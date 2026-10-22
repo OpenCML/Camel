@@ -78,10 +78,28 @@ inline std::string encodeEscapes(const std::string &input) {
     return oss.str();
 }
 
-inline std::string decodeEscapes(const std::string &input) {
+/// The one escape table of every string literal: an ordinary string, a triple-quoted string and
+/// the pattern text of a formatted string are all decoded here. A formatted string has one more
+/// escape of its own, `\${`, which the interpolation lexer and the AST builder decode before this
+/// point; it is what keeps `${` from starting an interpolation, not a character escape. `\$` is a
+/// character escape in every string, ordinary and triple-quoted included: a reader who writes it
+/// gets a `$` whichever quotes they are in (H89, ruling 2).
+///
+/// `doubleBraces` is set for the pattern text of a formatted string. There a brace that an escape
+/// produces (`\x7B`, `\u{7B}`) is a literal brace of the pattern, and `format` reads an undoubled
+/// `{` as the start of a placeholder; the braces written in the text were already doubled by the
+/// AST builder, so the ones decoded here are doubled now. Every other string passes false.
+inline std::string decodeEscapes(const std::string &input, bool doubleBraces = false) {
     std::ostringstream oss;
     size_t i   = 0;
     size_t len = input.length();
+
+    const auto put = [&oss, doubleBraces](char ch) {
+        oss << ch;
+        if (doubleBraces && (ch == '{' || ch == '}')) {
+            oss << ch;
+        }
+    };
 
     while (i < len) {
         char c = input[i];
@@ -128,7 +146,21 @@ inline std::string decodeEscapes(const std::string &input) {
                 oss << '\'';
                 i += 2;
                 break;
-            case '0': { // \0 or \nnn octal
+            case '`':
+                // A backtick is a character like any other: in an ordinary string it is the
+                // character itself, and in a formatted string the lexer has already used it to
+                // find the end of the string. Every string decodes it here (H20 item 1).
+                oss << '`';
+                i += 2;
+                break;
+            case '$':
+                // A `$` is a character like any other. The one place it is not is the `\${` of a
+                // formatted string, which is a structural escape decoded before this point; every
+                // other `\$`, in every string kind, is a plain dollar sign (H89, ruling 2).
+                oss << '$';
+                i += 2;
+                break;
+            case '0': { // \0 followed by up to two more octal digits: one byte, 0 to 0o77
                 size_t j = i + 1;
                 std::string oct;
                 while (j < len && oct.length() < 3 && input[j] >= '0' && input[j] <= '7') {
@@ -137,7 +169,7 @@ inline std::string decodeEscapes(const std::string &input) {
                 }
                 if (!oct.empty()) {
                     char ch = static_cast<char>(std::stoi(oct, nullptr, 8));
-                    oss << ch;
+                    put(ch);
                     i = j;
                 } else {
                     oss << '\0'; // A standalone \0
@@ -154,7 +186,7 @@ inline std::string decodeEscapes(const std::string &input) {
                 }
                 if (!hex.empty()) {
                     char ch = static_cast<char>(std::stoi(hex, nullptr, 16));
-                    oss << ch;
+                    put(ch);
                     i = j;
                 } else {
                     oss << '\\' << next;
@@ -179,7 +211,9 @@ inline std::string decodeEscapes(const std::string &input) {
                 if (digits > 0 && j < len && input[j] == '}' && camel::utf8::isScalarValue(value)) {
                     std::string encoded;
                     camel::utf8::encodeOne(value, encoded);
-                    oss << encoded;
+                    for (char ch : encoded) {
+                        put(ch);
+                    }
                     i = j + 1;
                 } else {
                     oss << '\\' << next;

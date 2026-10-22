@@ -30,7 +30,7 @@
  * access:
  *
  *   resource   the class of the thing (ResourceClass) and, for a module's object or for state
- *              no value names, which one (`tiles:device`, `fs`, `rand:generator`)
+ *              no value names, which one (`tiles:device`, `fs`, `rng`)
  *   binding    which operand names it (an ordinary or a with operand; a capture in the
  *              footprint of a graph), or none for ambient state
  *   region     which part of it: the whole, or the elements an access map of the node's index
@@ -75,8 +75,8 @@ enum class ResourceClass : uint8_t {
     Object,
     /// An object a module wraps; the resource's name says whose (`tiles:device`).
     Foreign,
-    /// State no value names; the resource's name says which (`fs`, `io:stdout`,
-    /// `rand:generator`). Two ambient resources are the same exactly when their names are.
+    /// State no value names; the resource's name says which (`fs`, `stdout`, `rng`). Two ambient
+    /// resources are the same exactly when their names are.
     Ambient,
 };
 

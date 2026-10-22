@@ -31,12 +31,21 @@ slot_t __head_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Contex
 slot_t __tail_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __range__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __slice_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+// The subscript forms of design principles 5.4: `t[a:b:s]`, `t[idx]` and `last(t)`.
+slot_t __slice_sub__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __idx_take_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __last_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __concat_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __append_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 // A private copy of an array: the first state of a loop whose body only appends to it.
 slot_t __copy_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 // The loop-state form of `append`: may write into the array's own block.
 slot_t __append_owned_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+// The in-place form of `append` (OperatorTable::setInPlaceForm; Builder::inPlaceRebindingOf):
+// the array `:var/take` handed it is appended to and returned, or a copy when its storage
+// cannot be written in place.
+slot_t __append_in_place_arr__(
+    ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __extend_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __contains_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

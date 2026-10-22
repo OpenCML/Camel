@@ -230,6 +230,109 @@ args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["return static_cast<int>(main_(0, 10));"]
 
+# ---- H112/H124: whose directory an import resolves in ----
+# H112 put the importing module's own directory ahead of the global search roots, so that
+# stdlib/rules.cml's `import graph` finds stdlib/graph.cmo and not a same-named program of the
+# entry directory. H124 pins both sides of that rule in one directory holding a graph.cml.
+
+[[tests]]
+name = "imports.entry_dir_wins"
+desc = "A program's own `import graph` takes the graph.cml next to it, not stdlib/graph.cmo: the entry directory still wins for the entry's own imports."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/importer_scope/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "41\n"
+
+[[tests]]
+name = "imports.library_dir_wins"
+desc = "In the same directory, std::opt compiles stdlib/rules.cml on demand; its `import graph` resolves next to rules (stdlib/graph.cmo), not the program's graph.cml, so the pass runs and the program prints its result."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/importer_scope/opt.cml"
+args = ["-E", "short", "${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+
+# ---- H129: -I / --include adds module search roots ----
+# Documented order (docs/cli.md, docs/language/05_modules.md): the entry file's directory, then
+# each -I directory in the order given, then CAMEL_PACKAGES, then the standard library. A
+# library's own import still starts in its own directory (H112). `-I` paths are resolved against
+# the entry file's directory, like CAMEL_PACKAGES, hence the `../roots/...` paths here.
+
+[[tests]]
+name = "imports.include_root_only"
+desc = "The import resolves only through the -I root: only_here is neither next to the program nor installed with Camel."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/include_path/prog/only_from_include.cml"
+args = ["-E", "short", "-I", "../roots/one", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "101\n"
+
+[[tests]]
+name = "imports.include_root_entry_dir_wins"
+desc = "shadow exists both next to the program (value 1) and in the -I root (value 2): the program's own directory is searched first."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/include_path/prog/local_wins.cml"
+args = ["-E", "short", "-I", "../roots/one", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
+
+[[tests]]
+name = "imports.include_root_used_without_local_file"
+desc = "The other side of the same-name case: a program without a local shadow.cml takes the -I root's copy (value 2), so the root is live and the previous test really proves the order."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/include_path/prog_root/root_wins.cml"
+args = ["-E", "short", "-I", "../roots/one", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n"
+
+[[tests]]
+name = "imports.include_root_twice"
+desc = "-I given twice (long form on the second): alpha from ../roots/one and beta from ../roots/two."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/include_path/prog/two_roots.cml"
+args = ["-E", "short", "-I", "../roots/one", "--include", "../roots/two", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "120\n"
+
+[[tests]]
+name = "imports.include_root_missing"
+desc = "A -I root that does not exist is not passed over silently: the import fails with ModuleNotFound at the import, and the search attempts name the root and say the path does not exist. The name and position are asserted in the output because the diagnostic's message spans the search attempts (the structured diagnostic parser reads one line)."
+kind = "negative"
+case = "../../../cases/compile/module_imports/include_path/prog/missing_root.cml"
+args = ["-E", "short", "-I", "../roots/missing", "${case}"]
+expect_exit = 1
+expect_output_contains = ["missing_root.cml:6:1", "Module 'nowhere_module' not found", "name=SemanticDiag::ModuleNotFound", "include_path/roots/missing", "path does not exist"]
+
+[[tests]]
+name = "imports.include_root_library_import"
+desc = "A library that is not the entry resolves its own import through the same -I root (after its own directory, H112)."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/include_path/prog/library_via_include.cml"
+args = ["-E", "short", "-I", "../roots/one", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "8\n"
+
+[[tests]]
+name = "imports.include_root_before_camel_packages"
+desc = "order exists in both the -I root (100) and the CAMEL_PACKAGES root (200); -I is searched first, so both given prints 100."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/include_path/prog/packages_order.cml"
+args = ["-E", "short", "-I", "../roots/one", "${case}"]
+envs = ["CAMEL_PACKAGES=../packages"]
+expect_exit = 0
+expect_stdout_exact = "100\n"
+
+[[tests]]
+name = "imports.include_camel_packages_alone"
+desc = "The same program and CAMEL_PACKAGES root with no -I: the package copy is used (200), so the ordering test has both roots live."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/include_path/prog/packages_order.cml"
+args = ["-E", "short", "${case}"]
+envs = ["CAMEL_PACKAGES=../packages"]
+expect_exit = 0
+expect_stdout_exact = "200\n"
+
 # ---- D6: port names of a function that captures, in std::rgir ----
 
 [[tests]]

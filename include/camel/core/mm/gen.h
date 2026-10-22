@@ -23,6 +23,7 @@
 #include "alloc/free_list.h"
 #include "alloc/growable.h"
 #include "alloc/large_obj.h"
+#include "camel/core/mm/debug_hook.h"
 #include "camel/core/rtdata/base.h"
 
 #include <atomic>
@@ -274,11 +275,12 @@ class GenerationalAllocatorWithGC : public IAllocator {
         uint64_t lastTracedRootReferenceCount = 0;
         size_t rememberedSetSize              = 0;
         size_t rootSourceCount                = 0;
-        // Pacing (reported with CAMEL_GC_STATS). Requests are counted once per collection they
-        // lead to, by the cause that asked first; deferredCollections counts every repeat.
-        uint64_t largeBudgetRequests    = 0;
-        uint64_t elderExhaustedRequests = 0;
-        uint64_t otherRequests          = 0; // Stress settings, explicit calls, a full birth space
+        // Pacing (reported with std::profile(gc_stats=1)). Requests are counted once per collection
+        // they lead to, by the cause that asked first; deferredCollections counts every repeat.
+        uint64_t largeBudgetRequests      = 0;
+        uint64_t elderExhaustedRequests   = 0;
+        uint64_t elderBlockBudgetRequests = 0; // Promoted block bytes, see below
+        uint64_t otherRequests            = 0; // Stress settings, explicit calls, a full birth space
         // Payload bytes handed out, per space. Small objects that found no room in the elder
         // space are counted in largeBytesAllocated (and in elderOverflowBytes).
         uint64_t youngBytesAllocated = 0;
@@ -296,6 +298,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
         size_t elderBudgetBytes   = 0;
         size_t elderReservedBytes = 0;
         size_t elderSegments      = 0;
+        // Blocks held by the values the last sweep left in the elder space, and the budget in
+        // force for the block bytes promoted since that sweep.
+        size_t elderBlockLiveBytes   = 0;
+        size_t elderBlockBudgetBytes = 0;
         // Time the program was stopped for collections (verification excluded).
         uint64_t minorPauseNs    = 0;
         uint64_t minorPauseMaxNs = 0;
@@ -326,6 +332,12 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void free(void *ptr) override;
 
     void noteFinalizable(void *payload) override;
+
+    /// An array took `block` over after allocation (a promoted array growing, a view of an
+    /// inline array, an in-place operation; see mm/alloc/allocator.h). When `owner` is already
+    /// in the elder space the block's bytes pace a major collection exactly as if the block had
+    /// been promoted with the value.
+    void noteBlockHeld(rtdata::Object *owner, Block *block) override;
 
     bool isObjectAddressStable(rtdata::Object *object) const;
 
@@ -358,7 +370,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     RuntimeStats stats() const;
 
     // 0: silent; 1: reportStats is meant to be called at exit; 2: also one line on stderr per
-    // major collection (CAMEL_GC_STATS).
+    // major collection (std::profile(gc_stats=<level>)).
     void setStatsLevel(int level);
 
     // One line: collections, requests by cause, bytes allocated per space, the large-object
@@ -429,6 +441,11 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // Block bytes allocated since the end of the last collection (see blockBytesAtCollection_).
     size_t blockBytesGrowthUnlocked() const;
 
+    // Adds the bytes `block` has not been counted for to the promoted-block budget and asks
+    // for a major once the window is full. A block reached through several views is thus
+    // counted once, by identity, and a growth after the takeover adds only the delta.
+    void noteElderBlockBytesUnlocked(Block *block);
+
     // Enforces heapLimitBytes for an old-space allocation of `requestBytes` (see definition).
     void checkHeapLimitUnlocked(size_t requestBytes);
 
@@ -440,6 +457,11 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void requestCollectionAtSafepointUnlocked(CollectionKind kind, std::string_view reason);
 
     void collectAtSafepointUnlocked(CollectionKind kind, std::string_view reason);
+
+    // Restarts the block-bytes pacing window from the live volume. Called after a collection's
+    // deferred releases have run: until then the blocks it found dead are still counted, and a
+    // base that includes them makes every following window larger than the last.
+    void noteBlockBytesAfterDeferredReleases();
 
     void publishSafepointSlowPathUnlocked();
 
@@ -508,6 +530,18 @@ class GenerationalAllocatorWithGC : public IAllocator {
     size_t elderBudget_;
     size_t elderBytesSinceSweep_ = 0; // Bytes the elder space took since the last sweep
     size_t elderLiveBytes_       = 0; // Elder bytes the last sweep left
+    // Blocks held by values that were promoted to the elder space are freed only by a major
+    // collection: a minor collection does not sweep the elder space. The block bytes promoted
+    // since the last sweep therefore request a major on the same rule as the large-object
+    // space: once they grow past the larger of the large-object floor
+    // (CAMEL_GC_LARGE_BUDGET_MB) and the growth percentage (CAMEL_GC_GROWTH_PERCENT) of the
+    // block bytes the last sweep left in promoted values.
+    size_t elderBlockBudget_;
+    size_t elderBlockBytesSinceSweep_ = 0; // Promoted block bytes since the last sweep
+    size_t elderBlockLiveBytes_       = 0; // Promoted block bytes the last sweep left
+    // Identifies one sweep when the live base is summed; a block shared by several surviving
+    // views is added once, by identity (Block::claimSweepGeneration).
+    uint64_t blockSweepGeneration_ = 1;
     size_t minorTriggerBytes_;        // Birth-space occupancy that asks for a minor collection
     size_t heapLimitBytes_;           // 0: none
     bool heapLimitExceeded_ = false;  // Set by an allocation; resolved at the next safepoint
@@ -730,8 +764,18 @@ inline bool autoSpaceSafepointSlowPathEnabled() noexcept {
 
 inline void safepoint(std::string_view reason = {}) {
     if (autoSpaceSafepointSlowPathEnabled()) {
+        // The allocator's safepoint observes the Debug-only safepoint hook itself, before it
+        // decides whether to collect.
         autoSpace().safepoint(reason);
     }
+#ifndef NDEBUG
+    else {
+        // A safepoint that does not have to enter the allocator still lets a Debug-only
+        // observer check invariants (the runtime draft-root check). Release has no hook and
+        // does not even call this branch.
+        observeSafepoint(reason);
+    }
+#endif
 }
 
 } // namespace camel::core::mm

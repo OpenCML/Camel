@@ -1,0 +1,8 @@
+// A program to run a pass list against (H130). It imports nothing: the passes named on the
+// pipeline are the only modules the pipeline has to find.
+module main
+
+func main(): int sync {
+    println(42)
+    return 0
+}

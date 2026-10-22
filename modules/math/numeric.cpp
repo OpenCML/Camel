@@ -40,7 +40,6 @@
 #include <cstdint>
 #include <format>
 #include <limits>
-#include <numbers>
 #include <numeric>
 #include <optional>
 
@@ -285,68 +284,10 @@ CAMEL_MATH_INTEGER(
 
 #undef CAMEL_MATH_INTEGER
 
-// ---- declarations ----
-
-using param_list_t = std::initializer_list<std::pair<Type *, bool>>;
-
-resolver_ptr_t sig(const param_list_t &norm, Type *result) {
-    return StaticFuncTypeResolver::create({}, norm, result);
-}
-
-// name: (f32) => f32 and (float) => float
-oper_group_ptr_t floatUnary(const std::string &name) {
-    Type *f = Type::Float32(), *d = Type::Float64();
-    return OperatorGroup::create(
-        name,
-        {{"math:" + name + "_f", sig({{f, false}}, f)}, {"math:" + name + "_d", sig({{d, false}}, d)}});
-}
-
-oper_group_ptr_t floatBinary(const std::string &name) {
-    Type *f = Type::Float32(), *d = Type::Float64();
-    return OperatorGroup::create(
-        name,
-        {{"math:" + name + "_f", sig({{f, false}, {f, false}}, f)},
-         {"math:" + name + "_d", sig({{d, false}, {d, false}}, d)}});
-}
-
-oper_group_ptr_t floatTest(const std::string &name) {
-    Type *f = Type::Float32(), *d = Type::Float64();
-    return OperatorGroup::create(
-        name,
-        {{"math:" + name + "_f", sig({{f, false}}, Type::Bool())},
-         {"math:" + name + "_d", sig({{d, false}}, Type::Bool())}});
-}
-
-// name over `arity` arguments of one type, for the given types (suffixes i, l, f, d).
-oper_group_ptr_t sameType(const std::string &name, size_t arity, bool floats) {
-    std::vector<std::pair<std::string, resolver_ptr_t>> overloads;
-    const std::vector<std::pair<const char *, Type *>> types = {
-        {"_i", Type::Int32()},
-        {"_l", Type::Int64()},
-        {"_f", Type::Float32()},
-        {"_d", Type::Float64()},
-    };
-    for (size_t k = 0; k < types.size(); ++k) {
-        if (!floats && k >= 2)
-            break;
-        Type *t = types[k].second;
-        resolver_ptr_t resolver;
-        switch (arity) {
-        case 1:
-            resolver = sig({{t, false}}, t);
-            break;
-        case 2:
-            resolver = sig({{t, false}, {t, false}}, t);
-            break;
-        default:
-            resolver = sig({{t, false}, {t, false}, {t, false}}, t);
-            break;
-        }
-        overloads.push_back({"math:" + name + types[k].first, std::move(resolver)});
-    }
-    return OperatorGroup::create(name, std::move(overloads));
-}
-
+// The shifts' result type is computed from the first argument, and the count may be of either
+// integer type: a `DynamicFuncTypeResolver` stays the one source of their type and cannot be a
+// declaration (design principles 6.4; handover H94, ruling 1 and H113). They are the only groups
+// of this file the declarations of `stdlib/math.cml` do not replace.
 oper_group_ptr_t shift(const std::string &name) {
     return OperatorGroup::create(
         name,
@@ -369,19 +310,8 @@ oper_group_ptr_t shift(const std::string &name) {
 
 const std::vector<oper_group_ptr_t> &getMathNumericGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
-        floatUnary("sin"),      floatUnary("cos"),     floatUnary("tan"),
-        floatUnary("asin"),     floatUnary("acos"),    floatUnary("atan"),
-        floatUnary("sinh"),     floatUnary("cosh"),    floatUnary("tanh"),
-        floatUnary("log"),      floatUnary("log2"),    floatUnary("log10"),
-        floatUnary("log1p"),    floatUnary("expm1"),   floatUnary("trunc"),
-        floatBinary("atan2"),   floatBinary("pow"),    floatBinary("hypot"),
-        sameType("min", 2, true), sameType("max", 2, true), sameType("clamp", 3, true),
-        sameType("sign", 1, true),
-        floatTest("is_nan"),    floatTest("is_inf"),
-        sameType("gcd", 2, false),     sameType("lcm", 2, false),
-        sameType("bit_and", 2, false), sameType("bit_or", 2, false),
-        sameType("bit_xor", 2, false), sameType("bit_not", 1, false),
-        shift("shl"),           shift("shr"),
+        shift("shl"),
+        shift("shr"),
     };
     return groups;
 }

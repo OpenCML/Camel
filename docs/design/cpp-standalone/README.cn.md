@@ -304,15 +304,15 @@ if (cond) {
 
 ### 7.1 故障
 
-可能故障的算子（除零、越界、转换越界、文字不是一个数、`slice` 越界、`head` 空数组……）在生成的代码里多一个实参：它的 `site`。`site` 是一个 `constexpr` 对象，带模块名、文件、行、列、所在图的名字与报告用的源码摘录。出故障时头文件里的函数抛出 `rt::Fault{种类, 实参, site}`。
+可能故障的算子（除零、越界、转换越界、文字不是一个数、`slice` 越界、`head` 空数组……）在生成的代码里多一个实参：它的 `site`。`site` 是一个 `constexpr` 对象，带转译时渲染好的两种报告（默认格式与一行格式）、种类的名字、消息与位置（`include/camel/standalone/core.h` 的 `Site`）。出故障时头文件里的函数抛出 `rt::Fault{种类, 实参, site}`。
 
 `rt::run` 接住它：先刷新标准输出，再按 `CAMEL_ERROR_FORMAT`（`text`，或测试用的 `short`）写出报告，退出码 1。**报告写在标准输出上**，因为解释器就写在那里【实测：`camel d03_div_zero.cml std::fvm 2>/dev/null` 仍然打印出报告；`2>&1 >/dev/null` 什么也没有】。
 
 报告的文字与解释器逐字节相同。做法是把它拆成三部分，各自取自编译器的唯一出处：
 
-- **种类的名字、代号、消息模板、提示**：取自诊断表（`getRuntimeDiagInfoMap`），程序用到哪几种故障就写出哪几种，放在生成的文件里；头文件只按模板填入实参。
-- **源码摘录**（`  --> 文件:行:列`、行号槽与 `^^^` 那几行）：转译时用编译器自己的渲染器（`src/core/error/diagnostics/render.cpp`）对 site 的位置渲染好，作为字符串常量写进 site。不在头文件里重写一个渲染器，免得两份代码在制表符、宽字符、长行截断上不一致。为此给渲染器加一个公开的小函数，只渲染摘录。
-- **运行时才知道的实参**（越界的下标、数组的长度、递归上限的值、出故障的图名）：头文件按消息模板的 `{0}`、`{1}` 填入。
+- **种类的名字、消息、提示与源码摘录**：全部由编译器自己的渲染器（`src/core/error/diagnostics/render.cpp`）在转译时按诊断表（`getRuntimeDiagInfoMap`）渲染好，作为字符串常量写进 site；头文件不重写渲染器，免得两份代码在制表符、宽字符、长行截断上不一致。
+- **运行时才知道的实参**（越界的下标、数组的长度、参数名）：渲染时留下占位符——字节 0x1F 加一位数字，数字是它是 `fault()` 的第几个实参；头文件在故障发生时用实参替换。
+- **转译时已经知道、运行时可以不同的实参**（递归上限）：整份报告直接写成转译时的上限，`Site::filled` 另记下这段文字；故障发生时头文件用生效的值替换它**第一次**出现的地方。因此 `CAMEL_MAX_RECURSION_DEPTH` 改了上限，生成程序的报告里仍是实际生效的数字，与解释器逐字节相同。
 
 颜色：解释器在终端上给报告上色；生成的程序不上色（测试与管道里两者都没有颜色）。
 
@@ -335,7 +335,7 @@ rt::Fallible<int64_t> v7 = rt::attempt([&] { return risky(rt::call(depth, site_5
 - `main` 声明了整数返回类型：返回值的低 8 位是退出码【实测：`return 300` 的退出码是 44】；`main` 是纯的（没有 `sync`）时也一样，不打印【实测 `func main(): int { return 7 }`：没有输出，退出码 7】。
 - `main` 声明了别的返回类型：值按 `println` 的写法打印到标准输出，退出码 0【实测：返回 `'hi'` 打印 `hi`；返回 `0.1 + 0.2` 打印 `0.30000000000000004`】。
 - 没有声明返回类型：不打印，退出码 0（D9 的第二半）。
-- `exit(n)`（`:exit`、`os:exit`）：刷新输出，退出码 n（D9 的第一半；今天被 `catch (...)` 吞成 `Unknown error`）。
+- `exit(n)`（`:exit`、`process:exit`）：刷新输出，退出码 n（D9 的第一半；今天被 `catch (...)` 吞成 `Unknown error`）。
 - 带参数的 `main`（9.8：值来自命令行）：生成的程序接受与命令行工具相同的 `--arg 名字=值`，按形参声明的类型读取（整数、浮点数、复数、`bool`、`string`；复数是语言里的复数文字，如 `1+2i`、`-2i`，实数文本则是实部、虚部为 0 的复数，如 `1.5`），缺少时给出带位置的错误（13 的 Q7）。
 - root 上算出来的顶层值（10.1：在 `main` 开始之前求值）：root 图本身也译成一个函数 `entry_`，它算出顶层值再调用 `main`；今天这种程序被拒绝（调研 1.3 的 `r12`）。
 
@@ -353,7 +353,7 @@ rt::Fallible<int64_t> v7 = rt::attempt([&] { return risky(rt::call(depth, site_5
 
 选第二种：每个会发出调用的函数多一个形参 `rt::Depth depth`，调用写成 `f(rt::call(depth, site), ...)`，`rt::call` 检查后返回 `depth + 1`。计数在寄存器里，不读写内存；检查放在调用处，所以报告的图名与位置与调度器一致；不发出任何调用的叶子函数不需要这个形参。尾调用写成循环，不经过 `rt::call`，所以不计数，与调度器一致。
 
-上限的默认值是转译时的设置（`--max-recursion-depth`、`CAMEL_MAX_RECURSION_DEPTH`，否则 1000），写进生成的程序；运行时 `CAMEL_MAX_RECURSION_DEPTH` 仍然可以改它，与解释器相同。
+上限的默认值是转译时的设置（`--max-recursion-depth`、`CAMEL_MAX_RECURSION_DEPTH`，否则 1000），写进生成的程序；运行时 `CAMEL_MAX_RECURSION_DEPTH` 仍然可以改它，与解释器相同。生成程序里每个调用点的报告写成转译时的上限（`Maximum recursion depth (1000) ...`，不留占位符）；`rt::call` 把生效的上限交给 `fault()`，`Site::filled` 让报告里的数字换成它，所以环境改了上限时报告仍给出实际值。
 
 **原生栈。** 上限可以调到一百万（`kMaxDepthLimit`），每层几十到几百字节，主线程的默认栈（Linux 8 MB、Windows 1 MB）不够。`rt::run` 在一个新线程上运行程序，栈的大小按上限留足（每层按 512 字节估，至少 64 MB，最多 1 GB；只是保留地址空间，用到的页才占内存）：POSIX 用 `pthread_attr_setstacksize`，Windows 用 `CreateThread` 的栈大小参数。这是头文件里唯一与平台相关的代码。
 
@@ -377,11 +377,11 @@ rt::Fallible<int64_t> v7 = rt::attempt([&] { return risky(rt::call(depth, site_5
 
 `random` 模块的算子（`rand:seed`、`rand`、`randn`、`randint`、`choice`、`sample`、`shuffle`）由 `camel/standalone/random.h` 译：与模块用同一个 `std::mt19937_64`（默认种子相同）和 `camel/utils/random.h` 的同一套分布（整数用 Lemire 的方法，正态用极坐标法与 fdlibm 的对数），洗牌与抽样的取下标方式也照模块写，所以种子相同时生成的程序与解释器打印相同的数【实测：`draws.cml`、`modules/std/random/basic.cml`】。
 
-内部算子 `:op/assn_append`（`acc = acc->append<v>` 这条重新绑定合成的一个节点，第一个操作数是变量单元）写成 `acc = rt::append(std::move(acc), v);`，捕获或经 `var` 参数共享的单元写成 `acc.set(rt::append(acc.take(), v));`：变量在这次调用里交出它的数组，没有别人拿着时 `rt::append` 原地追加，这正是解释器里“只有变量引用它”的标记（`holdsUnsharedArray`）所做的；元素若是表达式先算进一个局部，读到的仍是交出之前的数组。`:var/peek`（不清除那个标记的读）在生成的程序里与 `:var/get` 相同，引用计数本身就记着同一件事【实测：`consistency/new_values/rebinding_loop.cml`、`peek_loop.cml`、`peek.cml` 与 `std::fvm` 相同】。
+内部算子 `:op/assn_owned` 与 `:struct/append_arr_in_place`（`acc = acc->append<v>` 按 `append` 声明的原地形式改写成的两个节点，`:var/take(acc)` 交出变量单元里的数组）写成 `acc = rt::append(std::move(acc), v);`，捕获或经 `var` 参数共享的单元写成 `acc.set(rt::append(acc.take(), v));`：变量在这次调用里交出它的数组，没有别人拿着时 `rt::append` 原地追加，这正是解释器里“只有变量引用它”的标记（`holdsUnsharedArray`）所做的；元素若是表达式先算进一个局部，读到的仍是交出之前的数组。`:var/peek`（不清除那个标记的读）在生成的程序里与 `:var/get` 相同，引用计数本身就记着同一件事【实测：`consistency/new_values/rebinding_loop.cml`、`peek_loop.cml`、`peek.cml` 与 `std::fvm` 相同】。
 
 运行时里有两处行为看起来是意外，生成的程序照样复现，并报告给负责人（第 14 节）：`println<'{}+{}'>(1, 2)` 打印 `1+2` 之后多一个空行；`print<'{}-{}'>(3, 4)` 在末尾加了换行【实测 `m5.cml`】。【10.6 已裁定：这是解释器的缺陷，已修掉，生成的程序随之改正。】
 
-阶段 1 优先给 `std::cpp` 今天能译的 205 个程序用到的算子独立译法【实测：其中 195 个用 `:io/println`、56 个用 `:str/format`，其余是标量运算、字符串运算、`time:now`、`sys:get_env` 与一批 `math:*`】；剩下的经桥，程序照样能编译运行，只是要链接运行时。
+阶段 1 优先给 `std::cpp` 今天能译的 205 个程序用到的算子独立译法【实测：其中 195 个用 `:io/println`、56 个用 `:str/format`，其余是标量运算、字符串运算、`time:now`、`env:get_env` 与一批 `math:*`】；剩下的经桥，程序照样能编译运行，只是要链接运行时。
 
 ---
 
@@ -459,7 +459,7 @@ python3 test/tools/cppexec/run.py [--passes "std::opt::inline"] [--jobs N] 程�
 | 变基到 `d270689c` 并加随机数之后 | 866 | 545 | 545 | 535 | 492 |
 | 再加 `join`、`zip`、`statistics.mean`/`stdev`（本稿此版） | 866 | 564 | 564 | 551 | 505 |
 | 同上，先 `std::opt::inline` | 865 | 563 | 563 | 550 | 505 |
-| 变基到算子线（`append` 返回新值）之后，译 `:op/assn_append` | 879 | 574 | 574 | 566 | 521 |
+| 变基到算子线（`append` 返回新值）之后，译 `:op/assn_owned`（`append` 的原地形式） | 879 | 574 | 574 | 566 | 521 |
 | 同上，先 `std::opt::inline` | 879 | 574 | 574 | 566 | 521 |
 
 语料是 `test/cases benchmarks examples exemplars`（基线时 1,096 个程序，阶段 3 时 1,106 个），`python3 test/tools/cppexec/run.py --jobs 4 <这四个目录>` 量出【实测】。“写出 C++”之后没有一个编译不过、运行崩溃。阶段 3 时写出了 C++ 却与 `std::fvm` 不同的 9 个：5 个打印计时或当前时间；4 个依赖运行时今天“在原地追加”的 `append`（`xs->append<x>` 写成语句，见 5.2：11.3 裁定之后它们会是编译期错误，`cppexec` 把它们单独列为 `differs: in-place append (11.3)`）。
@@ -523,7 +523,7 @@ python3 test/tools/cppexec/run.py [--passes "std::opt::inline"] [--jobs N] 程�
 - **随机数。** 见第 8 节：与 `random` 模块同一套算法，种子相同时输出相同。
 - **浮点。** 运行时以 `-ffp-contract=off` 构建（`3af224da`），生成程序的构建命令（文件头注释、`camel-cpp`、`cppexec`、`docs/cpp_export_build.md`）也加上，否则有 FMA 的平台上 `a * b + c` 可能合并而与解释器差最后一位。顺带修了要链接运行时的程序的文件头注释：构建命令里原来写出了字面的 `\n`。
 - **分代回收成为默认。** 只影响 12.3 里 `std::fvm` 一侧的数字。
-- **`:op/assn_append` 与 `:var/peek`。** 见第 8 节：前者写成变量交出数组的 `rt::append`，后者当作读。
+- **`:op/assn_owned` 与 `:var/peek`。** 见第 8 节：前者（`append` 的原地形式）写成变量交出数组的 `rt::append`，后者当作读。
 
 ---
 
@@ -572,7 +572,7 @@ python3 test/tools/cppexec/run.py [--passes "std::opt::inline"] [--jobs N] 程�
 
 ## 14. 最不放心的地方
 
-1. **“`append` 返回新值”**（11.3）已由另一条线迁移：`append`、`extend`、`apply` 与 `algo` 的排序返回新值，`acc = acc->append<v>` 是 `:op/assn_append`，转译器照第 8 节译。那条线合入之后，原先因“在原地追加”而不同的 5 个程序在两种后端上结果相同，`cppexec` 不再有 `differs: in-place append (11.3)` 一类（12.1 最后两行）。
+1. **“`append` 返回新值”**（11.3）已由另一条线迁移：`append`、`extend`、`apply` 与 `algo` 的排序返回新值，`acc = acc->append<v>` 经 `append` 的原地形式写成 `:op/assn_owned`，转译器照第 8 节译。那条线合入之后，原先因“在原地追加”而不同的 5 个程序在两种后端上结果相同，`cppexec` 不再有 `differs: in-place append (11.3)` 一类（12.1 最后两行）。
 2. **引用计数的正确性**靠头文件里的少数几个类与转译器写 `std::move` 的位置。`std::move` 写错的后果是读到被移走的空句柄，而不是悄悄读到别的对象；11 的计数检查与地址消毒器能发现泄漏与重复释放。
 3. **故障报告的“逐字节相同”**依赖转译时渲染的摘录与运行时的渲染一致；渲染器以后改格式时两者同时改（同一份代码），但 `CAMEL_ERROR_FORMAT=json` 这类格式本稿没有覆盖，第一步只做 `text` 与 `short`。
 4. **执行序与 `std::fvm` 相同**只在两者都用 `buildReachableExecutionTopoIndices` 时成立；即时编译线或图存储线如果改了 `std::fvm` 取序的方式，这一点要跟着检查（`ExecPlan::order()` 统一之后自然成立）。

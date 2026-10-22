@@ -39,7 +39,7 @@ The core's kinds (`core_facts.h`):
 | `core.instance` | Node | ii | the index instance of an OPER node whose operator declares one (`instanceOf`), or "none" |
 | `core.reorder` | Node | ii | what its reduction may do (`reorderFreedomOf`) |
 | `core.effects` | Graph | ii | the effect summary through calls and loops (`effectSummaryOf`) |
-| `core.loopDomain` | CrossGraph | ii | a LOOP node and its body graph: the form, `t < len(xs)` with the extent when the array is a constant, the element port (design 11.3) |
+| `core.loopDomain` | CrossGraph | ii | a LOOP node and the graph that holds its body region: the form, `t < len(xs)` with the extent when the array is a constant, the element port (design 11.3) |
 | `core.permissions` | Node | i | the permissions granted to the node |
 | `core.resources` | Node | ii | what the node does to resources (`resourcesOf`, `docs/technical/41_resources_and_definitions.md`), at the nodes that touch any |
 
@@ -77,15 +77,24 @@ is keyed the same way.
 
 Every rewrite of the program goes through a `RuntimeGraphDraftSession` commit (`std::opt::inline`,
 `std::opt` and its parts, `std::macro`, specialization, entry arguments, `tensor::fuse`, the ONNX
-export's session, the loop lowering), so the revisions are maintained in one place. A fact computed
+export's session), so the revisions are maintained in one place. A fact computed
 before a pass reads as stale afterwards when the pass changed what it read, and is computed again
 on the next `obtain`; it is never reused silently. A `Cone` kind (`core.shape`) rehashes what it
 read when a revision changed: when that is unchanged (the node's type) the fact stays valid with a
 new stamp (`revalidated`).
 
-The loop lowering of std::fvm/std::jit/std::prl/std::cpp commits a detached copy: graphs keep
-their GraphId, the graph that held a loop gets a new revision, so facts computed on the program
-are valid on the copy where nothing changed.
+A pass can also change declarations: loading a module declares its operators, and every
+declaration increments `OperatorTable::declarationEpoch()` (`operator_table.h`). A fact of a kind
+that reads declarations is therefore stale after any module load, even when the graph it is about
+did not change. `std::opt` does this: its algebra phase resolves `rules::simplify`, which imports
+the `rules` library, and that imports `math` (H100, `resolvePassWithModule` in
+`src/execute/pass.cpp`); the epoch moves on its first run. The stamp is conservative by design
+(10.3 lists the declaration epoch beside the graph revision, and a kind opts in with
+`readsDeclarations`), so this is invalidation, not a defect: the recompute path is reached and the
+facts are rebuilt. A case must not turn the resulting totals into the property — `FACTS epoch` and
+`FACTS revision` say *why* a fact went stale, and the per-kind lines say which facts did (H121).
+
+A detached copy (the working copy of autodiff) keeps the GraphId of its graphs; the graph that held a loop gets a new revision, so facts computed on the program are valid on the copy where nothing changed.
 
 Facts do not follow a pass on their own (design 10.5: "derived facts are not stale notes that
 happened to survive a clone"); `tx.keep` (a pass re-establishing a fact it maintains) and the
@@ -115,22 +124,23 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
   ```
   FACT {"kind":"core.shape","version":1,"class":"derived","anchors":[{"graph":"layer","node":2}],"value":"f32 [2, 4]","stamp":{"revisions":[{"graph":"layer","revision":2}],"epoch":0,"target":0,"cone":"5ea9e00000000050"}}
   FACT {"kind":"core.reorder","version":1,"class":"derived","anchors":[{"graph":"total","node":1}],"value":"regroup, permute","stamp":{"revisions":[{"graph":"total","revision":3}],"epoch":68,"target":0}}
-  FACT {"kind":"core.loopDomain","version":1,"class":"derived","anchors":[{"graph":"twice","node":2},{"graph":"twice.loop1.body","node":0}],"value":"for: t sequential, t < len(node 1) = 2; element port 0 reads xs(t)","stamp":{"revisions":[{"graph":"twice","revision":4},{"graph":"twice.loop1.body","revision":5}],"epoch":0,"target":0}}
+  FACT {"kind":"core.loopDomain","version":1,"class":"derived","anchors":[{"graph":"twice","node":5},{"graph":"twice","node":2}],"value":"for: t sequential, t < len(node 1) = 2; element port 2 reads xs(t)","stamp":{"revisions":[{"graph":"twice","revision":4}],"epoch":0,"target":0}}
   FACT {"kind":"core.permissions","version":1,"class":"content","anchors":[{"graph":"total","node":1}],"value":"reassociate","stamp":null}
   ```
 
   (`test/cases/facts/tensors_and_loops.cml`.)
 - `test/plans/feat/modules/graph_facts.plan.toml`: the registry and store rules
-  (`test::facts`), facts across `std::opt::inline` and `std::opt` and a private loop lowering
-  (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
-  and `inspect --facts`. The test passes need `CAMEL_ENABLE_TEST_PASSES`.
+  (`test::facts`), facts across `std::opt::inline` and `std::opt` (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
+  and `inspect --facts`. The check pass prints the declaration epoch and the graph revisions it
+  finds (`FACTS epoch check=`, `FACTS check revision`), a per-kind tally per graph (`FACTS graph
+  kind <graph> <kind>`), and `FACTS after recompute valid=.. stale=.. gone=..`: after the stale
+  facts are computed again no fact a consumer can read is stale. The test passes are named in the
+  pipeline; no environment variable gates them.
 
 ## 7. Operators that read graphs
 
 Independent of the store, but part of the same work for Tiles: an operator that reads the graph
-of a function value it receives declares `OperatorTraits::inspectsGraphs` (Tiles' `run`,
+of a function value it receives declares `OperatorTraits::readsGraphs` (Tiles' `run`,
 `run_device`, `source`, `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`,
-`with_grad`). On a back end that runs a private lowered copy, every function-typed operand of
-such an operator goes through `:graph/original`, which returns the same function over the
-program's graph (`Program::original()`): Tiles sees the LOOP of a function on every back end
-(`docs/technical/39_loops.md` section 4).
+`with_grad`). Every back end runs the program's own graph, so such an operator sees the LOOP of a
+function and its regions wherever it runs (`docs/technical/39_loops.md` section 4).

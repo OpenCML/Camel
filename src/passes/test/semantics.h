@@ -21,7 +21,7 @@
  * TEST-ONLY: `test::operator_semantics` exercises the registration and query interface of
  * operator semantics (camel/core/operator_semantics.h, OperatorTable::declareSemantics) and
  * prints one line per check, `SEMANTICS <check> <result>`. It can only be named when the
- * environment variable CAMEL_ENABLE_TEST_PASSES is set (fault.h).
+ * environment variable they are named by a test pipeline (fault.h).
  *
  * It declares operators of the protocol `semtest`, which no module has: every registration
  * check of design section 4.4 that phase 1 implements gets one declaration that must be

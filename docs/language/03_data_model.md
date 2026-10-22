@@ -31,7 +31,7 @@
 
 没有 `any` 类型：编译之后每个值都有确定的类型（设计原则 5.10）。在任何类型位置写 `any`，与写别的未知类型名一样，是编译期错误 `SemanticDiag::UnresolvedTypeReference`；接受多种类型的形参用类型参数（见 [7.5](07_statements.md#75-泛型函数)），不同类型的值并排放用元组或结构体。
 
-读取 JSON：形状事先知道时用 `json::decode_as(text, shape)`，结果是 `T!`；形状事先不知道时用 `json::decode(text)`，它给出 `Json!`：文字不是 JSON 时是错误值 `JsonParseError`，嵌套超过深度上限时是 `JsonTooDeep`（都不是故障，设计原则 11.2；上限默认 10000，可用 `CAMEL_JSON_MAX_DEPTH` 调整），否则是 `Json`，类型确定，内容运行时才知道；用 `get`、`as_int`、`as_array` 等取出，每个都给出类型确定的值（找不到时为空），并接受 `Json?`、`Json!`（以及 `Json?!`）以便链式取值，例如 `j->get<'server'>->get<'port'>->as_int ?? 8080`；对 `Json!` 取值时错误原样传下去，结果是 `Json?!` 这样的两层，用 `??`、`!!` 拆开；`as_float` 也接受整数，`get<下标>` 越界给 `null`（11.2 定下的访问器设计）。
+读取 JSON：形状事先知道时用 `json::decode_as(text, shape)`，结果是 `T!`；形状事先不知道时用 `json::decode(text)`，它给出 `Json!`：文字不是 JSON 时是错误值 `JsonParseError`，嵌套超过深度上限时是 `JsonTooDeep`（都不是故障，设计原则 11.2；上限默认 10000，可用 `CAMEL_JSON_MAX_DEPTH` 调整），否则是 `Json`，类型确定，内容运行时才知道；用 `get`、`as_int`、`as_array` 等取出，每个都给出类型确定的值（找不到时为空），并接受 `Json?`、`Json!`（以及 `Json!?`）以便链式取值，例如 `j->get<'server'>->get<'port'>->as_int ?? 8080`；对 `Json!` 取值时错误原样传下去，结果是 `Json!?` 这样的两层，用 `??`、`!!` 拆开；`as_float` 也接受整数，`get<下标>` 越界给 `null`（11.2 定下的访问器设计）。
 
 标准库签名说明里的 `T`、`U...`（如 `println: (x: T, ...rest: U...) => T`）只是说明的记法：这些算子由类型规则按实参的类型检查，图上只有具体类型。
 
@@ -82,17 +82,20 @@ type Pair<T> = (T, T)
 - 超越函数（`exp`、`log` 等）不要求逐位相同，只承诺写明的误差上界（`exp`、`log` 不超过 2 ulp），NaN、无穷、零等特殊值精确。各算子声明的语义可以用 `camel inspect --ops` 查看。
 - **复数**：`re`、`im`、`conj` 是精确的（取一个部分、翻转一个符号位，没有算术）；`abs` 是 `hypot`，`exp` 是平台的复指数（它的模是 `exp`、方向是 `sin`/`cos`，是这两者的复合），两者只承诺平台的误差界（4 ulp），不承诺正确舍入，也不总传播 NaN（`hypot(inf, nan)` 是 `inf`，`exp(-inf+nan i)` 是 `0`）。复数的 `+`、`-`、`*`、`/` 是各部分的 IEEE 运算按书写顺序，跨后端逐位相同（`/` 的除数为复数零时是故障）；整数指数的 `^` 是这些乘法的固定序列，所以也逐位相同。
 
-需要更快、而结果可以不同的计算，由程序在函数或块上用 `@numeric(...)` 显式授予许可（[7.6.1](07_statements.md#761-numeric数值许可)）。没有授予就是规范算法；没有模块级的默认，也没有命令行开关。
+需要更快、而结果可以不同的计算，由程序在函数或块上用许可标签（`#reassociate`、`#contract` 等）显式授予许可（[7.6.1](07_statements.md#761-数值许可标签)）；`reassociate` 与 `contract` 是默认许可（7.3），`#strict` 撤销全部许可。没有授予就是规范算法；没有模块级的默认，也没有命令行开关。
 
 ## 3.3 复合值
 
 ### 3.3.1 数组
 
 ```cml
-let xs = [1, 2, 3]
-let names: string[] = []          // 空数组要写出类型
-let grid = [[1, 2], [3]]          // int[][]
-println(xs[0], len(xs), grid[0][1])
+func main(): int sync {
+    let xs = [1, 2, 3]
+    let names: string[] = []          // 空数组要写出类型
+    let grid = [[1, 2], [3]]          // int[][]
+    println(xs[0], len(xs), grid[0][1])
+    return 0
+}
 ```
 
 ```text
@@ -102,13 +105,14 @@ println(xs[0], len(xs), grid[0][1])
 - **元素是"有期望类型的位置"**（设计原则 5.1）：期望的类型就是数组的元素类型，字面量元素取它。`let xs: float[] = [1, 2.0]` 与 `let xs: float[] = [1, 2]` 都是 `float[]`；`[1, 2] as float[]` 也一样。
 - 没有期望类型时，同一个数组里的字面量取最宽的一种（整数 < 小数）：`[1, 2.0]` 是 `float[]`，也就是 `[1.0, 2.0]`。
 - 元素是**已经取好类型的值**（变量、调用结果）时不做隐式转换，类型不同就是错误：`let n = 1; let xs: float[] = [n, 2.0]` 与 `let xs: float[] = [n]` 都是 `SemanticDiag::ElementTypeMismatch`，报在元素上（`Cannot insert data of type 'int' into a(n) array with element type 'float'`）。元素类型之间没有共同的类型且不是字面量时同样是 `SemanticDiag::ElementTypeMismatch`。
-- 下标从 0 开始；越界（包括负数）是故障 `RuntimeDiag::IndexOutOfRange`。
+- 下标从 0 开始；越界（包括负数）是故障 `RuntimeDiag::IndexOutOfRange`。按整数数组一次取多个位置写 `xs[idx]`（即 `take`），切片写 `xs[a:b]`（是共用数据块的视图），见 [6.3](06_expressions.md#63-访问与下标)。
 - 内建函数：
 
   | 写法 | 结果 |
   |---|---|
   | `len(xs)` | 长度 |
   | `head(xs)`、`tail(xs)` | 第一个元素（空数组是故障 `RuntimeDiag::IndexOutOfRange`，与 `xs[0]` 相同）；去掉第一个元素的数组 |
+  | `last(xs)` | 最后一个元素（空数组是故障 `RuntimeDiag::IndexOutOfRange`）。负数下标不是从尾部数，所以取末尾元素用它，不写 `xs[-1]` |
   | `range(a, b)` | `[a, a+1, ..., b-1]`；`a >= b` 时为空 |
   | `xs->slice<a, b>` | 下标 `a` 到 `b-1` 的新数组。`a`、`b` 是 0 到长度之间的位置；越出数组（包括负数）是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致。两端都在数组内而 `b < a` 时结果为空。要“至多取 n 个”用 `array` 模块的 `take`、`drop`，它们按定义截断 |
   | `concat(xs, ys)` | 连接成新数组 |
@@ -123,9 +127,12 @@ println(xs[0], len(xs), grid[0][1])
 ### 3.3.2 元组
 
 ```cml
-let pair = (1, 'one')
-let (n, s) = pair              // 解构
-println(pair.0, pair.1, n, s)
+func main(): int sync {
+    let pair = (1, 'one')
+    let (n, s) = pair              // 解构
+    println(pair.0, pair.1, n, s)
+    return 0
+}
 ```
 
 ```text
@@ -146,9 +153,12 @@ println(pair.0, pair.1, n, s)
 ```cml
 type Point = { x: int, y: int }
 
-let p: Point = { x: 3, y: 4 }
-let q = { x: p.x + 1, y: p.y }     // “修改”就是造一个新的
-println(p, q.x)
+func main(): int sync {
+    let p: Point = { x: 3, y: 4 }
+    let q = { x: p.x + 1, y: p.y }     // “修改”就是造一个新的
+    println(p, q.x)
+    return 0
+}
 ```
 
 ```text
@@ -167,7 +177,7 @@ println(p, q.x)
 
 ### 3.3.4 字符串
 
-字符串是不可变的文本，**总是合法的 UTF-8**，长度与下标按码点计：`len('中文')` 是 2，`'中'[0]` 是 `'中'`。二进制数据用内建类型 `Bytes`（和 `string` 一样不必导入），两者之间显式转换：`bytes::encode`、`bytes::decode`（解码非法 UTF-8 得到错误值）；`str::from_bytes([255])` 这样用非法字节造字符串，在调用处就是故障。内建的操作：
+字符串是不可变的文本，**总是合法的 UTF-8**，长度与下标按码点计：`len('中文')` 是 2，`'中'[0]` 是 `'中'`。二进制数据用内建类型 `Bytes`（和 `string` 一样不必导入），两者之间显式转换：`bytes::encode`、`bytes::decode`（解码非法 UTF-8 得到错误值）。这是字符串与字节之间唯一的转换：没有别的名字能用非法字节造出字符串。内建的操作：
 
 | 写法 | 结果 |
 |---|---|
@@ -181,7 +191,7 @@ println(p, q.x)
 | `strs->join<sep>` | 连接字符串数组 |
 | `s[i]` | 第 `i` 个码点，结果是只含这一个字符的字符串；越界是故障 |
 
-其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：`split`、`trim`、`to_upper`、`to_lower`、`replace`、`find`、`substr`（下标与长度按码点）、`starts_with`、`ends_with`、`repeat`、`bytes`、`from_bytes`、`codepoints`、`from_codepoints`。
+其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：`split`、`trim`、`to_upper`、`to_lower`、`replace`、`find`、`substr`（下标与长度按码点）、`starts_with`、`ends_with`、`repeat`、`codepoints`、`from_codepoints`。
 
 ```cml
 import { split, trim, to_upper } from str
@@ -249,7 +259,7 @@ error DivByZero: the divisor is zero
   也可以显式写 `v as T?`。可以一次进入多层：`let x: int?! = 5`。图上每装入一层是一个转换节点（`CAST`），自动装入就是由编译器补上这个节点，与手写 `as` 得到的图相同。
 - **反方向永不自动。** `T?`、`T!` 要当 `T` 用，必须拆开；`int?` 也不会变成 `float?`，数值之间仍不做隐式转换。内建算子（`append`、`println` 等）的实参不在此列：它们的形参类型由 C++ 的类型规则从实参算出，没有可供装入的目标类型，需要时写 `as`。
 - **空数组字面量 `[]` 的元素类型取自它所在的位置**：声明的类型（`let xs: int[] = []`）、形参（`count([])`）、分支的另一条臂、`??`/`!!` 的左侧（`attempt(f) !! []`）、声明的返回类型、`as`（`[] as Map<string, int>`）。把 `[]` 绑定到没有写类型的名字上（`let xs = []`）是编译期错误 `SemanticDiag::EmptyArrayWithoutType`，诊断提示写出类型。
-- 两种标记可以组合：`T?!`、`T!?`。同一种不能重复。数组元素等位置需要括号：`(int?)[]`。
+- 两种标记可以组合：`T?!`、`T!?`。标记从最内层写起：`T?!` 是 fallible(nullable(T))，`T!?` 是 nullable(fallible(T))；`match` 只拆开最外层。同一种不能重复。数组元素等位置需要括号：`(int?)[]`。
 - 与泛型配合：`(typeas T)?` 从可空实参里绑定 `T`（[7.5](07_statements.md#75-泛型函数)）。
 - `let x: int! = v` 中 `!` 与 `=` 之间要有空格。
 - 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `try_read_text(path)`、`remove(path)`、`remove_dir(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
@@ -278,6 +288,8 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 **构造。** 变体写在类型名后面，用 `::` 限定：`Shape::Circle(1.0)`、`Shape::Rect { w: 2.0, h: 3.0 }`、`Shape::Empty`。结构体变体要写全字段，顺序不限；元组变体按位置给全。无数据的变体就是那个值本身，不写括号。构造出的值有类型 `Shape`；泛型实例的参数由字段的实参推出（`Option::Some(42)` 是 `Option<int>`），推不出时（`Option::None`）由期望的类型推出（`let x: Option<int> = Option::None`、实参位置、返回类型），仍推不出是编译期错误（`EnumTypeArgumentNotInferred`）。字段的类型必须与声明一致（`EnumFieldTypeMismatch`），个数与字段名也必须一致（`EnumVariantFieldCount`、`EnumConstructionMismatch`）；字段的实参按与声明字段相同的规则接受自动装入（`int` 进入 `float` 字段不自动，数值之间仍不做隐式转换）。
 
 **`match`。** 枚举靠 `match` 取出数据，不能直接取字段（`b.w` 是 `EnumFieldAccess`，诊断提示用 `match`）：
+
+<!-- camel-snippet: fragment: continues the Shape enum declared in the example above -->
 
 ```cml
 func area(s: Shape): float {

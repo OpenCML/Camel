@@ -1,0 +1,21 @@
+/**
+ * `kept` grants `contract`, one member of the group `fast` the rule requires; `scaled` is
+ * `#strict`, so it grants nothing at all (design principles 7.4) and the rule is applied to one
+ * body and not the other.
+ */
+module requires_group_target
+
+#strict
+func scaled(x: float): float {
+    return x * 1.0
+}
+
+#contract
+func kept(x: float): float {
+    return x * 1.0
+}
+
+func main(): int sync {
+    println(scaled(3.0), kept(4.0))
+    return 0
+}

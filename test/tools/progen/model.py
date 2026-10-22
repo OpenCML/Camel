@@ -323,7 +323,7 @@ def st(n: N, ind: int) -> list:
 
 def func_src(n: N, ind: int) -> list:
     pad = IND * ind
-    mods = ("macro " if n.a.get("macro") else "") + ("sync " if n.a.get("syncfn") else "")
+    mods = ("#macro " if n.a.get("macro") else "") + ("sync " if n.a.get("syncfn") else "")
     head = f"{pad}{mods}func {n.a['name']}({params_src(n.a['params'])}): {type_src(n.a['ret'])} "
     lines = [head + block(n.c[0], ind)]
     if n.a.get("with"):
@@ -370,7 +370,7 @@ def emit(prog: N) -> str:
     split = prog.a.get("split")
     out = [f"module {prog.a['module']}", ""]
     if prog.a.get("env"):
-        out += ["import { get_env } from sys", ""]
+        out += ["import { get_env } from env", ""]
     if split is None:
         out += type_decls_src(prog, False)
         out += globals_src(prog, False)

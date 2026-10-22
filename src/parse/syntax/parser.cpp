@@ -267,7 +267,7 @@ void ParserImpl::recover(bool inBlock, bool topLevel) {
                 break;
             }
             if (pos_ != start && tok().newlineBefore() &&
-                (topLevel ? startsDecl(cur_) || atRuleDecl(0) : startsStmt(cur_))) {
+                (topLevel ? startsDecl(cur_) || atRuleDecl(0) || atAnalysisDecl(0) : startsStmt(cur_))) {
                 break;
             }
             // A declaration keyword starts a declaration wherever it stands.
@@ -307,12 +307,7 @@ bool ParserImpl::startsDecl(TK kind) const {
     case TK::KwFunc:
     case TK::KwType:
     case TK::KwWith:
-    case TK::KwInner:
-    case TK::KwOuter:
-    case TK::KwAtomic:
-    case TK::KwShared:
     case TK::KwSync:
-    case TK::KwMacro:
     case TK::At:
     case TK::Hash:
         return true;
@@ -332,12 +327,11 @@ bool ParserImpl::startsStmt(TK kind) const {
     case TK::KwUsing:
     case TK::KwWith:
     case TK::KwExport:
-    case TK::KwInner:
-    case TK::KwOuter:
     case TK::KwReturn:
     case TK::KwThrow:
     case TK::At:
     case TK::Hash:
+    case TK::KwStatic:
         return true;
     default:
         return startsExpr(kind);
@@ -353,7 +347,7 @@ void ParserImpl::parseProgram() {
         if (cur_ == TK::Semi) {
             // One separator between declarations was taken already.
             error(SyntaxError::Kind::ExtraSemicolon, {}, pos_);
-        } else if (startsDecl(cur_) || atRuleDecl(0)) {
+        } else if (startsDecl(cur_) || atRuleDecl(0) || atAnalysisDecl(0)) {
             parseDecl();
             if (!panic_) {
                 eat(TK::Semi);
@@ -387,10 +381,9 @@ uint32_t ParserImpl::afterModifiers() const {
 
 /// decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
 ///      | tagDecl | dataDecl | funcDecl | typeDecl | ruleDecl
-/// Decided on the first token; after `export`, `inner` and `outer` on the next one or two
-/// (`export inner type` is an exported type, `export inner func` a function). The word `tag`
-/// is not reserved: a declaration starts with it only when a tag name follows (`atTagDecl`),
-/// so a value called `tag` still reads as a value.
+/// Decided on the first token; after `export` on the next one (`export let`, `export type`, ...).
+/// The word `tag` is not reserved: a declaration starts with it only when a tag name follows
+/// (`atTagDecl`), so a value called `tag` still reads as a value.
 void ParserImpl::parseDecl() {
     switch (cur_) {
     case TK::KwModule:
@@ -411,24 +404,26 @@ void ParserImpl::parseDecl() {
         return parseAnnotatedStmt();
     case TK::KwExport: {
         const TK next = peek(1);
+        if (atAnalysisDecl(1)) {
+            return parseAnalysisDecl();
+        }
         if (atRuleDecl(1)) {
             return parseRuleDecl();
         }
         if (atTagDecl(1)) {
             return parseTagDecl();
         }
-        if (next == TK::KwLet || next == TK::KwVar || next == TK::KwType || next == TK::LBrace ||
-            ((next == TK::KwInner || next == TK::KwOuter) && peek(2) == TK::KwType)) {
+        if (next == TK::KwLet || next == TK::KwVar || next == TK::KwType || next == TK::LBrace) {
             return parseExportDecl();
         }
         return parseFuncDecl();
     }
-    case TK::KwInner:
-    case TK::KwOuter:
-        return peek(1) == TK::KwType ? parseTypeDecl() : parseFuncDecl();
     default:
         if (atTagDecl(0)) {
             return parseTagDecl();
+        }
+        if (atAnalysisDecl(0)) {
+            return parseAnalysisDecl();
         }
         if (atRuleDecl(0)) {
             return parseRuleDecl();
@@ -438,13 +433,15 @@ void ParserImpl::parseDecl() {
 }
 
 /// stmt : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
-///      | blockStmt
+///      | blockStmt | staticForExpr
 /// blockStmt : 'wait'? stmtBlock | funcAnno+ stmtBlock
 /// Decided on the first token, except:
-///   - modifiers (`sync`, `macro`, ...) are skipped to see what they modify: `func` (a
-///     declaration), `{` after a lone `sync` (a block), anything else (a lambda expression);
+///   - modifiers (`sync`) are skipped to see what they modify: `func` (a declaration), `{`
+///     after a lone `sync` (a block), anything else (a lambda expression);
 ///   - `{` is a struct literal when it is `{}`, `{ name: ...` or `{ ...`, a block otherwise;
 ///     the same after `wait`.
+/// `static for` is a statement, not a value (H51 step 3): it parses here only, so writing it
+/// where a value is needed is a syntax error rather than a silently dropped value.
 void ParserImpl::parseStmt() {
     Depth depth(*this);
     if (depth.tooDeep()) {
@@ -472,22 +469,20 @@ void ParserImpl::parseStmt() {
         // `#tag func ...`, `#tag type ...` or `#tag { ... }`: the tags are read first, then
         // what they are written on (parseAnnotatedStmt).
         return parseAnnotatedStmt();
-    case TK::KwInner:
-    case TK::KwOuter:
-        return peek(1) == TK::KwType ? parseTypeDecl() : parseFuncDecl();
-    case TK::KwAtomic:
-    case TK::KwShared:
-    case TK::KwSync:
-    case TK::KwMacro: {
+    case TK::KwSync: {
         const uint32_t n = afterModifiers();
         if (peek(n) == TK::KwFunc) {
             return parseFuncDecl();
         }
-        if (cur_ == TK::KwSync && n == 1 && peek(1) == TK::LBrace) {
+        if (n == 1 && peek(1) == TK::LBrace) {
             return parseStmtBlock();
         }
         return parseExpr();
     }
+    case TK::KwStatic:
+        // `static for` is a statement; `static loop` is an expression with a value, and is
+        // read by parseExpr (`static` never starts anything else).
+        return peek(1) == TK::KwLoop ? parseStaticLoop() : parseStaticFor();
     case TK::KwWait: {
         // blockStmt : 'wait' stmtBlock, or the expression `wait {struct}`.
         const uint32_t brace = peek(1) == TK::KwSync ? 2 : 1;
@@ -570,8 +565,8 @@ void ParserImpl::parseStmtBlock() {
 }
 
 /// blockExpr : stmtBlock | dataExpr
-/// The block is the first alternative: `{}` is the empty block here. `{ name: ...` and `{ ...`
-/// are a struct literal, that is an expression.
+/// The block is the first alternative: `{}` is the empty block here. `{ name: ...`, `{ ...` and
+/// `{ static for ...` are expressions: a struct literal or a struct comprehension (H51 step 4).
 void ParserImpl::parseBlockExpr() {
     if ((cur_ == TK::KwSync && peek(1) == TK::LBrace) ||
         (cur_ == TK::LBrace && !braceIsStruct(0))) {
@@ -740,9 +735,9 @@ void ParserImpl::parseNamespaceDecl() {
 }
 
 /// funcAnno : '@' identRef (angledValues | parentIdents)?
-/// `@name` and `@name<args>` are decorators; `@name(a, b)` is an annotation whose arguments are
-/// names, `@numeric(reassociate, contract)` (design principles 7.5). Which annotations exist,
-/// and where each may be written, is checked when the tree is built (AST builder).
+/// `@name` and `@name<args>` are decorators. `@name(a, b)` is the removed spelling of the
+/// numeric-permission annotation (design principles 7.2 made permissions tags); it is parsed so
+/// that the AST builder can report it where it is written, and grants nothing.
 void ParserImpl::parseFuncAnno() {
     const size_t m = mark();
     bump();
@@ -756,14 +751,22 @@ void ParserImpl::parseFuncAnno() {
 }
 
 /// A statement that starts with annotations or tag uses: a function declaration, a type
-/// declaration, or an annotated/tagged block (blockStmt's second form; `@numeric(...)` on a
-/// block, design principles 7.5; `#tag { ... }` on a block, 6.2). They are read first; a block
-/// follows when the next token is '{' or `sync {`, a type declaration when it is 'type',
-/// anything else continues the function declaration. After a tag use '{' is always a block,
-/// never a struct literal.
+/// declaration, a rule declaration (`#requires<...> rule f(...)`), or an annotated/tagged block
+/// (blockStmt's second form; an `@name(args)` annotation, the removed spelling of the numeric
+/// permission annotation; `#tag { ... }` on
+/// a block, 6.2). They are read first; a block follows when the next token is '{' or `sync {`, a
+/// type declaration when it is 'type', a rule when the tags are followed by `rule`, anything else
+/// continues the function declaration. After a tag use '{' is always a block, never a struct
+/// literal.
 void ParserImpl::parseAnnotatedStmt() {
     const size_t m = mark();
     parseFrontMatter();
+    if (cur_ == TK::KwExport && atRuleDecl(1)) {
+        return parseRuleDeclRest(m);
+    }
+    if (atRuleDecl(0)) {
+        return parseRuleDeclRest(m);
+    }
     if (cur_ == TK::LBrace || (cur_ == TK::KwSync && peek(1) == TK::LBrace)) {
         parseStmtBlock();
         return close(m, NK::BlockStmt);
@@ -785,8 +788,11 @@ void ParserImpl::parseFrontMatter() {
     }
 }
 
-/// funcDecl : frontMatter ('with' angledParams)? 'export'? implMark? modifiers?
-///            'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
+/// funcDecl : frontMatter ('with' angledParams)? 'export'? modifiers?
+///            'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock?
+///
+/// Without a body the declaration stands for a C++ operator of the module the name is bound in
+/// (design principles 6.4): it has no block, and what it declares is its signature.
 void ParserImpl::parseFuncDecl() {
     const size_t m = mark();
     parseFrontMatter();
@@ -928,9 +934,6 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
         parseAngledParams();
     }
     eat(TK::KwExport);
-    if (cur_ == TK::KwInner || cur_ == TK::KwOuter) {
-        parseImplMark();
-    }
     if (isModifier(cur_)) {
         parseModifiers();
     }
@@ -947,7 +950,13 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::Colon)) {
         parseType();
     }
-    if (!panic_) {
+    // A function written without a body is the declaration of an operator of a C++ module: the
+    // signature is the whole of it (design principles 6.4, handover H19 step 1). A block is
+    // still what follows a signature in every other case, so the next token decides; `sync`
+    // belongs to the block and is read with it (parseStmtBlock).
+    const bool hasBlock =
+        cur_ == TK::LBrace || (cur_ == TK::KwSync && peek(1) == TK::LBrace);
+    if (!panic_ && hasBlock) {
         parseStmtBlock();
     }
     close(m, NK::FuncDecl);
@@ -1039,7 +1048,7 @@ void ParserImpl::parseDataDecl() {
     close(m, NK::DataDecl);
 }
 
-/// typeDecl : frontMatter? implMark? 'type' identRef
+/// typeDecl : frontMatter? 'type' identRef
 ///            ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
 ///            (typeExpr | STRING)
 void ParserImpl::parseTypeDecl() {
@@ -1050,9 +1059,6 @@ void ParserImpl::parseTypeDecl() {
 
 /// The part of typeDecl after the tags that may precede it; `m` marks where it began.
 void ParserImpl::parseTypeDeclRest(size_t m) {
-    if (cur_ == TK::KwInner || cur_ == TK::KwOuter) {
-        parseImplMark();
-    }
     if (!expect(TK::KwType)) {
         return close(m, NK::TypeDecl);
     }
@@ -1096,14 +1102,7 @@ void ParserImpl::parseRetStmt() {
     close(m, NK::RetStmt);
 }
 
-/// implMark : 'inner' | 'outer'
-void ParserImpl::parseImplMark() {
-    const size_t m = mark();
-    bump();
-    close(m, NK::ImplMark);
-}
-
-/// modifiers : ('atomic' | 'shared' | 'sync' | 'macro')+
+/// modifiers : 'sync'+
 void ParserImpl::parseModifiers() {
     const size_t m = mark();
     while (isModifier(cur_)) {
@@ -1178,14 +1177,16 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
     close(m, kind);
 }
 
-/// keyParamPair : ('var' | 'const')? identDef ':' typeExpr ('=' dataExpr)?
+/// keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
 void ParserImpl::parseKeyParamPair() {
     const size_t m = mark();
     if (!eat(TK::KwVar)) {
         eat(TK::KwConst);
     }
     parseIdentDef();
-    if (!panic_ && expect(TK::Colon)) {
+    // Only a lambda may leave the type out (see lambdaParams_); a declaration and a function
+    // type require it, and report the `:` that is missing.
+    if (!panic_ && (lambdaParams_ ? eat(TK::Colon) : expect(TK::Colon))) {
         parseType();
         if (eat(TK::Assign)) {
             parseExpr();

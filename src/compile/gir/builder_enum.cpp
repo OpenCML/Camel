@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -79,7 +79,7 @@ EnumType *Builder::enumTypeOfName(const Reference &name) {
     Type *resolved = nullptr;
     if (const auto declared = unit_->typeDecls.find(name); declared != unit_->typeDecls.end()) {
         resolved = declared->second;
-    } else if (const auto imported = module_->getImportedType(name); imported.has_value()) {
+    } else if (const auto imported = importedType(name); imported.has_value()) {
         resolved = imported.value();
     }
     if (resolved == nullptr) {
@@ -136,12 +136,24 @@ bool Builder::enumVariantOfName(
 node_handle_t Builder::applyInternalOperator(
     const char *op, Type *typeArgument, const std::vector<GCT::node_ptr_t> &operands,
     const GCT::node_ptr_t &origin) {
-    GCT::node_ptr_t callee = tree_->makeDRef(op);
+    return applyInternalOperatorCall(tree_->makeDRef(op), typeArgument, operands, origin);
+}
+
+node_handle_t Builder::applyInternalOperator(
+    camel::core::OperId op, Type *typeArgument, const std::vector<GCT::node_ptr_t> &operands,
+    const GCT::node_ptr_t &origin) {
+    return applyInternalOperatorCall(internalOperatorDref(op), typeArgument, operands, origin);
+}
+
+node_handle_t Builder::applyInternalOperatorCall(
+    const GCT::node_ptr_t &calleeNode, Type *typeArgument,
+    const std::vector<GCT::node_ptr_t> &operands, const GCT::node_ptr_t &origin) {
+    GCT::node_ptr_t callee = calleeNode;
     if (typeArgument != nullptr) {
         // The instance the call makes, as `f::<T>` gives one: the operator's result type is
         // that instance, and its slot is of it (a value of an enum type holds references).
         GCT::node_ptr_t application = tree_->makeTypeApplication();
-        *application << callee << tree_->makeType(typeArgument, ImplMark::Graph);
+        *application << callee << tree_->makeType(typeArgument);
         callee = application;
     }
     GCT::node_ptr_t call = tree_->makeLink(static_cast<uint32_t>(operands.size()));
@@ -279,7 +291,7 @@ Builder::visitEnumConstruction(const GCT::node_ptr_t &gct, EnumType *type, size_
         tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(tag)))));
     for (size_t i = 0; i < fields.size(); ++i) {
         Type *wanted          = instance->fieldType(tag, i);
-        node_handle_t coerced = coerceTo(fields[i], wanted, gct);
+        node_handle_t coerced = checkValue(fields[i], wanted, gct);
         if (coerced == nullptr) {
             diags_->of(SemanticDiag::EnumFieldTypeMismatch)
                 .atOrigin(gct->origin())
@@ -293,7 +305,7 @@ Builder::visitEnumConstruction(const GCT::node_ptr_t &gct, EnumType *type, size_
         }
         operands.push_back(tree_->makeDRef(bindTemporary(coerced)));
     }
-    return applyInternalOperator("__enum_make__", instance, operands, gct);
+    return applyInternalOperator(camel::core::oper::EnumMake, instance, operands, gct);
 }
 
 node_handle_t
@@ -307,7 +319,7 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
     };
 
     const std::string name      = bindTemporary(scrutinee);
-    const node_handle_t tagNode = applyTagOperator("__enum_tag__", name, gct);
+    const node_handle_t tagNode = applyTagOperator(camel::core::oper::EnumTag, name, gct);
     const std::string tagName   = bindTemporary(tagNode);
 
     std::vector<Arm> arms;
@@ -514,7 +526,7 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
                 continue;
             }
             node_handle_t fieldNode = applyInternalOperator(
-                "__enum_field__",
+                camel::core::oper::EnumField,
                 nullptr,
                 {indexData(arm.tag), indexData(index), tree_->makeDRef(name)},
                 arm.caseNode);

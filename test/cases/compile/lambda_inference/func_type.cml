@@ -1,0 +1,12 @@
+/**
+ * A function type (not a lambda) must write every parameter's type: the parser lets the type out
+ * only in a lambda's own parameter list, and the position of the function type is where this is
+ * reported (design principles 5.9; H92 item 2).
+ */
+module lambda_inference_func_type
+
+func apply(f: (x) => int, x: int): int { return f(x) }
+
+func main(): int sync {
+    return apply((x: int) => x + 1, 1)
+}

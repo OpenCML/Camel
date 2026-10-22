@@ -414,14 +414,6 @@ Rules buildRules() {
         false,
     };
 
-    // ---- Graphs (operators/graph.h) ----
-    // A function value of the generated program is its own C++ function: there is no copy of
-    // a graph to take back to its original.
-    r[":graph/original"] = {
-        [](OperatorCall &c) -> std::optional<std::string> { return c.norm(0).text; },
-        true,
-    };
-
     // ---- Arrays (struct.cpp, ops.cpp __builtin__idx__) ----
     r[":op/idx_arr"]          = faultingFunction("at", RuntimeDiag::IndexOutOfRange, 3);
     r[":struct/len_arr"]      = runtimeFunction("length");
@@ -432,9 +424,10 @@ Rules buildRules() {
     // The loop-state form (Builder::markLoopStateInPlace): writing in place is an optimisation of
     // `append`, and this back end has only the copying form, which gives the same values.
     r[":struct/append_arr_owned"] = withArgument("append");
-    // The private copy of a loop's first value, which the same rewrite puts before the loop: an
-    // Array here is a value, and `append` copies a block that another holder shares, so the copy
-    // itself has nothing to do (rt::append takes the array by value).
+    // The private copy one state of a loop takes (Builder::markLoopStateInPlace, per state),
+    // which the same rewrite puts before the loop: an Array here is a value, and `append` copies
+    // a block that another holder shares, so the copy itself has nothing to do (rt::append takes
+    // the array by value).
     r[":struct/copy_arr"] = identity();
     r[":struct/extend_arr"]   = withArgument("concat");
     r[":struct/contains_arr"] = withArgument("contains");
@@ -493,7 +486,7 @@ Rules buildRules() {
 
     // ---- Modules with a standalone translation ----
     r["time:now"]         = runtimeFunction("now", false);
-    r["sys:get_env"]      = runtimeFunction("getEnv", false);
+    r["env:get_env"]      = runtimeFunction("getEnv", false);
     r["statistics:mean"]  = runtimeFunction("statisticsMean");
     r["statistics:stdev"] = runtimeFunction("statisticsStdev");
     // random draws as modules/random does, through camel/utils/random.h (standalone/random.h).
@@ -557,8 +550,8 @@ Rules buildRules() {
         r[std::format("math:im_{}", t)]   = runtimeFunction("complexImag");
     }
 
-    // ---- The end of the program (`exit(n)`, `os.exit(n)`) ----
-    for (const char *uri : {":exit", "exit", "os:exit"}) {
+    // ---- The end of the program (`exit(n)`, `process.exit(n)`) ----
+    for (const char *uri : {":exit", "exit", "process:exit"}) {
         r[uri] = {
             [](OperatorCall &c) -> std::optional<std::string> {
                 return std::format("rt::exit({})", c.norm(0).text);

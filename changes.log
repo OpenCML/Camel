@@ -1,4 +1,29 @@
 [0.2.24]
+Changes:
+- 标准库改名：`sys` 是 `env`、`os` 是 `process`、`crypto` 是 `hash`、`tree` 是 `ckpt`；旧名不再是模块，导入它只得到普通的 `ModuleNotFound`，没有别名，也没有指向新名的提示。
+- 终端算子从 `os` 移进 `io`：`set_terminal_raw_mode`、`has_input`、`get_char`、`get_chars`、`clear_input_buffer`；`process` 只有 `exit`、`sleep`、`whoami`、`cpu_count`，其中 `exit`、`sleep` 仍是内建，不用 import。
+- `str::bytes`/`str::from_bytes` 删除：字符串与 UTF-8 字节之间只经 `bytes::encode`/`bytes::decode`；非法 UTF-8 现在是 `decode` 返回的 `EncodingError` 错误值，不再是 `from_bytes` 的故障。
+- 标准库的签名改由声明给出：`stdlib/<模块>.cml` 里无函数体的 `export func` 就是签名，`str`、`bytes`、`tensor`、`math`、`statistics`、`algo`、`random`、`re`、`json`、`fs`、`time`、`io`、`para`、`this`、`graph`、`tiles` 共 16 个模块已迁；`ckpt`、`process`、`env`、`hash` 还没有声明文件（仍是 `stdlib/signatures/*.cml`），`globals` 是内建。`inspect --ops` 与 `docs/stdlib-reference.md` 由声明生成，错元数、错类型在调用处拒绝并列出声明里的签名（含参数名）。
+- 结果类型随实参变的少数签名仍由 C++ 计算，声明文件里以 `// dynamic func` 或 `stdlib/signatures/<模块>.cml` 记下；`Tensor.shape` 这类限定名写不进声明，仍由 C++ 发布、指向声明的同一个算子，照常可用。
+- 资源名按设计原则 3.3 写平：`stdout`、`stdin`、`stderr`、`clock`、`env`、`rng`（原 `io:stdout`、`io:stdin`、`io:stderr`、`time:clock`、`process:environment`、`rand:generator`）；`process`、`fs`、`tensor:*`、`tiles:*`、`para:rendezvous`、`io:terminal` 不变。
+- ONNX 导出：只改名的聚合类型转换按目标类型标注、不生成算子——结构体字面量进入它命名的类型不再被拒，也不再写出 ONNX 没有的 `Cast`；循环体尾部的转换先脱掉，臂的叶子接受命名类型与字段顺序相同的匿名类型。
+- 数值许可成为标签：`@numeric(...)` 删除（写了是 `InvalidAnnotation`）；`#strict` 只拿走许可，不禁止逐位等价的改写（需要 `reassociate` 的重结合仍被拒，`x + x` 换成 `x * 2.0` 照常命中）；`rule` 可以带 `when` 条件，用 `#requires<...>` 声明许可。
+- 位置的期望类型只套在值上，不落进操作数：`let o: bool? = true || false` 能编译，`&&`/`||` 两侧仍是 `bool`，`??` 的两臂按 payload 取类型。
+- 两层标记的顺序写在文档里：`T?!` 是 fallible(nullable(T))、`T!?` 是 nullable(fallible(T))，`match` 只拆最外层（解析与打印本来就是这个顺序）。
+- 一个算子的标签、许可与读者由同一份声明事实给出，不再各读一份；读了算子声明的事实随声明纪元过期，过期读作“没有”。
+- 规则与饱和：运算符声明了交换律时，定律按任一操作数顺序匹配；抽取只保留有副作用、承载顺序与被写入的变量的节点，纯节点按可达性，饱和造出的死写法不再留在结果里。
+- 数组可以切片、按下标数组取元素：`xs[a:b]`、`xs[:]`、`xs[idx]`（`take`）；切片共用数据块、左闭右开，负下标不是从尾部数（`xs[-1]` 是 `IndexOutOfRange`，最后一个元素写 `last(xs)`）；步长不为 1 与多维视图仍点名 H17。
+- 泛型第一期：`match type` 按结构选择类型分支，`static for`/`static loop` 在编译期展开，省略返回类型的泛型函数按实例定下返回类型。
+- `macro` 修饰符删除，只写声明标签 `#macro`；求值失败是遍运行中的故障（`pass:std::macro`），不再是编译错误。
+- 遍模块有语法错误时，该遍以 `InvalidPassParameter` 失败并指出语法错误，进程不再无输出退出。
+- 遍不能解析时写明模块到底提供什么：`PassNotProvidedByModule`（模块在、遍不在）与 `PassNotExportedByModule`（声明了但没有导出），消息只写模块名与它确实提供的遍。
+- `-I`/`--include` 是模块搜索根，按顺序生效：入口目录、各 `-I`、`CAMEL_PACKAGES`、安装的模块；从文件加载的模块先在自己的目录里找。不存在的 `-I` 根不会被静默跳过，`ModuleNotFound` 会点名那个根。
+- 新增 `std::profile`（训练步的分阶段剖析）；`--timeit` 失败时指出第几轮（JSON 带 `iteration`）；`--devices` 选择设备，点名的设备不存在报 `DeviceUnavailable`。
+- Tiles：一棵树的叶子作为一批跨到设备；元素类型不同的 `cast_like` 改为拒绝而不是原样返回。
+- 循环的一轮在形状允许时编译成原生代码（35.6 → 7.0 ns），解释执行的一轮也不比它模拟的尾递归贵。
+- 放不下的数字文本一律拒绝：小到四舍五入成零或超出类型时，字面量、入口参数与转换都报错，不再读成 0 或截断；前导零的源码数字（`09`、`077`）是词法错误，八进制写 `0o77`，诊断目录删掉了 `IntegerLiteralTruncated`。
+- 导入标准库的程序启动多花约 4–5 ms（每条声明约 20 µs；导入全部模块时 CPU +32%，只导 `math` 也 +2.4 ms）：声明在启动时解析并编译，没有缓存。
+- 发布包的指令集基线是 `x86-64-v3`（AVX2 与 FMA）；没有 AVX2 的机器不能启动 wheel。
 
 [0.2.23]
 Changes:

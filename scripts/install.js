@@ -1,12 +1,12 @@
 import path from 'path'
-import { removeDir, runCommand, BASEDIR } from './common.js'
+import { removeDir, conanInstall, BASEDIR } from './common.js'
 
 function main() {
     process.chdir(BASEDIR)
     removeDir(path.join(BASEDIR, 'build'))
-    runCommand('conan install . --output-folder=build --build=missing')
-    runCommand('conan install . --output-folder=build --build=missing --settings=build_type=Debug')
-    runCommand('conan install . --output-folder=build --build=missing --settings=build_type=RelWithDebInfo')
+    // Which build types, see conanBuildTypes(): a job that builds only Release sets
+    // CAMEL_CONAN_BUILD_TYPES=Release and skips the other two.
+    conanInstall()
 }
 
 main()

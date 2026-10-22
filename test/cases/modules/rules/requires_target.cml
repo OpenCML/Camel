@@ -1,0 +1,20 @@
+/**
+ * A rule whose requirement is a permission (design principles 7.2): `#requires<approx_math>`
+ * says the rule may only be applied where the program grants the assumption. `kept` grants it,
+ * `scaled` does not, so the engine applies the rule to one body and not the other.
+ */
+module requires_target
+
+func scaled(x: float): float {
+    return x * 1.0
+}
+
+#[approx_math]
+func kept(x: float): float {
+    return x * 1.0
+}
+
+func main(): int sync {
+    println(scaled(3.0), kept(4.0))
+    return 0
+}

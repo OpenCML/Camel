@@ -80,13 +80,57 @@ await withServer(async (ls) => {
     m = edit(MAIN.replace('    let q = scale(p, 2)', '    let q = scale(p, 2)\n    let w = scale(p, 3).x/*c*/'))
     checkEq(labels(await complete(m, 'c')), ['x', 'y'], 'fields of the result of a call')
 
+    // ---- completion: inside the brackets of a subscript ----
+    // A subscript is an expression position like any other: the names in scope are offered in
+    // it, and the parts of a slice are expressions too.
+    m = edit(MAIN.replace('    let first = pair.0', '    let first = [sum][/*c*/0]'))
+    names = labels(await complete(m, 'c'))
+    check(names.includes('sum') && names.includes('total'), 'completion inside a subscript', names.slice(0, 12))
+    m = edit(MAIN.replace('    let first = pair.0', '    let first = [sum][/*c*/:2]'))
+    check(labels(await complete(m, 'c')).includes('sum'), 'completion before the colon of a slice')
+    m = edit(MAIN.replace('    let first = pair.0', '    let first = [sum][2:/*c*/]'))
+    check(labels(await complete(m, 'c')).includes('sum'), 'completion after the colon of a slice')
+
     // ---- completion: members of a module after `::` ----
-    m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport math')
-        .replace('    return 0\n}', '    let r = math::/*c*/\n    return 0\n}'))
-    items = await complete(m, 'c')
+    // A migrated module's names are declared in `stdlib/<m>.cml`; the signatures C++ computes
+    // stay in C++ (handover H19/H137). Both are exports of the one module, and both are offered.
+    const membersOf = async (imports, expr) => {
+        m = edit(MAIN.replace('import { now } from time', `import { now } from time\n${imports}`)
+            .replace('    return 0\n}', `    let r = ${expr}::/*c*/\n    return 0\n}`))
+        return complete(m, 'c')
+    }
+    items = await membersOf('import math', 'math')
     check(labels(items).includes('sqrt'), 'the exports of a module after `::`', labels(items).slice(0, 20))
     check((items.find((i) => i.label === 'sqrt') || {}).detail !== undefined,
         'with their signatures', items.find((i) => i.label === 'sqrt'))
+    // The two shapes side by side: `sqrt` is computed in C++, `abs` is declared in math.cml.
+    checkEq(items.find((i) => i.label === 'sqrt').detail, '(val: float | double) => float | double',
+        'a computed member keeps the signature C++ computes')
+    const abs = items.find((i) => i.label === 'abs')
+    check(abs !== undefined && abs.detail.startsWith('(x: i32) => i32') &&
+        abs.detail.includes('(+5 overloads)'),
+        'a declared member carries its declared overloads', abs)
+    // A module whose every name is declared: no `exportEntity` answers for it any more.
+    items = await membersOf('import re', 're')
+    checkEq(labels(items), ['test'], 'the members of a module that is all declarations')
+    checkEq(items[0].detail, '(pattern: string, text: string) => bool', 'with the declared signature')
+
+    // ---- hover: the same module members ----
+    const hoverMember = async (imports, call, needle, delta) => {
+        m = edit(MAIN.replace('import { now } from time', `import { now } from time\n${imports}`)
+            .replace('    return 0\n}', `    let r = ${call}\n    return 0\n}`))
+        const r = await ls.request('textDocument/hover', {
+            textDocument: { uri }, position: m.find(needle, 1, delta),
+        })
+        return r ? r.contents.value : null
+    }
+    let h = await hoverMember('import math', 'math::sqrt(4.0)', 'math::sqrt', 7)
+    check(h !== null && h.includes('sqrt: (val: float | double) => float | double'),
+        'hover on a computed member of a migrated module', h)
+    check(h.includes('Function of module `math`'), 'naming the module it comes from', h)
+    h = await hoverMember('import re', 're::test("a", "b")', 're::test', 5)
+    check(h !== null && h.includes('test: (pattern: string, text: string) => bool'),
+        'hover on a declared member of a migrated module', h)
 
     // ---- completion: the variants of an enum after `Type::` ----
     // A text that compiles first: a text being typed inherits the declaration types from it.
@@ -158,6 +202,18 @@ ${body}
     check(sh.signatures[0].label.startsWith('println: '), 'a library function', sh)
     m = edit(MAIN.replace('    return 0\n}', '    let z = (1, /*t*/2)\n    return 0\n}'))
     checkEq(await help(m, 't'), null, 'no signature help inside a tuple')
+    // A member of a migrated module: a computed signature and a declared one.
+    m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport math')
+        .replace('    return 0\n}', '    let r = math::sqrt(/*m*/4.0)\n    return 0\n}'))
+    sh = await help(m, 'm')
+    check(sh !== null && sh.signatures[0].label.includes('sqrt: (val: float | double)'),
+        'signature help on a computed member of a migrated module', sh)
+    checkEq(sh.activeParameter, 0, 'its first argument is active')
+    m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport math')
+        .replace('    return 0\n}', '    let r = math::abs(/*m*/1)\n    return 0\n}'))
+    sh = await help(m, 'm')
+    check(sh !== null && sh.signatures.some((s) => s.label.includes('abs: (x: i32) => i32')),
+        'signature help on a declared member of a migrated module', sh)
 
     // ---- rename ----
     edit(MAIN)

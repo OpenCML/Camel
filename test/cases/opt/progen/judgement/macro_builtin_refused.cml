@@ -7,7 +7,7 @@
  */
 module macro_builtin_refused
 
-macro func total(n: int): int {
+#macro func total(n: int): int {
     return range(0, n)->reduce<(acc: int, x: int): int => acc + x, 0>
 }
 

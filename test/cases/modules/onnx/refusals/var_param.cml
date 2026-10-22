@@ -8,7 +8,7 @@
 module var_param
 import { Tensor, reshape } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 sync func bump(var acc: Tensor): int sync {
     acc = acc + 1.0

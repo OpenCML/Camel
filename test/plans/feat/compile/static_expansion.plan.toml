@@ -1,0 +1,566 @@
+id = "compile.static_expansion"
+order = 339
+tier = "fast"
+tags = ["feat", "compile", "generics", "static"]
+desc = "`match type` selects a case by the shape of an instantiated type (design principles 5.5, R3), and generic return-type inference gives every instance a concrete result type."
+
+[[tests]]
+name = "match_type_shapes"
+desc = "struct, tuple and #leaf select the R3 shapes; `struct | tuple` and `_` work; only the selected case is type-checked (the tuple case calls `len(1)` and must not be reported)."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/match_type_shapes.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "struct",
+  "tuple",
+  "leaf",
+  "leaf",
+  "leaf",
+  "true",
+  "true",
+  "false",
+  "1",
+  "0",
+  "1",
+  "3",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `shape selection changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "type_arguments_from_fields"
+desc = "A `static for` binds a field's type and the binding can be written as an explicit type argument of a recursive call, so the design's tree walk (generic-structure 3.1.3) is an ordinary generic function: the three `int` leaves are 1, 2 and 3 by depth."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/type_arguments_from_fields.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n2\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "match_type_has_no_branch_node"
+desc = "The selected case is straight-line code: the graph of a function whose body is only a `match type` contains no BRCH or CASE node."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/match_type_shapes.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_output_not_contains = ["BRCH", "CASE"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "match_type_not_exhaustive"
+desc = "No case selects an int when the function writes only struct and tuple."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/match_type_exhaustive.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchNotExhaustive"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "match_type_unreachable_case"
+desc = "A case after `#leaf` can never be selected."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/match_type_unreachable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchUnreachableCase"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "match_type_unselected_names_are_resolved"
+desc = "Names in an unselected case are still resolved (H51 step 1 limitation)."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/match_type_unresolved.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fields_and_access"
+desc = "`static for (n, F) in fields T` expands a struct and an ordinary tuple in declaration order, `F` is usable as a type, an empty struct/tuple (including `fields ()`) expands zero times, nesting works, and `t.[\"0\"]` is `t.[0]`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/fields_and_access.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "a 1",
+  "b 2",
+  "0 3",
+  "1 4",
+  "p x 5",
+  "q 0 6",
+  "q 1 7",
+  "0",
+  "0",
+  "20",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `static for expansion changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_expansion_has_no_static_nodes"
+desc = "The expansion is straight-line code: the GIR contains ACCS nodes for the fields and no SFOR or SACC node, and the declaration order is kept."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/fields_and_access.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+expect_output_not_contains = ["SFOR", "SACC"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehensions"
+desc = "`{ static for ... }` builds a struct and `( static for ... )` a tuple from the rounds' values, in declaration order; a round's block keeps its value, and an empty shape gives an empty struct or tuple."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehensions.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "2 4",
+  "4 5",
+  "11 21",
+  "empty struct",
+  "empty tuple",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `comprehension changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "type_position_empty_tuple"
+desc = "`fields` and `match type` are followed by a type position (H79 ruling 1): `fields ()` is the empty tuple type in the comprehension and statement forms, and `match type ()` matches it, without a `type EmptyTuple = ()` alias."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/type_position_empty_tuple.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "empty tuple",
+  "0",
+  "empty tuple value",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `empty tuple type position changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehension_value_type"
+desc = "A comprehension's field types come from the round's values, not from `F` (H79 ruling 2): a recursive `widen` turns every int leaf of a nested struct/tuple into a float, the shape of `tree_map` with changed leaves."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehension_value_type.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "0.5 1.0 1.5 2.0",
+  "2.5",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `value-typed comprehension changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehension_field_order"
+desc = "A struct comprehension keeps the field names and declaration order of the walked type while each field takes the type of its round's value (H79 ruling 2): `{a: int, b: float}` with values `(F, float)` gives `{a: (int, float), b: (float, float)}`, `a` before `b`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehension_field_order.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "2 0.5 3.5 0.5",
+  "a then b",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `field order changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehension_field_order_graph"
+desc = "The packed struct type in the graph is the values' types in declaration order: one FILL with value_type `{ a: (int, float), b: (float, float) }`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehension_field_order.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["value_type=\"{ a: (int, float), b: (float, float) }\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehensions_rebuild"
+desc = "A generic `match type` over struct/tuple/leaf rebuilds a heterogeneous tree with comprehensions: the result is the same shape and the same values as the input."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehensions_rebuild.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = "5 6 7 8"
+assert(input.normalized.stdout.trim() === want, `rebuild changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehension_graph"
+desc = "The graph of a comprehension is straight-line: `t.[n].[m]` reads its parent once (one `.p` ACCS, then `.0` and `.1`), one FILL per struct or tuple, and no SFOR, SACC, LOOP, BRCH or CASE node."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehensions_graph.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const at = lines.findIndex((line) => line.includes('label="pairUp"'))
+assert(at > 0, "the graph of pairUp is missing")
+const indent = lines[at - 1].match(/^\s*/)[0]
+const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+assert(end > at, "the graph of pairUp has no end")
+const nodes = lines.slice(at, end).filter((line) => /\[label=".*", type=/.test(line))
+const labels = nodes
+  .filter((line) => line.includes('type="ACCS"'))
+  .map((line) => line.match(/\[label="([^"]*)"/)[1])
+assert(labels.join(",") === ".p,.0,.1", `field accesses changed: ${labels.join(",")}`)
+const fills = nodes.filter((line) => line.includes('type="FILL"')).length
+assert(fills === 2, `expected one FILL per struct/tuple, got ${fills}`)
+const left = nodes.filter((line) => /type="(SFOR|SACC|LOOP|BRCH|CASE)"/.test(line))
+assert(left.length === 0, `a static node was left in the graph: ${left[0]}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehension_void_element"
+desc = "A round whose block gives no value has no element to pack, and is reported instead of building a struct of the wrong shape."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/comprehension_void_element.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticComprehensionVoidElement"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_unknown_field"
+desc = "A struct field that does not exist is a compile-time error."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_access_unknown_field.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessUnknownField"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_out_of_range"
+desc = "A tuple element past the end is a compile-time error."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_access_out_of_range.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessIndexOutOfRange"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_not_constant"
+desc = "The key of `t.[...]` must be a compile-time constant, not a parameter."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_access_not_constant.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessNotConstant"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_shadowed_key"
+desc = "A local named like the field name shadows the static `n`; the key is then a runtime value, not a constant."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_access_shadowed_key.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessNotConstant"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_for_not_composite"
+desc = "`static for` walks a struct or an ordinary tuple only; an int has no fields."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_for_not_composite.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticForNotComposite"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "return_type_inferred_from_selected_case"
+desc = "A generic function without a return annotation gets a different concrete result type per instance; a `return` in the selected case gives the match's value, not the function's."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/return_inference.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ["1", "two", "true", "8"].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `return inference changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "return_inference_same_instance_cycle"
+desc = "A recursive call of the instance whose return type is still being inferred is a cycle, not a half type."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/return_inference_cycle.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericInstantiationCycle"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop"
+desc = "`static loop ... for (n, F) in fields T do body` walks the fields at instantiation and advances the state once per field: one state, several states as a tuple, the trip count coming from a type parameter of an enclosing generic, an empty struct, an ordinary tuple, `F` used as a type, and a loop nested in a `static for`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_loop.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "6",
+  "9",
+  "16 9",
+  "7",
+  "6",
+  "11",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `static loop changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_graph_matches_unrolled"
+desc = "The graph of a `static loop` over three fields is the graph of the hand-written fold `((0 + t.a) + t.b) + t.c`: the same nodes and the same links, and no SLOOP, LOOP, SFOR, SACC, BRCH or CASE node."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_loop_graph.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const attribute = (text, key) => {
+  const at = text.indexOf(key + '="')
+  if (at < 0) return null
+  const from = at + key.length + 2
+  return text.slice(from, text.indexOf('"', from))
+}
+const shapeOf = (name) => {
+  const at = lines.findIndex((line) => line.includes(`label="${name}"`))
+  assert(at > 0, `the graph of ${name} is missing`)
+  const indent = lines[at - 1].slice(0, lines[at - 1].indexOf(lines[at - 1].trim()))
+  const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+  assert(end > at, `the graph of ${name} has no end`)
+  const shape = []
+  for (const line of lines.slice(at, end)) {
+    const label = attribute(line, 'label')
+    const type = attribute(line, 'type')
+    if (label === null || type === null) continue
+    shape.push(`${line.includes('->') ? 'edge' : 'node'} ${label.replace(name, 'fold')} ${type}`)
+  }
+  return shape
+}
+const loop = shapeOf("loopSum")
+const unrolled = shapeOf("unrolled")
+assert(loop.length > 0, "the static loop graph has no nodes")
+assert(loop.join(String.fromCharCode(10)) === unrolled.join(String.fromCharCode(10)),
+  `the static loop is not the hand-written fold: ${loop.join(String.fromCharCode(10))} --- ${unrolled.join(String.fromCharCode(10))}`)
+const left = lines.filter((line) => /type="(SLOOP|LOOP|SFOR|SACC|BRCH|CASE)"/.test(line))
+assert(left.length === 0, `a static or branch node was left in the graph: ${left[0]}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_name_repeated"
+desc = "The field name `n` and the state names are one set: a state named like the field is a repeated name, not a shadow of it."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_name_repeated.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopNameRepeated"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_body_type"
+desc = "Each round's value is the next state: a string body for an int state is a loop body type mismatch."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_body_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopBodyTypeMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_not_composite"
+desc = "`static loop` walks a struct or an ordinary tuple only; an int has no fields, so there is no count known at instantiation."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_not_composite.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticForNotComposite"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "indices"
+desc = "`indices` (H51 step 6) walks the positions of a tuple value at instantiation, in both `static for` and `static loop`: `j` is an ordinary int and a compile-time key, the trip count is the tuple's arity (zero for the empty tuple, the type parameter's at instantiation for a generic), and a generator nested in a `fields` body walks a local tuple."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/indices.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "6",
+  "0 1",
+  "3",
+  "2",
+  "7",
+  "14",
+  "11",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `indices changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "indices_graph_matches_unrolled"
+desc = "The graph of `static loop acc = 0 for (j) in indices t do acc + t.[j]` is the graph of the hand-written `((0 + t.0) + t.1) + t.2`: the same nodes and links, and no SFOR, SLOOP, SACC or LOOP node left."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/indices_graph.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const attribute = (text, key) => {
+  const at = text.indexOf(key + '="')
+  if (at < 0) return null
+  const from = at + key.length + 2
+  return text.slice(from, text.indexOf('"', from))
+}
+const shapeOf = (name) => {
+  const at = lines.findIndex((line) => line.includes(`label="${name}"`))
+  assert(at > 0, `the graph of ${name} is missing`)
+  const indent = lines[at - 1].slice(0, lines[at - 1].indexOf(lines[at - 1].trim()))
+  const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+  assert(end > at, `the graph of ${name} has no end`)
+  const shape = []
+  for (const line of lines.slice(at, end)) {
+    const label = attribute(line, 'label')
+    const type = attribute(line, 'type')
+    if (label === null || type === null) continue
+    shape.push(`${line.includes('->') ? 'edge' : 'node'} ${label.replace(name, 'expansion')} ${type}`)
+  }
+  return shape
+}
+const loop = shapeOf("loopSum")
+const unrolled = shapeOf("unrolled")
+assert(loop.length > 0, "the static loop graph has no nodes")
+assert(loop.join(String.fromCharCode(10)) === unrolled.join(String.fromCharCode(10)),
+  `the static loop is not the hand-written expansion: ${loop.join(String.fromCharCode(10))} --- ${unrolled.join(String.fromCharCode(10))}`)
+const left = lines.filter((line) => /type="(SLOOP|LOOP|SFOR|SACC|BRCH|CASE)"/.test(line))
+assert(left.length === 0, `a static or branch node was left in the graph: ${left[0]}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "indices_not_tuple"
+desc = "`indices` walks tuples only: a struct value has named fields and no positions, so it is walked with `fields T`."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/indices_not_tuple.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticIndicesNotTuple"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "indices_shadowed_key"
+desc = "`j` is a compile-time key as well as a value: a body that declares a local `j` shadows it, and `t.[j]` through the local is a runtime key, refused as always."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/indices_shadowed_key.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessNotConstant"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "indices_two_names"
+desc = "The header of `indices` binds one name, the position: a second name (the `F` of `fields`) is a syntax error, not a silently unused binding."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/indices_two_names.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "indices_struct_comprehension"
+desc = "A struct comprehension names its fields from `fields T`; `indices` gives positions, not names, so the struct form is refused and the tuple form is the one to write."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/indices_struct_comprehension.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

@@ -81,6 +81,12 @@ void checkKind(const KindInfo &info) {
     if (info.dependency == Dependency::Cone && !info.cone) {
         reject(info.key, "Dependency::Cone needs the hash of the dependency cone (cone)");
     }
+    if (info.dependency == Dependency::Node && info.scope == Scope::Graph) {
+        reject(info.key, "Dependency::Node is about nodes: its facts anchor a node");
+    }
+    if (info.dependency == Dependency::Node && info.cone) {
+        reject(info.key, "Dependency::Node reads one node's record: it needs no cone");
+    }
 }
 
 /// The distinct graphs of `anchors`, in order.
@@ -141,6 +147,15 @@ void checkAnchors(const KindInfo &kind, std::span<const Anchor> anchors) {
         break;
     case Scope::CrossGraph:
         break;
+    }
+    if (kind.dependency == Dependency::Node) {
+        // The stamp of such a fact is the version of its anchors' nodes; an anchor that names no
+        // node would leave nothing to compare and the fact would never go stale.
+        for (const Anchor &anchor : anchors) {
+            if (anchor.node == kInvalidNodeRef) {
+                reject(kind.key, "Dependency::Node needs anchors that name nodes");
+            }
+        }
     }
 }
 
@@ -227,6 +242,22 @@ std::string factJson(
     out += std::format("],\"epoch\":{},\"target\":{}", stamp->declarationEpoch, stamp->targetHash);
     if (kind.dependency == Dependency::Cone) {
         out += std::format(",\"cone\":\"{:016x}\"", stamp->cone);
+    }
+    if (kind.dependency == Dependency::Node) {
+        out += ",\"nodes\":[";
+        for (size_t i = 0; i < stamp->nodes.size(); ++i) {
+            const Stamp::NodeMark &mark = stamp->nodes[i];
+            // The marks are the anchors', in order: the graph is named as the anchors name it.
+            const std::string_view graph =
+                i < anchors.size() ? anchors[i].graph->name() : std::string_view{};
+            out += std::format(
+                "{}{{\"graph\":{},\"node\":{},\"hash\":\"{:016x}\"}}",
+                i ? "," : "",
+                jsonString(graph),
+                mark.node,
+                mark.hash);
+        }
+        out += "]";
     }
     return out + "}}";
 }
@@ -326,6 +357,15 @@ Stamp FactStore::stampNow(const KindInfo &kind, std::span<const Anchor> anchors,
     for (const GCGraph *graph : graphsOf(anchors)) {
         stamp.graphs.emplace_back(graph->id(), closureRevisionOf(anchors, graph));
     }
+    if (kind.dependency == Dependency::Node) {
+        for (const Anchor &anchor : anchors) {
+            stamp.nodes.push_back(Stamp::NodeMark{
+                anchor.graph->id(),
+                anchor.node,
+                anchor.graph->nodeContentHash(anchor.node),
+            });
+        }
+    }
     stamp.declarationEpoch =
         kind.readsDeclarations ? camel::core::OperatorTable::instance().declarationEpoch() : 0;
     stamp.targetHash = targetHash;
@@ -356,11 +396,23 @@ FactStore::find(KindId kind, std::span<const Anchor> anchors, uint64_t targetHas
             it->stamp.graphs[i] ==
             std::pair<GraphId, uint64_t>(graphs[i]->id(), closureRevisionOf(anchors, graphs[i]));
     }
+    // The version of the nodes a Node fact is about: the graph's revision moved, the records of
+    // the facts' nodes did not (design 4.4: a fact is valid on a node version).
+    bool nodes = true;
+    if (info.dependency == Dependency::Node) {
+        nodes = it->stamp.nodes.size() == anchors.size();
+        for (size_t i = 0; nodes && i < anchors.size(); ++i) {
+            const Stamp::NodeMark &mark = it->stamp.nodes[i];
+            nodes = mark.graph == anchors[i].graph->id() && mark.node == anchors[i].node &&
+                    mark.hash == anchors[i].graph->nodeContentHash(anchors[i].node);
+        }
+    }
     const bool epoch =
         !info.readsDeclarations ||
         it->stamp.declarationEpoch == camel::core::OperatorTable::instance().declarationEpoch();
     const bool target = it->stamp.targetHash == targetHash;
-    if (revisions && epoch && target) {
+    const bool current = info.dependency == Dependency::Node ? nodes : revisions;
+    if (current && epoch && target) {
         status = Status::Valid;
         return &*it;
     }

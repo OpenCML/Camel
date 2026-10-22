@@ -101,9 +101,6 @@ const std::string DataDeclLoad::toString() const {
 
 const std::string TypeDeclLoad::toString() const {
     std::string result = "TypeDecl: ";
-    if (implMark_ != ImplMark::Graph) {
-        result += to_string(implMark_) + " ";
-    }
     result += ref_.toString();
     if (!params_.empty()) {
         result += "<";
@@ -164,9 +161,6 @@ const std::string FuncDeclLoad::geneCode() const {
 
 const std::string TypeDeclLoad::geneCode() const {
     std::string result = "type ";
-    if (implMark_ != ImplMark::Graph) {
-        result += to_string(implMark_) + " ";
-    }
     result += ref_.toString();
     if (!params_.empty()) {
         result += "<";
@@ -276,13 +270,7 @@ const std::string ExitStmtLoad::geneCode() const {
     }
 }
 const std::string StmtBlockLoad::toString() const {
-    std::string text = std::string("StmtBlock: ") + (synced_ ? "sync" : "") + (waited_ ? " wait" : "");
-    if (numeric_ != 0) {
-        // Only when granted, so that the dump of a program without @numeric is unchanged.
-        text += std::string(text.back() == ' ' ? "" : " ") + "numeric(" +
-                camel::core::sem::permissionsText(numeric_) + ")";
-    }
-    return text;
+    return std::string("StmtBlock: ") + (synced_ ? "sync" : "") + (waited_ ? " wait" : "");
 }
 
 const std::string StmtBlockLoad::geneCode() const {

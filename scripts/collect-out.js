@@ -22,11 +22,13 @@ import {
     logStep,
     logDone,
     logWarn,
+    moduleCmoFiles,
     outArtifactRoot,
     outArtifactBin,
     outArtifactLibs,
     outArtifactInclude,
-    outArtifactStdlib
+    outArtifactStdlib,
+    writeBuildInfo
 } from './common.js'
 
 // The Debug build has its own artifact directory: the Release tree stays at out/latest, so the
@@ -273,24 +275,27 @@ function collect(config, tag) {
     if (fs.existsSync(stdlibSrc)) {
         fs.cpSync(stdlibSrc, stdlibDir, { recursive: true })
     }
-    const cmoSourceDirs = [
-        path.join(BASEDIR, 'build', 'libs'),
-        path.join(BASEDIR, 'build', 'modules')
-    ]
-    for (const baseDir of cmoSourceDirs) {
-        if (!fs.existsSync(baseDir)) continue
-        const subdirs = fs.readdirSync(baseDir, { withFileTypes: true })
-        for (const ent of subdirs) {
-            if (!ent.isDirectory()) continue
-            const configDir = path.join(baseDir, ent.name, config)
-            if (!fs.existsSync(configDir)) continue
-            const files = fs.readdirSync(configDir)
-            for (const f of files) {
-                if (f.endsWith('.cmo') || f.endsWith('.pdb')) {
-                    fs.copyFileSync(path.join(configDir, f), path.join(stdlibDir, f))
-                }
-            }
+    // The `.cmo` files this configure builds, from CMake's manifest (H138). Never scan
+    // build/{libs,modules} for them: a module that was renamed or removed leaves its artifact
+    // behind, and copying that forward is how a retired name kept resolving.
+    const moduleFiles = moduleCmoFiles(config)
+    const installedCmo = new Set()
+    for (const src of moduleFiles) {
+        const name = path.basename(src)
+        fs.copyFileSync(src, path.join(stdlibDir, name))
+        installedCmo.add(name)
+        const pdb = src.replace(/\.cmo$/, '.pdb')
+        if (fs.existsSync(pdb)) {
+            fs.copyFileSync(pdb, path.join(stdlibDir, path.basename(pdb)))
         }
+    }
+    // stdlib/ is copied verbatim above, so a stale `.cmo` still in the source tree would land in
+    // the install, and out/<tag>/stdlib is on the module search path. The install is exactly the
+    // set the build produced: anything else would be a module that no longer exists.
+    for (const f of fs.readdirSync(stdlibDir)) {
+        if (!f.endsWith('.cmo') || installedCmo.has(f)) continue
+        fs.rmSync(path.join(stdlibDir, f))
+        logWarn(`Removed stale out/${tag}/stdlib/${f}: no module of that name is built`)
     }
 
     // Copy Python bridge DLLs to out/<tag>/libs for runtime routing.
@@ -306,6 +311,11 @@ function collect(config, tag) {
     }
 
     logDone(`Artifacts collected to out/${tag}/`)
+
+    // The stamp the `-NoBuild` guard compares against. Written by the build, not by the runner: an
+    // install made by `npm run build` on this machine, in a release tarball or on the Linux host all
+    // carry it, and a collect that died leaves no stamp for an install it did not finish.
+    writeBuildInfo(config, tag)
 
     // Only the Release tree is the installation a tag names; the Debug tree is a local test
     // artifact and must not become a release mirror.
@@ -323,6 +333,9 @@ function collect(config, tag) {
             fs.rmSync(mirrorRoot, { recursive: true })
         }
         fs.cpSync(outRoot, mirrorRoot, { recursive: true })
+        // The mirror is the same install under another name; its stamp must name its own tag so a
+        // guard run against out/<tag> reports where it looked.
+        writeBuildInfo(config, mirrorTag)
         logDone(`Mirrored to out/${mirrorTag}/`)
     }
 }

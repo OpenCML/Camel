@@ -9,7 +9,7 @@ tags = ["feat", "modules", "std", "json", "errors"]
 
 [[tests]]
 name = "json.accessor_error"
-desc = "get<key>, get<index>, as_int, as_string, as_bool, as_float, as_array and as_object of a failed Json! give that same error (same kind, message and location, not null and not a crash); the accessors of a plain Json still take parts out; the accessors of a document that has a value chain over Json?!; a document nested past CAMEL_JSON_MAX_DEPTH (default 10000) gives JsonTooDeep with the line and column of the bracket that goes too deep, from decode and decode_as."
+desc = "get<key>, get<index>, as_int, as_string, as_bool, as_float, as_array and as_object of a failed Json! give that same error (same kind, message and location, not null and not a crash); the accessors of a plain Json still take parts out; the accessors of a document that has a value chain over Json!?; a document nested past CAMEL_JSON_MAX_DEPTH (default 10000) gives JsonTooDeep with the line and column of the bracket that goes too deep, from decode and decode_as."
 kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"

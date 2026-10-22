@@ -4,7 +4,7 @@
 module export_var_local
 import { Tensor, reshape, relu } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func forward(x: Tensor): Tensor sync {
     var acc = x * 2.0

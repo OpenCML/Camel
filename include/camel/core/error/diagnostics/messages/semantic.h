@@ -50,7 +50,7 @@ enum class SemanticDiag : uint32_t {
     CallingIncompleteFunction   = 0x000013,
     // 0x000014 was ClosureCaptureAfterSelfCall, replaced by CaptureAfterRecursiveCall: with
     // function bodies built when first needed it is only met in recursion.
-    ImportNameNotExported        = 0x000015,
+    ImportNameNotExported = 0x000015,
     // A literal the type it is given cannot hold: out of range, truncated (a decimal literal
     // in an integer type), or not a value of that type at all (a text that is not a number).
     // One diagnostic for all of them (handover H24): it says which literal, which type, and
@@ -174,6 +174,42 @@ enum class SemanticDiag : uint32_t {
     TagOnUnnamedField      = 0x000167,
     TagArgumentNamed       = 0x000168,
     TagArgumentUnsupported = 0x000169,
+    TagArgumentType        = 0x00016A,
+    TagNotAPermission      = 0x00016B,
+    RuleTagNotRequires     = 0x00016C,
+    TagParameterType       = 0x00016D,
+    TagShadowsPermission   = 0x00016E,
+    // Static expansion (design principles 5.5, handover H51): 0x170 and up.
+    StaticMatchNotExhaustive  = 0x000170,
+    StaticMatchUnreachableCase = 0x000171,
+    StaticTypeNotConcrete     = 0x000172,
+    StaticMatchTooDeep        = 0x000173,
+    GenericInstantiationCycle = 0x000174,
+    StaticForNotComposite       = 0x000175,
+    StaticAccessNotInternal     = 0x000176,
+    StaticAccessUnknownField    = 0x000177,
+    StaticAccessIndexOutOfRange = 0x000178,
+    StaticAccessNotConstant     = 0x000179,
+    StaticComprehensionVoidElement = 0x00017A,
+
+    // `indices` (H51 step 6). 0x17B-0x17D are the body-less declaration diagnostics below, so
+    // this one takes the next free code after them.
+    StaticIndicesNotTuple = 0x000182,
+
+    // Body-less declarations, the declarations of a C++ module's operators (design principles
+    // 6.4; handover H19, step 1). 0x17B and up.
+    NativeDeclarationIncomplete = 0x00017B,
+    NativeDeclarationNotLoaded  = 0x00017C,
+    DeclarationModuleHasBody    = 0x00017D,
+    // Handover H94 (the author's rulings on body-less declarations): 0x17E and up.
+    /// Two generic declarations of one name can take the same call (ruling 2).
+    NativeDeclarationOverlap = 0x000180,
+    /// A declaration names an operator of another module (ruling 5).
+    NativeDeclarationForeignOperator = 0x000181,
+
+    // A lambda's parameter that writes no type and that the function type of its position does
+    // not determine (design principles 5.9). 0x17E and up.
+    LambdaParameterWithoutType = 0x00017E,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
@@ -181,8 +217,7 @@ enum class SemanticDiag : uint32_t {
     CapturedWriteInAsyncFunction = 0x100003,
     EffectNotExecuted            = 0x100004,
     // 0x90 and up, clear of what other work adds after EffectNotExecuted.
-    ExitInUnusedBranch      = 0x100090,
-    IntegerLiteralTruncated = 0x1000A0,
+    ExitInUnusedBranch = 0x100090,
     // Rulings of 2026-10-13 (design principles log 2.11): 0xC0 and up.
     UnusedFallibleValue = 0x1000C0,
     // Rulings of 2026-10-15 (design principles log 2.13): 0x110 and up.

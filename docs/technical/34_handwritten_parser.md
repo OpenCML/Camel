@@ -52,10 +52,12 @@ it.
 What needed care, all of it kept as ANTLR read it (checked token for token, section 7):
 
 - **Numbers** carry no sign. `REAL` is `digits . digits exponent?` and is the longest match
-  whenever it applies (`007.5`); `1.` and `1..2` leave the dot. `INTEGER` is decimal, `0` and
-  octal digits, `0x…`, `0b…`, then an exponent; a digit run that is none of these is cut where
-  the longest of them ends (`089` is `0`, `89`). `0xFFe-3` is one token: the final `e` goes to a
-  signed exponent.
+  whenever it applies (`007.5`); `1.` and `1..2` leave the dot. `INTEGER` is decimal, `0x…`,
+  `0b…`, `0o…`, then an exponent on a decimal number; `0xFFe-3` is one token: the final `e` goes
+  to a signed exponent. A decimal digit run that starts with `0` and has another digit (`09`,
+  `077`) used to be cut into two tokens; it is now refused as one run, with a located
+  `LexicalDiag::InvalidNumberFormat`, and a prefixed form with no digit of its base (`0o8`,
+  `0x`) is refused the same way. Octal is written `0o77` (H15i).
 - **Strings** `'…'`, `"…"`, `` `…` `` end at the first unescaped quote; `\\` and an escaped
   quote do not close; a string may span lines. When no quote closes it, it ends at its last
   escaped quote if there is one (`'C:\dir\'`), else it is unclosed and takes the rest of the
@@ -66,9 +68,9 @@ What needed care, all of it kept as ANTLR read it (checked token for token, sect
   characters, then one). `>=` is always one token; there is no `>>`.
 
 Lexical errors are recorded in the buffer and their text kept as `Error` tokens, which the
-parser skips: a run of characters that start no token (one error per run), an unclosed string,
-an unterminated block comment (ANTLR read its `/*` as `/` and `*`; the only place the token
-streams differ).
+parser skips: a run of characters that start no token (one error per run), a number run that is
+not a number token (`09`, `0o8`), an unclosed string, an unterminated block comment (ANTLR read
+its `/*` as `/` and `*`; the only place the token streams differ).
 
 ## 2. Rule 1: angle brackets touch
 
@@ -181,8 +183,8 @@ read (`peek`), never a whole bracket:
 | `{`: struct literal or block | 3 tokens | struct iff `{ name :` or `{ ...`; `{}` is an empty block as a branch arm or a lambda body and an empty struct as a statement (the order of the alternatives in `blockExpr` and `stmt`) |
 | `{` in a braced pattern | 3 tokens | pairs iff `{ name :` or `{ ...` |
 | `<` where an operand starts | 1 token | the `with` parameters of a lambda |
-| modifiers (`sync`, `macro`, …) at a statement | the modifiers + 1 | `func` after them: a declaration; `{` after a lone `sync`: a block; else a lambda |
-| `export`, `inner`, `outer` | ≤ 3 tokens | `export let/var/type/{`, `export inner type`: an export; else a function |
+| modifiers (`sync`) at a statement | the modifier + 1 | `func` after it: a declaration; `{` after a lone `sync`: a block; else a lambda |
+| `export` | ≤ 3 tokens | `export let/var/type/{`: an export; else a function |
 | `import x …` | 2 tokens | `x from`: the imported name; else a module path |
 | arguments: positional or named | 2 tokens | `name :` starts the named ones; a `...` before that is positional |
 | `[e for …]` | after the first element | `for` makes it a comprehension |
@@ -444,7 +446,7 @@ without names.
 | Test (`test/plans/feat/parse/frontend.plan.toml`) | What it holds |
 |---|---|
 | `grammar.reference_in_step` | the productions above the parser's functions, the grammar blocks of the language reference, the token table and the node kinds agree (`scripts/check-grammar.mjs`) |
-| `frontend.ast_snapshot` | every `.cml` file of the repository and every probe gives the AST recorded at the last comparison with ANTLR (`golden/ast_hashes.txt`, a hash per file of the normalized dump) |
+| `frontend.ast_snapshot` | every case of the parse corpus (`test/cases/parse/**`) and every probe gives the AST recorded at the last comparison with ANTLR (`golden/ast_hashes.txt`, a hash per file of the normalized dump). The snapshot is of the parser's tests, not of the repository (H188): other `.cml` files are checked by the plan that owns them |
 | `frontend.format_keeps_ast` | formatting an accepted file gives a text with the same AST |
 | `frontend.fuzz_lossless_tree` | for mutated programs the parser returns a tree whose leaves are exactly the tokens, and the AST builder accepts every tree without errors |
 

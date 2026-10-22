@@ -1,5 +1,5 @@
 // The tail recursion bench_loop.cml means: the state as parameters.
-import { get_env } from sys
+import { get_env } from env
 
 func spin(i: int, n: int, s: int): int {
     return if i >= n then s else spin(i + 1, n, s + i % 7)

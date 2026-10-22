@@ -6,7 +6,7 @@ module export_take
 
 import { Tensor, reshape, take } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func forward(x: Tensor, indices: int[]): Tensor {
     return take(x, indices)

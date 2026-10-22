@@ -1,0 +1,70 @@
+/**
+ * `static for (n, F) in fields T` expands the fields of a concrete struct or ordinary tuple at
+ * instantiation (H51 step 3): one copy of the body per field, in declaration order, with no
+ * graph node of its own. `t.[n]` picks the field whose key is a compile-time constant (H51
+ * step 4). `n` is the field name (a tuple's decimal index) and `F` is the field type, visible
+ * in `let v: F` and in `typeas F`.
+ */
+module fields_and_access
+
+func showStruct(t: {a: int, b: int}) {
+    sync {
+        static for (n, F) in fields {a: int, b: int} => {
+            let v: F = t.[n]
+            println(n, v)
+        }
+    }
+}
+
+func showTuple(t: (int, int)) {
+    sync {
+        static for (n, F) in fields (int, int) => {
+            let v: F = t.[n]
+            println(n, v)
+        }
+    }
+}
+
+func nested(t: {p: {x: int}, q: (int, int)}) {
+    sync {
+        static for (n, F) in fields {p: {x: int}, q: (int, int)} => {
+            let p: F = t.[n]
+            static for (m, G) in fields F => {
+                let v: G = p.[m]
+                println(n, m, v)
+            }
+        }
+    }
+}
+
+func emptyStruct(t: {}): int {
+    var count = 0
+    static for (n, F) in fields {} => {
+        count = count + 1
+    }
+    return count
+}
+
+/** `fields` is followed by a type position, so `()` is the empty tuple type (H79 ruling 1). */
+func emptyTuple(): int {
+    var count = 0
+    static for (n, F) in fields () => {
+        count = count + 1
+    }
+    return count
+}
+
+func tupleKey(t: (int, int)): int {
+    // A tuple element may be named by its decimal text or by its index; both are the same.
+    return t.["0"] + t.[0]
+}
+
+func main(): int sync {
+    showStruct({a: 1, b: 2})
+    showTuple((3, 4))
+    nested({p: {x: 5}, q: (6, 7)})
+    println(emptyStruct({}))
+    println(emptyTuple())
+    println(tupleKey((10, 0)))
+    return 0
+}

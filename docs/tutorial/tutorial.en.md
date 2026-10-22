@@ -379,6 +379,8 @@ Only `1` is printed. The return value `1` of `greet` does not depend on that `pr
 
 A `sync` written before a block makes it a sync block: the expressions in the block run in the order they are written, as if the compiler had added control edges between adjacent expressions. [`examples/06_sync_block.cml`](examples/06_sync_block.cml) changes only the body of `greet` into a sync block:
 
+<!-- camel-snippet: compile-only: the fence is the changed function only; the text block is the output of examples/06_sync_block.cml -->
+
 ```cml
 func greet(): int sync {
     println('hello from greet')
@@ -767,9 +769,9 @@ func main(): int sync {
 ```
 
 ```text
-1.41421
-5
-10
+1.4142135623730951
+5.0
+10.0
 ```
 
 - `import { a, b } from m` brings in the listed names; `import m` brings in only the namespace, and names are accessed as `m::name`.
@@ -777,7 +779,7 @@ func main(): int sync {
 
 ### The standard library
 
-The modules that come with Camel are `str` (strings), `array` (arrays), `math`, `statistics`, `algo`, `random`, `time`, `fs`, `json`, `os`, `sys`, `re`, `crypto`, `para`, `this`, the tensor family `tensor`, `nn`, `autodiff`, `onnx`, and `python`, which embeds Python ([language reference 5.2.1](../language/en/05_modules.md#521-modules-provided-with-camel)). The [standard library reference](../stdlib-reference.md) lists the functions of the first fifteen modules one by one: signature, whether it is pure, behaviour on failure, examples. [`examples/12_stdlib.cml`](examples/12_stdlib.cml):
+The modules that come with Camel are `str` (strings), `array` (arrays), `math`, `statistics`, `algo`, `random`, `time`, `fs`, `json`, `process`, `env`, `re`, `hash`, `para`, `this`, the tensor family `tensor`, `nn`, `autodiff`, `onnx`, and `python`, which embeds Python ([language reference 5.2.1](../language/en/05_modules.md#521-modules-provided-with-camel)). The [standard library reference](../stdlib-reference.md) lists the functions of the first fifteen modules one by one: signature, whether it is pure, behaviour on failure, examples. [`examples/12_stdlib.cml`](examples/12_stdlib.cml):
 
 ```cml
 module stdlib_demo
@@ -1068,9 +1070,9 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 ```
 
 ```text
-20
-12
-(20, 12)
+20.0
+12.0
+(20.0, 12.0)
 ```
 
 - `grad(f)` returns a function that differentiates the first `with` parameter of `f`; the remaining `with` parameters are constants and ordinary parameters are data.

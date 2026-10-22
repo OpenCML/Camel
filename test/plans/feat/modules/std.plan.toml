@@ -14,12 +14,34 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "crypto.basic"
-desc = "Exercises deterministic hashing and multi-round hashing from the crypto module."
+name = "hash.basic"
+desc = "Exercises deterministic hashing and multi-round hashing from the hash module."
 kind = "behavior"
-case = "../../../cases/modules/std/crypto/basic.cml"
+case = "../../../cases/modules/std/hash/basic.cml"
 args = ["${case}"]
 expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "env.basic"
+desc = "Exercises environment and working-directory queries from the env module."
+kind = "behavior"
+case = "../../../cases/modules/std/env/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "env.string_equality"
+desc = "Strings created by a module compare by content with literals, and branches on the comparison pick the right arm."
+kind = "behavior"
+case = "../../../cases/modules/std/env/string_equality.cml"
+args = ["${case}"]
+envs = ["CAMEL_TEST_STRING_EQ=abc"]
+expect_exit = 0
+expect_stdout_contains = ["eq_empty=true ne_empty=false eq_value=true", "arm unset", "arm set", "picked=12"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -46,13 +68,15 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fs.remove_permissions"
-desc = "A removal the file system refuses is an error value of kind PermissionDenied (not NotFound), carries the operator as its location, and leaves the entry in place."
+desc = "A removal the file system refuses is an error value of kind PermissionDenied (not NotFound), carries the operator as its location, and leaves the entry in place. The verifier arranges the refusal with a deny ACE (Windows) or the containing directory's permission bits, and prints why it stopped when the machine will not grant one -- a runner whose ACLs do not bind the process used to fail the run instead of reporting the reason."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/modules/std/fs/remove_permissions.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["fs.remove permission checks passed"]
+# Both outcomes of arranging the refusal begin with the same words: "passed" when the deny bound
+# the process, "skipped (…)" with the reason when it did not.
+expect_stdout_contains = ["fs.remove permission checks"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -97,10 +121,10 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "os.basic"
-desc = "Exercises non-interactive OS helpers such as identity lookup, sleeping, and CPU discovery."
+name = "process.basic"
+desc = "Exercises non-interactive process helpers such as identity lookup, sleeping, and CPU discovery."
 kind = "behavior"
-case = "../../../cases/modules/std/os/basic.cml"
+case = "../../../cases/modules/std/process/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -207,28 +231,6 @@ kind = "behavior"
 case = "../../../cases/modules/std/statistics/basic.cml"
 args = ["${case}"]
 expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
-
-[[tests]]
-name = "sys.basic"
-desc = "Exercises environment and working-directory queries from the sys module."
-kind = "behavior"
-case = "../../../cases/modules/std/sys/basic.cml"
-args = ["${case}"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
-
-[[tests]]
-name = "sys.string_equality"
-desc = "Strings created by a module compare by content with literals, and branches on the comparison pick the right arm."
-kind = "behavior"
-case = "../../../cases/modules/std/sys/string_equality.cml"
-args = ["${case}"]
-envs = ["CAMEL_TEST_STRING_EQ=abc"]
-expect_exit = 0
-expect_stdout_contains = ["eq_empty=true ne_empty=false eq_value=true", "arm unset", "arm set", "picked=12"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 

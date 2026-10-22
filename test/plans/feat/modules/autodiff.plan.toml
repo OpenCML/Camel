@@ -416,19 +416,19 @@ timeout_ms = 6000
 
 [[tests]]
 name = "fused_grad_check"
-desc = "After tensor::fuse (and without std::macro, so grad sees the fused graphs), the derivative rules of matmul_add and matmul_add_relu match finite differences in every operand."
+desc = "After tensor::fuse (and without std::macro), the program's own matmul, add and relu rules differentiate the marked groups: every operand's gradient matches finite differences."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/fused_grad_check.cml"
 args = ["${case}", "tensor::fuse", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["matmul_add.x ok", "matmul_add.w ok", "matmul_add.b ok", "matmul_add_relu.x ok", "matmul_add_relu.w ok", "matmul_add_relu.b ok"]
+expect_stdout_contains = ["linear.x ok", "linear.w ok", "linear.b ok", "linear_relu.x ok", "linear_relu.w ok", "linear_relu.b ok"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
 [[tests]]
 name = "fused_grad_check.fused"
-desc = "The functions checked by fused_grad_check are indeed fused: tensor::fuse leaves matmul_add and matmul_add_relu in them."
+desc = "The functions checked by fused_grad_check are indeed the marked groups: tensor::fuse leaves matmul, add and relu in them and writes tensor.fusion on every node of each group."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/fused_grad_check.cml"
 args = ["${case}", "tensor::fuse", "std::gir"]
@@ -437,8 +437,13 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert((out.match(/tensor:matmul_add_relu/g) || []).length === 3, 'expected three matmul_add_relu nodes')
-assert((out.match(/tensor:matmul_add"/g) || []).length === 3, 'expected three matmul_add nodes')
+const count = (text) => out.split(text).length - 1
+const q = String.fromCharCode(92) + '"'
+assert(count('label="tensor:matmul"') === 6, `expected six matmul nodes, got ${count('label="tensor:matmul"')}`)
+assert(count('label="tensor:relu"') === 3, `expected three relu nodes, got ${count('label="tensor:relu"')}`)
+assert(count('tensor.fusion=') === 15, `expected 15 grouped nodes, got ${count('tensor.fusion=')}`)
+assert(count('tensor.fusion=' + q + 'linear_relu' + q) === 9, `expected three linear_relu groups, got ${count('tensor.fusion=' + q + 'linear_relu' + q)}`)
+assert(count('matmul_add') === 0, 'no fused operator may appear')
 }
 """
 timeout_ms = 6000
@@ -1427,6 +1432,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "loop_grad_struct_state"
+desc = "A struct loop state is differentiable: the state is one struct, its tangent is the same struct, and the reverse pass reads the fields it needs. Before this, the forward rewrite took the programme's field read (`q.a`) for the loop's state projection, and the graph crashed while being scheduled (SIGSEGV: a struct access on a tuple). The shapes: a struct state the body also uses as a whole (`sumP(q)`, so H71's split into fields does not apply), a nested struct state, a struct state with an int field (its tangent is `{a}`), a one-field struct state, and a state whose struct part stays whole beside a counter. Every gradient is 24 (a·(1 + d) over d = 1, 2, 3), the same as the tuple-state reference; `mixedPart` adds b·d with b = 1, so its gradient is 1; a struct state whose array field is appended gives 2 in place and 6 when the round must be taped; a struct parameter tree differentiates to `{p: {a: 4, b: 4}, c: 4}`."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_struct_state.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_struct_state grads=24.0 24.0 24.0 24.0 1.0 24.0 2.0 6.0 { p: { a: 4.0, b: 4.0 }, c: 4.0 }\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "loop_grad_zero_rounds"
 desc = "A loop over an empty array runs no round: the tape is empty, the reverse pass does not run, and the gradient of the parameter the body would have used is zero, not the seed."
 kind = "behavior"
@@ -1474,8 +1492,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "loop_grad_refuse_iterable.lowered"
-desc = "The same refusal when std::fvm runs grad: the back end lowers loops in its private copy, but grad reads the program's own LOOP node, so the diagnostic is the same and is reported at the loop."
+name = "loop_grad_refuse_iterable.fvm"
+desc = "The same refusal when std::fvm runs grad: the back end and grad read the same LOOP node of the program, so the diagnostic is the same and is reported at the loop."
 kind = "negative"
 case = "../../../cases/modules/autodiff/loop_grad_refuse_iterable.cml"
 args = ["${case}", "${run_fvm}"]
@@ -2084,7 +2102,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "benchmark_gradients_vs_torch"
-# Slow layer: measured 8.3 s in the full serial run (docs/handover/reports/H10.md).
+# Slow layer: measured 8.3 s in the full serial run (handover note ⟨617198c⟩ (H10)).
 tier = "slow"
 desc = "The training gradient of nine benchmark models (mlp, mlp_big, lenet, lenet_big, gru, gru_big, transformer, transformer4, transformer_big) against PyTorch float32 autograd on the benchmark weights and input (benchmarks/train.py --check): the gradient of mean(y * y) with respect to every weight, under std::macro std::nvm and under std::macro std::opt std::nvm, each weight within 1e-4 of the reference (max|diff| over the weight's largest gradient entry, floored at 1e-3 of the model's). 1e-4 is the benchmark's agreement tolerance; the worst of the nine measures 6.7e-06. This is the second of the two numerical comparisons (native execution against PyTorch), not the exported artifact against native execution. resnet and resnetbn are checked by the next four entries: a float32-against-float32 comparison is not a test of their rules."
 kind = "behavior"
@@ -2099,7 +2117,7 @@ timeout_ms = 300000
 
 [[tests]]
 name = "resnet_gradient_smooth_vs_torch64"
-# Slow layer: measured 6.3 s in the full serial run (docs/handover/reports/H10.md).
+# Slow layer: measured 6.3 s in the full serial run (handover note ⟨617198c⟩ (H10)).
 tier = "slow"
 desc = "resnet with relu replaced by tanh on both sides (benchmarks/tools/grad_referee.py --activation tanh): Camel's gradient against PyTorch float64 autograd, every weight within 1e-4 (measured 1.4e-06). The rules of conv2d with stride and padding, the residual sum, the two axis means and the linear layer, with no kink for float32 rounding to cross."
 kind = "behavior"
@@ -2114,7 +2132,7 @@ timeout_ms = 300000
 
 [[tests]]
 name = "resnetbn_gradient_smooth_vs_torch64"
-# Slow layer: measured 14.5 s in the full serial run (docs/handover/reports/H10.md).
+# Slow layer: measured 14.5 s in the full serial run (handover note ⟨617198c⟩ (H10)).
 tier = "slow"
 desc = "resnetbn (20 training-mode batch_norms) with relu replaced by tanh on both sides: Camel's gradient against PyTorch float64 autograd, each of the 62 weights that have a gradient within 1e-4 (measured 7.8e-06), the loss and the 40 running statistics the forward leaves agreeing to 2e-7. The 20 conv biases in front of a batch_norm have a gradient of exactly zero (float64: 1e-17); what float32 computes there is the rounding of a sum that cancels, and it is accepted within 1e-4 of the floor or when no farther from float64 than PyTorch float32 on the same weight (measured: Camel 2.7e-04 of the floor, that is 2.7e-07 of the model's largest gradient entry; PyTorch float32 1.0e-03). Whether exactly-zero gradients need a bound of their own is open (benchmarks/README.md, Gradient agreement)."
 kind = "behavior"
@@ -2129,7 +2147,7 @@ timeout_ms = 300000
 
 [[tests]]
 name = "resnet_gradient_relu_kinks_vs_torch64"
-# Slow layer: measured 21.1 s in the full serial run (docs/handover/reports/H10.md).
+# Slow layer: measured 21.1 s in the full serial run (handover note ⟨617198c⟩ (H10)).
 tier = "slow"
 desc = "resnet as benchmarked, against PyTorch float64 autograd. The direct comparison is outside 1e-4 (3.1e-03 on stem_w; PyTorch float32 is 1.6e-03 from float64 on another weight) because the gradient is discontinuous where a relu input crosses zero and, of 8.9 million relu inputs, a few lie within float32 rounding of zero. The test requires that the gap is exactly that: Camel's gradient must be within 1e-4 of the float64 gradient recomputed with a few named relu decisions reversed, each of them a unit whose float64 input is within half the layer's float32/float64 forward drift of zero (measured: 2 units, inputs -3.9e-09 and +4.0e-08 in layers whose largest input is 3.4 and 5.3; residual 3.9e-07). A wrong rule is not explained by reversing such units and fails."
 kind = "behavior"
@@ -2144,7 +2162,7 @@ timeout_ms = 600000
 
 [[tests]]
 name = "resnetbn_gradient_relu_kinks_vs_torch64"
-# Slow layer: measured 42.6 s in the full serial run (docs/handover/reports/H10.md).
+# Slow layer: measured 42.6 s in the full serial run (handover note ⟨617198c⟩ (H10)).
 tier = "slow"
 desc = "resnetbn as benchmarked, against PyTorch float64 autograd, by the criterion of resnet_gradient_relu_kinks_vs_torch64. The direct comparison is 7.6e-02 for Camel and 9.5e-02 for PyTorch float32 (one reversed relu decision in a 4x4 plane behind a batch_norm moves single kernel-gradient entries by several percent, and everything upstream by a few thousandths); with 3 named relu decisions reversed (float64 inputs -3.8e-08, -1.8e-07, -2.4e-07) the float64 gradient is within 5.4e-06 of Camel's on the weights that have a gradient."
 kind = "behavior"
@@ -2288,6 +2306,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "loop_grad_composite_read"
+desc = "A composite loop state whose gradient comes from a value computed outside the loop and read only inside its body: the two-value state adds `s = w * 2` each round (value 12, gradient 6), and an array state grown by `append<a>` with `a = w + 1` outside the loop gives the gradient of `xs[1] + xs[2]` (2). The loop's value is read after the loop through a projection, which must pass the gradient on to the loop's site."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_composite_read.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_composite_read vg=(12.0, 6.0) d=2.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "with_grad.old_name_removed"
 desc = "The old name `value_and_grad` is deleted outright: it is an ordinary unresolved reference, not an alias and not a pointing diagnostic."
 kind = "negative"
@@ -2298,4 +2329,61 @@ expect_diagnostic_line = 7
 expect_output_contains = ["SemanticDiag::UnresolvedReference", "value_and_grad"]
 expect_output_not_contains = ["retired", "use `with_grad`"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_data_input_is_data"
+desc = "An ordinary argument is data even when its type has a tangent: a float `scale` converted to int and a `Tensor` of integer labels cast to int64 and back to float are inputs of the differentiated computation with nothing differentiable upstream, so they are not refused; the gradient is taken through the first `with` parameter and is 3.0 and [0, 1, 0] (sum 1.0) respectively (design principles 9.9). This is the C2 `with_grad(loss)` shape."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_data_input.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_exact = "6.0\n3.0\n2.0\n1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp.cross_module.macro.nvm"
+desc = "A function declared with `#vjp<rule>` in one module is differentiated from another module: the declaration tag's graph reference is read from the frozen graph, so the rule (10 * dy) is used instead of the derivative of the body (20 and 10, not 16 and 4). The library is imported by two modules, so the second import is served by the module cache: a tag that did not survive it would lose its rule."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/vjp_cross_module.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('vjp_cross_module da=20.0 db=10.0'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "vjp.cross_module.simplified.fvm"
+desc = "The same cross-module rule after generic simplification, run by FastVM: the graph reference of the rule is kept through `std::opt` and the module cache."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/vjp_cross_module.cml"
+args = ["${case}", "std::macro", "std::opt", "std::opt::fold", "std::opt::dce", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('vjp_cross_module da=20.0 db=10.0'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "vjp_old_annotation_removed"
+desc = "The old `@vjp<rule>` decorator is deleted: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp<rule>`, not at the operator it used to resolve to."
+kind = "negative"
+case = "../../../cases/modules/autodiff/err_vjp_annotation.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 1
+expect_output_contains = ["#vjp<rule>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

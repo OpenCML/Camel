@@ -118,9 +118,7 @@ enum class GraphRole {
     Lambda,   // a function value written in another function: a frame of its own
     /// The arm of a branch (`if`, `match`, `&&`, `||`, `??`, `!!`, `?->`, narrowing): code of
     /// the function that branches, which a call makes a frame of its own. Folded into the
-    /// function's frame unless the user asks for the subgraphs. The condition and the body of
-    /// a `LOOP` will be subgraphs of this kind too (design principles 3.10): they belong
-    /// to the function the loop is written in, and fold the same way.
+    /// function's frame unless the user asks for the subgraphs.
     Arm,
 };
 

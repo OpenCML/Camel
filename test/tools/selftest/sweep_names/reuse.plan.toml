@@ -1,0 +1,19 @@
+# Fixture of test/tools/selftest/run.mjs: the other direction of the identity rule. One source
+# test is reused under two sweeps; each copy is named after its own sweep, so the two identities
+# differ and each back end compares against the first back end of its own sweep. The program
+# prints the sweep's environment variable, so the two sweeps' outputs differ: a copy that
+# resolved its reference against the other sweep would fail on `stdout_normalized`.
+id = "selftest.sweep.reuse"
+order = 25
+tier = "fast"
+desc = "One source test under two sweeps: two distinct identities, each resolving its own base."
+
+[[sweeps]]
+name = "poison"
+plans = ["reuse_sources"]
+envs = ["SELFTEST_SWEEP=poison"]
+
+[[sweeps]]
+name = "poison_again"
+plans = ["reuse_sources"]
+envs = ["SELFTEST_SWEEP=poison_again"]

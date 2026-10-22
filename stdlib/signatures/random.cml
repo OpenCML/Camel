@@ -1,97 +1,32 @@
 /**
- * Signatures of the `random` module (C++ operators, modules/random).
+ * Computed signatures of the `random` module (C++ operators, modules/random).
  *
- * One generator for the whole process. Every function reads or advances it and is declared with
- * effects; none is ever folded or merged by a pass.
- *
- * After a seed the numbers are the same on every platform. The generator is the 64-bit Mersenne
- * Twister (std::mt19937_64, seeded with the value as an unsigned 64-bit integer), and the draws
- * are made by the project's own code (include/camel/utils/random.h), not by the C++ library's
- * distributions, which differ between libraries: a float in [0, 1) is the generator's 64 bits
- * times 2^-64; an integer in a range uses Lemire's method; a normal value uses Marsaglia's polar
- * method (the second value of each pair is dropped); `shuffle` and `sample` take the generator's
- * output modulo the number of places left.
+ * `choice`, `sample` and `shuffle` take their result type from the element type of their array
+ * argument; the `DynamicFuncTypeResolver` of modules/random is the one source of that signature,
+ * so they are not declared in stdlib/random.cml. Their documentation and `#op` tags live here,
+ * and scripts/stdlib-reference.mjs reads this file (the module's `computed:` entry) together
+ * with stdlib/random.cml.
  *
  * For reference only: these declarations are not compiled. They are checked against the
- * operators the module registers, and docs/stdlib-reference.md is generated from them
- * (scripts/stdlib-reference.mjs).
+ * operators the module registers, and docs/stdlib-reference.md is generated from them.
  */
-
-/// Sets the state of the generator: the same seed gives the same sequence.
-/// @effect sets the generator
-/// @example seed(42)
-inner func seed(value: int): void {
-    return 'rand:seed'
-}
-
-/// A float drawn uniformly from 0 (included) to 1 (excluded).
-/// @effect advances the generator
-/// @example rand()    // 0.374540
-inner func rand(): float {
-    return 'rand:rand'
-}
-
-/// A float drawn from the normal distribution with mean 0 and deviation 1.
-/// @effect advances the generator
-/// @example randn()    // -0.138264
-inner func randn(): float {
-    return 'rand:randn'
-}
-
-/// An integer drawn uniformly from low to high, both included; the two are swapped when low is
-/// above high.
-/// @effect advances the generator
-/// @example randint(1, 6)    // 4
-inner func randint(low: int, high: int): int {
-    return 'rand:randint'
-}
 
 /// One element of xs, drawn uniformly.
 /// @effect advances the generator
 /// @fails fault `InvalidArgument` when xs is empty
 /// @example choice(['a', 'b', 'c'])    // 'b'
-inner func choice(xs: T[]): T {
-    return 'rand:choice'
-}
+#op<'rand:choice'>
+export func choice(xs: T[]): T
 
 /// n elements of xs drawn without replacement, as a new array.
 /// @effect advances the generator
 /// @fails fault `InvalidArgument` when n is negative or above the number of elements
 /// @example sample([1, 2, 3, 4], 2)    // [3, 1]
-inner func sample(xs: T[], n: int): T[] {
-    return 'rand:sample'
-}
+#op<'rand:sample'>
+export func sample(xs: T[], n: int): T[]
 
 /// The elements of xs in a random order, as a new array; xs is not changed.
 /// @effect advances the generator
 /// @example shuffle([1, 2, 3])    // [2, 3, 1]
-inner func shuffle(xs: T[]): T[] {
-    return 'rand:shuffle'
-}
-
-/// A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
-/// half, as signed int64 bits). Pure: it reads no generator and the same seed gives the same key
-/// on every scheduler, in translated C++, and on every platform.
-/// @pure
-/// @example key(42)    // { hi: 1350887118657991639, lo: -7139630017956984517 }
-inner func key(seed: int): Key {
-    return 'rand:key'
-}
-
-/// Two independent keys derived from key: split(key) gives the same pair every time, and does
-/// not change key.
-/// @pure
-/// @example let (a, b) = split(key(42))
-inner func split(key: Key): (Key, Key) {
-    return 'rand:split'
-}
-
-/// A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
-/// stream. Pure: the same key and n give the same permutation everywhere, it reads no generator
-/// and does not change key; n = 0 gives [] and n = 1 gives [0].
-/// @pure
-/// @fails fault `InvalidArgument` when n is negative
-/// @example permutation(key(42), 4)    // [1, 0, 2, 3]
-inner func permutation(key: Key, n: int): int[] {
-    return 'rand:permutation'
-}
+#op<'rand:shuffle'>
+export func shuffle(xs: T[]): T[]

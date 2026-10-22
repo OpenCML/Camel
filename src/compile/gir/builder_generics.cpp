@@ -76,7 +76,13 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             continue;
         }
         const std::string name = child->name();
-        Type *type             = child->at(0)->dataType();
+        if (child->nativeDeclaration()) {
+            // A body-less declaration is a rule of an operator, generic or not; a generic one is
+            // instantiated by its resolver when it is called, not from a template (handover
+            // H19, step 1).
+            continue;
+        }
+        Type *type = child->at(0)->dataType();
         if (name.empty() || !isGenericHere(type)) {
             continue;
         }
@@ -479,7 +485,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         // not fit is refused at its element, and one that does not fit at all is described
         // below.
         if (compositeLiteralEntersIn(inputAt(i).node, wanted, inputAt(i).expr)) {
-            if (node_handle_t entered = coerceTo(inputAt(i).node, wanted, inputAt(i).expr)) {
+            if (node_handle_t entered = checkValue(inputAt(i).node, wanted, inputAt(i).expr)) {
                 inputAt(i).node = entered;
                 typeAt(i)       = wanted;
                 continue;
@@ -821,6 +827,16 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             if (instance.failed) {
                 throw BuildAbortException();
             }
+            // A recursive call of the instance being built can share its graph, but only once
+            // its return type is known. A function with no declared return type has none yet:
+            // returning the open graph would hand the caller half a type.
+            if (bodyStates_[instance.graph.get()] == BodyState::Open &&
+                !instance.graph->funcType()->hasExitType()) {
+                diags_->of(SemanticDiag::GenericInstantiationCycle)
+                    .atOrigin(call->origin())
+                    .commit(tmpl->name, typeBindingsToString(bindings));
+                throw BuildAbortException();
+            }
             return instance.graph;
         }
     }
@@ -963,12 +979,12 @@ compile_graph_ptr_t Builder::instantiateGeneric(
                        : instanceName);
         // The body keeps the `on nodes` tags of the generic declaration: they are the same for
         // every instance, and they were resolved once (tagFactsOf remembers by node).
-        buildFuncBody(
-            tmpl->func,
-            graph,
-            funcType,
-            instanceName,
-            tagFactsOf(tmpl->func, camel::core::tag::Nodes).nodes);
+        const TagFacts tags = tagFactsOf(tmpl->func, camel::core::tag::Func);
+        if (camel::core::tag::declaresMacro(tags.declaration)) {
+            graph->draft().setFlags(static_cast<uint8_t>(
+                graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+        }
+        buildFuncBody(tmpl->func, graph, funcType, instanceName, tags);
         leaveScope();
     } catch (...) {
         if (instanceIndex < tmpl->instances.size()) {

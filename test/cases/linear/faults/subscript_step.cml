@@ -1,0 +1,18 @@
+/**
+ * A subscript slice with a step other than 1 is a view with strides, which needs the
+ * multidimensional array representation of H17: the operator refuses it instead of copying the
+ * elements (design principles 5.4). The fault names the work that is missing.
+ */
+module subscript_step
+
+func every(xs: int[], a: int, b: int, s: int): int[] {
+    return xs[a:b:s]
+}
+
+func main(): int sync {
+    let xs = [1, 2, 3, 4, 5]
+    println(every(xs, 0, 5, 1))
+    println(every(xs, 0, 5, 2))
+    println('not reached')
+    return 0
+}

@@ -232,10 +232,9 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
                 std::move(uri),
                 std::make_shared<const OpDef>(std::move(def))});
         // An operator without an export name belongs to no operator group, which is what
-        // publishes resolvers by URI. A rewrite that creates such an operator (tensor::fuse)
-        // still needs its result type to follow its arguments when types are re-inferred
-        // (specialization to an export's input shapes); otherwise everything downstream of it
-        // loses its static shape.
+        // publishes resolvers by URI. Such an operator still needs its result type to follow its
+        // arguments when types are re-inferred (specialization to an export's input shapes);
+        // otherwise everything downstream of it loses its static shape.
         const Entry &entry = entries_.back();
         byId_.emplace(
             camel::core::OperatorTable::instance().intern(entry.uri),

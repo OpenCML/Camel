@@ -57,7 +57,7 @@ Invariants:
 This does not stand in the way of a moving collector for small objects: nothing here hands out
 pointers to collectable objects, and the spaces hold only what is never moved.
 
-What a function costs (measured, release build, `CAMEL_GC_STATS=1`): about 0.8 KB of the graph
+What a function costs (measured, release build, `std::profile(gc_stats=1)`): about 0.8 KB of the graph
 space for a function of one expression, 1.9 KB with an `if` (three graphs), 1.5 KB with a
 lambda; 0.6 to 1.8 KB of the permanent space before the type table (5 to 17 type objects:
 composite types were created anew at every use; see below for what is shared now); about 1.2 KB of the meta space when its graph owns a constant
@@ -96,12 +96,16 @@ caller:
   program defines), whose result type the body decides after values of the function exist.
   Capture names are no longer part of a function type; they are held by the graph
   (`GCGraph::captureNames`).
-- Struct types are interned by field names and field type objects.
+- Struct types are interned by their declaration and type arguments when they are named (design
+  principles 5.2: a named type is its declaration), and by field names and field type objects when
+  they are anonymous. A named declaration's instance is filled in after its fields have been read
+  and only then enters the table, so a recursive type through an array (`type Node = { children:
+  Node[] }`) has one instance whose `children` field denotes that same object.
 
 Not interned: open signatures, unions and type variables. An interned type is immutable by
-construction: no type class has a mutator except `OpenFunctionType::setExitType`, and the table
-never holds an open signature. `CAMEL_TYPE_STATS=1` prints what a program allocated per kind
-of type and how many constructions the table answered.
+construction: no type class has a mutator except `OpenFunctionType::setExitType` and the completion
+of a named struct instance before the table holds it. `std::profile(type_stats=true)` prints what a program
+allocated per kind of type and how many constructions the table answered.
 
 A graph's frame layout is not a type in the table at all: it is built at the end of the
 graph's own block in the graph space (`TupleType::constructFrameLayout`) and freed with the
@@ -123,6 +127,10 @@ metadata.
 The important consequences are:
 
 - `Tuple`, `Struct`, `FixedArray`, and `Array` trace only fields whose `TypeCode` is GC-traced.
+- A recursive type through an array is traced by the element type: a `Node` traces its `children`
+  slot as an `Array`, the array relocates each element as a `Node`, and each moved `Node` repeats
+  the same walk. The walk ends because the object graph is finite, not the type: the type object
+  has two fields whatever the depth of the value.
 - Inline small-array storage is traced the same way as fixed backing storage.
 - `Function` and compile-time `StaticFunction` relocate the closure tuple itself, then the tuple scan
   traces closure members with their tuple layout.
@@ -146,7 +154,7 @@ version lives as long as a live `Program` holds it, a `Program` as long as somet
 - **Two collections.** While a program runs, a major collection of run-time values marks through
   the heap and `GCGraphManager::sweepMarked()` (installed with `setGraphSweeper`, called after
   `markPhase`) frees the unmarked `Program`s and graph versions; the graph space also asks for a
-  major collection when it holds a megabyte (`CAMEL_GRAPH_GC_MB`, default 64) and as much again
+  major collection when it holds a megabyte (`--graph-gc-mb`, default 64) and as much again
   as it held after the last sweep (`requestMajorCollection`). Between passes (nothing runs)
   `collect()` has the heap marked the same way, without sweeping or moving anything
   (`collectGraphSpace`), so a function value of the heap keeps its `Program` there too; it runs
@@ -183,7 +191,7 @@ global `autoSpace` singleton can retain a dangling vector pointer.
 
 ## Collectors
 
-Two collectors run the auto space; `--gc` / `CAMEL_GC` chooses (`docs/cli.md`, "The
+Two collectors run the auto space; `--gc` chooses (`docs/cli.md`, "The
 collector"). The default is the non-moving one.
 
 - **mark-sweep.** Small objects are allocated from the free lists of the elder space, objects
@@ -202,7 +210,9 @@ reserved so far, at most 256 MB), so neither allocation nor promotion fails shor
 refusing memory. Major collections are paced by volume for both old spaces: one is asked for
 when a space has taken, since its last sweep, the larger of a floor (32 MB for the elder space,
 `CAMEL_GC_LARGE_BUDGET_MB` for large objects) and `CAMEL_GC_GROWTH_PERCENT` percent of what
-that sweep left alive. `CAMEL_GC_HEAP_LIMIT_MB` bounds what the two hold together.
+that sweep left alive. `CAMEL_GC_HEAP_LIMIT_MB` bounds what the two hold together. In the
+generational collector a third volume paces a major collection: the blocks held by values
+promoted to the elder space (see "Promoted-block pacing" below).
 
 What C++ code may do with objects under either collector is the subject of
 `36_gc_handle_rules.md`. In short for this file: a minor collection updates the roots in place
@@ -263,8 +273,8 @@ remembered when promotion leaves old-to-young edges behind.
 
 The verifier compares remembered entries against typed old/large objects whose layouts are known
 from barriers, roots, or relocation metadata. Missing remembered entries report the owner slot, slot
-type, region, and young target. `CAMEL_GC=generational` selects the moving collector;
-the production default remains address-stable.
+type, region, and young target. `--gc generational`, the default of a release build, selects the
+moving collector; `--gc mark-sweep` keeps objects where they are.
 
 Intentionally unbarriered paths are limited to storage that is not an old auto-space container:
 dynamic frame slots are traced roots, graph-space static tuples are graph roots rather than
@@ -307,6 +317,33 @@ contract above), and that wait is what a lower setting pays for. Freed large blo
 a size-class cache (up to 256 MB) and reused, so steady-state tensor workloads recycle hot memory
 instead of faulting fresh pages in; cached blocks stay resident, so the resident peak sits up to
 256 MB above what the space holds.
+
+### Promoted-block pacing
+
+A data block held by an array or a `Bytes` value moves with its owner, and when the owner is
+promoted the block can be released only by a major collection: a minor collection does not sweep
+the elder space. A program that promotes block-owning arrays and then drops them would therefore
+hold those blocks until some unrelated volume crossed the elder budget. The allocator counts
+block bytes **by block identity, not per value**. `rtdata::Object::heldBlock()` returns the block
+the value holds (or null), and `Block::claimPacingBytes()` returns the bytes that have not been
+counted yet, so one block reached through an array and a `reshape` view (or through two arrays)
+adds its bytes once whichever view is promoted first; a later view claims nothing, and growth of
+an already-counted block adds only the delta. A value can also take a block over after it was
+promoted: a view of an inline array, `Array::growCompact` moving inline data into a block,
+`Array::adoptBlock`, or `BytesObject::adopt`. Those sites call `IAllocator::noteBlockHeld` at the
+takeover; the collector counts the block there when the owner is already in the elder space, just
+as if the block had been promoted with the value. The allocator asks for a major collection at
+the next safepoint once the bytes promoted or adopted since the last sweep exceed a budget. After
+every sweep the budget is the larger of the large-object floor (`CAMEL_GC_LARGE_BUDGET_MB`,
+default 4 MB) and `CAMEL_GC_GROWTH_PERCENT` percent (default 100) of the block bytes the sweep
+left in promoted values; the rule and the floor are the same as for the large-object space,
+because these are the same kind of bytes: pure data outside the collected heap that only a full
+mark-sweep can reclaim. The live base is summed with `Block::claimSweepGeneration()` for the same
+identity reason: one block reached through several surviving views is counted once, not once per
+view. With the default, a program that keeps `B` bytes in promoted arrays whose blocks are still
+live holds at most about twice that, plus one pacing window; a program that keeps nothing holds
+about one floor plus the window. The garbage blocks are released by the deferred-release queue
+after that major collection runs (`mm/deferred.h`), before the next window is measured.
 
 GC finalization now runs before mark-sweep frees unreachable elder or large objects. In the
 young-copying path, dead nursery/from-space wrappers are finalized before the semispace reset, while
@@ -357,17 +394,17 @@ do not need source changes:
 - `CAMEL_GC_STRESS_SAFEPOINT=N` requests a collection every `N` explicit runtime safepoints.
 - `CAMEL_GC_STRESS_MODE=minor|major|both` selects which collection kind stress requests use.
 - `CAMEL_GC_LOG_MOVES=1` emits movement records when the copying path relocates an object.
-- `CAMEL_GC=generational` (older spelling `CAMEL_GC_ENABLE_YOUNG_COPYING=1`) selects the generational collector for GC
-  tests. It is off by default.
+- `--gc generational` selects the generational collector (the default);
+  `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is the older spelling and changes nothing.
 - `CAMEL_GC_PRINT_CONFIG=1` prints the effective GC diagnostic configuration to stderr when the
   process-level allocator is initialized.
-- `CAMEL_GC_STATS=1` also prints the occupancy of the graph, permanent and meta spaces at exit
+- `std::profile(gc_stats=1)` also prints the occupancy of the graph, permanent and meta spaces at exit
   (`[camel] spaces: ...`): for each, kilobytes in use and at the high-water mark, megabytes
   reserved, segments, allocations and the limit.
-- `CAMEL_GC_STATS=1` prints one line of pacing statistics to stderr at exit (`[camel] gc: ...`):
+- `std::profile(gc_stats=1)` prints one line of pacing statistics to stderr at exit (`[camel] gc: ...`):
   collections performed, requests by cause (large-object budget, elder space exhausted, other),
   megabytes allocated per space, the large-object volume the last sweep left, the high-water mark
-  of the large-object space, and the budget and growth setting in force. `CAMEL_GC_STATS=2` also
+  of the large-object space, and the budget and growth setting in force. `std::profile(gc_stats=2)` also
   prints one line per major collection (`[camel] gc collection: ...`) with the budget that was in
   force, the bytes allocated since the previous sweep, the volume before and after the sweep, and
   the next budget. The numbers depend only on the allocation order, not on time.

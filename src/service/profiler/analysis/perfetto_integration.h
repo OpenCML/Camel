@@ -66,6 +66,8 @@ class PerfettoIntegration {
 
   private:
     bool tracingEnabled_ = false;
+    // --profile-mode full: open the UI when the trace is written, instead of only writing it.
+    bool autoOpen_ = false;
     std::string outputFile_;
     std::vector<PerfettoTraceEvent> events_;
 

@@ -38,6 +38,7 @@
 #include "camel/core/error/abort.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/range.h"
+#include "camel/core/module/dynamic.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
 #include "camel/core/type/enum.h"
@@ -74,6 +75,7 @@ struct RawFact {
     enum class Kind : uint8_t {
         TypeExpression,
         TypeDeclared,
+        TypeReferenced,
         ValueDeclared,
         ExpressionTyped,
         ValueReferenced,
@@ -120,6 +122,15 @@ class Recorder : public camel::compile::SemanticRecorder {
         facts.push_back(
             {.kind = RawFact::Kind::TypeDeclared, .at = decl, .type = type, .name = name});
     }
+    void typeReferenced(
+        origin_id_t ref, const std::string &name, origin_id_t decl, Type *type) override {
+        facts.push_back(
+            {.kind  = RawFact::Kind::TypeReferenced,
+             .at    = ref,
+             .other = decl,
+             .type  = type,
+             .name  = name});
+    }
     void valueReferenced(
         origin_id_t ref, const std::string &name, origin_id_t decl, Type *type) override {
         facts.push_back(
@@ -152,12 +163,13 @@ class Recorder : public camel::compile::SemanticRecorder {
     }
     void callResolved(
         origin_id_t call, origin_id_t callee, camel::runtime::GraphId graph,
-        const std::string &operatorUri, FunctionType *type) override {
+        const std::string &operatorUri, FunctionType *type, bool macro) override {
         facts.push_back(
             {.kind  = RawFact::Kind::CallResolved,
              .at    = callee,
              .other = call,
              .type  = type,
+             .flag  = macro,
              .graph = graph,
              .uri   = operatorUri});
     }
@@ -445,6 +457,29 @@ class ModelBuilder {
         return Location{file, model_->files_[file].syntax.decls[decl].nameRange};
     }
 
+    // Where the type a name of `module` stands for is declared, when it is one of the sources
+    // being analysed: the compiler recorded the place while it declared the type, possibly in
+    // the module the name is imported from (Module::noteTypeDeclarationOrigin). Empty when the
+    // type is built in or its declaration is not in these sources.
+    std::vector<Location>
+    typeDeclarationOf(const camel::core::module::Module &module, const Reference &ref) {
+        std::vector<Location> out;
+        const camel::core::module::Module *declaring = &module;
+        Reference name                               = ref;
+        if (declaring->typeDeclarationOrigin(name) == 0) {
+            if (auto source = declaring->importedSource(name)) {
+                declaring = source->first.get();
+                name      = source->second;
+            }
+        }
+        if (auto where = locate(declaring->typeDeclarationOrigin(name))) {
+            if (auto decl = findDecl(*where, name.ident())) {
+                out.push_back(declLocation(where->file, *decl));
+            }
+        }
+        return out;
+    }
+
     // ---- compilation ----
 
     void compile() {
@@ -506,6 +541,22 @@ class ModelBuilder {
         }
         if (parsed && failure.empty()) {
             try {
+                // Editing a declaration module must use the same native implementation and
+                // exports as importing its sibling .cmo. Compile the editor buffer itself,
+                // so unsaved declarations still receive the compiler's real validation.
+                const fs::path implementation =
+                    camel::utils::pathFromUtf8(path).replace_extension(".cmo");
+                std::error_code ec;
+                if (fs::is_regular_file(implementation, ec) && !ec) {
+                    auto native = camel::core::module::loadCmoModule(
+                        camel::utils::pathToUtf8(implementation.stem()),
+                        camel::utils::pathToUtf8(implementation), ctx);
+                    if (native && native->load()) {
+                        mainModule->setDeclarationModule(true);
+                        mainModule->setImplementation(native);
+                        mainModule->inheritExportsFrom(*native);
+                    }
+                }
                 compiled = mainModule->compile(camel::core::module::CompileStage::Done);
             } catch (const Diagnostic &d) {
                 diagnostics->add(Diagnostic(d));
@@ -696,6 +747,20 @@ class ModelBuilder {
                     addUnique(file.declFacts[*decl].types, typeId(fact.type));
                 }
                 break;
+            case RawFact::Kind::TypeReferenced:
+                if (auto ref = findRef(*where)) {
+                    RefFacts &rf = file.refFacts[*ref];
+                    rf.resolved  = true;
+                    if (fact.type != nullptr) {
+                        addUnique(rf.types, typeId(fact.type));
+                    }
+                    if (auto declAt = locate(fact.other)) {
+                        if (auto decl = findDecl(*declAt, fact.name)) {
+                            addUnique(rf.targets, declLocation(declAt->file, *decl));
+                        }
+                    }
+                }
+                break;
             case RawFact::Kind::ValueReferenced:
                 if (auto ref = findRef(*where)) {
                     RefFacts &rf = file.refFacts[*ref];
@@ -748,11 +813,7 @@ class ModelBuilder {
                     break;
                 }
                 const uint32_t type = typeId(fact.type);
-                bool macro          = false;
-                try {
-                    macro = static_cast<FunctionType *>(fact.type)->modifiers().macro();
-                } catch (...) {
-                }
+                const bool macro    = fact.flag;
                 if (auto ref = findRef(*where)) {
                     RefFacts &rf = file.refFacts[*ref];
                     addUnique(rf.callTypes, type);
@@ -822,7 +883,7 @@ class ModelBuilder {
                     }
                     if (graph->funcType()) {
                         ext.signatures.push_back(sourceSpelling(graph->funcType()->toString()));
-                        ext.macro = ext.macro || graph->funcType()->modifiers().macro();
+                        ext.macro = ext.macro || graph->draft().isMacroGraph();
                     }
                     if (auto where = functionOfGraph(graph->graphId())) {
                         addUnique(ext.definitions, *where);
@@ -870,8 +931,12 @@ class ModelBuilder {
         for (const Reference &ref : module.importedRefs()) {
             const std::string name = ref.toString();
             std::optional<ExternalName> ext;
-            if (auto entity = module.getImportedEntity(ref)) {
-                ext = describe(name, *entity);
+            if (context != nullptr) {
+                // What the name means is the program's: its exported entities are the graphs
+                // this compilation made (one table per program, task H42).
+                if (auto entity = context->programExports().importedEntity(module, ref)) {
+                    ext = describe(name, *entity);
+                }
             }
             bool isType = false;
             if (auto type = module.getImportedType(ref); type.has_value() && *type != nullptr) {
@@ -881,6 +946,11 @@ class ModelBuilder {
                     ext->name = name;
                     ext->kind = ExternalName::Kind::Type;
                     ext->signatures.push_back(sourceSpelling((*type)->toString()));
+                }
+                if (ext->definitions.empty()) {
+                    // The type's own declaration, not the import: the compiler recorded where
+                    // it is, in the module the name comes from (task H82).
+                    ext->definitions = typeDeclarationOf(module, ref);
                 }
             }
             if (!ext) {
@@ -935,31 +1005,56 @@ class ModelBuilder {
             }
         }
         for (const auto &[prefix, mod] : spaces) {
-            if (!mod || !mod->loaded()) {
+            if (!mod) {
                 continue;
             }
+            // The members are the module's exports: what a C++ module registers, and — for a
+            // module whose signatures are declared in `stdlib/<m>.cml` — the declarations the
+            // loader compiles beside it (`Context::loadModuleFrom` returns one module with
+            // both; `Module::inheritExportsFrom` copies the C++ facts in, the declarations are
+            // exported on top). Those declarations are readable before the module's bodies are
+            // built, so a module a text imports but never calls is not `loaded()`: ask for
+            // them, as `camel inspect --ops` does before it reads a module's entities and as
+            // `ProgramExports::importedEntity` does before it resolves an imported name.
+            // Requiring `loaded()` here was the hole of handover H145: a migrated module
+            // registers no signature in C++ (`exportEntity` is gone for every declared name),
+            // so completion after `math::` was empty.
+            if (!mod->loaded()) {
+                try {
+                    mod->declareEntities();
+                } catch (...) {
+                    // A declaration module in error is reported where the file that imports it
+                    // is compiled; the other namespaces still list their members.
+                    continue;
+                }
+            }
             model_->namespaces_[prefix];
-            if (auto ns = mod->exportedEntityNS()) {
-                std::as_const(*ns).forEach([&](const Reference &ref,
-                                               const camel::core::module::entity &entity) {
-                    std::string space = prefix;
-                    for (const std::string &part : ref.paths()) {
-                        // A nested namespace is a member of the one around it.
-                        auto &outer = model_->namespaces_[space];
-                        if (std::none_of(outer.begin(), outer.end(), [&](const ExternalName &e) {
-                                return e.name == part && e.kind == ExternalName::Kind::Namespace;
-                            })) {
-                            ExternalName inner;
-                            inner.name = part;
-                            inner.kind = ExternalName::Kind::Namespace;
-                            outer.push_back(std::move(inner));
-                        }
-                        space += "::" + part;
+            const auto visitEntity = [&](const Reference &ref,
+                                         const camel::core::module::entity &entity) {
+                std::string space = prefix;
+                for (const std::string &part : ref.paths()) {
+                    // A nested namespace is a member of the one around it.
+                    auto &outer = model_->namespaces_[space];
+                    if (std::none_of(outer.begin(), outer.end(), [&](const ExternalName &e) {
+                            return e.name == part && e.kind == ExternalName::Kind::Namespace;
+                        })) {
+                        ExternalName inner;
+                        inner.name = part;
+                        inner.kind = ExternalName::Kind::Namespace;
+                        outer.push_back(std::move(inner));
                     }
-                    ExternalName ext = describe(ref.ident(), entity);
-                    ext.module       = mod->name();
-                    model_->namespaces_[space].push_back(std::move(ext));
-                });
+                    space += "::" + part;
+                }
+                ExternalName ext = describe(ref.ident(), entity);
+                ext.module       = mod->name();
+                model_->namespaces_[space].push_back(std::move(ext));
+            };
+            if (context != nullptr) {
+                // The program's entities for the module, then the module's own (native) names:
+                // what a name means is the program's (task H42).
+                context->programExports().forEachExportedEntity(*mod, visitEntity);
+            } else {
+                mod->nativeEntityNS()->forEach(visitEntity);
             }
             if (auto ns = mod->exportedTypeNS()) {
                 std::as_const(*ns).forEach([&](const Reference &ref, Type *const &type) {
@@ -975,6 +1070,7 @@ class ModelBuilder {
                     ext.kind   = ExternalName::Kind::Type;
                     ext.module = mod->name();
                     ext.signatures.push_back(sourceSpelling(type->toString()));
+                    ext.definitions = typeDeclarationOf(*mod, ref);
                     model_->namespaces_[space].push_back(std::move(ext));
                 });
             }

@@ -30,26 +30,55 @@ function snapshotTree(directory) {
     walk(directory, '')
     return entries
 }
+// The account this process runs as, named by its SID: `USERDOMAIN\USERNAME` is not reliable on a
+// runner, where the deny ACE is accepted for a name the token does not carry, so the write is not
+// refused at all and `icacls /remove:d` cannot find the entry it made.
+function currentUserSid() {
+    const who = spawnSync('whoami', ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8' })
+    if (who.status !== 0) {
+        return null
+    }
+    const fields = who.stdout.trim().split(',')
+    const sid = fields[fields.length - 1].replace(/"/g, '').trim()
+    return /^S-\d-\d+(-\d+)+$/.test(sid) ? sid : null
+}
 // Writes into a directory are refused for this process: on Windows with a deny ACE on the
-// directory (deny ACEs bind administrators too), elsewhere with the permission bits. Returns
-// the undo.
+// directory (deny ACEs bind administrators too), elsewhere with the permission bits. Returns the
+// undo, or a `skip` reason when a runner will not grant the refusal: what is under test is the
+// fault Camel reports for a save it cannot make, not whether a runner honours a deny ACE.
 function denyWrites(directory) {
     if (process.platform === 'win32') {
-        const user = `${process.env.USERDOMAIN}\\${process.env.USERNAME}`
-        const denied = spawnSync('icacls', [directory, '/deny', `${user}:(W)`], { encoding: 'utf8' })
-        assert.equal(denied.status, 0, denied.stdout + denied.stderr)
-        return () => {
-            const undone = spawnSync('icacls', [directory, '/remove:d', user], { encoding: 'utf8' })
-            assert.equal(undone.status, 0, undone.stdout + undone.stderr)
+        const sid = currentUserSid()
+        const account = sid ? `*${sid}` : `${process.env.USERDOMAIN}\\${process.env.USERNAME}`
+        const denied = spawnSync('icacls', [directory, '/deny', `${account}:(W)`], { encoding: 'utf8' })
+        if (denied.status !== 0) {
+            return { skip: `icacls could not deny ${account}: ${(denied.stdout + denied.stderr).trim()}` }
+        }
+        const probe = path.join(directory, '.deny-probe')
+        let refused = false
+        try {
+            fs.writeFileSync(probe, 'x')
+            fs.rmSync(probe, { force: true })
+        } catch {
+            refused = true
+        }
+        if (!refused) {
+            return { skip: `a deny ACE on ${account} did not refuse a write` }
+        }
+        return {
+            undo: () => {
+                const undone = spawnSync('icacls', [directory, '/remove:d', account], { encoding: 'utf8' })
+                assert.equal(undone.status, 0, undone.stdout + undone.stderr)
+            },
         }
     }
     const mode = fs.statSync(directory).mode
     fs.chmodSync(directory, 0o555)
-    return () => fs.chmodSync(directory, mode)
+    return { undo: () => fs.chmodSync(directory, mode) }
 }
 const privileged = process.platform !== 'win32' && typeof process.getuid === 'function' && process.getuid() === 0
-function invoke(source, pass, mode, directory, extraEnv = {}, exit = 0) {
-    const result = spawnSync(camel, [path.join(cases, source), pass, '--arg', `mode=${mode}`, '--arg', `dir=${directory}`], {
+function invoke(source, pass, mode, directory, extraEnv = {}, exit = 0, options = []) {
+    const result = spawnSync(camel, [...options, path.join(cases, source), pass, '--arg', `mode=${mode}`, '--arg', `dir=${directory}`], {
         env: { ...process.env, ...extraEnv }, encoding: 'utf8', timeout: 30000
     })
     assert.ifError(result.error)
@@ -126,11 +155,11 @@ try {
         assert.deepEqual(fs.readdirSync(replaceDir).sort(), ['a.txt', 'manifest.json'], `${pass}: old leaves survived the replacement`)
     }
     const stress = {
-        CAMEL_GC: 'generational', CAMEL_GC_ENABLE_YOUNG_COPYING: '1', CAMEL_GC_VERIFY: 'both',
+        CAMEL_GC_ENABLE_YOUNG_COPYING: '1', CAMEL_GC_VERIFY: 'both',
         CAMEL_GC_STRESS_SAFEPOINT: '1', CAMEL_GC_STRESS_MODE: 'minor'
     }
     for (const pass of ['std::nvm', 'std::fvm', 'std::jit']) {
-        assert.equal(invoke('checkpoint_roundtrip.cml', pass, 1, path.join(root, 'nvm'), stress).stdout, original)
+        assert.equal(invoke('checkpoint_roundtrip.cml', pass, 1, path.join(root, 'nvm'), stress, 0, ['--gc', 'generational']).stdout, original)
     }
     const tensor = path.join(root, 'tensor')
     const bits = invoke('checkpoint_tensor.cml', 'std::jit', 0, tensor).stdout.trim()
@@ -210,25 +239,29 @@ try {
         const failing = path.join(failingParent, 'ckpt')
         const failingSaved = invoke('checkpoint_roundtrip.cml', 'std::nvm', 0, failing).stdout
         const failingBefore = snapshotTree(failing)
-        const undo = denyWrites(failingParent)
-        let failed
-        try {
-            failed = invoke('checkpoint_roundtrip.cml', 'std::nvm', 7, failing, {}, 1)
-        } finally {
-            undo()
+        const grant = denyWrites(failingParent)
+        if (grant.skip) {
+            console.log(`native checkpoints: the failure path is skipped (${grant.skip})`)
+        } else {
+            let failed
+            try {
+                failed = invoke('checkpoint_roundtrip.cml', 'std::nvm', 7, failing, {}, 1)
+            } finally {
+                grant.undo()
+            }
+            assert.match(
+                failed.stdout + failed.stderr,
+                /FileSystemError|cannot create the checkpoint temporary directory/,
+                'a save that cannot create its temporary directory did not report a fault'
+            )
+            assert.deepEqual(snapshotTree(failing), failingBefore, 'a failed save changed the old checkpoint')
+            assert.equal(invoke('checkpoint_roundtrip.cml', 'std::nvm', 1, failing).stdout, failingSaved)
+            assert.deepEqual(
+                fs.readdirSync(failingParent).filter(name => name.includes('.pending-') || name.endsWith('.ckpt-previous')),
+                [],
+                'a failed save left a temporary or previous directory behind'
+            )
         }
-        assert.match(
-            failed.stdout + failed.stderr,
-            /FileSystemError|cannot create the checkpoint temporary directory/,
-            'a save that cannot create its temporary directory did not report a fault'
-        )
-        assert.deepEqual(snapshotTree(failing), failingBefore, 'a failed save changed the old checkpoint')
-        assert.equal(invoke('checkpoint_roundtrip.cml', 'std::nvm', 1, failing).stdout, failingSaved)
-        assert.deepEqual(
-            fs.readdirSync(failingParent).filter(name => name.includes('.pending-') || name.endsWith('.ckpt-previous')),
-            [],
-            'a failed save left a temporary or previous directory behind'
-        )
     }
     console.log('native checkpoints: schedulers, restart equality, GC, exact bits and rejection checks passed')
 } finally {

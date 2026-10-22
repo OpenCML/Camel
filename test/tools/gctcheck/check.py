@@ -72,6 +72,9 @@ def cmd_dump(args) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     home = Path(args.camel_home or os.environ.get("CAMEL_HOME") or REPO / "out" / "latest").resolve()
     files = corpus()
+    if not files:
+        print("gctcheck: no .cml in the corpus; nothing was dumped")
+        return 2
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
         done = list(pool.map(dump_one, [(f, home, out_dir) for f in files]))
     print(f"gctcheck: {len(done)} files dumped to {out_dir}")
@@ -81,6 +84,11 @@ def cmd_dump(args) -> int:
 def cmd_compare(args) -> int:
     a, b = Path(args.dir_a), Path(args.dir_b)
     names = sorted({p.name for p in a.glob("*.txt")} | {p.name for p in b.glob("*.txt")})
+    if not names:
+        # Two empty directories (or two directories with the wrong names) agree on nothing;
+        # "0 files, 0 different" is not a pass.
+        print(f"gctcheck: no record in {a} or {b}; nothing was compared")
+        return 2
     different, trees = [], 0
     for name in names:
         left = (a / name).read_text(encoding="utf-8") if (a / name).exists() else ""

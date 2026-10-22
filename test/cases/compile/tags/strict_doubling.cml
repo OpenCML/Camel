@@ -1,0 +1,49 @@
+/**
+ * The exact-doubling law `x + x => x * 2.0` (stdlib/rules.cml; design principles 7.4) is allowed
+ * under `#strict` only because it changes no bit. This program checks that premise directly, with
+ * no pass: each row prints `x + x` and `x * 2.0` at the canonical algorithm.
+ *
+ * The rows cover the sign of zero, the smallest subnormal and the subnormal/normal boundary, the
+ * largest finite value, both sides of the overflow threshold (max/2 doubles to max, the next
+ * value doubles to infinity), the infinities and a NaN. For every row the two texts must be the
+ * same: the text is the shortest form that reads back to the same value (7.7), so equal text is
+ * equal bits for every value except a NaN payload, which 7.7 leaves unconstrained for ordinary
+ * arithmetic.
+ */
+module strict_doubling
+
+import { inf, nan } from math
+
+func plus(x: float): float {
+    return x + x
+}
+
+func twice(x: float): float {
+    return x * 2.0
+}
+
+func row(name: string, x: float) {
+    println(name, plus(x), twice(x))
+}
+
+func main(): int sync {
+    let max = 1.7976931348623157e308
+    let half = max / 2.0
+    row('zero', 0.0)
+    row('negzero', -0.0)
+    row('one', 1.0)
+    row('minus_one', -1.0)
+    row('tenth', 0.1)
+    row('minus_tenth', -0.1)
+    row('subnormal', 5e-324)
+    row('minus_subnormal', -5e-324)
+    row('max_subnormal', 2.225073858507201e-308)
+    row('min_normal', 2.2250738585072014e-308)
+    row('max', max)
+    row('half_max', half)
+    row('above_half_max', half + 9.979201547673599e291)
+    row('inf', inf)
+    row('minus_inf', -inf)
+    row('nan', nan)
+    return 0
+}

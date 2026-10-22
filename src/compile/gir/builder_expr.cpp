@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -74,41 +74,48 @@ void reportFunctionReference(
 }
 } // namespace
 
+node_handle_t Builder::literalDataInType(const GCT::node_ptr_t &gct, Type *expected) {
+    // A literal in a position takes the position's type while it is made (design principles
+    // 5.1): the value written is converted exactly, and a composite literal element by element.
+    // Making it in its own type first would leave that literal unused in the graph; every
+    // other conversion of a value into its position is coerceTo (checkValue).
+    if (gct == nullptr || gct->type() != GCT::NodeKind::DATA || expected == nullptr) {
+        return nullptr;
+    }
+    const data_ptr_t &data = gct->data();
+    if (expected->assignableFrom(data->type())) {
+        return nullptr;
+    }
+    if (isComposite(data->type()->code())) {
+        if (!tt::as_shared<CompositeData>(data)->resolved()) {
+            return nullptr;
+        }
+        const data_ptr_t typed = compositeDataInType(data, expected, gct);
+        if (typed == nullptr) {
+            return nullptr;
+        }
+        node_handle_t result = currGraph_->addStaticDataNode(typed);
+        if (varied_ && currGraph_->outerGraph().get() != nullptr) {
+            node_handle_t copyNode = currGraph_->addCopyNode(typed->type());
+            linkNodes(LinkType::Norm, result, copyNode);
+            result = copyNode;
+        }
+        registerNodeOrigin(context_, result, gct, "gir.data.literal");
+        return result;
+    }
+    if (!expected->isPrimitive()) {
+        return nullptr;
+    }
+    const literal::Value *exact = literalValueOfGct(gct);
+    if (exact == nullptr || !literal::kindEnters(*exact, expected)) {
+        return nullptr;
+    }
+    return literalInType(*exact, expected, gct, true);
+}
+
 node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     ENTER("DATA");
     const data_ptr_t &data = gct->data();
-
-    // A literal that is the value of a body — an arm's value, or a function's last expression —
-    // is in the position the body stands at, so it takes that position's type (design
-    // principles 5.1): `let x: float = if c then 1 else 2` has float arms, and so has a
-    // `match` whose value is declared a float. The value written is converted exactly, and a
-    // composite literal element by element.
-    if (gct == tailStatement_ && expectedValueType_ != nullptr &&
-        !expectedValueType_->assignableFrom(data->type())) {
-        Type *expected = expectedValueType_;
-        if (isComposite(data->type()->code())) {
-            if (tt::as_shared<CompositeData>(data)->resolved()) {
-                if (const data_ptr_t typed = compositeDataInType(data, expected, gct)) {
-                    node_handle_t result = currGraph_->addStaticDataNode(typed);
-                    if (varied_ && currGraph_->outerGraph().get() != nullptr) {
-                        node_handle_t copyNode = currGraph_->addCopyNode(typed->type());
-                        linkNodes(LinkType::Norm, result, copyNode);
-                        result = copyNode;
-                    }
-                    registerNodeOrigin(context_, result, gct, "gir.data.literal");
-                    LEAVE("DATA");
-                    return result;
-                }
-            }
-        } else if (expected->isPrimitive()) {
-            if (const literal::Value *exact = literalValueOfGct(gct);
-                exact != nullptr && literal::kindEnters(*exact, expected)) {
-                node_handle_t literal = literalInType(*exact, expected, gct, true);
-                LEAVE("DATA");
-                return literal;
-            }
-        }
-    }
 
     node_handle_t node{};
     TypeCode dataType = data->type()->code();
@@ -435,11 +442,31 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
 }
 
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
+    if (const auto oper = tree_->operRefOf(gct); oper.has_value()) {
+        // A DREF the compiler made for an operator it knows by id: the group is the built-in
+        // module's, which registered it; no name of the program takes part.
+        ENTER("DREF");
+        genericCalleeAllowed_ = false;
+        refOrigin_            = gct->origin();
+        const oper_group_ptr_t group = internalOperatorGroup(*oper);
+        node_handle_t drefNode{currGraph_->addDrefNode(
+            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{group})};
+        registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+        if (recorder_) {
+            std::vector<std::string> signatures;
+            for (const auto &[uri, resolver] : group->resolvers()) {
+                signatures.push_back(resolver->signature());
+            }
+            recorder_->operatorReferenced(gct->origin(), group->name(), std::move(signatures));
+        }
+        LEAVE("DREF");
+        return drefNode;
+    }
     if (const std::string written = gct->name(); written.starts_with(kBuiltinPrefix)) {
         ENTER("DREF");
         genericCalleeAllowed_   = false;
         const std::string plain = written.substr(kBuiltinPrefix.size());
-        const auto entity       = context_->importModule("")->getExportedEntity(Reference(plain));
+        const auto entity       = context_->importModule("")->getNativeEntity(Reference(plain));
         ASSERT(
             entity.has_value() && entity->isOperGroup(),
             "A built-in operator the compiler names does not exist: " + plain);
@@ -450,6 +477,22 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         return drefNode;
     }
     ENTER("DREF");
+    // `n` of a `static for`: a compile-time string, not a name of the enclosing scope. A use
+    // of it as a value (not as the key of `t.[n]`) becomes a constant; the `j` of `indices`
+    // binds the round's integer node instead of a string. A binding of the body with the same
+    // name shadows it, as an ordinary local shadows anything outside it.
+    if (auto staticValue = staticValueNamed(gct->name());
+        staticValue.has_value() && !nodeAt(gct->name()).has_value()) {
+        if (node_handle_t valueNode = staticValueNodeNamed(gct->name())) {
+            LEAVE("DREF");
+            return valueNode;
+        }
+        node_handle_t node = currGraph_->addStaticDataNode(
+            tt::as_shared<Data>(std::make_shared<StringData>(*staticValue)));
+        registerNodeOrigin(context_, node, gct, "gir.data.static.for");
+        LEAVE("DREF");
+        return node;
+    }
     // The name as written, and the name of the module it stands for when it is one (from the
     // innermost namespace out; design principles 10.2, layers 1 and 2).
     const string written = gct->name();
@@ -554,6 +597,43 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         }
     }
+    if (module_ != nullptr) {
+        // A body-less declaration of this module: the name stands for the operator group the
+        // declaration made, which is no graph (handover H19, step 1). A name the C++ module it
+        // declares brings (its constants among them) is this module's own too, and is looked up
+        // here, before what an import brings under the same name (design principles 10.1;
+        // handover H94, ruling 1: the `.cml` and the `.cmo` are one module).
+        for (const std::string &candidate : {name, written}) {
+            auto native = ownNativeEntity(Reference(candidate));
+            if (!native.has_value()) {
+                continue;
+            }
+            if (native->isOperGroup()) {
+                node_handle_t drefNode{graph->addDrefNode(
+                    std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
+                        native->operGroup()})};
+                registerNodeOrigin(context_, drefNode, gct, "gir.dref.native");
+                LEAVE("DREF");
+                return drefNode;
+            }
+            if (native->isValue()) {
+                // A constant: the constant itself, as if it were written here as a literal
+                // (`math::pi` is where it is declared; design principles 10.1).
+                const GCT::node_ptr_t literal = tree_->makeData(native->value());
+                literal->setOrigin(gct->origin());
+                node_handle_t node = visitDataNode(literal);
+                if (recorder_) {
+                    recorder_->valueReferenced(
+                        gct->origin(),
+                        name,
+                        camel::source::kInvalidOriginId,
+                        valueTypeOf(nodeTypeOf(node)));
+                }
+                LEAVE("DREF");
+                return node;
+            }
+        }
+    }
     // Layers 3 to 5 (design principles 10.2): imported by name (or through a module or
     // namespace prefix), then through a `using namespace`, then what comes along unasked.
     // Operators take their overloads from every layer.
@@ -565,14 +645,14 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     std::optional<camel::core::module::entity> named;
     if (!isOperatorName(written) && module_->hasImportedRef(written, ImportLayer::Named)) {
         importedName = true;
-        named        = module_->getImportedEntity(written, ImportLayer::Named);
+        named        = importedEntity(written, ImportLayer::Named);
     }
     if (isOperatorName(written) || (named.has_value() && named->isOperGroup())) {
         // Operator groups (`+`, and the operators a module of operators brings) take their
         // overloads from every layer (design principles 10.2; the graph model, N3).
         importedName = importedName || module_->hasImportedRef(written);
         if (importedName) {
-            opt = module_->getImportedEntity(written);
+            opt = importedEntity(written);
         }
     } else if (named.has_value()) {
         opt = named;
@@ -588,7 +668,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         opt          = match->entity;
     } else if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
         importedName = true;
-        opt          = module_->getImportedEntity(written, ImportLayer::Ambient);
+        opt          = importedEntity(written, ImportLayer::Ambient);
     }
     if (importedName) {
         // An import of this name does not imply that the imported module exported it.
@@ -689,6 +769,55 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     throw BuildAbortException();
 }
 
+bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t &gct) {
+    if (written.starts_with(kBuiltinPrefix)) {
+        return true;
+    }
+    if (camel::core::isOverloadableOperatorGroup(written) || isOperatorName(written)) {
+        // The operator group exists even if no overload takes these operands; a call picks
+        // an overload, and its diagnostic belongs to the code that is built.
+        return true;
+    }
+    const std::string name = moduleLevelName(written);
+    if (nodeAt(name).has_value() || templateScope_->get(name).has_value() ||
+        graphsAt(name).has_value() || decoratedGraphAt(name).has_value()) {
+        return true;
+    }
+    if (written.find("::") != std::string::npos) {
+        // A qualified name: a variant of an enum or a name of an imported module. Their
+        // resolution needs the type or the module, which the build of the selected case
+        // does; for a case that is not selected the name is at least qualified.
+        return true;
+    }
+    if (module_ != nullptr) {
+        // A body-less declaration of this module: a name the module itself declared for a
+        // native operator (handover H19, step 1). `visitDRefNode` looks it up here, before what
+        // an import brings under the same name; a name in a `case` that is not selected must
+        // see the same names, or the case would resolve differently once it is selected.
+        for (const std::string &candidate : {name, written}) {
+            auto native = module_->getNativeEntity(Reference(candidate));
+            if (native.has_value() && native->isOperGroup()) {
+                return true;
+            }
+        }
+    }
+    if (!isOperatorName(written) && module_->hasImportedRef(written, ImportLayer::Named)) {
+        if (importedEntity(written, ImportLayer::Named).has_value()) {
+            return true;
+        }
+    }
+    if (isOperatorName(written) || module_->hasImportedRef(written)) {
+        if (module_->hasImportedRef(written) && importedEntity(written).has_value()) {
+            return true;
+        }
+    }
+    if (throughUsing(written, gct)) {
+        return true;
+    }
+    return module_->hasImportedRef(written, ImportLayer::Ambient) &&
+           importedEntity(written, ImportLayer::Ambient).has_value();
+}
+
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
     ExpectedValueScope expectedScope(expectedValueType_, boundType(gct->targetType()));
@@ -782,8 +911,8 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             if (data_ptr_t converted = data->convertTo(payload)) {
                 valueNode = currGraph_->addStaticDataNode(converted);
                 registerNodeOrigin(context_, valueNode, gct->at(0), "gir.data");
-            } else if (const std::string limits = literalRangeViolation(data, payload);
-                       !limits.empty()) {
+            } else if (
+                const std::string notFit = literalNotFitReason(data, payload); !notFit.empty()) {
                 rejectLiteralData(data, payload, gct->origin(), gct->at(0));
             }
         }
@@ -901,11 +1030,25 @@ node_handle_t Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
     return node;
 }
 
-node_handle_t Builder::variableOperator(const std::string &group, node_handle_t input) {
-    const auto entity = module_->getImportedEntity(group);
-    ASSERT(entity.has_value() && entity->isOperGroup(), "Variable operators are not available.");
+oper_group_ptr_t Builder::internalOperatorGroup(camel::core::OperId oper) {
+    const auto group = context_->importModule("")->nativeOperatorGroup(oper);
+    ASSERT(
+        group != nullptr,
+        "The built-in module did not register the operator the compiler emits: " +
+            std::string(camel::core::OperatorTable::instance().uri(oper)));
+    return group;
+}
+
+GCT::node_ptr_t Builder::internalOperatorDref(camel::core::OperId oper) {
+    // The id is the reference; the entity name is only the node's label (a GCT dump, a
+    // diagnostic), as it was when the DREF was made by name.
+    return tree_->makeDRef(oper, internalOperatorGroup(oper)->name());
+}
+
+node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t input) {
+    const auto group = internalOperatorGroup(oper);
     const std::vector<StaticArg> statics(1);
-    const auto op = entity->operGroup()->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
+    const auto op = group->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
     ASSERT(op.has_value(), "Variable operator rejected its operand.");
     node_handle_t node = currGraph_->addOperNode(*op, 0);
     stampPermissions(node);
@@ -916,18 +1059,18 @@ node_handle_t Builder::variableOperator(const std::string &group, node_handle_t 
 node_handle_t Builder::newVariable(node_handle_t value) {
     // The variable takes the widened type of its initializer (:var/new), so later assignments
     // may store values with a different refinement (e.g. shape).
-    node_handle_t variable = variableOperator("__var_new__", value);
+    node_handle_t variable = variableOperator(camel::core::oper::VarNew, value);
     variables_.insert(variable);
     return variable;
 }
 
 node_handle_t Builder::readVariable(node_handle_t variable) {
-    return readVariableThrough(variable, "__var_get__");
+    return readVariableThrough(variable, camel::core::oper::VarGet);
 }
 
 node_handle_t Builder::readVariableThrough(
-    node_handle_t variable, const std::string &group) {
-    node_handle_t value = variableOperator(group, variable);
+    node_handle_t variable, camel::core::OperId oper) {
+    node_handle_t value = variableOperator(oper, variable);
     pendingUsesOf(variable).push_back({value, true});
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
@@ -951,7 +1094,7 @@ node_handle_t Builder::peekVariable(node_handle_t variable) {
     // reading the value it writes must not take the array away from the set that follows.
     // It is a read all the same: ordered after the variable's last writer and, in a sync
     // block, in the block's chain.
-    return readVariableThrough(variable, "__var_peek__");
+    return readVariableThrough(variable, camel::core::oper::VarPeek);
 }
 
 std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr) {

@@ -1,0 +1,13 @@
+/**
+ * The undecided case (H92 report, 待决): a generic higher-order operator whose parameter type
+ * holds a type variable (`map`) gives the lambda no expected type, because the instance that
+ * would fix it does not exist yet when the lambda is lowered. Today that is the same error: the
+ * parameter type has to be written. A test records it so the decision has something to change.
+ */
+module lambda_inference_generic
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println(xs->map<(x) => x * x>)
+    return 0
+}

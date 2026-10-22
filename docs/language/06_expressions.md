@@ -12,6 +12,8 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 
 ## 6.2 字面量与构造
 
+<!-- camel-snippet: fragment: a list of literal and lambda forms, not a program -->
+
 ```cml
 42          3.14        'text'      true        null
 [1, 2, 3]                   // 数组
@@ -30,11 +32,14 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 反引号字符串 `` `...` `` 里的 `${表达式}` 是插值，可以带格式说明 `${表达式:格式说明}`（词法见 [2.5.4.1](02_lexical.md#2541-格式化字符串)）。它与 `'...'->format<...>` 是**同一棵树**：把 `${...}` 换成 `format` 的占位符（`{}` 或 `{:格式说明}`），把文字里的 `{`、`}` 写成 `{{`、`}}`，再以各插值表达式为 with 实参、以这段文字为普通实参调用 `format`。
 
 ```cml
-let name = 'Camel'
-let n = 42
-println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
-println(`n = ${n}, twice = ${n * 2}`)
-println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+func main(): int sync {
+    let name = 'Camel'
+    let n = 42
+    println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
+    println(`n = ${n}, twice = ${n * 2}`)
+    println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+    return 0
+}
 ```
 
 - 插值表达式在它写的位置、按它所在的词法作用域求值；名字查找、类型检查、副作用与写在字符串外完全一样。它们是 `format` 的 with 实参，何时求值由依赖与副作用规则决定（[4.2](04_execution_model.md#42-按依赖求值)），与同一批表达式写在字符串外没有区别。
@@ -50,12 +55,20 @@ println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
 | `p.x` | 结构体字段。不存在的字段是编译期错误 `SemanticDiag::InvalidAccessIndex` |
 | `t.0` | 元组成员，下标是字面量，越界是编译期错误 |
 | `xs[i]` | 数组元素。越界（含负数）是故障 `RuntimeDiag::IndexOutOfRange` |
+| `xs[idx]` | `idx` 是整数数组：按 `idx` 的顺序取这些位置上的元素（`take`），见下 |
+| `xs[a:b]`、`xs[a:b:s]`、`xs[:b]`、`xs[a:]`、`xs[:]` | 切片，见下 |
 | `m[k]` | 映射查找，类型是 `V?`（[3.6](03_data_model.md#36-映射与集合)） |
 | `mod::name` | 限定名 |
 
 - 对数组不能用 `.`（`xs.1` 是 `SemanticDiag::TypeNotIndexable`）。
 - 下标紧贴被访问的表达式，不能有空白。
-- 切片写法 `xs[a:b]`、`xs[a:b:c]` 保留，尚未实现：它没有专门的诊断，编译器按“下标运算符没有接受这些实参的重载”报告 `SemanticDiag::NoMatchingFunction`。用 `xs->slice<a, b>`。
+- **下标从 0 开始，负数不是从尾部数**：`xs[-1]` 是故障 `RuntimeDiag::IndexOutOfRange`。最后一个元素写 `last(xs)`。
+- **`xs[idx]` 是 `take`**：`idx` 的类型必须是 `int[]`，结果是 `idx` 各位置上的元素，按 `idx` 的顺序；同一个位置出现两次就取两次。越界与负数都是故障 `RuntimeDiag::IndexOutOfRange`。结果是一份新数组，不是视图（[5.4](../design-principles.cn.md)）。
+- **切片沿第一维，左闭右开**：`xs[a:b]` 是位置 `a` 到 `b-1`。`a` 省略表示从头，`b` 省略表示到末尾，`xs[:]` 是整个数组；`s` 是步长。切片是**共用数据块的视图**（[5.4](../design-principles.cn.md)），不复制元素。
+  - 两端都是 0 到 `len(xs)` 之间的位置（`b` 可以等于长度，表示取到最后一个）；负数或越界是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致（[3.9](../design-principles.cn.md)）。`b < a` 是空数组，不是故障。长度在编译期已知而边界是常量时，越界是编译期错误（[3.9](../design-principles.cn.md)）。
+  - 步长目前只支持 `s == 1`。步长不为 1 的切片是带步长的视图，需要 H17 的数组表示，所以现在是故障 `RuntimeDiag::InvalidArgument`（张量上是编译期错误），诊断里点名 H17；要一份拷贝写 `slice(xs, 0, a, b, s)`。
+  - 元素是对象的数组（`[[1, 2], [3, 4]]` 这类）按行复制，槽数组没有可共用的数据块（H17 记录）。
+- **多维下标**：`xs[:, 0]`、`xs[a:b, c]` 的语法已经接受，但它的视图要沿其余维取坐标，同样需要 H17 的数组表示；现在写它会得到编译期错误 `SemanticDiag::ConstructNotSupported`，诊断里点名 H17，并提示先用 `take` 或逐维取。
 - **字符串下标按码点**：`s[i]` 是第 `i` 个码点，结果是只含这一个字符的字符串（`'中文'[0]` 是 `'中'`）；越界同样是故障。要数值用 `str` 模块的 `codepoints`（见 [标准库参考](../stdlib-reference.md)）。
 
 ## 6.4 调用
@@ -371,13 +384,138 @@ func main(): int sync {
 
 `try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射）：写了得到 `SemanticDiag::TryCatchNotInLanguage`。可能失败的操作返回 `T!`，用 `!!`、`?->` 与 `case error e` 处理。
 
-### 6.8.3 `loop`
+### 6.8.3 `match type`
+
+`match type` 按**类型的形状**选一条分支，用于泛型函数（[5.5](../design-principles.cn.md)）：`T` 在实例化时已经是具体类型，编译器只把选中的分支建进图里，其余分支不建图、不做类型检查（名字仍然解析）。
+
+```
+match type 类型 {
+    case struct => 分支
+    case tuple  => 分支
+    case #leaf  => 分支
+    case _      => 分支
+}
+```
+
+- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
+- `_` 与 `#leaf` 一样匹配一切，只作为“兜底”写法；两者都必须是最后一个 case。`case struct | tuple` 用 `|` 合并几种形状。
+- `match type` 后面是类型位置：紧跟的 `(` 一律读作类型的开头，所以 `match type () { ... }` 匹配空元组类型；函数类型要再包一层括号，写成 `match type ((x: int) => int) { ... }`。
+- 没有 case 命中时是 `SemanticDiag::StaticMatchNotExhaustive`；`#leaf`/`_` 后面还有 case 是 `SemanticDiag::StaticMatchUnreachableCase`。`match type` 不比较具体类型名：`case int`、`case MyStruct` 不是这个构造的一部分，标量类型都走 `#leaf`。
+- 选中的分支直接成为当前位置的直线代码，运行时没有分支节点。分支的值就是整个 `match type` 的值；空分支的值为 `void`。
+- 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
+
+```cml
+func duplicate(t: typeas T) {
+    return match type T {
+        case struct => (t, t)
+        case tuple  => (t, t)
+        case #leaf  => (t, t)
+    }
+}
+```
+
+### 6.8.4 `static for` 与 `t.[n]`
+
+`static for (n, F) in fields T => 块` 把 `T` 的**字段表**在实例化时展开（[5.5](../design-principles.cn.md)）：每个字段执行一次块，展开出的代码直接成为当前位置的直线代码，运行时没有循环节点。
+
+- `T` 必须是具体类型，而且是 [R3 内部节点](../design/generic-structure/README.cn.md)：结构体或**普通**元组。`T?`、`T!`、可变单元格、标量、数组和函数都是叶子，报 `SemanticDiag::StaticForNotComposite`；先用 `match type` 处理它们。
+- `n` 是字段名；元组的字段名是十进制下标（`"0"`、`"1"`，……），按声明顺序。`F` 是字段类型。两者只在块内可见；`F` 可以写在类型位置（`let x: F`、`typeas F`），不能当值用。
+- `fields` 后面也是类型位置：紧跟的 `(` 一律读作类型的开头，所以空元组直接写 `fields ()`，不需要先 `type EmptyTuple = ()`；函数类型要再包一层括号，写成 `fields ((x: int) => int)`。
+- 字段按声明顺序展开，每个字段的块有独立的块作用域。空结构体或空元组展开零次，块一次也不建。
+- `static for` 作为语句时块的值总是被丢弃，整个构造的值是 `void`；需要值的位置写 comprehension 形式（见下）。
+- `t.[n]` 取结构体的字段或元组的元素，`n` 必须是编译期常量：字符串或整数字面量，或外层 `static for` 的 `n`。只有选中的那个字段建进图里（一个 `ACCS`），运行时不选择字段，所以运行期的值不能当键（`SemanticDiag::StaticAccessNotConstant`）。
+- 结构体没有这个字段报 `SemanticDiag::StaticAccessUnknownField`；元组的下标越界（或键不是下标）报 `SemanticDiag::StaticAccessIndexOutOfRange`；目标不是结构体或普通元组报 `SemanticDiag::StaticAccessNotInternal`。`t.["0"]` 与 `t.[0]` 对元组是同一个元素。
+- 字段的值被丢弃时（`t.[n];` 单独成句），只检查字段，不建 `ACCS`；目标表达式仍然求值，以保留它的副作用。
+
+```cml
+func show(t: typeas T) {
+    static for (n, F) in fields T => {
+        print(n, t.[n])
+    }
+}
+
+func first(t: (int, float)) {
+    return t.[0]
+}
+```
+
+**`indices`：按元组的位置展开。** `static for (j) in indices ts => 块` 把元组值 `ts` 的**位置**在实例化时展开：每个位置执行一次块，`j` 是这一轮的位置（`int`），轮数是元组的元数。
+
+- `ts` 必须是元组类型的值（普通元组；`T?`、`T!`、可变单元格是叶子）。不是元组时报 `SemanticDiag::StaticIndicesNotTuple`；类型还没具体化时报 `SemanticDiag::StaticTypeNotConcrete`。轮数在实例化时由 `ts` 的类型确定。
+- `j` 可以当值用（例如 `print(j)` 或参与计算），也可以当 `t.[j]` 的键：每轮它都是编译期常量。块里再声明同名变量仍会遮蔽它，此时当键报 `SemanticDiag::StaticAccessNotConstant`（与 `fields` 的 `n` 相同）。
+- `indices` 只绑定一个名字（没有 `F`）；元素的类型由 `ts` 的类型给出，目前不另给名字。写 `static for (j, F) in indices ts` 是语法错误。
+- `indices` 只遍历元组：结构体有字段名，用 `fields T`。`{ static for (j) in indices ts => e }` 没有字段名可给，报 `SemanticDiag::ConstructNotSupported`；需要值的位置写 `( static for (j) in indices ts => e )`。
+- 图与手写的展开相同：生成器本身没有节点，每轮的 `ts.[j]` 建一个 `ACCS`，与手写的 `ts.[0]`、`ts.[1]` 相同。
+
+```cml
+func sum(t: (int, int, int)): int {
+    return static loop acc = 0 for (j) in indices t do acc + t.[j]
+}
+
+func positions(t: (int, string)): (int, int) {
+    return ( static for (j) in indices t => j )
+}
+```
+
+**Comprehension：把各轮的值装回同一形状。** `static for` 也可以写在需要值的位置：`{ static for (n, F) in fields T => e }` 得到一个结构体，`( static for (n, F) in fields T => e )` 得到一个元组，字段或元素与 `T` 同名、同序，每个来自一轮的值。
+
+- 块的**值就是那一轮的值**：与语句形式不同，这里不丢弃。块里可以用 `let`，最后一句话的值就是字段的值；没有值（空块，或以一条没有值的语句结尾）报 `SemanticDiag::StaticComprehensionVoidElement`。
+- 每个字段/元素的**类型取自那一轮的值**，不强制等于 `F`：`F` 是 `int` 而值是 `float` 时结果字段就是 `float`。字段名与顺序仍来自 `T` 的声明顺序，所以 `tree_map` 这类改变叶子类型、保持形状的展开可以直接写。
+- 空结构体、空元组没有轮次，结果是 `{}` / `()`（一个零槽的 `FILL`）。
+- 图上是直线代码：每轮按声明顺序建出它读的 `ACCS`，最后每个结构体/元组一个 `FILL` 把各轮的值装回同形状，comprehension 本身没有节点。`t.[n].[m]` 里对父的访问只建一次，内层各字段共用同一个 `ACCS`，因此与 C++ `tree_map` 对同一棵树建出的图相同。
+- `{ static for ... }` 在需要块的位置（`case struct => { ... }`、`if c then { ... }`）也读作 comprehension，所以语句形式不能再套一层花括号：直接写 `static for (n, F) in fields T => 块`。
+- 要把各轮的值折成一个结果（而不是装回同一形状），用 [6.8.5](#685-static-loop) 的 `static loop`。
+
+```cml
+func doubled(t: {a: int, b: int}): {a: int, b: int} {
+    return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
+}
+
+func rebuild(t: typeas T) {
+    return match type T {
+        case struct => { static for (n, F) in fields T => rebuild(t.[n]) }
+        case tuple => ( static for (n, F) in fields T => rebuild(t.[n]) )
+        case _ => t
+    }
+}
+```
+
+### 6.8.5 `static loop`
+
+`static loop 状态 = 初值, ... for (n, F) in fields T do 表达式` 是 `static for` 的折叠形式：字段表在实例化时展开，每个字段把状态推进一轮，展开后没有循环节点。
+
+```
+static loop 名字 = 初值 (, 名字 = 初值)* (for (n, F) in fields T | for (j) in indices ts) do 表达式
+```
+
+- 状态头与 [6.8.6](#686-loop) 的 `loop` 相同：一个名字时循环的值就是这个值；几个名字时循环体给出按书写顺序的元组，循环的值也是这个元组。状态的名字只在循环体内可见；初值在循环所在处求值一次，其中看不到状态的名字。名字不能重复（`SemanticDiag::LoopNameRepeated`）。
+- 循环体每轮的值就是下一轮的状态，其类型必须是状态的类型（能自动装入的除外，如 `int` 进入 `int?`），否则是 `SemanticDiag::LoopBodyTypeMismatch`。空结构体或空元组一轮也不展开，循环的值是初值。
+- 遍历由 `static for` 共用的头给出：`for (n, F) in fields T`（按字段）或 `for (j) in indices ts`（按元组的位置，规则与 6.8.4 的 `indices` 相同）。没有 `while`，没有普通序列的 `for`，也没有 `break`/`continue`。`T` / `ts` 的类型必须是具体的结构体或普通元组（规则与 6.8.4 相同）。遍历外层泛型的类型参数时，轮数由实例化时的类型决定——这就是“实例化时已知的轮数”。
+- 展开成直线代码：每轮按字段顺序建出它读的 `ACCS`，上一轮的状态直接是下一轮读到的值，`static loop` 本身没有节点。块里的 `return` 与普通函数一样离开函数，不是“跳出循环”。
+- 效应就是直线代码的效应：循环体是不是同步块由它自己决定（3.2），每轮的效应按字段顺序执行。
+
+```cml
+func count(t: typeas T): int {
+    return static loop n = 0 for (name, F) in fields T do n + 1
+}
+
+func total_and_max(t: {a: int, b: int}): (int, int) {
+    return static loop total = 0, best = 0
+        for (n, F) in fields {a: int, b: int} do {
+            (total + t.[n], if best < t.[n] then t.[n] else best)
+        }
+}
+```
+
+### 6.8.6 `loop`
 
 循环是一个带状态的表达式（设计原则 3.10）。状态写在循环头上，每个名字只声明一次并给出初值；`do` 后面的表达式是循环体，它的值是下一轮的状态；整个循环的值是最后的状态。
 
 ```
 loop 名字 = 初值 (, 名字 = 初值)* (for 名字 in 序列)? (while 条件)? do 表达式
 ```
+
+<!-- camel-snippet: fragment: the loop forms; xs, n and ds are the surrounding example's values -->
 
 ```cml
 let total    = loop acc = 0 for x in xs do acc + x * x
@@ -398,7 +536,7 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 - **`do` 之后**是一个表达式，读法与 `then` 之后相同：`{ x: 1 }` 是结构体，`{ 5 }` 与 `sync { ... }` 是块。块里 `return` 结束这个块并给出下一轮的状态，不离开函数。
 - **效应**：循环体是不是同步块由它自己决定（3.2）。写成 `do sync { println(x); acc + x }` 时每轮按顺序执行其中的效应。循环所在的块不是同步块、而循环的值又没有被用到时，整个循环不执行，并给出 `EffectNotExecuted`（与没有被用到的调用相同）。
 - **顺序与深度**：各轮严格按顺序。循环不是递归：任意多轮都不占调用深度，`--max-recursion-depth` 不计循环的轮数；不终止的循环一直运行。
-- **数值许可**：写在函数或块上的 `@numeric(...)` 对词法上嵌在其中的循环体与条件同样有效（7.5）。
+- **数值许可**：写在函数或块上的许可标签（`#reassociate`、`#contract` 等）对词法上嵌在其中的循环体与条件同样有效（7.2、7.5）；`#strict` 同样覆盖它们。
 - `loop`、`while`、`do`、`for`、`in` 是关键字。
 
 在图上，一个循环是外层图里的一个 `LOOP` 节点，条件与循环体各是一张子图，两者共用一份捕获表（设计原则 3.10；`docs/design/graph-model` 3.5）。字符串、映射与张量在循环所在处按其类型一次转换成元素数组（字符串的码点、映射的键值对、张量的第一维子张量），`LOOP` 节点本身仍然只遍历数组：各后端与下降都只有这一种情形。
@@ -407,14 +545,51 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 
 lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略；体是一个表达式或一个块：
 
+<!-- camel-snippet: fragment: a list of lambda forms; total comes from the surrounding example -->
+
 ```cml
 (x: int) => x + 1
 (x: int): int => { let y = x * 2; return y + 1 }
+(x) => x + 1                                    // 形参类型从所在位置推出（见下）
 (s: string) => sync { println(s) }              // 同步块作函数体
 sync (x: int) => sync { total = total + x }     // 写入被捕获的变量：加函数修饰符 sync
 ```
 
 函数类型写作 `(x: T) => R`，形参要写名字：`(x: int) => int`、`(acc: int, x: int) => int`。
+
+**形参类型从哪里来。** lambda 不写类型的形参，其类型从 lambda 所在位置的函数类型推出，省略的返回类型同样如此。这样的位置有三种：
+
+- 实参：调用一个形参是函数类型的函数，`with` 实参同理。
+
+  <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
+
+  ```cml
+  func apply_twice(f: (x: int) => int, x: int): int { return f(f(x)) }
+  apply_twice((x) => x + 1, 3)         // x: int
+  ```
+
+- 带标注的绑定：`let` 或 `var` 的类型是函数类型；往这样的变量再赋一个新值同理。
+
+  <!-- camel-snippet: fragment: bindings shown inside the block they would be written in -->
+
+  ```cml
+  let g: (x: int) => int = (x) => x + 1    // x: int
+  var h: (x: int) => int = (x) => x - 1
+  h = (x) => x + 100                       // x: int
+  ```
+
+- 返回值：函数的结果类型是函数类型。
+
+  ```cml
+  func adder(n: int): (x: int) => int {
+      return (x) => x + n              // x: int，返回类型也是 int
+  }
+  ```
+
+期望的类型确定不了的形参是一个错误（`SemanticDiag::LambdaParameterWithoutType`，指到那个形参）：lambda 不在这样的位置上（`let g = (x) => x + 1`、`((x) => x)(1)`），期望的类型不是函数类型，形参个数对不上，或者期望的类型还带着这个位置绑定不了的类型变量。没有期望类型时它不会变成一个 `any`（5.10）：写出类型即可。
+
+- 推断不改变重载决议。lambda 在实参位置上推出类型这件事，与调用选中哪个重载无关：带类型的 lambda 仍按它自己的类型选重载（`pick((x: int) => x + 1, 1)` 与只有这一个重载时选中的相同）；不带类型的 lambda 面对一组重载时没有唯一的期望类型，于是报上面那个错误，而不是替调用挑一个重载。
+- 泛型高阶函数（`tree_reduce`、`map` 这类形参类型里带类型变量的）目前推不出来：实参位置的期望类型要等泛型实例化，而 lambda 总在实例化之前降低，所以那里的形参类型要写出来（`tree_reduce<(acc: int, x: int) => acc + x>(...)`）。这一项在 H92 的报告里记为待决。
 
 **函数是值。** 函数的名字可以用在任何能写值的位置：作实参、`with` 实参、`let g = f`、`return f`、数组或元组的元素、分支臂的值。
 
@@ -448,7 +623,7 @@ func main(): int sync {
 - 只有一个签名、且签名不随实参变化的库算子与用户函数一样是函数值：`xs->map<trim>`、`let t = trim`。
 - 代表一组重载（几个同名的用户函数，或有几个签名的算子，如 `abs`）的名字，在被调用者只有一个签名、且那个形参是函数类型的位置上，取签名与之完全相同的那一个：`func on_int(f: (x: int) => int, v: int)` 的调用 `on_int(abs, -3)`。其他位置上它没有单一的函数值，把它当值用是 `SemanticDiag::FunctionNameAsValue`，诊断列出各个签名；写一个写明形参类型的 lambda。签名随实参变化的算子（`println`、`len`、`map`、`append`）同样没有函数值。泛型函数的名字同理（`SemanticDiag::GenericFunctionAsValue`）。
 - 把这样的名字交给内建的高阶算子时（`xs->map<abs>`、`xs->reduce<max, 0>`、`xs->filter<is_even>`），算子说不出它期望哪个函数，编译器就逐个去问：恰好有一个被算子接受时取它；一个都不接受或有几个都接受时，名字没有值（`SemanticDiag::FunctionNameAsValue`，诊断列出候选）。
-- 带函数类型的声明 `let f: (x: int) => int = inc` 目前不可用（`SemanticDiag::FeatureNotSupported`）；省略类型即可。
+- 带函数类型的绑定 `let f: (x: int) => int = inc` 中，值按标注的函数类型检查；lambda 的形参类型也可以从它推出（见上）。
 
 ## 6.10 高阶算子
 

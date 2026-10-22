@@ -190,6 +190,17 @@ void enableFromEnvironment() {
     }
 }
 
+void enableRecording() {
+    Recorder &r = recorder();
+    if (detail::gEnabled) {
+        return;
+    }
+    r.origin         = Clock::now();
+    r.thread         = std::this_thread::get_id();
+    r.allocSnapshot  = findAllocShim();
+    detail::gEnabled = true;
+}
+
 void open(std::string_view name, std::string_view detail) {
     if (!enabled()) {
         return;
@@ -280,6 +291,10 @@ void report() {
     }
     const std::string json = toJson();
     detail::gEnabled       = false;
+    if (r.path.empty()) {
+        // Recording only (enableRecording): the reader has taken the phases already.
+        return;
+    }
     if (r.path == "-") {
         std::cerr << json << std::flush;
         return;
@@ -290,6 +305,26 @@ void report() {
         return;
     }
     out << json;
+}
+
+std::vector<PhaseRecord> snapshot() {
+    std::vector<PhaseRecord> records;
+    if (!enabled()) {
+        return records;
+    }
+    Recorder &r    = recorder();
+    const int64_t now = nowNs(r);
+    records.reserve(r.phases.size());
+    for (const Phase &phase : r.phases) {
+        PhaseRecord record;
+        record.name    = phase.name;
+        record.detail  = phase.detail;
+        record.depth   = phase.depth;
+        record.startNs = phase.startNs;
+        record.wallNs  = phase.wallNs >= 0 ? phase.wallNs : now - phase.startNs;
+        records.push_back(std::move(record));
+    }
+    return records;
 }
 
 } // namespace camel::utils::phase

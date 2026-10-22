@@ -16,6 +16,8 @@ module shapes
 
 ## 5.2 Imports
 
+<!-- camel-snippet: fragment: the forms of import; lib and its namespace are examples -->
+
 ```cml
 import { sqrt, floor } from math     // bring in the names listed
 import sqrt from math                // bring in one name, the same as import { sqrt } from math
@@ -29,7 +31,7 @@ import { inc } from lib::Tools       // bring in names of a namespace of the mod
 - **A module may import itself, to no effect** (design principles 10.1): `import m` or `import { f } from m` in `module m` binds nothing; its names are its own already (with `m::` in front or without, [5.4](#54-namespaces)). An entry file that imports itself by its file name is not loaded a second time.
 - **A name can be renamed when it is imported**: `import { find as str_find } from str` brings the `find` of the module in under the name `str_find`; renamed and plain names may stand in one import (`import { find as str_find, trim } from str`). After a renaming the original name is not visible in this module. When two modules have a function of the same name, rename one of them, or import one and use the qualified name for the other (`import array`, then `array::find`). A single name can be renamed too (`import find as str_find from str`), and a whole module is renamed with `import m as n`.
 - Two imports by name that bring functions of the same name and the same parameter types are `SemanticDiag::ImportNameConflict`, located at the later `import` and pointing to the earlier one; neither is chosen silently. Functions of the same name and different parameter types form one set of overloads, chosen by the argument types (functions of one name in one layer are one set of overloads, [5.4](#54-namespaces)).
-- **Search order**: `.cml` files in the same directory as the entry file, the directories given by `-I <dir>`, the directories listed in the environment variable `CAMEL_PACKAGES`, and the modules installed with Camel.
+- **Search order**: the entry file's own imports look first for a `.cml` file in its directory, then in the directories given by `-I <dir>`, the directories listed in the environment variable `CAMEL_PACKAGES`, and the modules installed with Camel. Any other module loaded from a file (the standard library's `rules`, for example) looks in its own directory first when it imports (a `xx.cmo` before a `xx.*`), and falls back to the order above; so the standard library's own `import graph` gets the standard library's `graph` and is not replaced by a same-named file of the entry directory, while the entry program's own `import graph` still gets the file in its directory.
 
 ```cml
 import math
@@ -47,7 +49,7 @@ func main(): int sync {
 
 ### 5.2.1 Modules provided with Camel
 
-Names that can be used without an import (global built-ins): `print`, `println`, `input`, `format`, `join`, `len`, `range`, `zip`, `head`, `tail`, `slice`, `concat`, `append`, `extend`, `contains`, `map`, `filter`, `reduce`, `foreach`, `exit`, `sleep`, `error`, `parse_int`, `parse_float`, the conversion functions (`int`, `float`, `string` and so on), and the operations on maps and sets ([3.6](03_data_model.md#36-maps-and-sets)).
+Names that can be used without an import (global built-ins): `print`, `println`, `input`, `format`, `join`, `len`, `range`, `zip`, `head`, `tail`, `last`, `slice`, `concat`, `append`, `extend`, `contains`, `map`, `filter`, `reduce`, `foreach`, `exit`, `sleep`, `error`, `parse_int`, `parse_float`, the conversion functions (`int`, `float`, `string` and so on), and the operations on maps and sets ([3.6](03_data_model.md#36-maps-and-sets)).
 
 | Module | Contents |
 |---|---|
@@ -58,9 +60,9 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `time` | `now`, `strftime`, `strptime` |
 | `fs` | `exists`, `is_file`, `is_dir`, `mkdir`, `mkdirs`, `remove`, `remove_dir`, `read_text`, `try_read_text`, `write_text`, `file_size`, `read_chunk`, `read_bytes`, `write_bytes`, `replace` |
 | `json` | the type `Json`; `encode`, `decode`, `decode_as`; `kind`, `is_null`, `get`, `as_bool`, `as_int`, `as_float`, `as_string`, `as_array`, `as_object` |
-| `os`, `sys` | `whoami`, `cpu_count`, terminal input; `get_cwd`, `get_env` |
+| `process`, `env` | `whoami`, `cpu_count`, terminal input; `get_cwd`, `get_env` |
 | `re` | `test` |
-| `crypto` | `sha256`, `sha256_rounds` |
+| `hash` | `sha256`, `sha256_rounds` |
 | `this` | `zen` |
 | `algo` | `sort`, `merge_sort`, `merge_sorted_arrays` and other sorting functions (each returns a new array, under one name) |
 | `statistics` | `mean`, `stdev`, `variance`, `median`, `quantile` |
@@ -105,8 +107,8 @@ func main(): int sync {
 ```
 
 ```text
-5
-10
+5.0
+10.0
 ```
 
 - `export` is written before a `func`, `type` or `let`/`var` declaration, or in the form `export { a, b }` listing names already declared.
@@ -203,6 +205,8 @@ func main(): int sync {
 - Diagnostics, the debugger and the graphs show full names: a function of another module is shown as `module::path::name`; the entry module's own names are shown without the module.
 
 **`using namespace`** lets the names of a namespace be written without their prefix:
+
+<!-- camel-snippet: fragment: the forms of using namespace; lib, Tools and Inner are examples -->
 
 ```cml
 import lib

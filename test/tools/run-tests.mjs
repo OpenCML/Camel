@@ -6,6 +6,7 @@ import { spawn, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { parseTomlFile } from './toml-lite.mjs'
 import { compareGirDotIsomorphic } from './gir-dot.mjs'
+import { applyNormalizers } from './normalizers.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -22,6 +23,149 @@ const IS_WINDOWS = process.platform === 'win32'
 const BUILDS = {
     release: { dir: 'latest', label: 'Release' },
     debug: { dir: 'debug', label: 'Debug' },
+}
+
+/**
+ * The fields a plan file may contain. A key that is not here is an error, not a comment: a test
+ * that wrote `expect_stdout_exact` under a misspelled name used to pass while asserting nothing.
+ * `desc` is human-readable documentation, and `perf_budget_platform` is the provenance of a
+ * benchmark budget; both are accepted, and neither turns into an assertion.
+ */
+const PLAN_FIELDS = new Set([
+    'id', 'desc', 'order', 'tier', 'debug_tier', 'parallel', 'tags', 'defaults', 'tests', 'sweeps',
+])
+const TEST_FIELDS = new Set([
+    'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'verify_timeout_ms',
+    'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep',
+    'known_fail', 'known_fail_note', 'failure_note',
+    'backends', 'backends_agree', 'compare_to', 'compare_fields',
+    'golden', 'snapshot_stream', 'snapshot_compare', 'normalizers',
+    'expect_exit', 'expect_stdout_contains', 'expect_stdout_exact', 'expect_stdout',
+    'expect_stdout_starts_with', 'expect_stdout_not_contains', 'expect_stderr_contains',
+    'expect_output_contains', 'expect_output_not_contains',
+    'expect_diagnostic_name', 'expect_diagnostic_code',
+    'expect_diagnostic_line', 'expect_diagnostic_column',
+    'perf_budget_mean_ms', 'perf_budget_tolerance_pct', 'perf_budget_platform',
+    'verify_script', 'verify_script_path', 'verify_js',
+])
+const SWEEP_FIELDS = new Set([
+    'name', 'plans', 'exclude', 'envs', 'skip_env_prefix', 'timeout_scale',
+    'fast_sample', 'risk_tags', 'risk_sample',
+])
+
+/** A plan file that contradicts the schema; it fails the plan, not the run. */
+class PlanSchemaError extends Error {
+    constructor(message) {
+        super(message)
+        this.name = 'PlanSchemaError'
+    }
+}
+
+function planLabel(planPath) {
+    const relative = path.relative(REPO_ROOT, planPath)
+    if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
+        return relative.split(path.sep).join('/')
+    }
+    return planPath
+}
+
+/** Levenshtein distance, for "did you mean": a one-letter typo must name the field it meant. */
+function editDistance(lhs, rhs) {
+    let previous = Array.from({ length: rhs.length + 1 }, (_, index) => index)
+    for (let i = 1; i <= lhs.length; i++) {
+        const current = [i]
+        for (let j = 1; j <= rhs.length; j++) {
+            const substitute = previous[j - 1] + (lhs[i - 1] === rhs[j - 1] ? 0 : 1)
+            current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, substitute)
+        }
+        previous = current
+    }
+    return previous[rhs.length]
+}
+
+function closestField(key, allowed) {
+    let best = null
+    let bestDistance = 3
+    for (const field of allowed) {
+        const distance = editDistance(key, field)
+        if (distance < bestDistance) {
+            best = field
+            bestDistance = distance
+        }
+    }
+    return best
+}
+
+function checkFields(planPath, entry, allowed, where) {
+    for (const key of Object.keys(entry)) {
+        if (allowed.has(key)) continue
+        const suggestion = closestField(key, allowed)
+        const hint = suggestion ? `; did you mean '${suggestion}'?` : ''
+        throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: unknown key '${key}'${hint}`)
+    }
+}
+
+function checkFieldType(planPath, entry, field, where, type) {
+    const value = entry[field]
+    if (value === undefined) return
+    const ok = type === 'string'
+        ? typeof value === 'string'
+        : type === 'number'
+            ? typeof value === 'number' && Number.isFinite(value)
+            : false
+    if (ok) return
+    const shown = type === 'string' ? JSON.stringify(value) : String(value)
+    throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: ${field} must be a ${type}, got ${shown}`)
+}
+
+/**
+ * Refuse a plan the runner does not fully understand before any of its tests run. Every key of
+ * the plan, of `[defaults]`, of a `[[tests]]` entry and of a `[[sweeps]]` entry is checked, so a
+ * misspelled assertion cannot silently assert nothing. There is deliberately no way to turn
+ * this off from a plan file (or from the environment): a plan that the runner only partly
+ * understands is not evidence.
+ */
+function validatePlanSchema(doc, planPath) {
+    checkFields(planPath, doc, PLAN_FIELDS, 'plan')
+    if (doc.defaults !== undefined) {
+        if (doc.defaults === null || typeof doc.defaults !== 'object' || Array.isArray(doc.defaults)) {
+            throw new PlanSchemaError(`${planLabel(planPath)}: [defaults] must be a table`)
+        }
+        checkFields(planPath, doc.defaults, TEST_FIELDS, '[defaults]')
+    }
+    for (const [index, test] of (doc.tests || []).entries()) {
+        if (test === null || typeof test !== 'object' || Array.isArray(test)) {
+            throw new PlanSchemaError(`${planLabel(planPath)}: test #${index + 1} is not a table`)
+        }
+        const where = typeof test.name === 'string' && test.name.length > 0
+            ? `test '${test.name}'`
+            : `test #${index + 1}`
+        checkFields(planPath, test, TEST_FIELDS, where)
+    }
+    for (const [index, sweep] of (doc.sweeps || []).entries()) {
+        if (sweep === null || typeof sweep !== 'object' || Array.isArray(sweep)) {
+            throw new PlanSchemaError(`${planLabel(planPath)}: [[sweeps]] entry #${index + 1} is not a table`)
+        }
+        const where = typeof sweep.name === 'string' && sweep.name.length > 0
+            ? `[[sweeps]] entry '${sweep.name}'`
+            : `[[sweeps]] entry #${index + 1}`
+        checkFields(planPath, sweep, SWEEP_FIELDS, where)
+    }
+    // The fields this change implemented get a type check too: a plan that sets one of them to a
+    // number must fail here, where the file and the test are named, not later inside an assertion.
+    const entries = [
+        ['[defaults]', doc.defaults],
+        ...(doc.tests || []).map((test, index) => [
+            typeof test.name === 'string' && test.name.length > 0 ? `test '${test.name}'` : `test #${index + 1}`,
+            test,
+        ]),
+    ]
+    for (const [where, entry] of entries) {
+        if (!entry) continue
+        checkFieldType(planPath, entry, 'expect_stdout_exact', where, 'string')
+        checkFieldType(planPath, entry, 'expect_stdout', where, 'string')
+        checkFieldType(planPath, entry, 'perf_budget_platform', where, 'string')
+    }
 }
 
 function camelHome(build) {
@@ -268,11 +412,19 @@ function parseArgs(argv) {
         // compares parallel output with serial output.
         jobs: DEFAULT_JOBS,
         targets: [],
+        // Plan files that `--changed` selected through a `layer: true` rule: they stay named
+        // targets but follow `--tier`, so a plan whose slow cases must not run from an ordinary
+        // change runs only its fast layer. `--run-changed` produces this; it is not a user knob.
+        layeredPlans: new Set(),
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         if (arg === '--update-golden') {
             options.updateGolden = true
+        } else if (arg === '--selection-layer' && i + 1 < argv.length) {
+            for (const entry of argv[++i].split(',')) {
+                if (entry.trim()) options.layeredPlans.add(path.resolve(process.cwd(), entry.trim()))
+            }
         } else if (arg === '--tier' && i + 1 < argv.length) {
             const tier = argv[++i]
             if (!TIERS.has(tier)) throw new Error(`--tier must be one of ${[...TIERS].join(', ')}, got '${tier}'`)
@@ -369,59 +521,6 @@ function loadVars() {
     return { ...builtins, ...parseTomlFile(VARS_PATH) }
 }
 
-/**
- * Replace the repository root with `<ROOT>` and write the rest of that path with forward slashes,
- * so a snapshot does not depend on where the checkout lives or on the platform's separator. The
- * root is recognised with forward slashes, with native separators, and with escaped backslashes
- * (a Windows path inside a quoted DOT or JSON string), in its own case and in lower case.
- */
-function normalizePathText(text, repoRoot = REPO_ROOT) {
-    const forward = repoRoot.replace(/\\/g, '/')
-    let output = text
-    if (repoRoot.includes('\\')) {
-        // Windows: `C:\\repo\\a\\b` (escaped) first, then `C:\repo\a\b` (native). Only the
-        // separator form the root itself was written in is rewritten in the rest of the path,
-        // so an escape that follows the path (`\"`, `\n`) is left alone.
-        const quote = (root) => root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const rest = '[^\\s"\'`<>|*?,;]*'
-        for (const [root, separator] of [
-            [repoRoot.replace(/\\/g, '\\\\'), /\\\\/g],
-            [repoRoot, /\\/g],
-        ]) {
-            const pattern = new RegExp(`${quote(root)}(${rest})`, 'gi')
-            output = output.replace(pattern, (_, tail) => `<ROOT>${tail.replace(separator, '/')}`)
-        }
-    }
-    return output.replaceAll(forward, '<ROOT>').replaceAll(forward.toLowerCase(), '<ROOT>')
-}
-
-function applyNormalizers(text, names) {
-    let output = text
-    for (const name of names || []) {
-        if (name === 'strip_ansi') {
-            output = output.replace(/\x1b\[[0-9;]*m/g, '')
-        } else if (name === 'normalize_newlines') {
-            output = output.replace(/\r\n/g, '\n')
-        } else if (name === 'trim_trailing_space') {
-            output = output
-                .split('\n')
-                .map((line) => line.replace(/[ \t]+$/g, ''))
-                .join('\n')
-        } else if (name === 'normalize_paths') {
-            output = normalizePathText(output)
-        } else if (name === 'normalize_addresses') {
-            output = output.replace(/0x[0-9a-fA-F]+/g, '<ADDR>')
-        } else if (name === 'normalize_origins') {
-            // The source origin ids of a GIR dump depend on what was compiled before the dumped
-            // program (a pass module written in Camel takes some).
-            output = output.replace(/"origin": "[0-9]+"/g, '"origin": "<ORIGIN>"')
-        } else if (name === 'normalize_duration_seconds') {
-            output = output.replace(/computed in [0-9]+\.[0-9]+ seconds/g, 'computed in <TIME> seconds')
-        }
-    }
-    return output
-}
-
 function parseDiagnostics(text) {
     const diagnostics = []
     const clean = applyNormalizers(text || '', ['strip_ansi', 'normalize_newlines', 'trim_trailing_space'])
@@ -495,7 +594,9 @@ function benchmarkSampleCount(benchmark) {
 }
 
 function formatMetric(result) {
-    if (result.benchmark) {
+    // A failed `--timeit` iteration reports the diagnosis, not a mean (H66): the failure is the
+    // test's result, so the status line carries no number.
+    if (result.benchmark && Number.isFinite(result.benchmark.mean_ms)) {
         const samples = benchmarkSampleCount(result.benchmark)
         const sampleSuffix = samples === null ? '' : ` (n=${samples})`
         if (samples !== null && samples < 2) {
@@ -779,6 +880,10 @@ async function runVerification(test, result) {
     }
 
     const payloadPath = path.join(tempDir, 'input.json')
+    // The documented payload fields are listed in docs/test-plans.md; every one of them must be
+    // present, and a missing key is silently dropped by `JSON.stringify` (H143: `case_path` was
+    // assembled from a result that did not carry it yet, so a script normalizing the absolute
+    // source path out of its output could not, and its digest varied with the checkout).
     const payload = {
         repo_root: REPO_ROOT,
         test_root: TEST_ROOT,
@@ -843,6 +948,28 @@ function verifyFailureLines(verification) {
     return lines
 }
 
+/**
+ * Where two strings first differ, with the text around the difference. An exact comparison that
+ * only said "differs" would send the reader to the log for a trailing space; this names the
+ * offset and shows both sides.
+ */
+function describeTextDifference(expected, actual) {
+    const shared = Math.min(expected.length, actual.length)
+    let index = 0
+    while (index < shared && expected[index] === actual[index]) index++
+    const window = (text) => {
+        const start = Math.max(0, index - 30)
+        const end = Math.min(text.length, index + 70)
+        return `${start > 0 ? '...' : ''}${text.slice(start, end)}${end < text.length ? '...' : ''}`
+    }
+    // A short output is shown whole: the reader should not have to open the log to see the
+    // trailing space or the extra line that made the comparison fail.
+    const whole = expected.length + actual.length <= 400
+    return `first difference at offset ${index} (expected ${expected.length} chars, got ${actual.length} chars): `
+        + `expected ${JSON.stringify(whole ? expected : window(expected))}, `
+        + `got ${JSON.stringify(whole ? actual : window(actual))}`
+}
+
 function compareField(field, actual, baseline) {
     if (field === 'exit_code') return actual.exitCode === baseline.exitCode
     if (field === 'stdout_normalized') return actual.normalized.stdout === baseline.normalized.stdout
@@ -882,10 +1009,29 @@ async function validateTest(test, result, context) {
             failures.push(`stdout does not contain '${needle}'`)
         }
     }
+    // `expect_stdout` is the legacy name of the same byte-exact comparison: a plan written
+    // before `expect_stdout_exact` existed meant the whole output, and the values it holds are
+    // whole outputs. Both compare the normalized stdout, as the other expectations do.
+    for (const field of ['expect_stdout_exact', 'expect_stdout']) {
+        if (typeof test[field] !== 'string') continue
+        const expected = expandTextTokens(test[field], scope)
+        if (result.normalized.stdout !== expected) {
+            failures.push(`${field} differs: ${describeTextDifference(expected, result.normalized.stdout)}`)
+        }
+    }
     if (typeof test.expect_stdout_starts_with === 'string') {
         const expectedStart = expandTextTokens(test.expect_stdout_starts_with, scope)
         if (!result.normalized.stdout.startsWith(expectedStart)) {
             failures.push(`stdout does not start with ${JSON.stringify(expectedStart)}`)
+        }
+    }
+    // The other direction: a plan that asserts a run says nothing about something (the profiler
+    // off is silent, a diagnostic is not printed for a program that has no fault) needs a
+    // negative assertion, and a missing one is not the same as a passing one.
+    for (const rawNeedle of test.expect_stdout_not_contains || []) {
+        const needle = expandTextTokens(rawNeedle, scope)
+        if (result.normalized.stdout.includes(needle)) {
+            failures.push(`stdout contains '${needle}'`)
         }
     }
     for (const rawNeedle of test.expect_stderr_contains || []) {
@@ -978,6 +1124,23 @@ async function validateTest(test, result, context) {
     if (test.kind === 'benchmark') {
         if (!result.benchmark) {
             failures.push('missing benchmark payload')
+        } else if (result.benchmark.failed) {
+            // `--timeit` reports the iteration that failed, its diagnostics and no mean (H66).
+            // That is the test's result; it is reported here instead of the runner throwing on
+            // the missing metric.
+            const reasons = (result.benchmark.diagnostics || []).map(
+                (diagnostic) =>
+                    `${diagnostic.data?.name || diagnostic.code || 'diagnostic'}: ${diagnostic.message}`
+            )
+            const reason =
+                reasons.length > 0
+                    ? reasons.join('; ')
+                    : result.benchmark.failure || 'no reason given'
+            failures.push(
+                `the timed pass failed in iteration ${result.benchmark.iteration ?? '?'}: ${reason}`
+            )
+        } else if (!Number.isFinite(result.benchmark.mean_ms)) {
+            failures.push('benchmark payload has no mean_ms')
         } else if (typeof test.perf_budget_mean_ms === 'number') {
             const tolerance = Number(test.perf_budget_tolerance_pct || 0)
             const ceiling = test.perf_budget_mean_ms * (1 + tolerance / 100)
@@ -997,6 +1160,9 @@ async function validateTest(test, result, context) {
 
 async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative) {
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
+    if (test.__planError) {
+        return runnerErrorResult(casePath, test.__planError)
+    }
     const toolName = test.tool || 'camel'
     const toolExe = toolName === 'python' ? pythonExecutable() : toolExecutable(toolName, logContext.options.build)
     if (!toolExe) {
@@ -1070,6 +1236,9 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         diagnostics: parseDiagnostics(raw.output),
         testTmp: scratch,
         testTmpRelative: scratchRelative,
+        // Set before validation: the verify script payload carries this as `case_path`, and the
+        // script that normalizes a source path out of its output needs it (H143).
+        casePath,
     }
 
     if (test.kind === 'benchmark' && raw.stdout) {
@@ -1080,7 +1249,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // only after this returns.
     const failures = await validateTest(test, result, { ...logContext, scope })
     const status = failures.length === 0 ? 'pass' : 'fail'
-    return { ...result, failures, status, casePath }
+    return { ...result, failures, status }
 }
 
 function writeLogFiles(plan, test, result, status, logDir) {
@@ -1109,6 +1278,7 @@ function writeLogFiles(plan, test, result, status, logDir) {
                 failure_note: test.failure_note || null,
                 failures: result.failures,
                 diagnostics: result.diagnostics,
+                perf_budget_platform: test.perf_budget_platform || null,
                 metrics: result.benchmark
                     ? {
                         mean_ms: result.benchmark.mean_ms,
@@ -1168,6 +1338,7 @@ function expandBackends(test) {
 
 function loadPlanTests(planPath) {
     const doc = parseTomlFile(planPath)
+    validatePlanSchema(doc, planPath)
     const planId = doc.id || path.basename(planPath, '.plan.toml')
     const tests = (doc.tests || [])
         .map((test) => ({ ...(doc.defaults || {}), ...test, __planPath: planPath, __planId: planId }))
@@ -1176,11 +1347,34 @@ function loadPlanTests(planPath) {
 }
 
 /**
+ * A plan the schema rejected. It becomes one failing test of that plan, so the rest of the run
+ * still runs and reports; the failure names the plan file, the test and the key. Silently
+ * dropping the plan would hide exactly the defect this exists to expose.
+ */
+function invalidPlan(planPath, error) {
+    const id = path.basename(planPath, '.plan.toml')
+    return {
+        id,
+        __planPath: planPath,
+        __error: error.message,
+        tests: [{
+            name: '<invalid plan>',
+            kind: 'behavior',
+            case: path.basename(planPath),
+            args: [],
+            __planPath: planPath,
+            __planId: id,
+            __planError: error.message,
+        }],
+    }
+}
+
+/**
  * A `[[sweeps]]` entry of a plan runs the tests of other plans again under an extra
  * environment, with all their assertions:
  *
  *   [[sweeps]]
- *   name = "poison"                     # the tests are named "<name>:<original name>"
+ *   name = "poison"                     # named "<name>:<source plan id>:<original name>"
  *   plans = ["../modules", "../linear"] # plan files or directories, relative to this plan
  *   exclude = ["modules/onnx"]          # substrings of plan paths that are left out
  *   envs = ["CAMEL_GC_POISON=1"]
@@ -1201,7 +1395,6 @@ function expandSweeps(doc, planPath) {
         const exclude = (sweep.exclude || []).map((item) => String(item))
         const scale = Number.isFinite(sweep.timeout_scale) ? sweep.timeout_scale : 1
         const prefix = sweep.skip_env_prefix || null
-        const rename = (name) => `${sweep.name}:${name}`
         // `fast_sample = N` keeps N tests per source plan in the fast layer and puts the rest in
         // the slow one: the default developer run still checks the property against every plan,
         // and the full sweep (every eligible test) is `--tier all` away. The
@@ -1214,13 +1407,22 @@ function expandSweeps(doc, planPath) {
         const fastSample = Number.isInteger(sweep.fast_sample) && sweep.fast_sample > 0 ? sweep.fast_sample : 0
         const riskTags = new Set((sweep.risk_tags || []).map((tag) => String(tag)))
         const riskSample = Number.isInteger(sweep.risk_sample) && sweep.risk_sample > 0 ? sweep.risk_sample : 0
-        const sources = sweep.plans
+        // A plan named twice (a directory target and a file inside it, say) is one source: two
+        // expansions of it would be two copies with the same name and the same work.
+        const sources = [...new Set(sweep.plans
             .flatMap((entry) => walkPlans(path.resolve(path.dirname(planPath), entry)))
             .filter((source) => source !== planPath)
-            .filter((source) => !exclude.some((item) => source.split(path.sep).join('/').includes(item)))
+            .filter((source) => !exclude.some((item) => source.split(path.sep).join('/').includes(item))))]
             .sort()
         for (const source of sources) {
             const { doc: sourceDoc, tests: sourceTests } = loadPlanTests(source)
+            // A copy is named after the sweep, its source plan and the source test. The source
+            // plan is part of the name because two plans may both have a test called `shapes`
+            // (H120): without it the copies collide, and a back end waits for, and compares
+            // against, whichever copy of its reference ran last. `id` is the plan's stable
+            // identifier, unique across the run; the fallback matches loadPlanTests.
+            const sourceId = sourceDoc.id || path.basename(source, '.plan.toml')
+            const rename = (name) => `${sweep.name}:${sourceId}:${name}`
             const risky = (sourceDoc.tags || []).some((tag) => riskTags.has(String(tag)))
             const sampleCount = fastSample > 0 && risky && riskSample > fastSample ? riskSample : fastSample
             const eligible = []
@@ -1299,6 +1501,9 @@ function selectTier(plans, tier, namedPlans = new Set()) {
         for (const test of plan.tests) order.push({ plan, test })
     }
     const wants = (plan, test) => {
+        // A plan the schema rejected fails in every layer: its tests never ran, so no layer can
+        // honestly say the plan is clean.
+        if (test.__planError) return true
         if (tier === 'all') return testTier(plan, test) !== 'debug'
         if (tier === 'debug') return plan.debug_tier === true || testTier(plan, test) === 'debug'
         return testTier(plan, test) === tier
@@ -1347,14 +1552,15 @@ function selectTier(plans, tier, namedPlans = new Set()) {
     return selectedPlans
 }
 
-function loadPlans(targets, tier) {
+function loadPlans(targets, tier, layeredPlans = new Set()) {
     // A plan file named on the command line (or by `--changed`'s self rule) runs in full; the
-    // plans a directory reaches follow the layer. The same plan reached both ways is named.
+    // plans a directory reaches follow the layer. The same plan reached both ways is named,
+    // unless `--changed` marked it `layer: true`: then the tier filter applies to it as well.
     const namedPlans = new Set()
     const discovered = []
     for (const target of targets) {
         const resolved = path.resolve(target)
-        if (fs.statSync(resolved).isFile()) namedPlans.add(resolved)
+        if (fs.statSync(resolved).isFile() && !layeredPlans.has(resolved)) namedPlans.add(resolved)
         discovered.push(...walkPlans(target))
     }
     if (targets.length === 0) discovered.push(...walkPlans(PLANS_ROOT))
@@ -1363,9 +1569,16 @@ function loadPlans(targets, tier) {
     const planPaths = [...new Set(discovered.map((planPath) => path.resolve(planPath)))]
     const plans = planPaths
         .map((planPath) => {
-            const { doc, tests: ownTests } = loadPlanTests(planPath)
-            const tests = [...ownTests, ...expandSweeps(doc, planPath)]
-            return { ...doc, __planPath: planPath, tests }
+            try {
+                const { doc, tests: ownTests } = loadPlanTests(planPath)
+                const tests = [...ownTests, ...expandSweeps(doc, planPath)]
+                return { ...doc, __planPath: planPath, tests }
+            } catch (error) {
+                // A schema error is a property of this plan file: fail this plan and go on. Any
+                // other error is a defect of the runner or of a sweep target, and stays fatal.
+                if (!(error instanceof PlanSchemaError)) throw error
+                return invalidPlan(planPath, error)
+            }
         })
         .sort((lhs, rhs) => {
             const lhsOrder = Number.isFinite(lhs.order) ? lhs.order : Number.MAX_SAFE_INTEGER
@@ -1563,12 +1776,12 @@ async function main() {
     const sharedVars = loadVars()
     const namedPlans = options.targets.filter((target) => {
         try {
-            return fs.statSync(target).isFile()
+            return fs.statSync(target).isFile() && !options.layeredPlans.has(path.resolve(target))
         } catch {
             return false
         }
     })
-    const plans = loadPlans(options.targets, options.tier)
+    const plans = loadPlans(options.targets, options.tier, options.layeredPlans)
     ensureDir(LOG_ROOT)
     // The pid keeps two runs started in the same second (the self-test does this) out of one
     // directory, whose logs and summary.json would otherwise overwrite each other.
@@ -1581,6 +1794,14 @@ async function main() {
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
     )
+    if (options.layeredPlans.size > 0 && options.tier !== 'all') {
+        // `--changed` marked these plans `layer: true`: naming them is not "run the whole file",
+        // it is "run the cases of this layer", so the slow cases that must not run from an
+        // ordinary change are filtered while the fast ones still run.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} selected plan target(s) follow --tier ${options.tier}: ${options.layeredPlans.size}`
+        )
+    }
     if (namedPlans.length > 0 && options.tier !== 'all') {
         // Naming a plan is the user's intent: it runs in full, whatever `--tier` says. A
         // directory target still selects the layer (see loadPlans).

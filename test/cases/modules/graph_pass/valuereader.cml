@@ -1,0 +1,13 @@
+// A pass module whose top-level value is built from a value imported from a Camel library and
+// from a call into it: both are nodes of the pass program's root, computed before the pass runs
+// (task H37, H36 item 1).
+module valuereader
+import { Program } from graph
+import { five, nine } from valuelib
+
+let sum = five + nine()
+
+export func show(p: Program): Program! sync {
+    println(five, sum)
+    return p
+}

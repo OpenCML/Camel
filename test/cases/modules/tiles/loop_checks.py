@@ -6,11 +6,11 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[4]
 EXE = os.environ.get('CAMEL_EXE', str(ROOT / 'out/latest/bin' / ('camel.exe' if os.name == 'nt' else 'camel')))
-ENV = dict(os.environ, CAMEL_HOME=str(ROOT / 'out/latest'), CAMEL_GC='generational',
+ENV = dict(os.environ, CAMEL_HOME=str(ROOT / 'out/latest'),
            CAMEL_GC_VERIFY='both', CAMEL_GC_STRESS_SAFEPOINT='1', CAMEL_GC_STRESS_MODE='minor')
 
 def run(case, passes, env=ENV):
-    return subprocess.run([EXE, str(Path(__file__).with_name(case + '.cml')), *passes],
+    return subprocess.run([EXE, '--gc', 'generational', str(Path(__file__).with_name(case + '.cml')), *passes],
                           cwd=ROOT, env=env, capture_output=True, text=True, timeout=90)
 
 for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:

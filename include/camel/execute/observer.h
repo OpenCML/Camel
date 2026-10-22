@@ -93,6 +93,12 @@ class ExecutionObserver {
     /// released. `isolated`: the fault is inside a fault-isolation boundary and will become
     /// an error value there; otherwise it ends the program.
     virtual void faultRaised(const core::error::RuntimeFault &fault, bool isolated) = 0;
+
+    /// The pass pipeline is about to run a pass. `schedules` is true for a scheduling pass,
+    /// whose apply runs the program; a rewrite or translation pass may evaluate graphs for
+    /// its work (the rules library, a macro function), and that is not the program's run.
+    /// `root` is the program root the pass is given, or null.
+    virtual void passStarting(bool /*schedules*/, runtime::GCGraph * /*root*/) {}
 };
 
 /// The installed observer, or null.

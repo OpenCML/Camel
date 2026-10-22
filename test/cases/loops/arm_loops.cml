@@ -1,0 +1,75 @@
+// A loop written as the value of a branch arm (H45). The round of a loop starts where the
+// region of the arm starts: an arm is one range of the execution order between the BRCH and the
+// JOIN, and the first round's events (the start of the loop and the test of the round) lie at
+// the first node of the loop's regions, which is a port of the body, not an operator. Every
+// value here is the same as the loop written in the function body, and every back end gives it.
+//
+// The cases, in the order they print: the whole `then` arm, the whole `else` arm, a `while` in
+// an arm, a loop of two states, a loop followed by more statements in the same arm, an `if`
+// inside the loop's body, a loop in a `match` arm, a loop in each arm, a collecting loop, the
+// same function called twice, and a loop in an arm of the root graph.
+func then_for(flag: bool, xs: int[]): int {
+    if flag then loop acc = 0 for x in xs do acc + x else -1
+}
+
+func else_for(flag: bool, xs: int[]): int {
+    if flag then -1 else loop acc = 0 for x in xs do acc + x
+}
+
+func while_arm(flag: bool, n: int): int {
+    if flag then loop i = 0 while i < n do i + 1 else -1
+}
+
+func two_states(flag: bool, n: int): (int, int) {
+    if flag then loop i = 1, acc = 0 while i <= n do (i + 1, acc + i) else (-1, -1)
+}
+
+func then_more(flag: bool, xs: int[]): int {
+    if flag then {
+        let s = loop acc = 0 for x in xs do acc + x
+        s * 10 + 1
+    } else {
+        -1
+    }
+}
+
+func body_if(xs: int[]): int {
+    if len(xs) > 0 then loop acc = 0 for x in xs do if x % 2 == 0 then acc + x else acc else -2
+}
+
+func match_arm(k: int, xs: int[]): int {
+    match k {
+        case 1 => loop acc = 0 for x in xs do acc + x
+        case _ => -1
+    }
+}
+
+func two_arms(flag: bool, xs: int[]): int {
+    if flag then loop acc = 0 for x in xs do acc + x else loop acc = 100 for x in xs do acc + x
+}
+
+func collecting(flag: bool, n: int): int[] {
+    if flag then loop xs = [0] while len(xs) < n do xs->append<7> else [9]
+}
+
+func main(): int sync {
+    println('then', then_for(true, [1, 2, 3]))
+    println('then.false', then_for(false, [1, 2, 3]))
+    println('else', else_for(false, [1, 2, 3]))
+    println('else.false', else_for(true, [1, 2, 3]))
+    println('while', while_arm(true, 3))
+    println('two', two_states(true, 4))
+    println('more', then_more(true, [1, 2, 3]))
+    println('body-if', body_if([1, 2, 3, 4]))
+    println('match', match_arm(1, [1, 2, 3]), match_arm(2, [1, 2, 3]))
+    println('two-arms', two_arms(true, [1, 2, 3]), two_arms(false, [1, 2, 3]))
+    println('collect', collecting(true, 4), collecting(false, 4))
+    println('twice', then_for(true, [1, 2, 3]), then_for(true, [1, 2, 3]))
+    if true then {
+        let s = loop acc = 0 for x in [4, 5] do acc + x
+        println('root', s)
+    } else {
+        println('root', -1)
+    }
+    return 0
+}

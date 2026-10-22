@@ -30,9 +30,10 @@
  * What a kind carries is spread over `payload`, `tag` and `flags`:
  *
  *     DATA              payload: the constant (a pointer to a shared_ptr the tree keeps)
- *     TYPE              payload: the type; tag: ImplMark
+ *     TYPE              payload: the type
  *     DECL              payload: the name; flag: a function is declared
- *     FUNC, NREF, DREF  payload: the name; FUNC flag: a decorated block
+ *     FUNC, NREF, DREF  payload: the name; FUNC flags: a decorated block, a body-less
+ *                       declaration of a C++ operator
  *     LINK, WITH        payload: the number of arguments written
  *     ACCS              payload: the index, or the key when the flag is clear
  *     BRCH              tag: BranchKind
@@ -44,7 +45,12 @@
  *     EXPT              payload: the list of exported names
  *     LOOP              payload: the names of the state, then the name of the element with
  *                       `for`; tag: camel::core::LoopKind
- *     VARI, WAIT, ANNO  nothing
+ *     SFOR              payload: the name of the walked entry, then the name of its type
+ *                       (empty for `indices`); flag A: the generator is `indices`
+ *     SLOOP             payload: the names of the state, then the name of the walked entry and
+ *                       the name of its type (empty for `indices`); flag A: `indices`
+ *     SCOMP             tag: 0 for `{ ... }`, 1 for `( ... )`
+ *     VARI, WAIT, ANNO, SACC  nothing
  *
  * Ownership and lifetime. Nodes are made by a Tree (tree.h) in its arena and are never freed
  * one by one: a node, its child array, the names it points to and the constants it refers to
@@ -70,8 +76,8 @@
 #include "camel/compile/gct/types.h"
 #include "camel/core/data.h"
 #include "camel/core/func.h"
-#include "camel/core/impl.h"
 #include "camel/core/loop_kind.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/core/source/ids.h"
 #include "camel/utils/assert.h"
 
@@ -131,14 +137,10 @@ class Node {
         flags_ |= kFlagA;
     }
 
-    /// TYPE: the type, and how a function of that type is implemented.
+    /// TYPE: the type.
     Type *dataType() const {
         check(NodeKind::TYPE);
         return payload_.type;
-    }
-    ImplMark implMark() const {
-        check(NodeKind::TYPE);
-        return static_cast<ImplMark>(tag_);
     }
 
     /// DECL, FUNC, NREF, DREF: the name as written, qualified names with `::` between the
@@ -161,6 +163,19 @@ class Node {
     void setDecoratedBlock() {
         check(NodeKind::FUNC);
         flags_ |= kFlagA;
+    }
+
+    /// FUNC, DECL: a body-less declaration (design principles 6.4; handover H19, step 1). The FUNC
+    /// the parser built has its type as its only child and no graph is built from it; the DECL the
+    /// module makes of it stands for an operator of a C++ module, and what it declares is its
+    /// signature.
+    bool nativeDeclaration() const {
+        ASSERT(kind_ == NodeKind::FUNC || kind_ == NodeKind::DECL, "The node is no declaration");
+        return (flags_ & kFlagB) != 0;
+    }
+    void setNativeDeclaration() {
+        ASSERT(kind_ == NodeKind::FUNC || kind_ == NodeKind::DECL, "The node is no declaration");
+        flags_ |= kFlagB;
     }
 
     /// DECL: whether a function is declared (else a type).
@@ -192,21 +207,6 @@ class Node {
     bool operands() const {
         check(NodeKind::EXEC);
         return (flags_ & kFlagB) != 0;
-    }
-
-    /// EXEC: the numeric permissions (camel/core/operator_semantics.h, PermissionMask) in
-    /// force in this scope: those `@numeric(...)` grants on it, on the function whose body it
-    /// is, and on every block and function it is lexically nested in (design principles 7.5:
-    /// an arm, a loop body or a lambda written in the code is part of the code). Every EXEC
-    /// the GCT builder makes carries them, so the graph builder reads them from the nearest
-    /// EXEC whatever order it builds graphs in. 0 when none is granted.
-    uint8_t numericPermissions() const {
-        check(NodeKind::EXEC);
-        return static_cast<uint8_t>(tag_);
-    }
-    void setNumericPermissions(uint8_t permissions) {
-        check(NodeKind::EXEC);
-        tag_ = permissions;
     }
 
     /// EXPT: the exported names.
@@ -310,6 +310,104 @@ class Node {
         check(NodeKind::CASE);
         ASSERT(caseType() == CaseType::Enum, "The case names no enum variant");
         return (flags_ & kFlagA) != 0;
+    }
+
+    /// TCASE: the shapes it selects, as a mask of typeCaseBit (design principles 5.5).
+    uint16_t typeCasePatterns() const {
+        check(NodeKind::TCASE);
+        return tag_;
+    }
+
+    /// SFOR: the name bound to the walked entry in the body (`n`, or `j` for `indices`).
+    const std::string &staticForValueName() const {
+        check(NodeKind::SFOR);
+        return *payload_.names->items[0];
+    }
+    /// SFOR: the name bound to the entry's type in the body (`F`; empty for `indices`).
+    const std::string &staticForTypeName() const {
+        check(NodeKind::SFOR);
+        return *payload_.names->items[1];
+    }
+    /// SFOR: the generator walks the positions of a tuple value (`indices ts`) rather than the
+    /// fields of a type (`fields T`).
+    bool staticForIndices() const {
+        check(NodeKind::SFOR);
+        return (flags_ & kFlagA) != 0;
+    }
+    /// SFOR: the walked shape (child 0): a TYPE for `fields`, the operand value for `indices`.
+    node_ptr_t staticForOperand() const {
+        check(NodeKind::SFOR);
+        return at(0);
+    }
+    /// SFOR: the body, entered once per round (child 1).
+    node_ptr_t staticForBody() const {
+        check(NodeKind::SFOR);
+        return at(1);
+    }
+
+    /// SACC: the value whose field or element is taken (child 0).
+    node_ptr_t staticAccessTarget() const {
+        check(NodeKind::SACC);
+        return at(0);
+    }
+    /// SACC: the compile-time key (child 1).
+    node_ptr_t staticAccessKey() const {
+        check(NodeKind::SACC);
+        return at(1);
+    }
+
+    /// SCOMP: a struct comprehension (`{ ... }`) rather than a tuple one (`( ... )`).
+    bool comprehensionIsStruct() const {
+        check(NodeKind::SCOMP);
+        return tag_ == 0;
+    }
+    /// SCOMP: the `static for` whose rounds fill the result (child 0).
+    node_ptr_t comprehensionGenerator() const {
+        check(NodeKind::SCOMP);
+        return at(0);
+    }
+
+    /// SLOOP: the number of names of the state (k).
+    size_t staticLoopStateCount() const {
+        check(NodeKind::SLOOP);
+        return payload_.names->count - 2;
+    }
+    /// SLOOP: the j-th name of the state.
+    const std::string &staticLoopStateName(size_t j) const {
+        check(NodeKind::SLOOP);
+        ASSERT(j < staticLoopStateCount(), "No state name at this index");
+        return *payload_.names->items[j];
+    }
+    /// SLOOP: the name bound to the walked entry in the body (`n`, or `j` for `indices`).
+    const std::string &staticLoopValueName() const {
+        check(NodeKind::SLOOP);
+        return *payload_.names->items[payload_.names->count - 2];
+    }
+    /// SLOOP: the name bound to the entry's type in the body (`F`; empty for `indices`).
+    const std::string &staticLoopTypeName() const {
+        check(NodeKind::SLOOP);
+        return *payload_.names->items[payload_.names->count - 1];
+    }
+    /// SLOOP: the fold walks the positions of a tuple value (`indices ts`) rather than the
+    /// fields of a type (`fields T`).
+    bool staticLoopIndices() const {
+        check(NodeKind::SLOOP);
+        return (flags_ & kFlagA) != 0;
+    }
+    /// SLOOP: the j-th first value of the state (children 1 ... k).
+    node_ptr_t staticLoopInitial(size_t j) const {
+        check(NodeKind::SLOOP);
+        return at(j + 1);
+    }
+    /// SLOOP: the walked shape (child 0): a TYPE for `fields`, the operand value for `indices`.
+    node_ptr_t staticLoopOperand() const {
+        check(NodeKind::SLOOP);
+        return at(0);
+    }
+    /// SLOOP: the body, entered once per field (the last child).
+    node_ptr_t staticLoopBody() const {
+        check(NodeKind::SLOOP);
+        return back();
     }
 
     /// CAST: the target type.

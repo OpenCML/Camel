@@ -43,6 +43,7 @@
 #include "camel/core/rtdata/func.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <unordered_set>
 
@@ -81,18 +82,6 @@ void Program::updateRefs(
                     .slotName  = "graph",
                 });
         }
-    }
-    if (original_ != nullptr) {
-        relocate(
-            const_cast<Program *>(original_),
-            nullptr,
-            RefTraceInfo{
-                .owner     = this,
-                .ownerType = type,
-                .slotType  = nullptr,
-                .ownerKind = "Program",
-                .slotName  = "program",
-            });
     }
 }
 
@@ -137,11 +126,19 @@ const Program *makeProgram(
 void GCGraphManager::noteGraph(GCGraph *graph) {
     std::lock_guard lock(mutex_);
     graphs_.insert(graph);
+    unbound_.erase(graph);
+}
+
+void GCGraphManager::noteUnbound(GCGraph *graph) {
+    std::lock_guard lock(mutex_);
+    graphs_.insert(graph);
+    unbound_.insert(graph);
 }
 
 void GCGraphManager::release(GCGraph *graph) {
     std::lock_guard lock(mutex_);
     graphs_.erase(graph);
+    unbound_.erase(graph);
     freeGraph(graph);
 }
 
@@ -179,12 +176,19 @@ Program *GCGraphManager::reserve() {
     return program;
 }
 
+namespace {
+// --graph-gc-mb: read by every manager made after the option is applied (default 64 MB).
+std::atomic<size_t> graphCollectionFloorBytes{size_t{64} << 20};
+} // namespace
+
+void setGraphCollectionFloorBytes(size_t bytes) {
+    graphCollectionFloorBytes.store(bytes, std::memory_order_release);
+}
+
 GCGraphManager::GCGraphManager() {
-    // CAMEL_GRAPH_GC_MB: how much the graph space may hold before the first collection asks
-    // for itself (afterwards: as much again as it held after the last one).
-    if (const char *text = std::getenv("CAMEL_GRAPH_GC_MB"); text != nullptr && *text != 0) {
-        collectionFloor_ = static_cast<size_t>(std::strtoull(text, nullptr, 10)) << 20;
-    }
+    // How much the graph space may hold before the first collection asks for itself
+    // (afterwards: as much again as it held after the last one).
+    collectionFloor_ = graphCollectionFloorBytes.load(std::memory_order_acquire);
 }
 
 void GCGraphManager::collectIfGrown() {
@@ -215,6 +219,23 @@ void GCGraphManager::replaceRoot(const Program *program) {
     collectIfGrown();
 }
 
+bool GCGraphManager::replaceRootIfCurrent(const Program *expected, const Program *program) {
+    bool replaced = false;
+    {
+        mm::NoCollectionScope noCollection;
+        std::lock_guard lock(mutex_);
+        if (current_ == expected) {
+            current_ = program;
+            rebuildGcRoots();
+            replaced = true;
+        }
+    }
+    if (replaced) {
+        collectIfGrown();
+    }
+    return replaced;
+}
+
 void GCGraphManager::adoptRoot(const Program *program) {
     {
         mm::NoCollectionScope noCollection;
@@ -235,6 +256,7 @@ void GCGraphManager::clear() {
         mm::NoCollectionScope noCollection;
         std::lock_guard lock(mutex_);
         current_ = nullptr;
+        unbound_.clear();
         rebuildGcRoots();
     }
     collect();
@@ -272,7 +294,7 @@ void GCGraphManager::settle(const Program *keep) {
     {
         mm::NoCollectionScope noCollection;
         std::lock_guard lock(mutex_);
-        if (provisional_.empty() && keep == nullptr) {
+        if (provisional_.empty() && keep == nullptr && unbound_.empty()) {
             return;
         }
         // `keep`, the program the pass handed on, is the one thing that must stay.
@@ -280,6 +302,9 @@ void GCGraphManager::settle(const Program *keep) {
         if (keep != nullptr && keep != current_) {
             provisional_.push_back(keep);
         }
+        // The graphs a rewrite encoded and its commit did not bind belong to the pass that made
+        // them; from here they live only if a program holds them.
+        unbound_.clear();
         rebuildGcRoots();
     }
     collectIfGrown();
@@ -390,6 +415,11 @@ void GCGraphManager::sweepMarked() {
     }
     std::vector<GCGraph *> deadGraphs;
     for (GCGraph *graph : graphs_) {
+        // A graph a rewrite encoded and no program bound yet is only reachable from the session
+        // that encoded it: it is freed once that pass is over (settle).
+        if (unbound_.contains(graph)) {
+            continue;
+        }
         if (!marked(graph)) {
             deadGraphs.push_back(graph);
         }

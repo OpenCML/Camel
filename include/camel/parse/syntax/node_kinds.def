@@ -36,16 +36,17 @@ CAMEL_NODE(TagPositions, Other)        // identDef (',' identDef)* ','?
 CAMEL_NODE(TagReaders, Other)          // identRef (',' identRef)* ','?
 CAMEL_NODE(TagUse, Other)              // '#' (tagRef | '[' tagRef (',' tagRef)* ','? ']')
 CAMEL_NODE(TagRef, Other)              // identRef angledValues?
-CAMEL_NODE(FuncDecl, Other)            // frontMatter? ('with' angledParams)? 'export'? implMark? modifiers? 'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
+CAMEL_NODE(FuncDecl, Other)            // frontMatter? ('with' angledParams)? 'export'? modifiers? 'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock? (no block: the declaration of a C++ operator, design principles 6.4)
 CAMEL_NODE(OperatorName, Other)        // IDENTIFIER (OPERATOR | '[' ']'): the name `operator`, read so only after 'func' (provisional notation)
 CAMEL_NODE(RuleDecl, Other)            // 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}' (IDENTIFIER dataExpr)?
 CAMEL_NODE(RuleContext, Other)         // '<' identDef (',' identDef)* ','? '>'
 CAMEL_NODE(RuleBody, Other)            // dataExpr ('=>' | '<=>') dataExpr
+CAMEL_NODE(AnalysisDecl, Other)        // 'export'? 'analysis' identDef ':' typeExpr '{' analysisClause* '}'
+CAMEL_NODE(AnalysisClause, Other)      // 'initial' '=>' dataExpr | ('join' | 'widen') '(' identList ')' '=>' dataExpr | 'on' '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
 CAMEL_NODE(DataDecl, Other)            // ('let' | 'var') carrier (':' typeList)? '=' dataList
-CAMEL_NODE(TypeDecl, Other)            // implMark? 'type' identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>=')) (typeExpr | STRING), with the tag uses before it
+CAMEL_NODE(TypeDecl, Other)            // 'type' identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>=')) (typeExpr | STRING), with the tag uses before it
 CAMEL_NODE(RetStmt, Other)             // ('return' | 'throw') dataList
-CAMEL_NODE(ImplMark, Other)            // 'inner' | 'outer'
-CAMEL_NODE(Modifiers, Other)           // ('atomic' | 'shared' | 'sync' | 'macro')+
+CAMEL_NODE(Modifiers, Other)           // 'sync'+
 CAMEL_NODE(ParentIdents, Other)        // '(' identList? ','? ')'
 CAMEL_NODE(BracedIdents, Other)        // '{' identList? ','? '}'
 CAMEL_NODE(BracketIdents, Other)       // '[' identList? ','? ']'
@@ -58,7 +59,8 @@ CAMEL_NODE(IndexValues, Other)         // indexValue (',' indexValue)*
 CAMEL_NODE(PairedValues, Other)        // keyValuePair (',' keyValuePair)*
 CAMEL_NODE(PairedParams, Other)        // keyParamPair (',' keyParamPair)*
 CAMEL_NODE(ArgumentList, Other)        // indexValues (',' pairedValues)? | pairedValues
-CAMEL_NODE(Indices, Other)             // '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']'
+CAMEL_NODE(Indices, Other)             // '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']'
+CAMEL_NODE(SliceIndices, Other)        // dataExpr? ':' dataExpr? (':' dataExpr?)?, a part not written left out
 CAMEL_NODE(ParentParams, Other)        // '(' pairedParams? ','? ')'
 CAMEL_NODE(ParentArgues, Other)        // '(' argumentList? ','? ')'
 CAMEL_NODE(AngledParams, Other)        // '<' pairedParams? ','? '>'
@@ -69,6 +71,8 @@ CAMEL_NODE(Pattern, Other)             // identRef (identDef | enumTuplePattern 
 CAMEL_NODE(EnumTuplePattern, Other)    // '(' (pattern (',' pattern)*)? ','? ')', after a variant path
 CAMEL_NODE(EnumStructPattern, Other)   // '{' (IDENTIFIER (':' pattern)? (',' ...)*)? ','? '}', after a variant path
 CAMEL_NODE(MatchCase, Other)           // 'case' pattern ('|' pattern)* '=>' blockExpr
+CAMEL_NODE(TypeCasePattern, Other)     // 'struct' | 'tuple' | '#' 'leaf' | '_'
+CAMEL_NODE(TypeCase, Other)            // 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
 CAMEL_NODE(CatchClause, Other)         // 'catch' identDef ':' typeExpr stmtBlock
 CAMEL_NODE(MemberAccess, Other)        // '.' (IDENTIFIER | INTEGER | REAL), after a call, a binding or an index
 CAMEL_NODE(TypeList, Other)            // typeExpr (',' typeExpr)*
@@ -79,6 +83,9 @@ CAMEL_NODE(SpreadValue, Expr)          // '...' dataExpr (an indexValue with the
 CAMEL_NODE(WaitExpr, Expr)             // 'wait' assignExpr
 CAMEL_NODE(IfExpr, Expr)               // 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 CAMEL_NODE(MatchExpr, Expr)            // 'match' logicalOrExpr '{' matchCase+ '}'
+CAMEL_NODE(MatchTypeExpr, Expr)        // 'match' 'type' typeExpr '{' typeCase* '}'
+CAMEL_NODE(StaticForExpr, Expr)        // 'static' 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr '=>' blockExpr
+CAMEL_NODE(StaticLoopExpr, Expr)       // 'static' 'loop' loopState (',' loopState)* 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr 'do' blockExpr
 CAMEL_NODE(TryExpr, Expr)              // 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
 CAMEL_NODE(LoopExpr, Expr)             // 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
 CAMEL_NODE(LoopState, Other)           // identDef '=' logicalOrExpr

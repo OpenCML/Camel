@@ -21,7 +21,7 @@
  * TEST-ONLY: `test::resources` exercises the resource declarations of operators
  * (camel/core/resource_semantics.h, OperatorTable::declareResources) and their resolution in a
  * program (camel/runtime/resources.h). It can only be named when the environment variable
- * CAMEL_ENABLE_TEST_PASSES is set (fault.h). One line per check, `RESOURCES <check> <result>`:
+ * they are named by a test pipeline (fault.h). One line per check, `RESOURCES <check> <result>`:
  *
  *   - registration: one declaration per rule of check 5 that must be rejected (on operators of
  *     the protocol `semtest`, which no module has), one that is accepted, the minor version a

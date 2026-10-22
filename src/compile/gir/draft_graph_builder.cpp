@@ -182,17 +182,17 @@ runtime::DraftNodeRef DraftGraphBuilder::addCopyNode(camel::core::type::Type *ty
     return ref(draft_->addCopyNode(type));
 }
 
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body) {
     return ref(draft_->addFillNode(type, body));
 }
 
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload) {
     return ref(draft_->addFillNode(type, payload));
 }
 
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex) {
     return ref(draft_->addAccsNode(type, tupleIndex));
 }
@@ -211,17 +211,16 @@ runtime::DraftNodeRef DraftGraphBuilder::addJoinNode(
     return ref(draft_->addJoinNode(type, brchNode.id, armCount));
 }
 
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body) {
     return ref(draft_->addCallNode(type, body));
 }
 
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex) {
     ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");
-    const uint8_t runtimeFlags = static_cast<uint8_t>(
-        (target->funcType() && target->funcType()->modifiers().macro()) ? runtime::kGCNodeFlagMacro
-                                                                        : 0);
+    const uint8_t runtimeFlags =
+        target->draft().isMacroGraph() ? runtime::kGCNodeFlagMacro : 0;
     const runtime::gc_node_ref_t id = draft_->addFuncNode(
         runtime::kInvalidGraphId,
         target->funcType()->exitType(),
@@ -232,33 +231,29 @@ DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t 
     return node;
 }
 
-runtime::DraftNodeRef DraftGraphBuilder::addLoopNode(
-    camel::core::LoopKind kind, const LoopTarget &target, camel::core::type::Type *type) {
-    ASSERT(target.body != nullptr, "A LOOP node needs a body graph.");
-    // The draft holds no graph yet: the encoder writes the runtime graphs of the targets
-    // (graph_encode.cpp), as it does for the callee of a FUNC node.
-    const runtime::gc_node_ref_t id = draft_->addLoopNode(runtime::GCLoopBody{.kind = kind}, type);
+runtime::DraftNodeRef
+DraftGraphBuilder::addRegionLoopNode(camel::core::LoopKind kind, camel::core::type::Type *type) {
+    return ref(draft_->addLoopNode(runtime::GCLoopBody{.kind = kind}, type));
+}
+
+runtime::DraftNodeRef
+DraftGraphBuilder::addRegionPortNode(camel::core::type::Type *type, std::string name) {
+    const auto slotIndex            = addRuntimeSlot(type);
+    const runtime::gc_node_ref_t id = draft_->addPortNode(type, slotIndex);
     const auto node                 = ref(id);
-    loopTargets_[node.id]              = target;
-    addDependencyGraph(target.cond);
-    addDependencyGraph(target.body);
+    if (!name.empty()) {
+        registerNodePortName(node, std::move(name));
+    }
     return node;
 }
 
-const DraftGraphBuilder::LoopTarget &
-DraftGraphBuilder::loopTarget(runtime::DraftNodeRef node) const {
-    auto it = loopTargets_.find(node.id);
-    ASSERT(it != loopTargets_.end(), "DraftGraphBuilder loop target not found.");
-    return it->second;
-}
-
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex) {
     ASSERT(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
     const runtime::gc_node_ref_t id =
         draft_->addOperNode(op->funcType()->exitType(), nullptr, op->uri(), dataIndex);
     const auto node = ref(id);
-    if (op->funcType()->modifiers().macro()) {
+    if (camel::core::OperatorTable::instance().isMacro(op->uri())) {
         draft_->setNodeRuntimeFlags(id, runtime::kGCNodeFlagMacro);
     }
     registerOperTarget(node, op);
@@ -340,6 +335,17 @@ void DraftGraphBuilder::eraseStaticGraphRef(const graph_ptr_t &graph) {
     std::erase(staticGraphRefs_, graph);
 }
 
+void DraftGraphBuilder::addRuleGraphRef(const graph_ptr_t &graph) {
+    if (graph && std::find(ruleGraphRefs_.begin(), ruleGraphRefs_.end(), graph) ==
+                     ruleGraphRefs_.end()) {
+        ruleGraphRefs_.push_back(graph);
+        // The draft keeps its own table of graph references: a graph built from it while the
+        // passes run (std::macro evaluates a gradient) must name its rule too, not only the
+        // program the graphs are encoded into at the end.
+        draft_->addRuleGraphRef(graph->graphId());
+    }
+}
+
 const std::string &DraftGraphBuilder::nodePortName(runtime::DraftNodeRef node) const {
     auto it = nodePortNames_.find(node.id);
     ASSERT(it != nodePortNames_.end(), "DraftGraphBuilder node port name not found.");
@@ -388,7 +394,6 @@ void DraftGraphBuilder::registerOperTarget(runtime::DraftNodeRef node, oper_idx_
 void DraftGraphBuilder::eraseNodeColdData(runtime::DraftNodeRef node) {
     nodePortNames_.erase(node.id);
     funcTargets_.erase(node.id);
-    loopTargets_.erase(node.id);
     drefTargets_.erase(node.id);
     operTargets_.erase(node.id);
 }

@@ -1,0 +1,52 @@
+# The cost of everything `camel` does before a program runs (handover H142).
+#
+# A declaration module (`stdlib/<module>.cml`) is parsed and compiled like a library when it is
+# imported. The tool derives their set and their declaration count from the tree (H177), so a new
+# module is measured the day its `.cml` lands; the count below is the one those sources held when
+# this pin was last read. This plan pins three commands that run before any program code does: the
+# process itself (`--version`), a one-line program with no imports, and `inspect --ops` on a
+# program that imports every standard library module. It also runs that program, so the same import
+# work is timed on the run path.
+#
+# The ceilings are about four times the H142 quiet median for `inspect_ops` and `imports_all`, and
+# five to eight times for `--version` and `imports_nothing`, whose 5-8 ms medians are below this
+# host's scheduling noise; at H142 all four were above the medians seen at load average 150 and 215.
+# The numbers and their spread are in handover note ⟨c49da87⟩ (H142). They are a smoke alarm for "the
+# standard library is now loaded before the program runs", not a percentage budget: this host is
+# shared, and a few milliseconds of spread is normal. H177 re-measured them at load average 21-22:
+# 5.1 / 7.4 / 38.3 / 37.0 ms. The two full-import commands are now about 2.6 and 2.4 times the quiet
+# median, not four, because importing `pyplot` initialises CPython in `load()` (~9.5 ms) and the
+# other new modules load too. The ceilings were left unchanged (handover note ⟨83d6558⟩ (H177)); their margin over
+# a load-215 window is thinner than it was, though: H142's load factors project about 127 / 113 ms
+# for the two full-import commands, over the 100 / 90 ceilings, so a later re-baseline may need
+# 150 / 140. The gate passes at every load measured here. The test prints one `startup.cost` line per
+# command (median, p10, p90, min, max, n) and fails only when a median crosses its ceiling.
+#
+# `declaration.cost` is the same idea one level down (handover H152): the compiler's own
+# `--time-phases` report of the declaration modules, added up and divided by their declarations.
+# The process wall clock cannot see that work (the ceilings above are tens of milliseconds), so
+# this is the measurement that moves when the declaration path changes; it reads ~20 us per
+# declaration and is gated at three times that. The line also prints the declarations' share of
+# the compile work of the whole run, which is the half of the pair that does not read as load.
+# H152 measured 18-19% with nine modules; H177 measured 17.8% with all twenty (10.9% with the old
+# nine only). The share fell because the run's import work grew (CPython's initialisation is not
+# declaration work), so the ceiling is a coarse alarm, not a declaration budget: a re-added H142
+# 4.6 ms would read about 24% today, under the 30% ceiling. H177 left the ceiling unchanged and
+# recorded the numbers and the per-module table in handover note ⟨83d6558⟩ (H177).
+id = "perf.startup"
+order = 401
+tier = "slow"
+tags = ["perf", "startup"]
+
+[[tests]]
+name = "startup.cost"
+desc = "The whole-process cost of --version, a one-line program, and inspect --ops over the whole standard library."
+kind = "behavior"
+tool = "node"
+case = "../../tools/startup-cost.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=309"]
+# Four commands, 21 timed runs each after three warm-ups, are a few seconds on a quiet host and
+# well under half a minute under load. 120 s catches a hang, not a slow run.
+timeout_ms = 120000

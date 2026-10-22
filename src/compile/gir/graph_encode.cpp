@@ -271,6 +271,16 @@ std::vector<draft_node_ref_t> collectLiveDraftNodes(const GraphDraft &draft) {
         if (header == nullptr) {
             continue;
         }
+        if (header->kind == GCNodeKind::Loop) {
+            // The ports of its regions are part of it, whether the code reads them or not.
+            for (auto part : {runtime::GCRegionKind::LoopCond, runtime::GCRegionKind::LoopBody}) {
+                if (const uint32_t region = draft.loopRegionOf(current, part); region != 0) {
+                    for (draft_node_ref_t port : draft.regionPortsOf(region)) {
+                        pushRoot(port);
+                    }
+                }
+            }
+        }
         if (header->kind == GCNodeKind::Brch) {
             const auto *payload =
                 reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(current).data());
@@ -392,6 +402,9 @@ class EncodeSession {
         prepared.source = graph;
         prepared.draft  = std::make_unique<GraphDraft>();
         prepared.draft->setInheritsRegions(false);
+        // Graph properties fixed before encoding: the macro flag of a `#macro` function is the
+        // one that matters here; a runtime graph keeps it for std::macro (design principles 8).
+        prepared.draft->setFlags(graph->draft().flags());
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
         prepared.draft->setId(freshIds_ ? freshIds_->allocate() : graph->graphId());
         prepared.draft->setFuncType(graph->funcType());
@@ -595,9 +608,6 @@ class EncodeSession {
                 graph->draft().returnKind());
         }
 
-        // Later statements may make an earlier control edge redundant. Clean up once before
-        // freezing, with a smaller work cap than the explicit optimization stage.
-        camel::runtime::reduceControlDependencies(*prepared.draft, 8192);
         // The regions keep their ids; one whose owner is not reachable is dead.
         const GraphDraft &built = graph->draft();
         const auto mapped       = [&](runtime::gc_node_ref_t ref) {
@@ -618,6 +628,12 @@ class EncodeSession {
             prepared.draft->setRegionResult(id, mapped(region.result));
             prepared.draft->setRegionOrigin(id, region.origin);
             prepared.draft->setRegionAttrs(id, region.attrs);
+            prepared.draft->setRegionParams(id, region.params);
+            std::vector<runtime::gc_node_ref_t> ports;
+            for (runtime::gc_node_ref_t port : built.regionPortsOf(r)) {
+                ports.push_back(mapped(port));
+            }
+            prepared.draft->setRegionPorts(id, ports);
         }
         prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
         CAMEL_LOG_INFO_S(
@@ -633,6 +649,7 @@ class EncodeSession {
             const auto &deps                          = prepared.source->dependencyGraphs();
             const auto &subs                          = prepared.source->subGraphs();
             const std::vector<graph_ptr_t> staticRefs = staticGraphRefsOf(prepared.source);
+            const std::vector<graph_ptr_t> ruleRefs   = prepared.source->ruleGraphs();
             std::vector<camel::runtime::GraphId> depPtrs(
                 deps.size(),
                 camel::runtime::kInvalidGraphId);
@@ -642,10 +659,14 @@ class EncodeSession {
             std::vector<camel::runtime::GraphId> staticGraphPtrs(
                 staticRefs.size(),
                 camel::runtime::kInvalidGraphId);
+            std::vector<camel::runtime::GraphId> ruleGraphPtrs(
+                ruleRefs.size(),
+                camel::runtime::kInvalidGraphId);
             prepared.bytes = GCGraphBuildAccess::requiredBytes(
                 depPtrs,
                 subPtrs,
                 staticGraphPtrs,
+                ruleGraphPtrs,
                 prepared.payloadShape,
                 prepared.staticSlots,
                 prepared.draft->frameSlotTypes());
@@ -682,14 +703,6 @@ class EncodeSession {
                 prepared.draft->setCalleeGraph(
                     preparedId,
                     resolvePreparedGraph(prepared.source->funcTarget(sourceId))->draft->id());
-            }
-            if (header->kind == GCNodeKind::Loop) {
-                const auto &target = prepared.source->loopTarget(sourceId);
-                prepared.draft->setLoopGraphs(
-                    preparedId,
-                    target.cond ? resolvePreparedGraph(target.cond)->draft->id()
-                                : camel::runtime::kInvalidGraphId,
-                    resolvePreparedGraph(target.body)->draft->id());
             }
             ++preparedId;
         }
@@ -942,6 +955,12 @@ class EncodeSession {
         for (const auto &graph : compileStaticRefs) {
             staticGraphRefs.push_back(resolvePreparedGraph(graph)->draft->id());
         }
+        std::vector<graph_ptr_t> compileRuleRefs = prepared.source->ruleGraphs();
+        std::vector<camel::runtime::GraphId> ruleGraphs;
+        ruleGraphs.reserve(compileRuleRefs.size());
+        for (const auto &graph : compileRuleRefs) {
+            ruleGraphs.push_back(resolvePreparedGraph(graph)->draft->id());
+        }
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Static graph-ref remap finished for graph '{}'.",
@@ -987,7 +1006,8 @@ class EncodeSession {
             prepared.memory,
             prepared.bytes,
             prepared.draft->id(),
-            camel::runtime::GCGraphDerivation{},
+            camel::runtime::GCGraphDerivation{
+                camel::runtime::kInvalidGraphId, prepared.draft->flags()},
             debugRecord,
             prepared.draft->funcType(),
             prepared.draft->frameSlotTypes(),
@@ -997,6 +1017,7 @@ class EncodeSession {
             depPtrs,
             subPtrs,
             staticGraphRefs,
+            ruleGraphs,
             prepared.payloadShape,
             [&](camel::runtime::GCGraphPayloadArena &arena) {
                 CAMEL_LOG_INFO_S(

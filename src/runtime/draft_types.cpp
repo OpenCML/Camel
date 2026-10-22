@@ -265,7 +265,6 @@ size_t reinferDraftTypes(GraphDraft &draft) {
         // at every commit of a rewrite asks the type table for the same object again.
         type::FunctionTypeFactory factory;
         factory.setHasCompileInfo(funcType->hasArgNames());
-        factory.setImplMark(funcType->implMark());
         factory.setModifiers(funcType->modifiers());
         factory.setExitType(exitType);
         size_t arg      = 0;

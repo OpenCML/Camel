@@ -476,13 +476,26 @@ string Generator::generateFuncDeclLoad(const AST::node_ptr_t &node) {
     // cout << "[generateFuncDeclLoad] original funcName: " << funcName << endl;
     string withParamsCode, paramsCode, returnTypeCode, bodyCode;
     bool hasWithParams = false;
-    bool isMacro = false, isAtomic = false, isShared = false, isSync = false;
-    string sImplMark = "";
+    bool isMacro = false, isSync = false;
     for (size_t i = 0; i < node->size(); ++i) {
         auto child = node->at(i);
         if (!child)
             continue;
         auto childNode = static_pointer_cast<AST::Node>(child);
+
+        // `#macro` before a declaration is a standard tag (design principles 8), written in
+        // front of the function. The tags of the declaration are this child.
+        if (const auto repeated = dynamic_pointer_cast<AST::RepeatedLoad>(childNode->load());
+            repeated && repeated->nodeName() == "TagUse") {
+            for (size_t j = 0; j < childNode->size(); ++j) {
+                const auto useNode = static_pointer_cast<AST::Node>(childNode->at(j));
+                if (const auto use = dynamic_pointer_cast<AST::TagUseLoad>(useNode->load());
+                    use && use->name().toString() == "macro") {
+                    isMacro = true;
+                }
+            }
+            continue;
+        }
 
         if (childNode->load()->type() == AST::LoadType::Data &&
             dynamic_pointer_cast<AST::FuncDataLoad>(childNode->load())) {
@@ -500,19 +513,10 @@ string Generator::generateFuncDeclLoad(const AST::node_ptr_t &node) {
                         dynamic_pointer_cast<AST::FuncTypeLoad>(funcDataChildNode->load());
                     if (funcTypeLoad) {
                         const auto &modifiers = funcTypeLoad->modifiers();
-                        isMacro               = modifiers.has(Modifier::Macro);
-                        isAtomic              = modifiers.has(Modifier::Atomic);
-                        isShared              = modifiers.has(Modifier::Shared);
                         isSync                = modifiers.has(Modifier::Sync);
                         // cout << "[generateFuncDeclLoad] FuncType modifiers: " <<
                         // string(modifiers)
-                        //      << ", isMacro: " << isMacro << ", isAtomic: " << isAtomic
-                        //      << ", isShared: " << isShared << ", isSync: " << isSync << endl;
-                        const auto implMark = funcTypeLoad->implMark();
-                        if (implMark == ImplMark::Inner)
-                            sImplMark = "inner ";
-                        else if (implMark == ImplMark::Outer)
-                            sImplMark = "outer ";
+                        //      << ", isMacro: " << isMacro << ", isSync: " << isSync << endl;
                     }
 
                     vector<string> withParamsVec;
@@ -567,18 +571,11 @@ string Generator::generateFuncDeclLoad(const AST::node_ptr_t &node) {
         }
     }
 
+    if (isMacro) {
+        code += "#macro ";
+    }
     if (hasWithParams) {
         code += "with <" + withParamsCode + ">\n";
-    }
-    code += sImplMark;
-    if (isMacro) {
-        code += "macro ";
-    }
-    if (isAtomic) {
-        code += "atomic ";
-    }
-    if (isShared) {
-        code += "shared ";
     }
     if (isSync) {
         code += "sync ";
@@ -667,18 +664,12 @@ string Generator::generateTypeDeclLoad(const AST::node_ptr_t &node) {
         if (firstChild) {
             auto firstChildNode = static_pointer_cast<AST::Node>(firstChild);
 
-            if (code.find("inner") != string::npos) {
-                string typeExpr = generateNode(firstChildNode);
-                code            = "inner type " + code.substr(6);
-                code += " = " + typeExpr;
-            } else {
-                string childrenCode = generateNode(firstChildNode);
-                if (!childrenCode.empty()) {
-                    if (childrenCode.find("=>") != string::npos) {
-                        code += " " + childrenCode;
-                    } else {
-                        code += " = " + childrenCode;
-                    }
+            string childrenCode = generateNode(firstChildNode);
+            if (!childrenCode.empty()) {
+                if (childrenCode.find("=>") != string::npos) {
+                    code += " " + childrenCode;
+                } else {
+                    code += " = " + childrenCode;
                 }
             }
         }

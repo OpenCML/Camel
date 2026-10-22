@@ -10,11 +10,11 @@ timeout_ms = 10000
 
 [[tests]]
 name = "core"
-desc = "test::resources (CAMEL_ENABLE_TEST_PASSES): one rejected declaration per rule of check 5 (an access of unknown class, an ambient resource without a name, a named variable, an ambient resource bound to an operand and a variable bound to none, an operator bound to a capture, a same result without its operand, a pure operator that touches something, an effectful one that touches nothing, an external effect for a state-only operator, an ambient allocation), the refinement of an operator its traits count as external, the minor version a declaration of resources adds to an existing record; the bounds of mapped regions and which overlap. In the program: assignments write their cell, reads read it, a var parameter, a capture and a recursion (a fixpoint) carry the access to the caller's cell, an array sorted in place is an object read and written, the generator, the console and the file system are ambient and external; pairs that conflict are ordered by data or by control edges, the arms of a branch are not a pair, and the program's output is unchanged."
+desc = "test::resources (test-only): one rejected declaration per rule of check 5 (an access of unknown class, an ambient resource without a name, a named variable, an ambient resource bound to an operand and a variable bound to none, an operator bound to a capture, a same result without its operand, a pure operator that touches something, an effectful one that touches nothing, an external effect for a state-only operator, an ambient allocation), the refinement of an operator its traits count as external, the minor version a declaration of resources adds to an existing record; the bounds of mapped regions and which overlap. In the program: assignments write their cell, reads read it, a var parameter, a capture and a recursion (a fixpoint) carry the access to the caller's cell, an array sorted in place is an object read and written, the generator, the console and the file system are ambient and external; pairs that conflict are ordered by data or by control edges, the arms of a branch are not a pair, and the program's output is unchanged."
 kind = "behavior"
 case = "../../../cases/resources/effects.cml"
 args = ["${case}", "test::resources"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -52,7 +52,7 @@ for (const l of [
   'RESOURCES footprint bump rmw variable norm 0 whole',
   'RESOURCES footprint countdown rmw variable norm 0 whole',
   'RESOURCES footprint __g_5__ rmw variable capture 0 whole',
-  'RESOURCES footprint main rmw ambient rand:generator; write ambient io:stdout; read ambient fs; rmw object (any); external',
+  'RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw object (any); external',
   'RESOURCES node main 2 :var/new: allocates variable',
   'RESOURCES node main 9 :op/assn_l: write variable (node 2); result may_alias 1',
   'RESOURCES node main 10 FUNC bump: rmw variable (node 2); result unknown',
@@ -60,7 +60,7 @@ for (const l of [
   'RESOURCES node main 15 CALL: rmw variable (node 2); result unknown',
   'RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0',
   'RESOURCES node main 20 algo:sort_in_place: rmw object (node 19); result same 0',
-  'RESOURCES node main 23 rand:seed: write ambient rand:generator; external',
+  'RESOURCES node main 23 rand:seed: write ambient rng; external',
   'RESOURCES node main 29 fs:exists: read ambient fs; external',
   'RESOURCES node countdown 12 FUNC countdown: rmw variable (node 0); result unknown',
   'RESOURCES order main 8 9 resource ordered by data',
@@ -79,12 +79,12 @@ assert(!out.includes(' unordered'), 'the program orders every conflicting pair')
 """
 
 [[tests]]
-name = "core_test_pass_needs_the_environment"
-desc = "test::resources is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
-kind = "negative"
+name = "core_test_pass_is_not_in_a_pipeline"
+desc = "test::resources is a test-only pass: no pipeline adds it, so a run that names no pass prints no check."
+kind = "behavior"
 case = "../../../cases/resources/effects.cml"
-args = ["${case}", "test::resources"]
-expect_exit = 1
+args = ["${case}"]
+expect_exit = 0
 expect_output_not_contains = ["RESOURCES "]
 
 [[tests]]
@@ -104,19 +104,80 @@ const expect = {
   ':var/take': 'rmw variable norm 0 whole; result may_alias 0',
   ':op/assn_l': 'write variable norm 0 whole; result may_alias 1',
   ':op/assn_add_l': 'rmw variable norm 0 whole',
-  ':op/assn_append': 'rmw variable norm 0 whole; result may_alias 0',
-  ':io/println': 'write ambient io:stdout; external',
-  ':io/input': 'rmw ambient io:stdin; external',
+  ':op/assn_owned': 'write variable norm 0 whole; result may_alias 1',
+  ':io/println': 'write ambient stdout; external',
+  ':io/input': 'rmw ambient stdin; external',
   'fs:read_text': 'read ambient fs; external',
   'fs:write_text': 'rmw ambient fs; external',
-  'rand:seed': 'write ambient rand:generator; external',
-  'rand:rand': 'rmw ambient rand:generator; external',
+  'rand:seed': 'write ambient rng; external',
+  'rand:rand': 'rmw ambient rng; external',
 }
 for (const [uri, text] of Object.entries(expect)) {
   const op = byUri.get(uri)
   assert(op && op.semantics, `${uri} has no semantics`)
   assert(op.semantics.resources === text, `${uri}: ${op.semantics.resources}`)
   assert(op.semantics.key === `${uri}@1.0`, `${uri}: key ${op.semantics.key}`)
+}
+}
+"""
+
+[[tests]]
+name = "resource_names"
+desc = "The resource set of the standard library is pinned (H134): `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:generator`, `tensor:threads`, `tiles:driver`, `tiles:device`, `para:rendezvous`, `process`); raw mode keeps `io:terminal` because folding it into `stdin` would be a change of the resource set, not a spelling."
+kind = "behavior"
+case = "../../../cases/resources/names.cml"
+args = ["inspect", "--ops", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+verify_script = """
+({ input, assert }) => {
+const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
+const byUri = new Map(ops.map((o) => [o.uri, o]))
+const resources = (uri) => { const op = byUri.get(uri); return op && op.semantics && op.semantics.resources }
+// Every ambient or foreign resource any listed operator names.
+const names = new Set()
+for (const op of ops) {
+  const text = op.semantics && op.semantics.resources
+  if (!text) continue
+  for (const m of text.matchAll(/(?:ambient|foreign) ([^\s;]+)/g)) names.add(m[1])
+}
+const expected = [
+  'clock', 'env', 'fs', 'io:terminal', 'para:rendezvous', 'process', 'rng', 'stderr',
+  'stdin', 'stdout', 'tensor:generator', 'tensor:threads', 'tiles:device', 'tiles:driver',
+]
+const got = [...names].sort()
+assert(got.length === expected.length, `expected ${expected.length} resources, got ${got.length}: ${got.join(', ')}`)
+for (const name of expected) assert(names.has(name), `missing resource ${name}`)
+for (const old of ['io:stdout', 'io:stdin', 'io:stderr', 'time:clock', 'process:environment', 'rand:generator'])
+  assert(!names.has(old), `old resource name ${old} is back`)
+// One operator of each kind, so a name cannot move between operators unnoticed.
+const expect = {
+  ':io/print': 'write ambient stdout; external',
+  ':io/println': 'write ambient stdout; external',
+  ':io/input': 'rmw ambient stdin; external',
+  'io:has_input': 'read ambient stdin; external',
+  'io:get_char': 'rmw ambient stdin; external',
+  'io:set_terminal_raw_mode': 'write ambient io:terminal; external',
+  'fs:read_text': 'read ambient fs; external',
+  'fs:write_text': 'rmw ambient fs; external',
+  'rand:seed': 'write ambient rng; external',
+  'rand:rand': 'rmw ambient rng; external',
+  'time:now': 'read ambient clock; external',
+  'time:strftime': 'read ambient env; external',
+  'env:get_env': 'read ambient env; external',
+  'process:sleep': 'read ambient clock; external',
+  'process:whoami': 'read ambient env; external',
+  'process:exit': 'rmw ambient process; external',
+  'ckpt:load_tree': 'read ambient fs; write ambient stderr; external',
+  'ckpt:save_tree': 'rmw ambient fs; external',
+  'tensor:show': 'write ambient stdout; external',
+  'tensor:seed': 'write ambient tensor:generator; external',
+  'nn:save_params': 'rmw ambient fs; external',
+  'tiles:upload': 'rmw ambient tiles:driver; allocates foreign tiles:device; external',
+}
+for (const [uri, text] of Object.entries(expect)) {
+  assert(resources(uri) === text, `${uri}: ${resources(uri)}`)
 }
 }
 """

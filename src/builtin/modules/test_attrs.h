@@ -20,7 +20,7 @@
 /*
  * `test_attrs`: decorators that grant node attributes, for the tests of the mechanism
  * (camel/core/module/attr_decorator.h). It exports them only when the
- * environment variable CAMEL_ENABLE_TEST_PASSES is set, as the test passes are.
+ * by naming them in a pipeline; no environment variable gates them.
  *
  *     mark            grants `test.mark` (a mark: inner wins, merges only with itself)
  *     flags<n: int>   grants bit n of `test.flags` (flags of any width: union, intersection

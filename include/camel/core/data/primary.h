@@ -49,8 +49,6 @@ template <typename T> class PrimaryData : public Data {
             type_ = type::Type::Float64();
         } else if constexpr (std::is_same_v<T, bool>) {
             type_ = type::Type::Bool();
-        } else if constexpr (std::is_same_v<T, char>) {
-            type_ = type::Type::Byte();
         } else {
             static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
         }
@@ -65,8 +63,6 @@ template <typename T> class PrimaryData : public Data {
             return data_ == 0;
         } else if constexpr (std::is_same_v<T, bool>) {
             return data_ == false;
-        } else if constexpr (std::is_same_v<T, char>) {
-            return data_ == '\0';
         } else {
             static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
         }
@@ -86,8 +82,6 @@ template <typename T> class PrimaryData : public Data {
     virtual const std::string toString() const override {
         if constexpr (std::is_same_v<T, bool>) {
             return data_ ? "true" : "false";
-        } else if constexpr (std::is_same_v<T, char>) {
-            return std::string(1, data_);
         } else if constexpr (std::is_same_v<T, float>) {
             std::ostringstream oss;
             oss << std::fixed << std::setprecision(3) << data_;
@@ -113,10 +107,10 @@ using LongData   = PrimaryData<int64_t>;
 using FloatData  = PrimaryData<float>;
 using DoubleData = PrimaryData<double>;
 using BoolData   = PrimaryData<bool>;
-using ByteData   = PrimaryData<std::byte>;
 
 // Whether the value of a literal can be held by the narrower primitive type `to`: an int64 in
-// an i32, a finite double in an f32 (it would become an infinity).
+// an i32, a finite double in an f32. A double too large for an f32 would become an infinity
+// and one too small would become zero; neither is an f32 value, so neither fits (H15i).
 template <typename T> bool primaryFitsType(T value, type::TypeCode to) {
     if constexpr (std::is_same_v<T, int64_t>) {
         if (to == type::TypeCode::Int32) {
@@ -125,8 +119,15 @@ template <typename T> bool primaryFitsType(T value, type::TypeCode to) {
         }
     } else if constexpr (std::is_same_v<T, double>) {
         if (to == type::TypeCode::Float32) {
-            return !std::isfinite(value) ||
-                   std::abs(value) <= static_cast<double>(std::numeric_limits<float>::max());
+            if (!std::isfinite(value)) {
+                return true;
+            }
+            // A nonzero value that becomes zero in an f32 is below half its smallest
+            // subnormal: the type has no value to give it.
+            if (value != 0.0 && static_cast<float>(value) == 0.0f) {
+                return false;
+            }
+            return std::abs(value) <= static_cast<double>(std::numeric_limits<float>::max());
         }
     }
     return true;
@@ -193,9 +194,11 @@ class ComplexData : public Data {
     double imaginary_ = 0.0;
 };
 
-// The range of a narrower primitive type, for the diagnostic of a literal it cannot hold; empty
-// when `data` converted to `type` is not such a case.
-inline std::string literalRangeViolation(const data_ptr_t &data, type::Type *type) {
+// Why a literal datum cannot be a value of `type`, as the reason clause of a diagnostic; empty
+// when there is no such case. An overflow says which range the type has; an underflow says that
+// the nearest value would be zero (H15i), which is not the same statement and is not written as
+// a range.
+inline std::string literalNotFitReason(const data_ptr_t &data, type::Type *type) {
     if (!data || !type) {
         return {};
     }
@@ -203,10 +206,18 @@ inline std::string literalRangeViolation(const data_ptr_t &data, type::Type *typ
     if (camel::core::type::isComplex(from)) {
         if (to == type::TypeCode::Complex64) {
             const auto value = std::dynamic_pointer_cast<ComplexData>(data);
-            if (value &&
-                !(primaryFitsType(value->real(), type::TypeCode::Float32) &&
+            if (value == nullptr) {
+                return {};
+            }
+            const auto underflows = [](double part) {
+                return part != 0.0 && static_cast<float>(part) == 0.0f;
+            };
+            if (underflows(value->real()) || underflows(value->imaginary())) {
+                return "too small to be represented (the nearest value is zero)";
+            }
+            if (!(primaryFitsType(value->real(), type::TypeCode::Float32) &&
                   primaryFitsType(value->imaginary(), type::TypeCode::Float32))) {
-                return "each part at most about 3.4e38 in magnitude";
+                return "out of range (each part at most about 3.4e38 in magnitude)";
             }
         }
         return {};
@@ -217,12 +228,15 @@ inline std::string literalRangeViolation(const data_ptr_t &data, type::Type *typ
     if (from == type::TypeCode::Int64 && to == type::TypeCode::Int32) {
         const auto value = std::dynamic_pointer_cast<PrimaryData<int64_t>>(data);
         if (value && !primaryFitsType(value->data(), to)) {
-            return "-2147483648 to 2147483647";
+            return "out of range (-2147483648 to 2147483647)";
         }
     } else if (from == type::TypeCode::Float64 && to == type::TypeCode::Float32) {
         const auto value = std::dynamic_pointer_cast<PrimaryData<double>>(data);
         if (value && !primaryFitsType(value->data(), to)) {
-            return "at most about 3.4e38 in magnitude";
+            if (value->data() != 0.0 && static_cast<float>(value->data()) == 0.0f) {
+                return "too small to be represented (the nearest value is zero)";
+            }
+            return "out of range (at most about 3.4e38 in magnitude)";
         }
     }
     return {};

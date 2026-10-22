@@ -17,15 +17,16 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-
 #include "camel/runtime/writings.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/core/tags.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <map>
@@ -36,6 +37,91 @@
 #include <unordered_map>
 
 namespace camel::runtime {
+
+// ---------------------------------------------------------------- engine roots
+
+namespace {
+
+/// Keeps what the engine holds outside the graph relocatable across the safepoints of a rule
+/// condition: the draft's static values and the constant slots the compiled patterns copied out
+/// of it. The rules' Program keeps the objects alive; this only updates the copies.
+class EngineRootScope {
+  public:
+    EngineRootScope(GraphDraft &draft, std::span<const Rule> rules) : draft_(draft), rules_(rules) {
+        camel::core::mm::autoSpace().registerExternalRootTracer(
+            this,
+            "rewrite.engineRoots",
+            [this](const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
+                draft_.relocateStaticValues(relocate);
+                traceRuleConstants(rules_, relocate);
+            });
+#ifndef NDEBUG
+        // The Debug-only safepoint draft-root check counts this scope for this draft only: a
+        // session that rewrites several graphs still needs its RootScope for the others.
+        debugDraftRootOpened(draft_);
+#endif
+    }
+    ~EngineRootScope() {
+#ifndef NDEBUG
+        debugDraftRootClosed(draft_);
+#endif
+        camel::core::mm::autoSpace().unregisterExternalRootTracer(this);
+    }
+    EngineRootScope(const EngineRootScope &)            = delete;
+    EngineRootScope &operator=(const EngineRootScope &) = delete;
+
+  private:
+    GraphDraft &draft_;
+    std::span<const Rule> rules_;
+};
+
+/// The type a replacement writing gets. A pattern's type is what the rule was written with, and it
+/// can be less informed than the node the rule replaces: a law for `Tensor<f32>` replaces a
+/// `Tensor<f32, [3]>` node. When the pattern accepts the node's own type, the writing keeps it, so
+/// a rewritten value has the type of the place it is written to (and a saturation, which merges
+/// writings by type, can merge them).
+camel::core::type::Type *writingType(
+    const camel::core::type::Type *patternType, const camel::core::type::Type *nodeType) {
+    if (patternType == nullptr) {
+        return const_cast<camel::core::type::Type *>(nodeType);
+    }
+    if (nodeType != nullptr &&
+        patternType->assignableFrom(const_cast<camel::core::type::Type *>(nodeType))) {
+        return const_cast<camel::core::type::Type *>(nodeType);
+    }
+    return const_cast<camel::core::type::Type *>(patternType);
+}
+
+/// The bits of a constant that are its value. A slot is 64 bits, but an f32 or an i32 occupies the
+/// low 32 and a bool the low 8; the other bytes are no part of the value. They must not decide
+/// whether two constants are the same: the memory a slot came from can differ between a Debug and a
+/// Release build, and then two equal f32 constants would compare unequal and a law would fire in one
+/// build only (H99).
+slot_t canonicalConstant(slot_t value, const camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return value;
+    }
+    switch (type->code()) {
+    case camel::core::type::TypeCode::Int32:
+    case camel::core::type::TypeCode::Float32:
+        return static_cast<slot_t>(static_cast<std::uint32_t>(value));
+    case camel::core::type::TypeCode::Bool:
+        return static_cast<slot_t>(static_cast<std::uint8_t>(value));
+    default:
+        return value;
+    }
+}
+
+/// The bytes a constant is keyed and compared by: its value's bits, with the bits that are not the
+/// value zeroed (see canonicalConstant).
+std::string constantPayload(slot_t value, const camel::core::type::Type *type) {
+    const slot_t canonical = canonicalConstant(value, type);
+    std::string payload(sizeof(canonical), '\0');
+    std::memcpy(payload.data(), &canonical, sizeof(canonical));
+    return payload;
+}
+
+} // namespace
 
 // ---------------------------------------------------------------- WritingStore
 
@@ -85,7 +171,8 @@ bool WritingStore::unionIn(
     ensure(layer, std::max(a, b));
     // The smaller class joins the larger.
     gc_node_ref_t big = a, small = b;
-    if (layer.size[big] < layer.size[small] || (layer.size[big] == layer.size[small] && big > small)) {
+    if (layer.size[big] < layer.size[small] ||
+        (layer.size[big] == layer.size[small] && big > small)) {
         std::swap(big, small);
     }
     auto smallMembers = layer.members.find(small);
@@ -115,11 +202,12 @@ bool WritingStore::unionIn(
     return true;
 }
 
-WritingStore::Layer &WritingStore::layer(uint8_t context) {
+WritingStore::Layer &WritingStore::layer(camel::core::sem::PermissionMask context) {
     auto it = std::lower_bound(
-        layers_.begin(), layers_.end(), context, [](const Layer &layer, uint8_t value) {
-            return layer.context < value;
-        });
+        layers_.begin(),
+        layers_.end(),
+        context,
+        [](const Layer &layer, uint8_t value) { return layer.context < value; });
     if (it != layers_.end() && it->context == context) {
         return *it;
     }
@@ -138,7 +226,7 @@ WritingStore::Layer &WritingStore::layer(uint8_t context) {
 }
 
 bool WritingStore::merge(
-    gc_node_ref_t a, gc_node_ref_t b, uint8_t perms, uint16_t rule, uint8_t flags,
+    gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms, uint16_t rule, uint8_t flags,
     WritingObserver *observer) {
     // The context of the equivalence itself decides whether it is new.
     Layer &own       = layer(perms);
@@ -152,17 +240,17 @@ bool WritingStore::merge(
     return isNew;
 }
 
-gc_node_ref_t WritingStore::canon(uint8_t context, gc_node_ref_t node) {
+gc_node_ref_t WritingStore::canon(camel::core::sem::PermissionMask context, gc_node_ref_t node) {
     return findIn(layer(context), node);
 }
 
-gc_node_ref_t WritingStore::find(uint8_t context, gc_node_ref_t node) {
+gc_node_ref_t WritingStore::find(camel::core::sem::PermissionMask context, gc_node_ref_t node) {
     Layer &l        = layer(context);
     const auto root = findIn(l, node);
     return root < l.smallest.size() ? l.smallest[root] : root;
 }
 
-std::span<const gc_node_ref_t> WritingStore::members(uint8_t context, gc_node_ref_t node) {
+std::span<const gc_node_ref_t> WritingStore::members(camel::core::sem::PermissionMask context, gc_node_ref_t node) {
     Layer &l        = layer(context);
     const auto root = findIn(l, node);
     auto it         = l.members.find(root);
@@ -176,15 +264,15 @@ std::span<const gc_node_ref_t> WritingStore::members(uint8_t context, gc_node_re
     return it->second.nodes;
 }
 
-std::vector<uint8_t> WritingStore::contexts() const {
-    std::vector<uint8_t> result;
+std::vector<camel::core::sem::PermissionMask> WritingStore::contexts() const {
+    std::vector<camel::core::sem::PermissionMask> result;
     for (const Layer &l : layers_) {
         result.push_back(l.context);
     }
     return result;
 }
 
-std::vector<gc_node_ref_t> WritingStore::classRoots(uint8_t context) {
+std::vector<gc_node_ref_t> WritingStore::classRoots(camel::core::sem::PermissionMask context) {
     Layer &l = layer(context);
     std::vector<gc_node_ref_t> roots;
     for (const auto &entry : l.members) {
@@ -202,9 +290,9 @@ using camel::core::type::Type;
 
 /// What makes two nodes the same value when their inputs are.
 struct NodeKey {
-    uint8_t kind  = 0;
-    uint8_t perms = 0;
-    uint32_t region = 0;
+    uint8_t kind     = 0;
+    camel::core::sem::PermissionMask perms    = 0;
+    uint32_t region  = 0;
     const Type *type = nullptr;
     std::string payload;
     std::vector<gc_node_ref_t> norm;
@@ -247,8 +335,8 @@ DraftWritings::DraftWritings(GraphDraft &draft, camel::core::sem::NumericPolicy 
 
 DraftWritings::~DraftWritings() = default;
 
-uint8_t DraftWritings::contextOf(gc_node_ref_t node) const {
-    return policy_.effective(draft_.nodePermissions(node));
+camel::core::sem::PermissionMask DraftWritings::contextOf(gc_node_ref_t node) const {
+    return camel::core::tag::effectivePermissions(draft_, node, policy_);
 }
 
 namespace {
@@ -272,13 +360,44 @@ bool readsVariable(
     return false;
 }
 
-/// Whether a node of this shape takes part in congruence, apart from the nodes it reads.
-bool shapeTakesPart(
-    const GraphDraft &draft, GCNodeKind kind, gc_slot_idx_t dataIndex, const Type *type,
-    std::span<const std::byte> payload, size_t ctrlInputs) {
-    if (ctrlInputs != 0) {
+/// Whether a node carries the program's order instead of being a pure value: a call runs a
+/// graph, a branch, join, sync or loop runs (or orders) what it holds, a gate waits for its
+/// control inputs, and an operator that is not pure has an effect (design principles 3.3).
+/// This is the rule the generic rewrite pass uses to decide what it may not reorder
+/// (`carriesOrdering` in src/passes/opt/generic/rewrite.cpp).
+bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
+    const auto *h = draft.header(node);
+    if (h == nullptr) {
         return false;
     }
+    switch (h->kind) {
+    case GCNodeKind::Func:
+    case GCNodeKind::Call:
+    case GCNodeKind::Join:
+    case GCNodeKind::Brch:
+    case GCNodeKind::Sync:
+    case GCNodeKind::Loop:
+        return true;
+    case GCNodeKind::Gate:
+        return !draft.ctrlInputsOf(node).empty();
+    case GCNodeKind::Oper: {
+        const std::span<const std::byte> payload = draft.payloadOf(node);
+        return payload.size() < sizeof(GCOperBody) ||
+               !camel::core::OperatorTable::instance().isPure(
+                   reinterpret_cast<const GCOperBody *>(payload.data())->oper);
+    }
+    default:
+        return false;
+    }
+}
+
+/// Whether a node of this shape computes its value from its data inputs alone, apart from the
+/// nodes it reads. A control input is not part of this question: it orders the node, it does not
+/// make the value different (design principles 3.3, 3.4; H95), so a pure computation with a
+/// control input is a pure computation still.
+bool shapeTakesPart(
+    const GraphDraft &draft, GCNodeKind kind, gc_slot_idx_t dataIndex, const Type *type,
+    std::span<const std::byte> payload) {
     switch (kind) {
     case GCNodeKind::Data: {
         if (dataIndex >= 0) {
@@ -326,15 +445,10 @@ uint8_t DraftWritings::shapeOf(gc_node_ref_t node) {
     }
     if (takes[node] == 0) {
         const auto *h = draft_.header(node);
-        bool yes      = h != nullptr && draft_.alive(node) &&
-                   shapeTakesPart(
-                       draft_,
-                       h->kind,
-                       h->dataIndex,
-                       h->dataType,
-                       draft_.payloadOf(node),
-                       0) &&
-                   !writtenInPlace(node);
+        bool yes =
+            h != nullptr && draft_.alive(node) &&
+            shapeTakesPart(draft_, h->kind, h->dataIndex, h->dataType, draft_.payloadOf(node)) &&
+            !writtenInPlace(node);
         if (yes && h->kind == GCNodeKind::Oper) {
             yes = !readsVariable(
                 draft_,
@@ -342,26 +456,24 @@ uint8_t DraftWritings::shapeOf(gc_node_ref_t node) {
                 draft_.withInputsOf(node),
                 [&](gc_node_ref_t in) { return writtenInPlace(in); });
         }
-        // 1: takes part; 3: would, but has control inputs (it can be the root of a rule only);
-        // 2: does not.
-        takes[node] = !yes ? 2 : draft_.ctrlInputsOf(node).empty() ? 1 : 3;
+        // 1: takes part; 2: does not. The control inputs are not asked: they order the node and
+        // do not make the value different (H95), so they neither keep it out of a class of
+        // writings nor out of a rule's term. A rewrite that replaces a node with control inputs
+        // carries them over to the writing that replaces it (`rewrite`), so the order the program
+        // wrote survives the replacement.
+        takes[node] = yes ? 1 : 2;
     }
     return takes[node];
 }
 
 bool DraftWritings::takesPart(gc_node_ref_t node) { return shapeOf(node) == 1; }
 
-bool DraftWritings::canBeRoot(gc_node_ref_t node) {
-    const uint8_t shape = shapeOf(node);
-    return shape == 1 || shape == 3;
-}
-
 namespace {
 
 /// The key of a node of the given parts; `canonOf` names the class of an input.
 template <typename CanonOf>
 NodeKey makeKey(
-    const GraphDraft &draft, GCNodeKind kind, uint8_t perms, uint32_t region, const Type *type,
+    const GraphDraft &draft, GCNodeKind kind, camel::core::sem::PermissionMask perms, uint32_t region, const Type *type,
     gc_slot_idx_t dataIndex, std::span<const std::byte> payload,
     std::span<const gc_node_ref_t> norm, std::span<const gc_node_ref_t> with, CanonOf &&canonOf) {
     NodeKey key;
@@ -373,10 +485,10 @@ NodeKey makeKey(
     case GCNodeKind::Data: {
         const auto index = static_cast<size_t>(-dataIndex);
         const slot_t v   = draft.staticSlots()[index];
-        key.payload.assign(reinterpret_cast<const char *>(&v), sizeof(v));
         if (const Type *ty = draft.staticSlotTypes()[index]) {
             key.type = ty;
         }
+        key.payload = constantPayload(v, key.type);
         break;
     }
     case GCNodeKind::Oper: {
@@ -409,7 +521,7 @@ void DraftWritings::enqueue(gc_node_ref_t node) {
     }
 }
 
-void DraftWritings::joined(uint8_t context, std::span<const gc_node_ref_t> moved) {
+void DraftWritings::joined(camel::core::sem::PermissionMask context, std::span<const gc_node_ref_t> moved) {
     for (gc_node_ref_t node : moved) {
         for (auto users : {draft_.normUsersOf(node), draft_.withUsersOf(node)}) {
             for (gc_node_ref_t user : users) {
@@ -429,7 +541,7 @@ void DraftWritings::index(gc_node_ref_t node) {
     if (!takesPart(node)) {
         return;
     }
-    const uint8_t context = contextOf(node);
+    const camel::core::sem::PermissionMask context = contextOf(node);
     const auto *h         = draft_.header(node);
     NodeKey key           = makeKey(
         draft_,
@@ -482,14 +594,14 @@ void DraftWritings::rebuild() {
     }
 }
 
-bool DraftWritings::assertEqual(gc_node_ref_t a, gc_node_ref_t b, uint8_t perms, uint16_t rule) {
+bool DraftWritings::assertEqual(gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms, uint16_t rule) {
     const bool changed = assertEqualDeferred(a, b, perms, rule);
     rebuild();
     return changed;
 }
 
 bool DraftWritings::assertEqualDeferred(
-    gc_node_ref_t a, gc_node_ref_t b, uint8_t perms, uint16_t rule) {
+    gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms, uint16_t rule) {
     const auto *ha = draft_.header(a);
     const auto *hb = draft_.header(b);
     if (ha == nullptr || hb == nullptr || ha->dataType != hb->dataType ||
@@ -508,10 +620,10 @@ gc_node_ref_t DraftWritings::lookupOrAdd(
     auto &ix = *index_;
     std::optional<NodeKey> key;
     if (!greedy_ &&
-        shapeTakesPart(draft_, init.kind, init.dataIndex, init.dataType, init.payload, 0) &&
-        !(init.kind == GCNodeKind::Oper &&
-          readsVariable(
-              draft_, norm, with, [&](gc_node_ref_t in) { return writtenInPlace(in); }))) {
+        shapeTakesPart(draft_, init.kind, init.dataIndex, init.dataType, init.payload) &&
+        !(init.kind == GCNodeKind::Oper && readsVariable(draft_, norm, with, [&](gc_node_ref_t in) {
+              return writtenInPlace(in);
+          }))) {
         key = makeKey(
             draft_,
             init.kind,
@@ -626,7 +738,8 @@ std::shared_ptr<const CostModel> findCostModel(const std::string &name) {
     return found == costModels().end() ? nullptr : found->second;
 }
 
-ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context::Context *context) {
+ExtractStats
+DraftWritings::extract(const CostModel &model, camel::core::context::Context *context) {
     GraphDraft::WritingScope scope(draft_);
     rebuild();
     ExtractStats stats;
@@ -642,7 +755,7 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
         if (!draft_.alive(node)) {
             continue;
         }
-        const uint8_t context = contextOf(node);
+        const camel::core::sem::PermissionMask context = contextOf(node);
         classOf[node]         = store_.canon(context, node);
         multi[node]           = store_.members(context, node).empty() ? 0 : 1;
         own[node]             = model.nodeCost(costContext, node);
@@ -694,8 +807,16 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
         }
     }
 
-    // What stays: every node that is the only writing of its value, what the graph names (its
-    // ports, entry, exit, result), and the writing chosen for every value that is read.
+    // What stays: what the graph names (its ports, entry, exit, result), the nodes extraction
+    // does not trim, and the writing chosen for every value that is read.
+    //
+    // The retention boundary (design principles 3.1; graph store 3.5 and 3.6): extraction does
+    // not decide which side effects happen, so it does not trim a node with an effect, a node
+    // that carries the program's order, or a value written in place. Everything else is a pure
+    // computation — a writing of its own value like any other — and stays only if something that
+    // stays reads it. That includes a pure node with control inputs: the control input orders
+    // it, it does not make it an effect. A saturation that added thousands of candidate
+    // writings therefore does not leave them in the extracted program as dead nodes.
     std::vector<uint8_t> selected(slots, 0);
     std::vector<gc_node_ref_t> work;
     const auto select = [&](gc_node_ref_t node) {
@@ -705,7 +826,7 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
         }
     };
     for (gc_node_ref_t node = 0; node < slots; ++node) {
-        if (draft_.alive(node) && !multi[node]) {
+        if (draft_.alive(node) && (writtenInPlace(node) || carriesOrdering(draft_, node))) {
             select(node);
         }
     }
@@ -718,7 +839,7 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
     // chosen for the value takes their place.
     const auto valueOf = [&](gc_node_ref_t node) {
         return node != kInvalidNodeRef && draft_.alive(node) && multi[node] ? chosen[classOf[node]]
-                                                                             : node;
+                                                                            : node;
     };
     const gc_node_ref_t entry  = valueOf(draft_.entryNode());
     const gc_node_ref_t exit   = valueOf(draft_.exitNode());
@@ -750,8 +871,7 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
         for (gc_node_ref_t input : inputsOf(work[at])) {
             const gc_node_ref_t pick = chosen[classOf[input]];
             if (pick == kInvalidNodeRef) {
-                throw std::logic_error(
-                    "A value has no writing that does not read itself.");
+                throw std::logic_error("A value has no writing that does not read itself.");
             }
             select(pick);
         }
@@ -766,7 +886,7 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
         if (!selected[node]) {
             continue;
         }
-        bool rewired = false;
+        bool rewired    = false;
         const auto pick = [&](std::span<const gc_node_ref_t> inputs) {
             std::vector<gc_node_ref_t> picked(inputs.begin(), inputs.end());
             for (gc_node_ref_t &input : picked) {
@@ -780,7 +900,7 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
         };
         const auto norm = pick(draft_.normInputsOf(node));
         const auto with = pick(draft_.withInputsOf(node));
-        auto ctrl = pick(draft_.ctrlInputsOf(node));
+        auto ctrl       = pick(draft_.ctrlInputsOf(node));
         if (multi[node] && chosen[classOf[node]] == node) {
             for (gc_node_ref_t member : store_.members(contextOf(node), node)) {
                 if (member == node) {
@@ -860,9 +980,7 @@ const Program *extractWritings(
     return session.commit();
 }
 
-gc_node_ref_t DraftWritings::find(gc_node_ref_t node) {
-    return store_.find(contextOf(node), node);
-}
+gc_node_ref_t DraftWritings::find(gc_node_ref_t node) { return store_.find(contextOf(node), node); }
 
 std::span<const gc_node_ref_t> DraftWritings::writingsOf(gc_node_ref_t node) {
     return store_.members(contextOf(node), node);
@@ -870,15 +988,16 @@ std::span<const gc_node_ref_t> DraftWritings::writingsOf(gc_node_ref_t node) {
 
 // ---------------------------------------------------------------- rules
 
-Pattern patVar(uint32_t var) {
+Pattern patVar(uint32_t var, camel::core::type::Type *type) {
     Pattern p;
     p.kind = Pattern::Kind::Var;
     p.var  = var;
+    p.type = type;
     return p;
 }
 
 Pattern patConst(uint32_t var) {
-    Pattern p = patVar(var);
+    Pattern p   = patVar(var);
     p.constOnly = true;
     return p;
 }
@@ -886,7 +1005,7 @@ Pattern patConst(uint32_t var) {
 Pattern patLiteral(slot_t value, camel::core::type::Type *type) {
     Pattern p;
     p.kind  = Pattern::Kind::Constant;
-    p.value = value;
+    p.value = canonicalConstant(value, type);
     p.type  = type;
     return p;
 }
@@ -915,11 +1034,48 @@ std::optional<std::pair<slot_t, camel::core::type::Type *>> Match::constant(uint
     return writings.constantOf(vars[var]);
 }
 
+namespace {
+
+void tracePatternConstants(
+    const Pattern &pattern, const camel::core::rtdata::Object::RefRelocator &relocate) {
+    if (pattern.kind == Pattern::Kind::Constant && pattern.type && pattern.type->isGCTraced() &&
+        pattern.value != NullSlot) {
+        auto *ref = camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(pattern.value);
+        if (ref) {
+            ref = relocate(
+                ref,
+                pattern.type,
+                camel::core::rtdata::RefTraceInfo{
+                    .owner     = nullptr,
+                    .ownerType = nullptr,
+                    .slotType  = pattern.type,
+                    .ownerKind = "RulePattern",
+                    .slotName  = {},
+                    .slotIndex = 0,
+                });
+            pattern.value = camel::core::rtdata::toSlot(ref);
+        }
+    }
+    for (const Pattern &arg : pattern.args) {
+        tracePatternConstants(arg, relocate);
+    }
+}
+
+} // namespace
+
+void traceRuleConstants(
+    std::span<const Rule> rules, const camel::core::rtdata::Object::RefRelocator &relocate) {
+    for (const Rule &rule : rules) {
+        tracePatternConstants(rule.lhs, relocate);
+        tracePatternConstants(rule.rhs, relocate);
+    }
+}
+
 std::optional<std::pair<slot_t, camel::core::type::Type *>>
 DraftWritings::constantOf(gc_node_ref_t node) {
-    const uint8_t context = contextOf(node);
+    const camel::core::sem::PermissionMask context = contextOf(node);
     const auto members    = store_.members(context, node);
-    const auto look = [&](gc_node_ref_t candidate)
+    const auto look       = [&](gc_node_ref_t candidate)
         -> std::optional<std::pair<slot_t, camel::core::type::Type *>> {
         const auto *h = draft_.header(candidate);
         if (h == nullptr || !draft_.alive(candidate) || h->kind != GCNodeKind::Data ||
@@ -930,8 +1086,9 @@ DraftWritings::constantOf(gc_node_ref_t node) {
         if (index >= draft_.staticSlots().size() || !takesPart(candidate)) {
             return std::nullopt;
         }
-        camel::core::type::Type *ty = draft_.staticSlotTypes()[index];
-        return std::pair{draft_.staticSlots()[index], ty != nullptr ? ty : h->dataType};
+        camel::core::type::Type *slotType = draft_.staticSlotTypes()[index];
+        camel::core::type::Type *ty = slotType != nullptr ? slotType : h->dataType;
+        return std::pair{canonicalConstant(draft_.staticSlots()[index], ty), ty};
     };
     if (members.empty()) {
         return look(node);
@@ -945,19 +1102,20 @@ DraftWritings::constantOf(gc_node_ref_t node) {
 }
 
 gc_node_ref_t DraftWritings::constantNode(
-    slot_t value, camel::core::type::Type *type, uint8_t perms, uint32_t region) {
+    slot_t value, camel::core::type::Type *type, camel::core::sem::PermissionMask perms, uint32_t region) {
+    const slot_t stored = canonicalConstant(value, type);
     NodeKey key;
-    key.kind   = static_cast<uint8_t>(GCNodeKind::Data);
-    key.perms  = perms;
-    key.region = region;
-    key.type   = type;
-    key.payload.assign(reinterpret_cast<const char *>(&value), sizeof(value));
+    key.kind    = static_cast<uint8_t>(GCNodeKind::Data);
+    key.perms   = perms;
+    key.region  = region;
+    key.type    = type;
+    key.payload = constantPayload(stored, type);
     auto &ix = *index_;
     if (auto found = ix.byKey.find(key); found != ix.byKey.end()) {
         return found->second;
     }
     GraphDraft::WritingScope scope(draft_);
-    const gc_node_ref_t node = draft_.materializeStaticValue(value, type);
+    const gc_node_ref_t node = draft_.materializeStaticValue(stored, type);
     if (perms != 0) {
         draft_.setNodePermissions(node, perms);
     }
@@ -968,37 +1126,95 @@ gc_node_ref_t DraftWritings::constantNode(
     return node;
 }
 
-void DraftWritings::matchFrom(
-    uint8_t context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
-    std::vector<uint8_t> &bound, const std::function<void()> &emit) {
+/// Whether a pattern term of `patternType` may match a node of `nodeType`: the type the pattern
+/// was written for must accept the node's (a `Tensor<f32>` pattern reads a `Tensor<f32, [3]>`,
+/// a pattern for `Tensor<f32>` never reads a `Tensor<int>`). The scalar operators have one id per
+/// element type, so their id already says this; the tensor operators share one id for every
+/// element type, and without the check a tensor law would rewrite another dtype's arithmetic
+/// with an f32 rounding argument (rewrite design 2.2).
+namespace {
+bool acceptsType(
+    const camel::core::type::Type *patternType, const camel::core::type::Type *nodeType) {
+    return patternType == nullptr || nodeType == nullptr ||
+           patternType->assignableFrom(const_cast<camel::core::type::Type *>(nodeType));
+}
+
+/// Whether `oper`'s declared semantics say that exchanging its two operands gives the same value
+/// for a result of type `type` (op-semantics 7.4: `BinaryLaw.commutative`, per element type;
+/// `elementOf` names the element type of an aggregate, an empty one reads the type itself). This
+/// is the fact the matcher reads to try the other order; an operator that does not declare it is
+/// read in the order the program wrote, because only the value of the operator (not a guess about
+/// its name or its shape) can justify the exchange.
+bool declaredCommutative(camel::core::OperId oper, const camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    const camel::core::sem::OperatorSemantics *declared =
+        camel::core::OperatorTable::instance().semantics(oper);
+    if (declared == nullptr || !declared->binary) {
+        return false;
+    }
+    const camel::core::sem::BinaryAlgebra &algebra = *declared->binary;
+    const std::optional<camel::core::type::TypeCode> element =
+        algebra.elementOf ? algebra.elementOf(type)
+                          : std::optional<camel::core::type::TypeCode>(type->code());
+    if (!element) {
+        return false;
+    }
+    for (const camel::core::sem::BinaryLaw &law : algebra.laws) {
+        if (law.element == *element) {
+            return law.commutative;
+        }
+    }
+    return false;
+}
+} // namespace
+
+bool DraftWritings::matchFrom(
+    camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
+    std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, bool commuted,
+    const std::function<bool()> &emit) {
     if (at == work.size()) {
-        emit();
-        return;
+        return emit();
     }
     const Item item  = work[at];
     const Pattern &p = *item.pattern;
     switch (p.kind) {
     case Pattern::Kind::Var:
         if (p.constOnly && !constantOf(item.node).has_value()) {
-            return;
+            return false;
+        }
+        if (const auto *header = draft_.header(item.node);
+            header == nullptr || !acceptsType(p.type, header->dataType)) {
+            return false;
         }
         if (bound[p.var]) {
-            if (store_.same(context, bind[p.var], item.node)) {
-                matchFrom(context, work, at + 1, bind, bound, emit);
+            bool same = store_.same(context, bind[p.var], item.node);
+            if (!same && p.constOnly) {
+                // A repeated `const c` is a repeated constant value, not a repeated node: source
+                // `x * 3.0 + x * 3.0` has two DATA nodes of the same value.
+                const auto a = constantOf(bind[p.var]);
+                const auto b = constantOf(item.node);
+                same = a && b && a->second == b->second &&
+                       canonicalConstant(a->first, a->second) ==
+                           canonicalConstant(b->first, b->second);
             }
-            return;
+            return same && matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
         }
         bound[p.var] = 1;
         bind[p.var]  = item.node;
-        matchFrom(context, work, at + 1, bind, bound, emit);
-        bound[p.var] = 0;
-        return;
+        {
+            const bool matched = matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
+            bound[p.var]       = 0;
+            return matched;
+        }
     case Pattern::Kind::Constant: {
         const auto found = constantOf(item.node);
-        if (found && found->first == p.value && found->second == p.type) {
-            matchFrom(context, work, at + 1, bind, bound, emit);
+        if (!found || found->second != p.type ||
+            canonicalConstant(found->first, p.type) != canonicalConstant(p.value, p.type)) {
+            return false;
         }
-        return;
+        return matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
     }
     case Pattern::Kind::Op: {
         // The root of a rule is the node itself; below it, any writing of the value read.
@@ -1012,44 +1228,80 @@ void DraftWritings::matchFrom(
                 candidates.push_back(item.node);
             }
         }
-        for (gc_node_ref_t candidate : candidates) {
+        // One pairing of the pattern's operands with a candidate's data inputs. `swapped` reads
+        // the two inputs in the other order; it is legal only for a binary term whose operator's
+        // declared semantics say the exchange gives the same value for this element type.
+        const auto matchCandidate = [&](gc_node_ref_t candidate, bool swapped) -> bool {
             const auto *h = draft_.header(candidate);
             if (h == nullptr || !draft_.alive(candidate) || h->kind != GCNodeKind::Oper ||
-                h->permissions != matchPerms_ ||
-                !(at == 0 ? canBeRoot(candidate) : takesPart(candidate)) ||
+                h->permissions != matchPerms_ || !acceptsType(p.type, h->dataType) ||
+                !takesPart(candidate) ||
                 reinterpret_cast<const GCOperBody *>(draft_.payloadOf(candidate).data())->oper !=
                     p.oper) {
-                continue;
+                return false;
             }
             const auto inputs = draft_.normInputsOf(candidate);
             if (inputs.size() != p.args.size() || !draft_.withInputsOf(candidate).empty()) {
-                continue;
+                return false;
+            }
+            if (swapped && (inputs.size() != 2 || !declaredCommutative(p.oper, h->dataType))) {
+                return false;
+            }
+            // What this term waits for: the rewrite carries it onto the writing that replaces the
+            // root, so the law does not move the computation across a control edge's ordering.
+            const size_t savedWaits = waits != nullptr ? waits->size() : 0;
+            if (waits != nullptr) {
+                for (gc_node_ref_t wait : draft_.ctrlInputsOf(candidate)) {
+                    if (std::find(waits->begin(), waits->end(), wait) == waits->end()) {
+                        waits->push_back(wait);
+                    }
+                }
             }
             const size_t saved = work.size();
             for (size_t i = 0; i < inputs.size(); ++i) {
-                work.push_back({&p.args[i], inputs[i]});
+                const size_t input = swapped ? (i == 0 ? 1 : 0) : i;
+                work.push_back({&p.args[i], inputs[input]});
             }
-            matchFrom(context, work, at + 1, bind, bound, emit);
+            const bool matched = matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
             work.resize(saved);
+            if (waits != nullptr) {
+                waits->resize(savedWaits);
+            }
+            return matched;
+        };
+        bool accepted = false;
+        for (gc_node_ref_t candidate : candidates) {
+            accepted = matchCandidate(candidate, false) || accepted;
         }
-        return;
+        if (!accepted && commuted) {
+            // Nothing matched in the order the law wrote. A law is about values, not about the
+            // order the program wrote them in: if the operator's semantics say exchanging its
+            // operands gives the same value, the other order denotes the same left side, so the
+            // right side (built below from the law's own text) is the same value too. The
+            // natural order was tried first, so a law that writes the operands in a particular
+            // order keeps that order whenever the program matches it, and the replacement keeps
+            // the written shape. Operators that do not declare commutativity are never commuted,
+            // and a two-way rule's reverse already reads the other order (`commuted` false).
+            for (gc_node_ref_t candidate : candidates) {
+                accepted = matchCandidate(candidate, true) || accepted;
+            }
+        }
+        return accepted;
     }
     case Pattern::Kind::Compute:
-        return; // right side only
+        return false; // right side only
     }
+    return false;
 }
 
-gc_node_ref_t DraftWritings::build(
-    const Pattern &pattern, const Match &match, const DraftNodeInit &base) {
+gc_node_ref_t
+DraftWritings::build(const Pattern &pattern, const Match &match, const DraftNodeInit &base) {
     switch (pattern.kind) {
     case Pattern::Kind::Var:
         return match.vars[pattern.var];
     case Pattern::Kind::Constant:
         return constantNode(
-            pattern.value,
-            pattern.type != nullptr ? pattern.type : base.dataType,
-            base.permissions,
-            base.region);
+            pattern.value, writingType(pattern.type, base.dataType), base.permissions, base.region);
     case Pattern::Kind::Compute: {
         std::vector<slot_t> values;
         for (const Pattern &arg : pattern.args) {
@@ -1062,9 +1314,7 @@ gc_node_ref_t DraftWritings::build(
             values.push_back(value->first);
         }
         return constantNode(
-            pattern.compute(values),
-            pattern.type != nullptr ? pattern.type : base.dataType,
-            base.permissions,
+            pattern.compute(values), writingType(pattern.type, base.dataType), base.permissions,
             base.region);
     }
     case Pattern::Kind::Op: {
@@ -1079,7 +1329,7 @@ gc_node_ref_t DraftWritings::build(
         DraftNodeInit init = base;
         init.kind          = GCNodeKind::Oper;
         init.dataIndex     = 0;
-        init.dataType      = pattern.type != nullptr ? pattern.type : base.dataType;
+        init.dataType      = writingType(pattern.type, base.dataType);
         init.payload       = bytes;
         return lookupOrAdd(init, inputs);
     }
@@ -1099,24 +1349,26 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
         throw std::logic_error("A rewrite needs a draft with one writing per value.");
     }
     GraphDraft::WritingScope scope(draft_);
+    EngineRootScope roots(draft_, rules);
     greedy_ = true;
     RewriteStats stats;
     auto &ix = *index_;
     // The constants there are, so that a constant a rule needs is found, not made again.
     for (gc_node_ref_t node = 0; node < draft_.nodeSlotCount(); ++node) {
-        if (draft_.alive(node) && draft_.header(node)->kind == GCNodeKind::Data && takesPart(node)) {
+        if (draft_.alive(node) && draft_.header(node)->kind == GCNodeKind::Data &&
+            takesPart(node)) {
             const auto *h = draft_.header(node);
             NodeKey key;
-            key.kind   = static_cast<uint8_t>(GCNodeKind::Data);
-            key.perms  = h->permissions;
-            key.region = draft_.nodeRegion(node);
-            key.type   = h->dataType;
+            key.kind             = static_cast<uint8_t>(GCNodeKind::Data);
+            key.perms            = h->permissions;
+            key.region           = draft_.nodeRegion(node);
+            key.type             = h->dataType;
             const auto slotIndex = static_cast<size_t>(-h->dataIndex);
             const slot_t value   = draft_.staticSlots()[slotIndex];
             if (const Type *ty = draft_.staticSlotTypes()[slotIndex]) {
                 key.type = ty;
             }
-            key.payload.assign(reinterpret_cast<const char *>(&value), sizeof(value));
+            key.payload = constantPayload(value, key.type);
             ix.byKey.try_emplace(key, node);
             if (node >= ix.keyOf.size()) {
                 ix.keyOf.resize(draft_.nodeSlotCount());
@@ -1125,7 +1377,7 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
         }
     }
 
-    size_t varCount = 0;
+    size_t varCount                                = 0;
     std::function<void(const Pattern &)> countVars = [&](const Pattern &p) {
         if (p.kind == Pattern::Kind::Var) {
             varCount = std::max<size_t>(varCount, p.var + 1);
@@ -1141,8 +1393,8 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
 
     // Nodes the graph keeps by name; they are never erased.
     const auto kept = [&](gc_node_ref_t node) {
-        if (node == draft_.entryNode() || node == draft_.exitNode() || node == draft_.outputNode() ||
-            node == draft_.returnNode()) {
+        if (node == draft_.entryNode() || node == draft_.exitNode() ||
+            node == draft_.outputNode() || node == draft_.returnNode()) {
             return true;
         }
         for (auto list : {draft_.normPorts(), draft_.withPorts(), draft_.closureNodes()}) {
@@ -1172,7 +1424,9 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
             }
             std::vector<gc_node_ref_t> inputs;
             for (auto part :
-                 {draft_.normInputsOf(node), draft_.withInputsOf(node), draft_.ctrlInputsOf(node)}) {
+                 {draft_.normInputsOf(node),
+                  draft_.withInputsOf(node),
+                  draft_.ctrlInputsOf(node)}) {
                 inputs.insert(inputs.end(), part.begin(), part.end());
             }
             if (node < ix.keyOf.size() && ix.keyOf[node].has_value()) {
@@ -1193,10 +1447,10 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
         size_t appliedInRound = 0;
         const size_t slots    = draft_.nodeSlotCount();
         for (gc_node_ref_t node = 0; node < slots; ++node) {
-            if (!draft_.alive(node) || !canBeRoot(node)) {
+            if (!draft_.alive(node) || !takesPart(node)) {
                 continue;
             }
-            const uint8_t context = contextOf(node);
+            const camel::core::sem::PermissionMask context = contextOf(node);
             matchPerms_           = draft_.header(node)->permissions;
             for (const Rule &rule : rules) {
                 if ((rule.needs & ~context) != 0 || rule.lhs.kind != Pattern::Kind::Op) {
@@ -1206,22 +1460,28 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
                 std::vector<Item> work{{&rule.lhs, node}};
                 std::vector<gc_node_ref_t> bind(varCount, kInvalidNodeRef);
                 std::vector<uint8_t> bound(varCount, 0);
+                std::vector<gc_node_ref_t> matchedWaits(
+                    draft_.ctrlInputsOf(node).begin(), draft_.ctrlInputsOf(node).end());
                 std::optional<std::vector<gc_node_ref_t>> chosen;
-                matchFrom(context, work, 0, bind, bound, [&] {
+                std::optional<std::vector<gc_node_ref_t>> chosenWaits;
+                matchFrom(context, work, 0, bind, bound, &matchedWaits, true, [&] {
                     if (!chosen && (!rule.when || rule.when(Match{*this, node, bind}))) {
-                        chosen = bind;
+                        chosen      = bind;
+                        chosenWaits = matchedWaits;
+                        return true;
                     }
+                    return false;
                 });
                 if (!chosen) {
                     continue;
                 }
                 const auto *h = draft_.header(node);
                 DraftNodeInit base;
-                base.dataType    = h->dataType;
-                base.permissions = h->permissions;
-                base.region      = draft_.nodeRegion(node);
-                base.origin      = draft_.nodeOrigin(node);
-                base.attrs       = draft_.nodeAttrs(node);
+                base.dataType       = h->dataType;
+                base.permissions    = h->permissions;
+                base.region         = draft_.nodeRegion(node);
+                base.origin         = draft_.nodeOrigin(node);
+                base.attrs          = draft_.nodeAttrs(node);
                 const size_t before = draft_.nodeSlotCount();
                 gc_node_ref_t made  = kInvalidNodeRef;
                 try {
@@ -1232,8 +1492,12 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
                 if (made == node) {
                     continue;
                 }
-                const std::vector<gc_node_ref_t> waits(
-                    draft_.ctrlInputsOf(node).begin(), draft_.ctrlInputsOf(node).end());
+                // Everything the match read that ordered it: the root's own control inputs and
+                // those of the operator terms the law stops reading. A law over data inputs is
+                // sound whatever the node is ordered after, but the engine must not move the
+                // computation across an effect, so the writing that replaces it waits for all of
+                // them (design principles 3.3, 3.4; H95).
+                const std::vector<gc_node_ref_t> waits = chosenWaits.value_or(std::vector<gc_node_ref_t>{});
                 // A node that already existed cannot be made to wait without risking a cycle.
                 if (!waits.empty() && made < before) {
                     continue;
@@ -1245,10 +1509,14 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
                         draft_.appendInput(DraftEdgeKind::Ctrl, made, wait);
                     }
                 }
-                if (draft_.entryNode() == node) draft_.setEntryNode(made);
-                if (draft_.exitNode() == node) draft_.setExitNode(made);
-                if (draft_.outputNode() == node) draft_.setOutputNode(made);
-                if (draft_.returnNode() == node) draft_.setReturnNode(made, draft_.returnKind());
+                if (draft_.entryNode() == node)
+                    draft_.setEntryNode(made);
+                if (draft_.exitNode() == node)
+                    draft_.setExitNode(made);
+                if (draft_.outputNode() == node)
+                    draft_.setOutputNode(made);
+                if (draft_.returnNode() == node)
+                    draft_.setReturnNode(made, draft_.returnKind());
                 for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
                     if (draft_.region(r).result == node) {
                         draft_.setRegionResult(r, made);
@@ -1272,13 +1540,14 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
 SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget &budget) {
     SaturateStats stats;
     GraphDraft::WritingScope scope(draft_);
+    EngineRootScope roots(draft_, rules);
     rebuild();
     struct Found {
         size_t rule;
         gc_node_ref_t root;
         std::vector<gc_node_ref_t> vars;
     };
-    size_t varCount = 0;
+    size_t varCount                                = 0;
     std::function<void(const Pattern &)> countVars = [&](const Pattern &p) {
         if (p.kind == Pattern::Kind::Var) {
             varCount = std::max<size_t>(varCount, p.var + 1);
@@ -1300,7 +1569,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
         std::unordered_map<camel::core::OperId, std::vector<gc_node_ref_t>> byOper;
         for (gc_node_ref_t node = 0; node < slots; ++node) {
             if (draft_.alive(node) && draft_.header(node)->kind == GCNodeKind::Oper &&
-                canBeRoot(node)) {
+                takesPart(node)) {
                 byOper[reinterpret_cast<const GCOperBody *>(draft_.payloadOf(node).data())->oper]
                     .push_back(node);
             }
@@ -1315,7 +1584,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
                 continue;
             }
             for (gc_node_ref_t node : candidates->second) {
-                const uint8_t context = contextOf(node);
+                const camel::core::sem::PermissionMask context = contextOf(node);
                 if ((rule.needs & ~context) != 0) {
                     continue;
                 }
@@ -1323,10 +1592,12 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
                 std::vector<Item> work{{&rule.lhs, node}};
                 std::vector<gc_node_ref_t> bind(varCount, kInvalidNodeRef);
                 std::vector<uint8_t> bound(varCount, 0);
-                matchFrom(context, work, 0, bind, bound, [&] {
+                matchFrom(context, work, 0, bind, bound, nullptr, !rule.twoWay, [&] {
                     if (!rule.when || rule.when(Match{*this, node, bind})) {
                         found.push_back(Found{r, node, bind});
+                        return true;
                     }
+                    return false;
                 });
             }
         }
@@ -1347,7 +1618,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
             base.origin         = draft_.nodeOrigin(match.root);
             base.attrs          = draft_.nodeAttrs(match.root);
             const size_t before = draft_.nodeSlotCount();
-            gc_node_ref_t made = kInvalidNodeRef;
+            gc_node_ref_t made  = kInvalidNodeRef;
             try {
                 made = build(rule.rhs, Match{*this, match.root, match.vars}, base);
             } catch (const RuleSkipped &) {
@@ -1377,3 +1648,4 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
 }
 
 } // namespace camel::runtime
+

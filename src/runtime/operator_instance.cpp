@@ -26,6 +26,7 @@
 #include "camel/runtime/reachable.h"
 
 #include "camel/core/node_attrs.h"
+#include "camel/core/tags.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/base.h"
@@ -122,7 +123,10 @@ reorderFreedomOf(const GCGraph &graph, gc_node_ref_t node, const core::sem::Nume
     const core::sem::OperatorSemantics *s =
         core::OperatorTable::instance().semantics(graph.nodeBodyAs<GCOperBody>(node)->oper);
     // instantiate validated the law's index against these semantics.
-    return core::sem::reorderFreedom(s->laws[instance->law], graph.nodePermissions(node), policy);
+    return core::sem::reorderFreedom(
+        s->laws[instance->law],
+        core::tag::effectivePermissions(graph, node, policy),
+        policy);
 }
 
 namespace {
@@ -196,11 +200,13 @@ void dumpOperatorInstances(const Program &program, std::ostream &os) {
             const auto instance = instanceOf(*graph, ref);
             line += ",\"instance\":" +
                     (instance ? jsonLines(core::sem::toString(*instance, s)) : std::string("null"));
-            if (const uint8_t granted = graph->nodePermissions(ref); granted != 0) {
-                line += ",\"permissions\":" + jsonString(core::sem::permissionsText(granted));
+            const camel::core::tag::Facts facts = camel::core::tag::factsOf(*graph, ref);
+            if (facts.permissions != 0) {
+                line +=
+                    ",\"permissions\":" + jsonString(core::sem::permissionsText(facts.permissions));
             }
-            if (const uint32_t attrs = graph->nodeAttrs(ref); attrs != 0) {
-                line += ",\"attrs\":" + jsonString(core::attr::text(attrs));
+            if (facts.tags != 0) {
+                line += ",\"attrs\":" + jsonString(core::attr::text(facts.tags));
             }
             if (const auto freedom = reorderFreedomOf(*graph, ref)) {
                 line += ",\"freedom\":" + freedomJson(*freedom);

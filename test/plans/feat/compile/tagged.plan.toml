@@ -69,6 +69,25 @@ assert(out === want, `unexpected output: ${out}`)
 timeout_ms = 12000
 
 [[tests]]
+name = "two_layer"
+desc = "The two marks compose innermost first: `int!?` is nullable(fallible(int)) and `case null` is exhaustive over it; `int?!` is fallible(nullable(int)) and its cases are `case error e` and the value. Each value is unwrapped in the only order its outer form allows (`??` then `!!`, and `!!` then `??`)."
+kind = "behavior"
+case = "../../../cases/compile/tagged/two_layer.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["7", "-4", "5", "-8"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
 name = "stdlib"
 desc = "Library operators that can fail return a `T!`: parse_int, parse_float, fs::try_read_text."
 kind = "behavior"
@@ -1098,6 +1117,38 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "two_layer_case_null"
+desc = "`int?!` is fallible(nullable(int)): its outer form is the error, so `case null` is rejected, and the diagnostic spells the type 'int?!'."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_two_layer_null.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
+expect_diagnostic_code = "0x03000076"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 13
+expect_output_contains = ["This 'match' on a value of type 'int?!' is not well formed: 'case null' needs a value that may be null."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "two_layer_case_error"
+desc = "`int!?` is nullable(fallible(int)): its outer form is the null, so `case error e` is rejected, and the diagnostic spells the type 'int!?'."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_two_layer_error.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
+expect_diagnostic_code = "0x03000076"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 13
+expect_output_contains = ["This 'match' on a value of type 'int!?' is not well formed: 'case error' needs a value that may have failed."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "nesting"
 desc = "The same mark twice (`(int?)?`) is rejected where it is written; `int?!` on the line before is accepted."
 kind = "negative"
@@ -1291,4 +1342,29 @@ expect_exit = 1
 expect_diagnostic_line = 8
 expect_diagnostic_column = 11
 expect_output_contains = ["An error value reached the exit of 'main' without being handled: Zero: zero.", "error_position_pipeline.cml:8:11", "(name=RuntimeDiag::UnhandledError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "optional_logic"
+desc = "A `bool?` position applies to the whole `&&` / `||` / `??` / `!!` expression, once: the operands of `&&` / `||` are `bool` (4.2), the sides of `??` / `!!` are a `T?` and a `T` or the same `T?` (3.8), and a statement whose value nothing takes has no position of the enclosing arm (H119)."
+kind = "behavior"
+case = "../../../cases/compile/tagged/optional_logic.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "ab\ntrue\nfalse\nfalse\ntrue\ntrue\n1\n1\n1\n7\n4\n5\ntrue\n-1.5\n"
+expect_output_not_contains = ["[Error]", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "optional_operand_not_bool"
+desc = "A `bool?` is still not a `bool` in an operand of `||`: the operand position is a `bool` whatever the surrounding position wants, so the value has to be opened with `??` (design principles 4.2)."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_optional_operand.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LogicalOperandNotBool"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["The left side of '||' has type 'bool?', not 'bool'."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

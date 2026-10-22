@@ -10,13 +10,17 @@
 
 // Load the NVIDIA APIs, select the device and cache compiled kernel modules.
 #include "tiles/internal/cuda_backend.h"
+#include "camel/execute/devices.h"
 #include "tiles/internal/capability.h"
+#include "tiles/internal/profile_hooks.h"
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <vector>
 #ifdef CAMEL_TILES_CUDA
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <stdexcept>
@@ -118,8 +122,9 @@ Api::Api()
     cuInit = driver.symbol<decltype(&::cuInit)>(TILES_STR(cuInit));
     cuDriverGetVersion =
         driver.symbol<decltype(&::cuDriverGetVersion)>(TILES_STR(cuDriverGetVersion));
-    cuDeviceGet     = driver.symbol<decltype(&::cuDeviceGet)>(TILES_STR(cuDeviceGet));
-    cuDeviceGetName = driver.symbol<decltype(&::cuDeviceGetName)>(TILES_STR(cuDeviceGetName));
+    cuDeviceGet      = driver.symbol<decltype(&::cuDeviceGet)>(TILES_STR(cuDeviceGet));
+    cuDeviceGetCount = driver.symbol<decltype(&::cuDeviceGetCount)>(TILES_STR(cuDeviceGetCount));
+    cuDeviceGetName  = driver.symbol<decltype(&::cuDeviceGetName)>(TILES_STR(cuDeviceGetName));
     cuDeviceGetAttribute =
         driver.symbol<decltype(&::cuDeviceGetAttribute)>(TILES_STR(cuDeviceGetAttribute));
     cuDevicePrimaryCtxRetain =
@@ -185,6 +190,18 @@ void Api::check(nvrtcResult r, const char *action) {
     if (r != NVRTC_SUCCESS)
         throw std::runtime_error(std::string(action) + ": " + nvrtcGetErrorString(r));
 }
+namespace {
+/// What the driver says about `result`, for a diagnostic that names a device.
+std::string cudaFailureText(Api &api, CUresult result) {
+    const char *name    = nullptr;
+    const char *message = nullptr;
+    if (api.cuGetErrorName(result, &name) != CUDA_SUCCESS || !name)
+        name = "CUDA error";
+    if (api.cuGetErrorString(result, &message) != CUDA_SUCCESS || !message)
+        message = "unknown error";
+    return std::string(name) + " (" + message + ")";
+}
+} // namespace
 Current::Current(Api &a, CUcontext ctx) : api(a) {
     api.check(api.cuCtxPushCurrent(ctx), "activate CUDA context");
 }
@@ -195,11 +212,38 @@ Current::~Current() {
 Backend::Backend(MemoryPolicy policy)
     : devicePool_(api, PoolKind::Device, policy.device),
       hostPool_(api, PoolKind::Host, policy.host) {
-    const auto initialized = api.cuInit(0);
-    if (initialized == CUDA_ERROR_NO_DEVICE)
+    // The selection is the run's configuration (design principles 13.4): without `--devices` a
+    // missing device is a capability miss and the host runs the program; with it every named
+    // device must be there, and a missing one is a diagnostic naming it, never a fallback.
+    const auto &selection        = camel::execute::selectedDevices();
+    const bool explicitSelection = selection.given && !selection.cuda.empty();
+    const auto initialized       = api.cuInit(0);
+    if (initialized == CUDA_ERROR_NO_DEVICE) {
+        if (explicitSelection)
+            throw DeviceUnavailable(selection.cuda.front(), "this machine has no CUDA device");
         throw BackendUnavailable("no CUDA device is available");
-    api.check(initialized, "initialize CUDA");
-    const int ordinal = configuredCudaOrdinal();
+    }
+    if (initialized != CUDA_SUCCESS) {
+        if (explicitSelection)
+            throw DeviceUnavailable(
+                selection.cuda.front(),
+                "initializing CUDA failed: " + cudaFailureText(api, initialized));
+        api.check(initialized, "initialize CUDA");
+    }
+    if (explicitSelection) {
+        int count = 0;
+        api.check(api.cuDeviceGetCount(&count), "count CUDA devices");
+        for (const int selected : selection.cuda) {
+            CUdevice probe        = 0;
+            const CUresult result = api.cuDeviceGet(&probe, selected);
+            if (result != CUDA_SUCCESS)
+                throw DeviceUnavailable(
+                    selected,
+                    "this machine has " + std::to_string(count) + " CUDA device(s); " +
+                        cudaFailureText(api, result));
+        }
+    }
+    const int ordinal = configuredCudaOrdinal().value_or(0);
     api.check(api.cuDeviceGet(&device, ordinal), "select CUDA device");
     char name[256]{};
     api.check(api.cuDeviceGetName(name, sizeof(name), device), "query CUDA device");
@@ -211,7 +255,11 @@ Backend::Backend(MemoryPolicy policy)
         api.cuDeviceGetAttribute(&minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, device),
         "query compute capability");
     description = std::string(name) + " (sm_" + std::to_string(major * 10 + minor) + ")";
-    int count   = 0;
+    // What `std::profile` reports as the device: the ordinal this backend chose.
+    if (profile_hooks::device) {
+        profile_hooks::device(("cuda:" + std::to_string(ordinal)).c_str());
+    }
+    int count = 0;
     api.check(api.nvrtcGetNumSupportedArchs(&count), "query NVRTC architectures");
     std::vector<int> archs(count);
     api.check(api.nvrtcGetSupportedArchs(archs.data()), "query NVRTC architectures");
@@ -308,8 +356,18 @@ ModuleLease Backend::module(const std::string &source) {
     std::vector<const char *> arguments;
     for (const auto &option : options)
         arguments.push_back(option.c_str());
+    // The NVRTC compile of one region: `std::profile` reports it as device compilation, whose
+    // cost is the region's first use and is cached afterwards.
+    const auto compileStart = std::chrono::steady_clock::now();
     auto status =
         api.nvrtcCompileProgram(program, static_cast<int>(arguments.size()), arguments.data());
+    if (profile_hooks::deviceCompile) {
+        profile_hooks::deviceCompile(
+            "nvrtc",
+            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                      std::chrono::steady_clock::now() - compileStart)
+                                      .count()));
+    }
     if (status != NVRTC_SUCCESS) {
         size_t size = 0;
         api.check(api.nvrtcGetProgramLogSize(program, &size), "read NVRTC log");
@@ -340,9 +398,76 @@ ModuleLease Backend::module(const std::string &source) {
     }
     return {shared_from_this(), std::move(compiled)};
 }
+namespace {
+/// What the one probe of the process found. Building the back end is what loads the driver and
+/// calls `cuInit`, so the answer — success or miss — is kept and no later caller asks again.
+/// A miss carries the sentence that explains it, and the device `--devices` named when that is
+/// what was missing.
+struct ProbeOutcome {
+    enum class Kind : uint8_t { Ready, Unavailable, DeviceMissing, Fault };
+
+    std::shared_ptr<Backend> backend;
+    Kind kind = Kind::Ready;
+    int ordinal = 0;
+    std::string reason;
+};
+
+/// Take the one measurement: build the back end, or record why it cannot be built.
+ProbeOutcome probeBackend() {
+    ProbeOutcome outcome;
+    const auto &selection = camel::execute::selectedDevices();
+    // The host-only selection needs no driver at all, and is answered before the probe: its
+    // fallback stays silent.
+    if (selection.given && (selection.cpu || selection.cuda.empty())) {
+        outcome.kind   = ProbeOutcome::Kind::Unavailable;
+        outcome.reason = "the run selected the host only (--devices cpu) and does not use a CUDA "
+                         "device";
+        return outcome;
+    }
+    // One line per actual probe: the H117 test asserts there is exactly one for the process.
+    if (deviceProbeStarted)
+        deviceProbeStarted();
+    try {
+        outcome.backend = std::make_shared<Backend>();
+    } catch (const DeviceUnavailable &e) {
+        outcome.kind    = ProbeOutcome::Kind::DeviceMissing;
+        outcome.ordinal = e.ordinal();
+        outcome.reason  = e.what();
+    } catch (const BackendUnavailable &e) {
+        // The driver, NVRTC or the device is not there. Without `--devices` that is a capability
+        // miss (the host runs the program); with it the run named a device, so the report names
+        // it, exactly as `createBackend` did before the probe cached the answer.
+        outcome.kind = selection.given && !selection.cuda.empty()
+                           ? ProbeOutcome::Kind::DeviceMissing
+                           : ProbeOutcome::Kind::Unavailable;
+        outcome.ordinal = selection.cuda.empty() ? 0 : selection.cuda.front();
+        outcome.reason  = e.what();
+    } catch (const std::exception &e) {
+        // Not a capability miss: an ordinary back-end failure, which is reported as before. It
+        // is kept too, so a broken back end is not rebuilt on every preferred call.
+        outcome.kind   = ProbeOutcome::Kind::Fault;
+        outcome.reason = e.what();
+    }
+    return outcome;
+}
+} // namespace
 std::shared_ptr<Backend> sharedBackend() {
-    static auto instance = std::make_shared<Backend>();
-    return instance;
+    // Once per process: the first caller that wants a device takes the measurement, and every
+    // later one reads its cached answer, including a miss. A fresh exception is built per call
+    // rather than rethrowing a shared one, so concurrent callers do not share an exception
+    // object.
+    static const ProbeOutcome outcome = probeBackend();
+    if (outcome.backend)
+        return outcome.backend;
+    switch (outcome.kind) {
+    case ProbeOutcome::Kind::DeviceMissing:
+        throw DeviceUnavailable(outcome.ordinal, outcome.reason);
+    case ProbeOutcome::Kind::Fault:
+        throw std::runtime_error(outcome.reason);
+    case ProbeOutcome::Kind::Unavailable:
+    default:
+        throw BackendUnavailable(outcome.reason);
+    }
 }
 Backend &backend() { return *sharedBackend(); }
 } // namespace camel::tiles::cuda_detail

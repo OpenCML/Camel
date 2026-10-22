@@ -53,11 +53,6 @@ namespace camel::compile::gir {
 class DraftGraphBuilder {
   public:
     using FuncTarget = graph_ptr_t;
-    /// The graphs of a LOOP node: the condition (null for a For loop) and the body.
-    struct LoopTarget {
-        graph_ptr_t cond;
-        graph_ptr_t body;
-    };
     using DrefTarget = std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>;
 
     explicit DraftGraphBuilder(camel::core::type::FunctionType *funcType = nullptr);
@@ -110,12 +105,12 @@ class DraftGraphBuilder {
 
     runtime::DraftNodeRef addStaticDataNode(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType = nullptr);
-    runtime::DraftNodeRef 
+    runtime::DraftNodeRef
     addPortNode(camel::core::type::Type *type, std::string name, bool isWith);
     runtime::DraftNodeRef addCastNode(camel::core::type::Type *type);
     runtime::DraftNodeRef addCopyNode(camel::core::type::Type *type);
     runtime::DraftNodeRef addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body);
-    runtime::DraftNodeRef 
+    runtime::DraftNodeRef
     addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload);
     runtime::DraftNodeRef addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex);
     runtime::DraftNodeRef addAccsNode(camel::core::type::Type *type, std::string key);
@@ -123,14 +118,15 @@ class DraftGraphBuilder {
         camel::core::type::Type *type, runtime::DraftNodeRef joinNode, runtime::gc_cnt_t armCount);
     runtime::DraftNodeRef addJoinNode(
         camel::core::type::Type *type, runtime::DraftNodeRef brchNode, runtime::gc_cnt_t armCount);
-    runtime::DraftNodeRef 
+    runtime::DraftNodeRef
     addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body = {});
     runtime::DraftNodeRef addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex);
     runtime::DraftNodeRef addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex);
-    /// A LOOP node of form `kind` running `target` (camel/runtime/loop.h); its value has type
-    /// `type`. The two graphs are made dependencies of this one.
-    runtime::DraftNodeRef 
-    addLoopNode(camel::core::LoopKind kind, const LoopTarget &target, camel::core::type::Type *type);
+    /// A LOOP node of form `kind` (camel/runtime/loop.h) whose condition and body are regions of
+    /// this graph; its value has type `type`.
+    runtime::DraftNodeRef addRegionLoopNode(camel::core::LoopKind kind, camel::core::type::Type *type);
+    /// A Port node that is a port of a region (the state of a loop), not a parameter of the graph.
+    runtime::DraftNodeRef addRegionPortNode(camel::core::type::Type *type, std::string name);
     /// Makes the OPER node `node` call `op` instead, an overload with the same parameters and
     /// result type (the node's inputs, outputs and slot are kept).
     void retargetOperNode(runtime::DraftNodeRef node, const oper_idx_ptr_t &op);
@@ -145,9 +141,14 @@ class DraftGraphBuilder {
     void eraseSubGraph(const graph_ptr_t &graph);
     void addStaticGraphRef(const graph_ptr_t &graph);
     void eraseStaticGraphRef(const graph_ptr_t &graph);
+    /// A graph a declaration tag of this graph's declaration names (a derivative rule). It is
+    /// kept in the reference table so that it is encoded with the program and can be read back
+    /// from the frozen graph.
+    void addRuleGraphRef(const graph_ptr_t &graph);
     const std::vector<graph_ptr_t> &dependencyGraphs() const { return dependencyGraphs_; }
     const std::vector<graph_ptr_t> &subGraphs() const { return subGraphs_; }
     const std::vector<graph_ptr_t> &staticGraphRefs() const { return staticGraphRefs_; }
+    const std::vector<graph_ptr_t> &ruleGraphs() const { return ruleGraphRefs_; }
 
     const std::string &nodePortName(runtime::DraftNodeRef node) const;
     const std::string &nodePortName(runtime::gc_node_ref_t nodeId) const {
@@ -156,10 +157,6 @@ class DraftGraphBuilder {
     const FuncTarget &funcTarget(runtime::DraftNodeRef node) const;
     const FuncTarget &funcTarget(runtime::gc_node_ref_t nodeId) const {
         return funcTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
-    }
-    const LoopTarget &loopTarget(runtime::DraftNodeRef node) const;
-    const LoopTarget &loopTarget(runtime::gc_node_ref_t nodeId) const {
-        return loopTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
     }
     const DrefTarget &drefTarget(runtime::DraftNodeRef node) const;
     const DrefTarget &drefTarget(runtime::gc_node_ref_t nodeId) const {
@@ -208,12 +205,12 @@ class DraftGraphBuilder {
 
     std::unordered_map<runtime::gc_node_ref_t, std::string> nodePortNames_;
     std::unordered_map<runtime::gc_node_ref_t, FuncTarget> funcTargets_;
-    std::unordered_map<runtime::gc_node_ref_t, LoopTarget> loopTargets_;
     std::unordered_map<runtime::gc_node_ref_t, DrefTarget> drefTargets_;
     std::unordered_map<runtime::gc_node_ref_t, oper_idx_ptr_t> operTargets_;
     std::vector<graph_ptr_t> dependencyGraphs_;
     std::vector<graph_ptr_t> subGraphs_;
     std::vector<graph_ptr_t> staticGraphRefs_;
+    std::vector<graph_ptr_t> ruleGraphRefs_;
     std::unordered_map<const ::OperatorIndex *, std::shared_ptr<::OperatorIndex>>
         operIndexRegistry_;
     mutable ExtraStorage<4> extras_;

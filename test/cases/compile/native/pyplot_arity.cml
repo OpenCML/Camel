@@ -1,0 +1,14 @@
+/**
+ * The declaration of `pyplot:plot` takes one or two ordinary arguments: a third is refused at
+ * the call, and the overloads the message lists are the declarations' two arities from
+ * `stdlib/pyplot.cml`, not the C++ module's `(data: (typeas T)[], filename?: string)` (handover
+ * H166).
+ */
+module pyplot_arity
+
+import { plot } from pyplot
+
+func main(): int sync {
+    plot([1.0, 2.0], "out.png", 3)
+    return 0
+}

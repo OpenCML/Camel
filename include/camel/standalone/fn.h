@@ -128,8 +128,9 @@ template <typename T> class Cell {
         return rep_->value;
     }
     /// The value, moved out for an assignment that computes the new value from it and then
-    /// stores it with set() (`acc = acc->append<v>`, :op/assn_append): an array the cell held
-    /// alone is then grown in place. Nothing reads the cell between take() and set().
+    /// stores it with set() (`acc = acc->append<v>`, the in-place form of `append`): an array
+    /// the cell held alone is then grown in place. Nothing reads the cell between take() and
+    /// set().
     T take() const noexcept { return std::move(rep_->value); }
 
   private:

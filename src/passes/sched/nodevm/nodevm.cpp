@@ -28,6 +28,8 @@
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/loop_frame.h"
 #include "camel/execute/observer.h"
+#include "camel/profile/operators.h"
+#include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
 #include "camel/utils/log.h"
@@ -57,6 +59,21 @@ using camel::runtime::GCNode;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::kInvalidNodeRef;
+
+/// Whether `loop` is a region form of its graph: a LOOP node owns a condition region and a body
+/// region (camel/runtime/graph.h). The graph form of a loop (two graphs in the LOOP body) is not
+/// built any more, and NodeVM does not execute it.
+[[maybe_unused]] bool hasLoopRegions(const camel::runtime::GCGraph &graph, gc_node_ref_t loop) {
+    for (uint32_t r = 0; r < graph.regionCount(); ++r) {
+        const camel::runtime::GCRegion *region = graph.region(r);
+        if (region != nullptr && region->owner == loop &&
+            (region->kind == camel::runtime::GCRegionKind::LoopCond ||
+             region->kind == camel::runtime::GCRegionKind::LoopBody)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 void bindMarkedFunctionFrame(
     Frame *frame, Function *func, std::span<const slot_t> normArgs,
@@ -350,6 +367,11 @@ slot_t NodeVMSchedPass::call(
                 skipNode = kInvalidNodeRef;
                 tillNode = joinNode;
             }
+            // The body's tuple FILL of a loop whose state is kept as its components: nothing
+            // reads the tuple, and the loop takes the components themselves (ExecPlan::elidedAt).
+            if (hasLoops && !currPlan->elidedAt.empty() && currPlan->elidedAt[i]) [[unlikely]] {
+                continue;
+            }
 
             // Debugger hook: live in release builds, one load of a pointer when no observer
             // is installed. It fires after branch-skip resolution and before the node
@@ -463,7 +485,7 @@ slot_t NodeVMSchedPass::call(
                     "BRCH ref {}: jumpIdx={}, branches={}, tillNode={}, skipNode={}, joinNode={}",
                     nodeRef,
                     jumpIdx,
-                    arms.size(),
+                    en.armCount,
                     tillNode,
                     skipNode,
                     joinNode));
@@ -517,7 +539,6 @@ slot_t NodeVMSchedPass::call(
             } break;
 
             case GCNodeKind::Func: {
-                auto *callerRuntimeGraph = currRuntimeGraph;
                 auto *runtimeTarget      = currProgram->graph(currPlan->directCallTargetIds[i]);
                 ASSERT(
                     runtimeTarget != nullptr,
@@ -581,7 +602,7 @@ slot_t NodeVMSchedPass::call(
                     const std::string uri(body->uri());
                     auto found = context_->execMgr().find(uri);
                     if (found) {
-                        opFunc = *found;
+                        opFunc = camel::profile::profiledOperator(uri, *found);
                         currPlan->resolvedOpers[nodeRef].store(opFunc, std::memory_order_relaxed);
                     } else {
                         if (camel::core::OperatorTable::instance().isMarked(body->oper)) {
@@ -598,8 +619,14 @@ slot_t NodeVMSchedPass::call(
             } break;
 
             case GCNodeKind::Loop:
-                // The rounds ran at the events of the plan; the state is the value.
-                ASSERT(hasLoops, "NodeVM runs only loops that are regions of their graph.");
+                // Every loop the builders make is a region of its graph: its rounds ran at the
+                // events of the plan and the state is its value. A loop of the old graph form (a
+                // condition graph and a body graph, run a call per round) is not executed; the
+                // plans above prove no such loop reaches this point.
+                ASSERT(
+                    hasLoopRegions(*currRuntimeGraph, nodeRef),
+                    "NodeVM: a LOOP node is not a region of its graph (the graph form of a loop "
+                    "must not remain).");
                 break;
 
             case GCNodeKind::Port:
@@ -676,6 +703,9 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     camel::runtime::GCGraph *graph = program->root();
     (void)os;
     ASSERT(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
+    if (camel::profile::enabled()) {
+        camel::profile::setBackend("std::nvm");
+    }
     camel::execute::RunScope runScope(programs_, *context_, program);
     Frame *rootFrame = framePool_.acquire(graph);
     slot_t result    = call(graph, rootFrame);
@@ -921,6 +951,11 @@ slot_t NodeVMSchedPass::evalNativeOperator(
     FrameArgsView normView(*currFrame, nargs);
     withView.setResultType(en.node->dataType());
     normView.setResultType(withView.resultType());
+    // What a pass recorded about this node (design principles 9.6); the operator's module reads
+    // its own keys, the scheduler knows none.
+    const camel::core::attr::AttrSetId attrs = currRuntimeGraph->nodeAttrs(en.ref);
+    withView.setAttrs(attrs);
+    normView.setAttrs(attrs);
 
     if (camel::core::effect_trace::enabled()) [[unlikely]] {
         camel::core::effect_trace::setSite(currRuntimeGraph->nodeOrigin(en.ref));
@@ -942,3 +977,4 @@ slot_t NodeVMSchedPass::evalNativeOperator(
     camel::execute::FunctionCallScope callScope(*context_, std::move(invoker));
     return (*opFunc)(withView, normView, *context_);
 }
+

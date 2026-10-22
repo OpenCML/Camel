@@ -1,0 +1,21 @@
+/**
+ * The declarations of `algo` are what an importer sees: `argsort` has its six declared key
+ * element types and gives `int[]`, while the seven operators whose result type comes from the
+ * element type of their array (`sort`, `merge_sorted_arrays`, `flatten`, `unique`, ...) still
+ * answer from the C++ resolver. Every call reaches the C++ operator (handover H19, step 10;
+ * H135).
+ */
+module algo_declaration_import
+
+import { sort, argsort, merge_sorted_arrays, flatten, unique } from algo
+
+func main(): int sync {
+    println(argsort([30, 10, 20]))
+    println(argsort([2.5, 1.5, 3.5]))
+    println(argsort(['pear', 'fig', 'apple']))
+    println(sort([3, 1, 2]))
+    println(merge_sorted_arrays([1, 3], [2, 4]))
+    println(flatten([[1, 2], [3]]))
+    println(unique([3, 1, 3, 2, 1]))
+    return 0
+}

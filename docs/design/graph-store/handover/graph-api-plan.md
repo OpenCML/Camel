@@ -25,7 +25,7 @@
 | 节点属性（标签）：驻留的标签集合编号 | `include/camel/core/node_attrs.h` |
 | 原生模块可以导出算子组和不透明类型（`Tensor`、`Map`、`Set` 是 `OtherType`），算子带类型解析器、纯度/资源声明 | `modules/tree/module.cpp`、`modules/tensor` |
 | 运行 Camel 代码于另一个程序之上的先例：`std::macro` 的 `MacroEvaluator(context, program)` 在遍里求值 Camel 函数，并要求求值与草稿不同时存在（safepoint 会移动对象） | `src/execute/macro/macro.cpp` 开头注释 |
-| 枚举（H1）已实现：`type E = enum {…}`、`match`；联合类型 `A\|B` 与 `T?` 已退役 | `docs/handover/reports/H1.md` |
+| 枚举（H1）已实现：`type E = enum {…}`、`match`；联合类型 `A\|B` 与 `T?` 已退役 | `handover note ⟨d80a283⟩ (H1)` |
 | 现有遍都是 C++：`std::opt` 等通过 `RuntimeGraphDraftSession` + 草稿；没有任何地方以 Camel 值的形式暴露图 | `src/passes/` |
 
 ## 2. 暴露的值类型

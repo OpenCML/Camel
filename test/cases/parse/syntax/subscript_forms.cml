@@ -1,0 +1,32 @@
+/**
+ * Every form of a subscript (design principles 5.4): a slice with both bounds, with only one,
+ * with neither, with a step, an int-array index (the `take` of the first dimension) and
+ * `last(xs)`. The forms whose view needs H17 have their own cases.
+ */
+module subscript_forms
+
+func part(xs: int[], a: int, b: int): int[] { return xs[a:b] }
+
+func after(xs: int[], a: int): int[] { return xs[a:] }
+
+func till(xs: int[], b: int): int[] { return xs[:b] }
+
+func whole(xs: int[]): int[] { return xs[:] }
+
+func stepped(xs: int[], a: int, b: int): int[] { return xs[a:b:1] }
+
+func rows(xs: int[], idx: int[]): int[] { return xs[idx] }
+
+func end(xs: int[]): int { return last(xs) }
+
+func main(): int sync {
+    let xs = [1, 2, 3, 4]
+    'part {}'->format<part(xs, 1, 3)>->println
+    'after {}'->format<after(xs, 2)>->println
+    'till {}'->format<till(xs, 2)>->println
+    'whole {}'->format<whole(xs)>->println
+    'stepped {}'->format<stepped(xs, 0, 4)>->println
+    'rows {}'->format<rows(xs, [2, 0])>->println
+    'end {}'->format<end(xs)>->println
+    return 0
+}

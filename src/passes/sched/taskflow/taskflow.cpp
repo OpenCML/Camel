@@ -30,6 +30,8 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/profile/operators.h"
+#include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
@@ -1031,6 +1033,9 @@ const camel::runtime::Program *
 TaskflowExecSchedPass::apply(const camel::runtime::Program *program, std::ostream & /*os*/) {
     camel::runtime::GCGraph *graph = program->root();
     ASSERT(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
+    if (camel::profile::enabled()) {
+        camel::profile::setBackend("std::taskflow");
+    }
     camel::execute::RunScope runScope(programs_, *context_, program);
 
     forceLinear_ = options_.linear;
@@ -1944,6 +1949,10 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
                 oper.end - oper.normBegin};
             FrameArgsView withView(*frame, wargs);
             FrameArgsView normView(*frame, nargs);
+            // What a pass recorded about this node (design principles 9.6).
+            const auto attrs = graph->nodeAttrs(nodeRef);
+            withView.setAttrs(attrs);
+            normView.setAttrs(attrs);
             if (camel::core::effect_trace::enabled()) [[unlikely]] {
                 camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));
             }
@@ -1962,7 +1971,8 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
         raiseFault(RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri), graph, nodeRef);
     }
     if (prepared) {
-        plan->shared->resolvedOpers[nodeRef].store(*opFunc, std::memory_order_release);
+        plan->shared->resolvedOpers[nodeRef].store(
+            camel::profile::profiledOperator(uri, *opFunc), std::memory_order_release);
     }
 
     std::vector<runtime_data_idx_t> withIndices;
@@ -1980,12 +1990,15 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     data_arr_t nargs{normIndices.data(), normIndices.size()};
     FrameArgsView withView(*frame, wargs);
     FrameArgsView normView(*frame, nargs);
+    const auto attrs = graph->nodeAttrs(nodeRef);
+    withView.setAttrs(attrs);
+    normView.setAttrs(attrs);
 
     if (camel::core::effect_trace::enabled()) [[unlikely]] {
         camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));
     }
     try {
-        return invoke(*opFunc, withView, normView);
+        return invoke(camel::profile::profiledOperator(uri, *opFunc), withView, normView);
     } catch (const RuntimeFault &fault) {
         // Reported at the operator, as on the other back ends (it used to be the start of
         // the enclosing graph).

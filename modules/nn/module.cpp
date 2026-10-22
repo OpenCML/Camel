@@ -19,6 +19,9 @@
 
 #include "module.h"
 
+#include <algorithm>
+#include <string_view>
+
 #include "../tensor/ops/registry.h"
 #include "camel/core/context/context.h"
 #include "camel/core/module/module.h"
@@ -31,13 +34,34 @@
 using namespace camel::core::context;
 using namespace camel::core::module;
 
+namespace {
+
+/// The operators whose signatures `stdlib/nn.cml` declares (handover H19, step 10; H165). The
+/// C++ side keeps their kernels, executors, traits, resources and semantics; the declaration is
+/// the module's signature, so their groups are not exported here. `save_params` comes from the
+/// optimizer groups rather than the tensor registry, but it stays on this list: the registry
+/// loop below must never export a declared name, whether or not that name moves into the
+/// registry.
+constexpr std::string_view kDeclaredOperators[] = {
+    "save_params",
+};
+
+bool isDeclaredOperator(std::string_view name) {
+    return std::find(std::begin(kDeclaredOperators), std::end(kDeclaredOperators), name) !=
+           std::end(kDeclaredOperators);
+}
+
+} // namespace
+
 NnModule::NnModule(context_ptr_t ctx) : BuiltinModule("nn", ctx) {
     // nn's operators rely on the tensor catalog (and its tangent space) being registered.
     camel::tensor::ops::registerTensorOps();
     camel::nn::registerNnTensorOps();
     exportType(Reference("OptimizerState"), camel::nn::OptimizerStateType::Default());
     for (const auto &group : camel::tensor::ops::OpRegistry::instance().operatorGroups("nn")) {
-        exportEntity(group->name(), group);
+        if (!isDeclaredOperator(group->name())) {
+            exportEntity(group->name(), group);
+        }
     }
     for (const auto &group : camel::nn::optimizerOperatorGroups()) {
         exportEntity(group->name(), group);

@@ -47,6 +47,7 @@
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
 #include "config.h"
+#include "module_failures.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/tns/topo_node_seq.h"
 #include "service/codegen/source/generator.h"
@@ -60,6 +61,7 @@
 #include <fcntl.h>
 #include <filesystem>
 #include <format>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -209,7 +211,8 @@ std::string resolveEntryDir(const std::string &inputPath) {
 std::vector<std::string> buildSearchPathsForEntry(const std::string &entryDir) {
     auto searchPaths = camel::utils::buildModuleSearchPaths(
         entryDir,
-        camel::utils::ModuleSearchPathOptions{.stdlibOverride = Run::stdLibPath});
+        camel::utils::ModuleSearchPathOptions{
+            .stdlibOverride = Run::stdLibPath, .includeDirs = Run::includeDirs});
     auto installRoot = camel::utils::resolveInstallRoot();
     std::size_t n    = 0;
     for (const auto &p : searchPaths) {
@@ -272,14 +275,45 @@ RunInvocation makeRunInvocation(const std::string &inputPath) {
     return invocation;
 }
 
-void emitRuntimeFailure(
-    const context_ptr_t &ctx, bool useJsonFormat, std::ostream &os, std::string_view fallback) {
-    const auto &diags = ctx->runtimeDiagSink();
-    if (diags->hasErrors()) {
-        diags->dump(os, useJsonFormat);
-    } else {
-        os << fallback << endl;
+/// Writes the diagnostics of a failed iteration; returns whether it wrote any.
+using TimeitDiagnosticsEmitter = std::function<bool(std::ostream &, bool)>;
+
+/// The report of one failed `--timeit` iteration. Text mode writes the `[timeit] i/N` line the
+/// completed iterations write, with `failed` in place of the time, then the diagnostics; the
+/// number is the one the failures are counted by. JSON mode writes one timeit object that names
+/// the 1-based `iteration` that failed (before H16 item 6 a failed run said nothing about it) and
+/// keeps the samples of the iterations that did complete, so a reader can tell how far the run got
+/// and what ended it. `emitDiagnostics` returns false when there is nothing to write; `fallback`
+/// is the sentence used then.
+void reportTimeitIterationFailure(
+    std::ostream &os, bool useJsonFormat, unsigned int iteration,
+    const std::vector<double> &samplesMs, std::string_view fallback,
+    const TimeitDiagnosticsEmitter &emitDiagnostics) {
+    if (!useJsonFormat) {
+        os << std::format(
+            "[timeit] {}/{} pass={} failed\n",
+            iteration,
+            Run::timeitIterations,
+            Run::timeitPass);
+        if (!emitDiagnostics(os, false) && !fallback.empty()) {
+            os << fallback << '\n';
+        }
+        return;
     }
+
+    os << "{\n"
+       << "  \"kind\": \"timeit\",\n"
+       << "  \"failed\": true,\n"
+       << "  \"iteration\": " << iteration << ",\n"
+       << "  \"iterations\": " << Run::timeitIterations << ",\n"
+       << "  \"pass\": " << nlohmann::json(Run::timeitPass).dump() << ",\n"
+       << "  \"samples_ms\": " << nlohmann::json(samplesMs).dump();
+    if (!fallback.empty()) {
+        os << ",\n  \"failure\": " << nlohmann::json(std::string(fallback)).dump();
+    }
+    os << ",\n  \"diagnostics\": [";
+    emitDiagnostics(os, true);
+    os << "]\n}\n";
 }
 
 std::optional<size_t> resolveTimedPassIndex(
@@ -432,8 +466,26 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             CAMEL_LOG_INFO_S("Main", "run | parse | done | {}", inputPath);
 
             invocation->mainModule->compile(CompileStage::Done);
-            if (!invocation->mainModule->loaded()) {
-                invocation->ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+            // The same question every output path asks (module_failures.h): a program that did
+            // not compile has no time to report, and a declaration module that did not load is
+            // an error in a module's diagnostics like any other. The scope is the program's
+            // dependencies: a pass library the pass list loaded is not part of the program the
+            // iteration times, and its failure belongs to pass resolution, not to the compile.
+            const bool compileFailed =
+                camel_cli::findModuleFailures(
+                    invocation->ctx, camel_cli::ModuleScope::ProgramDependencies)
+                    .any;
+            if (compileFailed) {
+                reportTimeitIterationFailure(
+                    os,
+                    useJsonFormat,
+                    iteration + 1,
+                    samplesMs,
+                    "",
+                    [ctx = invocation->ctx](std::ostream &out, bool json) {
+                        ctx->dumpAllModuleDiagnostics(out, json, !json);
+                        return true;
+                    });
                 return 1;
             }
 
@@ -453,6 +505,38 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                 stdoutFdRedirect.emplace(stdout);
                 stderrFdRedirect.emplace(stderr);
             }
+            auto restoreOutput = [&]() {
+                if (stdoutFdRedirect)
+                    stdoutFdRedirect->restore();
+                if (stderrFdRedirect)
+                    stderrFdRedirect->restore();
+                if (coutRedirect)
+                    coutRedirect->restore();
+                if (cerrRedirect)
+                    cerrRedirect->restore();
+            };
+            // The runtime diagnostics of this iteration, for the failure report. A failed pass
+            // always has at least one; the report's fallback sentence covers the paths that do
+            // not (the timed pass consumed no graph, an exception without a diagnostic, ...).
+            const TimeitDiagnosticsEmitter runtimeDiagnostics =
+                [diags = invocation->ctx->runtimeDiagSink()](std::ostream &out, bool json) {
+                    if (!diags->hasErrors()) {
+                        return false;
+                    }
+                    diags->dump(out, json, !json);
+                    return true;
+                };
+            auto failIteration = [&](std::string_view fallback) {
+                restoreOutput();
+                reportTimeitIterationFailure(
+                    os,
+                    useJsonFormat,
+                    iteration + 1,
+                    samplesMs,
+                    fallback,
+                    runtimeDiagnostics);
+                return 1;
+            };
             const camel::runtime::Program *program = invocation->ctx->runtimeProgram();
             try {
                 // The list is run in three parts; all names are checked before the first.
@@ -463,45 +547,19 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                     program,
                     Run::entryArgs);
                 if (program == nullptr) {
-                    if (stdoutFdRedirect)
-                        stdoutFdRedirect->restore();
-                    if (stderrFdRedirect)
-                        stderrFdRedirect->restore();
-                    if (coutRedirect)
-                        coutRedirect->restore();
-                    if (cerrRedirect)
-                        cerrRedirect->restore();
-                    emitRuntimeFailure(
-                        invocation->ctx,
-                        useJsonFormat,
-                        os,
-                        "the arguments of main could not be bound.");
-                    return 1;
+                    return failIteration("the arguments of main could not be bound.");
                 }
                 if (!prefixPasses.empty()) {
                     auto prefixResult =
                         applyPassesDetailed(program, prefixPasses, invocation->ctx, execOs);
                     program = prefixResult.program;
                     if (prefixResult.failed()) {
-                        if (stdoutFdRedirect)
-                            stdoutFdRedirect->restore();
-                        if (stderrFdRedirect)
-                            stderrFdRedirect->restore();
-                        if (coutRedirect)
-                            coutRedirect->restore();
-                        if (cerrRedirect)
-                            cerrRedirect->restore();
-                        emitRuntimeFailure(
-                            invocation->ctx,
-                            useJsonFormat,
-                            os,
-                            "execution failed before the timed pass.");
-                        return 1;
+                        return failIteration("execution failed before the timed pass.");
                     }
                     if (prefixResult.consumed()) {
-                        os << "execution was consumed before timed pass '" << Run::timeitPass
-                           << "' was reached." << endl;
-                        return 1;
+                        return failIteration(std::format(
+                            "execution was consumed before timed pass '{}' was reached.",
+                            Run::timeitPass));
                     }
                 }
 
@@ -516,20 +574,7 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                     std::chrono::duration<double, std::milli>(endedAt - startedAt).count();
 
                 if (timedResult.failed()) {
-                    if (stdoutFdRedirect)
-                        stdoutFdRedirect->restore();
-                    if (stderrFdRedirect)
-                        stderrFdRedirect->restore();
-                    if (coutRedirect)
-                        coutRedirect->restore();
-                    if (cerrRedirect)
-                        cerrRedirect->restore();
-                    emitRuntimeFailure(
-                        invocation->ctx,
-                        useJsonFormat,
-                        os,
-                        "timed pass execution failed without diagnostics.");
-                    return 1;
+                    return failIteration("timed pass execution failed without diagnostics.");
                 }
 
                 program = timedResult.program;
@@ -538,20 +583,7 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                         applyPassesDetailed(program, suffixPasses, invocation->ctx, execOs);
                     program = suffixResult.program;
                     if (suffixResult.failed()) {
-                        if (stdoutFdRedirect)
-                            stdoutFdRedirect->restore();
-                        if (stderrFdRedirect)
-                            stderrFdRedirect->restore();
-                        if (coutRedirect)
-                            coutRedirect->restore();
-                        if (cerrRedirect)
-                            cerrRedirect->restore();
-                        emitRuntimeFailure(
-                            invocation->ctx,
-                            useJsonFormat,
-                            os,
-                            "execution failed after the timed pass.");
-                        return 1;
+                        return failIteration("execution failed after the timed pass.");
                     }
                 }
 
@@ -559,31 +591,11 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                     auto fallbackResult =
                         applyPassesDetailed(program, Run::fallbackPasses, invocation->ctx, execOs);
                     if (fallbackResult.failed()) {
-                        if (stdoutFdRedirect)
-                            stdoutFdRedirect->restore();
-                        if (stderrFdRedirect)
-                            stderrFdRedirect->restore();
-                        if (coutRedirect)
-                            coutRedirect->restore();
-                        if (cerrRedirect)
-                            cerrRedirect->restore();
-                        emitRuntimeFailure(
-                            invocation->ctx,
-                            useJsonFormat,
-                            os,
-                            "fallback execution failed after the timed pass.");
-                        return 1;
+                        return failIteration("fallback execution failed after the timed pass.");
                     }
                 }
 
-                if (stdoutFdRedirect)
-                    stdoutFdRedirect->restore();
-                if (stderrFdRedirect)
-                    stderrFdRedirect->restore();
-                if (coutRedirect)
-                    coutRedirect->restore();
-                if (cerrRedirect)
-                    cerrRedirect->restore();
+                restoreOutput();
                 samplesMs.push_back(elapsedMs);
                 if (!useJsonFormat) {
                     os << std::format(
@@ -594,50 +606,69 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                         elapsedMs);
                 }
             } catch (Diagnostic &d) {
-                if (stdoutFdRedirect)
-                    stdoutFdRedirect->restore();
-                if (stderrFdRedirect)
-                    stderrFdRedirect->restore();
-                if (coutRedirect)
-                    coutRedirect->restore();
-                if (cerrRedirect)
-                    cerrRedirect->restore();
+                restoreOutput();
                 if (!d.persisted) {
                     invocation->ctx->runtimeDiagSink()->add(std::move(d));
                 }
-                emitRuntimeFailure(
-                    invocation->ctx,
-                    useJsonFormat,
-                    os,
-                    "timed execution raised a diagnostic without details.");
-                return 1;
+                return failIteration("timed execution raised a diagnostic without details.");
             }
 
             lastRunExitCode = invocation->ctx->processExitCodeOr(0);
         } catch (DiagnosticsLimitExceededBaseException &) {
-            if (invocation && invocation->ctx) {
-                // The diagnostic that ended the run is a runtime one when a pass or the
-                // binding of main's arguments reported it; the module diagnostics otherwise.
-                if (const auto &diags = invocation->ctx->runtimeDiagSink(); diags->hasErrors()) {
-                    diags->dump(os, useJsonFormat);
-                } else {
-                    invocation->ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
-                }
-            }
+            // The diagnostic that ended the run is a runtime one when a pass or the binding of
+            // main's arguments reported it; the module diagnostics otherwise.
+            const TimeitDiagnosticsEmitter diagnostics =
+                invocation && invocation->ctx
+                    ? TimeitDiagnosticsEmitter([ctx = invocation->ctx](
+                                                   std::ostream &out, bool json) {
+                          if (const auto &diags = ctx->runtimeDiagSink(); diags->hasErrors()) {
+                              diags->dump(out, json, !json);
+                          } else {
+                              ctx->dumpAllModuleDiagnostics(out, json, !json);
+                          }
+                          return true;
+                      })
+                    : TimeitDiagnosticsEmitter([](std::ostream &, bool) { return false; });
+            reportTimeitIterationFailure(
+                os, useJsonFormat, iteration + 1, samplesMs, "", diagnostics);
             return 1;
         } catch (Diagnostic &d) {
             if (invocation && invocation->parser) {
                 RangeConverter conv(invocation->parser->tokenPositions());
                 d.fetchRange(conv);
             }
-            os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText()) << endl;
+            reportTimeitIterationFailure(
+                os,
+                useJsonFormat,
+                iteration + 1,
+                samplesMs,
+                "uncaught diagnostic",
+                [&d](std::ostream &out, bool json) {
+                    out << (json ? d.toJson() : d.toText());
+                    if (!json) {
+                        out << '\n';
+                    }
+                    return true;
+                });
             return 1;
         } catch (exception &e) {
-            os << e.what() << endl;
+            reportTimeitIterationFailure(
+                os,
+                useJsonFormat,
+                iteration + 1,
+                samplesMs,
+                e.what(),
+                [](std::ostream &, bool) { return false; });
             ASSERT(false, e.what());
             return 1;
         } catch (...) {
-            os << "Unknown error occurred." << endl;
+            reportTimeitIterationFailure(
+                os,
+                useJsonFormat,
+                iteration + 1,
+                samplesMs,
+                "Unknown error occurred.",
+                [](std::ostream &, bool) { return false; });
             ASSERT(false, "Unknown error occurred.");
             return 1;
         }

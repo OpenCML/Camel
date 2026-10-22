@@ -10,13 +10,16 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[4]
 EXE = os.environ.get('CAMEL_EXE', str(ROOT / 'out/latest/bin' / ('camel.exe' if os.name == 'nt' else 'camel')))
-ENV = dict(os.environ, CAMEL_HOME=str(ROOT / 'out/latest'), CAMEL_GC='generational',
+ENV = dict(os.environ, CAMEL_HOME=str(ROOT / 'out/latest'),
            CAMEL_GC_VERIFY='both', CAMEL_GC_STRESS_SAFEPOINT='1', CAMEL_GC_STRESS_MODE='minor')
 
 
 def run(passes, env=ENV):
-    return subprocess.run([EXE, str(Path(__file__).with_suffix('.cml')), *passes],
-                          cwd=ROOT, env=env, capture_output=True, text=True, timeout=90)
+    # One invocation is about 7 s alone; the sweep runs eight tests at once, and a shared host
+    # can multiply that, so the per-run budget is 240 s rather than 90 s (the H75 plan budget is
+    # 360 s).
+    return subprocess.run([EXE, '--gc', 'generational', str(Path(__file__).with_suffix('.cml')), *passes],
+                          cwd=ROOT, env=env, capture_output=True, text=True, timeout=240)
 
 
 for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
@@ -33,14 +36,13 @@ for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
             assert len(lines) == 7, lines
             for line in lines[5:]:
                 graph = json.loads(line)
-                if vm == 'std::nvm' or passes[0] == 'tiles::compile':
-                    assert graph['regions'] == [], graph
-                    assert sum(n['reason'] == 'context_arguments' for n in graph['excluded']) == 1, graph
-                else:
-                    # Lowered backends give graph-inspecting operators the original
-                    # structured graph. The decorator's private runtime copy is separate.
-                    assert len(graph['regions']) == 1, graph
-                    assert len(graph['regions'][0]['outputs']) == 1, graph
+                # The decorated value's graph is the outlined graph on every backend: a
+                # function value carries its own program and graph, so a graph-inspecting
+                # operator no longer sees a lowered backend's private copy. The single region
+                # the decorator outlined is the call the analysis excludes as a context
+                # argument.
+                assert graph['regions'] == [], graph
+                assert sum(n['reason'] == 'context_arguments' for n in graph['excluded']) == 1, graph
     print(f'{vm}: multi-state LOOP pass/decorator, CPU boundaries and hidden CUDA PASS')
 
 result = run(['tiles::compile', 'std::jgir'])

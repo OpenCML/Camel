@@ -24,6 +24,8 @@
 #include "camel/core/type/tree.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/function_call.h"
+#include "camel/profile/profile.h"
+#include "camel/utils/log.h"
 #include "modules/tensor/ops/registry.h"
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
@@ -32,6 +34,7 @@
 #include "tiles/internal/compiled_region.h"
 #include "tiles/internal/dispatch.h"
 #include "tiles/internal/graph_values.h"
+#include "tiles/internal/profile_hooks.h"
 #include "tiles/internal/regions.h"
 #include "tiles/internal/tree_transfer.h"
 #include "tiles/program.h"
@@ -50,6 +53,13 @@ namespace td = core::rtdata;
 template <class F> slot_t checked(F &&body) {
     try {
         return body();
+    } catch (const DeviceUnavailable &e) {
+        // The run named this device (`--devices`); it is missing, so the report names it rather
+        // than moving the work to the host.
+        core::error::throwRuntimeFault(
+            core::error::RuntimeDiag::DeviceUnavailable,
+            std::to_string(e.ordinal()),
+            e.what());
     } catch (const std::exception &e) {
         core::error::throwRuntimeFault(
             core::error::RuntimeDiag::RuntimeError,
@@ -120,8 +130,7 @@ slot_t runPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
         if (tensor::asTensorType(type)) {
             const auto &shape  = program->nodes[program->outputs.at(leaf++)].shape;
             const size_t count = elements(shape);
-            auto *out =
-                tensor::createTensor(TypeCode::Float32, shape, core::mm::autoSpace());
+            auto *out = tensor::createTensor(TypeCode::Float32, shape, core::mm::autoSpace());
             if (count)
                 std::memcpy(out->rawData(), data.data() + offset, count * sizeof(float));
             offset += count * sizeof(float);
@@ -155,7 +164,9 @@ slot_t runCompiledKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t preferGpuKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::shared_ptr<const Program> program;
     const bool supported = checked([&] {
-        (void)configuredCudaOrdinal();
+        // `--devices cpu`: the host path, exactly as when no device is available.
+        if (!configuredCudaOrdinal())
+            return false;
         try {
             (void)deviceInfo();
             program = std::make_shared<const Program>(prepare(with, norm, ctx));
@@ -181,7 +192,11 @@ slot_t preferGpuKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
     return execute::invokeFunction(ctx, function, {}, arguments);
 }
-slot_t availableKernel(ArgsView &, ArgsView &, Context &) { return td::toSlot(available()); }
+slot_t availableKernel(ArgsView &, ArgsView &, Context &) {
+    // checked, so that a device the run named and that is missing is a diagnostic rather than
+    // "no device here": `available()` answers a capability question, not a configuration one.
+    return checked([] { return td::toSlot(available()); });
+}
 slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &ctx);
 slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
     auto *owner = new std::shared_ptr<DeviceValue>(std::move(resident));
@@ -297,8 +312,7 @@ slot_t hostResidentValue(Type *hostType, slot_t value, bool retain) {
     }
     if (resident->dtype != DType::F32)
         throw std::runtime_error("resident tensor type mismatch");
-    auto *tensor =
-        tensor::createTensor(TypeCode::Float32, resident->shape, core::mm::autoSpace());
+    auto *tensor = tensor::createTensor(TypeCode::Float32, resident->shape, core::mm::autoSpace());
     if (!data.empty())
         std::memcpy(tensor->rawData(), data.data(), data.size());
     return td::toSlot(tensor);
@@ -340,7 +354,8 @@ slot_t runHostResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 slot_t retainPreferredKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const bool gpu = checked([&] {
-        (void)configuredCudaOrdinal();
+        if (!configuredCudaOrdinal())
+            return false;
         try {
             (void)deviceInfo();
             return true;
@@ -353,7 +368,8 @@ slot_t retainPreferredKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::shared_ptr<Program> program;
     const bool gpu = checked([&] {
-        (void)configuredCudaOrdinal();
+        if (!configuredCudaOrdinal())
+            return false;
         try {
             (void)deviceInfo();
             program = std::make_shared<Program>(prepare(with, norm, ctx, true));
@@ -454,6 +470,138 @@ std::optional<Type *> resolve(const type_vec_t &with, const type_vec_t &norm, bo
     return source ? Type::String() : fn->exitType();
 }
 
+// The operator groups whose signature the module computes from an argument; a declaration cannot
+// write any of them (standard library conventions 1-2; handover H156). `gpu` returns the type of
+// its function argument; `upload` and `download` map every leaf of their argument into or out of
+// the `Device<...>` handle; the run/query groups take the function's parameter list as their
+// ordinary parameter (`run` also answers its result type); `regions` accepts any function value.
+// `stdlib/signatures/tiles.cml` records their reference entries, and the two fixed signatures
+// (`available`, `device`) are declared in `stdlib/tiles.cml`, so no group here is a declaration's
+// duplicate.
+const std::vector<oper_group_ptr_t> &getOperatorGroups() {
+    static const std::vector<oper_group_ptr_t> groups{
+        OperatorGroup::create(
+            "gpu",
+            {{"tiles:gpu",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(fn: Function) => Function",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      if (!with.empty() || norm.size() != 1 ||
+                          norm[0]->code() != TypeCode::Function)
+                          return std::nullopt;
+                      auto *fn = static_cast<FunctionType *>(norm[0]);
+                      if (fn->withTypesCount() || !fn->normTypesCount() ||
+                          !supportedLeaves(fn->exitType()))
+                          return std::nullopt;
+                      for (size_t i = 0; i < fn->normTypesCount(); ++i)
+                          if (fn->normIsVarAt(i) || !supportedLeaves(fn->normTypeAt(i)))
+                              return std::nullopt;
+                      return fn;
+                  })}}),
+        OperatorGroup::create(
+            "upload",
+            {{"tiles:upload",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(T: Tensor, float, struct or tuple) => Device<T>",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      if (!with.empty() || norm.size() != 1)
+                          return std::nullopt;
+                      auto *result = transferTreeType(norm[0], true);
+                      return result ? std::optional<Type *>(result) : std::nullopt;
+                  })}}),
+        OperatorGroup::create(
+            "download",
+            {{"tiles:download",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(Device<T>) => T",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      if (!with.empty() || norm.size() != 1)
+                          return std::nullopt;
+                      auto *result = transferTreeType(norm[0], false);
+                      return result ? std::optional<Type *>(result) : std::nullopt;
+                  })}}),
+        OperatorGroup::create(
+            "run",
+            {{"tiles:run",
+              DynamicFuncTypeResolver::create(
+                  {{1, {false}}, {1, {false}}},
+                  "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => NumericAggregate",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> { return resolve(with, norm, false); })}}),
+        OperatorGroup::create(
+            "run_device",
+            {{"tiles:run_device",
+              DynamicFuncTypeResolver::create(
+                  {{1, {false}}, {1, {false}}},
+                  "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => DeviceAggregate",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      auto result = resolve(with, norm, false);
+                      if (!result)
+                          return result;
+                      auto *type = residentType(*result);
+                      return type ? std::optional<Type *>(type) : std::nullopt;
+                  })}}),
+        OperatorGroup::create(
+            "run_preferred_resident",
+            {{"tiles:run_preferred_resident",
+              DynamicFuncTypeResolver::create(
+                  {{1, {false}}, {1, {false}}},
+                  "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => DeviceAggregate",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      auto result = resolve(with, norm, false);
+                      if (!result)
+                          return result;
+                      auto *type = residentType(*result);
+                      return type ? std::optional<Type *>(type) : std::nullopt;
+                  })}}),
+        OperatorGroup::create(
+            "source",
+            {{"tiles:source",
+              DynamicFuncTypeResolver::create(
+                  {{1, {false}}, {1, {false}}},
+                  "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> { return resolve(with, norm, true); })}}),
+        OperatorGroup::create(
+            "inspect",
+            {{"tiles:inspect",
+              DynamicFuncTypeResolver::create(
+                  {{1, {false}}, {1, {false}}},
+                  "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> { return resolve(with, norm, true); })}}),
+        OperatorGroup::create(
+            "benchmark",
+            {{"tiles:benchmark",
+              DynamicFuncTypeResolver::create(
+                  {{1, {false}}, {1, {false}}},
+                  "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> { return resolve(with, norm, true); })}}),
+        OperatorGroup::create(
+            "regions",
+            {{"tiles:regions",
+              DynamicFuncTypeResolver::create(
+                  {{1, {false}}, {0, {}}},
+                  "<fn: Function>() => string",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      if (with.size() != 1 || !norm.empty() ||
+                          with[0]->code() != TypeCode::Function)
+                          return std::nullopt;
+                      return Type::String();
+                  })}})};
+    return groups;
+}
+
 class TilesModule final : public BuiltinModule {
   public:
     explicit TilesModule(context_ptr_t ctx) : BuiltinModule("tiles", ctx) {
@@ -486,107 +634,55 @@ class TilesModule final : public BuiltinModule {
              "tiles:run_preferred_resident",
              "tiles:download"});
         exportType(Reference("Device"), DeviceType::get(tensor::TensorType::Default()));
-        exportEntity(
-            "gpu",
-            OperatorGroup::create(
-                "gpu",
-                {{"tiles:gpu",
-                  DynamicFuncTypeResolver::create(
-                      {{0, {}}, {1, {false}}},
-                      "(fn: Function) => Function",
-                      [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                          -> std::optional<Type *> {
-                          if (!with.empty() || norm.size() != 1 ||
-                              norm[0]->code() != TypeCode::Function)
-                              return std::nullopt;
-                          auto *fn = static_cast<FunctionType *>(norm[0]);
-                          if (fn->withTypesCount() || !fn->normTypesCount() ||
-                              !supportedLeaves(fn->exitType()))
-                              return std::nullopt;
-                          for (size_t i = 0; i < fn->normTypesCount(); ++i)
-                              if (fn->normIsVarAt(i) || !supportedLeaves(fn->normTypeAt(i)))
-                                  return std::nullopt;
-                          return fn;
-                      })}}));
-        for (const std::string name : {"upload", "download"}) {
-            exportEntity(
-                name,
-                OperatorGroup::create(
-                    name,
-                    {{"tiles:" + name,
-                      DynamicFuncTypeResolver::create(
-                          {{0, {}}, {1, {false}}},
-                          name == "upload" ? "(T: Tensor, float, struct or tuple) => Device<T>"
-                                           : "(Device<T>) => T",
-                          [upload = name == "upload"](
-                              const type_vec_t &with,
-                              const type_vec_t &norm,
-                              const ModifierSet &) -> std::optional<Type *> {
-                              if (!with.empty() || norm.size() != 1)
-                                  return std::nullopt;
-                              auto *result = transferTreeType(norm[0], upload);
-                              return result ? std::optional<Type *>(result) : std::nullopt;
-                          })}}));
-        }
-        std::vector<std::string>
-            executionNames{"run", "run_device", "source", "inspect", "benchmark"};
-        if (std::getenv("CAMEL_ENABLE_TEST_PASSES"))
-            executionNames.push_back("run_preferred_resident");
-        for (const std::string &name : executionNames) {
-            const bool residentResult = name == "run_device" || name == "run_preferred_resident";
-            const bool textResult     = name != "run" && !residentResult;
-            exportEntity(
-                name,
-                OperatorGroup::create(
-                    name,
-                    {{"tiles:" + name,
-                      DynamicFuncTypeResolver::create(
-                          {{1, {false}}, {1, {false}}},
-                          "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => " +
-                              std::string(
-                                  residentResult ? "DeviceAggregate"
-                                  : textResult   ? "string"
-                                                 : "NumericAggregate"),
-                          [source = textResult, resident = residentResult](
-                              const type_vec_t &with,
-                              const type_vec_t &norm,
-                              const ModifierSet &) -> std::optional<Type *> {
-                              auto result = resolve(with, norm, source);
-                              if (!result || !resident)
-                                  return result;
-                              auto *type = residentType(*result);
-                              return type ? std::optional<Type *>(type) : std::nullopt;
-                          })}}));
-        }
-        exportEntity(
-            "regions",
-            OperatorGroup::create(
-                "regions",
-                {{"tiles:regions",
-                  DynamicFuncTypeResolver::create(
-                      {{1, {false}}, {0, {}}},
-                      "<fn: Function>() => string",
-                      [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                          -> std::optional<Type *> {
-                          if (with.size() != 1 || !norm.empty() ||
-                              with[0]->code() != TypeCode::Function)
-                              return std::nullopt;
-                          return Type::String();
-                      })}}));
-        exportEntity(
-            "available",
-            OperatorGroup::create(
-                "available",
-                {{"tiles:available", StaticFuncTypeResolver::create({}, {}, Type::Bool())}}));
-        exportEntity(
-            "device",
-            OperatorGroup::create(
-                "device",
-                {{"tiles:device", StaticFuncTypeResolver::create({}, {}, Type::String())}}));
+        // `available` and `device` are declared in stdlib/tiles.cml (handover H156): their
+        // signatures are fixed, so the declaration is their one source and C++ exports no group
+        // for them. The ten groups behind `getOperatorGroups()` compute their signature from an
+        // argument and remain the module's own; the reference entries are in
+        // stdlib/signatures/tiles.cml.
+        for (const auto &group : getOperatorGroups())
+            exportEntity(group->name(), group);
     }
     bool load() override {
         if (loaded_)
             return true;
+        // The one device probe of the process, reported here because the device sources are built
+        // without libcamel as well (see capability.h). The H117 plan counts this line: however
+        // many calls prefer a device, there must be one.
+        deviceProbeStarted = [] {
+            CAMEL_LOG_INFO_S("tiles", "probe: constructing the CUDA backend");
+        };
+        // `std::profile` (camel/profile/profile.h): what the CUDA path of this module did. Each
+        // hook asks the session itself, so a run without the pass records nothing.
+        profile_hooks::kernel = [](const char *label) {
+            if (camel::profile::enabled()) {
+                camel::profile::kernelLaunch(label);
+            }
+        };
+        profile_hooks::toDevice = [](uint64_t bytes) {
+            if (camel::profile::enabled()) {
+                camel::profile::transferToDevice(bytes);
+            }
+        };
+        profile_hooks::toHost = [](uint64_t bytes) {
+            if (camel::profile::enabled()) {
+                camel::profile::transferToHost(bytes);
+            }
+        };
+        profile_hooks::synchronise = [](const char *what) {
+            if (camel::profile::enabled()) {
+                camel::profile::synchronise(what);
+            }
+        };
+        profile_hooks::deviceCompile = [](const char *what, uint64_t ns) {
+            if (camel::profile::enabled()) {
+                camel::profile::deviceCompile(what, ns);
+            }
+        };
+        profile_hooks::device = [](const char *name) {
+            if (camel::profile::enabled()) {
+                camel::profile::setDevice(name);
+            }
+        };
         context_->registerExecutorFactory("tiles", [ctx = context_]() -> executor_ptr_t {
             return std::make_shared<Executor>(
                 ctx,
@@ -615,11 +711,11 @@ class TilesModule final : public BuiltinModule {
         core::OperatorTable::instance().set("tiles:retain_host", {.pure = false});
         core::OperatorTable::instance().set(
             "tiles:run_host_resident",
-            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+            {.pure = false, .callsGraphs = true, .readsGraphs = true});
         core::OperatorTable::instance().set("tiles:retain_preferred", {.pure = false});
         core::OperatorTable::instance().set(
             "tiles:run_preferred_resident",
-            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+            {.pure = false, .callsGraphs = true, .readsGraphs = true});
         // run may initialize a driver/compile code; never execute it in constant folding.
         core::OperatorTable::instance().declare(
             "tiles",
@@ -636,7 +732,7 @@ class TilesModule final : public BuiltinModule {
              {"device", false}});
         // These compile the graph of the function value they receive: a back end that runs a
         // private copy of the program with its loops lowered hands them the program's own
-        // graph, LOOP nodes included (OperatorTraits::inspectsGraphs; op-semantics 11.4).
+        // graph, LOOP nodes included (OperatorTraits::readsGraphs; op-semantics 11.4).
         for (const char *name :
              {"run",
               "run_device",
@@ -649,15 +745,15 @@ class TilesModule final : public BuiltinModule {
               "gpu"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
-                {.pure = false, .inspectsGraphs = true});
+                {.pure = false, .readsGraphs = true});
         }
         core::OperatorTable::instance().set(
             "tiles:prefer_gpu",
-            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+            {.pure = false, .callsGraphs = true, .readsGraphs = true});
         for (const char *name : {"tiles:run_compiled", "tiles:run_compiled_device"})
             core::OperatorTable::instance().set(
                 name,
-                {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+                {.pure = false, .callsGraphs = true, .readsGraphs = true});
         // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
         // resource `tiles:device` (upload makes one; run and run_device read the device values
         // among their inputs, run_device returns new ones that may be inputs again); the driver

@@ -24,6 +24,9 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/mm.h"
+#include "camel/core/module/module.h"
+#include "camel/core/node_attrs.h"
+#include "camel/core/tags.h"
 #include "camel/core/mm/block.h"
 #include "camel/core/mm/foreign_handle.h"
 #include "camel/core/mm/profiler.h"
@@ -31,9 +34,11 @@
 #include "camel/core/rtdata/view_selftest.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
+#include "camel/execute/observer.h"
 #include "camel_pass.h"
 #include "camel/passes/test/chunks.h"
 #include "camel/passes/test/edges.h"
+#include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/rules.h"
 #include "camel/passes/test/saturate.h"
@@ -43,8 +48,9 @@
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/test/exhaust_perm_space.h"
 #include "camel/passes/test/exec_plan.h"
-#include "camel/passes/test/outline_loops.h"
 #include "camel/passes/test/regions.h"
+#include "camel/passes/test/arm_loop_regions.h"
+#include "camel/passes/test/loop_inputs.h"
 #include "camel/passes/trans/json/gir.h"
 #include "macro/macro.h"
 #include "pass_spec.h"
@@ -67,8 +73,10 @@
 #include "passes/test/native_call.h"
 #include "passes/test/resources.h"
 #include "passes/test/semantics.h"
+#include "passes/test/tags.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
+#include "passes/trans/profile/profile.h"
 #include "passes/trans/stats/stats.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
@@ -528,9 +536,31 @@ PassDescriptor dceDescriptor() {
     return d;
 }
 
+/// The algebraic simplification under the core's name: the rules library's pass
+/// (`rules::simplify`, or `rules::simplify_strict` for `safe_fp=true`), so the laws live once,
+/// in stdlib/rules.cml. `neutral_only` has no library equivalent; it keeps the C++ reference
+/// mode (the integer neutral elements only) that graph.plan.toml compares a Camel pass against.
+const camel::runtime::Program *runRulesAlgebra(
+    const camel::core::context::context_ptr_t &ctx, const camel::runtime::Program *program,
+    bool safeFp, std::ostream &os);
+
+class RulesAlgebraPass final : public GraphIRPass {
+  public:
+    RulesAlgebraPass(const camel::core::context::context_ptr_t &ctx, bool safeFp)
+        : GraphIRPass(ctx), safeFp_(safeFp) {}
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        return runRulesAlgebra(context_, program, safeFp_, os);
+    }
+
+  private:
+    bool safeFp_;
+};
+
 PassDescriptor algebraDescriptor() {
     PassDescriptor d;
-    d.doc    = "algebraic simplification";
+    d.doc    = "algebraic simplification (the rules library's simplified form: the laws of "
+               "stdlib/rules.cml, under the strict numeric policy when safe_fp is true)";
     d.params = {
         safeFpParameter(),
         PassParam{
@@ -538,14 +568,15 @@ PassDescriptor algebraDescriptor() {
             PassParamType::Bool,
             false,
             "apply only the integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), not the "
-            "merging of like terms and constant factors (the reference for passes that do the "
-            "same)"},
+            "merging of like terms and constant factors (the C++ reference for passes that do the "
+            "same; the rules library has no neutral-only mode)"},
     };
     d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<AlgebraPass>(
-            ctx,
-            args.getBool("safe_fp"),
-            args.getBool("neutral_only"));
+        if (args.getBool("neutral_only")) {
+            return std::unique_ptr<GraphIRPass>(std::make_unique<AlgebraPass>(ctx, true));
+        }
+        return std::unique_ptr<GraphIRPass>(
+            std::make_unique<RulesAlgebraPass>(ctx, args.getBool("safe_fp")));
     };
     return d;
 }
@@ -556,6 +587,70 @@ PassParam statsParameter() {
         PassParamType::String,
         std::string(),
         "append per-graph bytecode and execution counts of the run to this file"};
+}
+
+PassDescriptor profileDescriptor() {
+    PassDescriptor d;
+    d.doc =
+        "profiles the run (design docs/design/gpu/README.cn.md 5.6): the device and the time of "
+        "every operator, the operators and kernels of one step, the host/device transfers, the "
+        "synchronisations, the phase split of the compilation, and the element-wise loops that "
+        "run on the host; the report is written when the run ends";
+    d.params = {
+        PassParam{
+            "top",
+            PassParamType::Int,
+            int64_t{24},
+            "rows of the operator table; 0 writes every operator that ran"},
+        PassParam{
+            "hints",
+            PassParamType::Bool,
+            true,
+            "report the element-wise loops that run on the host, and why they did not go to a "
+            "device"},
+        PassParam{
+            "json",
+            PassParamType::String,
+            std::string(),
+            "also write the report as one JSON object to this file"},
+        PassParam{
+            "report",
+            PassParamType::Bool,
+            true,
+            "print the text report when the run ends; false turns on only the diagnostics the "
+            "other parameters ask for"},
+        PassParam{
+            "gc_stats",
+            PassParamType::Int,
+            int64_t{0},
+            "the allocator's statistics at exit: 1 one line, 2 also one line per collection"},
+        PassParam{
+            "type_stats",
+            PassParamType::Bool,
+            false,
+            "the type storage's statistics at exit (one line per kind, and the type table)"},
+        PassParam{
+            "effect_trace",
+            PassParamType::String,
+            std::string(),
+            "append one JSON line per executed effectful operator to this file"},
+    };
+    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+        camel::profile::ReportOptions options;
+        const int64_t top = args.getInt("top");
+        options.top       = top < 0 ? 0 : static_cast<size_t>(top);
+        options.hints     = args.getBool("hints");
+        options.report    = args.getBool("report");
+        const int64_t gcStats = args.getInt("gc_stats");
+        return std::make_unique<ProfilePass>(
+            ctx,
+            options,
+            args.getString("json"),
+            gcStats < 0 ? 0 : static_cast<int>(gcStats),
+            args.getBool("type_stats"),
+            args.getString("effect_trace"));
+    };
+    return d;
 }
 
 PassDescriptor fastVmDescriptor(bool jit) {
@@ -658,6 +753,7 @@ PassScopePtr initPassScope() {
                          GraphVizDumpPass,
                          (GraphVizDumpConfig{.rich = true, .annotateRoles = true})))},
                     {"stats", def(PASS(GraphStatsPass))},
+                    {"profile", def(profileDescriptor())},
                     {"cpp",
                      def(PASS(CppDumpPass),
                          {
@@ -729,6 +825,20 @@ PassScopePtr initPassScope() {
                 }),
             },
         }));
+    // The core passes that read tag facts: the dumps show a node's attributes and numeric
+    // permissions, and std::opt keeps them across rewrites (CSE combines by their merge rules).
+    // A tag's `read_by` names one of these (or a module's pass that registers itself).
+    for (const char *reader :
+         {"std::gir",
+          "std::rgir",
+          "std::gir_regions",
+          "std::rgir_regions",
+          "std::jgir",
+          "std::agir",
+          "std::argir",
+          "std::opt"}) {
+        camel::core::tag::declareReader(reader);
+    }
     return root;
 }
 
@@ -780,6 +890,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::rmir", "std::fastvm::jit::dump::rmir"},
     {"std::mir", "std::fastvm::jit::dump::mir"},
     {"std::tfg", "std::tfdump"},
+    {"std::prof", "std::profile"},
 };
 
 struct ModulePassRegistry {
@@ -947,9 +1058,23 @@ void setPassWarningHandler(PassWarningHandler handler, void *userData) {
 }
 
 void registerModulePass(const std::string &path, PassDescriptor descriptor) {
+    const bool readsTags = descriptor.readsTags;
     auto &registry = modulePasses();
-    std::lock_guard lock(registry.mutex);
-    registry.passes.insert_or_assign(path, std::move(descriptor));
+    {
+        std::lock_guard lock(registry.mutex);
+        registry.passes.insert_or_assign(path, std::move(descriptor));
+    }
+    if (readsTags) {
+        // The pass is a reader of tag facts; so is every alias that already names it.
+        camel::core::tag::declareReader(path);
+        auto &aliases = moduleAliases();
+        std::lock_guard lock(aliases.mutex);
+        for (const auto &[alias, target] : aliases.aliases) {
+            if (target == path) {
+                camel::core::tag::declareReader(alias);
+            }
+        }
+    }
 }
 
 void registerModulePass(const std::string &path, PassFactory factory) {
@@ -971,8 +1096,14 @@ void registerPassAlias(const std::string &alias, const std::string &target) {
         return;
     }
     auto &registry = moduleAliases();
-    std::lock_guard lock(registry.mutex);
-    registry.aliases.insert_or_assign(alias, target);
+    {
+        std::lock_guard lock(registry.mutex);
+        registry.aliases.insert_or_assign(alias, target);
+    }
+    // An alias of a reader is a reader too: a tag may name the short name.
+    if (camel::core::tag::isReader(target)) {
+        camel::core::tag::declareReader(alias);
+    }
 }
 
 namespace {
@@ -987,8 +1118,9 @@ std::string resolveAlias(const std::string &name) {
     return it == registry.aliases.end() ? name : it->second;
 }
 
-/// Test-only passes, off unless the environment enables them (CAMEL_ENABLE_TEST_PASSES is a
-/// gate on what exists, not a setting of a pass).
+/// Test-only passes: they exist only to be named by a test's pipeline and are in no default
+/// pipeline, so naming one is the whole switch (H81 removed the variable that used to gate
+/// them).
 const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
 #define TEST_PASS(K, T)                                                                            \
     {                                                                                              \
@@ -1007,12 +1139,16 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kExpandDefinitionsTestPass, ExpandDefinitionsTestPass),
         TEST_PASS(kResourcesTestPass, ResourcesTestPass),
         TEST_PASS(kControlTestPass, ControlTestPass),
+        TEST_PASS(kTagsTestPass, TagsTestPass),
         TEST_PASS(kChunksTestPass, ChunksTestPass),
         TEST_PASS(kEdgesCycleTestPass, EdgesCycleTestPass),
         TEST_PASS(kEdgesTypeTestPass, EdgesTypeTestPass),
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kCommitMergeTestPass, CommitMergeTestPass),
+        TEST_PASS(kGraphReleaseTestPass, GraphReleaseTestPass),
+        TEST_PASS(kFactNodeTestPass, FactNodeTestPass),
         TEST_PASS(kWritingsTestPass, WritingsTestPass),
         TEST_PASS(kTabledTestPass, TabledTestPass),
         TEST_PASS(kSaturateTestPass, SaturateTestPass),
@@ -1021,13 +1157,16 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kSaturateSafeTestPass, SaturateSafeTestPass),
         TEST_PASS(kSaturateWideTestPass, SaturateWideTestPass),
         TEST_PASS(kSaturateOneRoundTestPass, SaturateOneRoundTestPass),
+        TEST_PASS(kSaturatePropsTestPass, SaturatePropsTestPass),
         TEST_PASS(kRegionsTestPass, RegionsTestPass),
+        TEST_PASS(kArmLoopRegionsTestPass, ArmLoopRegionsTestPass),
+        TEST_PASS(kLoopInputsTestPass, LoopInputsTestPass),
         TEST_PASS(kExecPlanTestPass, ExecPlanTestPass),
-        TEST_PASS(kOutlineLoopsTestPass, OutlineLoopsTestPass),
         TEST_PASS(kExhaustPermSpaceTestPass, ExhaustPermSpaceTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
+        TEST_PASS(kFactLoadRulesTestPass, FactLoadRulesTestPass),
         TEST_PASS(kFactSeedTestPass, FactSeedTestPass),
         TEST_PASS(kFactCheckTestPass, FactCheckTestPass),
         TEST_PASS(kFactPersistTestPass, FactPersistTestPass),
@@ -1061,12 +1200,10 @@ std::optional<PassDescriptor> findDescriptor(const std::string &name) {
         return found;
     }
 
-    // 5. Test-only passes.
-    if (std::getenv(kTestPassesEnvVar) != nullptr) {
-        for (const auto &[testName, factory] : testPasses()) {
-            if (resolved == testName) {
-                return passWithoutParameters(factory);
-            }
+    // 5. Test-only passes. They are reachable by name and by nothing else; no pipeline adds them.
+    for (const auto &[testName, factory] : testPasses()) {
+        if (resolved == testName) {
+            return passWithoutParameters(factory);
         }
     }
     return std::nullopt;
@@ -1076,6 +1213,19 @@ struct ResolvedPass {
     PassFactory factory;                // the pass with its parameters bound; null if not usable
     bool known = false;                 // the name is a pass
     std::optional<std::string> problem; // the parameters are wrong
+    /// When the problem is a pass module that does not compile: its first error, as a secondary
+    /// location (H36c).
+    std::optional<DiagLabel> errorLocation;
+    /// A `<module>::<pass>` whose module is there and compiles but provides no such pass: the
+    /// module, the name, what the module does provide, and whether it declares the name without
+    /// exporting it (H130).
+    struct MissingPass {
+        std::string module;
+        std::string function;
+        std::vector<std::string> provided;
+        bool declaresUnexported = false;
+    };
+    std::optional<MissingPass> missingPass;
 };
 
 /// Resolves `name` or `name(key=value, ...)`. Prints nothing.
@@ -1103,9 +1253,14 @@ ResolvedPass resolvePass(const std::string &spec) {
     return result;
 }
 
-Diagnostic invalidParameterDiagnostic(const std::string &spec, const std::string &problem) {
+Diagnostic invalidParameterDiagnostic(
+    const std::string &spec, const std::string &problem,
+    const std::optional<DiagLabel> &errorLocation = std::nullopt) {
     setPipelineStage("pass:" + specName(spec));
-    auto diag  = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem);
+    auto diag = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem);
+    if (errorLocation) {
+        diag.related.push_back(*errorLocation);
+    }
     diag.stage = "pass:" + specName(spec);
     setPipelineStage("");
     return diag;
@@ -1163,6 +1318,54 @@ void listAvailablePasses(const std::string &name) {
             "(bool, int, float, string).\n";
 }
 
+/// The passes of a module, as the sentence of a diagnostic writes them: "no passes", "the pass
+/// 'x'", "the passes 'x', 'y'" (H130).
+std::string providedPassesText(const std::vector<std::string> &passes) {
+    if (passes.empty()) {
+        return "no passes";
+    }
+    std::string text       = passes.size() == 1 ? "the pass " : "the passes ";
+    std::string separator;
+    for (const auto &pass : passes) {
+        text += separator;
+        text += std::format("'{}'", pass);
+        separator = ", ";
+    }
+    return text;
+}
+
+/// The diagnostic for a pass name that does not resolve, told apart by what was found (H130):
+///   - a module that is there and cannot be used: its reason, chained to the module's own first
+///     error as a secondary location when that error has a position, exactly as any other
+///     refused pass specification;
+///   - a module that is there and provides no such pass: the short answer, naming the module and
+///     the passes it does provide, so that a name that is simply wrong does not read like a
+///     compiler that lost the module;
+///   - a name with no module behind it: unknown, followed by the list of passes that exist.
+[[noreturn]] void throwUnresolvedPass(const std::string &spec, const ResolvedPass &resolved) {
+    if (resolved.problem) {
+        throw invalidParameterDiagnostic(spec, *resolved.problem, resolved.errorLocation);
+    }
+    if (resolved.missingPass) {
+        const auto &missing        = *resolved.missingPass;
+        const std::string provided = providedPassesText(missing.provided);
+        setPipelineStage("pass:" + specName(spec));
+        const RuntimeDiag code = missing.declaresUnexported
+                                     ? RuntimeDiag::PassNotExportedByModule
+                                     : RuntimeDiag::PassNotProvidedByModule;
+        auto diag = DiagnosticBuilder::of(code).commit(missing.module, missing.function, provided);
+        diag.stage = "pass:" + specName(spec);
+        setPipelineStage("");
+        throw diag;
+    }
+    listAvailablePasses(spec);
+    setPipelineStage("pass:" + specName(spec));
+    auto unknown  = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(spec);
+    unknown.stage = "pass:" + specName(spec);
+    setPipelineStage("");
+    throw unknown;
+}
+
 } // namespace
 
 PassFactory findPassFactory(const std::string &name, std::ostream &os) {
@@ -1203,29 +1406,108 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
     }
     // A function written in Camel: the module is a library of its own, compiled now.
     std::string problem;
-    camel::execute::registerCamelPass(ctx, name.substr(0, sep), name.substr(sep + 2), problem);
+    std::optional<DiagLabel> errorLocation;
+    camel::execute::MissingCamelPass missing;
+    camel::execute::registerCamelPass(
+        ctx, name.substr(0, sep), name.substr(sep + 2), problem, &errorLocation, &missing);
     resolved = resolvePass(spec);
-    if (!resolved.factory && !problem.empty()) {
-        resolved.problem = problem;
+    if (!resolved.factory) {
+        if (!problem.empty()) {
+            resolved.problem       = problem;
+            resolved.errorLocation = errorLocation;
+        } else if (missing.moduleHasNoSuchPass) {
+            resolved.missingPass = ResolvedPass::MissingPass{
+                name.substr(0, sep), name.substr(sep + 2), std::move(missing.provided),
+                missing.declaresUnexported};
+        }
     }
     return resolved;
 }
 
+namespace {
+
+/// Whether `after` holds graphs of content different from `before`: a graph's revision changes
+/// only when a commit encoded different content for it (graph.h), and a graph one of the two
+/// holds and the other does not counts. The program objects themselves differ after every
+/// commit, so pointer inequality would call every pass a change.
+bool programContentChanged(
+    const camel::runtime::Program *before, const camel::runtime::Program *after) {
+    if (after == nullptr) {
+        return true;
+    }
+    if (after == before) {
+        return false;
+    }
+    for (camel::runtime::GCGraph *graph : after->graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        const camel::runtime::GCGraph *old = before->graph(graph->id());
+        if (old == nullptr || old->revision() != graph->revision()) {
+            return true;
+        }
+    }
+    for (camel::runtime::GCGraph *graph : before->graphs()) {
+        if (graph != nullptr && after->graph(graph->id()) == nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+PassRunResult applyRegisteredPass(
+    const camel::runtime::Program *program, const std::string &spec, const context_ptr_t &ctx,
+    std::ostream &os) {
+    ResolvedPass resolved = resolvePassWithModule(spec, ctx);
+    if (!resolved.factory) {
+        throwUnresolvedPass(spec, resolved);
+    }
+    const bool publishes = ctx && ctx->currentRuntimeProgram() == program;
+    auto pass            = resolved.factory(ctx);
+    const camel::runtime::Program *produced = pass->apply(program, os);
+    if (produced == nullptr) {
+        return {nullptr, true};
+    }
+    // Read the old program's graph versions before settleRuntimeGraphs can release it.
+    const bool changed = programContentChanged(program, produced);
+    if (ctx) {
+        deliverPassWarnings(*ctx, spec);
+        // A pass that ran on the installed program publishes a new one; its old program is no
+        // longer needed. A pass over a private program (onnx.export's working copy) does not
+        // install it, and the caller keeps it alive (the commit tracked it as detached).
+        if (publishes && ctx->currentRuntimeProgram() == produced) {
+            ctx->settleRuntimeGraphs(produced);
+        }
+        if (ctx->rtmDiags()->hasErrors()) {
+            return {nullptr, true};
+        }
+    }
+    return {produced, changed};
+}
+
+namespace {
+
+const camel::runtime::Program *runRulesAlgebra(
+    const camel::core::context::context_ptr_t &ctx, const camel::runtime::Program *program,
+    bool safeFp, std::ostream &os) {
+    const PassRunResult result = applyRegisteredPass(
+        program,
+        safeFp ? "rules::simplify_strict" : "rules::simplify",
+        ctx,
+        os);
+    return result.program;
+}
+
+} // namespace
+
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (const auto &name : passes) {
         auto resolved = resolvePassWithModule(name, ctx);
-        if (resolved.problem) {
-            throw invalidParameterDiagnostic(name, *resolved.problem);
+        if (!resolved.factory) {
+            throwUnresolvedPass(name, resolved);
         }
-        if (resolved.factory) {
-            continue;
-        }
-        listAvailablePasses(name);
-        setPipelineStage("pass:" + specName(name));
-        auto unknown  = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(name);
-        unknown.stage = "pass:" + specName(name);
-        setPipelineStage("");
-        throw unknown;
     }
 }
 
@@ -1280,10 +1562,91 @@ passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_
     return warning;
 }
 
+namespace {
+
+/// The Camel passes of the pipeline that declare `#reads<...>` on their function, by the tag
+/// they name: a pass written in Camel reads tags by saying so, the counterpart of a C++
+/// module's `read_by` (design principles 6.2). The module is loaded here because the warning
+/// is computed before the pipeline builds the passes.
+std::map<std::string, std::vector<std::string>> declaredReadersOf(
+    const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+    std::map<std::string, std::vector<std::string>> readers;
+    for (const auto &spec : passes) {
+        const std::string pass = resolveAlias(specName(spec));
+        const size_t sep       = pass.rfind("::");
+        if (sep == std::string::npos) {
+            continue;
+        }
+        const std::string moduleName = pass.substr(0, sep);
+        const std::string function   = pass.substr(sep + 2);
+        // `std::` passes are the core's (C++), not a module: loading "std" would be an error.
+        if (moduleName == "std" || moduleName.starts_with("std::")) {
+            continue;
+        }
+        try {
+            const auto module = ctx->importModule(moduleName);
+            if (!module || !module->loaded()) {
+                continue;
+            }
+            const auto facts = camel::core::tag::ofDeclaration(*module, Reference(function));
+            if (facts == camel::core::attr::kNoAttrs) {
+                continue;
+            }
+            const auto value =
+                camel::core::attr::valueOf(facts, camel::core::attr::key("reads"));
+            if (value == camel::core::attr::kNoValue) {
+                continue;
+            }
+            const auto add = [&](const std::string &tag) {
+                // The fact stores the name as the pass wrote it; the use of the tag in a
+                // program names it qualified. Resolve it in the pass's module, then in the core.
+                std::string key = tag;
+                if (const auto id = camel::core::tag::find(moduleName, tag)) {
+                    key = camel::core::tag::get(*id)->name;
+                } else if (const auto core = camel::core::tag::find(tag)) {
+                    key = camel::core::tag::get(*core)->name;
+                }
+                readers[key].push_back(pass);
+            };
+            const camel::core::attr::Value decoded = camel::core::attr::value(value);
+            if (decoded.kind == camel::core::attr::ValueKind::Symbol) {
+                add(decoded.text);
+            } else if (decoded.kind == camel::core::attr::ValueKind::Tuple) {
+                for (const auto item : decoded.items) {
+                    const camel::core::attr::Value tag = camel::core::attr::value(item);
+                    if (tag.kind == camel::core::attr::ValueKind::Symbol) {
+                        add(tag.text);
+                    }
+                }
+            }
+        } catch (...) {
+            // A module that cannot be read here names no readers; the pass itself reports why
+            // when the pipeline builds it.
+        }
+    }
+    return readers;
+}
+
+} // namespace
+
+bool pipelineNamesProfile(const std::vector<std::string> &passes) {
+    for (const auto &spec : passes) {
+        if (resolveAlias(specName(spec)) == "std::profile") {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::vector<Diagnostic> tagsNeverReadWarnings(
     const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     std::vector<Diagnostic> warnings;
     if (!ctx) {
+        return warnings;
+    }
+    // No tag is written, so there is nothing to warn about: returning here also keeps the
+    // pipeline from loading pass modules it would not otherwise load.
+    if (ctx->tagUses().empty()) {
         return warnings;
     }
     // The names in the pipeline, as written and as they resolve (an alias strips to the pass's
@@ -1295,9 +1658,28 @@ std::vector<Diagnostic> tagsNeverReadWarnings(
         inPipeline.push_back(name);
         inPipeline.push_back(resolveAlias(name));
     }
+    const auto camelReaders = declaredReadersOf(passes, ctx);
     for (const auto &use : ctx->tagUses()) {
-        bool read = false;
+        // The passes the tag's declaration names, and the Camel passes that say with
+        // `#reads<...>` that they read it.
+        std::vector<std::string> readers;
         for (const std::string &reader : use.readBy) {
+            // Only a pass that declared itself a reader of tag facts counts: a name that
+            // happens to be in the pipeline but reads no facts leaves the tag with no effect,
+            // which is what the warning says.
+            if (camel::core::tag::isReader(reader)) {
+                readers.push_back(reader);
+            }
+        }
+        if (const auto declared = camelReaders.find(use.name); declared != camelReaders.end()) {
+            for (const std::string &reader : declared->second) {
+                if (std::find(readers.begin(), readers.end(), reader) == readers.end()) {
+                    readers.push_back(reader);
+                }
+            }
+        }
+        bool read = false;
+        for (const std::string &reader : readers) {
             for (const std::string &name : inPipeline) {
                 if (name == reader || name.starts_with(reader + "::")) {
                     read = true;
@@ -1311,13 +1693,13 @@ std::vector<Diagnostic> tagsNeverReadWarnings(
         if (read) {
             continue;
         }
-        std::string readers;
-        for (const std::string &reader : use.readBy) {
-            readers += (readers.empty() ? "" : ", ") + reader;
+        std::string readersText;
+        for (const std::string &reader : readers) {
+            readersText += (readersText.empty() ? "" : ", ") + reader;
         }
         auto warning = DiagnosticBuilder::of(SemanticDiag::TagHasNoReader)
                            .atOrigin(use.origin)
-                           .commit(use.name, readers);
+                           .commit(use.name, readersText);
         warning.stage = "tag:" + use.name;
         warnings.push_back(std::move(warning));
     }
@@ -1354,18 +1736,23 @@ PassApplyResult applyPassesDetailed(
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), program->root()); });
             camel::utils::phase::Scope phaseScope("pass", p);
             auto pass = factory(ctx);
+            // The debugger's observer is told which pass runs: only a scheduling pass runs the
+            // program it debugs; a rewrite or translation pass may evaluate graphs of its own.
+            const bool schedules = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr;
+            if (auto *observer = camel::execute::executionObserver()) {
+                observer->passStarting(schedules, program->root());
+            }
             // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling
             // pass (the program executes), "pass:<name>" for rewrite and translation passes.
             struct StageScope {
                 explicit StageScope(std::string stage) { setPipelineStage(std::move(stage)); }
                 ~StageScope() { setPipelineStage(""); }
             } stageScope(
-                dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ? std::string("run")
-                                                                         : "pass:" + specName(p));
+                schedules ? std::string("run") : "pass:" + specName(p));
             // A program runs only when every parameter of `main` has a value. Parameters
             // left open are fine for rewriting and translation (they are the inputs of what
             // is translated); nothing may execute with a slot nobody filled.
-            if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
+            if (schedules) {
                 const auto open = camel::execute::unboundEntryParameters(program->root());
                 if (!open.empty()) {
                     std::string names;
@@ -1493,3 +1880,4 @@ const camel::runtime::Program *applyPasses(
     const context_ptr_t &ctx, std::ostream &os) {
     return applyPassesDetailed(program, passes, ctx, os).program;
 }
+

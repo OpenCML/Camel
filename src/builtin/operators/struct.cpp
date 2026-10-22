@@ -203,6 +203,95 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(res);
 }
 
+// `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first dimension a subscript
+// writes (design principles 5.4). The bounds follow the rules of the slice function (3.9): a
+// position from 0 to the length, the end one past the last element taken, a negative bound a
+// fault rather than a count from the end, and an end before the start the empty range. The step
+// and whether the end was written come with the call: a step is a distance forward, so 0 and
+// negative steps are faults, and an unwritten end runs to the end of the array.
+slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Array *arr    = norm.get<Array *>(0);
+    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    const Int64 start   = norm.get<Int64>(1);
+    const Int64 endRaw  = norm.get<Int64>(2);
+    const Int64 step    = norm.get<Int64>(3);
+    const bool wroteEnd = norm.get<Int64>(4) != 0;
+
+    const Int64 size = static_cast<Int64>(arr->size());
+    const Int64 end  = wroteEnd ? endRaw : size;
+    if (start < 0 || start > size || end < 0 || end > size) {
+        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
+    }
+    if (step != 1) {
+        // A slice with a step takes every `step`-th element, which is a view with strides: the
+        // multidimensional array representation H17 brings (design principles 5.4). A copy
+        // would have the same elements but would not share the block a slice shares, so the
+        // form is refused rather than quietly copied.
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "[]",
+            "a slice step must be 1 for now; a step other than 1 is a view with strides, which "
+            "needs the multidimensional array representation of H17");
+    }
+    if (arr->rank() != 1) {
+        // A slice of a dimension other than the first is a view with strides (H17); the type
+        // system states rank 1, so this is a defect rather than something a program writes.
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "[]",
+            "a slice of an array of rank 1; a slice of another dimension is a view with "
+            "strides, which needs the multidimensional array representation of H17");
+    }
+
+    // Both bounds inside the array and the end before the start is the empty range, not a
+    // fault (design principles 3.9).
+    const Int64 count = end > start ? end - start : 0;
+    if (arr->isCompact()) {
+        // A slice is a view sharing the data block (design principles 5.4).
+        return rtdata::toSlot(
+            Array::view(arr, std::span<const int64_t>(&count, 1), static_cast<uint64_t>(start)));
+    }
+    // A slot array has no block to share and is copied (H17 records that for slot arrays).
+    Array *res = Array::create(mm::autoSpace(), arrType, static_cast<size_t>(count));
+    for (Int64 i = 0; i < count; ++i) {
+        res->set<slot_t>(
+            static_cast<size_t>(i), arr->get<slot_t>(static_cast<size_t>(start + i)), arrType);
+    }
+    return rtdata::toSlot(res);
+}
+
+// `t[idx]` with `idx` an int array: the rows the indices name, in that order (the `take` of
+// design principles 5.4). An index outside the array, negative included, is a fault with the
+// index as written; a repeated index repeats its row.
+slot_t __idx_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Array *arr    = norm.get<Array *>(0);
+    Array *idx    = norm.get<Array *>(1);
+    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+
+    const size_t n    = arr->size();
+    const size_t take = idx->size();
+    Array *res        = Array::create(mm::autoSpace(), arrType, take);
+    for (size_t i = 0; i < take; ++i) {
+        const Int64 raw = idx->get<Int64>(i);
+        if (raw < 0 || static_cast<size_t>(raw) >= n) {
+            throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "an array", n);
+        }
+        res->set<slot_t>(i, arr->get<slot_t>(static_cast<size_t>(raw)), arrType);
+    }
+    return rtdata::toSlot(res);
+}
+
+slot_t __last_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Array *arr     = norm.get<Array *>(0);
+    const size_t n = arr->size();
+    if (n == 0) {
+        // No last element: the same fault as the index of an empty array would be, named with
+        // the position that does not exist (design principles 5.4).
+        throwRuntimeFault(RuntimeDiag::IndexOutOfRange, Int64{-1}, "an array", size_t{0});
+    }
+    return arr->get<slot_t>(n - 1);
+}
+
 slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *lhs    = norm.get<Array *>(0);
     Array *rhs    = norm.get<Array *>(1);
@@ -245,9 +334,10 @@ slot_t __append_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(res);
 }
 
-// A private copy of an array, made for the first state of a loop whose body only appends to it
-// (Builder::markLoopStateInPlace): the rounds then append to the copy in place, and the literal
-// the program wrote stays the constant it is. Not a name a program can reach for.
+// A private copy of an array, made for one state of a loop whose body only appends to it
+// (Builder::markLoopStateInPlace, which decides per state): the rounds then append to the copy
+// in place, and the literal the program wrote stays the constant it is. Not a name a program can
+// reach for.
 slot_t __copy_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     (void)ctx;
@@ -270,6 +360,14 @@ slot_t __append_owned_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
     arr->append(elem, arrType);
     return rtdata::toSlot(arr);
+}
+
+// The in-place form of `append` (OperatorTable::setInPlaceForm): the array is the one
+// :var/take handed the call, which no one else refers to, so it may take the element in place.
+// When its storage cannot be written in place (an array of references, a view, a block
+// someone else holds) it copies exactly like `append`; the result is the same either way.
+slot_t __append_in_place_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return __append_owned_arr__(with, norm, ctx);
 }
 
 // `xs->extend<ys>`: a new array, the elements of xs and then those of ys. xs is unchanged.

@@ -481,15 +481,14 @@ any Formatter::visitTagRef(cst::TagRef context) {
 funcDecl   :
         funcAnno*
         (WITH angledParams)?
-        EXPORT? implMark? modifiers?
+        EXPORT? modifiers?
 
-FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
+FUNC identRef parentParams (':' typeExpr)? stmtBlock? ;
 */
 any Formatter::visitFuncDecl(cst::FuncDecl context) {
     string result;
     const auto funcAnnos     = context->all<cst::FuncAnno>();
     const auto &angledParams = context->get<cst::AngledParams>();
-    const auto &implMark     = context->get<cst::ImplMark>();
     const auto &modifiers    = context->get<cst::Modifiers>();
     const auto &identRef     = context->get<cst::IdentRef>();
     const auto &parentParams = context->get<cst::ParentParams>();
@@ -512,10 +511,6 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         result += "export ";
     }
 
-    if (implMark) {
-        result += any_cast<string>(visitImplMark(implMark)) + " ";
-    }
-
     if (modifiers) {
         result += any_cast<string>(visitModifiers(modifiers)) + " ";
     }
@@ -534,6 +529,11 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         result += ": " + any_cast<string>(visitType(typeExpr));
     }
 
+    if (!stmtBlock) {
+        // A body-less declaration of a C++ operator: the signature is the whole of it (design
+        // principles 6.4; handover H19, step 1).
+        return result;
+    }
     return result + " " + any_cast<string>(visitStmtBlock(stmtBlock));
 }
 
@@ -542,7 +542,13 @@ ruleDecl : EXPORT? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}
            (IDENTIFIER dataExpr)? ;
 */
 any Formatter::visitRuleDecl(cst::RuleDecl context) {
-    string result = context->has(TK::KwExport) ? "export rule " : "rule ";
+    string result;
+    // The tags written before the rule (`#requires<...>`, design principles 6.2, 7.2): each on a
+    // line of its own, as before a function or a type declaration.
+    for (const auto &tagUse : context->all<cst::TagUse>()) {
+        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+    }
+    result += context->has(TK::KwExport) ? "export rule " : "rule ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
     if (const auto ruleContext = context->get<cst::RuleContext>()) {
         result += any_cast<string>(visitRuleContext(ruleContext));
@@ -553,6 +559,55 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
         result += " when " + any_cast<string>(visitExpr(condition));
     }
     return result;
+}
+
+/*
+analysisDecl : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr
+               '{' analysisClause* '}'
+*/
+any Formatter::visitAnalysisDecl(cst::AnalysisDecl context) {
+    string result;
+    for (const auto &tagUse : context->all<cst::TagUse>()) {
+        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+    }
+    result += context->tok(TK::KwExport) ? "export analysis " : "analysis ";
+    result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    if (const auto params = context->get<cst::ParentParams>()) {
+        result += any_cast<string>(visitParentParams(params));
+    }
+    result += ": " + any_cast<string>(visitType(context->type()));
+    result += " {";
+    pushIndent();
+    for (const auto clause : context->all<cst::AnalysisClause>()) {
+        result += lineEnd() + any_cast<string>(visitAnalysisClause(clause));
+    }
+    popIndent();
+    result += lineEnd() + "}";
+    return result;
+}
+
+/*
+analysisClause : IDENTIFIER '=>' dataExpr
+               | IDENTIFIER '(' identList? ')' '=>' dataExpr
+               | IDENTIFIER '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
+*/
+any Formatter::visitAnalysisClause(cst::AnalysisClause context) {
+    const string keyword = context->tok(TK::Identifier).text();
+    const auto exprs     = context->exprs();
+    if (const auto name = context->get<cst::IdentDef>()) {
+        return "on (const " + any_cast<string>(visitIdentDef(name)) + ": " +
+               any_cast<string>(visitType(context->type())) + ") => " +
+               any_cast<string>(visitExpr(exprs[0]));
+    }
+    if (const auto params = context->get<cst::IdentList>()) {
+        return keyword + "(" + any_cast<string>(visitIdentList(params)) + ") => " +
+               any_cast<string>(visitExpr(exprs[0]));
+    }
+    if (keyword == "on") {
+        return "on (" + any_cast<string>(visitExpr(exprs[0])) + ") => " +
+               any_cast<string>(visitExpr(exprs[1]));
+    }
+    return keyword + " => " + any_cast<string>(visitExpr(exprs[0]));
 }
 
 /*
@@ -646,18 +701,14 @@ any Formatter::visitDataDecl(cst::DataDecl context) {
 
 /*
 typeDecl
-    : implMark? TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
+    : TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
       (typeExpr | STRING)
     ;
 */
 any Formatter::visitTypeDecl(cst::TypeDecl context) {
-    const auto &implMark = context->get<cst::ImplMark>();
     string result;
     for (const auto &tagUse : context->all<cst::TagUse>()) {
         result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
-    }
-    if (implMark) {
-        result += any_cast<string>(visitImplMark(implMark)) + " ";
     }
     result += "type " + any_cast<string>(visitIdentRef(context->get<cst::IdentRef>()));
     if (const auto params = context->all<cst::IdentDef>(); !params.empty()) {
@@ -685,18 +736,10 @@ any Formatter::visitRetStmt(cst::RetStmt context) {
 }
 
 /*
-implMark    : INNER | OUTER ;
-*/
-any Formatter::visitImplMark(cst::ImplMark context) { return context->text(); }
-
-/*
-modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
+modifiers   : SYNC+ ;
 */
 any Formatter::visitModifiers(cst::Modifiers context) {
     string result;
-    context->tokCount(TK::KwMacro) ? result += "macro " : result;
-    context->tokCount(TK::KwAtomic) ? result += "atomic " : result;
-    context->tokCount(TK::KwShared) ? result += "shared " : result;
     context->tokCount(TK::KwSync) ? result += "sync " : result;
     // remove trailing space
     if (!result.empty()) {
@@ -739,16 +782,19 @@ any Formatter::visitKeyValuePair(cst::KeyValuePair context) {
 }
 
 /*
-keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
+keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)? ;
 */
 any Formatter::visitKeyParamPair(cst::KeyParamPair context) {
     string result = context->tok(TK::KwVar) ? "var " : context->tok(TK::KwConst) ? "const " : "";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
     const auto &typeExpr = context->type();
     const auto &dataExpr = context->expr();
-    result += ": " + any_cast<string>(visitType(typeExpr));
-    if (dataExpr) {
-        result += " = " + any_cast<string>(visitExpr(dataExpr));
+    // A lambda's parameter may leave its type out (design principles 5.9).
+    if (typeExpr) {
+        result += ": " + any_cast<string>(visitType(typeExpr));
+        if (dataExpr) {
+            result += " = " + any_cast<string>(visitExpr(dataExpr));
+        }
     }
     return result;
 }
@@ -825,17 +871,44 @@ any Formatter::visitArgumentList(cst::ArgumentList context) {
 }
 
 /*
-indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
+indices : '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']' ;
 */
 any Formatter::visitIndices(cst::Indices context) {
-    string result = "[" + any_cast<string>(visitExpr(context->expr(0)));
-    if (context->childCount() > 3) {
-        result += ": " + any_cast<string>(visitExpr(context->expr(1)));
-        if (context->childCount() > 6) {
-            result += ": " + any_cast<string>(visitExpr(context->expr(2)));
+    string result = "[";
+    bool first    = true;
+    for (const syn::Node entry : context->nodes()) {
+        if (!first) {
+            result += ", ";
+        }
+        first = false;
+        if (entry.is(NK::SliceIndices)) {
+            result += any_cast<string>(visitSliceIndices(cst::SliceIndices(entry)));
+        } else {
+            result += any_cast<string>(visitExpr(entry));
         }
     }
     return result + "]";
+}
+
+/*
+sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)?, a part not written left out ;
+*/
+any Formatter::visitSliceIndices(cst::SliceIndices context) {
+    // The tree keeps the colons it consumed, so the text is the parts and the colons in the
+    // order they were written. A colon is followed by a space only when a part follows it.
+    string result;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        const auto child = context->child(i);
+        if (child.isToken()) {
+            result += ":";
+            continue;
+        }
+        if (!result.empty() && result.back() == ':') {
+            result += " ";
+        }
+        result += any_cast<string>(visitExpr(child.node()));
+    }
+    return result;
 }
 
 /*
@@ -943,6 +1016,107 @@ any Formatter::visitMatchCase(cst::MatchCase context) {
 }
 
 /*
+matchTypeExpr
+    : MATCH TYPE typeExpr '{' typeCase* '}'
+    ;
+*/
+any Formatter::visitMatchTypeExpr(cst::MatchTypeExpr context) {
+    return "match type " + formatTypeInTypePosition(context->type()) + " {" +
+           formatList(
+               vec(context->all<cst::TypeCase>()),
+               context,
+               " ",
+               "",
+               PaddingNL | Multiline | PushScope) +
+           "}";
+}
+
+/*
+typeCase
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+    ;
+*/
+any Formatter::visitTypeCase(cst::TypeCase context) {
+    return "case " +
+           formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |") + " => " +
+           any_cast<string>(visitBlockExpr(context->lastChild().node()));
+}
+
+/*
+typeCasePattern
+    : 'struct' | 'tuple' | '#' 'leaf' | '_'
+    ;
+*/
+any Formatter::visitTypeCasePattern(cst::TypeCasePattern context) {
+    return context->text();
+}
+
+/*
+staticForExpr
+    : STATIC staticForHeader '=>' blockExpr
+    ;
+staticForHeader
+    : FOR '(' identDef (',' identDef)? ')' IN ('fields' typeExpr | 'indices' dataExpr)
+    ;
+*/
+any Formatter::visitStaticForExpr(cst::StaticForExpr context) {
+    const auto valueName = context->get<cst::IdentDef>(0);
+    const auto mode      = context->tok(TK::Identifier);
+    if (mode && mode.text() == "indices") {
+        return "static for (" + any_cast<string>(visitIdentDef(valueName)) + ") in indices " +
+               any_cast<string>(visit(context->expr())) + " => " +
+               any_cast<string>(visitBlockExpr(context->lastChild().node()));
+    }
+    const auto typeName = context->get<cst::IdentDef>(1);
+    return "static for (" + any_cast<string>(visitIdentDef(valueName)) + ", " +
+           any_cast<string>(visitIdentDef(typeName)) + ") in fields " +
+           formatTypeInTypePosition(context->type()) + " => " +
+           any_cast<string>(visitBlockExpr(context->lastChild().node()));
+}
+
+/// A `(` at the head of a type after `fields` / `match type` opens a tuple or a parenthesised
+/// type, not a parameter list (H79 ruling 1), so a function type written there needs one more
+/// pair of parentheses: `fields ((x: int) => int)`. Every other type is printed as it is.
+string Formatter::formatTypeInTypePosition(syn::Node type) {
+    const string text = any_cast<string>(visitType(type));
+    syn::Node head    = type;
+    while (head && head.is(NK::TypeExpr)) {
+        head = head.type(0);
+    }
+    return head && head.is(NK::FuncType) && text.starts_with("(") ? "(" + text + ")" : text;
+}
+
+/*
+staticLoopExpr
+    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+    ;
+*/
+any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
+    string text = "static loop ";
+    bool first  = true;
+    for (const auto state : context->all<cst::LoopState>()) {
+        text += (first ? "" : ", ") +
+                any_cast<string>(visitIdentDef(state.get<cst::IdentDef>())) + " = " +
+                any_cast<string>(visit(state.expr()));
+        first = false;
+    }
+    const auto mode = context->tok(TK::Identifier);
+    if (mode && mode.text() == "indices") {
+        text += " for (" +
+                any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(0))) +
+                ") in indices " + any_cast<string>(visit(context->expr())) + " do " +
+                any_cast<string>(visitBlockExpr(context->lastChild().node()));
+        return text;
+    }
+    text += " for (" +
+            any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(0))) + ", " +
+            any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(1))) + ") in fields " +
+            any_cast<string>(visitType(context->type())) + " do " +
+            any_cast<string>(visitBlockExpr(context->lastChild().node()));
+    return text;
+}
+
+/*
 catchClause
     : CATCH identDef ':' typeExpr stmtBlock
     ;
@@ -961,6 +1135,9 @@ ctrlExpr
     ;
 */
 any Formatter::visitCtrlExpr(syn::Node context) {
+    if (context.is(NK::MatchTypeExpr)) {
+        return visitMatchTypeExpr(cst::MatchTypeExpr(context));
+    }
     switch (context.is(NK::IfExpr) ? 1 : context.is(NK::MatchExpr) ? 2 : 3) {
     case 1: // IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
     {
@@ -1174,19 +1351,27 @@ any Formatter::visitAccessExpr(cst::AccessExpr context) {
 
 /*
 memberAccess
-    : '.' (IDENTIFIER | INTEGER | REAL)
+    : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
     ;
 */
 any Formatter::visitMemberAccess(cst::MemberAccess context) {
+    if (context->child(1).isToken() && context->child(1).text() == "[") {
+        return ".[" + any_cast<string>(visit(context->child(2).node())) + "]";
+    }
     return "." + context->child(1)->text();
 }
 
 /*
 structData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
+    | '{' staticForExpr '}'        // a struct comprehension (H51 step 4)
     ;
 */
 any Formatter::visitStructData(cst::StructData context) {
+    // A comprehension holds its generator and nothing else.
+    if (const auto generator = context->get<cst::StaticForExpr>()) {
+        return "{" + any_cast<string>(visitStaticForExpr(generator)) + "}";
+    }
     const auto &pairedValues = context->get<cst::PairedValues>();
     if (pairedValues) {
         return "{" +
@@ -1231,9 +1416,13 @@ any Formatter::visitArrayData(cst::ArrayData context) {
 /*
 tupleData
     : '(' dataList? ','? ')'
+    | '(' staticForExpr ')'        // a tuple comprehension (H51 step 4)
     ;
 */
 any Formatter::visitTupleData(cst::TupleData context) {
+    if (const auto generator = context->get<cst::StaticForExpr>()) {
+        return "(" + any_cast<string>(visitStaticForExpr(generator)) + ")";
+    }
     if (context->get<cst::DataList>()) {
         return "(" + any_cast<string>(visitDataList(context->get<cst::DataList>())) +
                (hasTrailingComma(context) ? "," : "") + ")";
@@ -1566,12 +1755,13 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(TagRef)
         CAMEL_FORMAT(FuncDecl)
         CAMEL_FORMAT(RuleDecl)
+        CAMEL_FORMAT(AnalysisDecl)
+        CAMEL_FORMAT(AnalysisClause)
         CAMEL_FORMAT(RuleContext)
         CAMEL_FORMAT(RuleBody)
         CAMEL_FORMAT(DataDecl)
         CAMEL_FORMAT(TypeDecl)
         CAMEL_FORMAT(RetStmt)
-        CAMEL_FORMAT(ImplMark)
         CAMEL_FORMAT(Modifiers)
         CAMEL_FORMAT(ParentIdents)
         CAMEL_FORMAT(BracedIdents)
@@ -1592,6 +1782,11 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(AngledValues)
         CAMEL_FORMAT(Pattern)
         CAMEL_FORMAT(MatchCase)
+        CAMEL_FORMAT(MatchTypeExpr)
+        CAMEL_FORMAT(StaticForExpr)
+        CAMEL_FORMAT(StaticLoopExpr)
+        CAMEL_FORMAT(TypeCase)
+        CAMEL_FORMAT(TypeCasePattern)
         CAMEL_FORMAT(CatchClause)
         CAMEL_FORMAT(MemberAccess)
         CAMEL_FORMAT(TypeList)
@@ -1686,6 +1881,8 @@ any Formatter::visit(syn::Node context) {
         return "typeas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
     case NK::ConstasData:
         return "constas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
+    case NK::SliceIndices:
+        return visitSliceIndices(cst::SliceIndices(context));
     default:
         throw std::runtime_error(
             "camel-format: no rule for " + std::string(syn::nodeKindName(context.kind())));

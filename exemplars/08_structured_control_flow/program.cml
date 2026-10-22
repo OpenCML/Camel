@@ -9,7 +9,7 @@ module structured_control_flow
 
 import { Tensor, reshape, relu } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func gate(t: Tensor): Tensor {
     return if t[0] > 0.5 then relu(t) * 2.0 else t * (t[1] * 2.0) - 1.0

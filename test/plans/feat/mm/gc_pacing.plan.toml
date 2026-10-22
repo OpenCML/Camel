@@ -1,303 +1,509 @@
 id = "mm.gc_pacing"
 order = 367
 tier = "slow"
-tags = ["feat", "mm", "gc", "pacing"]
+tags = ["feat", "mm", "gc", "pacing", "block"]
 desc = """
-How often the allocator asks for a collection when a program allocates large objects, and how
-much the large-object space holds at most. One array of 40 MB stays alive while 200 temporary
-arrays of 0.8 MB each are allocated and dropped, one per call (190.7 MB in all). After a sweep
-the budget is the larger of the floor (CAMEL_GC_LARGE_BUDGET_MB, default 4 MB) and
-CAMEL_GC_GROWTH_PERCENT percent of the volume the sweep left, so the space holds at most
-live * (1 + percent / 100) plus the allocation that crossed the budget, and the number of
-collections is the volume allocated divided by the budget. Both are read from the allocator's
-statistics line (CAMEL_GC_STATS=1); nothing here depends on time, and the program runs one node
-at a time, so the numbers are the same on every run.
+What asks for a collection, how much one frees, and how high the program's memory gets.
+
+Array data lives in data blocks, outside the collected heap. A minor collection is asked for when
+the birth space plus the block bytes allocated since the last collection reach 90 % of the birth
+space (3,774,873 bytes by default), so the window of block bytes a collection lets through is
+fixed and the high-water mark is the live set plus one window plus the one allocation that crossed
+it, whatever the number of steps (the first two cases). A churn-only program keeps nothing, so its
+high-water mark is the window plus one block and it does not grow with the work done (the next
+cases: the three back ends, the mark-sweep collector and a larger birth space).
+
+A block held by an array that is promoted to the elder space can be released only by a major
+collection (a minor collection does not sweep the elder space). The allocator counts the block
+bytes of promoted values and asks for a major collection once they exceed a budget: the larger of
+the CAMEL_GC_LARGE_BUDGET_MB floor (default 4 MB) and CAMEL_GC_GROWTH_PERCENT percent (default 100)
+of the block bytes the last sweep left in promoted values. The rolled-window case keeps `rows`
+arrays alive, so rows must survive the four minor collections that promote them and their blocks
+become the garbage that drives the major collections; without that path the high-water mark would
+grow with the number of steps. One block is one block of pressure: a block reached through two
+views is counted once (the views case asserts that a 3 MB block shared by an array and its
+`reshape` view, both promoted, does not ask for a major against the 4 MB floor), and an array that
+was promoted while still inline registers the block at the takeover when it grows (the adopted
+case asserts that growing that block past the floor asks for a major; without the registration no
+promotion ever sees the block). The training case is the shape of H40 section 8 (integer labels
+cast inside the differentiated function, softmax cross entropy, grad, sgd): the batch and the
+model stay alive and the peak stays at the live set plus one window, at twice the steps too.
+
+Every number below is read from the program (`std::mem::blocks()`) or the allocator's statistics
+line (std::profile(gc_stats=1)). Nothing depends on time; the collections are counted, and the bounds are
+wide enough for the three back ends (the parallel scheduler may allocate the same values in a
+different order).
 """
 
+# ---------------------------------------------------------------------------------------------
+# A live set plus one temporary per step: the peak is the live set plus one window.
+# ---------------------------------------------------------------------------------------------
+
 [[tests]]
-name = "gc_pacing.growth_default_fvm"
-desc = "Default growth (100 percent): the budget equals the live volume, the space doubles between collections: 4 collections, high-water mark 77.8 MB for 38.9 MB alive. Pipeline: std::fvm."
+name = "gc_pacing.live_fvm"
+desc = "40 MB live, 200 temporaries of 0.8 MB: the peak is 4.8 MB above the live set (3.6 MB window + 0.8 MB temporary), the low point is one temporary above it, and the block of the live array never enters the large-object space (no collection is asked for by the large-object budget). Pipeline: std::fvm."
 kind = "behavior"
-case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
-args = ["${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_STATS=1"]
+case = "../../../cases/feat/mm/gc/gc_block_pacing.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=200", "--arg", "temp=100000", "${run_fvm}"]
+
 expect_exit = 0
-expect_stdout_contains = ["gc_large_pacing total=25000000"]
+expect_stdout_contains = ["gc_block_pacing base=40000000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
+const m = /gc_block_pacing base=([0-9]+) peak=([0-9]+) low=([0-9]+) released=([0-9]+) total=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, released, total] = m.slice(1).map(Number)
+assert(base === 40000000, `base ${base}, expected 40000000 (5e6 ints of 8 bytes)`)
+assert(total === 20000000, `total ${total}, expected 20000000 (200 temporaries of 100000)`)
+assert(peak - base >= 3600000, `peak ${peak} is ${peak - base} above base, expected the 3.6 MB window to be used`)
+assert(peak - base <= 5000000, `peak ${peak} is ${peak - base} above base, expected the live set plus the window plus one temporary (4.4 MB)`)
+assert(low - base >= 700000, `low ${low} is ${low - base} above base, expected at least one temporary block`)
+assert(low - base <= 900000, `low ${low} is ${low - base} above base, expected the temporary block and nothing else: the collector ran too early`)
+assert(released >= 190, `${released} blocks released, expected all but the window (at least 190)`)
 const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
-assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
 const field = (name) => {
-    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
-    assert(m !== null, `no ${name} in: ${line[0]}`)
-    return Number(m[1])
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
 }
-const major = field('major')
-const byBudget = field('by_large_budget')
-const live = field('large_live_mb')
-const high = field('large_high_water_mb')
-const budget = field('budget_mb')
-assert(field('growth_percent') === 100, `growth setting in force: ${line[0]}`)
-assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
-assert(major >= 4 && major <= 4, `${major} collections, expected 4 to 4: ${line[0]}`)
-assert(Math.abs(budget - 38.9) <= 0.2, `budget ${budget} MB, expected 38.9: ${line[0]}`)
-// The space never holds more than what the last sweep left, plus the budget, plus the one
-// temporary array (0.8 MB) whose allocation crossed the budget.
-assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
-assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
-}
-"""
-timeout_ms = 120000
-
-[[tests]]
-name = "gc_pacing.growth_default_nvm"
-desc = "Default growth (100 percent): 4 collections, high-water mark 77.8 MB for 38.9 MB alive. Pipeline: std::nvm."
-kind = "behavior"
-case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
-args = ["${case}", "${run_nvm}"]
-envs = ["CAMEL_GC_STATS=1"]
-expect_exit = 0
-expect_stdout_contains = ["gc_large_pacing total=25000000"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
-assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
-const field = (name) => {
-    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
-    assert(m !== null, `no ${name} in: ${line[0]}`)
-    return Number(m[1])
-}
-const major = field('major')
-const byBudget = field('by_large_budget')
-const live = field('large_live_mb')
-const high = field('large_high_water_mb')
-const budget = field('budget_mb')
-assert(field('growth_percent') === 100, `growth setting in force: ${line[0]}`)
-assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
-assert(major >= 4 && major <= 4, `${major} collections, expected 4 to 4: ${line[0]}`)
-assert(Math.abs(budget - 38.9) <= 0.2, `budget ${budget} MB, expected 38.9: ${line[0]}`)
-// The space never holds more than what the last sweep left, plus the budget, plus the one
-// temporary array (0.8 MB) whose allocation crossed the budget.
-assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
-assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+assert(field('by_large_budget') === 0, `the large-object budget asked for a collection: ${line[0]}`)
+const minor = field('minor')
+assert(minor >= 33 && minor <= 50, `${minor} minor collections, expected one per window (33 to 50)`)
 }
 """
 timeout_ms = 120000
 
 [[tests]]
-name = "gc_pacing.growth_50_fvm"
-desc = "Growth 50 percent: budget 19.5 MB, twice the collections of the default, high-water mark 58.4 MB. Pipeline: std::fvm."
+name = "gc_pacing.live_steps"
+desc = "The same live set with 600 temporaries instead of 200: the peak does not move (4.8 MB above the live set), the collections and released blocks triple. Pipeline: std::fvm."
 kind = "behavior"
-case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
-args = ["${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=50"]
+case = "../../../cases/feat/mm/gc/gc_block_pacing.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=100000", "${run_fvm}"]
+
 expect_exit = 0
-expect_stdout_contains = ["gc_large_pacing total=25000000"]
+expect_stdout_contains = ["gc_block_pacing base=40000000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
+const m = /gc_block_pacing base=([0-9]+) peak=([0-9]+) low=([0-9]+) released=([0-9]+) total=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, released, total] = m.slice(1).map(Number)
+assert(base === 40000000, `base ${base}, expected 40000000`)
+assert(total === 60000000, `total ${total}, expected 60000000 (600 temporaries of 100000)`)
+assert(peak - base <= 5000000, `peak ${peak} is ${peak - base} above base: the peak must not grow with the work done`)
+assert(low - base <= 900000, `low ${low} is ${low - base} above base, expected the temporary block and nothing else`)
+assert(released >= 590, `${released} blocks released, expected all but the window (at least 590)`)
 const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
-assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
 const field = (name) => {
-    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
-    assert(m !== null, `no ${name} in: ${line[0]}`)
-    return Number(m[1])
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
 }
-const major = field('major')
-const byBudget = field('by_large_budget')
-const live = field('large_live_mb')
-const high = field('large_high_water_mb')
-const budget = field('budget_mb')
-assert(field('growth_percent') === 50, `growth setting in force: ${line[0]}`)
-assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
-assert(major >= 8 && major <= 9, `${major} collections, expected 8 to 9: ${line[0]}`)
-assert(Math.abs(budget - 19.5) <= 0.2, `budget ${budget} MB, expected 19.5: ${line[0]}`)
-// The space never holds more than what the last sweep left, plus the budget, plus the one
-// temporary array (0.8 MB) whose allocation crossed the budget.
-assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
-assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+const minor = field('minor')
+assert(minor >= 100 && minor <= 150, `${minor} minor collections, expected one per window (100 to 150)`)
 }
 """
 timeout_ms = 120000
 
 [[tests]]
-name = "gc_pacing.growth_25_fvm"
-desc = "Growth 25 percent: budget 9.7 MB, 16 collections, high-water mark 48.8 MB. Pipeline: std::fvm."
+name = "gc_pacing.live_nvm"
+desc = "The live-set case on the node VM: the same peak, low point and released blocks as std::fvm. Pipeline: std::nvm."
 kind = "behavior"
-case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
-args = ["${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=25"]
+case = "../../../cases/feat/mm/gc/gc_block_pacing.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=200", "--arg", "temp=100000", "${run_nvm}"]
+
 expect_exit = 0
-expect_stdout_contains = ["gc_large_pacing total=25000000"]
+expect_stdout_contains = ["gc_block_pacing base=40000000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
-assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
-const field = (name) => {
-    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
-    assert(m !== null, `no ${name} in: ${line[0]}`)
-    return Number(m[1])
+const m = /gc_block_pacing base=([0-9]+) peak=([0-9]+) low=([0-9]+) released=([0-9]+) total=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, released, total] = m.slice(1).map(Number)
+assert(base === 40000000 && total === 20000000, `base ${base}, total ${total}, expected 40000000 and 20000000`)
+assert(peak - base >= 3600000 && peak - base <= 5000000, `peak ${peak} is ${peak - base} above base, expected 3.6 to 5.0 MB`)
+assert(low - base <= 900000, `low ${low} is ${low - base} above base, expected the temporary block and nothing else`)
+assert(released >= 190, `${released} blocks released, expected all but the window (at least 190)`)
 }
-const major = field('major')
-const byBudget = field('by_large_budget')
-const live = field('large_live_mb')
-const high = field('large_high_water_mb')
-const budget = field('budget_mb')
-assert(field('growth_percent') === 25, `growth setting in force: ${line[0]}`)
-assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
-assert(major >= 16 && major <= 16, `${major} collections, expected 16 to 16: ${line[0]}`)
-assert(Math.abs(budget - 9.7) <= 0.2, `budget ${budget} MB, expected 9.7: ${line[0]}`)
-// The space never holds more than what the last sweep left, plus the budget, plus the one
-// temporary array (0.8 MB) whose allocation crossed the budget.
-assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
-assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+"""
+timeout_ms = 120000
+
+# ---------------------------------------------------------------------------------------------
+# Churn with nothing kept: the peak is one window plus one block, whatever the number of steps.
+# ---------------------------------------------------------------------------------------------
+
+[[tests]]
+name = "gc_pacing.churn_fvm"
+desc = "Nothing live, 600 temporaries of 2.4 MB: 180 MB of block data allocated, 7.2 MB high-water mark (a 3.6 MB window and one 2.4 MB block), every block but the window released. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
+
+expect_exit = 0
+expect_stdout_contains = ["gc_block_churn base=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /gc_block_churn base=([0-9]+) peak=([0-9]+) low=([0-9]+) dropped=([0-9]+) released=([0-9]+) total=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, dropped, released, total] = m.slice(1).map(Number)
+assert(base === 0, `base ${base}, expected 0: nothing is kept`)
+assert(total === 180000000, `total ${total}, expected 180000000 (600 x 300000)`)
+assert(peak >= 4800000 && peak <= 8000000, `peak ${peak}, expected a window plus one block (4.8 to 8.0 MB)`)
+assert(low >= 2400000 && low <= 4800000, `low ${low}, expected one block (2.4 MB) and at most a block more`)
+assert(dropped >= 250, `${dropped} samples saw the live bytes fall, expected most of them (at least 250)`)
+assert(released >= 590, `${released} blocks released, expected all but the window (at least 590)`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
+const field = (name) => {
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
+}
+const minor = field('minor')
+assert(minor >= 240 && minor <= 360, `${minor} minor collections, expected one per 2-block window (240 to 360)`)
 }
 """
 timeout_ms = 120000
 
 [[tests]]
-name = "gc_pacing.growth_25_nvm"
-desc = "Growth 25 percent: budget 9.7 MB, 16 collections, high-water mark 48.8 MB. Pipeline: std::nvm."
+name = "gc_pacing.churn_nvm"
+desc = "The churn case on the node VM: the same high-water mark and released blocks. Pipeline: std::nvm."
 kind = "behavior"
-case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
-args = ["${case}", "${run_nvm}"]
-envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=25"]
+case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=300000", "${run_nvm}"]
+
 expect_exit = 0
-expect_stdout_contains = ["gc_large_pacing total=25000000"]
+expect_stdout_contains = ["gc_block_churn base=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
-assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
-const field = (name) => {
-    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
-    assert(m !== null, `no ${name} in: ${line[0]}`)
-    return Number(m[1])
-}
-const major = field('major')
-const byBudget = field('by_large_budget')
-const live = field('large_live_mb')
-const high = field('large_high_water_mb')
-const budget = field('budget_mb')
-assert(field('growth_percent') === 25, `growth setting in force: ${line[0]}`)
-assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
-assert(major >= 16 && major <= 16, `${major} collections, expected 16 to 16: ${line[0]}`)
-assert(Math.abs(budget - 9.7) <= 0.2, `budget ${budget} MB, expected 9.7: ${line[0]}`)
-// The space never holds more than what the last sweep left, plus the budget, plus the one
-// temporary array (0.8 MB) whose allocation crossed the budget.
-assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
-assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+const m = /gc_block_churn base=([0-9]+) peak=([0-9]+) low=([0-9]+) dropped=([0-9]+) released=([0-9]+) total=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, dropped, released, total] = m.slice(1).map(Number)
+assert(base === 0 && total === 180000000, `base ${base}, total ${total}, expected 0 and 180000000`)
+assert(peak >= 4800000 && peak <= 8000000, `peak ${peak}, expected a window plus one block`)
+assert(dropped >= 250, `${dropped} samples saw the live bytes fall, expected most of them`)
+assert(released >= 590, `${released} blocks released, expected all but the window`)
 }
 """
 timeout_ms = 120000
 
 [[tests]]
-name = "gc_pacing.growth_25_prl"
-desc = "Growth 25 percent under the parallel scheduler (the program has no two unordered heavy items, so the allocation order is the sequential one): 16 collections, high-water mark 48.8 MB, every collection performed by the scheduler's gate. Pipeline: std::prl."
+name = "gc_pacing.churn_prl"
+# The high-water mark is the window the collector lets through plus one block, but a collection
+# is asked for at a safepoint and runs later while the machine is busy: next to seven other test
+# processes the same case measured 9.6 MB (H101) and 12 MB (H80's gate), against 7.2 MB alone.
+# The numbers this case checks are the serial run's, so it runs alone.
+parallel = false
+desc = "The churn case under the parallel scheduler: the program has no two unordered heavy items, so it allocates in the same order and the numbers are those of std::fvm, without the exact-count flakiness the old plan had (bounds, not equalities). Pipeline: std::prl."
 kind = "behavior"
-case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
-args = ["${case}", "std::prl"]
-envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=25"]
+case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=300000", "std::prl"]
+
 expect_exit = 0
-expect_stdout_contains = ["gc_large_pacing total=25000000"]
+expect_stdout_contains = ["gc_block_churn base=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
-assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
-const field = (name) => {
-    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
-    assert(m !== null, `no ${name} in: ${line[0]}`)
-    return Number(m[1])
-}
-const major = field('major')
-const byBudget = field('by_large_budget')
-const live = field('large_live_mb')
-const high = field('large_high_water_mb')
-const budget = field('budget_mb')
-assert(field('growth_percent') === 25, `growth setting in force: ${line[0]}`)
-assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
-assert(major >= 16 && major <= 16, `${major} collections, expected 16 to 16: ${line[0]}`)
-assert(Math.abs(budget - 9.7) <= 0.2, `budget ${budget} MB, expected 9.7: ${line[0]}`)
-// The space never holds more than what the last sweep left, plus the budget, plus the one
-// temporary array (0.8 MB) whose allocation crossed the budget.
-assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
-assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+const m = /gc_block_churn base=([0-9]+) peak=([0-9]+) low=([0-9]+) dropped=([0-9]+) released=([0-9]+) total=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, dropped, released, total] = m.slice(1).map(Number)
+assert(base === 0 && total === 180000000, `base ${base}, total ${total}, expected 0 and 180000000`)
+assert(peak >= 4800000 && peak <= 8000000, `peak ${peak}, expected a window plus one block`)
+assert(released >= 590, `${released} blocks released, expected all but the window`)
 }
 """
 timeout_ms = 120000
 
 [[tests]]
-name = "gc_pacing.growth_10_floor_fvm"
-desc = "Growth 10 percent of 38.9 MB is below the floor, so the floor (4 MB) is the budget: 34 collections, high-water mark 43.5 MB. Pipeline: std::fvm."
+name = "gc_pacing.churn_mark_sweep"
+desc = "Mark-sweep collector: no young generation, so every array is born in the elder space and its block is registered at the takeover; the promoted-block floor (4 MB) asks for the major collections instead of the elder-space budget, and the peak is 7.2 MB (the 2.4 MB temporary block plus the floor) for the same 180 MB of garbage (--gc mark-sweep). Pipeline: std::fvm."
 kind = "behavior"
-case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
-args = ["${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=10"]
+case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
+args = ["--gc", "mark-sweep", "${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
+
 expect_exit = 0
-expect_stdout_contains = ["gc_large_pacing total=25000000"]
+expect_stdout_contains = ["gc_block_churn base=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
+const m = /gc_block_churn base=([0-9]+) peak=([0-9]+) low=([0-9]+) dropped=([0-9]+) released=([0-9]+) total=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, dropped, released, total] = m.slice(1).map(Number)
+assert(base === 0 && total === 180000000, `base ${base}, total ${total}, expected 0 and 180000000`)
+assert(peak >= 6000000 && peak <= 8000000, `peak ${peak}, expected one temporary block plus the 4 MB floor (6 to 8 MB)`)
+assert(released >= 580, `${released} blocks released, expected almost all of them`)
 const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
-assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
 const field = (name) => {
-    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
-    assert(m !== null, `no ${name} in: ${line[0]}`)
-    return Number(m[1])
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
 }
 const major = field('major')
-const byBudget = field('by_large_budget')
-const live = field('large_live_mb')
-const high = field('large_high_water_mb')
-const budget = field('budget_mb')
-assert(field('growth_percent') === 10, `growth setting in force: ${line[0]}`)
-assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
-assert(major >= 34 && major <= 34, `${major} collections, expected 34 to 34: ${line[0]}`)
-assert(Math.abs(budget - 4.0) <= 0.2, `budget ${budget} MB, expected 4.0: ${line[0]}`)
-// The space never holds more than what the last sweep left, plus the budget, plus the one
-// temporary array (0.8 MB) whose allocation crossed the budget.
-assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
-assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+assert(field('minor') === 0, `this collector has no minor collections: ${line[0]}`)
+assert(major > 0, `no major collection under mark-sweep: ${line[0]}`)
+assert(major === field('by_elder_block_budget'), `every collection is asked for by the promoted-block budget: ${line[0]}`)
+assert(field('by_elder_exhausted') === 0, `the elder-space budget asked for a collection: ${line[0]}`)
 }
 """
 timeout_ms = 120000
 
 [[tests]]
-name = "gc_pacing.floor_64_fvm"
-desc = "CAMEL_GC_LARGE_BUDGET_MB is the floor of the budget, not the budget: 64 MB is above 25 percent of the live volume, so it is in force: 2 collections. Pipeline: std::fvm."
+name = "gc_pacing.churn_nursery8"
+desc = "The window is the birth space: with CAMEL_GC_NURSERY_MB=8 it is 7.2 MB, so the high-water mark of the same churn is 12 MB (one window and two blocks) and the collections halve. Pipeline: std::fvm."
 kind = "behavior"
-case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
-args = ["${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=25", "CAMEL_GC_LARGE_BUDGET_MB=64"]
+case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
+envs = ["CAMEL_GC_NURSERY_MB=8"]
 expect_exit = 0
-expect_stdout_contains = ["gc_large_pacing total=25000000"]
+expect_stdout_contains = ["gc_block_churn base=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
+const m = /gc_block_churn base=([0-9]+) peak=([0-9]+) low=([0-9]+) dropped=([0-9]+) released=([0-9]+) total=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, dropped, released, total] = m.slice(1).map(Number)
+assert(base === 0 && total === 180000000, `base ${base}, total ${total}, expected 0 and 180000000`)
+assert(peak >= 10000000 && peak <= 14000000, `peak ${peak}, expected an 8 MB window plus blocks (10 to 14 MB)`)
+assert(released >= 590, `${released} blocks released, expected all but the window`)
 const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
-assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
+const minor = Number(new RegExp('minor=([0-9]+)').exec(line[0])[1])
+assert(minor >= 120 && minor <= 180, `${minor} minor collections, expected one per 3-block window (120 to 180)`)
+}
+"""
+timeout_ms = 120000
+
+# ---------------------------------------------------------------------------------------------
+# Blocks held by promoted arrays: a major collection is asked for by their volume.
+# ---------------------------------------------------------------------------------------------
+
+[[tests]]
+name = "gc_pacing.promoted_fvm"
+desc = "A rolling window of 16 rows of 1 MB is kept; a row survives the four minor collections that promote it and is then garbage. The promoted block bytes (15 MB after the last sweep) ask for a major collection at the 4 MB floor: 64 majors in 300 steps, and the peak is 34.6 MB, which is the live window plus the floor and the young rows, not the 300 MB allocated. CAMEL_GC_GROWTH_PERCENT=25 keeps the budget at the floor. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_promoted_blocks.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
+envs = ["CAMEL_GC_GROWTH_PERCENT=25"]
+expect_exit = 0
+expect_stdout_contains = ["gc_promoted_blocks base=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /gc_promoted_blocks base=([0-9]+) peak=([0-9]+) low=([0-9]+) released=([0-9]+) total=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, released, total] = m.slice(1).map(Number)
+assert(base === 0, `base ${base}, expected 0`)
+assert(total === 39321600, `total ${total}, expected 39321600 (300 x 131072)`)
+assert(peak >= 30000000 && peak <= 40000000, `peak ${peak}, expected the live window (16 MB) plus the young rows and the floor (30 to 40 MB)`)
+assert(released >= 250, `${released} blocks released, expected the dropped rows (at least 250)`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
 const field = (name) => {
-    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
-    assert(m !== null, `no ${name} in: ${line[0]}`)
-    return Number(m[1])
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
 }
 const major = field('major')
-const byBudget = field('by_large_budget')
-const live = field('large_live_mb')
-const high = field('large_high_water_mb')
-const budget = field('budget_mb')
-assert(field('growth_percent') === 25, `growth setting in force: ${line[0]}`)
-assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
-assert(major >= 2 && major <= 2, `${major} collections, expected 2 to 2: ${line[0]}`)
-assert(Math.abs(budget - 64.0) <= 0.2, `budget ${budget} MB, expected 64.0: ${line[0]}`)
-// The space never holds more than what the last sweep left, plus the budget, plus the one
-// temporary array (0.8 MB) whose allocation crossed the budget.
-assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
-assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+assert(major >= 20, `${major} major collections, expected the promoted blocks to ask for many (at least 20)`)
+assert(major === field('by_elder_block_budget'), `every collection is asked for by the promoted-block budget: ${line[0]}`)
+assert(field('by_elder_exhausted') === 0, `the elder-space allocation budget asked for a collection: ${line[0]}`)
+const budget = field('elder_block_budget_mb')
+assert(budget >= 3.9 && budget <= 5.0, `promoted-block budget ${budget} MB, expected the 4 MB floor (25 % of 15 MB is less)`)
+assert(field('elder_block_live_mb') >= 12, `the promoted live blocks are not counted: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.promoted_steps"
+desc = "The same rolling window with 600 steps: the high-water mark does not move from 34.6 MB while the majors double. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_promoted_blocks.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
+envs = ["CAMEL_GC_GROWTH_PERCENT=25"]
+expect_exit = 0
+expect_stdout_contains = ["gc_promoted_blocks base=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /gc_promoted_blocks base=([0-9]+) peak=([0-9]+) low=([0-9]+) released=([0-9]+) total=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, released, total] = m.slice(1).map(Number)
+assert(base === 0 && total === 78643200, `base ${base}, total ${total}, expected 0 and 78643200`)
+assert(peak <= 40000000, `peak ${peak}: the high-water mark must not grow with the work done`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
+const field = (name) => {
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
+}
+assert(field('major') >= 60, `${field('major')} major collections, expected at least 60`)
+assert(field('major') === field('by_elder_block_budget'), `every collection is asked for by the promoted-block budget: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.promoted_floor"
+desc = "CAMEL_GC_LARGE_BUDGET_MB is the floor of the promoted-block budget too: with 16 MB (above 25 % of the live blocks) the majors fall from 64 to 22 and the high-water mark rises to 43 MB. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_promoted_blocks.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
+envs = ["CAMEL_GC_GROWTH_PERCENT=25", "CAMEL_GC_LARGE_BUDGET_MB=16"]
+expect_exit = 0
+expect_stdout_contains = ["gc_promoted_blocks base=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /gc_promoted_blocks base=([0-9]+) peak=([0-9]+) low=([0-9]+) released=([0-9]+) total=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, released, total] = m.slice(1).map(Number)
+assert(base === 0 && total === 39321600, `base ${base}, total ${total}, expected 0 and 39321600`)
+assert(peak >= 35000000 && peak <= 50000000, `peak ${peak}, expected the live window plus the 16 MB floor (35 to 50 MB)`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
+const field = (name) => {
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
+}
+assert(field('major') >= 10, `${field('major')} major collections, expected at least 10`)
+assert(field('major') === field('by_elder_block_budget'), `every collection is asked for by the promoted-block budget: ${line[0]}`)
+const budget = field('elder_block_budget_mb')
+assert(budget >= 15.9, `promoted-block budget ${budget} MB, expected the 16 MB floor in force`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.views_once"
+desc = "One 3 MB block reached through an array and its reshape view, both promoted: the block is counted once, so the promoted-block volume stays below the 4 MB floor and no major collection is asked for. Counting it per view would make 6 MB and ask for one. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_block_views.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=40", "--arg", "temp=100000", "${run_fvm}"]
+envs = ["CAMEL_GC_GROWTH_PERCENT=25"]
+expect_exit = 0
+expect_stdout_contains = ["gc_block_views peak="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /gc_block_views peak=([0-9]+) total=([0-9]+) keep=([0-9]+) ([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [peak, total, keepA, keepB] = m.slice(1).map(Number)
+assert(total === 4000000, `total ${total}, expected 4000000 (40 x 100000)`)
+assert(keepA === 750000 && keepB === 750000, `kept ${keepA} and ${keepB}, expected both views of the same 750000-element array`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
+const field = (name) => {
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
+}
+assert(field('major') === 0, `a major collection was asked for although the 3 MB block is below the 4 MB floor: ${line[0]}`)
+assert(field('by_elder_block_budget') === 0, `the promoted-block budget asked for a collection: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.adopted_block"
+desc = "An array promoted while inline (CAMEL_GC_PROMOTION_AGE=1, small allocations fill the birth space first) then grows its own block to 8 MB: the takeover registers the block, the sweep counts 4.7 MB of elder block bytes, and one major collection is asked for. Without the takeover registration the block is never counted and the collection count is zero. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_block_adopted.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "pause=20", "--arg", "rounds=3000", "--arg", "grow=450000", "${run_fvm}"]
+envs = ["CAMEL_GC_GROWTH_PERCENT=25", "CAMEL_GC_PROMOTION_AGE=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_block_adopted len=450000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /gc_block_adopted len=([0-9]+) total=([0-9]+) bytes=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [len, total, bytes] = m.slice(1).map(Number)
+assert(len === 450000, `length ${len}, expected 450000`)
+assert(total === 120000, `total ${total}, expected 120000 (20 x 3000 x 2 elements over 3000 rounds)`)
+assert(bytes >= 4194304, `the array's block is only ${bytes} bytes, expected it to grow past the 4 MB floor`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
+const field = (name) => {
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
+}
+assert(field('major') >= 1, `no major collection was asked for by the adopted block: ${line[0]}`)
+assert(field('elder_block_live_mb') >= 4.0, `the sweep did not count the adopted block in the elder live base: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+# ---------------------------------------------------------------------------------------------
+# A training-style loop: the peak stays at the live set plus one window.
+# ---------------------------------------------------------------------------------------------
+
+[[tests]]
+name = "gc_pacing.training_400"
+desc = "400 training steps (batch 1024, model 512 x 4): 5.9 MB peak over a 2.1 MB live set, the longest stop is a 3.6 MB window, 2685 blocks released, and the loss falls to 0.0035. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_training_peak.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=400", "--arg", "batch=1024", "--arg", "width=512", "${run_fvm}"]
+
+expect_exit = 0
+expect_stdout_contains = ["gc_training_peak base=2117768"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /gc_training_peak base=([0-9]+) peak=([0-9]+) low=([0-9]+) released=([0-9]+) loss=([0-9.eE+-]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, released, loss] = m.slice(1).map(Number)
+assert(base > 2000000 && base < 2200000, `base ${base}, expected the batch and the model (about 2.1 MB)`)
+assert(peak - base >= 3000000, `peak ${peak} is only ${peak - base} above base: the pacing window was not used`)
+assert(peak - base <= 4200000, `peak ${peak} is ${peak - base} above base, expected the window (3.6 MB) and a step's blocks, not the work done`)
+assert(low - base <= 200000, `low ${low} is ${low - base} above base, expected the live set between two windows`)
+assert(released >= 2400, `${released} blocks released, expected the churn of 400 steps`)
+assert(loss > 0.0005 && loss < 0.01, `loss ${loss}, expected the model to have trained (0.0005 to 0.01)`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
+const field = (name) => {
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
+}
+assert(field('by_large_budget') === 0, `the large-object budget asked for a collection: ${line[0]}`)
+assert(field('minor') >= 7, `${field('minor')} minor collections, expected the loop to have filled several windows`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.training_800"
+desc = "Twice the training steps: the peak stays at the live set plus one window (the same bound as 400 steps), the blocks released double and the loss halves. Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_training_peak.cml"
+args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=800", "--arg", "batch=1024", "--arg", "width=512", "${run_nvm}"]
+
+expect_exit = 0
+expect_stdout_contains = ["gc_training_peak base=2117768"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /gc_training_peak base=([0-9]+) peak=([0-9]+) low=([0-9]+) released=([0-9]+) loss=([0-9.eE+-]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [base, peak, low, released, loss] = m.slice(1).map(Number)
+assert(base > 2000000 && base < 2200000, `base ${base}, expected about 2.1 MB`)
+assert(peak - base <= 4200000, `peak ${peak} is ${peak - base} above base: doubling the work must not raise the peak`)
+assert(released >= 5000, `${released} blocks released, expected the churn of 800 steps`)
+assert(loss > 0.0005 && loss < 0.01, `loss ${loss}, expected the model to have trained`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
+const minor = Number(new RegExp('minor=([0-9]+)').exec(line[0])[1])
+assert(minor >= 15, `${minor} minor collections, expected the loop to have filled many windows`)
 }
 """
 timeout_ms = 120000

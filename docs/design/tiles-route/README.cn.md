@@ -262,7 +262,7 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 ### 10.3 Tiles 接下来的工作（按先后）
 
 1. 10.2 第 1、2 条。
-2. **支持 `LOOP`**：通过 `camel::runtime::LoopView` 读取（`docs/design/op-semantics` 11.5）；`run`、`@gpu` 拿到的已经是带 `LOOP` 的原图（读图算子声明了 `inspectsGraphs`）。先支持能确定迭代域的循环。
+2. **支持 `LOOP`**：通过 `camel::runtime::LoopView` 读取（`docs/design/op-semantics` 11.5）；`run`、`@gpu` 拿到的已经是带 `LOOP` 的原图（读图算子声明了 `readsGraphs`）。先支持能确定迭代域的循环。
 3. **其余算子与图事实迁到核心**：索引实例、归约规律、资源声明、定义图、图事实（`ctx.facts()`），去掉 Tiles 内与核心重复的推断，保持单一事实来源。
 4. **异步执行与设备常驻**：流、事件、内存池；相邻调用间的值留在设备上。
 5. **矩阵乘的性能**：接 cuBLAS（按 7.3 默认可用 f32 cuBLAS，须关闭 TF32 并保证可复现；安全模式下需逐位等于规范 FMA 链，做不到时不交给 cuBLAS），之后 Tensor Core（需 `change_precision` 许可）。
@@ -275,7 +275,7 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 - ~~空张量求 `mean` 时内核与定义图的故障种类不同~~：内核也报 `DivisionByZero`，与定义的除法同一诊断。（Tiles 自己的 `mean of empty tensor` 检查仍是另一种诊断，宜照此统一。）
 - ~~int64 求和以 f64 累加~~：全量与按轴的 int64、布尔求和都在 int64 里精确累加并回绕；全量的 `sum`/`mean` 最后一次转为 f64。声明的归约律 `sum_i64`、`mean_i64` 等的累加类型改为 int64。
 - ~~`exp` 对次正规结果冲刷为零~~：次正规结果在 2 ulp 内（实测正规 1.01 ulp、次正规 0.76 ulp），声明里去掉了 `not_ieee: subnormals`。Tiles 的 `exp` 也应给出次正规结果。
-- ~~可选的 CBLAS 后端不遵守规范算法~~：默认（含 `CAMEL_TENSOR_BLAS` 构建）一律走规范内核；只有节点同时获得 `reassociate` 与 `change_precision` 时，`tensor::fuse` 才把它换成 `tensor:matmul_blas`（用系统 BLAS）。
+- ~~可选的 CBLAS 后端不遵守规范算法~~：按 7.3，CPU 上按库实现的 f32 矩阵乘默认可用，条件是可复现（7.6）；图上仍是 `tensor:matmul`，实现选择记在节点的 `tensor.kernel` 属性上（`tensor::fuse` 写，见 H102）。安全模式（`tensor::fuse(safe_fp=true)`）与 `#strict` 节点用规范算法。库只改累加的顺序与分组，不改算子身份（9.6）。
 - ~~ONNX 导出的 `Slice` 仍截断~~：常量边界在已知长度上于导出时证明；其余边界经一个 `Gather` 守卫，越界时 ONNX Runtime 与 Camel 一样失败；在两臂都计算再选择的分支里这样的切片拒绝导出（带位置的诊断）。
 - `argmax`/`argmin` 按 7.7 比较（第一个 NaN；+0 大于 -0；并列取第一个），新增 `argmin`，二者都有数值与下标声明（律 `ArgMax`/`ArgMin`）。
 
@@ -292,7 +292,7 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 5. **没有原生实现的算子降低其定义图**（`expandDefinition`），不照 CPU 内核复刻；梯度与融合产生的算子由核心补语义声明与定义图（第 4 条）。
 6. **设备故障读核心的 `FaultSpec` 与归约规律的空区间规则**，报告带故障种类与源码位置（第 9 条）。
 7. **BF16 cuBLAS 的批偏移用核心的访问映射**，与 `ddpm-primitives.md` 的描述一致（第 10 条）。
-8. **许可对应实现的规则读核心的统一判定**（7.3：库实现的 f32 矩阵乘默认可用、BF16 只需 `change_precision`、安全模式由遍参数给出），不在模块内各写一份（第 6 条）。遍参数的通用语法由核心提供（2.17），设备选择改用遍参数，不用环境变量。核心已提供：`registerModulePass(path, PassDescriptor)` 让模块遍声明参数（名字、类型、默认值、说明），`tiles::compile(device=1)` 即可写出；`CAMEL_TILES_DEVICE`（`capability.cpp` 的 `configuredCudaOrdinal`，后端初始化与测试都读它）和 `CAMEL_TILES_NVRTC`（进程环境，可保留）尚未迁移——设备序号要先从遍实例传到后端初始化，这属于模块内部的改动，由 Tiles 做；核心这一侧已不再读它。
+8. **许可对应实现的规则读核心的统一判定**（7.3：库实现的 f32 矩阵乘默认可用、BF16 只需 `change_precision`、安全模式由遍参数给出），不在模块内各写一份（第 6 条）。遍参数的通用语法由核心提供（2.17）。设备选择已改为运行时配置 `--devices`（13.4：卡的选择通常在运行时；H105，2026-10-22）：核心在 `camel/execute/devices.h` 解析并保存选择，`capability.cpp` 的 `configuredCudaOrdinal` 读它，`CAMEL_TILES_DEVICE` 不再被读取，`CAMEL_TILES_NVRTC` 仍可保留。遍参数是否也要有 `device`（例如 `tiles::compile(device=1)`，让同一次运行的不同区域选不同的卡）尚未决定：多卡是 G7，届时由作者裁定是遍参数、还是 `--devices` 内的顺序。
 9. 遍名用 `tiles::` 前缀，别名由模块登记；核心别名表中的 `std::tiles` 由核心删去（第 11 条，9.2）。已删去（`registerPassAlias` 已提供；核心的测试与文档改写为 `tiles::compile`）。默认流水线登记已撤回（2.17 已改）：导入模块不再往流水线里加遍，`--no-module-passes` 也不再有。Tiles 尚待做的是用 `registerPassAlias` 登记它想要的短名；`@gpu` 改为标签 `#gpu`，由遍读取，不写遍名时 `tiles::compile` 不会自己运行——需要它的程序显式写出遍名，或者由库在缺少该遍时给出说明要加哪个遍的诊断。
 
 

@@ -37,6 +37,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_id.h"
+#include "camel/runtime/specializations.h"
 
 #include <span>
 #include <vector>
@@ -52,20 +53,21 @@ class GCGraphManager;
 class Program final : public camel::core::rtdata::Object {
   public:
     Program() = default;
-    /// A copy holds the same graphs; it is not the manager's (a working table of a session).
+    /// A copy holds the same graphs; it is the manager's only when the caller reserved it (a
+    /// session's work table is a Program of the context's, so that what it binds is freed).
     Program(const Program &other)
         : camel::core::rtdata::Object(), byId_(other.byId_), own_(other.own_),
           satellite_(other.satellite_), version_(other.version_), count_(other.count_),
-          root_(other.root_), original_(other.original_) {}
+          root_(other.root_), specializations_(other.specializations_) {}
     /// Assigning replaces the table and keeps whose program this is.
     Program &operator=(const Program &other) {
-        byId_      = other.byId_;
-        own_       = other.own_;
-        satellite_ = other.satellite_;
-        version_   = other.version_ + 1;
-        count_     = other.count_;
-        root_      = other.root_;
-        original_  = other.original_;
+        byId_            = other.byId_;
+        own_             = other.own_;
+        satellite_       = other.satellite_;
+        version_         = other.version_ + 1;
+        count_           = other.count_;
+        root_            = other.root_;
+        specializations_ = other.specializations_;
         if (manager_ != nullptr) {
             noteAll();
         }
@@ -128,6 +130,10 @@ class Program final : public camel::core::rtdata::Object {
     }
     std::vector<GCGraph *> staticGraphRefs(const GCGraph &graph) const {
         return resolve(graph.staticGraphRefs());
+    }
+    /// The graphs a declaration tag of `graph`'s declaration names (a derivative rule).
+    std::vector<GCGraph *> ruleGraphs(const GCGraph &graph) const {
+        return resolve(graph.ruleGraphs());
     }
     /// Calls `visitor` for every graph of the reference table of `graph`.
     template <typename Visitor> void traceGraphs(const GCGraph &graph, Visitor &&visitor) const {
@@ -196,14 +202,6 @@ class Program final : public camel::core::rtdata::Object {
             }
         }
     }
-    /// The program this one is a private copy of, nullptr when it is not one. A back end that
-    /// runs a rewritten copy of the program (lowerLoopsToTailRecursion, which commits its
-    /// session detached) gets a program whose original is the program it rewrote, followed
-    /// back to the first program that is not a copy. Operators that read the graphs of
-    /// function values (OperatorTraits::inspectsGraphs) are handed the original, so that they
-    /// see the program as it was written (op-semantics 11.4).
-    const Program *original() const { return original_; }
-
     /// Construction; see the file comment.
     void bind(GraphId id, GCGraph *graph) {
         ++version_;
@@ -222,7 +220,12 @@ class Program final : public camel::core::rtdata::Object {
         byId_[index] = graph;
     }
     void setRoot(GCGraph *root) { root_ = root; }
-    void setOriginal(const Program *original) { original_ = original; }
+
+    /// The specializations made over the graphs of this program (specializations.h): copied
+    /// with the program, so a rewrite that carries a program forward carries what it already
+    /// made.
+    const RuntimeSpecializationTable &specializations() const { return specializations_; }
+    RuntimeSpecializationTable &specializations() { return specializations_; }
 
   private:
     friend class GCGraphManager;
@@ -235,7 +238,7 @@ class Program final : public camel::core::rtdata::Object {
     uint64_t version_        = 0;
     size_t count_            = 0;
     GCGraph *root_           = nullptr;
-    const Program *original_ = nullptr;
+    RuntimeSpecializationTable specializations_;
 };
 
 /// Makes the function values among the static values of `graph` name `to` where `to` holds the

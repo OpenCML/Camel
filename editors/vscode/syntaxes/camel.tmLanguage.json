@@ -132,10 +132,7 @@
       "patterns": [
         {
           "name": "constant.character.escape.camel",
-          "match": "\\\\(?:[ntrabfv\\\\\"']|0[0-7]{0,2}|x[0-9a-fA-F]{1,2})"
-        },
-        {
-          "match": "\\\\[\\\\\"'`]"
+          "match": "\\\\(?:[ntrabfv\\\\\"'`$]|0[0-7]{0,2}|x[0-9a-fA-F]{1,2}|u\\{[0-9a-fA-F]{1,6}\\})"
         }
       ]
     },
@@ -144,7 +141,7 @@
       "patterns": [
         {
           "name": "constant.character.escape.camel",
-          "match": "\\\\(?!'''|\"\"\")(?:[ntrabfv\\\\\"']|0[0-7]{0,2}|x[0-9a-fA-F]{1,2})"
+          "match": "\\\\(?!'''|\"\"\")(?:[ntrabfv\\\\\"'`$]|0[0-7]{0,2}|x[0-9a-fA-F]{1,2}|u\\{[0-9a-fA-F]{1,6}\\})"
         }
       ]
     },
@@ -438,7 +435,7 @@
         },
         {
           "name": "storage.modifier.camel",
-          "match": "\\b(?:macro|inner|outer|atomic|shared|const)\\b"
+          "match": "\\b(?:const|static)\\b"
         },
         {
           "name": "keyword.operator.expression.camel",
@@ -473,7 +470,7 @@
       ]
     },
     "numbers": {
-      "comment": "REAL: [0-9]+ '.' [0-9]+ EXPONENT?; INTEGER: (DEC | OCT | HEX | BIN) EXPONENT?. No digit separators and no suffixes. A sign directly before the digits belongs to the token.",
+      "comment": "REAL: [0-9]+ '.' [0-9]+ EXPONENT?; INTEGER: (DEC | OCT 0o[0-7]+ | HEX | BIN). A decimal that starts with 0 and has another digit (09, 077) is a lexical error, not two tokens. No digit separators and no suffixes. A sign directly before the digits belongs to the token.",
       "patterns": [
         {
           "name": "constant.numeric.float.camel",
@@ -489,7 +486,7 @@
         },
         {
           "name": "constant.numeric.integer.octal.camel",
-          "match": "\\b0[0-7]+(?:[eE][+-]?[0-9]+)?\\b"
+          "match": "\\b0o[0-7]+\\b"
         },
         {
           "name": "constant.numeric.integer.decimal.camel",

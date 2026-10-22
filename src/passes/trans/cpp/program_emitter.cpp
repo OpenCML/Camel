@@ -62,51 +62,57 @@ std::string entryNumberText(camel::core::type::TypeCode code) {
     const auto message     = [](RuntimeDiag diag, std::vector<std::string> args) {
         return cppStringLiteral(camel::core::error::runtimeDiagMessage(diag, std::move(args)));
     };
+    // ConversionOutOfRange is one diagnostic for both ways a number misses: the reason says
+    // which, so an underflow is rendered with its own sentence (H15i) and the translated
+    // program refuses the same text the interpreter refuses, in the same words.
+    const auto outOfRange = [&](const std::string &target, const std::string &reason) {
+        return message(RuntimeDiag::ConversionOutOfRange, {"'" + mark + "'", target, reason});
+    };
+    const auto underflow = [&](const std::string &target, std::string_view part) {
+        return message(
+            RuntimeDiag::ConversionOutOfRange,
+            {"'" + mark + "'", target, camel::core::floatUnderflowReason(target.c_str(), part)});
+    };
+    const std::string integerToken = "the value is outside the range of an integer (" +
+                                     camel::utils::integerRangeText<int64_t>() + ")";
+    const std::string none = "nullptr";
     switch (code) {
     case camel::core::type::TypeCode::Int64:
         return std::format(
-            "{{{}, {}, nullptr}}",
+            "{{{}, {}, {}, {}, {}}}",
             message(RuntimeDiag::InvalidNumberText, {mark, "int", "an integer"}),
-            message(
-                RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'",
-                 "int",
-                 camel::core::integerRangeReason<int64_t>("int")}));
+            outOfRange("int", camel::core::integerRangeReason<int64_t>("int")),
+            none,
+            none,
+            none,
+            none);
     case camel::core::type::TypeCode::Int32:
         return std::format(
-            "{{{}, {}, nullptr}}",
+            "{{{}, {}, {}, {}, {}}}",
             message(RuntimeDiag::InvalidNumberText, {mark, "i32", "an integer"}),
-            message(
-                RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'",
-                 "i32",
-                 camel::core::integerRangeReason<int32_t>("i32")}));
+            outOfRange("i32", camel::core::integerRangeReason<int32_t>("i32")),
+            none,
+            none,
+            none,
+            none);
     case camel::core::type::TypeCode::Float64:
         return std::format(
-            "{{{}, {}, nullptr, {}}}",
+            "{{{}, {}, {}, {}, {}, {}}}",
             message(RuntimeDiag::InvalidNumberText, {mark, "float", "a number"}),
-            message(
-                RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'", "float", camel::core::floatRangeReason<double>("float")}),
-            message(
-                RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'",
-                 "float",
-                 "the value is outside the range of an integer (" +
-                     camel::utils::integerRangeText<int64_t>() + ")"}));
+            outOfRange("float", camel::core::floatRangeReason<double>("float")),
+            none,
+            outOfRange("float", integerToken),
+            underflow("float", {}),
+            none);
     case camel::core::type::TypeCode::Float32:
         return std::format(
-            "{{{}, {}, nullptr, {}}}",
+            "{{{}, {}, {}, {}, {}, {}}}",
             message(RuntimeDiag::InvalidNumberText, {mark, "f32", "a number"}),
-            message(
-                RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'", "f32", camel::core::floatRangeReason<float>("f32")}),
-            message(
-                RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'",
-                 "f32",
-                 "the value is outside the range of an integer (" +
-                     camel::utils::integerRangeText<int64_t>() + ")"}));
+            outOfRange("f32", camel::core::floatRangeReason<float>("f32")),
+            none,
+            outOfRange("f32", integerToken),
+            underflow("f32", {}),
+            none);
     case camel::core::type::TypeCode::Complex64:
     case camel::core::type::TypeCode::Complex128: {
         const bool single       = code == camel::core::type::TypeCode::Complex64;
@@ -118,25 +124,18 @@ std::string entryNumberText(camel::core::type::TypeCode code) {
                 "the {} part is outside the range of {} ({})", name, target, range);
         };
         return std::format(
-            "{{{}, {}, {}, {}}}",
+            "{{{}, {}, {}, {}, {}, {}}}",
             message(
                 RuntimeDiag::InvalidNumberText,
                 {mark, std::string(camel::utils::complexNumberTextHelp), "a complex number"}),
-            message(
-                RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'", target, part("real")}),
-            message(
-                RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'", target, part("imaginary")}),
-            message(
-                RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'",
-                 target,
-                 "the value is outside the range of an integer (" +
-                     camel::utils::integerRangeText<int64_t>() + ")"}));
+            outOfRange(target, part("real")),
+            outOfRange(target, part("imaginary")),
+            outOfRange(target, integerToken),
+            underflow(target, "real"),
+            underflow(target, "imaginary"));
     }
     default:
-        return "{nullptr, nullptr, nullptr}";
+        return "{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}";
     }
 }
 
@@ -568,8 +567,9 @@ std::string ProgramEmitter::inspectComment(GCGraph *graph) const {
 }
 
 std::string ProgramEmitter::emit(const camel::runtime::Program &runtimeProgram, GCGraph *root) {
-    parts_.program     = &runtimeProgram;
-    const bool program = mode_ == CppEmitMode::Plain;
+    parts_.program        = &runtimeProgram;
+    parts_.recursionLimit = camel::execute::recursionLimit(*context_).frames;
+    const bool program    = mode_ == CppEmitMode::Plain;
     for (const char *reserved : {"entry", "rt", "std", "main", "depth", "lit", "program"}) {
         globals_.reserve(reserved);
     }
@@ -639,7 +639,7 @@ std::string ProgramEmitter::emit(const camel::runtime::Program &runtimeProgram, 
         source = module->path();
         stem   = camel::utils::pathToUtf8(camel::utils::pathFromUtf8(source).stem());
     }
-    const size_t limit = camel::execute::recursionLimit(*context_).frames;
+    const size_t limit = parts_.recursionLimit;
 
     const bool bridged = !parts_.bridgedOperators.empty();
     std::string out;

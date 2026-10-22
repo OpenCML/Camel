@@ -59,6 +59,7 @@ void AdvancedTracer::initialize(const Config &config) {
 
     if (config_.enablePerfettoIntegration) {
         perfettoIntegration_ = std::make_unique<PerfettoIntegration>();
+        perfettoIntegration_->autoOpen_ = config_.openPerfettoUI;
         perfettoIntegration_->startTracing(config_.perfettoOutput);
     }
 }
@@ -373,20 +374,7 @@ void generate_advanced_report(const std::string &output_file) {
     AdvancedTracer::getInstance().generateStatisticsReport();
     AdvancedTracer::getInstance().generateCallGraph();
 
-#ifdef _WIN32
-    char *profile_mode = nullptr;
-    size_t len         = 0;
-    errno_t err        = _dupenv_s(&profile_mode, &len, "CAMEL_PROFILE_MODE");
-    bool is_full_profile =
-        (err == 0 && profile_mode != nullptr && std::string(profile_mode) == "FULL");
-    if (profile_mode) {
-        free(profile_mode);
-    }
-#else
-    const char *profile_mode = std::getenv("CAMEL_PROFILE_MODE");
-    bool is_full_profile     = (profile_mode && std::string(profile_mode) == "FULL");
-#endif
-    if (is_full_profile) {
+    if (AdvancedTracer::getInstance().getConfig().openPerfettoUI) {
         CAMEL_LOG_INFO_S("Profiler", "Full profiling mode detected, opening Perfetto UI...");
         AdvancedTracer::getInstance().openPerfettoUI();
     }

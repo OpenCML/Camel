@@ -43,7 +43,7 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
   `as`, `let`, `var`, `use`, `from`, `func`, `type`, `enum`, `with`, `wait`, `const`, `keyof`,  
   `return`, `module`, `import`, `export`, `typeas`, `typeof`, `using`, `namespace`,
   `if`, `then`, `else`, `match`, `case`, `for`, `in`, `of`, `try`, `catch`, `finally`, `throw`, `raise`,  
-  `sync`, `macro`, `inner`, `outer`, `atomic`, `shared`,  
+  `sync`,  
   `null`, `true`, `false`。  
 - **多字符记号**：`...`（省略号）在词法中优先于 `.`；`..` 为双点。
 
@@ -131,11 +131,11 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 
 - **模块声明**：`module <名称>`，如 `module main`、`module fib`。模块名为标识符或点分名。
 - **导入**：`import (moduleName | (identDef | bracedIdents) from moduleName)`。  
-  - 例：`import { now } from time`、`import { set_terminal_raw_mode, has_input, get_char } from os`、`import { zen } from this`。
+  - 例：`import { now } from time`、`import { set_terminal_raw_mode, has_input, get_char } from io`、`import { zen } from this`。
 - **命名空间**：`namespace IdentRef { ... }`，命名空间内可声明函数、类型、导入、导出和嵌套命名空间。声明会以限定引用导出或访问，如 `Tensor::ones`、`Parameter::new`、`module::Tools::inc`。
 - **using namespace**：`using namespace identRef`，将已导入命名空间中的导出符号注入当前模块或当前命名空间。
 - **导出**：`export (dataDecl | typeDecl | bracedIdents)`，使符号可被其他模块导入。
-- **模块名**：可选前导 `.`/`..`/`...`，后接 `IDENTIFIER ('.' IDENTIFIER)*`，如 `time`、`os`、`this`。
+- **模块名**：可选前导 `.`/`..`/`...`，后接 `IDENTIFIER ('.' IDENTIFIER)*`，如 `time`、`process`、`this`。
 
 ---
 
@@ -278,15 +278,14 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 
 ### 8.5 函数定义
 
-- **funcDecl**：`(with angledParams)? export? implMark? modifiers? func identRef parentParams (':' typeExpr)? stmtBlock`。
-  - **implMark**：`inner` | `outer`。  
-  - **modifiers**：`atomic`、`shared`、`sync`、`macro` 等组合。  
+- **funcDecl**：`(with angledParams)? export? modifiers? func identRef parentParams (':' typeExpr)? stmtBlock?`。
+  - **modifiers**：`sync`；`#macro` 是函数声明前的标准标签，不是修饰符。没有函数体的声明表示 C++ 实现的函数（设计原则 6.4）。  
   - **parentParams**：`'(' pairedParams? ','? ')'`；**keyParamPair**：`var? identDef ':' typeExpr ('=' dataExpr)?`。  
   - 例：`func fib(n: int): int { ... }`、`func main(): int sync { ... }`、`with <predicate: (p: Point) => bool> func my_filter(...)`。
 
 ### 8.6 类型定义
 
-- **typeDecl**：`implMark? type identRef ('<' identDef (',' identDef)* ','? '>')? '=' (typeExpr | STRING)`。带参数的类型声明是类型函数（见 `docs/language/07_statements.md` 7.2.6）。
+- **typeDecl**：`type identRef ('<' identDef (',' identDef)* ','? '>')? '=' (typeExpr | STRING)`。带参数的类型声明是类型函数（见 `docs/language/07_statements.md` 7.2.6）。
   - 例：`type Point = { x: int, y: int }`、`type Signal = (int, int)`。
 
 ---

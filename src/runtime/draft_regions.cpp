@@ -170,12 +170,6 @@ void GraphDraft::retireRegion(uint32_t id, bool keepRegion) {
     }
 }
 
-bool GraphDraft::isArmCall(gc_node_ref_t id) const {
-    const uint32_t r = nodeRegion(id);
-    return r != 0 && r < regions_.size() && regions_[r].kind == GCRegionKind::Arm &&
-           regions_[r].callSite == id;
-}
-
 uint32_t GraphDraft::loopRegionOf(gc_node_ref_t loop, GCRegionKind part) const {
     for (uint32_t r = 1; r < regions_.size(); ++r) {
         if (regions_[r].kind == part && regions_[r].owner == loop) {
@@ -261,30 +255,36 @@ bool GraphDraft::regionWithin(uint32_t inner, uint32_t outer) const {
     return true;
 }
 
-void GraphDraft::regionizeArmCalls() {
-    for (gc_node_ref_t brch : brchIds_) {
-        const DraftNodeHeader *h = header(brch);
-        if (!h || h->kind != GCNodeKind::Brch) {
-            continue;
+bool GraphDraft::inlinedCopyOf(gc_node_ref_t id, const GCGraph *callee) const {
+    if (callee == nullptr || regions_.empty()) {
+        return false;
+    }
+    // What the call is inside of, by the function it is a copy of: a type specialization is that
+    // function with a more precise type, so it counts as the same callee (design 9.4). A value
+    // specialization (a fixed-length unrolling: the same function with different constants) is a
+    // callee of its own, which is what lets `export_gated_gru_step` unroll.
+    const auto functionOf = [](const GCGraph *graph, GraphId fallback) {
+        if (graph == nullptr) {
+            return fallback;
         }
-        // The call of an arm is what the JOIN reads of it, ordered after the BRCH.
-        const gc_node_ref_t join =
-            reinterpret_cast<const DraftBrchPayload *>(payloadOf(brch).data())->join;
-        const std::vector<gc_node_ref_t> results(
-            withInputsOf(join).begin(),
-            withInputsOf(join).end());
-        for (uint32_t k = 0; k < results.size(); ++k) {
-            const gc_node_ref_t call = results[k];
-            if (!alive(call) || header(call)->kind != GCNodeKind::Func || nodeRegion(call) != 0 ||
-                std::ranges::find(ctrlInputsOf(call), brch) == ctrlInputsOf(call).end()) {
-                continue;
-            }
-            const uint32_t region = addRegion(GCRegionKind::Arm, nodeRegion(brch), brch, k);
-            setNodeRegion(call, region);
-            setRegionResult(region, call);
-            setRegionInline(region, kInvalidGraphId, call);
+        return isValid(graph->typeSpecializationRoot()) ? graph->typeSpecializationRoot()
+                                                        : graph->id();
+    };
+    const GraphId calleeFunction = functionOf(callee, callee->id());
+    // The region a call is in says what inlined body it belongs to; a region that is the body of
+    // a function inlined at its call carries the same source (an Arm region that became one).
+    for (uint32_t region = nodeRegion(id); region != 0 && region < regions_.size();
+         region = regions_[region].parent) {
+        const GraphId inlineOf = regions_[region].inlineOf;
+        if (inlineOf == callee->id()) {
+            return true;
+        }
+        const GCGraph *source = program_ != nullptr ? program_->graph(inlineOf) : nullptr;
+        if (functionOf(source, inlineOf) == calleeFunction) {
+            return true;
         }
     }
+    return false;
 }
 
 } // namespace camel::runtime

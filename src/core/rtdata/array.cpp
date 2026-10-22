@@ -83,8 +83,6 @@ const char *storageName(TypeCode code) {
         return "int64";
     case TypeCode::Bool:
         return "bool";
-    case TypeCode::Byte:
-        return "uint8";
     default:
         return "unknown";
     }
@@ -246,6 +244,7 @@ Array *Array::createCompact(
         array->capacity_ = view ? numel : (elemSize == 0 ? 0 : block->bytes() / elemSize);
         array->dataPtr_  = block->data() + byteOffset;
         array->noteFinalizable();
+        array->noteBlockHeld(block);
     } else if (inlineData) {
         array->block_    = nullptr;
         array->capacity_  = numel;
@@ -263,6 +262,7 @@ Array *Array::createCompact(
             std::memset(array->dataPtr_, 0, bytes);
         }
         array->noteFinalizable();
+        array->noteBlockHeld(created);
     }
     return array;
 }
@@ -330,8 +330,7 @@ slot_t readLeaf(const std::byte *at, TypeCode code, camel::core::mm::IAllocator 
         std::memcpy(&value, at, sizeof(value));
         return rtdata::toSlot(value);
     }
-    case TypeCode::Bool:
-    case TypeCode::Byte: {
+    case TypeCode::Bool: {
         const uint8_t value = *reinterpret_cast<const uint8_t *>(at);
         return rtdata::toSlot(value);
     }
@@ -379,11 +378,6 @@ void writeLeaf(std::byte *at, TypeCode code, slot_t slot) {
     }
     case TypeCode::Bool: {
         const uint8_t value = rtdata::fromSlot<uint8_t>(slot) != 0 ? 1 : 0;
-        std::memcpy(at, &value, sizeof(value));
-        break;
-    }
-    case TypeCode::Byte: {
-        const uint8_t value = rtdata::fromSlot<uint8_t>(slot);
         std::memcpy(at, &value, sizeof(value));
         break;
     }
@@ -672,8 +666,6 @@ double Array::getAsDouble(uint64_t flatIndex) const {
         return static_cast<double>(dataAs<int64_t>()[flatIndex]);
     case TypeCode::Bool:
         return dataAs<uint8_t>()[flatIndex] != 0 ? 1.0 : 0.0;
-    case TypeCode::Byte:
-        return static_cast<double>(dataAs<uint8_t>()[flatIndex]);
     default:
         throw std::invalid_argument("Unsupported numeric element type");
     }
@@ -692,8 +684,6 @@ int64_t Array::getAsInt64(uint64_t flatIndex) const {
         return dataAs<int64_t>()[flatIndex];
     case TypeCode::Bool:
         return dataAs<uint8_t>()[flatIndex] != 0 ? 1 : 0;
-    case TypeCode::Byte:
-        return dataAs<uint8_t>()[flatIndex];
     default:
         throw std::invalid_argument("Unsupported numeric element type");
     }
@@ -711,8 +701,6 @@ bool Array::getAsBool(uint64_t flatIndex) const {
     case TypeCode::Int64:
         return dataAs<int64_t>()[flatIndex] != 0;
     case TypeCode::Bool:
-        return dataAs<uint8_t>()[flatIndex] != 0;
-    case TypeCode::Byte:
         return dataAs<uint8_t>()[flatIndex] != 0;
     default:
         throw std::invalid_argument("Unsupported numeric element type");
@@ -737,9 +725,6 @@ void Array::setFromDouble(uint64_t flatIndex, double value) {
     case TypeCode::Bool:
         dataAs<uint8_t>()[flatIndex] = value != 0.0 ? 1 : 0;
         break;
-    case TypeCode::Byte:
-        dataAs<uint8_t>()[flatIndex] = static_cast<uint8_t>(value);
-        break;
     default:
         throw std::invalid_argument("Unsupported numeric element type");
     }
@@ -763,9 +748,6 @@ void Array::setFromInt64(uint64_t flatIndex, int64_t value) {
     case TypeCode::Bool:
         dataAs<uint8_t>()[flatIndex] = value != 0 ? 1 : 0;
         break;
-    case TypeCode::Byte:
-        dataAs<uint8_t>()[flatIndex] = static_cast<uint8_t>(value);
-        break;
     default:
         throw std::invalid_argument("Unsupported numeric element type");
     }
@@ -787,9 +769,6 @@ void Array::setFromBool(uint64_t flatIndex, bool value) {
         dataAs<int64_t>()[flatIndex] = value ? 1 : 0;
         break;
     case TypeCode::Bool:
-        dataAs<uint8_t>()[flatIndex] = value ? 1 : 0;
-        break;
-    case TypeCode::Byte:
         dataAs<uint8_t>()[flatIndex] = value ? 1 : 0;
         break;
     default:
@@ -888,12 +867,14 @@ void Array::growCompact(uint64_t newCapacity) {
         offset_   = 0;
         capacity_ = newCapacity;
         noteFinalizable();
+        noteBlockHeld(block);
         return;
     }
     if (block_->unique() && offset_ == 0 && !view_) {
         block_->grow(newBytes);
         dataPtr_  = block_->data();
         capacity_ = newCapacity;
+        noteBlockHeld(block_);
         return;
     }
     // Shared (a view, or another array): copy to a new block and leave the old one to its
@@ -913,6 +894,7 @@ void Array::growCompact(uint64_t newCapacity) {
         old->release();
     }
     noteFinalizable();
+    noteBlockHeld(block);
 }
 
 void Array::appendSlot(slot_t value, const type::ArrayType *arrayType) {
@@ -982,6 +964,7 @@ void Array::adoptBlock(Block *block, size_t newBytes) {
         old->release();
     }
     noteFinalizable();
+    noteBlockHeld(block);
 }
 
 bool Array::canWriteInPlace() const {
@@ -1008,6 +991,7 @@ void Array::ensureBlock() {
     offset_   = 0;
     capacity_ = numel_;
     noteFinalizable();
+    noteBlockHeld(block);
 }
 
 void Array::releaseBlock() noexcept {
@@ -1023,6 +1007,14 @@ void Array::finalize() noexcept {
         Block *block = block_;
         block_        = nullptr;
         block->releaseFromFinalizer();
+    }
+}
+
+Array::Block *Array::heldBlock() const noexcept { return block_; }
+
+void Array::noteBlockHeld(Block *block) {
+    if (block != nullptr && allocator_ != nullptr) {
+        allocator_->noteBlockHeld(this, block);
     }
 }
 

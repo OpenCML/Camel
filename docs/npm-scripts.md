@@ -12,8 +12,72 @@ This document describes the `package.json` scripts in the repository root.
 | `npm run config` | Edit CMake options interactively |
 | `npm run check` | Run repository checks |
 | `npm run format` | Format C++ sources under `src/` and `include/` |
-| `npm run clean` | Remove build artifacts |
+| `npm run clean` | Remove build trees, installs, test scratch and polluted source files |
 | `npm run pypi:rollup` | Build the PyPI wheel bundle |
+
+## Cleaning (`npm run clean`)
+
+`scripts/clean.js` removes the trees a build, an install and a test run leave behind. It never
+builds and never needs an install to exist.
+
+| Tier | Paths | Flag | Ignored by |
+|---|---|---|---|
+| Build trees | `build/` (all three configurations) and `cmake-build-*` at the repository root | `--build` | `.gitignore` `build/`, `cmake-build-*/` |
+| Installed artifacts | every child of `out/`: `out/latest`, `out/debug`, and any release tag mirror | `--out` | `.gitignore` `out/` |
+| Test scratch | `tmp/test/run-*` and `test/results/log` | `--tmp` | `.gitignore` `tmp/`, `test/.gitignore` `results/` |
+| Source-tree pollution | the `.cmo` under `stdlib/` or `modules/`, and linker output under the directories a build reads, that `scripts/check-source-artifacts.mjs` reports (vendored Python SDKs excluded) | `--source` | none: they are untracked build output |
+
+The default selects all four tiers: `npm run clean` is the same set as `npm run clean -- --all`.
+A build tree, an install, a test scratch directory and a polluted source file are all ignored by
+git and reproduced by the next build or test run, so the default deletes instead of defaulting to
+`--dry-run`; the safety rules below are enforced, not advisory.
+
+| Option | Effect |
+|---|---|
+| `--build` / `--out` / `--tmp` / `--source` | Select one tier; repeat to select several |
+| `--all` | All four tiers, spelled out (the same set as the default) |
+| `--dry-run` | Print `would remove <path>` for every path and the skips; delete nothing |
+| `--root <dir>` | Clean that checkout instead of this one (used by the guard's `--clean`) |
+
+There is no keep flag for `out/latest`: a caller who wants the install to survive asks for
+`--build --tmp`, which is narrower and explicit.
+
+A path is removed only when it resolves inside `--root` and belongs to a tier above; a symlink
+whose target is outside is left alone. `.git` is never deleted: a directory candidate that
+contains a `.git` entry is left in place and named. `stdlib/*.cml`, the tracked fixture
+`test/cases/modules/pass_not_found/unloadable.cmo`, and any path `git ls-files` reports are never
+deleted; a tracked path inside a tier is reported as `clean: skip <path>: tracked by git` and makes
+the command exit 1. The delete is `fs.rmSync` after resolving and checking the path, never a shell
+`rm -rf`.
+
+`node scripts/check-source-artifacts.mjs --clean` delegates to `node scripts/clean.js --source`
+(`--clean --dry-run` to `--source --dry-run`), so the H191 guard and `npm run clean` share one
+implementation of the delete. The build's guard and `feat/tools/portability` still run the scan
+without deleting; `feat/tools/clean` pins the tiers, the dry run and the tracked-file rule.
+
+## Build Stamp (`out/<tag>/build-info.json`)
+
+`npm run build` (and `debug` / `profile`) ends with `scripts/collect-out.js`, which writes
+`out/<tag>/build-info.json`: the sources the install was produced from.
+
+| Field | Content |
+|---|---|
+| `revision`, `dirty`, `dirtyCount`, `dirtyPaths` | `git rev-parse HEAD`, whether the tree had uncommitted changes, and up to 40 of those paths. `null` when git is unavailable: the stamp then says so, and the content fingerprint still guards the run. |
+| `builtAt`, `config`, `tag` | When, which configuration, and which install directory (`latest`, `debug`, or a release mirror tag). |
+| `fingerprint` | SHA-256 over the content of every path a build reads — `src/`, `include/`, `modules/`, `tools/`, `stdlib/`, `third_party/`, `cmake/`, `CMakeLists.txt`, `conanfile.txt` — with the file count and a per-file hash map (used to name the files that moved). |
+| `schema`, `fingerprint.version` | The shape of the stamp, so a stamp written by an older build is refused instead of misread. |
+
+The build writes it, no runner does, so a local build, a host build and a release tarball all carry
+it; the PyPI rollup copies `out/<tag>/` whole and ships the file.
+
+`node scripts/build-info.js check --tag latest` prints nothing when the stamp matches the current
+tree, and exits 4 when it does not, naming both revisions (HEAD plus dirty state), both
+fingerprints, and the source files that changed. `show` prints the stamp. `camel-remote.ps1` runs
+`check` before a `-NoBuild` plan: an install is reused only while its fingerprint still matches, and
+`-AllowStale` is the explicit override. Changes under `docs/`, `test/`, `scripts/`, `agents/`,
+`editors/`, `pypi/`, `assets/`, `examples/` and `benchmarks/` do not move the fingerprint (a test
+case is read at plan time); changes under the paths above do — including `stdlib/`, which
+`collect-out` copies verbatim into `out/<tag>/stdlib`.
 
 ## Test Harness
 
@@ -37,7 +101,38 @@ reusable external verifier. Full field constraints and examples live in
 |------|------|
 | `npm run test` | Main developer set: the **fast** layer of `smoke` and `feat/**`, in parallel |
 | `npm run test:all` | Full suite: every plan under `test/plans/`, fast and slow |
+| `npm run release-gate` | Release evidence: fast layer + the runnable slow plans by file + the static checks |
 | `npm run precommit:staged` | Format/update only files already staged for the current commit |
+
+## The Release Gate
+
+`npm run release-gate` (`scripts/release-gate.mjs`) owns the release evidence a release decision
+needs, because `npm run test` is only the fast layer: a directory target drops every `tier =
+"slow"` test, and `gpu/**` / `perf/**` are in no gate target at all.
+
+It runs, in order:
+
+1. the fast layer -- `smoke`, `feat/**`, and the fast-tier `gpu/profile` plan at `--tier fast`;
+2. the slow layer -- eleven explicit plan files (the runnable set), named one by one:
+   naming a file is what makes its slow tests run. It never takes a directory or `--tier all`;
+3. the eight static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
+   --check`, `check-doc-links --all`, `check-retired-names`, `check-doc-snippets`,
+   `stdlib-declarations --check`, `check-std-includes`;
+
+then exits non-zero when any phase failed. It does not build: build once first, and it checks the
+install it finds (`CAMEL_HOME`, else `out/latest`) against that build's stamp — the rule that a
+run must not measure another tree's binary — refusing (exit 2) when the stamp is missing or does
+not match this tree's sources.
+
+It also never runs the nineteen plan files `agents/test.md` forbids on a shared host (GC stress
+and poison, progen, the PyTorch comparisons, the benchmarks): it prints them by name with the
+reason on every run, and refuses with a message naming the policy when asked for one --
+`--tier all`, `--all`, `--suite`, or an `--include` / positional target that is, or contains, one
+of them. A skipped plan is unknown, not green. The debug layer (`--tier debug`) is out of scope
+for the same reason: it is never part of a Release gate.
+
+`--jobs N` (default 8), `--only fast|slow|static` (a PARTIAL run, for re-checking one layer),
+and `--dry-run` (print the commands and the skip list) are the only options.
 
 The staged pre-commit script delegates file selection to `scripts/format.js` and
 `scripts/update.js`; it only constrains auto-staging to the original staged path

@@ -1,0 +1,210 @@
+id = "compile.tag_permissions"
+order = 227
+tier = "fast"
+tags = ["feat", "compile", "tags", "numeric", "permissions", "semantics"]
+desc = "Numeric permissions are tags (design principles 7.2): `#reassociate`, `#contract`, `#approx_math`, `#change_precision`, the four finite-math assumptions and their group `finite_math` are standard tags of the core; `reassociate` and `contract` are the default grants of 7.3, and every other permission is a tag. A permission tag is a fact of the node's permission column, not an attribute. `#strict` (7.4) is a tag of the code: the nodes it marks carry it, and every reader of permissions asks tag::effectivePermissions, which returns the empty set for them -- the default grants included. `std::opt` reassociates a default-permitted sum; under `#strict` the reassociation does not fire, while the exact rewrites (CSE and exact doubling) still may."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "permissions.results"
+desc = "Tags grant permissions only: the program prints the same values in the byte-code interpreter and the parallel scheduler, and the group `finite_math`, `#strict` on a function and on a block are accepted."
+kind = "behavior"
+case = "../../../cases/compile/tags/permissions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1.0 2.0 3.0 6.0 7.0 8.0 9.0 10.0 11.0 12.0\n"
+
+[[tests]]
+name = "permissions.gir"
+desc = "std::gir shows a permission tag in the `numeric=` column and never in `attrs=`: `tagged` has contract, `tagged2` reassociate, `finite` the group, `grouped` both, `drifting` nondeterministic; a tag before a block grants inside it; `plain` has none. `#strict` is a tag of the code: its nodes carry `strict` in `attrs=` and keep their explicit permissions in `numeric=` (the effective set is empty, but the facts are what the code wrote), and an inner `#contract` inside `#strict` still shows contract."
+kind = "behavior"
+case = "../../../cases/compile/tags/permissions.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const stack = []
+const numeric = {}
+const attrs = {}
+for (const line of out.split('\n')) {
+  const t = line.trim()
+  if (t.startsWith('subgraph cluster_')) { stack.push(''); continue }
+  if (t === '}') { if (stack.length) stack.pop(); continue }
+  const label = t.match(/^label="([^"]+)";$/)
+  if (label && stack.length) { stack[stack.length - 1] = label[1]; continue }
+  if (t.includes('type="OPER"')) {
+    const fn = stack.length ? stack[stack.length - 1] : ''
+    const m = t.match(/numeric="([^"]*)"/)
+    const a = t.match(/attrs="([^"]*)"/)
+    ;(numeric[fn] ||= []).push(m ? m[1] : '')
+    ;(attrs[fn] ||= []).push(a ? a[1] : '')
+    for (const permission of ['reassociate', 'contract', 'approx_math', 'change_precision', 'finite_math', 'nondeterministic', 'no_nans', 'no_infs', 'no_signed_zeros', 'flush_subnormals']) {
+      assert(!t.includes('attrs="') || !a[1].includes(permission), `a permission tag must not be an attribute: ${t}`)
+    }
+  }
+}
+const of = (fn) => numeric[fn] || []
+const at = (fn) => attrs[fn] || []
+for (const fn of ['plain', 'tagged', 'blockTagged', 'tagged2', 'finite', 'grouped', 'drifting', 'strict', 'strictBlock', 'strictTagged', 'main']) {
+  assert(of(fn).length > 0, `no OPER nodes in ${fn}`)
+}
+for (const value of of('plain')) assert(value === '', `plain has no permission, got '${value}'`)
+for (const value of of('tagged')) assert(value === 'contract', `tagged: '${value}'`)
+for (const value of of('blockTagged')) assert(value === 'contract', `blockTagged: '${value}'`)
+for (const value of of('tagged2')) assert(value === 'reassociate', `tagged2: '${value}'`)
+for (const value of of('finite')) assert(value === 'finite_math', `finite: '${value}'`)
+for (const value of of('grouped')) assert(value === 'reassociate, contract', `grouped: '${value}'`)
+for (const value of of('drifting')) assert(value === 'nondeterministic', `drifting: '${value}'`)
+for (const value of of('strict')) assert(value === '', `strict carries no explicit permission, got '${value}'`)
+for (const value of of('strictBlock')) assert(value === '', `strictBlock carries no explicit permission, got '${value}'`)
+for (const value of of('strictTagged')) assert(value === 'contract', `strictTagged keeps its inner tag: '${value}'`)
+for (const value of of('main')) assert(value === '', `main: '${value}'`)
+for (const fn of ['strict', 'strictBlock', 'strictTagged']) {
+  for (const value of at(fn)) assert(value === 'strict', `${fn} carries strict in attrs, got '${value}'`)
+}
+for (const fn of ['plain', 'tagged', 'blockTagged', 'tagged2', 'finite', 'grouped', 'drifting']) {
+  for (const value of at(fn)) assert(value === '', `${fn} has no attribute, got '${value}'`)
+}
+}
+"""
+
+[[tests]]
+name = "permissions.strict_algebra"
+desc = "The strict policy allows no permission, so it must not turn `x*0.1 + x*0.1` into `x*0.2`: that reassociation changes the rounding path and needs `reassociate`. It may still use exact transformations -- common-subexpression merging, and the exact doubling `x + x => x*2.0` that needs no permission (7.4, stdlib/rules.cml) -- so the strict functions may keep the sum or carry the doubled product. `tightPair` has two different coefficients, where no exact transformation exists: the reassociating combine does not fire there, while the default policy folds the same expression into `x*0.4`."
+kind = "behavior"
+case = "../../../cases/compile/tags/strict_algebra.cml"
+args = ["${case}", "std::opt", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const stack = []
+const nodes = {}
+const byId = {}
+const inputs = {}
+for (const line of out.split('\n')) {
+  const t = line.trim()
+  if (t.startsWith('subgraph cluster_')) { stack.push(''); continue }
+  if (t === '}') { if (stack.length) stack.pop(); continue }
+  const cluster = t.match(/^label="([^"]+)";$/)
+  if (cluster && stack.length) { stack[stack.length - 1] = cluster[1]; continue }
+  const node = line.match(/^\s*([A-Za-z0-9_]+)\s+\[label="((?:\\.|[^"\\])*)"(?:,\s*type="([^"]*)")?/)
+  if (node) {
+    const fn = stack.length ? stack[stack.length - 1] : ''
+    const entry = { id: node[1], label: node[2], type: node[3] || '', fn }
+    ;(nodes[fn] ||= []).push(entry)
+    byId[entry.id] = entry
+    continue
+  }
+  const edge = line.match(/^\s*([A-Za-z0-9_]+)\s*->\s*([A-Za-z0-9_]+)\s+\[/)
+  if (edge) (inputs[edge[2]] ||= []).push(edge[1])
+}
+const opName = (n) => (n.label.match(/^:op\/([a-z0-9_]+)$/) || [])[1] || ''
+const opsOf = (fn) => (nodes[fn] || []).filter((n) => n.type === 'OPER')
+const withOp = (fn, name) => opsOf(fn).filter((n) => opName(n) === name || opName(n).startsWith(name + '_'))
+const mul = (fn) => withOp(fn, 'mul')
+const add = (fn) => withOp(fn, 'add')
+// The constants an operation reads directly, read from its incoming edges. The label of a DATA
+// node is the value's text (`0.1`, `2.0`), so this is how a product's coefficient is named.
+const constants = (n) => (inputs[n.id] || []).map((id) => byId[id]).filter((s) => s && s.type === 'DATA').map((s) => s.label)
+const shape = (fn) => JSON.stringify(opsOf(fn).map(opName))
+
+// 7.3: the default policy reassociates, so the scheduled coefficient is x*(0.1+0.1) = x*0.2.
+assert(mul('loose').length === 1, `loose must combine its two products, got ${shape('loose')}`)
+assert(add('loose').length === 0, `loose must have no sum left, got ${shape('loose')}`)
+assert(constants(mul('loose')[0]).includes('0.2'), `loose must carry the combined coefficient 0.2, got ${JSON.stringify(constants(mul('loose')[0]))}`)
+assert(mul('loosePair').length === 1, `loosePair must combine its two products, got ${shape('loosePair')}`)
+assert(add('loosePair').length === 0, `loosePair must have no sum left, got ${shape('loosePair')}`)
+assert(constants(mul('loosePair')[0]).includes('0.4'), `loosePair must carry the combined coefficient 0.4, got ${JSON.stringify(constants(mul('loosePair')[0]))}`)
+
+// 7.4: `#strict` removes the permission, so the reassociation above is the one rewrite that must
+// not happen. What may happen is exact: nothing (two products and the sum), CSE (one product and
+// the sum), or CSE followed by the exact doubling `x + x => x*2.0` (the product and its double).
+for (const fn of ['tight', 'tightBlock']) {
+  const ms = mul(fn)
+  const as = add(fn)
+  assert(!ms.some((m) => constants(m).includes('0.2')), `${fn} must not reassociate 0.1 + 0.1 into 0.2, got ${shape(fn)}`)
+  if (as.length === 0) {
+    assert(ms.length === 2, `${fn} without a sum must be the product and its exact double, got ${shape(fn)}`)
+    const doubled = ms.filter((m) => constants(m).includes('2.0'))
+    assert(doubled.length === 1, `${fn} must double the merged product by 2.0 (float_add_self), got ${JSON.stringify(ms.map(constants))}`)
+    assert(ms.some((m) => constants(m).includes('0.1')), `${fn} must still carry the rounded product x*0.1, got ${JSON.stringify(ms.map(constants))}`)
+  } else {
+    assert(as.length === 1, `${fn} keeps at most its one sum, got ${shape(fn)}`)
+    assert(ms.length === 1 || ms.length === 2, `${fn} must keep the one product CSE left (or both before CSE), got ${shape(fn)}`)
+    assert(ms.every((m) => constants(m).includes('0.1')), `${fn} must only multiply by the original coefficient 0.1, got ${JSON.stringify(ms.map(constants))}`)
+  }
+}
+
+// The permission still has teeth: two different coefficients have no exact law, so `#strict`
+// keeps both products and the sum, and the default policy's combine does not leak in.
+assert(mul('tightPair').length === 2, `tightPair must keep both products, got ${shape('tightPair')}`)
+assert(add('tightPair').length === 1, `tightPair must keep its sum, got ${shape('tightPair')}`)
+assert(!mul('tightPair').some((m) => constants(m).includes('0.4')), `tightPair must not carry the reassociated coefficient 0.4, got ${JSON.stringify(mul('tightPair').map(constants))}`)
+const pairCoefficients = mul('tightPair').flatMap(constants)
+assert(pairCoefficients.includes('0.1') && pairCoefficients.includes('0.3'), `tightPair must keep the coefficients 0.1 and 0.3, got ${JSON.stringify(pairCoefficients)}`)
+}
+"""
+
+[[tests]]
+name = "permissions.strict_doubling_exact"
+desc = "The exact-doubling law `x + x => x * 2.0` (stdlib/rules.cml) is what lets the strict algebra stage above use a rewrite without a permission, so the two sides must agree bit for bit. Without any pass, the program prints both sides for the sign of zero, the subnormals and the normal boundary, the largest finite value, the overflow threshold, the infinities and a NaN; every pair must print the same text, and the rows that must be zero, negzero, max, inf, -inf and nan are named."
+kind = "behavior"
+case = "../../../cases/compile/tags/strict_doubling.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const rows = input.normalized.stdout.trim().split('\n').map((line) => line.trim().split(' '))
+assert(rows.length === 16, `the program must print 16 rows, got ${rows.length}: ${JSON.stringify(rows)}`)
+const want = new Map([
+  ['zero', '0.0'],
+  ['negzero', '-0.0'],
+  ['one', '2.0'],
+  ['minus_one', '-2.0'],
+  ['tenth', '0.2'],
+  ['minus_tenth', '-0.2'],
+  ['max', 'inf'],
+  ['half_max', '1.7976931348623157e+308'],
+  ['above_half_max', 'inf'],
+  ['inf', 'inf'],
+  ['minus_inf', '-inf'],
+  ['nan', 'nan'],
+])
+const seen = new Set()
+for (const parts of rows) {
+  assert(parts.length === 3, `a row must be name, x + x and x * 2.0, got ${JSON.stringify(parts)}`)
+  const [name, sum, doubled] = parts
+  assert(!seen.has(name), `duplicate row ${name}`)
+  seen.add(name)
+  assert(sum === doubled, `${name}: x + x printed ${sum} but x * 2.0 printed ${doubled}; exact doubling must agree bit for bit`)
+  if (want.has(name)) assert(sum === want.get(name), `${name}: expected ${want.get(name)}, printed ${sum}`)
+}
+for (const name of ['zero', 'negzero', 'one', 'minus_one', 'tenth', 'minus_tenth', 'subnormal', 'minus_subnormal', 'max_subnormal', 'min_normal', 'max', 'half_max', 'above_half_max', 'inf', 'minus_inf', 'nan']) {
+  assert(seen.has(name), `the check must cover ${name}`)
+}
+// The subnormal rows must not collapse to zero: that is the case a wrong guard would miss.
+for (const name of ['subnormal', 'minus_subnormal', 'max_subnormal', 'min_normal']) {
+  const row = rows.find((parts) => parts[0] === name)
+  assert(row[1] !== '0.0' && row[1] !== '-0.0', `${name} doubled to zero, so the law is not exact for subnormals`)
+}
+}
+"""
+
+[[tests]]
+name = "permissions.old_numeric"
+desc = "The removed `@numeric(...)` spelling is a located error at the annotation; the message names the tag form that replaced it. Nothing is granted."
+kind = "negative"
+case = "../../../cases/compile/tags/err_numeric_annotation.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 1
+expect_output_contains = ["@numeric", "write '#[reassociate]'"]

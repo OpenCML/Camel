@@ -30,10 +30,13 @@
 
 #pragma once
 
+#include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/core/source/manager.h"
 #include "camel/parse/ast.h"
 #include "camel/parse/ast/value.h"
@@ -61,6 +64,7 @@ class Builder {
         }
         root_ = nullptr;
         namespaceStack_.clear();
+        programPermissions_.clear();
         visitProgram(syntax::cst::Program(tree.root()));
         return root_;
     }
@@ -94,18 +98,36 @@ class Builder {
     Value visitExportDecl(syntax::cst::ExportDecl context);
     Value visitUsingNamespaceDecl(syntax::cst::UsingNamespaceDecl context);
     Value visitRuleDecl(syntax::cst::RuleDecl context);
+    Value visitAnalysisDecl(syntax::cst::AnalysisDecl context);
     /// The import of the module `rewrite` that rule declarations need was made.
     bool ruleImportAdded_ = false;
+    /// The imports an analysis declaration needs (`__analysis`, `graph.Node`) were made.
+    bool analysisImportAdded_ = false;
+    /// The imports a rule condition needs (`__rule_when`, `graph.Node`) were made.
+    bool whenImportAdded_ = false;
     Value visitBlockStmt(syntax::cst::BlockStmt context);
     Value visitStmtBlock(syntax::cst::StmtBlock context);
     Value visitFuncData(syntax::cst::FuncData context);
     Value visitFuncAnno(syntax::cst::FuncAnno context);
-    /// The permissions of a `@numeric(...)` annotation; nullopt for a decorator (`@name`,
-    /// `@name<args>`). Any other annotation with names in parentheses, an unknown permission
-    /// and an empty list are reported (SemanticDiag::InvalidAnnotation) and grant nothing.
-    std::optional<uint8_t> numericAnnotationOf(syntax::cst::FuncAnno context);
+    /// Rejects the removed `@name(args)` spelling at the annotation, naming the tag form that
+    /// replaced it (design principles 7.2: a numeric permission is a tag). Plain decorators
+    /// (`@name`, `@name<args>`) are not affected.
+    bool rejectParenthesizedName(syntax::cst::FuncAnno context);
+    /// Rejects the removed `@vjp<rule>` decorator at the annotation, naming the declaration tag
+    /// that replaced it (design principles 6.2, 8: a custom derivative rule is a tag).
+    bool rejectVjpAnnotation(syntax::cst::FuncAnno context);
     Value visitFuncDecl(syntax::cst::FuncDecl context);
     Value visitTagDecl(syntax::cst::TagDecl context);
+    /// The permission groups the program declares (`tag fast = [reassociate, contract]`), by
+    /// the name they are declared with, expanded to the permissions their members grant. A
+    /// `#requires<fast>` written in the same program can name one of them (design principles
+    /// 7.2: a permission is a tag, and a group of permissions is a tag too). Built before the
+    /// declarations are visited, because a rule's requirement is read while it is parsed.
+    void collectProgramPermissionGroups(syntax::cst::Program program);
+    /// The permissions the program's group `name` grants; 0 when `name` is not a group of
+    /// permissions (including a name the program does not declare).
+    camel::core::sem::PermissionMask programPermissionOf(std::string_view name) const;
+    std::map<std::string, camel::core::sem::PermissionMask> programPermissions_;
     /// The tag uses of one `#` form, one node each (a `#[a, b]` group makes one for each
     /// member). An argument list is attached to the use as a RepeatedLoad("Data").
     std::vector<node_ptr_t> tagUsesOf(syntax::cst::TagUse context);
@@ -136,7 +158,12 @@ class Builder {
     Value visitAngledValues(syntax::cst::AngledValues context);
     Value visitPattern(syntax::cst::Pattern context);
     Value visitMatchCase(syntax::cst::MatchCase context);
-    /// IfExpr, MatchExpr, TryExpr.
+    Value visitMatchTypeExpr(syntax::cst::MatchTypeExpr context);
+    Value visitTypeCase(syntax::cst::TypeCase context);
+    Value visitStaticForExpr(syntax::cst::StaticForExpr context);
+    Value visitStaticLoopExpr(syntax::cst::StaticLoopExpr context);
+    TypeCaseKind typeCaseKindOf(syntax::cst::TypeCasePattern pattern);
+    /// IfExpr, MatchExpr, MatchTypeExpr, TryExpr.
     Value visitCtrlExpr(syntax::Node context);
     Value visitWaitExpr(syntax::cst::WaitExpr context);
     Value visitLoopExpr(syntax::cst::LoopExpr context);
@@ -159,6 +186,9 @@ class Builder {
     /// `lhs.member` (a field or tuple element), located by `range`.
     node_ptr_t
     makeMemberAccess(node_ptr_t lhs, syntax::Child dot, syntax::Child member, syntax::Node range);
+    /// `lhs.[key]`: a field or tuple element named by a compile-time key.
+    node_ptr_t
+    makeStaticAccess(node_ptr_t lhs, syntax::Child dot, syntax::Node key, syntax::Node range);
     Value visitStructData(syntax::cst::StructData context);
     Value visitArrayData(syntax::cst::ArrayData context);
     Value visitTupleData(syntax::cst::TupleData context);
@@ -191,3 +221,4 @@ class Builder {
 };
 
 } // namespace camel::parse::ast
+

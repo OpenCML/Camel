@@ -288,8 +288,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "The annotation '@{0}' is not accepted: {1}.",
                 "A line that starts with '@' annotates the function declaration or the block "
                 "that follows. '@name' and '@name<args>' are decorators of a function or of a "
-                "block; '@numeric(...)' grants numeric permissions to a function or a block "
-                "(design principles 7.5). A tag is written with '#': '#name', '#name<args>' or "
+                "block; '@name(args)' is no longer accepted (numeric permissions are tags, "
+                "design principles 7.2). A tag is written with '#': '#name', '#name<args>' or "
                 "'#[a, b<v>]' (design principles 6.2).",
             },
         },
@@ -888,16 +888,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::IntegerLiteralTruncated,
-            {
-                "IntegerLiteralTruncated",
-                "The integer literal '{0}' is not a whole number: its value is {1}, the "
-                "fraction is dropped.",
-                "A number written without a decimal point is an 'int', with an exponent too. "
-                "For the floating-point number write the decimal point: '{2}'.",
-            },
-        },
-        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
@@ -1181,8 +1171,246 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagArgumentUnsupported",
                 "The argument '{0}' of the tag '{1}' has a type a tag cannot carry yet.",
-                "A tag carries an integer, a string, a boolean (as 0 or 1), a symbol or a graph "
-                "reference; a floating-point argument comes with the real-valued tag attributes.",
+                "A tag carries an integer, a floating-point number, a string, a boolean (as 0 or 1), a "
+                "symbol or a graph reference; an argument of another type (a function, a "
+                "composite) is not a tag value yet.",
+            },
+        },
+        {
+            SemanticDiag::TagArgumentType,
+            {
+                "TagArgumentType",
+                "The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is "
+                "'{3}' ({4}).",
+                "A tag argument is a compile-time constant of the kind the parameter declares: "
+                "write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', "
+                "a string for 'string', and the name of a function for 'func' (the fact is the "
+                "graph reference of that function).",
+            },
+        },
+        {
+            SemanticDiag::TagShadowsPermission,
+            {
+                "TagShadowsPermission",
+                "The tag '{0}' is declared with the name of a tag of the language.",
+                "A numeric permission (design principles 7.2) and its group and `strict` (7.4) "
+                "are tags of the core, and a program may not declare a tag of that name: the "
+                "core's tag would still be what '#{0}' means, and the declaration would never be "
+                "read. Rename the tag.",
+            },
+        },
+        {
+            SemanticDiag::StaticMatchNotExhaustive,
+            {
+                "StaticMatchNotExhaustive",
+                "No case of this 'match type' selects the type '{0}'.",
+                "The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a "
+                "structure or an ordinary tuple, including 'T?' and 'T!'), and '_' for every "
+                "type. Add the case for this shape, or end with '#leaf' or '_'.",
+            },
+        },
+        {
+            SemanticDiag::StaticMatchUnreachableCase,
+            {
+                "StaticMatchUnreachableCase",
+                "The case '{0}' selects every type the cases after it could select.",
+                "'#leaf' and '_' select every type, so they must be the last case of a "
+                "'match type'.",
+            },
+        },
+        {
+            SemanticDiag::StaticTypeNotConcrete,
+            {
+                "StaticTypeNotConcrete",
+                "The type matched here is still '{0}' when the function is instantiated.",
+                "'match type' needs a concrete type. Bind every type variable of the subject, "
+                "or use it in a generic function whose call gives them.",
+            },
+        },
+        {
+            SemanticDiag::StaticMatchTooDeep,
+            {
+                "StaticMatchTooDeep",
+                "The 'match type' bodies are nested {0} deep.",
+                "A 'match type' inside the selected body of another one is expanded at compile "
+                "time; nest fewer of them.",
+            },
+        },
+        {
+            SemanticDiag::GenericInstantiationCycle,
+            {
+                "GenericInstantiationCycle",
+                "The generic function '{0}' is instantiated with {1} while that same instance "
+                "is being built, and its return type is not known yet.",
+                "A recursive generic call can be built only after the return type is known. "
+                "Write the return type of the function, or make the recursive call use "
+                "strictly smaller type arguments.",
+            },
+        },
+        {
+            SemanticDiag::StaticForNotComposite,
+            {
+                "StaticForNotComposite",
+                "The type '{0}' has no fields for a 'static for' to walk.",
+                "A 'static for' walks a struct or an ordinary tuple. A 'T?' or 'T!' and a "
+                "mutable cell are leaves (design principles 13.5), not tuples; handle them "
+                "with 'match type' first.",
+            },
+        },
+        {
+            SemanticDiag::StaticAccessNotInternal,
+            {
+                "StaticAccessNotInternal",
+                "A field cannot be taken from '{0}' by a compile-time key.",
+                "'t.[key]' names a field of a struct or an element of an ordinary tuple. A "
+                "'T?' or 'T!' has to be opened first ('??', '!!', 'match'), and a scalar or "
+                "an array has no fields.",
+            },
+        },
+        {
+            SemanticDiag::StaticAccessUnknownField,
+            {
+                "StaticAccessUnknownField",
+                "The struct '{1}' has no field '{0}'.",
+                "'t.[key]' takes the field named by the compile-time key; use one of the names "
+                "the struct declares.",
+            },
+        },
+        {
+            SemanticDiag::StaticAccessIndexOutOfRange,
+            {
+                "StaticAccessIndexOutOfRange",
+                "The key '{0}' is not an element of the tuple '{1}' ({2} elements).",
+                "A tuple element is named by its index from 0; a 'static for' gives the "
+                "decimal index as 'n'.",
+            },
+        },
+        {
+            SemanticDiag::StaticAccessNotConstant,
+            {
+                "StaticAccessNotConstant",
+                "The key '{0}' of a 't.[...]' access is not known when the function is "
+                "compiled.",
+                "The key is a string or integer literal, or the 'n' of an enclosing "
+                "'static for'. A runtime value cannot choose a field, because only the "
+                "selected field is built into the graph.",
+            },
+        },
+        {
+            SemanticDiag::StaticComprehensionVoidElement,
+            {
+                "StaticComprehensionVoidElement",
+                "The block for the field '{0}' of '{1}' gives no value, so the comprehension "
+                "has no element for it.",
+                "The block is the value of one field: its last statement must have a value. A "
+                "call that returns nothing, or a block that ends in a declaration, gives no "
+                "element; the statement form 'static for' is the one that drops values.",
+            },
+        },
+        {
+            SemanticDiag::StaticIndicesNotTuple,
+            {
+                "StaticIndicesNotTuple",
+                "'indices' walks the positions of a tuple, but '{0}' has type '{1}'.",
+                "'indices ts' walks the positions of an ordinary tuple: it needs a value of "
+                "tuple type (a tuple variable or a tuple literal). A struct has named fields; "
+                "walk it with 'fields T'. A 'T?' or 'T!' and a mutable cell are leaves (design "
+                "principles 13.5).",
+            },
+        },
+        {
+            SemanticDiag::NativeDeclarationIncomplete,
+            {
+                "NativeDeclarationIncomplete",
+                "The body-less declaration '{0}' is incomplete: it has no result type.",
+                "A body-less declaration is the whole signature of a C++ operator, result "
+                "included; write the result type (`: T`).",
+            },
+        },
+        {
+            SemanticDiag::NativeDeclarationNotLoaded,
+            {
+                "NativeDeclarationNotLoaded",
+                "The declaration '{0}' names the operator '{1}', which no loaded module "
+                "implements.",
+                "A body-less declaration stands for an operator of a loaded C++ module. Import "
+                "the module that implements it, and check that the URI names its function; a "
+                "declaration whose implementation is not loaded is not a function.",
+            },
+        },
+        {
+            SemanticDiag::DeclarationModuleHasBody,
+            {
+                "DeclarationModuleHasBody",
+                "The declaration module '{0}' has a body in function '{1}'.",
+                "A Camel module found beside a C++ module of the same name declares that "
+                "module's operators and has no bodies. Put the implementation in a module that "
+                "has no `.cmo`, or remove the `.cmo`.",
+            },
+        },
+        {
+            SemanticDiag::LambdaParameterWithoutType,
+            {
+                "LambdaParameterWithoutType",
+                "The type of the parameter '{0}' of this lambda is not written and cannot be "
+                "inferred: {1}.",
+                "A lambda takes the type of a parameter it does not write from the function "
+                "type of the position it stands in: an argument to a parameter of function "
+                "type, the value of a declared type, or the result of a function whose result "
+                "type is a function type (design principles 5.9). Write the type "
+                "('({0}: int) => ...'), or move the lambda to such a position.",
+            },
+        },
+        {
+            SemanticDiag::NativeDeclarationOverlap,
+            {
+                "NativeDeclarationOverlap",
+                "Two declarations of '{0}' can take the same call: '{1}' and '{2}'.",
+                "An operator has one meaning for one call: which rule applies must be decided by "
+                "the types of the arguments, never by the order the declarations are written in. "
+                "Give the declarations parameter types that cannot both accept one argument "
+                "list, or keep one of them.",
+            },
+        },
+        {
+            SemanticDiag::NativeDeclarationForeignOperator,
+            {
+                "NativeDeclarationForeignOperator",
+                "The declaration '{0}' names the operator '{1}', which another module declares.",
+                "A module declares only the operators it implements: a body-less declaration "
+                "stands for an operator of the module it is written in, and declares no other "
+                "module's operator. Write the declaration beside the implementation, or call "
+                "the operator through the module that declares it.",
+            },
+        },
+        {
+            SemanticDiag::TagNotAPermission,
+            {
+                "TagNotAPermission",
+                "The tag '{0}' grants no numeric permission.",
+                "A requirement names a permission of design principles 7.2: reassociate, "
+                "contract, approx_math, change_precision, nondeterministic, finite_math, no_nans, "
+                "no_infs, no_signed_zeros or flush_subnormals.",
+            },
+        },
+        {
+            SemanticDiag::RuleTagNotRequires,
+            {
+                "RuleTagNotRequires",
+                "A rule may be preceded only by '#requires<...>', not by the tag '{0}'.",
+                "State the permissions the rule needs as tag arguments: "
+                "'#requires<reassociate>' (design principles 7.2).",
+            },
+        },
+        {
+            SemanticDiag::TagParameterType,
+            {
+                "TagParameterType",
+                "The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an "
+                "int, a float, a bool, a string or a func.",
+                "Declare the parameter with the kind of the argument the tag is written with: "
+                "'tag {1}<{0}: int> on ...'; a 'func' parameter is written with the name of a "
+                "function ('#vjp<rule>').",
             },
         },
         {

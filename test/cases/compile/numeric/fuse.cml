@@ -1,31 +1,30 @@
 /**
- * tensor::fuse makes one matmul_add of `x @ w + b` only when the product and the sum were
- * granted the same numeric permissions; the fused node keeps them.
+ * tensor::fuse records how each matmul runs (`tensor.kernel`) and which nodes form one group
+ * (`tensor.fusion`); it never changes an operator (design principles 9.6).
+ *
+ * Default mode grants `reassociate` (7.3), so a plain matmul may use the library GEMM; `#strict`
+ * withholds the defaults (7.4), so the matmul inside its block runs the canonical algorithm.
+ * Both `matmul`+`add` patterns are still recorded as groups: identity is preserved, so the nodes
+ * of one group need not agree on permissions. Safe mode (`tensor::fuse(safe_fp=true)`) makes
+ * every matmul canonical.
  */
 module fuse
 
 import { Tensor, reshape, sum } from tensor
 
-@numeric(reassociate)
-func product(x: Tensor, w: Tensor): Tensor {
-    return x @ w
-}
-
-/// The product (reassociate, once inlined) and the sum (none) differ: not fused.
-func split(x: Tensor, w: Tensor, b: Tensor): Tensor {
-    return product(x, w) + b
-}
-
-/// Both reassociate: fused.
-@numeric(reassociate)
-func whole(x: Tensor, w: Tensor, b: Tensor): Tensor {
-    return x @ w + b
+func pair(x: Tensor, w: Tensor, b: Tensor): (Tensor, Tensor) {
+    let loose = x @ w + b
+    #strict {
+        let tight = x @ w + b
+        return (loose, tight)
+    }
 }
 
 func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5], [2, 3])
     let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25], [3, 2])
     let b = reshape([0.1, -0.2], [2])
-    'fuse split={} whole={}'->format<sum(split(x, w, b)), sum(whole(x, w, b))>->println
+    let (loose, tight) = pair(x, w, b)
+    'fuse split={} tight={}'->format<sum(loose), sum(tight)>->println
     return 0
 }

@@ -128,6 +128,11 @@ inline void pushUniquePath(
 
 struct ModuleSearchPathOptions {
     std::string stdlibOverride;
+    /// Extra roots from `-I` / `--include`, in command-line order. They follow the entry
+    /// directory and precede every environment-provided root (docs/language/05_modules.md
+    /// "Search order": the entry's own imports, the `-I` roots, `CAMEL_PACKAGES`, then the
+    /// standard library).
+    std::vector<std::string> includeDirs;
     bool includeInstallRoot       = true;
     bool includeExecutableRelated = true;
     bool includeCamelPackages     = true;
@@ -161,6 +166,13 @@ inline std::vector<std::string> buildModuleSearchPaths(
     fs::path baseEntry = entryDir.empty() ? fs::current_path() : pathFromUtf8(entryDir);
     baseEntry          = fs::absolute(baseEntry).lexically_normal();
     detail::pushUniquePath(paths, seen, baseEntry);
+
+    // `-I` / `--include`: after the entry directory, before every root that comes from the
+    // environment. A relative root is resolved against the entry directory, like the roots of
+    // CAMEL_PACKAGES below (the whole module search list has one base).
+    for (const auto &item : opts.includeDirs) {
+        detail::pushUniquePath(paths, seen, pathFromUtf8(item), baseEntry);
+    }
 
     const auto appendEnvList = [&](const std::string &name) {
         for (const auto &item : detail::splitPathList(getEnv(name))) {

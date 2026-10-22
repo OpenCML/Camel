@@ -1,6 +1,26 @@
 {
-    "comment": "Rules for `node scripts/test.js --changed`: a changed file is first looked up by its directory (`directoryRules`), then by the file rules below. The first rule whose path prefix matches names the plans to run, as paths under test/plans; a change that no rule matches (or whose plans cannot be found) falls back to the whole fast layer. Directory rules mirror the path under test/plans/feat and take the deepest existing match: modules/tensor/ops.cpp runs the tensor plans, test/cases/compile/enum/x.cml runs feat/compile/enum.plan.toml (not all of feat/compile), test/cases/loops/x.cml falls through to the file rule for loops. Keep the file rules from specific to general: the first match wins. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
+    "comment": "Rules for `node scripts/test.js --changed`: the plans a change runs. Both kinds are applied to every changed file. A directory rule (`directoryRules`) looks the path up under test/plans/feat and names the deepest plan directory or plan file that mirrors it (modules/tensor/ops.cpp -> feat/modules/tensor, test/cases/compile/enum/x.cml -> feat/compile/enum.plan.toml). A file rule (`rules`) then adds the plans outside that mirrored tree that the same change can also break (modules/tiles -> test/plans/gpu/tiles*, modules/onnx -> the exporter in feat/trans); the first matching file rule applies to a file, so keep them from specific to general. A rule entry is a path under test/plans, { \"plan\": path, \"layer\": true } or { \"plan\": path, \"ownCases\": true }: an ownCases plan is added only when the changed file is one of the `case` paths it names, so a slow plan cannot ride a shared directory into an edit it never reads (H205); a layered plan stays a named target but follows `--tier` like a directory, so the slow cases an ordinary change must not run (the PyTorch comparisons of autodiff and onnx) are filtered while the fast cases still run; `\"layer\": true` on the rule is the default for all its entries. A rule with \"self\": true selects the changed plan file itself (editing a plan runs that plan), except for the paths in \"except\": those fall back to the fast layer instead of running perf, GC stress, progen or PyTorch. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. A change no rule matches (or whose plans cannot be found) falls back to the whole fast layer; `--changed --list` prints the selection without running it. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. A tracked file that matches no rule is a hole, not a silent fallback: when a change also touches a file a rule matches, the unruled file contributes nothing. test/tools/selftest/run.mjs therefore fails on such a file unless it is on its allowlist, which names only the classes the project forbids (perf, GC stress, progen, PyTorch) or that no plan reads (vendored code, packaging, CI configuration). Deliberately not selectable: test/plans/perf/**, the GC-stress plans (feat/mm/gc*, gpu/tiles_regions, gpu/tiles_decorator) and progen (feat/opt/progen.plan.toml) -- the project forbids those on a shared host, so a change there runs the fast layer and the report says so instead of wiring them in. The same self-test now checks the other direction too (H201): every plan file under test/plans must be selected by at least one of the case paths it names, so a plan --changed can never reach cannot hide behind cases that select another plan; plans the policy keeps unselectable (perf, GC stress, progen, the debug layer) and a sweep-only plan are the only exemptions. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
     "directoryRules": [
+        {
+            "comment": "The graph-space gradient case is a fast mm case that lives in the GC directory: the generic test/cases rule below resolves that directory to feat/mm/gc.plan.toml, the slow GC-stress plan, which does not run it. This exact path comes first and names no fall-through, so the file rule for the case selects feat/mm/graph_space instead (H205).",
+            "paths": ["test/cases/feat/mm/gc/graph_space_grad.cml"],
+            "plans": "feat/mm/"
+        },
+        {
+            "comment": "The formatted-print case is a fast consistency program that happens to live under the cpp exec dump directory: the generic test/cases rule below resolves it to feat/trans/cpp.plan.toml, whose agree_with_fvm test compiles and runs C++ for up to ten minutes, and which does not run this case. This exact path comes first and falls through to the file rule that names print_formats (H205).",
+            "paths": ["test/cases/trans/cpp/exec/print_formats.cml"],
+            "plans": "feat/consistency/"
+        },
+        {
+            "comment": "The seed corpus of the progen finding cases (test/cases/opt/progen/findings): no plan directory mirrors it, and the generic test/cases rule below would resolve it to test/plans/feat/opt/progen.plan.toml -- the slow random-program check an ordinary change must never run in full. This rule comes first and names no fall-through, so the directory rule selects nothing here and the file rule for those cases names progen_simplify instead (H201).",
+            "paths": ["test/cases/opt/progen/"],
+            "plans": "feat/opt/"
+        },
+        {
+            "comment": "The cases whose own path starts with feat/ (test/cases/feat/mm, ...): the generic rule below would look for test/plans/feat/feat/mm. This narrower match comes first, so mm cases select feat/mm.",
+            "paths": ["test/cases/feat/"],
+            "plans": "feat/"
+        },
         {
             "comment": "A test case: its directory is looked up under test/plans/feat (compile, linear, modules/tensor, modules/nn.plan.toml, tools/unicode -> tools, ...).",
             "paths": ["test/cases/"],
@@ -20,7 +40,22 @@
     "rules": [
         {
             "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set.",
-            "paths": ["test/tools/run-tests.mjs", "test/tools/selftest/", "test/tools/toml-lite.mjs", "test/tools/gir-dot.mjs", "test/plan-selection.json", "test/runner.mjs", "scripts/test.js", "package.json"],
+            "paths": ["test/tools/run-tests.mjs", "test/tools/selftest/", "test/tools/toml-lite.mjs", "test/tools/gir-dot.mjs", "test/plan-selection.json", "test/runner.mjs", "test/vars.toml", "scripts/test.js", "package.json"],
+            "plans": ["smoke", "feat/consistency/runner.plan.toml"]
+        },
+        {
+            "comment": "The debugger harness (the DAP race harness of H159): the plan whose slow DAP cases it drives. A harness change is not a plan change, but this is the plan that would catch a regression in it.",
+            "paths": ["test/tools/debugger/"],
+            "plans": ["feat/tools/debugger.plan.toml"]
+        },
+        {
+            "comment": "The language-server test client.",
+            "paths": ["test/tools/lsp/"],
+            "plans": ["feat/tools/lsp.plan.toml"]
+        },
+        {
+            "comment": "The other test harnesses (cppexec, parsecheck, jitcov, progen, gcbench, ...): no plan tests a harness directly, and naming the plan that invokes one would mean naming most of feat/. The smallest honest check is smoke plus the runner plan, which is what a harness change can break first. The specific debugger and LSP clients above are narrower because their plans own them.",
+            "paths": ["test/tools/"],
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
         },
         {
@@ -29,9 +64,24 @@
             "plans": ["smoke", "feat/linear", "feat/para", "feat/trans"]
         },
         {
-            "comment": "Optimization passes.",
-            "paths": ["src/passes/opt/"],
-            "plans": ["smoke", "feat/opt", "feat/trans"]
+            "comment": "The optimization passes and the rewrite rule library they run: the opt plans, the pass dumps that print their effect, the rewrite-rule plan, and feat/compile for the module registration and operator declarations a rewrite-module change can break. stdlib/rules.cml is the data these passes run, so it selects the same set. `feat/opt` is a directory target, so `--tier fast` keeps its fast plans and filters the slow progen plan (progen is never selected by a rule).",
+            "paths": ["src/passes/opt/", "stdlib/rules.cml", "modules/rewrite/"],
+            "plans": ["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml", "feat/compile"]
+        },
+        {
+            "comment": "The profiler pass: its own plan runs without a CUDA device (the host fallback), so it is safe from an ordinary change.",
+            "paths": ["src/passes/trans/profile/"],
+            "plans": ["smoke", "gpu/profile.plan.toml"]
+        },
+        {
+            "comment": "The other translation passes: the graph printers, the C++ emitter, the JSON dump.",
+            "paths": ["src/passes/trans/"],
+            "plans": ["smoke", "feat/trans", "feat/compile/gir.plan.toml", "feat/consistency/print_formats.plan.toml"]
+        },
+        {
+            "comment": "The test-only passes (test::facts, test::regions, test::rules, ...): the plans that name them in their arguments.",
+            "paths": ["src/passes/test/"],
+            "plans": ["smoke", "feat/compile", "feat/linear", "feat/mm", "feat/modules", "feat/opt"]
         },
         {
             "comment": "Any other pass, including the shared pass machinery.",
@@ -59,39 +109,141 @@
             "plans": ["smoke", "feat/linear", "feat/para"]
         },
         {
-            "comment": "Automatic differentiation.",
-            "paths": ["modules/autodiff/"],
-            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml"]
+            "comment": "The rest of src/: the built-in operators and their semantic tables (src/builtin) are the core every module plan runs on, so feat/modules is included; the services, profiler helpers and utilities are reached through the compiler and the runtime. The specific rules above stay narrower.",
+            "paths": ["src/"],
+            "plans": ["smoke", "feat/compile", "feat/trans", "feat/linear", "feat/modules"]
         },
         {
-            "comment": "The ONNX exporter.",
-            "paths": ["modules/onnx/"],
+            "comment": "The public headers mirror src/: a header a pass or the runtime includes is as wide as the source file that includes it. These rules mirror the src/ rules above, so a header change selects the same plans as the implementation it declares.",
+            "paths": ["include/camel/parse/"],
+            "plans": ["smoke", "feat/parse", "feat/compile"]
+        },
+        {
+            "comment": "The compiler and graph headers.",
+            "paths": ["include/camel/compile/"],
+            "plans": ["smoke", "feat/compile", "feat/trans"]
+        },
+        {
+            "comment": "The pass API headers: the translation, optimization and scheduler passes.",
+            "paths": ["include/camel/passes/"],
+            "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear"]
+        },
+        {
+            "comment": "The core value/type headers and the runtime headers.",
+            "paths": ["include/camel/core/", "include/camel/runtime/"],
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm"]
+        },
+        {
+            "comment": "The executor and entry-argument headers.",
+            "paths": ["include/camel/execute/"],
+            "plans": ["smoke", "feat/linear", "feat/para"]
+        },
+        {
+            "comment": "Any other public header (init, utils, services, the standalone bridge): the compiler, the translator and the runtime, which is the smallest set every consumer of include/ shares.",
+            "paths": ["include/"],
+            "plans": ["smoke", "feat/compile", "feat/trans", "feat/linear"]
+        },
+        {
+            "comment": "Tiles, the module: the CPU plan, the three GPU plans H154 first ran (all slow, so they are named as plan files and run in full even under --tier fast), the profile plan, and the DDPM plan whose training cases are written against tiles. A module change can invalidate every consumer, and the GPU plans are what no directory rule could reach before H161.",
+            "paths": ["modules/tiles/"],
+            "plans": ["feat/modules/tiles.plan.toml", "gpu/tiles.plan.toml", "gpu/tiles_rows.plan.toml", "gpu/tiles_transfer.plan.toml", "gpu/profile.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
+        },
+        {
+            "comment": "A tiles case: the CPU plan is the directory mirror, and the DDPM and profile plans read some of these cases. The three GPU plans are slow (88 tests) and are added only for the cases they name (`ownCases`): a case edit cannot invalidate a GPU plan that does not run it, which is what kept a one-case edit running a whole GPU plan in full (H205). The GPU plan that shares a case with a fast plan is recorded in `slowCaseOwners`.",
+            "paths": ["test/cases/modules/tiles/", "test/cases/gpu/"],
+            "plans": ["feat/modules/tiles.plan.toml", "feat/modules/ddpm_primitives.plan.toml", "gpu/profile.plan.toml", { "plan": "gpu/tiles.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_rows.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_transfer.plan.toml", "ownCases": true }]
+        },
+        {
+            "comment": "The ONNX exporter. `layer` is true because the plan's four slow cases are ONNX Runtime and PyTorch comparisons: under --tier fast the fast exporter tests run and those are filtered; --tier all runs them. `feat/trans` holds the dumps that print the exported graph.",
+            "paths": ["modules/onnx/", "test/cases/modules/onnx/"],
+            "layer": true,
             "plans": ["feat/modules/onnx.plan.toml", "feat/trans", "feat/compile/enum.plan.toml"]
         },
         {
             "comment": "Neural-network operators: the nn plan and the plans that train with them.",
             "paths": ["modules/nn/"],
-            "plans": ["feat/modules/nn.plan.toml", "feat/modules/checkpoints.plan.toml", "feat/modules/ddpm_primitives.plan.toml", "feat/linear"]
+            "plans": ["feat/modules/nn.plan.toml", "feat/modules/checkpoints.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
         },
         {
-            "comment": "Tensor operators and shapes.",
+            "comment": "Automatic differentiation. `layer` is true because five slow cases compare gradients against PyTorch: --tier fast runs the fast autodiff cases and filters those.",
+            "paths": ["modules/autodiff/", "test/cases/modules/autodiff/"],
+            "layer": true,
+            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml"]
+        },
+        {
+            "comment": "Tensor operators and shapes: the tensor plans, the index/operator semantics plans, and autodiff (layered, for the same PyTorch reason), because a shape or operator change shows up in gradients.",
             "paths": ["modules/tensor/"],
-            "plans": ["feat/modules/tensor.plan.toml", "feat/modules/tensor", "feat/modules/autodiff.plan.toml"]
+            "plans": ["feat/modules/tensor.plan.toml", "feat/modules/tensor", "feat/modules/index_semantics.plan.toml", "feat/modules/operator_semantics.plan.toml", { "plan": "feat/modules/autodiff.plan.toml", "layer": true }]
         },
         {
-            "comment": "Keyed random: the random plan and the signatures/reference that list it.",
+            "comment": "Keyed random: the random plan (named, so its slow std::cpp comparison runs) and the registry that lists it.",
             "paths": ["modules/random/"],
             "plans": ["feat/modules/random.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
-            "comment": "Any other module.",
+            "comment": "Graph values and passes, and the rewrite rules built on them.",
+            "paths": ["modules/graph/"],
+            "plans": ["feat/modules/graph.plan.toml", "feat/modules/graph_facts.plan.toml", "feat/modules/rules.plan.toml"]
+        },
+        {
+            "comment": "Checkpoint trees.",
+            "paths": ["modules/tree/"],
+            "plans": ["feat/modules/checkpoints.plan.toml"]
+        },
+        {
+            "comment": "I/O: the module's plan and the std facade that wraps it.",
+            "paths": ["modules/io/"],
+            "plans": ["feat/modules/io.plan.toml", "feat/modules/std.plan.toml"]
+        },
+        {
+            "comment": "JSON values: the accessor/typed/value plans and the std facade.",
+            "paths": ["modules/json/"],
+            "plans": ["feat/modules/json_typed.plan.toml", "feat/modules/json_value.plan.toml", "feat/modules/json_accessor_error.plan.toml", "feat/modules/std.plan.toml"]
+        },
+        {
+            "comment": "Bytes and the std facade over them.",
+            "paths": ["modules/bytes/"],
+            "plans": ["feat/modules/bytes.plan.toml", "feat/modules/std.plan.toml"]
+        },
+        {
+            "comment": "Parallel operators: the para plans and the registry that lists their signatures.",
+            "paths": ["modules/para/"],
+            "plans": ["feat/para", "feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
+            "comment": "The Python bridge: the std plan whose python cases run it and the two consistency plans that drive it.",
+            "paths": ["modules/python/"],
+            "plans": ["feat/modules/std.plan.toml", "feat/consistency/attempt.plan.toml", "feat/consistency/cleanup.plan.toml"]
+        },
+        {
+            "comment": "Numeric operators: the std facade and the operator-semantics plan.",
+            "paths": ["modules/math/"],
+            "plans": ["feat/modules/std.plan.toml", "feat/modules/operator_semantics.plan.toml"]
+        },
+        {
+            "comment": "The declaration modules with no plan of their own: their cases live under test/cases/modules/std, which feat/modules/std.plan.toml runs, and their signatures are checked by the registry plan.",
+            "paths": ["modules/algo/", "modules/env/", "modules/fs/", "modules/hash/", "modules/process/", "modules/pyplot/", "modules/re/", "modules/sim/", "modules/statistics/", "modules/str/", "modules/this/", "modules/time/"],
+            "plans": ["feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
+            "comment": "Any other module. A directory target, so --tier fast filters the slow cases; a module that grows a specific rule above stops using this one.",
             "paths": ["modules/"],
             "plans": ["feat/modules"]
         },
         {
-            "comment": "The standard library's Camel sources and signatures.",
-            "paths": ["stdlib/", "modules/std/"],
-            "plans": ["feat/compile", "feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml", "feat/trans/macro.plan.toml"]
+            "comment": "The computed halves of the declarations (stdlib/signatures/<module>.cml): they are not compiled; stdlib-reference.mjs --verify-ops compares them with the operators the module registers, and --verify-doc regenerates docs/stdlib-reference.md from them. That is exactly feat/modules/stdlib_registry, so this rule is narrower than the declaration-body rule below and comes first.",
+            "paths": ["stdlib/signatures/"],
+            "plans": ["feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
+            "comment": "The declaration bodies (stdlib/<module>.cml): a declaration is compiled (feat/compile) and loaded at startup (smoke), it is imported by every module plan that uses its operators (feat/modules, a directory so --tier fast keeps the ProGen/GC/PyTorch entries out), and --verify-ops/--verify-doc check it against the registry. stdlib/rules.cml is matched by the optimizer rule above, which is narrower.",
+            "paths": ["stdlib/"],
+            "plans": ["smoke", "feat/modules", "feat/compile", "feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
+            "comment": "The std facade over the modules: the module plan that exercises it, the compile checks of its imports, and the registry that lists its operators.",
+            "paths": ["modules/std/"],
+            "plans": ["feat/compile", "feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
             "comment": "The language server, debugger, formatter and command-line tools.",
@@ -99,19 +251,69 @@
             "plans": ["feat/tools", "feat/format"]
         },
         {
+            "comment": "The documentation guards: docs_links runs all four (links, retired names, snippets, counts).",
+            "paths": ["scripts/check-doc-links.mjs", "scripts/check-doc-snippets.mjs", "scripts/check-retired-names.mjs", "scripts/check-doc-counts.mjs"],
+            "plans": ["feat/docs_links.plan.toml"]
+        },
+        {
+            "comment": "The release gate: docs.counts_current reads its --dry-run output (the slow-plan, static-check and skipped counts), so a change to the gate is a documentation-count change before it is anything else.",
+            "paths": ["scripts/release-gate.mjs"],
+            "plans": ["feat/docs_links.plan.toml"]
+        },
+        {
+            "comment": "The stdlib reference generator and the migration guard: stdlib_registry runs --verify-ops, --verify-doc and stdlib-declarations --check. The computed halves it reads are checked by the same plan.",
+            "paths": ["scripts/stdlib-reference.mjs", "scripts/stdlib-declarations.mjs"],
+            "plans": ["feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
+            "comment": "The grammar generator/checker: parse.frontend's grammar.reference_in_step keeps the generated reference, the parser productions and the token/node tables in step.",
+            "paths": ["scripts/check-grammar.mjs"],
+            "plans": ["feat/parse/frontend.plan.toml"]
+        },
+        {
+            "comment": "The standard-include check: portability.std_includes runs it over src, include, modules and tools. The source-tree artifact check is the same kind of property of the sources, and portability.source_artifacts runs it. The checker's --clean delegates to scripts/clean.js, whose own plan pins the tiers and the tracked-file rule.",
+            "paths": ["scripts/check-std-includes.mjs", "scripts/check-source-artifacts.mjs", "scripts/clean.js"],
+            "plans": ["feat/tools/portability.plan.toml", "feat/tools/clean.plan.toml"]
+        },
+        {
+            "comment": "The diagnostics catalog: compile.diag_catalog runs --check, --verify-doc and --coverage.",
+            "paths": ["scripts/diagnostics-catalog.mjs"],
+            "plans": ["feat/compile/diag_catalog.plan.toml"]
+        },
+        {
+            "comment": "The other build/dev scripts (build.js, format.js, collect-out.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
+            "paths": ["scripts/"],
+            "plans": ["smoke"]
+        },
+        {
             "comment": "Example programs and their recorded output.",
             "paths": ["examples/"],
             "plans": ["feat/examples"]
         },
         {
-            "comment": "Benchmark scripts and artifacts: the slow gradient comparisons and the perf plans.",
-            "paths": ["benchmarks/"],
-            "plans": ["feat/modules/autodiff.plan.toml", "perf"]
+            "comment": "The exemplars and their checker: feat/exemplars re-runs every exemplar and checks its recorded output.",
+            "paths": ["exemplars/"],
+            "plans": ["feat/exemplars.plan.toml"]
         },
         {
-            "comment": "Documentation checks.",
-            "paths": ["docs/", "AGENTS.md", "agents/"],
-            "plans": ["feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
+            "comment": "The generated stdlib reference: stdlib_registry.registry.reference_is_generated re-runs --verify-doc, so a hand edit fails there; docs_links is the ordinary documentation check.",
+            "paths": ["docs/stdlib-reference.md"],
+            "plans": ["feat/modules/stdlib_registry.plan.toml", "feat/docs_links.plan.toml"]
+        },
+        {
+            "comment": "The generated diagnostics catalog: compile.diag_catalog.catalog.doc_is_generated re-runs --verify-doc.",
+            "paths": ["docs/diagnostics.md"],
+            "plans": ["feat/compile/diag_catalog.plan.toml", "feat/docs_links.plan.toml"]
+        },
+        {
+            "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct); agents/ is the development guide. Smoke is included because a documentation change is usually part of a code change and the report's gate runs it; it is ten tests, not a mirror of the tree.",
+            "paths": ["docs/", "AGENTS.md", "agents/", "README.md", "CONTRIBUTING.md", "ROADMAP.md", "CODE_OF_CONDUCT.md", "SECURITY.md"],
+            "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
+        },
+        {
+            "comment": "Images the documents link to: docs_links checks that a relative link's target file exists, so adding or removing an asset is a documentation-link change. Images have no plan of their own.",
+            "paths": ["assets/", "logo.png"],
+            "plans": ["feat/docs_links.plan.toml"]
         },
         {
             "comment": "The editor syntax files and their tests.",
@@ -120,28 +322,78 @@
         },
         {
             "comment": "The build definitions: every backend may be affected, so the smoke set and the runtime plans.",
-            "paths": ["CMakeLists.txt", "cmake/", "modules/python/"],
+            "paths": ["CMakeLists.txt", "cmake/"],
             "plans": ["smoke", "feat/linear", "feat/para", "feat/modules"]
         },
         {
+            "comment": "The graph-space gradient case: the directory rule above keeps the slow GC plan off it, and this is the fast plan that runs it (H205).",
+            "paths": ["test/cases/feat/mm/gc/graph_space_grad.cml"],
+            "plans": ["feat/mm/graph_space.plan.toml"]
+        },
+        {
+            "comment": "The smoke cases: test/plans/smoke is outside the feat/ tree, so no directory rule can mirror test/cases/smoke.",
+            "paths": ["test/cases/smoke/"],
+            "plans": ["smoke"]
+        },
+        {
+            "comment": "A case directory with no plan directory of its own: the loop cases are tested by the linear loop plans. loops.plan.toml is not the only one: hof_declared (higher-order declarations), loops_in_arms and loop_collect each name cases in this directory, and a change to those cases has no other rule to select them (H201).",
+            "paths": ["test/cases/loops/"],
+            "plans": ["feat/linear/loops.plan.toml", "feat/linear/hof_declared.plan.toml", "feat/linear/loops_in_arms.plan.toml", "feat/linear/loop_collect.plan.toml"]
+        },
+        {
+            "comment": "The macro cases: the definitions/facts/resources group below also covers them, plus the linear plan whose higher-order declaration cases live here (H201).",
+            "paths": ["test/cases/macro/"],
+            "plans": ["feat/modules", "feat/tools", "feat/trans", "feat/linear/hof_declared.plan.toml"]
+        },
+        {
             "comment": "Case directories with no plan directory of their own: their cases are exercised by the module, tool and translation plans.",
-            "paths": ["test/cases/definitions/", "test/cases/facts/", "test/cases/macro/", "test/cases/resources/"],
+            "paths": ["test/cases/definitions/", "test/cases/facts/", "test/cases/resources/"],
             "plans": ["feat/modules", "feat/tools", "feat/trans"]
         },
         {
-            "comment": "A case directory with no plan directory of its own: the loop cases are tested by the linear plan.",
-            "paths": ["test/cases/loops/"],
-            "plans": ["feat/linear/loops.plan.toml"]
+            "comment": "The JSON cases: they live in one directory that no plan directory mirrors (the JSON plans are files under feat/modules). A JSON case change can break any of the three JSON plans and the std facade that wraps them, and none of those cases selects its plan otherwise (H201).",
+            "paths": ["test/cases/modules/std/json/"],
+            "plans": ["feat/modules/json_value.plan.toml", "feat/modules/json_typed.plan.toml", "feat/modules/json_accessor_error.plan.toml", "feat/modules/std.plan.toml"]
         },
         {
-            "comment": "A case directory with no plan directory of its own: the recursive Fibonacci case is timed by the perf plan.",
-            "paths": ["test/cases/perf/"],
-            "plans": ["perf/fib.plan.toml"]
+            "comment": "The unicode-path case: its plan lives under feat/modules, and the generic test/cases rule resolves this directory only as far as the feat/tools directory. Name the plan that runs the case (H201).",
+            "paths": ["test/cases/tools/unicode/"],
+            "plans": ["feat/modules/unicode_paths.plan.toml"]
         },
         {
-            "comment": "A plan file selects itself: editing the tests of one plan runs that plan.",
+            "comment": "The formatted-print case is shared by the consistency plan and the cpp dumps, but its own directory resolves to feat/trans/cpp.plan.toml, which does not run print_formats: name the plan whose test it is (H201).",
+            "paths": ["test/cases/trans/cpp/exec/print_formats.cml"],
+            "plans": ["feat/consistency/print_formats.plan.toml"]
+        },
+        {
+            "comment": "The compiler benchmark's smoke test (benchmarks/compile/bench.py) is feat/tools/compile_bench: a change to its case must select the plan that runs it. The rest of benchmarks/ stays the manual perf layer, as the rule-less allowlist says (H201).",
+            "paths": ["benchmarks/compile/"],
+            "plans": ["feat/tools/compile_bench.plan.toml"]
+        },
+        {
+            "comment": "The progen finding cases are the seed corpus of progen_simplify (fast) and capacity (fast), not of the progen plan itself: the directory-rule exception above keeps them from naming progen, and these are the plans that read them (H201). capacity runs only `const_graph_capacity.cml` in that corpus, so it is named by ownership (`ownCases`) rather than by the whole directory (H205).",
+            "paths": ["test/cases/opt/progen/findings/"],
+            "plans": ["feat/opt/progen_simplify.plan.toml", { "plan": "feat/mm/capacity.plan.toml", "ownCases": true }]
+        },
+        {
+            "comment": "The judgement programs are the corpus of open design questions: the cpp harness reads one of them through test/tools/cppexec/expect.txt, and the translation plan runs that harness (H201). The README and the findings index are documentation of the manual progen tool and are on the self-test's rule-less allowlist.",
+            "paths": ["test/cases/opt/progen/judgement/"],
+            "plans": ["feat/trans/cpp.plan.toml"]
+        },
+        {
+            "comment": "A plan file selects itself: editing the tests of one plan runs that plan. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. The except list keeps the plans the project forbids from an ordinary change out of that: a perf, GC-stress or progen plan edit falls back to the fast layer (name the plan file to run it deliberately).",
             "paths": ["test/plans/"],
-            "self": true
+            "self": true,
+            "except": ["test/plans/perf/", "test/plans/feat/mm/gc.plan.toml", "test/plans/feat/mm/gc_collections.plan.toml", "test/plans/feat/mm/gc_elder_exhaustion.plan.toml", "test/plans/feat/opt/progen.plan.toml", "test/plans/gpu/tiles_regions.plan.toml", "test/plans/gpu/tiles_decorator.plan.toml"]
         }
-    ]
+    ],
+    "slowCaseOwners": {
+        "comment": "Slow plans whose cases live in a directory a fast plan also uses. `ownCases` already keeps such a plan off the cases it does not run; this list records the cases it does run that a fast plan also runs, where the slow plan is therefore not the only owner of the changed path. The reason says why the slow plan must still run. The self-test derives the facts: it requires every entry to be a slow-cost plan (tier slow, a slow test, or a timeout of five minutes or more) that names at least one case a fast plan also names, so an entry that excuses nothing fails (H205).",
+        "entries": [
+            {
+                "plan": "gpu/tiles.plan.toml",
+                "why": "Its GPU tests share resident.cml with the fast screens plan: a case that a fast and a slow plan both exercise can break only on one of them, so the case edit must run both. The plan stays slow because it needs a CUDA device and its 83 tests take minutes."
+            }
+        ]
+    }
 }

@@ -132,10 +132,6 @@ class Builder {
     // parameters (typeasAllowed_), and records what was bound (declaredTypeVars_) so the
     // declaration can be checked. A type function may only appear as the base of
     // `Name<...>` (typeFunctionBase_).
-    // The numeric permissions in force where the builder is (design principles 7.5): the
-    // union of the `@numeric(...)` grants of the blocks and functions it is inside. Every EXEC
-    // is made with them (makeExec).
-    uint8_t numericPermissions_ = 0;
     node_ptr_t makeExec(bool synced = false, bool operands = false);
 
     bool funcDeclPending_ = false;
@@ -149,6 +145,12 @@ class Builder {
     bool inDeclReturnType_ = false;
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
+
+    // The lambda parameters whose type was left out, collected while the signature of the
+    // function being defined is visited and given to its FUNC node (Tree::setUnwrittenParams).
+    // Only the signature of a FuncData (openSignature_) may leave one out; the flag is taken
+    // by visitFuncData right after the signature.
+    std::vector<Tree::UnwrittenParam> pendingUnwrittenParams_;
 
     // Named dimensions of type extents (design principles 5.4): a name denotes an extent, not a
     // type. Like `typeas T`, a name is bound only in the parameter types of the function
@@ -232,9 +234,11 @@ class Builder {
     declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl);
     /// `type Name<params> = { field: T, ... }`: a named struct type (design principles 5.2).
     /// Its identity is this declaration (and, for a generic one, the type arguments); its
-    /// fields are in the order written here, and every instance keeps that order. The name is
-    /// not in scope while the fields are read: a struct cannot hold itself by value (only
-    /// through an array, a map, a set or an enum, and those are not supported yet; H23).
+    /// fields are in the order written here, and every instance keeps that order. A field may
+    /// hold the type being declared behind an array (`type Node = { children: Node[] }`): the
+    /// name is in scope while the fields are read, as an initially incomplete instance that is
+    /// completed before the declaration returns. A struct cannot hold itself by value, and
+    /// recursion through a map or a set is not represented yet.
     camel::core::type::Type *
     declareStructType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl);
     /// The variants of the declaration, with the field types of `instance` (the written ones
@@ -262,6 +266,10 @@ class Builder {
     node_ptr_t visitIfExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitLoopExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitMatchExpr(const AST::node_ptr_t &ast);
+    node_ptr_t visitMatchType(const AST::node_ptr_t &ast);
+    node_ptr_t visitStaticFor(const AST::node_ptr_t &ast);
+    node_ptr_t visitStaticLoop(const AST::node_ptr_t &ast);
+    node_ptr_t visitStaticAccess(const AST::node_ptr_t &ast);
     node_ptr_t visitTryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitLiteral(const AST::node_ptr_t &ast);
     node_ptr_t visitArrayData(const AST::node_ptr_t &ast);
@@ -307,6 +315,9 @@ class Builder {
     node_ptr_t declaredValue(const node_ptr_t &value, Type *type, const AST::node_ptr_t &ast);
     node_ptr_t visitStructData(const AST::node_ptr_t &ast);
     node_ptr_t visitTupleData(const AST::node_ptr_t &ast);
+    /// `{ static for ... }` / `( static for ... )` (H51 step 4): an SCOMP holding the generator.
+    /// The rounds are packed into a shape of the same fields in the graph builder.
+    node_ptr_t visitStaticComprehension(const AST::node_ptr_t &ast, bool isStruct);
     node_ptr_t visitFuncData(const AST::node_ptr_t &ast);
     node_ptr_t visitRefData(const AST::node_ptr_t &ast);
 
@@ -340,3 +351,4 @@ class Builder {
 };
 
 } // namespace camel::compile::gct
+

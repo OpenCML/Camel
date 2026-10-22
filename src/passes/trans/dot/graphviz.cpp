@@ -19,6 +19,7 @@
 
 #include "graphviz.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/tags.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/passes/trans/gir_metadata.h"
 
@@ -369,22 +370,22 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         const auto *outputType = nodeStaticSlotType(graph, *node);
         const string valueType =
             outputType ? camel::core::type::sourceTypeSpelling(outputType->toString()) : "";
-        // The numeric permissions the program granted with @numeric(...) (design principles
-        // 7.5): an attribute only on the nodes that have any, so that the dump of a program
-        // without the annotation is unchanged.
-        const uint8_t permissions = graph->nodePermissions(nodeRef);
+        // The numeric permissions the program granted with permission tags (design principles
+        // 7.2) and the attributes libraries attached to the node (language reference 7.6), read
+        // through the one query for the facts of a node (camel/core/tags.h): an attribute only
+        // on the nodes that have any, so that the dump of a program without tags is unchanged.
+        const camel::core::tag::Facts facts = camel::core::tag::factsOf(*graph, nodeRef);
+        const camel::core::sem::PermissionMask permissions = facts.permissions;
         const string valueAttr =
             (valueType.empty() ? "" : std::format(", value_type=\"{}\"", escape(valueType))) +
             (permissions == 0 ? ""
                               : std::format(
                                     ", numeric=\"{}\"",
                                     camel::core::sem::permissionsText(permissions))) +
-            // The attributes libraries attached to the node (language reference 7.6), likewise.
-            (graph->nodeAttrs(nodeRef) == 0
+            (facts.tags == 0
                  ? ""
                  : std::format(
-                       ", attrs=\"{}\"",
-                       escape(camel::core::attr::text(graph->nodeAttrs(nodeRef)))));
+                       ", attrs=\"{}\"", escape(camel::core::attr::text(facts.tags))));
         // Boundary roles: a role attribute; styled dumps also fill the node with its first role's
         // color and list every role in the tooltip.
         string roleAttr, roleFill, roleTooltip;
@@ -712,3 +713,4 @@ GraphVizDumpPass::apply(const camel::runtime::Program *program, std::ostream &os
     os << dumpGraph(graph);
     return nullptr;
 }
+

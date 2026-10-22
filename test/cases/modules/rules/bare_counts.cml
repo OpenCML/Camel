@@ -1,0 +1,44 @@
+/** The operator counts of the bare-term target, by element type. */
+module bare_counts
+
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+func countOf(p: Program, function: string, operator: string): int {
+    return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
+}
+
+/// add, multiply counts of the element type with this suffix.
+func show(p: Program, function: string, suffix: string) {
+    println(function,
+        countOf(p, function, ':op/add_' + suffix),
+        countOf(p, function, ':op/mul_' + suffix))
+}
+
+export func report(p: Program): Program! sync {
+    show(p, 'i32_combine_one', 'i')
+    show(p, 'i32_one_combine', 'i')
+    show(p, 'i32_combine_one_wrap', 'i')
+    show(p, 'i64_combine_one', 'l')
+    show(p, 'i64_one_combine', 'l')
+    show(p, 'f32_combine_one', 'f')
+    show(p, 'f32_one_combine', 'f')
+    show(p, 'f32_combine_one_zero', 'f')
+    show(p, 'f32_combine_one_mixed', 'f')
+    show(p, 'f32_combine_one_mixed_ok', 'f')
+    show(p, 'f64_combine_one', 'd')
+    show(p, 'f64_one_combine', 'd')
+    show(p, 'f64_combine_one_zero', 'd')
+    return p
+}

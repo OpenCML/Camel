@@ -1,0 +1,16 @@
+// A `loop` state whose elements are discrete (`int[]`) and whose next value is computed from
+// the differentiated parameter. An integer's derivative is zero by definition (design principles
+// 9.9), so the int state contributes nothing and the gradient is the one of the float state: the
+// doubling of `a`, 2 -- not a refusal.
+import { grad } from autodiff
+
+with <w: float>
+func f(): float {
+    let pair = loop a = w, ns = [int(w)] while len(ns) < 2 do (a * 2.0, ns->append<int(w * 10.0)>)
+    return pair.0
+}
+
+func main(): int sync {
+    println(grad(f)<2.0>())
+    return 0
+}

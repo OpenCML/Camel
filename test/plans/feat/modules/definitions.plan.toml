@@ -10,11 +10,11 @@ timeout_ms = 30000
 
 [[tests]]
 name = "declared_and_refused"
-desc = "test::definitions (CAMEL_ENABLE_TEST_PASSES): softmax, log_softmax (key 1.0: only the definition is declared), mean and relu (1.1 + the definition = 1.2) and sigmoid are built from tensor_definitions, each with its parameters and a portable content hash; a definition is built once; matmul has none; a definition without a function is rejected when declared. Refused when built, each with its reason: a cycle of two definitions (exp defined with softmax, which uses exp) and, since, softmax on that cycle too; a definition that reaches its own operator; a function of another arity; a function that reads a module-level value (a capture, so the graph takes more than the declared parameters: a definition library is encoded as the function graph alone, task H37); an effect in the definition of a pure operator; a generic function; a missing function; a library that does not compile; a library that does not exist."
+desc = "test::definitions (test-only): softmax, log_softmax (key 1.0: only the definition is declared), mean and relu (1.1 + the definition = 1.2) and sigmoid are built from tensor_definitions, each with its parameters and a portable content hash; a definition is built once; matmul has none; a definition without a function is rejected when declared. Refused when built, each with its reason: a cycle of two definitions (exp defined with softmax, which uses exp) and, since, softmax on that cycle too; a definition that reaches its own operator; a function of another arity; a function that reads a module-level value (a capture, whether the value is a literal or the result of a call, and the refusal names the captured values: a definition library is encoded as the function graph alone, task H37); an effect in the definition of a pure operator; a generic function; a missing function; a library that does not compile; a library that does not exist."
 kind = "behavior"
 case = "../../../cases/definitions/check.cml"
 args = ["${case}", "test::definitions"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -40,7 +40,8 @@ for (const l of [
   "DEFINITION cycle_refuses_softmax refused: the definition of 'tensor:softmax' is refused: a cycle of definitions (tensor:softmax -> tensor:exp -> tensor:softmax)",
   "DEFINITION reaches_itself refused: the definition of 'tensor:abs' is refused: a cycle of definitions (tensor:abs -> tensor:abs)",
   "DEFINITION arity refused: the definition of 'tensor:neg' is refused: 'bad_definitions::two' has no overload of 1 ordinary parameters and no with parameter",
-  "DEFINITION capture refused: the definition of 'tensor:matmul' is refused: its graph does not take exactly the declared parameters",
+  "DEFINITION capture refused: the definition of 'tensor:matmul' is refused: its graph captures 'first_axis' of the module's top level; a definition is a function of the operator's operands, so a module-level value cannot be bound",
+  "DEFINITION call_capture refused: the definition of 'tensor:pow' is refused: its graph captures 'call_axis' of the module's top level; a definition is a function of the operator's operands, so a module-level value cannot be bound",
   "DEFINITION effect_of_pure refused: the definition of 'tensor:sqrt' is refused: the operator is pure and its definition has an effect",
   "DEFINITION generic refused: the definition of 'tensor:log' is refused: 'bad_definitions::generic' is generic; a definition has one graph",
   "DEFINITION missing_function refused: the definition of 'tensor:rsqrt' is refused: 'bad_definitions' exports no 'nope'",
@@ -51,12 +52,12 @@ for (const l of [
 """
 
 [[tests]]
-name = "test_pass_needs_the_environment"
-desc = "test::definitions is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
-kind = "negative"
+name = "test_pass_is_not_in_a_pipeline"
+desc = "test::definitions is a test-only pass: no pipeline adds it, so a run that names no pass prints no definition."
+kind = "behavior"
 case = "../../../cases/definitions/check.cml"
-args = ["${case}", "test::definitions"]
-expect_exit = 1
+args = ["${case}"]
+expect_exit = 0
 expect_output_not_contains = ["DEFINITION "]
 
 [[tests]]
@@ -80,7 +81,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/definitions/kernels.cml"
 args = ["${case}", "test::expand_definitions", "${backend}"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 golden = "golden/definitions/kernels.txt"
@@ -92,7 +93,7 @@ desc = "test::expand_definitions reports on stderr what it expanded: 10 softmax,
 kind = "behavior"
 case = "../../../cases/definitions/kernels.cml"
 args = ["${case}", "test::expand_definitions", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -125,7 +126,7 @@ desc = "The same after test::expand_definitions (before std::macro): the operato
 kind = "behavior"
 case = "../../../cases/definitions/grad.cml"
 args = ["${case}", "test::expand_definitions", "std::macro"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -182,7 +183,7 @@ desc = "The same program after test::expand_definitions: the definition's divisi
 kind = "behavior"
 case = "../../../cases/definitions/mean_empty.cml"
 args = ["${case}", "test::expand_definitions", "${backend}"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
@@ -195,3 +196,14 @@ assert(out.includes('[Error]: Attempted division by zero.') && out.includes('(na
 assert(out.includes('tensor_definitions.cml:52:'), `located at the division of the definition: ${out}`)
 }
 """
+
+[[tests]]
+name = "gradients_numel_shape"
+desc = "An element count is a shape, not data whose gradient is dropped: differentiating the definition graph of `tensor_definitions::mean` (`sum(x) / (numel(x) as float)`) uses `numel(x)` as a constant shape count, so the mean is 2.5 and the gradient of the mean is 1/n per element (sum 1.0). This is the definition-level form of the `tensor:numel` exemption (design principles 9.9, 5.4)."
+kind = "behavior"
+case = "../../../cases/definitions/numel_shape.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_exact = "2.5\n1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

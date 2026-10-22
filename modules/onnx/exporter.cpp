@@ -55,6 +55,7 @@
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/reachable.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -252,6 +253,10 @@ class Evaluator {
 
     Value eval(Activation &act, gc_node_ref_t ref);
     Value evalNode(Activation &act, gc_node_ref_t ref);
+    /// The value of the CAST node `ref` applied to `src` (its evaluated source): performed now
+    /// for a constant, a no-op for a struct conversion of one layout, an ONNX Cast for a
+    /// model-dependent number, refused otherwise.
+    Value evalCast(Activation &act, gc_node_ref_t ref, Value src);
     Value evalOper(Activation &act, gc_node_ref_t ref);
     Value evalVariableRead(Activation &act, gc_node_ref_t ref);
     Value variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_ref_t at);
@@ -308,7 +313,6 @@ class Evaluator {
     BodyOutcome evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop);
     BodyOutcome mergeOutcomes(
         Activation &act, const Value &cond, BodyOutcome sides[2], Graph bodies[2], LoopFrame &loop);
-    Value selectValue(Activation &act, const std::string &cond, const Value &a, const Value &b);
     std::vector<Value> callArguments(Activation &act, gc_node_ref_t site, GCGraph *callee);
     Activation activationOf(GCGraph *callee, std::span<const Value> args);
     bool nodeReachesCall(const GCGraph *g, gc_node_ref_t ref, const GCGraph *target);
@@ -412,6 +416,33 @@ Value Evaluator::translate(GCGraph *graph, std::span<const Value> inputs) {
 /// specializations of them) mean nothing in the source; the source position says more.
 bool isSourceName(std::string_view name) { return !name.empty() && !name.starts_with("__"); }
 
+/// How the export refuses a LOOP node: the translation of a LOOP to an ONNX Loop is the next
+/// step (docs/design/loops 5.7), so it is refused where it is written instead of being lowered
+/// to a recursion the export would have to recover again. The translation reports it when a
+/// LOOP node reaches it (evalNode); refuseLoopNodes reports the same text before the export
+/// simplifies the function.
+std::string loopRefusalText(const GCGraph &graph) {
+    const std::string what =
+        "a 'loop' expression is not exported to ONNX yet; write the loop as a "
+        "tail-recursive function, which is exported as an ONNX Loop";
+    const std::string name = graph.name().substr(0, graph.name().find('$'));
+    return isSourceName(name) ? std::format("in '{}': {}", name, what) : what;
+}
+
+/// "file:line:column" of `origin`, or nothing when the origin has no source position.
+std::string sourceLocationOf(
+    const camel::source::source_context_ptr_t &source, uint64_t origin) {
+    if (!source || origin == camel::source::kInvalidOriginId) {
+        return {};
+    }
+    const auto *file = source->fileForOrigin(origin);
+    if (!file) {
+        return {};
+    }
+    const auto range = source->resolveOrigin(origin);
+    return std::format("{}:{}:{}", file->path, range.start.line + 1, range.start.character + 1);
+}
+
 /// The operator of a node, or an empty view for any other node kind.
 std::string_view operUriOf(const GCGraph *g, gc_node_ref_t ref) {
     const auto *n = g->node(ref);
@@ -432,7 +463,11 @@ core::OperId operIdOf(const GCGraph *g, gc_node_ref_t ref) {
 
 /// Reading a variable (`:var/get`) or storing into one (`=`, `+=`, ...).
 bool readsOrAssignsVariable(core::OperId id) {
-    return core::oper::isVariableRead(id) || core::OperatorTable::instance().isAssignment(id);
+    // `:var/take` hands the variable's own value to an in-place form: reading it, in the same
+    // sense as `:var/get`, and subject to the same rule (only a local variable's content can be
+    // exported).
+    return id == core::oper::VarTake || core::oper::isVariableRead(id) ||
+           core::OperatorTable::instance().isAssignment(id);
 }
 
 /// A variable declared in `g` itself (`var v = e` is the operator `:var/new`): its content
@@ -474,6 +509,11 @@ constexpr const char *kOuterVariable =
     "captured variable, a variable used in a branch arm): its content is state that an ONNX "
     "model cannot hold; only a variable declared, read and assigned directly in one function "
     "can be exported. Pass the value as an argument and return the new value instead";
+
+/// Why an exported function cannot grow an array in a variable (design principles 11.3).
+constexpr const char *kGrowingArray =
+    "an array variable is appended to (`acc = acc->append<v>`); an ONNX model holds no growing "
+    "arrays: compute the values as a tensor instead";
 
 /// Whether running `from` is a precondition of running `to` (data or control edges).
 bool runsBefore(const GCGraph *g, gc_node_ref_t from, gc_node_ref_t to) {
@@ -525,12 +565,29 @@ void Evaluator::refuseEffects(GCGraph *root) {
                     body->oper == core::oper::VarNew ||
                     (readsOrAssignsVariable(body->oper) && !g->normInputsOf(ref).empty() &&
                      isLocalVariable(g, g->normInputsOf(ref).front()));
-                if (!onLocalVariable && !core::OperatorTable::instance().isPure(body->oper)) {
+                // An in-place form handed `:var/take` of a local variable changes only that
+                // variable's own array (design principles 11.3). The read of the variable
+                // translates or refuses that assignment with its own diagnostic
+                // (variableValueAt), so the form itself is not an effect of the model.
+                const bool inPlaceOnLocalVariable = [&] {
+                    if (!core::OperatorTable::instance().reusesOperand(body->uri())) {
+                        return false;
+                    }
+                    const auto norm = g->normInputsOf(ref);
+                    if (norm.size() != 1 || operIdOf(g, norm.front()) != core::oper::VarTake) {
+                        return false;
+                    }
+                    const auto cell = g->normInputsOf(norm.front());
+                    return !cell.empty() && isLocalVariable(g, cell.front());
+                }();
+                if (!onLocalVariable && !inPlaceOnLocalVariable &&
+                    !core::OperatorTable::instance().isPure(body->oper)) {
                     const std::string uri(body->uri());
                     const uint64_t origin = g->nodeOrigin(ref);
                     const std::string what =
                         readsOrAssignsVariable(body->oper)
                             ? std::string(kOuterVariable)
+                        : uri == ":struct/append_arr_in_place" ? std::string(kGrowingArray)
                             : std::format("impure operator '{}' cannot be exported", uri);
                     throw ExportError(
                         isSourceName(g->name()) ? std::format("in '{}': {}", g->name(), what)
@@ -590,15 +647,7 @@ Value Evaluator::eval(Activation &act, gc_node_ref_t ref) {
 }
 
 std::string Evaluator::locationOf(uint64_t origin) const {
-    if (!source_ || origin == camel::source::kInvalidOriginId) {
-        return {};
-    }
-    const auto *file = source_->fileForOrigin(origin);
-    if (!file) {
-        return {};
-    }
-    const auto range = source_->resolveOrigin(origin);
-    return std::format("{}:{}:{}", file->path, range.start.line + 1, range.start.character + 1);
+    return sourceLocationOf(source_, origin);
 }
 
 std::vector<Value> Evaluator::evalAll(Activation &act, std::span<const gc_node_ref_t> refs) {
@@ -653,73 +702,8 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         }
         return it->second;
     }
-    case GCNodeKind::Cast: {
-        // `e as T` is a checked conversion. Of a constant it is performed now. Of a tensor that
-        // depends on the model input it is an assertion about element type and shape, and an
-        // ONNX model checks none when it runs: it is exported (as nothing) only when what is
-        // known of the value at export time already proves it, and refused otherwise.
-        const gc_node_ref_t source = g->normInputsOf(ref).front();
-        Value src                  = eval(act, source);
-        if (src.isConstant()) {
-            try {
-                return keep(n->dataType()->castSlotFrom(src.slot, src.ty), n->dataType());
-            } catch (const core::error::RuntimeFault &fault) {
-                // What the conversion says itself ("conversion to 'T' failed: ...").
-                unsupported(
-                    act,
-                    std::format(
-                        "this conversion of a constant always fails: {}",
-                        fault.formatArgs().empty() ? std::string(fault.what())
-                                                   : fault.formatArgs().front()));
-            }
-        }
-        if (tensor::asTensorType(n->dataType())) {
-            const TensorFacts facts = factsOf(src);
-            type::Type *known       = src.form == Value::Form::Tensor
-                                          ? tensor::TensorType::get(facts.dtype, facts.shape)
-                                          : inferenceTypeOf(src);
-            type::Type *declared    = g->node(source)->dataType();
-            const auto safety       = n->dataType()->castSafetyFrom(known);
-            if (safety == type::CastSafety::Safe ||
-                (declared && n->dataType()->castSafetyFrom(declared) == type::CastSafety::Safe)) {
-                return src;
-            }
-            const std::string have =
-                known ? known->toString() : std::string("a value of unknown type");
-            if (safety == type::CastSafety::Forbidden) {
-                unsupported(
-                    act,
-                    std::format(
-                        "this conversion to '{}' always fails: for the exported inputs the "
-                        "value is a '{}'",
-                        n->dataType()->toString(),
-                        have));
-            }
-            unsupported(
-                act,
-                std::format(
-                    "the conversion to '{}' of a value that depends on the model input cannot "
-                    "be checked when the model is exported: the value is only known to be a "
-                    "'{}', and an ONNX model does not check a shape or an element type when it "
-                    "runs. Convert to a type that leaves open what the inputs leave open (a "
-                    "negative extent for a dynamic axis), or export with inputs that fix it",
-                    n->dataType()->toString(),
-                    have));
-        }
-        if (src.form == Value::Form::Scalar &&
-            tensor::isSupportedTensorScalar(n->dataType()->code())) {
-            const TypeCode target = tensor::normalizeTensorDType(n->dataType()->code());
-            return Value::symbolicScalar(
-                emitter_.node(
-                    "Cast",
-                    {src.name},
-                    {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(target)))}),
-                n->dataType());
-        }
-        unsupported(
-            act,
-            std::format("cast of a model-dependent value to '{}'", n->dataType()->toString()));
-    }
+    case GCNodeKind::Cast:
+        return evalCast(act, ref, eval(act, g->normInputsOf(ref).front()));
     case GCNodeKind::Copy:
         // Exported values are never mutated in place, so a copy can share its source.
         return eval(act, g->normInputsOf(ref).front());
@@ -743,15 +727,100 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         // A LOOP node maps one to one onto an ONNX Loop (docs/design/loops 5.7); that
         // translation is the next step. Until then the export refuses it where it is written
         // rather than lowering it to a recursion it would have to recover again.
-        unsupported(
-            act,
-            "a 'loop' expression is not exported to ONNX yet; write the loop as a "
-            "tail-recursive function, which is exported as an ONNX Loop");
+        throw ExportError(loopRefusalText(*g));
     default:
         unsupported(
             act,
             std::format("graph node kind {} has no export semantics", static_cast<int>(n->kind)));
     }
+}
+
+Value Evaluator::evalCast(Activation &act, gc_node_ref_t ref, Value src) {
+    GCGraph *g                 = act.graph;
+    type::Type *const target   = g->node(ref)->dataType();
+    const gc_node_ref_t source = g->normInputsOf(ref).front();
+    // `e as T` is a checked conversion. Of a constant it is performed now. Of a tensor that
+    // depends on the model input it is an assertion about element type and shape, and an ONNX
+    // model checks none when it runs: it is exported (as nothing) only when what is known of
+    // the value at export time already proves it, and refused otherwise.
+    if (src.isConstant()) {
+        try {
+            return keep(target->castSlotFrom(src.slot, src.ty), target);
+        } catch (const core::error::RuntimeFault &fault) {
+            // What the conversion says itself ("conversion to 'T' failed: ...").
+            unsupported(
+                act,
+                std::format(
+                    "this conversion of a constant always fails: {}",
+                    fault.formatArgs().empty() ? std::string(fault.what())
+                                               : fault.formatArgs().front()));
+        }
+    }
+    // A CAST between two struct types of one layout moves nothing (design principles 5.1 and
+    // 5.2): an anonymous struct value entering a named type whose fields are written in the
+    // same order, or an `as` between two named types whose declarations agree. The export-time
+    // aggregate already holds the fields in that order, so it becomes a value of the target
+    // type and writes no ONNX node. A conversion that reorders the fields is the front end's
+    // FILL (the builder's struct conversion), not a CAST; a CAST whose two struct types do not
+    // correspond falls through to the refusal below.
+    if (target->code() == TypeCode::Struct) {
+        type::Type *from = g->node(source)->dataType();
+        if (from != nullptr && from->code() == TypeCode::Struct &&
+            target->castSafetyFrom(from) == type::CastSafety::Safe) {
+            auto *targetStruct = static_cast<type::StructType *>(target);
+            if (!src.isAggregate() || src.fields.size() != targetStruct->size()) {
+                unsupported(
+                    act,
+                    std::format(
+                        "cast of a model-dependent value to '{}': the value does not hold one "
+                        "element per field",
+                        target->toString()));
+            }
+            return Value::aggregate(target, std::move(src.fields));
+        }
+    }
+    if (tensor::asTensorType(target)) {
+        const TensorFacts facts = factsOf(src);
+        type::Type *known       = src.form == Value::Form::Tensor
+                                      ? tensor::TensorType::get(facts.dtype, facts.shape)
+                                      : inferenceTypeOf(src);
+        type::Type *declared    = g->node(source)->dataType();
+        const auto safety       = target->castSafetyFrom(known);
+        if (safety == type::CastSafety::Safe ||
+            (declared && target->castSafetyFrom(declared) == type::CastSafety::Safe)) {
+            return src;
+        }
+        const std::string have = known ? known->toString() : std::string("a value of unknown type");
+        if (safety == type::CastSafety::Forbidden) {
+            unsupported(
+                act,
+                std::format(
+                    "this conversion to '{}' always fails: for the exported inputs the value "
+                    "is a '{}'",
+                    target->toString(),
+                    have));
+        }
+        unsupported(
+            act,
+            std::format(
+                "the conversion to '{}' of a value that depends on the model input cannot be "
+                "checked when the model is exported: the value is only known to be a '{}', and "
+                "an ONNX model does not check a shape or an element type when it runs. Convert "
+                "to a type that leaves open what the inputs leave open (a negative extent for "
+                "a dynamic axis), or export with inputs that fix it",
+                target->toString(),
+                have));
+    }
+    if (src.form == Value::Form::Scalar && tensor::isSupportedTensorScalar(target->code())) {
+        const TypeCode code = tensor::normalizeTensorDType(target->code());
+        return Value::symbolicScalar(
+            emitter_.node(
+                "Cast",
+                {src.name},
+                {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(code)))}),
+            target);
+    }
+    unsupported(act, std::format("cast of a model-dependent value to '{}'", target->toString()));
 }
 
 // ---------------------------------------------------------------- tail recursion as a Loop
@@ -966,6 +1035,43 @@ bool holdsClosure(const Value &v) {
     return false;
 }
 
+/// Whether a value is, or holds, a function that `evalFill` left deferred (an aggregate element
+/// of function type that nothing has called yet): it has no value until it is evaluated with
+/// functions kept as values. A branch whose arm yields such a value must be merged eagerly too,
+/// or the merged function element would be a placeholder and the call of it would fail.
+bool holdsDeferredClosure(const Value &v) {
+    if (isDeferredClosure(v)) {
+        return true;
+    }
+    if (v.isAggregate()) {
+        return std::ranges::any_of(v.fields, holdsDeferredClosure);
+    }
+    return false;
+}
+
+/// Whether two struct types spell the same value layout. A named type and the anonymous type of
+/// its fields, written in the declaration's order, are one representation: a value of the
+/// anonymous type enters the named one by an identity CAST (design principles 5.2), and the two
+/// may meet where a branch's arms are typed (a returned literal next to a recursive call's
+/// result). Two named types are different types even when their fields agree.
+bool sameStructRepresentation(type::Type *a, type::Type *b) {
+    if (a == b) {
+        return true;
+    }
+    if (a == nullptr || b == nullptr || a->code() != TypeCode::Struct ||
+        b->code() != TypeCode::Struct) {
+        return false;
+    }
+    auto *sa = static_cast<type::StructType *>(a);
+    auto *sb = static_cast<type::StructType *>(b);
+    if (sa->named() == sb->named()) {
+        return false;
+    }
+    type::StructType *named = sa->named() ? sa : sb;
+    type::StructType *other = sa->named() ? sb : sa;
+    return named->castSafetyFrom(other) == type::CastSafety::Safe;
+}
+
 /// The leaves of a value: itself, or the elements of a tuple / struct, depth first.
 void flattenValue(const Value &v, std::vector<Value> &leaves) {
     if (v.isAggregate()) {
@@ -1015,6 +1121,34 @@ bool isCarriable(const Value &v) {
     return tensor::asTensorType(v.ty) != nullptr || tensor::isSupportedTensorScalar(v.ty->code());
 }
 
+/// What a value that a Loop cannot carry is, for a diagnostic: an array, a string, a function.
+std::string valueKind(const Value &leaf) {
+    if (leaf.isClosure() ||
+        (leaf.isConstant() && leaf.ty && leaf.ty->code() == TypeCode::Function)) {
+        return "a function";
+    }
+    if (leaf.isSymbolic() && leaf.form == Value::Form::IntArray) {
+        return "an int array whose elements depend on the model input";
+    }
+    if (leaf.isConstant() && leaf.ty) {
+        return std::format("a value of type '{}'", leaf.ty->toString());
+    }
+    return "a value that is neither a tensor nor a scalar";
+}
+
+/// What prevents `v` from being carried, named by its first offending leaf (a struct that holds
+/// an array is refused for the array, not for the struct).
+std::string carriedKind(const Value &v) {
+    std::vector<Value> leaves;
+    flattenValue(v, leaves);
+    for (const Value &leaf : leaves) {
+        if (!isCarriable(leaf)) {
+            return valueKind(leaf);
+        }
+    }
+    return valueKind(v);
+}
+
 /// A symbolic value named `name` with the form, dtype and shape of `like`.
 Value placeholderLike(const Value &like, std::string name) {
     if (type::Type *scalar = scalarCamelTypeOf(like)) {
@@ -1022,6 +1156,82 @@ Value placeholderLike(const Value &like, std::string name) {
     }
     const TensorFacts facts = factsOf(like);
     return Value::symbolic(std::move(name), facts.dtype, facts.shape);
+}
+
+/// The values a Loop carries for one argument (H44's outline, H71 item 3): the value itself when
+/// it is a tensor or a scalar, and the leaves of a struct or tuple in the order `flattenValue`
+/// gives them. False when there is nothing to carry (no leaf, or a leaf that a Loop cannot
+/// carry: an array, a string, a function). The leaf order is the type's declaration order, so
+/// the rebuilt value has the layout the program wrote.
+bool carriableLeaves(const Value &v, std::vector<Value> &leaves) {
+    leaves.clear();
+    flattenValue(v, leaves);
+    if (leaves.empty()) {
+        return false;
+    }
+    return std::ranges::all_of(leaves, [](const Value &leaf) { return isCarriable(leaf); });
+}
+
+/// The name of part `index` of an aggregate of type `ty`, for naming a leaf after its path.
+std::string partName(type::Type *ty, size_t index) {
+    if (ty == nullptr) {
+        return std::to_string(index);
+    }
+    if (ty->code() == TypeCode::Struct) {
+        auto *strct = static_cast<type::StructType *>(ty);
+        if (index < strct->size()) {
+            return std::string(strct->fieldName(index));
+        }
+    }
+    return std::to_string(index);
+}
+
+/// The paths of the leaves `flattenValue` yields, in the same order: "w", "deep_h", "0". A Loop's
+/// state input is named after the path it rebuilds, so the emitted graph reads like the struct.
+void leafPaths(const Value &v, std::string path, std::vector<std::string> &out) {
+    if (v.isAggregate()) {
+        for (size_t i = 0; i < v.fields.size(); ++i) {
+            leafPaths(v.fields[i], path + "_" + partName(v.camelType, i), out);
+        }
+        return;
+    }
+    if (v.isConstant() && v.ty && v.slot != NullSlot &&
+        (v.ty->code() == TypeCode::Tuple || v.ty->code() == TypeCode::Struct)) {
+        const std::vector<Value> fields = elementsOf(v.slot, v.ty);
+        for (size_t i = 0; i < fields.size(); ++i) {
+            leafPaths(fields[i], path + "_" + partName(v.ty, i), out);
+        }
+        return;
+    }
+    out.push_back(std::move(path));
+}
+
+/// `like`, rebuilt from placeholders named after `hint` in `carriableLeaves`' order: one
+/// placeholder per leaf, and the aggregate reads them as its fields. A Loop's state input is
+/// such a value; the executor keeps the leaves and the program keeps seeing the struct.
+Value placeholderState(const Value &like, std::string_view hint, Emitter &emitter) {
+    std::vector<Value> leaves;
+    if (!carriableLeaves(like, leaves)) {
+        return placeholderLike(like, emitter.fresh(hint));
+    }
+    if (leaves.size() == 1 && isCarriable(like)) {
+        return placeholderLike(like, emitter.fresh(hint));
+    }
+    std::vector<std::string> paths;
+    leafPaths(like, std::string(hint), paths);
+    if (paths.size() != leaves.size()) {
+        paths.clear();
+        for (size_t i = 0; i < leaves.size(); ++i) {
+            paths.push_back(std::format("{}_{}", hint, i));
+        }
+    }
+    std::vector<Value> placeholders;
+    placeholders.reserve(leaves.size());
+    for (size_t i = 0; i < leaves.size(); ++i) {
+        placeholders.push_back(placeholderLike(leaves[i], emitter.fresh(paths[i])));
+    }
+    size_t next = 0;
+    return rebuildValue(like, placeholders, next);
 }
 
 } // namespace
@@ -1143,36 +1353,6 @@ Value Evaluator::evalCall(Activation &act, gc_node_ref_t site) {
     }
 }
 
-Value Evaluator::selectValue(
-    Activation &act, const std::string &cond, const Value &a, const Value &b) {
-    if (sameValue(a, b)) {
-        return a;
-    }
-    if (a.isAggregate() || b.isAggregate() || !isCarriable(a) || !isCarriable(b)) {
-        unsupported(
-            act,
-            "a tuple, struct or array differs between the paths of a recursion whose depth "
-            "depends on the model input; only tensors and scalars can be carried by a loop");
-    }
-    const TensorFacts fa = factsOf(a), fb = factsOf(b);
-    if (!fa.dtype || fa.dtype != fb.dtype) {
-        unsupported(
-            act,
-            "the paths of a recursion whose depth depends on the model input yield values of "
-            "different types");
-    }
-    const std::string out = emitter_.node(
-        "Where",
-        {cond, emitter_.operand(a, *fa.dtype), emitter_.operand(b, *fa.dtype)});
-    if (type::Type *scalar = scalarCamelTypeOf(a)) {
-        return Value::symbolicScalar(out, scalar);
-    }
-    std::optional<tensor::StaticShape> shape;
-    if (fa.shape && fb.shape && *fa.shape == *fb.shape) {
-        shape = fa.shape;
-    }
-    return Value::symbolic(out, fa.dtype, shape);
-}
 
 Evaluator::BodyOutcome Evaluator::mergeOutcomes(
     Activation &act, const Value &cond, BodyOutcome sides[2], Graph bodies[2], LoopFrame &loop) {
@@ -1226,24 +1406,48 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
              Value::symbolicScalar("", type::Type::Bool())});
         contAt = outputs.size() - 1;
     }
-    std::vector<std::optional<size_t>> nextAt(loop.ports.size());
+    std::vector<std::vector<std::optional<size_t>>> nextAt(loop.ports.size());
+    std::vector<std::vector<Value>> nextLeaves(loop.ports.size());
     out.next.resize(loop.ports.size());
     for (size_t k = 0; k < loop.ports.size(); ++k) {
         if (sameValue(a.next[k], b.next[k])) {
             out.next[k] = a.next[k];
-        } else {
-            if (!isCarriable(a.next[k]) || !isCarriable(b.next[k])) {
+            continue;
+        }
+        // A carried struct or tuple changes leaf by leaf: each leaf that differs is one output of
+        // the If, and the aggregate is rebuilt from the leaves (H44's outline, as for the result
+        // below). A leaf that is the same on both paths keeps its value.
+        std::vector<Value> la, lb;
+        flattenValue(a.next[k], la);
+        flattenValue(b.next[k], lb);
+        if (la.size() != lb.size()) {
+            unsupported(
+                act,
+                std::format(
+                    "argument {} of a recursion whose depth depends on the model input holds a "
+                    "different number of values on the two paths of a branch",
+                    k + 1));
+        }
+        std::vector<std::optional<size_t>> at(la.size());
+        for (size_t j = 0; j < la.size(); ++j) {
+            if (sameValue(la[j], lb[j])) {
+                continue;
+            }
+            if (!isCarriable(la[j]) || !isCarriable(lb[j])) {
                 unsupported(
                     act,
                     std::format(
-                        "argument {} of a recursion whose depth depends on the model input "
-                        "(counting from 1, `with` parameters first) is a tuple, struct or array "
-                        "that a recursive call changes; a loop carries tensors and scalars: pass "
-                        "the elements as separate arguments",
-                        k + 1));
+                        "a recursive call changes argument {} of a recursion whose depth "
+                        "depends on the model input (counting from 1, `with` parameters first), "
+                        "which is {}; a loop carries tensors and scalars and tuples and structs "
+                        "of them",
+                        k + 1,
+                        valueKind(isCarriable(la[j]) ? lb[j] : la[j])));
             }
-            nextAt[k] = request(a.next[k], b.next[k]);
+            at[j] = request(la[j], lb[j]);
         }
+        nextAt[k] = std::move(at);
+        nextLeaves[k] = std::move(la);
     }
     // The result, leaf by leaf: a recursion may return a tuple or struct (nested) of tensors
     // and scalars. A leaf that is the same on both sides, or a constant next to a side that
@@ -1251,19 +1455,6 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
     std::vector<Value> resultLeaves;
     std::vector<std::optional<size_t>> resultAt;
     const Value *resultLike = nullptr;
-    const auto leafKind     = [](const Value &leaf) -> std::string {
-        if (leaf.isClosure() ||
-            (leaf.isConstant() && leaf.ty && leaf.ty->code() == TypeCode::Function)) {
-            return "a function";
-        }
-        if (leaf.isSymbolic() && leaf.form == Value::Form::IntArray) {
-            return "an int array whose elements depend on the model input";
-        }
-        if (leaf.isConstant() && leaf.ty) {
-            return std::format("a value of type '{}'", leaf.ty->toString());
-        }
-        return "a value that is neither a tensor nor a scalar";
-    };
     if (a.result && b.result) {
         std::vector<Value> la, lb;
         flattenValue(*a.result, la);
@@ -1292,7 +1483,7 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
                         "element must be a tensor or a scalar (float, int, bool) of one type on "
                         "every path",
                         j,
-                        !isCarriable(la[j]) || !isCarriable(lb[j]) ? leafKind(bad)
+                        !isCarriable(la[j]) || !isCarriable(lb[j]) ? valueKind(bad)
                                                                    : "of different types on them"));
             }
             resultAt[j] = request(la[j], lb[j]);
@@ -1318,7 +1509,7 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
                         "a recursion whose depth depends on the model input returns {} (element "
                         "{} of its result) on a path next to a recursive call; it can return "
                         "tensors and scalars (float, int, bool) and tuples or structs of them",
-                        leafKind(real),
+                        valueKind(real),
                         j));
             }
             std::vector<int64_t> dims;
@@ -1358,8 +1549,16 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
             out.contName = names[*contAt];
         }
         for (size_t k = 0; k < loop.ports.size(); ++k) {
-            if (nextAt[k]) {
-                out.next[k] = placeholderLike(outputs[*nextAt[k]].like, names[*nextAt[k]]);
+            bool rebuilt = false;
+            for (size_t j = 0; j < nextAt[k].size(); ++j) {
+                if (nextAt[k][j]) {
+                    nextLeaves[k][j] = placeholderLike(outputs[*nextAt[k][j]].like, names[*nextAt[k][j]]);
+                    rebuilt           = true;
+                }
+            }
+            if (rebuilt) {
+                size_t leaf         = 0;
+                out.next[k]         = rebuildValue(a.next[k], nextLeaves[k], leaf);
             }
         }
         for (size_t j = 0; j < resultAt.size(); ++j) {
@@ -1385,6 +1584,18 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
     case GCNodeKind::Gate: {
         const auto norm = g->normInputsOf(ref);
         return evalLoopBody(act, norm.empty() ? g->withInputsOf(ref).back() : norm.back(), loop);
+    }
+    case GCNodeKind::Cast: {
+        // A cast is not a decision: the branch under it decides whether the recursion goes on,
+        // and the conversion is applied to the value the path returns. (H5 puts a struct
+        // conversion between a returned branch and the function's exit; without this the
+        // branch is hidden from the loop translation and its recursive call is taken for a
+        // call in value position.)
+        BodyOutcome out = evalLoopBody(act, g->normInputsOf(ref).front(), loop);
+        if (out.result) {
+            out.result = evalCast(act, ref, std::move(*out.result));
+        }
+        return out;
     }
     case GCNodeKind::Func: {
         GCGraph *callee = programOf(g).calleeOf(*g, ref);
@@ -1493,7 +1704,7 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
         std::vector<Value> inputs = args;
         for (size_t k = 0; k < count; ++k) {
             if (carried[k]) {
-                inputs[k] = placeholderLike(args[k], emitter_.fresh(hint));
+                inputs[k] = placeholderState(args[k], hint, emitter_);
             }
         }
         return inputs;
@@ -1504,7 +1715,8 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
     // counter that starts at the constant 0).
     std::vector<bool> carriable(count, false);
     for (size_t k = 0; k < count; ++k) {
-        carriable[k] = isCarriable(args[k]);
+        std::vector<Value> leaves;
+        carriable[k] = carriableLeaves(args[k], leaves);
     }
     std::vector<bool> carried(count, false);
     {
@@ -1519,9 +1731,13 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
                 if (loop.changed[k] && !carriable[k]) {
                     unsupported(
                         act,
-                        "a tuple, struct or array argument changes across a recursion whose "
-                        "depth depends on the model input; only tensors and scalars can be "
-                        "carried by a loop");
+                        std::format(
+                            "a recursive call changes argument {} of a recursion whose depth "
+                            "depends on the model input (counting from 1, `with` parameters "
+                            "first), which is {}; a loop carries tensors and scalars and tuples "
+                            "and structs of them",
+                            k + 1,
+                            carriedKind(args[k])));
                 }
                 carried[k] = loop.changed[k];
             }
@@ -1543,6 +1759,8 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
     Graph bodyGraph;
     std::vector<ValueInfo> bodyInputs, bodyOutputs;
     std::vector<Value> finals = args;
+    std::vector<std::vector<Value>> initLeaves(count);
+    std::vector<size_t> leafArgument;
     try {
         const std::vector<Value> inputs = withPlaceholders(carried, "state");
         const std::string iter          = emitter_.fresh("loop_iter");
@@ -1568,23 +1786,39 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
                 }
                 continue;
             }
-            const TensorFacts in  = factsOf(inputs[k]);
-            const TensorFacts out = factsOf(outcome.next[k]);
-            if (!in.dtype || in.dtype != out.dtype || !in.shape || !out.shape ||
-                *in.shape != *out.shape) {
+            // A struct or tuple argument is carried leaf by leaf, in the order of its fields
+            // (H44's outline): the Loop state holds the leaves, and the body rebuilt from them
+            // is the struct the program wrote. Every leaf must keep its dtype and shape.
+            std::vector<Value> inLeaves, outLeaves;
+            carriableLeaves(inputs[k], inLeaves);
+            flattenValue(outcome.next[k], outLeaves);
+            flattenValue(args[k], initLeaves[k]);
+            if (inLeaves.size() != outLeaves.size() || inLeaves.size() != initLeaves[k].size()) {
                 unsupported(
                     act,
-                    "the dtype or shape of a value changes from one call of a recursion to the "
+                    "the number of values a recursion carries changes from one call to the "
                     "next; a loop can only carry values of a fixed dtype and shape");
             }
-            stateIn.push_back(valueInfoOf(inputs[k].name, in));
-            stateOut.push_back(valueInfoOf(
-                emitter_.node(
-                    "Identity",
-                    {emitter_.operand(outcome.next[k], *in.dtype)},
-                    {},
-                    "state_out"),
-                in));
+            for (size_t j = 0; j < inLeaves.size(); ++j) {
+                const TensorFacts in  = factsOf(inLeaves[j]);
+                const TensorFacts out = factsOf(outLeaves[j]);
+                if (!in.dtype || in.dtype != out.dtype || !in.shape || !out.shape ||
+                    *in.shape != *out.shape) {
+                    unsupported(
+                        act,
+                        "the dtype or shape of a value changes from one call of a recursion to "
+                        "the next; a loop can only carry values of a fixed dtype and shape");
+                }
+                stateIn.push_back(valueInfoOf(inLeaves[j].name, in));
+                stateOut.push_back(valueInfoOf(
+                    emitter_.node(
+                        "Identity",
+                        {emitter_.operand(outLeaves[j], *in.dtype)},
+                        {},
+                        "state_out"),
+                    in));
+                leafArgument.push_back(k);
+            }
         }
         const TensorFacts flag{TypeCode::Bool, tensor::StaticShape{}};
         stateIn.insert(stateIn.begin(), valueInfoOf(condIn, flag));
@@ -1607,21 +1841,31 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
         emitter_.operand(
             Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()),
             TypeCode::Bool)};
-    std::vector<size_t> carriedIndex;
     for (size_t k = 0; k < count; ++k) {
         if (carried[k]) {
-            loopInputs.push_back(emitter_.operand(args[k], factsOf(args[k]).dtype));
-            carriedIndex.push_back(k);
+            for (const Value &leaf : initLeaves[k]) {
+                loopInputs.push_back(emitter_.operand(leaf, factsOf(leaf).dtype));
+            }
         }
     }
     const std::vector<std::string> outputs = emitter_.nodeN(
         "Loop",
         std::move(loopInputs),
         {Attribute::makeGraph("body", std::move(bodyGraph))},
-        carriedIndex.size(),
+        leafArgument.size(),
         "loop_state");
-    for (size_t i = 0; i < carriedIndex.size(); ++i) {
-        finals[carriedIndex[i]] = placeholderLike(args[carriedIndex[i]], outputs[i]);
+    size_t output = 0;
+    for (size_t k = 0; k < count; ++k) {
+        if (!carried[k]) {
+            continue;
+        }
+        // The Loop hands the leaves back; the argument is the struct they make up.
+        std::vector<Value> leafValues;
+        for (const Value &leaf : initLeaves[k]) {
+            leafValues.push_back(placeholderLike(leaf, outputs[output++]));
+        }
+        size_t next = 0;
+        finals[k]   = rebuildValue(args[k], leafValues, next);
     }
 
     // The result: the body once more, at the final state, where it returns.
@@ -1681,12 +1925,16 @@ std::vector<Value> Evaluator::emitLoop(
     }
     emitter_.pushScope("loop_body");
     std::vector<ValueInfo> inputs, outputs;
+    // One Loop state input per leaf (H44's outline): a struct or tuple carried value is flattened
+    // in the order of its fields, and the leaves are what the Loop keeps between calls.
+    std::vector<std::vector<Value>> initLeaves(init.size());
+    std::vector<size_t> leafArgument;
     try {
         const std::string iter   = emitter_.fresh("loop_iter");
         const std::string condIn = emitter_.fresh("loop_cond_in");
         std::vector<Value> state;
         for (const Value &v : init) {
-            state.push_back(placeholderLike(v, emitter_.fresh("state")));
+            state.push_back(placeholderState(v, "state", emitter_));
         }
         const auto [cont, next] = body(Value::symbolicScalar(iter, type::Type::Int64()), state);
         if (next.size() != init.size()) {
@@ -1701,19 +1949,37 @@ std::vector<Value> Evaluator::emitLoop(
         outputs.push_back(
             valueInfoOf(emitter_.node("Identity", {cont ? *cont : always}, {}, "loop_cond"), flag));
         for (size_t k = 0; k < init.size(); ++k) {
-            const TensorFacts in  = factsOf(state[k]);
-            const TensorFacts out = factsOf(next[k]);
-            if (!isCarriable(next[k]) || !in.dtype || in.dtype != out.dtype || !in.shape ||
-                !out.shape || *in.shape != *out.shape) {
+            std::vector<Value> inLeaves, outLeaves;
+            const bool carries = carriableLeaves(state[k], inLeaves);
+            flattenValue(next[k], outLeaves);
+            flattenValue(init[k], initLeaves[k]);
+            if (!carries || inLeaves.size() != outLeaves.size() ||
+                inLeaves.size() != initLeaves[k].size()) {
                 unsupported(
                     act,
                     "the dtype or shape of a value changes from one call of a recursion to the "
                     "next; a loop can only carry values of a fixed dtype and shape");
             }
-            inputs.push_back(valueInfoOf(state[k].name, in));
-            outputs.push_back(valueInfoOf(
-                emitter_.node("Identity", {emitter_.operand(next[k], *in.dtype)}, {}, "state_out"),
-                in));
+            for (size_t j = 0; j < inLeaves.size(); ++j) {
+                const TensorFacts in  = factsOf(inLeaves[j]);
+                const TensorFacts out = factsOf(outLeaves[j]);
+                if (!in.dtype || in.dtype != out.dtype || !in.shape || !out.shape ||
+                    *in.shape != *out.shape) {
+                    unsupported(
+                        act,
+                        "the dtype or shape of a value changes from one call of a recursion to "
+                        "the next; a loop can only carry values of a fixed dtype and shape");
+                }
+                inputs.push_back(valueInfoOf(inLeaves[j].name, in));
+                outputs.push_back(valueInfoOf(
+                    emitter_.node(
+                        "Identity",
+                        {emitter_.operand(outLeaves[j], *in.dtype)},
+                        {},
+                        "state_out"),
+                    in));
+                leafArgument.push_back(k);
+            }
         }
     } catch (...) {
         emitter_.popScope();
@@ -1727,18 +1993,26 @@ std::vector<Value> Evaluator::emitLoop(
         emitter_.operand(
             Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()),
             TypeCode::Bool)};
-    for (const Value &v : init) {
-        loopInputs.push_back(emitter_.operand(v, factsOf(v).dtype));
+    for (size_t k = 0; k < init.size(); ++k) {
+        for (const Value &leaf : initLeaves[k]) {
+            loopInputs.push_back(emitter_.operand(leaf, factsOf(leaf).dtype));
+        }
     }
     const std::vector<std::string> names = emitter_.nodeN(
         "Loop",
         std::move(loopInputs),
         {Attribute::makeGraph("body", std::move(bodyGraph))},
-        init.size(),
+        leafArgument.size(),
         "loop_state");
     std::vector<Value> finals;
+    size_t output = 0;
     for (size_t k = 0; k < init.size(); ++k) {
-        finals.push_back(placeholderLike(init[k], names[k]));
+        std::vector<Value> leafValues;
+        for (const Value &leaf : initLeaves[k]) {
+            leafValues.push_back(placeholderLike(leaf, names[output++]));
+        }
+        size_t next = 0;
+        finals.push_back(rebuildValue(init[k], leafValues, next));
     }
     return finals;
 }
@@ -2180,7 +2454,53 @@ Value Evaluator::mergeValues(
             select.fields = {la[j], lb[j]};
             merged.push_back(std::move(select));
         } else {
-            merged.push_back(selectValue(act, cond, la[j], lb[j]));
+            // A value leaf becomes an If output, as the branch that yields it does: the model keeps
+            // the decision as a branch (a Where would hide it). Both arms of the Camel branch are
+            // already evaluated here; the If's arms only select the value each one yielded.
+            if (sameValue(la[j], lb[j])) {
+                merged.push_back(la[j]);
+                continue;
+            }
+            if (la[j].isAggregate() || lb[j].isAggregate() || !isCarriable(la[j]) ||
+                !isCarriable(lb[j])) {
+                unsupported(
+                    act,
+                    "a tuple, struct or array differs between the arms of a branch on a "
+                    "model-dependent condition; only tensors and scalars can be selected");
+            }
+            const TensorFacts fa = factsOf(la[j]), fb = factsOf(lb[j]);
+            if (!fa.dtype || fa.dtype != fb.dtype) {
+                unsupported(
+                    act,
+                    "the arms of a branch on a model-dependent condition yield values of "
+                    "different types");
+            }
+            Graph bodies[2];
+            const Value *leaves[2] = {&la[j], &lb[j]};
+            for (size_t i = 0; i < 2; ++i) {
+                // The arm yields a value computed outside the If: appendIdentity, not node(),
+                // which would return an Identity emitted in an enclosing scope and leave the
+                // arm empty.
+                emitter_.pushScope(i == 0 ? "then_branch" : "else_branch");
+                bodies[i] = emitter_.popScope();
+                const std::string out = emitter_.appendIdentity(
+                    bodies[i], emitter_.operand(*leaves[i], *fa.dtype), "arm_out");
+                bodies[i].outputs.push_back(valueInfoOf(out, factsOf(*leaves[i])));
+            }
+            const std::string out = emitter_.node(
+                "If",
+                {cond},
+                {Attribute::makeGraph("then_branch", std::move(bodies[0])),
+                 Attribute::makeGraph("else_branch", std::move(bodies[1]))});
+            if (type::Type *scalar = scalarCamelTypeOf(la[j])) {
+                merged.push_back(Value::symbolicScalar(out, scalar));
+            } else {
+                std::optional<tensor::StaticShape> shape;
+                if (fa.shape && fb.shape && *fa.shape == *fb.shape) {
+                    shape = fa.shape;
+                }
+                merged.push_back(Value::symbolic(out, fa.dtype, shape));
+            }
         }
     }
     size_t next = 0;
@@ -2248,18 +2568,100 @@ Value Evaluator::callClosure(
     case Value::ClosureKind::Loop:
         return callLoopClosure(act, fn, args, withCount);
     case Value::ClosureKind::Select: {
-        // Both functions are called and one result is selected (see evalEagerBranch).
-        emitter_.beginSpeculation();
-        Value a, b;
-        try {
-            a = callClosure(act, fn.fields[0], args, withCount);
-            b = callClosure(act, fn.fields[1], args, withCount);
-        } catch (...) {
-            emitter_.endSpeculation();
-            throw;
+        // (if c then f else g)(args) is if c then f(args) else g(args): the branch stays a
+        // branch in the model, so the arm not taken is not evaluated. Calling both and
+        // selecting the results would make a model that computes the arm it does not use (and
+        // an arm's call may be a function that has no value here at all). A result of tuple or
+        // struct shape becomes one If output per leaf: an If yields tensors, not aggregates.
+        const std::string condName = fn.name;
+        Graph bodies[2];
+        Value results[2];
+        std::vector<Value> arms[2];
+        for (size_t i = 0; i < 2; ++i) {
+            emitter_.pushScope(i == 0 ? "then_branch" : "else_branch");
+            act.memo.emplace_back();
+            try {
+                results[i] = callClosure(act, fn.fields[i], args, withCount);
+                if (results[i].isClosure() || holdsClosure(results[i]) ||
+                    holdsDeferredClosure(results[i])) {
+                    refuseFunctionBranch(act, results[i].camelType);
+                }
+                flattenValue(results[i], arms[i]);
+                act.memo.pop_back();
+                bodies[i] = emitter_.popScope();
+            } catch (...) {
+                act.memo.pop_back();
+                emitter_.popScope();
+                throw;
+            }
+            // The arm's leaves are values of the arm's own graph: emit an Identity for each into
+            // the popped body (appendIdentity, not node(), which would reuse an Identity of the
+            // enclosing scope and leave the arm empty).
+            for (const Value &leaf : arms[i]) {
+                const TensorFacts f = factsOf(leaf);
+                const std::string out =
+                    emitter_.appendIdentity(bodies[i], emitter_.operand(leaf), "arm_out");
+                bodies[i].outputs.push_back(valueInfoOf(out, f));
+            }
         }
-        emitter_.endSpeculation();
-        return mergeValues(act, fn.name, a, b);
+        if (arms[0].size() != arms[1].size()) {
+            unsupported(
+                act,
+                "the arms of a branch on a model-dependent condition yield different types");
+        }
+        // Arms that already agree need no selection (see evalSymbolicBranch).
+        bool agree = true;
+        for (size_t k = 0; k < arms[0].size() && agree; ++k) {
+            const Value &x = arms[0][k], &y = arms[1][k];
+            agree = (x.isConstant() && y.isConstant() && x.slot == y.slot && x.ty == y.ty) ||
+                    (x.isSymbolic() && y.isSymbolic() && x.form == y.form && x.name == y.name &&
+                     !x.name.empty());
+        }
+        if (agree) {
+            return results[0];
+        }
+        std::vector<Value> selected;
+        selected.reserve(arms[0].size());
+        for (size_t k = 0; k < arms[0].size(); ++k) {
+            const Value &x = arms[0][k], &y = arms[1][k];
+            if (x.isSymbolic() && x.form == Value::Form::IntArray) {
+                unsupported(
+                    act, "a branch on a model-dependent condition cannot yield an int array");
+            }
+            const TensorFacts a = factsOf(x), b = factsOf(y);
+            const bool sameForm = x.isConstant() || y.isConstant() || x.form == y.form;
+            if (!a.dtype || a.dtype != b.dtype || !sameForm) {
+                unsupported(
+                    act, "the arms of a branch on a model-dependent condition yield different types");
+            }
+            std::optional<tensor::StaticShape> shape;
+            if (a.shape && b.shape && a.shape->size() == b.shape->size()) {
+                shape = a.shape;
+                for (size_t d = 0; d < shape->size(); ++d) {
+                    if ((*a.shape)[d] != (*b.shape)[d]) {
+                        (*shape)[d] = tensor::kUnknownDim;
+                    }
+                }
+            }
+            if (type::Type *scalar = scalarCamelTypeOf(x)) {
+                selected.push_back(Value::symbolicScalar(std::string(), scalar));
+            } else {
+                selected.push_back(Value::symbolic(std::string(), a.dtype, shape));
+            }
+        }
+        // One If for the call, one output per leaf of its result.
+        const std::vector<std::string> names = emitter_.nodeN(
+            "If",
+            {condName},
+            {Attribute::makeGraph("then_branch", std::move(bodies[0])),
+             Attribute::makeGraph("else_branch", std::move(bodies[1]))},
+            selected.size(),
+            "branch_out");
+        for (size_t k = 0; k < selected.size(); ++k) {
+            selected[k].name = names[k];
+        }
+        size_t next = 0;
+        return rebuildValue(results[0], selected, next);
     }
     case Value::ClosureKind::Plain:
         break;
@@ -2558,7 +2960,9 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
                 continue;
             }
             const core::OperId id = operIdOf(g, user);
-            if (core::oper::isVariableRead(id)) {
+            if (core::oper::isVariableRead(id) || id == core::oper::VarTake) {
+                // A read, or the handover of the variable's own value to an in-place form,
+                // which changes only what the variable is then assigned.
                 continue;
             }
             if (!core::OperatorTable::instance().isAssignment(id) ||
@@ -2590,13 +2994,32 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
         if (!isLast) {
             continue;
         }
-        if (operUriOf(g, last) == ":op/assn_append") {
-            // `acc = acc->append<v>` (design principles 11.3): an array grown in a variable,
-            // which a model has no form for.
-            unsupported(
-                act,
-                "an array variable is appended to (`acc = acc->append<v>`); an ONNX model holds "
-                "no growing arrays: compute the values as a tensor instead");
+        // What a gate forwards (GATE(x), or the last with-input of a with-gate): after inlining,
+        // the value an assignment stores can be behind one.
+        const auto forwards = [g](gc_node_ref_t ref) {
+            for (;;) {
+                const GCNodeKind kind = g->node(ref)->kind;
+                if (kind != GCNodeKind::Gate && kind != GCNodeKind::Copy) {
+                    return ref;
+                }
+                const auto norm = g->normInputsOf(ref);
+                const auto with = g->withInputsOf(ref);
+                ref             = norm.empty() ? with.back() : norm.back();
+            }
+        };
+        const auto assigned = g->normInputsOf(last);
+        if (assigned.size() == 2) {
+            const gc_node_ref_t stored = forwards(assigned[1]);
+            if (g->node(stored)->kind == GCNodeKind::Oper &&
+                operUriOf(g, stored) == ":struct/append_arr_in_place") {
+                // `acc = acc->append<v>` (design principles 11.3): an array grown in a
+                // variable, which a model has no form for. The compiler writes the in-place
+                // form of `append` over what :var/take handed it.
+                unsupported(
+                    act,
+                    "an array variable is appended to (`acc = acc->append<v>`); an ONNX model "
+                    "holds no growing arrays: compute the values as a tensor instead");
+            }
         }
         const Value operand       = eval(act, g->normInputsOf(last)[1]);
         const AssignmentKind kind = assignmentKindOf(operUriOf(g, last));
@@ -2630,6 +3053,11 @@ Value Evaluator::applyOper(
     Activation &act, const std::string &uri, std::vector<Value> norm, type::Type *resultType,
     std::vector<Value> with) {
     const auto *def = tensor::ops::OpRegistry::instance().find(uri);
+
+    // A growing array has no ONNX counterpart; say why rather than that it is impure.
+    if (uri == ":struct/append_arr_in_place") {
+        unsupported(act, kGrowingArray);
+    }
 
     // Simplification has evaluated every pure operator whose arguments are constants; what is
     // left is translated. Side effects have no ONNX counterpart.
@@ -2789,8 +3217,7 @@ Value Evaluator::evalSymbolicBranch(
                     results[i].isClosure() ? results[i].camelType : results[i].ty);
             }
             const TensorFacts f = factsOf(results[i]);
-            const std::string out =
-                emitter_.node("Identity", {emitter_.operand(results[i])}, {}, "arm_out");
+            const std::string out = emitter_.armOutput(emitter_.operand(results[i]), "arm_out");
             act.memo.pop_back();
             bodies[i] = emitter_.popScope();
             bodies[i].outputs.push_back(valueInfoOf(out, f));
@@ -2866,7 +3293,8 @@ void Evaluator::collectArmLeaves(
     }
     if (isAggregateForm(a)) {
         const Value va = asAggregate(a), vb = asAggregate(b);
-        if (va.camelType != vb.camelType || va.fields.size() != vb.fields.size()) {
+        if (!sameStructRepresentation(va.camelType, vb.camelType) ||
+            va.fields.size() != vb.fields.size()) {
             unsupported(
                 act,
                 "the arms of a branch on a model-dependent condition yield different types");
@@ -2921,10 +3349,13 @@ Value Evaluator::evalSymbolicAggregateBranch(
             throw;
         }
     }
-    if (holdsClosure(results[0]) || holdsClosure(results[1])) {
+    if (holdsClosure(results[0]) || holdsClosure(results[1]) || holdsDeferredClosure(results[0]) ||
+        holdsDeferredClosure(results[1])) {
         // An arm yields a function that exists only at export time (what a linear recursion
-        // returns). Its captured values must stay visible where it is called, so the arms
-        // cannot live in If subgraphs: both are evaluated here and the condition selects.
+        // returns, or the pullback of a branch arm), or one that evalFill deferred because
+        // nothing had called it yet. Its captured values must stay visible where it is called,
+        // so the arms cannot live in If subgraphs: both are evaluated here and the condition
+        // selects.
         Value cond = Value::symbolicScalar(condName, type::Type::Bool());
         return evalEagerBranch(act, cond, arms);
     }
@@ -3391,7 +3822,12 @@ void emitOutputs(Emitter &emitter, const Value &result, const std::string &name)
                 name,
                 result.ty ? result.ty->toString() : "a value of unknown type"));
     }
-    const std::string output = emitter.node("Identity", {emitter.operand(result)}, {}, name);
+    // A graph output is a value of its own: two outputs that are the same result (the same
+    // tensor and scalar, or one returned twice) need two Identity nodes with two names, because
+    // a model's graph may not name one value as two outputs. node() would merge the second
+    // Identity into the first by structural CSE.
+    const std::string output =
+        emitter.appendIdentity(emitter.graph(), emitter.operand(result), name);
     emitter.graph().outputs.push_back(valueInfoOf(output, facts));
 }
 
@@ -3565,11 +4001,6 @@ OptimizeRewriteConfig exportRewriteConfig() {
     OptimizeRewriteConfig config;
     // Everything that is not recursive is inlined; ONNX has no calls.
     config.inlineConfig.smallSubgraphMaxNonDataPortNodes = std::numeric_limits<size_t>::max();
-    // The pullback of a data-dependent branch is an indirect call of a closure projected out
-    // of the branch's JOIN; split it into per-arm calls with one JOIN per value. The graph is
-    // only walked as a value DAG from here on (no execution topo is built), so the sibling
-    // JOINs this creates are valid.
-    config.enableBranchedCallSplit = true;
     // An export has to reach straight-line code or it is refused, so it is not held to the growth
     // bounds that keep an optimization pass cheap (the growth_budget parameter belongs to the
     // pass on the pipeline, and an export that runs after it may be held to it). A graph too
@@ -3834,12 +4265,42 @@ void refuseUnendedUnrolling(
         ExportError::Kind::Other);
 }
 
+/// Refuses a LOOP node before the export simplifies the bound function (translatePrepared).
+///
+/// The translation itself refuses a LOOP node where it is written (evalNode), but the export
+/// simplifies the function first, and that simplification can rewrite or unroll the graphs
+/// around the loop before the translation sees it. Refusing here keeps the exporter's
+/// diagnosis, at the loop, before any of that.
+///
+/// No pass removes a LOOP node (it runs its graphs, which may have effects), so a loop of the
+/// bound function still reaches the translation; the refusal is the same one, only reported
+/// earlier.
+void refuseLoops(
+    core::context::Context &ctx, const camel::runtime::Program &program, GCGraph *root) {
+    for (GCGraph *graph : camel::runtime::collectReachableGraphs(program, root)) {
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            if (*it == nullptr || (*it)->kind != GCNodeKind::Loop) {
+                continue;
+            }
+            const uint64_t origin = graph->nodeOrigin(it.ref());
+            throw ExportError(
+                loopRefusalText(*graph),
+                sourceLocationOf(ctx.sourceContext(), origin),
+                origin);
+        }
+    }
+}
+
 Model translatePrepared(
     core::context::Context &ctx, Emitter &emitter, const camel::runtime::Program *program,
     std::span<const Value> inputs, std::unordered_map<slot_t, std::string> names,
     const ExportOptions &options, Preparation preparation) {
     const auto context = ctx.shared_from_this();
     GCGraph *root      = program->root();
+    // A LOOP is refused before the simplification below, which can fail on the graphs of a
+    // function a loop is part of (see refuseLoops) and would then report its own failure
+    // instead of the loop.
+    refuseLoops(ctx, *program, root);
     std::ostringstream log;
     // The pass entry (ShapesOnly): the preceding passes simplified the program without two
     // things only the export knows: the shapes of the examples (binding their types above
@@ -4085,3 +4546,6 @@ Model exportFunction(
 }
 
 } // namespace camel::onnx
+
+
+

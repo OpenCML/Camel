@@ -32,8 +32,8 @@
  *
  * Every operator of the tensor module that takes a maximum or a minimum (the elementwise
  * `maximum`/`minimum`, the `max`/`min` reductions, max pooling, the stabilising maximum of
- * softmax, relu and the fused matmul_add_relu) goes through these functions, so they cannot
- * drift apart. They are branch-free selects, which the compiler vectorizes inside loops.
+ * softmax and relu) goes through these functions, so they cannot drift apart. They are
+ * branch-free selects, which the compiler vectorizes inside loops.
  */
 
 #pragma once

@@ -56,9 +56,7 @@ class EdgeChecker {
 
     std::vector<std::string> run() {
         checkWritings();
-        if (state_ != GraphState::NonExecutable) {
-            findCycle();
-        }
+        findCycle();
         for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
             checkNode(it.ref(), **it);
         }

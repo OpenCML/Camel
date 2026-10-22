@@ -14,7 +14,7 @@ desc = "test::facts: each registration rule rejects one kind (owner prefix, core
 kind = "behavior"
 case = "../../../cases/facts/two_functions.cml"
 args = ["${case}", "test::facts"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -55,12 +55,12 @@ for (const l of [
 """
 
 [[tests]]
-name = "test_passes_need_the_environment"
-desc = "test::facts is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
-kind = "negative"
+name = "test_pass_is_not_in_a_pipeline"
+desc = "test::facts is a test-only pass: no pipeline adds it, so a run that names no pass prints no facts."
+kind = "behavior"
 case = "../../../cases/facts/two_functions.cml"
-args = ["${case}", "test::facts"]
-expect_exit = 1
+args = ["${case}"]
+expect_exit = 0
 expect_output_not_contains = ["FACTS"]
 
 [[tests]]
@@ -84,41 +84,60 @@ assert(value('core.reorder', 'layer', 2) === 'contract', 'matmul freedom')
 assert(value('core.reorder', 'total', 1) === 'regroup, permute', 'sum freedom under reassociate')
 assert(value('core.effects', 'count') === 'may fault, may not terminate', 'loop effects')
 const loopFor = find('core.loopDomain', 'twice')
-assert(loopFor && loopFor.anchors[1].graph === 'twice' && loopFor.value.includes('= 2; element port 3 reads xs(t)'), 'for domain')
+assert(loopFor && loopFor.anchors[1].graph === 'twice' && loopFor.value.includes('= 2; element port 2 reads xs(t)'), 'for domain')
 assert(value('core.loopDomain', 'count') === 'while: rounds unbounded (no sequence)', 'while domain')
 const p = find('core.permissions', 'total', 1)
 assert(p && p.value === 'reassociate' && p.class === 'content' && p.stamp === null, 'permissions')
 const s = find('core.shape', 'layer', 2).stamp
-assert(s.revisions[0].graph === 'layer' && s.epoch === 0 && /^[0-9a-f]{16}$/.test(s.cone), 'shape stamp')
+assert(s.revisions[0].graph === 'layer' && s.epoch === 0 && s.nodes.length === 1 && s.nodes[0].graph === 'layer' && s.nodes[0].node === 2 && /^[0-9a-f]{16}$/.test(s.nodes[0].hash), 'shape stamp: the version of the node, not of a cone')
 assert(find('core.instance', 'layer', 2).stamp.epoch > 0, 'instance stamp has the epoch')
-assert(facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'main' && f.value === 'write ambient io:stdout; external'), 'println writes the console')
+assert(facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'main' && f.value === 'write ambient stdout; external'), 'println writes the console')
 assert(!facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'layer'), 'pure tensor code touches no resource')
 }
 """
 
 [[tests]]
 name = "rewrite_inline"
-desc = "Facts computed before std::opt::inline: the graphs it changed (main, which gets the callees' bodies, the root and twice, which refer to them) read stale, apart from the facts about nodes that kept their id and whose inputs did not change (revalidated: a rewrite keeps the NodeIds of the nodes it leaves); the graphs it did not change keep every fact. Everything stale is computed again and every stored fact then equals a fresh computation. A private loop lowering (as std::fvm does) makes the graphs that held a loop, and those referring to them, new; the others keep their facts."
+desc = "Facts computed before std::opt::inline, when no pass adds an operator declaration (the epoch is the same before and after): the graphs the rewrite did not change keep every fact, of every kind; on main, which gets the callees' bodies, the conservative kinds are stale and the shapes of the nodes it left where they were stay valid (Dependency::Node), while the shapes of the nodes it touched read stale. Everything stale is computed again, no readable fact is stale afterwards, and every stored fact equals a fresh computation."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_seed", "std::opt::inline", "test::facts_check"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+const num = (re, what) => { const m = out.match(re); assert(m, `missing ${what}`); return Number(m[1]) }
 for (const l of [
   'FACTS seeded core.shape 13', 'FACTS seeded core.instance 5', 'FACTS seeded core.reorder 2',
   'FACTS seeded core.effects 6', 'FACTS seeded core.loopDomain 2', 'FACTS seeded core.resources 4',
   'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
   'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice valid=7 revalidated=0 stale=0',
-  'FACTS graph main valid=0 revalidated=3 stale=8', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
+  'FACTS graph main valid=2 revalidated=0 stale=9', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
+  // The kinds of main, fact by fact: the conservative rule reads declarations and the graph, so
+  // every such fact on main is stale; a shape is about its node's own version, so the two nodes
+  // inlining left in place keep theirs and the three it touched do not.
+  'FACTS graph kind main core.effects valid=0 revalidated=0 stale=1',
+  'FACTS graph kind main core.instance valid=0 revalidated=0 stale=2',
+  'FACTS graph kind main core.resources valid=0 revalidated=0 stale=3',
+  'FACTS graph kind main core.shape valid=2 revalidated=0 stale=3',
   'FACTS gone 0',
-  'FACTS lowered count valid=0 revalidated=0 stale=2', 'FACTS lowered twice valid=0 revalidated=2 stale=5',
-  'FACTS lowered layer valid=6 revalidated=0 stale=0',
   '60.0',
 ]) line(l)
+// Inlining adds no operator declaration: the epoch is the same seed and check, and on the graphs
+// the pass did not change no fact of any kind is stale.
+assert(num(/FACTS epoch seed=(\d+)/, 'seed epoch') === num(/FACTS epoch check=(\d+)/, 'check epoch'),
+  'std::opt::inline declared an operator; this case asserts that it does not')
+for (const g of ['layer', 'total', 'count', 'twice']) {
+  assert(num(new RegExp(`FACTS seed revision ${g} (\\d+)`), `${g} seed revision`) ===
+    num(new RegExp(`FACTS check revision ${g} (\\d+)`), `${g} check revision`), `${g} changed under std::opt::inline`)
+  const kinds = out.split('\n').filter(l => l.startsWith(`FACTS graph kind ${g} `))
+  assert(kinds.length > 0, `${g} has no per-kind line`)
+  for (const k of kinds) assert(k.endsWith('stale=0'), `${g}: a fact is stale although the pass changed neither its graph nor a declaration: ${k}`)
+}
+const after = out.match(/^FACTS after recompute valid=(\d+) stale=(\d+) gone=(\d+)$/m)
+assert(after && after[2] === '0', 'a fact a consumer can read stayed stale after the recompute')
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
 assert(!out.includes('shared id'), 'one graph per GraphId')
 }
@@ -126,39 +145,100 @@ assert(!out.includes('shared id'), 'one graph per GraphId')
 
 [[tests]]
 name = "rewrite_opt"
-desc = "The same across std::opt: its passes ask to edit every graph, but only the graphs whose content changed get a new revision; nothing stale is reused."
+desc = "The same across std::opt, which does not change layer, total or count (their revisions are the same before and after) but loads the rules library, and that library's import declares operators: the declaration epoch moves. On the graphs it did not change, exactly the kinds that read declarations (core.instance, core.reorder, core.effects) go stale, and the kinds that read none (core.shape, Dependency::Node, and core.loopDomain) stay valid. main changed, so every fact about it is stale. Everything stale is computed again; after that no fact a consumer can read is stale, and every stored fact equals a fresh computation."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_seed", "std::opt", "test::facts_check"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+const num = (re, what) => { const m = out.match(re); assert(m, `missing ${what}`); return Number(m[1]) }
+const revision = (prefix, graph) => num(new RegExp(`FACTS ${prefix} revision ${graph} (\\d+)`), `${prefix} revision of ${graph}`)
+// Kinds whose stamps include the declaration epoch (KindSpec::readsDeclarations, facts.h): their
+// fact may depend on how an operator is declared, so any new declaration invalidates it.
+const readsDeclarations = new Set(['core.instance', 'core.reorder', 'core.effects'])
 for (const l of [
-  'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
-  'FACTS graph count valid=2 revalidated=0 stale=0',
-  'FACTS graph main valid=0 revalidated=2 stale=9', 'FACTS gone 0', '60.0',
+  'FACTS graph main valid=0 revalidated=0 stale=11', 'FACTS gone 0', '60.0',
 ]) line(l)
+
+// Why: the graphs the case asserts about did not change, but std::opt's algebra phase loads the
+// rules library, whose import declares its operators. The epoch is part of a fact's stamp
+// (docs/design/op-semantics 10.3), so a declaration change invalidates it even when the graph
+// it is about did not change.
+const seedEpoch = num(/FACTS epoch seed=(\d+)/, 'seed epoch')
+const checkEpoch = num(/FACTS epoch check=(\d+)/, 'check epoch')
+assert(checkEpoch > seedEpoch, `std::opt added no declaration (epoch ${seedEpoch} -> ${checkEpoch}); this case explains the stale facts by a declaration-epoch change`)
+assert(revision('seed', 'main') !== revision('check', 'main'), 'std::opt did not change main')
+for (const g of ['layer', 'total', 'count', 'twice']) {
+  assert(revision('seed', g) === revision('check', g), `${g} changed under std::opt: revision ${revision('seed', g)} -> ${revision('check', g)}`)
+  const kinds = out.split('\n').filter(l => l.startsWith(`FACTS graph kind ${g} `))
+  assert(kinds.length > 0, `${g} has no per-kind line`)
+  for (const k of kinds) {
+    const m = k.match(/^FACTS graph kind (\S+) (\S+) valid=(\d+) revalidated=(\d+) stale=(\d+)$/)
+    assert(m, `unreadable per-kind line: ${k}`)
+    const kind = m[2], valid = m[3], stale = m[5]
+    if (readsDeclarations.has(kind)) {
+      assert(valid === '0' && Number(stale) > 0, `${g} ${kind}: a fact that reads declarations survived a declaration-epoch change (valid=${valid})`)
+    } else {
+      assert(stale === '0', `${g} ${kind}: stale although neither its graph nor a declaration it reads changed (stale=${stale})`)
+    }
+  }
+}
+
+// No silent staleness: everything stale is recomputed, no fact a consumer can read is stale
+// afterwards, and every stored fact equals a fresh computation.
+assert(/FACTS recomputed [1-9]\d*/.test(out), 'nothing was recomputed')
+const after = out.match(/^FACTS after recompute valid=(\d+) stale=(\d+) gone=(\d+)$/m)
+assert(after, 'missing the after-recompute line')
+assert(after[2] === '0', `${after[2]} readable facts stayed stale after the recompute`)
+assert(Number(after[1]) > 0, 'no fact was readable after the recompute')
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
 }
 """
 
 [[tests]]
 name = "rewrite_macro_simplify"
-desc = "The same across std::macro and std::opt."
+desc = "The same across std::macro and std::opt: std::macro adds no declaration and changes none of these graphs; std::opt's algebra phase loads the rules library, which declares operators, so the epoch moves and exactly the declaration-reading kinds go stale on the graphs std::opt did not change. As in rewrite_opt, everything stale is recomputed and no readable fact is stale afterwards."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_seed", "std::macro", "std::opt", "test::facts_check"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
-for (const l of ['FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS gone 0', '60.0']) line(l)
-assert(/FACTS graph main valid=0 revalidated=\d+ stale=[1-9]/.test(out), 'main changed')
+const num = (re, what) => { const m = out.match(re); assert(m, `missing ${what}`); return Number(m[1]) }
+const revision = (prefix, graph) => num(new RegExp(`FACTS ${prefix} revision ${graph} (\\d+)`), `${prefix} revision of ${graph}`)
+const readsDeclarations = new Set(['core.instance', 'core.reorder', 'core.effects'])
+for (const l of [
+  'FACTS graph main valid=0 revalidated=0 stale=11', 'FACTS gone 0', '60.0',
+]) line(l)
+const seedEpoch = num(/FACTS epoch seed=(\d+)/, 'seed epoch')
+const checkEpoch = num(/FACTS epoch check=(\d+)/, 'check epoch')
+assert(checkEpoch > seedEpoch, `std::macro and std::opt added no declaration (epoch ${seedEpoch} -> ${checkEpoch})`)
+for (const g of ['layer', 'total', 'count', 'twice']) {
+  assert(revision('seed', g) === revision('check', g), `${g} changed under std::macro and std::opt`)
+  const kinds = out.split('\n').filter(l => l.startsWith(`FACTS graph kind ${g} `))
+  assert(kinds.length > 0, `${g} has no per-kind line`)
+  for (const k of kinds) {
+    const m = k.match(/^FACTS graph kind (\S+) (\S+) valid=(\d+) revalidated=(\d+) stale=(\d+)$/)
+    assert(m, `unreadable per-kind line: ${k}`)
+    const kind = m[2], valid = m[3], stale = m[5]
+    if (readsDeclarations.has(kind)) {
+      assert(valid === '0' && Number(stale) > 0, `${g} ${kind}: a fact that reads declarations survived a declaration-epoch change (valid=${valid})`)
+    } else {
+      assert(stale === '0', `${g} ${kind}: stale although neither its graph nor a declaration it reads changed (stale=${stale})`)
+    }
+  }
+}
+assert(/FACTS recomputed [1-9]\d*/.test(out), 'nothing was recomputed')
+const after = out.match(/^FACTS after recompute valid=(\d+) stale=(\d+) gone=(\d+)$/m)
+assert(after, 'missing the after-recompute line')
+assert(after[2] === '0', `${after[2]} readable facts stayed stale after the recompute`)
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
 }
 """
@@ -169,7 +249,7 @@ desc = "test::facts_persist: every encodable fact (shapes, reorder freedom, effe
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_persist"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -186,5 +266,27 @@ for (const l of [
   '60.0',
 ]) line(l)
 assert(!/FACTS reloaded (layer|total|twice|count)\S* graph changed/.test(out), 'unchanged graphs load')
+}
+"""
+
+[[tests]]
+name = "node_versions"
+desc = "test::facts_node: a fact of a kind about a node's own version (Dependency::Node, design 4.4) holds across a commit that changed its graph but not the node, where the fact of the conservative rule on the same node goes stale; the node's fact goes stale once the node itself changes. Every fact of that rule is about the record and the inputs of its nodes, so a rewrite that leaves a node where it was keeps its facts however many other nodes it changed."
+kind = "behavior"
+case = "../../../cases/facts/two_functions.cml"
+args = ["${case}", "test::facts_node"]
+
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const l of [
+  'FACTS node_revision new',
+  'FACTS node_version kept',
+  'FACTS node_other node=valid graph=stale',
+  'FACTS node_self node=stale',
+  '41',
+]) line(l)
 }
 """

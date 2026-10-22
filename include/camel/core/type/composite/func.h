@@ -48,7 +48,6 @@
 #pragma once
 
 #include "camel/core/func.h"
-#include "camel/core/impl.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/composite/composite.h"
 
@@ -76,7 +75,6 @@ class FunctionTypeFactory {
   public:
     FunctionTypeFactory() = default;
 
-    void setImplMark(ImplMark mark) { implMark_ = mark; }
     void setModifiers(ModifierSet mod) { modifiers_ = mod; }
     void setExitType(Type *type) { exitType_ = type; }
 
@@ -100,7 +98,6 @@ class FunctionTypeFactory {
     OpenFunctionType *buildOpen();
 
   private:
-    ImplMark implMark_     = ImplMark::Graph;
     ModifierSet modifiers_ = Modifier::None;
     std::vector<param_t> withTypes_;
     std::vector<param_t> normTypes_;
@@ -134,7 +131,6 @@ class FunctionType : public CompositeType {
     OpenFunctionType *asOpen() const;
     bool isOpen() const { return open_; }
 
-    ImplMark implMark() const { return implMark_; }
     ModifierSet modifiers() const { return modifiers_; }
     bool hasModifier(Modifier mod) const { return modifiers_.has(mod); }
     bool checkModifiers() const;
@@ -198,7 +194,6 @@ class FunctionType : public CompositeType {
     /// Everything a signature consists of. `names` has one entry per parameter (`with` first)
     /// when `hasNames`, and is empty otherwise.
     struct Parts {
-        ImplMark implMark     = ImplMark::Graph;
         ModifierSet modifiers = Modifier::None;
         std::vector<param_t> params; // `with` parameters first
         size_t withCount = 0;
@@ -242,7 +237,6 @@ class FunctionType : public CompositeType {
             paramCount() * (sizeof(Type *) + sizeof(TypeCode) + (hasNames_ ? sizeof(SymId) : 0)));
     }
 
-    ImplMark implMark_;
     ModifierSet modifiers_;
     uint16_t withCount_ = 0;
     uint16_t normCount_ = 0;

@@ -82,9 +82,6 @@ bool ParserImpl::startsExpr(TK kind) const {
     case TK::KwTry:
     case TK::KwLoop:
     case TK::KwSync:
-    case TK::KwMacro:
-    case TK::KwAtomic:
-    case TK::KwShared:
         return true;
     default:
         return false;
@@ -95,6 +92,7 @@ bool ParserImpl::startsExpr(TK kind) const {
 /// waitExpr : 'wait'? assignExpr
 /// ctrlExpr : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 ///          | 'match' identRef '{' matchCase+ '}'
+///          | 'match' 'type' typeExpr '{' typeCase* '}'
 ///          | 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
 void ParserImpl::parseExpr() {
     Depth depth(*this);
@@ -111,6 +109,13 @@ void ParserImpl::parseExpr() {
         return parseTry();
     case TK::KwLoop:
         return parseLoop();
+    case TK::KwStatic:
+        // `static for` is a statement (H51 step 3): only `static loop` is an expression, so a
+        // `static for` here keeps its old reading (the token is unexpected below).
+        if (peek(1) == TK::KwLoop) {
+            return parseStaticLoop();
+        }
+        return parseAssign();
     case TK::KwWait: {
         const size_t m = mark();
         bump();
@@ -385,7 +390,7 @@ void ParserImpl::parseComp() {
 
 /// annoExpr : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 /// | memberAccess)*
-/// memberAccess : '.' (IDENTIFIER | INTEGER | REAL)
+/// memberAccess : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 /// Rule 1: an index, a call, an
 /// angle-bracket argument list and the postfix `!` touch the expression before them. For `<` the
 /// lexer has decided already (LAngle). `Shape::Rect { w: 2 }` is a struct variant construction:
@@ -431,6 +436,18 @@ void ParserImpl::parseAnno() {
         }
         if (cur_ == TK::Dot) {
             const TK member = peek(1);
+            if (member == TK::LBracket) {
+                const size_t mm = mark();
+                bump(); // .
+                bump(); // [
+                parseExpr();
+                if (!panic_) {
+                    expectListEnd(TK::RBracket);
+                }
+                close(mm, NK::MemberAccess);
+                any = true;
+                continue;
+            }
             if (member == TK::Identifier || member == TK::Integer || member == TK::Real) {
                 const size_t mm = mark();
                 bump();
@@ -447,14 +464,25 @@ void ParserImpl::parseAnno() {
     }
 }
 
-/// accessExpr : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
-/// `t.0.1` arrives as `t`, `.`, and the REAL `0.1`: the AST builder splits it.
+/// accessExpr : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
+/// `t.0.1` arrives as `t`, `.`, and the REAL `0.1`: the AST builder splits it. `t.[n]` names a
+/// field or an element by a compile-time key instead of a literal name (H51 step 4).
 void ParserImpl::parseAccess() {
     const size_t m = mark();
     parsePrimary();
     bool any = false;
     while (cur_ == TK::Dot && !panic_) {
         const TK member = peek(1);
+        if (member == TK::LBracket) {
+            bump(); // .
+            bump(); // [
+            parseExpr();
+            if (!panic_) {
+                expectListEnd(TK::RBracket);
+            }
+            any = true;
+            continue;
+        }
         if (member != TK::Identifier && member != TK::Integer && member != TK::Real) {
             bump();
             if (isKeyword(cur_)) {
@@ -475,16 +503,42 @@ void ParserImpl::parseAccess() {
 }
 
 /// Whether the `(` at the current token opens the parameters of a lambda and not a tuple or a
-/// parenthesized expression. Parameters are `name: type` pairs, so the head tells: `(name:`,
-/// `(var`, or an empty list followed by `=>` or by the `:` of a return type. At most four
-/// tokens are read.
+/// parenthesized expression. Parameters are `name: type` pairs, or `name` alone in a lambda,
+/// where the type comes from the function type of the position the lambda stands in (design
+/// principles 5.9). The head tells: `(name:`, `(var`, `(name)` / `(name, ...)` when the list
+/// closes and `=>` (or the `:` of a return type) follows, or an empty list followed by `=>` or
+/// by that `:`. Only parentheses nest inside a parameter list (a type or a default value may
+/// hold a tuple, a function type or a call), so the matching `)` is found by counting them.
 bool ParserImpl::lambdaAhead() const {
     const TK t1 = peek(1);
     if (t1 == TK::KwVar) {
         return true;
     }
     if (t1 == TK::Identifier) {
-        return peek(2) == TK::Colon;
+        if (peek(2) == TK::Colon) {
+            return true;
+        }
+        if (peek(2) != TK::Comma && peek(2) != TK::RParen) {
+            return false;
+        }
+        uint32_t depth = 0;
+        for (uint32_t i = 0;; ++i) {
+            switch (peek(i)) {
+            case TK::Eof:
+                return false;
+            case TK::LParen:
+                ++depth;
+                break;
+            case TK::RParen:
+                if (--depth == 0) {
+                    const TK after = peek(i + 1);
+                    return after == TK::FatArrow || after == TK::Colon;
+                }
+                break;
+            default:
+                break;
+            }
+        }
     }
     if (t1 == TK::RParen) {
         const TK t2 = peek(2);
@@ -538,9 +592,6 @@ void ParserImpl::parsePrimary() {
     case TK::Lt:
     case TK::LAngle:
     case TK::KwSync:
-    case TK::KwMacro:
-    case TK::KwAtomic:
-    case TK::KwShared:
         return parseFuncData();
     default:
         break;
@@ -654,24 +705,57 @@ void ParserImpl::parseArguments(TK closer) {
     eat(TK::Comma);
 }
 
-/// indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']'
+/// indices : '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']'
 void ParserImpl::parseIndices() {
     const size_t m = mark();
     bump();
     {
         Scope scope(*this, false);
-        parseExpr();
-        if (eat(TK::Colon)) {
-            parseExpr();
-            if (eat(TK::Colon)) {
-                parseExpr();
+        parseSliceIndices();
+        while (eat(TK::Comma)) {
+            if (cur_ == TK::RBracket) {
+                break;
             }
+            parseSliceIndices();
         }
     }
     if (!panic_) {
         expect(TK::RBracket);
     }
     close(m, NK::Indices);
+}
+
+/// sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)?
+///
+/// One dimension of a subscript: a slice when a colon follows, an element index otherwise (the
+/// expression is then the whole dimension, which `indices` writes as its other alternative).
+/// The node keeps the colons it consumed as children, so which of the three parts were written
+/// is read from the tree itself and not recovered from token positions: the part before the
+/// first colon is the start, the one between the colons the end, the one after the second colon
+/// the step.
+void ParserImpl::parseSliceIndices() {
+    const size_t m = mark();
+    if (cur_ != TK::Colon) {
+        parseExpr();
+        if (cur_ != TK::Colon) {
+            return; // an element index: the expression is the whole dimension
+        }
+    }
+    bump(); // ':'
+    parseSlicePart();
+    if (eat(TK::Colon)) {
+        parseSlicePart();
+    }
+    close(m, NK::SliceIndices);
+}
+
+/// One part of a slice: nothing at all when the next token is a colon or the end of the
+/// subscript, which leaves the part out of the tree.
+void ParserImpl::parseSlicePart() {
+    if (cur_ == TK::Colon || cur_ == TK::Comma || cur_ == TK::RBracket) {
+        return;
+    }
+    parseExpr();
 }
 
 /// parentArgues : '(' argumentList? ','? ')'
@@ -770,10 +854,22 @@ void ParserImpl::parseArrayData() {
     close(m, NK::ArrayData);
 }
 
-/// structData : '{' (pairedValues ','?)? '}'
+/// structData : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'
+/// The second form is a struct comprehension (H51 step 4): `{ static for (n, F) in fields T => e }`
+/// builds a struct with the fields of `T`, in declaration order, each holding one round's value.
+/// It is written where a value is needed; the `static for` node itself is the one a statement
+/// uses, only here its value is taken.
 void ParserImpl::parseStructData() {
     const size_t m = mark();
     bump();
+    if (cur_ == TK::KwStatic && peek(1) == TK::KwFor) {
+        parseStaticFor();
+        if (!panic_) {
+            expectListEnd(TK::RBrace);
+        }
+        close(m, NK::StructData);
+        return;
+    }
     {
         Scope scope(*this, false);
         if (cur_ != TK::RBrace) {
@@ -787,11 +883,21 @@ void ParserImpl::parseStructData() {
     close(m, NK::StructData);
 }
 
-/// tupleData : '(' dataList? ','? ')'
-/// Also the parenthesized expression: one element and no comma.
+/// tupleData : '(' dataList? ','? ')' | '(' staticForExpr ')'
+/// Also the parenthesized expression: one element and no comma. The second form is a tuple
+/// comprehension (H51 step 4): `( static for (n, F) in fields T => e )` has the elements of `T`
+/// in declaration order, each one round's value.
 void ParserImpl::parseTupleData() {
     const size_t m = mark();
     bump();
+    if (cur_ == TK::KwStatic && peek(1) == TK::KwFor) {
+        parseStaticFor();
+        if (!panic_) {
+            expectListEnd(TK::RParen);
+        }
+        close(m, NK::TupleData);
+        return;
+    }
     {
         Scope scope(*this, false);
         if (cur_ != TK::RParen && cur_ != TK::Comma) {
@@ -811,14 +917,21 @@ void ParserImpl::parseFuncData() {
     if (isModifier(cur_)) {
         parseModifiers();
     }
+    // A lambda's parameters may leave the type out: it comes from the function type of the
+    // position the lambda stands in (design principles 5.9). Its return type and the types
+    // written inside its parameters are parsed with the flag off, as everywhere else.
+    const bool outerLambdaParams = lambdaParams_;
+    lambdaParams_                = true;
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
         parseAngledParams();
     }
     if (cur_ != TK::LParen) {
+        lambdaParams_ = outerLambdaParams;
         unexpected({e(TK::LParen)});
         return close(m, NK::FuncData);
     }
     parseParentParams();
+    lambdaParams_ = outerLambdaParams;
     if (eat(TK::Colon)) {
         parseType();
     }
@@ -854,6 +967,10 @@ void ParserImpl::parseIf() {
 /// The subject is any expression; the `{` after it opens the cases (a struct literal after a
 /// name is read only when the name is a variant path, `Shape::Rect { ... }`).
 void ParserImpl::parseMatch() {
+    if (peek(1) == TK::KwType) {
+        parseMatchType();
+        return;
+    }
     const size_t m = mark();
     bump();
     parseLogicalOr();
@@ -874,6 +991,175 @@ void ParserImpl::parseMatch() {
     }
     eat(TK::RBrace);
     close(m, NK::MatchExpr);
+}
+
+/// matchTypeExpr : 'match' 'type' typeExpr '{' typeCase* '}'
+/// The type after `match type` is a type position (H79 ruling 1): a `(` there always opens a
+/// type, so `match type () { ... }` is a match on the empty tuple type.
+void ParserImpl::parseMatchType() {
+    const size_t m = mark();
+    bump(); // match
+    bump(); // type
+    {
+        TypeHeadScope typeHead(*this);
+        parseType();
+    }
+    if (panic_ || !expect(TK::LBrace)) {
+        return close(m, NK::MatchTypeExpr);
+    }
+    {
+        Scope scope(*this, true);
+        while (cur_ == TK::KwCase && !panic_) {
+            parseTypeCase();
+        }
+        if (!panic_ && cur_ != TK::RBrace) {
+            unexpected({e(TK::KwCase), e(TK::RBrace)});
+        }
+    }
+    eat(TK::RBrace);
+    close(m, NK::MatchTypeExpr);
+}
+
+/// typeCase : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+void ParserImpl::parseTypeCase() {
+    const size_t m = mark();
+    bump(); // case
+    parseTypeCasePattern();
+    while (cur_ == TK::Pipe && !panic_) {
+        bump();
+        parseTypeCasePattern();
+    }
+    if (!panic_ && expect(TK::FatArrow)) {
+        parseBlockExpr();
+    }
+    close(m, NK::TypeCase);
+}
+
+/// staticForExpr : 'static' staticForHeader '=>' blockExpr
+/// `static for (n, F) in fields T => 块`（H51 步骤 3）：把结构体或元组的字段表在实例化时展开，
+/// 每个字段一份块。`n` 是字段名（元组是十进制下标），`F` 是字段类型；两者都只在块内可见。
+/// `static for (j) in indices ts => 块`（H51 步骤 6）：把元组 `ts` 的每个位置展开一次，`j`
+/// 是这一轮的位置（编译期整数）。两种头共用一个解析函数，只有 `in` 后面的写法不同。
+/// 这是展开机制，不是运行期循环：块里没有 SFOR/LOOP 节点，展开出的代码直接在当前图里。
+/// The header is shared with `static loop`: the same `for ... in ...` says what is walked, and
+/// only what follows it differs (`=> 块` or `do 表达式`).
+/// `fields` 后面是类型位置（H79 裁定 1）：`(` 一律按类型读，`fields ()` 是空元组类型。
+void ParserImpl::parseStaticFor() {
+    const size_t m = mark();
+    bump(); // static
+    parseStaticForHeader();
+    if (!panic_ && expect(TK::FatArrow)) {
+        parseBlockExpr();
+    }
+    close(m, NK::StaticForExpr);
+}
+
+/// staticForHeader : 'for' '(' identDef (',' identDef)? ')' 'in' ('fields' typeExpr
+///                                                       | 'indices' dataExpr)
+/// `fields` walks the fields of a type and binds two names (`n`, `F`); `indices` walks the
+/// elements of an ordinary tuple and binds one name (`j`, the position as an integer). The
+/// names and the walked shape become children of the node being built (no node of their own, as
+/// the parser of `loop` reads its `loopState` nodes directly).
+void ParserImpl::parseStaticForHeader() {
+    if (!panic_ && expect(TK::KwFor)) {
+        uint32_t secondNameAt = kNone;
+        if (!panic_ && expect(TK::LParen)) {
+            parseIdentDef();
+            if (cur_ == TK::Comma && !panic_) {
+                secondNameAt = pos_;
+                bump();
+                parseIdentDef();
+            }
+            if (!panic_) {
+                expect(TK::RParen);
+            }
+        }
+        if (!panic_ && expect(TK::KwIn)) {
+            if (atWord(0, "fields")) {
+                bump();
+                // `fields` is followed by a type position (H79 ruling 1): the `(` there is
+                // always a type, so `fields ()` is the empty tuple. `static for` and
+                // `static loop` share this header, so the reading is enforced here rather than
+                // at either caller.
+                TypeHeadScope typeHead(*this);
+                parseType();
+            } else if (atWord(0, "indices")) {
+                // `indices ts` walks a tuple value; `ts` is an ordinary expression, so this is
+                // not a type position and `TypeHeadScope` is not entered. It binds one name
+                // (`j`), so `(j, F) in indices ts` is rejected where the second name is.
+                if (secondNameAt != kNone) {
+                    error(SyntaxError::Kind::Unexpected, {e(TK::RParen)}, secondNameAt);
+                }
+                bump();
+                parseExpr();
+            } else if (!panic_) {
+                unexpected({e(TK::Identifier)});
+            }
+        }
+    }
+}
+
+/// staticLoopExpr : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
+/// `static loop acc = 0 for (n, F) in fields T do 表达式`（H51 步骤 5）：在实例化时按字段顺序
+/// 展开的折叠。状态头与普通的 `loop` 相同（一个名字时结果就是这个值，多个名字时是元组）；
+/// 遍历由 `staticForHeader` 给出：`in fields T`（步骤 5）或 `in indices ts`（步骤 6）。
+/// 没有 `while`，也没有普通序列的 `for`，因为轮数必须由类型在实例化时确定。`do` 后面是循环
+/// 体，它的值是下一轮的状态；展开后没有 LOOP 节点。
+void ParserImpl::parseStaticLoop() {
+    const size_t m = mark();
+    bump(); // static
+    bump(); // loop
+    for (;;) {
+        const size_t sm = mark();
+        parseIdentDef();
+        if (panic_ || !expect(TK::Assign)) {
+            close(sm, NK::LoopState);
+            return close(m, NK::StaticLoopExpr);
+        }
+        parseLogicalOr();
+        close(sm, NK::LoopState);
+        if (cur_ == TK::Comma && peek(1) == TK::Identifier && peek(2) == TK::Assign && !panic_) {
+            bump();
+            continue;
+        }
+        break;
+    }
+    parseStaticForHeader();
+    if (!panic_ && expect(TK::KwDo)) {
+        parseBlockExpr();
+    }
+    close(m, NK::StaticLoopExpr);
+}
+
+/// typeCasePattern : 'struct' | 'tuple' | '#' 'leaf' | '_'
+/// The words are contextual: only here do they name a shape, not a type.
+void ParserImpl::parseTypeCasePattern() {
+    const size_t m = mark();
+    switch (cur_) {
+    case TK::Identifier: {
+        const std::string_view word = tree_.tokens().text(pos_);
+        if (word != "struct" && word != "tuple") {
+            unexpected({e(TK::Identifier)});
+        }
+        bump();
+        break;
+    }
+    case TK::Hash:
+        bump();
+        if (cur_ == TK::Identifier && tree_.tokens().text(pos_) == "leaf") {
+            bump();
+        } else {
+            unexpected({e(TK::Identifier)});
+        }
+        break;
+    case TK::Underscore:
+        bump();
+        break;
+    default:
+        unexpected({e(TK::Identifier), e(TK::Hash), e(TK::Underscore)});
+        break;
+    }
+    close(m, NK::TypeCasePattern);
 }
 
 /// matchCase : 'case' pattern ('|' pattern)* '=>' blockExpr

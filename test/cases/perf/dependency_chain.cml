@@ -1,0 +1,37 @@
+/**
+ * The dependency-chain microbenchmark of the external performance report: a round is a chain of
+ * operators each of which waits for the one before, so the cost of a round is the sum of their
+ * latencies and no width hides it. 64x64 matrices, two matmuls, a broadcast add and a relu.
+ *
+ * `std::profile` reports what each operator of the chain costs on its own (`tensor:matmul`,
+ * `tensor:add`, `tensor:relu`), and how much wall time a round of the loop takes.
+ *
+ * Usage:
+ *   camel dependency_chain.cml --arg rounds=50 std::profile std::nvm
+ */
+
+module perf_dependency_chain
+
+import { Tensor, relu, sum, zeros } from tensor
+import { now } from time
+
+func chain(x: Tensor, w: Tensor, b: Tensor): Tensor {
+    return relu(x @ w + b) @ w
+}
+
+func main(rounds: int): int sync {
+    let x: Tensor = zeros([64, 64]) + 0.01
+    let w: Tensor = zeros([64, 64]) + 0.01
+    let b: Tensor = zeros([64, 1]) + 0.001
+    let started = now()
+    let (out, done) = loop y = x, step = 0
+        while step < rounds
+        do {
+            return (chain(y, w, b), step + 1)
+        }
+    let elapsed = now() - started
+    'perf chain rounds={} us_per_round={:.3f} out={}'
+        ->format<done, elapsed * 1000000.0 / float(done), sum(out)>
+        ->println
+    return 0
+}

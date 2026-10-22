@@ -11,40 +11,35 @@
  *
  * See the the MIT license for more details.
  *
- * Author: Camel Contributors
- * Created: Oct. 18, 2026
+ * Author: Zhenjie Wei
+ * Created: Oct. 21, 2024
  * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * Local algebra on binary operators, independent of autodiff. Matching never expands an
- * expression tree. The operators it rewrites are the ones that declare the laws it uses
- * (OperatorSemantics::binary: a commutative, associative sum, a product that distributes over
- * it, a subtraction of it): no operator is named here, so the scalar operators and the
- * elementwise operators of a module (tensors) are one case. The relaxations it applies are a
- * NumericPolicy's (design principles 7.4): the default policy allows the grouping to change
- * and `safe_fp=true` is the strict one.
+ * The residual of the old C++ algebraic pass: its integer neutral elements alone. The algebraic
+ * laws (like terms, coefficients, exact doubling, tensor element-wise forms) are the rules
+ * library's now (`rules::simplify`, registered as `std::opt::algebra`), so a law is written once,
+ * in stdlib/rules.cml. `neutral_only` is a documented reference mode with no library equivalent;
+ * it keeps the five neutral rewrites that the Camel-pass tests compare against. Nothing here runs
+ * without that parameter.
  */
 #include "generic.h"
 #include "rewrite.h"
 
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/base.h"
-#include "camel/runtime/control.h"
 #include "camel/runtime/draft_writes.h"
 
-#include <algorithm>
-#include <array>
-#include <cmath>
 #include <deque>
 #include <functional>
-#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <type_traits>
 #include <unordered_map>
+#include <vector>
 
 namespace camel::passes::generic {
 namespace {
@@ -55,9 +50,7 @@ using namespace camel::runtime;
 /// The operators of one family of laws over one element type, as the declarations select them.
 struct Arithmetic {
     type::TypeCode element = type::TypeCode::Void;
-    /// Aggregate operands (tensors): a coefficient is a scalar constant, the other operand has
-    /// the type of the result.
-    bool elementwise = false;
+    bool elementwise       = false;
     std::function<std::optional<type::TypeCode>(const type::Type *)> elementOf;
     OperId add = kNoOper, sub = kNoOper, mul = kNoOper;
     std::optional<uint64_t> addNeutral, subNeutral, mulNeutral;
@@ -135,8 +128,10 @@ class Families {
                     .elementwise = declared->binary->elementwise,
                     .elementOf   = declared->binary->elementOf,
                     .add         = *add,
+                    .sub         = kNoOper,
                     .mul         = mul,
                     .addNeutral  = sum->neutralBits,
+                    .subNeutral  = std::nullopt,
                     .mulNeutral  = product.neutralBits,
                 };
                 for (OperId sub = 1; sub < table.size(); ++sub) {
@@ -166,265 +161,73 @@ class Families {
     std::unordered_map<OperId, std::vector<size_t>> byOper_;
 };
 
-type::Type *scalarType(type::TypeCode code) {
-    switch (code) {
-    case type::TypeCode::Int32:
-        return type::Type::Int32();
-    case type::TypeCode::Int64:
-        return type::Type::Int64();
-    case type::TypeCode::Float32:
-        return type::Type::Float32();
-    case type::TypeCode::Float64:
-        return type::Type::Float64();
-    default:
-        return nullptr;
-    }
-}
-
-/// `value` in T when T holds it exactly (floating T only: an integer coefficient is written in
-/// the element type already).
-template <typename T, typename V> std::optional<T> exactIn(V value) {
-    if constexpr (std::is_floating_point_v<T>) {
-        const T converted = static_cast<T>(value);
-        if (static_cast<V>(converted) == value) {
-            return converted;
-        }
-    }
-    return std::nullopt;
-}
-
-/// The constant of a scalar node: of the element type, or (for aggregates, whose coefficients
-/// are written as plain numbers) a number of another type that the element type holds exactly.
-/// Do not peel GATEs: their control dependencies are part of evaluating the constant.
+/// The integer constant of a scalar data node, exactly as the element type holds it. Aggregates
+/// (tensors) have no neutral-element law here: the library has the tensor laws and this residual
+/// is only the documented integer neutral mode.
 template <typename T>
 std::optional<T> constant(
-    const GraphDraft &draft, gc_node_ref_t id, const Arithmetic &ops, const WrittenSlots &written) {
+    const GraphDraft &draft, gc_node_ref_t id, const Arithmetic &ops,
+    const WrittenSlots &written) {
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Data || h->dataType == nullptr || h->dataIndex >= 0 ||
-        !draft.normInputsOf(id).empty() || !draft.withInputsOf(id).empty() ||
-        !draft.ctrlInputsOf(id).empty() || written(id)) {
+        h->dataType->code() != ops.element || !draft.normInputsOf(id).empty() ||
+        !draft.withInputsOf(id).empty() || !draft.ctrlInputsOf(id).empty() || written(id)) {
         return std::nullopt;
     }
     const auto index = static_cast<size_t>(-h->dataIndex);
     if (index >= draft.staticSlots().size()) {
         return std::nullopt;
     }
-    const slot_t slot = draft.staticSlots()[index];
-    const auto code   = h->dataType->code();
-    if (code == ops.element) {
-        return fromSlot<T>(slot);
-    }
-    if (!ops.elementwise) {
-        return std::nullopt;
-    }
-    switch (code) {
-    case type::TypeCode::Int32:
-        return exactIn<T>(fromSlot<int32_t>(slot));
-    case type::TypeCode::Int64:
-        return exactIn<T>(fromSlot<int64_t>(slot));
-    case type::TypeCode::Float32:
-        return exactIn<T>(fromSlot<float>(slot));
-    case type::TypeCode::Float64:
-        return exactIn<T>(fromSlot<double>(slot));
-    default:
-        return std::nullopt;
-    }
-}
-
-/// Restrict elimination to a producer used only by this consumer. Shared products stay shared;
-/// arm anchors keep their identity. This also bounds ordering transfer to immediate inputs.
-bool exclusive(const GraphDraft &draft, gc_node_ref_t node, gc_node_ref_t consumer) {
-    if (!isReplaceable(draft, node)) {
-        return false;
-    }
-    for (auto users : {draft.normUsersOf(node), draft.withUsersOf(node), draft.ctrlUsersOf(node)}) {
-        if (std::ranges::any_of(users, [&](auto user) { return user != consumer; })) {
-            return false;
-        }
-    }
-    return true;
-}
-
-template <typename T> struct Term {
-    gc_node_ref_t base;
-    T coefficient;
-    gc_node_ref_t product = kInvalidNodeRef;
-};
-
-template <typename T>
-Term<T> term(
-    const GraphDraft &draft, gc_node_ref_t node, gc_node_ref_t consumer, const Arithmetic &ops,
-    type::Type *ty, const WrittenSlots &written) {
-    if (operIdOf(draft, node) == ops.mul && isPureOper(draft, node) && !written(node) &&
-        draft.header(node)->dataType == ty && exclusive(draft, node, consumer) &&
-        draft.withInputsOf(node).empty() && draft.normInputsOf(node).size() == 2 &&
-        draft.nodePermissions(node) == draft.nodePermissions(consumer) &&
-        draft.nodeAttrs(node) == draft.nodeAttrs(consumer)) {
-        const auto inputs = draft.normInputsOf(node);
-        for (size_t i = 0; i < 2; ++i) {
-            const auto *other = draft.header(inputs[1 - i]);
-            // The factor that is not the coefficient has the type of the product: an aggregate
-            // is not broadcast against a scalar here, only scaled by one.
-            if (auto c = constant<T>(draft, inputs[i], ops, written);
-                c && !written(inputs[1 - i]) && other && other->dataType == ty) {
-                return {inputs[1 - i], *c, node};
-            }
-        }
-    }
-    return {node, T{1}};
-}
-
-/// Under round-to-nearest-even, doubling a rounded normal product commutes with rounding.
-/// With an integer |c| >= 1, x*c cannot round in the subnormal range: every such exact product
-/// is already an integer multiple of the smallest subnormal. Thus (x*c)+(x*c) == x*(2*c),
-/// including overflow, infinities and signed zero. c and 2*c must be exactly representable.
-/// NaN arithmetic remains NaN (ordinary arithmetic does not specify NaN payload selection).
-template <typename T> bool exactDoubling(T c) {
-    if constexpr (std::is_integral_v<T>) {
-        return true;
-    } else {
-        return std::isfinite(c) && std::abs(c) >= T{1} && std::trunc(c) == c &&
-               std::abs(c) <= std::ldexp(T{1}, std::numeric_limits<T>::digits - 1);
-    }
-}
-
-/// Keep the consumer's identity, origin, permissions and CTRL edges, including output/arm
-/// anchors. Every removed product's data input survives, and its immediate CTRL predecessors
-/// move to the consumer. Never move a computation across a GATE or conditional boundary.
-template <typename T>
-void multiply(
-    GraphDraft &draft, gc_node_ref_t node, const Arithmetic &ops, gc_node_ref_t base, T c,
-    std::array<gc_node_ref_t, 2> products) {
-    const auto value = draft.materializeStaticValue(toSlot<T>(c), scalarType(ops.element));
-    const std::array inputs{base, value};
-    draft.setNormInputs(node, inputs);
-    auto *body = reinterpret_cast<GCOperBody *>(draft.mutablePayloadOf(node).data());
-    body->oper = ops.mul;
-    body->op   = nullptr;
-    if (products[1] == products[0]) {
-        products[1] = kInvalidNodeRef;
-    }
-    for (auto product : products) {
-        if (product == kInvalidNodeRef) {
-            continue;
-        }
-        const std::vector<gc_node_ref_t> predecessors(
-            draft.ctrlInputsOf(product).begin(),
-            draft.ctrlInputsOf(product).end());
-        draft.unlinkInput(DraftEdgeKind::Ctrl, node, product);
-        for (auto pred : predecessors) {
-            appendControlDependency(draft, pred, node);
-        }
-        draft.eraseNode(product);
-    }
+    return fromSlot<T>(draft.staticSlots()[index]);
 }
 
 template <typename T>
 bool simplify(
-    GraphDraft &draft, gc_node_ref_t node, const Arithmetic &ops, const sem::NumericPolicy &policy,
-    const WrittenSlots &written, bool neutralOnly) {
-    const auto inputs = draft.normInputsOf(node);
-    if (inputs.size() != 2 || !draft.withInputsOf(node).empty()) {
+    GraphDraft &draft, gc_node_ref_t node, const Arithmetic &ops, const WrittenSlots &written) {
+    if constexpr (!std::is_integral_v<T>) {
         return false;
-    }
-    auto *ty = draft.header(node)->dataType;
-    if (draft.header(inputs[0])->dataType != ty || draft.header(inputs[1])->dataType != ty ||
-        written(inputs[0]) || written(inputs[1])) {
-        return false;
-    }
-    const auto a = inputs[0], b = inputs[1];
-    const auto op = operIdOf(draft, node);
-    // Integer neutral elements preserve the evaluated operand. Floating-point identities
-    // need separate NaN/zero rules and are deliberately not inferred from real arithmetic.
-    if constexpr (std::is_integral_v<T>) {
-        if (isReplaceable(draft, node)) {
-            const auto ca = constant<T>(draft, a, ops, written),
-                       cb = constant<T>(draft, b, ops, written);
-            // The neutral elements are the declarations': x + 0, x - 0, x * 1 (the operand
-            // that stays is the other one; a subtraction is neutral on its right only).
-            const auto isNeutral = [](const std::optional<T> &c, const std::optional<uint64_t> &n) {
-                return c && n && *c == static_cast<T>(*n);
-            };
-            gc_node_ref_t replacement = kInvalidNodeRef;
-            if ((op == ops.add && isNeutral(cb, ops.addNeutral)) ||
-                (op == ops.sub && isNeutral(cb, ops.subNeutral)) ||
-                (op == ops.mul && isNeutral(cb, ops.mulNeutral))) {
-                replacement = a;
-            } else if (
-                (op == ops.add && isNeutral(ca, ops.addNeutral)) ||
-                (op == ops.mul && isNeutral(ca, ops.mulNeutral))) {
-                replacement = b;
-            }
-            if (replacement != kInvalidNodeRef) {
-                replaceNode(draft, node, replacement);
-                return true;
-            }
-        }
-    }
-    if (neutralOnly) {
-        return false;
-    }
-    if (op == ops.add) {
-        const auto left  = term<T>(draft, a, node, ops, ty, written);
-        const auto right = term<T>(draft, b, node, ops, ty, written);
-        if (left.base != right.base ||
-            (left.product == kInvalidNodeRef && right.product == kInvalidNodeRef && a != b)) {
+    } else {
+        const auto inputs = draft.normInputsOf(node);
+        if (inputs.size() != 2 || !draft.withInputsOf(node).empty()) {
             return false;
         }
-        const bool exact =
-            a == b && left.product != kInvalidNodeRef && exactDoubling(left.coefficient);
-        const T c = left.coefficient + right.coefficient;
-        if constexpr (std::is_floating_point_v<T>) {
-            if (!std::isfinite(left.coefficient) || !std::isfinite(right.coefficient) ||
-                !std::isfinite(c) || c == T{0}) {
-                return false;
-            }
-            // Same-sign, nonzero coefficients preserve infinities and signed zero. Only the
-            // rounding path changes, which the default algebra policy permits (§7.3).
-            // Cancellation can change inf-inf and zero signs and needs those specific grants.
-            const bool sameSign = left.coefficient != T{0} && right.coefficient != T{0} &&
-                                  std::signbit(left.coefficient) == std::signbit(right.coefficient);
-            const uint8_t required =
-                sem::kReassociate | (sameSign ? 0 : sem::kNoInfs | sem::kNoSignedZeros);
-            if (!exact && !policy.permits(draft.nodePermissions(node), required)) {
-                return false;
-            }
+        auto *ty = draft.header(node)->dataType;
+        if (draft.header(inputs[0])->dataType != ty || draft.header(inputs[1])->dataType != ty ||
+            written(inputs[0]) || written(inputs[1]) || !isReplaceable(draft, node)) {
+            return false;
         }
-        multiply(draft, node, ops, left.base, c, {left.product, right.product});
+        const auto a = inputs[0], b = inputs[1];
+        const auto op = operIdOf(draft, node);
+        const auto ca = constant<T>(draft, a, ops, written),
+                   cb = constant<T>(draft, b, ops, written);
+        const auto isNeutral = [](const std::optional<T> &c, const std::optional<uint64_t> &n) {
+            return c && n && *c == static_cast<T>(*n);
+        };
+        gc_node_ref_t replacement = kInvalidNodeRef;
+        if ((op == ops.add && isNeutral(cb, ops.addNeutral)) ||
+            (op == ops.sub && isNeutral(cb, ops.subNeutral)) ||
+            (op == ops.mul && isNeutral(cb, ops.mulNeutral))) {
+            replacement = a;
+        } else if (
+            (op == ops.add && isNeutral(ca, ops.addNeutral)) ||
+            (op == ops.mul && isNeutral(ca, ops.mulNeutral))) {
+            replacement = b;
+        }
+        if (replacement == kInvalidNodeRef) {
+            return false;
+        }
+        replaceNode(draft, node, replacement);
         return true;
     }
-    if (op == ops.mul) {
-        if constexpr (std::is_floating_point_v<T>) {
-            // Reassociation may remove an overflowing intermediate product. The default
-            // policy changes rounding, but does not also assume infinities away.
-            if (!policy.permits(draft.nodePermissions(node), sem::kReassociate | sem::kNoInfs)) {
-                return false;
-            }
-        }
-        for (auto [inner, outer] : {std::pair{a, b}, std::pair{b, a}}) {
-            const auto c = constant<T>(draft, outer, ops, written);
-            const auto t = term<T>(draft, inner, node, ops, ty, written);
-            if (!c || t.product == kInvalidNodeRef) {
-                continue;
-            }
-            const T combined = t.coefficient * *c;
-            if constexpr (std::is_floating_point_v<T>) {
-                if (!std::isfinite(t.coefficient) || !std::isfinite(*c) || t.coefficient == T{0} ||
-                    *c == T{0} || !std::isfinite(combined) || combined == T{0}) {
-                    continue;
-                }
-            }
-            multiply(draft, node, ops, t.base, combined, {t.product, kInvalidNodeRef});
-            return true;
-        }
-    }
-    return false;
 }
+
 } // namespace
 
-size_t algebraDraft(GraphDraft &draft, const sem::NumericPolicy &policy, bool neutralOnly) {
-    // Fixed-depth matching, and at most four times the original node count in visits. The queue
-    // revisits affected users without repeatedly scanning the graph or expanding shared DAGs.
+size_t algebraDraft(GraphDraft &draft, bool safeFp, bool neutralOnly) {
+    (void)safeFp; // the neutral elements are integer-only; the library owns the float policy
+    if (!neutralOnly) {
+        return 0;
+    }
     const size_t slots  = draft.nodeSlotCount();
     const auto families = Families::current();
     const WrittenSlots written(draft);
@@ -447,23 +250,14 @@ size_t algebraDraft(GraphDraft &draft, const sem::NumericPolicy &policy, bool ne
             continue;
         }
         const std::vector<gc_node_ref_t> users(
-            draft.normUsersOf(id).begin(),
-            draft.normUsersOf(id).end());
+            draft.normUsersOf(id).begin(), draft.normUsersOf(id).end());
         bool done = false;
-        // Unsigned arithmetic implements the declared wrapping integer contract without
-        // invoking host signed-overflow UB while calculating coefficients.
         switch (ops->element) {
         case type::TypeCode::Int32:
-            done = simplify<uint32_t>(draft, id, *ops, policy, written, neutralOnly);
+            done = simplify<uint32_t>(draft, id, *ops, written);
             break;
         case type::TypeCode::Int64:
-            done = simplify<uint64_t>(draft, id, *ops, policy, written, neutralOnly);
-            break;
-        case type::TypeCode::Float32:
-            done = simplify<float>(draft, id, *ops, policy, written, neutralOnly);
-            break;
-        case type::TypeCode::Float64:
-            done = simplify<double>(draft, id, *ops, policy, written, neutralOnly);
+            done = simplify<uint64_t>(draft, id, *ops, written);
             break;
         default:
             break;
@@ -481,107 +275,10 @@ size_t algebraDraft(GraphDraft &draft, const sem::NumericPolicy &policy, bool ne
     return changed;
 }
 
-size_t algebraDraft(GraphDraft &draft, bool safeFp, bool neutralOnly) {
-    return algebraDraft(
-        draft,
-        safeFp ? sem::NumericPolicy::strict() : sem::NumericPolicy::relaxed(),
-        neutralOnly);
-}
-
-bool mayAlgebra(const camel::runtime::GCGraph &graph) {
-    if (!graph.hasNodePayload()) {
-        return true;
-    }
-    const auto families = Families::current();
-    const auto &table   = OperatorTable::instance();
-    // A DATA constant (of any type: aggregates take coefficients of other types).
-    const auto isConstant = [&](gc_node_ref_t ref) {
-        const GCNode *node = graph.node(ref);
-        return node && node->kind == GCNodeKind::Data && node->dataIndex < 0 &&
-               graph.normInputsOf(ref).empty() && graph.withInputsOf(ref).empty() &&
-               graph.ctrlInputsOf(ref).empty();
-    };
-    // Whether the constant `ref` may be the neutral element `neutral` of `ops` (an integer law).
-    const auto mayBeNeutral = [&](gc_node_ref_t ref, const Arithmetic &ops,
-                                  const std::optional<uint64_t> &neutral) {
-        if (!neutral || !isConstant(ref)) {
-            return false;
-        }
-        const GCNode *node = graph.node(ref);
-        const auto index   = static_cast<size_t>(-node->dataIndex);
-        if (index >= graph.staticSlots().size() || !node->dataType() ||
-            node->dataType()->code() != ops.element) {
-            return true; // not read the same way here
-        }
-        const slot_t slot = graph.staticSlots()[index];
-        switch (ops.element) {
-        case type::TypeCode::Int32:
-            return fromSlot<uint32_t>(slot) == static_cast<uint32_t>(*neutral);
-        case type::TypeCode::Int64:
-            return fromSlot<uint64_t>(slot) == *neutral;
-        default:
-            return false;
-        }
-    };
-    // `ref` is a product of the family with a constant factor: its other factor, else none.
-    const auto scaledBase = [&](gc_node_ref_t ref, const Arithmetic &ops) -> gc_node_ref_t {
-        const GCNode *node = graph.node(ref);
-        if (!node || node->kind != GCNodeKind::Oper || !node->hasPayload() ||
-            graph.nodeBodyAs<GCOperBody>(ref)->oper != ops.mul ||
-            !table.isPure(ops.mul) || graph.normInputsOf(ref).size() != 2 ||
-            !graph.withInputsOf(ref).empty()) {
-            return kInvalidNodeRef;
-        }
-        const auto inputs = graph.normInputsOf(ref);
-        if (isConstant(inputs[0])) {
-            return inputs[1];
-        }
-        return isConstant(inputs[1]) ? inputs[0] : kInvalidNodeRef;
-    };
-    for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
-        const GCNode *node = *it;
-        if (node->kind != GCNodeKind::Oper || !node->hasPayload() || !node->dataType()) {
-            continue;
-        }
-        const gc_node_ref_t ref = it.ref();
-        const OperId op         = graph.nodeBodyAs<GCOperBody>(ref)->oper;
-        if (!table.isPure(op)) {
-            continue;
-        }
-        const Arithmetic *ops = families->match(op, node->dataType());
-        if (ops == nullptr || graph.normInputsOf(ref).size() != 2 ||
-            !graph.withInputsOf(ref).empty()) {
-            continue;
-        }
-        const gc_node_ref_t a = graph.normInputsOf(ref)[0], b = graph.normInputsOf(ref)[1];
-        const bool integer = ops->element == type::TypeCode::Int32 ||
-                             ops->element == type::TypeCode::Int64;
-        // x + 0, x - 0, x * 1 (and 0 + x, 1 * x).
-        if (integer &&
-            ((op == ops->add && (mayBeNeutral(b, *ops, ops->addNeutral) ||
-                                 mayBeNeutral(a, *ops, ops->addNeutral))) ||
-             (op == ops->sub && mayBeNeutral(b, *ops, ops->subNeutral)) ||
-             (op == ops->mul && (mayBeNeutral(b, *ops, ops->mulNeutral) ||
-                                 mayBeNeutral(a, *ops, ops->mulNeutral))))) {
-            return true;
-        }
-        // c1 * x + c2 * x, x + x
-        if (op == ops->add) {
-            const gc_node_ref_t baseA = scaledBase(a, *ops), baseB = scaledBase(b, *ops);
-            const gc_node_ref_t termA = baseA != kInvalidNodeRef ? baseA : a;
-            const gc_node_ref_t termB = baseB != kInvalidNodeRef ? baseB : b;
-            if (termA == termB && (baseA != kInvalidNodeRef || baseB != kInvalidNodeRef || a == b)) {
-                return true;
-            }
-        }
-        // (x * c1) * c2
-        if (op == ops->mul &&
-            ((scaledBase(a, *ops) != kInvalidNodeRef && isConstant(b)) ||
-             (scaledBase(b, *ops) != kInvalidNodeRef && isConstant(a)))) {
-            return true;
-        }
-    }
-    return false;
+bool mayAlgebra(const camel::runtime::GCGraph &) {
+    // The neutral elements are cheap to look for and the mode is a reference; the library pass
+    // has its own screening. Keep every graph in reach.
+    return true;
 }
 } // namespace camel::passes::generic
 
@@ -592,7 +289,7 @@ AlgebraPass::apply(const camel::runtime::Program *program, std::ostream &) {
         program,
         "std::opt::algebra",
         [&](camel::runtime::GraphDraft &draft) {
-            return camel::passes::generic::algebraDraft(draft, safeFp_, neutralOnly_);
+            return camel::passes::generic::algebraDraft(draft, false, neutralOnly_);
         },
         nullptr,
         nullptr,

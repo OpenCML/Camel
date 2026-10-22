@@ -1,0 +1,32 @@
+/**
+ * The boundaries the bare-term law must not cross. Each line prints what the program computes next
+ * to the value the tempting wrong law would have produced; the two differ, so a rewrite that fired
+ * would collapse the pair. `apply` is the same program under the law without its guards, which the
+ * last test of the plan runs: both lines then collapse.
+ */
+module bare_boundary
+
+import { Program } from graph
+import { rewrite } from rewrite
+
+/// `c = -1`: the sum is zero, and the law would multiply by a zero of the other sign.
+func minus_one(x: f32): f32 { return x * -1.0 + x }
+
+/// `c = 0`: the program computes `x*0 + x`, the law would compute `x*1`; at infinity they differ.
+func zero(x: f32): f32 { return x * 0.0 + x }
+
+// ---- The law without its guards: the same pattern, no condition ----
+
+rule combine_one_unguarded(x: f32, const c: f32) { x * c + x => x * (c + 1.0) }
+
+func main(): int sync {
+    let inf = f32(3.0e38) * 2.0
+    println(minus_one(-0.0), 0.0)
+    println(zero(inf), inf)
+    return 0
+}
+
+/// The unguarded law, applied to the same program: the two boundary lines collapse.
+export func apply(p: Program): Program! {
+    return rewrite(p, [combine_one_unguarded])
+}

@@ -1,9 +1,21 @@
 /** Every rule of the standard rules passes the check (rewrite design 5.2). */
 module check_library
 import { check } from rewrite
-import { int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_comm, int_mul_comm, int_add_assoc, int_mul_assoc, int_distribute, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_add_comm, float_mul_comm } from rules
+import {
+        int_add_assoc, int_add_comm, int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_assoc, int_mul_comm, int_mul_one, int_mul_zero, int_neg_neg, int_one_combine, int_one_mul, int_sub_self, int_sub_zero, int_zero_add, int_zero_mul,
+        int32_add_assoc, int32_add_comm, int32_add_self, int32_add_zero, int32_combine, int32_combine_one, int32_distribute, int32_div_one, int32_fold, int32_fold_add, int32_mul_assoc, int32_mul_comm, int32_mul_one, int32_mul_zero, int32_neg_neg, int32_one_combine, int32_one_mul, int32_sub_self, int32_sub_zero, int32_zero_add, int32_zero_mul,
+        float_add_comm, float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_comm, float_mul_one, float_neg_neg, float_one_combine, float_one_combine_mixed, float_one_mul, float_sub_zero,
+        float32_add_comm, float32_add_minus_zero, float32_add_self, float32_combine, float32_combine_mixed, float32_combine_one, float32_combine_one_mixed, float32_div_one, float32_double, float32_fold, float32_mul_comm, float32_mul_one, float32_neg_neg, float32_one_combine, float32_one_combine_mixed, float32_one_mul, float32_sub_zero,
+        tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_one_combine, tensor_f32_one_combine_mixed, tensor_f32_one_mul, tensor_f32_sub_zero, tensor_i64_distribute
+} from rules
 
 func main(): int sync {
-    print(check([int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_comm, int_mul_comm, int_add_assoc, int_mul_assoc, int_distribute, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_add_comm, float_mul_comm], 200, 7))
+    print(check([
+        int_add_assoc, int_add_comm, int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_assoc, int_mul_comm, int_mul_one, int_mul_zero, int_neg_neg, int_one_combine, int_one_mul, int_sub_self, int_sub_zero, int_zero_add, int_zero_mul,
+        int32_add_assoc, int32_add_comm, int32_add_self, int32_add_zero, int32_combine, int32_combine_one, int32_distribute, int32_div_one, int32_fold, int32_fold_add, int32_mul_assoc, int32_mul_comm, int32_mul_one, int32_mul_zero, int32_neg_neg, int32_one_combine, int32_one_mul, int32_sub_self, int32_sub_zero, int32_zero_add, int32_zero_mul,
+        float_add_comm, float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_comm, float_mul_one, float_neg_neg, float_one_combine, float_one_combine_mixed, float_one_mul, float_sub_zero,
+        float32_add_comm, float32_add_minus_zero, float32_add_self, float32_combine, float32_combine_mixed, float32_combine_one, float32_combine_one_mixed, float32_div_one, float32_double, float32_fold, float32_mul_comm, float32_mul_one, float32_neg_neg, float32_one_combine, float32_one_combine_mixed, float32_one_mul, float32_sub_zero,
+        tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_one_combine, tensor_f32_one_combine_mixed, tensor_f32_one_mul, tensor_f32_sub_zero, tensor_i64_distribute
+    ], 200, 7))
     return 0
 }

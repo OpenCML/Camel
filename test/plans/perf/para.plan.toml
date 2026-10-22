@@ -12,7 +12,10 @@ args = ["--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_n
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 120000
+# One timed iteration. The nvm run measured 140.78 s on the host at load 108 (H101), against the
+# 120 s guard it had; H80's run at load 26-54 passed, so the quiet run is under 120 s. 300 s is
+# twice the busiest measurement and still catches a hang.
+timeout_ms = 300000
 
 [[tests]]
 name = "asian_option_mc.prl_timeit"
@@ -25,27 +28,34 @@ snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
+# The 100M-element mergesort of test/cases/para/core/merge_sort.cml holds several 400 MB arrays
+# at once: the input, the two halves and the merged result of the top-level merge, plus the
+# collector's copies. The default data-block limit (--block-limit, 2048) is less than that
+# peak, so --timeit ends with RuntimeDiag::MemoryExhausted before the timed pass runs. NVM fits
+# in 8192 (peak RSS 3.8 GB); the parallel scheduler keeps more of the recursive slices alive and
+# needs 16384 (measured: 11.9 GB peak, 24.6 s). The timeout covers the ~85 s the NVM run takes on
+# a loaded host.
 [[tests]]
 name = "merge_sort.nvm_timeit"
 desc = "Benchmarks the large recursive mergesort workload on the baseline NVM scheduler."
 kind = "benchmark"
 case = "../../cases/para/core/merge_sort.cml"
-args = ["--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_nvm}"]
+args = ["--block-limit", "8192", "--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_nvm}"]
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 120000
+timeout_ms = 180000
 
 [[tests]]
 name = "merge_sort.prl_timeit"
 desc = "Benchmarks the large recursive mergesort workload on the PRL scheduler."
 kind = "benchmark"
 case = "../../cases/para/core/merge_sort.cml"
-args = ["--timeit", "std::prl/1", "--output-format", "json", "${case}", "${run_prl}"]
+args = ["--block-limit", "16384", "--timeit", "std::prl/1", "--output-format", "json", "${case}", "${run_prl}"]
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 120000
+timeout_ms = 180000
 
 [[tests]]
 name = "monte_carlo_pi.nvm_timeit"

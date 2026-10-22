@@ -20,6 +20,7 @@
 #include "handle.h"
 
 #include "camel/core/mm.h"
+#include "camel/runtime/draft.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
 
@@ -108,7 +109,17 @@ Handle *Handle::create(
     if (mem == nullptr) {
         throw std::bad_alloc();
     }
-    return new (mem) Handle(kind, program, graph, index, typeRef);
+    return new (mem) Handle(kind, program, nullptr, graph, index, typeRef);
+}
+
+Handle *Handle::createInDraft(
+    const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node,
+    mm::IAllocator &allocator) {
+    void *mem = allocator.alloc(sizeof(Handle), alignof(Handle));
+    if (mem == nullptr) {
+        throw std::bad_alloc();
+    }
+    return new (mem) Handle(HandleKind::Node, nullptr, &draft, draft.id(), node, nullptr);
 }
 
 bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) const {
@@ -121,13 +132,16 @@ bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) co
         return false;
     }
     const auto *that = static_cast<const Handle *>(other);
-    return kind_ == that->kind_ && program_ == that->program_ && graph_ == that->graph_ &&
-           index_ == that->index_ && typeRef_ == that->typeRef_;
+    return kind_ == that->kind_ && program_ == that->program_ && draft_ == that->draft_ &&
+           graph_ == that->graph_ && index_ == that->index_ && typeRef_ == that->typeRef_;
 }
 
 rtdata::Object *Handle::clone(mm::IAllocator &allocator, const Type *type, bool deep) const {
     (void)type;
     (void)deep;
+    if (draft_ != nullptr) {
+        return createInDraft(*draft_, index_, allocator);
+    }
     return create(kind_, program_, graph_, index_, typeRef_, allocator);
 }
 

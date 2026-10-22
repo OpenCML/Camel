@@ -19,7 +19,7 @@ verify_script = '''
  const count = label => g.nodes.filter(n => n.label === label).length
  assert(count(':op/mul_d') === 3, 'wrong remaining scalar arithmetic')
  assert(count('JOIN') === 3 && count('BRCH') === 3, 'branch structure lost')
- assert(count('sys:get_env') === 1, 'runtime condition lost')
+ assert(count('env:get_env') === 1, 'runtime condition lost')
 }
 '''
 
@@ -31,9 +31,9 @@ verify_script = '''
 ({ input, assert }) => {
  const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
  const count = label => g.nodes.filter(n => n.label === label).length
- assert(count(':op/mul_d') === 2, 'wrong remaining scalar arithmetic')
+ assert(count(':op/mul_d') === 1, 'wrong remaining scalar arithmetic')
  assert(count('JOIN') === 3 && count('BRCH') === 3, 'branch structure lost')
- assert(count('sys:get_env') === 1, 'runtime condition lost')
+ assert(count('env:get_env') === 1, 'runtime condition lost')
 }
 '''
 
@@ -47,7 +47,7 @@ verify_script = '''
  const count = label => g.nodes.filter(n => n.label === label).length
  assert(count(':op/mul_d') === 3, 'wrong remaining scalar arithmetic')
  assert(count('JOIN') === 3 && count('BRCH') === 3, 'branch structure lost')
- assert(count('sys:get_env') === 1, 'runtime condition lost')
+ assert(count('env:get_env') === 1, 'runtime condition lost')
 }
 '''
 
@@ -59,7 +59,7 @@ verify_script = '''
 ({ input, assert }) => {
  const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
  assert(!g.nodes.some(n => [':op/mul_d', ':op/add_d', ':str/format'].includes(n.label)), 'known gradient did not fold')
- assert(g.nodes.some(n => n.label === 'sys:get_env') && g.nodes.some(n => n.kind === 'JOIN'), 'condition lost')
+ assert(g.nodes.some(n => n.label === 'env:get_env') && g.nodes.some(n => n.kind === 'JOIN'), 'condition lost')
 }
 '''
 

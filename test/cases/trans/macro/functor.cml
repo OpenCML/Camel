@@ -5,7 +5,7 @@ module macro_functor
 
 type Adder = (y: int) => int
 
-macro func make_adder(x: int): Adder {
+#macro func make_adder(x: int): Adder {
     return (y: int): int => {
         return x + y
     }

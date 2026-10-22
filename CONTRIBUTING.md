@@ -36,7 +36,7 @@ See the [Setup Guide](docs/setup.en.md) ([中文](docs/setup.cn.md)) for detaile
 | Python | 3.9 |
 | Node.js | 18 |
 | Clang | 19 |
-| CMake | 3.20 |
+| CMake | 3.25 |
 | Conan | 2.10 |
 | Ninja | 1.11 |
 

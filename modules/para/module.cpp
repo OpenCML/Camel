@@ -33,6 +33,15 @@ using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::type;
 
+/*
+ * Unordered iteration. `unordered_foreach` and `unordered_reduce` take the element type of their
+ * array argument as the type of the function they call, so their signature is computed by a
+ * `DynamicFuncTypeResolver` and stays here (design principles 6.4; handover H19, step 10). The
+ * fixed signature of `rendezvous` is written once, in the declaration module `stdlib/para.cml`:
+ * what is left here is what only C++ knows, the kernels in operators.cpp, the executor that runs
+ * them, and the operator traits and resources declared at load.
+ */
+
 namespace {
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
@@ -90,15 +99,6 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         }),
                 },
             }),
-        // Not a scheduling directive: an ordinary (effectful) operator that lets a program
-        // observe that several calls are in flight at once. See operators.h.
-        OperatorGroup::create(
-            "rendezvous",
-            {{"para:rendezvous",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::Int64(), false}, {Type::Int64(), false}},
-                  Type::Int64())}}),
     };
     return groups;
 }

@@ -53,68 +53,92 @@ bool isContentComparableImpl(const Type *type, std::vector<const Type *> &active
     case TypeCode::Float32:
     case TypeCode::Float64:
     case TypeCode::Bool:
-    case TypeCode::Byte:
     case TypeCode::String:
     case TypeCode::Complex64:
     case TypeCode::Complex128:
         return true;
+    default:
+        break;
+    }
+    // A recursive type is a cycle of type objects (`Node -> Node[] -> Node`). A type already
+    // on the path is comparable once its parts are, and they are being checked: checking it
+    // again would never end.
+    if (std::find(active.begin(), active.end(), type) != active.end()) {
+        return true;
+    }
+    const TypeCode code = type->code();
+    const bool onPath   = code == TypeCode::Array || code == TypeCode::Tuple ||
+                        code == TypeCode::Struct || asEnumType(type) != nullptr ||
+                        asCollectionType(type) != nullptr;
+    if (onPath) {
+        active.push_back(type);
+    }
+    bool comparable = true;
+    bool handled    = code == TypeCode::Array || code == TypeCode::Tuple ||
+                   code == TypeCode::Struct;
+    switch (code) {
     case TypeCode::Array:
-        return isContentComparableImpl(static_cast<const ArrayType *>(type)->elemType(), active);
+        comparable =
+            isContentComparableImpl(static_cast<const ArrayType *>(type)->elemType(), active);
+        break;
     case TypeCode::Tuple: {
         const auto *tuple = static_cast<const TupleType *>(type);
         if (tuple->isCell()) {
-            return false;
-        }
-        if (tuple->isTagged()) {
-            return isContentComparableImpl(tuple->payloadType(), active);
-        }
-        for (size_t i = 0; i < tuple->size(); ++i) {
-            if (!isContentComparableImpl(tuple->typeAt(i), active)) {
-                return false;
+            comparable = false;
+        } else if (tuple->isTagged()) {
+            comparable = isContentComparableImpl(tuple->payloadType(), active);
+        } else {
+            for (size_t i = 0; i < tuple->size() && comparable; ++i) {
+                comparable = isContentComparableImpl(tuple->typeAt(i), active);
             }
         }
-        return true;
+        break;
     }
     case TypeCode::Struct: {
         const auto *st = static_cast<const StructType *>(type);
-        for (size_t i = 0; i < st->size(); ++i) {
-            if (!isContentComparableImpl(st->typeAt(i), active)) {
-                return false;
-            }
+        for (size_t i = 0; i < st->size() && comparable; ++i) {
+            comparable = isContentComparableImpl(st->typeAt(i), active);
         }
-        return true;
+        break;
     }
     default:
         break;
     }
-    if (const EnumType *enumType = asEnumType(type)) {
-        // A recursive enum (`Tree<int>` holds `Tree<int>`) is comparable once what it is
-        // built from is; the fields that name the enum itself are answered by this check.
-        if (std::find(active.begin(), active.end(), type) != active.end()) {
-            return true;
-        }
-        active.push_back(type);
-        for (const EnumVariant &variant : enumType->variants()) {
-            for (Type *fieldType : variant.fieldTypes) {
-                // A field of a variant that does not determine an argument cannot hold a
-                // value of this instance, so it does not decide whether values compare.
-                if (containsEnumHole(fieldType)) {
-                    continue;
+    if (comparable) {
+        if (const EnumType *enumType = asEnumType(type)) {
+            handled = true;
+            for (const EnumVariant &variant : enumType->variants()) {
+                for (Type *fieldType : variant.fieldTypes) {
+                    // A field of a variant that does not determine an argument cannot hold a
+                    // value of this instance, so it does not decide whether values compare.
+                    if (containsEnumHole(fieldType)) {
+                        continue;
+                    }
+                    if (!isContentComparableImpl(fieldType, active)) {
+                        comparable = false;
+                        break;
+                    }
                 }
-                if (!isContentComparableImpl(fieldType, active)) {
-                    active.pop_back();
-                    return false;
+                if (!comparable) {
+                    break;
                 }
             }
         }
+    }
+    if (comparable) {
+        if (const CollectionType *coll = asCollectionType(type)) {
+            handled = true;
+            // A key type is comparable by construction; the values of a map must be.
+            comparable = !coll->isMap() || isContentComparableImpl(coll->valueType(), active);
+        }
+    }
+    if (!handled) {
+        comparable = false;
+    }
+    if (onPath) {
         active.pop_back();
-        return true;
     }
-    if (const CollectionType *coll = asCollectionType(type)) {
-        // A key type is comparable by construction; the values of a map must be.
-        return !coll->isMap() || isContentComparableImpl(coll->valueType(), active);
-    }
-    return false;
+    return comparable;
 }
 
 } // namespace

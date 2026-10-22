@@ -1,0 +1,17 @@
+# Fixture of test/tools/selftest/run.mjs: the second of the two plans swept by collision.plan.toml.
+id = "selftest.sweep.collision.beta"
+order = 24
+tier = "fast"
+
+[defaults]
+kind = "behavior"
+args = ["${case}", "${backend}"]
+normalizers = ["normalize_newlines"]
+expect_exit = 0
+
+[[tests]]
+name = "shapes"
+case = "beta.cml"
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_stdout_contains = ["beta"]

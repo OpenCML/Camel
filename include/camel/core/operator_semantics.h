@@ -35,8 +35,8 @@
  *                      canonical algorithm, within a declared error bound, or not declared;
  *                      the special values; which program-granted permissions can change it
  *   FaultSpec          the faults it can raise (optional)
- *   Permission         the five permissions a program grants with @numeric(...), the fifth
- *                      (finite_math) split into its four assumptions: one byte
+ *   Permission         the relaxations a program grants with the standard permission tags,
+ *                      `finite_math` split into its four assumptions: one mask
  *
  * Phase 2 adds the index semantics (design section 5, camel/core/index_semantics.h):
  *
@@ -54,7 +54,7 @@
  *                      normative definition (design section 9, camel/runtime/definitions.h)
  *
  * An operator's declaration says only what the operator does. Permissions are never part of
- * it: they are written by the program on its own code and stored on the graph, one byte per
+ * it: they are written by the program on its own code and stored on the graph, one mask per
  * node (camel/runtime/graph.h, the permission column). A module cannot widen them.
  */
 
@@ -65,6 +65,7 @@
 #include "camel/core/symbol.h"
 #include "camel/core/type/base.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -109,27 +110,30 @@ struct OperatorKey {
 // ---- Permissions (design principles 7.5) --------------------------------------------------
 
 /**
- * One relaxation of the canonical algorithm, granted by the program with @numeric(...) on a
- * function or a block. The permissions do not imply each other. `finite_math` in the source is
- * the four assumptions kNoNans | kNoInfs | kNoSignedZeros | kFlushSubnormals together.
+ * One relaxation of the canonical algorithm, granted by the program with a tag on a function
+ * or a block (`#[approx_math]`). The permissions do not imply each other. `finite_math` in the
+ * source is the four assumptions kNoNans | kNoInfs | kNoSignedZeros | kFlushSubnormals
+ * together.
  */
-enum Permission : uint8_t {
-    kReassociate     = 1 << 0, // reassociate:      reorder or regroup a reduction
-    kContract        = 1 << 1, // contract:         a multiply and an add as one fused multiply-add
-    kApproxMath      = 1 << 2, // approx_math:      approximate math functions
-    kChangePrecision = 1 << 3, // change_precision: lower or raise input or accumulation precision
-    kNoNans          = 1 << 4, // finite_math:      assume no NaN
-    kNoInfs          = 1 << 5, //                   assume no infinity
-    kNoSignedZeros   = 1 << 6, //                   the sign of a zero does not matter
-    kFlushSubnormals = 1 << 7, //                   subnormal inputs and results may become zero
+enum Permission : uint16_t {
+    kReassociate      = 1 << 0, // reassociate:      reorder or regroup a reduction
+    kContract         = 1 << 1, // contract:         a multiply and an add as one fused multiply-add
+    kApproxMath       = 1 << 2, // approx_math:      approximate math functions
+    kChangePrecision  = 1 << 3, // change_precision: lower or raise input or accumulation precision
+    kNoNans           = 1 << 4, // finite_math:      assume no NaN
+    kNoInfs           = 1 << 5, //                   assume no infinity
+    kNoSignedZeros    = 1 << 6, //                   the sign of a zero does not matter
+    kFlushSubnormals  = 1 << 7, //                   subnormal inputs and results may become zero
+    kNonDeterministic = 1 << 8, // nondeterministic: the result may change with the schedule
 };
 
-/// A set of permissions: one byte, 0 when none is granted.
-using PermissionMask = uint8_t;
+/// A set of permissions: 0 when none is granted. Two bytes since `nondeterministic` (review of
+/// H2b: the mask grows; there is no second column).
+using PermissionMask = uint16_t;
 
 inline constexpr PermissionMask kNoPermissions = 0;
 inline constexpr PermissionMask kFiniteMath = kNoNans | kNoInfs | kNoSignedZeros | kFlushSubnormals;
-inline constexpr PermissionMask kAllPermissions = 0xFF;
+inline constexpr PermissionMask kAllPermissions = 0xFFFF;
 
 /// The source name of a single permission bit ("reassociate", ..., "no_nans", ...).
 std::string_view permissionName(Permission permission);
@@ -192,15 +196,17 @@ struct NumericSemantics {
 
 /**
  * Which relaxations a consumer applies on top of what the program grants. The permissions of a
- * node are the program's own (@numeric); a policy is the consumer's: the algebra pass of
+ * node are the program's own (permission tags); a policy is the consumer's: the algebra pass of
  * 7.3 relaxes by default and takes `safe_fp=true` to be strict, a back end relaxes
  * the accumulation order by default and has a safe mode. They are the same question, so the
  * code asks it here: a rewrite or a schedule asks `permits(nodePermissions, required)`, and
  * reorderFreedom (camel/core/index_semantics.h) takes the policy with the node's permissions.
  */
 struct NumericPolicy {
-    /// Permissions every node has under this policy, with or without @numeric.
-    PermissionMask defaultGrants = kNoPermissions;
+    /// Permissions every node has under this policy, with or without a tag: the defaults of
+    /// 7.3, `reassociate` and `contract`.
+    PermissionMask defaultGrants =
+        static_cast<PermissionMask>(kReassociate | kContract);
     /// Whether the permissions a node carries count. A strict policy ignores them: even a node
     /// with wider permissions keeps its canonical rounding path (7.4, safe mode).
     bool nodeGrants = true;
@@ -208,9 +214,11 @@ struct NumericPolicy {
     /// Nothing but what the program writes (what the node's own permissions give).
     static constexpr NumericPolicy explicitOnly() { return {kNoPermissions, true}; }
     /// The default of 7.3: the order and grouping of a sum or product may change
-    /// (kReassociate), nothing else is assumed. Precision, approximate math, fused multiply-add
-    /// and the special values still need their permission.
-    static constexpr NumericPolicy relaxed() { return {kReassociate, true}; }
+    /// (kReassociate), and a multiply and an add may fuse (kContract), nothing else is assumed.
+    /// Precision, approximate math and the special values still need their permission.
+    static constexpr NumericPolicy relaxed() {
+        return {static_cast<PermissionMask>(kReassociate | kContract), true};
+    }
     /// The safe mode (`safe_fp=true`): only what is exactly equivalent.
     static constexpr NumericPolicy strict() { return {kNoPermissions, false}; }
 
@@ -223,6 +231,46 @@ struct NumericPolicy {
     }
     bool operator==(const NumericPolicy &) const = default;
 };
+
+// ---- The numeric contract of a rewrite -----------------------------------------------------
+
+/**
+ * The error a rewrite may introduce, from the numeric contract of the operators it uses
+ * (design principles 7.2-7.4; rewrite design 4, `check`). `declaredUlps` is the sum of the
+ * declarations of the operators the rule's two sides use: none for an exact operator, one ulp
+ * for a correctly rounded step, the declared `ulpBound` of a bounded math function, and one for
+ * an operator that declares nothing. `steps` is the number of the rule's rounding steps.
+ *
+ * A rule that needs no permission must agree bit for bit. The permissions do not share one
+ * uniform rounding bound:
+ *   reassociate        moving the grouping may move each rounding: `steps + 1` ulps on top of
+ *                      the declarations;
+ *   contract           a fused multiply-add rounds once where the two sides round twice: no
+ *                      extra ulps (the declarations already cover one rounding per step);
+ *   approx_math        the bounded operator's declared `ulpBound` is in `declaredUlps`;
+ *   change_precision   each step may round in bf16, the least precision 7.3 allows: 2^-8
+ *                      relative per step;
+ *   finite_math        the check excludes the NaN, infinity, signed zero and subnormal samples
+ *                      the assumptions rule out; the finite values keep the rounding bound;
+ *   nondeterministic   no numeric bound exists, so the check cannot certify the rule.
+ */
+struct RewriteErrorBound {
+    /// False when the permissions have no numeric contract (`nondeterministic`): the check can
+    /// compare nothing and reports the rule as unchecked.
+    bool checkable = true;
+    /// The allowed difference, in units of the element epsilon and of the magnitude.
+    double ulps = 0.0;
+    /// The allowed difference relative to the magnitude, independent of the element epsilon.
+    double relative = 0.0;
+};
+
+/// The error one operator node may add, in ulps of its element type, from its declaration.
+double stepUlps(const NumericSemantics &numeric);
+
+/// The bound of a rule that needs `needs`, has `steps` rounding steps and whose operators
+/// declare `declaredUlps` between them (see RewriteErrorBound).
+RewriteErrorBound
+rewriteErrorBound(PermissionMask needs, size_t steps, double declaredUlps);
 
 // ---- Binary algebra (design section 7b) -----------------------------------------------------
 
@@ -361,8 +409,33 @@ struct ElementCalls {
 
 // ---- The record --------------------------------------------------------------------------
 
+/**
+ * What the operator does besides compute its result (design principles 3.3), the fact the
+ * `OperatorTraits` effect bits are derived from. `Undeclared`: nobody said; an operator is then
+ * treated as effectful, as if declared `Effectful` (the difference is that `find` still says
+ * nobody declared it). `Effectful`: it can change something outside the program's own
+ * variables. `StateOnly`: it creates, reads or changes a variable and nothing outside the
+ * program's variables. `Pure`: its result depends only on its arguments.
+ */
+enum class Effect : uint8_t { Undeclared, Pure, StateOnly, Effectful };
+
 struct OperatorSemantics {
     OperatorKey key;
+    /// The effect fact; `OperatorTraits::pure` and `stateOnly` are derived from it, never
+    /// declared separately (operator_table.h, traitsOf).
+    Effect effect = Effect::Undeclared;
+    /// Output element i depends only on input elements i (after broadcasting). Also derived
+    /// from a declared `binary.elementwise` law, so the two cannot disagree.
+    bool elementwise = false;
+    /// While it runs, the operator calls function values it received as arguments; also true
+    /// for every operator with an `elementCalls` declaration.
+    bool callsGraphs = false;
+    /// It reads the graphs of the function values it receives instead of only calling them.
+    bool readsGraphs = false;
+    /// The operator is a macro operator (design principles 8): `std::macro` may evaluate a call
+    /// of it ahead of time when its arguments are constants. `grad` and `with_grad` are the
+    /// macro operators of this repository; a declaration tag is not an operator trait.
+    bool macro = false;
     /// The index semantics (camel/core/index_semantics.h): the instance of one call. Empty when
     /// not declared: the operator reads its operands whole and writes its result whole, and
     /// nothing is known about which elements depend on which.

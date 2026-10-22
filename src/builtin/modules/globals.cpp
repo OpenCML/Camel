@@ -471,29 +471,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // `acc = acc->append<v>` written as a statement: the compiler writes this group for it
-        // (Builder::rebindingAppendOf), no program can name it. The variable is bound to the
-        // new array, which is built in place when only the variable refers to the old one
-        // (__builtin__assn_append__). Its types are those of `append`.
-        OperatorGroup::create(
-            "__assn_append__",
-            {
-                {
-                    ":op/assn_append",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: T[], value: T) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            if (!arrType->elemType()->assignableFrom(norm[1]))
-                                return nullopt;
-                            return arrType;
-                        }),
-                },
-            }),
         OperatorGroup::create(
             "__assn_add__",
             {
@@ -1461,6 +1438,24 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
                 {
+                    ":op/idx_take",
+                    // `t[idx]` with an int array takes the rows the indices name, in that
+                    // order (design principles 5.4; `take` in its function form).
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(arr: T[], indices: int[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array ||
+                                norm[1]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &indices = tt::as_ptr<ArrayType>(norm[1]);
+                            if (indices->elemType()->code() != TypeCode::Int64)
+                                return nullopt;
+                            return norm[0];
+                        }),
+                },
+                {
                     ":op/idx_str",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
@@ -1581,12 +1576,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // ======= OS (implemented in os.cmo) ======
+        // ======= process (implemented in process.cmo) ======
         OperatorGroup::create(
             "sleep",
             {
                 {
-                    "os:sleep",
+                    "process:sleep",
                     StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
                 },
             }),
@@ -1594,7 +1589,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "exit",
             {
                 {
-                    "os:exit",
+                    "process:exit",
                     StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
                 },
             }),
@@ -1725,6 +1720,23 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
+            "last",
+            {
+                {
+                    ":struct/last_arr",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "<> (arr: T[]) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
+                            return arrType->elemType();
+                        }),
+                },
+            }),
+        OperatorGroup::create(
             "tail",
             {
                 {
@@ -1781,6 +1793,30 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
+            "__slice__",
+            {
+                {
+                    ":op/slice_sub",
+                    // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first
+                    // dimension a subscript writes (design principles 5.4). `endWritten` says
+                    // whether the end was written at all: `t[a:]` runs to the end, and the end
+                    // argument stands for nothing when it is 0.
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {5, {false, false, false, false, false}}},
+                        "(arr: T[], start: int, end: int, step: int, endWritten: int) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            for (size_t i = 1; i < 5; ++i) {
+                                if (norm[i]->code() != TypeCode::Int64)
+                                    return nullopt;
+                            }
+                            return norm[0];
+                        }),
+                },
+            }),
+        OperatorGroup::create(
             "concat",
             {
                 {
@@ -1825,9 +1861,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // A private copy of an array: the first state of a loop whose body only appends to it
-        // (Builder::markLoopStateInPlace), so the literal the program wrote stays a constant and
-        // the loop appends to its own array. Not a name a program can reach for on its own.
+        // A private copy of an array: one of the states of a loop whose body only appends to it
+        // (Builder::markLoopStateInPlace, which decides per state), so the literal the program
+        // wrote stays a constant and the loop appends to its own array. Not a name a program can
+        // reach for on its own.
         OperatorGroup::create(
             "__copy_arr__",
             {
@@ -1844,11 +1881,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // `xs->append<v>` where the compiler proved the old array invisible: the loop body of a
-        // loop whose state is the array, with the state bound only to this call and the first
-        // value a fresh literal (Builder::markLoopStateInPlace). The append may then write into
-        // the state's own Block (Array::canWriteInPlace) instead of copying the array; when it
-        // cannot, it behaves exactly as `append`. Not a name a program can reach for on its own.
+        // `xs->append<v>` where the compiler proved the old array invisible: one state of a
+        // loop body, with that state bound only to this call and its first value a fresh
+        // literal (Builder::markLoopStateInPlace, per state). The append may then write into
+        // the state's own Block (Array::canWriteInPlace) instead of copying the array; when
+        // the array is not compact (an element that holds references) or the block is shared,
+        // it behaves exactly as `append`. Not a name a program can reach for on its own.
         OperatorGroup::create(
             "__append_owned__",
             {

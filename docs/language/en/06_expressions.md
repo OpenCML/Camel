@@ -12,6 +12,8 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 
 ## 6.2 Literals and construction
 
+<!-- camel-snippet: fragment: a list of literal and lambda forms, not a program -->
+
 ```cml
 42          3.14        'text'      true        null
 [1, 2, 3]                   // array
@@ -30,11 +32,14 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 In a backquoted string `` `...` ``, `${expression}` interpolates, optionally with a format specification, `${expression:spec}` (the lexical rules are in [2.5.4.1](02_lexical.md#2541-formatted-strings)). It is **the same tree** as `'...'->format<...>`: each `${...}` becomes a placeholder of `format` (`{}` or `{:spec}`), a `{` or `}` of the literal text is written `{{` or `}}`, and `format` is called with the interpolated expressions as its with-arguments and that text as its ordinary argument.
 
 ```cml
-let name = 'Camel'
-let n = 42
-println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
-println(`n = ${n}, twice = ${n * 2}`)
-println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+func main(): int sync {
+    let name = 'Camel'
+    let n = 42
+    println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
+    println(`n = ${n}, twice = ${n * 2}`)
+    println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+    return 0
+}
 ```
 
 - An interpolated expression is evaluated where it is written, in the lexical scope there; name lookup, type checking and effects are exactly those of the same expression outside the string. They are the with-arguments of `format`, so when they are evaluated follows the dependency and effect rules ([4.2](04_execution_model.md#42-evaluation-by-dependency)), exactly as if the same expressions were written outside the string.
@@ -50,12 +55,20 @@ println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
 | `p.x` | Struct field. A field that does not exist is the compile-time error `SemanticDiag::InvalidAccessIndex` |
 | `t.0` | Tuple member; the index is a literal, and out of range is a compile-time error |
 | `xs[i]` | Array element. Out of range (including negative) is the fault `RuntimeDiag::IndexOutOfRange` |
+| `xs[idx]` | `idx` is an `int[]`: the elements at those positions, in the order of `idx` (that is `take`), see below |
+| `xs[a:b]`, `xs[a:b:s]`, `xs[:b]`, `xs[a:]`, `xs[:]` | A slice, see below |
 | `m[k]` | Map lookup; the type is `V?` ([3.6](03_data_model.md#36-maps-and-sets)) |
 | `mod::name` | Qualified name |
 
 - `.` cannot be used on an array (`xs.1` is `SemanticDiag::TypeNotIndexable`).
 - A subscript directly follows the expression being accessed, with no whitespace.
-- The slice forms `xs[a:b]` and `xs[a:b:c]` are reserved, not implemented: there is no dedicated diagnostic for them, and the compiler reports `SemanticDiag::NoMatchingFunction`, as "the subscript operator has no overload that accepts these arguments". Use `xs->slice<a, b>`.
+- **Subscripts start at 0, and a negative one does not count from the end**: `xs[-1]` is the fault `RuntimeDiag::IndexOutOfRange`. The last element is written `last(xs)`.
+- **`xs[idx]` is `take`**: `idx` must have the type `int[]`, and the result is the elements at the positions of `idx`, in the order of `idx`; a position that appears twice is taken twice. Out of range and negative are the fault `RuntimeDiag::IndexOutOfRange`. The result is a new array, not a view ([5.4](../../design-principles.en.md)).
+- **A slice is along the first dimension, left-closed right-open**: `xs[a:b]` is the positions `a` to `b-1`. An omitted `a` means from the start, an omitted `b` to the end, and `xs[:]` is the whole array; `s` is the step. A slice is a **view sharing the data block** ([5.4](../../design-principles.en.md)); it does not copy the elements.
+  - Both bounds are positions from 0 to `len(xs)` (`b` may equal the length, which takes up to the last element); a negative or out-of-range bound is the fault `RuntimeDiag::SliceOutOfRange`, as an index out of range is a fault ([3.9](../../design-principles.en.md)). `b < a` is the empty array, not a fault. When the length is known at compile time and the bounds are constants, an out-of-range bound is a compile-time error ([3.9](../../design-principles.en.md)).
+  - The step is `s == 1` for now. A slice with another step is a view with strides, which needs the array representation of H17, so it is the fault `RuntimeDiag::InvalidArgument` (on a tensor: a compile-time error), and the diagnostic names H17; for a copy write `slice(xs, 0, a, b, s)`.
+  - An array whose elements are objects (`[[1, 2], [3, 4]]` and the like) is copied row by row: a slot array has no data block to share (recorded in H17).
+- **Multidimensional subscripts**: `xs[:, 0]` and `xs[a:b, c]` are accepted by the grammar, but their view takes the coordinates of the other dimensions, which also needs the array representation of H17; writing one is now the compile-time error `SemanticDiag::ConstructNotSupported`, the diagnostic names H17, and it says to use `take` or to index one dimension at a time.
 - **String subscripts are by code point**: `s[i]` is the `i`-th code point, and the result is a string containing just that one character (`'中文'[0]` is `'中'`); an out-of-range subscript is likewise a fault. For the numbers use `codepoints` of the `str` module (see the [standard library reference](../../stdlib-reference.md)).
 
 ## 6.4 Calls
@@ -371,13 +384,138 @@ Tuple patterns, struct patterns, and identifier patterns on values of ordinary t
 
 `try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph): writing it gives `SemanticDiag::TryCatchNotInLanguage`. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
 
-### 6.8.3 `loop`
+### 6.8.3 `match type`
+
+`match type` selects a branch by the **shape of a type**, for generic functions (design principles 5.5): `T` is concrete when the function is instantiated, the compiler builds only the selected branch, and the other branches are neither built nor type-checked (their names are still resolved).
+
+```
+match type type {
+    case struct => branch
+    case tuple  => branch
+    case #leaf  => branch
+    case _      => branch
+}
+```
+
+- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
+- `_` selects everything, like `#leaf`, and is the fallback spelling; both must be the last case. `case struct | tuple` selects either shape.
+- The type after `match type` is a type position: a `(` there is always the start of a type, so `match type () { ... }` matches the empty tuple type; a function type takes one more pair of parentheses, `match type ((x: int) => int) { ... }`.
+- With no matching case the error is `SemanticDiag::StaticMatchNotExhaustive`; a case after `#leaf`/`_` is `SemanticDiag::StaticMatchUnreachableCase`. The construct does not compare concrete type names: `case int` or `case MyStruct` is not part of it, and every scalar goes through `#leaf`.
+- The selected branch becomes straight-line code at that position; the graph has no branch node. Its value is the value of the `match type`, and an empty branch has type `void`.
+- A generic function may omit its return type: each instance gets it from the selected branch (return-type inference). A recursive call that comes back to the **same type instance** while that instance's return type is still unknown reports `SemanticDiag::GenericInstantiationCycle`; recursion with strictly smaller type arguments finishes the child instance first as usual.
+
+```cml
+func duplicate(t: typeas T) {
+    return match type T {
+        case struct => (t, t)
+        case tuple  => (t, t)
+        case #leaf  => (t, t)
+    }
+}
+```
+
+### 6.8.4 `static for` and `t.[n]`
+
+`static for (n, F) in fields T => block` expands the **field list** of `T` when the function is instantiated (design principles 5.5): the block runs once per field, and the expanded code becomes straight-line code at that position. The graph has no loop node.
+
+- `T` must be concrete and an [R3 inner node](../../design/generic-structure/README.cn.md): a struct or an **ordinary** tuple. `T?`, `T!`, a mutable cell, a scalar, an array and a function are leaves and report `SemanticDiag::StaticForNotComposite`; handle them with `match type` first.
+- `n` is the field name; for a tuple it is the decimal index (`"0"`, `"1"`, ...), in declaration order. `F` is the field type. Both are visible in the block only; `F` may be written in a type position (`let x: F`, `typeas F`) but is not a value.
+- The type after `fields` is a type position too: a `(` there is always the start of a type, so the empty tuple is written `fields ()` without a `type EmptyTuple = ()` first; a function type takes one more pair of parentheses, `fields ((x: int) => int)`.
+- Fields are expanded in declaration order, each with its own block scope. An empty struct or tuple expands zero times and the block is not built at all.
+- As a statement, `static for` always drops the value of the block, and the construct has type `void`; where a value is needed, write the comprehension form (below).
+- `t.[n]` takes a struct field or a tuple element; `n` must be a compile-time constant: a string or integer literal, or the `n` of an enclosing `static for`. Only the selected field is built into the graph (one `ACCS`); no field is chosen at run time, so a run-time value cannot be the key (`SemanticDiag::StaticAccessNotConstant`).
+- A struct without that field reports `SemanticDiag::StaticAccessUnknownField`; a tuple index past the end (or a key that is not an index) reports `SemanticDiag::StaticAccessIndexOutOfRange`; a target that is not a struct or an ordinary tuple reports `SemanticDiag::StaticAccessNotInternal`. For a tuple, `t.["0"]` and `t.[0]` are the same element.
+- When the field's value is dropped (a `t.[n];` statement on its own), the field is checked but no `ACCS` is built; the target expression is still evaluated, so its effects remain.
+
+```cml
+func show(t: typeas T) {
+    static for (n, F) in fields T => {
+        print(n, t.[n])
+    }
+}
+
+func first(t: (int, float)) {
+    return t.[0]
+}
+```
+
+**`indices`: expanding by tuple position.** `static for (j) in indices ts => block` expands the **positions** of the tuple value `ts` when the function is instantiated: the block runs once per position, `j` is this round's position (an `int`), and the trip count is the tuple's arity.
+
+- `ts` must be a value of tuple type (an ordinary tuple; `T?`, `T!` and a mutable cell are leaves). A value that is not a tuple reports `SemanticDiag::StaticIndicesNotTuple`; a type that is not concrete reports `SemanticDiag::StaticTypeNotConcrete`. The count is decided by `ts`'s type at instantiation.
+- `j` may be used as a value (`print(j)`, or in arithmetic) and as the key of `t.[j]`: it is a compile-time constant in every round. A local of the same name still shadows it, and using that as a key reports `SemanticDiag::StaticAccessNotConstant` (the same rule as `n` of `fields`).
+- `indices` binds one name only (there is no `F`); the element types come from `ts`'s type and are not given a name yet. `static for (j, F) in indices ts` is a syntax error.
+- `indices` walks tuples only: a struct has field names, so use `fields T`. `{ static for (j) in indices ts => e }` has no field names to give and reports `SemanticDiag::ConstructNotSupported`; where a value is needed, write `( static for (j) in indices ts => e )`.
+- The graph is the hand-written expansion: the generator leaves no node of its own, and each round's `ts.[j]` builds one `ACCS`, the same one `ts.[0]`, `ts.[1]` build.
+
+```cml
+func sum(t: (int, int, int)): int {
+    return static loop acc = 0 for (j) in indices t do acc + t.[j]
+}
+
+func positions(t: (int, string)): (int, int) {
+    return ( static for (j) in indices t => j )
+}
+```
+
+**Comprehensions: packing the rounds back into the same shape.** A `static for` may also be written where a value is needed: `{ static for (n, F) in fields T => e }` gives a struct and `( static for (n, F) in fields T => e )` gives a tuple, with the fields or elements of `T`, in the same names and order, each from one round's value.
+
+- The **value of the block is the round's value**: unlike the statement form, it is not dropped. The block may use `let`, and its last statement's value is the field's value; a block that gives none (an empty block, or one ending in a statement without a value) reports `SemanticDiag::StaticComprehensionVoidElement`.
+- Each field's or element's **type comes from that round's value**, not from `F`: with `F` an `int` and the value a `float`, the result field is a `float`. The field names and their order still come from `T` in declaration order, which is what lets an expansion such as `tree_map` change the leaves and keep the shape.
+- An empty struct or tuple has no round; the value is `{}` / `()` (a `FILL` with no slot).
+- The graph is straight-line code: each round builds the `ACCS` it reads, in declaration order, and one `FILL` per struct or tuple packs the rounds' values into the same shape; the comprehension leaves no node of its own. In `t.[n].[m]` the parent is read once and all inner fields share that `ACCS`, so the graph is the one the C++ `tree_map` builds for the same tree.
+- `{ static for ... }` in a position that needs a block (`case struct => { ... }`, `if c then { ... }`) is a comprehension too, so the statement form is not wrapped in another pair of braces: write `static for (n, F) in fields T => block`.
+- To fold the rounds' values into one result (rather than pack them back into the same shape), use the `static loop` of [6.8.5](#685-static-loop).
+
+```cml
+func doubled(t: {a: int, b: int}): {a: int, b: int} {
+    return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
+}
+
+func rebuild(t: typeas T) {
+    return match type T {
+        case struct => { static for (n, F) in fields T => rebuild(t.[n]) }
+        case tuple => ( static for (n, F) in fields T => rebuild(t.[n]) )
+        case _ => t
+    }
+}
+```
+
+### 6.8.5 `static loop`
+
+`static loop state = init, ... for (n, F) in fields T do expression` is the fold form of `static for`: the field list is expanded when the function is instantiated, each field advances the state one round, and the graph has no loop node.
+
+```
+static loop name = init (, name = init)* (for (n, F) in fields T | for (j) in indices ts) do expression
+```
+
+- The head is the same as the `loop` of [6.8.6](#686-loop): with one name the loop's value is that value; with several names the body gives a tuple in the order written and the loop's value is that tuple. The state names are visible in the body only; the first values are evaluated once where the loop is, and the state names are not visible in them. A name may not be repeated (`SemanticDiag::LoopNameRepeated`).
+- Each round's body value is the next state, and its type must be the state's type (except for the implicit conversions, an `int` into an `int?`); otherwise it is `SemanticDiag::LoopBodyTypeMismatch`. An empty struct or tuple has no rounds and the value is the first value.
+- The walk is the header shared with `static for`: `for (n, F) in fields T` (by field) or `for (j) in indices ts` (by tuple position, with the rules of `indices` in 6.8.4). There is no `while`, no `for` over an ordinary sequence, and no `break`/`continue`. `T` / `ts` must be a concrete struct or ordinary tuple (the rules of 6.8.4). When it is a type parameter of an enclosing generic, the trip count is decided by the type at instantiation — that is the count known at instantiation.
+- It expands to straight-line code: each round builds the `ACCS` it reads, in field order, the previous round's state is directly the value the next round reads, and `static loop` has no node of its own. A `return` in the body leaves the function, as in an ordinary function; it does not leave the loop.
+- Its effects are those of straight-line code: whether the body is a sync block is decided by the body itself (3.2), and each round's effects run in field order.
+
+```cml
+func count(t: typeas T): int {
+    return static loop n = 0 for (name, F) in fields T do n + 1
+}
+
+func total_and_max(t: {a: int, b: int}): (int, int) {
+    return static loop total = 0, best = 0
+        for (n, F) in fields {a: int, b: int} do {
+            (total + t.[n], if best < t.[n] then t.[n] else best)
+        }
+}
+```
+
+### 6.8.6 `loop`
 
 A loop is an expression with a state (design principles 3.10). The state is written in the head of the loop: each name is declared once with its first value. The expression after `do` is the body; its value is the state of the next round, and the value of the whole loop is the last state.
 
 ```
 loop name = init (, name = init)* (for name in sequence)? (while condition)? do expression
 ```
+
+<!-- camel-snippet: fragment: the loop forms; xs, n and ds are the surrounding example's values -->
 
 ```cml
 let total    = loop acc = 0 for x in xs do acc + x * x
@@ -398,7 +536,7 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 - **After `do`** comes an expression, read as after `then`: `{ x: 1 }` is a struct, `{ 5 }` and `sync { ... }` are blocks. A `return` in such a block ends the block with the next state; it does not leave the function.
 - **Effects.** Whether the body is a sync block is up to the body (3.2). Written `do sync { println(x); acc + x }`, its effects run in order every round. A loop in a block that is not a sync block, whose value nothing uses, does not run, with `EffectNotExecuted`, as for an unused call.
 - **Order and depth.** The rounds run strictly one after the other. A loop is not a recursion: no number of rounds takes call depth, `--max-recursion-depth` does not count them, and a loop that does not end runs on.
-- **Numeric permissions.** `@numeric(...)` on a function or a block covers the bodies and conditions of the loops written in it (7.5).
+- **Numeric permissions.** Permission tags (`#reassociate`, `#contract`, ...) on a function or a block cover the bodies and conditions of the loops written in it (7.2, 7.5); `#strict` covers them too.
 - `loop`, `while`, `do`, `for` and `in` are keywords.
 
 On the graph a loop is one `LOOP` node in the graph it is written in; the condition and the body are a subgraph each, sharing one table of captured values (design principles 3.10; `docs/design/graph-model` 3.5). A string, a map and a tensor are turned into their array of elements (the code points, the key-value pairs, the first-dimension sub-tensors) once, where the loop is; the `LOOP` node itself still iterates an array, which is the only form the back ends and the lowering handle.
@@ -407,14 +545,48 @@ On the graph a loop is one `LOOP` node in the graph it is written in; the condit
 
 A lambda is written `(parameters): return-type => body`; the return type can be omitted, and the body is an expression or a block:
 
+<!-- camel-snippet: fragment: a list of lambda forms; total comes from the surrounding example -->
+
 ```cml
 (x: int) => x + 1
 (x: int): int => { let y = x * 2; return y + 1 }
+(x) => x + 1                                    // the parameter type comes from where it stands (below)
 (s: string) => sync { println(s) }              // a sync block as the function body
 sync (x: int) => sync { total = total + x }     // writes a captured variable: add the function modifier sync
 ```
 
 A function type is written `(x: T) => R`, and the parameters must be named: `(x: int) => int`, `(acc: int, x: int) => int`.
+
+**Where a parameter type comes from.** A lambda parameter whose type is not written takes it, and an omitted return type too, from the function type of the position the lambda stands in. There are three such positions:
+
+- An argument: a call of a function whose parameter is of function type, and a `with` argument in the same way.
+
+  <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
+
+  ```cml
+  func apply_twice(f: (x: int) => int, x: int): int { return f(f(x)) }
+  apply_twice((x) => x + 1, 3)         // x: int
+  ```
+
+- A declared binding: a `let` or `var` whose type is a function type, and an assignment of a new value to that variable.
+
+  <!-- camel-snippet: fragment: bindings shown inside the block they would be written in -->
+
+  ```cml
+  let g: (x: int) => int = (x) => x + 1    // x: int
+  var h: (x: int) => int = (x) => x - 1
+  h = (x) => x + 100                       // x: int
+  ```
+
+- A returned result: the result type of the function is a function type.
+
+  ```cml
+  func adder(n: int): (x: int) => int {
+      return (x) => x + n              // x: int, and the result is int
+  }
+  ```
+
+A parameter that the expected type does not determine is an error (`SemanticDiag::LambdaParameterWithoutType`, located at that parameter): the lambda does not stand in such a position (`let g = (x) => x + 1`, `((x) => x)(1)`), the expected type is not a function type, the number of parameters differs, or the expected type still holds a type variable that this position does not bind. With no expected type it does not become an `any` (5.10): write the type.
 
 **Functions are values.** The name of a function can be used wherever a value can be written: as an argument, as a `with` argument, in `let g = f`, in `return f`, as an element of an array or tuple, as the value of a branch arm.
 
@@ -448,7 +620,9 @@ func main(): int sync {
 - A library operator with one signature that does not vary with its arguments is a function value like a user function: `xs->map<trim>`, `let t = trim`.
 - A name that stands for a group of overloads (several user functions of one name, or an operator with several signatures such as `abs`) is, where the callee has one signature and its parameter there is a function type, the one whose signature is exactly that type: the call `on_int(abs, -3)` of `func on_int(f: (x: int) => int, v: int)`. Anywhere else it has no single function value, and using it as a value is `SemanticDiag::FunctionNameAsValue`, which lists the signatures; write a lambda that spells out the parameter types. An operator whose signature varies with its arguments (`println`, `len`, `map`, `append`) has no function value either. The same goes for the name of a generic function (`SemanticDiag::GenericFunctionAsValue`).
 - When such a name is handed to a built-in higher-order operator (`xs->map<abs>`, `xs->reduce<max, 0>`, `xs->filter<is_even>`), the operator cannot say which function it expects, so the compiler asks it about each: when exactly one is accepted, that one is meant; when none or several are, the name has no value (`SemanticDiag::FunctionNameAsValue`, which lists the candidates).
-- A declaration with a function type, `let f: (x: int) => int = inc`, is currently unavailable (`SemanticDiag::FeatureNotSupported`); just omit the type.
+- A binding with a function type, `let f: (x: int) => int = inc`, checks its value against the type written; a lambda's parameter types can come from that type too (above).
+- The inference does not change overload resolution: a typed lambda still picks the overload its own type picks, and an untyped one facing a group of overloads has no single expected type, so it is the error above rather than a choice of overload.
+- A generic higher-order function (`tree_reduce`, `map`: a parameter type that mentions a type variable) does not infer yet: the expected type of the argument waits for the generic instantiation, and the lambda is always lowered before it. Write the parameter types there (`tree_reduce<(acc: int, x: int) => acc + x>(...)`); the H92 report records this as undecided.
 
 ## 6.10 Higher-order operators
 

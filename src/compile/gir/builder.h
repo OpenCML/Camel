@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,10 +69,25 @@ using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
 /// the function is called, so that a function keeps its meaning wherever it is used.
 class Builder {
   public:
-    explicit Builder(const camel::core::context::context_ptr_t &context) : context_(context) {}
+    /// A builder for a program of its own: it owns the program's export table (ProgramExports).
+    explicit Builder(const camel::core::context::context_ptr_t &context)
+        : context_(context), exports_(&ownExports_) {}
+
+    /// A builder that declares its modules into `exports`: the program the table belongs to
+    /// (the context's own program, whose table other readers use too).
+    Builder(
+        const camel::core::context::context_ptr_t &context,
+        camel::core::module::ProgramExports &exports)
+        : context_(context), exports_(&exports) {}
 
     /// The builder of the program compiled on `context`, created on first use.
     static Builder &of(const camel::core::context::context_ptr_t &context);
+
+    /// The entities the modules of this program export. One table per program: declaring a
+    /// module again for another program (a pass compiled as a program of its own) writes that
+    /// program's table, not this one (task H42).
+    camel::core::module::ProgramExports &exports() { return *exports_; }
+    const camel::core::module::ProgramExports &exports() const { return *exports_; }
 
     // Loading is three steps (the graph model, 3.9.4): declare every module, build, link.
 
@@ -157,6 +172,21 @@ class Builder {
         GCT::node_ptr_t exportList = nullptr;
         // Whether step two found it in error.
         bool failed = false;
+        // The body-less declarations of the module (handover H19, step 1): per name, the
+        // operator URI each rule declares and the rule itself. They are exported as one
+        // operator group once every declaration of the module has been read.
+        struct NativeOperators {
+            std::string name;
+            // Where the first declaration of the name is written, for a diagnostic about the
+            // name itself (a declaration that collides with an entity the C++ module exports).
+            camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+            std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>> rules;
+        };
+        std::vector<NativeOperators> nativeOperators;
+        // The groups those declarations make, by name: the ones the module exports and the
+        // private ones, which only its own bodies call (handover H94, ruling 3). A module's
+        // private operator is not an entity of the module.
+        std::unordered_map<std::string, oper_group_ptr_t> nativeOperatorGroups;
         // What the link step reports per module, collected while its bodies are built.
         std::vector<BuiltFunction> builtFunctions;
         std::vector<compile_graph_ptr_t> builtBodies;
@@ -265,6 +295,20 @@ class Builder {
     // everything but the functions with decorators, which exist once their bodies are built
     // (`decorated`).
     void exportDeclarations(const GCT::node_ptr_t &expt, bool decorated);
+    // A body-less declaration of the current module (design principles 6.4; handover H19, step
+    // 1): checked against the operator table and the loaded executors, then kept as a rule of
+    // the operator group of its name.
+    void declareNativeOperator(const GCT::node_ptr_t &gct);
+    // Exports the operator groups of the body-less declarations of the current module, one group
+    // per declared name, after its declarations were read. A name the module's export list
+    // `exportList` does not have stays private to the module (handover H94, ruling 3).
+    void exportNativeOperators(const GCT::node_ptr_t &exportList);
+    // The entity `ref` names in the module whose code is being built: one of its body-less
+    // declarations (exported or private) or a name the C++ module it declares brings, before
+    // what an import brings under the same name (design principles 10.1, 10.2; handover H94).
+    std::optional<camel::core::module::entity> ownNativeEntity(const Reference &ref);
+    // The operator URI a body-less declaration names, from its `#op<'...'>` tag when it has one.
+    std::optional<std::string> nativeOperatorUri(const GCT::node_ptr_t &gct);
     // Notes the nodes of the root graph added since `firstNode` as nodes of the current module.
     void claimRootNodes(size_t firstNode);
     // Makes the root graph the first time a module is declared.
@@ -300,6 +344,11 @@ class Builder {
     camel::core::context::context_ptr_t context_;
     camel::core::module::module_ptr_t module_;
     camel::core::error::diagnostics_ptr_t diags_;
+    /// The program's export table (see the constructors): `exports_` points at `ownExports_`
+    /// for a builder of a program of its own, or at the context's table for the context's
+    /// program. Never at a module's table: that is the module's own (native) declarations.
+    camel::core::module::ProgramExports ownExports_;
+    camel::core::module::ProgramExports *exports_;
 
     bool waited_;
     bool synced_;
@@ -309,13 +358,15 @@ class Builder {
     // (GCT::Node::numericPermissions). Every OPER node made while they are in force gets them
     // (stampPermissions); a function's graph starts from those of its own body, whatever was
     // in force where it is built from.
-    uint8_t numericPermissions_ = 0;
+    camel::core::sem::PermissionMask numericPermissions_ = 0;
     void stampPermissions(node_handle_t operNode) const;
     /// Sets numericPermissions_ for a scope and puts the previous value back at its end.
     struct NumericPermissionScope {
-        uint8_t &current;
-        uint8_t outer;
-        NumericPermissionScope(uint8_t &c, uint8_t permissions) : current(c), outer(c) {
+        camel::core::sem::PermissionMask &current;
+        camel::core::sem::PermissionMask outer;
+        NumericPermissionScope(
+            camel::core::sem::PermissionMask &c, camel::core::sem::PermissionMask permissions)
+            : current(c), outer(c) {
             current = permissions;
         }
         ~NumericPermissionScope() { current = outer; }
@@ -573,6 +624,9 @@ class Builder {
         };
         std::unordered_map<node_handle_t, Touched> touched;
         std::vector<node_handle_t> touchedOrder; // in the order they were first changed
+        /// The ports of the region (a loop's condition or body), in order: the element, then the
+        /// values of the state.
+        std::vector<node_handle_t> ports;
         /// The variables the arm stores into itself, and the functions it calls: what else it
         /// writes is what those write (capturedWritesOf), known once every body is built.
         std::set<node_handle_t> directWrites;
@@ -582,6 +636,54 @@ class Builder {
     using arm_ptr_t = std::shared_ptr<ArmBuild>;
     /// The arms being built, outermost first.
     std::vector<ArmBuild *> armStack_;
+    /// The `match type` arm being built: its cases are not regions (only one is selected),
+    /// but a `return` written in the selected body still gives the value of the match, not of
+    /// the function around it.
+    struct StaticBodyScope {
+        node_handle_t value{};
+        bool returned = false;
+    };
+    StaticBodyScope *activeStaticBody_ = nullptr;
+    /// The block a `static for` expands into. Its body is inline code at the `static for`
+    /// position, so in a sync block it continues the chain instead of starting a plain block.
+    const GCT::Node *syncedBlockOverride_ = nullptr;
+    /// How many `match type` bodies are being built, to stop a pathological nesting early.
+    size_t staticDepth_ = 0;
+    /// The `n` of the `static for` bodies being built, innermost scope last. `n` is a
+    /// compile-time string; it is not put in nodeScope_, so a body that only uses it as a key
+    /// builds no node for it. For `indices`, the binding also carries the round's index as a
+    /// value node: `j` is an ordinary `int`, so reading it as a value yields that node.
+    struct StaticValueBinding {
+        std::string name;
+        std::string value;
+        node_handle_t node{};
+    };
+    std::vector<std::vector<StaticValueBinding>> staticValueScopes_;
+    std::optional<std::string> staticValueNamed(const std::string &name) const {
+        for (auto scope = staticValueScopes_.rbegin(); scope != staticValueScopes_.rend();
+             ++scope) {
+            for (auto binding = scope->rbegin(); binding != scope->rend(); ++binding) {
+                if (binding->name == name) {
+                    return binding->value;
+                }
+            }
+        }
+        return std::nullopt;
+    }
+    /// The node of the value bound to `name` by the nearest `indices` round, if that binding
+    /// has one. Stops at the same binding as staticValueNamed, so a nearer `n` without a node
+    /// hides an outer `j`.
+    node_handle_t staticValueNodeNamed(const std::string &name) const {
+        for (auto scope = staticValueScopes_.rbegin(); scope != staticValueScopes_.rend();
+             ++scope) {
+            for (auto binding = scope->rbegin(); binding != scope->rend(); ++binding) {
+                if (binding->name == name) {
+                    return binding->node;
+                }
+            }
+        }
+        return nullptr;
+    }
     /// The arm whose code the builder is writing now, if it is in one: not a function or a
     /// lambda written inside it.
     ArmBuild *activeArm() const {
@@ -711,14 +813,11 @@ class Builder {
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
     bool genericCalleeAllowed_ = false;
+    // The type of the position the expression being built stands at: the value the expression
+    // produces must be of this type (design principles 5.1). Every syntax position that knows
+    // the type passes it down with an ExpectedValueScope or visitInPosition; checkValue applies
+    // it to the finished value.
     Type *expectedValueType_   = nullptr;
-    // The body statement whose last value is in a position (see tailPositionType), and the type
-    // that position expects.
-    const GCT::Node *tailExpectedFor_ = nullptr;
-    Type *tailExpectedType_           = nullptr;
-    // The last statement of such a body, the one whose value is in the position: a literal
-    // there takes the position's type (design principles 5.1; see visitDataNode).
-    const GCT::Node *tailStatement_ = nullptr;
     struct ExpectedValueScope {
         Type *&current;
         Type *outer;
@@ -806,6 +905,10 @@ class Builder {
     struct TagFacts {
         camel::core::attr::AttrSetId declaration = camel::core::attr::kNoAttrs;
         camel::core::attr::AttrSetId nodes       = camel::core::attr::kNoAttrs;
+        /// The numeric permissions the permission tags written here grant (design principles
+        /// 7.2: a permission is a tag). They go to the node's permission column, never to the
+        /// attribute set: one fact, one place.
+        camel::core::sem::PermissionMask permissions = 0;
     };
     /// The facts of the tag uses written on `gct`, which is written at `at` (Func, Type or
     /// Nodes). Resolved once per node and remembered. Reports a use that is wrong and throws
@@ -829,11 +932,23 @@ class Builder {
     /// in the module with the declaration.
     void recordFieldTags(const GCT::node_ptr_t &decl);
     std::unordered_map<const GCT::Node *, TagFacts> tagFacts_;
+    /// The graph a `func`-valued tag argument names (design principles 6.2): a function of this
+    /// block or module, a decorated function, or one an import brings. nullopt when the name
+    /// does not name exactly one function (overloads, an operator group, a value, a name that is
+    /// not declared).
+    std::optional<compile_graph_ptr_t> functionGraphNamed(const std::string &written);
+    /// Makes the graphs the declaration facts `set` name (a tag with a `func` parameter) rule
+    /// references of `graph` (kGraphRefRule): the tag's fact is a graph reference, and the graph
+    /// must be part of the program so that the tag's reader finds it in the frozen graph
+    /// (GCGraph::ruleGraphs) without looking the name up again.
+    void attachRuleGraphs(const compile_graph_ptr_t &graph, camel::core::attr::AttrSetId set);
+    /// The graphs named by `func`-valued tag arguments, by GraphId: attachRuleGraphs needs the
+    /// graph, and the attribute value only keeps the id.
+    std::unordered_map<uint32_t, compile_graph_ptr_t> tagFunctionGraphs_;
 
     void buildFuncBody(
         const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
-        const std::string &name,
-        camel::core::attr::AttrSetId bodyTags = camel::core::attr::kNoAttrs);
+        const std::string &name, const TagFacts &bodyTags);
 
     std::optional<node_handle_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
@@ -1043,7 +1158,8 @@ class Builder {
     // variable's last writer in this graph and, in a sync block, in the block's chain.
     node_handle_t readVariable(node_handle_t variable);
     // `:var/get` or `:var/peek` applied to `variable`, recorded as a read.
-    node_handle_t readVariableThrough(node_handle_t variable, const std::string &group);
+    node_handle_t readVariableThrough(
+        node_handle_t variable, camel::core::OperId oper);
     // The value `variable` holds (`:var/peek`): the same as readVariable, but the variable keeps
     // its array available for writing in place (the read does not take the array away).
     node_handle_t peekVariable(node_handle_t variable);
@@ -1055,7 +1171,14 @@ class Builder {
     // takes the variable or its value is only known once the callee is resolved.
     node_handle_t visitOperand(const GCT::node_ptr_t &expr, const GCT::node_ptr_t &call);
     // The node of `:var/new` or `:var/get` applied to `input`.
-    node_handle_t variableOperator(const std::string &group, node_handle_t input);
+    node_handle_t variableOperator(camel::core::OperId oper, node_handle_t input);
+    /// The group of an operator the compiler emits itself (`oper::EnumMake` and the like): the
+    /// built-in module registered it; an id is fixed at start-up, the group when that module is
+    /// loaded, which is before any module of a program is compiled.
+    oper_group_ptr_t internalOperatorGroup(camel::core::OperId oper);
+    /// The DREF of such an operator: the construction node carries the id, so the group is not
+    /// looked up by a name the program could shadow (visitDRefNode).
+    GCT::node_ptr_t internalOperatorDref(camel::core::OperId oper);
     // The immutable name an argument expression denotes: the name itself or a field of it
     // (`s`, `s.x`). Empty for a variable and for an expression that is not a name.
     std::optional<std::string> immutableNameOf(const GCT::node_ptr_t &expr);
@@ -1066,6 +1189,13 @@ class Builder {
 
     void_ptr_t visitDeclNode(const GCT::node_ptr_t &gct);
     compile_graph_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
+    /// The signature of a lambda whose parameters leave their type out (design principles 5.9),
+    /// with those types taken from the function type the position of the lambda expects
+    /// (`expected`, the one channel of the expected type). A parameter that type does not
+    /// determine is reported, at the parameter, with a located diagnostic. Any other signature
+    /// is returned as it is.
+    FunctionType *
+    completeLambdaSignature(const GCT::node_ptr_t &gct, FunctionType *funcType, Type *expected);
     node_handle_t visitDataNode(const GCT::node_ptr_t &gct);
     Type *visitTypeNode(const GCT::node_ptr_t &gct);
     node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
@@ -1079,13 +1209,46 @@ class Builder {
     FunctionType *signatureForArgumentContext(node_handle_t target) const;
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
-    /// A loop (design principles 3.10; camel/runtime/loop.h): the first values and
-    /// the array where the loop is, a graph for the condition and one for the body, and one
-    /// LOOP node calling them. The two graphs share one capture table (captureTwins_).
+    /// `match type`: selects a case from the shape of the subject type and builds only that
+    /// case's body, in the current graph (no branch node).
+    node_handle_t visitTypeMatchNode(const GCT::node_ptr_t &gct);
+    /// `static for (n, F) in fields T`: the body is built once per field, in the current graph.
+    /// With `values`, each round's value is collected instead of dropped (a comprehension); with
+    /// `shape`, the type the fields were taken from is handed back for the caller to pack.
+    node_handle_t visitStaticForNode(
+        const GCT::node_ptr_t &gct, std::vector<node_handle_t> *values = nullptr,
+        Type **shape = nullptr);
+    /// `{ static for ... }` / `( static for ... )`: the rounds' values are packed into a struct or
+    /// tuple of the same fields with one FILL; the comprehension leaves no node of its own.
+    node_handle_t visitStaticComprehensionNode(const GCT::node_ptr_t &gct);
+    /// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body`: the body is built
+    /// once per field, in the current graph, with the state names bound to the previous round's
+    /// values; the value is the last state (a tuple FILL when there are several).
+    node_handle_t visitStaticLoopNode(const GCT::node_ptr_t &gct);
+    /// The pack the C++ `tree_map` expansion makes: a static value of `values.size()` slots and a
+    /// FILL whose type has the fields of `shape` (a tuple of the values' types when `shape` is not
+    /// a struct). The origins are recorded against `origin` under `originKind`.
+    node_handle_t packStaticValues(
+        bool isStruct, Type *shape, const std::vector<node_handle_t> &values,
+        const GCT::node_ptr_t &origin, const char *originKind);
+    /// `t.[key]`: the field or tuple element is chosen at compile time.
+    node_handle_t visitStaticAccessNode(const GCT::node_ptr_t &gct);
+    bool typeCaseMatches(Type *subject, uint16_t patterns) const;
+
+    /// Whether a name read in a case body that is not selected names something. It walks the
+    /// same layers as visitDRefNode, but builds no node and checks no type (H51 step 1, Q10).
+    bool valueNameExists(const std::string &written, const GCT::node_ptr_t &gct);
+
+    /// Resolve the names of a case body that is not selected: its own `let`/`var` names bind,
+    /// and every other name must exist. No graph node is made and no type is checked.
+    void resolveStaticBodyNames(const GCT::node_ptr_t &body);
+    void walkStaticBodyNames(
+        const GCT::node_ptr_t &node, std::vector<std::unordered_set<std::string>> &locals);
+    static constexpr size_t kMaxStaticMatchDepth = 256;
+    /// A loop (design principles 3.10; camel/runtime/loop.h): the first values and the array
+    /// where the loop is, its condition and its body as regions of the current graph (built where
+    /// they are written, like the arms of a branch), and one LOOP node that has them.
     node_handle_t visitLoopNode(const GCT::node_ptr_t &gct);
-    /// Builds `graph`, a loop's condition or body graph made with its ports, from `exec`: the
-    /// names of its Norm ports are declared in it, and its result is the value of the block.
-    void buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec);
     /// Rewrites the body of a loop whose state values are handed back as `xs->append<v>`, when
     /// that state's first value is a fresh literal, to the form that may append to the state in
     /// place (design principles 10.5): the state's old value cannot be seen once the next round
@@ -1094,35 +1257,33 @@ class Builder {
     /// state the body hands the append call back directly, with several it returns a tuple whose
     /// j-th component is state j's next value.
     void markLoopStateInPlace(
-        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
-        std::vector<node_handle_t> &initial);
+        const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
+        const std::vector<bool> &privateInitial = {});
     /// The per-state half of markLoopStateInPlace: rewrites state `index` when its next value
     /// (`next`) is `state->append<v>` and the body uses that state's parameter nowhere else.
+    /// `initialIsPrivate`: the first value is a projection of a value the loop does not own (a
+    /// part of a struct state, H71); it is copied once before the loop either way.
     void markLoopStateInPlaceOne(
-        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
-        std::vector<node_handle_t> &initial, size_t index, node_handle_t next);
+        const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
+        size_t index, node_handle_t next, bool initialIsPrivate = false);
     /// Recognises a state that starts as an empty array and whose only use is appending one
     /// value per round, and gives the loop a collection slot for the appended values
     /// (design principles 3.10). The state itself stays: it is the value the program sees and
     /// the channel its gradient uses. The slot is an extra, internal output; a FILL (or an
     /// access, for one state) projects the loop's value back to the states alone. Must run
-    /// before autodiff and before `std::opt`: both read the loop's shape.
+    /// before autodiff and before `std::opt`: both read the loop's shape. The body then gives
+    /// the tuple of the next states and the appended values.
     std::vector<Type *> collectLoopAppends(
-        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
-        const std::vector<Type *> &stateTypes, const std::vector<bool> &emptyInitial);
+        const arm_ptr_t &body, const GCT::node_ptr_t &loop, const std::vector<Type *> &stateTypes,
+        const std::vector<bool> &emptyInitial);
     /// Rewrites an empty-array state's `void[]` type once the body's append has told us the
     /// element type it appends (design principles 5.1: `loop losses = [] for ...` infers from
-    /// the value appended). Returns false when the next value is not such an append.
+    /// the value appended), in the ports of the condition (when given) and of the body. Returns
+    /// false when the next value is not such an append.
     bool inferLoopStateFromAppend(
-        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+        const arm_ptr_t &body, const arm_ptr_t &cond, const GCT::node_ptr_t &loop,
         std::vector<node_handle_t> &initial, std::vector<Type *> &stateTypes, size_t index,
         node_handle_t next);
-    /// The condition and the body graph of a loop capture the same values in the same order
-    /// (design principles 3.10: one capture table): a capture made into one is made into the
-    /// other (captureInto).
-    std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> captureTwins_;
-    /// How many loops each graph has, for the names of their graphs (`f.loop2.body`).
-    std::unordered_map<DraftGraphBuilder *, size_t> loopCounts_;
     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
     /// `gct`, or, when `arms` is given, are those arms in order (built by buildArm).
     /// No arm is added to those the program wrote (design principles 3.7).
@@ -1134,10 +1295,14 @@ class Builder {
     /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
     /// no `case _` and does not list both values of a bool (MatchWithoutDefault, an error).
     void requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
-    /// One branch arm: a region of the current graph. Its body is the block `exec`, or what
-    /// `body` builds (called inside the arm's scope) when given; `exec` then only locates the
-    /// arm.
-    arm_ptr_t buildArm(const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {});
+    /// One branch arm, or the condition or the body of a loop (`kind`): a region of the current
+    /// graph. Its body is the block `exec`, or what `body` builds (called inside the region's
+    /// scope) when given; `exec` then only locates the region. `declare` is called first, inside
+    /// the scope: a loop part declares its ports there.
+    arm_ptr_t buildArm(
+        const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {},
+        runtime::GCRegionKind kind                  = runtime::GCRegionKind::Arm,
+        const std::function<void(ArmBuild &)> &declare = {});
     /// Gives the arm `arm` the value `result` (the last expression of its body) unless a
     /// `return` has given one.
     void setArmResult(ArmBuild &arm, node_handle_t result);
@@ -1145,9 +1310,6 @@ class Builder {
     void coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin);
     /// The nodes of each arm that read nothing the arm computes wait for the BRCH.
     void linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode);
-    /// The same at the exit of a graph already built (the body of a loop).
-    void coerceGraphExit(
-        const compile_graph_ptr_t &graph, Type *target, const GCT::node_ptr_t &origin);
     /// After the JOIN is there: the variables the arms changed are changed by the branch.
     void mergeArmVariables(
         const std::vector<arm_ptr_t> &arms, node_handle_t joinNode, node_handle_t brchNode,
@@ -1182,13 +1344,24 @@ class Builder {
     /// `match e { case Shape::Circle(r) => ... }`.
     node_handle_t visitEnumMatch(
         const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::EnumType *type);
-    /// A call of the compiler's own operator `op` over the given GCT operands (a DREF of the
-    /// operator and the operands), built like any call.
-    /// A call the graph makes itself (`__enum_make__` and its like): `typeArgument` is given as
-    /// `f::<T>`, for an operator whose result type is decided by a type the program does not
-    /// write. The operands are GCT nodes; the call is lowered as a written one would be.
+    /// A call of the compiler's own operator `oper` over the given GCT operands (a DREF of the
+    /// operator and the operands), built like any call. The operator is the built-in module's,
+    /// found by the id the table fixed at start-up (there is no name lookup, so nothing the
+    /// program declares under an internal name changes what the compiler emits).
+    /// `typeArgument` is given as `f::<T>`, for an operator whose result type is decided by a
+    /// type the program does not write. The operands are GCT nodes; the call is lowered as a
+    /// written one would be.
+    node_handle_t applyInternalOperator(
+        camel::core::OperId oper, camel::core::type::Type *typeArgument,
+        const std::vector<GCT::node_ptr_t> &operands, const GCT::node_ptr_t &origin);
+    /// The same, for an operator group the program may overload (`__eq__`): the overloads of
+    /// every layer are the ones a written call of the name would use (design principles 10.2).
     node_handle_t applyInternalOperator(
         const char *op, camel::core::type::Type *typeArgument,
+        const std::vector<GCT::node_ptr_t> &operands, const GCT::node_ptr_t &origin);
+    /// The call with the given callee DREF: what both applyInternalOperator forms make.
+    node_handle_t applyInternalOperatorCall(
+        const GCT::node_ptr_t &callee, camel::core::type::Type *typeArgument,
         const std::vector<GCT::node_ptr_t> &operands, const GCT::node_ptr_t &origin);
     /// The type of a node whose value is of enum type: its result slot is of that type too
     /// (the operator's placeholder type is not what the value is kept as; a slot of a type
@@ -1264,9 +1437,25 @@ class Builder {
 
     /// Collects the overloads of the operator `group` visible here.
     OperatorOverloads operatorOverloadsOf(const std::string &group);
-    /// The overloads of `group` the current module imported (Module::importedOperatorOverloads),
-    /// the operator groups merged into one; computed once per module and operator (the module
-    /// changes while an instance of an imported generic function is built).
+    /// The entity a name the current module imports stands for in this program
+    /// (ProgramExports::importedEntity): the import bindings resolved against this program's
+    /// exported entities. The same module in two programs may see different graphs (task H42).
+    std::optional<camel::core::module::entity> importedEntity(
+        const Reference &ref,
+        camel::core::module::ImportLayer layer = camel::core::module::ImportLayer::All) {
+        return exports_->importedEntity(*module_, ref, layer);
+    }
+    /// The type an imported name stands for. A type declaration is the module's own and the
+    /// same in every program, so this does not consult the program's table.
+    std::optional<Type *> importedType(
+        const Reference &ref,
+        camel::core::module::ImportLayer layer = camel::core::module::ImportLayer::All) {
+        return module_->getImportedType(ref, layer);
+    }
+    /// The overloads of `group` the current module imported
+    /// (ProgramExports::importedOperatorOverloads), the operator groups merged into one;
+    /// computed once per module and operator (the module changes while an instance of an
+    /// imported generic function is built).
     const OperatorOverloads &importedOperatorOverloadsOf(const std::string &group);
     std::map<std::pair<const void *, std::string>, OperatorOverloads> importedOperators_;
     /// The DREF for a use of the operator `group` (visitDRefNode).
@@ -1280,6 +1469,51 @@ class Builder {
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         const std::function<bool(FunctionType *, bool)> &accepts);
+
+    // ---- An operator of the module that declares the operand's type (design principles 5.7) --
+    //
+    // Names are looked up lexically where the expression is written; a value of a dependent
+    // type variable is also operated on as its type's declaration means, so an instance looks
+    // for the operator in the module that declares the operand's named type as well, not only
+    // in the module the generic function is written in. What the caller imported is not looked
+    // at. The types are concrete by the time an instance is built, so the modules are found
+    // from the operand types.
+
+    /// The modules whose overloads an operator call over these operand types may also use:
+    /// for each named struct or enum type among the operand value types, the module that
+    /// declares it (with the type's name as written), unless that is this module. Empty outside
+    /// a generic instance, and for anonymous, builtin and alias types, which have no declaring
+    /// module. Duplicates (two operands of the same type) appear once.
+    std::vector<std::pair<std::string, std::string>>
+    declaringModulesOf(const camel::core::type::type_vec_t &withTypes,
+                       const camel::core::type::type_vec_t &normTypes);
+    /// Adds what the declaring modules of the operands export as overloads of `group` to the
+    /// set of `dref`, once each: an overload the module also imports (or one found by both
+    /// routes) stays one candidate. `!=` takes the `==` overloads, as it does for the ones the
+    /// program declares (design principles 4.3). Returns whether anything was added.
+    bool addDeclaringModuleOverloads(
+        node_handle_t dref, const std::string &group,
+        const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes);
+    /// Whether a module that declares one of the operand types exports an overload of `group`
+    /// (design principles 5.7). Asked before an operator DREF exists, for `+=`, which follows the
+    /// plain operator (`compoundAssignmentByRebinding`).
+    bool hasDeclaringModuleOperator(
+        const std::string &group, const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes);
+    /// The scope the diagnostic names when no overload fits: the module the expression is
+    /// written in, and the declaring modules of the operands. Empty when the declaring-module
+    /// lookup does not apply, so that the diagnostic of an ordinary operator failure is
+    /// unchanged.
+    std::string operatorSearchScopeText(
+        const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes);
+    /// The loaded module of this name, or nullptr (the declaring module of a type is loaded:
+    /// the type came from it).
+    camel::core::module::module_ptr_t moduleNamed(const std::string &name);
+    /// What a diagnostic calls the module `name`: the name its source gives it, else the name
+    /// it is loaded under.
+    std::string moduleDisplayName(const std::string &name);
     /// Whether the generic overload `tmpl` accepts the arguments `normInputs` of the types
     /// `normTypes`: its type variables bind and every argument then fits its parameter
     /// (resolveGenericCall without the diagnostics). An argument that is a composite literal
@@ -1302,14 +1536,23 @@ class Builder {
 
     /// The statement of the block being built whose value nothing takes: every statement but
     /// the last (which is the block's value), while it is visited. A call that is this
-    /// statement may be the rebinding `acc = acc->append<v>` (rebindingAppendOf) or a pure
-    /// operation whose result is lost (rejectUnusedPureResult).
+    /// statement may be the rebinding `acc = acc->append<v>` (inPlaceRebindingOf, with the
+    /// in-place form `append` declares) or a pure operation whose result is lost
+    /// (rejectUnusedPureResult).
     const GCT::Node *unusedStatement_ = nullptr;
-    /// `acc = acc->append<v>` as the statement `gct`, `acc` a variable and `append` the
-    /// built-in one: the same rebinding, written with the operator __assn_append__, which
-    /// grows the array in place while only the variable refers to it. Returns nullptr when
-    /// `gct` is not that form; the call is then built as written.
-    node_handle_t rebindingAppendOf(const GCT::node_ptr_t &gct);
+
+    // ---- Comprehensions and static access (H51 steps 3 and 4) ------------------------------
+    //
+    // `t.[n].[m]` inside a `static for` names the same parent once per inner round. The parent's
+    // value does not change between the rounds of one expansion (the target is the same node:
+    // a parameter or a `let`), so the second `t.[n]` would be a second ACCS on the same parent.
+    // The access is remembered for the duration of the expansion and reused: a bound name and
+    // the access written out build the same graph. Only an expansion reuses it; outside one the
+    // cache is not consulted. Keyed by the target's draft node and the resolved field, both
+    // already compared by identity; a target that makes a fresh node (a `var` read, a call)
+    // therefore never matches an earlier round.
+    std::map<std::pair<node_handle_t, std::string>, node_handle_t> staticAccessCache_;
+    size_t staticExpansionDepth_ = 0;
     /// `xs = xs->op<w...>` (or `xs = op<w...>(xs)`) as the statement `gct` of a sync block,
     /// `xs` a variable holding an array and `op` an operator of a module that declares an
     /// in-place form for the overload the call resolves to (OperatorTable::setInPlaceForm;
@@ -1370,9 +1613,16 @@ class Builder {
 
     /// Binds `node` to a fresh name no program can write, so that arms can capture it.
     std::string bindTemporary(node_handle_t node);
-    /// The call `op(<name>)` of one of the built-in operators over tagged values.
+    /// The call `oper(<name>)` of one of the built-in operators over tagged values, by the id of
+    /// the compiler's own operator (`oper::TagIsNull` and the like; internalOperatorDref).
+    node_handle_t applyTagOperator(
+        camel::core::OperId oper, const std::string &name, const GCT::node_ptr_t &origin);
+    /// The call `<op>(<name>)` of a group the program may overload (`__not__`).
     node_handle_t
     applyTagOperator(const char *op, const std::string &name, const GCT::node_ptr_t &origin);
+    /// The call with the given callee DREF: what both applyTagOperator forms make.
+    node_handle_t applyTagOperatorCall(
+        const GCT::node_ptr_t &callee, const std::string &name, const GCT::node_ptr_t &origin);
     /// A CAST of `value` to `target`, made by the compiler (no conversion rule is consulted).
     node_handle_t
     castNodeTo(node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
@@ -1385,6 +1635,22 @@ class Builder {
     /// nullptr when the value does not enter (camel::core::type::entersImplicitly).
     node_handle_t
     coerceTo(node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// Applies the expected type of a position to the value built there, in the one place it is
+    /// done: a value that names a generic function is instantiated for `expected`, then the
+    /// value takes the type (coerceTo: literals, empty arrays, struct copies, `T?` / `T!`).
+    /// nullptr when the value does not enter the type; callers that can report it do.
+    node_handle_t checkValue(
+        node_handle_t node, camel::core::type::Type *expected, const GCT::node_ptr_t &origin);
+    /// Builds `gct` in a position that expects `expected`: the type is in force while the
+    /// expression is built (a generic function value reads it), and checkValue applies it to
+    /// the result. `expected` may be nullptr (no position).
+    node_handle_t
+    visitInPosition(const GCT::node_ptr_t &gct, camel::core::type::Type *expected);
+    /// The literal at `gct` built as `expected` while it is made, so that no literal of its own
+    /// type is left unused in the graph; nullptr when `gct` is not a literal that takes the
+    /// type or the literal already is of it. Used by visitInPosition.
+    node_handle_t
+    literalDataInType(const GCT::node_ptr_t &gct, camel::core::type::Type *expected);
     /// `value` as the struct type `target`, field by field and by name: a real copy, made when
     /// the fields are the same but not in the same order, or when a field type is refined. No
     /// copy is made when the layouts already agree (that conversion is a CAST, CastSafety).
@@ -1483,7 +1749,11 @@ class Builder {
     size_t tagTemporaries_ = 0;
     node_handle_t visitAnnoNode(const GCT::node_ptr_t &gct);
     node_handle_t visitExitNode(const GCT::node_ptr_t &gct);
-    node_handle_t visitExecNode(const GCT::node_ptr_t &gct);
+    /// Builds the statements of a block. `tailExpected` is the type of the position the block's
+    /// last value stands at (a body's value; see visitBodyNode), nullptr when nothing expects a
+    /// value.
+    node_handle_t
+    visitExecNode(const GCT::node_ptr_t &gct, camel::core::type::Type *tailExpected = nullptr);
     // The body of a graph (function, lambda, branch arm): a block of its own, whatever block
     // the function or arm is written in.
     node_handle_t visitBodyNode(const GCT::node_ptr_t &gct);

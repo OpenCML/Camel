@@ -212,6 +212,13 @@ void ParserImpl::parseSpecType() {
 /// an empty list followed by `=>`); otherwise `(T)` is the parenthesized type and anything
 /// else a tuple type.
 void ParserImpl::parsePrimaryType() {
+    // After `fields` and after `match type` the parser is in a type position: the head `(` opens
+    // a tuple or a parenthesised type, so `fields ()` is the empty tuple type (H79 ruling 1).
+    // The flag belongs to the head only: a type nested in the parentheses keeps the
+    // function-type reading, and a function type at that head is written between one more pair
+    // of parentheses (`fields ((x: int) => int)`).
+    const bool typeHead = typeHead_;
+    typeHead_           = false;
     switch (cur_) {
     case TK::Identifier:
         return parseIdentRef(NK::RefType);
@@ -221,9 +228,6 @@ void ParserImpl::parsePrimaryType() {
         return parseEnumType();
     case TK::Lt:
     case TK::KwSync:
-    case TK::KwMacro:
-    case TK::KwAtomic:
-    case TK::KwShared:
         return parseFuncType();
     case TK::KwTypeof: {
         // The operand stops before an assignment: `let v: typeof a = b` declares `v`.
@@ -244,9 +248,10 @@ void ParserImpl::parsePrimaryType() {
     }
     case TK::LParen: {
         const TK t1 = peek(1);
-        if (t1 == TK::KwVar || (t1 == TK::Identifier && peek(2) == TK::Colon) ||
-            (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
-            (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow)) {
+        if (!typeHead &&
+            (t1 == TK::KwVar || (t1 == TK::Identifier && peek(2) == TK::Colon) ||
+             (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
+             (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow))) {
             return parseFuncType();
         }
         const size_t m = mark();

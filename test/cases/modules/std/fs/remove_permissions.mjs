@@ -30,64 +30,116 @@ function invoke(mode, target) {
     return result.stdout.trim()
 }
 
+// The account this process runs as, named by its SID. `USERDOMAIN\USERNAME` is not reliable on a
+// runner: the deny ACE is accepted for a name that resolves to an account the token does not
+// carry, so the deny has no effect and `icacls /remove:d` then cannot find the entry it made.
+function currentUserSid() {
+    const who = spawnSync('whoami', ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8' })
+    if (who.status !== 0) {
+        return null
+    }
+    const fields = who.stdout.trim().split(',')
+    const sid = fields[fields.length - 1].replace(/"/g, '').trim()
+    return /^S-\d-\d+(-\d+)+$/.test(sid) ? sid : null
+}
+
+// Whether a removal of `target` is refused right now: a rename needs DELETE on the entry, the same
+// right a remove needs, and renaming back leaves everything as it was.
+function removalRefused(target) {
+    const probe = `${target}.deny-probe`
+    try {
+        fs.renameSync(target, probe)
+    } catch {
+        return true
+    }
+    fs.renameSync(probe, target)
+    return false
+}
+
 // Refuses the removal of `target` for this process. On Windows removing an entry needs DELETE
 // on the entry itself, so a deny ACE on it is refused even to an administrator. On POSIX
 // removing an entry needs write permission on its containing directory.
+//
+// A runner is not this workstation: `icacls` may refuse the SID, or accept an ACE that does not
+// bind the process. Both are reported and the check is skipped with the reason, because the
+// subject here is what Camel reports for a refused removal, not whether a runner grants a deny.
 function denyRemoval(target) {
     if (process.platform === 'win32') {
-        const user = `${process.env.USERDOMAIN}\\${process.env.USERNAME}`
-        const denied = spawnSync('icacls', [target, '/deny', `${user}:(D)`], { encoding: 'utf8' })
-        assert.equal(denied.status, 0, denied.stdout + denied.stderr)
-        return () => {
-            const undone = spawnSync('icacls', [target, '/remove:d', user], { encoding: 'utf8' })
-            assert.equal(undone.status, 0, undone.stdout + undone.stderr)
+        const sid = currentUserSid()
+        const account = sid ? `*${sid}` : `${process.env.USERDOMAIN}\\${process.env.USERNAME}`
+        const denied = spawnSync('icacls', [target, '/deny', `${account}:(D)`], { encoding: 'utf8' })
+        if (denied.status !== 0) {
+            return { skip: `icacls could not deny ${account}: ${(denied.stdout + denied.stderr).trim()}` }
+        }
+        if (!removalRefused(target)) {
+            return { skip: `a deny ACE on ${account} did not refuse the removal` }
+        }
+        return {
+            undo: () => {
+                const undone = spawnSync('icacls', [target, '/remove:d', account], { encoding: 'utf8' })
+                assert.equal(undone.status, 0, undone.stdout + undone.stderr)
+            },
         }
     }
     const directory = path.dirname(target)
     const mode = fs.statSync(directory).mode
     fs.chmodSync(directory, 0o555)
-    return () => fs.chmodSync(directory, mode)
+    return { undo: () => fs.chmodSync(directory, mode) }
+}
+
+// The checks themselves, so that a precondition a runner will not grant ends them with `return`
+// and a printed reason instead of a failure: what is under test is the error Camel reports.
+function checkRemovalRefusal() {
+    const fileParent = path.join(root, 'file-parent')
+    fs.mkdirSync(fileParent)
+    const file = path.join(fileParent, 'denied.txt')
+    fs.writeFileSync(file, 'x')
+    const first = denyRemoval(file)
+    if (first.skip) {
+        console.log(`fs.remove permission checks skipped (${first.skip})`)
+        return
+    }
+    let denied
+    try {
+        denied = invoke(1, file)
+    } finally {
+        first.undo()
+    }
+    assert.equal(denied, 'PermissionDenied | <fs::remove> | denied', denied)
+    assert(fs.existsSync(file), 'a refused remove deleted the file')
+    assert.equal(fs.readFileSync(file, 'utf8'), 'x')
+
+    const directoryParent = path.join(root, 'directory-parent')
+    fs.mkdirSync(directoryParent)
+    const directory = path.join(directoryParent, 'denied')
+    fs.mkdirSync(directory)
+    const second = denyRemoval(directory)
+    if (second.skip) {
+        console.log(`fs.remove permission checks skipped (${second.skip})`)
+        return
+    }
+    let deniedDirectory
+    try {
+        deniedDirectory = invoke(2, directory)
+    } finally {
+        second.undo()
+    }
+    assert.equal(deniedDirectory, 'PermissionDenied | <fs::remove_dir> | denied', deniedDirectory)
+    assert(fs.statSync(directory).isDirectory(), 'a refused remove_dir deleted the directory')
+
+    // The same calls succeed once the refusal is gone.
+    assert.equal(invoke(1, file), 'ok | -')
+    assert(!fs.existsSync(file))
+    assert.equal(invoke(2, directory), 'ok | -')
+    assert(!fs.existsSync(directory))
+    console.log('fs.remove permission checks passed')
 }
 
 try {
     if (privileged) {
         console.log('fs.remove permission checks skipped (privileged process)')
     } else {
-        const fileParent = path.join(root, 'file-parent')
-        fs.mkdirSync(fileParent)
-        const file = path.join(fileParent, 'denied.txt')
-        fs.writeFileSync(file, 'x')
-        let undo = denyRemoval(file)
-        let denied
-        try {
-            denied = invoke(1, file)
-        } finally {
-            undo()
-        }
-        assert.equal(denied, 'PermissionDenied | <fs::remove> | denied', denied)
-        assert(fs.existsSync(file), 'a refused remove deleted the file')
-        assert.equal(fs.readFileSync(file, 'utf8'), 'x')
-
-        const directoryParent = path.join(root, 'directory-parent')
-        fs.mkdirSync(directoryParent)
-        const directory = path.join(directoryParent, 'denied')
-        fs.mkdirSync(directory)
-        undo = denyRemoval(directory)
-        let deniedDirectory
-        try {
-            deniedDirectory = invoke(2, directory)
-        } finally {
-            undo()
-        }
-        assert.equal(deniedDirectory, 'PermissionDenied | <fs::remove_dir> | denied', deniedDirectory)
-        assert(fs.statSync(directory).isDirectory(), 'a refused remove_dir deleted the directory')
-
-        // The same calls succeed once the refusal is gone.
-        assert.equal(invoke(1, file), 'ok | -')
-        assert(!fs.existsSync(file))
-        assert.equal(invoke(2, directory), 'ok | -')
-        assert(!fs.existsSync(directory))
-        console.log('fs.remove permission checks passed')
+        checkRemovalRefusal()
     }
 } finally {
     assert(path.isAbsolute(root) && path.dirname(root) === parent && path.basename(root).startsWith('camel-fs-remove-'))

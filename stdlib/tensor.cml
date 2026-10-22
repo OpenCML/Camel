@@ -1,0 +1,91 @@
+/**
+ * The `tensor` module: multi-dimensional numeric arrays, their element type and extents, their
+ * binary form, a NumPy file, and the module's worker threads and random generator.
+ *
+ * The declarations written here are the operators whose signature is fixed. The ones whose element
+ * type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
+ * axis forms of a reduction — cannot be written as a declaration; they are implemented in
+ * `modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
+ * under the same sections (design principles 6.4; handover H19, H151). `show`'s umbrella parameter
+ * — a tensor, or any array — is written as one declaration per accepted type (handover H175).
+ */
+
+// The fixed signatures of the operators of `modules/tensor` (design principles 6.4; handover H19,
+// H151). This file is the one source of those signatures; the C++ side keeps the kernels, the
+// executors, the operator traits, the resources and the folds (`shape`, `numel` and `dim` still
+// fold from a type that fixes every extent). A declaration names `tensor:<function>` by
+// convention, so no `#op` tag is needed.
+
+module tensor
+
+// ---- shape and reshaping ----
+
+/// The extents of a tensor, in order.
+/// @pure
+/// @example shape(new([[1.0, 2.0], [3.0, 4.0]]))    // [2, 2]
+export func shape(t: Tensor): int[]
+
+/// The number of elements in a tensor: the product of its extents.
+/// @pure
+/// @example numel(zeros([2, 3]))    // 6
+export func numel(t: Tensor): int
+
+/// The extent of one axis; a negative axis counts from the last one (`-1` is the last axis).
+/// @pure
+/// @fails fault `RuntimeError` when the axis is outside the rank
+/// @example dim(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // 2
+export func dim(t: Tensor, axis: int): int
+export func dim(t: Tensor, axis: i32): int
+
+// ---- binary form ----
+
+/// The elements of a tensor as little-endian bytes, in row-major order: the payload `from_bytes`
+/// reads back.
+/// @pure
+/// @example to_bytes(new([1.0, 2.0]))    // [0, 0, 128, 63, 0, 0, 0, 64]
+export func to_bytes(t: Tensor): Bytes
+
+/// The tensor a NumPy `.npy` file holds: its element type and extents are the file's, known when
+/// the program runs (check them with `as`, or read them with `shape`).
+/// @effect reads a file
+/// @fails fault `RuntimeError` when the file is missing, is not a NumPy file, or holds a storage type the module does not read
+/// @example load_npy('x.npy') as Tensor<f32, const [2, 2]>
+export func load_npy(path: string): Tensor
+
+/// Writes a tensor to a NumPy `.npy` file, replacing it.
+/// @effect writes a file
+/// @fails fault `RuntimeError` when the file cannot be written
+/// @example save_npy(zeros([2, 2]), 'x.npy')
+export func save_npy(t: Tensor, path: string): void
+
+// ---- conversion and display ----
+
+/// Prints t to the console, in the module's layout.
+/// @effect writes the console
+/// @example show(new([[1.0, 2.0]]))
+export func show(t: Tensor): void
+export func show(t: (typeas A)[]): void
+
+// ---- module state ----
+
+/// The size of the module's worker pool.
+/// @effect reads the size of the worker pool
+/// @example num_threads()
+export func num_threads(): int
+
+/// Sets the size of the module's worker pool; a value below 1 is read as 1.
+/// @effect changes the size of the worker pool
+/// @example set_num_threads(4)
+export func set_num_threads(n: int): void
+export func set_num_threads(n: i32): void
+
+/// The name of the matrix-multiplication kernel the module dispatches to.
+/// @pure
+/// @example gemm_backend()
+export func gemm_backend(): string
+
+/// Reseeds the module's random generator, which `random` and `randn` draw from.
+/// @effect writes the random generator
+/// @example seed(42)
+export func seed(seed: int): void
+export func seed(seed: i32): void

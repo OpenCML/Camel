@@ -1,0 +1,14 @@
+/**
+ * The boundary the exact-doubling law must not cross: the coefficients are shared `let`
+ * constants, which is the only shape the doubled-coefficient pattern matches, and 0.1 is not an
+ * integer, so the law must not fire. At this subnormal input the rewrite would change 2*min to
+ * min.
+ */
+module typed_boundary_double
+
+func f32_double_frac(x: f32): f32 { return x * 0.1 + x * 0.1 }
+
+func main(): int sync {
+    println(f32_double_frac(9.80908925027372e-45), 9.80908925027372e-45)
+    return 0
+}

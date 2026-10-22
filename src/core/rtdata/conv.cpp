@@ -54,7 +54,11 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     case TypeCode::Float32: {
         auto floatData = tt::as_shared<camel::core::data::FloatData>(data);
         float f        = floatData->data();
-        slot_t result;
+        // An f32 uses the low four bytes of the slot. The rest is not part of the value, and a
+        // rule compiles a constant from a slot: if this half were left as it was on the stack, two
+        // readings of the same f32 constant could compare unequal, and whether they did would
+        // depend on the build (H99). Zero it, as toSlot does for every value narrower than a slot.
+        slot_t result{};
         std::memcpy(&result, &f, sizeof(float));
         return result;
     }
@@ -70,11 +74,6 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     case TypeCode::Bool: {
         auto boolData = tt::as_shared<camel::core::data::BoolData>(data);
         return static_cast<slot_t>(boolData->data() ? 1 : 0);
-    }
-
-    case TypeCode::Byte: {
-        auto byteData = tt::as_shared<camel::core::data::ByteData>(data);
-        return static_cast<slot_t>(byteData->data());
     }
 
     case TypeCode::Void: {

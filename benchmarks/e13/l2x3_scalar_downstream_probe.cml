@@ -8,7 +8,7 @@ module e13_l2x3_scalar_downstream
 import { Tensor, relu, mean, reshape } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
-import { get_env } from sys
+import { get_env } from env
 import { export_model } from onnx
 
 type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }

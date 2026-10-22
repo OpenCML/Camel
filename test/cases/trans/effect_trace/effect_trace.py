@@ -1,4 +1,4 @@
-"""Checks the effect trace written under CAMEL_EFFECT_TRACE.
+"""Checks the effect trace written by `std::profile(effect_trace="...")`.
 
   order   exemplars/05_effect_order runs under NodeVM, FastVM and inline + NodeVM; the three
           traces are identical line by line once `seq` is dropped, every line names an
@@ -41,11 +41,12 @@ def camel_exe() -> str:
 def run(program: Path, passes: list[str], trace: Path) -> tuple[int, str, list[dict]]:
     env = dict(os.environ)
     env.setdefault("CAMEL_HOME", str(REPO_ROOT / "out" / "latest"))
-    env["CAMEL_EFFECT_TRACE"] = str(trace)
     if trace.exists():
         trace.unlink()
-    proc = subprocess.run([camel_exe(), str(program), *passes], env=env, capture_output=True,
-                          text=True, cwd=REPO_ROOT)
+    # The trace is a parameter of the run: std::profile turns it on and writes no report.
+    profile = f'std::profile(effect_trace="{trace.as_posix()}",report=false,hints=false)'
+    proc = subprocess.run([camel_exe(), str(program), profile, *passes], env=env,
+                          capture_output=True, text=True, cwd=REPO_ROOT)
     lines = ([json.loads(l) for l in trace.read_text(encoding="utf-8").splitlines()]
              if trace.exists() else [])
     return proc.returncode, proc.stdout, lines

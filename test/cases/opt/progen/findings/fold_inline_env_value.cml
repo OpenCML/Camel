@@ -10,7 +10,7 @@
  */
 module fold_inline_env_value
 
-import { get_env } from sys
+import { get_env } from env
 
 type P = { x: int, y: int }
 

@@ -1,0 +1,21 @@
+/**
+ * A conversion (`e as T`, a CAST node) of a constant struct is a constant: after std::opt no
+ * CAST is left. `mk` returns an anonymous struct value in a position declared `P`; the value
+ * is computed (a call and a literal), so the front end converts it at the return instead of
+ * building it in the declared type. Once `three` is inlined and the struct is folded, the
+ * conversion re-types a constant and moves nothing.
+ */
+module fold_struct_cast
+
+type P = { a: int, b: float }
+
+func three(): int { return 3 }
+
+func mk(): P { return { a: three(), b: 1.5 } }
+
+func main(): int sync {
+    let p = mk()
+    println(p.a)
+    println(p.b)
+    return 0
+}

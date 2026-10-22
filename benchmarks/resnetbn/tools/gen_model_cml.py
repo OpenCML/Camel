@@ -51,7 +51,7 @@ module resnetbn
 import { Tensor, relu, mean, flatten } from tensor
 import { grad, with_grad } from autodiff
 import { conv2d, batch_norm_train, sgd, save_params } from nn
-import { get_env } from sys
+import { get_env } from env
 import { export_model } from onnx
 import { weight, bench_input, run_benchmark, run_training } from camel_bench
 """)

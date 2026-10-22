@@ -1,0 +1,13 @@
+/**
+ * An `int` where the declaration says `Key`: the call is refused at the declaration's type, and
+ * the message prints the declaration's own parameter name (`key`) — the one source is
+ * `stdlib/random.cml`, not the C++ module (handover H19, step 10; H128).
+ */
+module random_type
+
+import { permutation } from random
+
+func main(): int sync {
+    println(permutation(42, 3))
+    return 0
+}

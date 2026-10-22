@@ -31,8 +31,10 @@
 #include "build_config.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/execute/devices.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/params.h"
+#include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "camel/utils/path.h"
 #include "camel/utils/str.h"
@@ -192,6 +194,28 @@ bool readRoundLimit(
     return true;
 }
 
+/// The largest limit a memory option accepts, in megabytes (1 TiB): a value that is not a
+/// positive integer below it is no limit.
+constexpr size_t kMaxMemoryOptionMb = size_t{1} << 20;
+
+bool readMegabyteLimit(const std::string &text, const char *option, size_t &out) {
+    if (text.empty()) {
+        return true;
+    }
+    unsigned long long megabytes = 0;
+    const char *begin            = text.data();
+    const char *end              = text.data() + text.size();
+    auto [ptr, ec]               = std::from_chars(begin, end, megabytes);
+    if (ec != std::errc() || ptr != end || megabytes == 0 || megabytes > kMaxMemoryOptionMb) {
+        std::cerr << "Invalid " << option << " value: '" << text
+                  << "'. Expected a number of megabytes from 1 to " << kMaxMemoryOptionMb << "."
+                  << std::endl;
+        return false;
+    }
+    out = static_cast<size_t>(megabytes);
+    return true;
+}
+
 /// Left-to-right over argv: last `--log-level` / `-v*` wins; then applies preset/include and stderr
 /// sink.
 void applyCamelCliLogging(int argc, char **argv) {
@@ -317,6 +341,11 @@ string maxRecursionDepthOpt = ""; // raw --max-recursion-depth
 string maxMacroDepthOpt     = ""; // raw --max-macro-depth
 string maxMacroRoundsOpt    = ""; // raw --max-macro-rounds
 string gcModeOpt            = ""; // raw --gc
+string blockLimitOpt        = ""; // raw --block-limit (megabytes)
+string graphGcMbOpt         = ""; // raw --graph-gc-mb (megabytes)
+string nativeStackGuardOpt  = ""; // raw --native-stack-guard (on|off)
+string devicesOpt           = ""; // raw --devices (cpu|ordinal[,ordinal...])
+string profileModeOpt       = ""; // raw --profile-mode (normal|full)
 size_t maxRecursionDepth    = 0;  // 0: not given on the command line
 size_t maxMacroDepth        = 0;
 size_t maxMacroRounds       = 0;
@@ -632,7 +661,22 @@ bool parseArgs(int argc, char *argv[]) {
              "1000000; also CAMEL_MAX_MACRO_ROUNDS)",
          (option("--gc") & value("collector", gcModeOpt)) %
              "collector of run-time values: generational (default; young objects are copied) or "
-             "mark-sweep (objects keep their address); also CAMEL_GC",
+             "mark-sweep (objects keep their address)",
+         (option("--block-limit") & value("megabytes", blockLimitOpt)) %
+             "limit of the data-block space in megabytes (default 2048); raise it for a run that "
+             "builds several large models in one process",
+         (option("--graph-gc-mb") & value("megabytes", graphGcMbOpt)) %
+             "the graph space asks for a collection when it holds this many megabytes more than "
+             "after the last one (default 64)",
+         (option("--native-stack-guard") & value("on|off", nativeStackGuardOpt)) %
+             "check the native stack on every nested call (default on); off measures where the "
+             "stack really ends and is not for normal use",
+         (option("--devices") & value("cpu|ordinal[,ordinal...]", devicesOpt)) %
+             "devices a pipeline may use: cpu (the host only) or CUDA ordinals in order (e.g. 0 "
+             "or 0,1); a device named here must be there",
+         (option("--profile-mode") & value("normal|full", profileModeOpt)) %
+             "mode of the profiler of --profile: full also opens the Perfetto UI when the report "
+             "is written",
          option("-n", "--no-cache").set(noCache) % "do not use cache",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
@@ -823,6 +867,8 @@ bool parseArgs(int argc, char *argv[]) {
         }
         if (!Run::timeitSpec.empty()) {
             if (!parseTimeitSpecValue(Run::timeitSpec, Run::timeitPass, Run::timeitIterations)) {
+                // A usage error is not a successful run (H181): the value was refused above.
+                exitCode = 1;
                 return false;
             }
             Run::timeitEnabled = true;
@@ -877,7 +923,7 @@ bool parseArgs(int argc, char *argv[]) {
             std::exit(1);
         }
 
-        // The collector: the option, else the environment (read by the allocator itself).
+        // The collector: --gc, which the allocator applies before its heap exists.
         if (!Run::gcModeOpt.empty()) {
             const auto mode = camel::core::mm::parseCollectorMode(Run::gcModeOpt);
             if (!mode) {
@@ -892,8 +938,66 @@ bool parseArgs(int argc, char *argv[]) {
             }
         }
 
+        // The memory limits: --block-limit and --graph-gc-mb. Both must be read before the
+        // spaces they bound exist.
+        size_t blockLimitMb   = 0;
+        size_t graphGcFloorMb = 0;
+        if (!readMegabyteLimit(Run::blockLimitOpt, "--block-limit", blockLimitMb) ||
+            !readMegabyteLimit(Run::graphGcMbOpt, "--graph-gc-mb", graphGcFloorMb)) {
+            std::exit(1);
+        }
+        if (blockLimitMb != 0 &&
+            !camel::core::mm::selectBlockSpaceLimit(blockLimitMb * camel::core::mm::MB)) {
+            std::cerr << "Error: --block-limit was read after the data-block space was set up."
+                      << std::endl;
+            std::exit(1);
+        }
+        if (graphGcFloorMb != 0) {
+            camel::runtime::setGraphCollectionFloorBytes(graphGcFloorMb * camel::core::mm::MB);
+        }
+
+        // --native-stack-guard: off is the switch for measuring where the stack ends.
+        if (!Run::nativeStackGuardOpt.empty()) {
+            if (Run::nativeStackGuardOpt == "off") {
+                camel::execute::setNativeStackGuardEnabled(false);
+            } else if (Run::nativeStackGuardOpt == "on") {
+                camel::execute::setNativeStackGuardEnabled(true);
+            } else {
+                std::cerr << "Invalid --native-stack-guard value: '" << Run::nativeStackGuardOpt
+                          << "'. Expected on or off." << std::endl;
+                std::exit(1);
+            }
+        }
+
+        // --devices: the devices a pipeline may use (design principles 13.4). Read before any
+        // module can ask for one; a device named here is a requirement, not a preference.
+        if (!Run::devicesOpt.empty()) {
+            std::string why;
+            const auto selection = camel::execute::parseDeviceSelection(Run::devicesOpt, why);
+            if (!selection) {
+                std::cerr << "Error: --devices '" << Run::devicesOpt << "': " << why << "."
+                          << std::endl;
+                std::exit(1);
+            }
+            camel::execute::selectDevices(*selection);
+        }
+
+        // --profile-mode: the mode of the advanced profiler that --profile starts.
+        if (!Run::profileModeOpt.empty()) {
+            if (Run::profileModeOpt != "normal" && Run::profileModeOpt != "full") {
+                std::cerr << "Invalid --profile-mode value: '" << Run::profileModeOpt
+                          << "'. Expected normal or full." << std::endl;
+                std::exit(1);
+            }
+            if (!Run::profile) {
+                std::cerr << "Error: --profile-mode needs --profile." << std::endl;
+                std::exit(1);
+            }
+        }
+
         if (Run::timeitEnabled && Run::profile) {
             std::cerr << "Error: --timeit cannot be combined with --profile." << std::endl;
+            exitCode = 1;
             return false;
         }
     }
@@ -903,6 +1007,7 @@ bool parseArgs(int argc, char *argv[]) {
         std::cerr
             << "Error: Run requires an input file. Use --input <file> or provide a positional file."
             << std::endl;
+        exitCode = 1;
         return false;
     }
 

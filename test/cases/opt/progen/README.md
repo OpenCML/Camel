@@ -504,8 +504,8 @@ reported as a defect:
 at the call (`MacroEvaluationFailed`: "Operator ':mark/reduce_arr' is unavailable in macro
 execution"). 87 cells of the batches are this refusal; the generator now avoids declaring such
 functions `macro`.
-- Reading A: it is the ruling of 8 ("a failed macro evaluation is a compile-time error"), and
-  the diagnostic is located, so this is a legal refusal.
+- Reading A: it is the ruling of 8 ("a failed macro evaluation is a run-time fault of the
+  pass"), and the diagnostic is located, so this is a legal refusal.
 - Reading B: the evaluation did not fail because of the program (as a division by zero would);
   the evaluator lacks an operator. Section 3 says a macro function *may* be evaluated ahead of
   time and is an ordinary function otherwise, and `std::macro` already leaves a call for run

@@ -64,6 +64,18 @@ std::string to_string(NodeKind kind) {
         return "EXPT";
     case NodeKind::LOOP:
         return "LOOP";
+    case NodeKind::TMTCH:
+        return "TMTCH";
+    case NodeKind::TCASE:
+        return "TCASE";
+    case NodeKind::SFOR:
+        return "SFOR";
+    case NodeKind::SACC:
+        return "SACC";
+    case NodeKind::SCOMP:
+        return "SCOMP";
+    case NodeKind::SLOOP:
+        return "SLOOP";
     default:
         ASSERT(false, "Unknown NodeKind");
     }

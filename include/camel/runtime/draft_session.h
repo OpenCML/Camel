@@ -39,6 +39,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <source_location>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -54,23 +55,9 @@ struct RuntimeDraftIdentity {
     std::string name;
 };
 
-enum class RuntimeSpecializationBindingKind : uint8_t {
-    Norm,
-    With,
-    Closure,
-    Lift, // closure nodes turned into norm ports (see devirtualizeStaticCallInDraft)
-};
-
-struct RuntimeSpecializationBindingKey {
-    RuntimeSpecializationBindingKind kind = RuntimeSpecializationBindingKind::Norm;
-    size_t index                          = 0;
-    slot_t value                          = NullSlot;
-    camel::core::type::Type *type         = nullptr;
-    uint8_t runtimeFlags                  = 0;
-
-    bool operator==(const RuntimeSpecializationBindingKey &other) const = default;
-};
-
+/// The key a session remembers a specialization under within itself: the callee graph version
+/// itself and the bindings. The program keeps its own key (specializations.h): an id and a
+/// content revision, so an entry outlives the version it was made for.
 struct RuntimeSpecializationKey {
     GCGraph *baseGraph = nullptr;
     std::vector<RuntimeSpecializationBindingKey> bindings;
@@ -121,15 +108,52 @@ class GraphCommitConflict : public std::runtime_error {
     std::vector<GraphId> graphs_;
 };
 
+#ifndef NDEBUG
+/// Debug-only companion of RuntimeGraphDraftSession, read by the safepoint check that enforces
+/// the draft-root invariant (draft_session.cpp): the drafts the session has open, the RootScopes
+/// covering all of them, and the EngineRootScopes covering one. It registers no root itself; it
+/// is a record of what the session owns, not a second way to register a root. It is a cell of its
+/// own so that it survives a move of the session, like the drafts do (the drafts_ map holds
+/// unique_ptrs, and the GraphDraft objects stay where they are).
+struct DraftRootsDebug {
+    struct Entry {
+        const GraphDraft *draft = nullptr;
+        /// EngineRootScopes (DraftWritings) covering this draft; a RootScope on the session
+        /// covers every draft and is counted in sessionRoots.
+        unsigned roots = 0;
+    };
+
+    explicit DraftRootsDebug(std::string label);
+    ~DraftRootsDebug();
+    DraftRootsDebug(const DraftRootsDebug &)            = delete;
+    DraftRootsDebug &operator=(const DraftRootsDebug &) = delete;
+
+    /// Where the session was opened and which program root it rewrites.
+    std::string label;
+    /// The RootScopes open on the session; they cover every entry of `drafts`.
+    unsigned sessionRoots = 0;
+    std::vector<Entry> drafts;
+};
+
+/// A DraftWritings's EngineRootScope covers its own draft, not a whole session: record it for
+/// the safepoint check. A draft of no session (one the front end built) is ignored.
+void debugDraftRootOpened(const GraphDraft &draft);
+void debugDraftRootClosed(const GraphDraft &draft);
+#endif
+
 class RuntimeGraphDraftSession {
   public:
+    /// `location` names the place the session was opened, for the Debug-only safepoint check
+    /// that reports a draft this session left unrooted (draft_session.cpp). A default argument
+    /// captures the call site; a Release build does not read it.
     /// A session over the graphs reachable from the root of `program`.
     RuntimeGraphDraftSession(
-        const camel::core::context::context_ptr_t &context, const Program *program);
+        const camel::core::context::context_ptr_t &context, const Program *program,
+        std::source_location location = std::source_location::current());
     /// A session over the graphs reachable from `runtimeRoot`, a graph of `program`.
     RuntimeGraphDraftSession(
         const camel::core::context::context_ptr_t &context, const Program *program,
-        GCGraph *runtimeRoot);
+        GCGraph *runtimeRoot, std::source_location location = std::source_location::current());
 
     /// The program the session rewrites; after a commit, the program it produced.
     const Program *program() const { return program_; }
@@ -149,23 +173,53 @@ class RuntimeGraphDraftSession {
     const GraphDraft *tryDraft(const GCGraph *graph) const;
 
     /// The state of the graphs the commit encodes (graph.h, GraphState); the validator applies
-    /// the rules of that state. A session that builds a shape no back end runs (the ONNX
-    /// export's split of branched calls) says NonExecutable. Executable by default.
+    /// the rules of that state. Executable by default; a pass that proves equivalences between
+    /// nodes says Tabled.
     void setGraphState(GraphState state) { graphState_ = state; }
 
     GraphDraft &edit(GCGraph *graph);
     GraphDraft &rootDraft();
 
+    /// The specialization made for `key`, if this session or the program it works on already has
+    /// it: the session's own copies first, then the program's table (specializations.h), whose
+    /// entry is used only while the program still holds the graph, the callee is still the
+    /// version the entry was made for, and everything the specialization calls is in the program.
     GCGraph *findSpecialization(const RuntimeSpecializationKey &key) const;
+    /// Remembers the graph the session made for `key`, in the session and (when the key binds no
+    /// GC-managed value) in the program, so a later session over the program finds it.
     void rememberSpecialization(RuntimeSpecializationKey key, GCGraph *graph);
+    /// The name numbers of new specializations, kept by the program so that a program derived
+    /// from another continues where it left off instead of naming a second graph `walk$spec0`.
+    uint64_t nextSpecializationNonce();
+    uint64_t nextLiftNonce();
 
     /// Traces the static values the open drafts hold. The drafts keep them as raw slots, outside
     /// the object graph, so a collection at a safepoint would otherwise move one and leave the
     /// draft (and the graph a commit encodes) pointing at where it was. `ownerType` is the type
-    /// of the value that owns the session (a transaction), for the tracing report.
+    /// of the value that owns the session (a transaction), for the tracing report; `ownerKind`
+    /// names that owner there.
     void traceStaticSlots(
         const camel::core::rtdata::Object::RefRelocator &relocate,
-        const camel::core::type::Type *ownerType);
+        const camel::core::type::Type *ownerType, std::string_view ownerKind = "Txn");
+
+    /// Keeps the static values of every open draft alive and relocatable while Camel code may run:
+    /// a `when` condition of the rewrite engine is a safepoint, and the drafts are raw slots the
+    /// object graph does not reach. A transaction opens one too, for its whole lifetime (its own
+    /// trace callback also calls traceStaticSlots; tracing a draft twice is harmless). The
+    /// rewrite engine opens one from the first edit to the commit, because it rewrites one draft
+    /// after another while every condition can collect. The session must not be moved while a
+    /// scope is open. A Debug build checks at every safepoint that every open draft is covered by
+    /// one of these (or by the EngineRootScope of its DraftWritings).
+    class RootScope {
+      public:
+        explicit RootScope(RuntimeGraphDraftSession &session);
+        ~RootScope();
+        RootScope(const RootScope &)            = delete;
+        RootScope &operator=(const RootScope &) = delete;
+
+      private:
+        RuntimeGraphDraftSession &session_;
+    };
 
     /// Type-only specializations (see kTypeSpecializationTag) of the function `root` that the
     /// program holds: those reachable when first asked, plus those noted since.
@@ -174,17 +228,25 @@ class RuntimeGraphDraftSession {
 
     std::vector<GCGraph *> collectReachableRuntimeGraphs() const;
     /// Encodes the edited closure into a new program and returns it. A session over the
-    /// program's root installs it as the program of the context; with `detached` (a back end's
-    /// private rewrite, such as lowering loops before it runs) the program is left as it is and
+    /// program's root installs it as the program of the context; with `detached` (a private
+    /// rewrite, such as the working copy of autodiff) the program is left as it is and
     /// the new program is kept alive as a detached one (Context::trackDetachedRuntimeProgram).
     const Program *commit(bool detached = false);
     /// The graphs the session read or wrote (decoded or edited) whose version in the context's
     /// program is not the one it started from; empty while the context's program is still the
-    /// session's. A commit of a stale session does not fail: it makes a program of its own from
-    /// the one it started from, which is not the context's (the callers that run a function
-    /// value of the old program do this routinely). A caller that means to replace the context's
-    /// program asks first (optimistic concurrency, design 4.3.1).
+    /// session's. A commit of a stale session with no conflict does not fail: it merges its
+    /// graphs into the context's newest program (design 4.3.1) and replaces it. A commit that
+    /// does conflict makes a program of its own from the one it started from, which is not the
+    /// context's (the callers that run a function value of the old program do this routinely). A
+    /// caller that means to replace the context's program and must not fork asks first
+    /// (optimistic concurrency, design 4.3.1). A session that cannot replace the context's
+    /// program — one opened over a private program (the ONNX export's bound copy, a function
+    /// value's program, a subgraph root) that the context did not install — has no version of
+    /// the context's program to compare: its conflicts are empty (H112).
     std::vector<GraphId> conflicts() const;
+    /// conflicts() against `current`, which the caller names: the compare-and-swap of a commit
+    /// that lost the race to another one re-checks against the program that is there now.
+    std::vector<GraphId> conflictsWithProgram(const camel::runtime::Program *current) const;
     /// commit(), but throws GraphCommitConflict when conflicts() is not empty.
     const Program *commitChecked();
 
@@ -200,9 +262,20 @@ class RuntimeGraphDraftSession {
     /// the draft's revision is the same, so that asking for the closure of the program again
     /// does not walk the nodes of every draft again.
     const std::vector<std::pair<GraphId, const Program *>> &draftRefs(GCGraph *graph) const;
+    /// Whether a specialization with these bindings may outlive the session: it binds only
+    /// values (no GC-managed object), so the same key means the same specialization in a later
+    /// session over the program (specializations.h).
+    bool specializationLivesInProgram(const RuntimeSpecializationKey &key) const;
+    ProgramSpecializationKey programKeyOf(const RuntimeSpecializationKey &key) const;
 
     camel::core::context::context_ptr_t context_;
     const Program *program_ = nullptr;
+    /// Whether a commit may replace the context's program: true when the session was opened over
+    /// that program (it may have been overtaken since: the commit merges), or when the program it
+    /// works on is the context's now (someone installed it). A session over a function value's
+    /// program (a detached program: the ONNX export, a tile region, a gradient) hands its commit
+    /// back to its owner and never publishes it, whatever the context's program is.
+    bool mayPublish_ = false;
     mutable std::unique_ptr<Program> work_;
     GCGraph *runtimeRoot_ = nullptr;
     GraphState graphState_ = GraphState::Executable;
@@ -244,6 +317,11 @@ class RuntimeGraphDraftSession {
         specializationCache_;
     std::unordered_map<GraphId, size_t> typeSpecializationCounts_;
     bool typeSpecializationCountsReady_ = false;
+#ifndef NDEBUG
+    /// What the Debug-only safepoint draft-root check reads (DraftRootsDebug). Destroyed before
+    /// drafts_, so it unregisters while the drafts it names still exist.
+    std::unique_ptr<DraftRootsDebug> debugRoots_;
+#endif
 };
 
 /// Encodes new graphs that may refer to one another, such as the mutually recursive graphs a

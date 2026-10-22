@@ -2,12 +2,12 @@
 
 > **先读 [`../design-principles.cn.md`](../design-principles.cn.md)。** 它是语言作者对 Camel 根本定位与执行模型的规范性说明：与实现或其他文档冲突时以它为准；它没有覆盖或标为“未定”的问题，向语言作者提问，不要自行选择。
 >
-> 与设计原则的对应（第 8 节）：`macro` 是可有可无的标记，流水线里没有 `std::macro` 时 macro 函数就是普通函数；macro 函数体里的副作用与普通函数一样，在求值之时发生；求值失败暂按直接报错处理（未定）。
+> 与设计原则的对应（第 8 节）：`#macro` 是标准标签，可有可无，流水线里没有 `std::macro` 时 macro 函数就是普通函数；macro 函数体里的副作用与普通函数一样，在求值之时发生；求值失败按运行时故障处理（H97）。
 >
-> **求值失败**按上述暂定规则实现：实参全为常量而求值失败的 macro 调用是编译期错误
+> **求值失败**：实参全为常量而求值失败的 macro 调用，是 `std::macro` 这个遍运行中的运行时故障
 > `RuntimeDiag::MacroEvaluationFailed`（阶段 `pass:std::macro`，定位在调用处，附原因），流水线停止、程序不运行
-> （见第五节第 4 条）。此前的做法（告警 `MacroEvaluationDeferred` 并推迟到运行期）在引入该错误的那一次提交中
-> 被替换，回退该提交即可恢复。本文其余部分是开发过程记录，与设计原则冲突之处以设计原则为准。
+> （见第五节第 4 条）。此前的做法（编译期错误；更早是告警 `MacroEvaluationDeferred` 并推迟到运行期）已被替换。
+> 本文其余部分是开发过程记录，与设计原则冲突之处以设计原则为准。
 
 本文档记录 OpenCML 宏系统的实现进展、遇到的问题及临时解决方案，供后续开发参考。
 
@@ -15,7 +15,7 @@
 
 ## 一、功能概述
 
-**宏系统目标**：被标记为 `macro` 的函数可在编译期执行，其参数须为编译期值（对应 GIR 的 DATA 节点）或由其他宏产生的值；宏执行结果直接重写为 DATA 节点。
+**宏系统目标**：被标记为 `#macro` 的函数可被 `std::macro` 提前求值，其参数须为编译期值（对应 GIR 的 DATA 节点）或由其他宏产生的值；宏执行结果直接重写为 DATA 节点。
 
 **设计要点**：
 - 宏是“值宏”，执行后产生 DATA，不做代码级 AST/GIR 重写
@@ -96,9 +96,9 @@
 所有宏测试位于 `test/macro/`，需手动传入 `std::macro`（当前未纳入默认 fallback）：
 
 ```powershell
-$env:PATH = "D:/Projects/Camel/build/Release;$env:PATH"
-$env:CAMEL_HOME = "D:/Projects/Camel/out/latest"
-& "D:/Projects/Camel/build/Release/camel.exe" test/macro/basic.cml std::macro
+$env:PATH = "<repo>/build/Release;$env:PATH"
+$env:CAMEL_HOME = "<repo>/out/latest"
+& "<repo>/build/Release/camel.exe" test/macro/basic.cml std::macro
 ```
 
 | 文件 | 场景 | 期望输出 |
@@ -118,10 +118,10 @@ $env:CAMEL_HOME = "D:/Projects/Camel/out/latest"
 1. **宏内调用函数参数**：当前通过“编译期跳过”规避崩溃，该场景在运行时执行。
 2. **`std::macro` 未入默认 pipeline**：需显式 `camel xxx.cml std::macro`；默认 fallback 仍为 `std::default`。
 3. **CONST 关键字**：暂未实现，本版将任意 DATA 视为编译期值。
-4. **提前求值失败是编译期错误（暂定）**：实参全为静态但求值失败（算子报错、异常、超过 64 帧的求值深度）时，`std::macro` 报告错误 `RuntimeDiag::MacroEvaluationFailed`（`0x0400000E`，定位到调用处，附原因），流水线停止，程序不运行；实参非静态属正常情况，不是失败，仅在 `-v` 下有一行说明。后果：
-   - 失败的调用即使运行期永远执行不到（在未被调用的函数里、未走到的分支里），程序也被拒绝；
-   - 超过求值深度上限也算失败，因此不加 `std::macro` 能运行的程序（如 `count(40)`）加上后被拒绝；
-   - 失败前已执行的效应已在该遍执行期间发生（每轮一次），程序不再运行，不会重复；
+4. **提前求值失败是运行时故障（H97 定）**：实参全为静态但求值失败（算子报错、异常、超过求值深度或循环轮数）时，`std::macro` 报告故障 `RuntimeDiag::MacroEvaluationFailed`（`0x0400000E`，定位到调用处，附原因，阶段 `pass:std::macro`），流水线停止，程序不运行；实参非静态属正常情况，不是失败，仅在 `-v` 下有一行说明。后果：
+   - 失败的调用即使运行期永远执行不到（在未被调用的函数里、未走到的分支里），程序也会在该遍运行时停止；
+   - 超过求值深度或循环轮数上限也算失败，因此不加 `std::macro` 能运行的程序（如 `count(40)`）加上后会在该遍停止；
+   - 失败前已执行的效应已在该遍执行期间发生（每轮一次），程序不再运行，不会重复；输出保留；
    - `onnx.export_model` 在运行期用同一个求值器展开被导出函数里的 macro，那里的求值失败是同一个诊断（阶段为 `run`）。
    实现位置：`MacroEvaluator::reportFailures`（`src/execute/macro/eval.cpp`）。测试：计划 `trans.macro` 的 `failed_*`、`not_static.*`。
 5. **返回码**：`camel xxx.cml std::gir` / `std::macro std::gir` 可能返回非 0，但 DOT 输出正常，与 CLI/pass 约定有关。

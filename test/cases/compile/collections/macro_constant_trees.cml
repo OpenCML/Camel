@@ -33,15 +33,15 @@ func span_operations(lo: int, hi: int, inc: (x: int) => int, double: (x: int) =>
     }
 }
 
-macro func labels(n: int): Map<int, string> {
+#macro func labels(n: int): Map<int, string> {
     return span_labels(0, n)
 }
 
-macro func words(n: int): Set<string> {
+#macro func words(n: int): Set<string> {
     return span_words(0, n)
 }
 
-macro func operations(n: int): Map<int, (x: int) => int> {
+#macro func operations(n: int): Map<int, (x: int) => int> {
     let inc = (x: int): int => x + 1
     let double = (x: int): int => x * 2
     return span_operations(0, n, inc, double)

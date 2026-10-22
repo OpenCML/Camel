@@ -14,7 +14,7 @@ func f1(a2: (a0: int) => int, a3: string, a4: (int, int, bool)): int {
     return concat(['']->map<(p12: string): string => ''>, if false then [''] else ['', a3])->reduce<(p10: int, p11: string): int => -1, 0>;
 }
 
-macro func r13(a14: int, a15: float, a16: float): float {
+#macro func r13(a14: int, a15: float, a16: float): float {
     return 2.5;
 }
 

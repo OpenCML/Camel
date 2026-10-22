@@ -8,7 +8,7 @@ module request_in_arm
 
 import { Tensor, reshape } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func double(t: Tensor): Tensor {
     return t * 2.0

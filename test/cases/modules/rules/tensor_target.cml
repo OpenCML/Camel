@@ -1,0 +1,62 @@
+/**
+ * The tensor laws of the standard rules: one function per law, at the values the counts and the
+ * answers use. `Vec` has a known extent, so the rules (written for `Tensor<f32>`) are exercised
+ * through the type check: a less informed pattern type reads a more informed node type.
+ */
+module tensor_target
+
+import { Tensor, reshape } from tensor
+
+type Vec = Tensor<f32, const [3]>
+
+func combine(x: Vec): Vec { return x * 3.0 + x * 5.0 }
+func combine_mixed(x: Vec): Vec { return x * 3.0 + x * -5.0 }
+
+#[finite_math]
+func combine_mixed_granted(x: Vec): Vec { return x * 3.0 + x * -5.0 }
+
+func fold(x: Vec): Vec { return (x * 3.0) * 2.0 }
+
+#[no_infs]
+func fold_granted(x: Vec): Vec { return (x * 3.0) * 5.0 }
+
+func double(x: Vec): Vec { return x * 3.0 + x * 3.0 }
+func self(x: Vec): Vec { return x + x }
+func one(x: Vec): Vec { return x * 2.0 + x }
+func one_other(x: Vec): Vec { return x + x * 2.0 }
+func one_mixed(x: Vec): Vec { return x * -2.0 + x }
+
+#[finite_math]
+func one_mixed_granted(x: Vec): Vec { return x * -2.0 + x }
+
+func neutral(x: Vec): Vec { return (x * 1.0 + -0.0) - 0.0 }
+func inexact(x: Vec): Vec { return x * 0.1 + x * 0.2 }
+func inexact_one(x: Vec): Vec { return x * 0.1 + x }
+
+/// An i64 tensor's own add: the f32 law must not read it (the operator id is shared, the element
+/// type is not).
+func i64_self(t: Tensor<i64>): Tensor<i64> { return t + t }
+
+/// The i64 distribute law: exact, and it grows the writing, so only the saturation has it.
+func i64_distribute(a: Tensor<i64>, b: Tensor<i64>, c: Tensor<i64>): Tensor<i64> {
+    return a * (b + c)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0], [3])
+    println(combine(x))
+    println(combine_mixed(x))
+    println(combine_mixed_granted(x))
+    println(fold(x), fold_granted(x))
+    println(double(x), self(x))
+    println(one(x), one_other(x), one_mixed(x), one_mixed_granted(x))
+    println(neutral(x))
+    println(inexact(x), inexact_one(x))
+    let t = reshape([576460752303423489, 2, 3], [3])
+    println(i64_self(t))
+    let a = reshape([2, 3, 4], [3])
+    let b = reshape([1, 2, 3], [3])
+    let c = reshape([5, 6, 7], [3])
+    println(i64_distribute(a, b, c))
+    return 0
+}

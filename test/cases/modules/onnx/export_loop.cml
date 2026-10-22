@@ -7,7 +7,7 @@
 module export_loop
 import { Tensor, reshape, sum, tanh } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 // Depth depends on the data only: halve until the sum is below 1.
 func halve(h: Tensor): Tensor {

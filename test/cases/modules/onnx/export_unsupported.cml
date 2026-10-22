@@ -7,7 +7,7 @@ module export_unsupported
 import { Tensor, reshape } from tensor
 import { softmax_cross_entropy } from nn
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])

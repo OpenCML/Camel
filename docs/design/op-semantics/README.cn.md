@@ -3,7 +3,7 @@
 
 > **2026-10-15 已裁定**：第 15 节的 Q1–Q11 均按本稿建议（矩阵乘的规范算法取乙，按 k 递增的 FMA 链）；见设计原则 7.1。
 >
-> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 7 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。`LOOP` 的消费接口（第三阶段的 3a）已实现，见第 11 节开头的实施状态；事实库（3b）已实现，见第 10 节开头的实施状态；资源与定义图（第四阶段）已实现，见下面的第四阶段一段与第 8、9 节开头的实施状态。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
+> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 7 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`#reassociate`、`#contract` 等许可标签（函数与块）与 `#strict`（7.4）、每节点 16 位的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。`LOOP` 的消费接口（第三阶段的 3a）已实现，见第 11 节开头的实施状态；事实库（3b）已实现，见第 10 节开头的实施状态；资源与定义图（第四阶段）已实现，见下面的第四阶段一段与第 8、9 节开头的实施状态。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
 >
 > **第二阶段已实现（`lane/opsem-p2`）**：下标语义的数据结构与查询（`camel/core/index_semantics.h`：准仿射表达式、迭代域、访问与写映射、四种越界策略、间接访问的形式、归约律与 `reorderFreedom`、`splitDims`、`rowMajorView`；`camel/runtime/operator_instance.h`：冻结图节点上的实例）；第一批声明（逐元素族连同广播、`transpose`/`permute`/`slice`/`reshape`/`flatten`/`unsqueeze`/`broadcast_like`/`expand_axis`、`sum`/`mean` 全量与按轴、`max`/`min` 按轴（张量模块没有全量的 `max`/`min`）、`sum_to`、`matmul`、`nn` 的两种池化作为窗口的例子、`unordered_reduce` 的律）；`camel inspect --instances`；声明求值器 `tensor::test_index_eval`（与 CPU 内核逐位比较，见第 12 节）。给 Tiles 的说明见 14.2 节。与本稿字面不同的几处（均为窄读，见 14.2 与各处注释）：实例只有一个 `law` 下标（`Write` 不另存）；`Domain::guard` 表示分块尾部不存在的点；`LawInit::Operand`（`unordered_reduce` 的 `initial`）；`LawEmpty::Fault` 指归约维为空即故障（`max_axis` 的内核在结果为空时也拒绝空轴）；声明附在张量算子的 `OpDef::index` 上，与 `infer` 并列。
 > **第四阶段已实现（`lane/opsem-p4`）**：资源的声明与查询（`camel/core/resource_semantics.h`、`camel/runtime/resources.h`；事实种类 `core.resources`），见第 8 节开头；定义图的登记、构建与检查、展开（`OperatorTable::declareDefinition`、`camel/runtime/definitions.h`；`stdlib/tensor_definitions.cml`），见第 9 节开头。给 Tiles 的说明见 14.4 节。没有改变图的转储；程序的结果只有 `log_softmax` 的变了（内核改为照它的定义，Q10）；没有遍或后端默认展开定义图。`Indirect` 访问的 gather/scatter 算子仍不存在（数据结构自第二阶段就有），本阶段没有声明。
@@ -30,7 +30,7 @@ C++ 声明与 Camel 示例都是**拟议**的写法，现有编译器不接受�
 
 **七个决定。**
 
-1. **算子表旁边加一份带版本的 `OperatorSemantics` 记录**，与 `OperatorTraits` 并存：traits 是热路径上的五个位，semantics 是按需查询的富信息，各部分都可以缺省，缺省一律按保守处理。算子的**稳定标识**是 `protocol:name@主.次`（如 `tensor:matmul@1.0`）；`OperId` 仍是进程内的编号，离开进程的东西（`.cmo`、Tiles 的编译缓存）按稳定标识加版本绑定（第 4 节）。
+1. **算子表旁边加一份带版本的 `OperatorSemantics` 记录**，与 `OperatorTraits` 并存：traits 是热路径上的五个位，semantics 是按需查询的富信息，各部分都可以缺省，缺省一律按保守处理。算子的**稳定标识**是 `protocol:name@主.次`（如 `tensor:matmul@1.0`）；`OperId` 仍是进程内的编号，离开进程的东西（`.cmc`、Tiles 的编译缓存）按稳定标识加版本绑定（第 4 节）。
 2. **算子的原始语义与程序授予的许可分开。** 算子的声明只说它自己做什么（规范算法、累加类型、顺序、特殊值规则、故障条件）；五项数值许可只能由程序写在代码上，存在图上与节点平行的一列里，模块无从扩大（第 6 节）。
 3. **下标模型是"迭代域 + 每个操作数的访问映射 + 输出的写映射"，表达式是封闭的准仿射语言**（加、减、乘常数或参数、整除与取模），einsum 串只是简写；数据相关的地址（gather/scatter）是一种显式的"不可分析但声明了边界"的访问。声明是秩多态的，所以算子注册的是一个**实例化函数**：给定实参的类型与静态实参，得出这个节点上的具体迭代域（第 5 节）。这一点与 IC 稿"映射是一张纯子图"不同，理由在 1.3。
 4. **数值契约照第 7 节的裁定实施**：规范算法 + 五项互不蕴含的许可；归约是否可以重排，看的是"这个 dtype 与累加类型下的确切代数律 + 节点上的许可"，不是"加法有结合律"。`max`/`min` 的 NaN 与 ±0 规则今天在 CPU 上是位置相关、不交换的【实测】，建议改为 IEEE 754-2019 的 `maximum`/`minimum`，这使最大值归约在任何顺序下逐位相同而不需要许可（第 6、7 节；Q5）。
@@ -146,7 +146,7 @@ IC 稿（2026-10-15，`wzj-dev`）是一份**拟议的目标架构**：计算图
 
 图（每张冻结图）
  ├─ 节点、输入表、负载、图引用表、位置列 ……                                     ← 图模型第 3、4 节
- └─ 许可列（可选，每节点 1 字节：五项数值许可的位集；全为 0 时不存）              ← 新增，第 (i) 类信息
+ └─ 许可列（可选，每节点 16 位：许可标签的位集；全为 0 时不存）                    ← 新增，第 (i) 类信息
 
 快照（Program）
  └─ 事实库 FactStore：（事实种类，锚点）→ 值 + 印记                              ← 新增，第 (ii) 类信息
@@ -179,7 +179,7 @@ struct OperatorKey {
 ```
 
 - **主版本**变：结果、故障、访问、效应的任何一项改变（例如 `max` 的 NaN 规则按 Q5 改了，`tensor:max_axis` 从 1.x 变成 2.0）。**次版本**变：只是多声明了事实，旧版本声明的都仍然成立（例如给 `tensor:slice` 补上下标映射）。
-- 依赖算子语义的持久化结果（`.cmo` 里的事实节区、Tiles 的编译缓存）记下它用到的每个算子的 `OperatorKey`；装载时按 `protocol:name` 重新驻留得到本进程的 `OperId`，**主版本不同即失效，本进程的次版本低于记下的也失效**（记下的结果可能用了本进程没有的事实）。这是图模型 4.5 的 `OPRS` 节区加一个版本字段（10.7）。
+- 依赖算子语义的持久化结果（`.cmc` 里的事实节区、Tiles 的编译缓存）记下它用到的每个算子的 `OperatorKey`；装载时按 `protocol:name` 重新驻留得到本进程的 `OperId`，**主版本不同即失效，本进程的次版本低于记下的也失效**（记下的结果可能用了本进程没有的事实）。这是图模型 4.5 的 `OPRS` 节区加一个版本字段（10.7）。
 - `OperId` 的含义不变：进程内编号，热路径上比较它。`OperatorKey` 只在跨进程的边界上用。
 
 ### 4.2 记录
@@ -535,7 +535,7 @@ initial  base                                     // 输出从 base 开始；Com
 - **超越函数**（`exp`、`log`、`sin` 等）不要求跨设备逐位相同，只承诺一个写明的误差上界（以 ulp 计）。
 - **放宽必须显式授予，五项许可互不蕴含**：(a) 改变归约的顺序或结合方式；(b) 收缩为乘加融合；(c) 使用近似数学函数；(d) 降低输入或累加的精度（如 TF32、bf16）；(e) 对 NaN、无穷、负零、次正规数作额外假设。**模块只能声明算子本身做什么，不能替调用者扩大许可。**
 - **`unordered_reduce`** 只授予"这次归约的合并顺序可以改变"。
-- **许可写在哪段代码上就只对那段代码生效**：被调用的函数不继承；内联、展开定义图时许可随节点保留，并随缓存保存。授予的写法倾向于函数或块上的标注，如 `@numeric(reassociate, contract)`。
+- **许可写在哪段代码上就只对那段代码生效**：被调用的函数不继承；内联、展开定义图时许可随节点保留，并随缓存保存。授予写成函数或块上的标签，如 `#[reassociate, contract]`；`#strict`（设计原则 7.4）撤销默认许可与内层许可，有效许可为空集，读者统一通过 `tag::effectivePermissions` 取得。
 
 ### 6.2 算子的原始数值语义
 
@@ -577,7 +577,7 @@ initial  base                                     // 输出从 base 开始；Com
 | 常量折叠 | 按规范算法折叠（不用任何许可）——永远合法 |
 | 融合（Tiles） | 融合组里每个节点保留自己的许可。把 `a * b` 与 `+ c` 收缩成一条 FMA，要求**两个节点都有** (b)；把一串 `+` 重新加括号，要求**链上每个节点都有** (a) |
 | 复制、特化、求导生成的新节点 | 取触发它的节点的许可（与位置列"新造的节点取触发它的节点的位置"同一规则，图模型 3.8） |
-| 缓存 | 许可列是图块的一部分，随 `.cmo` 保存（10.6 的 (i) 类）；Tiles 的编译缓存把用到的许可放进键 |
+| 缓存 | 许可列是图块的一部分，随 `.cmc` 保存（10.6 的 (i) 类）；Tiles 的编译缓存把用到的许可放进键 |
 
 ### 6.5 授予的写法（示意，细节是 Q1–Q3）
 
@@ -714,12 +714,12 @@ granted = 节点的许可列 ∪ (law.order == Unordered ? {a} : ∅)
 
 > **实施状态（2026-10-16，`lane/opsem-p4`）**：8.1 的声明是 `sem::ResourceSpec`（`camel/core/resource_semantics.h`），作为 `OperatorSemantics::resources`，由 `OperatorTable::declareResources` 登记（没有记录的算子得到 `uri@1.0`，已有记录的次版本加一）；登记检查的第 5 条拒绝自身不一致的声明与和 traits 矛盾的声明。与下文的差别（都是窄读）：
 >
-> - **资源的类**：`Variable`（`var` 单元）、`Object`（就地改的对象）、`Foreign`（模块包装的对象，带名字，如 `tiles:device`）之外，加了 **`Ambient`**：没有值指名的状态（文件系统 `fs`、控制台 `io:stdout`/`io:stdin`、模块的随机数发生器 `rand:generator`、时钟、进程环境），以名字为身份。下文的 `Binding` 只有三类有身份的值；文件与随机数状态没有值指名它，不加这一类就无法声明（任务要求声明它们）。`Unknown` 只是未声明时的保守读法，不能声明。
+> - **资源的类**：`Variable`（`var` 单元）、`Object`（就地改的对象）、`Foreign`（模块包装的对象，带名字，如 `tiles:device`）之外，加了 **`Ambient`**：没有值指名的状态（文件系统 `fs`、控制台 `stdout`/`stdin`、模块的随机数发生器 `rng`、时钟、进程环境），以名字为身份。下文的 `Binding` 只有三类有身份的值；文件与随机数状态没有值指名它，不加这一类就无法声明（任务要求声明它们）。`Unknown` 只是未声明时的保守读法，不能声明。
 > - **区域**：`Mapped` 不另存表达式，而是指明节点下标实例里的哪一张映射（某个操作数的访问映射或写映射），区域就是该映射在域上取到的元素；`regionBounds` 给出包围盒，`regionsMayOverlap` 判断重叠（算不出就按整体）。今天没有声明 `Mapped` 区域的算子（张量没有就地算子），由测试用手造的实例覆盖。
 > - **结果**：`ResultAlias` 照 8.1；另有 `allocates`：结果是新的资源（`:var/new` 新建单元，`tiles:upload` 新建设备内存）。
 > - **外部效应与 traits**：声明的 `externalEffect` 只能在 traits 允许外部效应时为真（不是 pure、不是 stateOnly）；反过来可以细化：赋值族在 traits 里算外部效应（没有"写变量"这一位），资源声明说它只写程序自己的单元。效应摘要（`effectSummaryOf`）仍由 traits 算出，不变（8.3）。随机数的生成照 8.1 的注释算外部效应，见 14.4 的待问。
 > - **查询**（`camel/runtime/resources.h`）：`resourcesOf`（每个节点：OPER 读声明；FUNC、LOOP、被调函数可知的 CALL 读所运行的图的足迹并映射到节点的输入）、`footprintOf`（一张图对它收到的资源、环境状态与程序外做了什么；递归按最小不动点，按图的序号与声明纪元缓存）、`originOf`/`mayAlias`（同一次激活里两个不同的新建、或新建与收到的值，不是同一资源；两个端口可能是）、`resourceConflict`（`Resource`：重叠区域且至少一写；`External`：都有外部效应）、`dependsOn`（只看数据边）与 `orderedBefore`（含控制边）分开（8.2）、`requiredOrderings`（一张图里必须保持先后的成对节点，分支的不同臂不算一对；图没有排序的一对即设计原则第 15 节未决的情形）。
-> - **已声明**：`:var/*` 与赋值族、控制台与 profiler、`fs`、`random`、`time`、`os`、`sys`、`nn:save_params`、`para:rendezvous`、`algo` 的就地形式、张量的有效应算子、Tiles 的算子（14.4）。`:mark/` 高阶算子、`python`、`pyplot`、`onnx`、`autodiff` 未声明，照保守读法，与今天一样排序。
+> - **已声明**：`:var/*` 与赋值族、控制台与 profiler、`fs`、`random`、`time`、`process`、`env`、`nn:save_params`、`para:rendezvous`、`algo` 的就地形式、张量的有效应算子、Tiles 的算子（14.4）。`:mark/` 高阶算子、`python`、`pyplot`、`onnx`、`autodiff` 未声明，照保守读法，与今天一样排序。
 >
 > 细节见 `docs/technical/41_resources_and_definitions.md` 第 1 节。
 
@@ -840,14 +840,14 @@ func softmax_def(x: Tensor<f32>, axis: int): Tensor<f32> {
 > - 每次读都比较（发布构建里也比较）；过期读为"没有"并删除。`Dependency::Cone` 的种类（`core.shape`）在序号变了时重算锥散列，相同即重新盖印（`revalidated`）。
 > - 10.5 的 `tx.keep` 与提交时对 `keep` 下来的事实的两级校验**没有做**（本轮的范围是登记、存放、印记、改写时的失效与重算）；校验器是 `FactStore::verify`（重算并比较），测试用它确认改写之后没有任何过期事实被沿用。
 > - 第 (i) 类的种类（`core.permissions`）每次从图上读，事实库拒绝存放；第 (iii) 类必须带目标散列，登记时不许有编码与解码（核心从不持久化它）。
-> - 持久化（10.6）：没有 `.cmo` 缓存，只实现挂钩与往返测试：可移植的图内容散列（含下面所有的图；算子按 URI、语义键与版本、traits）、`PortableFact` 的文本形式、导出与装载时的核对。
+> - 持久化（10.6）：没有 `.cmc` 缓存，只实现挂钩与往返测试：可移植的图内容散列（含下面所有的图；算子按 URI、语义键与版本、traits）、`PortableFact` 的文本形式、导出与装载时的核对。
 > - 种类的键是 `owner.name`，`core.` 归核心，`tiles.` 归 Tiles 模块（任何模块的前缀都归它自己）。
 
 ### 10.1 什么是事实，什么不是
 
 | 类 | 是什么 | 放在哪 | 进缓存 |
 |---|---|---|---|
-| **(i) 不能从图上恢复的语义信息** | 程序写下的数值许可、用户写的约束（命名维度的关系已经在类型里）、定义图的绑定 | **图的内容**：许可列、类型、算子表的声明 | 必须：随图块保存（`.cmo`），参与图的内容散列 |
+| **(i) 不能从图上恢复的语义信息** | 程序写下的数值许可、用户写的约束（命名维度的关系已经在类型里）、定义图的绑定 | **图的内容**：许可列、类型、算子表的声明 | 必须：随图块保存（`.cmc`），参与图的内容散列 |
 | **(ii) 可推导的事实** | 节点的实例（域、映射）、值域、形状的细化、别名分析、资源区域的细化、循环不变量 | **事实库**（本节） | 一般重算；缓存时必须带依赖印记，装载时验 |
 | **(iii) 与目标相关的结果** | CUDA 布局、分块、调度、调优结果、生成的代码 | **不在核心**：Tiles 自己的编译缓存 | Tiles 的缓存，键见 10.6 |
 
@@ -927,19 +927,19 @@ struct Stamp {
 | 类 | 做法 |
 |---|---|
 | (i) | 许可列是图块里的一列（图模型 4.1 的排布加一个可选的列；4.5 的 `GRPH` 节区随之多一列）；定义图的绑定在 `OPRS` 的算子项里。它们是图的内容，进内容散列，所以不需要单独的失效规则 |
-| (ii) | **第一阶段不缓存**，每个进程重算。以后若要缓存：一个可选的 `FACT` 节区，每条事实以"图块的内容散列 + 锥散列 + 用到的 `OperatorKey` 与版本 + 事实种类与版本"为印记（进程内的 `GraphId`、修订号、`OperId` 都不能进文件）；装载时逐条验，不符即丢弃。注意 `.cmo` 存的是前端建成的图、不是任何遍之后的图（图模型 4.6），所以可缓存的只是关于前端产出的事实 |
-| (iii) | Tiles 的编译缓存，与 `.cmo` 分开。键至少包括：特化后程序的内容散列（今天的生成源码文本可以充当）、用到的每个 `OperatorKey` 与版本、每个节点的许可、硬件（计算能力、设备型号）、驱动与 NVRTC 版本、Tiles 的版本、编译选项（包括 6.9 第 4 条的精度选项）、调度选项 |
+| (ii) | **第一阶段不缓存**，每个进程重算。以后若要缓存：一个可选的 `FACT` 节区，每条事实以"图块的内容散列 + 锥散列 + 用到的 `OperatorKey` 与版本 + 事实种类与版本"为印记（进程内的 `GraphId`、修订号、`OperId` 都不能进文件）；装载时逐条验，不符即丢弃。注意 `.cmc` 存的是前端建成的图、不是任何遍之后的图（图模型 4.6），所以可缓存的只是关于前端产出的事实 |
+| (iii) | Tiles 的编译缓存，与 `.cmc` 分开。键至少包括：特化后程序的内容散列（今天的生成源码文本可以充当）、用到的每个 `OperatorKey` 与版本、每个节点的许可、硬件（计算能力、设备型号）、驱动与 NVRTC 版本、Tiles 的版本、编译选项（包括 6.9 第 4 条的精度选项）、调度选项 |
 
 ### 10.7 与图模型第 5、9 步的衔接
 
 - **第 5 步（快照与局部提交）**给出稳定的 `GraphId` 与修订号，事实库挂在快照上，随快照共享与释放。本稿的事实库可以先按 10.4 的过渡方案实现，第 5 步之后把印记的键换掉，接口不变。
-- **第 9 步（`.cmo`）**：`OPRS` 节区的每个算子项加 `OperatorKey` 的版本（4.1 的装载规则）；`GRPH` 的图块加许可列；`FACT` 节区是可选的后续项。图模型 4.7 的失效条件第 5 条"`OPRS` 里每个算子在本进程里存在且签名相同"扩充为"且语义版本兼容"。
+- **第 9 步（`.cmc`）**：`OPRS` 节区的每个算子项加 `OperatorKey` 的版本（4.1 的装载规则）；`GRPH` 的图块加许可列；`FACT` 节区是可选的后续项。图模型 4.7 的失效条件第 5 条"`OPRS` 里每个算子在本进程里存在且签名相同"扩充为"且语义版本兼容"。
 
 ---
 
 ## 11. `LOOP` 的消费接口
 
-> **实施状态（2026-10-15，`lane/loop`）**：`LOOP` 节点、11.1 的访问器（`include/camel/runtime/loop.h`，`camel::runtime::LoopView`、`loopOf`、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）、11.4 的私有降级（`include/camel/runtime/loop_lowering.h`，`lowerLoopsToTailRecursion`，结果是脱离主程序的副本）都已实现。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condGraph()` 在 `For` 时返回 `nullptr` 而不是空的 `optional`；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由节点算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实已随事实库（3b）实现（第 10 节开头）。**2026-10-20 补：收集输出（11.6）已实现**，节点载荷带收集槽计数，`LoopView` 有对应的访问器，四个执行器与降级都按 11.6 收集；自动微分把它当磁带（11.6，H4d 第二步）。给 Tiles 的读法见 11.5。
+> **实施状态（2026-10-15，`lane/loop`；2026-10-21 H43 更新）**：`LOOP` 节点、11.1 的访问器（`include/camel/runtime/loop.h`，`camel::runtime::LoopView`、`LoopDraftView`、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）都已实现；条件与循环体是图里的两个控制区域，11.4 的尾递归降级已删除。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condRegion()` 在 `For` 时为 0（没有条件区域）；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由区域算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实已随事实库（3b）实现（第 10 节开头）。**2026-10-20 补：收集输出（11.6）已实现**，节点载荷带收集槽计数，`LoopView` 有对应的访问器，四个执行器都按 11.6 收集；自动微分把它当磁带（11.6，H4d 第二步）。给 Tiles 的读法见 11.5。
 
 `LOOP` 节点本身（语法、建图、编码、校验、打印、降级）是图模型第 10 步与循环设计稿第 7 节的工作（实施情况见图模型第 7 节）。本节规定的是消费者看到的接口，按图模型 3.5 的卡片与 3.10 的裁定（条件图与循环体图共用一份捕获表；`for … while` 是同一种节点的第三种形式；多个状态时循环体返回元组，循环的值也是这个元组；`do` 式的写法）。
 
@@ -969,19 +969,16 @@ class LoopView {
     // Inputs of the LOOP node (outer graph)
     std::optional<NodeId> iterable() const;          // For/ForWhile: Norm input 0
     NodeId initialState(size_t j) const;             // the Norm input after the iterable
-    std::span<const NodeId> captures() const;        // With inputs; shared by cond and body
+    std::vector<NodeId> externalInputs(bool constants = false) const; // values the regions read from outside
 
-    // The two graphs
-    std::optional<GraphId> condGraph() const;        // While/ForWhile
-    GraphId bodyGraph() const;
-
-    // Correspondence between the node and the graphs' ports
-    NodeId condStateParam(size_t j) const;           // cond's j-th Norm port
-    std::optional<NodeId> bodyElementParam() const;  // For/ForWhile: body's first Norm port
+    // The two control regions (ids in the graph's region table)
+    uint32_t condRegion() const;                     // While/ForWhile; 0 when For
+    uint32_t bodyRegion() const;
+    std::vector<NodeId> regionNodes() const;         // the nodes of both regions
+    // Correspondence between the node and the regions' ports
+    NodeId condStateParam(size_t j) const;           // cond region's j-th Norm port
+    std::optional<NodeId> bodyElementParam() const;  // For/ForWhile: body region's first Norm port
     NodeId bodyStateParam(size_t j) const;
-    NodeId condCapturePort(size_t c) const;          // captures()[c] <-> cond capture port c
-    NodeId bodyCapturePort(size_t c) const;          //               <-> body capture port c
-
     // The body's result: (next state) or (s > 0) (next state…, collected values…)
     NodeId nextState() const;                        // the body graph's result node
     bool nextStateIsTuple() const;                   // k > 1 or s > 0
@@ -1024,10 +1021,10 @@ func row_sums(rows: Tensor<f32>[]): (Tensor<f32>, int) {
 
 `For` 形式的循环有一个 `Sequential` 维 `t ∈ [0, len(xs))`；元素端口的访问是 `xs(t)`；状态是一个递推。核心把它作为 `LOOP` 节点的一条可推导事实（`core.loopDomain`）给出；`While` 形式的维度上界未知（参数，没有值）。
 
-### 11.4 降为尾递归的时机
+### 11.4 循环始终是结构化的
 
-- 核心提供 `lowerLoopToTailRecursion(Rewrite &tx, GraphId graph, NodeId loop)`（图模型 3.5 卡片末尾的固定改写）。
-- **它只在各后端自己的入口、在后端私有的事务里调用**：后端从程序的快照开一个事务、降级、在自己的副本上工作，从不把降级提交回共享的程序。标准流水线里的遍（`std::opt`、`std::opt::inline` 等）**不得降级 `LOOP`**；需要它的遍把它当不透明节点（循环设计稿第 7 节第 1 步）。这样 Tiles 在流水线的任何位置看到的都是结构化的 `LOOP`。
+- 循环在程序的图里始终是 `LOOP` 节点加两个控制区域（条件与循环体）。没有任何遍或后端把它降级成子图；需要把条件与循环体当作图来读的代码（只有自动微分的回传图）读的是这两个区域的节点与结果。
+- **每个后端读同一个程序、同一组区域**：`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::cpp` 都按 `camel/execute/loop_frame.h` 的轮次协议执行这两个区域；宏求值器同样。Tiles 在流水线的任何位置看到的都是结构化的 `LOOP`。
 - 展开、分块、流水化一个循环是否合法，由 Tiles 判断；核心提供的是上面的访问器、11.3 的迭代域、循环体节点"只依赖捕获端口"（循环不变量）这类可推导事实。
 
 ### 11.5 给 Tiles 的说明：怎样读一个 `LOOP`
@@ -1038,44 +1035,43 @@ namespace rt = camel::runtime;
 
 for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
     if (g->node(ref)->kind != rt::GCNodeKind::Loop) continue;
-    const rt::LoopView loop(*g, ref);
+    const rt::LoopView loop(program, *g, ref);
     // 形式与状态
     loop.kind();                 // While / For / ForWhile
     loop.stateCount();           // k；loop.stateType(j)
     loop.collectionCount();      // s；loop.valueType() 是状态、k 元组或 (状态…, 数组…)
-    // 外层图里的输入
     loop.iterable();             // For/ForWhile：被遍历的元素数组（Norm 0；序列不是数组时为转换它的算子节点）
     loop.initialState(j);        // 第 j 个状态的初值
-    loop.captures();             // With 输入，两张子图共用
-    // 两张子图与端口的对应
-    loop.condGraph();            // While/ForWhile；For 时为 nullptr
-    loop.bodyGraph();
-    loop.condStateParam(j);  loop.bodyStateParam(j);  loop.bodyElementParam();
-    loop.condCapturePort(c); loop.bodyCapturePort(c);  // 对应 captures()[c]
+    loop.externalInputs();       // 两个区域从外面读的值，按首次读取次序
+    // 两个控制区域
+    loop.condRegion();           // While/ForWhile；For 时没有条件区域
+    loop.bodyRegion();
+    loop.regionNodes();          // 两个区域里的节点
+    loop.condStateParam(j); loop.bodyStateParam(j); loop.bodyElementParam();
     // 下一轮的状态与收集值
-    loop.nextState();            // 循环体图的结果节点（k > 1 或 s > 0 时是元组）
+    loop.nextState();            // 循环体区域的结果节点（k > 1 或 s > 0 时是元组）
     loop.nextStateComponent(j);  // 结果是元组 FILL 时，填第 j 个位置的节点
     loop.nextCollectionComponent(c); // 填第 k + c 个位置（收集值）的节点
-    loop.effects();              // 两张子图之并，加"可能故障""可能不终止"
+    loop.effects();              // 两个区域之并，加"可能故障""可能不终止"
 }
 ```
 
 - 语义：每一轮先求条件（`While`、`ForWhile`；条件看得到状态，看不到元素），再取下一个元素（`For`、`ForWhile`），再求循环体；条件为假或元素取完即结束；循环的值是最后的状态。`camel/core/loop_kind.h` 写明了这一点。
-- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它。**运行时 `tiles.run<f>` 等在每个后端上收到的都是程序原来的 `f` 的图**（`lane/facts` 起）：`std::nvm` 原生执行 `LOOP`；`std::fvm`、`std::jit`（默认）、`std::prl`、`std::cpp` 在私有副本上降级，副本里每张图记着它复制自程序的哪张图（`GCGraph::originalGraph()`），声明了 `inspectsGraphs` 的算子（`OperatorTraits::inspectsGraphs`：Tiles 的 `run`、`run_device`、`source`、`inspect`、`benchmark`，`onnx:export_model`，`autodiff:grad`、`with_grad`）的每个函数类型的操作数在副本里先经过 `:graph/original`，把副本的函数值换回原图、闭包不变。所以在降级的后端上 Tiles 看到的也是带 `LOOP` 的 `f`，不是 `f.loopN.rec`、`.next`、`.done`。新的模块算子若读函数值的图，同样在登记时声明 `inspectsGraphs`。
-- Tiles 自己决定原生处理还是在自己的入口降级：降级用 `lowerLoopsToTailRecursion(context, root)`，它返回一个脱离主程序的副本，不改共享的程序。
+- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它，每个后端都在程序自己的图上执行，所以 `tiles.run<f>` 等在所有后端上收到的都是程序原来的 `f` 的图。声明了读图的算子（`OperatorTraits::readsGraphs`：Tiles 的 `run`、`run_device`、`source`、`inspect`、`benchmark`，`onnx:export_model`，`autodiff:grad`、`with_grad`）直接拿到程序里的函数值，不需要把副本换回原图。新的模块算子若读函数值的图，同样在登记时声明 `readsGraphs`。
+- 没有"在入口降级"这条路径：Tiles 直接读 `LoopView` 的两个区域。
 - 校验已保证：初值能赋给状态类型、循环体返回状态类型、条件返回 `bool`、元素端口类型是数组的元素类型、两张子图的捕获端口个数、次序、类型相同并与 `captures()` 一一对应（I18、I19）。
 
 ### 11.6 收集输出（`s > 0`）
 
-循环可以在每轮交出一个值，由执行器收进数组：这是 `s` 个**收集槽**，节点载荷里的 `collectionCount`。它是 H4d 的第一步（`docs/handover/reports/H4.md`），为自动微分的磁带、以及将来 ONNX `Loop` 的 scan output 准备；源码语法尚未定义如何写收集槽，测试用一个只读遍给循环加槽。
+循环可以在每轮交出一个值，由执行器收进数组：这是 `s` 个**收集槽**，节点载荷里的 `collectionCount`。它是 H4d 的第一步（`handover note ⟨77e9e83⟩ (H4)`），为自动微分的磁带、以及将来 ONNX `Loop` 的 scan output 准备；源码语法尚未定义如何写收集槽，测试用一个只读遍给循环加槽。
 
 - **节点的值与循环体的返回值**：`k + s` 元组。值的前 k 个分量是状态（与无收集槽时相同，所以忽略磁带的消费者读到状态的位置不变），后 s 个是 `Tc[]`；循环体返回 `(s1' … sk', v1 … vs)`，`vc` 的类型是 `Tc`。`s = 0` 时节点形状与 11.1 完全一样。
 - **计数为什么必须在节点里**：`k = 2` 时值 `(状态, 数组)` 与“两个状态、第二个恰是数组”在类型上无法区分；类型本身不能说明有收集槽。
-- **执行**：每个执行器（NodeVM、FastVM 原生循环、宏求值器）与私有降级（FastVM/JIT/PRL）为每个槽建一个空数组，把它与状态放在同一个工作元组里（节点的槽位、后端的帧里，因而被 GC 追踪），每轮把 `vc` **原地追加**到对应数组。数组由这次循环独占（循环体看不到它们），追加是 O(1) 摊还、总计 O(n)；没有轮数上限，内存耗尽按 `RuntimeDiag::MemoryExhausted` 在循环的源位置报出。
-- **降级**：新增两个隐藏算子 `:loop/collector`（建空数组，循环前一次）与 `:loop/collect`（原地追加，返回磁带），它们不是纯的（按算子语义的默认），因此不会被重排或消除；降级后的 `rec` 仍然只把状态传给条件图与循环体图。
+- **执行**：每个执行器（NodeVM、FastVM 原生循环、宏求值器）为每个槽建一个空数组，把它与状态放在同一个工作元组里（节点的槽位、后端的帧里，因而被 GC 追踪），每轮把 `vc` **原地追加**到对应数组。数组由这次循环独占（循环体看不到它们），追加是 O(1) 摊还、总计 O(n)；没有轮数上限，内存耗尽按 `RuntimeDiag::MemoryExhausted` 在循环的源位置报出。
+- **收集槽在区域里**：循环体区域的结果的末尾 s 个分量是收集值；执行器每轮把 `vc` 原地追加到对应数组，不需要另建算子。
 - **消费**：`LoopView` 的 `collectionCount`、`valueIsTuple`、`valueComponentCount`、`stateValueIndex`、`collectionValueIndex`、`collectionArrayType`、`collectionElemType`、`nextStateIsTuple`、`bodyResultType`、`bodyStateResultIndex`、`bodyCollectionResultIndex`、`nextCollectionComponent` 以及自由函数 `loopValueComponent`、`loopStateValue`、`loopCollectedValue`；自动微分不必自己重新推导布局。改写一个还没编码的循环（自动微分给自己建的两个循环）用同一组访问器的 `LoopDraftView`（`camel/runtime/loop.h`，读的是 `GraphDraft` 里的节点）。
 - **自动微分**（H4d 第二步，2026-10-20）：磁带就是这些收集槽。残差是循环体回传真正读到的值（每条导数规则的入运算；循环体里一次调用的回传闭包整个作为一个 `Function` 值收进去，数组元素可以是函数，GC 追踪），所以一次循环的磁带是 `s` 个数组、每轮原地追加，没有复制。反向是一个 `While` 型 `LOOP`（`collectionCount = 0`）：状态是轮次下标加各状态与各捕获的梯度（只给能承载梯度的类型留位置），循环体用 `:op/idx_arr` 读这一轮的残差、调循环体的回传、接状态梯度、累加捕获梯度；零轮时状态梯度为种子、捕获梯度为零。循环体回传不读残差时仍收一个常量 `1`，反向循环靠它知道轮数。循环迭代或捕获的数组若依赖被微分的参数，按设计原则 9.9 在循环处拒绝并指出数组位置；不依赖的可以读，梯度在读处停住。
-- **导出**：残差是普通值（数组），不是闭包，所以 ONNX 与 `std::cpp` 都能表示：磁带是前向 `Loop` 的 scan output、反向 `Loop` 的输入。导出本身仍未做；`docs/handover/reports/H4.md`"H4d 第二步"列了它需要什么（其中循环体里一次调用的回传闭包不能作为 ONNX 的值，要按捕获的叶子展开）。
+- **导出**：残差是普通值（数组），不是闭包，所以 ONNX 与 `std::cpp` 都能表示：磁带是前向 `Loop` 的 scan output、反向 `Loop` 的输入。导出本身仍未做；`handover note ⟨77e9e83⟩ (H4)`"H4d 第二步"列了它需要什么（其中循环体里一次调用的回传闭包不能作为 ONNX 的值，要按捕获的叶子展开）。
 
 ---
 
@@ -1087,7 +1083,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 |---|---|---|---|
 | **1** | `OperatorKey` 与版本；`OperatorSemantics` 的记录与 `declareSemantics`/`semantics`/`bind`；4.4 的登记检查；`NumericSemantics` 与五个许可位；许可列（存储与转储，全为 0；前端标注等 Q1–Q3）；`OpDef` 加 `semantics` 字段 | 稳定的头文件与查询接口；可以把按名字字符串的分派换成按声明（第 13 节）；知道每个算子是哪一类数值、对哪些许可敏感 | 登记检查的单元测试（每条检查一个被拒绝的声明）；`bind` 的版本规则；许可列在 `std::rgir` 里可见、内联与克隆后保持（6.4 的表逐行一例） |
 | **2** | 第一批声明：逐元素族（`add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`、`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`）连同广播；`transpose`、`permute`、`slice`、`reshape`；`sum`/`mean`/`max`/`min` 的按轴与全量、`sum_to`；`matmul` 及其 k 维的律；内建 `:op/` 的 f64 标量算子 | 这些算子的实例（域、映射、律）；Tiles 的 `reindex`、广播、归约的累加选择都从声明推出 | **声明的性质测试**：一个只用于测试的"声明求值器"——按实例遍历域、按访问映射取值、按律与规范算法合并——对随机形状（含空、1、奇数、负轴、广播）与特殊值（NaN、±∞、±0、次正规数）算出结果，与 CPU 内核**逐位**比较（`Bounded` 类按 ulp 上界）；映射的健全性测试：小形状上穷举域，验证声称 `Unreachable` 的访问都在界内、`Unique` 的写确实单射。这一步会把 2.3 与 6.9 的核心审计项变成失败的测试，先登记为已知缺陷，等 Q4–Q7 裁定后修 |
-| **3a** | `LOOP` 的消费接口（第 11 节），随图模型第 10 步 | 结构化的 `LOOP` 与访问器；降级只在入口 | 前端产出的三种形式各一例，访问器逐项核对；I18–I20 各一个违反的变异；降级后四个后端输出一致 |
+| **3a** | `LOOP` 的消费接口（第 11 节），随图模型第 10 步 | 结构化的 `LOOP` 与访问器；每个后端读同一组区域 | 前端产出的三种形式各一例，访问器逐项核对；I18–I20 各一个违反的变异；四个后端输出一致 |
 | **3b**（已实现，`tx.keep` 与两级校验除外，见第 10 节开头） | 事实库：种类登记、印记、过渡期的图序号、`tx.keep`、两级校验 | 在核心的事实库里存放自己的分析结果，并得到"永不读到过期事实"的保证 | 变异测试：算一条事实 → 改上游节点 / 改形参类型 / 改被调图 / 换声明 → 读出为"没有"；发布构建下同样的测试；`--verify-graphs` 下一个故意 `keep` 错误事实的遍被提交拒绝 |
 | **4**（已实现，gather/scatter 的声明除外：没有这样的算子；见第 8、9 节开头） | 资源区域与别名的声明（第 8 节）；`Indirect` 访问与 gather/scatter 的声明；定义图（第 9 节）的登记、递归检测、展开遍 | 资源与别名事实；有定义图的算子可以展开或保留 | 就地算子与 `var` 形参的声明与效应摘要一致；定义图与内核的逐位比较（这会暴露 `softmax`，见 Q10）；有环的定义图被拒绝 |
 
@@ -1112,7 +1108,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 | 递归检测与深度 64（`compiler.cpp:145`） | 不变（这是 Tiles 对直接调用的展开策略）；定义图的递归由核心在登记时拒绝 | |
 | 形状推断复用 `infer` | 不变 | |
 | 布尔分支的特化 | 不变 | |
-| `LOOP`（今天不支持） | 第 11 节的访问器；Tiles 自己决定原生降级还是在入口降为尾递归 | |
+| `LOOP`（今天不支持） | 第 11 节的访问器；后端直接执行两个区域 | |
 | 编译缓存按源码文本（`cuda_backend.cpp:234-275`） | 进程内不变；持久化时按 10.6 的 (iii) 扩充键 | |
 | 存储计划、启动维度、共享内存、流、模块租约 | 不变，属于 Tiles | |
 
@@ -1136,7 +1132,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 
 - `max`/`min`（逐元素的 `maximum`/`minimum`、`max_axis`/`min_axis`）是 IEEE 754-2019 的 `maximum`/`minimum`：任一边是 NaN 得**规范的 quiet NaN**（`0x7fc00000`，符号位为 0，无载荷；与输入是哪个 NaN 无关，所以任意次序、任意分块逐位相同），`-0 < +0`。Tiles 的 `max_axis` 今天保留"首个 NaN 与 ±0 的平局规则"并带下标比较，要改为这条规则，带下标的并行比较可以去掉（6.9 第 6 条）。CUDA 的 `fmaxf` 不是它：用"两边有 NaN 则规范 NaN，否则相等时按位与（取 `+0`）、不等时取大"的比较序列。
 - `relu(x) = maximum(x, +0)`：NaN 得规范 NaN，`-0` 得 `+0`。Tiles 今天的 `a<0.0f?0.0f:a` 对 NaN 给原 NaN、对 `-0` 给 `-0`，两处都要改（6.9 第 3 条）。
-- `matmul` 的规范算法是按 k 递增的 FMA 链，从 `+0` 开始（Q7 取乙）：Tiles 现有的 `fmaf` 累加符合；K 尾部"排除而不是补 0"仍是必要的。CPU 的 GEMM 已改为同一算法（以前每 256 个 k 一块分别从 0 累加再相加），`linear`/`matmul_add` 先算完链再加偏置。
+- `matmul` 的规范算法是按 k 递增的 FMA 链，从 `+0` 开始（Q7 取乙）：Tiles 现有的 `fmaf` 累加符合；K 尾部"排除而不是补 0"仍是必要的。CPU 的 GEMM 已改为同一算法（以前每 256 个 k 一块分别从 0 累加再相加），`linear` 先算完链再加偏置。库实现（CBLAS）只改累加的顺序与分组，是节点属性 `tensor.kernel` 上的选择，算子是 `matmul`（9.6；H102）。
 - `softmax` 的 CPU 内核与定义 `exp(x - m) / sum(exp(x - m))` 逐位一致（除法，不是乘倒数；和在 f64 里累加、最后舍入为 f32）。Tiles 把 softmax 写成组合，逐位比较时以定义为准。
 
 **查询一个算子的数值语义：**
@@ -1171,7 +1167,7 @@ bool any        = graph->hasNodePermissions();
 ```
 
 - 许可只由程序写 `@numeric(...)` 授予（函数或块，词法上嵌在其中的臂、循环体、lambda 一起），被调用的函数不继承；没有模块级默认、没有命令行开关，**`tiles.run` 等入口不接受许可**。
-- 许可在 OPER 节点上；内联与克隆后各节点带自己的许可；`std::opt::cse` 与 `tensor::fuse` 不把许可不同的节点合并（融合出的节点带它们共同的许可）。Tiles 自己融合时同样按 6.4 的表：收缩 `a * b + c` 要两个节点都有 `contract`，重新加括号要链上每个节点都有 `reassociate`。
+- 许可在 OPER 节点上；内联与克隆后各节点带自己的许可；`std::opt::cse` 不把许可不同的节点合并。`tensor::fuse` 不合并节点：它把融合组与库实现的选择记成节点属性（`tensor.fusion`、`tensor.kernel`），图上保留原算子，各节点仍带自己的许可（9.6，H102）。Tiles 自己融合时同样按 6.4 的表：收缩 `a * b + c` 要两个节点都有 `contract`，重新加括号要链上每个节点都有 `reassociate`。
 - 编译缓存的键要包含用到的每个 `OperatorKey` 与每个节点的许可（10.6 的 (iii)）。
 - 许可只允许、不要求：没有许可时必须给规范结果；有许可时给规范结果也总是对的。
 
@@ -1245,7 +1241,7 @@ std::optional<sem::StridedView> v = sem::rowMajorView(inst, inst.norm[0], shape)
 
 **CPU 的结果、图的转储、程序的输出都没有变**；事实只在被问到时算、只在 `camel inspect --facts` 里显示。
 
-**函数值的图是程序原来的图**（11.5）：`tiles.run` 等声明了 `OperatorTraits::inspectsGraphs`（`modules/tiles/src/module.cpp` 的 `load()` 里，核心为此对 Tiles 做的唯一改动），所以在 `std::fvm`、`std::jit`、`std::prl` 上 `with.get<::Function *>(0)->graph()` 也是带 `LOOP` 的原图（`modules.tiles` 的 `loop_structure_*`）。
+**函数值的图是程序原来的图**（11.5）：`tiles.run` 等声明了 `OperatorTraits::readsGraphs`（`modules/tiles/src/module.cpp` 的 `load()` 里），所以在任何后端上 `with.get<::Function *>(0)->graph()` 都是带 `LOOP` 的原图（`modules.tiles` 的 `loop_structure_*`）。
 
 **读核心的事实：**
 
@@ -1285,7 +1281,7 @@ auto cached = facts.get<MyLayout>(kLayout, fact::Anchor{graph, ref}, target); //
 
 登记的规则（违反时 `std::invalid_argument`，消息里有键与原因）：键是 `owner.name`；同一个键再登记必须是同一种（版本、值类型、类、范围），返回同一个编号；必须给 `print`；`Dependency::Cone` 必须给锥散列。与目标无关、可由程序推出的结果（例如 Tiles 自己的下标映射复合）可以登记为 `Derived`，带 `compute` 时 `FactStore::verify` 能重算比较。
 
-**印记怎样保护 Tiles**：每条事实带着它锚点所在各图的 `(lineage, serial)`、算子声明的纪元（若种类读声明）与目标散列；每次读都比较（发布构建里也比较），任何一项不同就读为"没有"并删除。`serial` 在某个遍真的改了这张图、或改了它直接间接调用的图时才变（`std::opt::inline`、`std::opt` 的各部分、`std::macro`、特化、后端私有的降级都经由同一个提交）；所以特化成新形状的图是另一张图，旧图上的布局不会被错用；`declareSemantics` 改了算子的声明，读声明的事实全部过期；换了设备或编译选项，`targetHash` 不同。事实是进程内的；跨进程的编译缓存仍由 Tiles 自己保存，键按 10.6 (iii)。
+**印记怎样保护 Tiles**：每条事实带着它锚点所在各图的 `(lineage, serial)`、算子声明的纪元（若种类读声明）与目标散列；每次读都比较（发布构建里也比较），任何一项不同就读为"没有"并删除。`serial` 在某个遍真的改了这张图、或改了它直接间接调用的图时才变（`std::opt::inline`、`std::opt` 的各部分、`std::macro`、特化都经由同一个提交）；所以特化成新形状的图是另一张图，旧图上的布局不会被错用；`declareSemantics` 改了算子的声明，读声明的事实全部过期；换了设备或编译选项，`targetHash` 不同。事实是进程内的；跨进程的编译缓存仍由 Tiles 自己保存，键按 10.6 (iii)。
 
 ### 14.4 第四阶段给 Tiles 的（`lane/opsem-p4`）
 
@@ -1301,7 +1297,7 @@ namespace rt = camel::runtime;
 rt::NodeResources r = rt::resourcesOf(*graph, node);
 for (const rt::NodeAccess &a : r.accesses) {
     a.resource.cls;    // Variable / Object / Foreign / Ambient / Unknown（未声明的保守读法）
-    a.resource.name;   // "tiles:device"、"fs"、"rand:generator"
+    a.resource.name;   // "tiles:device"、"fs"、"rng"
     a.mode;            // Read / Write / ReadModifyWrite
     a.value;           // 同一张图里指名这个资源的节点（anyValue 时为 kInvalidNodeRef）
     a.region;          // Whole / Mapped（某个下标映射取到的元素）/ Unknown
@@ -1340,7 +1336,7 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 保留高层算子（映射到自己的内核）与展开后融合都可以，二者都必须与定义一致：`softmax`、`mean`、`relu`、`sigmoid` 在 CPU 上已逐位一致，Tiles 的实现按同一标准对照（`exp`/`log` 按声明的上界）。Tiles 今天把 softmax 写成组合，正与定义同形；注意定义里"没有元素的张量就是自己的结果"这一分支，以及 `max_axis` 用 IEEE `maximum`（14.1）。
 
 **待问（给负责人）**：
-1. 随机数生成器的效应：按 8.1 的注释算外部效应，于是它与打印、文件之间也保持先后；若定为"程序内部的状态"，调度器就可以让抽样与输出交换次序（它们彼此仍保持先后，因为都读改写 `rand:generator`）。
+1. 随机数生成器的效应：按 8.1 的注释算外部效应，于是它与打印、文件之间也保持先后；若定为"程序内部的状态"，调度器就可以让抽样与输出交换次序（它们彼此仍保持先后，因为都读改写 `rng`）。
 2. ~~`mean` 对空张量：内核与定义的故障种类不同~~ 已按 7.1（"故障也包括在内"）改：内核也报 `DivisionByZero`，与定义的除法相同的诊断（`definitions` 计划的 `mean_empty_fault*` 对照两边的故障种类与消息）。
 3. 定义库在第一次被问到时编译，而不是模块装载时（第 9 节开头的理由）；若要"装载时建出"，每个导入 `tensor` 的程序都要多编一个库。
 

@@ -24,6 +24,11 @@ desc = "Push diagnostics, incremental synchronisation, hover (source spelling of
 case = "../../../cases/tools/lsp/navigation.test.mjs"
 
 [[tests]]
+name = "lsp.types_across_modules"
+desc = "A type name whose declaration is in another module: definition of the name (imported by name and through a module prefix) is the declaration in that module, from the place the compiler recorded for it; the type also completes there."
+case = "../../../cases/tools/lsp/types.test.mjs"
+
+[[tests]]
 name = "lsp.editing"
 desc = "Completion (scope, fields after a dot, module members after ::, on text that does not parse), signature help, rename and its refusals, semantic tokens (var/let, sync)."
 case = "../../../cases/tools/lsp/editing.test.mjs"
@@ -32,7 +37,7 @@ case = "../../../cases/tools/lsp/editing.test.mjs"
 name = "lsp.robustness"
 desc = "Malformed frames, empty and half-written documents, positions outside the text, UTF-16 positions on lines with Chinese text and emoji, a document of 20000 lines, a burst of edits, cancellation: every request is answered and the server stays up."
 case = "../../../cases/tools/lsp/robustness.test.mjs"
-# Slow layer: measured 6.2 s in the full serial run (docs/handover/reports/H10.md).
+# Slow layer: measured 6.2 s in the full serial run (handover note ⟨617198c⟩ (H10)).
 tier = "slow"
 timeout_ms = 180000
 

@@ -202,7 +202,9 @@ Builder &Builder::of(const context_ptr_t &context) {
     ASSERT(context != nullptr, "The graph builder of a program needs its context.");
     auto &session = context->graphBuildSession();
     if (!session) {
-        session = std::make_shared<Builder>(context);
+        // The context's own program declares its modules into the context's export table: other
+        // readers of the program (the semantic analysis, definition lookups) see the same names.
+        session = std::make_shared<Builder>(context, context->programExports());
     }
     return *std::static_pointer_cast<Builder>(session);
 }
@@ -257,8 +259,21 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
                 // Reported (a redeclaration); the declaration is left out.
             }
         }
-        // What step two builds, in the order it is written; and the export list.
+        // The body-less declarations are exported as the operator groups of their names once
+        // all of them have been read: the group of a name is its set of overloads (handover
+        // H19, step 1). A module written in Camel otherwise exports through the program's
+        // table; an operator group is the module's own, as it is for a C++ module. The export
+        // list is read first: a declaration the module does not export is a private operator of
+        // the module (handover H94, ruling 3).
         GCT::node_ptr_t expt = nullptr;
+        for (size_t i = 0; i < root->size(); ++i) {
+            if (root->at(i)->type() == GCT::NodeKind::EXPT) {
+                expt = root->at(i);
+                break;
+            }
+        }
+        exportNativeOperators(expt);
+        // What step two builds, in the order it is written.
         for (size_t i = 0; i < root->size(); ++i) {
             const GCT::node_ptr_t &child = root->at(i);
             auto declaration             = std::make_unique<TopLevelDeclaration>();
@@ -267,6 +282,9 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
             if (child->type() == GCT::NodeKind::EXPT) {
                 expt = child;
                 continue;
+            }
+            if (child->type() == GCT::NodeKind::FUNC && child->nativeDeclaration()) {
+                continue; // a declaration of an operator: no graph of its own
             }
             if (child->type() == GCT::NodeKind::FUNC) {
                 FunctionType *declared = tt::as_ptr<FunctionType>(child->at(0)->dataType());

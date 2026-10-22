@@ -157,6 +157,18 @@ class Adapter {
     }
 
   private:
+    /// Why the worker is gone (or why it is about to be gone). Every request that cannot be
+    /// served is answered from this, so the reason it names is the reason that holds, not the
+    /// reason the state of the socket suggests at the moment the request happens to arrive.
+    enum class EndReason {
+        None,
+        Finished,     // the program ended by itself: it ran to its end, or failed
+        Terminated,   // the client asked for the end, and the program did not reach one
+        LaunchFailed, // the program never started
+        WorkerGone,   // the worker died without reporting a finished run
+        Disconnected, // the client left: the session is over
+    };
+
     // ---- the wire -------------------------------------------------------------------------
 
     std::optional<std::string> readMessage() {
@@ -255,18 +267,112 @@ class Adapter {
         if (port_ == 0) {
             return json{{"ok", false}, {"error", "No program is being debugged: launch first."}};
         }
+        // See workerCallMutex_: the end of the run must not kill the worker between this POST
+        // and its answer, and a command must not reach a worker the end has already decided
+        // about.
+        std::lock_guard<std::mutex> inFlight(workerCallMutex_);
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            if (endReason_ != EndReason::None) {
+                return json{{"ok", false}, {"error", endMessageLocked()}};
+            }
+        }
         httplib::Client client("127.0.0.1", port_);
         client.set_connection_timeout(5, 0);
         client.set_read_timeout(timeoutSec, 0);
         auto r = client.Post("/api/debug/" + command, args.dump(), "application/json");
         if (!r) {
-            return json{{"ok", false}, {"error", "The program being debugged has ended."}};
+            // The command did not reach an answer. Say what is known about the session: the
+            // end of the run, or a worker that stopped answering.
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            return json{{"ok", false}, {"error", endMessageLocked()}};
         }
         json answer = json::parse(r->body, nullptr, false);
         if (!answer.is_object()) {
             return json{{"ok", false}, {"error", "The debuggee gave no usable answer."}};
         }
         return answer;
+    }
+
+    /// The same request lifecycle for the worker's other HTTP API (the per-pass snapshots):
+    /// one lock, and a failure that names the end of the session rather than guessing it.
+    bool workerGet(const std::string &url, json &body, std::string &error, int timeoutSec = 30) {
+        if (port_ == 0) {
+            error = "No program is being debugged: launch first.";
+            return false;
+        }
+        std::lock_guard<std::mutex> inFlight(workerCallMutex_);
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            if (endReason_ != EndReason::None) {
+                error = endMessageLocked();
+                return false;
+            }
+        }
+        httplib::Client client("127.0.0.1", port_);
+        client.set_connection_timeout(5, 0);
+        client.set_read_timeout(timeoutSec, 0);
+        auto response = client.Get(url);
+        if (!response) {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            error = endMessageLocked();
+            return false;
+        }
+        json answer = json::parse(response->body, nullptr, false);
+        if (response->status != 200 || !answer.is_object()) {
+            error = answer.is_object() ? errorOf(answer) : "Invalid pass snapshot response.";
+            return false;
+        }
+        body = std::move(answer);
+        return true;
+    }
+
+    /// What a request that the end of the session makes impossible is told. The reason is
+    /// named, so "the program being debugged has ended" is only said when the program ended.
+    static std::string textOf(EndReason reason, int signal, int exitCode) {
+        switch (reason) {
+            case EndReason::Finished:
+                return "The program being debugged has ended.";
+            case EndReason::Terminated:
+                return "The program being debugged was terminated.";
+            case EndReason::LaunchFailed:
+                return "The program did not start: its launch failed.";
+            case EndReason::WorkerGone: {
+                std::ostringstream text;
+                text << "The debugger's worker exited unexpectedly";
+                if (signal != 0) {
+                    text << " (signal " << signal << ")";
+                } else {
+                    text << " (exit code " << exitCode << ")";
+                }
+                text << ".";
+                return text.str();
+            }
+            case EndReason::Disconnected:
+                return "The debug session has ended.";
+            case EndReason::None:
+                break;
+        }
+        return "The debugger's worker did not answer: the connection to it was lost.";
+    }
+
+    std::string endMessageLocked() const { return textOf(endReason_, endSignal_, endExitCode_); }
+
+    /// Records why the session is over and kills the worker, in one critical section that a
+    /// command cannot slip into: a command either lands before it (the worker answers) or after
+    /// it (the adapter answers from the recorded reason).
+    void endSession(EndReason reason, int code) {
+        std::lock_guard<std::mutex> inFlight(workerCallMutex_);
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            if (endReason_ == EndReason::None) {
+                endReason_ = reason;
+            }
+            if (!programExit_) {
+                programExit_ = code;
+            }
+        }
+        killWorker();
     }
 
     static std::string errorOf(const json &answer) {
@@ -293,6 +399,13 @@ class Adapter {
         bool expected;
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
+            if (endReason_ == EndReason::None) {
+                // No end of the run was decided: the worker died on its own. Remember why, so
+                // a request that arrives before the adapter exits is told the truth.
+                endReason_   = EndReason::WorkerGone;
+                endSignal_   = signal;
+                endExitCode_ = exitCode;
+            }
             expected = programExit_.has_value();
             code     = programExit_.value_or(signal != 0 ? 128 + signal : exitCode);
         }
@@ -418,13 +531,11 @@ class Adapter {
             } else if (outcome == "terminated") {
                 code = kExitTerminated;
             }
-            {
-                std::lock_guard<std::mutex> lock(stateMutex_);
-                programExit_ = code;
-            }
             // The worker has flushed the program's output before it reported the end; what is
-            // still in the pipes is forwarded before the exit callback runs.
-            killWorker();
+            // still in the pipes is forwarded before the exit callback runs. The answer to the
+            // command that let the program finish may still be on its way: `endSession` waits
+            // for it, then records that the program ended, then kills the worker.
+            endSession(EndReason::Finished, code);
             return true;
         }
         return false;
@@ -512,7 +623,7 @@ class Adapter {
         }
         if (command == "disconnect") {
             quiet_.store(true);
-            killWorker();
+            endSession(EndReason::Disconnected, kExitTerminated);
             ok();
             return true;
         }
@@ -775,13 +886,7 @@ class Adapter {
                         std::this_thread::sleep_for(std::chrono::milliseconds(50));
                     }
                     if (!workerGone_.load()) {
-                        {
-                            std::lock_guard<std::mutex> lock(stateMutex_);
-                            if (!programExit_) {
-                                programExit_ = kExitTerminated;
-                            }
-                        }
-                        killWorker();
+                        endSession(EndReason::Terminated, kExitTerminated);
                     }
                 });
             }
@@ -812,20 +917,13 @@ class Adapter {
                 }
                 url = "/api/pass-graph?index=" + std::to_string(index->get<int64_t>());
             }
-            httplib::Client client("127.0.0.1", port_);
-            client.set_connection_timeout(5, 0);
-            client.set_read_timeout(30, 0);
-            auto response = client.Get(url);
-            if (!response) {
-                fail("The program being debugged has ended.");
+            json snapshot;
+            std::string error;
+            if (!workerGet(url, snapshot, error)) {
+                fail(error);
                 return false;
             }
-            json answer = json::parse(response->body, nullptr, false);
-            if (response->status != 200 || !answer.is_object()) {
-                fail(answer.is_object() ? errorOf(answer) : "Invalid pass snapshot response.");
-            } else {
-                ok(std::move(answer));
-            }
+            ok(std::move(snapshot));
             return false;
         }
         if (command == "camel/setNodeBreakpoints") {
@@ -1026,14 +1124,8 @@ class Adapter {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
         const auto giveUp = [&](const std::string &m) {
-            {
-                std::lock_guard<std::mutex> lock(stateMutex_);
-                if (!programExit_) {
-                    programExit_ = kExitFailed;
-                }
-            }
             fail(m);
-            killWorker();
+            endSession(EndReason::LaunchFailed, kExitFailed);
         };
         if (!ready) {
             giveUp("launch: the debuggee did not start.");
@@ -1067,6 +1159,12 @@ class Adapter {
 
     void shutdown() {
         quiet_.store(true);
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            if (endReason_ == EndReason::None) {
+                endReason_ = EndReason::Disconnected;
+            }
+        }
         std::shared_ptr<ChildProcess> worker;
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
@@ -1095,8 +1193,19 @@ class Adapter {
     bool invalidatedEvent_ = false; // the client takes the `invalidated` event
 
     std::mutex stateMutex_;
+    /// Held across a command of the worker (the POST and its answer) and across the end of the
+    /// session. The worker writes the answer to `continue` or `nextPass` on its server thread
+    /// at the same moment the program finishes; killing it first would cut that answer off,
+    /// telling the client the program had ended instead of answering the command that ended it
+    /// (H150). The end holds it while it records why the session is over and kills the worker,
+    /// so a command either lands before that decision (and the worker answers it) or after it
+    /// (and the adapter answers from `endReason_`) (H159).
+    std::mutex workerCallMutex_;
     std::shared_ptr<ChildProcess> worker_;
     std::optional<int> programExit_; // set when the end of the worker is expected
+    EndReason endReason_ = EndReason::None; // guarded by stateMutex_
+    int endSignal_       = 0;               // why the worker died, when it did
+    int endExitCode_     = 0;
     bool started_ = false;
     int port_     = 0; // written by the main thread before the pump starts
     std::atomic<bool> workerGone_{false};

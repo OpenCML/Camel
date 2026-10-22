@@ -8,7 +8,7 @@
  */
 module grad_tail
 import { grad } from autodiff
-import { get_env } from sys
+import { get_env } from env
 
 func iterate(i: int, n: int, v: float): float {
     return if i >= n then v else iterate(i + 1, n, v * 0.999 + 0.001)

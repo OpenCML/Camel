@@ -1,0 +1,6 @@
+module fstring_comment_then_expression
+func main(): int sync {
+    println(`A ${/**/ 1}`)
+    println(`B ${/* c */ 2:d}`)
+    return 0
+}

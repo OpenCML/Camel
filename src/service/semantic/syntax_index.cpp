@@ -321,8 +321,8 @@ class Walker {
         case NK::FuncData:
             return funcData(cst::FuncData(node));
         case NK::FuncAnno:
-            // `@numeric(...)` names permissions, not values (design principles 7.5); only a
-            // decorator (`@name`, `@name<args>`) refers to a function.
+            // `@name(args)` is the removed spelling of the numeric-permission annotation; it names no
+            // value, and only a decorator (`@name`, `@name<args>`) refers to a function.
             if (node.get<cst::ParentIdents>()) {
                 return;
             }
@@ -519,8 +519,14 @@ class Walker {
             Decl &decl    = declare(DeclKind::Function, name, whole, whole);
             decl.exported = ctx.has(TK::KwExport);
             if (auto modifiers = ctx.get<cst::Modifiers>()) {
-                decl.sync  = modifiers.has(TK::KwSync);
-                decl.macro = modifiers.has(TK::KwMacro);
+                decl.sync = modifiers.has(TK::KwSync);
+            }
+            // `#macro` is a standard tag now, not a keyword modifier (design principles 8):
+            // the uses written before the declaration are direct children of the FuncDecl.
+            for (const auto use : ctx.all<cst::TagUse>()) {
+                if (flatTextOf(rangeOf(use)).find("#macro") != std::string::npos) {
+                    decl.macro = true;
+                }
             }
             // The header: from after the annotations to the body.
             Range header = whole;

@@ -1,0 +1,12 @@
+/**
+ * `last` of an empty array is a fault with the position that does not exist, as `xs[0]` of an
+ * empty array is (design principles 5.4): an array with no last element has no value to give.
+ */
+module subscript_last_empty
+
+func main(): int sync {
+    let xs: int[] = []
+    println(last(xs))
+    println('not reached')
+    return 0
+}

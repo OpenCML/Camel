@@ -69,6 +69,11 @@ class ParserImpl {
     uint32_t angle_    = kNone;
     bool constData_    = false; // the expression being parsed is a `const` type argument
     uint32_t spacedGt_ = kNone; // a `>` after a space read as a comparison inside angle_
+    // The parameter list being parsed belongs to a lambda, where a parameter's type may be
+    // left out: it comes from the function type of the position the lambda stands in (design
+    // principles 5.9). A function declaration's or a function type's parameters always write
+    // their types.
+    bool lambdaParams_ = false;
 
     bool panic_     = false; // an error was reported and the parser has not resynchronized
     uint32_t depth_ = 0;     // nesting of expressions, types and blocks
@@ -101,6 +106,19 @@ class ParserImpl {
             p.constData_ = inside;
         }
         ~ConstDataScope() { p.constData_ = old; }
+    };
+    /// A type position named by the grammar: after `fields` and after `match type`
+    /// the head `(` opens a tuple or a parenthesised type, never a parameter list, so `fields ()`
+    /// is the empty tuple type (design principles 5.6, H79 ruling 1). The flag is read and
+    /// cleared at the head of the type; a nested type keeps the function-type reading.
+    bool typeHead_ = false;
+    struct TypeHeadScope {
+        ParserImpl &p;
+        bool old;
+        explicit TypeHeadScope(ParserImpl &parser) : p(parser), old(parser.typeHead_) {
+            p.typeHead_ = true;
+        }
+        ~TypeHeadScope() { p.typeHead_ = old; }
     };
     struct Depth {
         ParserImpl &p;
@@ -214,14 +232,22 @@ class ParserImpl {
     /// At the name `rule` (offset `n`) that starts a rule declaration.
     bool atRuleDecl(uint32_t n) const;
     void parseRuleDecl();
+    /// ruleDecl after the tag uses that may precede it; `m` marks where they began.
+    void parseRuleDeclRest(size_t m);
     void parseRuleContext();
     void parseRuleBody();
+    /// At the name `analysis` (offset `n`) that starts an analysis declaration.
+    bool atAnalysisDecl(uint32_t n) const;
+    void parseAnalysisDecl();
+    /// analysisDecl after the tags and decorators that may precede it; `m` marks where it began.
+    void parseAnalysisDeclRest(size_t m);
+    void parseAnalysisClause();
     void parseDataDecl();
     void parseTypeDecl();
     /// typeDecl after the tags and decorators that may precede it; `m` marks where it began.
     void parseTypeDeclRest(size_t m);
     void parseRetStmt();
-    void parseImplMark();
+
     void parseModifiers();
     void parseIdentDef();
     void parseIdentRef(NK kind);
@@ -255,10 +281,12 @@ class ParserImpl {
         const uint32_t i = offsetOf(n);
         return toks_[i].kind == TK::Identifier && tree_.tokens_.text(i) == word;
     }
-    /// `{` at token offset `n` opens a struct literal: `{ name: ...` or `{ ...`.
+    /// `{` at token offset `n` opens a struct literal: `{ name: ...`, `{ ...`, or a struct
+    /// comprehension `{ static for ...` (H51 step 4). Anything else is a block.
     bool braceIsStruct(uint32_t n) const {
         const TK next = peek(n + 1);
-        return next == TK::Ellipsis || (next == TK::Identifier && peek(n + 2) == TK::Colon);
+        return next == TK::Ellipsis || (next == TK::Identifier && peek(n + 2) == TK::Colon) ||
+               (next == TK::KwStatic && peek(n + 2) == TK::KwFor);
     }
 
     // ---- Expressions (parser_expr.cpp) ----
@@ -308,7 +336,13 @@ class ParserImpl {
     void parseFuncData();
     void parseIf();
     void parseMatch();
+    void parseMatchType();
+    void parseStaticFor();
+    void parseStaticForHeader();
+    void parseStaticLoop();
     void parseMatchCase();
+    void parseTypeCase();
+    void parseTypeCasePattern();
     void parseEnumTuplePattern();
     void parseEnumStructPattern();
     void parsePattern();
@@ -324,6 +358,8 @@ class ParserImpl {
     void parseDataList(TK closer);
     void parseArguments(TK closer);
     void parseIndices();
+    void parseSliceIndices();
+    void parseSlicePart();
     void parseParentArgues();
     void parseAngledValues();
     void parseTypeArguments();
@@ -356,9 +392,6 @@ class ParserImpl {
     void parseTypeList(TK closer);
 };
 
-constexpr bool isModifier(TK kind) {
-    return kind == TK::KwAtomic || kind == TK::KwShared || kind == TK::KwSync ||
-           kind == TK::KwMacro;
-}
+constexpr bool isModifier(TK kind) { return kind == TK::KwSync; }
 
 } // namespace camel::parse::syntax

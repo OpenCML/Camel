@@ -303,7 +303,7 @@ slot_t saveKernel(ArgsView &, ArgsView &norm, Context &) {
     } catch (const std::exception &error) {
         core::error::throwRuntimeFault(
             core::error::RuntimeDiag::FileSystemError,
-            "tree.save_tree",
+            "ckpt.save_tree",
             directory,
             error.what());
     }
@@ -326,7 +326,7 @@ slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
         bool recovered           = false;
         const auto readDirectory = checkpointReadDirectory(directoryPath, recovered);
         if (recovered)
-            std::cerr << "warning: tree.load_tree: '" << directory
+            std::cerr << "warning: ckpt.load_tree: '" << directory
                       << "' is missing; reading the previous checkpoint an interrupted "
                          "save_tree left at '"
                       << camel::utils::pathToUtf8(readDirectory) << "'\n";
@@ -339,11 +339,11 @@ slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
             readNode(output->payloadType(), manifest.at("tree"), readDirectory, "");
         if (!dataHash.empty() && manifest.at("dataset_manifest_sha256") != dataHash)
             std::cerr
-                << "warning: tree.load_tree: dataset manifest SHA-256 differs from checkpoint\n";
+                << "warning: ckpt.load_tree: dataset manifest SHA-256 differs from checkpoint\n";
         mm::NoCollectionScope guard;
         return makeOk(rebuild(output->payloadType(), restored), output);
     } catch (const std::exception &error) {
-        return makeError("CheckpointError", directory + ": " + error.what(), "<tree::load_tree>");
+        return makeError("CheckpointError", directory + ": " + error.what(), "<ckpt::load_tree>");
     }
 }
 // A leaf type no checkpoint can hold is a compile-time error that names the path (design
@@ -429,8 +429,8 @@ class LoadResolver final : public FuncTypeResolver {
 
 std::vector<oper_group_ptr_t> checkpointOperatorGroups() {
     return {
-        OperatorGroup::create("load_tree", {{"tree:load_tree", std::make_shared<LoadResolver>()}}),
-        OperatorGroup::create("save_tree", {{"tree:save_tree", std::make_shared<SaveResolver>()}}),
+        OperatorGroup::create("load_tree", {{"ckpt:load_tree", std::make_shared<LoadResolver>()}}),
+        OperatorGroup::create("save_tree", {{"ckpt:save_tree", std::make_shared<SaveResolver>()}}),
     };
 }
 std::unordered_map<std::string, operator_t> checkpointKernels() {
@@ -438,12 +438,12 @@ std::unordered_map<std::string, operator_t> checkpointKernels() {
 }
 void declareCheckpointResources() {
     auto &table = core::OperatorTable::instance();
-    table.declare("tree", {{"save_tree", false}, {"load_tree", false}});
+    table.declare("ckpt", {{"save_tree", false}, {"load_tree", false}});
     auto reader = core::sem::externalAmbient("fs", core::sem::AccessMode::Read);
-    reader.accesses.push_back(core::sem::ambientAccess("io:stderr", core::sem::AccessMode::Write));
-    table.declareResources("tree:load_tree", std::move(reader));
+    reader.accesses.push_back(core::sem::ambientAccess("stderr", core::sem::AccessMode::Write));
+    table.declareResources("ckpt:load_tree", std::move(reader));
     table.declareResources(
-        "tree:save_tree",
+        "ckpt:save_tree",
         core::sem::externalAmbient("fs", core::sem::AccessMode::ReadModifyWrite));
 }
 } // namespace camel::treelib

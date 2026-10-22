@@ -1,0 +1,37 @@
+// The declarations of the binary value module. The functions are the operators of the C++ module
+// `modules/bytes` (`bytes:encode` and so on, module:function by convention); this file is the one
+// source of their signatures (design principles 6.4; handover H19, step 1).
+
+module bytes
+
+/// Encodes valid UTF-8 text as an immutable Bytes value.
+/// @pure
+/// @example encode('hello')
+export func encode(text: string): Bytes
+
+/// Decodes UTF-8, returning an EncodingError value for malformed input.
+/// @pure
+/// @fails error value `EncodingError` when the bytes are not valid UTF-8 or the text is larger than a string
+/// @example decode(encode('中文')) !! ''
+export func decode(content: Bytes): string!
+
+/// Copies integers in the inclusive range 0..255 into a binary value.
+/// @pure
+/// @fails fault `InvalidArgument` for an element outside 0..255
+/// @example from_array([0, 128, 255])
+export func from_array(values: int[]): Bytes
+
+/// Copies each byte into an integer array.
+/// @pure
+/// @example to_array(encode('AB'))    // [65, 66]
+export func to_array(content: Bytes): int[]
+
+/// The number of bytes in the binary value.
+/// @pure
+/// @example size(encode('abc'))    // 3
+export func size(content: Bytes): int
+
+/// Concatenates two binary values without decoding either one.
+/// @pure
+/// @example concat(encode('header'), from_array([0, 255]))
+export func concat(left: Bytes, right: Bytes): Bytes

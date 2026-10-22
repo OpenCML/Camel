@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <deque>
 #include <format>
 #include <limits>
@@ -30,6 +31,8 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
+
+#include "camel/utils/number_text.h"
 
 namespace camel::core::attr {
 
@@ -77,6 +80,10 @@ std::string encode(const Value &v) {
         break;
     case ValueKind::Int:
         put(static_cast<uint64_t>(v.integer));
+        break;
+    case ValueKind::Float:
+        // The bits: 0.0 and -0.0, and two NaNs, are different facts.
+        put(std::bit_cast<uint64_t>(v.real));
         break;
     case ValueKind::Symbol:
     case ValueKind::Graph:
@@ -184,6 +191,10 @@ AttrValueId flagWords(std::vector<uint64_t> words) {
 
 AttrValueId integer(int64_t v) { return internValue(Value{.kind = ValueKind::Int, .integer = v}); }
 
+AttrValueId real(double v) {
+    return internValue(Value{.kind = ValueKind::Float, .real = v});
+}
+
 AttrValueId symbol(std::string_view text) {
     return internValue(Value{.kind = ValueKind::Symbol, .text = std::string(text)});
 }
@@ -226,6 +237,13 @@ std::string valueText(AttrValueId id) {
     }
     case ValueKind::Int:
         return std::to_string(v.integer);
+    case ValueKind::Float:
+        // A NaN is interned by its bits (two NaNs are different facts, see attr::real): a dump
+        // that says only "nan" would hide the difference, so it shows the pattern.
+        if (std::isnan(v.real)) {
+            return std::format("nan(0x{:016x})", std::bit_cast<uint64_t>(v.real));
+        }
+        return camel::utils::floatText(v.real);
     case ValueKind::Symbol:
         return "\"" + v.text + "\"";
     case ValueKind::Graph:

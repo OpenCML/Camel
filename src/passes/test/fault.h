@@ -18,8 +18,9 @@
  */
 
 /*
- * TEST-ONLY fault-injection passes. They are not part of any pipeline and cannot be named unless
- * the environment variable CAMEL_ENABLE_TEST_PASSES is set.
+ * TEST-ONLY fault-injection passes. They are not part of any pipeline: they exist only to be
+ * named by a test's pipeline, so naming one is the whole switch (H81 removed the environment
+ * variable that used to gate them).
  *
  * `test::drop_call_argument` commits a structurally broken program on purpose: it removes the
  * last argument of the first direct call (FUNC node) whose callee takes one. The regression
@@ -38,7 +39,6 @@
 
 #include "camel/execute/pass/opt.h"
 
-inline constexpr const char *kTestPassesEnvVar     = "CAMEL_ENABLE_TEST_PASSES";
 inline constexpr const char *kDropCallArgumentPass = "test::drop_call_argument";
 inline constexpr const char *kLeakBranchArmPass    = "test::leak_branch_arm";
 inline constexpr const char *kShareBranchArmPass   = "test::share_branch_arm";

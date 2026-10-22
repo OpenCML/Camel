@@ -3,10 +3,12 @@
 // with a fragment into a Markdown file, a heading with that anchor exists.
 //
 //   node scripts/check-doc-links.mjs            the reader-facing documents (see SCOPE)
+//   node scripts/check-doc-links.mjs --default-roots  the same, ignoring a script path argument
 //   node scripts/check-doc-links.mjs --all      every tracked *.md of the repository
 //   node scripts/check-doc-links.mjs a.md b/    the given files and directories
 //
-// Exit status 1 when a link is broken. External links (http, mailto) are not fetched.
+// Exit status 1 when a link is broken, 2 when the scope is empty or names a missing entry: a
+// check of nothing is refused, never reported as a pass. External links (http, mailto) are not fetched.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -103,8 +105,26 @@ function check(file) {
 }
 
 const args = process.argv.slice(2)
-const entries = args.includes('--all') ? ['.'] : args.filter((a) => !a.startsWith('--')).length > 0 ? args.filter((a) => !a.startsWith('--')) : SCOPE
+const explicit = args.filter((a) => !a.startsWith('--'))
+const entries = args.includes('--all')
+    ? ['.']
+    : args.includes('--default-roots') || explicit.length === 0
+      ? SCOPE
+      : explicit
+// A scope entry that does not exist is a stale list, not a clean tree: it used to be dropped
+// silently, which is how the guard once reported "no broken links in 0 document(s)".
+const missing = entries.filter((entry) => !fs.existsSync(path.resolve(root, entry)))
+if (missing.length > 0) {
+    for (const entry of missing) console.log(`${entry}: no such file or directory`)
+    console.log(`${missing.length} scope entr${missing.length === 1 ? 'y does' : 'ies do'} not exist; refusing to check a smaller tree`)
+    process.exit(2)
+}
 const files = [...new Set(entries.flatMap(markdownFiles))].sort()
+// A pass over no document proves nothing, whichever way the scope came out empty.
+if (files.length === 0) {
+    console.log('no Markdown document in the given scope: nothing was checked')
+    process.exit(2)
+}
 const problems = files.flatMap(check)
 for (const p of problems) console.log(p.replace(/\\/g, '/'))
 if (problems.length > 0) {

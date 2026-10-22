@@ -22,6 +22,7 @@
 #include <filesystem>
 #include <mutex>
 #include <tuple>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "camel/core/context/context.h"
@@ -34,7 +35,6 @@
 #include "camel/core/module/userdef.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/execute/executor.h"
-#include "camel/passes/opt/inline.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/definitions.h"
 #include "camel/runtime/facts.h"
@@ -81,8 +81,6 @@ int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result, bool de
         return static_cast<int>(static_cast<int64_t>(result));
     case TypeCode::Bool:
         return result != 0 ? 1 : 0;
-    case TypeCode::Byte:
-        return static_cast<int>(static_cast<uint8_t>(result));
     case TypeCode::Void:
         return 0;
     default:
@@ -112,6 +110,15 @@ Context::~Context() {
         camel::core::mm::autoSpace().setGraphSweeper(nullptr);
     }
     runtimeGraphMgr_.reset();
+}
+
+camel::core::module::ProgramExports &Context::programExports() {
+    // Created on first use, like the facts and the definition store. Compilation of a context
+    // is single-threaded (the graph builder of the program is), so no lock is taken here.
+    if (!programExports_) {
+        programExports_ = std::make_unique<camel::core::module::ProgramExports>();
+    }
+    return *programExports_;
 }
 
 camel::runtime::DefinitionStore &Context::definitions() {
@@ -257,7 +264,7 @@ size_t Context::dumpModuleWarnings(
     return lines.size();
 }
 
-void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
+void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json, bool wrapInArray) const {
     auto allMods = allUserModules();
     std::vector<module_ptr_t> modsErr;
     for (const auto &mod : allMods) {
@@ -274,9 +281,13 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
     });
     if (json) {
         if (modsErr.empty()) {
-            os << "[]\n" << std::flush;
+            if (wrapInArray) {
+                os << "[]\n" << std::flush;
+            }
         } else {
-            os << "[\n";
+            if (wrapInArray) {
+                os << "[\n";
+            }
             bool first = true;
             for (const auto &mod : modsErr) {
                 auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
@@ -287,7 +298,9 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
                 ud->diagnostics()->dump(os, true, false);
                 first = false;
             }
-            os << "\n]\n" << std::flush;
+            if (wrapInArray) {
+                os << "\n]\n" << std::flush;
+            }
         }
     } else {
         for (const auto &mod : modsErr) {
@@ -377,6 +390,20 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
     lastCmoLoadError_.clear();
     auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
 
+    // A module resolves its own imports next to itself before the global search paths. The entry
+    // directory is first among those (the entry's imports resolve there), so without this the
+    // standard library's own import of `graph` — stdlib/rules.cml, compiled on demand by the
+    // algebraic pass — finds a same-named program of the entry directory (a test case named
+    // graph.cml, a user's file) instead of stdlib/graph.cmo (H112).
+    std::string importerDir;
+    if (!currentModuleName.empty()) {
+        auto importer = modules_.find(currentModuleName);
+        if (importer != modules_.end() && importer->second && !importer->second->path().empty()) {
+            importerDir = camel::utils::pathToUtf8(
+                camel::utils::pathFromUtf8(importer->second->path()).parent_path());
+        }
+    }
+
     for (const auto &name : candidates) {
         auto it = modules_.find(name);
         if (it != modules_.end()) {
@@ -387,8 +414,9 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
             return it->second;
         }
 
-        module_ptr_t module = tryLoadModule(name);
-        if (module) {
+        const auto accept = [&](module_ptr_t module) -> module_ptr_t {
+            if (!module)
+                return nullptr;
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                 "Context",
                 "Module '{}' loaded from file '{}'.",
@@ -423,6 +451,22 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
                 camel::core::module::warnUndeclaredOperatorTraits(*module);
             }
             return module;
+        };
+
+        module_ptr_t module;
+        bool resolvedNextToImporter = false;
+        if (!importerDir.empty()) {
+            auto [path, isCmo] = findModuleUnder(importerDir, name);
+            if (!path.empty()) {
+                resolvedNextToImporter = true;
+                module                 = loadModuleFrom(name, path, isCmo);
+            }
+        }
+        if (!module && !resolvedNextToImporter) {
+            module = tryLoadModule(name);
+        }
+        if (auto accepted = accept(std::move(module))) {
+            return accepted;
         }
 
         auto builtin = getBuiltinModule(name);
@@ -527,12 +571,13 @@ std::string Context::resolveRelativeModuleName(
     return join(base, ".");
 }
 
-std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &moduleName) {
+std::pair<std::string, bool>
+Context::findModuleUnder(const std::string &baseDir, const std::string &moduleName) {
     std::string relativePath = moduleName;
     std::replace(relativePath.begin(), relativePath.end(), '.', '/');
     fs::path relPath = camel::utils::pathFromUtf8(relativePath);
-    fs::path parentDir = relPath.parent_path();
-    std::string stem   = camel::utils::pathToUtf8(relPath.filename());
+    fs::path dir     = camel::utils::pathFromUtf8(baseDir) / relPath.parent_path();
+    std::string stem = camel::utils::pathToUtf8(relPath.filename());
     if (stem.empty())
         stem = camel::utils::pathToUtf8(relPath);
 
@@ -541,14 +586,14 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
     /// If D/xx is a directory, also search: 3) D/xx/xx.cmo  4) D/xx/xx.*
     // A directory is listed once per context (doc 38, section 8 item 5): looking every
     // module up by listing its directory again made N modules in one directory O(N^2).
-    auto findModuleInDir = [&](const fs::path &dir) -> std::pair<std::string, bool> {
-        const std::string key = camel::utils::pathToUtf8(dir.lexically_normal());
+    auto findIn = [&](const fs::path &directory) -> std::pair<std::string, bool> {
+        const std::string key = camel::utils::pathToUtf8(directory.lexically_normal());
         auto listing          = directoryListings_.find(key);
         if (listing == directoryListings_.end()) {
             DirectoryListing files;
             std::error_code ec;
-            if (fs::is_directory(dir, ec)) {
-                for (const auto &entry : fs::directory_iterator(dir, ec)) {
+            if (fs::is_directory(directory, ec)) {
+                for (const auto &entry : fs::directory_iterator(directory, ec)) {
                     if (!entry.is_regular_file(ec)) {
                         continue;
                     }
@@ -566,7 +611,7 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
         }
         const DirectoryListing &files = listing->second;
         if (files.cmo.contains(stem)) {
-            return {camel::utils::pathToUtf8(dir / (stem + ".cmo")), true};
+            return {camel::utils::pathToUtf8(directory / (stem + ".cmo")), true};
         }
         if (auto found = files.byStem.find(stem); found != files.byStem.end()) {
             return {found->second, camel::utils::pathFromUtf8(found->second).extension() == ".cmo"};
@@ -574,30 +619,25 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
         return {"", false};
     };
 
-    auto tryDir = [&](const fs::path &base) -> std::pair<std::string, bool> {
-        fs::path dir       = base / parentDir;
-        auto [path, isCmo] = findModuleInDir(dir);
-        if (!path.empty())
-            return {path, isCmo};
-        fs::path subdir = dir / stem;
-        return findModuleInDir(subdir);
-    };
+    auto [path, isCmo] = findIn(dir);
+    if (!path.empty())
+        return {path, isCmo};
+    return findIn(dir / stem);
+}
 
+std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &moduleName) {
     for (const auto &dir : entryConfig_.searchPaths) {
         if (dir.empty())
             continue;
         fs::path basePath = camel::utils::pathFromUtf8(dir);
         if (!basePath.is_absolute())
             basePath = camel::utils::pathFromUtf8(entryConfig_.entryDir) / basePath;
-        auto [path, isCmo] = tryDir(basePath);
-        if (!path.empty())
-            return {path, isCmo};
+        auto found = findModuleUnder(camel::utils::pathToUtf8(basePath), moduleName);
+        if (!found.first.empty())
+            return found;
     }
 
-    auto [path, isCmo] = tryDir(camel::utils::pathFromUtf8(entryConfig_.entryDir));
-    if (!path.empty())
-        return {path, isCmo};
-    return {"", false};
+    return findModuleUnder(entryConfig_.entryDir, moduleName);
 }
 
 std::vector<std::string> Context::getModuleSearchDiagnostics(const std::string &moduleName) const {
@@ -683,6 +723,11 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
         camel::utils::phase::Scope phaseScope("resolve", moduleName);
         std::tie(path, isCmo) = getModulePathAndKind(moduleName);
     }
+    return loadModuleFrom(moduleName, path, isCmo);
+}
+
+module_ptr_t
+Context::loadModuleFrom(const std::string &moduleName, const std::string &path, bool isCmo) {
     if (path.empty())
         return nullptr;
     if (isCmo) {
@@ -691,6 +736,35 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
         module_ptr_t mod = loadCmoModule(moduleName, path, shared_from_this(), &err);
         if (!mod && !err.empty())
             lastCmoLoadError_ = std::move(err);
+        if (!mod)
+            return mod;
+        // A `.cml` beside the `.cmo` is the declaration module of that module (design
+        // principles 6.4; handover H19, step 1): the C++ module implements its operators, and
+        // the `.cml` is the single source of their signatures. It is not a shadow of the
+        // `.cmo` — the `.cmo` is still what the lookup found and what the name stands for —
+        // and it is not dead code.
+        const fs::path declarations = camel::utils::pathFromUtf8(path).replace_extension(".cml");
+        std::error_code ec;
+        if (fs::is_regular_file(declarations, ec) && !ec) {
+            // The declarations are checked against the executors and the operator traits of the
+            // module they declare, which its own load registers. It loads once: this is the
+            // only place the module is loaded before it is asked for an operator.
+            if (!mod->load()) {
+                return mod;
+            }
+            camel::core::module::warnUndeclaredOperatorTraits(*mod);
+            auto declared = std::static_pointer_cast<UserDefinedModule>(
+                UserDefinedModule::fromFile(
+                    moduleName, camel::utils::pathToUtf8(declarations), shared_from_this()));
+            declared->setDeclarationModule(true);
+            declared->setImplementation(mod);
+            // One module, not two (design principles 6.4; handover H94, ruling 1): what the
+            // C++ module exports — its types, its constants and the groups and tags it
+            // declares — is what this module exports, and a `.cml` name is written into the
+            // same tables. An importer of the name never learns there were two objects.
+            declared->inheritExportsFrom(*mod);
+            return declared;
+        }
         return mod;
     }
     // The file of the entry module (which is registered under no module name): the entry
@@ -725,12 +799,6 @@ const camel::runtime::Program *Context::materializeRuntimeProgram() {
         *program);
     runtimeGraphMgr_->adoptRoot(program);
     registerRuntimeGraphDebugInfo(program);
-    // The condition and the body of each loop the front end built as graphs become regions of the
-    // graph that has the LOOP node.
-    if (const auto *regionized = camel::passes::opt::regionizeLoops(shared_from_this(), program);
-        regionized != program) {
-        return installRuntimeProgram(regionized);
-    }
     return program;
 }
 
@@ -748,6 +816,16 @@ Context::adoptRuntimeProgram(const camel::runtime::Program *program) {
     runtimeGraphMgr_->adoptRoot(program);
     registerRuntimeGraphDebugInfo(program);
     return program;
+}
+
+bool Context::installRuntimeProgramIfCurrent(
+    const camel::runtime::Program *expected, const camel::runtime::Program *program) {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    if (!runtimeGraphMgr_->replaceRootIfCurrent(expected, program)) {
+        return false;
+    }
+    registerRuntimeGraphDebugInfo(program);
+    return true;
 }
 
 const camel::runtime::Program *Context::currentRuntimeProgram() const {
@@ -803,6 +881,11 @@ void Context::leaveRun() {
 void Context::releaseRuntimeGraph(camel::runtime::GCGraph *graph) {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     runtimeGraphMgr_->release(graph);
+}
+
+void Context::noteUnboundRuntimeGraph(camel::runtime::GCGraph *graph) {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->noteUnbound(graph);
 }
 
 const camel::runtime::Program *

@@ -20,21 +20,22 @@ verify_script = """
 const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
 assert(ops.length > 300, `only ${ops.length} operators listed`)
 const modules = new Set(ops.map((o) => o.module))
-for (const m of ['<builtin>', 'algo', 'crypto', 'fs', 'json', 'math', 'os', 'para', 'random', 're', 'sim', 'statistics', 'str', 'sys', 'this', 'time']) {
+for (const m of ['<builtin>', 'algo', 'hash', 'fs', 'io', 'json', 'math', 'process', 'para', 'random', 're', 'sim', 'statistics', 'str', 'env', 'this', 'time']) {
   assert(modules.has(m), `module ${m} is not listed`)
 }
 const undeclared = ops.filter((o) => o.purity === 'undeclared').map((o) => o.uri)
 assert(undeclared.length === 0, `operators without a purity declaration: ${undeclared.join(', ')}`)
 const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
-const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'sys:get_env', 'sys:get_cwd',
-  'fs:read_text', 'fs:try_read_text', 'fs:exists', 'fs:file_size', 'fs:write_text', 'os:whoami', 'os:cpu_count', 'os:sleep', 'os:exit',
-  ':io/print', ':io/println', ':io/input', ':op/assn', ':op/assn_append', 'para:rendezvous',
+const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'env:get_env', 'env:get_cwd',
+  'fs:read_text', 'fs:try_read_text', 'fs:exists', 'fs:file_size', 'fs:write_text', 'process:whoami', 'process:cpu_count', 'process:sleep', 'process:exit',
+  'io:set_terminal_raw_mode', 'io:has_input', 'io:get_char', 'io:get_chars', 'io:clear_input_buffer',
+  ':io/print', ':io/println', ':io/input', ':op/assn', ':op/assn_owned', 'para:rendezvous',
   ':mark/map_arr', ':mark/foreach_arr']
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
 const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median', 'algo:sort', 'algo:argsort',
-  're:test', 'json:encode', 'json:decode', 'crypto:sha256_str', 'crypto:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
+  're:test', 'json:encode', 'json:decode', 'hash:sha256_str', 'hash:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3).
   ':struct/append_arr', ':struct/extend_arr', 'algo:sort', 'algo:quick_sort', 'algo:insert_sort', 'algo:merge_sort']
 for (const uri of pure) {
@@ -68,15 +69,87 @@ timeout_ms = 20000
 
 [[tests]]
 name = "registry.signatures_match"
-desc = "stdlib/signatures/*.cml list exactly the operators the modules register: every registered operator is declared, every declaration names a registered operator, the parameter counts agree and @pure / @effect is the declared purity."
+desc = "The declaration files (stdlib/*.cml and stdlib/signatures/*.cml) list exactly the operators the modules register: every registered operator is declared, every declaration names a registered operator, the parameter counts agree, @pure / @effect is the declared purity, and no signature-file declaration carries a body."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-reference.mjs"
 args = ["${case}", "--verify-ops"]
 expect_exit = 0
-expect_stdout_contains = ["the signature files agree with the"]
+expect_stdout_contains = ["the declarations agree with the"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
+
+[[tests]]
+name = "registry.docs_complete"
+desc = "Every name the reference prints has a description and an @example, every example compiles as a call of its declaration (its arguments bound to the declared parameter types, the types it mentions imported), a fallible result has an @fails line naming the error, and an example the checker cannot compile says why with @example-fragment <reason>."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-reference.mjs"
+args = ["${case}", "--verify-docs"]
+expect_exit = 0
+expect_stdout_contains = ["every declared name has a description and an @example"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "registry.migrations_stay_migrated"
+desc = "A module that has moved to a declaration module stays migrated: C++ has no StaticFuncTypeResolver for a name the declaration fixes, no stray stdlib/signatures/<module>.cml survives unless the reference generator names it in computed:, every declaration is behind a registered operator (--verify-ops, reused), the C++ export groups are the declaration's plus the computed signatures, and a computed name has exactly one recorded place (its computed: signature file, never an inline // dynamic func; handover H180)."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-declarations.mjs"
+args = ["${case}", "--check"]
+expect_exit = 0
+expect_stdout_contains = ["migrated modules stay migrated"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+# ---- The account pages' numbers are the tree's (H200) ----
+#
+# docs/technical/48_declaration_migration.md is the ledger of the migration: the declaration
+# modules, their declared names and declarations, their computed names, the registered overloads
+# and public names, the signature files, and one row per module. docs/technical/49_computed_signatures.md
+# is the ledger of the signature directory: the files, entries and names, the four buckets, the
+# per-file table, the size predictions, and the operator-line count. Every one of those is a claim
+# about the tree, and a hand edit is how it goes stale: H200 found 48 still listing `rewrite` as
+# pending although H183 had migrated it, and 49 drifted twice — its counts were patched by hand
+# while the table kept the old numbers. `--check-ledger` reads each number from both pages and
+# compares it with the tree, naming the file, so this test is red when a number is edited (it
+# prints "<file>:<line>: <what>: page says X, tree has Y"), when a row or a fact is dropped, and
+# when the rows and the totals disagree. The registered counts come from `camel inspect --ops` on
+# the same probe `--verify-ops` reads, and the bucket and per-file counts from the classification
+# `--check` rule 7 already trusts, so a change in either is red too.
+
+[[tests]]
+name = "registry.ledger_matches_tree"
+desc = "Every number docs/technical/48_declaration_migration.md and docs/technical/49_computed_signatures.md state is the tree's number: 48's declaration modules, declared names and declarations, computed names, overloads, public names, signature files, per-module rows and re-check quotes; 49's files, entries, names, four buckets, per-file rows, size predictions and operator-line count. A hand edit fails with '<file>:<line>: <what>: page says X, tree has Y', and a dropped row or fact fails instead of passing over a hole."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-declarations.mjs"
+args = ["${case}", "--check-ledger"]
+expect_exit = 0
+expect_stdout_contains = ["the ledgers agree with the tree"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+# ---- A declaration file that failed to load is an error, not a shorter list (H172) ----
+
+# `inspect --ops` is the tool people use to check what the modules register. A declaration module
+# that exists and does not load leaves its operators out of the listing; before H172 the tool
+# printed the rest and exited 0 (that is how H166 found its seven names only by counting them).
+# The case makes the declaration module in its scratch directory out of a real `.cmo` and points
+# `CAMEL_STD_LIB` at it.
+
+[[tests]]
+name = "registry.declaration_load_failure_is_an_error"
+desc = "`camel inspect --ops` exits 1 and reports on stderr, with a line naming the module and its declaration file, when a declaration module a program imports fails to load; it prints no operator listing it cannot vouch for. A module that is not imported is not an error, and the module's real declaration still lists with the same `CAMEL_STD_LIB`."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/inspect/declaration_load_failure.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000
 
 [[tests]]
 name = "registry.reference_is_generated"

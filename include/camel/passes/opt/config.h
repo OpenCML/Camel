@@ -79,6 +79,8 @@ enum class InlineDecline : uint8_t {
     Recursive,        // the callee is recursive (it is not copied into its callers)
     ReachesRecursion, // the callee is not small and reaches a recursive function
     Duplication,      // the callee is not small and copying it to every call site costs too much
+    InlinedCopy,      // the call lies in an inlined copy of the callee: the function would be
+                      // copied into itself (the inline history; design 9.4)
     Strategy,         // the inline strategy does not select this call
 };
 
@@ -131,12 +133,6 @@ struct OptimizeRewriteConfig {
     /// The nodes already copied, for a driver that runs the engine several times against one
     /// budget (std::opt). Null: each run of the engine has the whole budget.
     size_t *growthSpentNodes = nullptr;
-    /// Splits an indirect call whose callee is projected out of a branch JOIN into one call
-    /// per arm plus one JOIN per projected value. The result deliberately violates the
-    /// scheduler invariant that a JOIN is the single cut between its BRCH and everything
-    /// downstream (several sibling JOINs read the same BRCH and their users merge), so it is
-    /// only valid for consumers that never build an execution topo — the ONNX exporter.
-    bool enableBranchedCallSplit = false;
     InlineRewriteConfig inlineConfig{};
     /// Restrict algebra to strictly equivalent floating-point rewrites. By default local
     /// reassociation is allowed; precision changes and approximate functions are not implied.

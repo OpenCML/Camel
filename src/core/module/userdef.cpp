@@ -27,7 +27,9 @@
 
 #include "camel/compile/gir/encode.h"
 #include "camel/core/debug_breakpoint.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/parse/parse.h"
+#include "camel/utils/type.h"
 #include "compile/gct/builder.h"
 #include "compile/gir/builder.h"
 
@@ -249,13 +251,69 @@ void UserDefinedModule::setProgramGraph(
         // compileAsProgram() builds a program of its own from this module: its root graph is
         // kept with that program's builder, and the graph this module was loaded as part of
         // (the program that uses it, or the library of compileAsLibrary) stays as it was.
-        stage_  = CompileStage::Done;
-        loaded_ = true;
+        //
+        // The module is not marked built here. What it exports in this program is this
+        // program's, and a module is declared once per program: the program being compiled
+        // (or another tool program) that loads the module later must declare it into its own
+        // export table (task H42). Marking it Done would skip that declaration and leave the
+        // names of this program as the module's only ones.
         return;
     }
     compileGraph_ = root;
     stage_        = CompileStage::Done;
     loaded_       = true;
+}
+
+std::vector<UserDefinedModule::ExportedFunction> UserDefinedModule::exportedFunctions() const {
+    std::vector<ExportedFunction> functions;
+    if (!gct_) {
+        return functions;
+    }
+    const auto root = gct_->root();
+    if (root == nullptr) {
+        return functions;
+    }
+    // The export list says what the module offers; the declarations say which of those names are
+    // functions and with which type. Both are read from the construction tree: no graph is built,
+    // so a module that is parsed answers this even when it does not compile.
+    std::unordered_set<std::string> exported;
+    for (size_t i = 0; i < root->size(); ++i) {
+        const auto &child = root->at(i);
+        if (child->type() != GCT::NodeKind::EXPT) {
+            continue;
+        }
+        for (size_t name = 0; name < child->exportCount(); ++name) {
+            exported.insert(child->exportName(name));
+        }
+    }
+    for (size_t i = 0; i < root->size(); ++i) {
+        const auto &child = root->at(i);
+        if (child->type() != GCT::NodeKind::DECL || !child->isFunc() ||
+            !exported.contains(child->name()) || child->at(0) == nullptr) {
+            continue;
+        }
+        functions.push_back(ExportedFunction{
+            child->name(),
+            tt::as_ptr<camel::core::type::FunctionType>(child->at(0)->dataType())});
+    }
+    return functions;
+}
+
+bool UserDefinedModule::declaresFunction(const std::string &name) const {
+    if (!gct_) {
+        return false;
+    }
+    const auto root = gct_->root();
+    if (root == nullptr) {
+        return false;
+    }
+    for (size_t i = 0; i < root->size(); ++i) {
+        const auto &child = root->at(i);
+        if (child->type() == GCT::NodeKind::DECL && child->isFunc() && child->name() == name) {
+            return true;
+        }
+    }
+    return false;
 }
 
 UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
@@ -264,7 +322,15 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     if (compiling_) {
         return ProgramStatus::Failed;
     }
-    if (!compile(CompileStage::GCT)) {
+    // A module that does not parse throws its diagnostic out of compile(); the diagnostic is
+    // kept with the module, and the caller turns a failed program into the reason a pass is
+    // not available. A pass module the user is still editing is a problem of that pass
+    // specification, not an exception out of the pipeline, so the throw stops here.
+    try {
+        if (!compile(CompileStage::GCT)) {
+            return ProgramStatus::Failed;
+        }
+    } catch (const Diagnostic &) {
         return ProgramStatus::Failed;
     }
     struct Compiling {
@@ -321,10 +387,10 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
             }
         });
     for (const auto &mod : imported) {
-        // Its names were exported by the builder of the program it was loaded as part of; the
-        // declarations below are this program's own (their graphs are the ones the pass calls),
-        // so they must replace those names, not be refused as duplicates.
-        mod->clearExportedNamespaces();
+        // The module object may already export names for the program that loaded it. Those
+        // names are that program's, and they stay there: this builder has its own export table
+        // (Builder::exports), so declaring the module again records this program's graphs
+        // (task H42).
         builder->declareModule(mod, *mod->gct_, mod->diagnostics_);
         if (mod->diagnostics_->hasErrors()) {
             return ProgramStatus::Failed;
@@ -339,9 +405,13 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     }
     // The export table is filled by the declaration: the function the program runs must be one
     // non-generic function of this module, exactly as registerCamelPass demands of a pass.
-    const auto entity = getExportedEntity(Reference(entryFunction));
+    const auto entity = builder->exports().exportedEntity(*this, Reference(entryFunction));
     if (!entity) {
-        problem = std::format("'{}' exports no '{}'", name_, entryFunction);
+        // A function that is there but not exported is the mistake `module::name` cannot tell
+        // from a name that is not there; only the construction tree can (H130).
+        problem = declaresFunction(entryFunction)
+                      ? std::format("'{}' declares '{}' but does not export it", name_, entryFunction)
+                      : std::format("'{}' exports no '{}'", name_, entryFunction);
         return ProgramStatus::NoSuchFunction;
     }
     using Access = detail::EntityAccess;
@@ -360,8 +430,10 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     }
     // The builder owns what the graphs of the program refer to and lives as long as the module.
     programBuilders_.push_back(builder);
-    stage_  = CompileStage::Done;
-    loaded_ = true;
+    // The module is not marked built: this program's exports are this program's, and another
+    // program that loads the module (the one being transformed, another pass) declares it into
+    // its own export table (task H42). The front end (parse, GCT) is done, which is what the
+    // module object shares with every program.
     return ProgramStatus::Built;
 }
 

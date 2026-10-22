@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -254,10 +254,21 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->ref(callee[0])));
     }
     case runtime::GCNodeKind::Loop: {
-        // Each round calls the condition and the body graph.
-        const auto &target = graph->loopTarget(node);
-        return (target.cond && effectfulGraphs_.contains(target.cond.get())) ||
-               effectfulGraphs_.contains(target.body.get());
+        // Each round runs the condition and the body, regions of the graph.
+        const runtime::GraphDraft &draft = graph->draft();
+        for (auto part : {runtime::GCRegionKind::LoopCond, runtime::GCRegionKind::LoopBody}) {
+            const uint32_t region = draft.loopRegionOf(nodeIdOf(node), part);
+            if (region == 0) {
+                continue;
+            }
+            for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+                if (draft.alive(id) && draft.regionWithin(draft.nodeRegion(id), region) &&
+                    isEffectNode(graph, draft.ref(id))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
     case runtime::GCNodeKind::Join: {
         // The branch is an effect when what an arm gives depends on one inside the arm.
@@ -582,10 +593,10 @@ void Builder::markNonRetainingReads() {
     //     of an array of numbers, `format`). A call, a branch, a closure, a literal holding
     //     the value, a `let` used later by such a node: any of them keeps `r` a `:var/get`.
     //  4. No node made between `r` and its last user may write the variable: no operator
-    //     that is neither pure nor state-only (assignments, `:op/assn_append`, effects), no
-    //     call and no branch (their bodies may write it through a capture). The chain runs
-    //     the nodes in the order they were made, so the users of `r` run before any later
-    //     writer.
+    //     that is neither pure nor state-only (the assignments, `:op/assn_owned` among them,
+    //     effects), no call and no branch (their bodies may write it through a capture). The
+    //     chain runs the nodes in the order they were made, so the users of `r` run before any
+    //     later writer.
     //  5. The graph has no writer outside the chain (made in a nested block that is not a
     //     sync block), which could run between `r` and its users.
     //
@@ -626,10 +637,7 @@ void Builder::markNonRetainingReads() {
         }
         return unchainedWriter[draft] = found;
     };
-    const auto peekGroup = context_->importModule("")->getExportedEntity(Reference("__var_peek__"));
-    ASSERT(
-        peekGroup.has_value() && peekGroup->isOperGroup(),
-        "The built-in __var_peek__ is missing.");
+    const oper_group_ptr_t peekGroup = internalOperatorGroup(camel::core::oper::VarPeek);
     const std::vector<StaticArg> statics(1);
 
     for (node_handle_t read : syncedReads_) {
@@ -665,7 +673,7 @@ void Builder::markNonRetainingReads() {
         }
         node_handle_t cell = draft->ref(normInputsOf(read).front());
         const auto peek =
-            peekGroup->operGroup()->resolve({}, {nodeTypeOf(cell)}, statics, Modifier::None);
+            peekGroup->resolve({}, {nodeTypeOf(cell)}, statics, Modifier::None);
         ASSERT(peek.has_value(), "__var_peek__ rejected a variable.");
         nodeGraphOf(read)->retargetOperNode(read, *peek);
     }
@@ -1101,7 +1109,13 @@ void Builder::rejectLiteralValue(
     }
     const std::string range = literal::rangeText(type);
     std::string reason;
-    if (!range.empty()) {
+    if (value.underflows(type)) {
+        // A nonzero value whose nearest value of the type is zero (H15i): not a range above its
+        // largest, and not rounded away.
+        reason = folded ? "the value " + value.toString() +
+                              " is too small to be represented (the nearest value is zero)"
+                        : "too small to be represented (the nearest value is zero)";
+    } else if (!range.empty()) {
         // A folded expression is quoted as written, so the value it came to is also said.
         reason = folded ? "the value " + value.toString() + " is out of range (" + range + ")"
                         : "out of range (" + range + ")";
@@ -1123,8 +1137,8 @@ void Builder::rejectLiteralData(
         // A refusal the conversion already explained (`int('99999999999999999999')` is out of
         // range, not text that is not a number).
         reason = reasonGiven;
-    } else if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
-        reason = "out of range (" + limits + ")";
+    } else if (const std::string notFit = literalNotFitReason(data, type); !notFit.empty()) {
+        reason = notFit;
     } else if (data->type()->isPrimitive() && isIntegerType(type)) {
         // A decimal literal in an integer type: `int(1.9)` loses the fraction, `int(1.0e30)`
         // is out of the range.

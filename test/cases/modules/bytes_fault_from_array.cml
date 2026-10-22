@@ -1,0 +1,10 @@
+module bytes_fault_from_array
+
+import { from_array } from bytes
+
+func main(): int sync {
+    println('before')
+    println(from_array([104, 256]))
+    println('not reached')
+    return 0
+}

@@ -1,0 +1,54 @@
+/**
+ * The two marks compose innermost first: `T?!` is fallible(nullable(T)) and `T!?` is
+ * nullable(fallible(T)). A `match` opens the outer form only, so `case null` is exhaustive
+ * over `int!?` and not over `int?!` (H123; design principles 3.9).
+ */
+module two_layer
+
+func failing(): int! {
+    throw error('Boom', 'no value')
+}
+
+func seven(): int!? {
+    return 7
+}
+
+func inner_error(): int!? {
+    return failing()
+}
+
+func five(): int?! {
+    return 5
+}
+
+func absent(): int?! {
+    return null
+}
+
+func main(): int sync {
+    // `int!?` (nullable(fallible(int))): the outer form is the null, so `case null` is
+    // exhaustive; the value arm still holds an `int!`, which `!!` opens.
+    let a = seven()
+    println(match a {
+        case null => -1
+        case v => v !! -2
+    })
+    let b = inner_error()
+    println(match b {
+        case null => -3
+        case v => v !! -4
+    })
+    // `int?!` (fallible(nullable(int))): the outer form is the error, so the cases are
+    // `case error e` and the value; the value arm holds an `int?`, which `??` opens.
+    let c = five()
+    println(match c {
+        case error e => -5
+        case v => v ?? -6
+    })
+    let d = absent()
+    println(match d {
+        case error e => -7
+        case v => v ?? -8
+    })
+    return 0
+}

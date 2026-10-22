@@ -13,31 +13,31 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * The tensor::fuse rewrite (see fuse.h).
+ * The tensor::fuse pass (see fuse.h): it writes the implementation choices of the tensor
+ * operators as node attributes and changes no operator.
  */
 
 #include "fuse.h"
 
 #include "index_eval.h"
 
-#include "../ops/registry.h"
+#include "../attrs.h"
 
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_semantics.h"
+#include "camel/core/operator_table.h"
+#include "camel/core/tags.h"
 #include "camel/execute/pass/params.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
-#include <array>
-#include <cstdlib>
 #include <format>
-#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -47,12 +47,15 @@ using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
-using camel::runtime::GCReturnKind;
 using camel::runtime::GraphDraft;
 using camel::runtime::kInvalidNodeRef;
 using camel::runtime::RuntimeGraphDraftSession;
 
 namespace {
+
+namespace attr = camel::core::attr;
+namespace sem  = camel::core::sem;
+namespace tag  = camel::core::tag;
 
 /// The operator of an OPER node, kNoOper for any other node.
 camel::core::OperId operOf(const GraphDraft &draft, gc_node_ref_t id) {
@@ -63,7 +66,7 @@ camel::core::OperId operOf(const GraphDraft &draft, gc_node_ref_t id) {
     return reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->oper;
 }
 
-/// The operators the pattern is made of, interned once.
+/// The operators the patterns are made of, interned once.
 struct PatternOperators {
     camel::core::OperId add    = camel::core::OperatorTable::instance().intern("tensor:add");
     camel::core::OperId matmul = camel::core::OperatorTable::instance().intern("tensor:matmul");
@@ -75,10 +78,10 @@ const PatternOperators &patternOperators() {
     return operators;
 }
 
-/// True when nothing outside the pattern observes `id`: its value feeds only `next` (as a norm
-/// input) and its control users, if any, are `next` as well. Since no other node depends on it,
-/// merging it into `next` cannot create a cycle, and its own control inputs can move to the
-/// fused node (in `sync` code every call is chained this way).
+/// True when nothing outside the group observes `id`: its value feeds only `next` (as a norm
+/// input) and its control users, if any, are `next` as well. The group's nodes stay separate
+/// nodes of the graph (identity is preserved), so this is a property of the pattern, not a
+/// precondition for merging: a value with another reader would simply not be private to a group.
 bool isPrivateIntermediate(const GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t next) {
     const auto normUsers = draft.normUsersOf(id);
     const auto ctrlUsers = draft.ctrlUsersOf(id);
@@ -87,172 +90,143 @@ bool isPrivateIntermediate(const GraphDraft &draft, gc_node_ref_t id, gc_node_re
            id != draft.outputNode() && id != draft.returnNode() && id != draft.exitNode();
 }
 
-struct Match {
-    gc_node_ref_t matmul;
-    gc_node_ref_t add;
-    gc_node_ref_t relu; // kInvalidNodeRef when not fused
-    gc_node_ref_t bias;
-    uint32_t attrs = 0; // the node attributes the fused node keeps (attr::merge)
-};
-
-/// The first fusable pattern in the draft's current state. Rewrites change operands of other
-/// patterns (a fused add may be the bias of the next one), so matches are found one at a time.
-std::optional<Match> findMatch(const GraphDraft &draft) {
-    const PatternOperators &ops = patternOperators();
-    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (operOf(draft, id) != ops.add) {
-            continue;
-        }
-        const auto ins = draft.normInputsOf(id);
-        if (ins.size() != 2) {
-            continue;
-        }
-        // Float addition is commutative, so the product may be either operand.
-        for (size_t k = 0; k < 2; ++k) {
-            const gc_node_ref_t mm = ins[k];
-            // The fused node stands for the whole pattern, so every node of it must have been
-            // granted the same numeric permissions (design principles 7.5), which it keeps; its
-            // node attributes are what each attribute's key lets one node of the pattern keep
-            // (attr::merge), and a key that refuses keeps the nodes apart.
-            if (operOf(draft, mm) != ops.matmul || draft.normInputsOf(mm).size() != 2 ||
-                !isPrivateIntermediate(draft, mm, id) ||
-                draft.nodePermissions(mm) != draft.nodePermissions(id)) {
-                continue;
-            }
-            const auto attrs = camel::core::attr::merge(draft.nodeAttrs(mm), draft.nodeAttrs(id));
-            if (!attrs.has_value()) {
-                continue;
-            }
-            Match m{
-                .matmul = mm,
-                .add    = id,
-                .relu   = kInvalidNodeRef,
-                .bias   = ins[1 - k],
-                .attrs  = *attrs};
-            const auto users = draft.normUsersOf(id);
-            if (users.size() == 1 && operOf(draft, users[0]) == ops.relu &&
-                isPrivateIntermediate(draft, id, users[0]) &&
-                draft.nodePermissions(users[0]) == draft.nodePermissions(id)) {
-                if (const auto withRelu =
-                        camel::core::attr::merge(m.attrs, draft.nodeAttrs(users[0]))) {
-                    m.relu  = users[0];
-                    m.attrs = *withRelu;
-                }
-            }
-            return m;
-        }
+/// Writes `text` (a Symbol) under `key` on `id`; false when the set already said that.
+bool setSymbol(GraphDraft &draft, gc_node_ref_t id, attr::AttrKey key, std::string_view text) {
+    const attr::AttrSetId before = draft.nodeAttrs(id);
+    const attr::AttrSetId after  = attr::unite(before, attr::single(key, attr::symbol(text)));
+    if (after == before) {
+        return false;
     }
-    return std::nullopt;
+    draft.setNodeAttrs(id, after);
+    return true;
 }
 
-void fuse(GraphDraft &draft, const Match &m) {
-    const bool withRelu      = m.relu != kInvalidNodeRef;
-    const gc_node_ref_t root = withRelu ? m.relu : m.add;
-    const std::string uri    = withRelu ? "tensor:matmul_add_relu" : "tensor:matmul_add";
-    const auto *def          = ops::OpRegistry::instance().find(uri);
-    const auto mmInputs      = draft.normInputsOf(m.matmul);
-    const std::array inputs  = {mmInputs[0], mmInputs[1], m.bias};
-
-    // The fused node inherits every control dependency of the pattern that comes from outside it.
-    const std::array pattern = {m.matmul, m.add, m.relu};
-    std::vector<gc_node_ref_t> ctrl;
-    for (gc_node_ref_t node : pattern) {
-        if (node == kInvalidNodeRef) {
-            continue;
-        }
-        for (gc_node_ref_t pred : draft.ctrlInputsOf(node)) {
-            if (std::ranges::find(pattern, pred) == pattern.end() &&
-                std::ranges::find(ctrl, pred) == ctrl.end()) {
-                ctrl.push_back(pred);
-            }
-        }
-    }
-
-    const gc_node_ref_t fused = draft.addOperNode(draft.header(root)->dataType, def->kernel, uri);
-    draft.setNormInputs(fused, inputs);
-    draft.setCtrlInputs(fused, ctrl);
-    draft.setNodePermissions(fused, draft.nodePermissions(m.add));
-    draft.setNodeAttrs(fused, m.attrs);
-
-    draft.replaceAllValueUses(root, fused);
-    draft.replaceAllCtrlUses(root, fused);
-    draft.setNodeRegion(fused, draft.nodeRegion(root));
-    if (draft.outputNode() == root) {
-        draft.setOutputNode(fused);
-    }
-    if (draft.returnNode() == root) {
-        draft.setReturnNode(fused, draft.returnKind());
-    }
-    draft.eraseNode(root);
-    if (withRelu) {
-        draft.eraseNode(m.add);
-    }
-    draft.eraseNode(m.matmul);
+/// The 7.3 decision for one matmul, as the core states it: the node's effective permissions
+/// under this stage's policy. `reassociate` covers the library GEMM's own order and grouping of
+/// the accumulation (a separately rounded multiply and add included, 2.17); nothing else is
+/// needed. Implementation choices do not change the operator (9.6), so this writes an
+/// attribute, not another operator.
+std::string_view kernelChoice(const GraphDraft &draft, gc_node_ref_t id, const sem::NumericPolicy &policy) {
+    const sem::PermissionMask effective = tag::effectivePermissions(draft, id, policy);
+    return (effective & sem::kReassociate) != 0 ? kLibraryKernel : kCanonicalKernel;
 }
 
-/// The permissions a library GEMM needs: its own order and grouping of the accumulation
-/// (reassociate), and products that may be rounded separately or a different accumulation
-/// precision (change_precision). Design principles 7.1.
-constexpr uint8_t kLibraryGemmPermissions =
-    camel::core::sem::kReassociate | camel::core::sem::kChangePrecision;
-
-/// Replaces every tensor:matmul node granted kLibraryGemmPermissions by tensor:matmul_blas
-/// (same operands, control inputs and permissions). Returns the number replaced.
-size_t useLibraryGemm(GraphDraft &draft) {
+/// Writes tensor.kernel on every tensor:matmul of `draft`. Returns how many nodes it changed and
+/// counts the choices, so a run says how many matmuls run each way.
+size_t markKernels(
+    GraphDraft &draft, const sem::NumericPolicy &policy, size_t &library, size_t &canonical) {
     const PatternOperators &ops = patternOperators();
-    const auto *def             = ops::OpRegistry::instance().find("tensor:matmul_blas");
-    size_t count                = 0;
+    size_t changed              = 0;
     const gc_node_ref_t slots   = draft.nodeSlotCount();
     for (gc_node_ref_t id = 0; id < slots; ++id) {
-        if (operOf(draft, id) != ops.matmul ||
-            (draft.nodePermissions(id) & kLibraryGemmPermissions) != kLibraryGemmPermissions) {
+        if (operOf(draft, id) != ops.matmul) {
             continue;
         }
-        const auto inputs = draft.normInputsOf(id);
-        const auto ctrl   = draft.ctrlInputsOf(id);
-        const std::vector<gc_node_ref_t> in(inputs.begin(), inputs.end());
-        const std::vector<gc_node_ref_t> ctl(ctrl.begin(), ctrl.end());
-        const gc_node_ref_t blas =
-            draft.addOperNode(draft.header(id)->dataType, def->kernel, "tensor:matmul_blas");
-        draft.setNormInputs(blas, in);
-        draft.setCtrlInputs(blas, ctl);
-        draft.setNodePermissions(blas, draft.nodePermissions(id));
-        draft.setNodeAttrs(blas, draft.nodeAttrs(id));
-        draft.replaceAllValueUses(id, blas);
-        draft.replaceAllCtrlUses(id, blas);
-        draft.setNodeRegion(blas, draft.nodeRegion(id));
-        if (draft.outputNode() == id) {
-            draft.setOutputNode(blas);
+        const std::string_view choice = kernelChoice(draft, id, policy);
+        if (choice == kLibraryKernel) {
+            ++library;
+        } else {
+            ++canonical;
         }
-        if (draft.returnNode() == id) {
-            draft.setReturnNode(blas, draft.returnKind());
+        if (setSymbol(draft, id, kernelAttrKey(), choice)) {
+            ++changed;
         }
-        draft.eraseNode(id);
-        ++count;
     }
-    return count;
+    return changed;
+}
+
+/// Marks one group: `matmul` and `add` (and `relu` when it is its private reader) carry
+/// tensor.fusion with the same value. False when a node already belongs to another group or all
+/// of them already carry this value (a second run writes nothing).
+bool markGroup(
+    GraphDraft &draft, gc_node_ref_t matmul, gc_node_ref_t add, gc_node_ref_t relu,
+    std::string_view fusion) {
+    const attr::AttrKey key = fusionAttrKey();
+    for (gc_node_ref_t member : {matmul, add, relu}) {
+        if (member == kInvalidNodeRef) {
+            continue;
+        }
+        const attr::AttrValueId value = attr::valueOf(draft.nodeAttrs(member), key);
+        if (value != attr::kNoValue && attr::value(value).text != fusion) {
+            return false;
+        }
+    }
+    bool changed = false;
+    for (gc_node_ref_t member : {matmul, add, relu}) {
+        if (member != kInvalidNodeRef) {
+            changed |= setSymbol(draft, member, key, fusion);
+        }
+    }
+    return changed;
+}
+
+/// Marks every `x @ w + b` / `relu(x @ w + b)` group whose product nothing else observes.
+/// Returns the number of groups written (a second run finds them marked and writes none).
+size_t markGroups(GraphDraft &draft) {
+    const PatternOperators &ops = patternOperators();
+    const gc_node_ref_t slots   = draft.nodeSlotCount();
+    size_t groups               = 0;
+    for (gc_node_ref_t add = 0; add < slots; ++add) {
+        if (operOf(draft, add) != ops.add) {
+            continue;
+        }
+        const auto inputs = draft.normInputsOf(add);
+        if (inputs.size() != 2) {
+            continue;
+        }
+        // Float addition is commutative, so the product may be either operand; the first one
+        // that is a private product decides the group (an add is the root of one group).
+        gc_node_ref_t matmul = kInvalidNodeRef;
+        for (size_t side = 0; side < 2; ++side) {
+            const gc_node_ref_t candidate = inputs[side];
+            if (operOf(draft, candidate) == ops.matmul &&
+                draft.normInputsOf(candidate).size() == 2 &&
+                isPrivateIntermediate(draft, candidate, add)) {
+                matmul = candidate;
+                break;
+            }
+        }
+        if (matmul == kInvalidNodeRef) {
+            continue;
+        }
+        gc_node_ref_t relu      = kInvalidNodeRef;
+        std::string_view fusion = kLinearFusion;
+        const auto users        = draft.normUsersOf(add);
+        if (users.size() == 1 && operOf(draft, users[0]) == ops.relu &&
+            isPrivateIntermediate(draft, add, users[0])) {
+            relu   = users[0];
+            fusion = kLinearReluFusion;
+        }
+        if (markGroup(draft, matmul, add, relu, fusion)) {
+            ++groups;
+        }
+    }
+    return groups;
 }
 
 } // namespace
 
 const camel::runtime::Program *
 TensorFusePass::apply(const camel::runtime::Program *program, std::ostream &) {
+    // The stage's policy: the 7.3 defaults, or the canonical algorithms in safe mode (7.4).
+    const sem::NumericPolicy policy =
+        safeFp_ ? sem::NumericPolicy::strict() : sem::NumericPolicy::relaxed();
     RuntimeGraphDraftSession session(context_, program);
-    size_t fusedCount = 0, libraryCount = 0;
+    size_t changed = 0, library = 0, canonical = 0, groups = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
         GraphDraft &draft = session.edit(g);
-        while (const auto m = findMatch(draft)) {
-            fuse(draft, *m);
-            ++fusedCount;
-        }
-        libraryCount += useLibraryGemm(draft);
+        changed += markKernels(draft, policy, library, canonical);
+        groups += markGroups(draft);
     }
+    changed += groups;
     CAMEL_LOG_INFO_S(
         "tensor::fuse",
-        "fused {} matmul+add pattern(s), {} matmul(s) by the library GEMM",
-        fusedCount,
-        libraryCount);
-    if (fusedCount == 0 && libraryCount == 0) {
+        "{} matmul(s) on the library GEMM, {} on the canonical algorithm, {} fused group(s){}",
+        library,
+        canonical,
+        groups,
+        safeFp_ ? " (safe mode)" : "");
+    if (changed == 0) {
         return program;
     }
     return session.commit();
@@ -284,7 +258,7 @@ class ParamEchoTestPass : public GraphIRPass {
 
 void registerParamEchoTestPass() {
     PassDescriptor descriptor;
-    descriptor.doc    = "test only: prints its parameters";
+    descriptor.doc = "prints the parameters it received (a test pass)";
     descriptor.params = {
         PassParam{"n", PassParamType::Int, int64_t{1}, "an int"},
         PassParam{"ratio", PassParamType::Float, 0.5, "a float"},
@@ -301,17 +275,27 @@ void registerParamEchoTestPass() {
 } // namespace
 
 void registerTensorPasses() {
-    registerModulePass("tensor::fuse", [](const core::context::context_ptr_t &ctx) {
-        return std::make_unique<TensorFusePass>(ctx);
+    PassDescriptor descriptor;
+    descriptor.doc =
+        "records how the tensor operators run as node attributes (tensor.kernel, tensor.fusion) "
+        "without changing an operator";
+    descriptor.params = {PassParam{
+        "safe_fp",
+        PassParamType::Bool,
+        false,
+        "keep the matmul on the canonical algorithm (design principles 7.4); the default lets a "
+        "matmul the 7.3 rule permits use the library GEMM"}};
+    descriptor.readsTags = true;
+    descriptor.make       = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<TensorFusePass>(ctx, args.getBool("safe_fp"));
+    };
+    registerModulePass("tensor::fuse", std::move(descriptor));
+    // The declaration evaluator is a test (index_eval.h): it is reachable by name and in no default
+    // pipeline, which is the whole switch (H81 removed the environment variable that gated it).
+    registerModulePass("tensor::test_index_eval", [](const core::context::context_ptr_t &ctx) {
+        return std::make_unique<IndexEvalTestPass>(ctx);
     });
-    // The declaration evaluator is a test (index_eval.h): it exists only when test passes are
-    // enabled, as the core's test passes do (CAMEL_ENABLE_TEST_PASSES).
-    if (std::getenv("CAMEL_ENABLE_TEST_PASSES") != nullptr) {
-        registerModulePass("tensor::test_index_eval", [](const core::context::context_ptr_t &ctx) {
-            return std::make_unique<IndexEvalTestPass>(ctx);
-        });
-        registerParamEchoTestPass();
-    }
+    registerParamEchoTestPass();
 }
 
 } // namespace camel::tensor::passes

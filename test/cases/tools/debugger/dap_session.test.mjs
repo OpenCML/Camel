@@ -109,6 +109,12 @@ await runTest(async (t) => {
         )
         r = await dap.request('stackTrace', { threadId: 1 })
         check(!r.success && /has ended/.test(r.message), on('after the end a request is an error, not a hang'), r)
+        r = await dap.request('camel/passGraphs')
+        check(
+            !r.success && /has ended/.test(r.message),
+            on('a snapshot request after the end is an error with the reason, not a hang'),
+            r,
+        )
         checkEq(dap.protocolErrors, [], on('every message of the adapter was well formed'))
         checkEq(dap.output, '', on('the adapter writes nothing to its standard error'))
         await dap.stop()

@@ -44,20 +44,4 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
     camel::runtime::RuntimeGraphDraftSession &session, camel::runtime::GraphDraft &draft,
     camel::runtime::gc_node_ref_t funcNodeId, bool asArm = false);
 
-/// Inlines the call of every arm that is the call of a graph (the form `raiseBranchArms` gives
-/// an arm), so the arms are regions of the graphs that hold the branches again. The program
-/// itself when there is none.
-/// With `detached`, the result is a private program of the graphs reachable from `root` (the
-/// program of the context is left as it is).
-const camel::runtime::Program *lowerBranchArms(
-    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *root = nullptr, bool detached = false);
-
-/// Copies the condition and the body graph of every LOOP node of `program` into the graph that
-/// holds the node, as its LoopCond and LoopBody regions (the front end builds a loop as graphs).
-/// The program itself when there is none. With `detached`, as lowerBranchArms.
-const camel::runtime::Program *regionizeLoops(
-    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *root = nullptr, bool detached = false);
-
 } // namespace camel::passes::opt

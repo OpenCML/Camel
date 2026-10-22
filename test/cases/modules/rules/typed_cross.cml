@@ -1,0 +1,12 @@
+/** The same law on four element types: a rule of one type must leave the others alone. */
+module typed_cross
+
+func i32_c(x: i32): i32 { return x * 3 + x * 5 }
+func i64_c(x: int): int { return x * 3 + x * 5 }
+func f32_c(x: f32): f32 { return x * 3.0 + x * 5.0 }
+func f64_c(x: float): float { return x * 3.0 + x * 5.0 }
+
+func main(): int sync {
+    println(i32_c(2), i64_c(2), f32_c(2.0), f64_c(2.0))
+    return 0
+}

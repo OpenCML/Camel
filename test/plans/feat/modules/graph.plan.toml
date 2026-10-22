@@ -16,12 +16,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "node_kinds_match_the_graph"
-desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in NodeId order (compared once with the std::jgir dump of the same program)."
+desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in NodeId order; the graph inventory and the kinds match the std::jgir dump of the same program."
 kind = "behavior"
 case = "../../../cases/modules/graph_kinds.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "10\n[__root__, pick, total, kinds, main, __g_6__, __g_7__, __g_8__, __g_9__, __g_10__, __g_11__]\n[[NodeKind::Data, NodeKind::Call], [NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Join, NodeKind::Brch, NodeKind::Func, NodeKind::Func], [NodeKind::Port, NodeKind::Data, NodeKind::Data, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Gate], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
+expect_stdout_exact = "10\n[__root__, pick, total, kinds, main, __g_6__, __g_7__, __g_8__, __g_9__]\n[[NodeKind::Data, NodeKind::Call], [NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Join, NodeKind::Brch, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Data, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Gate], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
 timeout_ms = 10000
 
 [[tests]]
@@ -70,12 +70,13 @@ timeout_ms = 10000
 
 [[tests]]
 name = "unknown_camel_pass"
-desc = "A module that exports no such function leaves the pass unknown."
+desc = "A module that exports no such function names itself and the passes it does provide (H130), instead of leaving the pass unknown."
 kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "identity::nosuch", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["UnrecognizedGraphPass"]
+expect_output_contains = ["PassNotProvidedByModule", "Module 'identity' provides no pass 'nosuch'", "it provides the passes 'keep', 'refuse', 'report'"]
+expect_output_not_contains = ["not found, available passes are"]
 timeout_ms = 10000
 
 # A pass written in Camel has a top level of its own (task H37): the pass is the entry of a
@@ -121,6 +122,26 @@ case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "camel_import_values::show", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "[1, 2, 2, 3, 3, 4]\n42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_reads_a_value_imported_from_a_camel_library"
+desc = "A pass reads a value imported from a library written in Camel, and a top-level value built from it and from a call into that library (task H37; H36 allowed the Camel import)."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "valuereader::show", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "5 14\n42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_reads_the_handover_reproduction"
+desc = "The H37 handover brief's program: a module-level literal (`two = 2`) and a module-level value computed by a call (`twelve = two + ten()`), read by the pass."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "gl::apply", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2 12\n42\n"
 timeout_ms = 10000
 
 # A transaction edits the program being processed and commits a new Program (design 5.1).
@@ -222,6 +243,160 @@ expect_exit = 0
 expect_stdout_exact = "7\n11\n7\n10\n"
 timeout_ms = 20000
 
+# The five identities the C++ reference mode applies are the rules library's five integer rules
+# (stdlib/rules.cml: int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul and the
+# int32 versions). The case contains only those forms: the two tests below pin each implementation
+# to the same surviving graph (the operand add, and no other operator), so a change to either side
+# turns its test red. They are not a byte-for-byte differential: the C++ draft rewrite leaves the
+# neutral operand constant dead and attaches the parameter's source span to the port it keeps,
+# while the rule engine prunes the constant and its commit leaves the port without a span. Both are
+# engine artefacts, not the laws; handover note ⟨c7b6133⟩ (H160) §4 has the diff.
+
+[[tests]]
+name = "neutral_identities_by_std_opt_algebra"
+desc = "The reference: std::opt::algebra(neutral_only=true) removes all five identities of both integer types."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_identities.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::opt::dce(values_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
+ const ops=name=>g(name).nodes.filter(n=>n.kind==='OPER').map(n=>n.label);
+ for(const [name,add] of [['five64',':op/add_l'],['five32',':op/add_i']]){
+  const o=ops(name);
+  assert(o.length===1&&o[0]===add,name+': '+o.join(',')+' (the five identities did not all go)');
+  assert(g(name).nodes.every(n=>n.kind!=='DATA'),name+': a neutral operand constant survived dce');
+ }
+}
+'''
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_identities_by_the_rule_library"
+desc = "rules::simplify removes the same five identities and leaves the same graph: the library has these laws."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_identities.cml"
+args = ["${case}", "rules::simplify", "std::opt::dce(values_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
+ const ops=name=>g(name).nodes.filter(n=>n.kind==='OPER').map(n=>n.label);
+ for(const [name,add] of [['five64',':op/add_l'],['five32',':op/add_i']]){
+  const o=ops(name);
+  assert(o.length===1&&o[0]===add,name+': '+o.join(',')+' (the library did not apply the five)');
+  assert(g(name).nodes.every(n=>n.kind!=='DATA'),name+': a neutral operand constant survived dce');
+ }
+}
+'''
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_identities_execution"
+desc = "The five identities keep the value, including at the type's upper bound, on every back end."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_identities.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "7\n7\n9223372036854775806\n2147483646\n"
+timeout_ms = 20000
+
+# The mode is not the library's simplify: it applies the five laws and nothing else. These four
+# forms are exact laws of the library over the same integer names, and the mode must keep them.
+
+[[tests]]
+name = "neutral_mode_keeps_the_other_laws"
+desc = "neutral_only=true leaves x*0, x-x, x/1 and -(-x): the mode's set is only the five neutral elements."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_kept.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=d.graphs.find(g=>g.name==='other');assert(g,'missing other');
+ const ops=g.nodes.filter(n=>n.kind==='OPER').map(n=>n.label);
+ const count=l=>ops.filter(x=>x===l).length;
+ assert(count(':op/mul_l')===1,'x*0 was simplified by the neutral mode');
+ assert(count(':op/sub_l')===1,'x-x was simplified by the neutral mode');
+ assert(count(':op/div_l')===1,'x/1 was simplified by the neutral mode');
+ assert(count(':op/neg_l')===2,'-(-x) was simplified by the neutral mode');
+}
+'''
+timeout_ms = 20000
+
+[[tests]]
+name = "the_library_simplifies_the_other_laws"
+desc = "rules::simplify removes those same four forms: the difference is the mode, not a law the library lacks."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_kept.cml"
+args = ["${case}", "rules::simplify", "std::opt::dce(values_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=d.graphs.find(g=>g.name==='other');assert(g,'missing other');
+ const ops=g.nodes.filter(n=>n.kind==='OPER').map(n=>n.label);
+ const count=l=>ops.filter(x=>x===l).length;
+ assert(count(':op/mul_l')===1,'the library did not fold the four laws into the product');
+ assert(count(':op/sub_l')===0,'x-x survived the library');
+ assert(count(':op/div_l')===0,'x/1 survived the library');
+ assert(count(':op/neg_l')===0,'-(-x) survived the library');
+}
+'''
+timeout_ms = 20000
+
+# The precise limit of the reference mode, and the reason the C++ file is not deleted (H160): it
+# keeps the graph's named node (the C++ pass's isReplaceable), while the rule engine retargets it.
+# Both facts are pinned here so that neither can drift silently.
+
+[[tests]]
+name = "neutral_mode_keeps_the_named_node"
+desc = "neutral_only=true leaves x+0 when that add is the graph's return node."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_target.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=d.graphs.find(g=>g.name==='anchor');assert(g,'missing anchor');
+ const add=g.nodes.find(n=>n.label===':op/add_l');
+ assert(add,'the neutral mode simplified the graph\'s named node');
+ assert(g.exit===add.id,'the anchor graph exits at a node other than the add');
+}
+'''
+timeout_ms = 20000
+
+[[tests]]
+name = "the_rule_engine_retargets_the_named_node"
+desc = "rules::simplify rewrites the same add and moves the graph's return to the port."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_target.cml"
+args = ["${case}", "rules::simplify", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=d.graphs.find(g=>g.name==='anchor');assert(g,'missing anchor');
+ assert(!g.nodes.some(n=>n.label===':op/add_l'),'the rule engine kept the named add');
+ const x=g.nodes.find(n=>n.kind==='PORT');assert(x,'missing the port');
+ assert(g.exit===x.id,'the graph does not exit at the port');
+}
+'''
+timeout_ms = 20000
+
 # Unused values: after folding and inlining, constants and pure operations that no node reads are
 # left behind. unused::values (Camel) removes them like std::opt::dce restricted to values.
 
@@ -271,6 +446,18 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "target\n1\n0\n15\n15\nSignatureMismatch\n"
 timeout_ms = 20000
+
+# The two reads of a function value that live in the transaction group. `program_of` is the one
+# graph entry no other case calls; it is the Program the function value lives in.
+[[tests]]
+name = "program_of_a_function_value"
+desc = "program_of(target) is the running Program (its entry graph is __root__) and graph_of(target) is target's graph."
+kind = "behavior"
+case = "../../../cases/modules/graph_program.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "__root__\ntrue\ntarget\n"
+timeout_ms = 10000
 
 # Facts the core keeps (design 10): effects of a graph, the shape of a tensor node, the
 # permissions a node was granted, read without a pass computing them again.
@@ -345,6 +532,95 @@ expect_exit = 0
 expect_stdout_exact = "9\n42\n42\n"
 timeout_ms = 10000
 
+# The module that hosts the pass can be a library of the program at the same time: the pass runs
+# in a program of its own, and the two programs must not read each other's entities, generic
+# instances included.
+
+[[tests]]
+name = "pass_module_imported_by_the_program"
+desc = "sharedvals::run is the pass, and shared_target.cml imports the same module; both compute with their own graphs."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/shared_target.cml"
+args = ["${case}", "sharedvals::run", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n10\n2\n4\n"
+timeout_ms = 10000
+
+# Two passes of one pipeline, each importing (one under names of its own) the module the program
+# being transformed imports: every program declares the module into its own export table, so there
+# are three programs using the graphs their own builder made (task H42).
+
+[[tests]]
+name = "two_camel_passes_share_a_module"
+desc = "firstuser::run and seconduser::run import sharedvals under different names; the program imports it too."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/shared_target.cml"
+args = ["${case}", "firstuser::run", "seconduser::run", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "10\n6\n20\n8\n2\n4\n"
+timeout_ms = 10000
+
+# A Camel library the pass module imports may import another one: the whole closure is declared
+# and built, in import order.
+
+[[tests]]
+name = "pass_module_imports_a_camel_library_transitively"
+desc = "chain::show calls chainlib::six, which calls innerlib::triple; both modules are built with the pass."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "chain::show", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "6\n42\n"
+timeout_ms = 10000
+
+# A pass module the user is still editing does not parse: the pipeline reports a bad pass
+# specification, and the syntax error is a secondary location on it (its file, line and column),
+# not text stitched into the message.
+
+[[tests]]
+name = "pass_module_that_does_not_compile"
+desc = "unparsable_pass::run: the pass is InvalidPassParameter, the message names the pass and its library, and the parse error is a secondary location."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "unparsable_pass::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "its library 'unparsable_pass' does not compile. [SyntaxDiag::MissingClosingDelimiter:", "Expected ')' before 'return', to close the '('.", "at <ROOT>/test/cases/modules/graph_pass/unparsable_pass.cml:8:5]"]
+expect_output_not_contains = ["42", "does not compile: SyntaxDiag"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The same diagnostic in the text format: the pass module's file, line, column and original line
+# are drawn exactly as for any other secondary location.
+
+[[tests]]
+name = "pass_module_error_is_a_secondary_location"
+desc = "The unparsable pass module's syntax diagnostic is a note with the module's file, line, column and source line; the outer message stays InvalidPassParameter."
+kind = "snapshot"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["--error-format", "text", "${case}", "unparsable_pass::run", "std::nvm"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/graph_pass_unparsable_diagnostic.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The scope's other direction: an import is a dependency of the program, so a module that does
+# not compile makes the program fail at the compile step with that module's diagnostic, before any
+# pass runs. A pass library is not a dependency and is handled by pass resolution instead.
+
+[[tests]]
+name = "imported_module_that_does_not_compile"
+desc = "A program importing a module that does not parse fails at the compile step with that module's parse diagnostic, not with a pass diagnostic."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["ModuleParseFailed", "SyntaxDiag::MissingClosingDelimiter", "unparsable_pass.cml:8:5"]
+expect_output_not_contains = ["InvalidPassParameter", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
 # The `with` parameters of a pass function are the pass parameters written on the pipeline.
 
 [[tests]]
@@ -365,6 +641,28 @@ case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "params::report(n=1)", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["parameter 'label' is not written and has no default", "label: string (required)"]
+expect_output_not_contains = ["42"]
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_parameter_unknown"
+desc = "A parameter the pass does not declare is a located diagnostic that lists the ones it takes."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "params::report(label='x', n=1, bogus=2)", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "column 32", "has no parameter 'bogus'", "label: string (required)"]
+expect_output_not_contains = ["42"]
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_parameter_wrong_type"
+desc = "A value of the wrong type names both types and the column in the specification."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "params::report(label='x', n=1.5)", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "column 27", "parameter 'n' is a float, not an int"]
 expect_output_not_contains = ["42"]
 timeout_ms = 10000
 
@@ -392,25 +690,50 @@ expect_exit = 0
 expect_stdout_exact = "7\n"
 timeout_ms = 30000
 
+# A transaction may create a value of any type `add_constant` accepts (int, f64, bool, string);
+# each one is in the committed program, and a collection while the transaction is open does not
+# take it away.
+
+[[tests]]
+name = "constants_of_every_type"
+desc = "typed_constants::make creates an int, an f64, a bool and a string constant and counts each after the commit."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/typed_target.cml"
+args = ["${case}", "typed_constants::make", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n1\n1\n1\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "constants_of_every_type_survive_a_safepoint"
+desc = "The same pass with a collection forced at every safepoint while the four new values are live."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/typed_target.cml"
+args = ["${case}", "typed_constants::make", "std::nvm"]
+envs = ["CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "1\n1\n1\n1\n"
+timeout_ms = 30000
+
 # Region reads: a graph with the body only has no region column (region_of is null); after
 # inlining, the Inline regions and their parents are there.
 
 [[tests]]
 name = "regions_of_a_program_without_regions"
-desc = "region_of is null for every node of a graph that has the body only; region_parent is never called for one."
+desc = "Every node of a graph with the body only is in region 0, whose kind is Root."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "regionprobe::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "2\n0\n0\n2\n4\n0\n0\n4\n42\n"
+expect_stdout_exact = "2\n2\n0\n2\n4\n4\n0\n4\n42\n"
 timeout_ms = 10000
 
 [[tests]]
 name = "regions_after_inlining"
-desc = "After std::opt::inline, the inlined nodes are in Inline regions whose parent region exists."
+desc = "After std::opt::inline, body nodes are Root, inlined nodes are in Inline regions with a parent, and an Arm region is kept."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/region_target.cml"
 args = ["${case}", "std::opt::inline", "regionprobe::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "2\n0\n0\n2\n9\n9\n2\n9\n12\n12\n6\n12\n1\n0\n0\n1\n3\n0\n0\n3\n3\n"
+expect_stdout_exact = "2\n2\n0\n2\n7\n6\n0\n7\n10\n4\n5\n10\n3\n"
 timeout_ms = 20000

@@ -12,6 +12,8 @@ Any expression can be a statement. In a sync block it executes in order; outside
 
 **A `T!` that is evaluated and not used is a warning.** In a sync block a statement runs whether or not anything takes its value; when that value is a `T!` ([3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t)), an error it holds is lost without a trace, and the compiler says so (`SemanticDiag::UnusedFallibleValue`):
 
+<!-- camel-snippet: fragment: the body of save is elided; the four uses of a fallible value are the subject -->
+
 ```cml
 func save(path: string): int! sync { ... }
 
@@ -158,8 +160,10 @@ int 1 string a
 | Modifier | Meaning |
 |---|---|
 | `sync` | The function has side effects and needs to be synchronised ([4.3.3](04_execution_model.md#433-sync-func-function-modifier)) |
-| `macro` | Can be evaluated ahead of time by the `std::macro` pass ([4.5](04_execution_model.md#45-macro-functions)) |
-| `atomic`, `shared`, `inner`, `outer` | Reserved: they are parsed and have no semantics at all |
+
+There are no other modifiers. A function implemented in C++ is a body-less `export func` declaration (design principles 6.4); a helper used only inside its module is a plain `func` without `export`, since `func` is module-private already.
+
+`#macro` is not a modifier but a standard tag written before a function declaration ([4.5](04_execution_model.md#45-macro-functions)).
 
 ### 7.4.5 Operator overloading
 
@@ -289,7 +293,7 @@ func main(): int sync {
 - When nothing determines the variables it is the compile-time error `SemanticDiag::GenericFunctionAsValue` (or, for an argument, `SemanticDiag::GenericArgumentsMismatch`), which names them: `let g = id` has no context (write the type); in `apply(id, id)` each argument waits for the other.
 - An imported generic function can be a value too (`xss->map<reverse>`, with `reverse` from the `array` module).
 
-**Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value; type arguments cannot be written at a call (whether to allow that is undecided).
+**Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value.
 
 ## 7.6 Annotations
 
@@ -342,41 +346,50 @@ func main(): int sync {
 
 A library can declare an annotation that **grants an attribute** to the code it is written on, instead of wrapping it: written with constant arguments, it is applied as the graph is built, and the nodes of that function or block (with the branch arms, loop bodies and lambdas written in it, not the functions they call) carry the attribute, which passes and back ends of that library read; the library declares the kind of the attribute's values and how they combine and merge (`camel/core/node_attrs.h`). Such an annotation does not change what the code computes.
 
-### 7.6.1 `@numeric`: numeric permissions
+### 7.6.1 Numeric permission tags
 
-`@numeric(permission, ...)` before a function declaration or a block grants that code permissions to change floating-point results (design principles 7.5). It is not a decorator: it does not change the function's value, it only relaxes the canonical algorithm ([3.2.1](03_data_model.md#321-the-numeric-contract-of-floating-point)).
+Numeric permissions are tags (design principles 7.2, 7.5): `#reassociate`, `#contract` and the others, written before a function declaration or a block, grant that code permission to change floating-point results. They are not decorators: they do not change the function's value, they only relax the canonical algorithm ([3.2.1](03_data_model.md#321-the-numeric-contract-of-floating-point)).
 
-| Permission | Allows |
-|---|---|
-| `reassociate` | reordering or regrouping a reduction (a chain of additions or multiplications, `sum`, the inner products of a matrix multiplication) |
-| `contract` | contracting a multiplication and an addition into one fused multiply-add |
-| `approx_math` | approximate math functions (approximate division and square root included) |
-| `change_precision` | lower or higher input or accumulation precision (TF32, bf16, or an f64 accumulator for f32) |
-| `finite_math` | assuming no NaN, no infinity, no distinction of the sign of zero, subnormals may become zero; the four can also be written apart: `no_nans`, `no_infs`, `no_signed_zeros`, `flush_subnormals` |
+`reassociate` and `contract` are the default permissions of 7.3: they are allowed without a tag, and the tag only states them. Every other permission needs its tag. `#strict` (7.4) is the opposite: the code it marks is computed with the canonical algorithm bit for bit and uses no permission at all, the default grants included.
+
+| Tag | Allows | Default |
+|---|---|---|
+| `#reassociate` | reordering or regrouping a reduction (a chain of additions or multiplications, `sum`, the inner products of a matrix multiplication) | allowed |
+| `#contract` | contracting a multiplication and an addition into one fused multiply-add | allowed |
+| `#approx_math` | approximate math functions (approximate division and square root included) | needs the tag |
+| `#change_precision` | lower or higher input or accumulation precision (TF32, bf16, or an f64 accumulator for f32) | needs the tag |
+| `#finite_math` | assuming no NaN, no infinity, no distinction of the sign of zero, subnormals may become zero; the four can also be written apart: `#no_nans`, `#no_infs`, `#no_signed_zeros`, `#flush_subnormals` | needs the tag |
+| `#nondeterministic` | results that vary with the schedule (floating-point atomics, for example) | needs the tag |
 
 ```cml
 import { sqrt } from math
 
-@numeric(reassociate, contract)
+#[reassociate, contract]
 func dot(a: float, b: float, c: float, d: float): float {
     return a * b + c * d          // may be evaluated as fma(a, b, c * d)
 }
 
 func norm(x: float, y: float): float {
     let s = x * x
-    @numeric(approx_math)
+    #approx_math
     {
         return sqrt(s + y * y)    // the code of the block may use an approximate square root
     }
 }
+
+#strict
+func canonical(x: float, y: float): float {
+    return x * y + 1.0            // the canonical algorithm: no default grant, no permission used
+}
 ```
 
 - **It applies to the code it is written on**: the function body or the block, with the branch arms, loop bodies and lambdas lexically inside it. A block's permissions join those of the function around it.
-- **A called function does not inherit them**: the functions `dot` calls keep the canonical algorithm unless they carry their own `@numeric`. After inlining every node keeps its own permissions.
-- **A permission allows, it never requires.** The CPU back ends (`std::nvm`, `std::fvm`, `std::jit`, `std::prl`, `std::cpp`) always give the canonical results; later back ends (Tiles, for example) may use other algorithms on the nodes that have a permission.
+- **A called function does not inherit them**: the functions `dot` calls keep the canonical algorithm unless they carry their own permission tags. After inlining every node keeps its own permissions.
+- **`#strict` takes everything away**: the function or block it marks (with the branch arms, loop bodies and lambdas inside it) has the empty set as its effective permissions -- the default `reassociate` and `contract` are gone, and an inner grant has no effect. When both are written, `#strict` wins.
+- **A permission allows, it never requires.** The CPU back ends (`std::nvm`, `std::fvm`, `std::jit`, `std::prl`, `std::cpp`) always give the canonical results; later back ends (Tiles, for example) may use other algorithms on the nodes that have a permission. `std::opt` uses the defaults of 7.3; `std::opt(safe_fp=true)` works under the same policy as `#strict`.
 - There is no module-wide default and no command-line or pipeline switch; a back end's entry point (such as `tiles.run`) takes no permissions.
-- The permissions are recorded on every node of the graph: `std::rgir` and `std::gir` show `numeric="..."` on the nodes that have any, `camel inspect -a` and `-c` on the blocks. Common-subexpression merging and tensor fusion do not merge nodes with different permissions.
-- An unknown permission, another name followed by parentheses (`@foo(x)`) and an empty `@numeric()` are compile-time errors, `SemanticDiag::InvalidAnnotation`.
+- The permissions are recorded on every node of the graph: `std::rgir` and `std::gir` show `numeric="..."` on the nodes that have any. `#strict` is a tag of the code and appears as `attrs="strict"` on its nodes. Common-subexpression merging and tensor fusion do not merge nodes with different permissions.
+- **The old `@numeric(permission, ...)` spelling is gone**: it is now `SemanticDiag::InvalidAnnotation` at the annotation, naming the tag form that replaced it (`#[reassociate]`); an empty `@numeric()` and any `@name(args)` are rejected the same way.
 
 ### 7.6.2 Tags: `#`
 
@@ -391,9 +404,15 @@ export tag width<w: int> on type, field     // with parameters, which are compil
 tag finite = [kernel, fast]                 // a group: its members apply together
 ```
 
-The positions are `func` (a function declaration), `type` (a type declaration), `field` (a struct field), `nodes` (the nodes written in the region) and `param` (reserved). `read_by` says which passes read the tag; when none of them is in the pipeline a warning is reported where the tag is written.
+The positions are `func` (a function declaration), `type` (a type declaration), `field` (a struct field), `nodes` (the nodes written in the region) and `param` (reserved). `read_by` says which passes read the tag; when none of them is in the pipeline a warning is reported where the tag is written. Only a pass that declares itself a reader of tag facts counts: the core dump passes and `std::opt`, and module passes such as `tiles::compile` and `tensor::fuse`; a pass written in Camel can declare the tags it reads with `#reads<tag, ...>` on its function, which counts like `read_by`. A program may not declare a tag with the name of a core permission (nor `finite_math` or `strict`; `tag reassociate`, for one): that name always means the core's tag, so the declaration would never be read, and `SemanticDiag::TagShadowsPermission` refuses it at the declaration.
+
+The core carries a set of **numeric permission tags** (design principles 7.2), written without an import and `on nodes`: `reassociate`, `contract`, `approx_math`, `change_precision`, `no_nans`, `no_infs`, `no_signed_zeros`, `flush_subnormals`, `nondeterministic` (allows results that vary with the schedule, such as floating-point atomics), and the group `finite_math` that holds the first four of those assumptions; `strict` (7.4) is a core tag too, written `on func, nodes`. `#contract` lands in the node's permission column (the `numeric="..."` of a dump) and `#strict` in its attribute set (`attrs="strict"`); readers get permissions through one query (`permissionsOf` / `effectivePermissions` in `camel/core/tags.h`), and `effectivePermissions` returns the empty set for `#strict`. The defaults are those of 7.3: `reassociate` and `contract` are allowed anyway, the others still have to be written.
+
+A rule declaration may be preceded by `#requires<permission, ...>`: the arguments are permission names, the core's group `finite_math`, or a group the module declares with `tag name = [permission, ...]` (members are expanded recursively, and the group name means the union of its permissions). The engine applies the rule only where the numeric policy of the nodes allows those permissions ([46 Rules](../../technical/46_rules.md)). A requirement that names an ordinary tag, an undeclared name, or `#requires` outside a rule is a located error, never a silent pass.
 
 There are three forms of `#`, written before a function, a type declaration, a struct field or a block:
+
+<!-- camel-snippet: fragment: the three tag forms are illustrative; width is a tag a module declares, and the bodies are elided -->
 
 ```cml
 #kernel
@@ -414,9 +433,11 @@ func main(): int {
 }
 ```
 
-`#name`, `#name<arguments>` and `#[a, b<v>]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, and an argument of a type a tag cannot carry yet (a floating-point one for now, see H2b).
+`#name`, `#name<arguments>` and `#[a, b<v>]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Each argument must be a constant of the kind its parameter declares — `int`, `float`, `bool`, `string`, or a function name for `func`; a real is carried as a real attribute by its bits and `1.5` prints as `1.5`. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, an argument whose kind is not the declared one (`SemanticDiag::TagArgumentType`), and a parameter of a kind a tag cannot carry yet (`SemanticDiag::TagParameterType`).
 
-A tag of `on nodes` is a **node attribute** (`camel/core/node_attrs.h`): a tag written before a function body or a block holds for the nodes written in it, it accumulates with same-name tags outside by the attribute's combine rule, and an inner same-name tag with a parameter takes the inner value. A tag of `on func`, `on type` and `on field` belongs to the declaration itself: a C++ module reads it with `tag::ofDeclaration` / `tag::ofField`; reading it from Camel code waits for the first stage of generics.
+A tag of `on nodes` is a **node attribute** (`camel/core/node_attrs.h`): a tag written before a function body or a block holds for the nodes written in it, it accumulates with same-name tags outside by the attribute's combine rule, and an inner same-name tag with a parameter takes the inner value. A tag of `on func`, `on type` and `on field` belongs to the declaration itself: a C++ module reads it in one query, `tag::factsOf` (tags, permissions and readers; `tag::ofDeclaration` / `tag::ofField` remain); reading it from Camel code waits for the first stage of generics.
+
+A parameter may also be declared `func`: its argument is then a function name, and the tag's fact is the **graph reference** of that function (`attr::graphRef`), not a function value. The GIR builder keeps that graph in the reference table of the function's graph (`kGraphRefRule`), so the frozen graph names the function directly; it is not resolved by name again at run time and no closure captures it. A `func` argument is therefore a static function of the program, never a closure over the surrounding scope. The autodiff module declares `export tag vjp<rule: func> on func` this way: `#vjp<rule>` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)). The old `@vjp<rule>` annotation is gone: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp<rule>`.
 
 `@name(arguments)` is not how a tag is written: it is reported as an annotation, and the message points at `#name`.
 

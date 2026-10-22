@@ -1,0 +1,14 @@
+/**
+ * An `int` where the declarations of `algo:argsort` take an array of keys: the call is refused
+ * at the declaration's type, and the signatures in the message have the declarations' own
+ * parameter name (`keys`) — the one source is `stdlib/algo.cml`, not the C++ module (handover
+ * H19, step 10; H135).
+ */
+module algo_type
+
+import { argsort } from algo
+
+func main(): int sync {
+    println(argsort(42))
+    return 0
+}

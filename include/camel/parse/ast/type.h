@@ -106,20 +106,16 @@ class StructTypeLoad : public TypeLoad {
 class FuncTypeLoad : public TypeLoad {
   public:
     FuncTypeLoad() : TypeLoad(TypeType::Func) {}
-    FuncTypeLoad(const std::string &uri, ImplMark impl = ImplMark::Graph)
-        : TypeLoad(TypeType::Func), implMark_(impl), uri_(uri) {}
+    FuncTypeLoad(const std::string &uri) : TypeLoad(TypeType::Func), uri_(uri) {}
     const std::string toString() const override;
 
     const std::string uri() const { return uri_; }
     void setUri(const std::string &uri) { uri_ = uri; }
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &modifiers) { modifiers_ = modifiers; }
-    ImplMark implMark() const { return implMark_; }
-    void setImplMark(ImplMark implMark) { implMark_ = implMark; }
     const std::string geneCode() const override;
 
   private:
-    ImplMark implMark_ = ImplMark::Graph;
     ModifierSet modifiers_;
     std::string uri_;
 };

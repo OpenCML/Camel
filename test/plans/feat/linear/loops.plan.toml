@@ -3,15 +3,15 @@ order = 348
 tier = "fast"
 debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "linear", "loops"]
-desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node, run by every back end (nvm, fvm and jit in the frame of the function, prl through the private lowering to tail recursion), the elements a string, a map and a tensor give it (11.1, 11.3), its diagnostics, and the refusals of the consumers that do not handle it yet."
+desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node with its condition and body regions, run by every back end (nvm, fvm, jit and prl in the frame of the function, each reading the same regions), the elements a string, a map and a tensor give it (11.1, 11.3), its diagnostics, and the refusals of the consumers that do not handle it yet."
 
 [[tests]]
 name = "loops.native_callback"
 desc = "A native graph-reading callback invokes original For/While closures with fresh captures, including concurrent calls to the same graph under moving GC."
 kind = "behavior"
 case = "../../../cases/loops/native_callback.cml"
-args = ["${case}", "test::native_callback", "std::prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "30 42 30\n24\n3744\n"
 timeout_ms = 20000
@@ -20,8 +20,8 @@ timeout_ms = 20000
 name = "loops.native_callback.scheduler"
 kind = "behavior"
 case = "../../../cases/loops/native_callback.cml"
-args = ["${case}", "test::native_callback", "std::prl(bytecode=false)"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl(bytecode=false)"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "30 42 30\n24\n3744\n"
 timeout_ms = 20000
@@ -30,8 +30,8 @@ timeout_ms = 20000
 name = "loops.native_callback.fault"
 kind = "negative"
 case = "../../../cases/loops/native_callback_fault.cml"
-args = ["${case}", "test::native_callback", "std::prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 1
 expect_diagnostic_line = 3
 expect_output_contains = ["native before fault once", "RuntimeDiag::DivisionByZero", "native_callback_fault.cml:3:61"]
@@ -42,8 +42,8 @@ timeout_ms = 20000
 name = "loops.native_callback.fault.scheduler"
 kind = "negative"
 case = "../../../cases/loops/native_callback_fault.cml"
-args = ["${case}", "test::native_callback", "std::prl(bytecode=false)"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl(bytecode=false)"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 1
 expect_diagnostic_line = 3
 expect_output_contains = ["native before fault once", "RuntimeDiag::DivisionByZero", "native_callback_fault.cml:3:61"]
@@ -64,6 +64,30 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "loops.struct_state"
+desc = "A struct is the loop's state (H44 item 3): both fields change every round (6 8), only one does (0 7), and a named state's body may write the fields in another order (3 106) or nest a named field in another order (3 16 3), because an unnamed struct value enters the named type by name with a field-by-field copy (design principles 5.2). Also a `sync` body whose last value is the next struct (round 1, round 2, then 2 3), an `if` body whose arms are structs (12 4), an `if` body with one named arm and one unnamed arm in another order (2 4), and a `sync` function returning a struct in another order (2 1). The four back ends agree on the values and on the (empty) diagnostics."
+kind = "behavior"
+case = "../../../cases/loops/struct_state.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "6 8\n0 7\n3 106\n3 16 3\nround 1\nround 2\n2 3\n12 4\n2 4\n2 1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.struct_state.opt_jit"
+desc = "The same struct loop states after `std::opt` and on the JIT: the optimizer keeps the struct the state and must give the same values as the interpreters."
+kind = "behavior"
+case = "../../../cases/loops/struct_state.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "6 8\n0 7\n3 106\n3 16 3\nround 1\nround 2\n2 3\n12 4\n2 4\n2 1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "loops.effects"
 desc = "A body that is a sync block runs its effects every round, in order, and its last value is the next state; a loop in a sync function returns its last state (countdown 0)."
 kind = "behavior"
@@ -78,7 +102,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.captures"
-desc = "One capture table for the condition and the body (3.10): the condition captures `limit`, the body `step` and `scale`; a `var` read in the body; nested loops whose inner graphs capture the outer state, in a `for` and in a two-state `while` (24 306 42 25 4)."
+desc = "The condition and the body read what they use where they are (3.10): `limit` is a constant the condition reads in place, `step` and `scale` are constants the body reads in place (a constant is not a capture, H91); the `var` `bias` is a cell and the outer state is a value, and those are the captures. Nested loops capture the outer state, in a `for` and in a two-state `while` (24 306 42 25 4)."
 kind = "behavior"
 case = "../../../cases/loops/captures.cml"
 args = ["${case}", "${backend}"]
@@ -86,6 +110,17 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["24 306 42 25 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.constant_is_not_a_capture"
+desc = "A constant is not a capture (H91, design principles 3.10): test::loop_inputs shows with_runtime with one capture (the parameter `n`, which its condition reads) and one constant left out (the body's `k`), and constants_only with no capture and the same one constant. The LOOP node's With inputs stay the results of its regions and the round port, so no constant is bound to the node. The same pipeline runs on std::nvm and prints 21 70: the shape and the values are checked together."
+kind = "behavior"
+case = "../../../cases/loops/captures_constants.cml"
+args = ["${case}", "test::loop_inputs", "std::nvm"]
+expect_exit = 0
+expect_output_contains = ["graph=with_runtime loop=", "kind=for-while state=1 with=3 captures=1 constants=1", "graph=constants_only loop=", "kind=for state=1 with=2 captures=0 constants=1", "input PORT constant=0 type=int", "constant DATA constant=1 type=int", "21 70"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -329,7 +364,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loops.fault_tensor_rank0"
-desc = "`for` over a tensor whose rank is only 0 at run time: the fault is reported at the loop's sequence on nvm and on the lowered fvm."
+desc = "`for` over a tensor whose rank is only 0 at run time: the fault is reported at the loop's sequence on nvm and on fvm."
 kind = "negative"
 case = "../../../cases/loops/fault_tensor_rank0.cml"
 args = ["-E", "short", "${case}", "${backend}"]
@@ -379,12 +414,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loops.onnx_refused"
-desc = "onnx.export_model of a function with a loop is refused at the loop (line 8): the LOOP to ONNX Loop translation is the next step."
+desc = "The program runs onnx.export_model on a function with a loop: the exporter refuses the loop where it is written (line 8), before the export's own simplification rewrites the function's graphs, and no model is written. No pass is needed: the exporter reads the program's own graph when the program calls it, so the default pipeline reaches the refusal. (The entry used to name std::macro, which does nothing here: the program declares no macro.)"
 kind = "negative"
 case = "../../../cases/loops/onnx_refused.cml"
-args = ["-E", "short", "${case}", "std::macro"]
+args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["onnx.export_model:", "a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_output_not_contains = ["RewriteInvalid", "rules::simplify"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
@@ -400,8 +437,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.grad_through_loop_lowered"
-desc = "The same gradient run by std::fvm, which lowers loops in its private copy while grad reads the program's own graph: the tape is collected by the loop node and the reverse pass is a LOOP node of its own."
+name = "loops.grad_through_loop_fvm"
+desc = "The same gradient run by std::fvm: the tape is collected by the loop node and the reverse pass is a LOOP node of its own."
 kind = "behavior"
 case = "../../../cases/loops/grad_through_loop.cml"
 args = ["${case}", "std::fvm"]
@@ -433,8 +470,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.grad_array_loop_lowered"
-desc = "The array gradients of loops.grad_array_loop run by std::fvm, which lowers loops in a private copy while grad reads the program's own graph."
+name = "loops.grad_array_loop_fvm"
+desc = "The array gradients of loops.grad_array_loop run by std::fvm."
 kind = "behavior"
 case = "../../../cases/loops/grad_array_loop.cml"
 args = ["${case}", "std::fvm"]
@@ -470,13 +507,15 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.onnx_refused_lowered"
-desc = "export_model run by std::prl, which lowers loops in a private copy: the export reads the program's own graph and refuses the loop at line 8."
+name = "loops.onnx_refused_prl"
+desc = "The same refusal by export_model run by std::prl: the back end lowers the loop in its own copy, so the export still reads the program's own graph and refuses the loop at line 8."
 kind = "negative"
 case = "../../../cases/loops/onnx_refused.cml"
 args = ["-E", "short", "${case}", "std::prl"]
 expect_exit = 1
-expect_output_contains = ["a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["onnx.export_model:", "a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_output_not_contains = ["RewriteInvalid", "rules::simplify"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
@@ -490,6 +529,18 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "200 200 1 199\n0 7 0 7 3 0 7\n6 1 0 5\n200 0 7 199 200 0 7 199\n200 0 7 200 10 8\n200 0 7 199 200 7 199\n1 1 2 199 199\n200 0 7 0 1\n200 0 7 199 1\n200 0 7 199 1\n200 0 7 199 199\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+[[tests]]
+name = "loops.state_in_place.multi"
+desc = "The per-state decision on the shapes the second H17c item asks for, 200 rounds, values hand-computed: four states of four types (an appended int array, a counter, a bool, a float) where the appended value is another state's old value; two appended arrays of different element types; a struct state whose array field is appended (the struct's fields are the loop's state components, design principles 10.5 as H71 reads it for a struct, so the array is one private state: one block at entry and none per round) and an array of structs (compact aggregate elements, one block in place); a state that starts from an array element the loop does not own; a body that reads the previous state's length while writing the next (the read sees the old length, and the copy form runs); the loop's state read after the loop; a constant component between two appended arrays; the appended array as the third state after two constants; and two states from the same literal, each privately copied. `std::mem::blocks()` between the operations shows one block for each appended array and one per round for a state that copies."
+kind = "behavior"
+case = "../../../cases/loops/state_in_place_multi.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "200 0 0 198 199 false 199\n200 0 1 200 2 1\n200 199\n200 1\n200 9 7\n4 3\n397\n200 1 0 200 2\n0 0 200 7\n200 1 200 2\n1 2 1 1 199 3 1 2 1 2\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
@@ -529,53 +580,132 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.refuse_struct_data"
-desc = "A differentiable value read through a struct and converted to data (`float(p.n)`, where `n` is an `int` field computed from the parameter) is refused at the read: the conversion has no gradient channel, so the contribution would vanish without a sign (design principles 9.9)."
-kind = "negative"
-case = "../../../cases/loops/refuse_struct_data.cml"
-args = ["-E", "short", "${case}", "std::nvm"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 12
-expect_output_contains = ["has no gradient channel", "refuse_struct_data.cml:12:18"]
+name = "loops.discrete_struct_field"
+desc = "A differentiable value read through a struct and turned into data (`float(p.n)`, where `n` is an `int` field computed from the parameter): an integer's derivative is zero by definition (design principles 9.9), so the conversion is a constant of the call and the gradient is 80 at x = 2 (the gradient of `x * x * 20`), not a refusal."
+kind = "behavior"
+case = "../../../cases/loops/discrete_struct_field.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "80.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "loops.refuse_effectful_data"
-desc = "A value produced by an effectful call (`side` returns an `int` from the parameter) and converted to data is refused at the conversion: the call boundary hides the dependency, so the gradient would be dropped silently (design principles 9.9)."
-kind = "negative"
-case = "../../../cases/loops/refuse_effectful_data.cml"
-args = ["-E", "short", "${case}", "std::nvm"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 15
-expect_output_contains = ["has no gradient channel", "refuse_effectful_data.cml:15:16"]
+name = "loops.discrete_effectful_value"
+desc = "A value produced by an effectful call whose type is discrete (`side` returns an `int` from the parameter) and read as data: the integer's derivative is zero by definition (design principles 9.9), so `float(n)` is the constant 20 at x = 2 and the printed gradient is 20."
+kind = "behavior"
+case = "../../../cases/loops/discrete_effectful_value.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "side\n20.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "loops.refuse_loop_array_state"
-desc = "A loop state with no gradient channel (`int[]`) whose next value depends on the parameter is refused at the loop, even when only another state's value is read: before H22 the int state's contribution vanished and the gradient was 2 instead of 6 (design principles 9.9, 3.10)."
-kind = "negative"
-case = "../../../cases/loops/refuse_loop_array_state.cml"
-args = ["-E", "short", "${case}", "std::nvm"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 9
-expect_output_contains = ["has no gradient channel", "refuse_loop_array_state.cml:9:16"]
+name = "loops.discrete_loop_state"
+desc = "A loop state whose elements are discrete (`int[]`) and whose next value is computed from the parameter: the integer state contributes nothing (derivative zero by definition, design principles 9.9), so only the float state's doubling is differentiated and the gradient is 2, not a refusal."
+kind = "behavior"
+case = "../../../cases/loops/discrete_loop_state.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "loops.refuse_loop_iter_array"
-desc = "A loop iterating over an array computed from the parameter is refused at the loop: each round's element carries part of the contribution, but the reverse pass has no scatter for an iterated array, so before H22 the gradient was silently 0 (design principles 9.9)."
-kind = "negative"
-case = "../../../cases/loops/refuse_loop_iter_array.cml"
-args = ["-E", "short", "${case}", "std::nvm"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 8
-expect_output_contains = ["has no gradient channel", "refuse_loop_iter_array.cml:8:12"]
+name = "loops.discrete_loop_iterable"
+desc = "A loop iterating over an `int[]` computed from the parameter: the elements are discrete, so their derivative is zero by definition (design principles 9.9), the sum of the elements is a constant of the call (6 at w = 2) and the gradient is 0."
+kind = "behavior"
+case = "../../../cases/loops/discrete_loop_iterable.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "0.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "loops.collect_multi_state"
+desc = "A collection output in a loop with several states: the body returns `(next states..., appended element...)`, so the append is part of the result and the loop value is `(states..., collection arrays...)`; the FILL projection gives the program only the states. Before the fix the body result read the states back through an ACCS of the loop value, so the append became dead and C2's training loop stopped at `EffectNotExecuted`."
+kind = "behavior"
+case = "../../../cases/loops/loop_collect_multi.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[1.0, 1.0, 1.0] 3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.compiled"
+desc = "A loop of regions in a function the JIT compiled (framed code, `std::jit(hot_threshold=0)` compiles the callee at its first call): one state over an array, two states under a condition, `for ... while` with an `if` body, an empty array, a nested loop, a loop that collects, a body that calls a function, a body that calls a function whose own loop runs while the outer loop is on the machine stack, a `sync` body whose effects run every round in order, and a block whose `return` ends it with the next state. The compiled values are the interpreters' (`backends_agree`), and the same under `std::opt::inline`, where the loops are compiled as part of main."
+kind = "behavior"
+case = "../../../cases/loops/compiled.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "30\n10\n12\n7\n18\n[10, 10, 10] 3\n21\n29\ntick 3\ntick 2\ntick 1\n3\n10\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "loops.compiled.native"
+desc = "The shapes of a compiled loop whose rounds are native code, not calls of the loop helpers (H55, jit_framed.plan.toml asserts which is which): three state components under a `while` (the condition reads one, the body writes all three), a loop the test stops before its first round (its value is the first state), a condition over one component while the body writes both, the same loop called twice with a frame each, and a division in the body that faults on the third round. The values and the located diagnostic are the interpreters' on every back end."
+kind = "negative"
+case = "../../../cases/loops/compiled_native.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
+backends_agree = ["exit_code", "diagnostics"]
+sweep = false
+expect_exit = 1
+expect_output_contains = ["4 6 16", "5 0", "4 12", "40"]
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 27
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "loops.compiled.fault"
+desc = "A division by zero in the body of a compiled loop, after two rounds: the located diagnostic of the interpreters (line 4, column 53), and the same one under std::fvm."
+kind = "negative"
+case = "../../../cases/loops/compiled_fault.cml"
+args = ["${case}", "${backend}"]
+backends = ["fvm", "jit_hot_threshold0"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 53
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "loops.compiled.moving"
+desc = "The same loop rounds with the generational collector and safepoint poisoning: every safepoint moves every young object and poisons where it was, so a reference the compiled loop kept outside its frame across a round boundary would fault or go stale. The body allocates a string in each of N rounds."
+kind = "behavior"
+case = "../../../cases/loops/compiled_churn.cml"
+args = ["--gc", "generational", "${case}", "${backend}"]
+backends = ["fvm", "jit_hot_threshold0"]
+backends_agree = ["exit_code", "stdout_normalized"]
+envs = ["N=20000", "CAMEL_GC_POISON=1"]
+sweep = false
+expect_exit = 0
+expect_stdout_exact = "20000\ndone\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "loops.compiled.round_safepoint"
+desc = "A collection at every safepoint (CAMEL_GC_STRESS_SAFEPOINT=1, poisoning on) during 500 rounds of a compiled loop that allocates in the body: the compiled rounds reach the same safepoints as the interpreter's rounds (the same number of collections and the same objects moved, checked by hand with std::profile(gc_stats=1)), so the state a round carries is always in the frame when the collector runs."
+kind = "behavior"
+case = "../../../cases/loops/compiled_churn.cml"
+args = ["--gc", "generational", "${case}", "${backend}"]
+backends = ["fvm", "jit_hot_threshold0"]
+backends_agree = ["exit_code", "stdout_normalized"]
+envs = ["N=500", "CAMEL_GC_POISON=1", "CAMEL_GC_STRESS_SAFEPOINT=1"]
+sweep = false
+expect_exit = 0
+expect_stdout_exact = "500\ndone\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000

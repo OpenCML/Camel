@@ -29,24 +29,20 @@
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 
-#include <sstream>
-
 using namespace std;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 
 namespace camel::core::type {
 
-const signed char primitiveTypeConvMatrix[8][8] = {
-    // Int, Long, Float, Double, Bool, Byte, Void, String
-    {01, 01, 01, 01, 01, -1, 01}, // Int
-    {-1, 01, -1, 01, 01, -1, 01}, // Long
-    {-1, -1, 01, 01, 01, -1, 01}, // Float
-    {-1, -1, -1, 01, 01, -1, 01}, // Double
-    {01, 01, 01, 01, 01, 01, 01}, // Bool
-    {01, 01, 01, 01, 01, 01, 01}, // Byte
-    {00, 00, 00, 00, 00, 00, 01}, // Void
-    {00, 00, 00, 00, 00, 00, 01}  // String
+const signed char primitiveTypeConvMatrix[6][6] = {
+    // Int, Long, Float, Double, Bool, Void
+    {01, 01, 01, 01, 01, 01}, // Int
+    {-1, 01, -1, 01, 01, 01}, // Long
+    {-1, -1, 01, 01, 01, 01}, // Float
+    {-1, -1, -1, 01, 01, 01}, // Double
+    {01, 01, 01, 01, 01, 01}, // Bool
+    {00, 00, 00, 00, 00, 01}, // Void
 };
 
 namespace {
@@ -101,8 +97,6 @@ string typeCodeToString(TypeCode code) {
         return std::string(kSourceTypeNames[1].second);
     case TypeCode::Bool:
         return "bool";
-    case TypeCode::Byte:
-        return "byte";
     case TypeCode::Void:
         return "void";
     case TypeCode::String:
@@ -153,8 +147,6 @@ std::string Type::mangle() const {
         return "f";
     case TypeCode::Bool:
         return "b";
-    case TypeCode::Byte:
-        return "c";
     case TypeCode::Void:
         return "v";
     case TypeCode::String:
@@ -241,7 +233,6 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     const TypeCode to   = code_;
 
     using camel::core::rtdata::Bool;
-    using camel::core::rtdata::Byte;
     using camel::core::rtdata::Float32;
     using camel::core::rtdata::Float64;
     using camel::core::rtdata::Int32;
@@ -265,8 +256,6 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
             DO_CONV(Int32, Float64, v);
         case TypeCode::Bool:
             DO_CONV(Int32, Bool, v != 0);
-        case TypeCode::Byte:
-            DO_CONV(Int32, Byte, static_cast<Byte>(v & 0xFF));
         case TypeCode::String: {
             ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
             return toSlot(s);
@@ -286,8 +275,6 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
             DO_CONV(Int64, Float64, v);
         case TypeCode::Bool:
             DO_CONV(Int64, Bool, v != 0);
-        case TypeCode::Byte:
-            DO_CONV(Int64, Byte, static_cast<Byte>(v & 0xFF));
         case TypeCode::String: {
             ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
             return toSlot(s);
@@ -307,8 +294,6 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
             DO_CONV(Float32, Float64, v);
         case TypeCode::Bool:
             DO_CONV(Float32, Bool, v != 0);
-        case TypeCode::Byte:
-            DO_CONV(Float32, Byte, static_cast<Byte>(static_cast<int>(v) & 0xFF));
         case TypeCode::String: {
             ::String *s = ::String::from(camel::utils::floatText(v), mm::autoSpace());
             return toSlot(s);
@@ -328,8 +313,6 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
             DO_CONV(Float64, Float32, v);
         case TypeCode::Bool:
             DO_CONV(Float64, Bool, v != 0);
-        case TypeCode::Byte:
-            DO_CONV(Float64, Byte, static_cast<Byte>(static_cast<int>(v) & 0xFF));
         case TypeCode::String: {
             ::String *s = ::String::from(camel::utils::floatText(v), mm::autoSpace());
             return toSlot(s);
@@ -349,37 +332,12 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
             DO_CONV(Bool, Float32, v ? 1.0f : 0.0f);
         case TypeCode::Float64:
             DO_CONV(Bool, Float64, v ? 1.0 : 0.0);
-        case TypeCode::Byte:
-            DO_CONV(Bool, Byte, v ? static_cast<Byte>(1) : static_cast<Byte>(0));
         case TypeCode::String: {
             ::String *s = ::String::from(v ? "true" : "false", mm::autoSpace());
             return toSlot(s);
         }
         default:
             ASSERT(false, "castSlotFrom Bool->unsupported target");
-        }
-    }
-    case TypeCode::Byte: {
-        Byte v = fromSlot<Byte>(static_cast<slot_t>(value));
-        switch (to) {
-        case TypeCode::Int32:
-            DO_CONV(Byte, Int32, static_cast<int>(v));
-        case TypeCode::Int64:
-            DO_CONV(Byte, Int64, static_cast<int>(v));
-        case TypeCode::Float32:
-            DO_CONV(Byte, Float32, static_cast<int>(v));
-        case TypeCode::Float64:
-            DO_CONV(Byte, Float64, static_cast<int>(v));
-        case TypeCode::Bool:
-            DO_CONV(Byte, Bool, v != static_cast<Byte>(0));
-        case TypeCode::String: {
-            std::ostringstream oss;
-            oss << "0x" << std::hex << static_cast<uint64_t>(v);
-            ::String *s = ::String::from(oss.str(), mm::autoSpace());
-            return toSlot(s);
-        }
-        default:
-            ASSERT(false, "castSlotFrom Byte->unsupported target");
         }
     }
     case TypeCode::Void:
@@ -501,11 +459,6 @@ Type *Type::Float() { return Type::Float64(); }
 
 Type *Type::Bool() {
     static Type *type = primitiveSingleton(TypeCode::Bool);
-    return type;
-}
-
-Type *Type::Byte() {
-    static Type *type = primitiveSingleton(TypeCode::Byte);
     return type;
 }
 

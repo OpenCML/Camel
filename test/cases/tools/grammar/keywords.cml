@@ -1,4 +1,6 @@
 // Every keyword of the lexer in a position the parser accepts it in, where there is one.
+// `inner`, `outer`, `atomic` and `shared` are no longer keywords: they are ordinary names
+// (H107), so they appear below as values.
 module keywords
 
 import { now } from time
@@ -13,8 +15,13 @@ var mutable = 2
 export let shared_value = 3
 
 type Alias = int
-inner type Handle = 'handle'
-outer type Raw = string
+type Handle = 'handle'
+type Raw = string
+
+let inner = 4
+let outer = 5
+let atomic = 6
+let shared = 7
 
 func plain(x: int): int {
     return if x > 0 then x else 0 - x
@@ -22,18 +29,6 @@ func plain(x: int): int {
 
 sync func effect(var target: int) {
     wait target += 1
-}
-
-macro func early(n: int): int {
-    return n * 2
-}
-
-atomic shared func marked(): void {
-    return null
-}
-
-inner func builtin_impl(x: int): int {
-    return x
 }
 
 func control(dir: string, xs: int[]): int! {

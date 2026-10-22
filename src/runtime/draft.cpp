@@ -651,6 +651,7 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
     draft->dependencies_    = graph->dependencies();
     draft->subGraphs_       = graph->subGraphs();
     draft->staticGraphRefs_ = graph->staticGraphRefs();
+    draft->ruleGraphs_      = graph->ruleGraphs();
     draft->draftIdsBySourceRef_.assign(graph->nodeCount(), kInvalidNodeRef);
 
     std::vector<gc_node_ref_t> sourceToDraft(graph->nodeCount(), kInvalidNodeRef);
@@ -902,12 +903,12 @@ void GraphDraft::refuseWithWritings(const char *what) const {
         "extracted.");
 }
 
-uint8_t GraphDraft::nodePermissions(gc_node_ref_t id) const {
+camel::core::sem::PermissionMask GraphDraft::nodePermissions(gc_node_ref_t id) const {
     const DraftNodeHeader *h = header(id);
     return h ? h->permissions : 0;
 }
 
-void GraphDraft::setNodePermissions(gc_node_ref_t id, uint8_t permissions) {
+void GraphDraft::setNodePermissions(gc_node_ref_t id, camel::core::sem::PermissionMask permissions) {
     requireOneWriting("setNodePermissions");
     ++mutations_;
     DraftNode *draftNode = node(id);
@@ -1344,6 +1345,33 @@ void GraphDraft::setStaticSlot(size_t index, slot_t value) {
     staticSlots_[index] = value;
 }
 
+void GraphDraft::relocateStaticValues(
+    const camel::core::rtdata::Object::RefRelocator &relocate) {
+    for (size_t i = 0; i < staticSlots_.size(); ++i) {
+        const camel::core::type::Type *type =
+            i < staticSlotTypes_.size() ? staticSlotTypes_[i] : nullptr;
+        if (!type || !type->isGCTraced() || staticSlots_[i] == NullSlot) {
+            continue;
+        }
+        auto *ref = camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(staticSlots_[i]);
+        if (!ref) {
+            continue;
+        }
+        ref = relocate(
+            ref,
+            type,
+            camel::core::rtdata::RefTraceInfo{
+                .owner     = nullptr,
+                .ownerType = nullptr,
+                .slotType  = type,
+                .ownerKind = "GraphDraft",
+                .slotName  = {},
+                .slotIndex = i,
+            });
+        relocateStaticSlot(i, camel::core::rtdata::toSlot(ref));
+    }
+}
+
 void GraphDraft::addDependency(GraphId graph) {
     ++mutations_;
     touchRefs();
@@ -1373,6 +1401,15 @@ void GraphDraft::addStaticGraphRef(GraphId graph) {
     if (isValid(graph) && std::find(staticGraphRefs_.begin(), staticGraphRefs_.end(), graph) ==
                               staticGraphRefs_.end()) {
         staticGraphRefs_.push_back(graph);
+    }
+}
+
+void GraphDraft::addRuleGraphRef(GraphId graph) {
+    ++mutations_;
+    touchRefs();
+    if (isValid(graph) &&
+        std::find(ruleGraphs_.begin(), ruleGraphs_.end(), graph) == ruleGraphs_.end()) {
+        ruleGraphs_.push_back(graph);
     }
 }
 
@@ -1468,9 +1505,11 @@ GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &n
         dependencies_,
         subGraphs_,
         staticGraphRefs_,
+        ruleGraphs_,
         payloadShape,
         [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(*this, payload); },
         staticSlots_);
 }
 
 } // namespace camel::runtime
+

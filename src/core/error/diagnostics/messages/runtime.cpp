@@ -134,9 +134,10 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "MacroEvaluationFailed",
                 "'{0}' could not be evaluated by std::macro: {1}.",
                 "Every argument of this macro call is a constant, so std::macro evaluates it "
-                "ahead of time, and a failed evaluation is a compile-time error. The program "
-                "is rejected even if the call would never be reached at "
-                "run time. Without std::macro in the pipeline the call runs with the program.",
+                "ahead of time. A failed evaluation is a fault during the run of the pass, "
+                "not a compile error: the program stops before it runs, and the output the "
+                "evaluation produced before the failure stays. Without std::macro in the "
+                "pipeline the call runs with the program.",
             },
         },
         {
@@ -242,6 +243,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::DeviceUnavailable,
+            {
+                "DeviceUnavailable",
+                "CUDA device {0} was named by --devices but is not available: {1}.",
+                "Name a device this machine has (--devices <ordinal>), or run on the host with "
+                "--devices cpu. Without --devices a missing device is not an error: the program "
+                "runs on the host.",
+            },
+        },
+        {
             RuntimeDiag::PassNeedsExtraction,
             {
                 "PassNeedsExtraction",
@@ -250,6 +261,27 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "passes that work on them and the passes that run or translate the program "
                 "accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every "
                 "value by a cost model (its parameter 'cost', 'weighted' by default).",
+            },
+        },
+        {
+            RuntimeDiag::PassNotProvidedByModule,
+            {
+                "PassNotProvidedByModule",
+                "Module '{0}' provides no pass '{1}'; it provides {2}.",
+                "A pass of a module is one of its exported functions of type "
+                "`(p: Program) => Program!`; check the name. The module named here is the one the "
+                "pass name resolved to: a file of the entry directory with that name shadows the "
+                "library one.",
+            },
+        },
+        {
+            RuntimeDiag::PassNotExportedByModule,
+            {
+                "PassNotExportedByModule",
+                "Module '{0}' declares '{1}' but does not export it, so it cannot be named as a "
+                "pass; it provides {2}.",
+                "Write `export func {1}(...)` in module {0}, or name a pass it exports. A pass is "
+                "an exported function `(p: Program) => Program!`.",
             },
         },
         {

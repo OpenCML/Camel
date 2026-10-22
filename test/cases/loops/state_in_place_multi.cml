@@ -1,0 +1,113 @@
+// H17c second item: the in-place write of a loop state, proved for several states at once. The
+// decision is per state (Builder::markLoopStateInPlace): a state whose first value is a literal
+// and whose only use in the body is `state->append<v>` is appended to in place; every other
+// state is left alone. The allocation counts below (`std::mem::blocks()` read between the
+// operations) are therefore per state: one private copy for each appended array, one block per
+// round for a state that copies.
+//
+// Hand-computed, 200 rounds unless the call says otherwise (a loop that starts at length 1 and
+// runs `while len(xs) < n` runs n - 1 rounds):
+//
+//   threeTyped   appends another state's old value: xs = [0, 0, 1, .., 198], count = 199,
+//                flip toggled 199 times (false), total 199 * 0.25 = 49.75
+//   growMixed    int[] and float[] (different element types): the last elements are 1 and 0.25
+//   growStruct   a struct state: its fields are the loop's state components (H71), so the array
+//                field is a state of its own, appended in place (1 block at entry, none per
+//                round); values are the same
+//   growPairs    an array of structs: compact aggregate elements, appended in place (1 block)
+//   growFromElem a state that starts from an array element: the loop does not own it (199 blocks)
+//   peekOld(4)   the body reads the previous state (`len(xs)`) while writing the next: copy form,
+//                and the read is the old length (4 3)
+//   readAfter    the loop's state read after the loop: xs[0] + xs[199] + count = 0 + 198 + 199
+//   constMiddle  a constant component between two appended arrays (2 blocks)
+//   arrayLast    the appended array is the third state, the first two are constants (1 block)
+//   sameLiteral  two states from the same literal: each gets its own private copy (2 blocks)
+func threeTyped(n: int): (int[], int, bool, float) {
+    return loop xs = [0], count = 0, flip = true, total = 0.0 while len(xs) < n do
+        (xs->append<count>, count + 1, !flip, total + 0.25)
+}
+
+func growMixed(n: int): (int[], float[]) {
+    return loop xs = [0], ys = [0.5] while len(xs) < n do (xs->append<1>, ys->append<0.25>)
+}
+
+func growStructState(n: int): (int, int) {
+    let s = loop s = { xs: [0], n: 0 } while len(s.xs) < n do { xs: s.xs->append<7>, n: s.n + 1 }
+    return (len(s.xs), s.n)
+}
+
+func growPairs(n: int): (int, int) {
+    let ps = loop ps = [{ a: 0 }] while len(ps) < n do ps->append<{ a: 1 }>
+    return (len(ps), ps[n - 1].a)
+}
+
+func growFromElement(rows: int[][], n: int): int[] {
+    return loop xs = rows[0] while len(xs) < n do xs->append<7>
+}
+
+func peekOld(n: int): (int[], int) {
+    return loop xs = [0], seen = -1 while len(xs) < n do (xs->append<7>, len(xs))
+}
+
+func readStateAfter(n: int): int {
+    let (xs, count) = loop xs = [0], c = 0 while len(xs) < n do (xs->append<c>, c + 1)
+    return xs[0] + xs[len(xs) - 1] + count
+}
+
+func constMiddle(n: int): (int[], int, int[]) {
+    return loop xs = [0], c = 5, zs = [10] while len(xs) < n do (xs->append<1>, 0, zs->append<2>)
+}
+
+func arrayLast(n: int): (int, int, int[]) {
+    return loop a = 3, b = 4, xs = [0] while len(xs) < n do (0, 0, xs->append<7>)
+}
+
+func sameLiteral(n: int): (int[], int[]) {
+    return loop a = [0], b = [0] while len(a) < n do (a->append<1>, b->append<2>)
+}
+
+func main(): int sync {
+    let b0 = std::mem::blocks()
+    let (xs, count, flip, total) = threeTyped(200)
+    let b1 = std::mem::blocks()
+    let (ms, fs) = growMixed(200)
+    let b2 = std::mem::blocks()
+    let (sn, sl) = growStructState(200)
+    let b3 = std::mem::blocks()
+    let (pn, pa) = growPairs(200)
+    let b4 = std::mem::blocks()
+    let es = growFromElement([[9]], 200)
+    let b5 = std::mem::blocks()
+    let (ps, seen) = peekOld(4)
+    let b6 = std::mem::blocks()
+    let tail = readStateAfter(200)
+    let b7 = std::mem::blocks()
+    let (cs, cc, cz) = constMiddle(200)
+    let b8 = std::mem::blocks()
+    let (la, lb, lx) = arrayLast(200)
+    let b9 = std::mem::blocks()
+    let (sa, sb) = sameLiteral(200)
+    let b10 = std::mem::blocks()
+    println(len(xs), xs[0], xs[1], xs[199], count, flip, int(total * 4.0))
+    println(len(ms), ms[0], ms[199], len(fs), int(fs[0] * 4.0), int(fs[199] * 4.0))
+    println(sn, sl)
+    println(pn, pa)
+    println(len(es), es[0], es[199])
+    println(len(ps), seen)
+    println(tail)
+    println(len(cs), cs[199], cc, len(cz), cz[199])
+    println(la, lb, len(lx), lx[199])
+    println(len(sa), sa[199], len(sb), sb[199])
+    println(
+        b1.allocs - b0.allocs,
+        b2.allocs - b1.allocs,
+        b3.allocs - b2.allocs,
+        b4.allocs - b3.allocs,
+        b5.allocs - b4.allocs,
+        b6.allocs - b5.allocs,
+        b7.allocs - b6.allocs,
+        b8.allocs - b7.allocs,
+        b9.allocs - b8.allocs,
+        b10.allocs - b9.allocs)
+    return 0
+}

@@ -9,7 +9,7 @@ desc = "Bounded mandatory data/control proofs, zero/exhausted budgets, predecess
 kind = "behavior"
 case = "../../../cases/opt/generic/control_chain.cml"
 args = ["${case}", "test::control", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_stdout_contains = ["CONTROL topology, budgets, branches, dense chain: PASS"]
 timeout_ms = 8000
@@ -26,11 +26,22 @@ expect_stdout_contains = ["Control construction, rewrites, branch protection and
 timeout_ms = 30000
 
 [[tests]]
-name = "control.test_pass_hidden"
-desc = "The topology test pass is unavailable outside an explicitly enabled test process."
+name = "control.test_pass_not_in_default_pipeline"
+desc = "A test pass is not part of any default pipeline: the program runs its own passes and the topology pass does not run."
+kind = "behavior"
+case = "../../../cases/opt/generic/control_chain.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["1", "2"]
+expect_stdout_not_contains = ["CONTROL topology"]
+timeout_ms = 4000
+
+[[tests]]
+name = "control.test_pass_runs_when_named"
+desc = "Writing a test pass's name on the command line is what runs it; no environment variable decides which passes exist."
 kind = "behavior"
 case = "../../../cases/opt/generic/control_chain.cml"
 args = ["${case}", "test::control"]
-expect_exit = 1
-expect_stdout_contains = ["UnrecognizedGraphPass"]
+expect_exit = 0
+expect_stdout_contains = ["CONTROL topology"]
 timeout_ms = 4000

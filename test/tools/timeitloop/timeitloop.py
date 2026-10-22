@@ -7,7 +7,7 @@ The command
           --output-format json
 
 was seen to end in an access violation (`0xC0000005`, exit code 3221225477) twice in about thirty
-`--timeit` calls of the H8 performance baseline (docs/handover/reports/H8.md, section 6). The same
+`--timeit` calls of the H8 performance baseline (handover note ⟨89307a8⟩ (H8), section 6). The same
 command passed when it was repeated, so the script runs it in fresh processes and records every
 exit code: a run that ends in the violation, and a run that ends with any other nonzero code, are
 both failures here, and the stdout and stderr of each are kept.
@@ -23,7 +23,7 @@ number of iterations that were run is printed too, so a rate can be given for ei
 
 The command is run the way `test/tools/perfbaseline/baseline.py` runs it: with stdout and stderr
 as pipes, from the repository root, with the binary at `out/latest/bin/camel`. Nothing about the
-process or its environment is special; `--gc` sets `CAMEL_GC` for the child, as `gcbench.py` does,
+process or its environment is special; `--gc` passes `--gc` to the child, as `gcbench.py` does,
 and with `--gc both` the two collectors alternate from one process to the next (mark-sweep,
 generational, ...) so that both see the same drift of a machine that is busy with other work.
 
@@ -79,7 +79,7 @@ def main():
     parser.add_argument("--case", default=os.path.join("test", "cases", "perf", "gc", "alloc_small.cml"))
     parser.add_argument("--arg", dest="arg", default="reps=200000", help="an --arg of the program")
     parser.add_argument("--gc", default="", choices=("", "mark-sweep", "generational", "both"),
-                        help="CAMEL_GC of the child; both alternates the collectors")
+                        help="the collector of the child (--gc); both alternates the collectors")
     parser.add_argument("--camel", default="",
                         help="the binary to run (default: out/latest/bin/camel), for a build with assertions or symbols")
     parser.add_argument("--jobs", type=int, default=1, help="processes in parallel")
@@ -110,12 +110,8 @@ def main():
     print(f"# jobs={options.jobs} runs={options.runs} collectors={','.join(c or 'default' for c in collectors)}",
           flush=True)
 
-    def environment(index):
-        env = dict(os.environ)
-        collector = collectors[(index - 1) % len(collectors)]
-        if collector:
-            env["CAMEL_GC"] = collector
-        return env
+    def collector_of(index):
+        return collectors[(index - 1) % len(collectors)]
 
     failures = []
     completed = 0
@@ -126,7 +122,10 @@ def main():
             next_index = 1
             while completed < options.runs:
                 while len(futures) < options.jobs and next_index <= options.runs:
-                    futures.append(pool.submit(run_once, next_index, binary, args, environment(next_index)))
+                    chosen = collector_of(next_index)
+                    run_args = (["--gc", chosen] if chosen else []) + args
+                    futures.append(pool.submit(run_once, next_index, binary, run_args,
+                                               dict(os.environ)))
                     next_index += 1
                 index, code, seconds, out, err = futures.pop(0).result()
                 completed += 1

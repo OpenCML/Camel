@@ -108,6 +108,13 @@ await runTest(async (t) => {
             'after the diagnostic of the compiler, with its position',
             dap.outputOf('stdout'),
         )
+        // A program that never started did not end: the reason a request is refused says so.
+        const late = await dap.request('stackTrace', { threadId: 1 })
+        check(
+            !late.success && /did not start/.test(late.message) && !/has ended/.test(late.message),
+            'a request after a launch that never started the program says that, not that it ended',
+            late,
+        )
         await dap.stop()
     }
 
@@ -119,6 +126,14 @@ await runTest(async (t) => {
         const exited = await dap.waitEvent('exited')
         checkEq(exited?.body?.exitCode, 1, 'an unknown pass ends the session with exit code 1')
         check(/std::no_such_pass/.test(dap.outputOf('stderr') + dap.outputOf('stdout')), 'and names the pass', dap.outputOf('stdout'))
+        check(await dap.waitEvent('terminated'), 'and terminated')
+        // This program did run, and then failed: that is the end the error names.
+        const late = await dap.request('stackTrace', { threadId: 1 })
+        check(
+            !late.success && /has ended/.test(late.message),
+            'a request after a pipeline that failed says the program ended',
+            late,
+        )
         await dap.stop()
     }
 
@@ -224,7 +239,15 @@ await runTest(async (t) => {
             'opt: the folded sum loses its breakpoint with the constant-only reason',
             folded,
         )
+        // The passes evaluate graphs of their own (the rules library's). That work is not the
+        // program's run: a breakpoint on code that survives the passes must stay verified, or a
+        // pass would wipe out every breakpoint of the file before the program starts (H150).
         const stop = await dap.waitStop()
+        check(
+            !dap.events.some((e) => e.event === 'breakpoint' && e.body.breakpoint?.id === s.breakpoints[CALLS][2].id),
+            'opt: a pass running its own graphs does not withdraw the breakpoint that survives',
+            dap.events.filter((e) => e.event === 'breakpoint'),
+        )
         checkEq(stop?.line, printLine, 'opt: the surviving effect stops at its source line')
         checkEq(stop?.body.hitBreakpointIds, [s.breakpoints[CALLS][2].id], 'opt: only the surviving breakpoint is hit')
         const locals = await dap.variables(stop.top.id)

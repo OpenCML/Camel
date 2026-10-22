@@ -1,0 +1,63 @@
+id = "modules.rename"
+order = 374
+tier = "fast"
+tags = ["feat", "modules", "rename", "diagnostic"]
+
+# A module rename is complete when the new name imports and the old one is not silently an alias
+# (handover H114): the old spelling is simply an unknown module, with no alias and no diagnostic
+# that points at the new spelling. One pair of tests per renamed module;
+# `rename_identity.plan.toml` proves the graph itself did not change.
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "rename.env_new_name"
+desc = "`env` imports and its two operators read the environment and the working directory."
+case = "../../../cases/modules/rename/env_new.cml"
+args = ["${case}"]
+expect_stdout_exact = "true\ntrue\n"
+
+[[tests]]
+name = "rename.env_old_name_rejected"
+desc = "`import ... from sys` is an ordinary unknown-module error; there is no alias and no pointer to `env`."
+kind = "negative"
+case = "../../../cases/modules/rename/env_old.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["env_old.cml:6:", "Module 'sys' not found", "name=SemanticDiag::ModuleNotFound, code=0x03000002"]
+
+[[tests]]
+name = "rename.process_new_name"
+desc = "`process` imports and its process/machine operators run."
+case = "../../../cases/modules/rename/process_new.cml"
+args = ["${case}"]
+expect_stdout_exact = "true\ntrue\n"
+
+[[tests]]
+name = "rename.process_old_name_rejected"
+desc = "`import ... from os` is an ordinary unknown-module error; there is no alias and no pointer to `process`."
+kind = "negative"
+case = "../../../cases/modules/rename/process_old.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["process_old.cml:6:", "Module 'os' not found", "name=SemanticDiag::ModuleNotFound, code=0x03000002"]
+
+[[tests]]
+name = "rename.hash_new_name"
+desc = "`hash` imports and its SHA-256 operators run."
+case = "../../../cases/modules/rename/hash_new.cml"
+args = ["${case}"]
+expect_stdout_exact = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\ntrue\n"
+
+[[tests]]
+name = "rename.hash_old_name_rejected"
+desc = "`import ... from crypto` is an ordinary unknown-module error; there is no alias and no pointer to `hash`."
+kind = "negative"
+case = "../../../cases/modules/rename/hash_old.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["hash_old.cml:6:", "Module 'crypto' not found", "name=SemanticDiag::ModuleNotFound, code=0x03000002"]

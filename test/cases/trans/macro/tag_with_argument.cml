@@ -1,0 +1,12 @@
+module tag_with_argument
+
+// The standard #macro tag declares no parameter. Writing one is an error about the tag, not a
+// silently ignored argument.
+
+#macro<1> func bad(x: int): int {
+    return x
+}
+
+func main(): int {
+    return bad(1)
+}

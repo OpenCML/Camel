@@ -86,15 +86,15 @@ Use these controls for deterministic GC validation:
 | `CAMEL_GC_STRESS_SAFEPOINT=N` | Request collection every `N` runtime safepoints. |
 | `CAMEL_GC_STRESS_MODE=minor|major|both` | Select the requested stress collection kind. |
 | `CAMEL_GC_LOG_MOVES=1` | Log object movement in the young-copying path. |
-| `CAMEL_GC=generational` (`--gc generational`) | Run the generational collector: young objects are copied. `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is the older spelling and is still read. |
+| `--gc generational` | Run the generational collector: young objects are copied. `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is the older spelling and no longer changes anything. |
 | `CAMEL_GC_POISON=1` | Safepoint poisoning: every safepoint moves every young object and poisons where it was (`36_gc_handle_rules.md` section 8). Implies the generational collector. |
 | `CAMEL_GC_PROMOTION_AGE=N` | Minor collections an object survives before promotion (1 to 15, default 4). |
 | `CAMEL_GC_LARGE_THRESHOLD_KB=N`, `CAMEL_GC_NURSERY_MB=N` | Size above which an object is born old (default 4 KB with mark-sweep, 64 KB generational), and the size of the birth space (default 4 MB). |
 | `CAMEL_GC_HEAP_LIMIT_MB=N` | Limit on what the elder and large-object spaces hold; reaching it is `RuntimeDiag::MemoryExhausted` (`docs/cli.md`, "The collector"). |
 | `CAMEL_GC_PRINT_CONFIG=1` | Print the effective GC diagnostic configuration to stderr at allocator initialization. |
-| `CAMEL_GC_LARGE_BUDGET_MB=N` | Floor (MB) of the large-object allocation between collections; default 4. It is in force only while the growth setting gives less. Not a diagnostic switch: it tunes production pacing. |
-| `CAMEL_GC_GROWTH_PERCENT=N` | Large-object allocation between collections, in percent of the volume the last sweep left alive; default 100 (the space doubles). Lower: less garbage held, more collections, in proportion. Not a diagnostic switch: it tunes production pacing. |
-| `CAMEL_GC_STATS=1|2` | Print the allocator's pacing statistics to stderr at exit (1), and one line per major collection (2). Also prints the occupancy of the graph, permanent and meta spaces (`[camel] spaces: ...`). |
+| `CAMEL_GC_LARGE_BUDGET_MB=N` | Floor (MB) of the large-object allocation between collections, and of the block bytes promoted to the elder space that ask for a major collection; default 4. It is in force only while the growth setting gives less. Not a diagnostic switch: it tunes production pacing. |
+| `CAMEL_GC_GROWTH_PERCENT=N` | Large-object allocation between collections, and promoted block bytes between major collections, in percent of the volume the last sweep left alive; default 100 (the space doubles). Lower: less garbage held, more collections, in proportion. Not a diagnostic switch: it tunes production pacing. |
+| `std::profile(gc_stats=1|2)` | Print the allocator's pacing statistics to stderr at exit (1), and one line per major collection (2). Also prints the occupancy of the graph, permanent and meta spaces (`[camel] spaces: ...`). |
 | `CAMEL_GRAPH_SPACE_LIMIT_MB=N`, `CAMEL_PERM_SPACE_LIMIT_MB=N`, `CAMEL_META_SPACE_LIMIT_MB=N` | Total (MB) the graph, permanent or meta space may reserve; default 256 each. Not diagnostic switches: they bound the size of the compiled program. Reaching one is `RuntimeDiag::MemoryExhausted`. |
 | `CAMEL_SPACE_SEGMENT_KB=N` | First segment (KB) of the graph, permanent and meta spaces (default 64, 32 and 16 MB). A test control: small segments make the spaces grow with small programs. |
 
@@ -121,9 +121,9 @@ pass boundary.
 | Mode | Settings | Finds |
 |---|---|---|
 | Collection stress | `CAMEL_GC_STRESS_SAFEPOINT=1` (and `_ALLOC=N`), `CAMEL_GC_STRESS_MODE=major` | a value that no root reaches: it is freed and its memory reused |
-| Moving stress | the same with `CAMEL_GC=generational CAMEL_GC_STRESS_MODE=minor` or `both`, `CAMEL_GC_VERIFY=both` | a root that is not updated; with the default promotion age objects stop moving after four collections, so a raw pointer that is held for longer than that is not found |
+| Moving stress | the same with `--gc generational` with `CAMEL_GC_STRESS_MODE=minor` or `both`, `CAMEL_GC_VERIFY=both` | a root that is not updated; with the default promotion age objects stop moving after four collections, so a raw pointer that is held for longer than that is not found |
 | Safepoint poisoning | `CAMEL_GC_POISON=1` | a raw pointer kept across any safepoint: nothing is promoted by age, every safepoint moves everything young, and the old addresses read as an unmapped page until the space has been walked once. This is the mode to run a new operator or scheduler change under |
-| Tenuring stress | `CAMEL_GC=generational CAMEL_GC_PROMOTION_AGE=1 CAMEL_GC_STRESS_SAFEPOINT=1 CAMEL_GC_STRESS_MODE=minor CAMEL_GC_VERIFY=both` | a missing write barrier: everything is old after one collection, and the verifier reports an old object that points at a young one without being remembered |
+| Tenuring stress | `--gc generational` with `CAMEL_GC_PROMOTION_AGE=1 CAMEL_GC_STRESS_SAFEPOINT=1 CAMEL_GC_STRESS_MODE=minor CAMEL_GC_VERIFY=both` | a missing write barrier: everything is old after one collection, and the verifier reports an old object that points at a young one without being remembered |
 
 The first two existed before the handle rules; they left two gaps that poisoning closes: an
 object that had been promoted no longer moved, and the address an object moved away from kept
@@ -168,7 +168,7 @@ npm run test
 When manually invoking `camel.exe`, set the runtime environment first:
 
 ```powershell
-$env:CAMEL_HOME = "D:\Projects\Camel\out\latest"
+$env:CAMEL_HOME = "<repo>\out\latest"
 $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 ```
 
@@ -337,6 +337,11 @@ Use this rule when extending GC coverage:
   header, or broken allocator metadata.
 - Verifier failures after collection usually indicate missed root relocation, missed write barrier,
   stale remembered-set entry, or finalizer/reclamation ordering problems.
+- A slot whose static type is an aggregate (a tuple or a struct) that points outside every managed
+  region is usually a compact element view that was stored instead of materialised
+  (`rtdata/view.h`): a view is a Struct/Tuple header in the thread-local view store, not an
+  allocated object, so every store that keeps a value must materialise it first (`Tuple::set`,
+  `Struct::set`, `Array::set`, `Frame::set`; H73).
 - A remembered-set self-test failure usually points to a container write path that bypassed typed
   setters or forgot to record the actual old owner.
 - A foreign-resource self-test failure usually points to incorrect dispose idempotency, wrapper

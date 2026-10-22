@@ -1,0 +1,51 @@
+[a, b, c]
+[a, , c, ]
+[] 1
+[abc]
+[a, b-c]
+[, a]
+[é, ü]
+[x, y]
+trim [hi there] 8
+trim_start [hi  ] 4
+trim_end [  hi] 4
+trim empty [] 0
+trim blank [] 0
+trim none [hi] 2
+trim nbsp [ x ] 3
+upper [HELLO, WORLD 123] 16
+lower [hello, world 123] 16
+upper non-ascii [HéLLO üNï STRAßE] 16
+lower non-ascii [hÉllo ÜnÏ] 9
+upper empty [] 0
+replace [a+b+c] 5
+replace none [abc] 3
+replace longer [a<->b<->] 8
+replace remove [ba] 2
+replace overlap [bb] 2
+replace empty subject [] 0
+replace non-ascii [hello] 5
+2 3 -1
+0 0 -1
+2 -1
+substr [ell] 3
+substr all [hello] 5
+substr empty at end [] 0
+substr empty [] 0
+substr one char of é [2] 1
+substr non-ascii [€l] 2
+substr 4-byte [a😀] 2
+true true false true
+true true false false
+repeat [ababab] 6
+repeat zero [] 0
+repeat empty [] 0
+[104, 195, 169] [] 3
+decode [hi] 2
+decode empty [] 0
+round trip [héllo €] 7
+3 [104, 0, 105]
+中 1
+h o 1
+true 文 2 1 [195, 169]
+😀 4

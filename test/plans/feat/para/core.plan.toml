@@ -400,7 +400,7 @@ args = ["-t", "4", "--max-recursion-depth", "1000000", "${case}", "${backend}"]
 backends = ["fvm", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_starts_with = "2000\n400000\ndone\n"
+expect_stdout_starts_with = "1000\n400000\ndone\n"
 # 400000 calls: under a sweep that collects at every safepoint (poison) that is 400000
 # collections on std::fvm. What such a sweep checks, the other tests check.
 sweep = false
@@ -409,15 +409,15 @@ timeout_ms = 30000
 
 [[tests]]
 name = "recursion_too_deep.prl_evaluator"
-desc = "The same program with the bytecode hand-off off (std::prl(bytecode=false)), so that the scheduler's own evaluator runs the recursion and every call nests on the native stack: it stops with MaxRecursionDepthExceeded when the stack of the thread is nearly full (the shared guard reserves space for reporting and fault unwinding on each platform) instead of a segmentation fault; depth(2000) printed before it, nothing after."
+desc = "The same program with the bytecode hand-off off (std::prl(bytecode=false)), so that the scheduler's own evaluator runs the recursion and every call nests on the native stack: it stops with MaxRecursionDepthExceeded when the stack of the thread is nearly full (the shared guard reserves space for reporting and fault unwinding on each platform) instead of a segmentation fault; depth(1000) printed before it, nothing after."
 kind = "negative"
 case = "../../../cases/para/core/recursion_too_deep.cml"
 args = ["-t", "4", "--max-recursion-depth", "1000000", "${case}", "${run_prl_no_bytecode}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_code = "0x04000004"
-expect_stdout_contains = ["2000", "the native stack of the thread"]
-expect_stdout_starts_with = "2000\n"
+expect_stdout_contains = ["1000", "the native stack of the thread"]
+expect_stdout_starts_with = "1000\n"
 expect_output_not_contains = ["400000\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000

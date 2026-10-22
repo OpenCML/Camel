@@ -23,6 +23,7 @@
 #include "camel/core/error/runtime.h"
 
 #include <algorithm>
+#include <atomic>
 #include <charconv>
 #include <cstdlib>
 #include <format>
@@ -201,12 +202,20 @@ uintptr_t nativeStackFloor() {
     return bounds.low + stackReserve(bounds);
 }
 
+namespace {
+// Set once by --native-stack-guard, before anything runs; on by default.
+std::atomic<bool> &nativeStackGuardFlag() {
+    static std::atomic<bool> flag{true};
+    return flag;
+}
+} // namespace
+
 bool nativeStackGuardEnabled() {
-    static const bool enabled = [] {
-        const char *raw = std::getenv("CAMEL_NATIVE_STACK_GUARD");
-        return !(raw != nullptr && raw[0] == '0' && raw[1] == 0);
-    }();
-    return enabled;
+    return nativeStackGuardFlag().load(std::memory_order_relaxed);
+}
+
+void setNativeStackGuardEnabled(bool enabled) {
+    nativeStackGuardFlag().store(enabled, std::memory_order_relaxed);
 }
 
 void nativeStackBounds(uintptr_t &low, uintptr_t &high) {

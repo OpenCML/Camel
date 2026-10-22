@@ -54,8 +54,8 @@ name = "new_values.rebinding_loop.gc_mark_sweep_nvm"
 desc = "The rebinding loops on std::nvm with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
-args = ["${case}", "std::gc::verify", "${run_nvm}"]
-envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "mark-sweep", "${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
 timeout_ms = 60000
@@ -65,8 +65,8 @@ name = "new_values.rebinding_loop.gc_mark_sweep_fvm"
 desc = "The rebinding loops on std::fvm with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
-args = ["${case}", "std::gc::verify", "${run_fvm}"]
-envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "mark-sweep", "${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
 timeout_ms = 60000
@@ -76,8 +76,8 @@ name = "new_values.rebinding_loop.gc_mark_sweep_prl"
 desc = "The rebinding loops on std::prl with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
-args = ["${case}", "std::gc::verify", "${run_prl}"]
-envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "mark-sweep", "${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
 timeout_ms = 60000
@@ -87,8 +87,8 @@ name = "new_values.rebinding_loop.gc_generational_nvm"
 desc = "The rebinding loops on std::nvm with the generational collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
-args = ["${case}", "std::gc::verify", "${run_nvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
 timeout_ms = 60000
@@ -98,8 +98,8 @@ name = "new_values.rebinding_loop.gc_generational_fvm"
 desc = "The rebinding loops on std::fvm with the generational collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
-args = ["${case}", "std::gc::verify", "${run_fvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
 timeout_ms = 60000
@@ -109,8 +109,8 @@ name = "new_values.rebinding_loop.gc_generational_prl"
 desc = "The rebinding loops on std::prl with the generational collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
-args = ["${case}", "std::gc::verify", "${run_prl}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
 timeout_ms = 60000
@@ -187,8 +187,8 @@ name = "new_values.peek.gc_mark_sweep"
 desc = "The reads between appends on std::fvm with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/peek.cml"
-args = ["${case}", "std::gc::verify", "${run_fvm}"]
-envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "mark-sweep", "${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "1 2 [1, 2] [1, 2, 3] 2\n1 [1, 2, 3, 4] 4 true\n[1] [[1], [2], [3]]\n[5, 6] 2 [5, 6, 7]"]
 timeout_ms = 60000
@@ -198,8 +198,8 @@ name = "new_values.peek.gc_generational"
 desc = "The reads between appends on std::fvm with the generational collector, a collection of both kinds every third allocation and the heap verified around each."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/peek.cml"
-args = ["${case}", "std::gc::verify", "${run_fvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "1 2 [1, 2] [1, 2, 3] 2\n1 [1, 2, 3, 4] 4 true\n[1] [[1], [2], [3]]\n[5, 6] 2 [5, 6, 7]"]
 timeout_ms = 60000
@@ -218,12 +218,12 @@ timeout_ms = 3000
 
 [[tests]]
 name = "new_values.peek_loop.graph"
-desc = "The graph of the loop reads `out` with `:var/peek`."
+desc = "The graph of the loop reads `out` with `:var/peek`, and the rebinding appends through the in-place form of `append`."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/peek_loop.cml"
 args = ["${case}", "std::rgir"]
 expect_exit = 0
-expect_stdout_contains = [":var/peek", ":op/assn_append"]
+expect_stdout_contains = [":var/peek", ":struct/append_arr_in_place", ":op/assn_owned"]
 
 [[tests]]
 name = "new_values.macro_append"
@@ -354,8 +354,8 @@ name = "new_values.sort_rebinding.gc_mark_sweep"
 desc = "The rebindings on std::fvm with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
-args = ["${case}", "std::gc::verify", "${run_fvm}"]
-envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "mark-sweep", "${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]"]
 timeout_ms = 60000
@@ -365,8 +365,8 @@ name = "new_values.sort_rebinding.gc_generational"
 desc = "The rebindings on std::fvm with the generational collector, a collection of both kinds every third allocation and the heap verified around each."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
-args = ["${case}", "std::gc::verify", "${run_fvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]"]
 timeout_ms = 60000

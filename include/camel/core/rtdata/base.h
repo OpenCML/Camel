@@ -35,6 +35,10 @@
 #include <string_view>
 #include <typeinfo>
 
+namespace camel::core::mm {
+class Block;
+}
+
 namespace camel::core::rtdata {
 
 class Object;
@@ -92,6 +96,12 @@ class Object {
     virtual void print(std::ostream &os, const camel::core::type::Type *type) const = 0;
     virtual void onMoved()                                                          = 0;
     virtual void finalize() noexcept {}
+    /// The data block this value holds (core/mm/block.h), or null when its data is inline or in
+    /// the collected heap. The collector reads it when it promotes a value and when it measures
+    /// the elder live base: a block held by an elder value can be released only by a major
+    /// collection, and a block reached through several views is counted once, by its identity
+    /// (gen.cpp, forward / sweepOldGen; mm/alloc/allocator.h, noteBlockHeld).
+    virtual camel::core::mm::Block *heldBlock() const noexcept { return nullptr; }
     virtual void updateRefs(const RefRelocator &relocate, const camel::core::type::Type *type) = 0;
 
     template <typename T>
@@ -187,7 +197,6 @@ using Float32 = float;
 using Float64 = double;
 using Float   = Float64;
 using Bool    = bool;
-using Byte    = std::byte;
 
 /** Safe slot printing without dereferencing Object*; used by debug_trace and similar paths that
  * may
@@ -217,9 +226,6 @@ inline void printSlotSafe(std::ostream &os, const slot_t data, camel::core::type
         break;
     case camel::core::type::TypeCode::Bool:
         os << (fromSlot<Bool>(data) ? "true" : "false");
-        break;
-    case camel::core::type::TypeCode::Byte:
-        os << "0x" << std::hex << static_cast<uint64_t>(data) << std::dec;
         break;
     case camel::core::type::TypeCode::Void:
         os << "null";

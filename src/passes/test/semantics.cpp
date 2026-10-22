@@ -111,6 +111,58 @@ OperatorSemanticsTestPass::apply(const camel::runtime::Program *program, std::os
         attempt(os, "opaque_not_sensitive_to_all", "semtest:opaque", s);
     }
 
+    // ---- Trait derivation (table-driven): the traits are the record's facts, and a trait
+    // declared with set() before the semantics is not lost when they are declared, nor is a
+    // semantic fact lost when a trait is changed afterwards. Every line below would change if
+    // a trait were mapped from somewhere else than sem::OperatorSemantics (traitsOf).
+    auto printTraits = [&](std::string_view uri) {
+        const auto t = table.find(uri);
+        if (!t) {
+            os << "SEMANTICS traits " << uri << " undeclared\n";
+            return;
+        }
+        os << "SEMANTICS traits " << uri << " pure=" << t->pure
+           << " elementwise=" << t->elementwise << " stateOnly=" << t->stateOnly
+           << " mayFault=" << t->mayFault << " callsGraphs=" << t->callsGraphs
+           << " readsGraphs=" << t->readsGraphs << "\n";
+    };
+    table.set("semtest:derived_pure", {.pure = true, .mayFault = false});
+    printTraits("semtest:derived_pure");
+    // set() after the semantics: the same record's effect changes, nothing else is lost.
+    table.set("semtest:derived_pure", {.stateOnly = true, .mayFault = false});
+    printTraits("semtest:derived_pure");
+    table.set("semtest:derived_calls", {.pure = false, .mayFault = true});
+    {
+        // Declaring element calls is declaring that the operator calls graphs: callsGraphs is
+        // derived from the fact, so no separate trait bit has to agree with it.
+        OperatorSemantics s = valid("semtest:derived_calls");
+        s.elementCalls      = ElementCalls{.shape = ElementShape::Map, .independent = true};
+        attempt(os, "derived_calls", "semtest:derived_calls", std::move(s));
+    }
+    printTraits("semtest:derived_calls");
+    table.set("semtest:derived_elementwise", {.pure = true});
+    {
+        OperatorSemantics s = valid("semtest:derived_elementwise");
+        s.binary            = BinaryAlgebra{.laws = {}, .elementwise = true};
+        attempt(os, "derived_elementwise", "semtest:derived_elementwise", std::move(s));
+    }
+    printTraits("semtest:derived_elementwise");
+    // The trait still follows the fault list when the fault list is the fact.
+    table.set("semtest:derived_faults", {.pure = true, .mayFault = true});
+    {
+        OperatorSemantics s = valid("semtest:derived_faults");
+        s.faults            = std::vector<FaultSpec>{{FaultKind::DivisionByZero, 1}};
+        attempt(os, "derived_faults", "semtest:derived_faults", std::move(s));
+    }
+    printTraits("semtest:derived_faults");
+    // A record with semantics but no effect fact: nobody declared the traits.
+    attempt(
+        os,
+        "derived_undeclared",
+        "semtest:derived_undeclared",
+        valid("semtest:derived_undeclared"));
+    printTraits("semtest:derived_undeclared");
+
     // ---- Queries. ----
     const auto id = table.lookup("semtest:ok");
     os << "SEMANTICS key " << (id && table.key(*id) ? table.key(*id)->toString() : "none") << "\n";

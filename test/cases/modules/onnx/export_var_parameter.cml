@@ -8,7 +8,7 @@ module export_var_parameter
 
 import { Tensor, reshape, tanh } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 sync func step(x: Tensor, var acc: Tensor): Tensor sync {
     let y = tanh(x)

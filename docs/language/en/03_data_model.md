@@ -30,7 +30,7 @@ Every expression has a definite type at compile time; the graph contains only co
 
 There is no type `any`: after compilation every value has a definite type (design principles 5.10). Writing `any` in any type position is, like any other unknown type name, the compile-time error `SemanticDiag::UnresolvedTypeReference`; a parameter that takes several types uses a type parameter (see [7.5](07_statements.md#75-generic-functions)), and values of different types side by side go in a tuple or a struct.
 
-Reading JSON: for a known shape use `json::decode_as(text, shape)`, whose result is a `T!`; for an unknown shape use `json::decode(text)`, which gives a `Json!`: an error value `JsonParseError` when the text is not JSON, and `JsonTooDeep` when the document nests deeper than the limit (neither is a fault, design principles 11.2; the limit is 10000 by default and `CAMEL_JSON_MAX_DEPTH` sets it), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?`, `Json!` or `Json?!` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; an accessor of a `Json!` gives the two-layer result (`Json?!` and the like) with the error of the document passed on unchanged, taken apart with `??` and `!!`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2).
+Reading JSON: for a known shape use `json::decode_as(text, shape)`, whose result is a `T!`; for an unknown shape use `json::decode(text)`, which gives a `Json!`: an error value `JsonParseError` when the text is not JSON, and `JsonTooDeep` when the document nests deeper than the limit (neither is a fault, design principles 11.2; the limit is 10000 by default and `CAMEL_JSON_MAX_DEPTH` sets it), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?`, `Json!` or `Json!?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; an accessor of a `Json!` gives the two-layer result (`Json!?` and the like) with the error of the document passed on unchanged, taken apart with `??` and `!!`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2).
 
 The `T` and `U...` in the signatures of the standard library (as in `println: (x: T, ...rest: U...) => T`) are a notation of the reference only: these operators check their arguments with type rules, and the graph holds concrete types only.
 
@@ -81,17 +81,20 @@ The result of floating-point arithmetic is fixed by a **canonical algorithm**, n
 - Transcendental functions (`exp`, `log`, ...) are not required to give the same bits everywhere, only to stay within a stated error bound (`exp` and `log`: 2 ulp), with NaN, infinities and zeros exact. `camel inspect --ops` shows the semantics each operator declares.
 - **Complex numbers**: `re`, `im` and `conj` are exact (reading one part and flipping one sign bit are not arithmetic); `abs` is `hypot` and `exp` is the platform's complex exponential (its magnitude is its `exp` and its direction its `sin`/`cos`, a composition of the two), so both promise only the platform's error bound (4 ulp), not correct rounding, and neither always propagates a NaN (`hypot(inf, nan)` is `inf`, `exp(-inf+nan i)` is `0`). `+`, `-`, `*` and `/` of complex numbers are the IEEE operations on the parts in the written order and agree bit for bit across backends (`/` faults when the divisor is the complex zero); `^` with an integer exponent is a fixed sequence of those multiplications, so it is reproducible too.
 
-Faster computation whose results may differ is granted explicitly by the program, with `@numeric(...)` on a function or a block ([7.6.1](07_statements.md#761-numeric-numeric-permissions)). Without a grant, the canonical algorithm is used; there is no module-wide default and no command-line switch.
+Faster computation whose results may differ is granted explicitly by the program, with permission tags (`#reassociate`, `#contract`, ...) on a function or a block ([7.6.1](07_statements.md#761-numeric-permission-tags)); `reassociate` and `contract` are the defaults of 7.3, and `#strict` takes every permission away. Without a grant, the canonical algorithm is used; there is no module-wide default and no command-line switch.
 
 ## 3.3 Compound values
 
 ### 3.3.1 Arrays
 
 ```cml
-let xs = [1, 2, 3]
-let names: string[] = []          // an empty array needs its type written out
-let grid = [[1, 2], [3]]          // int[][]
-println(xs[0], len(xs), grid[0][1])
+func main(): int sync {
+    let xs = [1, 2, 3]
+    let names: string[] = []          // an empty array needs its type written out
+    let grid = [[1, 2], [3]]          // int[][]
+    println(xs[0], len(xs), grid[0][1])
+    return 0
+}
 ```
 
 ```text
@@ -101,13 +104,14 @@ println(xs[0], len(xs), grid[0][1])
 - **The elements are positions with an expected type** (design principles 5.1): the expected type is the array's element type, and a literal element takes it. `let xs: float[] = [1, 2.0]` and `let xs: float[] = [1, 2]` are both a `float[]`, and so is `[1, 2] as float[]`.
 - With no expected type, the literals in one array take the widest kind (integer < decimal): `[1, 2.0]` is a `float[]`, that is `[1.0, 2.0]`.
 - An element that **already has a type** (a variable, the result of a call) is not converted implicitly, and a different type is an error: `let n = 1; let xs: float[] = [n, 2.0]` and `let xs: float[] = [n]` are `SemanticDiag::ElementTypeMismatch`, reported at the element (`Cannot insert data of type 'int' into a(n) array with element type 'float'`). Elements whose types have no common type and are not literals are `SemanticDiag::ElementTypeMismatch` too.
-- Subscripts start at 0; an out-of-range subscript (including a negative one) is the fault `RuntimeDiag::IndexOutOfRange`.
+- Subscripts start at 0; an out-of-range subscript (including a negative one) is the fault `RuntimeDiag::IndexOutOfRange`. Several positions at once are written `xs[idx]` with an `int[]` (that is `take`), a slice is written `xs[a:b]` (a view sharing the data block), see [6.3](06_expressions.md#63-access-and-subscripts).
 - Built-in functions:
 
   | Form | Result |
   |---|---|
   | `len(xs)` | Length |
   | `head(xs)`, `tail(xs)` | The first element (of an empty array: the fault `RuntimeDiag::IndexOutOfRange`, as for `xs[0]`); the array without its first element |
+  | `last(xs)` | The last element (of an empty array: the fault `RuntimeDiag::IndexOutOfRange`). A negative subscript does not count from the end, so use this for the last element, not `xs[-1]` |
   | `range(a, b)` | `[a, a+1, ..., b-1]`; empty when `a >= b` |
   | `xs->slice<a, b>` | A new array of subscripts `a` to `b-1`. `a` and `b` are positions from 0 to the length; a bound outside the array (a negative one included) is the fault `RuntimeDiag::SliceOutOfRange`, as an index out of range is a fault. With both bounds inside the array and `b < a` the result is empty. To take "at most n" use `take` and `drop` of the `array` module, which cut by definition |
   | `concat(xs, ys)` | Concatenation into a new array |
@@ -122,9 +126,12 @@ println(xs[0], len(xs), grid[0][1])
 ### 3.3.2 Tuples
 
 ```cml
-let pair = (1, 'one')
-let (n, s) = pair              // destructuring
-println(pair.0, pair.1, n, s)
+func main(): int sync {
+    let pair = (1, 'one')
+    let (n, s) = pair              // destructuring
+    println(pair.0, pair.1, n, s)
+    return 0
+}
 ```
 
 ```text
@@ -138,9 +145,12 @@ A member index is a literal; one beyond the length is a compile-time error (`Sem
 ```cml
 type Point = { x: int, y: int }
 
-let p: Point = { x: 3, y: 4 }
-let q = { x: p.x + 1, y: p.y }     // "modifying" means building a new one
-println(p, q.x)
+func main(): int sync {
+    let p: Point = { x: 3, y: 4 }
+    let q = { x: p.x + 1, y: p.y }     // "modifying" means building a new one
+    println(p, q.x)
+    return 0
+}
 ```
 
 ```text
@@ -163,7 +173,7 @@ Nothing converts between two named types implicitly, even when their fields are 
 
 ### 3.3.4 Strings
 
-A string is immutable text and is **always valid UTF-8**; length and subscripts count code points: `len('中文')` is 2 and `'中'[0]` is `'中'`. Binary data is the built-in type `Bytes` (a type name like `string`, not imported), converted explicitly: `bytes::encode`, `bytes::decode` (malformed UTF-8 gives an error value); making a string from invalid bytes, as in `str::from_bytes([255])`, is a fault right there. The built-in operations:
+A string is immutable text and is **always valid UTF-8**; length and subscripts count code points: `len('中文')` is 2 and `'中'[0]` is `'中'`. Binary data is the built-in type `Bytes` (a type name like `string`, not imported), converted explicitly: `bytes::encode`, `bytes::decode` (malformed UTF-8 gives an error value). That is the only conversion between a string and bytes: no other name makes a string from bytes. The built-in operations:
 
 | Form | Result |
 |---|---|
@@ -177,7 +187,7 @@ A string is immutable text and is **always valid UTF-8**; length and subscripts 
 | `strs->join<sep>` | Joins an array of strings |
 | `s[i]` | The `i`-th code point; the result is a string containing just that one character; an out-of-range subscript is a fault |
 
-The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `find`, `substr` (index and length in code points), `starts_with`, `ends_with`, `repeat`, `bytes`, `from_bytes`, `codepoints`, `from_codepoints`.
+The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `find`, `substr` (index and length in code points), `starts_with`, `ends_with`, `repeat`, `codepoints`, `from_codepoints`.
 
 ```cml
 import { split, trim, to_upper } from str
@@ -245,7 +255,7 @@ Rules:
   `v as T?` can still be written. Several levels are entered at once: `let x: int?! = 5`. On the graph each level is a conversion node (`CAST`); the compiler adds the node a program would write with `as`, and the graph is the same.
 - **Never the other way.** A `T?` or `T!` used as a `T` must be opened; an `int?` does not become a `float?` either, and numbers are still not converted implicitly. The arguments of built-in operators (`append`, `println`, ...) are not such a position: their parameter types are computed from the arguments by C++ type rules, so there is no target type to enter; write `as` there.
 - **The empty array literal `[]` takes its element type from where it stands**: a declared type (`let xs: int[] = []`), a parameter (`count([])`), the other arm of a branch, the left side of `??`/`!!` (`attempt(f) !! []`), a declared return type, `as` (`[] as Map<string, int>`). Binding `[]` to a name without a type (`let xs = []`) is the compile-time error `SemanticDiag::EmptyArrayWithoutType`, which says to write the type.
-- The two tags can be combined: `T?!`, `T!?`. The same one cannot be repeated. Positions such as array elements need parentheses: `(int?)[]`.
+- The two tags can be combined: `T?!`, `T!?`. The marks are written from the innermost outwards: `T?!` is fallible(nullable(T)) and `T!?` is nullable(fallible(T)); a `match` opens the outer form only. The same one cannot be repeated. Positions such as array elements need parentheses: `(int?)[]`.
 - With generics: `(typeas T)?` binds `T` from a nullable argument ([7.5](07_statements.md#75-generic-functions)).
 - In `let x: int! = v` there must be a space between `!` and `=`.
 - Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `try_read_text(path)`, `remove(path)` and `remove_dir(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
@@ -274,6 +284,8 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 **Construction.** A variant is written after the type name, qualified with `::`: `Shape::Circle(1.0)`, `Shape::Rect { w: 2.0, h: 3.0 }`, `Shape::Empty`. A struct variant takes every field it declares, in any order; a tuple variant takes its fields by position. A variant without data is the value itself, with no parentheses. The value has type `Shape`; the arguments of a generic instance are inferred from the field arguments (`Option::Some(42)` is `Option<int>`), or, when they cannot be (`Option::None`), from the type the position expects (`let x: Option<int> = Option::None`, an argument position, a return type), and failing both is a compile-time error (`EnumTypeArgumentNotInferred`). A field argument must have the declared type (`EnumFieldTypeMismatch`), and the number and names of the fields must agree with the declaration (`EnumVariantFieldCount`, `EnumConstructionMismatch`). Automatic wrapping into a field follows the usual rule: an `int` does not become a `float` by itself.
 
 **`match`.** An enum is taken apart by `match`; its fields are never read directly (`b.w` is `EnumFieldAccess`, and the diagnostic shows the `match`):
+
+<!-- camel-snippet: fragment: continues the Shape enum declared in the example above -->
 
 ```cml
 func area(s: Shape): float {

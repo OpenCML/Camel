@@ -21,6 +21,8 @@
 
 #include <vector>
 
+#include "camel/core/operator_semantics.h"
+
 #include "base.h"
 
 namespace camel::parse::ast {
@@ -124,15 +126,14 @@ class FuncDeclLoad : public StmtLoad {
 
 class TypeDeclLoad : public StmtLoad {
   public:
-    TypeDeclLoad(Reference ref, ImplMark impl = ImplMark::Graph, std::string uri = "")
-        : StmtLoad(StmtType::Type), ref_(ref), implMark_(impl), uri_(uri) {}
+    TypeDeclLoad(Reference ref, std::string uri = "")
+        : StmtLoad(StmtType::Type), ref_(ref), uri_(std::move(uri)) {}
 
     const Reference &ref() const { return ref_; }
     /// The parameters of a type function, `T` and `U` in `type Pair<T, U> = ...`; empty for
     /// an ordinary type declaration.
     const std::vector<std::string> &params() const { return params_; }
     void setParams(std::vector<std::string> params) { params_ = std::move(params); }
-    ImplMark implMark() const { return implMark_; }
     const std::string &uri() const { return uri_; }
 
     const std::string toString() const override;
@@ -140,7 +141,6 @@ class TypeDeclLoad : public StmtLoad {
 
   private:
     Reference ref_;
-    ImplMark implMark_;
     std::string uri_;
     std::vector<std::string> params_;
 };
@@ -184,13 +184,6 @@ class StmtBlockLoad : public StmtLoad {
     void wait() { waited_ = true; }
     bool waited() const { return waited_; }
 
-    /// The numeric permissions (camel/core/operator_semantics.h, PermissionMask) granted by a
-    /// `@numeric(...)` written on this block or on the function whose body it is (design
-    /// principles 7.5). Only this block's own grant: the GCT builder adds those of the
-    /// enclosing blocks. 0 when none.
-    void grantNumeric(uint8_t permissions) { numeric_ |= permissions; }
-    uint8_t numeric() const { return numeric_; }
-
     // The children of a block, in this order (each only when it is there):
     //   [0] RepeatedLoad("Stmt")          the statements (always)
     //   [1] RepeatedLoad("FuncAnno")      the decorators after the statements' child, in the
@@ -204,7 +197,6 @@ class StmtBlockLoad : public StmtLoad {
   private:
     bool synced_     = false;
     bool waited_     = false;
-    uint8_t numeric_ = 0;
 };
 
 /// One `#` form (design principles 6.2): `#name`, `#name<args>`, and each member of
@@ -276,3 +268,4 @@ class TagDeclLoad : public StmtLoad {
 };
 
 } // namespace camel::parse::ast
+

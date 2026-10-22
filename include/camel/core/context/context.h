@@ -50,6 +50,7 @@ class FactStore;
 
 namespace camel::core::module {
 class Module;
+class ProgramExports;
 }
 
 namespace camel::compile {
@@ -137,6 +138,10 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unordered_map<std::string, std::shared_ptr<const void>> passFacts_;
     /// See setSemanticRecorder.
     camel::compile::SemanticRecorder *semanticRecorder_ = nullptr;
+    /// The exported entities of the program this context is building (see programExports).
+    /// Declared before the builder session so that the builder, which refers to it, is
+    /// destroyed first.
+    std::unique_ptr<module::ProgramExports> programExports_;
     /// See graphBuildSession.
     std::shared_ptr<void> graphBuildSession_;
     /// The regular files of each directory a module was looked up in (getModulePathAndKind),
@@ -155,9 +160,17 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Look up the file for a module. Any suffix other than .cmo is treated as source code; .cmo is
      * treated as a dynamic library. An empty first value means not found. */
     std::pair<std::string, bool> getModulePathAndKind(const std::string &moduleName);
+    /** `getModulePathAndKind` for one search root: `base/<name>.cmo` or `base/<name>.*`, then the
+     * same inside `base/<name>/`. Used for the directory of the importing module, before the
+     * global search paths (H112). */
+    std::pair<std::string, bool>
+    findModuleUnder(const std::string &baseDir, const std::string &moduleName);
     std::string getModulePath(const std::string &moduleName);
-    bool moduleFileExists(const std::string &moduleName);
     module_ptr_t tryLoadModule(const std::string &moduleName);
+    /// Load the module at a path that was resolved for it (a `.cmo` as a dynamic library, any
+    /// other file as source). Kept apart from the lookup so a caller can name the directory the
+    /// path was found in.
+    module_ptr_t loadModuleFrom(const std::string &moduleName, const std::string &path, bool isCmo);
     /** Collect lookup attempts for a missing module so error messages can report them. */
     std::vector<std::string> getModuleSearchDiagnostics(const std::string &moduleName) const;
     /** Return the base search paths that were actually consulted; for .cmo load failures we only
@@ -201,6 +214,10 @@ class Context : public std::enable_shared_from_this<Context> {
     const camel::runtime::Program *materializeRuntimeProgram();
     const camel::runtime::Program *adoptRuntimeProgram(const camel::runtime::Program *program);
     const camel::runtime::Program *installRuntimeProgram(const camel::runtime::Program *program);
+    /// installRuntimeProgram, but only while `expected` is still the installed program (see
+    /// GCGraphManager::replaceRootIfCurrent): answers whether it installed it.
+    bool installRuntimeProgramIfCurrent(const camel::runtime::Program *expected,
+                                        const camel::runtime::Program *program);
     const camel::runtime::Program *currentRuntimeProgram() const;
     void clearRuntimeGraphs();
     /// A new, empty Program owned by the context, for whoever builds one.
@@ -217,6 +234,9 @@ class Context : public std::enable_shared_from_this<Context> {
     void enterRun();
     void leaveRun();
     void releaseRuntimeGraph(camel::runtime::GCGraph *graph);
+    /// See GCGraphManager::noteUnbound: a graph a rewrite encoded and has not bound in a
+    /// program yet, which the collector frees once the pass is over if nothing binds it.
+    void noteUnboundRuntimeGraph(camel::runtime::GCGraph *graph);
     /// The newest program of the context that holds this version of `graph` (see
     /// GCGraphManager::programOf), nullptr when none does.
     const camel::runtime::Program *
@@ -276,8 +296,10 @@ class Context : public std::enable_shared_from_this<Context> {
     std::vector<module_ptr_t> importedModules() const;
 
     /// Dump diagnostics from main and all imported modules that have errors; json=true for JSON
-    /// format
-    void dumpAllModuleDiagnostics(std::ostream &os, bool json) const;
+    /// format. `wrapInArray` is `Diagnostics::dump`'s: with false (JSON only) the objects are
+    /// written without the surrounding `[` and `]`, so a caller that is itself writing a JSON
+    /// object can nest them.
+    void dumpAllModuleDiagnostics(std::ostream &os, bool json, bool wrapInArray = true) const;
 
     /// Dump the Warn-level diagnostics of the user modules that compiled without an error (the
     /// modules with errors show theirs through dumpAllModuleDiagnostics). Text: one line per
@@ -349,11 +371,27 @@ class Context : public std::enable_shared_from_this<Context> {
      */
     std::shared_ptr<void> &graphBuildSession() { return graphBuildSession_; }
 
+    /**
+     * The exported entities of the program compiled on this context: the names each module
+     * declares for this program, with the graphs this program built (design principles 10.1;
+     * one table per program, task H42). The graph builder of the context's program shares this
+     * table; a program of its own (a pass compiled by compileAsProgram) has one of its own, so
+     * the same module can be declared in both without either seeing the other's graphs.
+     *
+     * Created on first use. Readers that are not the graph builder (the semantic analysis, an
+     * operator's definition lookup) read it here.
+     */
+    camel::core::module::ProgramExports &programExports();
+
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }
 
     module_ptr_t
     importModule(const std::string &rawModuleName, const std::string &currentModuleName = "");
+    /// Whether a file for the module is found on the search paths, whether or not it can be
+    /// loaded: what tells a name with no module behind it from a module that is there and cannot
+    /// be used (H130).
+    bool moduleFileExists(const std::string &moduleName);
 
   private:
     void registerRuntimeGraphDebugInfo(const camel::runtime::Program *program);

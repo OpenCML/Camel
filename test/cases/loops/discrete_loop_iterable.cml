@@ -1,0 +1,14 @@
+// A `loop` iterating over an `int[]` computed from the differentiated parameter. The elements
+// are discrete, so their derivative is zero by definition (design principles 9.9): the sum of the
+// elements is a constant of the call, 6 at w = 2, and the gradient is 0 -- not a refusal.
+import { grad } from autodiff
+
+with <w: float>
+func f(): float {
+    return loop acc = 0.0 for x in [int(w), int(w * 2.0)] do acc + float(x)
+}
+
+func main(): int sync {
+    println(grad(f)<2.0>())
+    return 0
+}

@@ -2,7 +2,7 @@
 #^^^^^^ keyword.control.import.module.camel
 #       ^^^^^ entity.name.namespace.module.camel
 >
->import { set_terminal_raw_mode, has_input, get_char, clear_input_buffer } from os
+>import { set_terminal_raw_mode, has_input, get_char, clear_input_buffer } from io
 #^^^^^^ keyword.control.import.camel
 #       ^ meta.block.camel punctuation.section.block.begin.camel
 #                              ^ meta.block.camel punctuation.separator.comma.camel

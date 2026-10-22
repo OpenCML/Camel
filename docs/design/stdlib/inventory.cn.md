@@ -3,6 +3,9 @@
 依据：docs/design-principles.cn.md（3、5、10、11、13 节）、docs/stdlib-reference.md、stdlib/、modules/、src/builtin/modules/、docs/design/{training,arrays-memory,showcase,io-concurrency-streams}、docs/language/05_modules.md、docs/reviews/2026-10-19/{frontend,modules}.cn.md。
 标注"未验证"的是只读下无法确认的判断（没有运行构建产物）。个数口径：stdlib/signatures 里按函数名去重，重载不重复计。
 
+> 2026-10-22 注：本文是 2026-10-20 的盘点，保留当时的名字；`str::bytes`/`str::from_bytes` 已由
+> H122 删除（字符串与 UTF-8 字节之间现在只用 `bytes::encode`/`bytes::decode`）。
+
 ## 1. 模块表
 
 "默认可见"：全局内建不需导入；其余都要 `import`。模块查找：入口文件同目录 .cml、`-I` 目录、`CAMEL_PACKAGES`、随安装的 `out/latest/stdlib/`（.cml 与 .cmo 都放在这里）。
@@ -14,7 +17,7 @@
 |---|---|---|---|---|---|---|
 | globals（名字 ""） | 转换、输出、字符串/数组基础、高阶、Map/Set | C++（globals.cpp 1750 行 + src/builtin/operators） | 47 个名字（79 个重载） | int/i64/i32/float/f64/f32/string/parse_int/parse_float/error；print/println/input/sleep/exit；format/join/len；range/head/tail/slice/concat/contains/zip/append/extend；map/filter/reduce/foreach/apply/attempt；Map：get/get_or/put/remove/has/keys/values/items/merge；Set：add/union/intersect/difference/is_subset | 默认可见 | 全部 |
 | profiler | 性能追踪 begin/end/instant/enable | C++ | 4 | begin、end、instant、enable | 仅 Debug 构建（`#ifndef NDEBUG`），需导入 | 0 个测试/示例 |
-| test_attrs | 测试用装饰器 mark/flags/level/plain | C++ | 4 | 同左 | 只在 `CAMEL_ENABLE_TEST_PASSES` 下导出，需导入 | 3 个测试 |
+| test_attrs | 测试用装饰器 mark/flags/level/plain | C++ | 4 | 同左 | 测试用，需导入 | 3 个测试 |
 
 ### 1.2 用 Camel 写的库（stdlib/*.cml）
 
@@ -42,11 +45,11 @@
 | random | 带全局状态的随机数 | 7 | seed/rand/randn/randint/choice/sample/shuffle | 13 / 2 | 无键式随机数 |
 | time | 时钟与格式化 | 3 | now（float 秒）/strftime/strptime | 25 / 14 | |
 | fs | 文件系统 | 13 | read_text/try_read_text/read_bytes/read_chunk/write_text/write_bytes/replace/exists/is_file/is_dir/file_size/mkdir/mkdirs | 13 / 4 | 全部 @effect |
-| os | 进程与终端 | 8 | sleep/whoami/cpu_count/set_terminal_raw_mode/has_input/get_char/get_chars/clear_input_buffer | 7 / 1 | 另有 exit 在全局 |
-| sys | 环境 | 2 | get_env/get_cwd | 105 / 33（几乎都是入口参数用 get_env） | |
+| process | 进程与终端 | 8 | sleep/whoami/cpu_count/set_terminal_raw_mode/has_input/get_char/get_chars/clear_input_buffer | 7 / 1 | 另有 exit 在全局 |
+| env | 环境 | 2 | get_env/get_cwd | 105 / 33（几乎都是入口参数用 get_env） | |
 | json | `Json` 类型与编解码 | 12 | encode/decode/decode_as；kind/is_null/get/as_bool/as_int/as_float/as_string/as_array/as_object | 17 / 2 | |
 | re | 正则 | 1 | test | 4 / 1 | |
-| crypto | 哈希 | 2 | sha256（str/Bytes 两重载）/sha256_rounds | 6 / 0 | |
+| hash | 哈希 | 2 | sha256（str/Bytes 两重载）/sha256_rounds | 6 / 0 | |
 | para | 无序并行与同步 | 3 | unordered_foreach/unordered_reduce/rendezvous | 11 / 0 | rendezvous 看起来是测试设施 |
 | this | `zen()` 彩蛋 | 1 | zen | 4 / 0 | |
 | io | 空壳：module.cpp 注释写 print/println/input 已移入内建，`getOperatorGroups()` 返回空 | 0 | 无 | 1 测试（registry_all） | 仍编译、仍可导入 |
@@ -60,13 +63,13 @@
 
 ### 2.1 同一件事多处实现或多个名字
 
-- `sleep`：全局 `sleep` 与 `os::sleep` 是同一个算子（signature 里的 URI 都是 `os:sleep`）。
-- `exit` 在全局，其余进程功能在 `os`；环境变量/工作目录在 `sys`，用户名/CPU 数在 `os`。`os` 与 `sys` 的划分没有依据。
+- `sleep`：全局 `sleep` 与 `process::sleep` 是同一个算子（signature 里的 URI 都是 `process:sleep`）。
+- `exit` 在全局，其余进程功能在 `process`；环境变量/工作目录在 `env`，用户名/CPU 数在 `process`。`process` 与 `env` 的划分没有依据。
 - 排序：`algo` 导出 sort/insert_sort/quick_sort/merge_sort 四个名字（只接受数字元素），`array::sort_by` 是另一条路；原则 11.3 说"只有 `sort`，返回新数组"，docs/language 5.2.1 也写"每种只有一个名字"，实际不符。没有对任意可比较元素的通用 `sort`。
 - `min`/`max`：`math` 是两数（数值，4 重载），`array` 是数组→`T?`，`tensor` 是张量（`max(x, axis, keepdim)`）；`sum`、`mean` 在 array/statistics/tensor 各有一份，`softmax`、`exp`、`log`、`sqrt`、`abs`、`pow` 在 math 与 tensor 各一份。导入多个模块时靠重载/改名区分。
 - `range`、`slice`、`concat`、`len` 在全局与 `tensor`（range/slice/concat）里同名；`seed`/`randn` 在 `random` 与 `tensor`（带自己的 seed/random/randn）里同名。后者是否共享生成器：未验证。
 - 字节相关：`str::bytes(s)`/`str::from_bytes(xs)` 的"bytes"是 `int[]`；`bytes` 模块的 `Bytes` 另用 `to_array/from_array`、`encode/decode`；`tensor::from_bytes` 又是 `Bytes→Tensor`。`from_bytes` 有三种含义（str、tensor，加 bytes 的 from_array）。原则 11.1 的"字节序列用 `Bytes`"在 str 里没有贯彻。`bytes::concat`/`bytes::size` 与全局 `concat`/`len` 同义。
-- 序列化散落：`tensor::load_npy/save_npy`、`tree::save_tree/load_tree`、`nn::save_params`、`fs::write_*`、`json::encode/decode`，命名没有统一模式（save/load/write/replace/encode）。`fs::replace`（原子替换文件）与 `str::replace` 同名不同义。
+- 序列化散落：`tensor::load_npy/save_npy`、`ckpt::save_tree/load_tree`、`nn::save_params`、`fs::write_*`、`json::encode/decode`，命名没有统一模式（save/load/write/replace/encode）。`fs::replace`（原子替换文件）与 `str::replace` 同名不同义。
 - Set 同时有 `has` 与 `contains`（global.cml 两者都有）；Map 有 `get<key>`、`has`，原则 11.3 示例用下标 `m['a'] ?? 0`；Json 又有自己的 `get`。原则 11.4 要求"只保留一种写法"，现状没收敛。
 - 全局 `head`/`tail` 是 `slice` 的特例；`extend` 与 `concat` 功能重复；`apply<f>`（T→T）与 `map` 的区别未在文档说明（未验证它的语义）。
 - `i64`/`f64` 与 `int`/`float` 是别名（各 5 个重载）。
@@ -89,14 +92,14 @@
 违反或有分歧的：
 - `format<args...>`：被格式化的数据放在尖括号里，格式串是主输入（`'{} is {}'->format<a, b>`），与 4.4 相反；`print<fmt>(...)` 方向正确。
 - `re::test(pattern, text)`：被处理的文本在第二位，不能写成 `text->test(...)`；其余库都是"数据第一"。
-- `fs` 全部用普通参数且路径在前：`read_chunk(path, offset, size)`、`write_text(path, content)`；`time::strftime(ts, format)`、`strptime(text, format)`；`random::sample(xs, n)`；`crypto::sha256_rounds(s, rounds)`；`json::encode(value, indent)`；`math::clamp(x, lo, hi)`；这些"配置"用的是普通参数。同一库里 `str::repeat<count>`、`array::take<n>` 却用 with。
+- `fs` 全部用普通参数且路径在前：`read_chunk(path, offset, size)`、`write_text(path, content)`；`time::strftime(ts, format)`、`strptime(text, format)`；`random::sample(xs, n)`；`hash::sha256_rounds(s, rounds)`；`json::encode(value, indent)`；`math::clamp(x, lo, hi)`；这些"配置"用的是普通参数。同一库里 `str::repeat<count>`、`array::take<n>` 却用 with。
 - tensor 的配置全是普通参数：`sum(x, axis, keepdim)`、`reshape(x, shape)`、`max(x, axis, true)`（见 tensor_definitions.cml）。`tiles::run<f>(args)`、`attempt(f, args)` 把函数放在不同位置。
 - 原则 4.4 末句"标准库各函数的归属在示例写出来后逐个确定"：这项审查尚未做。
 
 ### 2.4 错误约定（原则 3.9：可能失败的操作返回 `T!`，故障是程序错误）
 
 - `fs` 几乎全是故障：`read_text`、`read_bytes`、`read_chunk`、`write_*`、`file_size`、`mkdir(s)` 打不开文件都是 fault；只有 `try_read_text` 返回 `string!`。文件缺失是典型的"可能失败的操作"，应是 `T!`；`mkdir` 同时返回 bool 又可能故障。
-- `sys::get_env` 找不到变量是 fault（RuntimeError），应当是 `string?`；`os::set_terminal_raw_mode` 终端拒绝是 fault。
+- `env::get_env` 找不到变量是 fault（RuntimeError），应当是 `string?`；`process::set_terminal_raw_mode` 终端拒绝是 fault。
 - `time::strptime` 文本与格式不符是 fault（TimeFormatFailed），而 `parse_int` 对同类问题返回 `int!`。
 - `re::test` 的坏正则是 fault（可以接受，但与 `json::decode` 的坏文本返回 `Json!` 的处理不同）。
 - 空集合：`head([])`、`random::choice([])` 是 fault，`array::min/max/find`、`statistics::median/quantile` 返回 `T?`。
@@ -106,7 +109,7 @@
 ### 2.5 效应、资源、纯度声明
 
 - 纯度：仓库内模块有测试强制逐个声明（`warnUndeclaredOperatorTraits` 对第三方给警告；test/plans/feat/modules/stdlib_registry.plan.toml）。但 `tree` 为过测试把永不成节点的名字声明为有副作用（评审 frontend #10）；`math` 无数值声明（评审 modules #15）。
-- 资源：C++ 侧已有 `declareResources`（fs、os、sys、time、random、para、algo、nn::save_params、tree、tiles 都有），内建 print/println/input 在 builtin_semantics.cpp 声明。资源名是 `io:stdout`、`io:stdin`、`io:terminal`、`time:clock`、`process:environment`、`process`、`rand:generator`、`fs`、`profiler`，与原则 3.3 约定的默认资源名（`stdout/stderr/stdin/fs/clock/env`）不一致；`stderr` 没有对应的输出函数。
+- 资源：C++ 侧已有 `declareResources`（fs、process、env、time、random、para、algo、nn::save_params、tree、tiles 都有），内建 print/println/input 在 builtin_semantics.cpp 声明。H134 之后资源名是 `stdout`、`stdin`、`stderr`、`clock`、`env`、`fs`、`process`、`rng`、`tensor:generator`、`tensor:threads`、`tiles:driver`、`tiles:device`、`para:rendezvous`，与原则 3.3 一致；`io:terminal` 是 raw mode 自己的资源（并入 `stdin` 是资源集变化，留给作者）。`stderr` 还没有对应的输出函数。
 - 签名文件里的 `@effect` 是自由文本（"reads a file"、"advances the generator"、"what f does"），不是资源名；`.cml` 签名头注明"for reference only: not compiled"。算子的类型规则、纯度、资源、故障在 C++ 注册、OperatorTable 声明、signatures/*.cml 三处各写一遍（评审 frontend #10）。
 - 语言层面 `uses`/`pure`/`resource` 的语法：docs/language 里没有出现（只有 design-principles 与 blueprint 描述），推断尚未实现；所以库作者现在无法用 Camel 声明资源。
 - `random` 全部 @effect（全局生成器）；原则 13.5 的键式纯随机数尚未实现。
@@ -116,7 +119,7 @@
 - `io`：空模块，仍随构建发出，一个测试 import 它。可删。
 - `tree`：不是空壳。tree_map 等五个是类型导向的内联，核心建图器按 URI 硬编码展开（评审 modules #1），`stdlib` 层面只有签名登记。已出现在 stdlib-reference。
 - `sim`：两个基准内核，领域专用；`para::rendezvous`、`this::zen`：测试/彩蛋性质。
-- `tiles`：实验模块；导出里有 `test_call`、`test_compiled_call` 等，受 `CAMEL_ENABLE_TEST_PASSES` 控制。
+- `tiles`：实验模块；导出里有 `test_call`、`test_compiled_call` 等，测试用，在流水线里写出名字即可用。
 - `test_attrs` 受环境变量控制；`profiler` 仅 Debug。
 - `tensor_definitions` 不是给用户用的库，却放在 stdlib 目录下与用户库同级。
 - `perf` 的 `timeit` 用递归、`println` 和 `format` 打印，不适合当库接口；`perfms` 返回元组（均值, 误差）。
@@ -141,7 +144,7 @@
 | 正则完整接口 | 只有 `test` | 日志过滤、文本抽取（examples/text/log_filter） |
 | 字符串缺口 | 无 lines/按码点 len 与切片/pad/rfind/strip_prefix/分行/大小写以外的 Unicode 处理；`len` 按字节（globals.cml 文档），原则 11.1 要求按码点 | 文本处理、分词、示例 word_frequency |
 | 通用 `sort`、`group_by`、`zip` 以外的集合 | array::sort_by 只有键排序；无 group_by（需 Map，array.cml 头注释已说明）；无 chunk/window/partition/dedup_by | 数据处理示例 |
-| 进程与命令行 | 无 spawn/exec；无命令行解析（只有 sys::get_env 与 `--arg`） | 工具型程序、调用外部命令、智能体的代码执行工具 |
+| 进程与命令行 | 无 spawn/exec；无命令行解析（只有 env::get_env 与 `--arg`） | 工具型程序、调用外部命令、智能体的代码执行工具 |
 | 日志 | 无 | 长时间训练与智能体 |
 | 哈希与摘要扩展 | 只有 sha256；无 md5/sha1/blake3/hmac、随机字节、编码（base64/hex） | 检查点清单哈希、数据版本（训练稿 8.2） |
 | 序列化格式 | 只有 json、.npy、tree 检查点；无 safetensors/msgpack/yaml/toml | 模型权重交换（PyTorch/HF 生态） |
@@ -170,7 +173,7 @@
 - **math**：`clamp`、`sign`、`min`/`max`（两数）、`gcd`/`lcm`、`hypot`、`hex/bin/oct`、`expm1`/`log1p`（后两个需要精度，留 C++）。
 - **fs**：`read_text`（=`decode(read_bytes)`，但有流式与错误形式问题）、`write_text`（=`write_bytes(encode)`）、`mkdirs`（=循环 `mkdir`）、`is_file/is_dir/exists` 可共用一个 stat 原语；`try_read_text` 与 `read_text` 的错误形式差异可在 Camel 层一次解决。
 - **json**：`as_*`/`get`/`kind`/`is_null` 是对 `Json` 值的访问，类型本身在 C++；访问器的 `Json?`/`Json!` 链式重载可由一个 C++ 原语加 Camel 包装产生。
-- **crypto::sha256_rounds**：`sha256` 的循环，Camel 即可。
+- **hash::sha256_rounds**：`sha256` 的循环，Camel 即可。
 - **this::zen**：常量字符串。
 
 ### 4.2 Camel 实现但应是（或可能是）C++
@@ -192,7 +195,7 @@
 - **默认可见（prelude）**：只有 globals（模块名 ""）一个，名字写死在 src/builtin/modules/globals.cpp，用户不可扩展。优先级里"内建"最低，用户模块可覆盖。没有"再导出（re-export）"之外的 prelude 配置机制（`export { a, b }` 只导出本模块已声明的名字；是否支持转导出：未验证）。
 - **资源名可见性**：原则 3.3 说基础资源默认可见，语言层 `resource`/`uses` 语法目前没有（推断）。
 - **版本**：模块无版本号。C++ 模块有 ABI 版本 `CAMEL_MODULE_ABI_VERSION = 3`（include/camel/core/module/dynamic.h），.cmo 导出 `camel_module_abi_version()` 与 `camel_module_create(Context*)`，加载前检查。原则 10.5 要求"公开 C++ 接口按版本承诺兼容"，尚未建立；.cml 模块没有版本、没有包清单。
-- **模块缓存**：`.cmo` 缓存（`__cmo__/`）默认关闭。C++ 模块与缓存共用扩展名，靠文件头区分。
+- **模块缓存**：`.cmc` 缓存（`__cmc__/`）默认关闭，尚未实现；见设计原则 10.3。
 - **C++ 模块声明签名的方式**：每个模块在 `module.cpp` 里继承 `BuiltinModule`，构造函数用 `exportEntity(name, OperatorGroup)`/`exportType` 导出；类型规则用 `StaticFuncTypeResolver`（固定签名）或 `DynamicFuncTypeResolver`（按实参算，用户重载会悄悄胜出，评审 frontend #11）；`load()` 里 `registerExecutorFactory`、`OperatorTable::declare` 声明纯度、`declareResources` 声明资源、`declareSemantics` 声明数值语义（只有 tensor 做）。tensor 另用 `OpDef`（name/exports/params/infer/kernel/traits，modules/tensor/ops）一个条目生成多项。
 - **stdlib/signatures 的角色**：纯参考元数据，不编译；`node scripts/stdlib-reference.mjs --write` 生成 docs/stdlib-reference.md，`--verify-ops` 对照 `camel inspect --ops` 检查算子名、参数个数、纯度是否一致。只覆盖 18 个模块，是三处来源之一。
 - **用 Camel 写的库怎么被找到**：`stdlib/*.cml` 随 collect-out 拷到 `out/latest/stdlib/`，按文件名导入；它们是泛型函数，在调用模块按元素类型实例化，全程序一张 `__root__`。库可以导出值（C++ 的 `math::pi` 也是值）；不能导出 `var`；既有标注函数又有其他重载的名字目前不能导出（ConstructNotSupported）。

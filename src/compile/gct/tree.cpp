@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 13, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -144,6 +144,20 @@ const std::vector<Tree::LiteralElement> *Tree::literalElementsOf(const data_ptr_
     return it == literalElements_.end() ? nullptr : &it->second;
 }
 
+void Tree::setUnwrittenParams(const Node *func, std::vector<UnwrittenParam> params) {
+    if (func != nullptr && !params.empty()) {
+        unwrittenParams_[func] = std::move(params);
+    }
+}
+
+const std::vector<Tree::UnwrittenParam> *Tree::unwrittenParamsOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = unwrittenParams_.find(func);
+    return it == unwrittenParams_.end() ? nullptr : &it->second;
+}
+
 Tree *Tree::of(const Node *node) {
     const auto address = reinterpret_cast<uintptr_t>(node);
     return reinterpret_cast<const Chunk *>(address & ~(static_cast<uintptr_t>(kChunkBytes) - 1))
@@ -224,10 +238,9 @@ node_ptr_t Tree::makeData(const data_ptr_t &data) {
     return node;
 }
 
-node_ptr_t Tree::makeType(Type *type, ImplMark impl) {
+node_ptr_t Tree::makeType(Type *type) {
     Node *node          = makeNode(NodeKind::TYPE);
     node->payload_.type = type;
-    node->tag_          = static_cast<uint16_t>(impl);
     return node;
 }
 
@@ -254,6 +267,20 @@ node_ptr_t Tree::makeDRef(const std::string &name) {
     Node *node          = makeNode(NodeKind::DREF);
     node->payload_.name = internReference(name);
     return node;
+}
+
+node_ptr_t Tree::makeDRef(OperId oper, const std::string &name) {
+    Node *node          = makeDRef(name);
+    operRefs_[node]     = oper;
+    return node;
+}
+
+std::optional<OperId> Tree::operRefOf(const Node *node) const {
+    const auto it = operRefs_.find(node);
+    if (it == operRefs_.end()) {
+        return std::nullopt;
+    }
+    return it->second;
 }
 
 node_ptr_t Tree::makeVari() { return makeNode(NodeKind::VARI); }
@@ -297,6 +324,55 @@ node_ptr_t Tree::makeCase(CaseType type, const std::string &binding) {
     Node *node          = makeNode(NodeKind::CASE);
     node->payload_.name = intern(binding);
     node->tag_          = static_cast<uint16_t>(type);
+    return node;
+}
+
+node_ptr_t Tree::makeTypeMatch() { return makeNode(NodeKind::TMTCH); }
+
+node_ptr_t Tree::makeTypeCase(uint16_t patterns) {
+    Node *node = makeNode(NodeKind::TCASE);
+    node->tag_ = patterns;
+    return node;
+}
+
+node_ptr_t Tree::makeStaticFor(
+    const std::string &valueName, const std::string &typeName, bool byIndices) {
+    Node *node = makeNode(NodeKind::SFOR);
+    auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(2)));
+    list->count    = 2;
+    list->items[0] = intern(valueName);
+    list->items[1] = intern(typeName);
+    node->payload_.names = list;
+    if (byIndices) {
+        node->flags_ |= Node::kFlagA;
+    }
+    return node;
+}
+
+node_ptr_t Tree::makeStaticLoop(
+    const std::vector<std::string> &state, const std::string &valueName,
+    const std::string &typeName, bool byIndices) {
+    Node *node = makeNode(NodeKind::SLOOP);
+    const size_t count = state.size() + 2;
+    auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(count)));
+    list->count = count;
+    for (size_t i = 0; i < state.size(); ++i) {
+        list->items[i] = intern(state[i]);
+    }
+    list->items[count - 2] = intern(valueName);
+    list->items[count - 1] = intern(typeName);
+    node->payload_.names = list;
+    if (byIndices) {
+        node->flags_ |= Node::kFlagA;
+    }
+    return node;
+}
+
+node_ptr_t Tree::makeStaticAccess() { return makeNode(NodeKind::SACC); }
+
+node_ptr_t Tree::makeComprehension(bool isStruct) {
+    Node *node = makeNode(NodeKind::SCOMP);
+    node->tag_ = static_cast<uint16_t>(isStruct ? 0 : 1);
     return node;
 }
 
@@ -397,8 +473,15 @@ node_ptr_t Tree::clone(const Node *node) {
     case NodeKind::DECL:
     case NodeKind::FUNC:
     case NodeKind::NREF:
+        copy->payload_.name = intern(*node->payload_.name);
+        break;
     case NodeKind::DREF:
         copy->payload_.name = intern(*node->payload_.name);
+        // A DREF the compiler made for an operator by id stands for the same operator in the
+        // copy.
+        if (const auto oper = Tree::of(node)->operRefOf(node)) {
+            operRefs_[copy] = *oper;
+        }
         break;
     case NodeKind::CASE:
         if (node->caseType() == CaseType::Enum) {
@@ -427,7 +510,9 @@ node_ptr_t Tree::clone(const Node *node) {
         }
         break;
     case NodeKind::EXPT:
-    case NodeKind::LOOP: {
+    case NodeKind::LOOP:
+    case NodeKind::SFOR:
+    case NodeKind::SLOOP: {
         const Node::NameList *names = node->payload_.names;
         auto *list =
             static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(names->count)));
@@ -444,6 +529,12 @@ node_ptr_t Tree::clone(const Node *node) {
     }
     for (const Node *child : *node) {
         append(*copy, clone(child));
+    }
+    if (node->kind_ == NodeKind::FUNC) {
+        // A lambda's unwritten parameters come with it: the copy is the same lambda.
+        if (const auto *params = Tree::of(node)->unwrittenParamsOf(node)) {
+            unwrittenParams_[copy] = *params;
+        }
     }
     return copy;
 }
@@ -529,18 +620,55 @@ std::string Node::toString() const {
         default:
             return "CASE: (error " + binding() + ")";
         }
+    case NodeKind::TMTCH:
+        return "TMTCH";
+    case NodeKind::SFOR:
+        return "SFOR: " + staticForValueName() + ", " + staticForTypeName();
+    case NodeKind::SACC:
+        return "SACC";
+    case NodeKind::SCOMP:
+        return std::string("SCOMP: ") + (comprehensionIsStruct() ? "struct" : "tuple");
+    case NodeKind::SLOOP: {
+        std::string text = "SLOOP: ";
+        for (size_t j = 0; j < staticLoopStateCount(); ++j) {
+            text += (j == 0 ? "" : ", ") + staticLoopStateName(j);
+        }
+        return text + " for (" + staticLoopValueName() + ", " + staticLoopTypeName() + ")";
+    }
+    case NodeKind::TCASE: {
+        std::string text = "TCASE: (";
+        bool first       = true;
+        for (const TypeCaseKind kind :
+             {TypeCaseKind::Struct, TypeCaseKind::Tuple, TypeCaseKind::Leaf,
+              TypeCaseKind::Wildcard}) {
+            if ((typeCasePatterns() & typeCaseBit(kind)) == 0) {
+                continue;
+            }
+            text += first ? "" : " | ";
+            first = false;
+            switch (kind) {
+            case TypeCaseKind::Struct:
+                text += "struct";
+                break;
+            case TypeCaseKind::Tuple:
+                text += "tuple";
+                break;
+            case TypeCaseKind::Leaf:
+                text += "#leaf";
+                break;
+            case TypeCaseKind::Wildcard:
+                text += "_";
+                break;
+            }
+        }
+        return text + ")";
+    }
     case NodeKind::CAST:
         return "CAST: " + targetType()->toString();
     case NodeKind::EXIT:
         return "EXIT: " + to_string(exitType());
-    case NodeKind::EXEC: {
-        std::string text = synced() ? "SYNC" : "EXEC";
-        if (numericPermissions() != 0) {
-            // Only when granted, so that the dump of a program without @numeric is unchanged.
-            text += ": numeric(" + camel::core::sem::permissionsText(numericPermissions()) + ")";
-        }
-        return text;
-    }
+    case NodeKind::EXEC:
+        return synced() ? "SYNC" : "EXEC";
     case NodeKind::LOOP: {
         std::string text = std::string("LOOP: ") + camel::core::loopKindName(loopKind()) + " (";
         for (size_t j = 0; j < loopStateCount(); ++j) {

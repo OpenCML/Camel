@@ -268,11 +268,11 @@ whose only work is the call of `main`) is shown last, without a location.
 After a tail call the caller's frame is gone; both back ends reuse it. The stack is shown as
 it is, and the frame that was entered by a tail call carries the count of frames it replaced:
 `loop (tail call, 3 frames replaced)`. No frames are invented. `DESIGN-QUESTION(tail-call-stack)`.
-With frames of functions (5.4) the count is of activations of functions: the arm that replaced
-its own function's frame is part of that function and is not counted, so the third iteration of
+With frames of functions (5.4) the count is of activations of functions: an arm is a region of
+its function's frame and is not an activation of its own, so the third iteration of
 `spin` in `return if n == 0 then acc else spin(n - 1, acc + n)` is
-`spin (tail call, 2 frames replaced)`; with frames of subgraphs every shadow frame counts
-(`spin (tail call, 4 frames replaced)`).
+`spin (tail call, 2 frames replaced)`. An arm is a region of the frame it runs in, not a shadow
+frame (5.4), so frames of subgraphs counts the same two frames.
 
 ### 5.3 Inlined code
 
@@ -294,24 +294,20 @@ not listed.
 
 The core keeps one shadow frame per activation of a graph, as the schedulers run them, and
 groups them into *activations of functions*; a tail call that replaces the only frame of an
-activation replaces the activation (and is counted, 5.2). The parts of a loop, which are still
-graphs, are grouped with the function that holds the `LOOP` node:
+activation replaces the activation (and is counted, 5.2). A frame starts an activation: a call of
+a function or of a lambda, the tail call of one.
 
-- the frame of a loop part, called by a frame of its owner, is part of the caller's activation;
-- every other frame starts an activation: a call of a function or of a lambda, the tail call of
-  one.
-
-`frames` `subgraphs` shows every shadow frame, so the parts of a loop are frames of their own;
-lambdas are frames of their own in both settings: a function value is a function. The setting is
+`frames` `subgraphs` shows every shadow frame; lambdas are frames of their own in both settings: a function value is a function. The setting is
 the core command `configure {frames}`, the DAP launch attribute `frames` and custom request
 `camel/setFrames` (VS Code: *Camel: Toggle Subgraph Frames*), and the REPL command `frames`.
 It changes what the next question about the stack sees, also while the program is stopped; a
 step uses the setting it started with.
 
-A loop (design principles 3.10) will be a `LOOP` node with a condition subgraph and a body
-subgraph; they are code of the function the loop is written in and fold the same way. In the
-index they will be a role of graph that folds (`GraphRole`), with the graph that holds the
-`LOOP` node as their owner, so the activations, the names and the steps need no other change.
+A loop (design principles 3.10) is a `LOOP` node whose condition and body are regions of the
+graph that holds it, as the arms of a branch are: they have no frame of their own in either
+setting, the nodes in them are nodes of the function's frame, and the names of their ports (the
+state, the element) are visible while the code is in the region (`NodeInfo::controlRegion`,
+`GraphInfo::visibleAt`).
 
 ### 5.5 Full names
 
@@ -599,10 +595,10 @@ has ruled since, which say so.
 6. `parallel-debugging`: run on the sequential `std::fvm` with a notice (implemented), refuse
    to debug, or stop-the-world with one current node per worker.
 7. `arm-frames`: show the arm of a branch as the frame it is, or fold arms into the frame of
-   their function. **Ruled** (design principles 12.1): folded by default, the real subgraphs on
-   request (5.4). `func fact(n: int): int { return if n <= 1 then 1 else n * fact(n - 1) }`
-   stopped in the third call shows `fact` three times, `main`; with frames of subgraphs `fact`,
-   `fact [arm at line 1] (tail call, 1 frame replaced)` twice, `main`.
+   their function. **Ruled** (design principles 12.1): folded by default, and an arm is a region
+   of the frame it runs in, so no setting invents an arm frame (5.4). `func fact(n: int) { ... }`
+   stopped in the third call shows `fact` three times, `main`; `frames subgraphs` shows the same
+   frames.
 
 ## 9. Status
 

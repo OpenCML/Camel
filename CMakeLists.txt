@@ -209,7 +209,7 @@ if(NOT _camel_skip_python_modules)
     endif()
 endif()
 add_subdirectory(modules/io)
-add_subdirectory(modules/os)
+add_subdirectory(modules/process)
 add_subdirectory(modules/math)
 add_subdirectory(modules/time)
 add_subdirectory(modules/random)
@@ -217,10 +217,10 @@ add_subdirectory(modules/algo)
 add_subdirectory(modules/statistics)
 add_subdirectory(modules/this)
 add_subdirectory(modules/fs)
-add_subdirectory(modules/crypto)
+add_subdirectory(modules/hash)
 add_subdirectory(modules/re)
 add_subdirectory(modules/str)
-add_subdirectory(modules/sys)
+add_subdirectory(modules/env)
 add_subdirectory(modules/json)
 add_subdirectory(modules/para)
 add_subdirectory(modules/sim)
@@ -233,6 +233,28 @@ add_subdirectory(modules/bytes)
 add_subdirectory(modules/graph)
 add_subdirectory(modules/rewrite)
 add_subdirectory(modules/onnx)
+
+# ---------------------------------------------------------------------------------------------
+# The module manifest (H138): one line per .cmo this configure builds, per configuration.
+#
+# The build tree keeps the output of a module after the module is renamed or removed, because
+# CMake does not delete the artifact of a target that no longer exists. scripts/common.js used to
+# copy every `.cmo` it found under build/{libs,modules}/<dir>/<config>/ into stdlib/, so a retired
+# module's leftover was reinstalled on every build and `import <retired name>` kept working; the
+# install then copied stdlib/ into out/latest/stdlib, which is on the module search path. The
+# install step now copies exactly what this manifest lists (and removes any other .cmo it finds
+# in stdlib/), so a .cmo cannot outlive the module that produced it.
+#
+# file(GENERATE) is evaluated at generate time: $<TARGET_FILE:...> is the real path of the file
+# this configuration links, and $<CONFIG> in OUTPUT writes one manifest per configuration.
+get_property(_camel_cmo_targets GLOBAL PROPERTY CAMEL_CMO_TARGETS)
+set(_camel_cmo_manifest "")
+foreach(_camel_cmo_target IN LISTS _camel_cmo_targets)
+    string(APPEND _camel_cmo_manifest "$<TARGET_FILE:${_camel_cmo_target}>\n")
+endforeach()
+file(GENERATE
+    OUTPUT "${CMAKE_BINARY_DIR}/camel-module-outputs-$<CONFIG>.txt"
+    CONTENT "${_camel_cmo_manifest}")
 
 # CLI and tools: link the libcamel shell (camel-cli lives under tools).
 add_subdirectory(tools)

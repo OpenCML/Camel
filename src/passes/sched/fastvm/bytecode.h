@@ -94,6 +94,11 @@ enum class OpCode : uint8_t {
     FDIV,
     DDIV,
 
+    // The remainder of an integer division, as the operator `%` states it (camel/utils/int_div.h:
+    // x % -1 is 0, and a zero divisor is a fault).
+    IMOD,
+    LMOD,
+
     ILT,
     LLT,
     FLT,
@@ -305,7 +310,8 @@ struct BytecodeHeader {                  // 16 bytes
             [[fallthrough]];
         case OpCode::SCHD:
             return 1;
-        case OpCode::OPER: // Native function pointer followed by its OperId.
+        case OpCode::OPER: // Native function pointer, its OperId, and the node's attribute set.
+            return 3;
         case OpCode::FILL:
             return 2;
         case OpCode::FUNC:
@@ -323,6 +329,11 @@ struct BytecodeHeader {                  // 16 bytes
 
     bool hasExtraWord() const { return extraWordCount() != 0; }
 
+    /// The loop an LBEG, LTST or LEND belongs to (their one extra word). The handlers know these
+    /// three carry exactly that word, which extra() would work out from the opcode again; a round
+    /// asks for it at each of its two events.
+    inline const camel::runtime::ExecLoop *loopPayload() const;
+
     inline BytecodeExtra *extra() {
         const size_t extraWords = extraWordCount();
         ASSERT(extraWords != 0, "Bytecode has no extra payload.");
@@ -336,8 +347,10 @@ struct BytecodeHeader {                  // 16 bytes
             reinterpret_cast<const uint64_t *>(this + opsize) - extraWords);
     }
 
-    // FILL uses two extra words. FUNC/TAIL use two extra words in non-JIT builds and three extra
-    // words in JIT builds. extra() returns the first word.
+    // FILL uses two extra words. OPER uses three: its function pointer, its OperId, and the
+    // attribute set of the node it runs (camel/core/operator.h, ArgsView::attrs). FUNC/TAIL use
+    // two extra words in non-JIT builds and three extra words in JIT builds. extra() returns the
+    // first word.
     inline uint64_t *extra2() {
         const size_t extraWords = extraWordCount();
         ASSERT(extraWords >= 2, "Bytecode has no second extra payload word.");
@@ -361,6 +374,16 @@ struct BytecodeHeader {                  // 16 bytes
         return reinterpret_cast<const uint64_t *>(this + opsize) - extraWords + 2;
     }
 #endif
+
+    /// OPER's third extra word: the attribute set of the node it runs (camel/core/node_attrs.h).
+    inline camel::core::attr::AttrSetId *operAttrs() {
+        ASSERT(opcode == OpCode::OPER, "Bytecode is not an OPER.");
+        return reinterpret_cast<camel::core::attr::AttrSetId *>(extra2() + 1);
+    }
+    inline const camel::core::attr::AttrSetId *operAttrs() const {
+        ASSERT(opcode == OpCode::OPER, "Bytecode is not an OPER.");
+        return reinterpret_cast<const camel::core::attr::AttrSetId *>(extra2() + 1);
+    }
 
     static constexpr size_t directCallExtraWordCount() {
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
@@ -416,6 +439,14 @@ union BytecodeExtra {                           // 8 bytes
 
     std::string toString(OpCode opcode) const;
 };
+
+inline const camel::runtime::ExecLoop *BytecodeHeader::loopPayload() const {
+    ASSERT(
+        opcode == OpCode::LBEG || opcode == OpCode::LTST || opcode == OpCode::LEND,
+        "Bytecode is not a loop event.");
+    return reinterpret_cast<const BytecodeExtra *>(reinterpret_cast<const uint64_t *>(this + opsize) - 1)
+        ->loop;
+}
 
 // FUNC/TAIL:
 // - extra()  : runtime callee graph pointer

@@ -61,22 +61,14 @@ std::array<Counter, kKindCount> &counters() {
     return instance;
 }
 
-/// Arranges for the report to be printed at exit, once, when CAMEL_TYPE_STATS is set to
-/// anything but "0" or the empty string.
-void installReportOnce() {
-    static std::once_flag once;
-    std::call_once(once, [] {
-        const char *value = std::getenv("CAMEL_TYPE_STATS");
-        if (value != nullptr && value[0] != '\0' && !(value[0] == '0' && value[1] == '\0')) {
-            std::atexit([] { reportTypeStorage(std::cerr); });
-        }
-    });
-}
-
 } // namespace
 
+void enableTypeStatsReport() {
+    static std::once_flag once;
+    std::call_once(once, [] { std::atexit([] { reportTypeStorage(std::cerr); }); });
+}
+
 void *allocTypeStorage(TypeStorageKind kind, size_t size, size_t align) {
-    installReportOnce();
     void *mem = mm::permSpace().alloc(size, align);
     ASSERT(mem != nullptr, "Failed to allocate type storage from the permanent space.");
     Counter &counter = counters()[static_cast<size_t>(kind)];

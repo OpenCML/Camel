@@ -1,0 +1,18 @@
+/**
+ * A bound past the length of a subscript slice is SliceOutOfRange at the bracket, with both
+ * bounds and the length (design principles 3.9); a bound equal to the length is the end of the
+ * array and is in range.
+ */
+module subscript_slice_out_of_range
+
+func part(xs: int[], a: int, b: int): int[] {
+    return xs[a:b]
+}
+
+func main(): int sync {
+    let xs = [1, 2, 3, 4, 5]
+    println(part(xs, 1, 5))
+    println(part(xs, 3, 9))
+    println('not reached')
+    return 0
+}

@@ -22,6 +22,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/effect_trace.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/profile/operators.h"
 #include "camel/utils/log.h"
 
 #include <mutex>
@@ -76,8 +77,9 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
         return std::nullopt;
     }
     const std::string protocol = uri.substr(0, pos);
-    // With CAMEL_EFFECT_TRACE set, effectful operators are handed out behind a logging
-    // trampoline (camel/core/effect_trace.h); otherwise wrap() returns the operator unchanged.
+    // With a trace file set by std::profile(effect_trace="..."), effectful operators are handed
+    // out behind a logging trampoline (camel/core/effect_trace.h); otherwise wrap() returns the
+    // operator unchanged.
     auto traced = [&uri](std::optional<operator_t> op) -> std::optional<operator_t> {
         if (op && camel::core::effect_trace::enabled()) {
             return camel::core::effect_trace::wrap(uri, *op);
@@ -93,7 +95,7 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
     }
     if (!factoryRegistered(protocol)) {
         // An operator of a module the program has not imported: the globals `exit` and `sleep`
-        // are implemented in the os module. Importing the module registers its executor.
+        // are implemented in the process module. Importing the module registers its executor.
         static std::mutex importMutex;
         std::lock_guard importLock(importMutex);
         if (!factoryRegistered(protocol)) {
@@ -120,7 +122,7 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
 }
 
 std::string ExecutorManager::getNameOfAnOperator(const operator_t &tracedOp) const {
-    const operator_t op = camel::core::effect_trace::unwrap(tracedOp);
+    const operator_t op = camel::profile::unwrapThunk(camel::core::effect_trace::unwrap(tracedOp));
     for (const auto &[protocol, executor] : loadedExecutors) {
         std::string name = executor->getNameOfAnOperator(op);
         if (!name.empty()) {

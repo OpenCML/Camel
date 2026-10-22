@@ -1,12 +1,16 @@
 module bytes_values
 import { from_array, to_array, encode, decode, size, concat } from bytes
 import { read_bytes, write_bytes, read_chunk, replace, file_size } from fs
-import { sha256 } from crypto
-import { get_env } from sys
-import { tree_map } from tree
+import { sha256 } from hash
+import { get_env } from env
+import { tree_map } from ckpt
 func count(b: Bytes): int { return size(b) }
 func main(): int sync {
-    let path = get_env('TEMP') + '/camel-bytes-values.bin'
+    // The runner gives every test its own scratch directory (CAMEL_TEST_TMPDIR) and the OS
+    // temp is not writable on every runner; a direct run keeps the older fixed path.
+    let scratch = get_env('CAMEL_TEST_TMPDIR')
+    let dir = if scratch == '' then get_env('TEMP') else scratch
+    let path = dir + '/camel-bytes-values.bin'
     let binary = from_array([0, 65, 0, 255, 13, 10, 128, 0])
     write_bytes(path, binary)
     println(to_array(read_bytes(path)))

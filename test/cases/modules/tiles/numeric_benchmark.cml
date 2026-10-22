@@ -11,7 +11,7 @@ func strict_chain(x: Tensor<f32>, w: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
     let a6 = a5 * w + b
     return a6 * w + b
 }
-@numeric(contract)
+#[contract]
 func contracted_chain(x: Tensor<f32>, w: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
     let a0 = x * w + b
     let a1 = a0 * w + b

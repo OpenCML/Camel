@@ -113,13 +113,31 @@ slot_t transferTree(ArgsView &norm, bool upload) {
         };
         walk(norm.type(0), norm.slot(0), snapshot);
     }
-    for (auto &leaf : leaves) {
-        if (upload) {
-            leaf.device = uploadValue(leaf.shape, leaf.dtype, leaf.bytes);
-            leaf.bytes.clear();
-        } else {
-            leaf.bytes = downloadValue(*leaf.device);
+    // The forest moves as one batch: one stream, one pinned staging region and
+    // one synchronisation per direction. Each leaf keeps its own device block,
+    // and result order is the walk order used by `materialize` below.
+    if (upload) {
+        std::vector<HostLeaf> batch;
+        batch.reserve(leaves.size());
+        for (const auto &leaf : leaves)
+            batch.push_back(HostLeaf{leaf.shape, leaf.dtype, leaf.bytes});
+        auto placed = uploadValues(batch);
+        if (placed.size() != leaves.size())
+            throw std::runtime_error("device upload returned the wrong leaf count");
+        for (size_t i = 0; i < leaves.size(); ++i) {
+            leaves[i].device = std::move(placed[i]);
+            leaves[i].bytes.clear();
         }
+    } else {
+        std::vector<const DeviceValue *> batch;
+        batch.reserve(leaves.size());
+        for (const auto &leaf : leaves)
+            batch.push_back(leaf.device.get());
+        auto downloaded = downloadValues(batch);
+        if (downloaded.size() != leaves.size())
+            throw std::runtime_error("device download returned the wrong leaf count");
+        for (size_t i = 0; i < leaves.size(); ++i)
+            leaves[i].bytes = std::move(downloaded[i]);
     }
     core::mm::NoCollectionScope guard;
     size_t index     = 0;

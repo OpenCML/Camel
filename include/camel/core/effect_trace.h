@@ -20,7 +20,7 @@
 /*
  * Effect trace: an ordered log of the effectful operators a process executed.
  *
- * When the environment variable CAMEL_EFFECT_TRACE names a file, every operator that is not
+ * When a file is named with `std::profile(effect_trace="<file>")`, every operator that is not
  * registered as pure in OperatorTable appends one JSON line when it is called:
  *
  *   {"seq":0,"uri":":io/println","stage":"run",
@@ -40,8 +40,8 @@
  * The hook sits where operator URIs are resolved to functions (ExecutorManager::find): an
  * effectful operator is handed out behind a trampoline, so every back end, including
  * JIT-compiled code, is covered without a per-back-end call hook. Interpreters additionally
- * publish the source origin of the operator they are about to call. With the variable unset
- * nothing is wrapped and the only cost is one cached flag test per operator resolution.
+ * publish the source origin of the operator they are about to call. With no file set nothing is
+ * wrapped and the only cost is one cached flag test per operator resolution.
  */
 
 #pragma once
@@ -49,11 +49,16 @@
 #include "camel/core/operator.h"
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace camel::core::effect_trace {
 
-/// True when CAMEL_EFFECT_TRACE names a trace file (read once per process).
+/// Names the file the trace is appended to (`std::profile(effect_trace="<file>")`), before the
+/// program runs. An empty path turns tracing off.
+void setTraceFile(std::string path);
+
+/// True when a trace file is set.
 bool enabled();
 
 /// The function to call for operator `uri`: `op` itself when tracing is off or the operator is

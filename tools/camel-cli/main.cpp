@@ -34,6 +34,7 @@
 #include "camel/init.h"
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/parse.h"
+#include "camel/profile/profile.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/utils/command_line.h"
@@ -43,6 +44,7 @@
 #include "camel/utils/phase_timer.h"
 #include "check.h"
 #include "config.h"
+#include "module_failures.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/stats/stats.h"
 #include "passes/trans/tns/topo_node_seq.h"
@@ -229,7 +231,8 @@ int runCommand(int argc, char *argv[]) {
     std::string entryDir = camel::utils::pathToUtf8(fs::absolute(entryPath).parent_path());
     auto searchPaths     = camel::utils::buildModuleSearchPaths(
         entryDir,
-        camel::utils::ModuleSearchPathOptions{.stdlibOverride = Run::stdLibPath});
+        camel::utils::ModuleSearchPathOptions{
+            .stdlibOverride = Run::stdLibPath, .includeDirs = Run::includeDirs});
     {
         auto installRoot = camel::utils::resolveInstallRoot();
         std::size_t n    = 0;
@@ -326,6 +329,12 @@ int runCommand(int argc, char *argv[]) {
     };
 
     try {
+        // `std::profile` reports the phase split of the compilation, which starts before any pass
+        // runs: the recorder has to be recording before the first module is parsed. The report
+        // is taken by the pass's report at the end of the run, so no phase file is written.
+        if (selectedCommand == Command::Run && pipelineNamesProfile(Run::resolvedPassList)) {
+            phase::enableRecording();
+        }
         std::optional<phase::Scope> parsePhase(std::in_place, "parse", "main");
         const bool parsedOk = parser->parse(*input);
         parsePhase.reset();
@@ -374,6 +383,28 @@ int runCommand(int argc, char *argv[]) {
                 Inspect::dumpInstances || Inspect::dumpFacts || Inspect::dumpTags) {
                 mainModule->compile(CompileStage::Done);
             }
+            // Every dump below reads something the compile produced, so the question is asked
+            // once, before the first one: did anything fail? A `--gct` dump used to print the
+            // construction tree even when the tree was partial and then exit 0 (H181), which is
+            // H172's `--ops` silence on a different output path. `--ops` keeps the contract that
+            // H172 gave it: the listing is what stdout carries, so the diagnostics and the
+            // declaration files that failed go to stderr.
+            //
+            // The scope is the program's dependencies: these dumps are of the program `inspect`
+            // compiled, and the failure that makes a dump untrue is one in its entry module or
+            // in a module it imports. Nothing else has been loaded on this path.
+            const bool listing = Inspect::dumpOps;
+            if (camel_cli::failIfModuleErrors(
+                    ctx,
+                    camel_cli::ModuleScope::ProgramDependencies,
+                    listing ? std::cerr : os,
+                    useJsonFormat,
+                    listing ? &std::cerr : nullptr)) {
+                if (!listing) {
+                    compileSummary(false);
+                }
+                return 1;
+            }
         } else {
             phase::Scope phaseScope("compile", "main");
             mainModule->compile(CompileStage::Done);
@@ -382,16 +413,6 @@ int runCommand(int argc, char *argv[]) {
         if (selectedCommand == Command::Inspect) {
             if (Inspect::dumpGCT && mainModule->gct()) {
                 mainModule->gct()->print(os);
-            }
-            // A `-g`/`--tns`/... dump reads the program graph: a failed build has none. Report
-            // the diagnostics instead of materializing a half-built graph (the shape of an
-            // access violation: the dump used to walk it and die).
-            if ((Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpInstances ||
-                 Inspect::dumpFacts || Inspect::dumpTags) &&
-                !mainModule->loaded()) {
-                ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
-                compileSummary(false);
-                return 1;
             }
             if (Inspect::dumpGIR) {
                 GraphVizDumpPass pass(ctx);
@@ -431,13 +452,46 @@ int runCommand(int argc, char *argv[]) {
                         module->load();
                     }
                 }
+                // A listing is only worth printing when nothing it should contain is missing. A
+                // module that failed to compile leaves its operators out, and this tool is how
+                // the inventory is checked: exiting 0 with a shorter list is the silence that
+                // hid the `pyplot`/`python` registration gap (handover H166, H172). Loading a
+                // module here can still fail (a module nothing compiled yet), so the same
+                // question the compile asked is asked again, after the load, by the same helper.
+                // A module that is not imported is not looked at, and a C++ module whose
+                // signatures are computed (no `.cml` beside its `.cmo`) has no declaration file
+                // to fail.
+                //
+                // The scope is every user module: the listing is the inventory of every module
+                // the context holds, including the imported ones just loaded above (H172). A
+                // module that failed to compile leaves its operators out wherever it sits, so
+                // this is the one command whose question is about all of them.
+                if (camel_cli::failIfModuleErrors(
+                        ctx,
+                        camel_cli::ModuleScope::AllUserModules,
+                        std::cerr,
+                        useJsonFormat,
+                        &std::cerr)) {
+                    return 1;
+                }
                 camel::core::module::dumpOperators(modules, os);
             }
             return 0;
         }
 
-        if (!mainModule->loaded()) {
-            ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+        // The program's dependencies, not every module in the context: a run is about the entry
+        // module and what it imports. Resolving the pass list above imported the pass's library
+        // (and compiling a pass written in Camel imported what that library imports), so a pass
+        // library that does not parse has its diagnostics in the context by now — but it is not
+        // a dependency of the program, and stopping here would replace the pass resolution's
+        // `InvalidPassParameter` (with the parse error as its secondary location) with the raw
+        // parse diagnostic (H198). A pass that is really unusable is reported by the pipeline,
+        // which runs next and has the pass's name to put in the message.
+        if (camel_cli::failIfModuleErrors(
+                ctx,
+                camel_cli::ModuleScope::ProgramDependencies,
+                os,
+                useJsonFormat)) {
             compileSummary(false);
             return 1;
         }
@@ -486,6 +540,7 @@ int runCommand(int argc, char *argv[]) {
                     config.enablePerfettoIntegration = true;
                     config.perfettoOutput            = "profile_reports/camel_trace.perfetto-trace";
                     config.outputFile                = "profile_reports/camel_trace.json";
+                    config.openPerfettoUI            = Run::profileModeOpt == "full";
                     profiler::start_advanced_tracing(config);
                 }
             });
@@ -616,6 +671,16 @@ int runCommand(int argc, char *argv[]) {
 
             memperf::report(os);
 
+            // `std::profile`: the report of the whole run. It is written here because only the
+            // driver has seen the compilation, the pipeline and the fallback pass; the session
+            // itself was started by the pass. The text form joins the program's output; under
+            // `--output-format json` it goes to standard error, so the diagnostics array on the
+            // standard output keeps its shape.
+            if (camel::profile::enabled() && camel::profile::reportOptions().report) {
+                std::ostream &reportOut = useJsonFormat ? std::cerr : os;
+                camel::profile::reportText(reportOut, camel::profile::reportOptions());
+            }
+
             if (!useJsonFormat && warningsNotShown() > 0) {
                 std::cerr << "camel: " << warningsNotShown()
                           << " more warning(s) not shown (--max-warning " << Diag::maxWarnings
@@ -704,6 +769,11 @@ int main(int argc, char *argv[]) {
     // argv here, before the argument parser runs, so that the report covers the start of the
     // run as well. The file is joined to the option: a separate value would take the program
     // that follows for the file, and the report would be written over the program.
+    //
+    // `-I` / `--include` are taken out the same way. clipp's repeatable value parameter keeps
+    // consuming the non-option arguments that follow it, so `camel -I root prog.cml` handed
+    // `prog.cml` to `-I` as a second root and left the run without an input file. One root per
+    // occurrence, in command-line order, is the promised form (docs/cli.md).
     std::vector<char *> args;
     for (size_t i = 0; i < arguments.size(); ++i) {
         std::string &arg = arguments[i];
@@ -711,6 +781,21 @@ int main(int argc, char *argv[]) {
             phase::enable("-");
         } else if (i > 0 && arg.starts_with("--time-phases=")) {
             phase::enable(std::string(arg.substr(std::string_view("--time-phases=").size())));
+        } else if (i > 0 && (arg == "-I" || arg == "--include")) {
+            if (i + 1 >= arguments.size()) {
+                std::cerr << "Error: " << arg << " requires a directory." << std::endl;
+                return 1;
+            }
+            Run::includeDirs.push_back(arguments[++i]);
+        } else if (i > 0 && arg.starts_with("--include=")) {
+            std::string dir = arg.substr(std::string_view("--include=").size());
+            if (dir.empty()) {
+                std::cerr << "Error: --include requires a directory." << std::endl;
+                return 1;
+            }
+            Run::includeDirs.push_back(std::move(dir));
+        } else if (i > 0 && arg.size() > 2 && arg.starts_with("-I")) {
+            Run::includeDirs.push_back(arg.substr(2));
         } else {
             // The parser only reads an argument; the strings above outlive the call.
             args.push_back(arg.data());

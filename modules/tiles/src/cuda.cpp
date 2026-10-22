@@ -12,6 +12,7 @@
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/mixed_gemm.h"
+#include "tiles/internal/profile_hooks.h"
 #include "tiles/internal/submission.h"
 #include "tiles/program.h"
 #include <algorithm>
@@ -160,10 +161,14 @@ struct OwnedAllocation final : DeviceStorage {
         const auto &owner = lease->backend();
         Current current(owner->api, owner->context);
         std::vector<std::byte> result(bytes);
-        if (!result.empty())
+        if (!result.empty()) {
             owner->api.check(
                 owner->api.cuMemcpyDtoH(result.data(), pointer(), result.size()),
                 "download resident tensor");
+            if (profile_hooks::toHost) {
+                profile_hooks::toHost(result.size());
+            }
+        }
         return result;
     }
     // Ownership is shared: the lease returns its block exactly when the last
@@ -237,14 +242,30 @@ class DeviceRun {
         api.check(
             api.cuMemcpyHtoDAsync(table, hostTable, tableBytes, resources.stream),
             "upload argument table");
+        // All host inputs of one submission share a single pinned staging region:
+        // the forest is copied into it once and every input reaches its own device
+        // block on the same stream.
+        size_t hostTotal = 0;
+        for (const auto &node : p.nodes) {
+            if (hostData(node)) {
+                if (bytes(node) > SIZE_MAX - hostTotal)
+                    throw std::overflow_error("Tiles host input staging overflows");
+                hostTotal += bytes(node);
+            }
+        }
         hostInputs.assign(p.nodes.size(), nullptr);
-        for (size_t id = 0; id < p.nodes.size(); ++id) {
-            const auto &node = p.nodes[id];
-            const auto *data = hostData(node);
-            if (!data)
-                continue;
-            hostInputs[id] = resources.allocateHost(bytes(node));
-            std::memcpy(hostInputs[id], data, bytes(node));
+        if (hostTotal) {
+            void *hostStaging = resources.allocateHost(hostTotal);
+            size_t hostOffset = 0;
+            for (size_t id = 0; id < p.nodes.size(); ++id) {
+                const auto &node = p.nodes[id];
+                const auto *data = hostData(node);
+                if (!data)
+                    continue;
+                hostInputs[id] = static_cast<std::byte *>(hostStaging) + hostOffset;
+                std::memcpy(hostInputs[id], data, bytes(node));
+                hostOffset += bytes(node);
+            }
         }
         for (const auto &launch : p.launches) {
             if (launch.implementation == "cublas_bf16") {
@@ -272,10 +293,15 @@ class DeviceRun {
                 "clear scalar fault");
         for (size_t id = 0; id < program.nodes.size(); ++id) {
             const auto &n = program.nodes[id];
-            if (hostInputs[id])
+            if (hostInputs[id]) {
                 api.check(
                     api.cuMemcpyHtoDAsync(pointers[id], hostInputs[id], bytes(n), resources.stream),
                     "upload input");
+                // `std::profile`: host->device traffic and the kernel count of this region.
+                if (profile_hooks::toDevice) {
+                    profile_hooks::toDevice(bytes(n));
+                }
+            }
         }
         // Benchmark upload timing includes DMA completion. Native submissions keep
         // the same pinned staging alive and record completion after their kernels.
@@ -306,10 +332,16 @@ class DeviceRun {
                     args,
                     nullptr),
                 "launch kernel");
+            if (profile_hooks::kernel) {
+                profile_hooks::kernel(s.name.c_str());
+            }
         }
     }
     void synchronize() {
         api.check(api.cuStreamSynchronize(resources.stream), "complete GPU computation");
+        if (profile_hooks::synchronise) {
+            profile_hooks::synchronise("tiles stream");
+        }
         if (fault) {
             unsigned node;
             api.check(api.cuMemcpyDtoH(&node, fault, sizeof(node)), "read scalar fault");
@@ -318,18 +350,41 @@ class DeviceRun {
         }
     }
     std::vector<std::byte> download() {
-        synchronize();
         size_t total = 0;
-        for (auto output : program.outputs)
+        for (auto output : program.outputs) {
+            if (bytes(program.nodes[output]) > SIZE_MAX - total)
+                throw std::overflow_error("Tiles result download overflows");
             total += bytes(program.nodes[output]);
-        std::vector<std::byte> result(total);
+        }
+        // One pinned region takes every result; the copies are queued before the
+        // single synchronisation, so the host waits once for the whole forest.
+        void *pinned  = total ? resources.allocateHost(total) : nullptr;
         size_t offset = 0;
         for (auto output : program.outputs) {
             const size_t count = bytes(program.nodes[output]);
             if (count)
                 api.check(
-                    api.cuMemcpyDtoH(result.data() + offset, pointers[output], count),
+                    api.cuMemcpyDtoHAsync(
+                        static_cast<std::byte *>(pinned) + offset,
+                        pointers[output],
+                        count,
+                        resources.stream),
                     "download result");
+            offset += count;
+        }
+        synchronize();
+        std::vector<std::byte> result(total);
+        offset = 0;
+        for (auto output : program.outputs) {
+            const size_t count = bytes(program.nodes[output]);
+            if (count) {
+                std::memcpy(
+                    result.data() + offset,
+                    static_cast<const std::byte *>(pinned) + offset,
+                    count);
+                if (profile_hooks::toHost)
+                    profile_hooks::toHost(count);
+            }
             offset += count;
         }
         return result;
@@ -412,45 +467,159 @@ std::shared_ptr<const DeviceValue> placeOnDevice(std::shared_ptr<const DeviceVal
     }
     return uploadValue(value->shape, value->dtype, downloadValue(*value));
 }
-std::shared_ptr<DeviceValue>
-uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
-    if (bytes(Node{.shape = shape, .dtype = dtype}) != data.size() ||
-        (dtype == DType::F64 && !shape.empty()))
-        throw std::runtime_error("device upload shape mismatch");
+std::vector<std::shared_ptr<DeviceValue>> uploadValues(std::span<const HostLeaf> values) {
+    size_t total = 0;
+    for (const auto &leaf : values) {
+        if (bytes(Node{.shape = leaf.shape, .dtype = leaf.dtype}) != leaf.bytes.size() ||
+            (leaf.dtype == DType::F64 && !leaf.shape.empty()))
+            throw std::runtime_error("device upload shape mismatch");
+        if (leaf.bytes.size() > SIZE_MAX - total)
+            throw std::overflow_error("device upload batch is too large");
+        total += leaf.bytes.size();
+    }
+    if (values.empty())
+        return {};
     auto b = sharedBackend();
     Current current(b->api, b->context);
-    // Staging owns the destination block as well as the pinned source, so an
-    // exception anywhere below drains the async copy before the block can return
-    // to the pool. The lease is shared, not moved, so the returned value keeps it
-    // alive after this scope ends. Only the physical capacity is rounded; the
-    // logical payload stays exactly the uploaded size.
+    // Staging owns every destination block as well as the one pinned source, so
+    // an exception anywhere below drains the queued copies before a block can
+    // return to the pool. The leases are shared, not moved: each returned value
+    // keeps its own block alive after this scope ends. Only the physical capacity
+    // is rounded; the logical payload stays exactly the uploaded size.
     Resources staging(b);
-    const CUdeviceptr pointer = staging.allocate(data.size());
-    auto allocation           = std::make_shared<OwnedAllocation>();
-    allocation->lease         = staging.shareDevice(pointer);
-    if (!allocation->lease)
-        throw std::runtime_error("upload destination allocation is not owned");
-    allocation->logicalBytes = data.size();
-    if (!data.empty()) {
-        const size_t size = data.size();
-        void *pinned      = staging.allocateHost(size);
-        std::memcpy(pinned, data.data(), size);
-        b->api.check(
-            b->api.cuMemcpyHtoDAsync(pointer, pinned, size, staging.stream),
-            "upload resident tensor");
-        b->api.check(b->api.cuStreamSynchronize(staging.stream), "complete resident upload");
+    std::vector<std::shared_ptr<DeviceValue>> result;
+    std::vector<CUdeviceptr> pointers;
+    result.reserve(values.size());
+    pointers.reserve(values.size());
+    for (const auto &leaf : values) {
+        const CUdeviceptr pointer = staging.allocate(leaf.bytes.size());
+        auto allocation           = std::make_shared<OwnedAllocation>();
+        allocation->lease         = staging.shareDevice(pointer);
+        if (!allocation->lease)
+            throw std::runtime_error("upload destination allocation is not owned");
+        allocation->logicalBytes = leaf.bytes.size();
+        auto value               = std::make_shared<DeviceValue>();
+        value->shape             = leaf.shape;
+        value->dtype             = leaf.dtype;
+        value->address           = pointer;
+        value->owner             = std::move(allocation);
+        pointers.push_back(pointer);
+        result.push_back(std::move(value));
     }
-    auto result     = std::make_shared<DeviceValue>();
-    result->shape   = shape;
-    result->dtype   = dtype;
-    result->address = pointer;
-    result->owner   = std::move(allocation);
+    if (total) {
+        auto *pinned  = static_cast<std::byte *>(staging.allocateHost(total));
+        size_t offset = 0;
+        for (size_t i = 0; i < values.size(); ++i) {
+            const auto &leaf = values[i];
+            if (leaf.bytes.empty())
+                continue;
+            std::memcpy(pinned + offset, leaf.bytes.data(), leaf.bytes.size());
+            b->api.check(
+                b->api.cuMemcpyHtoDAsync(
+                    pointers[i],
+                    pinned + offset,
+                    leaf.bytes.size(),
+                    staging.stream),
+                "upload resident tensor");
+            if (profile_hooks::toDevice)
+                profile_hooks::toDevice(leaf.bytes.size());
+            offset += leaf.bytes.size();
+        }
+        b->api.check(b->api.cuStreamSynchronize(staging.stream), "complete resident upload");
+        if (profile_hooks::synchronise)
+            profile_hooks::synchronise("resident upload");
+    }
+    return result;
+}
+std::shared_ptr<DeviceValue>
+uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
+    const HostLeaf leaf{shape, dtype, data};
+    auto values = uploadValues(std::span<const HostLeaf>(&leaf, 1));
+    return std::move(values.front());
+}
+std::vector<std::vector<std::byte>> downloadValues(std::span<const DeviceValue *const> values) {
+    std::vector<std::vector<std::byte>> result(values.size());
+    struct Copy {
+        size_t index;
+        CUdeviceptr source;
+        size_t bytes;
+    };
+    std::vector<Copy> copies;
+    std::vector<const DeviceCompletion *> waited;
+    std::shared_ptr<Backend> batchBackend;
+    for (size_t i = 0; i < values.size(); ++i) {
+        const auto &value = *values[i];
+        // Distinct leaves published by one submission share one completion, so
+        // the whole forest waits for it once.
+        if (value.completion &&
+            std::find(waited.begin(), waited.end(), value.completion.get()) == waited.end()) {
+            value.completion->wait();
+            waited.push_back(value.completion.get());
+        }
+        if (!value.owner || !value.address)
+            throw std::runtime_error("invalid resident tensor");
+        const size_t count    = bytes(Node{.shape = value.shape, .dtype = value.dtype});
+        const auto allocation = std::dynamic_pointer_cast<OwnedAllocation>(value.owner);
+        if (!allocation || !allocation->lease || !allocation->lease->valid() ||
+            allocation->pointer() != value.address || count > allocation->logicalBytes ||
+            (batchBackend && allocation->lease->backend() != batchBackend)) {
+            // Host storage and any foreign or inconsistent CUDA storage keep their
+            // own checked read; they cannot share this backend's stream. A foreign
+            // CUDA block still needs its own context for the synchronous copy.
+            if (allocation && allocation->lease && allocation->lease->valid()) {
+                auto foreign = allocation->lease->backend();
+                Current current(foreign->api, foreign->context);
+                result[i] = value.owner->read(value.address, count);
+            } else {
+                result[i] = value.owner->read(value.address, count);
+            }
+            continue;
+        }
+        if (!batchBackend)
+            batchBackend = allocation->lease->backend();
+        if (count)
+            copies.push_back({i, allocation->pointer(), count});
+    }
+    if (copies.empty())
+        return result;
+    auto b = std::move(batchBackend);
+    Current current(b->api, b->context);
+    Resources staging(b);
+    size_t total = 0;
+    for (const auto &copy : copies) {
+        if (copy.bytes > SIZE_MAX - total)
+            throw std::overflow_error("device download batch is too large");
+        total += copy.bytes;
+    }
+    auto *pinned  = static_cast<std::byte *>(staging.allocateHost(total));
+    size_t offset = 0;
+    for (const auto &copy : copies) {
+        b->api.check(
+            b->api.cuMemcpyDtoHAsync(pinned + offset, copy.source, copy.bytes, staging.stream),
+            "download resident tensor");
+        offset += copy.bytes;
+    }
+    b->api.check(b->api.cuStreamSynchronize(staging.stream), "complete resident download");
+    if (profile_hooks::synchronise)
+        profile_hooks::synchronise("resident download");
+    offset = 0;
+    for (const auto &copy : copies) {
+        result[copy.index].resize(copy.bytes);
+        std::memcpy(result[copy.index].data(), pinned + offset, copy.bytes);
+        offset += copy.bytes;
+        if (profile_hooks::toHost)
+            profile_hooks::toHost(copy.bytes);
+    }
     return result;
 }
 bool available() {
     try {
         (void)backend();
         return true;
+    } catch (const DeviceUnavailable &) {
+        // A device the run named is missing: that is the run's configuration, not a capability
+        // of this machine, so the caller reports it instead of treating the host as the answer.
+        throw;
     } catch (const std::exception &) {
         return false;
     }
@@ -483,11 +652,16 @@ std::vector<std::byte> execute(std::shared_ptr<const Program> snapshot) {
     }
     auto submitted = submitProgram(std::move(snapshot));
     submitted.completion->wait();
+    std::vector<const DeviceValue *> outputs;
+    outputs.reserve(submitted.outputs.size());
+    for (const auto &output : submitted.outputs)
+        outputs.push_back(output.get());
+    // All result leaves come back on one stream with one pinned region and one
+    // synchronisation, not one per leaf.
+    auto leaves = downloadValues(outputs);
     std::vector<std::byte> result;
-    for (const auto &output : submitted.outputs) {
-        auto data = downloadValue(*output);
-        result.insert(result.end(), data.begin(), data.end());
-    }
+    for (auto &leaf : leaves)
+        result.insert(result.end(), leaf.begin(), leaf.end());
     return result;
 }
 
@@ -733,6 +907,17 @@ SubmittedProgram submitProgram(std::shared_ptr<const Program>) {
 std::shared_ptr<DeviceValue> uploadValue(const Shape &, DType, std::span<const std::byte>) {
     (void)deviceInfo();
     return {};
+}
+std::vector<std::shared_ptr<DeviceValue>> uploadValues(std::span<const HostLeaf>) {
+    (void)deviceInfo();
+    return {};
+}
+std::vector<std::vector<std::byte>> downloadValues(std::span<const DeviceValue *const> values) {
+    std::vector<std::vector<std::byte>> result;
+    result.reserve(values.size());
+    for (const auto *value : values)
+        result.push_back(downloadValue(*value));
+    return result;
 }
 std::vector<std::byte> execute(std::shared_ptr<const Program>) {
     (void)deviceInfo();

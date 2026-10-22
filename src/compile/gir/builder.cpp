@@ -37,6 +37,7 @@
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/typevar.h"
 
 #include <atomic>
 #include <cctype>
@@ -83,8 +84,15 @@ void Builder::buildEntryCall() {
             if (mainOrigin != camel::source::kInvalidOriginId) {
                 sourceContext->debugMap().registerGraphOrigin(rootGraph_->graphId(), mainOrigin);
                 // Also as the origin of the entry function: the entry graph is rewritten (and
-                // renamed) by passes, the question "where is main" outlives that.
-                sourceContext->debugMap().registerEntryOrigin(mainOrigin);
+                // renamed) by passes, the question "where is main" outlives that. That question
+                // is about the program the context runs, so only building that program records
+                // it: a library built as a program of its own (`buildLibraryEntry`: a Camel pass
+                // compiled on demand, such as stdlib/rules.cml) has its own entry function, and
+                // recording it would move every later diagnostic about the running program to
+                // that library's source (H112).
+                if (libraryEntryFunction_.empty()) {
+                    sourceContext->debugMap().registerEntryOrigin(mainOrigin);
+                }
             }
         }
         // `main` is a function like any other: its parameters are the inputs of the
@@ -164,6 +172,9 @@ void Builder::buildEntryCall() {
 }
 
 compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name) {
+    // A new graph is a new set of draft nodes: an access remembered for an earlier graph can
+    // never be reused here (staticAccessCache_).
+    staticAccessCache_.clear();
     std::string scopeName = name;
     if (name.empty()) {
         const bool atRoot = currGraph_ == rootGraph_;
@@ -435,6 +446,16 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
         return visitCastNode(node);
     case GCT::NodeKind::LOOP:
         return visitLoopNode(node);
+    case GCT::NodeKind::TMTCH:
+        return visitTypeMatchNode(node);
+    case GCT::NodeKind::SFOR:
+        return visitStaticForNode(node);
+    case GCT::NodeKind::SCOMP:
+        return visitStaticComprehensionNode(node);
+    case GCT::NodeKind::SLOOP:
+        return visitStaticLoopNode(node);
+    case GCT::NodeKind::SACC:
+        return visitStaticAccessNode(node);
     default:
         ASSERT(false, "Unknown GCT NodeType");
     }
@@ -443,6 +464,13 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
 
 void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     ENTER("DECL");
+    if (gct->nativeDeclaration()) {
+        // A body-less declaration declares an operator of a C++ module (design principles 6.4):
+        // it is checked and kept as an operator rule, not as a graph (handover H19, step 1).
+        declareNativeOperator(gct);
+        LEAVE("DECL");
+        return nullptr;
+    }
     GCT::node_ptr_t typeNode = gct->at(0);
     Type *type               = typeNode->dataType();
     if (!gct->isFunc()) {
@@ -475,18 +503,37 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
 
 compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
+    // The function type the position of this lambda expects (design principles 5.9). A body
+    // clears the expected type, so it is read before the scope that does so.
+    Type *const expectedHere = expectedValueType_;
     ExpectedValueScope functionScope(expectedValueType_, nullptr);
     std::string name         = gct->name();
     GCT::node_ptr_t typeLoad = gct->at(0);
     Type *type               = typeLoad->dataType();
     FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
+    if (gct->nativeDeclaration()) {
+        // A body-less declaration declares an operator rule; there is no body to build
+        // (visitDeclNode; handover H19, step 1).
+        LEAVE("FUNC");
+        return nullptr;
+    }
     // The tags written before the declaration (design principles 6.2) are resolved here, before
     // the generic early return: they hold for the declaration (`on func`) or for the nodes of its
     // body (`on nodes`). The body's are handed to buildFuncBody below; a tag on a lambda has no
     // declaration to belong to.
     const TagFacts tags = tagFactsOf(gct, camel::core::tag::Func);
+    // An operator is declared once per signature, and each overload has its own facts; every
+    // other declaration has one entry under its name.
+    const std::string signature =
+        camel::core::isOverloadableOperatorGroup(name) ? funcType->toString() : std::string{};
     if (!name.empty() && tags.declaration != camel::core::attr::kNoAttrs) {
-        camel::core::tag::attachToDeclaration(*module_, Reference(name), tags.declaration);
+        camel::core::tag::attachToDeclaration(
+            *module_, Reference(name), signature, tags.declaration);
+    }
+    if (!name.empty()) {
+        // What the declaration grants: the permission tags written before it.
+        camel::core::tag::attachPermissionsToDeclaration(
+            *module_, Reference(name), signature, tags.permissions);
     }
     if (isGenericHere(type)) {
         // A generic function: registered as a template when its block was entered
@@ -500,11 +547,29 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         // with the type variables replaced.
         funcType = instantiateFunctionType(funcType, typeBindings_);
     }
+    if (name.empty()) {
+        // A lambda's parameters that write no type take it from the function type of the
+        // position the lambda stands in (design principles 5.9).
+        funcType = completeLambdaSignature(gct, funcType, expectedHere);
+    }
     rejectRedeclaredFunction(name, funcType, gct);
     rejectOperatorConflict(name, funcType, gct);
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name);
-    buildFuncBody(gct, graph, funcType, name, tags.nodes);
+    if (camel::core::tag::declaresMacro(tags.declaration)) {
+        graph->draft().setFlags(static_cast<uint8_t>(
+            graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+    }
+    buildFuncBody(gct, graph, funcType, name, tags);
+    // A declaration tag whose argument names a function (`#vjp<cube_rule>`) keeps that graph
+    // in the reference table of the function's graph: the fact is a graph reference, and the
+    // reader finds it in the frozen graph (GCGraph::ruleGraphs).
+    attachRuleGraphs(graph, tags.declaration);
+    // A declaration fact that has to live on the graph itself: a scheduler reads
+    // `#independent` from the exit node of the function it is about to call (design 3.6).
+    if (!name.empty()) {
+        camel::core::tag::markIndependentElements(graph->draft(), tags.declaration);
+    }
     if (name.empty()) {
         lambdaGraphs_[gct] = graph.get();
     }
@@ -517,12 +582,114 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         gct->decoratedBlock() ? std::vector<GCT::node_ptr_t>{} : appliedDecoratorsOf(gct);
     if (!annoNodes.empty()) {
         graph_ptr_t decorated = buildDecoratedGraph(name, graph, annoNodes);
+        attachRuleGraphs(decorated, tags.declaration);
         insertDecoratedGraph(name, decorated);
         decoratedOf_[graph.get()] = decorated;
     }
 
     LEAVE("FUNC");
     return graph;
+}
+
+FunctionType *Builder::completeLambdaSignature(
+    const GCT::node_ptr_t &gct, FunctionType *funcType, Type *expected) {
+    const auto *unwritten = GCT::Tree::of(gct)->unwrittenParamsOf(gct);
+    if (unwritten == nullptr || unwritten->empty()) {
+        return funcType;
+    }
+    // A lambda takes the types it does not write from the function type of the position it
+    // stands in (design principles 5.9). That expected type reaches this point through the one
+    // channel of the expected type (`expected`): an argument to a parameter of function type,
+    // the value of a declared type, or the result of a function whose result type is a function
+    // type.
+    if (expected == nullptr) {
+        const std::string name(funcType->argNameAt((*unwritten)[0].index));
+        diags_->of(SemanticDiag::LambdaParameterWithoutType)
+            .atOrigin((*unwritten)[0].origin)
+            .commit(name, "nothing here expects a function type");
+        throw BuildAbortException();
+    }
+    if (expected->code() != TypeCode::Function) {
+        const std::string name(funcType->argNameAt((*unwritten)[0].index));
+        diags_->of(SemanticDiag::LambdaParameterWithoutType)
+            .atOrigin((*unwritten)[0].origin)
+            .commit(
+                name,
+                std::format(
+                    "the type expected here, '{}', is not a function type", expected->toString()));
+        throw BuildAbortException();
+    }
+    const auto *expectedFunc = tt::as_ptr<FunctionType>(expected);
+    const size_t withCount   = funcType->withTypesCount();
+    const size_t total       = withCount + funcType->normTypesCount();
+    const auto report        = [&](const GCT::Tree::UnwrittenParam &param,
+                           const std::string &reason) -> void {
+        const std::string name(funcType->argNameAt(param.index));
+        diags_->of(SemanticDiag::LambdaParameterWithoutType)
+            .atOrigin(param.origin)
+            .commit(name, reason);
+        throw BuildAbortException();
+    };
+    if (expectedFunc->withTypesCount() != withCount ||
+        expectedFunc->normTypesCount() != funcType->normTypesCount()) {
+        report(
+            (*unwritten)[0],
+            std::format(
+                "the expected type '{}' takes {} parameters and the lambda {}",
+                expectedFunc->toString(),
+                expectedFunc->withTypesCount() + expectedFunc->normTypesCount(),
+                total));
+    }
+    const auto typeAt = [&](size_t index) -> Type * {
+        return index < withCount ? funcType->withTypeAt(index)
+                                 : funcType->normTypeAt(index - withCount);
+    };
+    const auto nameAt = [&](size_t index) -> std::string {
+        return funcType->hasArgNames() ? std::string(funcType->argNameAt(index)) : std::string{};
+    };
+    FunctionTypeFactory factory;
+    factory.setModifiers(funcType->modifiers());
+    factory.setHasCompileInfo(funcType->hasArgNames());
+    // The result type: the one written, or the one the expected function type gives. An
+    // expected result that still holds a type variable says nothing, and the body decides.
+    Type *exitType = funcType->hasExitType() ? funcType->exitType() : nullptr;
+    if (exitType == nullptr && expectedFunc->hasExitType() &&
+        !containsTypeVar(expectedFunc->exitType())) {
+        exitType = expectedFunc->exitType();
+    }
+    factory.setExitType(exitType);
+    size_t hole = 0;
+    for (size_t i = 0; i < total; ++i) {
+        Type *type   = typeAt(i);
+        bool isHole  = hole < unwritten->size() && (*unwritten)[hole].index == i;
+        if (isHole) {
+            const GCT::Tree::UnwrittenParam &param = (*unwritten)[hole++];
+            Type *const wanted                     = i < withCount
+                                                         ? expectedFunc->withTypeAt(i)
+                                                         : expectedFunc->normTypeAt(i - withCount);
+            if (wanted == nullptr) {
+                report(param, "the expected function type does not say what this parameter is");
+            }
+            if (containsTypeVar(wanted)) {
+                std::vector<std::string> names;
+                collectTypeVars(wanted, names);
+                report(
+                    param,
+                    std::format(
+                        "the expected type '{}' still holds the type variable '{}', which this "
+                        "position does not bind",
+                        expectedFunc->toString(),
+                        names.empty() ? std::string("?") : names.front()));
+            }
+            type = wanted;
+        }
+        if (i < withCount) {
+            factory.addWithArg(nameAt(i), type, funcType->withIsVarAt(i));
+        } else {
+            factory.addNormArg(nameAt(i), type, funcType->normIsVarAt(i - withCount));
+        }
+    }
+    return factory.buildOpen();
 }
 
 void Builder::stampPermissions(node_handle_t operNode) const {
@@ -534,21 +701,30 @@ void Builder::stampPermissions(node_handle_t operNode) const {
 
 void Builder::buildFuncBody(
     const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
-    const std::string &name, camel::core::attr::AttrSetId bodyTags) {
+    const std::string &name, const TagFacts &bodyTags) {
     // The function's graph has the permissions of its own body (which include those of the
     // code it is written in), not those of the place that asked for it to be built (a call
-    // that instantiates a generic function, a block that declares it).
-    const GCT::node_ptr_t body = gct->size() > 1 ? gct->at(1) : nullptr;
+    // that instantiates a generic function, a block that declares it). The permission tags
+    // written before the declaration (`#[contract] func f`) grant to the body too.
+    // A lambda is different: its body is an expression written where the lambda is, so it also
+    // inherits the permissions in force there (`#[reassociate] func f` grants to the lambda in
+    // f's body, design principles 7.5). A named function is built on demand, possibly from a
+    // call site, so it must not take the permissions of the place that built it.
+    const camel::core::sem::PermissionMask inherited =
+        name.empty() ? numericPermissions_ : camel::core::sem::kNoPermissions;
     NumericPermissionScope permissions(
         numericPermissions_,
-        body && body->type() == GCT::NodeKind::EXEC ? body->numericPermissions() : 0);
+        static_cast<camel::core::sem::PermissionMask>(inherited | bodyTags.permissions));
     // The attributes its decorators grant join those in force where it is written (each key's
     // combine rule, camel/core/node_attrs.h), for everything written in it; so do the facts of
     // the tags written before it, which hold for the nodes of its body (`on nodes`).
     AttrScope attrs(
         currentAttrs_,
         camel::core::attr::unite(
-            camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first), bodyTags));
+            camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first), bodyTags.nodes));
+    // A function (or a lambda) written inside a `match type` arm has returns of its own.
+    StaticBodyScope *outerStaticBody = std::exchange(activeStaticBody_, nullptr);
+    const size_t outerStaticDepth    = std::exchange(staticDepth_, 0);
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -601,6 +777,8 @@ void Builder::buildFuncBody(
     } catch (const camel::core::mm::MemoryExhausted &e) {
         // Say which function was being compiled; the allocator does not know.
         bodyStates_[graph.get()] = BodyState::Built;
+        activeStaticBody_        = outerStaticBody;
+        staticDepth_             = outerStaticDepth;
         leaveScope();
         throw e.during(
             std::format("compiling function '{}'", name.empty() ? graph->name() : name),
@@ -609,20 +787,28 @@ void Builder::buildFuncBody(
         // The caller entered the scope of `graph`; an error leaves it on the way out.
         bodyStates_[graph.get()] = BodyState::Built;
         failedBodies_.insert(graph.get());
+        activeStaticBody_        = outerStaticBody;
+        staticDepth_             = outerStaticDepth;
         leaveScope();
         throw;
     }
+    activeStaticBody_ = outerStaticBody;
+    staticDepth_      = outerStaticDepth;
 }
 
 
-node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpected) {
     ENTER("EXEC");
-    // The permissions of this scope (they include those of the enclosing ones) are in force
-    // for everything built in it, arms and lambdas included.
-    NumericPermissionScope permissions(numericPermissions_, gct->numericPermissions());
     // The tags written before the block hold for the nodes written in it (`#kernel { ... }`,
     // design principles 6.2): they join the attributes in force where the block is written.
     const TagFacts blockTags = tagFactsOf(gct, camel::core::tag::Nodes);
+    // The permissions of this scope (they include those of the enclosing ones) are in force
+    // for everything built in it, arms and lambdas included. A permission written as a tag
+    // (`#[contract] { ... }`) reaches the nodes through this one column.
+    NumericPermissionScope permissions(
+        numericPermissions_,
+        static_cast<camel::core::sem::PermissionMask>(
+            numericPermissions_ | blockTags.permissions));
     AttrScope attrs(
         currentAttrs_,
         camel::core::attr::unite(currentAttrs_, blockTags.nodes));
@@ -634,7 +820,8 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     // declaration) is not a block: in a sync block it continues the chain, in written order,
     // like the arguments of a call statement. So does a sync block written inside a sync
     // block: its expressions are expressions of the enclosing block, in the same order.
-    const bool operands = gct->operands() || (synced_ && gct->synced());
+    const bool operands = gct->operands() || (synced_ && gct->synced()) ||
+                          (synced_ && gct == syncedBlockOverride_);
     if (!operands) {
         synced_         = gct->synced();
         lastSyncedNode_ = {};
@@ -688,8 +875,6 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     std::pair<GCT::node_ptr_t, node_handle_t> lastStatement{};
     for (size_t i = 0; i < gct->size(); i++) {
         StatementState before(*this);
-        // The tail statement of an enclosing body, kept across a statement that fails.
-        const GCT::Node *outerTailStatement = tailStatement_;
         try {
             const auto &child = gct->at(i);
             // Every statement but the last is one whose value nothing takes, and the last one
@@ -699,14 +884,25 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
             const bool unused = !gct->operands() && (i + 1 < gct->size() || valueDropped);
             unusedStatement_  = unused ? child : nullptr;
             any result;
-            if (gct == tailExpectedFor_ && i + 1 == gct->size() && !gct->operands()) {
-                // The body's value, in the position of the body (see visitBodyNode). A literal
-                // written here takes that position's type (design principles 5.1), which is
-                // how an arm's value takes the type of the whole `if` / `match`.
-                tailStatement_ = child;
-                ExpectedValueScope tailScope(expectedValueType_, tailExpectedType_);
-                result         = visit(child);
-                tailStatement_ = outerTailStatement;
+            // The body's value, in the position of the body (see visitBodyNode): the same
+            // expected-type channel every other position uses, and checkValue converts a
+            // literal or empty array there (design principles 5.1).
+            // A function declaration is a statement, not a value: it leaves the block's value
+            // as it was (an empty-named FUNC is a lambda written in place, and is a value).
+            const bool declaration =
+                child->type() == GCT::NodeKind::FUNC && !child->name().empty();
+            const bool tailPosition = tailExpected != nullptr && !gct->operands() &&
+                                      i + 1 == gct->size() && !declaration;
+            if (tailPosition) {
+                result = visitInPosition(child, tailExpected);
+            } else if (!gct->operands()) {
+                // A statement whose value nothing takes is in no position: the type the
+                // block's value stands at does not reach inside it, or a `let` written before
+                // the value of a `T?` arm would build its initializer in that `T?` (H119). An
+                // operand scope (`gct->operands()`) is in the position of the element or
+                // field it builds, and keeps it.
+                ExpectedValueScope statementScope(expectedValueType_, nullptr);
+                result = visit(child);
             } else {
                 result = visit(child);
             }
@@ -726,7 +922,6 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
                 res = valueNodeOf(result);
             }
         } catch (const BuildAbortException &e) {
-            tailStatement_ = outerTailStatement;
             before.restore();
             unusedStatement_ = nullptr;
             failed           = true;
@@ -768,3 +963,5 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
 }
 
 } // namespace camel::compile::gir
+
+

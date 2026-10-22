@@ -27,6 +27,7 @@
 
 #include <array>
 #include <charconv>
+#include <cmath>
 #include <format>
 #include <system_error>
 #include <utility>
@@ -35,8 +36,8 @@ namespace camel::core::sem {
 
 namespace {
 
-/// The source names of the eight permission bits, in bit order.
-constexpr std::array<std::pair<Permission, std::string_view>, 8> kPermissionNames = {{
+/// The source names of the nine permission bits, in bit order.
+constexpr std::array<std::pair<Permission, std::string_view>, 9> kPermissionNames = {{
     {kReassociate, "reassociate"},
     {kContract, "contract"},
     {kApproxMath, "approx_math"},
@@ -45,6 +46,7 @@ constexpr std::array<std::pair<Permission, std::string_view>, 8> kPermissionName
     {kNoInfs, "no_infs"},
     {kNoSignedZeros, "no_signed_zeros"},
     {kFlushSubnormals, "flush_subnormals"},
+    {kNonDeterministic, "nondeterministic"},
 }};
 
 /// Parses a decimal uint16_t that is the whole of `text`.
@@ -135,6 +137,50 @@ std::string permissionsText(PermissionMask mask) {
         add("finite_math");
     }
     return out;
+}
+
+// ---- The numeric contract of a rewrite -----------------------------------------------------
+
+double stepUlps(const NumericSemantics &numeric) {
+    switch (numeric.cls) {
+    case NumericClass::Exact:
+        return 0.0;
+    case NumericClass::Bounded:
+        // The declaration promises `ulpBound`; a bound below one ulp is a rounding step at least.
+        return numeric.ulpBound >= 1.0f ? static_cast<double>(numeric.ulpBound) : 1.0;
+    case NumericClass::CorrectlyRounded:
+    case NumericClass::Opaque:
+        break;
+    }
+    // An undeclared operator is read conservatively: one rounding step.
+    return 1.0;
+}
+
+RewriteErrorBound rewriteErrorBound(PermissionMask needs, size_t steps, double declaredUlps) {
+    if (needs == kNoPermissions) {
+        // Bit for bit: the check compares the bits (a NaN is a NaN).
+        return {};
+    }
+    RewriteErrorBound bound;
+    bound.ulps = declaredUlps;
+    const double stepCount = static_cast<double>(steps) + 1.0;
+    if ((needs & kReassociate) != 0) {
+        // The regrouped roundings may each land one ulp away from the written ones.
+        bound.ulps += stepCount;
+    }
+    if ((needs & kContract) != 0) {
+        // A contraction removes a rounding; it never adds error beyond a step's declaration.
+    }
+    if ((needs & kChangePrecision) != 0) {
+        // Design principles 7.3: bf16 is the least precision the permission admits (8 mantissa
+        // bits), and each of the rule's steps may round there.
+        bound.relative += std::ldexp(1.0, -8) * stepCount;
+    }
+    if ((needs & kNonDeterministic) != 0) {
+        // Every schedule is allowed, so there is no number to compare against.
+        bound.checkable = false;
+    }
+    return bound;
 }
 
 // ---- Numeric classes and faults ------------------------------------------------------------

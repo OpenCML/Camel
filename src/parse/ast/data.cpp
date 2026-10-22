@@ -36,6 +36,16 @@ std::string to_string(DataType type) {
         return "IfExpr";
     case DataType::MatchExpr:
         return "MatchExpr";
+    case DataType::TypeMatch:
+        return "TypeMatch";
+    case DataType::TypeCase:
+        return "TypeCase";
+    case DataType::StaticFor:
+        return "StaticFor";
+    case DataType::StaticLoop:
+        return "StaticLoop";
+    case DataType::StaticAccess:
+        return "StaticAccess";
     case DataType::TryExpr:
         return "TryExpr";
     case DataType::LoopExpr:
@@ -48,15 +58,37 @@ std::string to_string(DataType type) {
         return "Struct";
     case DataType::Tuple:
         return "Tuple";
+    case DataType::StructComp:
+        return "StructComp";
+    case DataType::TupleComp:
+        return "TupleComp";
     case DataType::Func:
         return "Func";
     case DataType::Ref:
         return "Ref";
     case DataType::ConstAs:
         return "ConstAs";
+    case DataType::Slice:
+        return "Slice";
     default:
         ASSERT(false, "Unknown DataType");
         return "UnknownDataType";
+    }
+}
+
+std::string to_string(TypeCaseKind kind) {
+    switch (kind) {
+    case TypeCaseKind::Struct:
+        return "struct";
+    case TypeCaseKind::Tuple:
+        return "tuple";
+    case TypeCaseKind::Leaf:
+        return "#leaf";
+    case TypeCaseKind::Wildcard:
+        return "_";
+    default:
+        ASSERT(false, "Unknown TypeCaseKind");
+        return "unknown";
     }
 }
 
@@ -182,6 +214,21 @@ const std::string IfExprLoad::geneCode() const { return "if"; }
 
 const std::string MatchExprLoad::geneCode() const { return "match"; }
 
+const std::string TypeCaseLoad::geneCode() const {
+    std::string result = "case ";
+    for (size_t i = 0; i < patterns_.size(); ++i) {
+        if (i > 0) {
+            result += " | ";
+        }
+        result += to_string(patterns_[i]);
+    }
+    return result + " =>";
+}
+
+const std::string TypeCaseLoad::toString() const {
+    return "TypeCase(" + geneCode() + ")" + this->status();
+}
+
 const std::string TryExprLoad::geneCode() const { return "try"; }
 
 const std::string LiteralLoad::geneCode() const { return value_.toString(); }
@@ -191,6 +238,10 @@ const std::string ArrayDataLoad::geneCode() const { return "[]"; }
 const std::string StructDataLoad::geneCode() const { return "{}"; }
 
 const std::string TupleDataLoad::geneCode() const { return "()"; }
+
+const std::string StructCompLoad::geneCode() const { return "{ static for }"; }
+
+const std::string TupleCompLoad::geneCode() const { return "( static for )"; }
 
 const std::string FuncDataLoad::geneCode() const {
     if (ref_.empty()) {
@@ -203,6 +254,8 @@ const std::string FuncDataLoad::geneCode() const {
 const std::string RefDataLoad::geneCode() const { return ref_.toString(); }
 
 const std::string ConstAsLoad::geneCode() const { return "constas " + ref_.toString(); }
+
+const std::string SliceLoad::geneCode() const { return ":"; }
 
 const std::string EnumPatternLoad::geneCode() const {
     std::string result = ref_.toString();

@@ -1,0 +1,16 @@
+/**
+ * A subscript that slices one dimension and indexes another (`m[:, 0]`, `m[a:b, c]`) is a view
+ * with strides, which needs H17 (design principles 5.4). The syntax is accepted and the form is
+ * refused with a located diagnostic that names the work it waits for, rather than lowered to a
+ * copy that would not share the block a slice shares.
+ */
+module subscript_multidim
+import { Tensor, reshape, shape } from tensor
+
+func main(): int sync {
+    println('ran')
+    let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let column = m[:, 0]
+    println(shape(column))
+    return 0
+}

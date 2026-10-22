@@ -6,7 +6,7 @@ module export_dynamic_recursion
 
 import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func shrink(t: Tensor): Tensor {
     return if sum(t) > 1.0 then shrink(t * 0.5) else t

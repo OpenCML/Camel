@@ -166,17 +166,9 @@ string recordLabel(
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
     case camel::runtime::GCNodeKind::Loop: {
-        // `LOOP while`: the condition and the body are regions of the graph (drawn as such). A
-        // loop in graph form (outlineLoopRegions) names its graphs: `LOOP while cond=f.loop1.cond
-        // body=f.loop1.body` (graph model 3.5, the LOOP card).
-        const auto *cond = program.loopCondOf(*graph, nodeRef);
-        const auto *body = program.loopBodyOf(*graph, nodeRef);
-        std::string text =
-            std::format("LOOP {}", camel::core::loopKindName(graph->loopKindOf(nodeRef)));
-        if (cond) {
-            text += " cond=" + cond->name();
-        }
-        return body ? text + " body=" + body->name() : text;
+        // `LOOP while`: the condition and the body are regions of the graph, drawn as such. The
+        // node names its form only (graph model 3.5, the LOOP card).
+        return std::format("LOOP {}", camel::core::loopKindName(graph->loopKindOf(nodeRef)));
     }
     default:
         return "NODE";

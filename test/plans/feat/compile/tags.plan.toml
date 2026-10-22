@@ -2,7 +2,7 @@ id = "compile.tags"
 order = 226
 tier = "fast"
 tags = ["feat", "compile", "tags", "attributes", "semantics"]
-desc = "The tag mechanism of design principles 6.2: `tag name<params> on positions` declares a name of the module's entity namespace, `tag group = [a, b]` a group of tags, and `#name`, `#name<args>` and `#[a, b<v>]` write a tag before a function, a type declaration, a struct field or a block. Tags of `on nodes` become node attributes of the region they precede (an inner same-name tag with a parameter wins); tags of `on func`, `on type` and `on field` belong to the declaration and are printed by `camel inspect --tags` (the C++ query is tag::ofDeclaration / tag::ofField). A tag says through `read_by` which passes read it, and the pipeline warns when none of them is in it. Writing a tag where its declaration does not list it, an undeclared tag, a wrong number of arguments, a non-constant argument and an argument type a tag cannot carry are located errors at the tag."
+desc = "The tag mechanism of design principles 6.2: `tag name<params> on positions` declares a name of the module's entity namespace, `tag group = [a, b]` a group of tags, and `#name`, `#name<args>` and `#[a, b<v>]` write a tag before a function, a type declaration, a struct field or a block. Tags of `on nodes` become node attributes of the region they precede (an inner same-name tag with a parameter wins); tags of `on func`, `on type` and `on field` belong to the declaration and are printed by `camel inspect --tags` (the C++ query is tag::ofDeclaration / tag::ofField). A tag says through `read_by` which passes read it, and the pipeline warns when none of them is in it. Writing a tag where its declaration does not list it, an undeclared tag, a wrong number of arguments, a non-constant argument, an argument that is not of the kind its parameter declares, and a parameter of a kind a tag cannot carry yet are located errors at the tag."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -155,16 +155,60 @@ expect_diagnostic_column = 6
 expect_output_contains = ["The argument 'n' of the tag 'width' is not a compile-time value."]
 
 [[tests]]
-name = "unsupported_argument"
-desc = "A floating-point tag argument is refused with the types a tag can carry yet (H2b adds real-valued attributes)."
+name = "float_argument"
+desc = "A parameter declared `float` takes a real, carried as a real attribute: `#ratio<1.5>` is printed as written, and so is a second use with another value."
+kind = "behavior"
+case = "../../../cases/compile/tags/float.cml"
+args = ["inspect", "--tags", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+for (const line of [
+  'main::ratio on type, field<r: float>',
+  'T : main::ratio=1.5',
+  'U : main::ratio=0.25',
+]) {
+  assert(out.includes(line), `missing '${line}' in:\\n${out}`)
+}
+}
+"""
+
+[[tests]]
+name = "argument_type"
+desc = "A real argument for an `int` parameter is a located kind mismatch (the declared kind is what an argument must be, design principles 6.2)."
 kind = "negative"
 case = "../../../cases/compile/tags/err_float.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TagArgumentUnsupported"
+expect_diagnostic_name = "SemanticDiag::TagArgumentType"
 expect_diagnostic_line = 6
 expect_diagnostic_column = 2
-expect_output_contains = ["has a type a tag cannot carry yet"]
+expect_output_contains = ["The parameter 'w' of the tag 'width' is declared 'int', but the argument is '1.5' (float)."]
+
+[[tests]]
+name = "argument_type_bool_for_int"
+desc = "The kind check is two-way: a boolean where the parameter declares an integer is the same located diagnostic."
+kind = "negative"
+case = "../../../cases/compile/tags/err_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentType"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 2
+expect_output_contains = ["The parameter 'w' of the tag 'width' is declared 'int', but the argument is 'true' (bool)."]
+
+[[tests]]
+name = "parameter_type"
+desc = "A parameter of a kind a tag cannot carry (here a function signature) is a located diagnostic at the use, not a value silently carried as something else."
+kind = "negative"
+case = "../../../cases/compile/tags/err_param_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagParameterType"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 2
+expect_output_contains = ["The parameter 'f' of the tag 'callback' is declared '(x: int) => int': a tag parameter is an int, a float, a bool, a string or a func."]
 
 [[tests]]
 name = "old_annotation_form"
@@ -176,4 +220,121 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
 expect_diagnostic_line = 4
 expect_diagnostic_column = 1
-expect_output_contains = ["a tag is written '#name' or '#name<args>' (or '#[a, b]'), never '@name(args)'", "'#name', '#name<args>' or '#[a, b<v>]'"]
+expect_output_contains = ["an annotation takes '<...>' arguments, not '(...)'", "'#name', '#name<args>' or '#[a, b<v>]'"]
+[[tests]]
+name = "reads"
+desc = "`#reads<...>` names the tags a pass reads: the arguments are tag names, not values, any number of them are accepted, and the fact is the declaration's tuple, printed by `camel inspect --tags`."
+kind = "behavior"
+case = "../../../cases/compile/tags/reads.cml"
+args = ["inspect", "--tags", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+for (const line of [
+  'main::cost on func',
+  'first : reads=("reassociate", "contract")',
+  'second : reads=("cost")',
+]) {
+  assert(out.includes(line), `missing '${line}' in:\n${out}`)
+}
+}
+"""
+
+[[tests]]
+name = "reads_empty"
+desc = "`#reads<>` names no tag: the form takes at least one, and the diagnostic says how many are written."
+kind = "negative"
+case = "../../../cases/compile/tags/err_reads_empty.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 2
+expect_output_contains = ["The tag 'reads' takes 1 or more parameter(s), but 0 argument(s) are written."]
+
+[[tests]]
+name = "reads_undeclared"
+desc = "A name written in `#reads<...>` must be a declared tag: a typo is reported where it is written, not silently carried."
+kind = "negative"
+case = "../../../cases/compile/tags/err_reads_undeclared.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagUndeclared"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 2
+expect_output_contains = ["No tag 'nowhere' is declared."]
+
+[[tests]]
+name = "reads_camel_pass_is_a_reader"
+desc = "A Camel pass that writes `#reads<marked>` is recorded as a reader of `marked`: a program whose tag names that pass reads the tag, so no `TagHasNoReader` warning is emitted."
+kind = "behavior"
+case = "../../../cases/modules/rules/reads_target.cml"
+args = ["${case}", "reads_pass::apply", "std::nvm"]
+expect_exit = 0
+expect_output_not_contains = ["TagHasNoReader"]
+
+[[tests]]
+name = "shadows_permission"
+desc = "A program may not declare a tag with the name of a core permission (log 2026-10-21): the declaration would never be read, so it is refused where it is written."
+kind = "negative"
+case = "../../../cases/compile/tags/err_tag_shadows_permission.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagShadowsPermission"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 1
+expect_output_contains = ["The tag 'reassociate' is declared with the name of a tag of the language."]
+
+
+[[tests]]
+name = "independent.node"
+desc = "`#independent` on a user function declaration reaches the runtime graph: std::jgir shows it as an attribute of the function graph's exit node, and a function declared without the tag has none. The tag is on the declaration, not on every node of the body: the exit node is the one that stands for what the function gives."
+kind = "behavior"
+case = "../../../cases/compile/tags/independent.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const dump = JSON.parse(input.normalized.stdout)
+const byName = new Map(dump.graphs.map((g) => [g.name, g]))
+const exitAttrs = (name) => {
+  const g = byName.get(name)
+  assert(g, `graph ${name} is not in the dump`)
+  const n = g.nodes.find((node) => node.id === g.exit)
+  assert(n, `graph ${name} has no exit node`)
+  return n.attrs || {}
+}
+assert(exitAttrs('twice').independent === true, `twice: ${JSON.stringify(exitAttrs('twice'))}`)
+assert(!('independent' in exitAttrs('plain')), `plain: ${JSON.stringify(exitAttrs('plain'))}`)
+}
+"""
+
+[[tests]]
+name = "independent.query"
+desc = "The runtime query tag::declaresIndependentElements reads the fact from the encoded graph, without the module that declared the function: test::tags prints yes for the tagged function and no for the other one."
+kind = "behavior"
+case = "../../../cases/compile/tags/independent.cml"
+args = ["${case}", "test::tags"]
+expect_exit = 11
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+for (const line of [
+  'TAGS independent twice yes',
+  'TAGS independent plain no',
+  'TAGS independent main no',
+]) assert(out.includes(line), `missing: ${line}`)
+}
+"""
+
+[[tests]]
+name = "independent.run"
+desc = "A tagged function runs to the same result on the four back ends: the declaration is a fact, not a change of semantics."
+kind = "behavior"
+case = "../../../cases/compile/tags/independent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 11
+expect_stdout_exact = ""

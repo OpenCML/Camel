@@ -2,7 +2,7 @@ id = "compile.numeric_permissions"
 order = 214
 tier = "fast"
 tags = ["feat", "compile", "numeric", "semantics"]
-desc = "`@numeric(...)` on a function or a block grants numeric permissions to the code written in it, arms, loop bodies and lambdas included, never to a function it calls (design principles 7.5; docs/design/op-semantics 6.3, 6.4). The graph keeps them in a per-node column beside the source positions; std::gir shows them as a `numeric` attribute on the nodes that have any. Rewrites keep them, CSE and tensor::fuse do not merge nodes granted different ones, and the CPU back ends compute the canonical results with or without them."
+desc = "Permission tags on a function or a block grant numeric permissions to the code written in it, arms, loop bodies and lambdas included, never to a function it calls (design principles 7.2, 7.5; docs/design/op-semantics 6.3, 6.4). `#[reassociate]`, `#[contract]` and the other standard tags are written where the old `@numeric(...)` was; `#[finite_math]` is the group. The graph keeps the grants in a per-node column beside the source positions; std::gir shows them as a `numeric` attribute on the nodes that have any. CSE does not merge nodes granted different ones, rewrites keep them, and tensor::fuse reads them into node attributes (tensor.kernel) without changing an operator; the CPU back ends compute the canonical results with or without them."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -91,18 +91,42 @@ expect_stdout_exact = "18.0\n"
 
 [[tests]]
 name = "fuse"
-desc = "tensor::fuse fuses `x @ w + b` when both nodes have the same permissions (the fused node keeps them) and not when they differ (a product inlined from an annotated function, an add without)."
+desc = "tensor::fuse changes no operator: it writes tensor.kernel (the 7.3 decision) and tensor.fusion (the group) on the nodes. The default policy lets the plain product use the library GEMM while the `#strict` block's matmul runs the canonical algorithm (7.4); both matmul+add patterns are groups even though their permissions differ."
 kind = "behavior"
 case = "../../../cases/compile/numeric/fuse.cml"
-args = ["${case}", "std::opt::inline", "tensor::fuse", "std::gir"]
+args = ["${case}", "tensor::fuse", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
-const opers = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"'))
-const fused = opers.filter((l) => l.includes('label="tensor:matmul_add"'))
-assert(fused.length >= 1 && fused.every((l) => l.includes('numeric="reassociate"')), 'the fused node keeps reassociate')
-const adds = opers.filter((l) => l.includes('label="tensor:add"'))
-assert(adds.length >= 1 && adds.every((l) => !l.includes('numeric=')), 'the add of split stays unfused')
+const out = input.normalized.stdout
+const q = String.fromCharCode(92) + '"'
+const count = (text) => out.split(text).length - 1
+const kernel = (value) => count('tensor.kernel=' + q + value + q)
+assert(count('label="tensor:matmul"') === 2, `expected two matmul operators, got ${count('label="tensor:matmul"')}`)
+assert(kernel('library') === 1, 'the plain product may use the library GEMM')
+assert(kernel('canonical') === 1, '#strict keeps the canonical algorithm')
+assert(count('tensor.fusion=') === 4, 'both matmul+add patterns are groups')
+assert(count('matmul_add') === 0 && count('matmul_blas') === 0, 'no fused operator may appear')
+}
+"""
+
+[[tests]]
+name = "fuse.safe"
+desc = "tensor::fuse(safe_fp=true) records the canonical algorithm on every matmul (7.4) and still marks the groups: the safe mode's graph is the same graph."
+kind = "behavior"
+case = "../../../cases/compile/numeric/fuse.cml"
+args = ["${case}", "tensor::fuse(safe_fp=true)", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const q = String.fromCharCode(92) + '"'
+const count = (text) => out.split(text).length - 1
+const kernel = (value) => count('tensor.kernel=' + q + value + q)
+assert(count('label="tensor:matmul"') === 2, 'two matmul operators')
+assert(kernel('canonical') === 2, 'safe mode runs the canonical algorithm everywhere')
+assert(kernel('library') === 0, 'nothing uses the library GEMM')
+assert(count('tensor.fusion=') === 4, 'the groups are still recorded')
 }
 """
 
@@ -111,42 +135,54 @@ name = "fuse.result"
 desc = "Fused or not, the results are the canonical ones."
 kind = "behavior"
 case = "../../../cases/compile/numeric/fuse.cml"
-args = ["${case}", "std::opt::inline", "tensor::fuse"]
+args = ["${case}", "tensor::fuse"]
 expect_exit = 0
-expect_stdout_exact = "fuse split=-12.825000286102295 whole=-12.825000286102295\n"
-
-[[tests]]
-name = "trees"
-desc = "The AST shows a block's own grant, the GCT the permissions in force in every EXEC (the enclosing grants joined); nothing is shown where none is granted."
-kind = "behavior"
-case = "../../../cases/compile/numeric/permissions.cml"
-args = ["inspect", "-a", "-c", "${case}"]
-expect_exit = 0
-expect_stdout_contains = ["StmtBlock: numeric(reassociate, contract)", "StmtBlock: numeric(contract)", "StmtBlock: numeric(finite_math)", "EXEC: numeric(reassociate, contract)", "EXEC: numeric(finite_math)"]
+expect_stdout_exact = "fuse split=-12.825000286102295 tight=-12.825000286102295\n"
 
 [[tests]]
 name = "invalid"
-desc = "An unknown permission, another annotation with names in parentheses and an empty @numeric() are SemanticDiag::InvalidAnnotation, each at its line. (A decorator on a block is accepted, language reference 7.6: compile.decorators.)"
+desc = "An annotation with names in parentheses, the removed `@numeric(...)` spelling included, is SemanticDiag::InvalidAnnotation at its line; the message names the tag form that replaced it."
 kind = "negative"
 case = "../../../cases/compile/numeric/invalid.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["'fast' is not a permission", "invalid.cml:8:1", "The annotation '@kernelish' is not accepted", "invalid.cml:11:1", "it names no permission", "invalid.cml:14:1"]
+expect_output_contains = ["The annotation '@kernelish' is not accepted", "invalid.cml:8:1", "The annotation '@numeric' is not accepted", "invalid.cml:11:1", "#[reassociate]"]
 
 [[tests]]
 name = "library_gemm"
-desc = "The optional CBLAS backend (CAMEL_TENSOR_BLAS) does not follow matmul's canonical FMA chain, so it is never the default: tensor::fuse replaces a matmul by tensor:matmul_blas (the library GEMM when the build has one, the canonical kernel otherwise) only when its node was granted both reassociate and change_precision; a plain matmul and one granted reassociate alone stay tensor:matmul. Without a BLAS in the build the three results are the canonical ones."
+desc = "Per 7.3 the CPU library GEMM is available by default, so in default mode every matmul records tensor.kernel=\"library\" while the operator stays tensor:matmul; the `#[reassociate, change_precision]` tag is no longer needed (an accumulation reorder is reassociate's business). Without a BLAS in the build the library path is the canonical kernel, so the three results are the canonical ones."
 kind = "behavior"
 case = "../../../cases/compile/numeric/library_gemm.cml"
 args = ["${case}", "tensor::fuse", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
-const opers = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"'))
-const blas = opers.filter((l) => l.includes('label="tensor:matmul_blas"'))
-const canonical = opers.filter((l) => l.includes('label="tensor:matmul"'))
-assert(blas.length === 1 && blas[0].includes('numeric="reassociate, change_precision"'), `one library matmul expected: ${blas}`)
-assert(canonical.length === 2 && canonical.some((l) => !l.includes('numeric=')) && canonical.some((l) => l.includes('numeric="reassociate"')), `two canonical matmuls expected: ${canonical}`)
+const out = input.normalized.stdout
+const q = String.fromCharCode(92) + '"'
+const count = (text) => out.split(text).length - 1
+const kernel = (value) => count('tensor.kernel=' + q + value + q)
+assert(count('label="tensor:matmul"') === 3, 'three matmul operators')
+assert(kernel('library') === 3, 'the default policy lets every matmul use the library GEMM')
+assert(kernel('canonical') === 0, 'nothing is withheld in default mode')
+}
+"""
+
+[[tests]]
+name = "library_gemm.safe"
+desc = "tensor::fuse(safe_fp=true) withholds the library GEMM from every matmul (7.4): the operator is unchanged, only the attribute differs."
+kind = "behavior"
+case = "../../../cases/compile/numeric/library_gemm.cml"
+args = ["${case}", "tensor::fuse(safe_fp=true)", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const q = String.fromCharCode(92) + '"'
+const count = (text) => out.split(text).length - 1
+const kernel = (value) => count('tensor.kernel=' + q + value + q)
+assert(count('label="tensor:matmul"') === 3, 'three matmul operators')
+assert(kernel('canonical') === 3, 'safe mode runs the canonical algorithm')
+assert(kernel('library') === 0, 'no library GEMM in safe mode')
 }
 """
 

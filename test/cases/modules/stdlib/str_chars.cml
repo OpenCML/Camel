@@ -5,11 +5,12 @@
  */
 module str_chars
 
-import { bytes, from_bytes, substr, codepoints, from_codepoints } from str
+import { substr, codepoints, from_codepoints } from str
+import { encode, decode, from_array, size } from bytes
 
 func main(): int sync {
     let s = 'h€😀é'        // 1 + 3 + 4 + 2 bytes, 4 characters
-    println(len(s), len(bytes(s)))
+    println(len(s), size(encode(s)))
     println(codepoints(s))
     println(codepoints(''), len(''))
     println(from_codepoints([104, 8364, 128512, 233]) !! 'bad')
@@ -24,7 +25,7 @@ func main(): int sync {
     println(from_codepoints([1114112]) !! 'beyond')
     println(from_codepoints([-1]) !! 'negative')
 
-    // what from_bytes accepts: valid UTF-8 only
-    println(from_bytes([226, 130, 172]), from_bytes(bytes('h€😀é')) == 'h€😀é')
+    // what decode accepts: valid UTF-8 only; malformed bytes are an error value, not a fault
+    println(decode(from_array([226, 130, 172])) !! 'bad', (decode(encode('h€😀é')) !! 'bad') == 'h€😀é')
     return 0
 }

@@ -6,8 +6,8 @@
 # io 模块（print/println，globals 预加载）
 camel test/modules/io/basic.cml
 
-# os 模块（whoami, sleep 等）
-camel test/modules/os/basic.cml
+# process 模块（whoami, sleep 等）
+camel test/cases/modules/std/process/basic.cml
 
 # math 模块
 camel test/modules/math/basic.cml
@@ -27,8 +27,8 @@ camel test/modules/statistics/basic.cml
 # this 模块（zen）
 camel test/modules/this/basic.cml
 
-# sys 模块（get_env, get_cwd）
-camel test/modules/sys/basic.cml
+# env 模块（get_env, get_cwd）
+camel test/modules/env/basic.cml
 
 # fs 模块（read_text, write_text）
 camel test/modules/fs/basic.cml

@@ -1,0 +1,22 @@
+module neutral_kept
+
+// The mode applies only the five neutral elements. The rules library has four more exact integer
+// laws over the same names (`x * 0`, `x - x`, `x / 1`, `-(-x)`); `neutral_only=true` must leave
+// them, which is why the C++ reference is not the library's `simplify` (H160).
+
+func keep(v: int): int {
+    return v
+}
+
+func other(a: int): int {
+    let x0 = a * 0
+    let x1 = a - a
+    let x2 = a / 1
+    let x3 = -(-a)
+    return keep(x0 + x1 + x2 + x3)
+}
+
+func main(): int sync {
+    println(other(5))
+    return 0
+}

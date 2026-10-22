@@ -65,8 +65,8 @@ retain the raw records; do not interpret small differences as proven speedups.
 ## Remote build notes
 
 The baseline revision 75776da8 built and passed 35/35 host/GPU/tensor tests on
-88zjwei's RTX 3090 device 3. It used an isolated source archive under
-`/home/zjwei/camel-eval/tiles-75776da8`, the pre-existing Conda Clang 23.1.2
+an RTX 3090 (device 3) on the Linux build host. It used an isolated source
+checkout, the pre-existing Conda Clang 23.1.2
 toolchain and build virtual environment (CMake 4.4.3, Conan 2.33), and CUDA 12.3.
 The Conda sysroot required a private `CPLUS_INCLUDE_PATH` exposing only the
 system Python multiarch configuration header directory. No system toolchain or
@@ -92,7 +92,7 @@ driver 580.95.05 (CUDA driver API 13000), NVRTC 12.3, target compute_86, device 
 Reproduce after the standard build with the toolchain environment above:
 
 ```sh
-CAMEL_TILES_DEVICE=7 python test/tools/benchmark-tiles.py --runs 3 \
+python test/tools/benchmark-tiles.py --runs 3 --devices 7 \
   --source-revision 8e7be37400c6e67707f7f3d07a217126d0896486 \
   --output tiles-rtx3090.jsonl
 ```

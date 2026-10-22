@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-178 diagnostics: 160 errors, 18 warnings.
+204 diagnostics: 187 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -39,6 +39,7 @@ prints one entry.
 | `0x0200000C` | [SyntaxDiag::ComparisonNeedsSpace](#comparisonneedsspace) | Error |
 | `0x0200000D` | [SyntaxDiag::AngleCloseAfterSpace](#anglecloseafterspace) | Error |
 | `0x0200000E` | [SyntaxDiag::LineStartsWithOperator](#linestartswithoperator) | Error |
+| `0x0200000F` | [SyntaxDiag::EmptyInterpolation](#emptyinterpolation) | Error |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn |
 | `0x03000000` | [SemanticDiag::UnknownSemanticError](#unknownsemanticerror) | Error |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error |
@@ -145,12 +146,34 @@ prints one entry.
 | `0x03000167` | [SemanticDiag::TagOnUnnamedField](#tagonunnamedfield) | Error |
 | `0x03000168` | [SemanticDiag::TagArgumentNamed](#tagargumentnamed) | Error |
 | `0x03000169` | [SemanticDiag::TagArgumentUnsupported](#tagargumentunsupported) | Error |
+| `0x0300016A` | [SemanticDiag::TagArgumentType](#tagargumenttype) | Error |
+| `0x0300016B` | [SemanticDiag::TagNotAPermission](#tagnotapermission) | Error |
+| `0x0300016C` | [SemanticDiag::RuleTagNotRequires](#ruletagnotrequires) | Error |
+| `0x0300016D` | [SemanticDiag::TagParameterType](#tagparametertype) | Error |
+| `0x0300016E` | [SemanticDiag::TagShadowsPermission](#tagshadowspermission) | Error |
+| `0x03000170` | [SemanticDiag::StaticMatchNotExhaustive](#staticmatchnotexhaustive) | Error |
+| `0x03000171` | [SemanticDiag::StaticMatchUnreachableCase](#staticmatchunreachablecase) | Error |
+| `0x03000172` | [SemanticDiag::StaticTypeNotConcrete](#statictypenotconcrete) | Error |
+| `0x03000173` | [SemanticDiag::StaticMatchTooDeep](#staticmatchtoodeep) | Error |
+| `0x03000174` | [SemanticDiag::GenericInstantiationCycle](#genericinstantiationcycle) | Error |
+| `0x03000175` | [SemanticDiag::StaticForNotComposite](#staticfornotcomposite) | Error |
+| `0x03000176` | [SemanticDiag::StaticAccessNotInternal](#staticaccessnotinternal) | Error |
+| `0x03000177` | [SemanticDiag::StaticAccessUnknownField](#staticaccessunknownfield) | Error |
+| `0x03000178` | [SemanticDiag::StaticAccessIndexOutOfRange](#staticaccessindexoutofrange) | Error |
+| `0x03000179` | [SemanticDiag::StaticAccessNotConstant](#staticaccessnotconstant) | Error |
+| `0x0300017A` | [SemanticDiag::StaticComprehensionVoidElement](#staticcomprehensionvoidelement) | Error |
+| `0x0300017B` | [SemanticDiag::NativeDeclarationIncomplete](#nativedeclarationincomplete) | Error |
+| `0x0300017C` | [SemanticDiag::NativeDeclarationNotLoaded](#nativedeclarationnotloaded) | Error |
+| `0x0300017D` | [SemanticDiag::DeclarationModuleHasBody](#declarationmodulehasbody) | Error |
+| `0x0300017E` | [SemanticDiag::LambdaParameterWithoutType](#lambdaparameterwithouttype) | Error |
+| `0x03000180` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
+| `0x03000181` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
+| `0x03000182` | [SemanticDiag::StaticIndicesNotTuple](#staticindicesnottuple) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
-| `0x031000A0` | [SemanticDiag::IntegerLiteralTruncated](#integerliteraltruncated) | Warn |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn |
 | `0x03100110` | [SemanticDiag::NullTestNeverNull](#nulltestnevernull) | Warn |
 | `0x03100111` | [SemanticDiag::KnownNotNull](#knownnotnull) | Warn |
@@ -193,6 +216,9 @@ prints one entry.
 | `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error |
 | `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error |
 | `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error |
+| `0x04000070` | [RuntimeDiag::DeviceUnavailable](#deviceunavailable) | Error |
+| `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error |
+| `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -257,16 +283,25 @@ func main(): int sync {
 **Message**
 
 ```text
-Invalid number format: {0}.
+Invalid number format: '{0}'.
 ```
 
 **Help**
 
 ```text
-Check the syntax of the numeric literal.
+A number is decimal digits without a leading zero, or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. In an entry argument and a conversion text a leading zero is decimal ('077' is 77).
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/numbers/leading_zero.cml`, run as `camel -E short test/cases/parse/numbers/leading_zero.cml`)
+
+```camel
+module parse_numbers_leading_zero
+
+func main(): int sync {
+    let a = 077
+    return a
+}
+```
 
 ### UnclosedStringLiteral
 
@@ -488,7 +523,17 @@ Expected {1} before {0}.
 The items of a list (parameters, arguments, elements) are separated by ','.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/lambda_inference/func_type.cml`, run as `camel test/cases/compile/lambda_inference/func_type.cml`)
+
+```camel
+module lambda_inference_func_type
+
+func apply(f: (x) => int, x: int): int { return f(x) }
+
+func main(): int sync {
+    return apply((x: int) => x + 1, 1)
+}
+```
 
 ### MissingInitializer
 
@@ -518,7 +563,15 @@ A declaration binds a name to a value: let {0} = <value>, or with a type: let {0
 Expected {0} before {1}.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/fstring/lambda_spec.cml`, run as `camel test/cases/compile/fstring/lambda_spec.cml`)
+
+```camel
+module fstring_lambda_spec
+func main(): int sync {
+    print(`A ${(x: int): int => x}`)
+    return 0
+}
+```
 
 ### UnexpectedToken
 
@@ -620,6 +673,32 @@ A line break ends a statement unless the line is visibly unfinished. To continue
 ```
 
 *No example: no test small enough to show raises it.*
+
+### EmptyInterpolation
+
+`0x0200000F` · Error · `SyntaxDiag::EmptyInterpolation`
+
+**Message**
+
+```text
+An interpolation has no expression to format.
+```
+
+**Help**
+
+```text
+Write an expression between '${' and '}': ${value}. For a literal '${' write '\${'.
+```
+
+**Example** (`test/cases/compile/fstring/empty_interpolation.cml`, run as `camel test/cases/compile/fstring/empty_interpolation.cml`)
+
+```camel
+module fstring_empty_interpolation
+func main(): int sync {
+    print(`A ${}`)
+    return 0
+}
+```
 
 ### ComparisonAcrossLines
 
@@ -1173,19 +1252,32 @@ Cannot call function '{0}' with type '{1}' as its type is not fully constructed 
 This often occurs when a function without an explicit return type calls itself, preventing the compiler from inferring the actual return type. Consider explicitly specifying the function's return type to avoid this issue.
 ```
 
-**Example** (`test/cases/compile/generics/err_recursive_untyped.cml`, run as `camel test/cases/compile/generics/err_recursive_untyped.cml`)
+**Example** (`test/cases/compile/module_load/order_values.cml`, run as `camel test/cases/compile/module_load/order_values.cml`)
 
 ```camel
-module err_recursive_untyped
-
-func count(xs: (typeas T)[], i: int) {
-    return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
-}
+// Top-level declarations do not depend on the order they are written in (design principles
+// 10.1): a value uses values written after it, a function uses a value written after it, a
+// function without a declared return type is called before it is written.
+let area = pi * r * r
+let pi = 3.14159
+let r = 2.0
 
 func main(): int sync {
-    println(count([1, 2], 0))
+    println(area, twice(), offset())
     return 0
 }
+
+func twice() {
+    return k * 2
+}
+
+let k = 21
+
+func offset(): int {
+    return k + later
+}
+
+let later = 100
 ```
 
 ### ImportNameNotExported
@@ -1294,7 +1386,19 @@ Failed to parse module file: {0}.
 Check the file for syntax errors.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/graph_pass/imports_unparsable.cml`, run as `camel test/cases/modules/graph_pass/imports_unparsable.cml std::nvm`)
+
+```camel
+// A program whose import is a module that does not parse. The import is a dependency of the
+// program, so the program fails at the compile step with that module's parse diagnostic (H198) —
+// not later, and not with a pass diagnostic: nothing asked for a pass of it.
+module imports_unparsable
+import unparsable_pass
+
+func main(): int sync {
+    return 0
+}
+```
 
 ### InvalidOperatorURI
 
@@ -2142,16 +2246,17 @@ This 'match' on a value of type '{0}' is not well formed: {1}.
 A 'match' on a 'T?' has exactly the cases 'case null' and one other ('case v' binds the value, 'case _' ignores it). A 'match' on a 'T!' has exactly 'case error e' and one other.
 ```
 
-**Example** (`test/cases/compile/tagged/err_match_missing.cml`, run as `camel test/cases/compile/tagged/err_match_missing.cml`)
+**Example** (`test/cases/compile/tagged/err_two_layer_null.cml`, run as `camel test/cases/compile/tagged/err_two_layer_null.cml`)
 
 ```camel
-module err_match_missing
+module err_two_layer_null
 
 func main(): int sync {
     println('never printed')
-    let r = parse_int('1')
+    let r: int?! = 5
     let s = match r {
-        case v => v
+        case null => 0
+        case v => v ?? 1
     }
     println(s)
     return 0
@@ -2399,12 +2504,15 @@ The {1} side of '{0}' has type '{2}', not 'bool'.
 '&&' and '||' are branches on a 'bool': 'a && b' is 'if a then b else false', 'a || b' is 'if a then true else b'. The right side is evaluated only when the left side does not decide, both sides are 'bool', and neither operator can be overloaded. For logic that evaluates both sides (element-wise logic on tensors, an operator of a type of your own) use '&' and '|'.
 ```
 
-**Example** (`test/cases/consistency/logical/left_not_bool.cml`, run as `camel -E short test/cases/consistency/logical/left_not_bool.cml`)
+**Example** (`test/cases/compile/tagged/err_optional_operand.cml`, run as `camel test/cases/compile/tagged/err_optional_operand.cml`)
 
 ```camel
+module err_optional_operand
+
 func main(): int sync {
-    let n = 3
-    println(n && true)
+    let o: bool? = true
+    let p = o || false
+    println(p)
     return 0
 }
 ```
@@ -2825,17 +2933,17 @@ The annotation '@{0}' is not accepted: {1}.
 **Help**
 
 ```text
-A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@numeric(...)' grants numeric permissions to a function or a block (design principles 7.5). A tag is written with '#': '#name', '#name<args>' or '#[a, b<v>]' (design principles 6.2).
+A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@name(args)' is no longer accepted (numeric permissions are tags, design principles 7.2). A tag is written with '#': '#name', '#name<args>' or '#[a, b<v>]' (design principles 6.2).
 ```
 
-**Example** (`test/cases/compile/tags/err_old_annotation.cml`, run as `camel test/cases/compile/tags/err_old_annotation.cml`)
+**Example** (`test/cases/compile/tags/err_numeric_annotation.cml`, run as `camel test/cases/compile/tags/err_numeric_annotation.cml`)
 
 ```camel
-/// The old `@name(...)` form of a tag: a located diagnostic points at `#[...]`.
-module err_old_annotation
+/// The removed `@numeric(...)` spelling: a located diagnostic points at the tag form that
+/// replaced it (design principles 7.2 made numeric permissions tags).
+module err_numeric_annotation
 
-@kernel(base)
-
+@numeric(contract)
 func main(): int { return 0 }
 ```
 
@@ -2882,13 +2990,17 @@ The body of this loop gives a value of type '{0}'; the state of the loop has typ
 The initial state fixes the state type. Return that type after 'do', or change the initial value (for example, '0.0' instead of '0' for a float state). With multiple state names, return a tuple in the same order.
 ```
 
-**Example** (`test/cases/loops/err_body_type.cml`, run as `camel -E short test/cases/loops/err_body_type.cml`)
+**Example** (`test/cases/compile/static_expansion/static_loop_body_type.cml`, run as `camel test/cases/compile/static_expansion/static_loop_body_type.cml`)
 
 ```camel
-func main(): int sync {
-    let x = loop s = 0 for v in [1.5, 2.5] do v
-    println(x)
-    return 0
+module static_loop_body_type
+
+func bad(t: {a: int}): int {
+    return static loop acc = 0 for (n, F) in fields {a: int} do "not an int"
+}
+
+func main(): int {
+    return bad({a: 1})
 }
 ```
 
@@ -2960,13 +3072,17 @@ The name '{0}' is declared twice in this loop head.
 The names of a loop's state and the name 'for' binds to the element are declared together, for the condition and the body; each is given once.
 ```
 
-**Example** (`test/cases/loops/err_repeated_name.cml`, run as `camel -E short test/cases/loops/err_repeated_name.cml`)
+**Example** (`test/cases/compile/static_expansion/static_loop_name_repeated.cml`, run as `camel test/cases/compile/static_expansion/static_loop_name_repeated.cml`)
 
 ```camel
-func main(): int sync {
-    let r = loop x = 0 for x in [1, 2] do x
-    println(r)
-    return 0
+module static_loop_name_repeated
+
+func bad(t: {a: int}): int {
+    return static loop n = 0 for (n, F) in fields {a: int} do n + 1
+}
+
+func main(): int {
+    return bad({a: 1})
 }
 ```
 
@@ -3624,7 +3740,25 @@ The argument '{0}' of the tag '{1}' has a type a tag cannot carry yet.
 **Help**
 
 ```text
-A tag carries an integer, a string, a boolean (as 0 or 1), a symbol or a graph reference; a floating-point argument comes with the real-valued tag attributes.
+A tag carries an integer, a floating-point number, a string, a boolean (as 0 or 1), a symbol or a graph reference; an argument of another type (a function, a composite) is not a tag value yet.
+```
+
+*No example: no test small enough to show raises it.*
+
+### TagArgumentType
+
+`0x0300016A` · Error · `SemanticDiag::TagArgumentType`
+
+**Message**
+
+```text
+The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}' ({4}).
+```
+
+**Help**
+
+```text
+A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for 'func' (the fact is the graph reference of that function).
 ```
 
 **Example** (`test/cases/compile/tags/err_float.cml`, run as `camel test/cases/compile/tags/err_float.cml`)
@@ -3639,6 +3773,617 @@ export tag width<w: int> on type
 type T = { a: int }
 
 func main(): int { return 0 }
+```
+
+### TagNotAPermission
+
+`0x0300016B` · Error · `SemanticDiag::TagNotAPermission`
+
+**Message**
+
+```text
+The tag '{0}' grants no numeric permission.
+```
+
+**Help**
+
+```text
+A requirement names a permission of design principles 7.2: reassociate, contract, approx_math, change_precision, nondeterministic, finite_math, no_nans, no_infs, no_signed_zeros or flush_subnormals.
+```
+
+**Example** (`test/cases/modules/rules/err_requires_unknown.cml`, run as `camel test/cases/modules/rules/err_requires_unknown.cml`)
+
+```camel
+/// A requirement that names no permission: reported at the argument, where it is written.
+module err_requires_unknown
+import { Program } from graph
+import { rewrite } from rewrite
+
+#requires<reassociate2>
+rule r(x: int) { x + 0 => x }
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [r])
+}
+```
+
+### RuleTagNotRequires
+
+`0x0300016C` · Error · `SemanticDiag::RuleTagNotRequires`
+
+**Message**
+
+```text
+A rule may be preceded only by '#requires<...>', not by the tag '{0}'.
+```
+
+**Help**
+
+```text
+State the permissions the rule needs as tag arguments: '#requires<reassociate>' (design principles 7.2).
+```
+
+**Example** (`test/cases/modules/rules/err_rule_tag.cml`, run as `camel test/cases/modules/rules/err_rule_tag.cml`)
+
+```camel
+/// A tag other than `#requires` before a rule: a rule states requirements, not facts.
+module err_rule_tag
+
+tag fast on nodes
+
+#fast
+rule r(x: int) { x + 0 => x }
+
+func main(): int { return 0 }
+```
+
+### TagParameterType
+
+`0x0300016D` · Error · `SemanticDiag::TagParameterType`
+
+**Message**
+
+```text
+The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string or a func.
+```
+
+**Help**
+
+```text
+Declare the parameter with the kind of the argument the tag is written with: 'tag {1}<{0}: int> on ...'; a 'func' parameter is written with the name of a function ('#vjp<rule>').
+```
+
+**Example** (`test/cases/compile/tags/err_param_type.cml`, run as `camel test/cases/compile/tags/err_param_type.cml`)
+
+```camel
+/// A parameter of a kind a tag cannot carry: reported where the tag is written, not carried.
+module err_param_type
+
+tag callback<f: (x: int) => int> on type
+
+#callback<1>
+type T = { x: int }
+
+func main(): int { return 0 }
+```
+
+### TagShadowsPermission
+
+`0x0300016E` · Error · `SemanticDiag::TagShadowsPermission`
+
+**Message**
+
+```text
+The tag '{0}' is declared with the name of a tag of the language.
+```
+
+**Help**
+
+```text
+A numeric permission (design principles 7.2) and its group and `strict` (7.4) are tags of the core, and a program may not declare a tag of that name: the core's tag would still be what '#{0}' means, and the declaration would never be read. Rename the tag.
+```
+
+**Example** (`test/cases/compile/tags/err_tag_shadows_permission.cml`, run as `camel test/cases/compile/tags/err_tag_shadows_permission.cml`)
+
+```camel
+module err_tag_shadows_permission
+
+tag reassociate on func
+
+func main(): int {
+    return 0
+}
+```
+
+### StaticMatchNotExhaustive
+
+`0x03000170` · Error · `SemanticDiag::StaticMatchNotExhaustive`
+
+**Message**
+
+```text
+No case of this 'match type' selects the type '{0}'.
+```
+
+**Help**
+
+```text
+The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a structure or an ordinary tuple, including 'T?' and 'T!'), and '_' for every type. Add the case for this shape, or end with '#leaf' or '_'.
+```
+
+**Example** (`test/cases/compile/static_expansion/match_type_exhaustive.cml`, run as `camel test/cases/compile/static_expansion/match_type_exhaustive.cml`)
+
+```camel
+module match_type_exhaustive
+
+func only_composite(t: typeas T): int {
+    return match type T {
+        case struct => 1
+        case tuple => 2
+    }
+}
+
+func main(): int sync {
+    println(only_composite(1))
+    return 0
+}
+```
+
+### StaticMatchUnreachableCase
+
+`0x03000171` · Error · `SemanticDiag::StaticMatchUnreachableCase`
+
+**Message**
+
+```text
+The case '{0}' selects every type the cases after it could select.
+```
+
+**Help**
+
+```text
+'#leaf' and '_' select every type, so they must be the last case of a 'match type'.
+```
+
+**Example** (`test/cases/compile/static_expansion/match_type_unreachable.cml`, run as `camel test/cases/compile/static_expansion/match_type_unreachable.cml`)
+
+```camel
+module match_type_unreachable
+
+func after_leaf(t: typeas T): int {
+    return match type T {
+        case #leaf => 1
+        case struct => 2
+    }
+}
+
+func main(): int sync {
+    println(after_leaf(1))
+    return 0
+}
+```
+
+### StaticTypeNotConcrete
+
+`0x03000172` · Error · `SemanticDiag::StaticTypeNotConcrete`
+
+**Message**
+
+```text
+The type matched here is still '{0}' when the function is instantiated.
+```
+
+**Help**
+
+```text
+'match type' needs a concrete type. Bind every type variable of the subject, or use it in a generic function whose call gives them.
+```
+
+*No example: no test small enough to show raises it.*
+
+### StaticMatchTooDeep
+
+`0x03000173` · Error · `SemanticDiag::StaticMatchTooDeep`
+
+**Message**
+
+```text
+The 'match type' bodies are nested {0} deep.
+```
+
+**Help**
+
+```text
+A 'match type' inside the selected body of another one is expanded at compile time; nest fewer of them.
+```
+
+*No example: no test small enough to show raises it.*
+
+### GenericInstantiationCycle
+
+`0x03000174` · Error · `SemanticDiag::GenericInstantiationCycle`
+
+**Message**
+
+```text
+The generic function '{0}' is instantiated with {1} while that same instance is being built, and its return type is not known yet.
+```
+
+**Help**
+
+```text
+A recursive generic call can be built only after the return type is known. Write the return type of the function, or make the recursive call use strictly smaller type arguments.
+```
+
+**Example** (`test/cases/compile/generics/err_recursive_untyped.cml`, run as `camel test/cases/compile/generics/err_recursive_untyped.cml`)
+
+```camel
+module err_recursive_untyped
+
+func count(xs: (typeas T)[], i: int) {
+    return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
+}
+
+func main(): int sync {
+    println(count([1, 2], 0))
+    return 0
+}
+```
+
+### StaticForNotComposite
+
+`0x03000175` · Error · `SemanticDiag::StaticForNotComposite`
+
+**Message**
+
+```text
+The type '{0}' has no fields for a 'static for' to walk.
+```
+
+**Help**
+
+```text
+A 'static for' walks a struct or an ordinary tuple. A 'T?' or 'T!' and a mutable cell are leaves (design principles 13.5), not tuples; handle them with 'match type' first.
+```
+
+**Example** (`test/cases/compile/static_expansion/static_for_not_composite.cml`, run as `camel test/cases/compile/static_expansion/static_for_not_composite.cml`)
+
+```camel
+module static_for_not_composite
+
+func walk(t: int) {
+    static for (n, F) in fields int => {
+        println(n, t)
+    }
+}
+
+func main(): int {
+    walk(1)
+    return 0
+}
+```
+
+### StaticAccessNotInternal
+
+`0x03000176` · Error · `SemanticDiag::StaticAccessNotInternal`
+
+**Message**
+
+```text
+A field cannot be taken from '{0}' by a compile-time key.
+```
+
+**Help**
+
+```text
+'t.[key]' names a field of a struct or an element of an ordinary tuple. A 'T?' or 'T!' has to be opened first ('??', '!!', 'match'), and a scalar or an array has no fields.
+```
+
+*No example: no test small enough to show raises it.*
+
+### StaticAccessUnknownField
+
+`0x03000177` · Error · `SemanticDiag::StaticAccessUnknownField`
+
+**Message**
+
+```text
+The struct '{1}' has no field '{0}'.
+```
+
+**Help**
+
+```text
+'t.[key]' takes the field named by the compile-time key; use one of the names the struct declares.
+```
+
+**Example** (`test/cases/compile/static_expansion/static_access_unknown_field.cml`, run as `camel test/cases/compile/static_expansion/static_access_unknown_field.cml`)
+
+```camel
+module static_access_unknown_field
+
+func field(t: {a: int, b: int}): int {
+    return t.["c"]
+}
+
+func main(): int {
+    return field({a: 1, b: 2})
+}
+```
+
+### StaticAccessIndexOutOfRange
+
+`0x03000178` · Error · `SemanticDiag::StaticAccessIndexOutOfRange`
+
+**Message**
+
+```text
+The key '{0}' is not an element of the tuple '{1}' ({2} elements).
+```
+
+**Help**
+
+```text
+A tuple element is named by its index from 0; a 'static for' gives the decimal index as 'n'.
+```
+
+**Example** (`test/cases/compile/static_expansion/static_access_out_of_range.cml`, run as `camel test/cases/compile/static_expansion/static_access_out_of_range.cml`)
+
+```camel
+module static_access_out_of_range
+
+func element(t: (int, int)): int {
+    return t.[2]
+}
+
+func main(): int {
+    return element((1, 2))
+}
+```
+
+### StaticAccessNotConstant
+
+`0x03000179` · Error · `SemanticDiag::StaticAccessNotConstant`
+
+**Message**
+
+```text
+The key '{0}' of a 't.[...]' access is not known when the function is compiled.
+```
+
+**Help**
+
+```text
+The key is a string or integer literal, or the 'n' of an enclosing 'static for'. A runtime value cannot choose a field, because only the selected field is built into the graph.
+```
+
+**Example** (`test/cases/compile/static_expansion/static_access_not_constant.cml`, run as `camel test/cases/compile/static_expansion/static_access_not_constant.cml`)
+
+```camel
+module static_access_not_constant
+
+func field(t: {a: int, b: int}, k: string): int {
+    return t.[k]
+}
+
+func main(): int {
+    return field({a: 1, b: 2}, "a")
+}
+```
+
+### StaticComprehensionVoidElement
+
+`0x0300017A` · Error · `SemanticDiag::StaticComprehensionVoidElement`
+
+**Message**
+
+```text
+The block for the field '{0}' of '{1}' gives no value, so the comprehension has no element for it.
+```
+
+**Help**
+
+```text
+The block is the value of one field: its last statement must have a value. A call that returns nothing, or a block that ends in a declaration, gives no element; the statement form 'static for' is the one that drops values.
+```
+
+**Example** (`test/cases/compile/static_expansion/comprehension_void_element.cml`, run as `camel test/cases/compile/static_expansion/comprehension_void_element.cml`)
+
+```camel
+module comprehension_void_element
+
+func broken(t: {a: int, b: int}) {
+    return { static for (n, F) in fields {a: int, b: int} => {} }
+}
+
+func main(): int sync {
+    let r = broken({a: 1, b: 2})
+    return 0
+}
+```
+
+### NativeDeclarationIncomplete
+
+`0x0300017B` · Error · `SemanticDiag::NativeDeclarationIncomplete`
+
+**Message**
+
+```text
+The body-less declaration '{0}' is incomplete: it has no result type.
+```
+
+**Help**
+
+```text
+A body-less declaration is the whole signature of a C++ operator, result included; write the result type (`: T`).
+```
+
+*No example: no test small enough to show raises it.*
+
+### NativeDeclarationNotLoaded
+
+`0x0300017C` · Error · `SemanticDiag::NativeDeclarationNotLoaded`
+
+**Message**
+
+```text
+The declaration '{0}' names the operator '{1}', which no loaded module implements.
+```
+
+**Help**
+
+```text
+A body-less declaration stands for an operator of a loaded C++ module. Import the module that implements it, and check that the URI names its function; a declaration whose implementation is not loaded is not a function.
+```
+
+**Example** (`test/cases/compile/native/missing.cml`, run as `camel test/cases/compile/native/missing.cml`)
+
+```camel
+import { absent } from missing_module
+
+func main(): int {
+    return absent(1)
+}
+```
+
+### DeclarationModuleHasBody
+
+`0x0300017D` · Error · `SemanticDiag::DeclarationModuleHasBody`
+
+**Message**
+
+```text
+The declaration module '{0}' has a body in function '{1}'.
+```
+
+**Help**
+
+```text
+A Camel module found beside a C++ module of the same name declares that module's operators and has no bodies. Put the implementation in a module that has no `.cmo`, or remove the `.cmo`.
+```
+
+*No example: no test small enough to show raises it.*
+
+### LambdaParameterWithoutType
+
+`0x0300017E` · Error · `SemanticDiag::LambdaParameterWithoutType`
+
+**Message**
+
+```text
+The type of the parameter '{0}' of this lambda is not written and cannot be inferred: {1}.
+```
+
+**Help**
+
+```text
+A lambda takes the type of a parameter it does not write from the function type of the position it stands in: an argument to a parameter of function type, the value of a declared type, or the result of a function whose result type is a function type (design principles 5.9). Write the type ('({0}: int) => ...'), or move the lambda to such a position.
+```
+
+**Example** (`test/cases/compile/lambda_inference/no_expected.cml`, run as `camel test/cases/compile/lambda_inference/no_expected.cml`)
+
+```camel
+module lambda_inference_no_expected
+
+func main(): int sync {
+    let g = (x) => x + 1
+    println(g(1))
+    return 0
+}
+```
+
+### NativeDeclarationOverlap
+
+`0x03000180` · Error · `SemanticDiag::NativeDeclarationOverlap`
+
+**Message**
+
+```text
+Two declarations of '{0}' can take the same call: '{1}' and '{2}'.
+```
+
+**Help**
+
+```text
+An operator has one meaning for one call: which rule applies must be decided by the types of the arguments, never by the order the declarations are written in. Give the declarations parameter types that cannot both accept one argument list, or keep one of them.
+```
+
+**Example** (`test/cases/compile/native/overlap.cml`, run as `camel test/cases/compile/native/overlap.cml`)
+
+```camel
+module native_overlap
+
+#op<':op/idx_arr'>
+export func pick(xs: (typeas T)[], i: int): T
+
+// The same call: an array of some element type and an index. `T` and `U` are no help — every
+// call of one is a call of the other.
+#op<':op/idx_arr'>
+export func pick(xs: (typeas U)[], i: int): U
+
+func main(): int sync {
+    println(pick([10, 20, 30], 1))
+    return 0
+}
+```
+
+### NativeDeclarationForeignOperator
+
+`0x03000181` · Error · `SemanticDiag::NativeDeclarationForeignOperator`
+
+**Message**
+
+```text
+The declaration '{0}' names the operator '{1}', which another module declares.
+```
+
+**Help**
+
+```text
+A module declares only the operators it implements: a body-less declaration stands for an operator of the module it is written in, and declares no other module's operator. Write the declaration beside the implementation, or call the operator through the module that declares it.
+```
+
+**Example** (`test/cases/compile/native/foreign_operator.cml`, run as `camel test/cases/compile/native/foreign_operator.cml`)
+
+```camel
+import bytes
+import { size } from bytes_tag
+
+func main(): int sync {
+    let b = bytes::encode('abc')
+    println(size(b))
+    return 0
+}
+```
+
+### StaticIndicesNotTuple
+
+`0x03000182` · Error · `SemanticDiag::StaticIndicesNotTuple`
+
+**Message**
+
+```text
+'indices' walks the positions of a tuple, but '{0}' has type '{1}'.
+```
+
+**Help**
+
+```text
+'indices ts' walks the positions of an ordinary tuple: it needs a value of tuple type (a tuple variable or a tuple literal). A struct has named fields; walk it with 'fields T'. A 'T?' or 'T!' and a mutable cell are leaves (design principles 13.5).
+```
+
+**Example** (`test/cases/compile/static_expansion/indices_not_tuple.cml`, run as `camel test/cases/compile/static_expansion/indices_not_tuple.cml`)
+
+```camel
+module indices_not_tuple
+
+func bad(t: {a: int, b: int}): int {
+    return static loop acc = 0 for (j) in indices t do acc + 1
+}
+
+func main(): int {
+    return bad({a: 1, b: 2})
+}
 ```
 
 ### VarParamInAsyncFunction
@@ -3810,31 +4555,6 @@ func f(x: int): int sync {
 
 func main(): int sync {
     println(f(9))
-    return 0
-}
-```
-
-### IntegerLiteralTruncated
-
-`0x031000A0` · Warn · `SemanticDiag::IntegerLiteralTruncated`
-
-**Message**
-
-```text
-The integer literal '{0}' is not a whole number: its value is {1}, the fraction is dropped.
-```
-
-**Help**
-
-```text
-A number written without a decimal point is an 'int', with an exponent too. For the floating-point number write the decimal point: '{2}'.
-```
-
-**Example** (`test/cases/compile/literals/int_negative_exponent.cml`, run as `camel -E short test/cases/compile/literals/int_negative_exponent.cml`)
-
-```camel
-func main(): int sync {
-    println(1e-2, 15e-1, 1500e-2)
     return 0
 }
 ```
@@ -4060,7 +4780,22 @@ The tag '{0}' is written, but none of the passes it names ({1}) is in the pipeli
 A tag only allows a pass to do something; with no such pass in the pipeline the tag has no effect. Add the pass it names ('read_by'), or remove the tag.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/rules/reads_target.cml`, run as `camel test/cases/modules/rules/reads_target.cml reads_pass::apply std::nvm`)
+
+```camel
+module reads_target
+import { marked } from reads_pass
+
+#[marked]
+func f(x: int): int {
+    return x
+}
+
+func main(): int {
+    println(f(1))
+    return 0
+}
+```
 
 ## Run time and passes (`RuntimeDiag`)
 
@@ -4212,7 +4947,7 @@ Check for infinite recursion. A call in tail position takes no frame, so write a
 ```camel
 module depth_value
 
-import { get_env } from sys
+import { get_env } from env
 
 func via(f: (n: int) => int, n: int): int {
     return if n == 0 then 0 else 1 + f(n - 1)
@@ -4406,7 +5141,7 @@ Pass '{0}' failed with an internal error: {1}.
 The pass gave up without a diagnostic of its own: it built or was given a graph it cannot handle, which is a defect of the compiler rather than of the program. Try the pipeline without this pass or with the passes in another order, and report the program together with the pass list.
 ```
 
-**Example** (`test/cases/opt/generic/broken_graph.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 camel --output-format json test/cases/opt/generic/broken_graph.cml test::drop_call_argument std::fvm`)
+**Example** (`test/cases/opt/generic/broken_graph.cml`, run as `camel --output-format json test/cases/opt/generic/broken_graph.cml test::drop_call_argument std::fvm`)
 
 ```camel
 module broken_graph
@@ -4438,7 +5173,7 @@ func main(): int sync {
 **Help**
 
 ```text
-Every argument of this macro call is a constant, so std::macro evaluates it ahead of time, and a failed evaluation is a compile-time error. The program is rejected even if the call would never be reached at run time. Without std::macro in the pipeline the call runs with the program.
+Every argument of this macro call is a constant, so std::macro evaluates it ahead of time. A failed evaluation is a fault during the run of the pass, not a compile error: the program stops before it runs, and the output the evaluation produced before the failure stays. Without std::macro in the pipeline the call runs with the program.
 ```
 
 **Example** (`test/cases/compile/collections/refuse_grad.cml`, run as `camel test/cases/compile/collections/refuse_grad.cml std::macro`)
@@ -4568,7 +5303,7 @@ Out of memory{0}: {1}.
 The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values: it is bounded by the memory of the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the values the program keeps alive do not fit the limit.
 ```
 
-**Example** (`test/cases/loops/collection_oom.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 CAMEL_GC_HEAP_LIMIT_MB=16 camel test/cases/loops/collection_oom.cml test::loop_collect_summary ${backend}`)
+**Example** (`test/cases/loops/collection_oom.cml`, run as `CAMEL_GC_HEAP_LIMIT_MB=16 camel test/cases/loops/collection_oom.cml test::loop_collect_summary ${backend}`)
 
 ```camel
 // A collecting loop whose tapes outgrow the heap limit (CAMEL_GC_HEAP_LIMIT_MB): the failure is
@@ -4919,7 +5654,15 @@ Invalid pass specification '{0}': {1}.
 A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml unparsable_pass::run std::nvm`)
+
+```camel
+module tiny
+func main(): int sync {
+    println(21 * 2)
+    return 0
+}
+```
 
 ### GraphPassFailed
 
@@ -4963,7 +5706,7 @@ Pass '{0}' cannot take the program: some values of it have several writings.
 An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).
 ```
 
-**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 camel test/cases/feat/mm/writings/congruence.cml test::tabled std::opt::fold std::nvm`)
+**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::opt::fold std::nvm`)
 
 ```camel
 module congruence
@@ -4977,6 +5720,107 @@ func f(a: int, b: int): int {
 
 func main(): int sync {
     println(f(2, 3))
+    return 0
+}
+```
+
+### DeviceUnavailable
+
+`0x04000070` · Error · `RuntimeDiag::DeviceUnavailable`
+
+**Message**
+
+```text
+CUDA device {0} was named by --devices but is not available: {1}.
+```
+
+**Help**
+
+```text
+Name a device this machine has (--devices <ordinal>), or run on the host with --devices cpu. Without --devices a missing device is not an error: the program runs on the host.
+```
+
+**Example** (`test/cases/modules/tiles/gpu_fallback.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel --devices 63 test/cases/modules/tiles/gpu_fallback.cml std::nvm`)
+
+```camel
+module tiles_gpu_fallback
+import { gpu, available } from tiles
+@gpu
+func add(a: float, b: float): float { return a + b }
+@gpu
+func effect(x: float): float sync {
+    println("cpu effect")
+    return x + x
+}
+@gpu
+func nested(a: float, b: float): float { return add(a, b) * 2.0 }
+@gpu
+func pair(a: float, b: float): (float, float) { return (a + b, a * b) }
+func main(): int sync {
+    println(available())
+    println(add(2.0, 3.0))
+    println(effect(4.0))
+    let offset = 7.0
+    let captured = gpu((x: float): float => x + offset)
+    println(captured(3.0))
+    println(nested(2.0, 3.0))
+    let p = pair(2.0, 3.0)
+    println(p.0, p.1)
+    return 0
+}
+```
+
+### PassNotProvidedByModule
+
+`0x04000186` · Error · `RuntimeDiag::PassNotProvidedByModule`
+
+**Message**
+
+```text
+Module '{0}' provides no pass '{1}'; it provides {2}.
+```
+
+**Help**
+
+```text
+A pass of a module is one of its exported functions of type `(p: Program) => Program!`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
+```
+
+**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::nosuch std::nvm`)
+
+```camel
+module tiny
+func main(): int sync {
+    println(21 * 2)
+    return 0
+}
+```
+
+### PassNotExportedByModule
+
+`0x04000187` · Error · `RuntimeDiag::PassNotExportedByModule`
+
+**Message**
+
+```text
+Module '{0}' declares '{1}' but does not export it, so it cannot be named as a pass; it provides {2}.
+```
+
+**Help**
+
+```text
+Write `export func {1}(...)` in module {0}, or name a pass it exports. A pass is an exported function `(p: Program) => Program!`.
+```
+
+**Example** (`test/cases/modules/pass_not_found/main.cml`, run as `camel test/cases/modules/pass_not_found/main.cml declares_not_exported::run std::nvm`)
+
+```camel
+// A program to run a pass list against (H130). It imports nothing: the passes named on the
+// pipeline are the only modules the pipeline has to find.
+module main
+
+func main(): int sync {
+    println(42)
     return 0
 }
 ```

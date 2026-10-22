@@ -9,7 +9,7 @@ module resnet
 import { Tensor, relu, mean, flatten } from tensor
 import { grad, with_grad } from autodiff
 import { conv2d, sgd, save_params } from nn
-import { get_env } from sys
+import { get_env } from env
 import { export_model } from onnx
 import { now } from time
 import { weight, bench_input, run_benchmark, run_training, warm_count, step_count, log_step, log_final } from camel_bench

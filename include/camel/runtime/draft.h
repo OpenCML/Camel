@@ -92,12 +92,12 @@ struct DraftNodeHeader {
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
-    // The numeric permissions the program granted to the node with @numeric(...)
-    // (camel/core/operator_semantics.h, PermissionMask; design principles 7.5), 0 when none.
+    // The numeric permissions the program granted to the node with the standard permission
+    // tags (camel/core/operator_semantics.h, PermissionMask; design principles 7.5), 0 when none.
     // Graph content, not a derived fact: rewrites keep it as they keep the origin (a node that
     // replaces another inherits it, inlined and cloned nodes keep their own), and the encoder
     // writes it to the frozen graph's permission column (GCGraph::nodePermissions).
-    uint8_t permissions = 0;
+    camel::core::sem::PermissionMask permissions = 0;
     // The node's attributes (camel/core/node_attrs.h, AttrSetId), 0 when none. Graph content,
     // kept by rewrites like the permissions above; the encoder writes it to the frozen graph's
     // attribute column (GCGraph::nodeAttrs).
@@ -127,7 +127,7 @@ struct DraftNodeInit {
     GCNodeKind kind                   = GCNodeKind::Data;
     uint8_t runtimeFlags              = 0;
     uint64_t origin                   = 0;
-    uint8_t permissions               = 0; // see DraftNodeHeader::permissions
+    camel::core::sem::PermissionMask permissions = 0; // see DraftNodeHeader::permissions
     uint32_t attrs                    = 0; // see DraftNodeHeader::attrs
     uint32_t region                   = 0; // see DraftNodeHeader::region; 0 on a rewrite: kept
     std::span<const std::byte> payload{};
@@ -288,7 +288,7 @@ class GraphDraft {
         return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeSlotTypes_.size();
     }
     bool hasFrameLayout() const { return hasFrameLayout_; }
-    bool isMacroGraph() const { return funcType_ != nullptr && funcType_->modifiers().macro(); }
+    bool isMacroGraph() const { return (flags_ & kGraphFlagMacro) != 0; }
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
     bool empty() const { return liveNodeCount_ == 0; }
@@ -345,19 +345,27 @@ class GraphDraft {
 
     std::span<const slot_t> staticSlots() const { return staticSlots_; }
     std::span<camel::core::type::Type *const> staticSlotTypes() const { return staticSlotTypes_; }
-    /// Writes the relocated value of static slot `index`. A collection at a safepoint may move a
+/// Writes the relocated value of static slot `index`. A collection at a safepoint may move a
     /// value a draft holds; the graph's content does not change, so this is not an edit (it does
     /// not count a mutation or change what the draft refers to).
     void relocateStaticSlot(size_t index, slot_t value) {
         ASSERT(index < staticSlots_.size(), "Draft static slot index is out of range.");
         staticSlots_[index] = value;
     }
+    /// Relocates every value the static slots hold: what a rule condition (a safepoint) needs,
+    /// since the draft itself is not traced by the collector. Each slot is written back with
+    /// relocateStaticSlot, so a collection during the engine is not an edit.
+    void relocateStaticValues(const camel::core::rtdata::Object::RefRelocator &relocate);
     const std::vector<GraphId> &dependencies() const { return dependencies_; }
     const std::vector<GraphId> &subGraphs() const { return subGraphs_; }
     /// Forgets the graphs in `graphs` that no node calls any more (the graphs that held code now
     /// spliced into this one).
     void dropUncalledGraphs(std::span<const GraphId> graphs);
     const std::vector<GraphId> &staticGraphRefs() const { return staticGraphRefs_; }
+    /// The graphs a declaration tag of the graph's declaration names (a derivative rule): kept
+    /// in the reference table so that they are part of the program, and read back by the pass
+    /// that owns the tag.
+    const std::vector<GraphId> &ruleGraphs() const { return ruleGraphs_; }
 
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> normInputsOf(const DraftNode *node) const;
@@ -528,12 +536,6 @@ class GraphDraft {
     /// Ends the region `id` (unless `keepRegion`) and the regions inside it; nodes that are still
     /// in them go to the region around.
     void retireRegion(uint32_t id, bool keepRegion = false);
-    /// Gives each arm that is the call of a graph (the form the front end builds) its region, the
-    /// call alone in it.
-    void regionizeArmCalls();
-    /// True when `id` is the call of the graph that is an arm (GCRegion::callSite): the arm is
-    /// that call until lowerBranchArms inlines it.
-    bool isArmCall(gc_node_ref_t id) const;
     /// The region a node is put in when it is added without one (0: the body). The front end
     /// sets it to the arm it is writing; passes leave it alone.
     uint32_t insertRegion() const { return insertRegion_; }
@@ -556,6 +558,14 @@ class GraphDraft {
     void clearRegions();
     /// True when `inner` is `outer` or lies in it.
     bool regionWithin(uint32_t inner, uint32_t outer) const;
+    /// True when node `id` lies in a copy that was inlined from the function `callee` is a version
+    /// of (an Inline region around it says the body came from that graph, at any depth). The
+    /// inline source is the history the inliner reads: a call of a function inside an inlined copy
+    /// of that function is not inlined again, or the copy would contain a copy of itself (design
+    /// 9.4, the H44c inline history). A type specialization counts as a version of the function it
+    /// refines the types of; a value specialization (a fixed-length unrolling, different
+    /// constants) is a callee of its own.
+    bool inlinedCopyOf(gc_node_ref_t id, const GCGraph *callee) const;
     /// Source origin of node `id` (see DraftNodeHeader::origin).
     uint64_t nodeOrigin(gc_node_ref_t id) const;
     /// The origin of the first live node that has one, 0 when none has: where to report
@@ -563,8 +573,8 @@ class GraphDraft {
     uint64_t firstNodeOrigin() const;
     void setNodeOrigin(gc_node_ref_t id, uint64_t origin);
     /// Numeric permissions of node `id` (see DraftNodeHeader::permissions).
-    uint8_t nodePermissions(gc_node_ref_t id) const;
-    void setNodePermissions(gc_node_ref_t id, uint8_t permissions);
+    camel::core::sem::PermissionMask nodePermissions(gc_node_ref_t id) const;
+    void setNodePermissions(gc_node_ref_t id, camel::core::sem::PermissionMask permissions);
     /// Attributes of node `id` (camel/core/node_attrs.h; see DraftNodeHeader::attrs).
     uint32_t nodeAttrs(gc_node_ref_t id) const;
     void setNodeAttrs(gc_node_ref_t id, uint32_t attrs);
@@ -600,6 +610,7 @@ class GraphDraft {
     void addDependency(GraphId graph);
     void addSubGraph(GraphId graph);
     void addStaticGraphRef(GraphId graph);
+    void addRuleGraphRef(GraphId graph);
 
     GCGraph *encode(const std::string &mangledName, const std::string &name) const;
 
@@ -699,6 +710,8 @@ class GraphDraft {
     std::vector<GraphId> dependencies_;
     std::vector<GraphId> subGraphs_;
     std::vector<GraphId> staticGraphRefs_;
+    std::vector<GraphId> ruleGraphs_;
 };
 
 } // namespace camel::runtime
+

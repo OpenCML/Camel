@@ -505,15 +505,15 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
             : std::format("set by the growth_budget parameter of {}", report->passName);
     const std::string raise =
         report->passName.empty()
-            ? std::string("raise the budget by writing a larger growth_budget on the pass that "
-                          "inlines (std::opt or std::opt::inline)")
+            ? std::string(
+                  "raise the budget by writing a larger growth_budget on the pass that "
+                  "inlines (std::opt or std::opt::inline)")
             : std::format(
                   "raise the budget by writing a larger growth_budget on {} (for example "
                   "{}(growth_budget=8192))",
                   report->passName,
                   report->passName);
-    const std::string budget =
-        std::format("{} nodes, {}", report->growthBudget, source);
+    const std::string budget = std::format("{} nodes, {}", report->growthBudget, source);
     if (no && no->why == InlineDecline::GrowthBudget) {
         return std::format(
             "the inliner ran before onnx::export and left this call because its growth budget "
@@ -568,6 +568,15 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
                 name,
                 no->callSites,
                 no->calleeNodes);
+            break;
+        case InlineDecline::InlinedCopy:
+            why = std::format(
+                "the inliner ran before onnx::export and left this call because it lies in a "
+                "copy inlined from {} itself, where inlining it again would copy the function "
+                "into its own copy; the call is the recursion of that copy, and the export "
+                "reads it as the loop it is (write the call in the copy's own body without a "
+                "branch on runtime data if it must be unrolled instead)",
+                name);
             break;
         default:
             why = "the inliner ran before onnx::export and left this call";

@@ -121,9 +121,6 @@ void printScalar(std::ostream &os, slot_t data, const Type *type) {
     case TypeCode::Bool:
         os << (fromSlot<Bool>(data) ? "true" : "false");
         break;
-    case TypeCode::Byte:
-        os << "0x" << std::hex << static_cast<uint64_t>(data) << std::dec;
-        break;
     case TypeCode::Void:
         os << "null";
         break;

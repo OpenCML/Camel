@@ -1,0 +1,42 @@
+/**
+ * `#strict` (design principles 7.4) takes every numeric permission away, the default grants of
+ * 7.3 included. It does not forbid a rewrite that is exact bit for bit: under `safe_fp=true` the
+ * algebra stage may use "provably equivalent coefficient doubling" and may not use a permission
+ * to change the rounding path.
+ *
+ * So the strict functions below may keep `x*0.1 + x*0.1`, or let CSE merge the two products into
+ * `p` and then double `p` exactly with `float_add_self` (`x + x => x*2.0`, no permission: 7.4 and
+ * stdlib/rules.cml). They may not combine the two `0.1` coefficients into `0.2`: that changes the
+ * rounding path and needs `reassociate`. `tightPair` has two different coefficients, so no exact
+ * transformation exists and the sum must stay; the default policy still folds it into `x*0.4`.
+ */
+module strict_algebra
+
+func loose(x: float): float {
+    return x * 0.1 + x * 0.1
+}
+
+#strict
+func tight(x: float): float {
+    return x * 0.1 + x * 0.1
+}
+
+func tightBlock(x: float): float {
+    #strict {
+        return x * 0.1 + x * 0.1
+    }
+}
+
+func loosePair(x: float): float {
+    return x * 0.1 + x * 0.3
+}
+
+#strict
+func tightPair(x: float): float {
+    return x * 0.1 + x * 0.3
+}
+
+func main(): int sync {
+    println(loose(3.0), tight(3.0), tightBlock(3.0), loosePair(3.0), tightPair(3.0))
+    return 0
+}

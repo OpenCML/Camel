@@ -27,6 +27,7 @@
 #include "rewrite.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/core/tags.h"
 
 #include <algorithm>
 #include <map>
@@ -188,7 +189,7 @@ bool mayMerge(const GCGraph &graph) {
         std::vector<uint64_t> key{
             graph.nodeBodyAs<GCOperBody>(ref)->oper,
             (*it)->typeId,
-            graph.nodePermissions(ref)};
+            camel::core::tag::permissionsOf(graph, ref)};
         for (auto inputs : {graph.normInputsOf(ref), graph.withInputsOf(ref)}) {
             key.push_back(~uint64_t{0});
             for (gc_node_ref_t in : inputs) {

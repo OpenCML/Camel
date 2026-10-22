@@ -1,0 +1,35 @@
+/**
+ * The check of rules with a condition (H38): the samples cannot be used to compare the two sides,
+ * because the tool cannot ask a condition about sampled values, so a conditional rule is checked
+ * by firing it on its own left side: the rule must fire (the condition holds there) and the
+ * rewritten left side must agree with the original one.
+ */
+module check_when
+import { check } from rewrite
+import { Node, type_name, type_of } from graph
+
+func isIntNode(n: Node): bool {
+    return match type_of(n) {
+        case null => false
+        case t => type_name(t) == 'int'
+    }
+}
+
+func isFloatNode(n: Node): bool {
+    return match type_of(n) {
+        case null => false
+        case t => type_name(t) == 'float'
+    }
+}
+
+rule double_int(x: int) { x + x => x * 2 } when isIntNode(x)
+rule double_float(x: float) { x + x => x * 2.0 } when isFloatNode(x)
+
+/// The condition holds, but the two sides do not agree: the check must still say so.
+rule wrong_guard(x: int) { x + x => x } when isIntNode(x)
+
+func main(): int sync {
+    println(check([double_int, double_float], 100, 1))
+    println(check([wrong_guard], 100, 1))
+    return 0
+}

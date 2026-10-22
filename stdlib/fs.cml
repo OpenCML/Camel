@@ -1,0 +1,101 @@
+/**
+ * The file system: the content of a file, writing and atomically replacing it, the few questions
+ * about a path, and the two removals. Every operator of the module touches the file system, which
+ * the program cannot see from its arguments, so every one has an effect and a call runs only when
+ * it is reachable from a sync block; no pass folds or merges one. A declaration carries a
+ * signature, not an effect: the resource facts stay in the C++ module (`modules/fs`), where only
+ * C++ knows them.
+ */
+
+// The declarations of the operators of the C++ module `modules/fs` (design principles 6.4;
+// handover H19, step 10). This file is the one source of their signatures; the C++ side keeps the
+// kernels, the executor, the operator traits and the resources. A declaration names
+// `fs:<function>` by convention, so no `#op` tag is needed.
+
+module fs
+
+/// The whole content of the file.
+/// @effect reads a file
+/// @fails fault `FileOpenFailed` when the file cannot be opened; fault `InvalidArgument` for malformed UTF-8; use read_bytes for binary files
+/// @example read_text('notes.txt')    // the text of the file
+export func read_text(path: string): string
+
+/// The whole content of the file, or an error value.
+/// @effect reads a file
+/// @fails error `IOError` when the path is a directory, or the file cannot be opened or read; error `EncodingError` for malformed UTF-8
+/// @example try_read_text('notes.txt') !! ''    // the text, or '' when it cannot be read
+export func try_read_text(path: string): string!
+
+/// Up to size bytes of the file starting at byte offset; fewer at the end of the file.
+/// @effect reads a file
+/// @fails fault `InvalidArgument` when offset or size is negative; fault `FileOpenFailed` or `FileSystemError` when the file cannot be opened or read
+/// @example read_chunk('notes.txt', 0, 16)    // the first 16 bytes
+export func read_chunk(path: string, offset: int, size: int): Bytes
+
+/// The complete binary content, preserving every byte.
+/// @effect reads a file
+/// @example read_bytes('pixels.bin')
+export func read_bytes(path: string): Bytes
+
+/// Writes binary content, creating parent directories when needed.
+/// @effect writes a file
+/// @example write_bytes('pixels.bin', payload)
+export func write_bytes(path: string, content: Bytes): void
+
+/// Flushes a temporary in the same directory and atomically replaces the destination.
+/// @effect writes and replaces a file
+/// @example replace('checkpoint.bin', payload)
+export func replace(path: string, content: Bytes): void
+
+/// Replaces the content of the file, creating it and its parent directories when needed.
+/// @effect writes a file
+/// @fails fault `FileSystemError` when a directory cannot be created; fault `FileOpenFailed` when the file cannot be opened
+/// @example write_text('out/log.txt', 'done')
+export func write_text(path: string, content: string): void
+
+/// Whether something exists at the path.
+/// @effect reads the file system
+/// @example exists('notes.txt')    // true or false
+export func exists(path: string): bool
+
+/// Whether the path names a regular file.
+/// @effect reads the file system
+/// @example is_file('notes.txt')    // true or false
+export func is_file(path: string): bool
+
+/// Whether the path names a directory.
+/// @effect reads the file system
+/// @example is_dir('out')    // true or false
+export func is_dir(path: string): bool
+
+/// The size of the file in bytes.
+/// @effect reads the file system
+/// @fails fault `FileSystemError` when the size cannot be read (no such file)
+/// @example file_size('notes.txt')    // 1024
+export func file_size(path: string): int
+
+/// Creates one directory; false when it already exists.
+/// @effect changes the file system
+/// @fails fault `FileSystemError` when it cannot be created (no parent directory)
+/// @example mkdir('out')    // true
+export func mkdir(path: string): bool
+
+/// Creates a directory and every missing parent; false when it already exists.
+/// @effect changes the file system
+/// @fails fault `FileSystemError` when it cannot be created
+/// @example mkdirs('out/logs/today')    // true
+export func mkdirs(path: string): bool
+
+/// Removes a file or a symbolic link; a directory, even an empty one, is an error (use
+/// `remove_dir`). Removing a path that is not there is an error value, not a silent success.
+/// @effect removes a file
+/// @fails error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a directory or the removal fails for another reason
+/// @example remove('notes.txt')
+export func remove(path: string): void!
+
+/// Removes one empty directory. A directory that is not empty is an error, not a recursive
+/// delete; a file or a symbolic link is an error too.
+/// @effect removes a directory
+/// @fails error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a file, a symbolic link, or a directory that is not empty
+/// @example remove_dir('out/old')
+export func remove_dir(path: string): void!

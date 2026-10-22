@@ -22,6 +22,11 @@
 #include "camel/core/operator_semantics.h"
 #include "camel/core/tags.h"
 
+#include <cctype>
+#include <cstdint>
+#include <functional>
+#include <set>
+
 #include "camel/parse/syntax/lexer.h"
 #include "camel/parse/syntax/parser.h"
 #include "camel/parse/syntax/report.h"
@@ -29,6 +34,7 @@
 #include "camel/utils/scope.h"
 #include "camel/utils/token.h"
 #include "camel/utils/type.h"
+#include "camel/utils/utf8.h"
 
 #define DEBUG_LEVEL -1
 
@@ -290,11 +296,77 @@ void Builder::popNamespace(size_t previousSize) {
 /*
 program : SEP? (decl SEP?)* EOF;
 */
+void Builder::collectProgramPermissionGroups(cst::Program program) {
+    // The names and members of the groups this program declares (`tag fast = [reassociate,
+    // contract]`). Only the module's own, top-level declarations: a requirement is read while
+    // the rule that carries it is parsed, before the GCT builder registers anything.
+    std::map<std::string, std::vector<std::string>> groups;
+    for (const syn::Node &decl : program->nodes()) {
+        if (!decl.is(NK::TagDecl)) {
+            continue;
+        }
+        const cst::TagDecl tag(decl);
+        const auto name = tag->get<cst::IdentDef>();
+        if (!name) {
+            continue;
+        }
+        std::vector<std::string> members;
+        if (const auto group = tag->get<cst::BracketIdents>()) {
+            if (const auto list = group->get<cst::IdentList>()) {
+                for (const auto ident : list->all<cst::IdentDef>()) {
+                    members.emplace_back(ident->text());
+                }
+            }
+        }
+        if (!members.empty()) {
+            groups.emplace(name->text(), std::move(members));
+        }
+    }
+    std::function<camel::core::sem::PermissionMask(const std::string &, std::set<std::string> &)>
+        expand = [&](const std::string &name,
+                     std::set<std::string> &visiting) -> camel::core::sem::PermissionMask {
+        // A core permission (including `finite_math` and its members) grants itself; a group
+        // grants what its members grant. A cycle grants nothing and is not followed.
+        if (const auto permission = camel::core::sem::parsePermission(name)) {
+            return *permission;
+        }
+        const auto it = groups.find(name);
+        if (it == groups.end() || !visiting.insert(name).second) {
+            return 0;
+        }
+        camel::core::sem::PermissionMask mask = 0;
+        for (const std::string &member : it->second) {
+            mask |= expand(member, visiting);
+        }
+        return mask;
+    };
+    for (const auto &[name, members] : groups) {
+        std::set<std::string> visiting;
+        programPermissions_[name] = expand(name, visiting);
+    }
+}
+
+camel::core::sem::PermissionMask Builder::programPermissionOf(std::string_view name) const {
+    if (const auto it = programPermissions_.find(std::string(name)); it != programPermissions_.end()) {
+        return it->second;
+    }
+    // A qualified requirement written for a group of this module (`m::fast`).
+    if (const size_t sep = name.rfind("::"); sep != std::string_view::npos) {
+        if (const auto it = programPermissions_.find(std::string(name.substr(sep + 2)));
+            it != programPermissions_.end()) {
+            return it->second;
+        }
+    }
+    return 0;
+}
+
 Value Builder::visitProgram(cst::Program context) {
     ENTER("Program");
     g_sourceContext = sourceContext_;
     g_sourceFileId  = sourceFileId_;
     const ArenaScope arena;
+
+    collectProgramPermissionGroups(context);
 
     root_ = std::make_shared<Node>(module_);
 
@@ -367,6 +439,8 @@ Value Builder::visitDecl(syn::Node context) {
         return visitTagDecl(cst::TagDecl(context));
     case NK::RuleDecl:
         return visitRuleDecl(cst::RuleDecl(context));
+    case NK::AnalysisDecl:
+        return visitAnalysisDecl(cst::AnalysisDecl(context));
     default:
         return Value();
     }
@@ -529,14 +603,12 @@ Value Builder::visitBlockStmt(cst::BlockStmt context) {
     if (context->tok(TK::KwWait)) {
         unwrapNodeAs<StmtBlockLoad>(res)->wait();
     }
-    // `@numeric(...)` before a block grants its permissions to the block (design principles
-    // 7.5). A decorator before a block decorates the block as a function of no parameters
-    // called where it is written (language reference 7.6): the decorators are the block's second
-    // child.
+    // A decorator before a block decorates the block as a function of no parameters called where
+    // it is written (language reference 7.6): the decorators are the block's second child. The
+    // removed `@name(args)` spelling is reported here and grants nothing.
     node_ptr_t decorators = nullptr;
     for (const auto &anno : context->all<cst::FuncAnno>()) {
-        if (const auto permissions = numericAnnotationOf(anno)) {
-            unwrapNodeAs<StmtBlockLoad>(res)->grantNumeric(*permissions);
+        if (rejectParenthesizedName(anno) || rejectVjpAnnotation(anno)) {
             continue;
         }
         if (!decorators) {
@@ -611,17 +683,8 @@ Value Builder::visitFuncData(cst::FuncData context) {
     auto modifier = context->get<cst::Modifiers>();
     ModifierSet modSet;
     if (modifier) {
-        if (modifier->tokCount(TK::KwAtomic) > 0) {
-            modSet.insert(Modifier::Atomic);
-        }
-        if (modifier->tokCount(TK::KwShared) > 0) {
-            modSet.insert(Modifier::Shared);
-        }
         if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
-        }
-        if (modifier->tokCount(TK::KwMacro) > 0) {
-            modSet.insert(Modifier::Macro);
         }
     }
     funcType->setModifiers(modSet);
@@ -697,47 +760,39 @@ Value Builder::visitFuncData(cst::FuncData context) {
 
 /*
 funcAnno   : '@' identRef (angledValues | parentIdents)? ;
-`@numeric(name, ...)`: the numeric permissions the program grants (design principles 7.5).
+A decorator (`@name`, `@name<args>`). Names in parentheses are the removed `@numeric(...)`
+spelling: it is reported here, where it is written, and names the tag form that replaced it.
 */
-std::optional<uint8_t> Builder::numericAnnotationOf(cst::FuncAnno context) {
-    const auto names = context->get<cst::ParentIdents>();
-    if (!names) {
-        return std::nullopt;
+bool Builder::rejectParenthesizedName(cst::FuncAnno context) {
+    if (!context->get<cst::ParentIdents>()) {
+        return false;
     }
     const std::string annotation = context->get<cst::IdentRef>()->text();
-    auto reject                  = [&](const std::string &why) {
-        diags_->of(SemanticDiag::InvalidAnnotation)
-            .at(rangeOf(context->firstToken(), context->lastToken()))
-            .commit(annotation, why);
-    };
-    if (annotation != "numeric") {
-        reject(
-            "the only annotation that takes names in parentheses is '@numeric(...)'; a tag is "
-            "written '#name' or '#name<args>' (or '#[a, b]'), never '@name(args)'");
-        return uint8_t{0};
+    const std::string why =
+        annotation == "numeric"
+            ? "the numeric permissions are tags now: write '#[reassociate]' (or "
+              "'#[reassociate, contract]', '#[finite_math]', ...) before the function or the "
+              "block"
+            : "an annotation takes '<...>' arguments, not '(...)'; a tag is written '#name', "
+              "'#name<args>' or '#[a, b]'";
+    diags_->of(SemanticDiag::InvalidAnnotation)
+        .at(rangeOf(context->firstToken(), context->lastToken()))
+        .commit(annotation, why);
+    return true;
+}
+
+bool Builder::rejectVjpAnnotation(cst::FuncAnno context) {
+    const std::string annotation = context->get<cst::IdentRef>()->text();
+    if (annotation != "vjp") {
+        return false;
     }
-    uint8_t granted = 0;
-    const auto list = names->get<cst::IdentList>();
-    if (!list) {
-        reject(
-            "it names no permission; write one or more of reassociate, contract, "
-            "approx_math, change_precision, finite_math, no_nans, no_infs, "
-            "no_signed_zeros, flush_subnormals");
-        return uint8_t{0};
-    }
-    for (const auto &ident : list->all<cst::IdentDef>()) {
-        const std::string name(ident->text());
-        if (const auto permission = camel::core::sem::parsePermission(name)) {
-            granted |= *permission;
-        } else {
-            reject(
-                "'" + name +
-                "' is not a permission; the permissions are reassociate, contract, "
-                "approx_math, change_precision, finite_math (no_nans, no_infs, "
-                "no_signed_zeros, flush_subnormals)");
-        }
-    }
-    return granted;
+    diags_->of(SemanticDiag::InvalidAnnotation)
+        .at(rangeOf(context->firstToken(), context->lastToken()))
+        .commit(
+            annotation,
+            "a custom derivative rule is a declaration tag now: write '#vjp<rule>' before the "
+            "function (design principles 6.2, 8)");
+    return true;
 }
 
 Value Builder::visitFuncAnno(cst::FuncAnno context) {
@@ -767,7 +822,7 @@ Value Builder::visitFuncAnno(cst::FuncAnno context) {
 funcDecl   :
         funcAnno*
         (WITH angledParams)?
-        EXPORT? implMark? modifiers?
+        EXPORT? modifiers?
         FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
 */
 /*
@@ -804,12 +859,8 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const auto sides  = body->exprs();
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();
-    if (context->expr()) {
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->expr().firstToken()))
-            .commit("when", "the condition of a rule is not implemented");
-    }
-    int64_t consts = 0;
+    const auto when   = context->expr();
+    int64_t consts    = 0;
     if (const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams()) {
         int bit = 0;
         for (const auto pair : paired->all<cst::KeyParamPair>()) {
@@ -817,6 +868,94 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                 consts |= int64_t{1} << bit;
             }
             ++bit;
+        }
+    }
+
+    // `#requires<...>`: the numeric permissions the rule needs (design principles 7.2). The
+    // arguments are the names of the standard permission tags, not values: a permission tag is
+    // a compile-time fact, so the requirement is checked here, when the rule is compiled, and
+    // an argument that names no permission is a located diagnostic rather than a silent pass.
+    // The mask is handed to `__rule`, which the rewrite engines compare with the policy (a rule
+    // whose requirement is not met is not applied).
+    camel::core::sem::PermissionMask needs = 0;
+    for (const auto use : context->all<cst::TagUse>()) {
+        for (const auto tagRef : use->all<cst::TagRef>()) {
+            const auto ident = tagRef->get<cst::IdentRef>();
+            const std::string written(ident->text());
+            if (written != "requires") {
+                diags_->of(SemanticDiag::RuleTagNotRequires)
+                    .at(rangeOf(ident->firstToken(), ident->lastToken()))
+                    .commit(written);
+                continue;
+            }
+            const syn::TokenBuffer &tokens = context.tree()->tokens();
+            const size_t begin             = tagRef->firstToken().index();
+            const size_t end               = tagRef->lastToken().index();
+            size_t argCount                = 0;
+            const auto resolve             = [&](size_t first, size_t last) {
+                while (first <= last && syn::isTrivia(tokens[first].kind)) {
+                    ++first;
+                }
+                while (last >= first && last != SIZE_MAX && syn::isTrivia(tokens[last].kind)) {
+                    --last;
+                }
+                if (first > last || last == SIZE_MAX) {
+                    return;
+                }
+                ++argCount;
+                std::string name;
+                for (size_t i = first; i <= last; ++i) {
+                    if (!syn::isTrivia(tokens[i].kind)) {
+                        name += tokens.text(i);
+                    }
+                }
+                camel::core::sem::PermissionMask permission =
+                    camel::core::tag::permissionOfName(name);
+                if (permission == 0) {
+                    // A group this program declares (`tag fast = [reassociate, contract]`):
+                    // its declaration is not in the core's registry, so it is expanded here.
+                    permission = programPermissionOf(name);
+                }
+                if (permission != 0) {
+                    needs = static_cast<camel::core::sem::PermissionMask>(needs | permission);
+                    return;
+                }
+                const auto at =
+                    rangeOf(syn::TokenRef(context.tree(), first), syn::TokenRef(context.tree(), last));
+                // `#requires` names the core's permission tags; a name that is not one (a typo,
+                // or a tag of the program that grants no permission) is reported here, at the
+                // argument, with the list of the permissions that can be named.
+                diags_->of(SemanticDiag::TagNotAPermission).at(at).commit(name);
+            };
+            bool inAngles = false;
+            size_t argFrom = 0;
+            for (size_t i = begin; i <= end; ++i) {
+                if (syn::isTrivia(tokens[i].kind)) {
+                    continue;
+                }
+                const std::string_view text = tokens.text(i);
+                if (!inAngles) {
+                    if (text == "<") {
+                        inAngles = true;
+                        argFrom  = i + 1;
+                    }
+                    continue;
+                }
+                if (text == ">") {
+                    resolve(argFrom, i == 0 ? 0 : i - 1);
+                    inAngles = false;
+                } else if (text == ",") {
+                    resolve(argFrom, i == 0 ? 0 : i - 1);
+                    argFrom = i + 1;
+                }
+            }
+            if (!inAngles && argCount == 0) {
+                // `#requires` without any `<...>` argument requires nothing, which is never
+                // what was meant, so say how many arguments the form takes.
+                diags_->of(SemanticDiag::TagArgumentCount)
+                    .at(rangeOf(tagRef->firstToken(), tagRef->lastToken()))
+                    .commit("requires", "1", "0");
+            }
         }
     }
 
@@ -857,6 +996,58 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     node_ptr_t lhsFunc = side("__lhs", sides[0]);
     node_ptr_t rhsFunc = side("__rhs", sides[1]);
 
+    // A condition is a fourth function of the same parameters, as nodes of the draft being
+    // rewritten: `func name__when(params as graph::Node) => expr`.
+    node_ptr_t whenFunc;
+    if (when) {
+        if (!whenImportAdded_) {
+            whenImportAdded_   = true;
+            auto rewriteImport = std::make_shared<ImportLoad>();
+            rewriteImport->setTokenRange(extractTokenRangeFromContext(context));
+            rewriteImport->setPath("rewrite");
+            rewriteImport->setRefs({Reference("__rule_when")});
+            imports_.push_back(rewriteImport);
+            auto graphImport = std::make_shared<ImportLoad>();
+            graphImport->setTokenRange(extractTokenRangeFromContext(context));
+            graphImport->setPath("graph");
+            graphImport->setRefs({Reference("Node")});
+            imports_.push_back(graphImport);
+        }
+        const Reference whenRef = qualifyRef(Reference(name + "__when"));
+        node_ptr_t whenParams   = createNodeAs<RepeatedLoad>("NamedPair");
+        setNodeTokenRangeByContext(whenParams, context);
+        if (params) {
+            if (const auto paired = params->get<cst::PairedParams>()) {
+                for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                    node_ptr_t named = createNodeAs<NamedPairLoad>(
+                        Reference(std::string(pair->get<cst::IdentDef>()->text())),
+                        false,
+                        false);
+                    setNodeTokenRangeByContext(named, pair);
+                    node_ptr_t nodeType = createNodeAs<RefTypeLoad>(Reference("Node"));
+                    setNodeTokenRangeByContext(nodeType, pair);
+                    *named << nodeType << createNodeAs<OptionalLoad>("DataExpr");
+                    *whenParams << named;
+                }
+            }
+        }
+        node_ptr_t whenType = createNodeAs<FuncTypeLoad>();
+        setNodeTokenRangeByContext(whenType, when);
+        *whenType << createNodeAs<RepeatedLoad>("NamedPair");
+        *whenType << whenParams;
+        node_ptr_t whenResult = createNodeAs<OptionalLoad>("Type");
+        node_ptr_t boolType   = createNodeAs<RefTypeLoad>(Reference("bool"));
+        setNodeTokenRangeByContext(boolType, when);
+        *whenResult << boolType;
+        *whenType << whenResult;
+        node_ptr_t whenData = createNodeAs<FuncDataLoad>(whenRef);
+        setNodeTokenRangeByContext(whenData, when);
+        *whenData << whenType << any2node(visitBlockExpr(when));
+        whenFunc = createNodeAs<FuncDeclLoad>(whenRef);
+        setNodeTokenRangeByContext(whenFunc, when);
+        *whenFunc << whenData;
+    }
+
     // func name() => __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
     const auto literal = [&](LiteralType type, const std::string &text) {
         node_ptr_t literalNode = createNodeAs<LiteralLoad>(Literal(type, text));
@@ -872,13 +1063,18 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     setNodeTokenRangeByContext(args, context);
     *args << literal(LiteralType::String, name);
     *args << literal(LiteralType::Boolean, twoWay ? "true" : "false");
-    *args << literal(LiteralType::Integer, "0"); // the numeric permissions: tags, not yet
+    *args << literal(LiteralType::Integer, std::to_string(needs));
     *args << literal(LiteralType::Integer, std::to_string(consts));
     *args << reference(name + "__lhs");
     *args << reference(name + "__rhs");
+    std::string makerName = "__rule";
+    if (whenFunc) {
+        *args << reference(name + "__when");
+        makerName = "__rule_when";
+    }
     node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
     setNodeTokenRangeByContext(call, context);
-    *call << reference("__rule") << args << createNodeAs<RepeatedLoad>("NamedData");
+    *call << reference(makerName) << args << createNodeAs<RepeatedLoad>("NamedData");
 
     node_ptr_t exprStmt = createNodeAs<ExprStmtLoad>();
     setNodeTokenRangeByContext(exprStmt, context);
@@ -892,7 +1088,8 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
 
     node_ptr_t makerType = createNodeAs<FuncTypeLoad>();
     setNodeTokenRangeByContext(makerType, context);
-    *makerType << createNodeAs<RepeatedLoad>("NamedPair") << createNodeAs<RepeatedLoad>("NamedPair");
+    *makerType << createNodeAs<RepeatedLoad>("NamedPair")
+               << createNodeAs<RepeatedLoad>("NamedPair");
     node_ptr_t makerTypeOpt = createNodeAs<OptionalLoad>("Type");
     setNodeTokenRangeByContext(makerTypeOpt, context);
     *makerType << makerTypeOpt;
@@ -905,11 +1102,342 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     setNodeTokenRangeByContext(makerDecl, context);
 
     LEAVE("RuleDecl");
-    return std::vector<node_ptr_t>{lhsFunc, rhsFunc, makerDecl};
+    std::vector<node_ptr_t> declarations{lhsFunc, rhsFunc};
+    if (whenFunc) {
+        declarations.push_back(whenFunc);
+    }
+    declarations.push_back(makerDecl);
+    return declarations;
 }
 
 /*
-tagDecl : ('export')? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+analysisDecl : frontMatter? 'export'? 'analysis' identDef parentParams? ':' typeExpr
+               '{' analysisClause* '}'
+analysisClause : 'initial' '=>' dataExpr
+               | ('join' | 'widen') '(' identList? ')' '=>' dataExpr
+               | 'on' '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
+
+An analysis is compiled to plain functions and one call of `__analysis`:
+
+    func range__initial() => 0.0
+    func range__join(a, b) => max(a, b)
+    func range__widen(a, b) => ...                  (join when omitted)
+    func range__on0(x: int, y: int) => x + y        (the pattern; never run)
+    func range__on0_fact(x: graph::Node, y: graph::Node) => range(x) + range(y)
+    func range(n: graph::Node): T => __analysis('range', range__initial, range__join,
+        range__widen, n, range__on0, range__on0_fact, constMask, ...)
+
+The pattern function carries the shape the matcher reads: its parameters are the pattern
+variables (typed `int` unless the clause declares a `const c: T`), and its body is the operator
+expression. The fact function takes the matched nodes (or the values of `const` parameters) and
+computes the fact. `__analysis` is an operator of the module `rewrite`, imported here.
+
+A declaration with parameters (`analysis pair(a: Node, b: Node): bool`) is a multi-parameter
+query: the parameters are the pattern variables a rule's condition hands it (`pair(x, y)`), and
+`__analysis` receives one node per parameter instead of the single queried value. The engine
+reads the fact of the value those parts belong to; the declaration without parameters keeps the
+one-value form (`range(n)`).
+*/
+Value Builder::visitAnalysisDecl(cst::AnalysisDecl context) {
+    ENTER("AnalysisDecl");
+    if (!analysisImportAdded_) {
+        analysisImportAdded_ = true;
+        auto rewriteImport     = std::make_shared<ImportLoad>();
+        rewriteImport->setTokenRange(extractTokenRangeFromContext(context));
+        rewriteImport->setPath("rewrite");
+        rewriteImport->setRefs({Reference("__analysis")});
+        imports_.push_back(rewriteImport);
+        auto graphImport = std::make_shared<ImportLoad>();
+        graphImport->setTokenRange(extractTokenRangeFromContext(context));
+        graphImport->setPath("graph");
+        graphImport->setRefs({Reference("Node")});
+        imports_.push_back(graphImport);
+    }
+
+    const std::string name = std::string(context->get<cst::IdentDef>()->text());
+    const Reference ref    = qualifyRef(Reference(name));
+    if (context->has(TK::KwExport)) {
+        export_->addRef(ref);
+    }
+    const auto typeExprs = context->types();
+    if (typeExprs.size() != 1) {
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(rangeOf(context->firstToken()))
+            .commit("analysis", "an analysis declaration needs the type of its fact");
+        LEAVE("AnalysisDecl");
+        return Value();
+    }
+    const syn::Node factType = typeExprs[0];
+    const auto clauseNodes   = context->all<cst::AnalysisClause>();
+
+    // The expressions of the three fixed clauses; a `widen` that is absent is a `join`.
+    syn::Node initialExpr, joinExpr, widenExpr;
+    std::vector<std::string> joinParams, widenParams;
+    struct OnClause {
+        syn::Node pattern;
+        syn::Node rhs;
+        std::string constName;
+        syn::Node constType;
+    };
+    std::vector<OnClause> onClauses;
+    for (const auto clause : clauseNodes) {
+        const std::string keyword = clause->tok(TK::Identifier).text();
+        const auto exprs          = clause->exprs();
+        if (keyword == "initial") {
+            if (!exprs.empty()) {
+                initialExpr = exprs[0];
+            }
+        } else if (keyword == "join" || keyword == "widen") {
+            const auto idents = clause->get<cst::IdentList>();
+            std::vector<std::string> names;
+            if (idents) {
+                for (const auto ident : idents->all<cst::IdentDef>()) {
+                    names.push_back(std::string(ident->text()));
+                }
+            }
+            syn::Node body = exprs.empty() ? syn::Node() : exprs[0];
+            if (keyword == "join") {
+                joinExpr   = body;
+                joinParams = names;
+            } else {
+                widenExpr   = body;
+                widenParams = names;
+            }
+        } else if (keyword == "on") {
+            OnClause on;
+            const auto types = clause->types();
+            if (types.size() == 1 && exprs.size() == 1) {
+                on.constName = std::string(clause->get<cst::IdentDef>()->text());
+                on.constType = types[0];
+                on.pattern   = syn::Node();
+                on.rhs       = exprs[0];
+            } else if (exprs.size() == 2) {
+                on.pattern = exprs[0];
+                on.rhs     = exprs[1];
+            } else {
+                continue;
+            }
+            onClauses.push_back(std::move(on));
+        }
+    }
+    if (!initialExpr || !joinExpr) {
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(rangeOf(context->firstToken()))
+            .commit("analysis", "an analysis needs `initial` and `join`");
+        LEAVE("AnalysisDecl");
+        return Value();
+    }
+
+    // The names bound by the pattern of an `on` clause, in the order the pattern function
+    // declares them. A bare reference is a variable; the callee of a call is not (`abs(x)`
+    // binds x, not abs), and a qualified name belongs to a module.
+    const std::function<void(syn::Node, std::vector<std::string> &)> collectVars =
+        [&](syn::Node node, std::vector<std::string> &out) {
+            if (!node || node.empty()) {
+                return;
+            }
+            if (node.kind() == NK::RefData) {
+                const std::string text = std::string(node.text());
+                if (text.find("::") == std::string::npos &&
+                    std::find(out.begin(), out.end(), text) == out.end()) {
+                    out.push_back(text);
+                }
+                return;
+            }
+            if (node.kind() == NK::AnnoExpr && node->get<cst::ParentArgues>()) {
+                for (size_t i = 1; i < node->childCount(); ++i) {
+                    collectVars(node->child(i).node(), out);
+                }
+                return;
+            }
+            for (size_t i = 0; i < node->childCount(); ++i) {
+                collectVars(node->child(i).node(), out);
+            }
+        };
+
+    const auto makeFunc = [&](const std::string &fname,
+                              const std::vector<std::pair<std::string, node_ptr_t>> &params,
+                              node_ptr_t retType,
+                              node_ptr_t body) -> node_ptr_t {
+        const Reference fnRef = qualifyRef(Reference(fname));
+        node_ptr_t funcType   = createNodeAs<FuncTypeLoad>();
+        setNodeTokenRangeByContext(funcType, context);
+        *funcType << createNodeAs<RepeatedLoad>("NamedPair");
+        node_ptr_t normParams = createNodeAs<RepeatedLoad>("NamedPair");
+        for (const auto &[pname, ptype] : params) {
+            node_ptr_t named = createNodeAs<NamedPairLoad>(Reference(pname), false, false);
+            setNodeTokenRangeByContext(named, context);
+            *named << ptype << createNodeAs<OptionalLoad>("DataExpr");
+            *normParams << named;
+        }
+        *funcType << normParams;
+        node_ptr_t returnType = createNodeAs<OptionalLoad>("Type");
+        setNodeTokenRangeByContext(returnType, context);
+        *returnType << retType;
+        *funcType << returnType;
+        node_ptr_t funcData = createNodeAs<FuncDataLoad>(fnRef);
+        setNodeTokenRangeByContext(funcData, context);
+        *funcData << funcType << body;
+        node_ptr_t decl = createNodeAs<FuncDeclLoad>(fnRef);
+        setNodeTokenRangeByContext(decl, context);
+        *decl << funcData;
+        return decl;
+    };
+    const auto typeOf = [&](syn::Node node) { return any2node(visitType(node)); };
+    const auto refType = [&](const std::string &typeName) {
+        node_ptr_t node = createNodeAs<RefTypeLoad>(Reference(typeName));
+        setNodeTokenRangeByContext(node, context);
+        return node;
+    };
+
+    std::vector<node_ptr_t> declarations;
+    declarations.push_back(
+        makeFunc(name + "__initial", {}, typeOf(factType), any2node(visitBlockExpr(initialExpr))));
+    std::vector<std::pair<std::string, node_ptr_t>> joinParamsDecl;
+    for (size_t i = 0; i < 2; ++i) {
+        joinParamsDecl.emplace_back(
+            i < joinParams.size() ? joinParams[i] : "a" + std::to_string(i), typeOf(factType));
+    }
+    declarations.push_back(
+        makeFunc(name + "__join", joinParamsDecl, typeOf(factType), any2node(visitBlockExpr(joinExpr))));
+    if (widenExpr) {
+        std::vector<std::pair<std::string, node_ptr_t>> widenParamsDecl;
+        for (size_t i = 0; i < 2; ++i) {
+            widenParamsDecl.emplace_back(
+                i < widenParams.size() ? widenParams[i] : "a" + std::to_string(i),
+                typeOf(factType));
+        }
+        declarations.push_back(
+            makeFunc(name + "__widen", widenParamsDecl, typeOf(factType), any2node(visitBlockExpr(widenExpr))));
+    }
+
+    // The `on` clauses: the pattern function and the function that computes the fact.
+    struct CompiledOn {
+        std::string patternFn;
+        std::string factFn;
+        uint64_t constMask = 0;
+    };
+    std::vector<CompiledOn> compiled;
+    const auto nodeType = [&]() { return refType("Node"); };
+    for (size_t index = 0; index < onClauses.size(); ++index) {
+        const OnClause &on = onClauses[index];
+        const std::string prefix = name + "__on" + std::to_string(index);
+        std::vector<std::string> vars;
+        if (!on.constName.empty()) {
+            vars.push_back(on.constName);
+        } else {
+            collectVars(on.pattern, vars);
+        }
+        if (vars.empty()) {
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(rangeOf(context->firstToken()))
+                .commit("analysis", "an `on` pattern names no variable");
+            continue;
+        }
+        std::vector<std::pair<std::string, node_ptr_t>> patternParams;
+        std::vector<std::pair<std::string, node_ptr_t>> factParams;
+        uint64_t mask = 0;
+        for (size_t i = 0; i < vars.size(); ++i) {
+            if (i == 0 && !on.constName.empty()) {
+                patternParams.emplace_back(vars[i], typeOf(on.constType));
+                factParams.emplace_back(vars[i], typeOf(on.constType));
+                mask |= uint64_t{1} << i;
+            } else {
+                patternParams.emplace_back(vars[i], refType("int"));
+                factParams.emplace_back(vars[i], nodeType());
+            }
+        }
+        node_ptr_t patternBody;
+        if (!on.constName.empty()) {
+            // The `const` clause matches any constant of the type and binds its value: the
+            // pattern is the parameter itself, so the matcher binds the node and the fact
+            // function receives the value (the body of the clause is the fact).
+            node_ptr_t patternRef = createNodeAs<RefDataLoad>(Reference(on.constName));
+            setNodeTokenRangeByContext(patternRef, context);
+            node_ptr_t stmt = createNodeAs<ExprStmtLoad>();
+            setNodeTokenRangeByContext(stmt, context);
+            *stmt << patternRef;
+            node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
+            setNodeTokenRangeByContext(stmts, context);
+            *stmts << stmt;
+            patternBody = createNodeAs<StmtBlockLoad>();
+            setNodeTokenRangeByContext(patternBody, context);
+            *patternBody << stmts;
+        } else {
+            patternBody = any2node(visitBlockExpr(on.pattern));
+        }
+        declarations.push_back(makeFunc(
+            prefix,
+            patternParams,
+            on.constName.empty() ? refType("int") : typeOf(on.constType),
+            patternBody));
+        declarations.push_back(
+            makeFunc(prefix + "_fact", factParams, typeOf(factType), any2node(visitBlockExpr(on.rhs))));
+        compiled.push_back({prefix, prefix + "_fact", mask});
+    }
+
+    // The query function: `func name(a: Node, b: Node): T => __analysis(...)`. Its parameters
+    // are the pattern variables a rule's condition hands it; without a parameter list the query
+    // takes the value itself (`range(n)`), as it always has.
+    std::vector<std::pair<std::string, node_ptr_t>> queryParams;
+    std::vector<std::string> queryArgs;
+    if (const auto params = context->get<cst::ParentParams>()) {
+        if (const auto paired = params->get<cst::PairedParams>()) {
+            for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                const std::string pname(pair->get<cst::IdentDef>()->text());
+                node_ptr_t ptype = pair->type() ? typeOf(pair->type()) : refType("Node");
+                queryParams.emplace_back(pname, ptype);
+                queryArgs.push_back(pname);
+            }
+        }
+    }
+    if (queryParams.empty()) {
+        queryParams.emplace_back("n", refType("Node"));
+        queryArgs.push_back("n");
+    }
+    node_ptr_t args = createNodeAs<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(args, context);
+    const auto literal = [&](LiteralType type, const std::string &text) {
+        node_ptr_t node = createNodeAs<LiteralLoad>(Literal(type, text));
+        setNodeTokenRangeByContext(node, context);
+        return node;
+    };
+    const auto reference = [&](const std::string &text) {
+        node_ptr_t node = createNodeAs<RefDataLoad>(Reference(text));
+        setNodeTokenRangeByContext(node, context);
+        return node;
+    };
+    *args << literal(LiteralType::String, name);
+    *args << reference(name + "__initial");
+    *args << reference(name + "__join");
+    *args << reference(widenExpr ? name + "__widen" : name + "__join");
+    for (const std::string &arg : queryArgs) {
+        *args << reference(arg);
+    }
+    for (const CompiledOn &on : compiled) {
+        *args << reference(on.patternFn);
+        *args << reference(on.factFn);
+        *args << literal(LiteralType::Integer, std::to_string(on.constMask));
+    }
+    node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
+    setNodeTokenRangeByContext(call, context);
+    *call << reference("__analysis") << args << createNodeAs<RepeatedLoad>("NamedData");
+    node_ptr_t exprStmt = createNodeAs<ExprStmtLoad>();
+    setNodeTokenRangeByContext(exprStmt, context);
+    *exprStmt << call;
+    node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
+    setNodeTokenRangeByContext(stmts, context);
+    *stmts << exprStmt;
+    node_ptr_t block = createNodeAs<StmtBlockLoad>();
+    setNodeTokenRangeByContext(block, context);
+    *block << stmts;
+    declarations.push_back(makeFunc(name, queryParams, typeOf(factType), block));
+
+    LEAVE("AnalysisDecl");
+    return declarations;
+}
+
+/*
         | ('export')? 'tag' identDef '=' bracketIdents ;
 A tag is a name in the namespace of functions and types (design principles 6.2). The AST keeps
 the positions as a bit set (TagPosition), the parameters as written, the members of a group and
@@ -995,6 +1523,46 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
         node_ptr_t use  = createNodeAs<TagUseLoad>(name);
         setNodeTokenRangeByContext(use, ref);
         if (const auto values = ref->get<cst::AngledValues>()) {
+            // A tag whose arguments are names, not values (`#reads<reassociate, contract>`):
+            // each argument is the name as written, carried as a string constant. Whether the
+            // name is a tag is the GIR builder's question; here it is only text.
+            const auto id = camel::core::tag::find(name.toString());
+            const camel::core::tag::Decl *decl =
+                id.has_value() ? camel::core::tag::get(*id) : nullptr;
+            if (decl != nullptr && decl->names) {
+                node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
+                setNodeTokenRangeByContext(dataList, values);
+                const syn::TokenBuffer &tokens = context.tree()->tokens();
+                std::string current;
+                const auto flush = [&]() {
+                    if (!current.empty()) {
+                        node_ptr_t literalNode =
+                            createNodeAs<LiteralLoad>(Literal(LiteralType::String, current));
+                        setNodeTokenRangeByContext(literalNode, values);
+                        *dataList << literalNode;
+                        current.clear();
+                    }
+                };
+                for (size_t i = values->firstToken().index();
+                     i <= values->lastToken().index() && i < tokens.size();
+                     ++i) {
+                    if (syn::isTrivia(tokens[i].kind)) {
+                        continue;
+                    }
+                    const std::string_view text = tokens.text(i);
+                    if (text == "<" || text == ">") {
+                        flush();
+                    } else if (text == ",") {
+                        flush();
+                    } else {
+                        current += text;
+                    }
+                }
+                flush();
+                *use << dataList;
+                uses.push_back(use);
+                continue;
+            }
             auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
                 visitAngledValues(values));
             if (namedDataList && namedDataList->size() > 0) {
@@ -1030,13 +1598,12 @@ void Builder::addTagUses(const node_ptr_t &owner, const syn::Node &context) {
 Value Builder::visitFuncDecl(cst::FuncDecl context) {
     ENTER("FuncDecl");
 
-    // Decorators are applied to the function; `@numeric(...)` grants its permissions to the
-    // function's body (design principles 7.5), which is where the GCT builder reads them.
-    node_ptr_t annoListNode    = nullptr;
-    uint8_t numericPermissions = 0;
+    // Decorators are applied to the function. The removed `@name(args)` spelling and the removed
+    // `@vjp<rule>` decorator are reported and add no decorator (numeric permissions and custom
+    // derivative rules are tags now, design principles 7.2, 8).
+    node_ptr_t annoListNode = nullptr;
     for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
-        if (const auto permissions = numericAnnotationOf(funcAnno)) {
-            numericPermissions |= *permissions;
+        if (rejectParenthesizedName(funcAnno) || rejectVjpAnnotation(funcAnno)) {
             continue;
         }
         if (!annoListNode) {
@@ -1045,40 +1612,28 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         *annoListNode << any2node(visitFuncAnno(funcAnno));
     }
 
+    // A function written without a body is a declaration of an operator of a C++ module (design
+    // principles 6.4): the signature is the whole of it. Its token range and origin end with the
+    // signature, not with a block that is not there.
+    const auto blockContext = context->get<cst::StmtBlock>();
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
     TokenRange typeRange    = {
         context->firstToken()->index(),
-        context->get<cst::StmtBlock>()->firstToken()->index() + 1};
+        blockContext ? blockContext->firstToken()->index() + 1
+                     : context->lastToken()->index() + 1};
     setNodeTokenRange(funcTypeNode, typeRange);
     setNodeOriginByOffsets(
         funcTypeNode,
         static_cast<size_t>(context->firstToken()->begin()),
-        static_cast<size_t>(context->get<cst::StmtBlock>()->firstToken()->begin()));
+        static_cast<size_t>(
+            blockContext ? blockContext->firstToken()->begin() : context->lastToken()->end()));
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
-
-    auto implMark = context->get<cst::ImplMark>();
-    if (implMark) {
-        if (implMark->text() == "inner") {
-            funcType->setImplMark(ImplMark::Inner);
-        } else {
-            funcType->setImplMark(ImplMark::Outer);
-        }
-    }
 
     auto modifier = context->get<cst::Modifiers>();
     ModifierSet modSet;
     if (modifier) {
-        if (modifier->tokCount(TK::KwAtomic) > 0) {
-            modSet.insert(Modifier::Atomic);
-        }
-        if (modifier->tokCount(TK::KwShared) > 0) {
-            modSet.insert(Modifier::Shared);
-        }
         if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
-        }
-        if (modifier->tokCount(TK::KwMacro) > 0) {
-            modSet.insert(Modifier::Macro);
         }
     }
     funcType->setModifiers(modSet);
@@ -1102,7 +1657,8 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     setNodeOriginByOffsets(
         typeOptNode,
         static_cast<size_t>(context->firstToken()->begin()),
-        static_cast<size_t>(context->get<cst::StmtBlock>()->firstToken()->begin()));
+        static_cast<size_t>(
+            blockContext ? blockContext->firstToken()->begin() : context->lastToken()->end()));
     if (context->type()) {
         node_ptr_t typeNode = any2node(visitType(context->type()));
         *typeOptNode << typeNode;
@@ -1132,8 +1688,12 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         export_->addRef(ref);
     }
 
-    node_ptr_t blockNode = any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
-    unwrapNodeAs<StmtBlockLoad>(blockNode)->grantNumeric(numericPermissions);
+    // The body, when the declaration has one. A `FuncDataLoad` without a `StmtBlock` child is a
+    // body-less declaration: the GCT builder makes a FUNC of it that no graph is built from.
+    node_ptr_t blockNode = nullptr;
+    if (blockContext) {
+        blockNode = any2node(visitStmtBlock(blockContext));
+    }
 
     node_ptr_t funcNode = createNodeAs<FuncDataLoad>(ref);
     setNodeTokenRangeByContext(funcNode, context);
@@ -1181,7 +1741,7 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
                 "returnType"),
             semanticPart(
                 camel::source::SemanticRole::ValueProducer,
-                nodeOrigin(blockNode),
+                blockNode ? nodeOrigin(blockNode) : camel::source::kInvalidOriginId,
                 -1,
                 "body"),
         });
@@ -1314,29 +1874,21 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
 
 /*
 typeDecl
-    : implMark? TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
+    : TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
       (typeExpr | STRING)
     ;
 */
 Value Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
     string uri;
-    ImplMark implMark = ImplMark::Graph;
     Reference ref = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
-    if (context->get<cst::ImplMark>()) {
-        if (context->get<cst::ImplMark>()->tok(TK::KwInner)) {
-            implMark = ImplMark::Inner;
-        } else {
-            implMark = ImplMark::Outer;
-        }
-    }
     if (context->tok(TK::String)) {
         uri = context->tok(TK::String)->text();
         // Remove quotes from the string
         uri = uri.substr(1, uri.size() - 2);
     }
 
-    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, implMark, uri);
+    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, uri);
     setNodeTokenRangeByContext(typeDeclNode, context);
     unwrapNodeAs<TypeDeclLoad>(typeDeclNode)->setDoc(docOf(context));
     if (!context->all<cst::IdentDef>().empty()) {
@@ -1441,7 +1993,9 @@ Value Builder::visitKeyValuePair(cst::KeyValuePair context) {
 }
 
 /*
-keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
+keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)? ;
+A type left out is a lambda's parameter (design principles 5.9): it stands as an InferTypeLoad,
+which GCT lowers to a hole and GIR fills from the function type the position expects.
 */
 Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
     ENTER("KeyParamPair");
@@ -1453,7 +2007,13 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
     Reference ref(context->get<cst::IdentDef>()->text());
     node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref, isVar, isConst);
     setNodeTokenRangeByContext(namedPairNode, context);
-    *namedPairNode << any2node(visitType(context->type()));
+    if (context->type()) {
+        *namedPairNode << any2node(visitType(context->type()));
+    } else {
+        node_ptr_t inferNode = createNodeAs<InferTypeLoad>(Reference());
+        setNodeTokenRangeByContext(inferNode, context->get<cst::IdentDef>());
+        *namedPairNode << inferNode;
+    }
     node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");
     if (context->expr()) {
         setNodeTokenRangeByContext(dataExprOptNode, context->expr());
@@ -1553,20 +2113,47 @@ Value Builder::visitArgumentList(cst::ArgumentList context) {
 }
 
 /*
-indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
+indices : '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']' ;
+sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)? ;
 */
 Value Builder::visitIndices(cst::Indices context) {
     ENTER("Indices");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
-    if (context->expr(0)) {
-        *dataList << any2node(visitExpr(context->expr(0)));
-    }
-    if (context->expr(1)) {
-        *dataList << any2node(visitExpr(context->expr(1)));
-    }
-    if (context->expr(2)) {
-        *dataList << any2node(visitExpr(context->expr(2)));
+    for (const syn::Node entry : context->nodes()) {
+        if (entry.is(NK::SliceIndices)) {
+            // Three slots, one per part, an unwritten part a null load: the graph builder tells
+            // a slice from an element subscript by the node, not by counting children. Which
+            // slot a part takes follows from the colons the tree kept: a part before the first
+            // colon is the start, one between the colons the end, one after the second the step.
+            const cst::SliceIndices slice(entry);
+            node_ptr_t sliceNode = createNodeAs<SliceLoad>();
+            setNodeTokenRangeByContext(sliceNode, slice);
+            node_ptr_t slots[3] = {nullptr, nullptr, nullptr};
+            size_t colons       = 0;
+            for (size_t i = 0; i < slice->childCount(); ++i) {
+                const auto child = slice->child(i);
+                if (child.isToken()) {
+                    if (child.token().kind() == TK::Colon) {
+                        ++colons;
+                    }
+                    continue;
+                }
+                if (colons < 3) {
+                    slots[colons] = any2node(visitExpr(child.node()));
+                }
+            }
+            for (node_ptr_t &slot : slots) {
+                if (slot == nullptr) {
+                    slot = createNodeAs<NullLoad>();
+                    setNodeTokenRangeByContext(slot, slice);
+                }
+                *sliceNode << slot;
+            }
+            *dataList << sliceNode;
+        } else {
+            *dataList << any2node(visitExpr(entry));
+        }
     }
     LEAVE("Indices");
     return dataList;
@@ -1759,6 +2346,197 @@ Value Builder::visitMatchCase(cst::MatchCase context) {
 }
 
 /*
+matchTypeExpr
+    : MATCH TYPE typeExpr '{' typeCase* '}'
+    ;
+*/
+Value Builder::visitMatchTypeExpr(cst::MatchTypeExpr context) {
+    ENTER("MatchTypeExpr");
+    node_ptr_t matchNode = createNodeAs<TypeMatchLoad>();
+    setNodeTokenRangeByContext(matchNode, context);
+    node_ptr_t typeNode = any2node(visitType(context->type()));
+    *matchNode << typeNode;
+    node_ptr_t casesNode = createNodeAs<RepeatedLoad>("TypeCase");
+    setNodeTokenRangeByContext(casesNode, context);
+    for (const auto typeCase : context->all<cst::TypeCase>()) {
+        *casesNode << any2node(visitTypeCase(typeCase));
+    }
+    *matchNode << casesNode;
+    registerAstSemanticBundle(
+        matchNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(matchNode, context->tok(TK::KwMatch), "ast.match.type"),
+                -1,
+                "match"),
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(matchNode, context->tok(TK::KwType), "ast.match.type.type"),
+                -1,
+                "type"),
+            semanticPart(
+                camel::source::SemanticRole::BranchCondition,
+                nodeOrigin(typeNode),
+                -1,
+                "type"),
+        });
+    LEAVE("MatchTypeExpr");
+    return matchNode;
+}
+
+/*
+staticForExpr
+    : STATIC staticForHeader '=>' blockExpr
+    ;
+staticForHeader
+    : FOR '(' identDef (',' identDef)? ')' IN ('fields' typeExpr | 'indices' dataExpr)
+    ;
+`indices` (H51 step 6) walks the positions of a tuple value; its operand is child 0 as an
+ordinary expression, where `fields` has a type there.
+*/
+Value Builder::visitStaticForExpr(cst::StaticForExpr context) {
+    ENTER("StaticForExpr");
+    const auto bindings = context->all<cst::IdentDef>();
+    const std::string valueName =
+        bindings.size() > 0 ? std::string(bindings[0]->text()) : std::string("_");
+    const std::string typeName =
+        bindings.size() > 1 ? std::string(bindings[1]->text()) : std::string("_");
+    const auto mode      = context->tok(TK::Identifier);
+    const bool byIndices = mode && mode.text() == "indices";
+    node_ptr_t forNode   = createNodeAs<StaticForLoad>(valueName, typeName, byIndices);
+    setNodeTokenRangeByContext(forNode, context);
+    node_ptr_t shapeNode = byIndices ? any2node(visitExpr(context->expr()))
+                                     : any2node(visitType(context->type()));
+    *forNode << shapeNode;
+    node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
+    *forNode << bodyNode;
+    registerAstSemanticBundle(
+        forNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(forNode, context->tok(TK::KwStatic), "ast.static.for.strong"),
+                -1,
+                "static"),
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(forNode, context->tok(TK::KwFor), "ast.static.for"),
+                -1,
+                "for"),
+            semanticPart(
+                camel::source::SemanticRole::BranchCondition,
+                nodeOrigin(shapeNode),
+                -1,
+                byIndices ? "indices" : "type"),
+        });
+    LEAVE("StaticForExpr");
+    return forNode;
+}
+
+/*
+staticLoopExpr
+    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+    ;
+The children of the node are described at StaticLoopLoad: a Repeated Data of the first values,
+the walked shape (a type for `fields`, a value for `indices`), and the body.
+*/
+Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
+    ENTER("StaticLoopExpr");
+    std::vector<Reference> state;
+    node_ptr_t inits = createNodeAs<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(inits, context);
+    for (const auto entry : context->all<cst::LoopState>()) {
+        state.emplace_back(entry->get<cst::IdentDef>()->text());
+        *inits << any2node(visitExpr(entry->expr()));
+    }
+    const auto bindings = context->all<cst::IdentDef>();
+    const std::string valueName =
+        bindings.size() > 0 ? std::string(bindings[0]->text()) : std::string("_");
+    const std::string typeName =
+        bindings.size() > 1 ? std::string(bindings[1]->text()) : std::string("_");
+    const auto mode      = context->tok(TK::Identifier);
+    const bool byIndices = mode && mode.text() == "indices";
+    node_ptr_t loopNode  = createNodeAs<StaticLoopLoad>(state, valueName, typeName, byIndices);
+    setNodeTokenRangeByContext(loopNode, context);
+    *loopNode << inits;
+    node_ptr_t shapeNode = byIndices ? any2node(visitExpr(context->expr()))
+                                     : any2node(visitType(context->type()));
+    *loopNode << shapeNode;
+    node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
+    *loopNode << bodyNode;
+    registerAstSemanticBundle(
+        loopNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(loopNode, context->tok(TK::KwStatic), "ast.static.loop.strong"),
+                -1,
+                "static"),
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(loopNode, context->tok(TK::KwLoop), "ast.static.loop"),
+                -1,
+                "loop"),
+            semanticPart(
+                camel::source::SemanticRole::BranchCondition,
+                nodeOrigin(shapeNode),
+                -1,
+                byIndices ? "indices" : "type"),
+        });
+    LEAVE("StaticLoopExpr");
+    return loopNode;
+}
+
+TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
+    const std::string text = pattern.text();
+    if (text == "struct") {
+        return TypeCaseKind::Struct;
+    }
+    if (text == "tuple") {
+        return TypeCaseKind::Tuple;
+    }
+    if (text == "#leaf") {
+        return TypeCaseKind::Leaf;
+    }
+    ASSERT(text == "_", "Unknown match type pattern");
+    return TypeCaseKind::Wildcard;
+}
+
+/*
+typeCase
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+    ;
+*/
+Value Builder::visitTypeCase(cst::TypeCase context) {
+    ENTER("TypeCase");
+    std::vector<TypeCaseKind> patterns;
+    for (const auto pattern : context->all<cst::TypeCasePattern>()) {
+        patterns.push_back(typeCaseKindOf(pattern));
+    }
+    node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(std::move(patterns));
+    setNodeTokenRangeByContext(caseNode, context);
+    node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
+    *caseNode << bodyNode;
+    registerAstSemanticBundle(
+        caseNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(caseNode, context->tok(TK::KwCase), "ast.match.type.case"),
+                -1,
+                "case"),
+            semanticPart(
+                camel::source::SemanticRole::CaseBody,
+                nodeOrigin(bodyNode),
+                -1,
+                "body"),
+        });
+    LEAVE("TypeCase");
+    return caseNode;
+}
+
+/*
 ctrlExpr
     : IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
     | MATCH identRef '{' matchCase+ '}'
@@ -1824,6 +2602,14 @@ Value Builder::visitCtrlExpr(syn::Node context) {
                     1,
                     "else"),
             });
+    } break;
+    case NK::MatchTypeExpr: // MATCH TYPE typeExpr '{' typeCase* '}'
+    {
+        ctrlNode = any2node(visitMatchTypeExpr(cst::MatchTypeExpr(context)));
+    } break;
+    case NK::StaticForExpr:
+    {
+        ctrlNode = any2node(visitStaticForExpr(cst::StaticForExpr(context)));
     } break;
     case NK::MatchExpr: // MATCH logicalOrExpr '{' matchCase+ '}'
     {
@@ -2451,8 +3237,8 @@ Value Builder::visitUnaryExpr(syn::Node context) {
             // smallest integer -9223372036854775808 (whose digits alone do not fit), a typed
             // `let b: i32 = -2147483648`. Only the minus right before the literal: `-2 ^ 2`
             // negates the power and `-(2)` the parenthesis.
-            const auto literal = cst::Literal(context->expr());
-            const bool integer = static_cast<bool>(literal->tok(TK::Integer));
+            const auto literal   = cst::Literal(context->expr());
+            const bool integer   = static_cast<bool>(literal->tok(TK::Integer));
             const bool imaginary = static_cast<bool>(literal->tok(TK::Imaginary));
             if ((integer || literal->tok(TK::Real) || imaginary) && literal->childCount() == 1) {
                 res = createNodeAs<LiteralLoad>(Literal(
@@ -2707,7 +3493,12 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
                 registerAstSemanticBundle(exprNode, std::move(parts));
             } else if (child.node().is(NK::MemberAccess)) {
                 auto access = cst::MemberAccess(child.node());
-                exprNode    = makeMemberAccess(lhsNode, access->child(0), access->child(1), access);
+                if (access->child(1).isToken() && access->child(1).text() == "[") {
+                    exprNode = makeStaticAccess(
+                        lhsNode, access->child(0), access->child(2).node(), access);
+                } else {
+                    exprNode = makeMemberAccess(lhsNode, access->child(0), access->child(1), access);
+                }
             } else if (child.node().is(NK::StructData)) {
                 // `Shape::Rect { w: 2 }`: a struct-shape variant is built from a struct literal,
                 // which is one argument. The graph builder decides by the shape of the variant
@@ -2897,30 +3688,73 @@ Builder::makeMemberAccess(node_ptr_t lhs, syn::Child dot, syn::Child member, syn
 
 /*
 accessExpr
-    : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
+    : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
     ;
 */
 Value Builder::visitAccessExpr(cst::AccessExpr context) {
     ENTER("AccessExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr()));
-    for (size_t i = 1; i < context->childCount(); i += 2) {
-        string strOp = context->child(i)->text();
+    size_t i           = 1;
+    while (i < context->childCount()) {
+        std::string strOp = context->child(i)->text();
         if (strOp != ".") {
             throw std::runtime_error("Invalid access operator: " + strOp);
         }
+        if (context->child(i + 1).isToken() && context->child(i + 1).text() == "[") {
+            // `.` '[' dataExpr ']': a field or element named by a compile-time key.
+            const auto &keyChild = context->child(i + 2);
+            lhsNode = makeStaticAccess(lhsNode, context->child(i), keyChild.node(), context);
+            i += 4;
+            continue;
+        }
         lhsNode = makeMemberAccess(lhsNode, context->child(i), context->child(i + 1), context);
+        i += 2;
     }
     LEAVE("AccessExpr");
     return lhsNode;
 }
 
+node_ptr_t Builder::makeStaticAccess(
+    node_ptr_t lhs, syn::Child dot, syn::Node key, syn::Node range) {
+    node_ptr_t dataNode = createNodeAs<StaticAccessLoad>();
+    setNodeTokenRangeByContext(dataNode, range);
+    node_ptr_t keyNode = any2node(visitExpr(key));
+    *dataNode << lhs << keyNode;
+    registerAstSemanticBundle(
+        dataNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Operator,
+                deriveAstAnchorOrigin(dataNode, tokenOf(dot), "ast.access.static"),
+                -1,
+                ".[]"),
+            semanticPart(camel::source::SemanticRole::Receiver, nodeOrigin(lhs), -1, "target"),
+            semanticPart(
+                camel::source::SemanticRole::IndexExpr,
+                nodeOrigin(keyNode),
+                -1,
+                "key"),
+        });
+    return dataNode;
+}
+
 /*
 structData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
+    | '{' staticForExpr '}'        // a struct comprehension (H51 step 4)
     ;
 */
 Value Builder::visitStructData(cst::StructData context) {
     ENTER("StructData");
+    if (const auto generator = context->get<cst::StaticForExpr>()) {
+        // `{ static for (n, F) in fields T => e }`: the value has the fields of `T`, each from one
+        // round; the generator is built once and the rounds are packed in the graph builder.
+        node_ptr_t compNode = createNodeAs<StructCompLoad>();
+        setNodeTokenRangeByContext(compNode, context);
+        *compNode << any2node(visitStaticForExpr(generator));
+        LEAVE("StructData");
+        return compNode;
+    }
     node_ptr_t dataNode = createNodeAs<StructDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
     if (context->get<cst::PairedValues>()) {
@@ -2982,10 +3816,18 @@ Value Builder::visitArrayData(cst::ArrayData context) {
 /*
 tupleData
     : '(' dataList? ','? ')'
+    | '(' staticForExpr ')'        // a tuple comprehension (H51 step 4)
     ;
 */
 Value Builder::visitTupleData(cst::TupleData context) {
     ENTER("TupleData");
+    if (const auto generator = context->get<cst::StaticForExpr>()) {
+        node_ptr_t compNode = createNodeAs<TupleCompLoad>();
+        setNodeTokenRangeByContext(compNode, context);
+        *compNode << any2node(visitStaticForExpr(generator));
+        LEAVE("TupleData");
+        return compNode;
+    }
     // `(e)`: a parenthesized expression, not a tuple (three children: the brackets and the
     // list; a trailing comma would be a fourth).
     if (context->get<cst::DataList>() && context->get<cst::DataList>()->exprs().size() == 1 &&
@@ -3035,9 +3877,10 @@ Value Builder::visitLiteralData(cst::Literal context) {
 
 namespace {
 
-/// The text of a formatted string that is not an interpolation: `\${` is the literal `${` and
-/// every other escape is left for decodeEscapes to decode (a brace has no escape: it is
-/// literal, and is doubled for `format` afterwards).
+/// The text of a formatted string that is not an interpolation: only `\${` is decoded here,
+/// because it is what keeps `${` from starting an interpolation. Every character escape, the
+/// backtick and the bare `\$` (not followed by `{`) included, is left for decodeEscapes, the one
+/// table of every string literal.
 std::string decodeFStringText(std::string_view text) {
     std::string out;
     out.reserve(text.size());
@@ -3048,27 +3891,97 @@ std::string decodeFStringText(std::string_view text) {
                 i += 2;
                 continue;
             }
-            if (text[i + 1] == '`') {
-                out += '`'; // `\`` is a literal backtick (it also does not close the string)
-                ++i;
-                continue;
-            }
         }
         out += text[i];
     }
     return out;
 }
 
+/// An interpolation is empty when it holds no token that is neither white space nor a comment
+/// (the author's criterion, H89 ruling 3). White space is never a token, so this is: every token
+/// is Eof or a comment. `Command` (the ignored `#!` line) and `Error` are not comments, and either
+/// leaves the interpolation non-empty.
+bool isEmptyInterpolation(const syn::TokenBuffer &tokens) {
+    for (const syn::Token &token : tokens.tokens()) {
+        switch (token.kind) {
+        case syn::TokenKind::Eof:
+        case syn::TokenKind::LineComment:
+        case syn::TokenKind::DocComment:
+        case syn::TokenKind::BlockComment:
+            break;
+        default:
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Shown when the text taken as a format specification contains `=>`: the ':' of a lambda's
+/// return type at the top level of an interpolation was read as the start of the specification.
+/// The same sentence is used where the format check fails (gir/builder_operators.cpp).
+constexpr std::string_view kLambdaNeedsParenthesesHint =
+    "a lambda with a return type needs its own parentheses at the top level of an "
+    "interpolation: the ':' of the return type is read as the start of the format "
+    "specification. Write it as ${((x: int): int => x)}";
+
+/// The end (just past the closing `}`) of a valid `\u{H…}` escape that starts at `i`, or npos.
+/// Valid means what decodeEscapes decodes: 1 to 6 hex digits and a Unicode scalar value.
+size_t unicodeEscapeEnd(std::string_view text, size_t i) {
+    if (i + 2 >= text.size() || text[i] != '\\' || text[i + 1] != 'u' || text[i + 2] != '{') {
+        return std::string_view::npos;
+    }
+    size_t j       = i + 3;
+    size_t digits  = 0;
+    uint32_t value = 0;
+    while (j < text.size() && digits < 6 && std::isxdigit(static_cast<unsigned char>(text[j]))) {
+        const char d = text[j];
+        value        = value * 16 + (d <= '9' ? d - '0' : (d | 0x20) - 'a' + 10);
+        ++digits;
+        ++j;
+    }
+    if (digits == 0 || j >= text.size() || text[j] != '}' || !camel::utf8::isScalarValue(value)) {
+        return std::string_view::npos;
+    }
+    return j + 1;
+}
+
 /// The pattern text for `format`: the literal braces of a formatted string are doubled, so
-/// `format` prints them.
+/// `format` prints them. A valid `\u{H…}` is a character escape, not format syntax: its braces are
+/// left alone for decodeEscapes, which doubles a brace the escape produces (H89). An invalid one
+/// is kept as written, so its braces are format syntax and are doubled here.
 std::string escapeFormatBraces(std::string_view text) {
     std::string out;
     out.reserve(text.size());
-    for (const char c : text) {
+    size_t i = 0;
+    while (i < text.size()) {
+        const char c = text[i];
+        if (c == '\\') {
+            // An even run of backslashes is `\\` pairs; the last backslash of an odd run opens
+            // an escape.
+            size_t run = 0;
+            while (i + run < text.size() && text[i + run] == '\\') {
+                ++run;
+            }
+            out.append(text.substr(i, run - (run % 2)));
+            i += run - (run % 2);
+            if (run % 2 == 0) {
+                continue;
+            }
+            const size_t end = unicodeEscapeEnd(text, i);
+            if (end != std::string_view::npos) {
+                out.append(text.substr(i, end - i));
+                i = end;
+                continue;
+            }
+            out += text[i];
+            ++i;
+            continue;
+        }
         if (c == '{' || c == '}') {
             out += c;
         }
         out += c;
+        ++i;
     }
     return out;
 }
@@ -3102,7 +4015,16 @@ Value Builder::visitFStringData(cst::Literal context) {
     const syn::TokenRef token = context->firstToken();
     const std::string &source = context->tree()->source();
     const std::string_view whole(source);
-    const auto interpolations = context->tree()->tokens().interpolationsOf(token->index());
+    const syn::TokenBuffer &buffer = context->tree()->tokens();
+    const auto interpolations      = buffer.interpolationsOf(token->index());
+
+    // Where an interpolation lies in the file: from its `$` to just past its `}`. A diagnostic
+    // about the interpolation itself (not about the expression inside it) points here.
+    const auto interpolationRange = [&buffer](const syn::FStringInterpolation &part) {
+        return CharRange{
+            {buffer.lineOf(part.open), buffer.columnOf(part.open)},
+            {buffer.lineOf(part.close + 1), buffer.columnOf(part.close + 1)}};
+    };
 
     std::vector<node_ptr_t> args;
     std::string pattern;
@@ -3125,12 +4047,36 @@ Value Builder::visitFStringData(cst::Literal context) {
         cursor = static_cast<size_t>(part.close) + 1;
 
         syn::TokenBuffer tokens = syn::Lexer::tokenizeRange(source, part.exprBegin, part.exprEnd);
-        syn::Tree sub           = syn::Parser::parseExpression(std::move(tokens));
+        // No token that is neither white space nor a comment is `${}`, `${ }`, `${:spec}` or
+        // `${/*c*/}`: an interpolation without an expression is its own mistake, not a parse
+        // error inside an expression (H20 item 1, H89 ruling 3). `${/**/ 1}` has a token and is
+        // an expression.
+        if (isEmptyInterpolation(tokens)) {
+            diags_->of(SyntaxDiag::EmptyInterpolation).at(interpolationRange(part)).commit();
+            failed = true;
+            continue;
+        }
+        const size_t beforeExpression = diags_->count();
+        syn::Tree sub                 = syn::Parser::parseExpression(std::move(tokens));
         syn::reportLexicalErrors(sub.tokens(), *diags_);
         if (sub.tokens().errors().empty()) {
             syn::reportSyntaxErrors(sub, *diags_);
         }
         if (!sub.root() || sub.hasErrors()) {
+            // The first ':' outside every bracket ends the expression. A lambda with a return
+            // type has such a ':' at its top level, so its `=>` ended up in the specification
+            // and the expression is incomplete: say what the fix is (H20 item 1).
+            if (part.hasSpec) {
+                const std::string_view spec = whole.substr(
+                    part.specBegin, static_cast<size_t>(part.specEnd) - part.specBegin);
+                if (spec.find("=>") != std::string_view::npos) {
+                    diags_->addRelatedToErrorsFrom(
+                        beforeExpression,
+                        DiagLabel{
+                            interpolationRange(part),
+                            std::string(kLambdaNeedsParenthesesHint)});
+                }
+            }
             failed = true;
             continue;
         }
@@ -3605,17 +4551,8 @@ Value Builder::visitFuncType(cst::FuncType context) {
     auto modifier = context->get<cst::Modifiers>();
     ModifierSet modSet;
     if (modifier) {
-        if (modifier->tokCount(TK::KwAtomic) > 0) {
-            modSet.insert(Modifier::Atomic);
-        }
-        if (modifier->tokCount(TK::KwShared) > 0) {
-            modSet.insert(Modifier::Shared);
-        }
         if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
-        }
-        if (modifier->tokCount(TK::KwMacro) > 0) {
-            modSet.insert(Modifier::Macro);
         }
     }
     funcType->setModifiers(modSet);
@@ -3716,10 +4653,14 @@ Value Builder::visitExpr(syn::Node context) {
         return visitWaitExpr(cst::WaitExpr(context));
     case NK::IfExpr:
     case NK::MatchExpr:
+    case NK::MatchTypeExpr:
+    case NK::StaticForExpr:
     case NK::TryExpr:
         return visitCtrlExpr(context);
     case NK::LoopExpr:
         return visitLoopExpr(cst::LoopExpr(context));
+    case NK::StaticLoopExpr:
+        return visitStaticLoopExpr(cst::StaticLoopExpr(context));
     case NK::AssignExpr:
         return visitAssignExpr(cst::AssignExpr(context));
     case NK::LogicalOrExpr:

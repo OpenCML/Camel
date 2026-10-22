@@ -9,7 +9,7 @@
 module ort_argmax
 import { Tensor, reshape, argmax } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func forward(x: Tensor): (Tensor, Tensor, Tensor) {
     return (argmax(x, 1), argmax(x, 1, true), argmax(x, 0))

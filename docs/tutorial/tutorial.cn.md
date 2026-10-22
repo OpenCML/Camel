@@ -379,6 +379,8 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 
 写在块前的 `sync` 使它成为同步块：块里的表达式按书写顺序执行，相当于编译器在相邻的表达式之间加了控制边。[`examples/06_sync_block.cml`](examples/06_sync_block.cml) 只把 `greet` 的函数体改成同步块：
 
+<!-- camel-snippet: compile-only: the fence is the changed function only; the text block is the output of examples/06_sync_block.cml -->
+
 ```cml
 func greet(): int sync {
     println('hello from greet')
@@ -767,9 +769,9 @@ func main(): int sync {
 ```
 
 ```text
-1.41421
-5
-10
+1.4142135623730951
+5.0
+10.0
 ```
 
 - `import { a, b } from m` 引入列出的名字；`import m` 只引入命名空间，用 `m::name` 访问。
@@ -777,7 +779,7 @@ func main(): int sync {
 
 ### 标准库
 
-随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`algo`、`random`、`time`、`fs`、`json`、`os`、`sys`、`re`、`crypto`、`para`、`this`，张量一系的 `tensor`、`nn`、`autodiff`、`onnx`，以及嵌入 Python 的 `python`（[语言参考 5.2.1](../language/05_modules.md#521-随-camel-提供的模块)）。[标准库参考](../stdlib-reference.md)逐个列出前十五个模块的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](examples/12_stdlib.cml)：
+随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`algo`、`random`、`time`、`fs`、`json`、`process`、`env`、`re`、`hash`、`para`、`this`，张量一系的 `tensor`、`nn`、`autodiff`、`onnx`，以及嵌入 Python 的 `python`（[语言参考 5.2.1](../language/05_modules.md#521-随-camel-提供的模块)）。[标准库参考](../stdlib-reference.md)逐个列出前十五个模块的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](examples/12_stdlib.cml)：
 
 ```cml
 module stdlib_demo
@@ -1068,9 +1070,9 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 ```
 
 ```text
-20
-12
-(20, 12)
+20.0
+12.0
+(20.0, 12.0)
 ```
 
 - `grad(f)` 返回一个函数，它对 `f` 的第一个 `with` 参数求导；其余 `with` 参数当作常量，普通参数是数据。

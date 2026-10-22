@@ -135,7 +135,6 @@ std::string paramNameOf(const FunctionType *func, size_t argIndex, const char *p
 FunctionTypeFactory
 rebuildFunctionType(FunctionType *func, const type_bindings_t &bindings, bool &changed) {
     FunctionTypeFactory factory;
-    factory.setImplMark(func->implMark());
     factory.setModifiers(func->modifiers());
     factory.setHasCompileInfo(func->hasArgNames());
     const auto replaced = [&](Type *type) {

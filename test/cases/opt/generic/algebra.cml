@@ -15,14 +15,14 @@ func strict_coefficients(x: float): float {
     return x * 3.0 + x * 5.0
 }
 
-@numeric(reassociate)
+#[reassociate]
 func relaxed_coefficients(x: float): float {
     return x * 3.0 + x * 5.0
 }
 
 func mixed_permissions(x: float): float {
     let t = x * 3.0
-    @numeric(reassociate, finite_math)
+    #[reassociate, finite_math]
     { return t + x * 5.0 }
 }
 

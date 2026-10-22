@@ -25,7 +25,12 @@
 
 #include "camel/parse/parse.h"
 
+#include <string>
 #include <vector>
+
+namespace camel::core::type {
+class FunctionType;
+}
 
 namespace camel::runtime {
 class GCGraph;
@@ -73,6 +78,11 @@ class UserDefinedModule : public Module {
     // Set while compileAsProgram() builds: the graph of that program is not the graph the
     // module was loaded as part of, so setProgramGraph must not replace it.
     bool buildingProgramOfItsOwn_ = false;
+    // A `.cml` found beside a `.cmo` of its name declares that C++ module's operators
+    // (design principles 6.4; handover H19, step 1): its top-level functions have no body and
+    // `implementation_` is the C++ module, kept alive for its executors and operator traits.
+    bool declarationModule_ = false;
+    module_ptr_t implementation_;
 
   public:
     UserDefinedModule(
@@ -82,10 +92,36 @@ class UserDefinedModule : public Module {
 
     /// The graph construction tree, or null before the module reached that stage.
     const GCT::Tree *gct() const { return gct_.get(); }
+
+    /// A function the module exports: the name it has and the type it was declared with.
+    struct ExportedFunction {
+        std::string name;
+        const camel::core::type::FunctionType *type = nullptr;
+    };
+    /// The functions the module exports, in declaration order: its export list read against its
+    /// declarations, so that a caller can name what the module offers (H130: the passes a
+    /// `module::pass` could have named). Only the construction tree is read — no graph is built
+    /// — so this answers for a module that is parsed even when it does not compile; empty
+    /// before the tree exists.
+    std::vector<ExportedFunction> exportedFunctions() const;
+    /// Whether the module declares a top-level function `name`, exported or not. A name that is
+    /// declared but not exported is a different mistake from a name that is not there, and the
+    /// difference is what the user has to change.
+    bool declaresFunction(const std::string &name) const;
     camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
     camel::parse::parser_ptr_t parser() const { return parser_; }
     virtual bool loaded() const override { return stage_ == CompileStage::Done; }
     CompileStage stage() const { return stage_; }
+
+    /// Whether this module is the declaration module of a C++ module (a `.cml` beside the
+    /// `.cmo`): its top-level functions carry no body.
+    bool declarationModule() const { return declarationModule_; }
+    void setDeclarationModule(bool on) { declarationModule_ = on; }
+    /// The C++ module whose operators the declarations stand for, when it has one.
+    const module_ptr_t &implementation() const { return implementation_; }
+    void setImplementation(const module_ptr_t &implementation) {
+        implementation_ = implementation;
+    }
 
     bool compile(CompileStage till = CompileStage::Done);
     /// Whether compile() is running for this module.

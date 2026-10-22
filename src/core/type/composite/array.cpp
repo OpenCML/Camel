@@ -52,7 +52,6 @@ bool isCompactElementType(TypeCode code) {
     case TypeCode::Float32:
     case TypeCode::Float64:
     case TypeCode::Bool:
-    case TypeCode::Byte:
     case TypeCode::Complex64:
     case TypeCode::Complex128:
         return true;
@@ -74,7 +73,6 @@ size_t arrayElementSize(TypeCode code) {
     case TypeCode::Complex128:
         return 16;
     case TypeCode::Bool:
-    case TypeCode::Byte:
         return 1;
     default:
         ASSERT(false, "Not a compact element type");

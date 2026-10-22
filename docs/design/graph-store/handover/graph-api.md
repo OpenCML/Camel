@@ -27,8 +27,8 @@
 4. **`constant::<T>(n)`**：等 H19“一个事实一处”把原生函数声明放进 `.cml` 后，原生算子才能有类型参数；到那时把 `constant(n, sample)` 换成 `constant::<T>(n)`（技术债；签名在 `stdlib/signatures/graph.cml`，实现 `constantKernel` 与类型规则在 `modules/graph/read.cpp`）。
 5. **组合子**（C7 的余项）：现在只有 `open_function` / `to_function`。想要的 `rewrite(f, pass)` 之类最好写成 Camel 库（`stdlib/graph.cml`），依赖第 1 项。
 6. **事实**（C8 的余项）：只暴露了 effects/shape/permissions；`core.instance`、`core.reorder`、`core.loopDomain`、`core.resources` 和遍自己注册的事实没有暴露。
-7. **区域读取**（H36 已落地）：`Region` 类型、`RegionKind` 枚举与 `region_of(n)`、`region_kind(r)`、`region_parent(r)`；只有体的图没有区域表，`region_of` 返回 `null`。测试 `regions_of_a_program_without_regions`、`regions_after_inlining`。
-8. **EdgeChecker 区域规则（2）(3)**（H36 未做，阻塞）：R2b 已落地（分支臂是区域），但 `src/runtime/graph_edges.cpp` 的 `EdgeChecker` 仍只检查同区域，没有“节点只读自己区域或祖先区域的节点”“JOIN 的 with 输入可读本 BRCH 的 Arm 区域的结果”“加边的默认区域取各输入区域里最深”的规则；参考 `verifyBranchArmRegions`（`graph_runtime_support.cpp`）与 `src/runtime/arm_members.h`；不要假设一个 BRCH 只有一个 JOIN（NonExecutable 状态）。
+7. **区域读取**（H36 已落地）：`Region` 类型、`RegionKind` 枚举与 `region_of(n)`、`region_kind(r)`、`region_parent(r)`；每个节点都属于一个区域，区域 0 是函数体，只有体的图没有区域表时 `region_of` 也返回区域 0，`region_kind` 为 `Root`。测试 `regions_of_a_program_without_regions`、`regions_after_inlining`。
+8. **区域规则（2）(3)**：由分支臂校验覆盖（`src/runtime/branch_arms.cpp` 的 `verifyBranchArmRegions`，参考 `src/runtime/arm_members.h`）——“节点只读自己区域或祖先区域的节点”“JOIN 的 with 输入可读本 BRCH 的 Arm 区域的结果”“加边的默认区域取各输入区域里最深”；`EdgeChecker` 本身只检查等价写入同区域，一个 BRCH 只有一个 JOIN。
 9. **Map/Set 键**：句柄用 `id(h)` 做键；“库类型作键”的通用协议是核心的另一个条目。
 
 ## 陷阱

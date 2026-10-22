@@ -2,7 +2,7 @@
 module tiles_loop_multi_device
 import { Tensor, load_npy, save_npy } from tensor
 import { run, run_device, download, source, inspect, benchmark } from tiles
-import { get_env } from sys
+import { get_env } from env
 
 func scalar_swap(a: float, b: float): (float, float) {
     return loop x = a, y = b for k in [1, 2, 3] do (y, x)
@@ -36,12 +36,12 @@ func rounding(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>) {
     return loop x = a, y = b for k in [1, 2, 3] do (x + y, y)
 }
 func strict_madd(x: Tensor<f32>, a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return x * a + b }
-@numeric(contract)
+#[contract]
 func permissions(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>) {
     return loop x = a, y = a for k in [1] do (strict_madd(x, a, b), y * a + b)
 }
 func strict_projection(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return permissions(a, b).0 }
-@numeric(contract)
+#[contract]
 func permitted_madd(x: Tensor<f32>, a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return x * a + b }
 func permission_one(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
     let pair = loop x = a, y = a for k in [1] do (y, permitted_madd(y, a, b))

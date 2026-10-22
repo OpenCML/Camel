@@ -262,7 +262,7 @@ int main() {
 
 **分支**：`JOIN` 被写成 C++ 的条件表达式 `(条件) ? (臂 1) : (臂 2)`，多路的 `match` 写成一串 `(选择子 == 常量) ? … : …`。【读码 `runtime_emitter.cpp:906-959`】臂是函数调用，所以没被选中的臂不执行。但这个表达式是一段**文本**，被粘贴到每一个使用 `JOIN` 的值的地方，不在它该执行的位置上落成语句。由此有两个缺陷（附录 B D4、D5）：分支的值被用两次，文本就出现两次，被选中的臂执行两次；同步块里排在分支之后的效应，会跑到分支之前。字符串上的 `match` 则因为 `==` 比较的是两个 `String *`（常量每次都是新分配的对象）而永远不相等（D3）。
 
-**尾调用**：没有任何处理，就是 C++ 的 `return f(...)`。一个尾递归的循环 `loop` 变成 `f_loop` 与它的臂函数 `f_g_6` 两个互相调用的函数，栈会不会增长取决于 C++ 编译器。`clang++ -O2` 下一千万步的循环段错误；把原生栈设为不限之后同一个程序给出正确结果，说明原因就是栈。【实测 `examples/defects/d10_tail_loop.cml`；附录 A】非尾递归同样没有深度上限（D7）。[循环设计稿](../loops/README.cn.md)（1.2 的表）已经记过"是否变成循环取决于 C++ 编译器"。
+**尾调用**：没有任何处理，就是 C++ 的 `return f(...)`。一个尾递归的循环 `loop_` 变成 `f_loop_` 与它的臂函数 `f_g_6` 两个互相调用的函数，栈会不会增长取决于 C++ 编译器。`clang++ -O2` 下一千万步的循环段错误；把原生栈设为不限之后同一个程序给出正确结果，说明原因就是栈。【实测 `examples/defects/d10_tail_loop.cml`；附录 A】非尾递归同样没有深度上限（D7）。[循环设计稿](../loops/README.cn.md)（1.2 的表）已经记过"是否变成循环取决于 C++ 编译器"。
 
 **高阶算子**（`map`、`filter`、`reduce`、`foreach`、`apply`、`attempt` 等）：不支持，而且今天的结构支持不了。它们在运行时里**不是 C++ 算子**，而是 `:mark/map_arr` 这样的标记，由每个调度器自己实现（共 8 个标记）【读码：检索 `":mark/` 得到 `map_arr`、`apply_arr`、`filter_arr`、`reduce_arr`、`foreach_arr`、`unordered_reduce_arr`、`unordered_foreach_arr`、`isolate`】。生成的代码要支持它们，就得自己把它们写成 C++ 循环。
 
@@ -293,6 +293,8 @@ int main() {
 ## 2. 生成的代码今天怎样管理内存
 
 ### 2.1 做法：运行时的堆上的对象，裸指针拿着，不告诉任何人
+
+<!-- camel-snippet: fragment: an excerpt of generated-code input; the body is elided -->
 
 ```camel
 func main(): int sync {

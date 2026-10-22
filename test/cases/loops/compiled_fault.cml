@@ -1,0 +1,11 @@
+// A fault inside the body of a loop that the JIT compiled: the round's division by zero is
+// reported at the expression in the body, with the position the interpreter gives it.
+func divide(xs: int[]): int {
+    let acc = loop acc = 0 for x in xs do acc + 100 / x
+    return acc
+}
+
+func main(): int sync {
+    println(divide([2, 5, 0, 4]))
+    return 0
+}

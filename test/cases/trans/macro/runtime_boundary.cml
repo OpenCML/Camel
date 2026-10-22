@@ -7,7 +7,7 @@ func seed(): int {
     return 41
 }
 
-macro func add_one(x: int): int {
+#macro func add_one(x: int): int {
     return x + 1
 }
 

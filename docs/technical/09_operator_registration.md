@@ -19,7 +19,7 @@
 | 全局内置模块（`GlobalsBuiltinModule`） | `src/builtin/`，编入 libcamel | 空字符串 `""` | `Context::create` 时加载，其导出对每个用户模块默认可见 |
 | 标准库与第三方模块 | `modules/<name>/`，各自编译为 `<name>.cmo` 动态库 | 模块名，如 `algo`、`math`、`tensor`、`python` | 被 `import` 时，或其协议下的算子首次被查找时加载 |
 
-libcamel 内部的模块工厂表 `builtinModuleFactories`（`src/core/module/builtin.cpp`）只包含全局内置模块，以及调试构建下的 `profiler`。`algo`、`math`、`tensor`、`nn`、`os`、`io`、`json`、`python` 等都是 `modules/` 下的 `.cmo` 模块。
+libcamel 内部的模块工厂表 `builtinModuleFactories`（`src/core/module/builtin.cpp`）只包含全局内置模块，以及调试构建下的 `profiler`。`algo`、`math`、`tensor`、`nn`、`process`、`io`、`json`、`python` 等都是 `modules/` 下的 `.cmo` 模块。
 
 ## 2. OperatorGroup 与类型解析
 
@@ -118,7 +118,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 
 因此 **opsMap 的 key 必须是 suffix**（即 `:` 后的部分），而不是完整 URI。
 
-第 3 步使一个模块的算子组可以引用另一个模块的实现：全局内置模块导出的 `sleep` 与 `exit` 的 URI 是 `os:sleep`、`os:exit`，首次查找时自动加载 `os` 模块，程序不必显式导入它。
+第 3 步使一个模块的算子组可以引用另一个模块的实现：全局内置模块导出的 `sleep` 与 `exit` 的 URI 是 `process:sleep`、`process:exit`，首次查找时自动加载 `process` 模块，程序不必显式导入它。
 
 找不到实现时 `find` 返回 `nullopt`，各调度器据此报告运行时诊断 `UnrecognizedOperatorURI`。
 
@@ -145,15 +145,16 @@ C++ 模块也可以导出值（设计原则 10.1）：在构造函数里 `export
 
 ## 4. 语义性质（纯度）注册
 
-算子表 `OperatorTable`（`include/camel/core/operator_table.h`）为每个算子 URI 保存一项，项的编号是 `OperId`，`OPER` 节点的负载里存的就是这个编号（URI 文本驻留在符号表里，全进程只存一份）。表项上的 `OperatorTraits`：
+算子表 `OperatorTable`（`include/camel/core/operator_table.h`）为每个算子 URI 保存一项，项的编号是 `OperId`，`OPER` 节点的负载里存的就是这个编号（URI 文本驻留在符号表里，全进程只存一份）。表项上的 `OperatorTraits` **不是另存的一份声明**：每个字段都由该算子的语义记录 `sem::OperatorSemantics` 的对应事实派生（`OperatorTable::traitsOf`，`src/core/operator_table.cpp`），派生是唯一的映射。`set(uri, traits)` 登记的是记录上的效果事实（`effect`、`elementwise`、`callsGraphs`、`readsGraphs`、`faults`），`declareSemantics` 登记记录的其余部分，两者写同一份记录、互不覆盖。因此不可能出现“trait 说纯、语义记录说会写”的分歧：只有一份事实。
 
-| 字段 | 含义 |
-|------|------|
-| `pure` | 无副作用、无隐藏状态，结果只依赖实参。这样的调用可以在编译期求值、与相同调用合并、未被使用时删除。 |
-| `elementwise` | 输出的第 i 个元素只依赖各输入（广播后）的第 i 个元素。 |
-| `stateOnly` | 不是纯函数，但效果不超出程序自身的变量（创建或读取变量）。不会被折叠、合并或跨越写操作移动，也不作为用户可观察的效果报告。 |
-| `mayFault` | 可能出故障（除零、越界、转换放不进目标类型）。**缺省为真**；确定不会出故障的才声明为假。目前没有任何遍依据它改变行为（图数据模型设计稿 Q1 待定）。 |
-| `callsGraphs` | 执行中会调用实参里的函数值（`map`、`reduce` 等高阶算子与 `attempt`），它做什么取决于传进来的函数。 |
+| 字段 | 含义 | 记录上的来源 |
+|------|------|------|
+| `pure` | 无副作用、无隐藏状态，结果只依赖实参。这样的调用可以在编译期求值、与相同调用合并、未被使用时删除。 | `effect == Pure` |
+| `elementwise` | 输出的第 i 个元素只依赖各输入（广播后）的第 i 个元素。 | `elementwise`，或 `binary.elementwise` |
+| `stateOnly` | 不是纯函数，但效果不超出程序自身的变量（创建或读取变量）。不会被折叠、合并或跨越写操作移动，也不作为用户可观察的效果报告。 | `effect == StateOnly` |
+| `mayFault` | 可能出故障（除零、越界、转换放不进目标类型）。**缺省为真**；故障表为空表示确定不会出故障。目前没有任何遍依据它改变行为（图数据模型设计稿 Q1 待定）。 | `faults`：缺省→真，空表→假，非空→真 |
+| `callsGraphs` | 执行中会调用实参里的函数值（`map`、`reduce` 等高阶算子与 `attempt`），它做什么取决于传进来的函数。 | `callsGraphs`，或声明了 `elementCalls` |
+| `readsGraphs` | 读实参里的函数值的图（编译、导出、微分），而不只是调用它们。 | `readsGraphs` |
 
 遍与调度器按编号认算子，不比较 URI 文本：
 
@@ -167,7 +168,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 登记发生在模块加载时：
 
-- 全局内置模块：`GlobalsBuiltinModule` 构造时调用 `registerBuiltinOperatorTraits()`（`src/builtin/executors/builtin.cpp`）。`op/` 下除 `op/assn` 原地赋值族之外的算子、`coll/` 下的全部算子，以及一份列明的字符串与数组辅助算子登记为纯；`:var/new`、`:var/get` 登记为 `stateOnly`；`io/`、`profiler/` 不登记。`append`、`extend` 返回新数组，登记为纯（设计原则 11.3）；`:op/assn_append`（写成语句的 `acc = acc->append<v>`）属于 `op/assn` 族，不纯。
+- 全局内置模块：`GlobalsBuiltinModule` 构造时调用 `registerBuiltinOperatorTraits()`（`src/builtin/executors/builtin.cpp`）。`op/` 下除 `op/assn` 原地赋值族之外的算子、`coll/` 下的全部算子，以及一份列明的字符串与数组辅助算子登记为纯；`:var/new`、`:var/get`、`:var/peek`、`:var/take` 与各算子的原地形式（`:struct/append_arr_in_place`、`:op/set_index_in_place`）登记为 `stateOnly`；`io/`、`profiler/` 不登记。`append`、`extend` 返回新数组，登记为纯（设计原则 11.3）；`:op/assn_owned`（写成语句的 `acc = acc->append<v>`、`xs = xs->sort`）属于 `op/assn` 族，不纯。
 - `.cmo` 模块：在 `load()` 中直接调用 `OperatorTable::instance().set(uri, traits)`。例如 `modules/math/module.cpp` 把 `getMathOpsMap()` 中的全部算子登记为纯。
 
 另有两处按 URI 或按值类型登记的信息，供需要的模块使用：
@@ -183,13 +184,16 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 ### 4.2 算子语义：数值、下标与归约律
 
-traits 之外，算子表的每一项可以带一份只读、带版本的语义记录 `sem::OperatorSemantics`（`include/camel/core/operator_semantics.h`；设计见 [算子语义协议](../design/op-semantics/README.cn.md)），由模块在加载时用 `OperatorTable::declareSemantics(uri, record)` 登记，登记前检查（键与 URI 一致、版本不降、数值部分自洽、归约律自洽；失败抛 `std::invalid_argument`）。查询 `semantics(id)` 无锁；没有记录、或记录缺某一部分，读法都是保守的。
+同一份语义记录（`include/camel/core/operator_semantics.h`；设计见 [算子语义协议](../design/op-semantics/README.cn.md)）既带 §4 的效果事实，也带数值、下标、归约律等部分，由模块在加载时用 `OperatorTable::declareSemantics(uri, record)` 登记，登记前检查（键与 URI 一致、版本不降、数值部分自洽、归约律自洽；失败抛 `std::invalid_argument`）。`set` 先登记的效果事实在 `declareSemantics` 时保留，反之亦然。查询 `semantics(id)` 无锁；没有记录、或记录缺某一部分，读法都是保守的。
 
 | 部分 | 内容 |
 |------|------|
 | `key` | `protocol:name@主.次`，跨进程的稳定标识；结果、故障、访问改变时主版本加一，只增加事实时次版本加一 |
+| `effect` | 效果事实：`Pure`、`StateOnly`、`Effectful`；未声明（`Undeclared`）按 `Effectful` 读。§4 的 `pure`/`stateOnly` 由它派生 |
+| `elementwise` | 逐元素事实；`binary.elementwise` 也计入 §4 的 `elementwise` |
+| `callsGraphs` / `readsGraphs` | 调用/读取实参里的函数值；`elementCalls` 蕴含 `callsGraphs` |
 | `numeric` | 精确、正确舍入（规范算法）、有 ulp 上界、不透明；舍入所在类型；对哪些 `@numeric` 许可敏感 |
-| `faults` | 会出的故障（可缺省，缺省时看 `mayFault`） |
+| `faults` | 会出的故障（可缺省，缺省时按“可能出故障”读；空表表示不会出故障） |
 | `indexing` | 实例化函数（`include/camel/core/index_semantics.h`）：一次调用的迭代域、各操作数的访问映射、写映射 |
 | `laws` | 归约律（每种元素类型一条）：运算、输入/累加/结果类型、初值、顺序、空域、确切的结合与交换性、单位元 |
 
@@ -202,7 +206,7 @@ traits 之外，算子表的每一项可以带一份只读、带版本的语义�
 
 `tensor` 模块的声明：数值部分在 `modules/tensor/ops/semantics.cpp` 的一张表里；下标语义与归约律在 `modules/tensor/ops/indexing.cpp`，与类型推断用同一个 `InferContext`，放在 `OpDef::index`（与 `OpDef::infer` 并列），注册时由 `OpRegistry::add` 包成 `indexing` 交给算子表。共用的构造工具是 `IndexBuilder`（`ops/indexing.h`；`nn` 模块的池化也用它）。已经持有 `InferContext` 的后端可以直接调 `ops::instantiate(def, ctx)`。内建的 `:op/` 标量算子与 `:mark/unordered_reduce_arr` 的记录在 `src/builtin/executors/builtin_semantics.cpp`。
 
-**声明是代码，登记时查不出它与内核是否一致**，所以每个声明都要过声明求值器：`CAMEL_ENABLE_TEST_PASSES=1 camel test/cases/modules/tensor/index_semantics.cml tensor::test_index_eval` 对每个已声明的算子生成大量随机调用（空、长度 1、广播、负轴、可选参数缺省、NaN、±∞、±0、次正规数、int64 与 bool），只按声明（域、访问映射及其越界策略、写映射、归约律）算出结果，与 CPU 内核逐位比较（有上界的 `exp`、`log` 按上界），并顺带检查映射的健全性（读不越界、写落在结果内、唯一写恰好写一次）。新增或修改一个声明时，在 `index_eval.cpp` 的表里加上它的用例生成器；测试计划 `test/plans/feat/modules/index_semantics.plan.toml` 要求全部一致。
+**声明是代码，登记时查不出它与内核是否一致**，所以每个声明都要过声明求值器：`camel test/cases/modules/tensor/index_semantics.cml tensor::test_index_eval` 对每个已声明的算子生成大量随机调用（空、长度 1、广播、负轴、可选参数缺省、NaN、±∞、±0、次正规数、int64 与 bool），只按声明（域、访问映射及其越界策略、写映射、归约律）算出结果，与 CPU 内核逐位比较（有上界的 `exp`、`log` 按上界），并顺带检查映射的健全性（读不越界、写落在结果内、唯一写恰好写一次）。新增或修改一个声明时，在 `index_eval.cpp` 的表里加上它的用例生成器；测试计划 `test/plans/feat/modules/index_semantics.plan.toml` 要求全部一致。
 
 ## 5. 注册流程
 
@@ -218,13 +222,13 @@ traits 之外，算子表的每一项可以带一份只读、带版本的语义�
 1. 在 `modules/<name>/` 下建立模块目录，`CMakeLists.txt` 中 `include` `modules/camel_module.cmake` 并调用 `add_camel_module(NAME <name>)`。默认源文件为 `executor.cpp`、`module.cpp`、`operators.cpp`，可用 `SOURCES` 指定；输出为 `<name>.cmo`。
 2. 该 CMake 函数会自动编入 `modules/camel_module_abi.cpp`，由它导出 `camel_module_abi_version()`。加载器（`loadCmoModule`，`include/camel/core/module/dynamic.h`）先比对 `CAMEL_MODULE_ABI_VERSION`，不一致则拒绝加载。
 
-`ArgsView::resultType()` 提供本次单态调用的静态结果布局，供 `tree::load_tree::<T>` 等仅凭输入类型无法确定返回布局的原生算子使用。它不是一个运行时类型值，也不属于 `with` 或普通实参。节点、字节码/JIT 和并行调度器，以及标准库的原生常量求值入口，在调用前设置该元数据；自行构造 `ArgsView` 的宿主也必须为此类算子设置它。该字段改变 C++ 对象布局，模块 ABI 已升至 3，旧模块须与核心一起重建。算子不能跨调用保存实参中的堆对象裸指针。
+`ArgsView::resultType()` 提供本次单态调用的静态结果布局，供 `ckpt::load_tree::<T>` 等仅凭输入类型无法确定返回布局的原生算子使用。它不是一个运行时类型值，也不属于 `with` 或普通实参。节点、字节码/JIT 和并行调度器，以及标准库的原生常量求值入口，在调用前设置该元数据；自行构造 `ArgsView` 的宿主也必须为此类算子设置它。该字段改变 C++ 对象布局，模块 ABI 已升至 3，旧模块须与核心一起重建。算子不能跨调用保存实参中的堆对象裸指针。
 3. 实现并导出 `extern "C" Module *camel_module_create(Context *ctx)`，返回新建的模块对象，所有权交给运行时。
 4. 在模块构造函数中用 `exportEntity()` 导出各 `OperatorGroup`（需要时用 `exportType()` 导出类型），URI 使用 `<name>:suffix` 格式。
 5. 在 `load()` 中调用 `registerExecutorFactory("<name>", factory)`，factory 创建持有 suffix → `operator_t` 映射的 Executor；并在此登记纯算子的 `OperatorTraits`。
 6. 确保 opsMap 的 key 与算子组中 URI 的 suffix 一一对应。
 
-导入模块时，`Context` 先在模块搜索路径中查找 `<name>.cmo` 或同名源文件，找不到再查 libcamel 内部的模块工厂表。
+导入模块时，`Context` 在导入方是文件模块时先在它自己的目录里查找 `<name>.cmo` 或同名源文件（H112），再按模块搜索路径查找，找不到再查 libcamel 内部的模块工厂表。
 
 ## 6. 注意事项汇总
 
@@ -269,17 +273,27 @@ traits 之外，算子表的每一项可以带一份只读、带版本的语义�
   它们仍按有副作用对待。
 - 仓库内的模块由测试约束（`test/plans/feat/modules/stdlib_registry.plan.toml`）：不得有未声明的算子。
 
-## 8. 签名文件与标准库参考
+## 8. 声明与标准库参考
 
-- `stdlib/signatures/<模块>.cml` 逐个声明模块导出的算子（`globals.cml` 是内建函数）：`///` 注释写说明，
-  `@pure` 或 `@effect <原因>`、`@fails <失败时的行为>`、`@example <代码>    // <结果>`，函数体里
-  `return '<URI>'`（`*` 通配一组只在类型上不同的重载）。这些文件不参与编译。
-- 用 Camel 写的库（`stdlib/<模块>.cml`）本身就是签名文件：读它的 `export func` 与 `///` 注释。
-- C++ 模块导出的值写作 `export let 名字: 类型 = 值`，带 `///` 说明与 `@example`，不写 `@pure` 与 URI（它不是算子，`--verify-ops` 不核对它）。
+- 原生实现的签名写成**没有函数体的 `export func`**（设计原则 6.4；H19 第 1 步）：`stdlib/<模块>.cml`
+  与同目录的 `<模块>.cmo` 是同一个模块，这份 `.cml` 就是它的声明模块，参与编译，签名与参数名以它为准。
+  `///` 注释写说明，`@pure` 或 `@effect <原因>`、`@fails <失败时的行为>`、`@example <代码>    // <结果>`；
+  URI 默认是 `<模块>:<名字>`，算子名不是 Camel 标识符或是本模块算子的另一个前缀时，用
+  `#op<'模块:算子'>` 标签写出。声明没有函数体：旧写法把 URI 写在函数体的 `return '<URI>'` 里，这个写法
+  已经删除——带函数体的 `func` 就是普通函数（声明模块里则报 `DeclarationModuleHasBody`）。
+- `stdlib/signatures/<模块>.cml` 只作参考、不参与编译：它保留尚未声明化的 C++ 模块的签名，以及声明
+  表达不了的计算签名（`json` 的 `encode`/`decode_as`）。条目同样是无函数体的声明（`*` 通配一组只在
+  类型上不同的重载）；`--verify-ops` 拒绝其中带函数体的条目。
+- 用 Camel 写的库（`stdlib/<模块>.cml`，同目录没有 `<模块>.cmo`）本身就是签名文件：读它的 `export func`
+  与 `///` 注释；这些函数有函数体，声明与实现是同一份。
+- C++ 模块导出的值不能写成声明（`export let` 需要初始值，写了就是第二份值）：声明模块里用
+  `// value 名字: 类型` 的注释记录参考页条目，值本身仍由 C++ 导出。不参与编译的签名文件可以直接写
+  `export let 名字: 类型 = 值`，带 `///` 说明与 `@example`，不写 `@pure` 与 URI（它不是算子，`--verify-ops` 不核对它）。
 - `node scripts/stdlib-reference.mjs --write` 由它们生成 `docs/stdlib-reference.md`；`--verify-doc` 检查
-  文档是最新的；`--verify-ops` 用 `camel inspect --ops` 的结果核对签名文件：每个已注册的算子都有声明、
-  每条声明都对应一个已注册的算子、参数个数一致、`@pure`/`@effect` 与登记的纯度一致。三者都在默认测试
-  集里（同一个测试计划）。新增或修改算子后：改签名文件，运行 `--write`，提交生成的文档。
+  文档是最新的；`--verify-ops` 用 `camel inspect --ops` 的结果核对声明：每个已注册的算子都有声明、
+  每条声明都对应一个已注册的算子、参数个数一致、`@pure`/`@effect` 与登记的纯度一致，并拒绝签名文件里
+  带函数体的条目。三者都在默认测试集里（同一个测试计划）。新增或修改算子后：改声明，运行 `--write`，
+  提交生成的文档。
 
 ## 9. 参考
 

@@ -10,7 +10,7 @@
  */
 module gc_prl_blocked_worker
 
-import { sleep } from os
+import { sleep } from process
 
 func label(i: int, k: int): string { return 'v' + string(i) + '-' + string(k) }
 

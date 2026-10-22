@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata.h"
 #include "camel/core/type/base.h"
@@ -55,11 +56,18 @@ class ArgsView {
     type::Type *resultType() const { return resultType_; }
     void setResultType(type::Type *result) { resultType_ = result; }
 
+    /// The attributes of the node this call runs (camel/core/node_attrs.h): what a pass recorded
+    /// about the node, e.g. which implementation runs it. 0 when the caller has none. The core
+    /// knows no key: the scheduler hands the set over and the operator's own module reads it.
+    camel::core::attr::AttrSetId attrs() const { return attrs_; }
+    void setAttrs(camel::core::attr::AttrSetId attrs) { attrs_ = attrs; }
+
     template <typename T> T get(size_t index) const { return rtdata::fromSlot<T>(slot(index)); }
     template <typename T> void set(size_t index, T value) { setSlot(index, rtdata::toSlot(value)); }
 
   private:
     type::Type *resultType_ = nullptr;
+    camel::core::attr::AttrSetId attrs_ = camel::core::attr::kNoAttrs;
 };
 
 using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &ctx);

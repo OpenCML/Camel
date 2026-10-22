@@ -9,7 +9,7 @@ module export_capability
 
 import { Tensor, reshape, relu, cast } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func counts(t: Tensor): Tensor {
     return relu(cast(t, 'int64') - 2)

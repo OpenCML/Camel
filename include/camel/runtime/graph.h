@@ -37,9 +37,9 @@
  *    time anything asks for it and keeps it for the graph's lifetime.
  * 6. The source position of each node is a column parallel to the records (nodeOrigin): one
  *    32-bit origin id per node, 0 when the node has none. Beside it, only in a graph where some
- *    node has any, the numeric permissions the program granted with @numeric(...): one byte per
- *    node (nodePermissions; design principles 7.5, docs/design/op-semantics 6.3), and the
- *    attributes libraries attached to the nodes: one 32-bit interned set per node
+ *    node has any, the numeric permissions the program granted with the standard permission
+ *    tags: one mask per node (nodePermissions; design principles 7.5, docs/design/op-semantics
+ *    6.3), and the attributes libraries attached to the nodes: one 32-bit interned set per node
  *    (nodeAttrs; camel/core/node_attrs.h, language reference 7.6).
  * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7), by
  *    GraphId; the Program a graph is read in (program.h) says which version of each it means.
@@ -53,6 +53,7 @@
 
 #include "camel/core/loop_kind.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/symbol.h"
@@ -124,14 +125,13 @@ enum class GCNodeKind : uint8_t {
     Dref = 14, // build-time only, see above
     // A loop (design principles 3.10; docs/design/graph-model 3.5, the LOOP card):
     // Norm inputs the array (For, ForWhile) then the k first values of the state; With inputs
-    // the m captured values, shared by the condition graph and the body graph; Ctrl inputs
-    // ordering. Its payload names the two graphs (GCLoopRef). Its value is the
+    // the results of its two regions and the round port; Ctrl inputs ordering. Its condition
+    // and body are regions of this graph (GCRegionKind::LoopCond and LoopBody) whose ports are
+    // the state (see camel/runtime/loop.h). Its value is the
     // last state: the value when k = 1, the k-tuple when k > 1. A producer may also give it s
     // collection slots (payload collectionCount): the body then returns (state…, v…) each round
     // and the value is (state…, array…), the arrays holding the v of every round (see
-    // camel/runtime/loop.h). Consumers read it through camel/runtime/loop.h (LoopView); those
-    // that do not run it natively lower it to a tail recursion first
-    // (lowerLoopsToTailRecursion), never in the shared program.
+    // camel/runtime/loop.h). Consumers read it through camel/runtime/loop.h (LoopView).
     Loop = 15,
     // The place of a node a rewrite removed. A graph keeps the NodeIds of the version it came
     // from, so a removed node leaves a record with this kind and no inputs, which every
@@ -145,12 +145,9 @@ enum class GCNodeKind : uint8_t {
 /// types along the edges, no cycle of inputs) are not listed; this is what differs:
 ///  - Executable: every value has one writing and the graph has no cycle of inputs. The state a
 ///    back end runs.
-///  - NonExecutable: a shape no back end runs (the ONNX export's split of branched calls, whose
-///    sibling JOINs merge and close a cycle of inputs). The cycle check is left to the back ends,
-///    which refuse a cyclic graph when they build the execution plan.
 ///  - Tabled: some value has several writings (an equivalence table on the graph). Not
 ///    executable until an extraction picks one writing per value; acyclic at the level of nodes.
-enum class GraphState : uint8_t { Executable, NonExecutable, Tabled };
+enum class GraphState : uint8_t { Executable, Tabled };
 
 enum class GCReturnKind : uint8_t {
     None,
@@ -180,17 +177,15 @@ enum GCNodeFlag : uint8_t {
     kGCNodeFlagConstant = 1 << 1,
 };
 
-/// The operator a back end's private copy of the program applies to a function value before an
-/// operator that reads graphs gets it (Program::original, OperatorTraits::inspectsGraphs):
-/// the same function over the program's own graph. Implemented by the built-in executor
-/// (src/builtin/operators/graph.h); a program cannot name it.
-inline constexpr std::string_view kGraphOriginalUri = ":graph/original";
-
 /// Properties a graph has besides its nodes (GCGraph::flags).
 enum GCGraphFlag : uint8_t {
-    /// The graph is a function that carries a vjp rule as its last closure value
-    /// (autodiff::attachRule).
-    kGraphFlagCarriesRule = 1 << 0,
+    /// The function of the graph is a macro (design principles 8): `std::macro` may evaluate a
+    /// call of it ahead of time and materialise the result as a constant. The fact is the
+    /// standard tag `#macro` on the declaration, or, for an operator value, the operator's
+    /// declared macro trait; it is recorded on the graph so that a runtime graph keeps it.
+    /// Bit 0 was once the flag of a graph that carried a derivative rule as a closure value
+    /// (the old `@vjp` decorator); that is a graph reference now (kGraphRefRule).
+    kGraphFlagMacro = 1 << 0,
     /// A commit looked at the graph's gates: none waits on nothing (GraphDraft::
     /// dissolveUnorderedGates). A graph without it is looked at by the next commit that
     /// reaches it; a graph with it is left as it is unless it is edited.
@@ -210,7 +205,7 @@ struct WritingUnion {
     gc_node_ref_t a = kInvalidNodeRef;
     gc_node_ref_t b = kInvalidNodeRef;
     /// The numeric permissions the equivalence needs (0: it holds bit for bit).
-    uint8_t perms = 0;
+    camel::core::sem::PermissionMask perms = 0;
     uint8_t flags = 0;
     /// The rule that asserted it (0: none, congruence).
     uint16_t rule = 0;
@@ -263,6 +258,7 @@ enum GCGraphRefRole : uint8_t {
     kGraphRefCallee = 1 << 0, // called directly by a FUNC node (a dependency)
     kGraphRefNested = 1 << 1, // written inside this graph (a lambda, a branch arm)
     kGraphRefStatic = 1 << 2, // the graph of a function constant of the static area
+    kGraphRefRule   = 1 << 3, // the graph a declaration tag of the graph names (a derivative rule)
 };
 
 /// "No graph" in a GCFuncRef or a GCLoopRef: a FUNC node that names no callee yet, the condition
@@ -439,7 +435,7 @@ struct GCNodeChunk {
     uint32_t payloadWordCount = 0;
     uint32_t *origins         = nullptr; // nodeCount source origins (0: none)
     uint32_t *regions         = nullptr; // nodeCount regions of the nodes; null when all are 0
-    uint8_t *permissions      = nullptr; // nodeCount numeric permissions; null when all are 0
+    camel::core::sem::PermissionMask *permissions = nullptr; // nodeCount numeric permissions
     uint32_t *attrs           = nullptr; // nodeCount attribute sets; null when all are 0
     gc_node_ref_t *edges      = nullptr; // edgeCount entries: the input runs of the nodes in order
     gc_payload_word_t *payload = nullptr; // payloadWordCount words
@@ -520,7 +516,7 @@ class GCGraph : public camel::core::rtdata::Object {
     uint64_t nodeOrigin(gc_node_ref_t ref) const;
     /// Numeric permissions (camel/core/operator_semantics.h, PermissionMask) the program granted
     /// to node `ref`, 0 when none; the graph has no permission column when no node has any.
-    uint8_t nodePermissions(gc_node_ref_t ref) const;
+    camel::core::sem::PermissionMask nodePermissions(gc_node_ref_t ref) const;
     /// True when some node of the graph has numeric permissions.
     bool hasNodePermissions() const { return nativePayload_.hasPermissions; }
     /// The attributes (camel/core/node_attrs.h, AttrSetId) of node `ref`, 0 when none; the
@@ -612,10 +608,12 @@ class GCGraph : public camel::core::rtdata::Object {
     /// The entries of the reference table with role `role`, in table order.
     std::vector<GraphId> refsWithRole(uint8_t role) const;
     /// The graphs called directly, written inside this one, referred to by a function
-    /// constant: views of the reference table by role.
+    /// constant, and named by a declaration tag of the graph (a derivative rule): views of the
+    /// reference table by role.
     std::vector<GraphId> dependencies() const { return refsWithRole(kGraphRefCallee); }
     std::vector<GraphId> subGraphs() const { return refsWithRole(kGraphRefNested); }
     std::vector<GraphId> staticGraphRefs() const { return refsWithRole(kGraphRefStatic); }
+    std::vector<GraphId> ruleGraphs() const { return refsWithRole(kGraphRefRule); }
     std::span<const slot_t> staticSlots() const;
 
     bool hasNodePayload() const;
@@ -674,6 +672,19 @@ class GCGraph : public camel::core::rtdata::Object {
     }
     /// The payload bytes of node `ref` (rounded up to whole words); empty when it has none.
     std::span<const std::byte> nodePayloadBytes(gc_node_ref_t ref) const;
+    /**
+     * The version of node `ref`, as a hash of what it is: its record (kind, flags, slot, type),
+     * the nodes it consumes (Norm, then With, then Ctrl, in order) and its payload. Two versions
+     * of a graph that carry the same node at the same place hash the same, whatever else of the
+     * graph changed, and a node whose record moved to another chunk hashes the same as well (the
+     * offsets it holds are read as counts). 0 for a ref that is not a node.
+     *
+     * This is what a node-level fact is stamped with (facts.h, Dependency::Node): a fact about a
+     * node holds while the node does not change, though the graph's revision did. It is the
+     * version a stored mark would say, without the 8 bytes per node of the whole graph space
+     * (design graph-store 4.4).
+     */
+    uint64_t nodeContentHash(gc_node_ref_t ref) const;
 
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
         const GCNode *n = node(ref);
@@ -835,6 +846,12 @@ inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
 /// without sweeping it (GenerationalAllocatorWithGC::collectGraphSpace). While a program runs
 /// the collector of run-time values does it with a major collection (sweepMarked). The manager
 /// frees the Programs and graphs nothing marked.
+/// The floor of the graph-space collection (`--graph-gc-mb <megabytes>`, default 64): the graph
+/// space asks for a major collection when it holds this much more than it did after the last
+/// one. Chosen by the command line before the first program exists; a manager made later reads
+/// it. The size after the last collection replaces it once it is larger.
+void setGraphCollectionFloorBytes(size_t bytes);
+
 class GCGraphManager {
   public:
     GCGraphManager();
@@ -847,6 +864,11 @@ class GCGraphManager {
     /// the previous program held and nothing else holds is freed.
     void adoptRoot(const Program *program);
     void replaceRoot(const Program *program);
+    /// replaceRoot, but only while `expected` is still the installed program: a commit that
+    /// rewrote a program that is no longer the context's publishes only if nothing overtook it
+    /// (design 4.3.1, which asks for one compare-and-swap instead of a lock). Answers whether it
+    /// replaced it.
+    bool replaceRootIfCurrent(const Program *expected, const Program *program);
     /// The installed program, nullptr when there is none.
     const Program *root() const;
     // The collector reads this stable vector only when collections are allowed.
@@ -893,6 +915,12 @@ class GCGraphManager {
 
     /// Called by Program::bind for a program the manager owns.
     void noteGraph(GCGraph *graph);
+    /// Called for a graph a rewrite encoded but has not bound into a program: a graph version a
+    /// session makes on the way (a specialization) is used by the drafts of the session before a
+    /// commit binds it, or not at all. The collector knows it from here on, but does not free it
+    /// until the pass settles, so that the session's work table can still reach it; a graph no
+    /// program binds by then is freed like any other.
+    void noteUnbound(GCGraph *graph);
 
   private:
     friend class Program;
@@ -905,6 +933,9 @@ class GCGraphManager {
     mutable std::recursive_mutex mutex_;
     std::vector<Program *> programs_;
     std::unordered_set<GCGraph *> graphs_;
+    /// Graphs a rewrite encoded and did not bind yet (noteUnbound): the sweep leaves them alone
+    /// until the pass settles, then they are freed unless a program holds them.
+    std::unordered_set<GCGraph *> unbound_;
     const Program *current_ = nullptr;
     std::vector<const Program *> detached_;
     std::vector<const Program *> pinned_;
@@ -922,3 +953,4 @@ class GCGraphManager {
 };
 
 } // namespace camel::runtime
+

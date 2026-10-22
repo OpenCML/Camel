@@ -1,0 +1,35 @@
+id = "tools.cli"
+order = 921
+tier = "fast"
+tags = ["feat", "tools", "cli", "inspect", "timeit"]
+desc = "Every camel command that compiles or loads the program reports the diagnostics it caused and exits 1: inspect --gct no longer prints a partial tree, and a failed --timeit run reports no time"
+
+# H172 fixed `inspect --ops`, one branch that rendered something and then exited 0 without asking
+# whether anything failed. The same shape lived in `inspect --gct` (a partial construction tree,
+# exit 0) and in three command-line refusals that printed a reason and exited 0. These cases hold
+# the fixed paths and pin the ones that were already right, all through one shared decision
+# (tools/camel-cli/module_failures.h).
+
+[[tests]]
+name = "cli.inspect_gct_reports_a_failed_build"
+desc = "`inspect --gct` exits 1 and reports the diagnostics, with no construction tree, when the tree itself could not be built (an import of a missing module, a declaration module that exists and fails to load); a healthy program, a library, and errors found only after the tree is built (a semantic error, a later type error) still dump it, and a combined `--gct --gir` dump prints neither."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/inspect/gct_failure.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "cli.failed_program_paths"
+desc = "run, check and --timeit all exit 1 on a semantic error, a missing import, an import that does not compile and a declaration module that fails to load; a failed --timeit run names the iteration and prints the diagnostics but no elapsed time and no summary, and an unknown pass is a failed iteration too."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/cli/failed_program_paths.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000

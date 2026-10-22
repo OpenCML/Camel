@@ -6,12 +6,12 @@ digraph GraphIR {
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
             N00 [label="flag", type="PORT", param_name="flag", param_kind="normal", param_index="0", value_type="bool"];
-            N01 [label="JOIN", type="JOIN", role="branch-contract", origin=157, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [?, ?]>"];
-            N02 [label="BRCH", type="BRCH", origin=156, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
-            N03 [label="[2, 3]", type="DATA", origin=160, span="13:30-13:36", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
-            N04 [label="tensor:zeros", type="OPER", origin=161, span="13:24-13:29", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [2, 3]>"];
-            N05 [label="[3, 2]", type="DATA", origin=164, span="13:48-13:54", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
-            N06 [label="tensor:ones", type="OPER", origin=165, span="13:43-13:47", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [3, 2]>"];
+            N01 [label="JOIN", type="JOIN", role="branch-contract", origin=<ORIGIN>, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [?, ?]>"];
+            N02 [label="BRCH", type="BRCH", origin=<ORIGIN>, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
+            N03 [label="[2, 3]", type="DATA", origin=<ORIGIN>, span="13:30-13:36", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
+            N04 [label="tensor:zeros", type="OPER", origin=<ORIGIN>, span="13:24-13:29", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [2, 3]>"];
+            N05 [label="[3, 2]", type="DATA", origin=<ORIGIN>, span="13:48-13:54", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
+            N06 [label="tensor:ones", type="OPER", origin=<ORIGIN>, span="13:43-13:47", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [3, 2]>"];
             F02 -> N00 [label="0", type="NORM_PORT"];
             N01 -> O02 [label="0", type="EXIT"];
             N04 -> N01 [label="0|0", type="WITH"];
@@ -24,16 +24,16 @@ digraph GraphIR {
             N02 -> N06 [label="1|0", type="CTRL"];
         }
         O01 [label="EXIT", type="EXIT"];
-        N07 [label="[3, 4]", type="DATA", origin=168, span="17:17-17:23", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
-        N08 [label="tensor:ones", type="OPER", origin=169, span="17:12-17:16", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [3, 4]>"];
-        N09 [label="FLAG", type="DATA", origin=175, span="18:25-18:31", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
-        N0A [label="sys:get_env", type="OPER", role="effect", origin=176, span="18:17-18:24", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
-        N0B [label="true", type="DATA", origin=177, span="18:36-18:42", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
-        N0C [label=":op/eq_s", type="OPER", origin=178, span="18:33-18:35", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="bool"];
-        N0D [label="pick", type="FUNC", origin=179, span="18:12-18:43", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
-        N0E [label="tensor:matmul", type="OPER", origin=180, span="18:44-18:45", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
-        N0F [label=":io/println", type="OPER", role="effect", origin=181, span="18:4-18:11", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
-        N10 [label="0", type="DATA", origin=182, span="19:11-19:12", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
+        N07 [label="[3, 4]", type="DATA", origin=<ORIGIN>, span="17:17-17:23", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
+        N08 [label="tensor:ones", type="OPER", origin=<ORIGIN>, span="17:12-17:16", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [3, 4]>"];
+        N09 [label="FLAG", type="DATA", origin=<ORIGIN>, span="18:25-18:31", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
+        N0A [label="env:get_env", type="OPER", role="effect", origin=<ORIGIN>, span="18:17-18:24", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
+        N0B [label="true", type="DATA", origin=<ORIGIN>, span="18:36-18:42", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
+        N0C [label=":op/eq_s", type="OPER", origin=<ORIGIN>, span="18:33-18:35", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="bool"];
+        N0D [label="pick", type="FUNC", origin=<ORIGIN>, span="18:12-18:43", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
+        N0E [label="tensor:matmul", type="OPER", origin=<ORIGIN>, span="18:44-18:45", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
+        N0F [label=":io/println", type="OPER", role="effect", origin=<ORIGIN>, span="18:4-18:11", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
+        N10 [label="0", type="DATA", origin=<ORIGIN>, span="19:11-19:12", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
         N11 [label="GATE", type="GATE", value_type="int"];
         N11 -> O01 [label="0", type="EXIT"];
         N07 -> N08 [label="0|0", type="NORM"];
@@ -49,7 +49,7 @@ digraph GraphIR {
         N0F -> N11 [label="0|0", type="CTRL"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N12 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=166, span="16:0-20:1", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="() => int"];
+    N12 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="16:0-20:1", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="() => int"];
     N13 [label="CALL", type="CALL", value_type="int"];
     N13 -> O00 [label="0", type="EXIT"];
     N12 -> N13 [label="0|0", type="WITH"];

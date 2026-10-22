@@ -1,0 +1,127 @@
+id = "perf.training_steps"
+order = 420
+tier = "slow"
+tags = ["perf", "training", "gpu"]
+
+# The benchmarks of the GPU work (task H48, design docs/design/gpu/README.cn.md 5.6 and 7): what a
+# step costs today on the host, so that the device path has a baseline to be measured against.
+#
+#   dependency_chain  the external report's chain: a round is two 64x64 matmuls with a broadcast
+#                     add and a relu between them, each waiting for the one before.
+#   mlp_step          the C2 training step (784 -> 128 -> 10 MLP, relu, softmax cross entropy,
+#                     Adam) on generated data, so no dataset is needed.
+#   transformer_step  a small Transformer training step: attention (q/k/v, scaled scores,
+#                     softmax, values), two RMSNorm layers, an MLP, softmax cross entropy, Adam
+#                     and an EMA of one weight matrix.
+#
+# The budgets are the mean of ten runs on the reference host (32 cores, Release); they are a
+# regression guard, not a goal, and the per-step numbers these programs print are in
+# handover note ⟨f9dbbfe⟩ (H54) and handover note ⟨058be18⟩ (H48). The host is shared: the same plan measures 1.3-1.6x
+# slower while eight agents are building on it, so the tolerance is 100 % -- a real regression is
+# still caught, a busy neighbour is not a failure.
+#
+# H54 (the cost of one operator; handover note ⟨f9dbbfe⟩) took the thread pool out of these steps: a range
+# whose chunks are smaller than 40 us of work now runs on the calling thread, and the pool is only
+# created by a range that really splits. What the plan measured before and after it, medians of ten
+# runs (before at load 29-70, after at load 34-41):
+#
+#   dependency_chain.nvm      9.31 -> 8.84 ms    mlp_step.nvm       93.95 -> 48.14 ms
+#   dependency_chain.fvm      9.39 -> 8.69 ms    mlp_step.fvm       88.20 -> 48.37 ms
+#   transformer_step.nvm      6.63 -> 5.83 ms    transformer_step.profile  25.32 -> 20.71 ms
+#
+# and the per-step numbers behind them: the chain's round is 17.6 us (median; two 64^3 matmuls at
+# 6.7 us each, a broadcast add at 0.7 us), the C2 step is 0.96 ms (1.88 before), the Transformer
+# step 118 us. H48's 16.2 ms step and 45-78 us matmul were measured on the same host at load 85-90,
+# where the pool's wakeup storm dominated.
+#
+# H64 (the optimizer's own step; handover note ⟨00719c9⟩) made Adam one pass over whole tensors instead of a
+# double loop per parameter with a libm sqrt call. What the plan measured before and after it,
+# medians of ten runs, alternating baseline and new in one window at load 31-32:
+#
+#   dependency_chain.nvm      8.78 ->  8.82 ms    mlp_step.nvm       48.24 -> 31.38 ms
+#   dependency_chain.fvm      8.74 ->  8.78 ms    mlp_step.fvm       48.79 -> 33.36 ms
+#   transformer_step.nvm      6.15 ->  5.89 ms
+#
+# and the C2 step behind them: 0.96 ms before, 0.63 ms after; the update is 0.16 ms of it, one pass
+# at 1.56 ns per parameter, against 0.65 ms the old loop took for the same 101770 parameters at
+# load 20 (1.19 ms in the step at load 65). The chain runs no optimizer, which is why it does not
+# move.
+#
+# std::nvm has no budget at all: by the author's ruling (reviews/H24-H25-H26.md, H43 item 7) it
+# is the node-at-a-time reference implementation, the performance is fvm's and jit's to carry, and
+# its per-step numbers are recorded here only to be compared against.
+#
+# `dependency_chain` has no budget on either back end either: every range in it is a single chunk
+# (64x64 products, 4096-element elementwise loops), so it never creates or touches the pool, and
+# what remains is two GEMMs that run at ~72 % of the core's FMA peak. Its round is 16.8-18.6 us
+# from one run to the next depending on the load, which is a property of the host, not of the
+# runtime; the guard would only measure the neighbours.
+
+[[tests]]
+name = "dependency_chain.nvm"
+desc = "500 rounds of a two-matmul dependency chain on std::nvm: the per-round cost of the external report's microbenchmark."
+kind = "benchmark"
+case = "../../cases/perf/dependency_chain.cml"
+args = ["${timeit_nvm_10}", "${case}", "--arg", "rounds=500", "${run_nvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 180000
+
+[[tests]]
+name = "dependency_chain.fvm"
+desc = "The same chain on std::fvm."
+kind = "benchmark"
+case = "../../cases/perf/dependency_chain.cml"
+args = ["${timeit_fvm_10}", "${case}", "--arg", "rounds=500", "${run_fvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 180000
+
+[[tests]]
+name = "mlp_step.nvm"
+desc = "The C2 training step, 50 steps of batch 32 on std::nvm: the per-step cost of a step whose optimizer is a third of it."
+kind = "benchmark"
+case = "../../cases/perf/mlp_step.cml"
+args = ["${timeit_nvm_10}", "${case}", "--arg", "steps=50", "--arg", "batch=32", "--arg", "lr=0.001", "${run_nvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+
+[[tests]]
+name = "mlp_step.fvm"
+desc = "The same steps on std::fvm."
+kind = "benchmark"
+case = "../../cases/perf/mlp_step.cml"
+args = ["${timeit_fvm_10}", "${case}", "--arg", "steps=50", "--arg", "batch=32", "--arg", "lr=0.001", "${run_fvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 500
+perf_budget_tolerance_pct = 100
+
+[[tests]]
+name = "transformer_step.nvm"
+desc = "The small Transformer training step, 50 steps on std::nvm, with attention, RMSNorm, Adam and EMA."
+kind = "benchmark"
+case = "../../cases/perf/transformer_step.cml"
+args = ["${timeit_nvm_10}", "${case}", "--arg", "steps=50", "--arg", "lr=0.01", "${run_nvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+
+# The numbers of a step, from the profiler rather than from the clock of the program.
+[[tests]]
+name = "transformer_step.profile"
+desc = "std::profile of the Transformer step: it finds the step loop, counts the operators of a round and names the operators by cost."
+kind = "behavior"
+case = "../../cases/perf/transformer_step.cml"
+args = ["${case}", "--arg", "steps=10", "--arg", "lr=0.01", "std::profile", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["PROFILE camel", "operators per step", "tensor:matmul", "nn:adam", "wall per step"]
+timeout_ms = 180000

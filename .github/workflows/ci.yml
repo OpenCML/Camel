@@ -1,17 +1,7 @@
-# Build from scratch and run the default test set (smoke + feat) on version-tag pushes
-# and manual dispatch. Branch pushes and pull requests do not trigger this workflow.
+# Everything that has to stay green, on every tag and on demand.
 #
-# Jobs
-#   build-test   Linux x64 and Windows x64 are required; macOS is experimental (never validated, does
-#                not fail the run). linux-x64-nojit is the Linux build with ENABLE_FASTVM_JIT off: the
-#                build every processor but x86-64 gets (std::jit runs the bytecode interpreter), which
-#                no x86-64 build compiles otherwise.
-#   sanitizers   Manual only (Run workflow -> sanitizers): ASan + UBSan Debug build on Linux, smoke plan.
-#
-# Toolchain follows docs/setup.en.md (Clang >= 19, CMake, Ninja, Conan >= 2.10, Node 20).
-# libcamel is built for the same portable baseline as the release wheels (CAMEL_TARGET_ARCH), so what is
-# tested here is what build-pypi.yml ships; hosted runners do not share one CPU model.
-
+# The work of one platform lives in ci-leg.yml: compiling is ~13 of the ~15 minutes of a leg, and
+# a leg that only Release needs (macOS) is opt-in rather than a fourth runner on every tag.
 name: CI
 
 on:
@@ -25,6 +15,10 @@ on:
         description: "Also run the ASan/UBSan Debug build (Linux, smoke plan)"
         type: boolean
         default: false
+      macos:
+        description: "Also run the macOS arm64 leg (Apple toolchain signal; the wheel workflow already builds there)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -32,17 +26,6 @@ concurrency:
 
 permissions:
   contents: read
-
-env:
-  CC: clang
-  CXX: clang++
-  HUSKY: "0"
-  # The build goes on after a file fails to compile (scripts/common.js), so that one run shows
-  # every error of a platform nobody builds on locally. The step still fails.
-  CAMEL_BUILD_KEEP_GOING: "1"
-  # Reference-side packages of the ONNX export tests (skip_unless in test/plans/feat/modules/onnx.plan.toml);
-  # without them those tests are skipped, not failed.
-  TEST_PIP_PACKAGES: numpy onnx onnxruntime psutil
 
 jobs:
   build-test:
@@ -53,175 +36,38 @@ jobs:
         cfg:
           - runner: ubuntu-24.04
             slug: linux-x64
-            arch: x86-64-v2
-            experimental: false
+            arch: x86-64-v3
           - runner: ubuntu-24.04
             slug: linux-x64-nojit
-            arch: x86-64-v2
-            experimental: false
+            arch: x86-64-v3
             nojit: true
-          # Pinned: Conan maps this Clang to Visual Studio 17, which newer images no longer carry.
+          # Pinned: the leg needs Visual Studio 17, and the newer images carry only VS 2026 (VS 18).
+          # windows-2022 has VS 17 with the 14.4x toolset, so its Conan runtime version is v144;
+          # ci-leg.yml pins whatever value the cell declares.
           - runner: windows-2022
             slug: win-x64
-            arch: x86-64-v2
-            experimental: false
-          - runner: macos-latest
-            slug: macos-arm64
-            arch: baseline # the x86-64 levels do not apply to arm64
-            experimental: true
-    runs-on: ${{ matrix.cfg.runner }}
-    continue-on-error: ${{ matrix.cfg.experimental }}
-    timeout-minutes: 120
-    env:
-      # Same value as build-pypi.yml on x86-64 (pending the owner's decision there).
-      CAMEL_TARGET_ARCH: ${{ matrix.cfg.arch }}
+            arch: x86-64-v3
+            msvc_runtime_version: v144
+    uses: ./.github/workflows/ci-leg.yml
+    with:
+      runner: ${{ matrix.cfg.runner }}
+      slug: ${{ matrix.cfg.slug }}
+      arch: ${{ matrix.cfg.arch }}
+      nojit: ${{ matrix.cfg.nojit || false }}
+      msvc_runtime_version: ${{ matrix.cfg.msvc_runtime_version || '' }}
 
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - name: Enable long paths (Windows)
-        if: runner.os == 'Windows'
-        run: git config --global core.longpaths true
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      # Ubuntu 24.04's unversioned `clang` package is Clang 18; the project needs >= 19.
-      - name: Install toolchain (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-19 ninja-build cmake
-          mkdir -p "$RUNNER_TEMP/clang-bin"
-          ln -sf /usr/bin/clang-19 "$RUNNER_TEMP/clang-bin/clang"
-          ln -sf /usr/bin/clang++-19 "$RUNNER_TEMP/clang-bin/clang++"
-          echo "$RUNNER_TEMP/clang-bin" >> "$GITHUB_PATH"
-
-      - name: Install toolchain (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco upgrade llvm ninja -y --no-progress
-          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      # Apple Clang is rejected by CMakeLists.txt (compiler id must be Clang), so use Homebrew LLVM.
-      - name: Install toolchain (macOS)
-        if: runner.os == 'macOS'
-        env:
-          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
-        run: |
-          # Pinned to the major version of the Linux job: fmt 11.2 does not compile with the
-          # libc++ of the newest Homebrew LLVM.
-          brew install llvm@19 ninja
-          echo "$(brew --prefix llvm@19)/bin" >> "$GITHUB_PATH"
-
-      - name: Verify toolchain
-        run: |
-          clang --version
-          clang++ --version
-          cmake --version
-          ninja --version
-          node --version
-          python --version
-          major=$(clang -dumpversion | cut -d. -f1)
-          if [ "$major" -lt 19 ]; then
-            echo "::error::Clang >= 19 is required (docs/setup.en.md); found $(clang -dumpversion)"
-            exit 1
-          fi
-          echo "CLANG_MAJOR=$major" >> "$GITHUB_ENV"
-
-      - name: Install Conan and test-side Python packages
-        run: |
-          python -m pip install --upgrade pip "conan>=2.10,<3" $TEST_PIP_PACKAGES
-          # CPU-only wheels: the default Linux wheel on PyPI pulls in the CUDA runtime.
-          # The wheel host is occasionally unreachable from a runner; try a few times.
-          for attempt in 1 2 3 4; do
-            python -m pip install torch --index-url https://download.pytorch.org/whl/cpu && break
-            [ "$attempt" = 4 ] && exit 1
-            sleep $((attempt * 20))
-          done
-
-      - name: Cache Conan packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.conan2/p
-          key: conan-${{ matrix.cfg.slug }}-clang${{ env.CLANG_MAJOR }}-${{ hashFiles('conanfile.txt') }}
-          restore-keys: |
-            conan-${{ matrix.cfg.slug }}-clang${{ env.CLANG_MAJOR }}-
-
-      # The detected profile is adjusted to the one in docs/setup.en.md: C++23 and Ninja Multi-Config.
-      - name: Conan profile
-        run: |
-          conan profile detect --force
-          profile="$(conan profile path default)"
-          # Not `sed -i`: on the Windows runner its rename crosses devices and fails.
-          python - "$profile" <<'EOF'
-          import re, sys
-          path = sys.argv[1]
-          text = open(path, encoding="utf-8").read()
-          text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
-          # The image has the 14.4x toolset; v143 makes Conan ask vcvars for 14.3, which is absent.
-          text = re.sub(r"(?m)^compiler\.runtime_version=v143$", "compiler.runtime_version=v144", text)
-          text += "\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n"
-          open(path, "w", encoding="utf-8", newline="\n").write(text)
-          EOF
-          cat "$profile"
-
-      - name: Install npm dependencies (skip husky / prepare)
-        run: npm ci --ignore-scripts
-
-      - name: Conan install (Release, Debug, RelWithDebInfo)
-        run: node scripts/install.js
-
-      # scripts/cmake-opts.js reads the build options from .camel-opts.json.
-      - name: Switch the JIT off (no-JIT build)
-        if: matrix.cfg.nojit
-        run: |
-          echo '{ "ENABLE_FASTVM_JIT": "OFF" }' > .camel-opts.json
-
-      - name: Build (Release)
-        run: npm run build
-
-      # The precondition of the tests that need compiled code must say "no JIT" here: otherwise
-      # this job would test the ordinary build a second time.
-      - name: Check that the build has no JIT (no-JIT build)
-        if: matrix.cfg.nojit
-        run: |
-          if node test/tools/have-native-jit.mjs; then
-            echo "::error::the no-JIT build reports a JIT"
-            exit 1
-          fi
-
-      # The default collector is generational; the no-JIT job runs the whole set under the
-      # other one, so that mark-sweep stays tested on every push.
-      - name: Test (smoke + feat)
-        run: node scripts/test.js
-        env:
-          CAMEL_GC: ${{ matrix.cfg.nojit && 'mark-sweep' || '' }}
-
-      - name: Upload test logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-logs-${{ matrix.cfg.slug }}
-          path: |
-            test/results/log/*/fail/
-            test/results/log/*/summary.json
-          if-no-files-found: ignore
-          retention-days: 14
+  # Opt-in: `experimental` means it never decides the run, and it is the most expensive runner.
+  # build-pypi.yml already builds and smoke-installs wheels on macOS, so this leg is for the case
+  # where a macOS-only compiler problem has to be told apart from a wheel-build problem.
+  build-test-macos:
+    name: Build and test (macos-arm64)
+    if: github.event_name == 'workflow_dispatch' && inputs.macos
+    uses: ./.github/workflows/ci-leg.yml
+    with:
+      runner: macos-latest
+      slug: macos-arm64
+      arch: baseline # the x86-64 levels do not apply to arm64
+      experimental: true
 
   # Manual: Run workflow -> sanitizers. Debug build of everything with ASan + UBSan, then the smoke plan.
   # The flags reach CMake through CFLAGS/CXXFLAGS/LDFLAGS on the first configure of a fresh build tree.
@@ -231,7 +77,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      CAMEL_TARGET_ARCH: x86-64-v2
+      CAMEL_TARGET_ARCH: x86-64-v3
+      # This job builds Debug, so it asks for every configuration: Ninja Multi-Config wants one
+      # conan_toolchain.cmake per tree that covers the configurations the tree is built with.
+      CAMEL_CONAN_BUILD_TYPES: Release,Debug,RelWithDebInfo
 
     steps:
       - name: Checkout
@@ -280,8 +129,6 @@ jobs:
           path = sys.argv[1]
           text = open(path, encoding="utf-8").read()
           text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
-          # The image has the 14.4x toolset; v143 makes Conan ask vcvars for 14.3, which is absent.
-          text = re.sub(r"(?m)^compiler\.runtime_version=v143$", "compiler.runtime_version=v144", text)
           text += "\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n"
           open(path, "w", encoding="utf-8", newline="\n").write(text)
           EOF
@@ -313,5 +160,3 @@ jobs:
         with:
           name: test-logs-sanitizers
           path: test/results/log/
-          if-no-files-found: ignore
-          retention-days: 14

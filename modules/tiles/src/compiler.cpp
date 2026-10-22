@@ -10,6 +10,7 @@
 
 // Translate the supported pure tensor subgraphs without running user operators on the host.
 #include "camel/core/rtdata/array.h"
+#include "camel/core/tags.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
@@ -273,7 +274,7 @@ class Compiler {
         }
         return {.type = type, .tensor = append(std::move(node))};
     }
-    size_t materialize(const Value &value) {
+    size_t materialize(const Value &value, const char *what) {
         if (value.tensor != SIZE_MAX)
             return value.tensor;
         if (value.constant && std::holds_alternative<double>(*value.constant))
@@ -282,16 +283,17 @@ class Compiler {
                     .op         = "constant64",
                     .attributes = {std::bit_cast<int64_t>(std::get<double>(*value.constant))},
                     .dtype      = DType::F64});
-        throw UnsupportedComputation("loop state/capture must be a tensor or f64 value");
+        throw UnsupportedComputation(
+            std::string(what) + " must be a tensor or f64 value (" +
+            (value.type != nullptr ? value.type->toString() : std::string("unknown")) + ")");
     }
     Value loop(Frame &frame, rt::gc_node_ref_t id) {
         const rt::LoopView view(*runtimeProgram, *frame.graph, id);
         if (view.kind() != core::LoopKind::For || view.stateCount() == 0 ||
             !view.bodyEffects().pure())
             throw UnsupportedComputation("tiles requires a pure static For loop");
-        // The body is a region of the graph that has the node, or a graph of its own (a program an
-        // interpreter made for itself, outlineLoopRegions).
-        auto *body = view.inRegions() ? frame.graph : view.bodyGraph();
+        // The body is a region of the graph that has the node.
+        auto *body = frame.graph;
         const rt::fact::Anchor anchors[]{
             {runtimeProgram, frame.graph, id},
             {runtimeProgram, body, *view.bodyElementParam()}};
@@ -313,20 +315,21 @@ class Compiler {
         std::vector<size_t> inputs;
         for (size_t i = 0; i < view.stateCount(); ++i) {
             auto initial = eval(frame, view.initialState(i));
-            inputs.push_back(materialize(initial));
+            inputs.push_back(materialize(initial, "loop initial state"));
             auto state = nested.placeholder(initial.type);
             region->stateInputs.push_back(state.tensor);
             initials.push_back(std::move(initial));
             states.push_back(std::move(state));
         }
-        const std::vector<rt::gc_node_ref_t> outerRefs =
-            view.inRegions() ? view.externalInputs(true)
-                             : std::vector<rt::gc_node_ref_t>(
-                                   view.captures().begin(),
-                                   view.captures().end());
+        // Only values read from outside the regions are captured; a constant is lowered in place
+        // by eval() (a DATA node, or a node whose value is known at build time), so a constant
+        // (a tensor literal, a tuple FILL template, the round counter's initial value) is not a
+        // capture (H91, "a constant is not a capture"). Capturing the tuple template of the
+        // next-state FILL is what used to make a multi-state loop unlowerable.
+        const std::vector<rt::gc_node_ref_t> outerRefs = view.externalInputs(false);
         for (auto ref : outerRefs) {
             const auto outer = eval(frame, ref);
-            inputs.push_back(materialize(outer));
+            inputs.push_back(materialize(outer, "loop capture"));
             auto inner = nested.placeholder(outer.type);
             region->captureInputs.push_back(inner.tensor);
             captures.push_back(std::move(inner));
@@ -340,23 +343,18 @@ class Compiler {
         for (size_t i = 0; i < states.size(); ++i)
             activation.values.emplace(view.bodyStateParam(i), states[i]);
         for (size_t c = 0; c < captures.size(); ++c)
-            activation.values.emplace(
-                view.inRegions() ? outerRefs[c] : view.bodyCapturePort(c),
-                captures[c]);
-        if (!view.inRegions()) {
-            nested.active.insert(body);
-        }
+            activation.values.emplace(outerRefs[c], captures[c]);
         // Visit the statements of the body too: an unused println in a sync body must not
         // disappear.
         nested.eval(activation, view.bodyResult());
         auto result = nested.eval(activation, view.nextState());
         if (states.size() == 1)
-            region->nextStates.push_back(nested.materialize(result));
+            region->nextStates.push_back(nested.materialize(result, "loop next state"));
         else {
             if (result.fields.size() != states.size())
                 throw std::runtime_error("loop next-state tuple arity mismatch");
             for (const auto &field : result.fields)
-                region->nextStates.push_back(nested.materialize(field));
+                region->nextStates.push_back(nested.materialize(field, "loop next state"));
         }
         region->body         = std::move(nested.program);
         region->body.outputs = region->nextStates;
@@ -469,9 +467,38 @@ class Compiler {
                 break;
             }
             case rt::GCNodeKind::Cast: {
-                out                = eval(f, ins.front());
-                const auto *target = tensor::asTensorType(node->dataType());
-                if (!target || out.tensor == SIZE_MAX || !target->assignableFrom(out.type))
+                out          = eval(f, ins.front());
+                auto *target = node->dataType();
+                // A nominal struct annotation accepts an anonymous struct value whose fields
+                // match by name (design principles 5.2). The same order is an identity
+                // conversion; a different order is a copy the front end otherwise emits, but
+                // reordering the already evaluated fields keeps the same value.
+                if (target->code() == ty::TypeCode::Struct &&
+                    out.type->code() == ty::TypeCode::Struct && target->assignableFrom(out.type)) {
+                    const auto *named   = static_cast<ty::StructType *>(target);
+                    const auto *unnamed = static_cast<ty::StructType *>(out.type);
+                    if (unnamed->size() != out.fields.size())
+                        throw std::runtime_error("struct cast field count mismatch");
+                    bool ordered = named->size() == unnamed->size();
+                    for (size_t i = 0; ordered && i < named->size(); ++i)
+                        ordered = named->fieldName(i) == unnamed->fieldName(i);
+                    if (!ordered) {
+                        std::vector<Value> fields;
+                        fields.reserve(named->size());
+                        for (size_t i = 0; i < named->size(); ++i) {
+                            const auto at = unnamed->findField(named->fieldName(i));
+                            if (!at)
+                                throw std::runtime_error("struct cast field is missing");
+                            fields.push_back(std::move(out.fields[*at]));
+                        }
+                        out.fields = std::move(fields);
+                    }
+                    out.type = target;
+                    break;
+                }
+                const auto *tensorTarget = tensor::asTensorType(target);
+                if (!tensorTarget || out.tensor == SIZE_MAX ||
+                    !tensorTarget->assignableFrom(out.type))
                     throw std::runtime_error("unsupported cast or tensor shape assertion failed");
                 break;
             }
@@ -594,8 +621,10 @@ class Compiler {
                 // Only this operator's lowering inherits its lexical grant.
                 // Arguments and separately called functions have already been
                 // lowered with their own permissions and must remain unchanged.
+                const camel::core::sem::PermissionMask permissions =
+                    camel::core::tag::factsOf(*g, id).permissions;
                 for (size_t i = first; i < program.nodes.size(); ++i) {
-                    program.nodes[i].permissions = g->nodePermissions(id);
+                    program.nodes[i].permissions = permissions;
                     if (program.nodes[i].semantic == SIZE_MAX)
                         program.nodes[i].semantic = semantic;
                 }
@@ -783,13 +812,32 @@ class Compiler {
             throw UnsupportedComputation(
                 "operator '" + uri() + "' needs a statically known f32 tensor result");
         Node n{.op = std::string(def->name), .shape = *result->shape()};
-        if (n.op == "sum_to" || n.op == "cast_like") {
+        if (n.op == "sum_to") {
             n.inputs = {tensorValue(args.at(0))};
             if (program.nodes[n.inputs[0]].shape == n.shape)
                 return {.type = *inferred, .tensor = n.inputs[0]};
-            if (n.op == "cast_like")
-                throw std::runtime_error("cast_like shape mismatch");
             return {.type = *inferred, .tensor = append(std::move(n))};
+        }
+        if (n.op == "cast" || n.op == "cast_like") {
+            // `cast_like` keeps the source's shape but takes `like`'s element type; `cast`
+            // names its target type in the second argument. The check above leaves only f32
+            // results, and `tensorValue` has already converted an f64 scalar source, so the
+            // source is f32 whenever the target is: returning it is then the documented
+            // "converting a value to its own type does nothing". A different element type
+            // would have to convert, which this backend cannot represent yet, so the region
+            // stays on the CPU, where the tensor kernel converts
+            // (notes/core-semantics-map.md, "cast_like"). A scalar source is not the same
+            // value as the 0-d tensor this result has: keep that on the CPU as well.
+            if (!tensor::asTensorType(args.at(0).type))
+                throw UnsupportedComputation("'" + n.op + "' needs a tensor operand here");
+            n.inputs           = {tensorValue(args.at(0))};
+            const Node &source = program.nodes[n.inputs[0]];
+            if (source.shape != n.shape)
+                throw std::runtime_error(n.op + " shape mismatch");
+            if (source.dtype == n.dtype)
+                return {.type = *inferred, .tensor = n.inputs[0]};
+            throw UnsupportedComputation(
+                "element type conversion in '" + n.op + "' is not supported");
         }
         if (n.op == "broadcast_like" || n.op == "expand_axis") {
             n.inputs   = {tensorValue(args.at(0))};
@@ -902,11 +950,7 @@ std::string loopEligibility(
             const auto ref = view.initialState(i);
             frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
         }
-        const std::vector<rt::gc_node_ref_t> outerRefs =
-            view.inRegions() ? view.externalInputs(true)
-                             : std::vector<rt::gc_node_ref_t>(
-                                   view.captures().begin(),
-                                   view.captures().end());
+        const std::vector<rt::gc_node_ref_t> outerRefs = view.externalInputs(false);
         for (auto ref : outerRefs)
             frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
         (void)compiler.loop(frame, id);
@@ -1021,3 +1065,4 @@ void bindRegionArguments(
     planStorage(program);
 }
 } // namespace camel::tiles
+

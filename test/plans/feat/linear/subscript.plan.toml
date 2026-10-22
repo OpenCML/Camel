@@ -1,0 +1,109 @@
+id = "linear.subscript"
+order = 346
+tier = "fast"
+tags = ["feat", "linear", "subscript", "slice"]
+
+[[tests]]
+name = "subscript.forms"
+desc = "Every form of a subscript on an array of rank 1 (design principles 5.4): `xs[a:b]`, `xs[a:]`, `xs[:b]`, `xs[:]`, a step of 1, an int-array index (take) and `last(xs)`. The slice shares the block of the source; the element values are the ones of the first dimension, on every back end."
+kind = "behavior"
+case = "../../../cases/parse/syntax/subscript_forms.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+expect_exit = 0
+expect_stdout_exact = "part [2, 3]\nafter [3, 4]\ntill [1, 2]\nwhole [1, 2, 3, 4]\nstepped [1, 2, 3, 4]\nrows [3, 1]\nend 4\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "subscript.slice_negative.nvm"
+desc = "A negative bound of a subscript slice is SliceOutOfRange at the bracket, not a count from the end (design principles 3.9, 5.4), with both bounds and the length (nvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/subscript_slice_negative.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::SliceOutOfRange"
+expect_diagnostic_code = "0x04000052"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 14
+expect_output_contains = ["The range -1 to 3 is out of range for an array of length 5."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "subscript.slice_negative.fvm"
+desc = "A negative bound of a subscript slice is SliceOutOfRange at the bracket on the bytecode VM too, at the same position (fvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/subscript_slice_negative.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::SliceOutOfRange"
+expect_diagnostic_code = "0x04000052"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 14
+expect_output_contains = ["The range -1 to 3 is out of range for an array of length 5."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "subscript.slice_out_of_range.nvm"
+desc = "A bound equal to the length is the end of the array and is in range; one past it is SliceOutOfRange with both bounds and the length (nvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/subscript_slice_out_of_range.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::SliceOutOfRange"
+expect_diagnostic_code = "0x04000052"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 14
+expect_output_contains = ["[2, 3, 4, 5]", "The range 3 to 9 is out of range for an array of length 5."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "subscript.step"
+desc = "A subscript slice with a step other than 1 is a view with strides: the operator faults with InvalidArgument and says it waits for H17, instead of copying the elements (design principles 5.4). A step of 1 slices as usual."
+kind = "negative"
+case = "../../../cases/linear/faults/subscript_step.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_code = "0x04000034"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 14
+expect_output_contains = ["[1, 2, 3, 4, 5]", "a slice step must be 1 for now", "H17"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "subscript.take_index"
+desc = "An int-array subscript is take: an index outside the array is IndexOutOfRange with the index as written, and the first call (with a repeated index) prints its elements in the order given."
+kind = "negative"
+case = "../../../cases/linear/faults/subscript_take_index.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 14
+expect_output_contains = ["[5, 1, 5]", "Index 7 is out of range for an array of length 5."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "subscript.last_empty"
+desc = "`last` of an empty array is IndexOutOfRange, as `xs[0]` of an empty array is: an array with no last element has no value to give."
+kind = "negative"
+case = "../../../cases/linear/faults/subscript_last_empty.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_output_contains = ["Index -1 is out of range for an array of length 0."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

@@ -23,6 +23,9 @@
  * test::saturate runs under the default numeric policy (the order and grouping of a sum or
  * product may change), test::saturate_safe under the strict one. For each function of the
  * corpus it prints "SATURATE <name> add=<n> mul=<n>": the operators left after extraction.
+ * test::saturate_props repeats the run to report the properties the counters stand for: every
+ * function reaches a fixed point within the budget, a second saturation of the same writings
+ * adds nothing, two sessions over the same program agree, and the same operators remain.
  */
 #include "camel/passes/test/saturate.h"
 
@@ -160,21 +163,52 @@ std::vector<Rule> corpusRules() {
     return rules;
 }
 
+const std::set<std::string> kCorpusTargets{
+    "strict",
+    "underflow_sensitive",
+    "strict_coefficients",
+    "relaxed_coefficients",
+    "mixed_permissions",
+    "integer_coefficients",
+    "integer_chain",
+    "shared_product",
+    "strict32",
+    "integer32"};
+
+/// Prints the operators each saturated function was left with: the observable result the rules
+/// work for. A rule that never fires leaves an `add` or a `mul` behind, so this also says that
+/// the saturation did not stop early.
+void printOperatorCounts(
+    const Program *next, const std::vector<std::pair<std::string, GraphId>> &done,
+    std::ostream &os) {
+    for (const auto &[name, id] : done) {
+        size_t adds = 0, muls = 0, waits = 0;
+        const GCGraph *graph = next->graph(id);
+        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            if (graph->node(ref)->kind != GCNodeKind::Oper) {
+                continue;
+            }
+            const auto uri = graph->nodeBodyAs<GCOperBody>(ref)->uri();
+            waits += graph->ctrlInputsOf(ref).empty() ? 0 : 1;
+            adds += uri.starts_with(":op/add_");
+            muls += uri.starts_with(":op/mul_");
+        }
+        os << "SATURATE " << name << " add=" << adds << " mul=" << muls << " waits=" << waits
+           << "\n";
+    }
+}
+
+/// Whether two runs of the same saturation found and changed the same things. `saturated` is
+/// the termination property: a run whose budget ended first has not reached a fixed point.
+bool sameCounters(const SaturateStats &a, const SaturateStats &b) {
+    return a.rounds == b.rounds && a.matches == b.matches && a.newWritings == b.newWritings &&
+           a.unions == b.unions && a.saturated == b.saturated;
+}
+
 const Program *saturateProgram(
     const camel::core::context::context_ptr_t &ctx, const Program *program, std::ostream &os,
     sem::NumericPolicy policy, const char *extraTarget = nullptr, size_t rounds = Budget{}.rounds) {
-    static const std::set<std::string> kTargets{
-        "strict",
-        "underflow_sensitive",
-        "strict_coefficients",
-        "relaxed_coefficients",
-        "mixed_permissions",
-        "integer_coefficients",
-        "integer_chain",
-        "shared_product",
-        "strict32",
-        "integer32"};
-    std::set<std::string> targets = kTargets;
+    std::set<std::string> targets = kCorpusTargets;
     if (extraTarget != nullptr) {
         targets.insert(extraTarget);
     }
@@ -215,20 +249,79 @@ const Program *saturateProgram(
         done.emplace_back(graph->name(), graph->id());
     }
     const Program *next = session.commit();
-    for (const auto &[name, id] : done) {
-        size_t adds = 0, muls = 0, waits = 0;
-        const GCGraph *graph = next->graph(id);
-        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
-            if (graph->node(ref)->kind != GCNodeKind::Oper) {
+    printOperatorCounts(next, done, os);
+    return next;
+}
+
+/// The properties of saturation, on the algebra corpus under the default numeric policy.
+///
+/// One `SaturateStats` snapshot (rounds, matches, writings, unions of a particular rule set and
+/// matcher) is not a property: it changes whenever the matcher or the rules change. What the
+/// design promises is weaker and still testable — the run terminates, the writings are a fixed
+/// point (saturating them again adds no writing and no union), and the same program and rules
+/// give the same counters on every run. The result the rules are for (the operators left after
+/// extraction) is printed too, so a rule that stopped firing is visible.
+const Program *saturateProgramChecked(
+    const camel::core::context::context_ptr_t &ctx, const Program *program, std::ostream &os,
+    sem::NumericPolicy policy) {
+    const std::vector<Rule> rules = corpusRules();
+    const Budget budget;
+
+    // A first run, and a second saturation of the same writings. The session is not committed:
+    // only the counters and the fixed point are read from it.
+    std::vector<std::pair<SaturateStats, SaturateStats>> probe;
+    {
+        RuntimeGraphDraftSession session(ctx, program);
+        for (GCGraph *graph : program->graphs()) {
+            if (!kCorpusTargets.contains(graph->name())) {
                 continue;
             }
-            const auto uri = graph->nodeBodyAs<GCOperBody>(ref)->uri();
-            waits += graph->ctrlInputsOf(ref).empty() ? 0 : 1;
-            adds += uri.starts_with(":op/add_");
-            muls += uri.starts_with(":op/mul_");
+            GraphDraft &draft = session.edit(graph);
+            DraftWritings writings(draft, policy);
+            writings.build();
+            const SaturateStats first = writings.saturate(rules, budget);
+            const SaturateStats again = writings.saturate(rules, budget);
+            probe.emplace_back(first, again);
         }
-        os << "SATURATE " << name << " add=" << adds << " mul=" << muls << " waits=" << waits << "\n";
     }
+
+    // A second run over the same program: it must find the same counters, and its result is the
+    // program the pipeline gets.
+    RuntimeGraphDraftSession session(ctx, program);
+    std::vector<std::pair<std::string, GraphId>> done;
+    size_t saturated = 0, fixpoint = 0, stable = 0;
+    size_t run = 0;
+    for (GCGraph *graph : program->graphs()) {
+        if (!kCorpusTargets.contains(graph->name())) {
+            continue;
+        }
+        GraphDraft &draft = session.edit(graph);
+        DraftWritings writings(draft, policy);
+        writings.build();
+        const SaturateStats stats = writings.saturate(rules, budget);
+        const SaturateStats &first = probe[run].first;
+        const SaturateStats &again = probe[run].second;
+        ++run;
+        const bool same  = sameCounters(first, stats);
+        const bool fixed = again.newWritings == 0 && again.unions == 0 && again.saturated;
+        saturated += stats.saturated ? 1 : 0;
+        fixpoint += fixed ? 1 : 0;
+        stable += same ? 1 : 0;
+        const ExtractStats extracted = writings.extract(*findCostModel("nodes"), ctx.get());
+        os << "SATURATE-INFO " << graph->name() << " rounds=" << stats.rounds
+           << " matches=" << stats.matches << " writings=" << stats.newWritings
+           << " unions=" << stats.unions << " saturated=" << stats.saturated
+           << " erased=" << extracted.erased << "\n";
+        os << "SATURATE-AGAIN " << graph->name() << " writings=" << again.newWritings
+           << " unions=" << again.unions << " saturated=" << again.saturated
+           << " rounds=" << again.rounds << " matches=" << again.matches << "\n";
+        os << "SATURATE-STABLE " << graph->name() << " same=" << (same ? 1 : 0) << "\n";
+        done.emplace_back(graph->name(), graph->id());
+    }
+    const Program *next = session.commit();
+    printOperatorCounts(next, done, os);
+    os << "SATURATE-PROPS targets=" << done.size() << " saturated=" << saturated
+       << " fixpoint=" << fixpoint << " stable=" << stable << "\n";
     return next;
 }
 
@@ -252,4 +345,9 @@ SaturateWideTestPass::apply(const camel::runtime::Program *program, std::ostream
 const camel::runtime::Program *
 SaturateOneRoundTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     return saturateProgram(context_, program, os, sem::NumericPolicy::relaxed(), nullptr, 1);
+}
+
+const camel::runtime::Program *
+SaturatePropsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    return saturateProgramChecked(context_, program, os, sem::NumericPolicy::relaxed());
 }

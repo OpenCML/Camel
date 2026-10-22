@@ -1,0 +1,13 @@
+/**
+ * The declaration of `sim:pi_hits` takes two ordinary arguments: one is refused at the call,
+ * and the overload the message lists is the declaration's `(samples: int, seed: int) => int` —
+ * `stdlib/sim.cml`, not the C++ module (handover H179).
+ */
+module sim_arity
+
+import { pi_hits } from sim
+
+func main(): int sync {
+    println(pi_hits(1))
+    return 0
+}

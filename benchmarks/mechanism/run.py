@@ -26,6 +26,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 COUNTS = HERE / "counts.py"
+REPO_ROOT = HERE.parents[1]
 
 HEADER = ["section", "item", "scope", "metric", "value", "unit", "rule"]
 
@@ -76,8 +77,8 @@ def lookup(rows: list[list[str]], section: str, item: str, metric: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out-dir", default=".")
-    ap.add_argument("--camel-repo", default=os.environ.get("CAMEL_REPO", "D:/Projects/Camel"))
-    ap.add_argument("--ssh-host", default=os.environ.get("T10_SSH_HOST", "88zjwei"))
+    ap.add_argument("--camel-repo", default=os.environ.get("CAMEL_REPO", str(REPO_ROOT)))
+    ap.add_argument("--ssh-host", default=os.environ.get("T10_SSH_HOST", ""))
     ap.add_argument("--server-dir", default=os.environ.get("T10_SERVER_DIR", "~/camel-eval/t10"))
     ap.add_argument("--torch-prefix", default=None, help="server site-packages; default auto-detected from venv-bench")
     ap.add_argument("--skip-server", action="store_true", help="reuse server_*_rows.csv already in --out-dir")
@@ -105,6 +106,8 @@ def main() -> int:
         collect(rows, ort_csv.read_text(encoding="utf-8"))
         collect(rows, et_csv.read_text(encoding="utf-8"))
     else:
+        if not args.ssh_host:
+            ap.error("--ssh-host (or T10_SSH_HOST) is required unless --skip-server is given")
         print("== scp counts.py to server ==", flush=True)
         run(["scp", "-o", "BatchMode=yes", str(COUNTS), f"{args.ssh_host}:{args.server_dir}/counts.py"])
         torch_prefix = args.torch_prefix

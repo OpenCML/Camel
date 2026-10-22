@@ -1,0 +1,46 @@
+/** The typed laws, applied on their own, and the deliberately wrong versions the tests must catch. */
+module typed_pass
+import { Program } from graph
+import { rewrite } from rewrite
+import { int32_add_zero, int32_zero_add, int32_sub_zero, int32_mul_one, int32_one_mul, int32_mul_zero, int32_zero_mul, int32_div_one, int32_neg_neg, int32_sub_self, int32_combine, int32_fold, int32_fold_add, float32_mul_one, float32_one_mul, float32_add_minus_zero, float32_sub_zero, float32_div_one, float32_neg_neg, float32_combine, float32_combine_mixed, float32_fold, float32_double } from rules
+
+/// Every i32 law but nothing else: a float or an `int` expression is untouched.
+export func apply_i32(p: Program): Program! {
+    return rewrite(p, [int32_add_zero, int32_zero_add, int32_sub_zero, int32_mul_one, int32_one_mul, int32_mul_zero, int32_zero_mul, int32_div_one, int32_neg_neg, int32_sub_self, int32_combine, int32_fold, int32_fold_add])
+}
+
+/// Every f32 law but nothing else.
+export func apply_f32(p: Program): Program! {
+    return rewrite(p, [float32_mul_one, float32_one_mul, float32_add_minus_zero, float32_sub_zero, float32_div_one, float32_neg_neg, float32_combine, float32_combine_mixed, float32_fold, float32_double])
+}
+
+/// Only the exact doubling law, so its condition is observable: the combine rule would otherwise
+/// take the same instances first.
+export func apply_double_only(p: Program): Program! { return rewrite(p, [float32_double]) }
+
+// ---- The wrong laws: the same shapes without the guards. A test that does not change under
+// these would not be testing the guard at all.
+
+rule i32_mul_div_wrong(x: i32) { (x * 2) / 2 => x }
+rule f32_add_stable_wrong(x: f32, const c: f32) { (x + c) - c => x }
+rule f32_mul_div_wrong(x: f32) { (x * 3.0) / 3.0 => x }
+rule f32_zero_wrong(x: f32) { x * 0.0 => f32(0.0) }
+rule f32_self_wrong(x: f32) { x / x => f32(1.0) }
+rule f32_double_wrong(x: f32, const c: f32) { x * c + x * c => x * (c + c) }
+rule f32_combine_wrong(x: f32, const c1: f32, const c2: f32) { x * c1 + x * c2 => x * (c1 + c2) }
+rule f32_fold_wrong(x: f32, const c1: f32, const c2: f32) { (x * c1) * c2 => x * (c1 * c2) }
+rule f32_mixed_wrong(x: f32, const c1: f32, const c2: f32) { x * c1 + x * c2 => x * (c1 + c2) }
+
+export func apply_double_wrong(p: Program): Program! { return rewrite(p, [f32_double_wrong]) }
+
+/// The five wrong laws of the boundary program at once: their patterns are disjoint, so every
+/// line changes.
+export func apply_all_boundary_wrong(p: Program): Program! {
+    return rewrite(p, [i32_mul_div_wrong, f32_add_stable_wrong, f32_mul_div_wrong, f32_zero_wrong, f32_self_wrong])
+}
+
+/// The three coefficient-law guards at once: the sum overflow, the product underflow and overflow,
+/// and the zero-sum mix.
+export func apply_all_guard_wrong(p: Program): Program! {
+    return rewrite(p, [f32_combine_wrong, f32_fold_wrong, f32_mixed_wrong])
+}

@@ -1,0 +1,20 @@
+// A module that is both the pass the pipeline runs and a library the program being transformed
+// imports. The pass program and the program have builders of their own, and neither may read the
+// other's entities (task H36, item 1; H37 review, question 2). `twice` is a generic function, so
+// both builders also make an instance of it for the same type.
+module sharedvals
+import { Program } from graph
+
+export func bump(x: int): int {
+    return x + 1
+}
+
+export func twice(x: (typeas T)): T {
+    return x + x
+}
+
+export func run(p: Program): Program! sync {
+    println(bump(41))
+    println(twice(5))
+    return p
+}

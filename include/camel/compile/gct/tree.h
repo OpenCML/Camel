@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 13, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,6 +57,7 @@
 #include <iosfwd>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -66,8 +67,12 @@
 #include "camel/common/ref.h"
 #include "camel/compile/gct/node.h"
 #include "camel/compile/literal.h"
+#include "camel/core/operator_table.h"
 
 namespace camel::compile::gct {
+
+/// The table's operator index (see the DREF the compiler makes for an operator by id).
+using OperId = camel::core::OperId;
 
 /// One `#` tag use (design principles 6.2) as written, before it is resolved: the name as
 /// written (qualified by the namespaces of its module), its arguments lowered to data nodes
@@ -107,11 +112,19 @@ class Tree {
     // reference and is refused with std::runtime_error (makeFunc takes the empty name of an
     // anonymous function).
     node_ptr_t makeData(const data_ptr_t &data);
-    node_ptr_t makeType(Type *type, ImplMark impl);
+    node_ptr_t makeType(Type *type);
     node_ptr_t makeDecl(const std::string &name, bool isFunc);
     node_ptr_t makeFunc(const std::string &name);
     node_ptr_t makeNRef(const std::string &name);
     node_ptr_t makeDRef(const std::string &name);
+    /// A DREF the compiler makes for an operator it already knows by id (`oper::EnumMake`):
+    /// the graph builder finds the group from the id, in the built-in module, instead of
+    /// resolving `name` through the scopes and imports of the program. `name` is the group's
+    /// entity name, kept as the node's label (the GCT dump, a diagnostic about the node).
+    node_ptr_t makeDRef(OperId oper, const std::string &name);
+    /// The id of the operator a DREF made by makeDRef(OperId, name) stands for; nullopt for
+    /// every other node.
+    std::optional<OperId> operRefOf(const Node *node) const;
     node_ptr_t makeVari();
     node_ptr_t makeWait();
     node_ptr_t makeLink(size_t argCount);
@@ -121,6 +134,26 @@ class Tree {
     node_ptr_t makeAccs(const std::string &key);
     node_ptr_t makeBrch(BranchKind kind = BranchKind::Cond);
     node_ptr_t makeCase(CaseType type, const std::string &binding = {});
+    /// `match type` (children: TYPE, TCASE...) and one of its cases (child: the body).
+    node_ptr_t makeTypeMatch();
+    node_ptr_t makeTypeCase(uint16_t patterns);
+    /// `static for (n, F) in fields T` (children: TYPE, body) or `static for (j) in indices ts`
+    /// (children: the operand value, body). `valueName` is `n` (or `j`), `typeName` is `F`
+    /// (empty for `indices`); both are bound only while the body is built.
+    node_ptr_t makeStaticFor(
+        const std::string &valueName, const std::string &typeName, bool byIndices = false);
+    /// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body` (children: TYPE, the k
+    /// first values, body), or the same over `indices ts` (children: the operand value, the k
+    /// first values, body). `state` are the names of the state; `valueName` is `n` (or `j`) and
+    /// `typeName` is `F` (empty for `indices`), both bound only while the body is built.
+    node_ptr_t makeStaticLoop(
+        const std::vector<std::string> &state, const std::string &valueName,
+        const std::string &typeName, bool byIndices = false);
+    /// `t.[key]` (children: the target, the key expression).
+    node_ptr_t makeStaticAccess();
+    /// A comprehension (child: the `static for` that generates it): `isStruct` for
+    /// `{ static for ... }`, false for `( static for ... )` (H51 step 4).
+    node_ptr_t makeComprehension(bool isStruct);
     /// A CASE of an enum variant: `label` the variant as written (`Shape::Rect`), `fields` and
     /// `bindings` the entries of the pattern in the order written (see Node::EnumCase).
     node_ptr_t makeEnumCase(
@@ -180,6 +213,21 @@ class Tree {
     void setLiteralElements(const data_ptr_t &data, std::vector<LiteralElement> elements);
     const std::vector<LiteralElement> *literalElementsOf(const data_ptr_t &data) const;
 
+    /// A parameter of a lambda whose type is left out (design principles 5.9): its index among
+    /// the parameters (`with` parameters first) and the origin of the pair, where the
+    /// diagnostic goes when the expected function type does not determine it. The signature
+    /// built from the lambda stands `void` in its place until GIR, the only stage that knows
+    /// the expected type, fills it.
+    struct UnwrittenParam {
+        size_t index                      = 0;
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    };
+
+    /// The parameters of the lambda `func` whose type was left out, in the order written. Null
+    /// when there are none.
+    void setUnwrittenParams(const Node *func, std::vector<UnwrittenParam> params);
+    const std::vector<UnwrittenParam> *unwrittenParamsOf(const Node *func) const;
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -232,8 +280,12 @@ class Tree {
     std::unordered_map<const Node *, std::vector<Reference>> usings_;
     std::unordered_map<const Node *, std::vector<std::string>> namespaces_;
     std::unordered_map<const Node *, std::vector<TagUse>> tagUses_;
+    // The DREFs the compiler made for an operator it knows by id (makeDRef(OperId, name)),
+    // and that id: a DREF's payload is its name, so the id is kept beside the node.
+    std::unordered_map<const Node *, OperId> operRefs_;
     std::unordered_map<const Node *, std::map<size_t, std::vector<TagUse>>> fieldTagUses_;
     std::unordered_map<const Node *, literal::Value> literalValues_;
+    std::unordered_map<const Node *, std::vector<UnwrittenParam>> unwrittenParams_;
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.
     std::unordered_map<const camel::core::data::Data *, std::vector<LiteralElement>>

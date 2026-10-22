@@ -190,6 +190,8 @@ main 7
 
 **“被依赖”是静态的，并且在 `main` 之前。** `examples/now_order/main.cml`【实测】：
 
+<!-- camel-snippet: fragment: the top of examples/now_order/main.cml; noisy is declared above -->
+
 ```camel
 let cfg = noisy('evaluating cfg')
 let other = noisy('evaluating other')
@@ -226,6 +228,8 @@ main starts
 ### 1.5 跨模块时发生什么
 
 **(1) 导出的函数用到本模块顶层的值：名字找错。** `examples/lib_let/`：
+
+<!-- camel-snippet: fragment: two files side by side to compare them, not one program -->
 
 ```camel
 // lib.cml
@@ -607,9 +611,9 @@ C++ 模块没有 root 图，只有算子。今天的常量是无参的纯算子�
 | | 做法 | 评价 |
 |---|---|---|
 | (i) `DATA` 节点 | 模块在加载时交出一个值，导入方的 root 上放一个 `DATA` 节点 | 只适用于加载时就能确定的值；字符串、张量这类对象要在程序运行之前跨模块边界交给 Camel，碰到 10.5“模块不得跨调用保存指向 Camel 对象的裸指针”那组规则 |
-| (ii) 无输入的算子节点 | 模块声明“`pi` 是一个值，由算子 `math:pi` 给出”。第一次引用它时在公共 root 上建**一个** `OPER math:pi` 节点，之后所有引用都指向它 | 与 Camel 模块的 `let pi = <表达式>` 完全同构：root 上的一个节点，被依赖才求值，求值一次。纯算子被 `std::opt::fold` 折成常量【实测】。不纯的也能表达（`sys::args`、`os::cpu_count`）。模块接口只多一个“这是值不是函数”的标记 |
+| (ii) 无输入的算子节点 | 模块声明“`pi` 是一个值，由算子 `math:pi` 给出”。第一次引用它时在公共 root 上建**一个** `OPER math:pi` 节点，之后所有引用都指向它 | 与 Camel 模块的 `let pi = <表达式>` 完全同构：root 上的一个节点，被依赖才求值，求值一次。纯算子被 `std::opt::fold` 折成常量【实测】。不纯的也能表达（`process::args`、`process::cpu_count`）。模块接口只多一个“这是值不是函数”的标记 |
 
-建议 (ii)。用户写 `math::pi`，没有括号；图上与今天 `math::pi()` 所在位置的那个节点是同一种节点，只是它在 root 上、全程序一个。`pi()` 的去留见 Q6。标准库的签名文件相应地从 `inner func pi(): float` 改成值的声明（写法待定）。
+建议 (ii)。用户写 `math::pi`，没有括号；图上与今天 `math::pi()` 所在位置的那个节点是同一种节点，只是它在 root 上、全程序一个。`pi()` 的去留见 Q6。标准库的签名文件相应地把 `pi` 从函数声明改成值的声明（写法待定）。
 
 ### 5.6 用 Camel 写的标准库模块
 
@@ -771,6 +775,8 @@ root 上的值在整个运行期间都被 `main` 的函数值与各层帧引用�
 
 ### Q2 求值时机：`main` 之前，还是首次用到时
 
+<!-- camel-snippet: fragment: an open question; read_config is the question's hypothetical function -->
+
 ```camel
 let cfg = read_config()                   // 读文件，带效应
 func port(): int { return cfg.1 }
@@ -800,6 +806,8 @@ let b = open_log('b.log')
 **建议保持不是。** 需要顺序时写进一个 `sync` 函数体，或用数据依赖串起来。把 root 定为同步块等于让模块顶层成为一段脚本，并且跨模块时“谁的顶层先执行”没有自然的答案。
 
 ### Q4 是否允许导出 `var`
+
+<!-- camel-snippet: fragment: an open question; the body is elided and cnt is hypothetical -->
 
 ```camel
 // counter.cml

@@ -23,7 +23,10 @@
  *   grad(f)            <W...>(N...) => gradient of W0   (macro)
  *   with_grad(f)       <W...>(N...) => (value, gradient of W0)  (macro)
  *   stop_gradient(x)   x, through which no gradient flows
- *   @vjp<rule> func f  f with a custom derivative rule (see rules.h)
+ *
+ * A custom derivative rule is a declaration tag, not an operator of this module
+ * (design principles 6.2, 8): `#vjp<rule>` before a function declaration attaches the
+ * rule's graph to the function's graph (see rules.h).
  *
  * grad and with_grad differentiate the **first with parameter** of f (design
  * principles 9.9): the weights are `with` parameters, the ordinary parameters are

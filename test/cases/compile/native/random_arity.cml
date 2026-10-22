@@ -1,0 +1,12 @@
+/**
+ * The declaration of `rand:randint` takes two ordinary arguments: a second one is missing, and
+ * the overload the message lists is the declaration's (handover H19, step 10; H128).
+ */
+module random_arity
+
+import { randint } from random
+
+func main(): int sync {
+    println(randint(1))
+    return 0
+}

@@ -12,7 +12,6 @@ kind = "behavior"
 case = "../../../cases/opt/generic/generic_passes.cml"
 timeout_ms = 20000
 expect_exit = 0
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
@@ -40,3 +39,10 @@ desc = "Three sessions on one program (design 4.3.1): after the first commits, t
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
 args = ["${case}", "test::commit_conflict"]
 expect_stdout_contains = ["CONFLICTS before=0", "CONFLICTS same_graph=1 other_graph=0", "CHECKED refused: 1 graph(s)"]
+
+[[tests]]
+name = "stale_commit_merges_into_the_newest_snapshot"
+desc = "A session that started from a program another session has replaced, and whose graphs the other one did not touch, commits into that newest program (design 4.3.1: no conflict, one compare-and-swap) instead of forking the history: the change of the first session is kept, the second graph gets its own change, and the program that holds both is the one installed."
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "test::commit_merge"]
+expect_stdout_contains = ["MERGE stale=1", "MERGE installed=1 first_kept=1 second_kept=1 root_edited=1"]

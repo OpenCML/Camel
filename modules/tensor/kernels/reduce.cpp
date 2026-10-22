@@ -44,7 +44,9 @@ using type::TypeCode;
 
 namespace {
 
-constexpr int64_t kLaneGrain = 1 << 12;
+// One reduced element reads a strided value and adds it into an accumulator: about two
+// elementwise elements (parallel.h, kNsPerFloat).
+constexpr int64_t kLaneGrain = grainForWork(kNsPerFloat * 2.0);
 
 struct AxisSplit {
     int64_t outer  = 1;

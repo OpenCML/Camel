@@ -1,0 +1,38 @@
+/**
+ * Neural-network primitives: 2-D convolution and its gradients, max and average pooling with
+ * their gradients, batch normalization, embedding, the fused softmax cross-entropy loss, the
+ * optimizers, and the checkpoint writer for a parameter tree. The operators work on the core
+ * `Tensor` type; nothing here needs PyTorch or a GPU.
+ */
+
+// The declaration of the one fixed signature of the C++ module `modules/nn` (design principles
+// 6.4; handover H19, step 10; H165). This file is the one source of `save_params`'s signature;
+// the C++ side keeps the kernel, the executor, the operator traits, the resource and the
+// semantics.
+//
+// Every other operator of the module computes its signature from its arguments and stays in C++:
+//   - the fifteen tensor operators (`conv2d`, its three gradients, `max_pool2d`/`avg_pool2d`,
+//     their gradients, `batch_norm`, `batch_norm_train` and its gradient, `embedding`,
+//     `embedding_table_grad`, `softmax_cross_entropy` and its gradient) infer their element type
+//     and shape — or the shape of each tensor of their result tuple — from the dtype and shape of
+//     the tensors they receive, and the loss picks its label overload from the target's dtype;
+//   - the three optimizers (`sgd`, `adam_state`, `adam`) answer the parameter tree's own type or
+//     the module's `OptimizerState`, and their gradient parameter is typed by the parameter tree.
+// Their reference entries are in `stdlib/signatures/nn.cml`, as `json` and `random` keep the
+// entries of their computed signatures (handover H115, H128).
+//
+// `save_params` is fixed: it takes a value and a directory, writes the tensor leaves of the value,
+// and returns nothing. A declaration can say that with a type variable over the value.
+
+module nn
+
+// ---- optimizers ----
+
+/// Saves every tensor leaf of `params` under `dir`, as `<dir>/<path>.npy`, the path joining struct
+/// field names and tuple indices with dots; other leaves are ignored. The directories are
+/// created when missing.
+/// @effect writes files under `dir`
+/// @fails fault `RuntimeError` when the directory cannot be created or a leaf cannot be written
+/// @example-fragment the example builds its tensors with `new` from the `tensor` module, which this page does not import
+/// @example save_params({ w: new([1.0, 2.0]), b: new([0.0]) }, 'checkpoints/step-1')
+export func save_params(params: typeas P, dir: string): void

@@ -15,7 +15,7 @@ A Camel program is a graph. This chapter explains how this graph is evaluated: e
 | `var` parameter | The callee subgraph and the caller point to the same object |
 | `wait e` | Control edges between `e` and the operations before and after it that use its value or the variables it modifies |
 | `if`, `match`, `??`, `!!`, `?->` | A branch node; each arm is a subgraph |
-| `macro` function | An ordinary subgraph; the `std::macro` pass can evaluate it ahead of time and materialise the result as a constant in the graph |
+| `#macro` function | An ordinary subgraph; the `std::macro` pass can evaluate it ahead of time and materialise the result as a constant in the graph |
 
 ---
 
@@ -193,12 +193,12 @@ func main(): int sync {
 
 The management and tracking of side effects is still under research (the design principles, 2.8). The behaviour when the same mutable object is written in several places outside a sync block, none of them with `wait`, is not yet decided.
 
-## 4.5 `macro` functions
+## 4.5 `#macro` functions
 
-A function marked `macro` can be evaluated ahead of time by the `std::macro` pass, and the result is materialised as a constant in the graph:
+`#macro` is a standard tag ([6.2](../../design-principles.en.md), [8](../../design-principles.en.md)), written before a function declaration, usable without an import:
 
 ```cml
-macro func cube(x: int): int { return x * x * x }
+#macro func cube(x: int): int { return x * x * x }
 
 func main(): int sync {
     println(cube(3))
@@ -208,11 +208,14 @@ func main(): int sync {
 
 `camel m.cml` and `camel m.cml std::macro std::nvm` both print `27`; in the graph of the latter, `cube(3)` is already the constant `27` (which can be seen with `camel m.cml std::macro std::rgir`).
 
-- `macro` itself does not define a stage, and it is not mandatory: when the pipeline has no `std::macro`, a macro function is just an ordinary function.
-- Only calls whose arguments are all constants (or results of another macro) are evaluated ahead of time; otherwise the call is left to run time.
+`#macro` is a mark on the declaration, not part of the function type: the function type is that of an ordinary function. It may be written only on a function declaration; on a type, field, parameter or block it is a tag-position error, and `#macro<...>` is a tag-argument-count error. A lambda has no declaration to carry it, so `#macro` cannot be written there.
+
+- The tag itself does not define a stage, and it is not mandatory: when the pipeline has no `std::macro`, a macro function is just an ordinary function.
+- Only calls whose arguments are all constants (or results of another macro call) are evaluated ahead of time; otherwise the call is left to run time.
 - Side effects in the body of a macro function are handled as in an ordinary function: they happen at the time of evaluation.
-- A failure of ahead-of-time evaluation (an operator reports an error, or the evaluation depth limit is exceeded; the default is 64 levels, adjustable with `--max-macro-depth`) is the compile-time error `RuntimeDiag::MacroEvaluationFailed`, and the program does not run.
-- `grad` and the other automatic-differentiation operators are macro operators, and using them requires `std::macro` in the pipeline (section 16 of the tutorial). This is a precondition of that library, not a constraint of the language.
+- Evaluation proceeds in rounds: a round's results become the next round's constants, until no call can be evaluated ahead of time any more. A macro function value obtained in one round can therefore be expanded in the next.
+- A failure of ahead-of-time evaluation (an operator reports an error, or the evaluation depth limit is exceeded; the default is 64 levels, adjustable with `--max-macro-depth`) is a run-time fault, like a fault during the run of any pass: the stage is `pass:std::macro`, the position is the call, the program does not run, and the effects the evaluation performed before failing stay. A loop evaluated by `std::macro` runs at most 1,000,000 rounds (`--max-macro-rounds`), and passing that is the same fault.
+- `grad` and the other automatic-differentiation operators are macro operators — a fact of the operator declaration, not the `#macro` tag; using them requires `std::macro` in the pipeline (section 16 of the tutorial). This is a precondition of that library, not a constraint of the language.
 
 ## 4.6 Faults, exit and resource limits
 

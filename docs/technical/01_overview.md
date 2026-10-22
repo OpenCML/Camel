@@ -38,7 +38,6 @@
 
 - 类型系统包含：基本类型、复合类型（List/Dict/Tuple/Struct）、函数类型（含 with 参数、修饰符等）。
 - 运算符在 GIR 中对应 **OperNode**，绑定到 `operator_t`，由运行时根据类型分发。
-- 支持 **Inner/Outer/Graph** 等实现标记（ImplMark），用于多态与特化。
 
 ## 4. 技术栈概览
 

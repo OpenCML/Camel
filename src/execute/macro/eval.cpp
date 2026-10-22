@@ -415,18 +415,26 @@ void MacroEvaluator::noteFailure(
 }
 
 void MacroEvaluator::reportFailures() {
-    // Provisional rule of the language author: a macro call that std::macro evaluates and
-    // that fails (an operator's error, an exception, the depth limit) is an error, reported
-    // at the call with the reason. The pass driver stops the pipeline on it; with the
-    // command line's error limit the first one already ends the pass.
+    // Design principles 8: a failed evaluation is a fault like a fault during the run of any
+    // pass, not a compile error. It is recorded through the run-time sink, at the call (or at
+    // the place the evaluation reports), with the stage of the pass that was running. The
+    // program is not run: the sink's error limit stops the pipeline after this first fault.
     std::vector<Failure> failures = std::move(failures_);
     failures_.clear();
     for (const Failure &failure : failures) {
-        auto builder = context_->rtmDiags()->of(RuntimeDiag::MacroEvaluationFailed);
-        if (failure.origin != 0) {
-            builder.atOrigin(static_cast<camel::source::origin_id_t>(failure.origin));
-        }
-        builder.commit(failure.callee, failure.reason);
+        const auto origin = static_cast<camel::source::origin_id_t>(failure.origin);
+        RuntimeFault fault(
+            RuntimeDiag::MacroEvaluationFailed,
+            {failure.callee, failure.reason},
+            "",
+            nullptr,
+            ExecutionSiteHint{.cachedOrigin = origin});
+        ExecutionSite site;
+        site.cachedOrigin = origin;
+        Diagnostic diagnostic =
+            context_->runtimeErrorReporter()->describe(fault, site);
+        diagnostic.stage = "pass:std::macro";
+        context_->runtimeDiagSink()->add(std::move(diagnostic));
     }
 }
 
@@ -635,6 +643,10 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         data_arr_t wargs{indices.data() + normCount, indices.size() - normCount};
         FrameArgsView withView(*frame, wargs);
         FrameArgsView normView(*frame, nargs);
+        // What a pass recorded about this node (design principles 9.6).
+        const auto attrs = ownerGraph->nodeAttrs(nodeRef);
+        withView.setAttrs(attrs);
+        normView.setAttrs(attrs);
         (void)os;
         CAMEL_LOG_INFO_S("Macro", "Execute static operator '{}'.", std::string(body->uri()));
         mm::safepoint("macro static operator");

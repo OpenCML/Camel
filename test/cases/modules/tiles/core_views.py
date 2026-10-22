@@ -96,10 +96,11 @@ def run_matrix():
         folder = Path(directory)
         bits = prepare(folder)
         env = dict(os.environ, CAMEL_HOME=str(ROOT / 'out/latest'), TILES_TEST_OUT=str(folder),
-                   CAMEL_GC='generational', CAMEL_GC_VERIFY='both',
+                   CAMEL_GC_VERIFY='both',
                    CAMEL_GC_STRESS_SAFEPOINT='1', CAMEL_GC_STRESS_MODE='minor')
         for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
-            result = subprocess.run([EXE, str(Path(__file__).with_suffix('.cml')), 'std::macro', vm],
+            result = subprocess.run([EXE, '--gc', 'generational',
+                                     str(Path(__file__).with_suffix('.cml')), 'std::macro', vm],
                                     cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
             try:
                 assert result.returncode == 0, (vm, result.returncode, result.stdout, result.stderr)

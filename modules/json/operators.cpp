@@ -147,8 +147,6 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
         return json(fromSlot<Float64>(s));
     case TypeCode::Bool:
         return json(fromSlot<Bool>(s));
-    case TypeCode::Byte:
-        return json(static_cast<int>(static_cast<unsigned>(fromSlot<Byte>(s))));
     case TypeCode::Void:
         return json(nullptr);
     case TypeCode::String: {
@@ -538,7 +536,6 @@ bool jsonTypeEncodable(Type *type) {
     case TypeCode::Float32:
     case TypeCode::Float64:
     case TypeCode::Bool:
-    case TypeCode::Byte:
     case TypeCode::Void:
     case TypeCode::String:
         return true;
@@ -610,7 +607,7 @@ slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
 namespace {
 
 /// The argument of an accessor, with the layers its static type declares taken off. An
-/// accessor takes a `Json`, a `Json?`, or a `Json!` (also the `Json!` inside a `Json?!`, so
+/// accessor takes a `Json`, a `Json?`, or a `Json!` (also the `Json!` inside a `Json!?`, so
 /// that calls chain over a document decoded before); of a `Json!` it passes the error of the
 /// document on unchanged (design principles 11.2).
 struct JsonAccessorArg {
@@ -632,7 +629,7 @@ JsonAccessorArg jsonAccessorArg(ArgsView &norm, size_t i) {
     }
     if (tagged->isNullable()) {
         if (isNullValue(slot)) {
-            return arg; // a null `Json?`, or the null of a `Json?!`
+            return arg; // a null `Json?`, or the null of a `Json!?`
         }
         slot = nullablePayload(slot);
         if (asFallible(tagged->payloadType()) == nullptr) {
@@ -640,7 +637,7 @@ JsonAccessorArg jsonAccessorArg(ArgsView &norm, size_t i) {
             return arg;
         }
     }
-    // A `Json!`, or the `Json!` of a `Json?!` whose null was handled above.
+    // A `Json!`, or the `Json!` of a `Json!?` whose null was handled above.
     arg.fallible = true;
     if (isErrorValue(slot)) {
         arg.failed = slot;
@@ -652,7 +649,7 @@ JsonAccessorArg jsonAccessorArg(ArgsView &norm, size_t i) {
 
 /// The result of an accessor: `value` as the value of the result type, null when there is
 /// none, or the error of the document passed on unchanged. `result` is the type of the value
-/// a success carries (`Json`, `int`, ...); the result itself is a `R?`, or a `R?!` when the
+/// a success carries (`Json`, `int`, ...); the result itself is a `R?`, or a `R!?` when the
 /// argument had the `Json!` layer.
 slot_t jsonAccessorResult(const JsonAccessorArg &arg, Type *result, slot_t value) {
     if (arg.failed != NullSlot) {

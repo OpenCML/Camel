@@ -226,9 +226,9 @@ function or union payload).
 
 ### 4.3 Nesting and combination (Q2)
 
-`T?!` and `T!?` are allowed and mean what they say: an operation that may fail and whose
-result may be absent, and the reverse. Each operator and each `match` takes off exactly the
-outer form. `T??` and `T!!` are rejected (`TaggedTypeNesting`, 0x62): the second mark adds no
+`T?!` (fallible(nullable(T))) and `T!?` (nullable(fallible(T))) are allowed and mean what they
+say: an operation that may fail and whose result may be absent, and the reverse. Each operator
+and each `match` takes off exactly the outer form. `T??` and `T!!` are rejected (`TaggedTypeNesting`, 0x62): the second mark adds no
 information a program could use, and `??` could not tell the two nulls apart for the reader.
 The same check applies to the signature of a generic function once its type variables are
 replaced (`findRepeatedMark`), at the call; types written inside the body of an instance are

@@ -51,10 +51,11 @@ namespace camel::core::mm {
 
 namespace {
 
-constexpr std::string_view kCauseLargeBudget    = "large object budget";
-constexpr std::string_view kCauseElderExhausted = "elder space budget";
-constexpr std::string_view kCauseHeapLimit      = "heap limit";
-constexpr const char *kHeapLimitEnv             = "CAMEL_GC_HEAP_LIMIT_MB";
+constexpr std::string_view kCauseLargeBudget      = "large object budget";
+constexpr std::string_view kCauseElderExhausted   = "elder space budget";
+constexpr std::string_view kCauseElderBlockBudget = "promoted block budget";
+constexpr std::string_view kCauseHeapLimit        = "heap limit";
+constexpr const char *kHeapLimitEnv               = "CAMEL_GC_HEAP_LIMIT_MB";
 
 double megabytes(uint64_t bytes) { return static_cast<double>(bytes) / (1024.0 * 1024.0); }
 
@@ -81,6 +82,7 @@ GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
       largeObjGrowthPercent_(config.largeObjGrowthPercent),
       largeObjBudget_(config.largeObjCollectionBudget), elderMinBudget_(config.elderGenSize),
       elderBudget_(config.elderGenSize),
+      elderBlockBudget_(config.largeObjCollectionBudget),
       minorTriggerBytes_(
           static_cast<size_t>(
               static_cast<double>(config.birthSize) *
@@ -108,6 +110,36 @@ void GenerationalAllocatorWithGC::noteFinalizable(void *payload) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (enableYoungGenCopying_ && payload && inYoungGenSpace(headerOf(payload))) {
         youngFinalizables_.push_back(static_cast<rtdata::Object *>(payload));
+    }
+}
+
+void GenerationalAllocatorWithGC::noteBlockHeld(rtdata::Object *owner, Block *block) {
+    if (owner == nullptr || block == nullptr) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    // Only a block held by the elder space is beyond a minor collection. A young array that
+    // grows its block is counted when it is promoted (forward); a large object is measured by
+    // the large-object budget.
+    if (!inElderGenSpace(headerOf(owner))) {
+        return;
+    }
+    noteElderBlockBytesUnlocked(block);
+}
+
+void GenerationalAllocatorWithGC::noteElderBlockBytesUnlocked(Block *block) {
+    if (block == nullptr) {
+        return;
+    }
+    const size_t added = block->claimPacingBytes();
+    if (added == 0) {
+        return;
+    }
+    elderBlockBytesSinceSweep_ += added;
+    if (UNLIKELY(elderBlockBytesSinceSweep_ >= elderBlockBudget_) &&
+        pendingSafepointCollection_ != CollectionKind::Major &&
+        pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
+        requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderBlockBudget);
     }
 }
 
@@ -313,8 +345,12 @@ class SafepointScope {
 
 void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
 #ifndef NDEBUG
+    // Before the inhibit check and before any collection: the invariant the observer watches
+    // is about what is open while Camel code runs, not about whether this safepoint collects.
+    observeSafepoint(reason);
     AllocationDebugScope debugScope;
 #endif
+    CollectionKind requested = CollectionKind::None;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         SafepointScope atSafepoint(atSafepoint_);
@@ -341,7 +377,7 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
             requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "safepoint poisoning");
         }
 
-        CollectionKind requested        = pendingSafepointCollection_;
+        requested                      = pendingSafepointCollection_;
         pendingSafepointCollection_     = CollectionKind::None;
         const std::string_view gcReason = reason.empty() ? std::string_view{"safepoint"} : reason;
         collectAtSafepointUnlocked(requested, gcReason);
@@ -349,12 +385,17 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
         publishSafepointSlowPathUnlocked();
     }
     // The collection is over and the allocator unlocked: release what the wrappers it
-    // found dead were holding (see ForeignResourceObject::finalize).
+    // found dead were holding (see ForeignResourceObject::finalize), then start the next
+    // pacing window from what remains.
     runDeferredReleases();
+    if (requested != CollectionKind::None) {
+        noteBlockBytesAfterDeferredReleases();
+    }
 }
 
 void GenerationalAllocatorWithGC::minorGC() {
 #ifndef NDEBUG
+    observeSafepoint("manual minor GC");
     AllocationDebugScope debugScope;
 #endif
     {
@@ -369,12 +410,15 @@ void GenerationalAllocatorWithGC::minorGC() {
         publishSafepointSlowPathUnlocked();
     }
     // The collection is over and the allocator unlocked: release what the wrappers it
-    // found dead were holding (see ForeignResourceObject::finalize).
+    // found dead were holding (see ForeignResourceObject::finalize), then start the next
+    // pacing window from what remains.
     runDeferredReleases();
+    noteBlockBytesAfterDeferredReleases();
 }
 
 void GenerationalAllocatorWithGC::majorGC() {
 #ifndef NDEBUG
+    observeSafepoint("manual major GC");
     AllocationDebugScope debugScope;
 #endif
     {
@@ -389,14 +433,16 @@ void GenerationalAllocatorWithGC::majorGC() {
         publishSafepointSlowPathUnlocked();
     }
     // The collection is over and the allocator unlocked: release what the wrappers it
-    // found dead were holding (see ForeignResourceObject::finalize).
+    // found dead were holding (see ForeignResourceObject::finalize), then start the next
+    // pacing window from what remains.
     runDeferredReleases();
+    noteBlockBytesAfterDeferredReleases();
 }
 
 bool GenerationalAllocatorWithGC::debugRunRememberedSetSelfTest() {
     if (!enableYoungGenCopying_) {
         throw std::runtime_error(
-            "GC remembered-set self-test requires CAMEL_GC_ENABLE_YOUNG_COPYING=1");
+            "GC remembered-set self-test requires the generational collector (--gc generational)");
     }
 
     auto *stringType = type::Type::String();
@@ -714,6 +760,8 @@ void GenerationalAllocatorWithGC::requestCollectionAtSafepointUnlocked(
             ++stats_.largeBudgetRequests;
         } else if (reason == kCauseElderExhausted) {
             ++stats_.elderExhaustedRequests;
+        } else if (reason == kCauseElderBlockBudget) {
+            ++stats_.elderBlockBudgetRequests;
         } else {
             ++stats_.otherRequests;
         }
@@ -773,9 +821,13 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
             stats_.majorPauseMaxNs = std::max(stats_.majorPauseMaxNs, pause);
         }
     }
-    // The collection has finished: buffers that its finalizers dead-arrayed are now free, and
-    // this is the volume the next pacing window starts from.
-    blockBytesAtCollection_ = camel::core::mm::blockBytesLive();
+    // The pacing base is *not* taken here: the finalizers this collection ran only queued the
+    // blocks of the arrays they found dead (see Block::releaseFromFinalizer), and those bytes
+    // are still live right now. Taking the base before the queue runs would pace the next
+    // window against a volume that includes this collection's own garbage; with a workload that
+    // recycles the same working set the trigger then needs more and more growth to fire, and the
+    // high-water mark climbs as if nothing were ever released. The callers take the base after
+    // runDeferredReleases() (see noteBlockBytesAfterDeferredReleases).
 
     if (heapLimitBytes_ != 0 && kind == CollectionKind::Minor &&
         oldBytesHeldUnlocked() > heapLimitBytes_ && !heapLimitExceeded_) {
@@ -803,6 +855,14 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
     if (debugConfig_.verifyAfterGC) {
         throwIfVerificationFailed(verifyHeapUnlocked(), std::format("after {}", reason));
     }
+}
+
+void GenerationalAllocatorWithGC::noteBlockBytesAfterDeferredReleases() {
+    // Runs on the collecting thread after the deferred queue has been drained, so the blocks the
+    // collection found dead are already out of the live count. Re-read it rather than subtracting
+    // per-release amounts: the queue also runs releases queued by earlier work.
+    std::lock_guard<std::mutex> lock(mutex_);
+    blockBytesAtCollection_ = camel::core::mm::blockBytesLive();
 }
 
 void GenerationalAllocatorWithGC::minorGCUnlocked() {
@@ -1138,6 +1198,12 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
             pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
             requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderExhausted);
         }
+        // A block this value holds moves with it into the elder space, and only a major
+        // collection sweeps the elder space, so these bytes can no longer be reclaimed by the
+        // minor collections the blocks pace. Count them and ask for the major when enough have
+        // accumulated since the last sweep. The block is counted by identity: a second view of
+        // it that is promoted later adds nothing.
+        noteElderBlockBytesUnlocked(obj->heldBlock());
         newHeader = headerOf(newObj);
         newHeader->setAge(age);
         newHeader->setRegion(AllocRegion::ElderGen);
@@ -1378,12 +1444,23 @@ void GenerationalAllocatorWithGC::markObject(rtdata::Object *obj, const type::Ty
 
 void GenerationalAllocatorWithGC::sweepOldGen() {
     std::vector<ObjectHeader *> unreachable;
+    size_t liveBlockBytes = 0;
+    const uint64_t sweepGeneration = blockSweepGeneration_++;
 
-    elderGenSpace_.iterateAllocated([&unreachable](ObjectHeader *header) {
-        if (!header->marked_) {
-            unreachable.push_back(header);
-        }
-    });
+    elderGenSpace_.iterateAllocated(
+        [&unreachable, &liveBlockBytes, sweepGeneration](ObjectHeader *header) {
+            if (!header->marked_) {
+                unreachable.push_back(header);
+            } else {
+                // The blocks the survivors still hold: only a major collection can release
+                // them, so they are the base of the next promoted-block budget. A block can be
+                // reached through several views; count it once, by identity.
+                Block *block = payloadOf<rtdata::Object>(header)->heldBlock();
+                if (block != nullptr && block->claimSweepGeneration(sweepGeneration)) {
+                    liveBlockBytes += block->bytes();
+                }
+            }
+        });
 
     stats_.freedElderObjects += unreachable.size();
     finalizeObjects(unreachable);
@@ -1399,6 +1476,14 @@ void GenerationalAllocatorWithGC::sweepOldGen() {
     const size_t growth   = elderLiveBytes_ / 100 * largeObjGrowthPercent_ +
                             elderLiveBytes_ % 100 * largeObjGrowthPercent_ / 100;
     elderBudget_          = std::max(elderMinBudget_, growth);
+    // The same rule for the blocks held by promoted values: the floor, or the growth
+    // percentage of the block bytes this sweep left in the elder space. The bytes promoted
+    // since the sweep are what can have turned into garbage that only the next major can free.
+    elderBlockBytesSinceSweep_ = 0;
+    elderBlockLiveBytes_       = liveBlockBytes;
+    const size_t blockGrowth = liveBlockBytes / 100 * largeObjGrowthPercent_ +
+                               liveBlockBytes % 100 * largeObjGrowthPercent_ / 100;
+    elderBlockBudget_ = std::max(largeObjMinBudget_, blockGrowth);
 }
 
 void GenerationalAllocatorWithGC::sweepLargeObjects() {
@@ -1463,10 +1548,12 @@ void GenerationalAllocatorWithGC::reportStats(std::ostream &os) const {
     const RuntimeStats s = stats();
     os << std::format(
         "[camel] gc: major={} requested={} deferred={} by_large_budget={} by_elder_exhausted={} "
+        "by_elder_block_budget={} "
         "by_other={} alloc_young_mb={:.1f} alloc_elder_mb={:.1f} alloc_large_mb={:.1f} "
         "elder_overflow_objects={} elder_overflow_mb={:.1f} large_live_mb={:.1f} "
         "large_high_water_mb={:.1f} budget_mb={:.1f} growth_percent={} minor={} moved={} "
         "promoted={} elder_live_mb={:.1f} elder_reserved_mb={:.1f} elder_segments={} "
+        "elder_block_live_mb={:.1f} elder_block_budget_mb={:.1f} "
         "minor_pause_ms={:.2f} minor_pause_max_ms={:.3f} major_pause_ms={:.2f} "
         "major_pause_max_ms={:.3f}\n",
         s.majorCollections,
@@ -1474,6 +1561,7 @@ void GenerationalAllocatorWithGC::reportStats(std::ostream &os) const {
         s.deferredCollections,
         s.largeBudgetRequests,
         s.elderExhaustedRequests,
+        s.elderBlockBudgetRequests,
         s.otherRequests,
         megabytes(s.youngBytesAllocated),
         megabytes(s.elderBytesAllocated),
@@ -1490,6 +1578,8 @@ void GenerationalAllocatorWithGC::reportStats(std::ostream &os) const {
         megabytes(s.elderLiveBytes),
         megabytes(s.elderReservedBytes),
         s.elderSegments,
+        megabytes(s.elderBlockLiveBytes),
+        megabytes(s.elderBlockBudgetBytes),
         static_cast<double>(s.minorPauseNs) / 1e6,
         static_cast<double>(s.minorPauseMaxNs) / 1e6,
         static_cast<double>(s.majorPauseNs) / 1e6,

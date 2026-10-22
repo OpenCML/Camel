@@ -1,0 +1,172 @@
+id = "modules.pass_not_found"
+order = 378
+tier = "fast"
+tags = ["feat", "modules", "pass", "diagnostics", "module"]
+desc = "A pass named through a module that is there: a module that provides no such pass names itself and the passes it does provide, and a module that cannot be loaded keeps the loader's reason"
+
+# H130: a pass named through a module that is there.
+#
+# `camel file.cml module::pass` used to answer "Pass <module::pass> not found, available passes
+# are: ..." whenever the module could not be used: it does not export the name, it provides no such
+# pass, or its file was found and the loader refused it. Every reason the module had was thrown
+# away, so a module that is there and a module that is not were indistinguishable.
+#
+# Three answers now, told apart by what the lookup finds:
+#   * the module file is there and cannot be loaded: InvalidPassParameter, with what the loader
+#     said (this used to be "pass not found" too);
+#   * the module compiles but provides no such pass: the short diagnostic that names the module and
+#     the passes it does provide, and nothing else (no list of every pass of the compiler);
+#   * the module is not there at all: the pipeline's unknown-pass answer, with the list, unchanged.
+
+[[tests]]
+name = "pass_not_exported_by_its_module"
+desc = "declares_not_exported::run: the module declares `run` without `export`; the diagnostic says so, names the pass it does provide, and prints no global pass list."
+kind = "negative"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "declares_not_exported::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNotExportedByModule", "Module 'declares_not_exported' declares 'run' but does not export it", "it provides the pass 'other'"]
+expect_output_not_contains = ["not found, available passes are", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The module that declares `run` without exporting it is a working pass module: `other` runs.
+
+[[tests]]
+name = "the_other_pass_of_that_module_runs"
+desc = "declares_not_exported::other runs the program and prints 42: the module is usable, the name `run` is what is wrong."
+kind = "behavior"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "declares_not_exported::other", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+timeout_ms = 10000
+
+# A module that compiles and provides a pass, but not the one named.
+
+[[tests]]
+name = "pass_absent_from_a_module_that_compiles"
+desc = "no_pass::run: the module provides `ok` and no `run`; the diagnostic names the module and the pass it provides, and prints no global pass list."
+kind = "negative"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "no_pass::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNotProvidedByModule", "Module 'no_pass' provides no pass 'run'", "it provides the pass 'ok'"]
+expect_output_not_contains = ["not found, available passes are", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "the_pass_that_module_provides_runs"
+desc = "no_pass::ok runs the program and prints 42: the module loads fine, so the message above is about the name."
+kind = "behavior"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "no_pass::ok", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+timeout_ms = 10000
+
+# H124 probe C: `std::opt` asks for `rules::simplify`, and this directory's rules.cml (found before
+# the standard library's) provides no pass at all. The message must say that, and it must name the
+# module the name resolved to.
+
+[[tests]]
+name = "pass_absent_from_a_shadowing_module"
+desc = "std::opt needs rules::simplify; the local rules.cml provides no pass: the diagnostic names `rules`, says it provides none, and does not fall back to the global pass list."
+kind = "negative"
+case = "../../../cases/modules/pass_not_found/shadowed_rules/main.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNotProvidedByModule", "Module 'rules' provides no pass 'simplify'", "it provides no passes"]
+expect_output_not_contains = ["not found, available passes are", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 20000
+
+# `onnx` gained a declaration module in H179 (`stdlib/onnx.cml`), so it is now a Camel module of
+# the kind H130 answers with the short diagnostic. Its `onnx::export` pass is registered by C++,
+# and the `provided` list of the diagnostic names only the module's Camel pass functions (H130),
+# so it says "no passes"; the generic unknown-pass answer is kept by the `hash` case in
+# feat/compile/diag_json.
+
+[[tests]]
+name = "pass_absent_from_a_declaration_module"
+desc = "onnx::nosuchpass: `onnx` is a declaration module and declares no pass function, so the diagnostic is the H130 module-specific one; the program does not run and the global pass list is not printed."
+kind = "negative"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "onnx::nosuchpass", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNotProvidedByModule", "Module 'onnx' provides no pass 'nosuchpass'", "it provides no passes"]
+expect_output_not_contains = ["not found, available passes are", "2011"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A module whose file is there but that the loader refuses: the pass specification reports the
+# loader's reason. Before H130 this was "Pass <unloadable::run> not found" with the reason lost.
+#
+# H204: the fixture is one line of text, 72 bytes, not a shared library. The lookup finds it (a
+# `.cmo` of the name comes first), then `dlopen` / `LoadLibraryW` refuses it. The platform's own
+# words differ -- "invalid ELF header" on Linux, `Win32Error(193)` ("not a valid Win32
+# application", localized) on Windows -- so this case asserts only Camel's stable part:
+# InvalidPassParameter, "its library 'unloadable' cannot be loaded", and "Found .cmo but load
+# failed". The reason travels in the diagnostic and is not pinned. An empty file and a 21-byte
+# text fail too, but Linux then says "file too short"; at 72 bytes the reason reads as "not a
+# valid module" on both platforms. A real module in its place is accepted and the answer changes
+# to the generic unknown-pass one, which is this case's red direction.
+
+[[tests]]
+name = "pass_module_that_cannot_be_loaded"
+desc = "unloadable::run: the file is found and refused by the loader, so the diagnostic is InvalidPassParameter and keeps the loader's reason."
+kind = "negative"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "unloadable::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "its library 'unloadable' cannot be loaded", "Found .cmo but load failed"]
+expect_output_not_contains = ["not found, available passes are", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# H204: the fixture stays text, so review can read it and no loader can accept it. A compiled
+# object (ELF, Mach-O, PE) has NUL bytes; committing one in the fixture's place fails here.
+
+[[tests]]
+name = "the_unloadable_fixture_is_text"
+desc = "unloadable.cmo is plain text (no NUL byte, valid UTF-8), not a compiled object: the fixture stays readable and no platform's loader can accept it."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/modules/pass_not_found/unloadable_is_text.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["unloadable.cmo is text"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 10000
+
+# The third answer is unchanged: a name with no module behind it is the pipeline's unknown pass,
+# followed by the list of passes that exist.
+
+[[tests]]
+name = "a_name_with_no_module_stays_unknown"
+desc = "none_such::run: no module file anywhere, so the pipeline still lists the passes it knows."
+kind = "negative"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "none_such::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["Pass <none_such::run> not found, available passes are:", "Available aliases are:"]
+expect_output_not_contains = ["PassNotProvidedByModule", "PassNotExportedByModule", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+# `rewrite` gained a declaration module in H183 (`stdlib/rewrite.cml`), so it is now a Camel
+# module of the kind H130 answers with the short diagnostic. It registers no pass, and the
+# `provided` list names only the module's Camel pass functions, so it says "no passes". This is the
+# same intended change H179 recorded for `onnx`; no diagnostic code was added.
+
+[[tests]]
+name = "pass_absent_from_rewrite_declaration_module"
+desc = "rewrite::nosuchpass: `rewrite` is a declaration module and declares no pass function, so the diagnostic is the H130 module-specific one instead of the generic unknown-pass answer; the program does not run and the global pass list is not printed."
+kind = "negative"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "rewrite::nosuchpass", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNotProvidedByModule", "Module 'rewrite' provides no pass 'nosuchpass'", "it provides no passes"]
+expect_output_not_contains = ["not found, available passes are", "2011"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 20000

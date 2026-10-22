@@ -1,0 +1,9 @@
+module static_access_not_constant
+
+func field(t: {a: int, b: int}, k: string): int {
+    return t.[k]
+}
+
+func main(): int {
+    return field({a: 1, b: 2}, "a")
+}

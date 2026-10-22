@@ -4,8 +4,9 @@
  * std::prl, which hands these serial functions to it) direct calls do not nest on the native
  * stack and depth(400000) completes. Where every call nests on the native stack (the parallel
  * scheduler's own evaluator, std::prl(bytecode=false)) it stops with MaxRecursionDepthExceeded
- * when the stack of the thread is nearly full instead of a segmentation fault; depth(2000)
- * fits there.
+ * when the stack of the thread is nearly full instead of a segmentation fault; depth(1000)
+ * fits there (about 1.5 KiB of native stack per open call, and the guard keeps a sixteenth of
+ * a 32 MiB thread stack usable on Windows).
  */
 module recursion_too_deep
 
@@ -14,7 +15,7 @@ func depth(n: int): int {
 }
 
 func main(): int sync {
-    println(depth(2000))
+    println(depth(1000))
     println(depth(400000))
     println('done')
     return 0

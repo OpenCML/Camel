@@ -181,11 +181,13 @@ A `sync` written before a block (including the postfix form on a function body, 
 ### 3.9 Errors and faults
 
 - **The error value is one fixed built-in structure**: a kind name, a message, and the source location where it arose. All functions that may fail share this one error.
-- **A value that may fail is written only `T!`**, and there is only one type of error value (distinguished by Kind); when typed errors are needed later, they will be added in the form `T ! E` once `enum` exists. `?` is only the nullable mark. `int?!` is allowed; `int??` and `int!!` are not.
+- **A value that may fail is written only `T!`**, and there is only one type of error value (distinguished by Kind); when typed errors are needed later, they will be added in the form `T ! E` once `enum` exists. `?` is only the nullable mark. `int?!` is allowed; `int??` and `int!!` are not. The marks are written from the innermost outwards, so `T?!` is fallible(nullable(T)) and `T!?` is nullable(fallible(T)).
 - **`a !! b` handles errors**; the right side may be nullable, with the same rules as `??`. `x ?-> f` passes the error on unchanged when `x` is an error, and calls `f` otherwise. On the graph all of them are branches.
 - **`throw` is kept, and it means returning an error value**, the same structure as `return`, and it accepts only an error value: `throw error('Kind', 'message')`, with the location filled in by the compiler. `try`/`catch` does not enter the language: it has no stable mapping on the graph. Writing it should produce a diagnostic that points to `!!`, `?->` and fault isolation. `raise` is not part of the syntax and is not a reserved word.
 - **Errors and faults are two different things.** Only operations declared as able to fail (reading a file, parsing, the network and so on) return an error value. Division by zero, out-of-bounds access and recursion that is too deep are faults; they do not become error values, otherwise every division and every subscript would have to handle an error.
 - **A fault terminates with a location by default, but can be isolated at a subgraph boundary.** An isolation operator `attempt` is provided: a fault that occurs in the function it wraps becomes an error value at the boundary, to be handled with `!!`. Clean-up is guaranteed before termination: output is flushed and external resources are released.
+
+  <!-- camel-snippet: fragment: a fragment of the fault example; risky is the function of the paragraph above -->
 
   ```camel
   let a = risky(0)                 // fault: the whole program terminates with a location
@@ -205,6 +207,8 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **The `LOOP` node is introduced.** Most modern computation-graph standards have such a node, and interoperating with them needs it. The loop body is an independent subgraph and is not merged into the outer graph. The condition subgraph and the body subgraph share one capture table; `for … while` is a third form of the same node; with several states the body returns a tuple, and the value of `LOOP` is also this tuple.
 - **A loop is an expression with state.** The state is written in the loop header, the value of the body is the next round's state, and the value of the whole loop is the final state. No statement form is added for "a `var` outside the loop as the state"; to iterate only for effect, use existing means such as `foreach`.
 - **The loop header is written in the `do` form**: the state is declared once, several states are separated by commas, and the value of the loop is the tuple they form; what follows `do` is one expression, and `{` is read as after `then` (`{ x: 1 }` is a struct, `{ 5 }` is a block).
+
+  <!-- camel-snippet: fragment: the loop forms; xs, n and ds are the surrounding example's values -->
 
   ```camel
   let total    = loop acc = 0 for x in xs do acc + x * x
@@ -335,6 +339,8 @@ A `sync` written before a block (including the postfix form on a function body, 
 
 - **Type functions are written with dedicated type expressions**, called with angle brackets in type positions. A type is always written after `:`, so these angle brackets are not ambiguous with the angle brackets of `with` parameters. A type declaration with parameters is a type function.
 
+  <!-- camel-snippet: fragment: a signature sketch; swap has no body and is not a loaded operator -->
+
   ```camel
   type Pair<T> = (T, T)                    // sketch
   func swap(p: Pair<typeas T>): Pair<T>
@@ -343,7 +349,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **New primitives are used only for what the main language cannot express**, and appear as marks, fixed in number: `typeas T`, `constas n` (binding at a position in the signature), `typeof x` (the static type of an expression), `fields T` (the field table of a type). Whatever can be computed from the primitives (such as `keyof`, which takes the field names) is written in a library, as a type function or an ordinary function, not as a keyword.
 - **Ordinary functions and type functions are symmetric in their form.** `func` defines an ordinary function, called with `f(...)`; `type` defines a type function, called with `F<...>`, appearing only in type positions, such as `type Device<T> = match type T { ... }`. A type function has no context parameters (`with`); inside the angle brackets there are only types and compile-time values. What distinguishes them is the result: one whose result is a type is defined with `type`; one whose result is a value (including judgements evaluated at compile time, such as `is_numeric::<T>()`) is defined with `func`.
 - **The body of a type function is a type expression**, not a statement block: the braces in `type P = { w: float }` are a struct type and cannot double as a statement block. A more complex computation is split into several type functions, or uses `match type`, which starts with a keyword.
-- **Types appear only in type positions.** The type positions are marked out by the syntax: after `:`, after `type Name =`, after `as`, inside `::<...>`, `match type`, after `fields`, and inside the angle brackets of a type function. There are only three ways for a type to get into value code: the explicit type argument `::<T>`, the `typeas` binding, and obtaining by `typeof`. So `f<...>` in a value position is always a context parameter, and `F<...>` in a type position is always a type-function call; the parser need not know what the name refers to.
+- **Types appear only in type positions.** The type positions are marked out by the syntax: after `:`, after `type Name =`, after `as`, inside `::<...>`, `match type`, after `fields`, and inside the angle brackets of a type function. In the type positions after `match type` and `fields`, a following `(` is always read as the start of a type: `fields ()` is the empty tuple type, and a function type takes one more pair of parentheses (`fields ((x: int) => int)`). There are only three ways for a type to get into value code: the explicit type argument `::<T>`, the `typeas` binding, and obtaining by `typeof`. So `f<...>` in a value position is always a context parameter, and `F<...>` in a type position is always a type-function call; the parser need not know what the name refers to.
 - **A type function can be an argument of a type function** (higher-order types): writing the name of a type function without angle brackets in a type position refers to that type function itself, such as `MapLeaves<Device, Params>`. Whether a formal parameter is a type or a type function is inferred from how it is used in the body.
 - **A field name computed from a literal form gets square brackets**: in a comprehension, the `n` in `[n]: e` is a compile-time value and the `n` in `n: e` is a literal field name; a compile-time field access is written `t.[n]`.
 
@@ -351,6 +357,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 
 - Names are always looked up lexically at the definition; when an operation is done on a value that depends on a type variable (such as `==` at a leaf, or the overload selection for a callback argument), overloads are in addition looked up in the module where the type of that value is declared. What the caller imported is not looked at.
 - To use a different operation, pass the function in explicitly as an argument (such as `tree_eq<my_eq>(a, b)`).
+- **Operators of a named type travel with the type**: for an operation on a value of any named type (not only in generics), besides the lexically visible overloads, the **exported** overloads of the module that declares the type are searched; a type reached through an alias or a re-export likewise. Overloads that are not exported are not visible.
 
 ### 5.8 Variance
 
@@ -480,7 +487,7 @@ Keywords are kept only for modifiers that change semantics (such as `sync`, `exp
 - **`macro` itself defines no stage and is not required.** When there is no `std::macro` pass in the pipeline, a macro function is just an ordinary function. `std::macro` is a stage of the pipeline, not compile time.
 - A value is either a compile-time constant or the return value of a macro; only these two can be processed by a macro.
 - When a macro function body has side effects, it is treated like any other normal function: the effects happen at the time of evaluation. This is expected behaviour and cannot be avoided from a practical viewpoint.
-- **Failure of macro evaluation**: treated as a run-time fault, like a fault during the run of any pass. (The implementation still reports a compile error; the change is pending, handover task H2 item 6.)
+- **Failure of macro evaluation**: treated as a run-time fault, like a fault during the run of any pass.
 - Loops in `std::macro` run at most 1 million rounds (adjustable, like the recursion limit).
 - The two kinds of early computation are kept apart (6.5).
 
@@ -554,7 +561,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 ### 9.10 Schedulers, back ends and releases
 
 - **The parallel scheduler hands a subgraph with nothing to parallelize to the bytecode interpreter**, and counts the recursion limit by the same rule: when `--max-recursion-depth` is raised, deep non-tail recursion runs to the end on `std::prl` just as on `std::fvm`.
-- The instruction-set baseline of the release package is `x86-64-v2`.
+- The instruction-set baseline of the release package is `x86-64-v3` (AVX2 and FMA; raised from `x86-64-v2` on 2026-10-21, see the ruling log).
 
 ---
 
@@ -580,8 +587,8 @@ Design motivation: the dynamism of the Python language itself determines its fle
 
 ### 10.3 The module cache
 
-- **A compiled module can be cached** (`.cmo`, cached module object), so that a module need not be recompiled. The cache of each module is one graph rooted at that module; it is for convenience and speed and need not be identical to the final result of an actual compilation. C++ modules use the same extension, and the two are told apart by the file header.
-- The cache is put in the `__cmo__/` directory beside the source file; off by default at first; a module that hits the cache does not replay compile-time warnings. The importer's cache is invalidated when any of the following changes: the signature of an exported function (including the inferred return type), the module-level values it uses indirectly, its effects, the body of a generic function.
+- **A compiled module can be cached** (`.cmc`, cached module object), so that a module need not be recompiled. The cache of each module is one graph rooted at that module; it is for convenience and speed and need not be identical to the final result of an actual compilation. **The cache is not implemented**: this section fixes its form and invalidation conditions; whether to implement it is still open.
+- The cache is put in the `__cmc__/` directory beside the source file; off by default at first; a module that hits the cache does not replay compile-time warnings. The importer's cache is invalidated when any of the following changes: the signature of an exported function (including the inferred return type), the module-level values it uses indirectly, its effects, the body of a generic function. `--verify-ops` still reads the source, not the cache.
 
 ### 10.4 The place of native C++ modules
 
@@ -616,7 +623,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 - `json.decode` returns the self-describing `Json` type, and `decode_as<T>` is provided (for explicit type arguments see 5.9).
 - For bad JSON text, `decode` returns the error value of `Json!`, not a fault.
 - The accessors of `Json` accept `Json?` and `Json!`, for chained access (access can be chained even when parsing failed); `as_float` accepts integers; `get<index>` out of range gives `null`.
-- **When `Json` accessors take a `Json!`, the error passes through unchanged**: `decode(text)->get<'a'>` has type `Json?!`, handled with `!!` or `??`. A document that is too deep reports `JsonTooDeep` (distinct from malformed text); the default depth limit is 10000, to become an optional parameter of `decode`.
+- **When `Json` accessors take a `Json!`, the error passes through unchanged**: `decode(text)->get<'a'>` has type `Json!?`, handled with `!!` or `??`. A document that is too deep reports `JsonTooDeep` (distinct from malformed text); the default depth limit is 10000, to become an optional parameter of `decode`.
 
 ### 11.3 Collections and sorting
 
@@ -679,6 +686,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 ### 13.4 Distribution
 
 - Sharding is written as the tag `#shard<[axis name, ...]>`, which can be attached to function parameters; axis names are abstract, the size of an axis is injected at execution time; the same information can also be written in a schedule file. The `shard` pass of the standard library derives the sharding of each result, inserts communication (ordinary operators with side effects) and reports inconsistencies; an operator for which derivation cannot continue (a native operator without a declared index mapping) falls back to gather-then-compute, which is correct but slower. The type system is unchanged. The order of summation across cards follows 7.6.
+- **Placement (a tendency, not a red line)**: the user declares where computation runs; GPU is not the default. Usually the source states only the intent (`#gpu`, `#cpu` on a function, block or module) and the compiler derives residency, transfers and synchronisation from the graph; which card and how many is usually run-time configuration (such as `--devices`), so the same code moves between machines unchanged. When needed, the source may name a specific device (pipeline stages, pinning to a card for performance, heterogeneous devices), and run-time configuration may override or complete it. Engineering convenience and the optimisation ceiling come before the tidiness of "no configuration in source".
 
 ### 13.5 Training infrastructure
 
@@ -712,6 +720,7 @@ These are all misreadings that have actually happened; check against them before
 9. Treating the preconditions of automatic differentiation as constraints of the language core. — They are constraints of the library.
 10. Picking one derived characteristic as Camel's "core selling point" (for example "one body of code, many uses"). — The core is graph-native; the rest are natural consequences.
 11. Changing the semantics to make a test pass. — First confirm the semantics, then judge whether the test or the implementation is wrong.
+12. Reading the order of two marks backwards (taking `T?!` for nullable-over-fallible). — Marks are written from the innermost outwards: `T?!` is fallible(nullable(T)) and `T!?` is nullable(fallible(T)); the parser and the printer agree (found by H115, documents corrected by H123).
 
 ---
 

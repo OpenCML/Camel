@@ -78,7 +78,7 @@ struct GCGraphPayloadArena {
 
     GCNode *nodes              = nullptr; // nodeCount + 1 records
     uint32_t *origins          = nullptr; // nodeCount source origins
-    uint8_t *permissions       = nullptr; // nodeCount numeric permissions, or null
+    camel::core::sem::PermissionMask *permissions = nullptr; // nodeCount permissions, or null
     uint32_t *attrs            = nullptr; // nodeCount attribute sets, or null
     uint32_t *regions          = nullptr; // nodeCount regions, or null
     GCRegion *regionTable      = nullptr; // regionCount regions
@@ -130,8 +130,9 @@ using FrameSlotTypes = std::optional<std::span<camel::core::type::Type *const>>;
 struct GCGraphBuildAccess {
     static size_t requiredBytes(
         std::span<const GraphId> dependencies, std::span<const GraphId> subGraphs,
-        std::span<const GraphId> staticGraphRefs, const GCGraphPayloadShape &payload,
-        std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots);
+        std::span<const GraphId> staticGraphRefs, std::span<const GraphId> ruleGraphs,
+        const GCGraphPayloadShape &payload, std::span<const slot_t> staticSlots,
+        const FrameSlotTypes &frameSlots);
 
     static GCGraph *constructInPlace(
         void *memory, size_t bytes, GraphId id, const GCGraphDerivation &derivation,
@@ -139,7 +140,8 @@ struct GCGraphBuildAccess {
         const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
         camel::core::type::TupleType *closureType, GraphId outerGraph,
         std::span<const GraphId> dependencies, std::span<const GraphId> subGraphs,
-        std::span<const GraphId> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
+        std::span<const GraphId> staticGraphRefs, std::span<const GraphId> ruleGraphs,
+        const GCGraphPayloadShape &payloadShape,
         const std::function<void(GCGraphPayloadArena &)> &emitPayload,
         std::span<const slot_t> staticSlots);
 
@@ -149,7 +151,7 @@ struct GCGraphBuildAccess {
         camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
         GraphId outerGraph, std::span<const GraphId> dependencies,
         std::span<const GraphId> subGraphs, std::span<const GraphId> staticGraphRefs,
-        const GCGraphPayloadShape &payloadShape,
+        std::span<const GraphId> ruleGraphs, const GCGraphPayloadShape &payloadShape,
         const std::function<void(GCGraphPayloadArena &)> &emitPayload,
         std::span<const slot_t> staticSlots);
 
@@ -193,9 +195,8 @@ void validateRuntimeGraphCalls(
 /// The edge invariants (graph_edges.cpp): no cycle of inputs, and the types agree along the
 /// edges. Run with validateRuntimeGraphCalls, because the types of a call's callee are read.
 /// Throws std::runtime_error naming the graph, the nodes and what disagrees.
-/// `state` (graph.h, GraphState) says what to expect of the graph: only a NonExecutable graph may
-/// hold a cycle of inputs (the back ends refuse it when they build the execution plan).
 void validateRuntimeGraphEdges(
     const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 
 } // namespace camel::runtime
+

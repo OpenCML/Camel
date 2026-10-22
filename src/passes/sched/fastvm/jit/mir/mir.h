@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.
  * You may use this software according to the terms and conditions of the

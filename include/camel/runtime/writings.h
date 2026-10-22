@@ -64,7 +64,7 @@ namespace camel::runtime {
 class WritingObserver {
   public:
     virtual ~WritingObserver()                                                    = default;
-    virtual void joined(uint8_t context, std::span<const gc_node_ref_t> moved) = 0;
+    virtual void joined(camel::core::sem::PermissionMask context, std::span<const gc_node_ref_t> moved) = 0;
 };
 
 class WritingStore {
@@ -78,30 +78,30 @@ class WritingStore {
     /// Asserts that `a` and `b` are the same value in every context that has `perms`. Returns
     /// true when that changed the classes of the context `perms`.
     bool merge(
-        gc_node_ref_t a, gc_node_ref_t b, uint8_t perms = 0, uint16_t rule = 0, uint8_t flags = 0,
+        gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0, uint16_t rule = 0, uint8_t flags = 0,
         WritingObserver *observer = nullptr);
 
     /// The smallest node of the class of `node` in the context `context`.
-    gc_node_ref_t find(uint8_t context, gc_node_ref_t node);
+    gc_node_ref_t find(camel::core::sem::PermissionMask context, gc_node_ref_t node);
     /// A node of the class that stays the same until the class joins another: for keys that
     /// name a class (find gives the smallest node, which changes less often but costs a lookup).
-    gc_node_ref_t canon(uint8_t context, gc_node_ref_t node);
+    gc_node_ref_t canon(camel::core::sem::PermissionMask context, gc_node_ref_t node);
     /// The nodes of the class ascending; empty for a node alone in its class.
-    std::span<const gc_node_ref_t> members(uint8_t context, gc_node_ref_t node);
-    bool same(uint8_t context, gc_node_ref_t a, gc_node_ref_t b) {
+    std::span<const gc_node_ref_t> members(camel::core::sem::PermissionMask context, gc_node_ref_t node);
+    bool same(camel::core::sem::PermissionMask context, gc_node_ref_t a, gc_node_ref_t b) {
         return find(context, a) == find(context, b);
     }
     /// True when no equivalence was asserted.
     bool empty() const { return log_.empty(); }
     std::span<const WritingUnion> log() const { return log_; }
     /// The contexts that have a layer, ascending.
-    std::vector<uint8_t> contexts() const;
+    std::vector<camel::core::sem::PermissionMask> contexts() const;
     /// The roots of the classes of more than one node in the context, ascending.
-    std::vector<gc_node_ref_t> classRoots(uint8_t context);
+    std::vector<gc_node_ref_t> classRoots(camel::core::sem::PermissionMask context);
 
   private:
     struct Layer {
-        uint8_t context = 0;
+        camel::core::sem::PermissionMask context = 0;
         // Union by size; `smallest` is read at the root of a class.
         std::vector<gc_node_ref_t> parent;
         std::vector<gc_node_ref_t> size;
@@ -114,7 +114,7 @@ class WritingStore {
         };
         std::unordered_map<gc_node_ref_t, Members> members;
     };
-    Layer &layer(uint8_t context);
+    Layer &layer(camel::core::sem::PermissionMask context);
     static gc_node_ref_t findIn(Layer &layer, gc_node_ref_t node);
     static void ensure(Layer &layer, gc_node_ref_t node);
     static bool unionIn(Layer &layer, gc_node_ref_t a, gc_node_ref_t b, WritingObserver *observer);
@@ -157,15 +157,16 @@ struct Pattern {
     uint32_t var     = 0;
     bool constOnly   = false;
     camel::core::OperId oper = camel::core::kNoOper;
-    // Constant: the bits and the type; Op, Compute: the type of the result (null: the type of the
-    // value the rule matched).
-    slot_t value                       = 0;
+    // Constant: the bits and the type; Var, Op, Compute: the type of the value (null: any type).
+    // `value` is mutable because the patterns of a rule are compiled once and a collection during
+    // a rule condition (a safepoint) can move the constant it holds.
+    mutable slot_t value               = 0;
     camel::core::type::Type *type      = nullptr;
     std::vector<Pattern> args;
     // Compute (right side only): the constant it is, from the constants of its arguments.
     std::function<slot_t(std::span<const slot_t>)> compute;
 };
-Pattern patVar(uint32_t var);
+Pattern patVar(uint32_t var, camel::core::type::Type *type = nullptr);
 Pattern patConst(uint32_t var);
 Pattern patLiteral(slot_t value, camel::core::type::Type *type);
 Pattern patOp(camel::core::OperId oper, std::vector<Pattern> args, camel::core::type::Type *type = nullptr);
@@ -204,6 +205,12 @@ struct Rule {
     /// The rule comes from a `<=>`: it holds both ways, which only a saturation can use.
     bool twoWay = false;
 };
+
+/// Relocates the constant values the patterns of `rules` hold. The objects themselves are kept
+/// alive by the rule's Program; a collection during a rule condition can move them, and the
+/// patterns hold copies of their slots.
+void traceRuleConstants(
+    std::span<const Rule> rules, const camel::core::rtdata::Object::RefRelocator &relocate);
 
 /// What a saturation may spend; the result does not depend on time. Rounds are passes over all
 /// the rules. The run stops, without an error, when a budget is used up.
@@ -252,14 +259,17 @@ const Program *extractWritings(
 /// node ever changes, and the graph stays acyclic node by node.
 ///
 /// Only a node that is a pure function of its inputs takes part: a constant, a conversion, an
-/// access, a pure operator, with no control input, not written in place and not reading a
-/// variable. Every other node is alone in its class. Two nodes are congruent only in the same
-/// region and with the same numeric permissions (design principles 7.5, op-semantics 6.4).
+/// access, a pure operator, not written in place and not reading a variable. Every other node is
+/// alone in its class. A control input does not keep a node out: it orders the computation, it
+/// does not make the value different (design principles 3.3, 3.4; H95), and extraction gives the
+/// writing that stays the control inputs of every writing of its value. Two nodes are congruent
+/// only in the same region and with the same numeric permissions (design principles 7.5,
+/// op-semantics 6.4).
 class DraftWritings : private WritingObserver {
   public:
     explicit DraftWritings(
         GraphDraft &draft,
-        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::explicitOnly());
+        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed());
     ~DraftWritings();
     DraftWritings(const DraftWritings &)            = delete;
     DraftWritings &operator=(const DraftWritings &) = delete;
@@ -274,11 +284,11 @@ class DraftWritings : private WritingObserver {
     void build();
     /// Asserts that `a` and `b` are the same value under `perms`, then closes over congruence.
     /// Returns true when that changed the classes.
-    bool assertEqual(gc_node_ref_t a, gc_node_ref_t b, uint8_t perms = 0, uint16_t rule = 0);
+    bool assertEqual(gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0, uint16_t rule = 0);
     /// The same without the closure over congruence, which the caller does with rebuild() once
     /// it has made all its merges (a saturation round).
     bool assertEqualDeferred(
-        gc_node_ref_t a, gc_node_ref_t b, uint8_t perms = 0, uint16_t rule = 0);
+        gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0, uint16_t rule = 0);
     /// The node that computes this, in the class it belongs to: an existing one, or a new one
     /// with the inputs `norm` and `with` (any members of their classes). A node that does not
     /// take part in congruence is always new.
@@ -298,7 +308,7 @@ class DraftWritings : private WritingObserver {
     RewriteStats rewrite(std::span<const Rule> rules, size_t maxRounds = 16);
     /// The constant node `value` of `type` in this region with these permissions: the one there
     /// is, or a new one.
-    gc_node_ref_t constantNode(slot_t value, camel::core::type::Type *type, uint8_t perms, uint32_t region);
+    gc_node_ref_t constantNode(slot_t value, camel::core::type::Type *type, camel::core::sem::PermissionMask perms, uint32_t region);
     /// The constant (bits and type) a writing of the value of `node` is, if any is.
     std::optional<std::pair<slot_t, camel::core::type::Type *>> constantOf(gc_node_ref_t node);
     /// Closes the classes over congruence: nodes whose inputs changed class are looked up again.
@@ -319,28 +329,48 @@ class DraftWritings : private WritingObserver {
 
   private:
     struct Index;
-    /// 1: the node takes part in congruence and in every match; 3: it only could be the root of
-    /// a rule (it has control inputs, which a replacement takes over); 2: it does not.
+    /// 1: the node takes part in congruence and in every match — it computes its value from its
+    /// data inputs; 2: it does not. A control input takes no part in this question: it orders the
+    /// node, it does not make the value different (design principles 3.3, 3.4; H95).
     uint8_t shapeOf(gc_node_ref_t node);
     bool writtenInPlace(gc_node_ref_t node);
     bool takesPart(gc_node_ref_t node);
-    bool canBeRoot(gc_node_ref_t node);
-    uint8_t contextOf(gc_node_ref_t node) const;
+    camel::core::sem::PermissionMask contextOf(gc_node_ref_t node) const;
     struct Item {
         const Pattern *pattern;
         gc_node_ref_t node;
     };
-    void matchFrom(
-        uint8_t context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
-        std::vector<uint8_t> &bound, const std::function<void()> &emit);
+    /// Matches `work[at..]`; `waits`, when given, collects the control inputs of every operator
+    /// term matched (the root included), so a rewrite can give them to the writing it builds.
+    /// Returns whether any match was accepted (whether `emit` returned true).
+    ///
+    /// A binary term whose operator's semantics declare it commutative for the node's element
+    /// type is read in the written order first. The other order is tried only when the written
+    /// order produced no accepted match, so a law sees its operands where it wrote them, and the
+    /// replacement (which is built from the law's right side) keeps the written order when one
+    /// exists. The fact is read per operator and per element type from
+    /// `sem::OperatorSemantics::binary` (docs/design/op-semantics 7.4); a term whose operator does
+    /// not declare it is never commuted, since a law is about values and the matcher may not
+    /// guess (design principles 9.5).
+    ///
+    /// `commuted` says whether that fallback may run for this rule. A `<=>` rule already states both
+    /// directions, and a saturation applies its reverse as a rule of its own; the fallback is what
+    /// a law that wrote only one order needs, so a two-way rule passes false. (Trying it as well
+    /// only doubled the matches of the rearranging laws: `rules::saturate_all` went from about
+    /// half a second to past the 20 s timeout, H118.) A one-way rule (`=>`) has no reverse and
+    /// passes true.
+    bool matchFrom(
+        camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
+        std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, bool commuted,
+        const std::function<bool()> &emit);
     gc_node_ref_t build(
         const Pattern &pattern, const Match &match, const DraftNodeInit &base);
     void enqueue(gc_node_ref_t node);
-    void joined(uint8_t context, std::span<const gc_node_ref_t> moved) override;
+    void joined(camel::core::sem::PermissionMask context, std::span<const gc_node_ref_t> moved) override;
     void index(gc_node_ref_t node);
 
     GraphDraft &draft_;
-    uint8_t matchPerms_ = 0;
+    camel::core::sem::PermissionMask matchPerms_ = 0;
     bool greedy_        = false; // rewrite(): nodes are replaced, so nothing is looked up by key
     camel::core::sem::NumericPolicy policy_;
     WritingStore store_;
@@ -367,3 +397,4 @@ Fact classFact(DraftWritings &writings, gc_node_ref_t node, On &&on, Join &&join
 }
 
 } // namespace camel::runtime
+

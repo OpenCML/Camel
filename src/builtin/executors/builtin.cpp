@@ -30,10 +30,8 @@ using namespace camel::core::rtdata;
 #include "../operators/cast.h"
 #include "../operators/collection.h"
 #include "../operators/enum.h"
-#include "../operators/graph.h"
 #include "../operators/higher_order.h"
 #include "../operators/io.h"
-#include "../operators/loop.h"
 #include "../operators/macro.h"
 #include "../operators/mem.h"
 #include "../operators/ops.h"
@@ -108,6 +106,8 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/mem_blocks", __builtin__mem_blocks__},
         // `xs->append<v>` written by the loop-state rewrite; not a group a program can name.
         {"struct/append_arr_owned", __append_owned_arr__},
+        // The in-place form of `append` (Builder::inPlaceRebindingOf); likewise internal.
+        {"struct/append_arr_in_place", __append_in_place_arr__},
         // The private copy of an array a rewritten loop starts from; likewise internal.
         {"struct/copy_arr", __copy_arr__},
 
@@ -130,7 +130,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/assn_b", __builtin__assn__},
         {"op/assn", __builtin__assn__},
         // `acc = acc->append<v>` as a statement; not a group a program can name.
-        {"op/assn_append", __builtin__assn_append__},
         {"op/assn_owned", __builtin__assn_owned__},
 
         // The `set` operators a path assignment lowers to (Builder::pathAssignmentOf) and the
@@ -281,6 +280,8 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         {"op/idx_arr", __builtin__idx__},
         {"op/idx_str", __builtin__idx__},
+        {"op/idx_take", __idx_take_arr__},
+        {"op/slice_sub", __slice_sub__},
 
         {"op/not", __builtin__not__},
 
@@ -322,6 +323,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"struct/zip", __zip__},
 
         {"struct/head_arr", __head_arr__},
+        {"struct/last_arr", __last_arr__},
 
         {"struct/tail_arr", __tail_arr__},
 
@@ -354,12 +356,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // macro
         {"macro/cmp", __cmp__},
 
-        // Inserted by the runtime, never written by a program (operators/graph.h).
-        {"graph/original", __graph_original__},
-
-        // Inserted by the loop lowering, never written by a program (operators/loop.h).
-        {"loop/collector", __loop_collector__},
-        {"loop/collect", __loop_collect__},
 
         // Tagged forms T? and T! (operators/tagged.h). All are under op/: pure.
         {"op/tag_is_null", __is_null__},
@@ -415,6 +411,9 @@ void registerBuiltinOperatorTraits() {
         "struct/len_arr",
         "struct/zip",
         "struct/head_arr",
+        "struct/last_arr",
+        "op/idx_take",
+        "op/slice_sub",
         "struct/tail_arr",
         "struct/range",
         "struct/slice_arr",
@@ -428,7 +427,6 @@ void registerBuiltinOperatorTraits() {
         "tangent/scatter_add_arr",
         "tangent/init_arr",
         "tangent/last_arr",
-        "graph/original",
     };
     // Declared never to fault, where the implementation has no fault path at all: integer
     // addition and subtraction wrap, floating-point arithmetic and ordering cannot fail, and
@@ -438,7 +436,7 @@ void registerBuiltinOperatorTraits() {
         "op/add_i", "op/add_l", "op/add_f", "op/add_d", "op/sub_i", "op/sub_l", "op/sub_f",
         "op/sub_d", "op/lt_i",  "op/lt_l",  "op/lt_f",  "op/lt_d",  "op/le_i",  "op/le_l",
         "op/le_f",  "op/le_d",  "op/gt_i",  "op/gt_l",  "op/gt_f",  "op/gt_d",  "op/ge_i",
-        "op/ge_l",  "op/ge_f",  "op/ge_d",  "op/and",   "op/or",    "op/not",   "graph/original",
+        "op/ge_l",  "op/ge_f",  "op/ge_d",  "op/and",   "op/or",    "op/not",
     };
     auto &registry = camel::core::OperatorTable::instance();
     for (const auto &[name, op] : getOpsImplMap()) {
@@ -455,7 +453,7 @@ void registerBuiltinOperatorTraits() {
     }
     // The higher-order operators and function composition run a function the program passes
     // in: what they do is what that function does, and the passes that look at them look at
-    // that function. exit and sleep are the os module's and are built in as well.
+    // that function. exit and sleep are the process module's and are built in as well.
     for (const char *uri :
          {":mark/map_arr",
           ":mark/apply_arr",
@@ -471,7 +469,7 @@ void registerBuiltinOperatorTraits() {
     registry.set(
         std::string(camel::execute::kFaultIsolationUri),
         {.pure = false, .callsGraphs = true});
-    registry.declare("os", {{"exit", false}, {"sleep", false}});
+    registry.declare("process", {{"exit", false}, {"sleep", false}});
     // The block counters are ambient state: two calls with the same arguments can return
     // different structs, so the call must not be folded, merged or dropped as a pure one.
     registry.set(":op/mem_blocks", {.pure = false});
@@ -486,6 +484,11 @@ void registerBuiltinOperatorTraits() {
     registry.set(":op/set_index_in_place", {.stateOnly = true, .mayFault = true});
     registry.setInPlaceForm(":op/set_index", ":op/set_index_in_place");
     registry.declareReusesOperand(":op/set_index_in_place");
+    // The in-place append (Builder::inPlaceRebindingOf): the array :var/take handed it is
+    // appended to and returned; it changes nothing outside the program's own variables.
+    registry.set(":struct/append_arr_in_place", {.stateOnly = true});
+    registry.setInPlaceForm(":struct/append_arr", ":struct/append_arr_in_place");
+    registry.declareReusesOperand(":struct/append_arr_in_place");
     // What the compiler does at a call because of the operator (design principles log 2.17).
     registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
     registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});

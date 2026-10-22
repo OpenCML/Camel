@@ -29,6 +29,7 @@
 #include "camel/runtime/graph.h"
 #include "compile.h"
 #include <array>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -170,11 +171,22 @@ struct CodeLease {
         : space(std::move(space)), start(start), length(length) {}
     CodeLease(const CodeLease &)            = delete;
     CodeLease &operator=(const CodeLease &) = delete;
-    ~CodeLease() { space->release(start, length); }
+    ~CodeLease() {
+        space->release(start, length);
+        if (onRelease) {
+            onRelease();
+        }
+    }
 
     std::shared_ptr<CodeSpace> space;
     size_t start;
     size_t length;
+    /// Runs when the version is freed, after its range is given back: what the pass cached about
+    /// the version's JIT entry names the version (whose address the allocator may hand to another
+    /// one) and is cleared here. The JIT entry is compiled after the lease is made, so the hook is
+    /// attached then; it holds a weak view of the pass's cache, so a version that outlives the pass
+    /// leaves nothing to do.
+    std::function<void()> onRelease;
 };
 
 class FastVMSchedPass : public RuntimeGraphSchedulePass {
@@ -229,7 +241,19 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 
 #if ENABLE_FASTVM_JIT
     std::unique_ptr<jit::IJitBackend> jitBackend_;
-    std::unordered_map<jit::JitEntryFn, camel::runtime::GCGraph *> jitFnToGraph_;
+    /// The graph version each JIT entry was compiled for, by entry. The pass makes it, the leases
+    /// of the versions hold it weakly: an entry is erased when the collector frees its version,
+    /// because the version's address can be reused and a stale entry would name a graph that is
+    /// gone. Its own mutex, as the interpreter thread reads it while another compiles.
+    struct JitGraphCache {
+        std::mutex mutex;
+        std::unordered_map<jit::JitEntryFn, camel::runtime::GCGraph *> byFn;
+        void forget(jit::JitEntryFn fn) {
+            std::lock_guard lock(mutex);
+            byFn.erase(fn);
+        }
+    };
+    std::shared_ptr<JitGraphCache> jitCache_ = std::make_shared<JitGraphCache>();
     std::mutex jitCacheMutex_;
     jit::JitConfig jitConfig_{};
     jit::TierPolicy tierPolicy_{jitConfig_};
@@ -237,6 +261,11 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     // Shared JIT call context consumed by interpreter-side FUNC/TAIL slow paths.
     void *currentJitCtx_{};
     void compileAndCacheGraph(camel::runtime::GCGraph *graph, size_t entryPc);
+    /// Records `fn` as the JIT entry of `graph` and has the version's lease clear it when the
+    /// version is freed.
+    void attachJitEntry(camel::runtime::GCGraph *graph, jit::JitEntryFn fn);
+    /// How many JIT entries name a live graph version (the pass's share of the cache).
+    size_t jitEntryCount() const;
     /// What the back end is given to compile `graph`, whose bytecode starts at `entryPc`.
     jit::CompilationUnit jitUnitFor(
         camel::runtime::GCGraph *graph, size_t entryPc,

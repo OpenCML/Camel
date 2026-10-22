@@ -1,0 +1,17 @@
+/**
+ * An int-array subscript is `take` (design principles 5.4): an index outside the array, negative
+ * included, is IndexOutOfRange with the index as written; repeated indices repeat their element.
+ */
+module subscript_take_index
+
+func rows(xs: int[], idx: int[]): int[] {
+    return xs[idx]
+}
+
+func main(): int sync {
+    let xs = [1, 2, 3, 4, 5]
+    println(rows(xs, [4, 0, 4]))
+    println(rows(xs, [0, 7]))
+    println('not reached')
+    return 0
+}

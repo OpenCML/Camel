@@ -466,6 +466,8 @@ class Formatter {
 
     std::any visitFuncDecl(cst::FuncDecl context);
     std::any visitRuleDecl(cst::RuleDecl context);
+    std::any visitAnalysisDecl(cst::AnalysisDecl context);
+    std::any visitAnalysisClause(cst::AnalysisClause context);
     std::any visitRuleContext(cst::RuleContext context);
     std::any visitRuleBody(cst::RuleBody context);
 
@@ -482,8 +484,6 @@ class Formatter {
     std::any visitTypeDecl(cst::TypeDecl context);
 
     std::any visitRetStmt(cst::RetStmt context);
-
-    std::any visitImplMark(cst::ImplMark context);
 
     std::any visitModifiers(cst::Modifiers context);
 
@@ -509,6 +509,8 @@ class Formatter {
 
     std::any visitIndices(cst::Indices context);
 
+    std::any visitSliceIndices(cst::SliceIndices context);
+
     std::any visitParentParams(cst::ParentParams context);
 
     std::any visitParentArgues(cst::ParentArgues context);
@@ -520,6 +522,21 @@ class Formatter {
     std::any visitPattern(cst::Pattern context);
 
     std::any visitMatchCase(cst::MatchCase context);
+
+    std::any visitMatchTypeExpr(cst::MatchTypeExpr context);
+
+    /// The type after `fields` / `match type`, where the parser reads a `(` as the start of a
+    /// type (H79 ruling 1): a function type, whose text starts with `(`, is written with one
+    /// more pair of parentheses so that the output parses back to the same tree.
+    std::string formatTypeInTypePosition(syn::Node type);
+
+    std::any visitTypeCase(cst::TypeCase context);
+
+    std::any visitStaticForExpr(cst::StaticForExpr context);
+
+    std::any visitStaticLoopExpr(cst::StaticLoopExpr context);
+
+    std::any visitTypeCasePattern(cst::TypeCasePattern context);
 
     std::any visitCatchClause(cst::CatchClause context);
 

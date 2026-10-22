@@ -1,0 +1,25 @@
+module static_for_and_access
+
+func show(t: typeas T) {
+static for(n,F) in fields T=>{
+let v: F=t.[n]
+println(n,v)
+}
+}
+
+func first(t: (int,int)): int {
+return t.['0']+t.[0]
+}
+
+// After `fields` and `match type` a `(` is the start of a type, so a function type there is
+// written with one more pair of parentheses; the formatter adds them back.
+func apply(f: (x: int) => int): int {
+return match type ((x: int)=>int) {
+case #leaf=>f(1)
+case _=>0
+}
+}
+
+func overLeaf() {
+static for(n,F) in fields ((x: int)=>int) => {}
+}

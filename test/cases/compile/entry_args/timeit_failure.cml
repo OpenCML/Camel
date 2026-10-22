@@ -1,0 +1,20 @@
+/**
+ * A program that fails on its third `--timeit` execution. Every `--timeit` iteration rebuilds and
+ * runs the program from scratch, so the count of executions lives in a file named by
+ * `CAMEL_TIMEIT_COUNTER`; the third one divides by zero. The failure is what the iteration field
+ * of the `--timeit` report must name.
+ */
+module timeit_failure
+
+import { get_env } from env
+import { try_read_text, write_text } from fs
+
+func main(): int sync {
+    let path = get_env('CAMEL_TIMEIT_COUNTER')
+    let count = int(try_read_text(path) !! '0')
+    let next = count + 1
+    write_text(path, string(next))
+    // Only the third execution has a zero here; the compiler cannot fold the division because
+    // `next` comes from a file at run time.
+    return 1 / (next - 3)
+}

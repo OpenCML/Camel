@@ -1,16 +1,16 @@
 /**
  * A training step (with_grad + sgd) through a function with a custom derivative rule
- * (@vjp): the exported gradient uses the rule, not the derivative of the body. For the example
+ * (#vjp): the exported gradient uses the rule, not the derivative of the body. For the example
  * input Camel prints the loss 5.56157 and the updated w [[0.3799, -0.2188], [0.6391, 0.8194]],
  * b [0.1628, -0.2505]; NumPy with the declared rule and the exported model on ONNX Runtime
  * agree (checked by hand, artifacts: b2/probes/p11_vjp_step.cml).
  */
 module export_train_step_vjp
 import { Tensor, reshape, sum, tanh, where } from tensor
-import { with_grad, vjp } from autodiff
+import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 // A hard sign with a straight-through gradient scaled by 0.5: the rule, not the body, is what
 // the gradient uses.
@@ -18,7 +18,7 @@ func hard_sign_rule(x: Tensor, dy: Tensor): Tensor {
     return dy * 0.5
 }
 
-@vjp<hard_sign_rule>
+#vjp<hard_sign_rule>
 func hard_sign(x: Tensor): Tensor {
     return where(x > 0.0, x * 0.0 + 1.0, x * 0.0 - 1.0)
 }

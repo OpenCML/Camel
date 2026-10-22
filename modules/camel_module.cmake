@@ -19,6 +19,12 @@ function(add_camel_module)
   set(_name ${ARG_NAME})
   set(_target ${_name}_cmo)
 
+  # The .cmo files this configure builds, for the manifest written at the end of the top-level
+  # CMakeLists.txt. scripts/common.js installs exactly these files: a .cmo that a module left in
+  # the build tree before it was renamed or removed must not be copied into stdlib/ or the
+  # install (H138).
+  set_property(GLOBAL APPEND PROPERTY CAMEL_CMO_TARGETS ${_target})
+
   if(ARG_SOURCES)
     set(_sources ${ARG_SOURCES})
   else()

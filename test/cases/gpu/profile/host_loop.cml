@@ -1,0 +1,23 @@
+/**
+ * A step loop and a host element-wise loop, for `std::profile`.
+ *
+ * `step` is the loop whose round is a step: three rounds, each calling `loss`. `loss` itself
+ * runs a loop over the elements of a tensor, a pure element-wise chain per round, which the
+ * profiler reports as a loop that stays on the host and says why.
+ */
+
+module profile_host_loop
+
+import { Tensor, new, sum, zeros } from tensor
+
+func loss(w: Tensor<f32>, x: Tensor<f32>): float {
+    return loop s = 0.0 for v in x do s + sum(v * w + 0.5)
+}
+
+func main(): int sync {
+    let w = new([0.5, 1.5, 2.5, 3.5])
+    let x = new([1.0, 2.0, 3.0, 4.0])
+    let total = loop a = 0.0 for i in range(0, 3) do a + loss(w, x)
+    println(int(total))
+    return 0
+}

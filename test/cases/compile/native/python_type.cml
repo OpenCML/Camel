@@ -1,0 +1,13 @@
+/**
+ * The declaration of `python:py_import` takes one ordinary argument, a `string`: an `int` is
+ * refused at the call, and the message lists the declaration from `stdlib/python.cml`, not the
+ * C++ module's dynamic signature (handover H166).
+ */
+module python_type
+
+import { py_import } from python
+
+func main(): int sync {
+    py_import(1)
+    return 0
+}

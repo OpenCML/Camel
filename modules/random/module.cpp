@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,6 @@
 #include "camel/core/context/context.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/array.h"
-#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
 #include "camel/core/operator_traits.h"
@@ -37,25 +36,12 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 
 namespace {
+// The computed signatures of this module stay in C++ (design principles 6.4; handover H19,
+// step 10): `choice`, `sample` and `shuffle` take their result type from the element type of
+// their array argument, and `stdlib/signatures/random.cml` keeps their reference entries.
+// Every other operator is declared in `stdlib/random.cml`, the one source of its signature.
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "seed",
-            {{"rand:seed",
-              StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void())}}),
-        OperatorGroup::create(
-            "rand",
-            {{"rand:rand", StaticFuncTypeResolver::create({}, {}, Type::Float64())}}),
-        OperatorGroup::create(
-            "randn",
-            {{"rand:randn", StaticFuncTypeResolver::create({}, {}, Type::Float64())}}),
-        OperatorGroup::create(
-            "randint",
-            {{"rand:randint",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::Int64(), false}, {Type::Int64(), false}},
-                  Type::Int64())}}),
         OperatorGroup::create(
             "choice",
             {{"rand:choice",
@@ -92,27 +78,6 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                           return std::nullopt;
                       return norm[0];
                   })}}),
-        // Keyed random is pure: no generator, no state, the same bits everywhere (13.5). A Key
-        // is the struct `{ hi: int, lo: int }` until nominal types (H5).
-        OperatorGroup::create(
-            "key",
-            {{"rand:key",
-              StaticFuncTypeResolver::create(
-                  {}, {{Type::Int64(), false}}, camel::random::keyType())}}),
-        OperatorGroup::create(
-            "split",
-            {{"rand:split",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{camel::random::keyType(), false}},
-                  TupleType::create({camel::random::keyType(), camel::random::keyType()}))}}),
-        OperatorGroup::create(
-            "permutation",
-            {{"rand:permutation",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{camel::random::keyType(), false}, {Type::Int64(), false}},
-                  ArrayType::create(Type::Int64()))}}),
     };
     return groups;
 }
@@ -135,7 +100,7 @@ bool RandomModule::load() {
     camel::core::OperatorTable::instance().declare(
         "rand",
         {
-            // Every one reads or advances the generator.
+            // The generator functions read or advance it; keyed random is pure.
             {"seed", false},
             {"rand", false},
             {"randn", false},
@@ -155,13 +120,13 @@ bool RandomModule::load() {
         camel::core::OperatorTable::instance().declareResources(
             "rand",
             {
-                {"seed", externalAmbient("rand:generator", AccessMode::Write)},
-                {"rand", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
-                {"randn", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
-                {"randint", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
-                {"choice", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
-                {"sample", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
-                {"shuffle", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
+                {"seed", externalAmbient("rng", AccessMode::Write)},
+                {"rand", externalAmbient("rng", AccessMode::ReadModifyWrite)},
+                {"randn", externalAmbient("rng", AccessMode::ReadModifyWrite)},
+                {"randint", externalAmbient("rng", AccessMode::ReadModifyWrite)},
+                {"choice", externalAmbient("rng", AccessMode::ReadModifyWrite)},
+                {"sample", externalAmbient("rng", AccessMode::ReadModifyWrite)},
+                {"shuffle", externalAmbient("rng", AccessMode::ReadModifyWrite)},
             });
     }
     loaded_ = true;

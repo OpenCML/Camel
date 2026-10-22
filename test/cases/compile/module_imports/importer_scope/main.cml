@@ -1,0 +1,11 @@
+/// H112, H124 property 1: a program's own import resolves in its own directory first. This
+/// directory holds a graph.cml, so `graph` here is that file, not stdlib/graph.cmo: it exports
+/// `answer`, which the standard library's graph does not.
+module importer_scope_main
+
+import graph
+
+func main(): int sync {
+    println(graph::answer())
+    return 0
+}

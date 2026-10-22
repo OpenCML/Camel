@@ -19,10 +19,12 @@
 
 #include "fastvm.h"
 #include "camel/runtime/exec_plan.h"
+#include "camel/core/mm.h"
 #include "camel/core/module/module.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/observer.h"
+#include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
 #include "camel/core/rtdata/aggregate.h"
 #include "camel/core/rtdata/view.h"
@@ -139,6 +141,14 @@ inline void setFastVmJitFramedOf(camel::runtime::GCGraph *graph, bool framed) {
     uintptr_t flags = fastVmFlagsOf(graph);
     flags           = framed ? (flags | kFastVmFlagJitFramed) : (flags & ~kFastVmFlagJitFramed);
     graph->execPlan().fastVm.flags = flags;
+}
+
+/// Whether the graph runs a loop of regions (`39_loops.md`, section 4; ExecPlan::loops). Such a
+/// graph is compiled at its first call even under the on-demand threshold: its cost is the
+/// rounds, which a call count cannot see, and the entry function of a program — entered once —
+/// can be where a ten-million-round loop is written.
+inline bool graphHasLoopRegions(const camel::runtime::GCGraph *graph) {
+    return graph != nullptr && !graph->execPlan().loops.empty();
 }
 #endif
 
@@ -365,6 +375,11 @@ void FastVMSchedPass::leaseCode(camel::runtime::GCGraph *graph, size_t start, si
     }
     graph->execPlan().fastVm.codeLease =
         std::make_shared<CodeLease>(codeSpace_, start, length);
+#if ENABLE_FASTVM_JIT
+    // A version that already has its JIT entry (a second lease of the same graph) keeps the entry
+    // cleared with the new lease.
+    attachJitEntry(graph, fastVmJitEntryOf(graph));
+#endif
 }
 
 void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
@@ -519,6 +534,16 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     (void)os;
     ASSERT(program->root() != nullptr, "FastVM requires a non-null runtime root graph.");
 
+    if (camel::profile::enabled()) {
+#if ENABLE_FASTVM_JIT
+        camel::profile::setBackend(jitConfig_.policy == jit::JitPolicy::Disabled ? "std::fvm"
+                                                                                : "std::jit");
+#else
+        // A build without the JIT runs this pass as `std::fvm`, whichever name it was given.
+        camel::profile::setBackend("std::fvm");
+#endif
+    }
+
     camel::runtime::GCGraph *runtimeRoot = program->root();
     camel::execute::RunScope runScope(programs_, *context_, program);
     precompile(*program, runtimeRoot);
@@ -530,8 +555,14 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
         FastVMSchedPass *vm;
         ~StatsAtExit() {
             vm->statsWrite();
-            if (std::getenv("CAMEL_GC_STATS") != nullptr) {
+            if (camel::core::mm::statsReportEnabled()) {
                 std::cerr << "fvm_code_bytecodes=" << vm->bytecodes_.size() << '\n';
+#if ENABLE_FASTVM_JIT
+                // The entries name the graph versions that were compiled on the way; one whose
+                // version the collector freed must not be here (it would name a dead graph and
+                // the map would grow with every run-time specialization).
+                std::cerr << "fvm_jit_entries=" << vm->jitEntryCount() << '\n';
+#endif
             }
         }
     } statsAtExit{this};
@@ -1124,8 +1155,37 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
 }
 
 camel::runtime::GCGraph *FastVMSchedPass::jitFnToGraph(JitEntryFn fn) const {
-    auto it = jitFnToGraph_.find(fn);
-    return it != jitFnToGraph_.end() ? it->second : nullptr;
+    std::lock_guard lock(jitCache_->mutex);
+    auto it = jitCache_->byFn.find(fn);
+    return it != jitCache_->byFn.end() ? it->second : nullptr;
+}
+
+size_t FastVMSchedPass::jitEntryCount() const {
+    std::lock_guard lock(jitCache_->mutex);
+    return jitCache_->byFn.size();
+}
+
+void FastVMSchedPass::attachJitEntry(camel::runtime::GCGraph *graph, JitEntryFn fn) {
+    if (!graph || !fn) {
+        return;
+    }
+    {
+        std::lock_guard lock(jitCache_->mutex);
+        jitCache_->byFn[fn] = graph;
+    }
+    // The entry names the version: the lease of its bytecode range clears the entry when the
+    // collector frees the version. The hook holds the cache weakly, as the version may outlive
+    // the pass (and, with it, the cache it names).
+    auto *lease = static_cast<CodeLease *>(graph->execPlan().fastVm.codeLease.get());
+    if (lease == nullptr) {
+        return;
+    }
+    const std::weak_ptr<JitGraphCache> cache = jitCache_;
+    lease->onRelease = [cache, fn] {
+        if (const auto alive = cache.lock()) {
+            alive->forget(fn);
+        }
+    };
 }
 
 JitEntryFn FastVMSchedPass::jitFnOf(camel::runtime::GCGraph *graph) const {
@@ -1250,7 +1310,7 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
     if (fn) {
         setFastVmJitFramedOf(graph, framed);
         setJitFnOf(graph, fn);
-        jitFnToGraph_[fn] = graph;
+        attachJitEntry(graph, fn);
         statsNoteCompiled(entryPc);
         setJitCompileFailedOf(graph, false);
         setJitFailureReportedOf(graph, false);
@@ -1262,11 +1322,37 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
             }
             pc += bc.opsize;
         }
+        // What the rounds of the graph's loops became: native code where the shape allowed it,
+        // the loop helpers where it did not (and why). The statistics carry the same detail.
+        std::string loopSummary;
+        {
+            std::vector<std::pair<std::string, size_t>> byDetail;
+            for (const auto &construct : jitBackend_->runtimeConstructs(unit)) {
+                if (construct.kind != "LOOP")
+                    continue;
+                auto it = std::find_if(
+                    byDetail.begin(),
+                    byDetail.end(),
+                    [&](const auto &entry) { return entry.first == construct.detail; });
+                if (it == byDetail.end())
+                    byDetail.emplace_back(construct.detail, 1);
+                else
+                    ++it->second;
+            }
+            for (const auto &[detail, count] : byDetail) {
+                if (!loopSummary.empty())
+                    loopSummary += ", ";
+                loopSummary += detail == "native" ? "native rounds" : detail;
+                if (count > 1)
+                    loopSummary += std::format(" ({} loops)", count);
+            }
+        }
         CAMEL_LOG_INFO_S(
             "JIT",
-            "OnDemand: compiled & cached graph '{}' as {} code",
+            "OnDemand: compiled & cached graph '{}' as {} code{}",
             graph->name(),
-            framed ? "framed" : "frameless");
+            framed ? "framed" : "frameless",
+            loopSummary.empty() ? std::string() : "; loop rounds: " + loopSummary);
     } else {
         setJitCompileFailedOf(graph, true);
         if (!jitFailureReportedOf(graph)) {
@@ -1290,7 +1376,7 @@ Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
     }
     size_t targetPc = getFuncExtraTargetPc(bc);
     uint32_t count  = incFuncExtraCount(bc);
-    if (tierPolicy_.shouldJit(count)) {
+    if (tierPolicy_.shouldJit(count, graphHasLoopRegions(runtimeTarget))) {
         compileAndCacheGraph(runtimeTarget, targetPc);
         return &bytecodes_[pc];
     }
@@ -1369,7 +1455,7 @@ slot_t FastVMSchedPass::invokeCallOrJit(
         return invokeOwnedJitFrame(fn, frame, jitCtx);
     }
     const bool compileFailed = jitCompileFailedOf(runtimeGraph);
-    if (!compileFailed && tierPolicy_.shouldJit(callCount)) {
+    if (!compileFailed && tierPolicy_.shouldJit(callCount, graphHasLoopRegions(runtimeGraph))) {
         compileAndCacheGraph(runtimeGraph, pc);
         fn = jitFnOf(runtimeGraph);
         if (fn) {

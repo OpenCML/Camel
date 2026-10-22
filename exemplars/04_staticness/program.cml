@@ -20,7 +20,7 @@ module staticness
 
 import { Tensor, ones, zeros, shape, reshape, slice, sum } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func run(t: int, steps: int, x: Tensor, h: Tensor): Tensor {
     let batch = shape(x)[0]

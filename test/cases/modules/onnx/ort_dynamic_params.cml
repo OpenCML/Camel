@@ -13,7 +13,7 @@ module ort_dynamic_params
 import { Tensor, load_npy, save_npy, reshape, sum, mean, tanh, transpose } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 type P = { w: Tensor, b: Tensor }
 

@@ -10,6 +10,7 @@
 
 // Classify static core-indexed operations, then partition the complete dependency DAG.
 #include "camel/core/operator_table.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
@@ -114,7 +115,7 @@ std::string eligibility(
         .shape       = *output,
         .inputs      = {},
         .dtype       = node->dataType()->code() == ty::TypeCode::Float64 ? DType::F64 : DType::F32,
-        .permissions = graph.nodePermissions(id),
+        .permissions = camel::core::tag::factsOf(graph, id).permissions,
         .semantic    = 0,
         .indexing    = inst};
     const auto inputs = graph.normInputsOf(id);
@@ -191,6 +192,9 @@ analyzeRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::Fa
         for (auto inner : view.regionNodes()) {
             insideLoop[inner] = true;
         }
+        // Every value the regions read, constants included: this is dependency analysis (was the
+        // read computed outside the loop?), not the loop's capture list. A constant is not a
+        // capture and is evaluated in place (LoopView::externalInputs, default without it).
         loopReads[id] = view.externalInputs(true);
     }
     for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
@@ -273,7 +277,7 @@ inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::Fa
         for (auto id : region.members) {
             const auto *copy = extracted.graph->header(extracted.sourceToNode[id]);
             if (copy->origin != graph.nodeOrigin(id) ||
-                copy->permissions != graph.nodePermissions(id) ||
+                copy->permissions != camel::core::tag::factsOf(graph, id).permissions ||
                 copy->dataType != graph.node(id)->dataType())
                 throw std::runtime_error("region extraction lost source metadata");
         }

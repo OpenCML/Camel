@@ -172,7 +172,8 @@ class Result:
         self.seconds = seconds
         self.peak_kb = peak_kb
         self.detail = detail
-        # The line `[camel] spaces: ...` the run printed at exit (with CAMEL_GC_STATS set).
+        # The line `[camel] spaces: ...` the run printed at exit (with `std::profile(gc_stats=1)`
+        # in the pipeline).
         self.spaces = spaces
 
 
@@ -328,8 +329,7 @@ def check_chunks(n: int) -> int:
     with tempfile.TemporaryDirectory(prefix="camel_scale_") as tmp:
         path = Path(tmp) / f"scale_chunks_{n}.cml"
         path.write_text(text, encoding="utf-8", newline="\n")
-        code, out, err, _, _ = run_file(
-            path, ["test::chunks", "std::nvm"], {"CAMEL_ENABLE_TEST_PASSES": "1"})
+        code, out, err, _, _ = run_file(path, ["test::chunks", "std::nvm"])
     line = next((l for l in out.splitlines() if l.startswith("CHUNKS ")), "")
     fields = dict(f.split("=") for f in line.split()[1:] if "=" in f)
     shared, chunks = int(fields.get("shared", "-1")), line.split(" of ")[1].split()[0] if " of " in line else "0"

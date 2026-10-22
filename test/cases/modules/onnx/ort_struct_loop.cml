@@ -1,0 +1,123 @@
+/**
+ * Tail recursions whose depth depends on the model input and which CARRY a struct or tuple
+ * between calls (H44's outline, H71 item 3): the argument is flattened into one ONNX Loop state
+ * per leaf, in the order of its fields, the body entry rebuilds the struct from those leaves,
+ * and the Loop's outputs are rebuilt into the struct the recursion returned.
+ *
+ * rec   the state is a struct of two tensors and a counter, replaced whole every call.
+ * tup   the same state as a tuple.
+ * nest  the state is a struct whose `deep` field is a struct (two levels flattened).
+ * scal  the state is a struct of scalar leaves (a float and an int).
+ * empt  the state has an empty struct field: it contributes no carried value.
+ *
+ * Run by ort_struct_loop.py: x.npy is read from the working directory, the native results of
+ * every model are saved there, and the model named by MODEL is exported when ONNX_OUT is set.
+ */
+module ort_struct_loop
+import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+// rec: two tensors and a counter, as a struct.
+type Run = { h: Tensor, acc: Tensor, k: int }
+
+func walk(s: Run): Run {
+    return if s.k >= 6 || sum(s.h * s.h) < 1.0 then s
+        else walk({ h: tanh(s.h) * 0.3 + s.h * 0.6, acc: s.acc + s.h, k: s.k + 1 })
+}
+
+func start(x: Tensor): Run {
+    return walk({ h: x, acc: x * 0.0, k: 0 })
+}
+
+// tup: the same state as a tuple.
+func walkT(s: (Tensor, Tensor, int)): (Tensor, Tensor, int) {
+    return if s.2 >= 6 || sum(s.0 * s.0) < 1.0 then s
+        else walkT((tanh(s.0) * 0.3 + s.0 * 0.6, s.1 + s.0, s.2 + 1))
+}
+
+func startT(x: Tensor): (Tensor, Tensor, int) {
+    return walkT((x, x * 0.0, 0))
+}
+
+// nest: a struct in a struct.
+type Inner = { h: Tensor, k: int }
+type Outer = { deep: Inner, acc: Tensor }
+
+func walkN(s: Outer): Outer {
+    return if s.deep.k >= 6 || sum(s.deep.h * s.deep.h) < 1.0 then s
+        else walkN({
+            deep: { h: tanh(s.deep.h) * 0.3 + s.deep.h * 0.6, k: s.deep.k + 1 },
+            acc: s.acc + s.deep.h
+        })
+}
+
+func startN(x: Tensor): Outer {
+    return walkN({ deep: { h: x, k: 0 }, acc: x * 0.0 })
+}
+
+// scal: a struct of scalar leaves.
+type Small = { x: float, n: int }
+
+func walkS(s: Small): Small {
+    return if s.n >= 6 then s else walkS({ x: s.x * 0.5 + 0.25, n: s.n + 1 })
+}
+
+func startS(x: Tensor): Small {
+    return walkS({ x: sum(x), n: 0 })
+}
+
+// empt: a struct with an empty struct field; the field has no leaf, the tensor still changes.
+type Empty = {}
+type Hold = { h: Tensor, e: Empty, k: int }
+
+func walkE(s: Hold): Hold {
+    return if s.k >= 6 || sum(s.h * s.h) < 1.0 then s
+        else walkE({ h: tanh(s.h) * 0.3 + s.h * 0.6, e: {}, k: s.k + 1 })
+}
+
+func startE(x: Tensor): Hold {
+    return walkE({ h: x, e: {}, k: 0 })
+}
+
+func main(): int sync {
+    let x = load_npy('x.npy')
+    let a = start(x)
+    save_npy(a.h, 'rec_0.npy')
+    save_npy(a.acc, 'rec_1.npy')
+    save_npy(reshape([a.k], [1]), 'rec_2.npy')
+    let b = startT(x)
+    save_npy(b.0, 'tup_0.npy')
+    save_npy(b.1, 'tup_1.npy')
+    save_npy(reshape([b.2], [1]), 'tup_2.npy')
+    let c = startN(x)
+    save_npy(c.deep.h, 'nest_0.npy')
+    save_npy(reshape([c.deep.k], [1]), 'nest_1.npy')
+    save_npy(c.acc, 'nest_2.npy')
+    let d = startS(x)
+    save_npy(reshape([d.x], [1]), 'scal_0.npy')
+    save_npy(reshape([d.n], [1]), 'scal_1.npy')
+    let f = startE(x)
+    save_npy(f.h, 'empt_0.npy')
+    save_npy(reshape([f.k], [1]), 'empt_1.npy')
+    let out = get_env('ONNX_OUT')
+    let which = get_env('MODEL')
+    let exported = if out == '' then 0 else if which == 'rec' then sync {
+        export_model((x: Tensor): Run => start(x), (x), out)
+        1
+    } else if which == 'tup' then sync {
+        export_model((x: Tensor): (Tensor, Tensor, int) => startT(x), (x), out)
+        1
+    } else if which == 'nest' then sync {
+        export_model((x: Tensor): Outer => startN(x), (x), out)
+        1
+    } else if which == 'scal' then sync {
+        export_model((x: Tensor): Small => startS(x), (x), out)
+        1
+    } else sync {
+        export_model((x: Tensor): Hold => startE(x), (x), out)
+        1
+    }
+    println(exported)
+    return 0
+}

@@ -92,6 +92,18 @@ class SemanticRecorder {
         (void)type;
     }
 
+    /// The name at `ref` stands for the type `type`, whose declaration is at `decl`; `decl` is
+    /// invalid when the builder does not know the declaration (a type variable, a built-in
+    /// name) or when the type is declared outside the sources being compiled. Optional: the
+    /// default ignores the report.
+    virtual void
+    typeReferenced(origin_id_t ref, const std::string &name, origin_id_t decl, Type *type) {
+        (void)ref;
+        (void)name;
+        (void)decl;
+        (void)type;
+    }
+
     /// The name at `ref` stands for the value that `decl` bound to `declName` (see
     /// valueDeclared); `decl` is invalid when the builder does not know the declaration.
     virtual void
@@ -113,10 +125,11 @@ class SemanticRecorder {
 
     /// The call at `call`, whose callee expression is at `callee`, was resolved to a function
     /// of type `type`: the graph `graph` (invalid for an operator or a function value), or the
-    /// operator `operatorUri`.
+    /// operator `operatorUri`. `macro` is whether the callee is a macro function or a macro
+    /// operator (design principles 8): its call may be evaluated ahead of time by `std::macro`.
     virtual void callResolved(
         origin_id_t call, origin_id_t callee, GraphId graph, const std::string &operatorUri,
-        FunctionType *type) = 0;
+        FunctionType *type, bool macro) = 0;
 
     /// The body of the function at `func` was built into the graph `graph`; `type` is its
     /// type, complete once the compilation is (an inferred return type is filled in place).

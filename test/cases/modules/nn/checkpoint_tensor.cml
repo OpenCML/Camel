@@ -1,7 +1,7 @@
 module checkpoint_tensor
 import { Tensor, new, from_bytes, to_bytes } from tensor
 import { from_array, to_array } from bytes
-import { save_tree, load_tree } from tree
+import { save_tree, load_tree } from ckpt
 func original(): Tensor<f32> {
     return from_bytes::<f32>(from_array([1, 0, 128, 127, 1, 0, 192, 127, 0, 0, 128, 127, 1, 0, 0, 0]), [4])
 }

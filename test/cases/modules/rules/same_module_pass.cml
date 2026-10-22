@@ -1,0 +1,20 @@
+module same_module_pass
+
+import { Program } from graph
+import { rewrite } from rewrite
+
+// Deliberately not an equation: `x + 0` becomes `x + 1`, so the rewritten program prints 8
+// where the program as written prints 7. The test can then tell that the pass ran and that the
+// program it produced (not an empty one, and not the original) was installed and run.
+rule add_zero_bumps(x: int) { x + 0 => x + 1 }
+
+func f(x: int): int { return x + 0 }
+
+func main(): int sync {
+    println(f(7))
+    return 0
+}
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [add_zero_bumps])
+}

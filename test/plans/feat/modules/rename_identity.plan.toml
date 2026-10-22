@@ -1,0 +1,35 @@
+id = "modules.rename_identity"
+order = 373
+tier = "fast"
+tags = ["feat", "modules", "rename", "identity"]
+
+# A rename is a spelling change: the graph an unchanged program produces is the same before and
+# after it, apart from the module name in the operator URIs (handover H114). Each sample holds
+# literals only and is dumped with `std::jgir`, a translation pass, so nothing is executed and the
+# graph does not depend on the machine. `identity.mjs` replaces the module name in every string of
+# the JSON document and compares its digest with the one recorded before the rename.
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script_path = "../../../cases/modules/rename/identity.mjs"
+
+[[tests]]
+name = "rename.env_graph_identity"
+desc = "`sys` -> `env`: the graph of a program that reads the environment and the working directory is unchanged apart from `env:` in the two operator URIs."
+case = "../../../cases/modules/rename/env_identity.cml"
+args = ["${case}", "std::jgir"]
+
+[[tests]]
+name = "rename.process_graph_identity"
+desc = "`os` -> `process`: the graph of a program that asks who it is and how many CPUs there are is unchanged apart from `process:` in the operator URIs."
+case = "../../../cases/modules/rename/process_identity.cml"
+args = ["${case}", "std::jgir"]
+
+[[tests]]
+name = "rename.hash_graph_identity"
+desc = "`crypto` -> `hash`: the graph of a program that hashes a literal is unchanged apart from `hash:` in the operator URIs."
+case = "../../../cases/modules/rename/hash_identity.cml"
+args = ["${case}", "std::jgir"]

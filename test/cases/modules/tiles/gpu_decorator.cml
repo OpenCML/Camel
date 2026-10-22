@@ -20,13 +20,13 @@ func strict(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> {
 }
 
 @gpu
-@numeric(contract)
+#[contract]
 func contracted(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> {
     return a * b + c
 }
 
 @gpu
-@numeric(contract)
+#[contract]
 func caller(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> {
     return strict(a, b, c)
 }

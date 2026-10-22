@@ -161,7 +161,7 @@ class ProgramIndex::Recorder final : public camel::compile::SemanticRecorder {
     void operatorReferenced(origin_id_t, const std::string &, std::vector<std::string>) override {}
     void callResolved(
         origin_id_t, origin_id_t, camel::runtime::GraphId, const std::string &,
-        FunctionType *) override {}
+        FunctionType *, bool) override {}
     void functionBuilt(
         origin_id_t func, const std::string &name, camel::runtime::GraphId graph,
         FunctionType *) override {
@@ -340,20 +340,7 @@ void ProgramIndex::collect(
         graphs.push_back(g);
         if (g->hasNodePayload()) {
             for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
-                const GCNode *n = *it;
-                if (n != nullptr && n->kind == GCNodeKind::Loop && arms != nullptr) {
-                    // The condition and the body of a loop are code of the function the loop
-                    // is written in (design principles 12.1: they fold like arms).
-                    for (GCGraph *part :
-                         {program->loopCondOf(*g, it.ref()), program->loopBodyOf(*g, it.ref())}) {
-                        if (part != nullptr) {
-                            auto &owners = (*arms)[part];
-                            if (std::find(owners.begin(), owners.end(), g) == owners.end()) {
-                                owners.push_back(g);
-                            }
-                        }
-                    }
-                }
+                const GCNode *n  = *it;
                 const origin_t o = g->nodeOrigin(it.ref());
                 if (n == nullptr || o == 0) {
                     continue;
@@ -1022,22 +1009,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     // frame of an arm is shown at all is the stack's business (DebugCore, 5.4): it folds into
     // the frame of the function unless the user asks for the subgraphs.
     info->display = info->name;
-    // `f.loop1.cond`, `f.loop1.body`: the condition and the body of a loop written in `f`.
-    const bool loopPart = info->name.find(".loop") != std::string::npos &&
-                          (info->name.ends_with(".cond") || info->name.ends_with(".body"));
-    if (loopPart && armOwners_.contains(g)) {
-        info->role   = GraphRole::Arm;
-        info->owners = armOwners_.at(g);
-        int line     = 0;
-        for (const NodeInfo &n : info->nodes) {
-            if (n.loc.valid() && (line == 0 || n.loc.line < line)) {
-                line = n.loc.line;
-            }
-        }
-        const std::string owner = info->name.substr(0, info->name.rfind(".loop"));
-        info->display = owner + " [loop " + (info->name.ends_with(".cond") ? "condition" : "body") +
-                        (line > 0 ? " at line " + std::to_string(line) : std::string()) + "]";
-    } else if (info->name.rfind("__g_", 0) == 0) {
+    if (info->name.rfind("__g_", 0) == 0) {
         std::string owner;
         for (GCGraph *outer = programOfGraph->outerOf(*g); outer != nullptr;
              outer          = programOfGraph->outerOf(*outer)) {

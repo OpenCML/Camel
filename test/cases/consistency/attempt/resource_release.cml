@@ -14,7 +14,7 @@
 module resource_release
 
 import { py_call, py_exec, py_eval, py_wrap, py_attr, PyObject } from python
-import { get_env } from sys
+import { get_env } from env
 
 func open_resource(name: string): PyObject sync {
     return py_call('Resource', py_wrap(name))

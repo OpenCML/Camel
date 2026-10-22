@@ -9,7 +9,7 @@ module export_onnx
 import { Tensor, tanh, reshape } from tensor
 import { export_model } from onnx
 import { mkdirs, file_size } from fs
-import { get_env } from sys
+import { get_env } from env
 
 type Weights = { hidden: Tensor, out: Tensor }
 

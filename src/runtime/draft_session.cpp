@@ -42,7 +42,9 @@
 #include "camel/utils/pointer_set.h"
 
 #include <algorithm>
+#include <atomic>
 #include <format>
+#include <mutex>
 #include <queue>
 #include <unordered_set>
 
@@ -476,6 +478,7 @@ GCGraph *encodeDraftGraph(
     const std::vector<GraphId> subGraphs(draft.subGraphs().begin(), draft.subGraphs().end());
     const std::vector<GraphId> staticGraphRefs =
         collectDraftStaticGraphRefs(context, draft, staticDataType);
+    const std::vector<GraphId> ruleGraphs(draft.ruleGraphs().begin(), draft.ruleGraphs().end());
 
     std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
     if (auto *tupleType = staticDataType) {
@@ -517,6 +520,7 @@ GCGraph *encodeDraftGraph(
         dependencies,
         subGraphs,
         staticGraphRefs,
+        ruleGraphs,
         payloadShape,
         [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(draft, payload); },
         staticSlots);
@@ -540,6 +544,9 @@ size_t draftGraphBytes(
     const std::vector<GraphId> staticRefPlaceholders(
         collectDraftStaticGraphRefs(context, draft, staticDataType).size(),
         kInvalidGraphId);
+    const std::vector<GraphId> ruleGraphPlaceholders(
+        draft.ruleGraphs().size(),
+        kInvalidGraphId);
     std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
     if (staticDataType && staticSlots.size() < staticDataType->size()) {
         staticSlots.resize(staticDataType->size(), NullSlot);
@@ -548,6 +555,7 @@ size_t draftGraphBytes(
         dependencyPlaceholders,
         subGraphPlaceholders,
         staticRefPlaceholders,
+        ruleGraphPlaceholders,
         describeDraftNativePayload(draft),
         staticSlots,
         draft.frameSlotTypes());
@@ -737,6 +745,203 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
 
 } // namespace
 
+#ifndef NDEBUG
+// ---------------------------------------------------------------------------------------------
+// The Debug-only safepoint draft-root check.
+//
+// The red line (handover note ⟨b2dbdd6⟩ (H74)): while a session holds a draft open, every safepoint the session
+// reaches must keep the draft's static values relocatable, or a collection at that safepoint
+// leaves the raw slots in the draft pointing at where the objects were. The root registration
+// itself stays where it is: the session's RootScope registers an external tracer, and a
+// DraftWritings's EngineRootScope covers the one draft it is made for. This section keeps only
+// the record the check needs: which sessions are alive, which drafts each has open, and which of
+// the existing scopes cover them. It registers no root of its own, so a path cannot satisfy the
+// check by registering somewhere else than the collector.
+//
+// The check runs at the start of every safepoint (gen.h, gen.cpp), not only at a collecting one,
+// so a path that forgets a scope is reported at the first safepoint it reaches rather than at the
+// first collection: in a Debug build a test fails even when nothing would have moved yet.
+
+namespace {
+
+std::mutex &draftRootsMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::vector<DraftRootsDebug *> &draftRootsRegistry() {
+    static std::vector<DraftRootsDebug *> registry;
+    return registry;
+}
+
+/// Sessions with at least one open draft; the check returns without the lock while it is zero.
+std::atomic<size_t> &draftRootSessionsWithDrafts() {
+    static std::atomic<size_t> count{0};
+    return count;
+}
+
+size_t nextDraftRootSessionId() {
+    static std::atomic<size_t> next{0};
+    return next.fetch_add(1, std::memory_order_relaxed) + 1;
+}
+
+void noteDraftOpened(DraftRootsDebug &state, const GraphDraft *draft) {
+    std::lock_guard<std::mutex> lock(draftRootsMutex());
+    if (state.drafts.empty()) {
+        draftRootSessionsWithDrafts().fetch_add(1, std::memory_order_relaxed);
+    }
+    state.drafts.push_back(DraftRootsDebug::Entry{.draft = draft, .roots = 0});
+}
+
+void noteDraftClosed(DraftRootsDebug &state, const GraphDraft *draft) {
+    std::lock_guard<std::mutex> lock(draftRootsMutex());
+    if (state.drafts.empty()) {
+        return;
+    }
+    std::erase_if(state.drafts, [draft](const DraftRootsDebug::Entry &entry) {
+        return entry.draft == draft;
+    });
+    if (state.drafts.empty()) {
+        draftRootSessionsWithDrafts().fetch_sub(1, std::memory_order_relaxed);
+    }
+}
+
+void noteDraftsCleared(DraftRootsDebug &state) {
+    std::lock_guard<std::mutex> lock(draftRootsMutex());
+    if (state.drafts.empty()) {
+        return;
+    }
+    state.drafts.clear();
+    draftRootSessionsWithDrafts().fetch_sub(1, std::memory_order_relaxed);
+}
+
+void noteRootScopeOpened(DraftRootsDebug &state) {
+    std::lock_guard<std::mutex> lock(draftRootsMutex());
+    ++state.sessionRoots;
+}
+
+void noteRootScopeClosed(DraftRootsDebug &state) {
+    std::lock_guard<std::mutex> lock(draftRootsMutex());
+    ASSERT(state.sessionRoots > 0, "A session RootScope was closed more often than it was opened.");
+    --state.sessionRoots;
+}
+
+/// The first draft of `state` no scope covers, and what it would lose, or an empty string when
+/// every draft is covered. Called with the registry lock held; it reads the draft it names.
+std::string describeUncoveredDraft(const DraftRootsDebug &state, std::string_view reason) {
+    const DraftRootsDebug::Entry *uncovered = nullptr;
+    for (const DraftRootsDebug::Entry &entry : state.drafts) {
+        if (entry.roots == 0) {
+            uncovered = &entry;
+            break;
+        }
+    }
+    if (uncovered == nullptr) {
+        return {};
+    }
+    const GraphDraft &draft     = *uncovered->draft;
+    const GCGraph *source       = draft.baseGraph();
+    const std::string graphName = source != nullptr ? source->name() : std::string{"<built>"};
+    const auto slots            = draft.staticSlots();
+    const auto types            = draft.staticSlotTypes();
+    const size_t slotCount      = std::min(slots.size(), types.size());
+    // Slot 0 is the static tuple itself (see traceStaticSlots); the values start at 1.
+    std::string holds;
+    for (size_t i = 1; i < slotCount; ++i) {
+        if (!shouldTraverseStaticSlotType(types[i]) || slots[i] == NullSlot) {
+            continue;
+        }
+        holds =
+            std::format("its static slot {} holds a value of type '{}'", i, types[i]->toString());
+        break;
+    }
+    if (holds.empty()) {
+        holds = "it holds no GC-traced static value yet";
+    }
+    return std::format(
+        "GC draft-root invariant violated at safepoint '{}': {} has {} open draft(s) and no "
+        "RootScope covers the session; draft '{}' (graph {}), at draft address {}, is not rooted: "
+        "{}. A collection at a safepoint would leave that raw slot pointing at where the object "
+        "was. Open RuntimeGraphDraftSession::RootScope before the first draft is decoded and keep "
+        "it until the commit reads the drafts again (modules/rewrite/module.cpp); a DraftWritings "
+        "EngineRootScope covers only the draft it is made for.",
+        reason.empty() ? std::string_view{"safepoint"} : reason,
+        state.label,
+        state.drafts.size(),
+        graphName,
+        toValue(draft.id()),
+        static_cast<const void *>(&draft),
+        holds);
+}
+
+void checkDraftRootsAtSafepoint(std::string_view reason) {
+    if (draftRootSessionsWithDrafts().load(std::memory_order_relaxed) == 0) {
+        return;
+    }
+    std::string message;
+    {
+        std::lock_guard<std::mutex> lock(draftRootsMutex());
+        for (const DraftRootsDebug *state : draftRootsRegistry()) {
+            if (state->drafts.empty() || state->sessionRoots > 0) {
+                continue;
+            }
+            message = describeUncoveredDraft(*state, reason);
+            if (!message.empty()) {
+                break;
+            }
+        }
+    }
+    if (!message.empty()) {
+        // An assertion, not an exception: the rewrite kernels catch std::exception and turn it
+        // into an error value, and a red-line violation must not become an ordinary rule error.
+        ASSERT(false, message);
+    }
+}
+
+} // namespace
+
+DraftRootsDebug::DraftRootsDebug(std::string label) : label(std::move(label)) {
+    std::lock_guard<std::mutex> lock(draftRootsMutex());
+    draftRootsRegistry().push_back(this);
+}
+
+DraftRootsDebug::~DraftRootsDebug() {
+    std::lock_guard<std::mutex> lock(draftRootsMutex());
+    std::erase_if(draftRootsRegistry(), [this](const DraftRootsDebug *entry) {
+        return entry == this;
+    });
+    if (!drafts.empty()) {
+        draftRootSessionsWithDrafts().fetch_sub(1, std::memory_order_relaxed);
+    }
+}
+
+void debugDraftRootOpened(const GraphDraft &draft) {
+    std::lock_guard<std::mutex> lock(draftRootsMutex());
+    for (DraftRootsDebug *state : draftRootsRegistry()) {
+        for (DraftRootsDebug::Entry &entry : state->drafts) {
+            if (entry.draft == &draft) {
+                ++entry.roots;
+                return;
+            }
+        }
+    }
+}
+
+void debugDraftRootClosed(const GraphDraft &draft) {
+    std::lock_guard<std::mutex> lock(draftRootsMutex());
+    for (DraftRootsDebug *state : draftRootsRegistry()) {
+        for (DraftRootsDebug::Entry &entry : state->drafts) {
+            if (entry.draft == &draft) {
+                if (entry.roots > 0) {
+                    --entry.roots;
+                }
+                return;
+            }
+        }
+    }
+}
+#endif
+
 size_t RuntimeSpecializationKeyHasher::operator()(const RuntimeSpecializationKey &key) const {
     size_t seed = 0;
     hashCombine(seed, key.baseGraph);
@@ -751,17 +956,40 @@ size_t RuntimeSpecializationKeyHasher::operator()(const RuntimeSpecializationKey
 }
 
 RuntimeGraphDraftSession::RuntimeGraphDraftSession(
-    const camel::core::context::context_ptr_t &context, const Program *program)
-    : RuntimeGraphDraftSession(context, program, program ? program->root() : nullptr) {}
+    const camel::core::context::context_ptr_t &context, const Program *program,
+    std::source_location location)
+    : RuntimeGraphDraftSession(context, program, program ? program->root() : nullptr, location) {}
 
 RuntimeGraphDraftSession::RuntimeGraphDraftSession(
     const camel::core::context::context_ptr_t &context, const Program *program,
-    GCGraph *runtimeRoot)
+    GCGraph *runtimeRoot, [[maybe_unused]] std::source_location location)
     : context_(context), program_(program), runtimeRoot_(runtimeRoot) {
     ASSERT(context_ != nullptr, "Runtime graph draft session requires a valid context.");
     ASSERT(program_ != nullptr, "Runtime graph draft session requires a program.");
     ASSERT(runtimeRoot_ != nullptr, "Runtime graph draft session requires a runtime root graph.");
+    // The session may replace the context's program only while the program it rewrites is one of
+    // that program's (mayPublish_ in the header): remembered here, because a later commit cannot
+    // tell an overtaken session from one that was never over the context's program.
+    mayPublish_ = context_->currentRuntimeProgram() == program_;
     work_ = std::make_unique<Program>(*program_);
+#ifndef NDEBUG
+    // The safepoint check finds this session through DraftRootsDebug and reports the call site
+    // when a draft is left unrooted. The session is a cell of its own so that a move of the
+    // session (macro.cpp) keeps the drafts and this record together.
+    debugRoots_ = std::make_unique<DraftRootsDebug>(std::format(
+        "session #{} opened at {}:{} over program root '{}'",
+        nextDraftRootSessionId(),
+        location.file_name(),
+        location.line(),
+        runtimeRoot_->name()));
+    // Installed once, on the first session: a safepoint before there is a session has no draft
+    // to check. A Release build has neither the observer nor the call (debug_hook.h).
+    static const bool draftRootCheckInstalled = [] {
+        mm::setSafepointObserver(&checkDraftRootsAtSafepoint);
+        return true;
+    }();
+    (void)draftRootCheckInstalled;
+#endif
 }
 
 void RuntimeGraphDraftSession::adoptProgram(const Program &program) const {
@@ -769,7 +997,15 @@ void RuntimeGraphDraftSession::adoptProgram(const Program &program) const {
 }
 
 void RuntimeGraphDraftSession::adoptGraph(GCGraph *graph) const {
-    if (graph != nullptr && work_->graph(graph->id()) == nullptr) {
+    if (graph == nullptr) {
+        return;
+    }
+    // A graph the session encoded itself (a specialization) is a version of the program that no
+    // program binds yet: the drafts reach it through the work table, which the collector does not
+    // trace. Telling the manager about it lets the collector free it once the pass is over when
+    // the commit did not bind it (a commit that replaced it with a copy of its own).
+    context_->noteUnboundRuntimeGraph(graph);
+    if (work_->graph(graph->id()) == nullptr) {
         work_->bind(graph->id(), graph);
     }
 }
@@ -820,6 +1056,9 @@ GraphDraft &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
             draftedIds_.resize(index + 1, 0);
         }
         draftedIds_[index] = 1;
+#ifndef NDEBUG
+        noteDraftOpened(*debugRoots_, it->second->draft.get());
+#endif
     }
     return *it->second->draft;
 }
@@ -831,8 +1070,32 @@ GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) {
 
 GraphDraft &RuntimeGraphDraftSession::rootDraft() { return edit(runtimeRoot_); }
 
+RuntimeGraphDraftSession::RootScope::RootScope(RuntimeGraphDraftSession &session)
+    : session_(session) {
+    mm::autoSpace().registerExternalRootTracer(
+        this,
+        "runtime.draftRoots",
+        [this](const camel::core::rtdata::Object::RefRelocator &relocate) {
+            session_.traceStaticSlots(relocate, nullptr, "Draft");
+        });
+#ifndef NDEBUG
+    ASSERT(
+        session_.debugRoots_ != nullptr,
+        "A session RootScope requires the session's Debug record.");
+    noteRootScopeOpened(*session_.debugRoots_);
+#endif
+}
+
+RuntimeGraphDraftSession::RootScope::~RootScope() {
+#ifndef NDEBUG
+    noteRootScopeClosed(*session_.debugRoots_);
+#endif
+    mm::autoSpace().unregisterExternalRootTracer(this);
+}
+
 void RuntimeGraphDraftSession::traceStaticSlots(
-    const camel::core::rtdata::Object::RefRelocator &relocate, const Type *ownerType) {
+    const camel::core::rtdata::Object::RefRelocator &relocate, const Type *ownerType,
+    std::string_view ownerKind) {
     for (auto &[graph, entry] : drafts_) {
         GraphDraft &draft        = *entry->draft;
         const auto slots         = draft.staticSlots();
@@ -856,7 +1119,7 @@ void RuntimeGraphDraftSession::traceStaticSlots(
                     .owner     = nullptr,
                     .ownerType = ownerType,
                     .slotType  = type,
-                    .ownerKind = "Txn",
+                    .ownerKind = ownerKind,
                     .slotName  = "draft",
                     .slotIndex = i,
                 });
@@ -865,17 +1128,81 @@ void RuntimeGraphDraftSession::traceStaticSlots(
     }
 }
 
+bool RuntimeGraphDraftSession::specializationLivesInProgram(
+    const RuntimeSpecializationKey &key) const {
+    if (key.baseGraph == nullptr) {
+        return false;
+    }
+    for (const RuntimeSpecializationBindingKey &binding : key.bindings) {
+        // A type-only binding names a type (permanent, never moved); a value binding is a value
+        // in the language's sense only when the type does not hold a GC-managed object.
+        if (binding.value == NullSlot) {
+            continue;
+        }
+        if (binding.type == nullptr || binding.type->isGCTraced()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+ProgramSpecializationKey
+RuntimeGraphDraftSession::programKeyOf(const RuntimeSpecializationKey &key) const {
+    return ProgramSpecializationKey{
+        .baseGraph    = key.baseGraph->id(),
+        .baseRevision = key.baseGraph->revision(),
+        .bindings     = key.bindings,
+    };
+}
+
 GCGraph *RuntimeGraphDraftSession::findSpecialization(const RuntimeSpecializationKey &key) const {
     if (auto it = specializationCache_.find(key); it != specializationCache_.end()) {
         return it->second;
     }
-    return nullptr;
+    // What a session over the program the session before it produced already made (the export and
+    // std::opt simplify in rounds): the program keeps the specializations of its graphs.
+    if (!specializationLivesInProgram(key)) {
+        return nullptr;
+    }
+    const ProgramSpecializationKey programKey = programKeyOf(key);
+    GraphId specializedId                     = kInvalidGraphId;
+    if (!work_->specializations().find(programKey, specializedId)) {
+        return nullptr;
+    }
+    GCGraph *specialized = work_->graph(specializedId);
+    if (specialized == nullptr) {
+        return nullptr; // the program no longer holds that graph: make the specialization again
+    }
+    GCGraph *base = work_->graph(programKey.baseGraph);
+    if (base == nullptr || base != key.baseGraph || base->revision() != programKey.baseRevision) {
+        return nullptr; // the callee has another version now; the entry was made for that one
+    }
+    // The commit binds the graphs the edited graph reaches, so a specialization whose callees the
+    // program does not hold could not be used (and would make the commit fail its validation).
+    for (const GraphId ref : specialized->refs()) {
+        if (work_->graph(ref) == nullptr) {
+            return nullptr;
+        }
+    }
+
+    return specialized;
 }
 
 void RuntimeGraphDraftSession::rememberSpecialization(
     RuntimeSpecializationKey key, GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime specialization cache cannot store a null graph.");
+    if (specializationLivesInProgram(key)) {
+        work_->specializations().remember(programKeyOf(key), graph->id());
+    }
     specializationCache_.insert_or_assign(std::move(key), graph);
+}
+
+uint64_t RuntimeGraphDraftSession::nextSpecializationNonce() {
+    return work_->specializations().nextSpecializationNonce();
+}
+
+uint64_t RuntimeGraphDraftSession::nextLiftNonce() {
+    return work_->specializations().nextLiftNonce();
 }
 
 size_t RuntimeGraphDraftSession::typeSpecializationCount(GraphId root) {
@@ -1002,12 +1329,32 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectReachableRuntimeGraphs()
 }
 
 std::vector<GraphId> RuntimeGraphDraftSession::conflicts() const {
-    std::vector<GraphId> differing;
     const Program *current = context_->currentRuntimeProgram();
+    // A conflict is a lost race for the context's program, and only a session whose commit could
+    // replace that program can lose one: it was opened over it (mayPublish_), or it works on the
+    // program its owner installed from an earlier commit (current == program_). Then the graph
+    // ids name the same versions in both programs, and a version another commit replaced is a
+    // real conflict. A session over a private program — the ONNX export's bound copy, a function
+    // value's program, a subgraph root, a detached rewrite — holds a program that nobody else
+    // writes, whose ids are not versions of the context's program at all: comparing the two
+    // reports every graph the copy made or replaced as a conflict (H112). There is nothing to
+    // check for those, and a checked commit must not refuse work it owns.
+    const bool contextProgram = mayPublish_ || current == program_;
+    if (!contextProgram || runtimeRoot_ != program_->root()) {
+        return {};
+    }
+    return conflictsWithProgram(current);
+}
+
+std::vector<GraphId> RuntimeGraphDraftSession::conflictsWithProgram(const Program *current) const {
+    std::vector<GraphId> differing;
     if (current == nullptr || current == program_) {
         return differing;
     }
-    // The graphs the session decoded or edited are the ones it read or wrote.
+    // The graphs the session read or wrote: it reads a graph when it decodes it (a draft) and
+    // writes the ones it was handed for editing. A graph the drafts only name (the callee of a
+    // FUNC node) is not read: the commit validates the calls of what it encodes against the
+    // program it publishes, so a new version of such a graph cannot make the commit wrong.
     const auto compare = [&](GraphId id) {
         if (current->graph(id) != program_->graph(id) &&
             std::find(differing.begin(), differing.end(), id) == differing.end()) {
@@ -1046,6 +1393,72 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         return nullptr;
     }
 
+    GCGraph *oldRuntimeRoot = runtimeRoot_;
+
+    // A session replaces the context's program only if it is one of that program's: opened over
+    // the program the context held then (`mayPublish_`: it may have been overtaken since, and
+    // then the commit merges), or working on the program the context holds now (its owner
+    // installed what an earlier commit returned). A session over a function value's program (a
+    // detached program: the ONNX export, a tile region, a gradient) rewrites that program and
+    // hands the commit back to its owner; publishing it would replace the program that is
+    // running with somebody's private copy.
+    const Program *current = context_->currentRuntimeProgram();
+    const bool contextProgram = mayPublish_ || current == program_;
+    // A session over the program's root replaces it. A session over another root (a detached
+    // program, e.g. a function being exported) only returns the rewritten root: the running
+    // program is left as it is.
+    const bool installing = !detached && contextProgram && program_->root() == oldRuntimeRoot;
+    // A session that is stale and found no conflict merges into the program the context has now
+    // instead of forking the history (design 4.3.1): the graph versions it read and wrote are
+    // unchanged there, so the commit is made on top of that program.
+    const bool merging =
+        installing && current != nullptr && current != program_ && conflicts().empty();
+    const Program *base = merging ? current : program_;
+    if (merging) {
+        // The graphs of the session are the versions this session read; every version the
+        // program now holds of them is the same content (that is what no conflict means). The
+        // drafts are edits of this session, so they are kept as they are, and are re-keyed to
+        // the graphs of that program: the graphs this commit decodes from here on (to dissolve
+        // gates, to name a new version in a function value) must be decoded from it, not from
+        // the version the session started with, or the commit would write back the old content
+        // over another session's change.
+        std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts;
+        drafts.reserve(drafts_.size());
+        for (auto &[graph, entry] : drafts_) {
+            GCGraph *held = current->graph(graph->id());
+            drafts.emplace(held != nullptr ? held : graph, std::move(entry));
+        }
+        drafts_ = std::move(drafts);
+        std::unordered_set<GCGraph *> edited;
+        edited.reserve(edited_.size());
+        for (GCGraph *graph : edited_) {
+            GCGraph *held = current->graph(graph->id());
+            edited.insert(held != nullptr ? held : graph);
+        }
+        edited_ = std::move(edited);
+        draftRefs_.clear();
+        // The graphs the session holds may be versions the context's program does not have: the
+        // specializations the session made itself (they live in the work table only), and the
+        // graphs of a private program a pass made, which the graphs of this commit refer to.
+        // They come along; for every id the context holds, its version is the one this commit
+        // works on.
+        const std::vector<GCGraph *> own = work_->graphs();
+        // The specializations made so far are keyed by graph identity and content, so they stay
+        // valid over the program that is there now, which holds the same versions (no conflict).
+        RuntimeSpecializationTable ownSpecializations = std::move(work_->specializations());
+        *work_                                        = *current;
+        work_->specializations().adoptMissingFrom(ownSpecializations);
+        for (GCGraph *graph : own) {
+            if (work_->graph(graph->id()) == nullptr) {
+                work_->bind(graph->id(), graph);
+            }
+        }
+        work_->setRoot(current->root());
+        runtimeRoot_        = work_->root();
+        program_            = current;
+        closureCache_.valid = false;
+    }
+
     const std::vector<GCGraph *> closure = collectCommitClosure();
     ASSERT(!closure.empty(), "Runtime draft commit received an empty closure.");
     for (GCGraph *graph : closure) {
@@ -1059,23 +1472,35 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             edited_.insert(graph);
         } else if (!drafted) {
             GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
+#ifndef NDEBUG
+            // Before the draft is destroyed: the Debug record must never name a freed draft.
+            noteDraftClosed(*debugRoots_, drafts_.at(graph)->draft.get());
+#endif
             drafts_.erase(graph);
             draftedIds_[toValue(graph->id())] = 0;
             draftRefs_.erase(graph);
         }
     }
 
-    GCGraph *oldRuntimeRoot = runtimeRoot_;
-
     // The program after the commit holds every graph of the closure: the version it has now, or
     // the one this commit makes of it. A graph names the others by id, so another graph's new
     // version needs none of its own. A graph gets one when it was edited, when the program did
     // not hold it, and when it holds a function value of a graph that got a new version (a
-    // function value names the program it resolves in, which must give that version).
+    // function value names the program it resolves in, which must give that version). A commit
+    // that merges starts from the newest program, so that its graph versions are the ones the
+    // context holds.
     Program *committed = context_->reserveProgram();
-    for (GCGraph *graph : closure) {
-        committed->bind(graph->id(), graph);
+    if (merging) {
+        *committed = *current;
     }
+    for (GCGraph *graph : closure) {
+        if (committed->graph(graph->id()) == nullptr) {
+            committed->bind(graph->id(), graph);
+        }
+    }
+    // The program this commit produces carries the specializations the session made (and the ones
+    // it found in the program it started from), so the next session over it finds them again.
+    committed->specializations() = work_->specializations();
     std::unordered_map<GCGraph *, GCGraph *> fresh; // a graph -> the commit's encoding of it
     std::unordered_map<GCGraph *, size_t> allocatedBytes;
     std::vector<GCGraph *> order; // the graphs encoded, in the order they were allocated
@@ -1155,7 +1580,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         const auto indexOfId = [&](GraphId id) {
             return toValue(id) < indexOf.size() ? indexOf[toValue(id)] : kNone;
         };
-        constexpr uint8_t kRoles = kGraphRefCallee | kGraphRefStatic;
+        constexpr uint8_t kRoles = kGraphRefCallee | kGraphRefStatic | kGraphRefRule;
         std::vector<uint32_t> first(closure.size() + 1, 0), callers;
         for (GCGraph *graph : closure) {
             for (size_t r = 0; r < graph->refs().size(); ++r) {
@@ -1236,32 +1661,76 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         GCGraphBuildAccess::inheritRevision(copy, graph, changed);
     }
     committed->setRoot(committed->graph(oldRuntimeRoot->id()));
+
+    // The table is a cache, not an owner (specializations.h): an entry whose specialization the
+    // program does not hold names a graph the snapshot collected, and an entry whose callee got a
+    // new version names one this program no longer has. Neither resolves in a later session, so
+    // the program forgets them: it keeps the specializations its root reaches, and a session that
+    // needs another makes that one again. Nothing here binds a graph the closure does not reach,
+    // so a specialization nothing calls is collected with the snapshot it was in.
+    committed->specializations().eraseIf(
+        [&](const ProgramSpecializationKey &key, GraphId id) {
+            const GCGraph *specialized = committed->graph(id);
+            if (specialized == nullptr) {
+                return false;
+            }
+            const GCGraph *base = committed->graph(key.baseGraph);
+            return base != nullptr && base->revision() == key.baseRevision;
+        });
+
+    // Publishing is a compare-and-swap against the program the commit was made on top of: the
+    // graphs are encoded for that program, and the table replaces it only while it is still the
+    // context's (design 4.3.1). A merge that lost the race to another commit remakes its table
+    // over the program that is there now while the graphs it read and wrote keep their versions
+    // there, and otherwise the commit stays private (it still hands back the program it made).
+    bool published = false;
+    if (installing) {
+        constexpr int kMaxPublishAttempts = 4;
+        const Program *expected           = base;
+        for (int attempt = 0; attempt < kMaxPublishAttempts; ++attempt) {
+            if (context_->installRuntimeProgramIfCurrent(expected, committed)) {
+                published = true;
+                break;
+            }
+            const Program *now = context_->currentRuntimeProgram();
+            if (now == nullptr || now == program_ || !conflictsWithProgram(now).empty()) {
+                break;
+            }
+            Program *rebased = context_->reserveProgram();
+            *rebased         = *now;
+            // Only the versions this commit made are its own: every other graph of the program
+            // is the one that is there now, which another commit may have given a new version.
+            for (const auto &[graph, copy] : fresh) {
+                rebased->bind(graph->id(), copy);
+            }
+            rebased->setRoot(rebased->graph(committed->root()->id()));
+            rebased->specializations() = committed->specializations();
+            committed                  = rebased;
+            expected  = now;
+        }
+    }
+    if (!published) {
+        // A private copy of a program: tracking it keeps it alive for the caller and out of the
+        // context's root until something installs it.
+        context_->trackDetachedRuntimeProgram(committed);
+    }
     // A graph left as it was names, in its function values, the program before: they name the
-    // new one, which holds the same versions of everything they reach.
+    // program this commit produced, which holds the same versions of everything they reach.
     for (GCGraph *graph : closure) {
         if (!fresh.contains(graph) && graph->hasStaticGraphRefs()) {
             retargetFunctions(graph, *committed);
         }
     }
-
-    // A session over the program's root replaces it. A session over another root (a detached
-    // program, e.g. a function being exported) only returns the rewritten root: the running
-    // program is left as it is.
-    // A shape no back end runs (GraphState::NonExecutable: the export-only sessions) is never
-    // installed: it stays in a private program, whatever the caller asked for.
-    if (!detached && graphState_ != GraphState::NonExecutable &&
-        context_->currentRuntimeProgram() == program_ && program_->root() == oldRuntimeRoot) {
-        program_ = context_->installRuntimeProgram(committed);
-    } else {
-        // A private copy of a program: it remembers the program it was made from, for the
-        // operators that read graphs (Program::original).
-        committed->setOriginal(program_->original() ? program_->original() : program_);
-        program_ = committed;
-        context_->trackDetachedRuntimeProgram(committed);
-    }
+// The commit decided above whether this session installs (a session over the program's root,
+    // a shape some back end runs, nothing detached) and published with a compare-and-swap; a
+    // commit that did not publish stays a private program that remembers what it was made from.
+    program_            = committed;
     runtimeRoot_        = program_->root();
-    work_        = std::make_unique<Program>(*program_);
+    work_               = std::make_unique<Program>(*program_);
     closureCache_.valid = false;
+#ifndef NDEBUG
+    noteDraftsCleared(*debugRoots_);
+#endif
     drafts_.clear();
     draftedIds_.clear();
     draftRefs_.clear();

@@ -34,6 +34,7 @@ safepoints and nowhere else. A safepoint is reached by exactly these:
 | Reached by | Where |
 |---|---|
 | A call of a Camel function | `std::nvm`: entry of every graph. `std::fvm`, `std::jit` (interpreter): every `CALL`, `FUNC`, `TAIL`. `std::tf` / `std::prl`: whenever a worker is outside a region (below) |
+| A round of a loop | the round boundary of every back end that runs loops in the frame (`loopEnd`, `LEND`): `std::nvm`, `std::fvm`, `std::jit` (compiled or interpreted, `07_jit_architecture.md` 17.9), the macro evaluator and `std::prl` — once per round, before the next round's state is bound |
 | A higher-order operator calling its element function | the same, once per element: `map`, `apply`, `filter`, `reduce`, `foreach` and everything built on them |
 | The macro evaluator | before every static operator, at every function entry, at every node (`src/execute/macro/eval.cpp`) |
 | A pass boundary | before and after every pass (`src/execute/pass.cpp`) |
@@ -206,13 +207,29 @@ root tracers), and nothing read before a call is used after it.
   value is live in a register or on the machine stack: the register allocator refuses a value
   that lives across one, and the code reads the frame again afterwards. Its stack map at those
   points is empty, so a safepoint under it is allowed, including one reached by an operator it
-  called.
+  called or by the round boundary of a loop whose rounds it runs (`LEND`, section 17.9).
   Neither kind contains the address of an object when objects can move: an object constant is
   read from the static area of the graph, a root that is updated in place (section 5), each
   time it is used. With mark-sweep frameless code still has such constants as immediates.
 - **The macro pass** evaluates all candidates of a round before it opens a graph draft: a draft
   holds plain copies of static slots, and evaluation reaches safepoints. Any pass that
-  evaluates and rewrites must keep that order, or root what its drafts hold.
+  evaluates and rewrites must keep that order, or root what its drafts hold. The rewrite engine
+  takes the second way: one `RuntimeGraphDraftSession` rewrites graph after graph, a `when`
+  condition is Camel code and so a safepoint, and `RuntimeGraphDraftSession::RootScope` keeps the
+  static values of every draft the session has opened relocatable until the commit reads them
+  (`modules/rewrite/module.cpp`; the defect and its reproducer are in `handover note ⟨b2dbdd6⟩ (H74)`). A
+  transaction opens one too, for its whole lifetime: its value may stay reachable across
+  safepoints while the drafts are open (`modules/graph/txn.cpp`).
+- **The invariant is checked, not remembered.** A Debug build checks it at the start of every
+  safepoint (`mm::observeSafepoint`, installed by the first `RuntimeGraphDraftSession`): if a
+  session has a draft open that no `RootScope` (and no `DraftWritings::EngineRootScope` for that
+  draft) covers, the check aborts and names the safepoint, the session's construction site and
+  program root, and the first unrooted draft's graph, id and static slot. It runs before the
+  decision to collect, so the first safepoint the wrong path reaches reports, not the first
+  collection; an assertion rather than an exception, so a rewrite kernel that catches
+  `std::exception` cannot turn it into an ordinary rule error. A Release build has neither the
+  observer nor the call and pays nothing for it. The check reads the session's own open-draft set
+  and the scopes that already exist; it registers no second kind of root.
 
 ## 5. What the generational collector relies on
 
@@ -237,7 +254,7 @@ root tracers), and nothing read before a call is used after it.
 1. Run its tests with `CAMEL_GC_POISON=1` (section 8). Tests under `test/plans/feat/modules`,
    `compile`, `linear`, `para`, `trans` and `smoke` are run that way by the default test set
    (`mm.gc_poison_sweep`), so a module with tests there is covered as it is.
-2. Run them with `CAMEL_GC=generational CAMEL_GC_VERIFY=both CAMEL_GC_STRESS_SAFEPOINT=1
+2. Run them with `--gc generational` with `CAMEL_GC_VERIFY=both CAMEL_GC_STRESS_SAFEPOINT=1
    CAMEL_GC_STRESS_MODE=minor CAMEL_GC_PROMOTION_AGE=1`: everything is promoted at once, which
    is what shows a missing write barrier (rule 6) as "Old-to-young reference is missing from
    remembered set".
@@ -280,8 +297,8 @@ generational collector as it was.
 Found clean: every `onMoved` (arrays re-derive `dataPtr_`, tensors their shape and data
 pointers; the others have no pointer into themselves); every `updateRefs` for typed slots; no
 `static`, `thread_local`, module-state member or stored lambda holds a reference; the built-in
-operators and the operators of `algo`, `crypto`, `fs`, `io`, `math`, `os`, `para`, `re`, `sim`,
-`statistics`, `sys`, `this`, `time`, `pyplot`, `nn`, `autodiff` (run time) keep to rule 1; the
+operators and the operators of `algo`, `hash`, `fs`, `io`, `math`, `process`, `para`, `re`, `sim`,
+`statistics`, `env`, `this`, `time`, `pyplot`, `nn`, `autodiff` (run time) keep to rule 1; the
 higher-order operators of all three schedulers re-read after every element call; no address of
 auto-space memory is given to NumPy, DLPack or Python (they copy).
 

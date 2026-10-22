@@ -131,6 +131,13 @@ std::optional<camel::core::error::Diagnostic> passesNeverRunWarning(
     const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
 
 /**
+ * True when the pipeline names `std::profile` (or an alias of it) anywhere: the driver turns on
+ * the phase recorder before compiling, because the report of that pass carries the phase split
+ * of the compilation, which starts before any pass can run.
+ */
+bool pipelineNamesProfile(const std::vector<std::string> &passes);
+
+/**
  * A warning (SemanticDiag::TagHasNoReader) for each tag the program writes whose declaration
  * names the passes that read it (`read_by`) and none of them is in the pipeline: the tag then
  * has no effect. A reader matches a pass of the list by name or by the pass's alias, and a
@@ -156,4 +163,22 @@ PassApplyResult applyPassesDetailed(
 /** Backward-compatible wrapper: only returns the program, without status. */
 const camel::runtime::Program *applyPasses(
     const camel::runtime::Program *program, const std::vector<std::string> &passes,
+    const camel::core::context::context_ptr_t &ctx, std::ostream &os);
+
+/// The outcome of one registered pass run, for a pass that runs another pass on the program it
+/// is given (std::opt runs the rules library's algebra, `rules::simplify`, as its algebraic
+/// stage). `program` is what the pass produced (unchanged when a rewrite pass produced nothing);
+/// `changed` says whether the produced program holds graphs of different content.
+struct PassRunResult {
+    const camel::runtime::Program *program = nullptr;
+    bool changed                           = false;
+};
+
+/// Runs the pass `spec` (as the pipeline writes it: `name` or `name(k=v, ...)`) on `program`,
+/// importing the module that contributes a `<module>::<pass>` name. This is the same resolution
+/// and stage handling the pipeline uses, without the pipeline's own bookkeeping: a rewrite pass
+/// that itself names another pass uses it. Returns {nullptr, true} when the pass failed (the
+/// diagnostics say why).
+PassRunResult applyRegisteredPass(
+    const camel::runtime::Program *program, const std::string &spec,
     const camel::core::context::context_ptr_t &ctx, std::ostream &os);

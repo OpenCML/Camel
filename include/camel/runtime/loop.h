@@ -25,14 +25,13 @@
  *
  * is one LOOP node in the graph it is written in, with
  *   Norm inputs   xs (For, ForWhile), then a1 ... ak;
- *   With inputs   the m values the loop captures, one table for both graphs;
+ *   With inputs   the results of its regions (the body's, the condition's) and the round port;
  *   Ctrl inputs   ordering;
- *   payload       the form, the condition graph c (While, ForWhile) and the body graph b.
- * The condition graph takes s1 ... sk (Norm ports) and the m captures (With ports) and returns
- * a bool; the body graph takes (x,) s1 ... sk and the same m captures and returns the next
- * value of each slot the loop collects (see below), after the k state values. Without collection
- * slots the body returns the next state alone: the value when k = 1, the k-tuple when k > 1.
- * The LOOP node's value is the last state.
+ *   payload       the form, its collection count, and the regions (LoopCond, LoopBody).
+ * The condition region takes s1 ... sk (its ports) and gives a bool; the body region takes
+ * (x,) s1 ... sk and gives the next value of each slot the loop collects (see below), after the
+ * k state values. Without collection slots the body gives the next state alone: the value when
+ * k = 1, the k-tuple when k > 1. The LOOP node's value is the last state.
  *
  * Collection slots. A graph producer (no source syntax exists for this yet; the H4d design)
  * may give a LOOP node s typed collection slots. Each round the body then also produces one
@@ -40,7 +39,7 @@
  * node's value is (state_1, ..., state_k, array_1, ..., array_s): the state components first,
  * so a consumer that does not care about the tape can read the state where it used to. The
  * payload's collectionCount is s; the element type of slot c is the s-th trailing component
- * of the body graph's exit tuple; and the node's value type is the tuple that names both. The
+ * of the body region's result tuple; and the node's value type is the tuple that names both. The
  * count is explicit because the state type alone cannot tell e.g. k = 2 from k = 1 plus a
  * collection slot of the same type.
  *
@@ -48,17 +47,12 @@
  * if no element is left stop, else x = the next element; v = b([x,] s), which is the next state
  * (the k-tuple) followed by the s collected values; s = the first k of v; the collected values
  * are appended to their arrays. The rounds run strictly one after the other; each is one
- * activation of the condition graph and one of the body graph.
+ * activation of the condition region and one of the body region, in the frame of the graph.
  *
  * Ownership. A LoopView is a view: it holds the graph and the node, and is valid as long as the
- * frozen graph and the Program it was made in are (camel/runtime/graph.h, program.h). The two
- * graphs of the loop are the ones the Program holds; nodes are named by their NodeIds
+ * frozen graph and the Program it was made in are (camel/runtime/graph.h, program.h). The
+ * condition and the body are regions of that graph; nodes are named by their NodeIds
  * (gc_node_ref_t), types by Type pointers.
- *
- * Lowering. lowerLoopsToTailRecursion (camel/runtime/loop_lowering.h) rewrites every LOOP of a
- * program into the tail recursion it means. It is applied only by a back end, on a private copy
- * of the program it runs (op-semantics 11.4): a pass never commits a lowered loop to the shared
- * program, so a consumer such as Tiles sees structured loops wherever it is in the pipeline.
  */
 
 #pragma once
@@ -112,58 +106,50 @@ class LoopView {
     std::optional<gc_node_ref_t> iterable() const;
     /// The first value of the j-th value of the state (the Norm input after the iterable).
     gc_node_ref_t initialState(size_t j) const;
-    /// The captured values (With inputs), shared by the condition and the body graph; none for a
-    /// loop in region form, whose With inputs are the results of its regions.
-    std::span<const gc_node_ref_t> captures() const {
-        return inRegions() ? std::span<const gc_node_ref_t>() : graph_->withInputsOf(node_);
-    }
 
-    // ---- The two graphs, or the two regions ----
+    // ---- The two regions ----
 
-    /// A loop in region form (the form a program has after the front end): its condition and its
-    /// body are regions of the graph that has the node, and it names no graph. A loop in graph
-    /// form (outlineLoopRegions) names its two graphs.
-    bool inRegions() const { return body_ == nullptr; }
-    /// While, ForWhile: the condition region; 0 for For and for a loop in graph form.
+    /// While, ForWhile: the condition region; 0 for For.
     uint32_t condRegion() const { return condRegion_; }
     uint32_t bodyRegion() const { return bodyRegion_; }
-    /// While, ForWhile: the condition graph; nullptr for For and for a loop in region form.
-    GCGraph *condGraph() const { return cond_; }
-    GCGraph *bodyGraph() const { return body_; }
 
-    // ---- A loop in region form: what its regions hold and read ----
+    // ---- What the regions hold and read ----
 
     /// The Port node, of type int64, whose slot a back end counts the rounds of the loop in (the
-    /// last With input of the node); a loop in region form only.
+    /// last With input of the node).
     gc_node_ref_t roundPort() const { return graph_->withInputsOf(node_).back(); }
     /// The nodes of the condition and of the body region, the regions inside them included, and
-    /// the round port, in node order. Empty for a loop in graph form.
+    /// the round port, in node order.
     std::vector<gc_node_ref_t> regionNodes() const;
     /// The nodes outside the two regions that nodes inside them read, in the order they are first
-    /// read: what graph form passes as captures. The constants (DATA nodes) are left out unless
-    /// `constants`. Empty for a loop in graph form.
+    /// read: besides the round's ports (the element and the state), what a round uses and what a
+    /// consumer that lifts the loop into another representation has to pass in.
+    ///
+    /// A constant is not a capture. A node whose value is known at build time -- a `DATA` of the
+    /// static area (a literal, a folded literal, a static value the builder materialized) or any
+    /// node the graph marks `constant` -- is evaluated where it is read, in place, so it is left
+    /// out unless `constants` asks for it. A value that is merely loop-invariant (a parameter, a
+    /// module value read through a capture port, a variable's cell) is not constant and stays an
+    /// input (design principles 3.10; the author's ruling of 2026-10-21).
     std::vector<gc_node_ref_t> externalInputs(bool constants = false) const;
 
-    // ---- Correspondence between the node and the ports of its graphs ----
+    // ---- Correspondence between the node and the ports of its regions ----
 
-    /// The condition graph's j-th Norm port (the j-th value of the state).
+    /// The condition region's j-th port (the j-th value of the state).
     gc_node_ref_t condStateParam(size_t j) const;
-    /// For, ForWhile: the body graph's first Norm port, the element of the round.
+    /// For, ForWhile: the body region's first port, the element of the round.
     std::optional<gc_node_ref_t> bodyElementParam() const;
-    /// The body graph's Norm port of the j-th value of the state.
+    /// The body region's port of the j-th value of the state.
     gc_node_ref_t bodyStateParam(size_t j) const;
-    /// The capture port of the condition graph (body graph) that receives captures()[c].
-    gc_node_ref_t condCapturePort(size_t c) const;
-    gc_node_ref_t bodyCapturePort(size_t c) const;
 
     // ---- The next state and the collected values ----
 
     /// The body's result node: the next state, followed by the s collected values when the loop
-    /// collects (so a tuple whenever valueIsTuple(); otherwise the state itself when k = 1). In
-    /// region form, the value the result of the body region forwards.
+    /// collects (so a tuple whenever valueIsTuple(); otherwise the state itself when k = 1). It
+    /// is the value the result of the body region forwards.
     gc_node_ref_t nextState() const;
     /// The node the body (condition) ends in: nextState(), or a GATE in front of it that orders
-    /// the value after the statements of the body (the exit of the graph, in graph form).
+    /// the value after the statements of the body.
     gc_node_ref_t bodyResult() const;
     gc_node_ref_t condResult() const;
     /// True when the body builds its result with a tuple FILL: k > 1 or the loop collects.
@@ -197,8 +183,6 @@ class LoopView {
     LoopKind kind_;
     size_t stateCount_;
     size_t collectionCount_;
-    GCGraph *cond_;
-    GCGraph *body_;
     uint32_t condRegion_ = 0;
     uint32_t bodyRegion_ = 0;
 };
@@ -211,13 +195,12 @@ inline LoopView loopOf(const Program &program, const GCGraph &graph, gc_node_ref
 class GraphDraft;
 
 /// The LOOP node `node` of a draft: what a graph producer (autodiff) reads while it rewrites the
-/// graph a LOOP node is in, before it is encoded. The same facts as LoopView, from the same
-/// layout: the draft holds the node's inputs and its value type, the node's payload holds the two
-/// graphs (camel/runtime/graph.h, GCLoopBody), and the graphs' own ports are read as LoopView
-/// reads them. One place, so a producer never re-derives the layout either.
+/// graph a LOOP node is in, before it is encoded. The same facts as LoopView: the draft holds the
+/// node's inputs and its value type, and its condition and body are regions of the same draft.
+/// One place, so a producer never re-derives the layout either.
 class LoopDraftView {
   public:
-    /// The LOOP node `node` of `draft`, whose graphs `program` holds; asserts that it is one.
+    /// The LOOP node `node` of `draft`, a region-form loop; asserts that it is one.
     LoopDraftView(const Program &program, const GraphDraft &draft, gc_node_ref_t node);
 
     gc_node_ref_t node() const { return node_; }
@@ -237,19 +220,25 @@ class LoopDraftView {
 
     std::optional<gc_node_ref_t> iterable() const;
     gc_node_ref_t initialState(size_t j) const;
-    std::span<const gc_node_ref_t> captures() const;
 
-    GCGraph *condGraph() const { return cond_; }
-    GCGraph *bodyGraph() const { return body_; }
+    uint32_t condRegion() const { return condRegion_; }
+    uint32_t bodyRegion() const { return bodyRegion_; }
+    /// The nodes of the two regions (the regions inside them included) and the round port.
+    std::vector<gc_node_ref_t> regionNodes() const;
+    /// The nodes outside the two regions that nodes inside them read, in the order they are first
+    /// read. A constant (a `DATA`, or a node marked `constant`) is evaluated in place and is left
+    /// out unless `constants`; a merely loop-invariant value stays an input.
+    std::vector<gc_node_ref_t> externalInputs(bool constants = false) const;
 
     gc_node_ref_t condStateParam(size_t j) const;
     std::optional<gc_node_ref_t> bodyElementParam() const;
     gc_node_ref_t bodyStateParam(size_t j) const;
-    gc_node_ref_t condCapturePort(size_t c) const;
-    gc_node_ref_t bodyCapturePort(size_t c) const;
 
+    /// The body's result: the next state, followed by any collected values.
     gc_node_ref_t nextState() const;
-    /// The type of the body graph's result (the state, or the state and the collected values).
+    /// The node the body region ends in: nextState(), or a GATE in front of it.
+    gc_node_ref_t bodyResult() const;
+    /// The type of the body's result (the state, or the state and the collected values).
     camel::core::type::Type *bodyResultType() const;
     size_t bodyStateResultIndex(size_t j) const { return j; }
     size_t bodyCollectionResultIndex(size_t c) const { return stateCount_ + c; }
@@ -260,8 +249,8 @@ class LoopDraftView {
     LoopKind kind_;
     size_t stateCount_;
     size_t collectionCount_;
-    GCGraph *cond_;
-    GCGraph *body_;
+    uint32_t condRegion_ = 0;
+    uint32_t bodyRegion_ = 0;
 };
 
 /// Reads component `index` of a finished loop's value (the layout LoopView describes): the value

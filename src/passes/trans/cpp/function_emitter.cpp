@@ -1213,7 +1213,8 @@ std::string FunctionEmitter::callDepth(const GCGraph *graph, gc_node_ref_t ref) 
             graph,
             ref,
             RuntimeDiag::MaxRecursionDepthExceeded,
-            {graph->name(), SiteTable::valueMark(0)}));
+            {graph->name(), std::to_string(program_.recursionLimit)},
+            std::to_string(program_.recursionLimit)));
 }
 
 // ---- Composite values (design note, section 4) ----
@@ -1507,7 +1508,7 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
 namespace {
 
 /// Whether the operator `id` reads or writes a variable it is given first: :var/get,
-/// :var/peek and the assignments (:op/assn_append among them).
+/// :var/peek and the assignments (:op/assn_owned among them).
 bool isVariableAccess(camel::core::OperId id) {
     return camel::core::oper::isVariableRead(id) ||
            camel::core::OperatorTable::instance().isAssignment(id);
@@ -1549,7 +1550,9 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
             if (node == nullptr) {
                 continue;
             }
-            if (node->kind == GCNodeKind::Oper && isVariableAccess(operatorId(graph, user)) &&
+            if (node->kind == GCNodeKind::Oper &&
+                (isVariableAccess(operatorId(graph, user)) ||
+                 operatorId(graph, user) == camel::core::oper::VarTake) &&
                 graph->normInputsOf(user).front() == cell) {
                 continue;
             }
@@ -1595,10 +1598,43 @@ bool FunctionEmitter::lowerVariable(
         }
         return true;
     }
+    const auto norm = g->normInputsOf(ref);
+    if (id == camel::core::oper::VarTake) {
+        // `:var/take` hands the variable's own array to an in-place form. The generated
+        // program moves it there (`std::move(cell)` in the form's lowering), so the take is
+        // the cell's value, not a copy of it.
+        const CppValue &cell = valueOf(frame, norm.front());
+        frame.values[ref] =
+            CppValue{cell.cell == CppValue::Cell::Local ? cell.text : cell.text + ".get()", false};
+        return true;
+    }
+    if (uri == ":struct/append_arr_in_place") {
+        return lowerAppendInPlace(frame, ref, out);
+    }
+    if (uri == ":op/assn_owned") {
+        // `xs = xs->append<v>` (the in-place form of `append`): the compiler writes
+        // :op/assn_owned(xs, :struct/append_arr_in_place(v, :var/take(xs))). The variable
+        // gives its array up for the call, so when nothing else holds it rt::append grows it
+        // in place (design note 5.2), which is what the interpreter's sole-reference mark does.
+        // The element is computed first: an expression that read the variable must see the
+        // array before it is given up. The form may already have been lowered as a step of the
+        // sequence before the assignment that stores it, so it is lowered once (consumed).
+        if (norm.size() == 2 && g->node(norm[1])->kind == GCNodeKind::Oper &&
+            operatorUri(g, norm[1]) == ":struct/append_arr_in_place" &&
+            lowerAppendInPlace(frame, norm[1], out)) {
+            frame.values[ref] = CppValue{valueOf(frame, norm[1]).text, false};
+            return true;
+        }
+        refuse(
+            g,
+            ref,
+            std::format(
+                "{} binds a variable to an in-place form that std::cpp does not translate yet",
+                describeFunction(g)));
+    }
     if (!isVariableAccess(id)) {
         return false;
     }
-    const auto norm        = g->normInputsOf(ref);
     const CppValue &cell   = valueOf(frame, norm.front());
     const bool local       = cell.cell == CppValue::Cell::Local;
     const std::string read = local ? cell.text : cell.text + ".get()";
@@ -1608,31 +1644,6 @@ bool FunctionEmitter::lowerVariable(
         // same read; what it tells the interpreter (the array may still be grown in place)
         // the reference count tells the generated program.
         bind(frame, ref, read, false, out, "read");
-        return true;
-    }
-    if (uri == ":op/assn_append") {
-        // `acc = acc->append<v>` (the ops lane's rebinding): the variable is bound to a new
-        // array, the old one unchanged. The variable gives its array up for the call, so when
-        // nothing else holds it rt::append grows it in place (design note 5.2), which is what
-        // the interpreter's sole-reference mark does. The element is computed first: an
-        // expression that read the variable must see the array before it is given up.
-        std::string item = valueOf(frame, norm[1]).text;
-        if (!isIdentifier(item)) {
-            const std::string name = locals_.unique(std::format("item{}", nextValue_++));
-            out.push_back(
-                Stmt::line(
-                    std::format(
-                        "const {} {} = {};",
-                        cppType(g, norm[1], g->node(norm[1])->dataType()),
-                        name,
-                        withoutParentheses(item))));
-            item = name;
-        }
-        out.push_back(
-            Stmt::line(
-                local ? std::format("{0} = rt::append(std::move({0}), {1});", cell.text, item)
-                      : std::format("{0}.set(rt::append({0}.take(), {1}));", cell.text, item)));
-        bind(frame, ref, read, false, out, "assigned");
         return true;
     }
     // An assignment: `x = v`, or `x = x op v` computed as the operator `op` is.
@@ -1671,6 +1682,42 @@ bool FunctionEmitter::lowerVariable(
     return true;
 }
 
+bool FunctionEmitter::lowerAppendInPlace(Frame &frame, gc_node_ref_t ref, Block &out) {
+    if (frame.consumed.contains(ref)) {
+        return true;
+    }
+    const GCGraph *g = frame.graph;
+    const auto taken = g->normInputsOf(ref);
+    const auto items = g->withInputsOf(ref);
+    if (taken.size() != 1 || items.size() != 1 ||
+        g->node(taken.front())->kind != GCNodeKind::Oper ||
+        operatorUri(g, taken.front()) != ":var/take") {
+        return false;
+    }
+    const auto cellInput = g->normInputsOf(taken.front());
+    if (cellInput.empty()) {
+        return false;
+    }
+    const CppValue &cell = valueOf(frame, cellInput.front());
+    const bool local     = cell.cell == CppValue::Cell::Local;
+    std::string item     = valueOf(frame, items.front()).text;
+    if (!isIdentifier(item)) {
+        const std::string name = locals_.unique(std::format("item{}", nextValue_++));
+        out.push_back(Stmt::line(std::format(
+            "const {} {} = {};",
+            cppType(g, items.front(), g->node(items.front())->dataType()),
+            name,
+            withoutParentheses(item))));
+        item = name;
+    }
+    out.push_back(Stmt::line(
+        local ? std::format("{0} = rt::append(std::move({0}), {1});", cell.text, item)
+              : std::format("{0}.set(rt::append({0}.take(), {1}));", cell.text, item)));
+    frame.consumed.insert(ref);
+    frame.values[ref] = CppValue{local ? cell.text : cell.text + ".get()", false};
+    return true;
+}
+
 // ---- Operators that call function values (hof.h) ----
 
 bool FunctionEmitter::lowerHigherOrder(
@@ -1696,7 +1743,8 @@ bool FunctionEmitter::lowerHigherOrder(
         g,
         ref,
         RuntimeDiag::MaxRecursionDepthExceeded,
-        {g->name(), SiteTable::valueMark(0)});
+        {g->name(), std::to_string(program_.recursionLimit)},
+        std::to_string(program_.recursionLimit));
     const auto norm = g->normInputsOf(ref);
     const auto with = g->withInputsOf(ref);
     std::string expr;

@@ -31,17 +31,33 @@ enum class DataType {
     IfExpr,
     MatchExpr,
     MatchCase,
+    TypeMatch,
+    TypeCase,
+    StaticFor,
+    StaticLoop,
+    StaticAccess,
     TryExpr,
     LoopExpr,
     Literal,
     Array,
     Tuple,
     Struct,
+    // Comprehensions (H51 step 4): a `static for` in a value position whose rounds are packed
+    // back into a struct (`StructComp`) or a tuple (`TupleComp`) of the same shape.
+    TupleComp,
+    StructComp,
     Func,
     Ref,
     ConstAs,
+    Slice,
     EnumPattern
 };
+
+/// The shapes a `match type` case selects (design principles 5.5, R3):
+/// a structure, an ordinary tuple, every leaf (including `T?` / `T!` and cells), or anything.
+enum class TypeCaseKind : uint8_t { Struct = 0, Tuple = 1, Leaf = 2, Wildcard = 3 };
+
+std::string to_string(TypeCaseKind kind);
 
 enum class UnaryDataOp { Not, Neg, Inv };
 
@@ -193,6 +209,92 @@ class MatchExprLoad : public DataLoad {
     const std::string geneCode() const override;
 };
 
+/// `match type T { case ... => ... }`: children [0] the type, [1] Repeated TypeCase.
+/// The cases are all kept: the graph builder selects one when the type is known.
+class TypeMatchLoad : public DataLoad {
+  public:
+    TypeMatchLoad() : DataLoad(DataType::TypeMatch) {}
+
+    const std::string toString() const override { return "TypeMatch" + this->status(); }
+    const std::string geneCode() const override { return "match type"; }
+};
+
+/// One case of `match type`; the body is child [0]. The patterns are kept in the load
+/// because they are shapes, not expressions or types.
+class TypeCaseLoad : public DataLoad {
+  public:
+    explicit TypeCaseLoad(std::vector<TypeCaseKind> patterns)
+        : DataLoad(DataType::TypeCase), patterns_(std::move(patterns)) {}
+
+    const std::vector<TypeCaseKind> &patterns() const { return patterns_; }
+    const std::string toString() const override;
+    const std::string geneCode() const override;
+
+  private:
+    std::vector<TypeCaseKind> patterns_;
+};
+
+/// `static for (n, F) in fields T => body` or `static for (j) in indices ts => body`:
+/// children [0] the walked shape (a type for `fields`, a value for `indices`), [1] the body (a
+/// block). The load holds the names: for `fields`, `n` is the field name (a tuple's index in
+/// decimal) and `F` the field type; for `indices`, only `j` (the position as an integer) is
+/// bound. Neither is a declaration of the enclosing scope: they live in the body only.
+class StaticForLoad : public DataLoad {
+  public:
+    StaticForLoad(std::string valueName, std::string typeName, bool byIndices = false)
+        : DataLoad(DataType::StaticFor), valueName_(std::move(valueName)),
+          typeName_(std::move(typeName)), byIndices_(byIndices) {}
+
+    const std::string &valueName() const { return valueName_; }
+    const std::string &typeName() const { return typeName_; }
+    /// `indices ts` walks the positions of a tuple value; `fields T` walks the fields of a type.
+    bool byIndices() const { return byIndices_; }
+    const std::string toString() const override { return "StaticFor" + this->status(); }
+    const std::string geneCode() const override { return "static for"; }
+
+  private:
+    std::string valueName_;
+    std::string typeName_;
+    bool byIndices_ = false;
+};
+
+/// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body` (or `in indices ts`):
+/// children [0] a Repeated Data of the first values, [1] the walked shape (a type for `fields`,
+/// a value for `indices`), [2] the body (a block). The load holds the names of the state and the
+/// generator's bindings; the rounds are the fields of `T` or the positions of `ts`.
+class StaticLoopLoad : public DataLoad {
+  public:
+    StaticLoopLoad(
+        std::vector<Reference> state, std::string valueName, std::string typeName,
+        bool byIndices = false)
+        : DataLoad(DataType::StaticLoop), state_(std::move(state)),
+          valueName_(std::move(valueName)), typeName_(std::move(typeName)),
+          byIndices_(byIndices) {}
+
+    const std::vector<Reference> &state() const { return state_; }
+    const std::string &valueName() const { return valueName_; }
+    const std::string &typeName() const { return typeName_; }
+    bool byIndices() const { return byIndices_; }
+    const std::string toString() const override { return "StaticLoop" + this->status(); }
+    const std::string geneCode() const override { return "static loop"; }
+
+  private:
+    std::vector<Reference> state_;
+    std::string valueName_;
+    std::string typeName_;
+    bool byIndices_ = false;
+};
+
+/// `t.[key]`: children [0] the target, [1] the key expression. The key must be a compile-time
+/// constant (a literal or the `n` of an enclosing `static for`); the graph builder decides.
+class StaticAccessLoad : public DataLoad {
+  public:
+    StaticAccessLoad() : DataLoad(DataType::StaticAccess) {}
+
+    const std::string toString() const override { return "StaticAccess" + this->status(); }
+    const std::string geneCode() const override { return ".[]"; }
+};
+
 class MatchCaseLoad : public DataLoad {
   public:
     MatchCaseLoad() : DataLoad(DataType::MatchCase) {}
@@ -294,6 +396,26 @@ class TupleDataLoad : public DataLoad {
     const std::string geneCode() const override;
 };
 
+/// `( static for (n, F) in fields T => e )`: the generator is child 0. The elements come from
+/// the rounds in declaration order; the type is `TupleType` of the rounds' value types.
+class TupleCompLoad : public DataLoad {
+  public:
+    TupleCompLoad() : DataLoad(DataType::TupleComp) {}
+
+    const std::string toString() const override { return "TupleComp" + this->status(); }
+    const std::string geneCode() const override;
+};
+
+/// `{ static for (n, F) in fields T => e }`: the generator is child 0. The fields keep the names
+/// and order of `T`; the type is a `StructType` of the rounds' value types.
+class StructCompLoad : public DataLoad {
+  public:
+    StructCompLoad() : DataLoad(DataType::StructComp) {}
+
+    const std::string toString() const override { return "StructComp" + this->status(); }
+    const std::string geneCode() const override;
+};
+
 class FuncDataLoad : public DataLoad {
   public:
     FuncDataLoad() : DataLoad(DataType::Func) {} // anonymous function
@@ -340,6 +462,19 @@ class ConstAsLoad : public DataLoad {
 
   private:
     Reference ref_;
+};
+
+/// One dimension of a subscript that is a slice, `t[a:b]`, `t[:b]`, `t[a:]`, `t[a:b:s]`: its
+/// start, end and step, in that order. A part that was not written is a null load in its slot,
+/// an empty part, never an omitted value (design principles 5.4).
+class SliceLoad : public DataLoad {
+  public:
+    SliceLoad() : DataLoad(DataType::Slice) {}
+
+    const std::string toString() const override {
+        return "DataLoad: " + to_string(dataType()) + this->status();
+    }
+    const std::string geneCode() const override;
 };
 
 /// One field the pattern of an enum variant names. A tuple variant writes the bindings in

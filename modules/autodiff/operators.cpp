@@ -24,7 +24,6 @@
 #include "operators.h"
 
 #include "pullback.h"
-#include "rules.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/derivative.h"
@@ -41,7 +40,6 @@ namespace camel::autodiff {
 namespace {
 
 namespace mm = camel::core::mm;
-using ::Modifier;
 using ::ModifierSet;
 using camel::core::context::Context;
 using camel::core::error::RuntimeDiag;
@@ -66,11 +64,7 @@ class GradResolver final : public type::FuncTypeResolver {
         if (!gradient) {
             return std::nullopt;
         }
-        return FunctionType::create(
-            {},
-            {{norm[0], false}},
-            gradient->functionType,
-            Modifier::Macro);
+        return FunctionType::create({}, {{norm[0], false}}, gradient->functionType);
     }
 
     std::optional<std::string> explainRejection(
@@ -107,59 +101,8 @@ class GradResolver final : public type::FuncTypeResolver {
     bool withValue_;
 };
 
-/// stop_gradient: (x: T) => T.
-class IdentityResolver final : public type::FuncTypeResolver {
-  public:
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        (void)modifiers;
-        if (!with.empty() || norm.size() != 1) {
-            return std::nullopt;
-        }
-        return FunctionType::create({}, {{norm[0], false}}, norm[0]);
-    }
-
-    std::string signature() const override { return "(x: T) => T"; }
-};
-
-/// vjp, as a decorator: <rule: (params..., dy) => gradients> (f) => f.
-class VjpResolver final : public type::FuncTypeResolver {
-  public:
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        (void)modifiers;
-        if (with.size() != 1 || norm.size() != 1 || with[0]->code() != TypeCode::Function ||
-            norm[0]->code() != TypeCode::Function) {
-            return std::nullopt;
-        }
-        auto *rule     = tt::as_ptr<FunctionType>(with[0]);
-        auto *function = tt::as_ptr<FunctionType>(norm[0]);
-        if (rule->normTypesCount() != function->withTypesCount() + function->normTypesCount() + 1) {
-            return std::nullopt;
-        }
-        return FunctionType::create(
-            {{with[0], false}},
-            {{norm[0], false}},
-            norm[0],
-            Modifier::Macro);
-    }
-
-    std::string signature() const override {
-        return "<rule: (params..., dy) => gradients> (f: (params...) => y) => f";
-    }
-};
-
-slot_t vjpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    auto *rule     = with.get<::Function *>(0);
-    auto *function = norm.get<::Function *>(0);
-    if (rule == nullptr || function == nullptr || function->graph() == nullptr) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "autodiff: vjp needs function values");
-    }
-    return toSlot<::Function *>(attachRule(ctx.shared_from_this(), function, rule));
-}
-
+/// stop_gradient: (x: T) => T is declared in `stdlib/autodiff.cml` (handover H19, step 10;
+/// H165); the kernel below and the traits in `AutodiffModule::load` stay here.
 slot_t gradFunction(ArgsView &norm, Context &ctx, bool withValue) {
     auto *function = norm.get<::Function *>(0);
     if (function == nullptr || function->graph() == nullptr) {
@@ -208,10 +151,8 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
         OperatorGroup::create(
             "with_grad",
             {{"autodiff:with_grad", std::make_shared<GradResolver>(true)}}),
-        OperatorGroup::create("vjp", {{"autodiff:vjp", std::make_shared<VjpResolver>()}}),
-        OperatorGroup::create(
-            "stop_gradient",
-            {{"autodiff:stop_gradient", std::make_shared<IdentityResolver>()}}),
+        // `stop_gradient` is not here: its signature is declared in `stdlib/autodiff.cml`
+        // (handover H19, step 10; H165), and its kernel and traits stay in this module.
     };
     return groups;
 }
@@ -221,7 +162,6 @@ std::unordered_map<std::string, operator_t> operatorKernels() {
         {"grad", &gradKernel},
         {"with_grad", &valueAndGradKernel},
         {"stop_gradient", &stopGradientKernel},
-        {"vjp", &vjpKernel},
     };
 }
 
@@ -231,13 +171,14 @@ void registerOperatorMetadata() {
     // must be (design principles 3.3), as not pure.
     camel::core::OperatorTable::instance().declare(
         "autodiff",
-        {{"grad", false}, {"with_grad", false}, {"vjp", false}});
+        {{"grad", false}, {"with_grad", false}});
     // grad and with_grad differentiate the graph of the function value they receive: on a
     // back end that lowered loops in a private copy they are handed the program's own graph, so
-    // they refuse a loop there as everywhere else (OperatorTraits::inspectsGraphs; op-semantics
-    // 11.4). vjp only attaches a rule to the function it is given and returns it to be called.
+    // they refuse a loop there as everywhere else (OperatorTraits::readsGraphs; op-semantics
+    // 11.4). A custom rule is a declaration tag (`#vjp<rule>`), not an operator of this module.
     for (const char *name : {"autodiff:grad", "autodiff:with_grad"}) {
-        camel::core::OperatorTable::instance().set(name, {.pure = false, .inspectsGraphs = true});
+        camel::core::OperatorTable::instance().set(
+            name, {.pure = false, .readsGraphs = true, .macro = true});
     }
     camel::core::OperatorTable::instance().set(
         "autodiff:stop_gradient",

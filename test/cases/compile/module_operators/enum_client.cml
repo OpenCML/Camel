@@ -1,0 +1,12 @@
+/**
+ * `combine` on a `Color`: the enum's operator is in the module that declares the enum, found
+ * through the operand's type (design principles 5.7).
+ */
+import { Color } from enum_models
+import { combine } from enum_gen
+
+func main(): int sync {
+    println(combine(Color::Red, Color::Red) == Color::Blue)
+    println(combine(Color::Red, Color::Green) == Color::Green)
+    return 0
+}

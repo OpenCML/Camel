@@ -17,14 +17,14 @@ Implementation map:
 - Core: `include/camel/core/derivative.h` (VjpBuilder, rule registry, tangent
   spaces, tangent types of aggregates). Scalar rules live in
   `src/builtin/operators/derivative.cpp`.
-- Engine: `modules/autodiff` (`grad`, `with_grad`, `vjp`,
-  `stop_gradient`; the pullback transform in `pullback.cpp`). It is an
-  ordinary package, not part of the core: grad is a macro operator like any
-  other, and third-party packages can ship their own.
+- Engine: `modules/autodiff` (`grad`, `with_grad`,
+  `stop_gradient`; the pullback transform in `pullback.cpp`, and the custom-rule
+  tag `vjp`). It is an ordinary package, not part of the core: grad is a macro
+  operator like any other, and third-party packages can ship their own.
 - Tensor and nn rules: `modules/tensor/ops/vjp.cpp` and the `vjp` entries of the
   op definitions; tree optimizers in `modules/nn/optim.cpp`.
 - Verification: `test/cases/modules/autodiff` (finite differences, branches,
-  recursion, `@vjp`), and `benchmarks/train.py --check`, which matches the
+  recursion, `#vjp<rule>`), and `benchmarks/train.py --check`, which matches the
   MLP, GRU and Transformer gradients against PyTorch weight by weight.
 
 Deviations from the proposal below:
@@ -33,7 +33,8 @@ Deviations from the proposal below:
   differentiated input are differentiated, so operators on static data
   (shape arithmetic, integer comparisons) need no rule.
 - `grad` is not restricted by the core; rules and engines are package
-  contributions, and `@vjp` is a decorator evaluated by `std::macro`.
+  contributions, and `#vjp<rule>` is a declaration tag the transform reads
+  (design principles 6.2), not a decorator evaluated by `std::macro`.
 - Generic simplification (`std::opt`) collapses pullback closures
   into straight-line code, and FastVM/JIT compile graphs created at run time
   (a gradient built while the program runs) on first call, so training steps
@@ -59,7 +60,9 @@ Deviations from the proposal below:
    unrolling, and branch selection belong to general passes.
 5. **Derivative rules are layered.** Builtin rules ship with operator
    definitions, packages may add rules for their operators, and users attach
-   rules to their own functions with the `@vjp` decorator at macro time.
+   rules to their own functions with the `#vjp<rule>` declaration tag: the tag's
+   argument is the rule's graph, kept in the function graph's reference table
+   (`kGraphRefRule`), so the transform reads the rule directly.
 
 ## 2. Pipeline Placement
 
@@ -344,10 +347,16 @@ macro operator over function values).
 
 Precedence, most specific first:
 
-1. **Function rules from `@vjp<rule>`.** Attached to a user function at macro
-   time. The contract is `rule(inputs..., dy) => tangents` (a tuple when there
-   are several differentiable inputs). When the transform meets a call to a
+1. **Function rules from `#vjp<rule>`.** A declaration tag on a user function
+   (`export tag vjp<rule: func> on func`, design principles 6.2). Its argument is
+   the rule's graph: the GIR builder keeps it in the function graph's reference
+   table (`kGraphRefRule`), so the frozen graph names the rule and the transform
+   reads it directly — no macro evaluation, no side table, no rewritten copy of
+   the function. The contract is `rule(inputs..., dy) => tangents` (a tuple when
+   there are several differentiable inputs). When the transform meets a call to a
    function that has a rule, it uses the rule instead of differentiating the body.
+   A rule must be a static function of the program: a graph reference cannot
+   carry a closure.
 2. **Operator rules registered by packages.** Keyed by operator URI, for
    operators defined outside `tensor`/`nn`.
 3. **Builtin operator rules.** `OpDef::vjp`, already in place, written against
@@ -433,11 +442,11 @@ What differs from the design above:
   a constant condition, where folding left them (inside branch arms).
 - **Both export entries run the same export simplification** on the bound
   function (`exportRewriteConfig`, `modules/onnx/exporter.cpp`), with settings
-  `std::opt` does not have: inlining regardless of size, up to 4096
-  rounds (deeper static recursion), and the branched-call split that turns the
-  pullback of a data-dependent branch into per-arm calls
-  (`enableBranchedCallSplit`, valid only for a consumer that builds no
-  execution order, which is why it cannot be a pass before a scheduler).
+  `std::opt` does not have: inlining regardless of size and up to 4096
+  rounds (deeper static recursion). A branch pullback needs no split across the
+  branch: the arms are regions of the branch's own graph, so the closure an arm
+  yields and the call of it are in one graph, and the lowering keeps the branch
+  with one `If` per value it yields.
   `onnx.export_model` also expands macros; the pass leaves that to `std::macro`.
   For twenty-six programs of `test/cases/modules/onnx` the two entries write
   models with bit-identical ONNX Runtime outputs (`pass_export.py equiv`),
@@ -476,7 +485,11 @@ What differs from the design above:
   `modules/onnx/exporter.cpp`):
   - the carried values are the arguments a recursive call changes (found by a
     first, discarded evaluation of the body); the others stay what they are
-    outside the loop, so constants keep folding inside the body;
+    outside the loop, so constants keep folding inside the body. A carried
+    argument that is a tuple or struct is carried leaf by leaf, in the order of
+    its fields: one `Loop` state input per leaf, the body entry rebuilds the
+    tuple or struct from those inputs, and the loop's outputs are rebuilt into
+    the value the recursion returns (H44's outline; `ort_struct_loop`);
   - the body is the function's own graph evaluated once. A branch that
     separates "return" from "call again" becomes an `If` whose outputs are the
     continue flag and the next state: each side is computed only when it is
@@ -507,9 +520,10 @@ What differs from the design above:
     data-dependent loop: `func spin(h: Tensor, k: int): (Tensor, int)`,
     stopped by a threshold on the state or a maximum count.
   Refused, each with a diagnostic at the recursive call or the export request:
-  a carried value whose dtype or shape changes between calls; a tuple, struct
-  or array argument that changes (the carried values themselves are the
-  arguments: tensors and scalars, not a tuple passed whole); a leaf of the
+  a carried value whose dtype or shape changes between calls; an argument that
+  a recursive call changes and that holds a value a loop cannot carry (an
+  array, a string, a function), such as a struct with an array field (the
+  diagnostic names the argument and what it holds); a leaf of the
   result that is neither a tensor nor a scalar: a function, or an int array
   built from values that depend on the model input (the diagnostic names the
   element of the result and what it is); returning paths whose results differ
@@ -518,8 +532,12 @@ What differs from the design above:
   `pass_export_loop`, `export_dynamic_recursion`, `ort_loop_values` (tuple,
   two returning paths, struct, three carried values, nested tuple with a
   carried float and a bool: NumPy and the native run for 0, 1, several and
-  the maximum number of steps), `export_loop_values_array` (refusal); both
-  entries write equivalent models (`pass_export.py equiv`).
+  the maximum number of steps), `ort_struct_loop` (a carried struct of two
+  tensors and a counter, the same as a tuple, a struct in a struct, and a
+  struct of scalar leaves), `export_loop_tuple_argument` (one tuple argument
+  carried, flattened), `export_loop_values_array` and
+  `export_loop_carried_array` (refusals); both entries write equivalent
+  models (`pass_export.py equiv`).
 - **Linear recursion** (the recursive call is not the last action). A function
   `f(a) = E(a, if c(a) then E'(a, f(step(a))) else B(a))` with ONE recursive
   call on one side of ONE two-way branch is the pair of loops it denotes:
@@ -611,8 +629,8 @@ What differs from the design above:
    optimize to straight-line code.
 3. Branch regions (§4.3); calls through function values (§4.4).
 4. Rule coverage (`layer_norm`, `gelu`, `permute`, `where`, `mean`, `slice`,
-   `concat`, `batch_norm`, ...), the finite-difference harness, and `@vjp`
-   function rules.
+   `concat`, `batch_norm`, ...), the finite-difference harness, and the
+   `#vjp<rule>` function rules.
 5. Tree optimizers, layer library, `stop_gradient`, and `apply_gradients`
    re-expressed on `grad`.
 6. Shape specialization and simplification passes; `onnx::export` reduced to

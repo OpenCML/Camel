@@ -30,6 +30,8 @@
 #include "camel/core/mm/gen.h"
 #include "camel/core/rtdata.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/profile/profile.h"
+#include "camel/runtime/exec_plan.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 
@@ -118,7 +120,7 @@ inline size_t branchTableEntries(const Bytecode &bc) {
 std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstOnly) {
     std::vector<JitBlocker> found;
     auto add = [&](size_t pc, std::string kind, std::string text) {
-        found.push_back({pc, std::move(kind), std::move(text)});
+        found.push_back({pc, std::move(kind), std::move(text), {}});
     };
     if (!unit.runtimeGraph) {
         add(0, "no-graph", "null runtime graph in JIT compilation unit");
@@ -143,9 +145,6 @@ std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstO
         if (firstOnly && !found.empty())
             return found;
         const Bytecode &bc = unit.bytecodes[pc];
-        if (bc.opcode == OpCode::LBEG || bc.opcode == OpCode::LTST || bc.opcode == OpCode::LEND) {
-            add(pc, "LOOP", "pc=" + std::to_string(pc) + " a loop is not compiled (the graph is interpreted)");
-        }
         if (bc.opcode == OpCode::BRCH) {
             // The lowering jumps to the entries of the jump table.
             const size_t table = pc + bc.opsize;
@@ -168,13 +167,225 @@ std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstO
 // one through memory (see FUNC and TAIL in compileBytecodeWith).
 constexpr size_t kMaxRegisterArgs = 4;
 
+// A loop of regions whose three events (LBEG, LTST, LEND) are in the unit, and whether the rounds
+// of it are lowered to native code instead of calls of the loop helpers of trampoline.h (H55).
+// The pcs are the ones the events were emitted at (compile.cpp): the LBEG starts the loop, the
+// LTST runs after the condition's region, the LEND after the body's region, and the LEND jumps
+// back to the first instruction of a round when another one follows.
+struct LoopRound {
+    const camel::runtime::ExecLoop *loop = nullptr;
+    size_t beginPc = SIZE_MAX; // LBEG
+    size_t testPc  = SIZE_MAX; // LTST
+    size_t endPc   = SIZE_MAX; // LEND
+    size_t bodyPc  = SIZE_MAX; // the first instruction of the body (the LTST falls through to it)
+    size_t roundPc = SIZE_MAX; // the first instruction of a round (the LEND jumps back to it)
+    // The pc this lowering gives the first instruction of the stop path. No bytecode is at it: it
+    // is a local label (the MIR jumps by pc), one per loop, above every graph's bytecode.
+    uint32_t stopPc = 0;
+    std::string helperReason; // why the rounds take the helpers; empty when they are native
+    bool native() const { return helperReason.empty(); }
+};
+
+// Where the stop path of the nth loop goes in MIR (LoopRound::stopPc): a pc no bytecode has, so
+// that a local branch can target an instruction in the middle of a bytecode's lowering.
+constexpr uint32_t kLocalLabelPcBase = 0x7F000000u;
+
+// What a native round may consist of: an instruction that neither allocates, so that no
+// collection can be asked for inside the round, nor reaches a safepoint or another graph.
+// Arithmetic, comparison, branch and join do not; the divisions run natively and fault through
+// the trap check they already carry (markDivision), which is the driver's; the integer remainder
+// is the one helper call allowed, because it stores its own result, does not allocate and does
+// not poll. Everything that builds a value the collector traces — an operator, a cast, a copy
+// (which clones), a fill, an element access — a call, and another loop's events keep the round
+// on the helpers.
+bool instructionRunsInRound(OpCode op) {
+    switch (op) {
+    case OpCode::IADD:
+    case OpCode::LADD:
+    case OpCode::FADD:
+    case OpCode::DADD:
+    case OpCode::ISUB:
+    case OpCode::LSUB:
+    case OpCode::FSUB:
+    case OpCode::DSUB:
+    case OpCode::IMUL:
+    case OpCode::LMUL:
+    case OpCode::FMUL:
+    case OpCode::DMUL:
+    case OpCode::IDIV:
+    case OpCode::LDIV:
+    case OpCode::FDIV:
+    case OpCode::DDIV:
+    case OpCode::IMOD:
+    case OpCode::LMOD:
+    case OpCode::ILT:
+    case OpCode::LLT:
+    case OpCode::FLT:
+    case OpCode::DLT:
+    case OpCode::IGT:
+    case OpCode::LGT:
+    case OpCode::FGT:
+    case OpCode::DGT:
+    case OpCode::IEQ:
+    case OpCode::LEQ:
+    case OpCode::FEQ:
+    case OpCode::DEQ:
+    case OpCode::INE:
+    case OpCode::LNE:
+    case OpCode::FNE:
+    case OpCode::DNE:
+    case OpCode::ILE:
+    case OpCode::LLE:
+    case OpCode::FLE:
+    case OpCode::DLE:
+    case OpCode::IGE:
+    case OpCode::LGE:
+    case OpCode::FGE:
+    case OpCode::DGE:
+    case OpCode::BRCH:
+    case OpCode::JOIN:
+    case OpCode::JUMP:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool isLoopEvent(OpCode op) {
+    return op == OpCode::LBEG || op == OpCode::LTST || op == OpCode::LEND;
+}
+
+// The loops of the unit's own bytecode, in the order their events appear, each with the pcs the
+// lowering of a round reads and the reason it cannot be native ("" when it can). The single place
+// that decides this: the coverage statistics and the lowerer both call it, so what the statistics
+// say a loop does is what the code does.
+std::vector<LoopRound> loopRoundsOf(const CompilationUnit &unit) {
+    std::vector<LoopRound> rounds;
+    if (!unit.runtimeGraph || unit.graphLength == 0)
+        return rounds;
+    const Bytecode *base = unit.bytecodes.data();
+    const size_t graphEnd = unit.entryPc + unit.graphLength;
+    ASSERT(
+        graphEnd <= unit.bytecodes.size(),
+        "Current graph bytecode range exceeds linked bytecode span.");
+    std::unordered_map<const camel::runtime::ExecLoop *, size_t> indexOf;
+    for (size_t pc = unit.entryPc; pc < graphEnd;) {
+        const Bytecode &bc = base[pc];
+        if (isLoopEvent(bc.opcode)) {
+            const camel::runtime::ExecLoop *loop = bc.extra()->loop;
+            if (loop != nullptr) {
+                auto it = indexOf.find(loop);
+                if (it == indexOf.end()) {
+                    it = indexOf.emplace(loop, rounds.size()).first;
+                    rounds.push_back({});
+                    rounds.back().loop = loop;
+                }
+                LoopRound &round = rounds[it->second];
+                switch (bc.opcode) {
+                case OpCode::LBEG: round.beginPc = pc; break;
+                case OpCode::LTST: round.testPc = pc; break;
+                case OpCode::LEND: round.endPc = pc; break;
+                default: break;
+                }
+            }
+        }
+        pc += bc.opsize;
+    }
+    for (size_t i = 0; i < rounds.size(); ++i) {
+        LoopRound &round = rounds[i];
+        round.stopPc    = kLocalLabelPcBase + static_cast<uint32_t>(i);
+        const camel::runtime::ExecLoop &loop = *round.loop;
+        auto why = [&](std::string reason) { round.helperReason = std::move(reason); };
+        if (round.beginPc == SIZE_MAX || round.testPc == SIZE_MAX || round.endPc == SIZE_MAX) {
+            why("the loop's events are not all in the graph's bytecode");
+            continue;
+        }
+        if (getJumpTargetPc(&base[round.testPc]) != round.endPc ||
+            round.beginPc + base[round.beginPc].opsize != getJumpTargetPc(&base[round.endPc])) {
+            why("the loop's events do not link start, test and end as the lowering reads them");
+            continue;
+        }
+        // What the loop is, before where its events are: a shape that cannot go native says so,
+        // whatever the bytecode around it looks like (a loop over a sequence starts and tests at
+        // the same place, and has no condition of its own).
+        if (loop.iterates) {
+            why("the round takes the next element of a sequence");
+            continue;
+        }
+        if (!loop.hasCond) {
+            why("the loop has no condition to test");
+            continue;
+        }
+        if (loop.collectionCount != 0) {
+            why("the round collects the values it produces");
+            continue;
+        }
+        if (!loop.stateComponents) {
+            why(
+                loop.stateCount == 1
+                    ? "the state is a single value, not a slot the body writes every round"
+                    : "the round makes the state tuple anew every round");
+            continue;
+        }
+        round.roundPc = getJumpTargetPc(&base[round.endPc]);
+        round.bodyPc  = round.testPc + base[round.testPc].opsize;
+        if (round.roundPc >= round.testPc || round.bodyPc >= round.endPc) {
+            why("the loop has no condition or body instruction of its own");
+            continue;
+        }
+        if (round.endPc + base[round.endPc].opsize >= graphEnd) {
+            why("the loop is the last instruction of the graph");
+            continue;
+        }
+        // The state binding and the round count are slot moves with no runtime behind them, so the
+        // slots must be the frame's own: the ports and the components the body writes (a component
+        // of the static area is not one of those, planStateComponents), and a round slot that is a
+        // value slot and not slot 0, the frame pointer of the JIT's frame.
+        bool slotsInFrame = loop.roundSlot > 0 && loop.condResultSlot != 0;
+        for (size_t j = loop.stateCount; slotsInFrame && j < loop.stateCount * 3; ++j)
+            slotsInFrame = loop.slots[j] > 0;
+        if (slotsInFrame)
+            for (size_t j = 0; j < loop.stateCount; ++j)
+                slotsInFrame = slotsInFrame && loop.stateSlots[j] > 0;
+        if (!slotsInFrame) {
+            why("the loop's state or round count is not in a frame slot of its own");
+            continue;
+        }
+        if (camel::profile::enabled()) {
+            why("std::profile counts the rounds");
+            continue;
+        }
+        if (camel::core::mm::autoSpace().debugConfig().stressEveryNSafepoints != 0) {
+            why("the safepoint stress mode asks for a safepoint every N safepoints");
+            continue;
+        }
+        // The instructions of a round: the condition's region, the LTST, the body's region. Any
+        // instruction that could allocate (and so ask for a collection) or reach a safepoint
+        // keeps the round on the helpers, because only the helper path polls.
+        for (size_t pc = round.roundPc; pc < round.endPc; pc += base[pc].opsize) {
+            const OpCode op = base[pc].opcode;
+            if (op == OpCode::LTST)
+                continue; // this loop's own test
+            if (isLoopEvent(op)) {
+                why(std::format("the round contains a nested loop at pc={}", pc));
+                break;
+            }
+            if (!instructionRunsInRound(op)) {
+                why(std::format("the round contains {} at pc={}", to_string(op), pc));
+                break;
+            }
+        }
+    }
+    return rounds;
+}
+
 // What keeps a unit from being compiled as frameless code (mir.h, JitExitKind): every construct
 // that needs the runtime. The single place that says which code a unit gets: none of these,
 // frameless; any, framed.
 std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bool firstOnly) {
     std::vector<JitBlocker> found;
     auto add = [&](size_t pc, std::string kind, std::string text) {
-        found.push_back({pc, std::move(kind), std::move(text)});
+        found.push_back({pc, std::move(kind), std::move(text), {}});
     };
     if (!unit.runtimeGraph || !unit.runtimeGraph->hasFrameLayout() || unit.graphLength == 0) {
         return found; // not compiled at all (collectBlockers)
@@ -225,6 +436,8 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
         "Current graph bytecode range exceeds linked bytecode span.");
     const size_t frameBytes =
         (unit.runtimeGraph->runtimeDataType()->size() * sizeof(slot_t) + 15u) & ~size_t{15};
+    // The lowering of the loops of the graph (LoopRound), once: what a LBEG reports below.
+    const std::vector<LoopRound> loopRounds = loopRoundsOf(unit);
     for (size_t pc = unit.entryPc; pc < graphEnd;) {
         if (firstOnly && !found.empty())
             return found;
@@ -252,6 +465,42 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
             break;
         case OpCode::SCHD:
             add(pc, "SCHD", where + " unsupported opcode SCHD");
+            break;
+        case OpCode::LBEG:
+        case OpCode::LTST:
+        case OpCode::LEND: {
+            // The rounds run in the frame; a graph with a loop is framed code. One entry per
+            // loop, at its LBEG: the entry says whether the rounds of it are lowered to native
+            // code (LoopRound) or go through the loop helpers, and why.
+            if (bc.opcode != OpCode::LBEG)
+                break;
+            const LoopRound *round = nullptr;
+            for (const LoopRound &candidate : loopRounds) {
+                if (candidate.loop == bc.extra()->loop) {
+                    round = &candidate;
+                    break;
+                }
+            }
+            const bool isNative = round != nullptr && round->native();
+            const std::string what =
+                isNative
+                    ? where + " contains a loop whose rounds are native code"
+                    : fallback + " contains a loop (LBEG/LTST/LEND)" +
+                          (round != nullptr && !round->helperReason.empty()
+                               ? ": " + round->helperReason
+                               : std::string());
+            std::string lowering = "helper";
+            if (round != nullptr) {
+                lowering = isNative ? "native" : "helper: " + round->helperReason;
+            }
+            found.push_back({pc, "LOOP", what, lowering});
+            break;
+        }
+        case OpCode::IMOD:
+        case OpCode::LMOD:
+            // The remainder runs in the helper (it faults on a zero divisor), so the graph
+            // needs the frame a helper call runs against.
+            add(pc, "IMOD", fallback + " contains an integer remainder");
             break;
         case OpCode::FUNC:
         case OpCode::TAIL: {
@@ -462,6 +711,9 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     const uint64_t helperOper      = reinterpret_cast<uint64_t>(&jitHelperOper);
     const uint64_t helperBytecode  = reinterpret_cast<uint64_t>(&jitHelperBytecode);
     const uint64_t helperBranchArm = reinterpret_cast<uint64_t>(&jitHelperBranchArm);
+    const uint64_t helperLoopBegin = reinterpret_cast<uint64_t>(&jitHelperLoopBegin);
+    const uint64_t helperLoopTest  = reinterpret_cast<uint64_t>(&jitHelperLoopTest);
+    const uint64_t helperLoopEnd   = reinterpret_cast<uint64_t>(&jitHelperLoopEnd);
     // Owns the parameter blocks the NativeJitFuncCall MIRs point to, until encoding is done.
     std::vector<std::unique_ptr<NativeJitCallParams>> callParams;
 
@@ -518,6 +770,13 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             blockStarts.insert(getJumpTargetPc(&base[p]));
             blockStarts.insert(next);
             break;
+        case OpCode::LTST:
+        case OpCode::LEND:
+            // LTST jumps to its LEND when the loop stops; LEND jumps back to the first
+            // instruction of a round. The slot cache must not carry a value across either.
+            blockStarts.insert(getJumpTargetPc(&base[p]));
+            blockStarts.insert(next);
+            break;
         case OpCode::RETN:
         case OpCode::TAIL:
             blockStarts.insert(next);
@@ -554,6 +813,29 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
                                  const slot_t * /*sb*/,
                                  x64::VRegId v,
                                  x64::MirBuilder & /*b*/) { loadSlot(bc.fastop[opIdx], disp, v); };
+
+    // The loops of this unit whose rounds are lowered to native code (LoopRound): the decisions
+    // are made once, before anything is lowered, by the function the statistics read too.
+    const std::vector<LoopRound> loopRounds = loopRoundsOf(unit);
+    auto nativeRound = [&](const camel::runtime::ExecLoop *loop) -> const LoopRound * {
+        for (const LoopRound &round : loopRounds)
+            if (round.loop == loop && round.native())
+                return &round;
+        return nullptr;
+    };
+    // Gives the k ports at loop.slots[first] the running state. stateComponents keeps the state
+    // in the body's own slots (ExecLoop::stateSlots), so a round starts and goes on by copying
+    // them into the ports the condition and the body read — what bindLoopState does in the
+    // interpreter, done by the frame the code already has. The copy is a move of one word: a port
+    // holds whatever type the component has (a scalar's bits, or a reference).
+    auto bindLoopPorts = [&](const camel::runtime::ExecLoop &loop, size_t first) {
+        for (size_t j = 0; j < loop.stateCount; ++j) {
+            const data_idx_t from = loop.stateSlots[j];
+            x64::VRegId v         = nextVReg++;
+            loadSlot(from, slotDisp(from), v, false);
+            build.emitVStoreToFrame(slotDisp(loop.slots[first + j]), v);
+        }
+    };
 
     // The wrapper owns all ABI adaptation. MIR generation below always assumes
     // the internal JIT convention:
@@ -1286,6 +1568,81 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             build.emitJmpRel32(static_cast<uint32_t>(target));
             break;
         }
+        // The three events of a loop of regions (framed code). The frame carries the state, the
+        // ports and the round counter, so the helpers of loop_frame.h run the round exactly as
+        // the interpreters do; the code then jumps on what the event returned: LTST to its LEND
+        // when the loop stops, LEND back to the first instruction of a round when another one
+        // follows. Both events are barriers for the slot cache (the helpers write the frame).
+        //
+        // Where the round's shape allows it (LoopRound, H55), the two events a round has are
+        // lowered instead: the test is a load and a conditional jump, the back edge a direct
+        // jump, the state binding slot copies, and the round counter is not counted at all (no
+        // instruction of such a round reads it; it becomes -1 on the stop path, which is what
+        // every back end leaves there).
+        case OpCode::LBEG: {
+            const camel::runtime::ExecLoop *loop = bc.extra()->loop;
+            build.emitCallHelper(static_cast<uint32_t>(pc), helperLoopBegin);
+            slotCache.clear();
+            const LoopRound *round = nativeRound(loop);
+            if (round != nullptr) {
+                // A round starts at the instruction after the LBEG, and that is where the back
+                // edge goes: binding the condition's ports there binds them at the start of
+                // every round, the first one included (loopBegin bound it already, and a second
+                // copy of the same state costs nothing next to the loop).
+                build.setNextPc(static_cast<uint32_t>(round->roundPc));
+                bindLoopPorts(*loop, loop->stateCount);
+            }
+            break;
+        }
+        case OpCode::LTST: {
+            const camel::runtime::ExecLoop *loop = bc.extra()->loop;
+            const LoopRound *round               = nativeRound(loop);
+            if (round == nullptr) {
+                build.emitCallHelper(static_cast<uint32_t>(pc), helperLoopTest);
+                x64::VRegId vStop = nextVReg++;
+                build.emitVMovFromRax(vStop);
+                build.emitVTest(vStop);
+                build.emitJneRel32(static_cast<uint32_t>(getJumpTargetPc(&bc)));
+                slotCache.clear();
+                break;
+            }
+            // The test: the condition's result, false meaning the loop stops (loopTest). The
+            // ports of the body take the state only on the path that goes on.
+            x64::VRegId vCond = nextVReg++;
+            loadSlot(loop->condResultSlot, slotDisp(loop->condResultSlot), vCond);
+            build.emitVTest(vCond);
+            build.emitJeRel32(round->stopPc);
+            bindLoopPorts(*loop, loop->stateCount * 2);
+            break;
+        }
+        case OpCode::LEND: {
+            const camel::runtime::ExecLoop *loop = bc.extra()->loop;
+            const LoopRound *round               = nativeRound(loop);
+            if (round == nullptr) {
+                build.emitCallHelper(static_cast<uint32_t>(pc), helperLoopEnd);
+                x64::VRegId vContinue = nextVReg++;
+                build.emitVMovFromRax(vContinue);
+                build.emitVTest(vContinue);
+                build.emitJneRel32(static_cast<uint32_t>(getJumpTargetPc(&bc)));
+                slotCache.clear();
+                break;
+            }
+            // The body fell through to here: the next round starts at the head of a round.
+            build.emitJmpRel32(static_cast<uint32_t>(round->roundPc));
+            // The stop path, which the test jumps to: the round count becomes -1, as loopTest
+            // leaves it, and the loop ends through the same helper as every other shape — it
+            // brings the loop's value tuple up to date from the components (loopEnd), once per
+            // loop and not once per round. What it would do on the path that goes on is what the
+            // copies above and the jump back do here.
+            build.setNextPc(round->stopPc);
+            x64::VRegId vStopped = nextVReg++;
+            build.emitVLoadImm64(vStopped, static_cast<uint64_t>(-1));
+            build.emitVStoreToFrame(slotDisp(loop->roundSlot), vStopped);
+            build.emitCallHelper(static_cast<uint32_t>(pc), helperLoopEnd);
+            slotCache.clear();
+            build.emitJmpRel32(static_cast<uint32_t>(pc + bc.opsize));
+            break;
+        }
         case OpCode::RETN: {
             x64::VRegId v0 = nextVReg++;
             if (bc.fastop[0] == 0) {
@@ -1307,6 +1664,13 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         case OpCode::COPY:
         case OpCode::FILL:
         case OpCode::ACCS:
+            build.emitCallHelper(static_cast<uint32_t>(pc), helperBytecode);
+            slotCache.clear();
+            break;
+        case OpCode::IMOD:
+        case OpCode::LMOD:
+            // The remainder of an integer division, in the helper: it faults on a zero divisor
+            // (the fault path needs the driver), and it stores its own result.
             build.emitCallHelper(static_cast<uint32_t>(pc), helperBytecode);
             slotCache.clear();
             break;
