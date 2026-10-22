@@ -1,0 +1,227 @@
+# H36 — finishing the Camel graph API
+
+Worktree `D:\Projects\Camel-wt\h36-graphapi`, branch `handover/H36-graph-api`. The original
+work is merged as `134c522f`; the branch is fast-forwarded to `develop` `32ccd19d` (H22, tags,
+loops as regions, branch arms built in place). The review correction (item 4 below) is left in
+the working tree: 8 modified files, no new branch, no commit, no push.
+
+The original change was 23 modified tracked files plus 11 new files; the correction edits
+`modules/graph/read.cpp`, `stdlib/signatures/graph.cml`, `docs/stdlib-reference.md`, the two
+region docs, the probe and its plan, and this report. The build is green
+(`camel-build.ps1`, exit 0). The plans that this task touched, plus the neighbours they can
+break, are green: `graph` 39/39, `definitions` 22/22, `smoke` 10/10; `stdlib_registry` 4/4
+after regenerating the reference.
+
+The original branch tip was an ancestor of `develop`, so the work was restored with `stash` +
+`git stash pop` and only `src/execute/camel_pass.cpp` needed a manual merge.
+
+---
+
+## Item 1 — a pass module may import a Camel library
+
+**Landed.** Two compile paths now accept Camel imports:
+
+* `UserDefinedModule::compileAsLibrary()` (`src/core/module/userdef.cpp`) no longer rejects a
+  module written in Camel that the library imports. It is built by the program's own builder
+  (`Builder::of(context_)`, `buildLibrary`), which already has the transitive Camel import
+  closure declared by GCT and keeps the graphs those modules export the ones this module names.
+  The old "imports modules written in C++ only" diagnostic is gone.
+* `UserDefinedModule::compileAsProgram()` (the route `DefinitionStore::libraryFunction` uses for
+  a pass) keeps its own builder (a pass must be a *program* of its own so module-level `let`s
+  are computed before the pass runs, H37's invariant), but now declares the transitive Camel
+  import closure into that builder, in import order, before declaring and building itself. The
+  imported modules' `buildingProgramOfItsOwn_` is set while this program builds, so
+  `setProgramGraph` does not replace the graph they were loaded as part of.
+
+The choice for `compileAsLibrary` is the shared program builder, not a fresh one. Reason: GCT
+`compileImportedModules` has already declared the whole Camel import closure in the context's
+program builder; a fresh builder would duplicate declarations and leave exported entities
+pointing at unbuilt placeholders. For `compileAsProgram` a fresh builder is required (it is the
+tool program), and the closure is declared into it explicitly.
+
+**A monomorphic imported function returns its value.** The first build of the fresh tool
+program still read `0`; the cause was exports, not encoding: `Module::exportEntity` /
+`exportType` use `Namespace::insert`, which refuses names that exist already, and every imported
+module already exported the entities of the builder that first loaded it. The fresh
+declarations were therefore built into new graphs, but the module kept exporting the old
+(unbuilt) graphs; the pass bound those, so `graph_of(nine)` showed a graph with 0 nodes and a
+call returned the type's zero. The fix is `Module::clearExportedNamespaces()` (types and
+entities), called on each imported Camel module just before `compileAsProgram` declares it again
+in the tool builder: the fresh declaration then exports its own graphs, the pass binds them, and
+`buildModuleBody` fills them. `buildingProgramOfItsOwn_` is restored after the build, so a later
+program may record the imported module's root graph normally.
+
+Cases:
+
+* `pass_module_imports_a_camel_library` (`imports.cml`): imports `array`, calls `flat_map` on a
+  local array, output `[1, 2, 2, 3, 3, 4]`.
+* `pass_module_calls_a_monomorphic_camel_function` (`monomorphic.cml`): imports
+  `libvals::nine`/`addOne`, calls both directly, output `9`, `42` (next to the generic case, and
+  the case that would have caught the zero).
+* `camel_pass_module_importing_a_camel_module` (`camel_import_values.cml`): the same from the
+  pass entry itself. This replaces develop's `..._is_refused` expectation, which asserted the
+  old restriction: the task is exactly to remove it, so the new expectation is "runs", and the
+  diagnostic `imports modules written in C++ only` no longer exists.
+
+A generic Camel function is still specialized into the pass's graph and works the same way; the
+monomorphic path now goes through the fresh declaration, so both kinds of call compute.
+
+## Item 2 — command-line pass parameters
+
+**Landed.** The `with` parameters of the pass function are the pass parameters (design
+principles 4.4 and 9.3):
+
+* `include/camel/execute/pass/params.h`: `PassParam` has `bool required`.
+* `src/execute/pass_spec.cpp`: `describeParams` marks required parameters, and `bindArgs`
+  refuses a required parameter that is not written:
+  `parameter '<name>' is not written and has no default (the pass declares: ...)`.
+* `src/execute/camel_pass.cpp`: `CamelParam {name, passType, code}`, `passParamsOf(FunctionType&)`,
+  `zeroOf(PassParamType)`; the descriptor lists every `with` parameter as required; `CamelPass`
+  keeps the parameter list and `PassArgs`, converts the values (including a `::String::from` in
+  `mm::autoSpace()`) and calls
+  `vm.callGraph(program, graph, span(&argument, 1), span(withArgs))`.
+* `src/passes/sched/nodevm/nodevm.{h,cpp}`: `callGraph(..., withArguments = {})` binds the
+  ordinary ports and then the `with` ports.
+
+Camel has no source default for a `with` parameter, so the descriptor default is a zero
+placeholder and `required` is the truth; a missing value is a resolution error before the pass
+runs. Strings are allocated in the moving space because the root frame binds the with-port
+before the call and `FramePool` traces active frames.
+
+Cases: `camel_pass_parameters` (string, int, f64, f32, bool; used at a call site
+`twice(n)` and captured by a lambda) and `camel_pass_parameter_missing` (required diagnostic,
+exit 1, names the parameter and its type).
+
+## Item 3 — roots for values a transaction creates
+
+**Landed.** Editing can create a value; constant folding needs it.
+
+* `modules/graph/txn.cpp`: `add_constant(t, g, value)` validates the Txn/Graph, takes the
+  value's type from `norm.type(2)`, materializes it with
+  `GraphDraft::materializeStaticValue(value, type)` and returns a `Node` handle. A string is
+  cloned into `mm::permSpace()` first: a transaction's draft static slot may not be traced at
+  every safepoint (old-generation foreign-resource wrappers are not guaranteed to be traced),
+  and a new string must not move or be collected while the transaction is open.
+* `include/camel/runtime/draft.h`: `relocateStaticSlot(index, value)` (writes without counting a
+  mutation).
+* `include/camel/runtime/draft_session.h` / `src/runtime/draft_session.cpp`:
+  `RuntimeGraphDraftSession::traceStaticSlots(relocate, ownerType)` walks every draft's static
+  slots from index 1, filters with `shouldTraverseStaticSlotType`, relocates each pointer with
+  `ownerKind = "Txn"`, `slotName = "draft"`, `slotIndex`, and writes it back.
+* `txnDescriptor().trace` now also calls `traceStaticSlots` after relocating the base, so a
+  transaction with captured values is safe while a NodeVM safepoint collects.
+
+Both mechanisms are kept: the tracer fixes stale draft slots for any value, the `permSpace`
+copy makes a new string independent of whether the wrapper is traced at all.
+
+Cases: `constant_folding_makes_a_value` (`fold_constants::fold`, adds `1+2`, `3+4` through
+`constant` + `add_constant` + `replace` + `commit`, creates a golden string, churns strings,
+commits, checks no int add remains and the golden exists) and
+`constant_folding_survives_a_safepoint` (same with
+`CAMEL_GC_STRESS_SAFEPOINT=1`, `CAMEL_GC_STRESS_MODE=minor`). Both exit 0 and print `7`.
+
+## Item 4 — region reading and validator region rules
+
+**Reading landed.**
+
+* New `modules/graph/regionkind.{h,cpp}`: the Camel enum `RegionKind` with one variant per
+  `GCRegionKind` (`Root, Arm, LoopCond, LoopBody, Inline, Block, Dead`), an exhaustive table,
+  `regionKindType()`, `regionKindTag()`, `regionKindName()`. A new `GCRegionKind` stops the
+  build in the table.
+* `modules/graph/read.cpp`: `region_of(n) => Region`, `region_kind(r) => RegionKind`,
+  `region_parent(r) => Region?`; `modules/graph/module.cpp` exports `RegionKind`;
+  `modules/graph/CMakeLists.txt` adds `regionkind.cpp`.
+* **Review correction (item 4): every node is in a region.** `region_of` returns region 0, the
+  function body, for every node, including in a graph whose region table is empty
+  (`GCGraph::regionCount() == 0`); it is no longer `null`/`Region?`. `region_kind` of region 0
+  is `Root` (also when the table is empty), so a reader does not distinguish two cases.
+  `region_parent` is `null` for the body (id 0) and for a parent that is not in the table.
+  Implementation: `regionOfKernel` always builds a Region handle; `regionOf` has a static
+  `Root` body for a tableless graph; `regionParentKernel` returns null for id 0 before looking
+  it up.
+
+The region column exists after R2b (arm regions, `src/runtime/arm_raise.cpp`,
+`draft_regions.cpp`) and after loops-as-regions; the test `regions_after_inlining` shows body
+nodes as `Root`, `Inline` regions with a parent for inlined nodes, and an `Arm` region kept
+after `std::opt::inline`; `regions_of_a_program_without_regions` shows every node of a
+body-only graph in region 0 with kind `Root`.
+
+The EdgeChecker rules (2)(3) are not part of this task: they are covered by the branch-arms
+validation in the rules lane, as the review notes, and were left untouched here.
+
+## Item 5 — `constant(n, sample)` → `constant::<T>(n)`
+
+**Blocked, no change.** H19 (`::<T>` for native operators) has not landed: no
+`constant::<...>` syntax in the tree, and `stdlib/signatures/*.cml` are reference metadata, not
+a bodyless native declaration mechanism. `constant(n, sample)` stays as it is; the signature
+comment still explains why.
+
+## Item 6 — tests, differentials, documentation
+
+* `test/plans/feat/modules/graph.plan.toml` now runs **39** cases (31 after develop; 8 added
+  here: `pass_module_imports_a_camel_library`, `pass_module_calls_a_monomorphic_camel_function`,
+  `camel_pass_parameters`, `camel_pass_parameter_missing`, `constant_folding_makes_a_value`,
+  `constant_folding_survives_a_safepoint`, `regions_of_a_program_without_regions`,
+  `regions_after_inlining` — the import-refusal case was converted rather than added).
+* The two differential cases (`neutral::integers` vs `std::opt::algebra(neutral_only=true)`,
+  `unused::values` vs `std::opt::dce(values_only=true)`) still compare byte-for-byte on
+  `stdout_normalized` and pass; `normalize_origins` stays, because compiling the pass module
+  consumes source origins.
+* Changed expectations, all justified:
+  * develop's `camel_pass_module_importing_a_camel_module_is_refused` became
+    `camel_pass_module_importing_a_camel_module`: item 1 removes exactly that restriction, so
+    the old negative expectation was the wrong invariant after the change.
+  * `camel_import_values.cml` was rewritten from "import a value that is not exported / expect
+    refusal" to "import `array` and use `flat_map`"; the old test could not pass with the new
+    semantics and its diagnostic (`ImportNameNotExported`) was incidental.
+  * `imports.cml` now prints the mapped array rather than the node count of `graphs(p)`: the
+    node count is not a stable observable once the tool program's builder adds the imported
+    generic graph.
+  * Review item 4: `region_of` is now `Node -> Region` (not `Region?`), region 0 is the body
+    with kind `Root` also in a tableless graph; `regionprobe` counts body nodes by kind instead
+    of testing `null`. The expected outputs therefore change to `2/2/0/2`, `4/4/0/4` for
+    `tiny`, and to `2/2/0/2`, `7/6/0/7`, `10/4/5/10`, target `3` after `std::opt::inline`
+    (current develop builds an `Arm` region and inlines into `Inline` regions; the old
+    expectations predate loops/branch arms as regions).
+* New cases live in `test/cases/modules/graph_pass/`: `imports.cml`, `monomorphic.cml` (with
+  its library `libvals.cml`), `params.cml`, `fold_constants.cml`, `fold_target.cml`,
+  `region_target.cml`, `regionprobe.cml`. `libvals.cml` is a fixture module, not a case of its
+  own.
+* Docs updated: `docs/technical/45_graph_module.md` (types incl. `RegionKind`, region reads,
+  `add_constant` / `traceStaticSlots`, tool-program path, imports, parameters, limitations),
+  `docs/cli.md` (a Camel pass's `with` parameters are its pass parameters, required),
+  `stdlib/signatures/graph.cml` (import comment, region functions, `add_constant`),
+  `docs/design/graph-store/handover/graph-api.md` (items 7 and 8), and `docs/stdlib-reference.md` regenerated with `node scripts/stdlib-reference.mjs --write`.
+
+## Verification
+
+| Check | Result |
+| --- | --- |
+| `camel-build.ps1` (Release) | exit 0 |
+| `graph.plan.toml` | 39/39 pass |
+| `definitions.plan.toml` | 22/22 pass |
+| `smoke` | 10/10 pass |
+| `stdlib_registry.plan.toml` | 4/4 pass (reference regenerated) |
+
+Commands (one plan per run, `-Jobs 8`):
+
+```powershell
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h36-graphapi
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-test.ps1 -Path D:\Projects\Camel-wt\h36-graphapi -Plan test\plans\feat\modules\graph.plan.toml -Jobs 8
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-test.ps1 -Path D:\Projects\Camel-wt\h36-graphapi -Plan test\plans\feat\modules\definitions.plan.toml -Jobs 8
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-test.ps1 -Path D:\Projects\Camel-wt\h36-graphapi -Plan smoke -Jobs 8
+node scripts\stdlib-reference.mjs --write
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-test.ps1 -Path D:\Projects\Camel-wt\h36-graphapi -Plan test\plans\feat\modules\stdlib_registry.plan.toml -Jobs 8
+```
+
+## Open questions / remaining work
+
+1. **H19** (`constant::<T>`) is not landed; item 5 stays blocked.
+2. `add_constant` accepts bool/int/float/string only, and a string is permanently copied into
+   `permSpace` (one copy per new string constant). If transaction-created values grow in use,
+   the permanent allocation should be revisited (recorded as debt by the review).
+3. `clearExportedNamespaces()` mutates the imported module's export table (it is process-wide).
+   The tool program needs this because the module object is shared with the program that loaded
+   it; after the pass is built, the table holds the tool program's graphs for that module. Any
+   code that compiles another program later must declare the module again (as `compileAsProgram`
+   and `compileAsLibrary` do), not assume the table still describes the first program.
