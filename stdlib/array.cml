@@ -3,9 +3,9 @@
 
 /**
  * Array functions and higher-order functions, written in Camel on top of the built-in
- * operators (map, filter, reduce, range, zip, slice, len) and three private primitives of this
- * module (flatten, unique, argsort). Every function returns a new value; none changes its
- * argument.
+ * operators (map, filter, reduce, range, zip, slice, len) and three primitives of this module
+ * (flatten, unique, argsort), whose kernels are the C++ module's. Every function returns a new
+ * value; none changes its argument.
  *
  * - The array a function works on is its ordinary argument; a function or a value that
  *   configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
@@ -22,34 +22,40 @@
  */
 module array
 
+// `algo` carries the C++ kernels of the three primitives. Their declarations above name this
+// module's operators (`array:flatten`, `array:unique`, `array:argsort`), which that module
+// registers and the import loads. The C++ module cannot be folded into this one while a module
+// with bodies may not sit beside a C++ module of the same name (it would be a declaration
+// module).
 import algo
 import math
 
-// The primitives are declared here, for this module only, and answered on the `array` protocol
-// (H19 step 5). They are pure and return a new array.
+// The primitives are declared here, as body-less declarations of this module: each stands for
+// the operator of its own name, implemented by the C++ module the import above loads (H19
+// step 5). They are pure and return a new array.
 
-#op<'array:flatten'>
-func native_flatten::<T>(xss: T[][]): T[]
-
-#op<'array:unique'>
-func native_unique::<T>(xs: T[]): T[]
-
-#op<'array:argsort'>
-func native_argsort::<T>(keys: T[]): int[]
+/// The indices that sort the keys ascending; equal keys keep their order (stable).
+/// @example argsort([3, 1, 2])    // [1, 2, 0]
+export func argsort(keys: i32[]): int[]
+export func argsort(keys: int[]): int[]
+export func argsort(keys: f32[]): int[]
+export func argsort(keys: float[]): int[]
+export func argsort(keys: bool[]): int[]
+export func argsort(keys: string[]): int[]
 
 // ---- rearranging ----
 
 /// The elements in reverse order.
 /// @example reverse([1, 2, 3])    // [3, 2, 1]
 export func reverse::<T>(xs: T[]): T[] {
-    return xs[:: -1]
+    return xs[::-1]
 }
 
 /// The first n elements; all of them when there are fewer, none when n is not positive.
 /// @example [1, 2, 3, 4]->take<2>    // [1, 2]
 with <n: int>
 export func take::<T>(xs: T[]): T[] {
-    return xs[: math::clamp(n, 0, len(xs))]
+    return xs[:math::clamp(n, 0, len(xs))]
 }
 
 /// The elements after the first n; none when there are fewer, all when n is not positive.
@@ -67,15 +73,11 @@ export func enumerate::<T>(xs: T[]): (int, T)[] {
 
 /// The elements of the inner arrays, in order.
 /// @example flatten([[1, 2], [3]])    // [1, 2, 3]
-export func flatten::<T>(xss: T[][]): T[] {
-    return native_flatten(xss)
-}
+export func flatten::<T>(xss: T[][]): T[]
 
 /// The first occurrence of every value, in order; values are compared as `==` compares them.
 /// @example unique([3, 1, 3, 2, 1])    // [3, 1, 2]
-export func unique::<T>(xs: T[]): T[] {
-    return native_unique(xs)
-}
+export func unique::<T>(xs: T[]): T[]
 
 // ---- searching ----
 
@@ -120,23 +122,21 @@ export func count::<T>(xs: T[]): int {
 
 /// The sum of the elements, 0 for an empty array. Integers wrap around on overflow, as `+` does.
 /// @example sum([1, 2, 3])    // 6
-export func sum::<T>(xs: T[]): T {
-    let zero: T = 0
-    let add: (a: T, b: T) => T = (a, b) => a + b
-    return xs->reduce<add, zero>
+export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
+    return xs->reduce<(a, b) => a + b, 0>
 }
 
 /// The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
 /// +0), or null for an empty array.
 /// @example min([3, 9, 2]) ?? 0    // 2
-export func min::<T>(xs: T[]): T? {
+export func min::<T>(xs: T[]): T? when is_numeric::<T>() {
     return if len(xs) == 0 then null else xs->reduce<math::min, xs[0]>
 }
 
 /// The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
 /// -0), or null for an empty array.
 /// @example max([3, 9, 2]) ?? 0    // 9
-export func max::<T>(xs: T[]): T? {
+export func max::<T>(xs: T[]): T? when is_numeric::<T>() {
     return if len(xs) == 0 then null else xs->reduce<math::max, xs[0]>
 }
 
@@ -146,7 +146,7 @@ export func max::<T>(xs: T[]): T? {
 /// @example [1, 2]->flat_map<(x: int) => [x, x * 10]>    // [1, 10, 2, 20]
 with <f: (x: T) => U[]>
 export func flat_map::<T, U>(xs: T[]): U[] {
-    return native_flatten(xs->map<f>)
+    return flatten(xs->map<f>)
 }
 
 /// The elements in ascending order of key(x); elements with equal keys keep their order (the
@@ -156,7 +156,7 @@ export func flat_map::<T, U>(xs: T[]): U[] {
 /// @example ['pear', 'fig', 'apple']->sort_by<(w: string) => len(w)>    // ['fig', 'pear', 'apple']
 with <key: (x: T) => K>
 export func sort_by::<T, K>(xs: T[]): T[] {
-    return xs[native_argsort(xs->map<key>)]
+    return xs[argsort(xs->map<key>)]
 }
 
 /// f(xs[i], ys[i]) for every i.
@@ -164,6 +164,5 @@ export func sort_by::<T, K>(xs: T[]): T[] {
 /// @example zip_with<(a: int, b: int) => a + b>([1, 2], [10, 20])    // [11, 22]
 with <f: (a: T, b: U) => V>
 export func zip_with::<T, U, V>(xs: T[], ys: U[]): V[] {
-    let pair: (p: (T, U)) => V = ((a, b)) => f(a, b)
-    return zip(xs, ys)->map<pair>
+    return zip(xs, ys)->map<((a, b)) => f(a, b)>
 }
