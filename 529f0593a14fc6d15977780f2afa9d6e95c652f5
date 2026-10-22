@@ -1,0 +1,320 @@
+# H22 — no silent gradient loss, collection outputs, empty-array context
+
+## State
+
+- Branch `handover/H22-grad-collect`, worktree `D:\Projects\Camel-wt\h22-grad`, rebased onto
+  `develop` (18ee349c; the original H22 work is in develop as c254a2e4). The false-positive fix
+  and the new tests are in the working tree: **not committed, not pushed**.
+- Build: `pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h22-grad`,
+  exit 0 (last run 21 s), artifacts in `out/latest`.
+- Item 1 is implemented: the silent-loss shapes are refused with a located diagnostic, and an
+  empty-array `append` state is recognised as a collection output before autodiff and before
+  `std::opt`.
+- Item 3 is implemented on top of H23's contextual empty-array typing; one `[] as int[]` cast is
+  kept as the proof that the cast still works. The recursive-type array-field example is still
+  blocked by H23's `FeatureNotSupported` (see Open questions).
+- Item 2 (array tangent = array of element tangents) was done on
+  `handover/H22-loop-grad`; this branch does not redo it. It remains open from this branch's
+  point of view only in the sense that it is not part of this diff.
+
+## 1. Shapes that went quiet, and what is refused now
+
+### 1.1 Evidence before the change
+
+All probes are in `D:\Temp\h22-probe` (not in the tree). The differentiated value is the first
+`with` parameter.
+
+| shape | program | observed before | why it was silent |
+|---|---|---|---|
+| value read through a struct | `p = { w: w * 2.0, n: int(w * 10.0) }`, `return p.w * float(p.n)` | printed value `80.0`, gradient `40.0` | `p.n` is an `int` field computed from `w`; `float(p.n)` converted it to data, and the conversion node was considered inactive, so the contribution disappeared |
+| value produced by an effectful call | `side(w)` returns `int`, `return w * float(side(w))` | printed value `40.0`, gradient `20.0` | the call's `int` result has no tangent; `float(...)` read it as data |
+| array state in a loop, not read in the result | `loop a = w, ns = [int(w)] while ... do (a * 2.0, ns->append<int(w * 10.0)>)`, result `pair.0` | returned a gradient computed from the float state alone, with no sign that the `int[]` state also decided how many rounds ran | the loop was rewritten from the float state only; the `int[]` state was not checked for dependence on an active value |
+| array iterated by a loop | `loop acc = 0.0 for x in [int(w), int(w * 2.0)] do acc + float(x)` | printed `6.0`, gradient `0.0` | the iterated array has no tangent; its elements were read as data, with no scatter in the reverse pass |
+| loop value has no tangent | `loop i = 0 ... do i + (if w > 0 then 1 else 0)`; result converted to float | gradient was silently partial/zero | the loop's own value had no tangent; `rewriteLoop` returned without a diagnostic |
+| struct / effectful value inside a loop body | `loop acc = [] ... acc->append<w * float(({ w: x * w, n: int(w * 10.0) }).n)>` | gradient dropped one factor | the same conversion happened inside a loop body |
+
+The last two were confirmed with `loop_struct_inside.cml` and `loop_effectful_inside.cml`; after
+the change both are refused at the `float(...)` read in the body.
+
+### 1.2 What is refused and where
+
+`modules/autodiff/pullback.cpp`, `Backward::run` (activity loop, around line 2424):
+
+- Activity starts at the **ports whose gradient this pass computes**, not at every port that
+  has a tangent. `Backward` now takes that set (`differentiated_`): for `grad`/`with_grad` it is
+  the first `with` parameter only; for a function pullback it is every port for which the plan
+  returns a tangent. An ordinary argument (`x`, `labels`, a scale) is data even when its type
+  has a tangent type (every `Tensor` does): no gradient is being computed for it, so nothing
+  derived from it can lose one.
+- A value whose type has no tangent (`tangentTypeOf(type) == nullptr`) and that depends on such a
+  differentiated port becomes **tainted**. “Depends” follows Norm and With inputs, not Ctrl
+  inputs: control edges still select code and are not data.
+- A node that **has** a tangent but receives a tainted value as Norm/With data is refused with
+  `failAt(nodeOrigin(node), ...)`. The message names the value type, the location of the use, and
+  (when known) where the no-channel value came from:
+  `a value of type '{}' depends on a differentiated parameter but has no gradient channel, and it is used as data here{}...`
+- Aggregates that are built from tainted parts are not refused as a whole: a tuple/struct FILL
+  with a tangent is structural, so a struct can carry a tainted field and a later read of that
+  field is the located use. This keeps `if`, tuples and struct construction working.
+- Three kinds of inputs are deliberately control, not data:
+  - a branch condition (`BRCH`'s `bool`);
+  - a `JOIN`'s arm selector (`BRCH`);
+  - a `tensor:where` / `:op/where` mask (its first Norm input).
+  A tainted value used under one of these still refuses when it is later converted to a number
+  (e.g. `float(bool_value)`).
+- Shape/length metadata (`tensor:shape`, `tensor:rank`, `tensor:numel`, `:op/len_arr`,
+  `:op/len_str`) is not tainted: a shape is a discrete property, and reshaping by it is control.
+  `tensor:numel` is the count in `sum(x) / (numel(x) as float)`, so the definition graph of
+  `tensor_definitions::mean` differentiates.
+- `visitOper`'s missing-derivative-rule error is now located too
+  (`no derivative rule for operator '{}' of type '{}'...`), instead of an unlocated `fail`.
+
+**The false positive this fixes.** C2's `with_grad(loss)` has one differentiated `with`
+parameter (`m`, the model tree); `x` and `labels` are ordinary arguments. Before the fix all
+graph ports with a tangent were seeds, and every `Tensor` has one, so `labels` was “active”.
+`cast(labels, 'int64')` therefore tainted the integer tensor, and `softmax_cross_entropy`, which
+also reads the active logits, refused at `train.cml:53:12`. The labels are data: nothing upstream
+of them is differentiated and no gradient is being dropped. The same root caused a float input
+converted with `int(...)` and then back to float to be refused. The fix is the seed set, not a
+loosening of the use check: a value is tainted only when it is downstream of a port whose
+gradient is actually being computed.
+
+`modules/autodiff/pullback.cpp`, `ForwardRewrite::rewriteLoop` (around line 1527):
+
+- The body plan records `stateNextTainted[j]`: whether the next value of state `j` is tainted.
+  If the state has no gradient channel and its next value depends on an active/tainted value, the
+  loop is refused at the loop's own origin:
+  `a 'loop' state of type '{}' has no gradient channel, but its next value depends on a differentiated parameter{}...`
+- This catches an array state that the result does not read, and a loop whose value has no
+  tangent but whose initial state depends on the parameter. The previous check only looked at
+  `active_`, so an initial array/boolean derived from the parameter could slip through; it now
+  checks `tainted_` as well.
+
+`src/builtin/operators/derivative.cpp`:
+
+- `:struct/copy_arr` now has the identity rule (`identityVjp`). The in-place loop rewrite copies
+  a literal initial array through this private operator; without a rule, a multi-state loop with
+  a `float[]` state failed with “no derivative rule”. It is a copy, so its gradient is the
+  output gradient unchanged.
+- `:struct/append_arr` and `:struct/append_arr_owned` already had the append rule.
+
+New negative cases (all in `test/cases/loops/`, added to
+`test/plans/feat/linear/loops.plan.toml`):
+
+| test | refused at |
+|---|---|
+| `refuse_struct_data.cml` | `float(p.n)`, line 12 column 18 |
+| `refuse_effectful_data.cml` | `float(n)`, line 15 column 16 |
+| `refuse_loop_array_state.cml` | the loop, line 9 column 16 |
+| `refuse_loop_iter_array.cml` | the loop, line 8 column 12 |
+
+`refuse_loop_no_channel.cml` still covers the loop-value-without-tangent case and the
+`std::macro` wrapping (`MacroEvaluationFailed` with the inner located diagnostic).
+
+## 2. `append` recognised as a collection output
+
+### 2.1 Recognition
+
+`src/compile/gir/builder_control.cpp`, `Builder::collectLoopAppends` (line 2289), called from
+`visitLoopNode` after the body is built and after `markLoopStateInPlace` (line 1993). It runs in
+the front-end builder, so it is before autodiff and before any `std::opt` pass.
+
+A state becomes a collection when all of these hold:
+
+- its initial value is an empty array literal: untyped `[]` (a `Data`/`Fill` of `void[]`) or a
+  typed `[]` whose static array length is 0 (`isEmptyArrayLiteral`);
+- its next value (the body result, or one component of the body's tuple FILL) is
+  `:struct/append_arr` or `:struct/append_arr_owned`;
+- the append reads exactly that state port and the port has a single use in the body (the
+  append);
+- the append has exactly one With value (the appended element).
+
+The element type is the type of the appended value. The state is **not removed**: it remains the
+value the program sees and the channel its gradient uses. The collection slot is an extra,
+internal output.
+
+### 2.2 Shape of the graph
+
+- Body result: `(next states..., appended values...)`, a tuple FILL whose components are the
+  **next values the body computed** and the appended elements. In particular, a multi-state body
+  must not read its states back through an `ACCS` of the loop's value: that read returns the
+  state the round started with, and it made the append unreachable (nothing depended on it).
+  This was the second C2 failure: `EffectNotExecuted` on `losses->append<value>` in the
+  4-state training loop. `GCLoopBody.collectionCount` is the number of appended values;
+  `setLoopCollectionCount` records it on the LOOP node. If a state component is a constant the
+  body does not give back as a value, recognition declines rather than inventing an `ACCS`.
+- Loop value: `(states..., arrays...)`, one array per collection slot. The driver builds each
+  array in one pass.
+- User-visible value: for one state, an `ACCS 0` of the loop value; for several states, a FILL
+  with slots `0..k-1` that reads the state components and leaves the collections to autodiff and
+  the exporter. The projection is registered as `gir.loop.value`.
+- `markLoopStateInPlace` still applies: the state appends in place, and the initial literal is
+  copied so the literal is not edited. The collection value is the appended element, so it does
+  not hold the growing state array and does not copy it per round.
+
+### 2.3 Empty-array state typing
+
+`Builder::inferLoopStateFromAppend` (line 1967) handles the one-state case where the loop's
+position gives no type (`loop losses = []` under an unannotated `let`):
+
+- The builder defers the `LoopStateWithoutType` diagnostic when the initial is an empty array and
+  there is exactly one state.
+- After the body is built, the next value is the append call. The element type is taken from the
+  append's With value.
+- The state port, the append call, the initial literal and the body exit are retyped from
+  `void[]` to `Element[]`, and the append call is re-resolved with the new element/array types
+  (`importedOperatorGroupNamed("append")` + `retargetOperNode`).
+- If the next value is not such an append, the original `LoopStateWithoutType` diagnostic is
+  reported at the initial value.
+
+With two or more states the loop value is a tuple and the empty state has no positional element
+type; it still requires an annotation (`let empty: float[] = []`).
+
+### 2.4 Autodiff with builder collections
+
+`modules/autodiff/pullback.cpp` used to assert that a loop reaching the forward rewrite had no
+collection slots. It now preserves them:
+
+- `rewriteLoop` reads `view.collectionCount()` and records existing slots before the tape.
+  `LoopBodyPlan` has `existingCollectionTypes` / `existingCollectionElemTypes` and
+  `tapeCollectionTypes`; `collectionTypes` is the full list (existing, then tape).
+- `buildLoopBody` splits the body result into states and existing appended values, seeds the
+  backward pass with the **state value** only (not the whole tuple), and rebuilds the body result
+  as `(states..., existing values..., residuals/round counter...)`. The forward body's function
+  type is updated accordingly.
+- The tape accesses start at `k + existingCollections`; the reverse loop's closure captures only
+  the tape slots, not the builder's collections.
+- The builder's state projection is reused rather than redirected to itself (an `ACCS` for one
+  state, a FILL for several). A loop without a projection still gets one, as before.
+- `:struct/copy_arr` identity rule keeps the in-place fallback differentiable.
+
+### 2.5 Cost
+
+`test/cases/loops/grad_loop_collect.cml`:
+
+- `sum_losses<2.0>(4)` = `6.0`; `grad(sum_losses)<2.0>(4)` = `3.0`.
+- 1000 rounds read `std::mem::blocks()` before/after: **3 blocks** allocated, not one copy per
+  round. The state array grows in place; the collection slot is one driver-built array. The
+  plan asserts the exact value (`std::nvm`).
+
+## 3. Empty array literal with context (item 3)
+
+`test/cases/compile/literals/empty_array_context.cml` now covers:
+
+- a function return type (`loop acc = []` as the function's value);
+- an annotated `let`;
+- an unannotated `let` whose loop has no context: the appended value types the state
+  (`inferred`);
+- a cast `[] as int[]` (the one cast kept as proof the cast still works);
+- a declaration (`let empty: string[] = []`), an array of arrays (`[[]]`);
+- a struct field (`{ xs: [] }` where the field is `int[]`);
+- a function parameter (`takes([])` where the parameter is `float[]`).
+
+The only array cast in the tests was the `[] as int[]` in this file; there were no other
+`[] as T[]` array casts that existed only for missing contextual typing. Casts to `Map`/`Set`
+are collection-literal casts, not array casts, and are left alone.
+
+The recursive-type array field (`type Node = { children: Node[] }`, `{ children: [] }`) is still
+rejected by H23 item 2 with
+`SemanticDiag::FeatureNotSupported: The feature 'a type that mentions itself through an array or another collection ('Node')' is not supported yet.`
+It cannot be exercised until that feature exists.
+
+## 4. Verification
+
+Run with
+`pwsh -NoProfile -File D:\Projects\Camel-wt\camel-test.ps1 -Path D:\Projects\Camel-wt\h22-grad -Plan ... -Jobs 8`
+(final run, all plans in one invocation):
+
+| plan | pass / total |
+|---|---|
+| `test/plans/feat/modules/autodiff.plan.toml` | 155 / 155 |
+| `test/plans/feat/modules/definitions.plan.toml` | 23 / 23 |
+| `test/plans/feat/linear/loops.plan.toml` | 110 / 110 |
+| `test/plans/feat/linear/loop_collect.plan.toml` | 25 / 25 |
+| `test/plans/feat/compile` | 878 / 878 |
+| `smoke` | 10 / 10 |
+
+All exit 0; no failures. Per the task, no full suite, poison sweep, GC stress, progen or PyTorch
+comparison was run as a separate requirement. (`autodiff.plan.toml` still contains the usual
+PyTorch-backed tests; they passed in the plan run.)
+
+End-to-end: `python showcase/c2-mlp-mnist/compare.py --profile small` → **PASS**, all five
+tolerances pass (initial loss 2.351336073 vs 2.351336002; final validation loss 0.003365365 vs
+0.003365094; final accuracy 1.0 vs 1.0; checkpoint drift 0). The run wrote
+`showcase/c2-mlp-mnist/RESULTS.md`; it was reverted, since this task does not change the
+showcase's recorded numbers.
+
+Additional manual probes (not in the tree):
+
+- untyped `loop losses = [] ...` with `std::macro`: value `12.0`, gradient `6.0`;
+- multi-state `float[]` loop: value `12.0`, gradient `6.0` (exercises `:struct/copy_arr`);
+- control-only `int` use (`if int(w * 10.0) > 0 then w else -w`): gradient `1.0`, so the taint
+  rule does not reject discrete control;
+- data input: `f(scale) = w * float(int(scale))`, `grad(f)<2.0>(3.0) = 3.0`, and a `Tensor` of
+  integer labels cast to int64 then float gives gradient `[0, 1, 0]` (sum `1.0`);
+- multi-state collection: `[1.0, 1.0, 1.0] 3`.
+
+## 5. Changed expectations and files
+
+The original H22 work is already in `develop` as c254a2e4 (`builder.h`, `derivative.cpp`, the
+builder's collection recognition, `empty_array_context.cml` and its plan, the loops tests). The
+false-positive fix is the working-tree change on top of it:
+
+Changed in this working tree:
+
+- `modules/autodiff/pullback.cpp` — `Backward` takes the differentiated ports
+  (`differentiated_`); activity starts there instead of at every tangent-bearing port;
+  `tensor:numel` remains in `metadataOper`.
+- `src/compile/gir/builder_control.cpp` — a multi-state collection body returns its next state
+  values, not `ACCS` reads of the loop value.
+- `test/plans/feat/modules/autodiff.plan.toml` — `grad_data_input_is_data`.
+- `test/plans/feat/modules/definitions.plan.toml` — `gradients_numel_shape`.
+- `test/plans/feat/linear/loops.plan.toml` — `loops.collect_multi_state`.
+
+New:
+
+- `test/cases/modules/autodiff/grad_data_input.cml`
+- `test/cases/definitions/numel_shape.cml`
+- `test/cases/loops/loop_collect_multi.cml`
+
+No existing expectation was changed to make a failing test pass. The earlier
+`empty_array_context.cml` expected output only gained the lines of its newly added cases; the
+description says so.
+
+## 6. Open questions
+
+1. **Multi-state empty-array inference.** `loop a = [], b = []` still requires annotations: the
+   loop's value is a tuple, so the initial state has no positional type, and the append is only
+   known after the body is built. One state is inferred; several are not. Is inferring each
+   state's element from its own append the intended rule?
+2. **Collection versus tape representation.** This branch keeps the appended state as the
+   program's value and its gradient channel, and adds the collection as an internal output. A
+   future design that differentiates the user-visible collection directly (H4d's distinction
+   between residuals and user collections) may want the collection to be the value and the state
+   to disappear.
+3. **Recursive type through an array.** H23 item 2 still refuses
+   `type Node = { children: Node[] }`; the item-3 example for a recursive array field cannot run
+   until that is implemented.
+4. **Which discrete uses are control.** The rule exempts branch conditions, `JOIN` selectors,
+   `where` masks, shape/rank/length metadata. `float(bool)` and `float(int)` remain refusals.
+   Is that the intended boundary, especially for tensor masks and for lengths used as arithmetic
+   rather than as loop bounds?
+5. **Diagnostic source for a struct field.** The main location is the use, but “the value with no
+   channel comes from” is empty for an `ACCS` field read (the field node has no origin of its
+   own). Pointing at the field's initializer would make the message stronger.
+6. **`:struct/copy_arr` identity.** The copy is treated as the identity for gradients. That is
+   right for a value copy; if a future in-place representation makes the copy observable, the
+   rule needs revisiting.
+7. **Allocation counts are backend-specific.** The `3 blocks` assertion is for `std::nvm`; a
+   different backend may allocate the driver array differently.
+8. **Loop body seeds (remaining false positive).** A call site's pullback computes a tangent for
+   every port the plan marks (all ports whose type `carriesGradient`), and a loop body's activity
+   analysis seeds all of them. A captured float that is only data therefore still looks active
+   inside the body. `D:\Temp\h22-probe\loop_data_capture.cml` shows it: with `<w>` and
+   `f(scale) = loop acc = 0.0, i = 0 ... do (acc + w * float(int(scale)), i + 1)`, `scale` is an
+   ordinary input, but `int(scale)` is refused inside the body (the expected value is 12.0 and
+   the gradient 6.0). The top-level C2 false positive is fixed; separating the loop-body case
+   needs the call site's active captures passed into a body plan that is built before the outer
+   activity is known (or a static reachability from the differentiated ports in the outer
+   graph). This is the remaining limit of the rule; it is not a reason to loosen the top-level
+   check.
