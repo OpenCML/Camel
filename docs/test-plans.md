@@ -192,6 +192,30 @@ combines with `--changed` to run the slow tests of directory targets too; a laye
 its slow cases, so `--tier all` is what reaches the autodiff/onnx comparisons. `--changed --list`
 prints the plan targets the changed files select without running them.
 
+A non-plan file under `test/plans/` (a golden, a fixture) selects the nearest directory that
+holds a plan: editing `feat/parse/golden/ast_hashes.txt` runs `feat/parse`, and editing a golden
+under `feat/modules/tensor/` runs that plan directory. The file has no plan of its own, and this
+is the plan that reads it.
+
+A tracked file that matches no rule used to be invisible in a mixed change: another file's rule
+kept the fallback away, and this file contributed nothing (H182). Two things now make that
+visible. `--changed` prints a `[WARN]` naming every changed file no rule matched. And the
+self-test `test/tools/selftest/run.mjs` walks every tracked file and fails on a class that
+neither a directory rule nor a file rule selects, unless the class is on its allowlist with a
+reason. The allowlist names only the deliberately unselectable layers (perf, GC stress, progen,
+the PyTorch comparisons) and files no plan reads (vendored code, packaging, CI configuration,
+repository metadata). A new kind of file therefore cannot appear without a rule or a reason: add
+the rule, or add the class and its reason to the self-test.
+
+That check is why the file rules now cover the classes H161 could not have known about: the
+`stdlib/<module>.cml` declaration bodies (`feat/modules` plus `feat/compile`) and their computed
+halves in `stdlib/signatures/` (the registry plan, which runs `--verify-ops` and `--verify-doc`),
+the documentation and release-gate scripts (`feat/docs_links`), the debugger race harness
+(`feat/tools/debugger`), exemplars, root Markdown and assets, the public headers under
+`include/` (mirroring `src/`), the rest of `src/` and the test harnesses. `test/perf-baseline.json`
+and `scripts/perf-gate.mjs` are the one class left without a perf plan on purpose: perf is manual
+(H167), so a change there must not select a perf plan.
+
 Keep the file short and honest: map the smallest set of plans that would catch a regression in
 that area, specific rules first (`src/passes/sched/` before `src/passes/`, `modules/tiles/` before
 `modules/`). A rule that selects one plan too many is better than a rule that selects none, but say

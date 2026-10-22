@@ -1,6 +1,11 @@
 {
-    "comment": "Rules for `node scripts/test.js --changed`: the plans a change runs. Both kinds are applied to every changed file. A directory rule (`directoryRules`) looks the path up under test/plans/feat and names the deepest plan directory or plan file that mirrors it (modules/tensor/ops.cpp -> feat/modules/tensor, test/cases/compile/enum/x.cml -> feat/compile/enum.plan.toml). A file rule (`rules`) then adds the plans outside that mirrored tree that the same change can also break (modules/tiles -> test/plans/gpu/tiles*, modules/onnx -> the exporter in feat/trans); the first matching file rule applies to a file, so keep them from specific to general. A rule entry is a path under test/plans, or { \"plan\": path, \"layer\": true }: a layered plan stays a named target but follows `--tier` like a directory, so the slow cases an ordinary change must not run (the PyTorch comparisons of autodiff and onnx) are filtered while the fast cases still run; `\"layer\": true` on the rule is the default for all its entries. A rule with \"self\": true selects the changed plan file itself (editing a plan runs that plan), except for the paths in \"except\": those fall back to the fast layer instead of running perf, GC stress, progen or PyTorch. A change no rule matches (or whose plans cannot be found) falls back to the whole fast layer; `--changed --list` prints the selection without running it. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. Deliberately not selectable: test/plans/perf/**, the GC-stress plans (feat/mm/gc*, gpu/tiles_regions, gpu/tiles_decorator) and progen (feat/opt/progen.plan.toml) -- the project forbids those on a shared host, so a change there runs the fast layer and the report says so instead of wiring them in. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
+    "comment": "Rules for `node scripts/test.js --changed`: the plans a change runs. Both kinds are applied to every changed file. A directory rule (`directoryRules`) looks the path up under test/plans/feat and names the deepest plan directory or plan file that mirrors it (modules/tensor/ops.cpp -> feat/modules/tensor, test/cases/compile/enum/x.cml -> feat/compile/enum.plan.toml). A file rule (`rules`) then adds the plans outside that mirrored tree that the same change can also break (modules/tiles -> test/plans/gpu/tiles*, modules/onnx -> the exporter in feat/trans); the first matching file rule applies to a file, so keep them from specific to general. A rule entry is a path under test/plans, or { \"plan\": path, \"layer\": true }: a layered plan stays a named target but follows `--tier` like a directory, so the slow cases an ordinary change must not run (the PyTorch comparisons of autodiff and onnx) are filtered while the fast cases still run; `\"layer\": true` on the rule is the default for all its entries. A rule with \"self\": true selects the changed plan file itself (editing a plan runs that plan), except for the paths in \"except\": those fall back to the fast layer instead of running perf, GC stress, progen or PyTorch. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. A change no rule matches (or whose plans cannot be found) falls back to the whole fast layer; `--changed --list` prints the selection without running it. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. A tracked file that matches no rule is a hole, not a silent fallback: when a change also touches a file a rule matches, the unruled file contributes nothing. test/tools/selftest/run.mjs therefore fails on such a file unless it is on its allowlist, which names only the classes the project forbids (perf, GC stress, progen, PyTorch) or that no plan reads (vendored code, packaging, CI configuration). Deliberately not selectable: test/plans/perf/**, the GC-stress plans (feat/mm/gc*, gpu/tiles_regions, gpu/tiles_decorator) and progen (feat/opt/progen.plan.toml) -- the project forbids those on a shared host, so a change there runs the fast layer and the report says so instead of wiring them in. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
     "directoryRules": [
+        {
+            "comment": "The cases whose own path starts with feat/ (test/cases/feat/mm, ...): the generic rule below would look for test/plans/feat/feat/mm. This narrower match comes first, so mm cases select feat/mm.",
+            "paths": ["test/cases/feat/"],
+            "plans": "feat/"
+        },
         {
             "comment": "A test case: its directory is looked up under test/plans/feat (compile, linear, modules/tensor, modules/nn.plan.toml, tools/unicode -> tools, ...).",
             "paths": ["test/cases/"],
@@ -20,7 +25,22 @@
     "rules": [
         {
             "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set.",
-            "paths": ["test/tools/run-tests.mjs", "test/tools/selftest/", "test/tools/toml-lite.mjs", "test/tools/gir-dot.mjs", "test/plan-selection.json", "test/runner.mjs", "scripts/test.js", "package.json"],
+            "paths": ["test/tools/run-tests.mjs", "test/tools/selftest/", "test/tools/toml-lite.mjs", "test/tools/gir-dot.mjs", "test/plan-selection.json", "test/runner.mjs", "test/vars.toml", "scripts/test.js", "package.json"],
+            "plans": ["smoke", "feat/consistency/runner.plan.toml"]
+        },
+        {
+            "comment": "The debugger harness (the DAP race harness of H159): the plan whose slow DAP cases it drives. A harness change is not a plan change, but this is the plan that would catch a regression in it.",
+            "paths": ["test/tools/debugger/"],
+            "plans": ["feat/tools/debugger.plan.toml"]
+        },
+        {
+            "comment": "The language-server test client.",
+            "paths": ["test/tools/lsp/"],
+            "plans": ["feat/tools/lsp.plan.toml"]
+        },
+        {
+            "comment": "The other test harnesses (cppexec, parsecheck, jitcov, progen, gcbench, ...): no plan tests a harness directly, and naming the plan that invokes one would mean naming most of feat/. The smallest honest check is smoke plus the runner plan, which is what a harness change can break first. The specific debugger and LSP clients above are narrower because their plans own them.",
+            "paths": ["test/tools/"],
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
         },
         {
@@ -72,6 +92,41 @@
             "comment": "Execution, entry arguments and the standalone bridge.",
             "paths": ["src/execute/"],
             "plans": ["smoke", "feat/linear", "feat/para"]
+        },
+        {
+            "comment": "The rest of src/: the built-in operators and their semantic tables (src/builtin) are the core every module plan runs on, so feat/modules is included; the services, profiler helpers and utilities are reached through the compiler and the runtime. The specific rules above stay narrower.",
+            "paths": ["src/"],
+            "plans": ["smoke", "feat/compile", "feat/trans", "feat/linear", "feat/modules"]
+        },
+        {
+            "comment": "The public headers mirror src/: a header a pass or the runtime includes is as wide as the source file that includes it. These rules mirror the src/ rules above, so a header change selects the same plans as the implementation it declares.",
+            "paths": ["include/camel/parse/"],
+            "plans": ["smoke", "feat/parse", "feat/compile"]
+        },
+        {
+            "comment": "The compiler and graph headers.",
+            "paths": ["include/camel/compile/"],
+            "plans": ["smoke", "feat/compile", "feat/trans"]
+        },
+        {
+            "comment": "The pass API headers: the translation, optimization and scheduler passes.",
+            "paths": ["include/camel/passes/"],
+            "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear"]
+        },
+        {
+            "comment": "The core value/type headers and the runtime headers.",
+            "paths": ["include/camel/core/", "include/camel/runtime/"],
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm"]
+        },
+        {
+            "comment": "The executor and entry-argument headers.",
+            "paths": ["include/camel/execute/"],
+            "plans": ["smoke", "feat/linear", "feat/para"]
+        },
+        {
+            "comment": "Any other public header (init, utils, services, the standalone bridge): the compiler, the translator and the runtime, which is the smallest set every consumer of include/ shares.",
+            "paths": ["include/"],
+            "plans": ["smoke", "feat/compile", "feat/trans", "feat/linear"]
         },
         {
             "comment": "Tiles: the CPU plan, the three GPU plans H154 first ran (all slow, so they are named as plan files and run in full even under --tier fast), the profile plan, and the DDPM plan whose training cases are written against tiles. The GPU plans are what no directory rule could reach before H161.",
@@ -156,9 +211,19 @@
             "plans": ["feat/modules"]
         },
         {
-            "comment": "The standard library's Camel sources and signatures.",
-            "paths": ["stdlib/", "modules/std/"],
-            "plans": ["feat/compile", "feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml", "feat/trans/macro.plan.toml"]
+            "comment": "The computed halves of the declarations (stdlib/signatures/<module>.cml): they are not compiled; stdlib-reference.mjs --verify-ops compares them with the operators the module registers, and --verify-doc regenerates docs/stdlib-reference.md from them. That is exactly feat/modules/stdlib_registry, so this rule is narrower than the declaration-body rule below and comes first.",
+            "paths": ["stdlib/signatures/"],
+            "plans": ["feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
+            "comment": "The declaration bodies (stdlib/<module>.cml): a declaration is compiled (feat/compile), it is imported by every module plan that uses its operators (feat/modules, a directory so --tier fast keeps the ProGen/GC/PyTorch entries out), and --verify-ops/--verify-doc check it against the registry. stdlib/rules.cml is matched by the optimizer rule above, which is narrower.",
+            "paths": ["stdlib/"],
+            "plans": ["feat/modules", "feat/compile", "feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
+            "comment": "The std facade over the modules: the module plan that exercises it, the compile checks of its imports, and the registry that lists its operators.",
+            "paths": ["modules/std/"],
+            "plans": ["feat/compile", "feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
             "comment": "The language server, debugger, formatter and command-line tools.",
@@ -166,14 +231,69 @@
             "plans": ["feat/tools", "feat/format"]
         },
         {
+            "comment": "The documentation guards: docs_links runs all four (links, retired names, snippets, counts).",
+            "paths": ["scripts/check-doc-links.mjs", "scripts/check-doc-snippets.mjs", "scripts/check-retired-names.mjs", "scripts/check-doc-counts.mjs"],
+            "plans": ["feat/docs_links.plan.toml"]
+        },
+        {
+            "comment": "The release gate: docs.counts_current reads its --dry-run output (the slow-plan, static-check and skipped counts), so a change to the gate is a documentation-count change before it is anything else.",
+            "paths": ["scripts/release-gate.mjs"],
+            "plans": ["feat/docs_links.plan.toml"]
+        },
+        {
+            "comment": "The stdlib reference generator and the migration guard: stdlib_registry runs --verify-ops, --verify-doc and stdlib-declarations --check. The computed halves it reads are checked by the same plan.",
+            "paths": ["scripts/stdlib-reference.mjs", "scripts/stdlib-declarations.mjs"],
+            "plans": ["feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
+            "comment": "The grammar generator/checker: parse.frontend's grammar.reference_in_step keeps the generated reference, the parser productions and the token/node tables in step.",
+            "paths": ["scripts/check-grammar.mjs"],
+            "plans": ["feat/parse/frontend.plan.toml"]
+        },
+        {
+            "comment": "The standard-include check: portability.std_includes runs it over src, include, modules and tools.",
+            "paths": ["scripts/check-std-includes.mjs"],
+            "plans": ["feat/tools/portability.plan.toml"]
+        },
+        {
+            "comment": "The diagnostics catalog: compile.diag_catalog runs --check, --verify-doc and --coverage.",
+            "paths": ["scripts/diagnostics-catalog.mjs"],
+            "plans": ["feat/compile/diag_catalog.plan.toml"]
+        },
+        {
+            "comment": "The other build/dev scripts (build.js, format.js, collect-out.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
+            "paths": ["scripts/"],
+            "plans": ["smoke"]
+        },
+        {
             "comment": "Example programs and their recorded output.",
             "paths": ["examples/"],
             "plans": ["feat/examples"]
         },
         {
-            "comment": "Documentation checks.",
-            "paths": ["docs/", "AGENTS.md", "agents/"],
+            "comment": "The exemplars and their checker: feat/exemplars re-runs every exemplar and checks its recorded output.",
+            "paths": ["exemplars/"],
+            "plans": ["feat/exemplars.plan.toml"]
+        },
+        {
+            "comment": "The generated stdlib reference: stdlib_registry.registry.reference_is_generated re-runs --verify-doc, so a hand edit fails there; docs_links is the ordinary documentation check.",
+            "paths": ["docs/stdlib-reference.md"],
+            "plans": ["feat/modules/stdlib_registry.plan.toml", "feat/docs_links.plan.toml"]
+        },
+        {
+            "comment": "The generated diagnostics catalog: compile.diag_catalog.catalog.doc_is_generated re-runs --verify-doc.",
+            "paths": ["docs/diagnostics.md"],
+            "plans": ["feat/compile/diag_catalog.plan.toml", "feat/docs_links.plan.toml"]
+        },
+        {
+            "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct); agents/ is the development guide.",
+            "paths": ["docs/", "AGENTS.md", "agents/", "README.md", "CONTRIBUTING.md", "ROADMAP.md", "CODE_OF_CONDUCT.md", "SECURITY.md"],
             "plans": ["feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
+        },
+        {
+            "comment": "Images the documents link to: docs_links checks that a relative link's target file exists, so adding or removing an asset is a documentation-link change. Images have no plan of their own.",
+            "paths": ["assets/", "logo.png"],
+            "plans": ["feat/docs_links.plan.toml"]
         },
         {
             "comment": "The editor syntax files and their tests.",
@@ -186,6 +306,11 @@
             "plans": ["smoke", "feat/linear", "feat/para", "feat/modules"]
         },
         {
+            "comment": "The smoke cases: test/plans/smoke is outside the feat/ tree, so no directory rule can mirror test/cases/smoke.",
+            "paths": ["test/cases/smoke/"],
+            "plans": ["smoke"]
+        },
+        {
             "comment": "Case directories with no plan directory of their own: their cases are exercised by the module, tool and translation plans.",
             "paths": ["test/cases/definitions/", "test/cases/facts/", "test/cases/macro/", "test/cases/resources/"],
             "plans": ["feat/modules", "feat/tools", "feat/trans"]
@@ -196,7 +321,7 @@
             "plans": ["feat/linear/loops.plan.toml"]
         },
         {
-            "comment": "A plan file selects itself: editing the tests of one plan runs that plan. The except list keeps the plans the project forbids from an ordinary change out of that: a perf, GC-stress or progen plan edit falls back to the fast layer (name the plan file to run it deliberately).",
+            "comment": "A plan file selects itself: editing the tests of one plan runs that plan. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. The except list keeps the plans the project forbids from an ordinary change out of that: a perf, GC-stress or progen plan edit falls back to the fast layer (name the plan file to run it deliberately).",
             "paths": ["test/plans/"],
             "self": true,
             "except": ["test/plans/perf/", "test/plans/feat/mm/gc.plan.toml", "test/plans/feat/mm/gc_collections.plan.toml", "test/plans/feat/mm/gc_elder_exhaustion.plan.toml", "test/plans/feat/opt/progen.plan.toml", "test/plans/gpu/tiles_regions.plan.toml", "test/plans/gpu/tiles_decorator.plan.toml"]

@@ -25,10 +25,13 @@
 //   * the `--changed` mapping: the directory rule and the file rules together (the mirrored
 //     plan plus the plans outside that tree that catch the same change), the layered plans that
 //     follow `--tier`, the forbidden perf/GC-stress/progen boundary, the base branch and its
-//     CAMEL_TEST_BASE override.
+//     CAMEL_TEST_BASE override;
+//   * every tracked file is selected by a rule or names an allowed rule-less class: a new kind
+//     of file (a new extension under a new path) cannot be dropped from `--changed` silently
+//     (H182).
 import fs from 'fs'
 import path from 'path'
-import { spawnSync } from 'child_process'
+import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { changedBase, plansForChanges } from '../../runner.mjs'
 
@@ -545,6 +548,101 @@ for (const rule of selectionDoc.rules || []) {
         }
     }
 }
+// --- a rule-less file class cannot appear silently (H182) -------------------------------------
+// `--changed` applies the rules per file. A file no rule matches is dropped from the union, and
+// when another file in the same change does match, there is no fallback to notice it: the class
+// runs nothing. That is how stdlib/signatures, the doc guards, the golden files and the debugger
+// harness were being missed. This check walks every tracked file and fails on one that neither a
+// directory rule nor a file rule selects, unless it names a class the project deliberately does
+// not select. The allowlist is only for the forbidden layers (perf, GC stress, progen, PyTorch)
+// and for files no plan can read (vendored code, packaging, CI configuration).
+const RULELESS_ALLOWED = [
+    {
+        match: /^benchmarks\//,
+        why: 'the benchmarks and their PyTorch baselines are the manual perf layer (H167); a change here must not select a perf plan',
+    },
+    {
+        match: /^showcase\//,
+        why: 'the showcase programs are the manual perf layer (H167)',
+    },
+    {
+        match: /^pypi\//,
+        why: 'the Python packaging sources; no test plan reads them',
+    },
+    {
+        match: /^third_party\//,
+        why: 'vendored third-party code; no plan owns it',
+    },
+    {
+        match: /^(\.github|\.vscode|\.husky)\//,
+        why: 'CI and editor configuration; no test plan reads it',
+    },
+    {
+        match: /^(LICENSE|ABOUT|ZEN|changes\.log|conanfile\.txt|package-lock\.json|hello\.cml|export_matrix\.(csv|md))$/,
+        why: 'repository metadata and generated release artifacts; no plan reads them',
+    },
+    {
+        match: /^\.(clang-format|gitattributes|gitignore|prettierrc)$/,
+        why: 'repository-wide formatting/ignore configuration; no plan reads it',
+    },
+    {
+        match: /^test\/\.gitignore$|^test\/README\.md$|^test\/plans\/\.gitkeep$/,
+        why: 'test scaffolding and its own documentation; no plan reads them',
+    },
+    {
+        match: /^test\/perf-baseline\.json$/,
+        why: 'the manual perf baseline (H167); a change here must not select a perf plan',
+    },
+    {
+        match: /^test\/cases\/perf\//,
+        why: 'the perf cases are run by perf plans only, and perf is manual (H167)',
+    },
+    {
+        match: /^test\/plans\/perf\//,
+        why: 'the perf plans are deliberately not selectable (H161 section 7)',
+    },
+    {
+        match: /^test\/plans\/feat\/mm\/gc(\.plan\.toml|_collections\.plan\.toml|_elder_exhaustion\.plan\.toml)$/,
+        why: 'the GC-stress plans are deliberately not selectable',
+    },
+    {
+        match: /^test\/plans\/feat\/opt\/progen\.plan\.toml$/,
+        why: 'progen is deliberately not selectable',
+    },
+    {
+        match: /^test\/plans\/gpu\/tiles_(regions|decorator)\.plan\.toml$/,
+        why: 'these GPU plans are GC stress and deliberately not selectable',
+    },
+]
+const trackedFiles = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8' })
+    .split('\0')
+    .filter(Boolean)
+const uncoveredFiles = trackedFiles.filter(
+    (file) => plansForChanges([file]) === null && !RULELESS_ALLOWED.some((entry) => entry.match.test(file))
+)
+if (uncoveredFiles.length > 0) {
+    const classes = new Map()
+    for (const file of uncoveredFiles) {
+        const segments = file.split('/')
+        const top = segments.length > 1 ? `${segments[0]}/` : '(root) '
+        const extension = path.extname(file) || '(none)'
+        const key = `${top}*${extension}`
+        if (!classes.has(key)) classes.set(key, [])
+        classes.get(key).push(file)
+    }
+    const named = [...classes.entries()]
+        .map(([key, files]) => `${key} (${files[0]}${files.length > 1 ? ` and ${files.length - 1} more` : ''})`)
+        .join('; ')
+    problems.push(
+        `plan-selection: ${uncoveredFiles.length} tracked file(s) match no rule and are not an allowed rule-less class: ${named}`
+    )
+}
+for (const entry of RULELESS_ALLOWED) {
+    if (!trackedFiles.some((file) => entry.match.test(file))) {
+        problems.push(`plan-selection: allowlist entry matches no tracked file (${entry.why})`)
+    }
+}
+
 // The base branch: origin/develop by default, overridden by CAMEL_TEST_BASE.
 const savedBase = process.env.CAMEL_TEST_BASE
 delete process.env.CAMEL_TEST_BASE
