@@ -35,7 +35,7 @@ Not in this reference: the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
-| [built-in](#built-in-functions) | none | C++ | 51 |
+| [built-in](#built-in-functions) | none | C++ | 52 |
 | [str](#str) | `import { ... } from str` | C++ | 14 |
 | [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ | 7 |
@@ -300,6 +300,20 @@ one line end.
 
 - With effects: writes to standard output.
 - Example: `println('a', 1)` gives `a 1`
+
+#### `eprintln`
+
+```camel
+eprintln: (x: T, ...rest: U...) => T
+```
+
+Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
+the first one (so that the write can be part of the data flow). The other arguments may each
+have a type of their own. With a format, eprintln<fmt>(...), writes the format with the
+arguments put in and one line end.
+
+- With effects: writes to standard error.
+- Example: `eprintln('a', 1)` gives `a 1`
 
 #### `input`
 
@@ -3571,7 +3585,7 @@ its error is passed on unchanged); read a part whose shape is known with decode_
 its JSON text. In the examples below, `j` is a Json decoded so.
 
 - Pure.
-- Failure: error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 by default, set by `CAMEL_JSON_MAX_DEPTH`; the message gives the line and column of the bracket that goes too deep).
+- Failure: error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 levels; the message gives the line and column of the bracket that goes too deep).
 - Example: `decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1` gives `80`
 
 #### `kind`

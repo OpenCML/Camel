@@ -295,10 +295,11 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/inv_i", __builtin__inv__},
         {"op/inv_l", __builtin__inv__},
 
-        // IO (built-in input/print/println)
+        // IO (built-in input/print/println/eprintln)
         {"io/input", __op_input__},
         {"io/print", __op_print__},
         {"io/println", __op_println__},
+        {"io/eprintln", __op_eprintln__},
 
         // string
         {"str/format", __format__},

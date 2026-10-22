@@ -1519,7 +1519,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()),
                 },
             }),
-        // ======= IO (built-in input/print/println) ======
+        // ======= IO (built-in input/print/println/eprintln) ======
         OperatorGroup::create(
             "input",
             {
@@ -1561,6 +1561,28 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             {
                 {
                     ":io/println",
+                    DynamicFuncTypeResolver::create(
+                        {{-1, {}}, {-1, {}}},
+                        "<fmt?: string> (x: T, ...rest: U...) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (with.size() > 0 && with[0]->code() != TypeCode::String) {
+                                return nullopt;
+                            }
+                            if (norm.size() < 1) {
+                                return Type::Void();
+                            }
+                            return norm[0];
+                        }),
+                },
+            }),
+        // `println` on the standard error stream, with the same declaration shape (the author's
+        // ruling on H134 question 2: it is in the prelude, so no import).
+        OperatorGroup::create(
+            "eprintln",
+            {
+                {
+                    ":io/eprintln",
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {-1, {}}},
                         "<fmt?: string> (x: T, ...rest: U...) => T",

@@ -9,5 +9,5 @@ null
 5
 hi
 JsonTooDeep <json::decode>
-the JSON document nests deeper than the limit of 10000 levels (at line 1, column 10001); decoding a deeper document would exhaust the native stack: decode a shallower document or set CAMEL_JSON_MAX_DEPTH to a larger limit
+the JSON document nests deeper than the limit of 10000 levels (at line 1, column 10001); decoding a deeper document would exhaust the native stack: decode a shallower document
 JsonTooDeep <json::decode_as>

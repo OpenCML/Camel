@@ -57,6 +57,15 @@ void writeToStdout(const std::string &text, bool flush) {
     }
 }
 
+// `eprintln` writes the standard error stream, which is its own resource (`stderr`), so it has
+// its own lock: a line still reaches the stream in one piece under a parallel scheduler.
+void writeToStderr(const std::string &text) {
+    static std::mutex mutex;
+    std::lock_guard lock(mutex);
+    std::cerr << text;
+    std::cerr.flush();
+}
+
 /// What `print` and `println` write for their arguments, without a line end: the arguments
 /// separated by one space, or, with a format (`print<fmt>(...)`), the format with the
 /// arguments put in. Returns the first argument (an effect function returns a value, design
@@ -142,6 +151,18 @@ slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const slot_t result = writeArguments(with, norm, out, formatted);
     out << '\n';
     writeToStdout(out.str(), true);
+    return result;
+}
+
+// `eprintln` is `println` on the standard error stream: same text, one line end, and it gives
+// back its first argument (design principles 3.1). It is in the prelude (the author's ruling on
+// H134 question 2), so a program writes it without an import.
+slot_t __op_eprintln__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    std::ostringstream out;
+    bool formatted      = false;
+    const slot_t result = writeArguments(with, norm, out, formatted);
+    out << '\n';
+    writeToStderr(out.str());
     return result;
 }
 

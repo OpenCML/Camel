@@ -45,7 +45,7 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 | 其中因语言机制写不出（阻塞） | **14** | 本页 §2.4 的口径，逐条见表 |
 | 公开名（26 个声明模块） | **297** | `inspect --ops`：202 个声明名 + 95 个计算名 |
 | 注册重载（26 个声明模块） | **440** | `inspect --ops`，337 条由声明回答、103 条由 C++ 计算 |
-| 注册重载（参考页全部模块，含 `<builtin>`） | **543** | `--verify-ops`；`<builtin>` 占 96 条 |
+| 注册重载（参考页全部模块，含 `<builtin>`） | **544** | `--verify-ops`；`<builtin>` 占 97 条 |
 | `stdlib/signatures/` 的文件 | **10** | 8 个是已迁移模块的计算签名，2 个属于尚未迁移的模块 |
 
 这 26 个模块的 297 个公开名 = 202 个声明名 + 95 个计算名。8 个模块有计算签名、18 个没有；
@@ -135,7 +135,7 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
   「没有执行器」。由实参算结果、但写法本身合法的名字算**计算**，不算阻塞；这是 H157 §0 与
   47 §4.3 的分法。
 - **重载** = `inspect --ops` 的 `OPERATOR` 行去掉 `::` 别名与 `__` 组后的条数。
-  543 = 440（26 个声明模块）+ 7（只有 `ckpt` 仍是未迁移的非声明模块）+ 96（`<builtin>`）。
+  544 = 440（26 个声明模块）+ 7（只有 `ckpt` 仍是未迁移的非声明模块）+ 97（`<builtin>`）。
 - **签名文件** = `stdlib/signatures/*.cml`。其中 8 个是已迁移模块的 `computed:` 文件，2 个属于
   尚未迁移的模块（`ckpt`、`globals`）。
 
@@ -207,7 +207,7 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 | Q-V：变参 | `python:py_call`、`py_print`、`py_println`。`..ts` 已设计、未实现；三者的结果类型还各自取自实参，`rewrite:__analysis` 同理 | 作者 / 语言（47 §3.2） | handover note ⟨cdf4d60⟩ (H157) §6.2；[47](47_declaration_syntax.md) §3.2 |
 | Q-M：模块类型作为类型实参 | `python:py_wrap`、`py_unwrap`；`PyObject` 没有覆写 `typeArguments()` | 作者（H148 Q-M） | handover note ⟨cdf4d60⟩ (H157) §6.2；[47](47_declaration_syntax.md) §3.3 |
 | `ckpt` 的 5 个 intrinsic：`tree_map`、`tree_reduce`、`tree_unzip`、`tree_leaves`、`tree_paths` | 没有执行器：建图时按树形状展开，声明在加载时被 `NativeDeclarationNotLoaded` 拒绝；4 个的结果类型也写不出 | H51 第 2 项（用 Camel 重写 5 个 `tree_*` 并删掉核心里的硬编码展开）；不是声明语法 | handover note ⟨3597306⟩ (H140) §3.1；handover note ⟨2f3c6a8⟩ (H174) §2.1 |
-| `globals`：50 个名字、93 条声明 | 语言全局，`BuiltinModule("")`、不可导入；不是模块，没有声明宿主。93 条声明在 `stdlib/signatures/globals.cml`（文件里 51 个名字，多出的限定名 `std::mem::blocks` 不是公开名），96 条注册重载在 `inspect --ops` 的 `<builtin>` 行：两个数计的不是同一件事，前者读文件、后者读注册表 | 作者（H141 的调查，未裁定） | `stdlib/signatures/globals.cml`；`inspect --ops`；handover note ⟨9a5ec0a⟩ (H141) |
+| `globals`：51 个名字、94 条声明 | 语言全局，`BuiltinModule("")`、不可导入；不是模块，没有声明宿主。94 条声明在 `stdlib/signatures/globals.cml`（文件里 52 个名字，多出的限定名 `std::mem::blocks` 不是公开名），97 条注册重载在 `inspect --ops` 的 `<builtin>` 行：两个数计的不是同一件事，前者读文件、后者读注册表 | 作者（H141 的调查，未裁定） | `stdlib/signatures/globals.cml`；`inspect --ops`；handover note ⟨9a5ec0a⟩ (H141) |
 
 ### 4.2 已定，不再算迁移工作
 
@@ -255,9 +255,9 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 
 | 命令 | 今天打印 |
 |---|---|
-| `node scripts/stdlib-declarations.mjs --check` | `26 declaration module(s), 95 computed signature(s) ... 0 problem(s)`，并确认 `543 registered operator overloads` |
+| `node scripts/stdlib-declarations.mjs --check` | `26 declaration module(s), 95 computed signature(s) ... 0 problem(s)`，并确认 `544 registered operator overloads` |
 | `node scripts/stdlib-declarations.mjs --check-ledger` | `the ledgers agree with the tree: ...`，本页与 [49](49_computed_signatures.md) 的每个数字都与树一致 |
-| `node scripts/stdlib-reference.mjs --verify-ops` | `the declarations agree with the 543 registered operator overloads` |
-| `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | `OPERATOR` 行 813 条；去掉 `::` 别名与 `__` 组后 354 个公开名（其中 `<builtin>` 50 个）/ 543 条公开重载（其中 `<builtin>` 96 条） |
+| `node scripts/stdlib-reference.mjs --verify-ops` | `the declarations agree with the 544 registered operator overloads` |
+| `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | `OPERATOR` 行 814 条；去掉 `::` 别名与 `__` 组后 355 个公开名（其中 `<builtin>` 51 个）/ 544 条公开重载（其中 `<builtin>` 97 条） |
 | `node scripts/check-doc-counts.mjs` | `no stale count in ...` |
 | `node scripts/check-doc-links.mjs --default-roots` | `no broken links in ...` |

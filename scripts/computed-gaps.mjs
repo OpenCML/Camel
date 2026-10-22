@@ -181,6 +181,7 @@ export const LEDGER = [
             ['error', ':op/error_new', 'permanently-reference-only', 'no-operator-host'],
             ['print', ':io/print', 'permanently-reference-only', 'no-operator-host'],
             ['println', ':io/println', 'permanently-reference-only', 'no-operator-host'],
+            ['eprintln', ':io/eprintln', 'permanently-reference-only', 'no-operator-host'],
             ['input', ':io/input', 'permanently-reference-only', 'no-operator-host'],
             ['sleep', 'process:sleep', 'permanently-reference-only', 'no-operator-host'],
             ['exit', 'process:exit', 'permanently-reference-only', 'no-operator-host'],
