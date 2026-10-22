@@ -33,6 +33,7 @@ import os from 'os'
 import path from 'path'
 import url from 'url'
 import { spawnSync } from 'child_process'
+import { applyNormalizers } from '../test/tools/normalizers.mjs'
 
 const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 const REPO_ROOT = path.dirname(HERE)
@@ -44,15 +45,16 @@ const { readOnnxModel } = await import(
 const CAMEL = path.join(REPO_ROOT, 'out', 'latest', 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
 
 function normalize(text) {
-    const root = REPO_ROOT.replace(/\\/g, '/')
-    return text
-        .replace(/\x1b\[[0-9;]*m/g, '')
-        .replace(/\r\n/g, '\n')
-        .replace(/\\/g, '/')
-        .replaceAll(root, '<ROOT>')
-        .split('\n')
-        .map((line) => line.replace(/\s+$/, ''))
-        .join('\n')
+    // The same normalizers the plan runner applies, from the one definition in test/tools, so an
+    // exemplar golden cannot pin an id or a path that a plan snapshot would have normalized. The
+    // backslash folding is this checker's own: a program may print a path in any separator style.
+    return applyNormalizers(text.replace(/\\/g, '/'), [
+        'strip_ansi',
+        'normalize_newlines',
+        'trim_trailing_space',
+        'normalize_paths',
+        'normalize_origins',
+    ])
 }
 
 /** The first diagnostic of a run: {name, line, column}. */
@@ -92,7 +94,8 @@ function runOne(dir, run, update, log) {
         } else if (!fs.existsSync(file)) {
             failures.push(`missing ${run.stdout} (run with --update)`)
         } else {
-            const expected = normalize(fs.readFileSync(file, 'utf8'))
+            const raw = fs.readFileSync(file, 'utf8')
+            const expected = normalize(raw)
             if (expected !== stdout) {
                 // The first line that differs, so that a run on another platform shows what it printed.
                 const want = expected.split('\n'), got = stdout.split('\n')
@@ -102,6 +105,20 @@ function runOne(dir, run, update, log) {
                     `stdout differs from ${run.stdout} at line ${line + 1}:\n` +
                         `       expected: ${JSON.stringify(want[line] ?? '<end>')}\n` +
                         `       got:      ${JSON.stringify(got[line] ?? '<end>')}`
+                )
+            }
+            // An origin id is a compiler-internal identifier, renumbered whenever another file is
+            // parsed first (H139): the comparison above normalizes it, but a golden that still
+            // records the number advertises a pin that will break the next time the tree shifts.
+            // Re-record with --update; it writes origin=<ORIGIN>, which still asserts a node has
+            // one. This is the guard that makes the class of failure visible, not just this file.
+            const pinned = raw.match(/\borigin=[0-9]+/g)
+            if (pinned) {
+                failures.push(
+                    `${run.stdout} records ${pinned.length} raw origin id(s) (${pinned[0]}): ` +
+                        `an origin id is a compiler-internal identifier that renumbers when any ` +
+                        `other file is parsed first, so the golden must not pin it; re-record ` +
+                        `with --update, which writes origin=<ORIGIN> (docs/test-plans.md)`
                 )
             }
         }

@@ -371,6 +371,12 @@ path nothing); it runs with the default test set (`test/plans/feat/consistency/r
   comparison already ignores them.
 - `normalize_duration_seconds`
 
+`test/tools/normalizers.mjs` holds the one definition of these; the plan runner and
+`exemplars/check.mjs` (whose goldens the plan only launches) both call it, so a separate
+comparison path cannot keep comparing less than a plan snapshot does. `exemplars/check.mjs`
+additionally refuses a golden that still records a raw origin id, so the next such pin fails
+where it is recorded instead of on another machine.
+
 Normalizers affect:
 
 - inline and path-based verification payloads under `input.normalized.*`
