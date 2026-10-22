@@ -131,14 +131,22 @@ std::string paramNameOf(const FunctionType *func, size_t argIndex, const char *p
                                             : prefix + std::to_string(i);
 }
 
-/// A factory holding `func` with the variables replaced; `changed` tells whether any was.
-FunctionTypeFactory
-rebuildFunctionType(FunctionType *func, const type_bindings_t &bindings, bool &changed) {
+/// A factory holding `func` with the variables (and, when `extents` is not null, the named
+/// extents) replaced; `changed` tells whether anything was. A `constas` parameter is part of the
+/// declaration's identity, not a runtime argument: it is dropped when `dropConstas` says the
+/// function itself is being instantiated (the call binds its value), and kept otherwise, so a
+/// function type written inside a substituted type keeps its own value parameter.
+FunctionTypeFactory rebuildFunctionType(
+    FunctionType *func, const type_bindings_t &bindings, const ExtentValues *extents,
+    bool dropConstas, bool &changed) {
     FunctionTypeFactory factory;
     factory.setModifiers(func->modifiers());
     factory.setHasCompileInfo(func->hasArgNames());
     const auto replaced = [&](Type *type) {
         Type *result = substituteTypeVars(type, bindings);
+        if (extents != nullptr) {
+            result = substituteExtentValues(result, *extents);
+        }
         changed |= result != type;
         return result;
     };
@@ -153,6 +161,15 @@ rebuildFunctionType(FunctionType *func, const type_bindings_t &bindings, bool &c
             paramNameOf(func, func->withTypesCount() + i, "__n", i);
         if (func->hasRest() && i + 1 == func->normTypesCount()) {
             factory.addRestArg(name);
+            continue;
+        }
+        if (func->normIsConstasAt(i)) {
+            if (dropConstas) {
+                // The value is known at the call: the instance has no such parameter.
+                changed = true;
+                continue;
+            }
+            factory.addConstasArg(name, replaced(func->normTypeAt(i)));
             continue;
         }
         factory.addNormArg(name, replaced(func->normTypeAt(i)), func->normIsVarAt(i));
@@ -327,7 +344,7 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
     case TypeCode::Function: {
         bool changed = false;
         FunctionTypeFactory factory =
-            rebuildFunctionType(static_cast<FunctionType *>(type), bindings, changed);
+            rebuildFunctionType(static_cast<FunctionType *>(type), bindings, nullptr, false, changed);
         return changed ? factory.build() : type;
     }
     default:
@@ -351,9 +368,80 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
     return type;
 }
 
-OpenFunctionType *instantiateFunctionType(FunctionType *type, const type_bindings_t &bindings) {
+OpenFunctionType *instantiateFunctionType(
+    FunctionType *type, const type_bindings_t &bindings, const ExtentValues *extents) {
     bool changed = false;
-    return rebuildFunctionType(type, bindings, changed).buildOpen();
+    return rebuildFunctionType(type, bindings, extents, extents != nullptr, changed).buildOpen();
+}
+
+Type *substituteExtentValues(Type *type, const ExtentValues &values) {
+    if (type == nullptr || values.empty()) {
+        return type;
+    }
+    switch (type->code()) {
+    case TypeCode::Array: {
+        auto *array = static_cast<ArrayType *>(type);
+        Type *elem  = substituteExtentValues(array->elemType(), values);
+        return elem == array->elemType() ? type : ArrayType::create(elem);
+    }
+    case TypeCode::Tuple: {
+        auto *tuple  = static_cast<TupleType *>(type);
+        bool changed = false;
+        std::vector<Type *> types;
+        types.reserve(tuple->size());
+        for (Type *elem : tuple->types()) {
+            types.push_back(substituteExtentValues(elem, values));
+            changed |= types.back() != elem;
+        }
+        if (!changed) {
+            return type;
+        }
+        if (tuple->isNullable()) {
+            return TupleType::nullable(types.front());
+        }
+        if (tuple->isFallible()) {
+            return TupleType::fallible(types.front());
+        }
+        return tuple->isCell() ? TupleType::cell(types.front()) : TupleType::create(types);
+    }
+    case TypeCode::Struct: {
+        auto *record = static_cast<StructType *>(type);
+        bool changed = false;
+        if (record->named()) {
+            std::vector<Type *> args;
+            args.reserve(record->typeArgCount());
+            for (Type *arg : record->typeArgs()) {
+                args.push_back(substituteExtentValues(arg, values));
+                changed |= args.back() != arg;
+            }
+            return changed ? StructType::get(record->decl(), args) : type;
+        }
+        StructTypeFactory factory;
+        for (size_t i = 0; i < record->size(); ++i) {
+            Type *field = substituteExtentValues(record->typeAt(i), values);
+            changed |= field != record->typeAt(i);
+            factory.add(std::string(record->fieldName(i)), field);
+        }
+        return changed ? factory.build() : type;
+    }
+    case TypeCode::Function: {
+        bool changed = false;
+        FunctionTypeFactory factory =
+            rebuildFunctionType(static_cast<FunctionType *>(type), {}, &values, false, changed);
+        return changed ? factory.build() : type;
+    }
+    default:
+        break;
+    }
+    if (type->isOtherType()) {
+        // A module type decides what its named extents mean (`Tensor` keeps them as a shape).
+        // A type that knows nothing of them leaves the type alone.
+        if (OtherType *replaced = static_cast<OtherType *>(type)->withExtentValues(values);
+            replaced != nullptr && replaced != type) {
+            return replaced;
+        }
+    }
+    return type;
 }
 
 bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {

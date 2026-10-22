@@ -217,6 +217,9 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
         if (normCount > 0) {
             parts.push_back(literal((fn->hasRest() ? "X" : "") + std::string("N") +
                                     std::to_string(normCount)));
+            if (fn->hasConstas()) {
+                parts.push_back(literal("C" + std::to_string(fn->constasIndex())));
+            }
             for (size_t i = 0; i < normCount; ++i) {
                 if (fn->normIsVarAt(i)) {
                     parts.push_back(literal("V"));
@@ -261,6 +264,9 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
                 parts.push_back(literal(std::string(fn->argNameAt(withCount + i))));
             }
             continue;
+        }
+        if (fn->normIsConstasAt(i)) {
+            parts.push_back(literal("constas "));
         }
         if (fn->normIsVarAt(i)) {
             parts.push_back(literal("var "));
@@ -489,7 +495,9 @@ bool sameType(const Type *a, const Type *b) {
             const auto *rhs = static_cast<const FunctionType *>(right);
             if (lhs->withTypesCount() != rhs->withTypesCount() ||
                 lhs->normTypesCount() != rhs->normTypesCount() ||
-                lhs->hasRest() != rhs->hasRest()) {
+                lhs->hasRest() != rhs->hasRest() ||
+                lhs->hasConstas() != rhs->hasConstas() ||
+                (lhs->hasConstas() && lhs->constasIndex() != rhs->constasIndex())) {
                 return false;
             }
             for (size_t i = 0; i < lhs->withTypesCount(); ++i) {

@@ -1,0 +1,11 @@
+module constas_no_type
+
+// A `constas` parameter writes its type; only `int` is supported.
+func bad(constas n): int {
+    return n
+}
+
+func main(): int sync {
+    println(bad(1))
+    return 0
+}

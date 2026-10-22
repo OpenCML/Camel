@@ -65,6 +65,9 @@ using param_t           = std::pair<Type *, bool>; // bool indicates whether the
 using param_init_list_t = std::initializer_list<param_t>;
 using param_vec_t       = std::vector<param_t>;
 
+/// No parameter is a `constas` parameter (design principles 5.4).
+inline constexpr uint16_t kNoConstas = 0xFFFF;
+
 class FunctionType;
 class OpenFunctionType;
 
@@ -98,6 +101,18 @@ class FunctionTypeFactory {
         argNames_.push_back(ident);
     }
 
+    /// A `constas n: T` parameter: it records a compile-time value that is part of the
+    /// declaration's identity, not a runtime argument (design principles 5.4). Its type stays in
+    /// the signature so that the call site is checked against it, and `constasIndex` tells it
+    /// apart from an ordinary parameter of the same type.
+    void addConstasArg(const std::string &ident, Type *type) {
+        constasIndex_ = static_cast<uint16_t>(withTypes_.size() + normTypes_.size());
+        normTypes_.emplace_back(type, false);
+        argNames_.push_back(ident);
+    }
+
+    bool hasConstas() const { return constasIndex_ != kNoConstas; }
+
     /// Whether the signature records the parameter names given to addWithArg/addNormArg (the
     /// default). Without them it prints the parameter types only.
     void setHasCompileInfo(bool has) { hasNames_ = has; }
@@ -115,6 +130,7 @@ class FunctionTypeFactory {
     bool hasNames_  = true;
     bool hasRest_   = false;
     std::vector<std::string> argNames_;
+    uint16_t constasIndex_ = kNoConstas;
 };
 
 class FunctionType : public CompositeType {
@@ -177,6 +193,20 @@ class FunctionType : public CompositeType {
     /// signature is `void`; the tuple of the arguments it receives is made at the call.
     bool hasRest() const { return hasRest_; }
 
+    /// Whether the signature has a `constas n: T` parameter, and which one it is (an index over
+    /// all parameters, `with` parameters first).
+    bool hasConstas() const { return constasIndex_ != kNoConstas; }
+    size_t constasIndex() const {
+        ASSERT(hasConstas(), "The signature has no constas parameter");
+        return constasIndex_;
+    }
+    /// The ordinary index of the `constas` parameter (`normTypeAt`/`argNameAt`).
+    size_t constasNormIndex() const { return constasIndex_ - withCount_; }
+    bool normIsConstasAt(size_t index) const {
+        ASSERT(index < normCount_, "Index out of range");
+        return withCount_ + index == constasIndex_;
+    }
+
     std::span<Type *const> withTypesSpan() const { return {types(), withCount_}; }
     std::span<Type *const> normTypesSpan() const { return {types() + withCount_, normCount_}; }
     std::span<const TypeCode> withTypeCodesSpan() const { return {codes(), withCount_}; }
@@ -215,6 +245,7 @@ class FunctionType : public CompositeType {
         Type *exitType   = nullptr;
         bool hasNames    = false;
         bool hasRest     = false;
+        uint16_t constasIndex = kNoConstas;
         std::vector<SymId> names;
     };
 
@@ -258,6 +289,8 @@ class FunctionType : public CompositeType {
     uint16_t normCount_ = 0;
     bool hasNames_      = false;
     bool hasRest_       = false;
+    /// The index of the `constas` parameter, or kNoConstas.
+    uint16_t constasIndex_ = kNoConstas;
     bool open_          = false;
     // Followed in memory by the parameter arrays (see the file comment).
 };

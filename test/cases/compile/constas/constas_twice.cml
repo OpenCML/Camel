@@ -1,0 +1,11 @@
+module constas_twice
+
+// A declaration takes at most one `constas` value parameter.
+func bad(constas n: int, constas m: int): int {
+    return n + m
+}
+
+func main(): int sync {
+    println(bad(1, 2))
+    return 0
+}
