@@ -155,7 +155,7 @@ recorded, and a module with an error is never run.
 A fault is raised with `throwRuntimeFault(code, args...)` and reported at the node that was
 executing. The catch-all `RuntimeDiag::RuntimeError` says only "An error has occurred: ...";
 the built-in operators and the modules `fs`, `json`, `re`, `time`, `math` (and single sites of
-`process`, `random`, `hash`, `algo`, `statistics`) now raise codes of their own with the values
+`process`, `random`, `hash`, `array`, `statistics`) now raise codes of their own with the values
 involved (`InvalidNumberText`, `FormatFailed`, `OperandTypeUnsupported`, `FieldNotFound`,
 `InvalidArgument`, `FileOpenFailed`, `FileSystemError`, `JsonEncodeUnsupported`, `RegexInvalid`,
 `TimeFormatFailed`, `OperatorNotImplemented`).

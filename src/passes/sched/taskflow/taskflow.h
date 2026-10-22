@@ -490,7 +490,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     //
     // A graph is heavy when its body, or the body of a graph it calls directly or indirectly,
     // contains a higher-order operator (`:mark/...`), an operator of a module (a URI with a
-    // protocol, `tensor:matmul`, `algo:sort`: anything but the built-in `:...` operators), or
+    // protocol, `tensor:matmul`, `array:sort`: anything but the built-in `:...` operators), or
     // a call of a function value (the callee is not known when the plan is built). A graph
     // that only does built-in arithmetic, comparisons and calls of such graphs (the body of
     // `fib`) is light: a task per call costs more than the call. A recursive graph is
