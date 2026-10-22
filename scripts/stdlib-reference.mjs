@@ -103,7 +103,14 @@ const MODULES = [
         computed: 'signatures/random.cml',
     },
     { name: 'time', title: '`time`', kind: 'cpp' },
-    { name: 'fs', title: '`fs`: files', kind: 'cpp' },
+    {
+        name: 'fs',
+        title: '`fs`: files',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles (H19).
+        source: 'fs.cml',
+        declaration: true,
+    },
     {
         name: 'io',
         title: '`io`: terminal input',

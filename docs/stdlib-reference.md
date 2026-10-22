@@ -2386,8 +2386,12 @@ fields are taken as local time.
 
 ## `fs`: files
 
-Every function touches the file system and is declared with effects: its call must be
-reachable from a sync block to run, and no pass folds or merges it.
+The file system: the content of a file, writing and atomically replacing it, the few questions
+about a path, and the two removals. Every operator of the module touches the file system, which
+the program cannot see from its arguments, so every one has an effect and a call runs only when
+it is reachable from a sync block; no pass folds or merges one. A declaration carries a
+signature, not an effect: the resource facts stay in the C++ module (`modules/fs`), where only
+C++ knows them.
 
 #### `read_text`
 
