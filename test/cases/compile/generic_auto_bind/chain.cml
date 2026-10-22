@@ -1,0 +1,28 @@
+/**
+ * A generic function calls generic functions: the instance of each is fixed by the types the
+ * chain gives it, so `chained` instantiates `first` and `pair` for its own variable
+ * (design principles 5.5). No `typeas` is written anywhere.
+ */
+module chain
+
+func id(x: T): T {
+    return x
+}
+
+func pair(x: U): (U, U) {
+    return (id(x), x)
+}
+
+func first(p: (V, V)): V {
+    return p.0
+}
+
+func chained(x: W): W {
+    return first(pair(x))
+}
+
+func main(): int sync {
+    println(chained(7))
+    println(first(pair('s')))
+    return 0
+}

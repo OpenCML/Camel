@@ -372,9 +372,34 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::TypeVariableRedeclared,
             {
                 "TypeVariableRedeclared",
-                "'typeas {0}' cannot bind '{0}': the name already denotes a type here.",
-                "Write 'typeas' only at the first occurrence of a type variable and plain "
-                "'{0}' afterwards, or choose a name that is not a type in scope.",
+                "'typeas {0}' cannot bind '{0}': this signature already binds a type variable "
+                "'{0}'.",
+                "A type variable is bound once: write 'typeas {0}' only at the place where it is "
+                "first bound, and plain '{0}' everywhere after that (a plain '{0}' in a "
+                "parameter type binds it already, so the explicit form is only needed when the "
+                "name also denotes a type).",
+            },
+        },
+        {
+            SemanticDiag::TypeVariableOnlyInReturn,
+            {
+                "TypeVariableOnlyInReturn",
+                "The name '{0}' appears only in the return type and no type answers it.",
+                "A type variable binds where it first appears in a parameter type, including the "
+                "type of a 'with' parameter; a name first written in the return type has no "
+                "argument to take a type from. Write it in a parameter type, or declare it "
+                "explicitly as 'typeas {0}' when only the expected result determines it (design "
+                "principles 5.9).",
+            },
+        },
+        {
+            SemanticDiag::TypeVariableUsedOnce,
+            {
+                "TypeVariableUsedOnce",
+                "The type variable '{0}' is bound here and appears only once in the signature.",
+                "One occurrence is what a misspelt type name looks like, so check the spelling. "
+                "If the name is wanted, use it again in a later parameter type or in the return "
+                "type; an explicit 'typeas {0}' states that the single occurrence is deliberate.",
             },
         },
         {

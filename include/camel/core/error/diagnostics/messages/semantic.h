@@ -227,6 +227,9 @@ enum class SemanticDiag : uint32_t {
     TagValueConflict = 0x00019D,
     /// A dimension pack (`..rest`) is not the last item of its `[...]`, or is written twice.
     DimensionAfterAnyRank = 0x00019E,
+    /// A plain name that no type answers is written only in the return type of a signature:
+    /// it binds no type variable, since there is no argument to take a type from (5.5).
+    TypeVariableOnlyInReturn = 0x00019F,
 
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
@@ -266,6 +269,10 @@ enum class SemanticDiag : uint32_t {
     // A dimension name is written once in a signature, so it relates nothing (design principles
     // 5.4): write `?` if the size is not meant as a relation.
     DimensionNameUsedOnce = 0x100161,
+    // Type variables (design principles 5.5), 0x161 and up.
+    /// A type variable is bound automatically and written only once: its name is most likely a
+    /// misspelt type name.
+    TypeVariableUsedOnce = 0x100162,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

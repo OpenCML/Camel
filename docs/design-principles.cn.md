@@ -322,11 +322,11 @@ func main(): int sync {
 - **泛型函数按实参类型实例化。** 泛型函数是一张子图模板；每用一组具体类型调用，就实例化出一张类型全部具体的子图，函数体在这时检查。图上只有具体类型，运行时不需要类型信息。
 - **类型变量与维度名同一条规则，自动绑定**：形参类型（含 `with` 形参的类型）里第一次出现、且不是已有类型名的名字，就是类型变量的绑定，之后的出现是引用；只出现在返回类型里的名字是错误；只出现一次的给出警告（拼错的类型名通常只出现一次）。`typeas T` 保留为显式的绑定写法，用于名字与已有类型同名、需要写明"这里是新绑定"的地方。
 
-  <!-- camel-snippet: fragment: the type variables are the notation this section defines; the compiler does not yet bind them automatically, so the sketch is not compiled -->
   ```camel
   func first(xs: T[]): T { return xs[0] }
+
   with <key: (x: T) => K>
-  func sort_by(xs: T[]): T[]
+  func keys(xs: T[]): K[] { return xs->map<key> }
   ```
 
 - **泛型函数可以出现在任何期望一个函数的位置**，包括传给另一个泛型函数。编译器把它的实例化延迟到类型变量能从上下文确定时；确定不了是编译期错误，并指出哪个变量定不下来。延迟只发生在编译期，图上只有具体的实例。
