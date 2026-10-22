@@ -247,6 +247,19 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::GpuScopeNoDeviceProgram,
+            {
+                "GpuScopeNoDeviceProgram",
+                "`#gpu` scope '{0}': operator '{1}' has no device program ({2}).",
+                "The `#gpu` tag promises that the device runs everything written in the scope, "
+                "including the functions it calls; an operator the device back end cannot build a "
+                "program for is a compile-time error there, never a host execution. Change the "
+                "operator, its shape or the function it is written in, put it under `#cpu` where "
+                "the scope allows that, or remove the tag; `--devices cpu` runs the whole program "
+                "on the host.",
+            },
+        },
+        {
             RuntimeDiag::PassNeedsExtraction,
             {
                 "PassNeedsExtraction",

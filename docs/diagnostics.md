@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-229 diagnostics: 210 errors, 19 warnings.
+230 diagnostics: 211 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -244,6 +244,7 @@ prints one entry.
 | `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error |
 | `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error |
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error |
+| `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -6638,6 +6639,48 @@ module main
 func main(): int sync {
     println(42)
     return 0
+}
+```
+
+### GpuScopeNoDeviceProgram
+
+`0x040001A7` · Error · `RuntimeDiag::GpuScopeNoDeviceProgram`
+
+**Message**
+
+```text
+`#gpu` scope '{0}': operator '{1}' has no device program ({2}).
+```
+
+**Help**
+
+```text
+The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is a compile-time error there, never a host execution. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.
+```
+
+**Example** (`test/cases/gpu/nofallback/refused_operator.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/gpu/nofallback/refused_operator.cml tiles::compile std::nvm`)
+
+```camel
+/// (b) An operator without a device program, written in a function a `#gpu` scope calls. The
+/// scope covers the functions it calls (GPU design 2.3), so `tanh` here is inside it; `tanh` has
+/// no device implementation, and the compiler refuses the program instead of running it on the
+/// host. `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
+module gpu_nofallback_refused_operator
+
+import { Tensor, tanh, reshape } from tensor
+
+func activate(x: Tensor<f32>): Tensor<f32> {
+    return tanh(x)
+}
+
+#gpu
+func step(x: Tensor<f32>): Tensor<f32> {
+    return activate(x)
+}
+
+func main() {
+    let x = reshape([1.0, 2.0], [2])
+    println(step(x))
 }
 ```
 
