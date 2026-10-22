@@ -120,7 +120,9 @@ class Tree {
     node_ptr_t makeCase(CaseType type, const std::string &binding = {});
     /// `match type` (children: TYPE, TCASE...) and one of its cases (child: the body).
     node_ptr_t makeTypeMatch();
-    node_ptr_t makeTypeCase(uint16_t patterns);
+    /// `patterns` are the shapes the case selects; `types` its identity patterns (`case int`,
+    /// `case T`), in the order written after the shapes.
+    node_ptr_t makeTypeCase(uint16_t patterns, const std::vector<Type *> &types);
     /// `static for (n, F) in fields T` (children: TYPE, body) or `static for (j) in indices ts`
     /// (children: the operand value, body). `valueName` is `n` (or `j`), `typeName` is `F`
     /// (empty for `indices`); both are bound only while the body is built.

@@ -1,0 +1,20 @@
+/**
+ * `case T` uses the type parameter's binding at the instantiation: the pattern `U` is compared
+ * with the subject `T` after both are bound, so `same::<int, int>()` is true and
+ * `same::<int, float>()` is false.
+ */
+module type_identity_typevar
+
+func same::<T, U>(): bool {
+    return match type T {
+        case U => true
+        case _ => false
+    }
+}
+
+func main(): int sync {
+    println(same::<int, int>())
+    println(same::<int, float>())
+    println(same::<float, float>())
+    return 0
+}

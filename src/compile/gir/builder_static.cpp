@@ -17,6 +17,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/tree.h"
 #include "camel/utils/scope.h"
 
@@ -32,7 +33,8 @@ using namespace camel::core::type;
 
 namespace {
 
-std::string typePatternText(uint16_t patterns) {
+std::string typePatternText(const GCT::node_ptr_t &caseNode) {
+    const uint16_t patterns = caseNode->typeCasePatterns();
     std::string text;
     const auto add = [&](GCT::TypeCaseKind kind, const char *name) {
         if ((patterns & GCT::typeCaseBit(kind)) == 0) {
@@ -45,8 +47,15 @@ std::string typePatternText(uint16_t patterns) {
     };
     add(GCT::TypeCaseKind::Struct, "struct");
     add(GCT::TypeCaseKind::Tuple, "tuple");
+    add(GCT::TypeCaseKind::Func, "func");
     add(GCT::TypeCaseKind::Leaf, "#leaf");
     add(GCT::TypeCaseKind::Wildcard, "_");
+    for (size_t i = 0; i < caseNode->typeCaseTypeCount(); ++i) {
+        if (!text.empty()) {
+            text += " | ";
+        }
+        text += caseNode->typeCaseTypeAt(i)->toString();
+    }
     return text.empty() ? std::string("(none)") : text;
 }
 
@@ -151,9 +160,11 @@ void Builder::walkStaticBodyNames(
     }
 }
 
-bool Builder::typeCaseMatches(Type *subject, uint16_t patterns) const {
-    const bool isStruct = subject->code() == TypeCode::Struct;
-    const bool isTuple  = subject->code() == TypeCode::Tuple && tree::isInternal(subject);
+bool Builder::typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) const {
+    const uint16_t patterns = caseNode->typeCasePatterns();
+    const bool isStruct     = subject->code() == TypeCode::Struct;
+    const bool isTuple = subject->code() == TypeCode::Tuple && tree::isInternal(subject);
+    const bool isFunc  = subject->code() == TypeCode::Function;
     if ((patterns & typeCaseBit(GCT::TypeCaseKind::Wildcard)) != 0) {
         return true;
     }
@@ -163,7 +174,27 @@ bool Builder::typeCaseMatches(Type *subject, uint16_t patterns) const {
     if (isTuple && (patterns & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0) {
         return true;
     }
-    return (patterns & typeCaseBit(GCT::TypeCaseKind::Leaf)) != 0 && !isStruct && !isTuple;
+    if (isFunc && (patterns & typeCaseBit(GCT::TypeCaseKind::Func)) != 0) {
+        return true;
+    }
+    if ((patterns & typeCaseBit(GCT::TypeCaseKind::Leaf)) != 0 && !isStruct && !isTuple) {
+        return true;
+    }
+    // An identity pattern is exact: `case float` does not select `int`, `case f32` does not
+    // select `f64`, and a named struct is its declaration, not merely a struct of that shape.
+    // The pattern's type variables have the bindings of the instance being built, so `case T`
+    // selects exactly the type `T` was bound to. A pattern that is still open is reported by
+    // visitTypeMatchNode before any case is selected.
+    for (size_t i = 0; i < caseNode->typeCaseTypeCount(); ++i) {
+        Type *pattern = boundType(caseNode->typeCaseTypeAt(i));
+        if (pattern == nullptr || containsTypeVar(pattern)) {
+            continue;
+        }
+        if (typeEquals(subject, pattern)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
@@ -198,15 +229,78 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
             if (catchesAll && i + 1 < caseCount) {
                 diags_->of(SemanticDiag::StaticMatchUnreachableCase)
                     .atOrigin(caseNode->origin())
-                    .commit(typePatternText(patterns));
+                    .commit(typePatternText(caseNode));
                 throw BuildAbortException();
+            }
+            // An identity pattern must name a type by the time the case is selected: a type
+            // variable of the pattern that the instance does not bind cannot match anything.
+            std::vector<Type *> earlier;
+            uint16_t earlierShapes = 0;
+            for (size_t j = 0; j < i; ++j) {
+                const auto &other = gct->at(j + 1);
+                for (size_t k = 0; k < other->typeCaseTypeCount(); ++k) {
+                    earlier.push_back(other->typeCaseTypeAt(k));
+                }
+                earlierShapes |= other->typeCasePatterns();
+                if ((other->typeCasePatterns() & typeCaseBit(GCT::TypeCaseKind::Wildcard)) != 0) {
+                    earlier.clear(); // every type is selected before this case
+                }
+            }
+            for (size_t k = 0; k < caseNode->typeCaseTypeCount(); ++k) {
+                Type *written = caseNode->typeCaseTypeAt(k);
+                Type *pattern = boundType(written);
+                if (pattern == nullptr) {
+                    continue;
+                }
+                if (containsTypeVar(pattern)) {
+                    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                        .atOrigin(caseNode->origin())
+                        .commit(
+                            pattern->toString(),
+                            "a type variable of the pattern is not bound here");
+                    throw BuildAbortException();
+                }
+                // A shape an earlier case selects covers whole families: `case struct` before
+                // `case Point` makes the latter dead, exactly as `case #leaf` before it does.
+                const bool isStruct = pattern->code() == TypeCode::Struct;
+                const bool isTuple =
+                    pattern->code() == TypeCode::Tuple && tree::isInternal(pattern);
+                const bool isFunc = pattern->code() == TypeCode::Function;
+                const bool coveredByShape =
+                    (isStruct &&
+                     (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Struct)) != 0) ||
+                    (isTuple && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0) ||
+                    (isFunc && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Func)) != 0);
+                if (coveredByShape) {
+                    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                        .atOrigin(caseNode->origin())
+                        .commit(
+                            pattern->toString(),
+                            "an earlier case selects every type of this shape");
+                    throw BuildAbortException();
+                }
+                for (Type *before : earlier) {
+                    Type *bound = boundType(before);
+                    if (bound == nullptr || containsTypeVar(bound)) {
+                        continue;
+                    }
+                    if (typeEquals(pattern, bound)) {
+                        // The type is selected by an earlier case, which is written before
+                        // this one: no subject can reach this pattern.
+                        diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                            .atOrigin(caseNode->origin())
+                            .commit(
+                                pattern->toString(), "an earlier case already selects this type");
+                        throw BuildAbortException();
+                    }
+                }
             }
         }
 
         GCT::node_ptr_t selected = nullptr;
         for (size_t i = 0; i < caseCount; ++i) {
             const auto &caseNode = gct->at(i + 1);
-            if (typeCaseMatches(subject, caseNode->typeCasePatterns())) {
+            if (typeCaseMatches(subject, caseNode)) {
                 selected = caseNode;
                 break;
             }

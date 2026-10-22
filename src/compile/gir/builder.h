@@ -1438,7 +1438,7 @@ class Builder {
         const char *originKind);
     /// `t.[key]`: the field or tuple element is chosen at compile time.
     node_handle_t visitStaticAccessNode(const GCT::node_ptr_t &gct);
-    bool typeCaseMatches(Type *subject, uint16_t patterns) const;
+    bool typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) const;
 
     /// Whether a name read in a case body that is not selected names something. It walks the
     /// same layers as visitDRefNode, but builds no node and checks no type (H51 step 1, Q10).
