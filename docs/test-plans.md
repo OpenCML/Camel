@@ -19,6 +19,10 @@ When adding a new feature or test case, manually run the case from the command l
 - `npm run test` runs the **fast** layer: what a developer runs after a change.
 - `npm run test:all` runs everything, fast and slow (`--tier all`). It does **not** run the debug
   layer, which needs a Debug build.
+- `npm run release-gate` runs the release evidence instead of everything: the fast layer, then the
+  runnable slow plans **by explicit plan file** (never a directory, never `--tier all`), then the
+  static checks. It skips the plans `agents/test.md` reserves for a milestone on a quiet machine,
+  prints them by name, and refuses when asked for one; see `docs/npm-scripts.md`.
 - `node scripts/test.js <plan file>` runs that plan in full: naming the file is the intent, so
   its slow tests run whatever `--tier` says. A **directory** target selects test by test and
   follows `--tier`; add `--tier all` to include the slow tests of a directory or of the whole
