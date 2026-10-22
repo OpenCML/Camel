@@ -630,7 +630,7 @@ class GctConstantEvaluator {
     data_ptr_t evalCall(const GCT::node_ptr_t &node) {
         const GCT::node_ptr_t &callee = node->at(0);
         const std::string name =
-            callee->type() == GCT::NodeKind::DREF ? queryName(callee->name()) : std::string{};
+            callee->type() == GCT::NodeKind::DREF ? plainName(callee->name()) : std::string{};
         std::vector<data_ptr_t> args;
         for (size_t i = 1; i < node->size(); ++i) {
             args.push_back(eval(node->at(i)));
@@ -1441,7 +1441,7 @@ Builder::FoldedCall Builder::foldConstantCall(const GCT::node_ptr_t &call) {
     const GCT::node_ptr_t &nameNode =
         head->type() == GCT::NodeKind::TAPP ? head->at(0) : head;
     const std::string name = nameNode->name();
-    const std::string plain = queryName(name);
+    const std::string plain = plainName(name);
     const bool builtinName  = !plain.empty() && isBuiltinOperatorName(plain);
     if (builtinName) {
         bool foldable = false;
@@ -1520,7 +1520,7 @@ Builder::FoldedCall Builder::evaluateCallAtBuildTime(
 
     // An operator over constants is computed by the evaluator itself; this is how an arithmetic
     // expression over folded calls becomes a constant too.
-    const std::string operatorName = queryName(name);
+    const std::string operatorName = plainName(name);
     if (!operatorName.empty() && isBuiltinOperatorName(operatorName)) {
         try {
             result.data = GctConstantEvaluator::runBuiltinCall(operatorName, arguments);
