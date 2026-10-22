@@ -496,14 +496,17 @@ Other tools: `camel-codegen`, `camel-pr` (the profiler), `camel-db` (the debugge
 
 ### Release and Debug installations
 
-The two build configurations are installed side by side, each with its own `bin`, `lib` and
-`stdlib`, and each addressed by its own `CAMEL_HOME`:
+The two build configurations are installed side by side, each with its own `bin`, `libs`,
+`include` and `stdlib`, and each addressed by its own `CAMEL_HOME`:
 
 | Build | Command | `CAMEL_HOME` | Artifacts |
 |-------|---------|--------------|-----------|
-| Release | `npm run build` | `out/latest` | `out/latest/bin/camel.exe` |
-| Debug | `npm run debug` | `out/debug` | `out/debug/bin/camel.exe` |
-| Profile | `npm run profile` | `out/latest` | `out/latest/bin/camel.exe` (RelWithDebInfo) |
+| Release | `npm run build` | `out/latest` | `out/latest/bin/camel` |
+| Debug | `npm run debug` | `out/debug` | `out/debug/bin/camel` |
+| Profile | `npm run profile` | `out/latest` | `out/latest/bin/camel` (RelWithDebInfo) |
+
+On Windows the tools carry an `.exe` suffix (`out/latest/bin/camel.exe`); on Linux and macOS the
+names are as in the table.
 
 A Debug build keeps the assertions that a Release build compiles out, and reports itself as
 `(Debug <footprint>)` in `--version`; it also logs the `debug` and `trace` levels that a Release

@@ -13,9 +13,9 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 
 ## 2. 当前基线
 
-- 开发分支 `fsh-dev`；默认测试集（`smoke` 加全部 `feat` 计划）2255 条，全部通过，没有遗留失败。
+- 集成分支 `develop`（`main` 只用于发布）；默认测试集（`smoke` 加全部 `feat` 计划）**5,167 条**：5,156 条通过、11 条因环境前提跳过（Windows 路径语义、Python 预置、VS Code 扩展依赖），没有遗留失败（2026-10-22 在 `68ee3a899` 上实测）。
 - 核心（`src/` 与 `include/`）约 9.8 万行，库（`modules/` 与 `stdlib/`）约 3.8 万行，工具（`tools/`）另有约 1.6 万行；42 个内建遍（另有 37 个别名）加 2 个由模块提供的遍（`tensor::fuse`、`onnx::export`）；四种执行后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）以及到 C++ 的转译。
-- 持续集成在推送（`main`、`develop`、`fsh-dev`）与合并请求时构建并运行默认测试集：Linux x64 与 Windows x64 必须通过，macOS arm64 是试验项，失败不阻断；打标签时另外构建发布包。
+- 持续集成在推送发布标签（`v*`）或手动触发时构建并运行默认测试集：Linux x64 与 Windows x64 必须通过，macOS arm64 是手动选择的试验项，失败不阻断；打标签时另外构建发布包。
 
 下面各项前的记号：`[定]` 语义已裁定，可以直接做；`[稿]` 要先出设计稿，经语言作者过目；`[问]` 还有未决的问题（见设计原则第 15 节）。没有记号的不涉及语义。
 
@@ -96,7 +96,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 - **标准库** `[定]`：原语用 C++，组合逻辑用 Camel。（状态：部分完成——原语在 C++ 模块里（`modules/`），用 Camel 写的库已有 `stdlib/array.cml`（数组与高阶函数，建立在内建算子与 `algo` 的三个原语之上）；其余组合逻辑还没有用 Camel 写的库，见下面各子项）
   - 字符串（切分、修剪、大小写、替换、查找；`[定]` 按字节，另有码点算子）、数组与高阶函数、位运算：已有（`str`、`array`、`math`，见 `docs/stdlib-reference.md`）。未做：字节缓冲区、带比较函数的排序、`group_by`（等映射类型）。（状态：部分完成——`str`（C++）、`array`（Camel，`stdlib/array.cml`）与 `math` 的位运算函数已有，由 `test/plans/feat/modules/stdlib_values.plan.toml`、`stdlib_faults.plan.toml` 测试；字节缓冲区、带比较函数的排序（现有 `sort_by` 按键排序）、`group_by` 未做）
   - `math`、`statistics` 已补全；`time` 的补全；`fs` 补全与路径处理；子进程、套接字、日志；CSV、TOML、base64、压缩。（状态：部分完成——`math`、`statistics` 已补全（`docs/stdlib-reference.md`），`fs` 有 `try_read_text`、`read_chunk`、`is_file`、`is_dir`、`mkdir`、`mkdirs`；`time` 仍只有 `now`、`strftime`、`strptime`，路径处理、子进程、套接字、日志、CSV、TOML、base64、压缩未做）
-  - 签名文件已与实现对齐并由测试约束（`scripts/stdlib-reference.mjs --verify-ops`），参考文档由签名文件生成；纯度已逐个算子声明并由测试约束。（状态：部分完成——10 个签名文件（`stdlib/signatures/`）与注册的算子一致（`scripts/stdlib-reference.mjs --verify-ops`），`docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 生成（`--verify-doc`），纯度逐个算子声明（`camel inspect --ops`），三者都由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束；`sim` 的两个算子全部声明在 `stdlib/sim.cml`，`onnx` 的 `supported_operators` 已声明、`export_model` 记在 `stdlib/signatures/onnx.cml`（H179）；计算签名只记在 `stdlib/signatures/<模块>.cml` 一处，声明文件不写内联写法（H180）；`rewrite` 的八个可调用算子全部声明在 `stdlib/rewrite.cml`，`stdlib/signatures/rewrite.cml` 已删（H183）；`env`、`process`、`hash` 的算子声明在 `stdlib/env.cml`、`stdlib/process.cml`、`stdlib/hash.cml`，三份 `stdlib/signatures/<模块>.cml` 已删，签名文件 10 个 = 8 个已迁移模块的计算签名 + `ckpt` 与 `globals` 两个尚未迁移的模块（H163 迁走三份；H202 删掉 `algo`/`math`/`para`/`random` 四份、`graph` 只剩 4 条））
+  - 签名文件已与实现对齐并由测试约束（`scripts/stdlib-reference.mjs --verify-ops`），参考文档由签名文件生成；纯度已逐个算子声明并由测试约束。（状态：部分完成——10 个签名文件（`stdlib/signatures/`）与注册的算子一致（`scripts/stdlib-reference.mjs --verify-ops`），`docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 生成（`--verify-doc`），纯度逐个算子声明（`camel inspect --ops`），三者都由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束；`sim` 的两个算子全部声明在 `stdlib/sim.cml`，`onnx` 的 `supported_operators` 已声明、`export_model` 记在 `stdlib/signatures/onnx.cml`；计算签名只记在 `stdlib/signatures/<模块>.cml` 一处，声明文件不写内联写法；`rewrite` 的八个可调用算子全部声明在 `stdlib/rewrite.cml`，`stdlib/signatures/rewrite.cml` 已删；`env`、`process`、`hash` 的算子声明在 `stdlib/env.cml`、`stdlib/process.cml`、`stdlib/hash.cml`，三份 `stdlib/signatures/<模块>.cml` 已删，签名文件 10 个 = 8 个已迁移模块的计算签名 + `ckpt` 与 `globals` 两个尚未迁移的模块（此前迁走三份；后来又删掉 `algo`/`math`/`para`/`random` 四份、`graph` 只剩 4 条））
   - 用 Camel 写的测试框架与断言库。（状态：未开始）
 - **模块接口** `[定]`：整理出一层公开的 C++ 接口并按版本承诺兼容；纯度声明进入这层接口。（状态：未开始）
 - **跨语言互操作**：Python 桥的自动类型转换；从 Python 里 `import camel` 运行图；C FFI。（状态：未开始）
@@ -106,7 +106,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 
 目标：外人能上手，能调试。
 
-- **持续集成**：推送与合并请求触发，三个平台构建并运行测试；去掉发布包里的 `-march=native`；随后加入 sanitizer、覆盖率与性能基线。应最先落地，它是其他各项的安全网。（状态：部分完成——推送与合并请求触发，Linux x64 与 Windows x64 构建并运行默认测试集，macOS 为试验项、未经验证（`.github/workflows/ci.yml`）；发布包改用 `CAMEL_TARGET_ARCH=x86-64-v2`，不再是 `-march=native`；sanitizer 只有手动触发的一项；覆盖率与性能基线未做）
+- **持续集成**：让推送与合并请求都触发 CI，三个平台构建并运行测试；去掉发布包里的 `-march=native`；随后加入 sanitizer、覆盖率与性能基线。应最先落地，它是其他各项的安全网。（状态：部分完成——推送发布标签（`v*`）与手动触发时，Linux x64 与 Windows x64 构建并运行默认测试集，macOS 为手动选择的试验项、失败不阻断（`.github/workflows/ci.yml`）；发布包使用 `CAMEL_TARGET_ARCH=x86-64-v3`，不再是 `-march=native`；sanitizer 只有手动触发的一项；覆盖率与性能基线未做）
 - **调试器** `[定]`：源码行与图节点两种视图，两种单步；变量查看与调用栈；实现标准调试协议。（状态：部分完成——已有的 `camel-db`（`tools/debugger`）提供图节点视图、节点断点与按节点单步；源码行视图与按行单步、变量查看、调用栈、标准调试协议未做）
 - **语言服务器**：悬停、跳转到定义、补全、重命名、语义高亮、增量同步（现在只有诊断与格式化）。（状态：未开始）
 - **编辑器支持**：语法高亮定义与 VS Code 扩展。（状态：未开始）
@@ -124,6 +124,6 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 ## 8. 工作方式
 
 - 语义问题按"Camel 应当是什么"提交语言作者裁定，不按现有实现将就；裁定写入设计原则文档后再据以开发。
-- 每条工作线在独立的克隆与分支上进行，完成后经验收合回 `fsh-dev`；合入 `develop` 与发布按 [`agents/branching.md`](agents/branching.md) 执行。
+- 每条工作线在独立的克隆与分支上进行，从 `develop` 建分支，完成后合回 `develop`（`git merge --no-ff`）；发布由维护者把 `develop` 合入 `main` 并打标签。贡献流程见 [贡献指南](CONTRIBUTING.md)。
 - 每项改动附带测试；标准库里的优化遍不得把程序改错。
 - 发现的缺陷如实记录并附最小复现；只修复明确的实现错误，不用临时规则掩盖。

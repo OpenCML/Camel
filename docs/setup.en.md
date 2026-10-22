@@ -197,7 +197,7 @@ Run the following commands to install the required dependencies:
   - `profiler`: Profiling tool `camel-pr`
   - `lang-server`: Language server `camel-ls` (see 3.7)
 
-Build outputs are under `build/tools/<tool>/<Config>/`. The `camel` executable is copied to the project root.
+Intermediate build outputs are under `build/tools/<tool>/<Config>/`; `npm run build` then installs them into `out/latest/` (a Debug build installs into `out/debug/`), with the tools in `out/latest/bin/` — `camel` on Linux and macOS, `camel.exe` on Windows.
 
 ### 3.6 Building Targets
 

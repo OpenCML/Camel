@@ -69,7 +69,7 @@ camel prog.cml std::jit                 # run with JIT compilation
 camel prog.cml std::prl                 # run with parallel scheduling
 camel prog.cml std::opt std::fvm        # optimize, then run
 camel prog.cml std::gir                # print the graph (Graphviz DOT) instead of running
-camel prog.cml std::macro std::opt onnx::export    # translate `main` to an ONNX model
+camel prog.cml std::macro std::opt 'onnx::export(out="model.onnx")'   # export `main` to an ONNX model
 ```
 
 Automatic differentiation (`grad` from the `autodiff` module) and ONNX export are libraries built on the same pass mechanism. The [tutorial](docs/tutorial/tutorial.en.md) walks through looking at the graph, changing the pipeline, exporting a small model and taking a gradient.
@@ -81,14 +81,16 @@ Automatic differentiation (`grad` from the `autodiff` module) and ONNX export ar
 
 ### Build
 
-Camel is built from source; see [docs/setup.en.md](docs/setup.en.md) for the toolchain.
+Camel is built from source; [docs/setup.en.md](docs/setup.en.md) lists the toolchain per platform. The build needs Clang 19 or newer, CMake 3.25 or newer, Ninja and Conan 2.10 or newer, plus Node.js 18 or newer for the scripts. The first `npm install` or build runs `conan install` and downloads the C++ dependencies, so it needs network access.
 
 ```bash
-npm install
-npm run build        # the executable is out/latest/bin/camel
+npm install          # installs the npm packages and runs conan install
+npm run build        # Release build; the executable lands in out/latest/bin
 ```
 
-Put `out/latest/bin` on your `PATH` (and set `CAMEL_HOME` to `out/latest`). A Python wheel named `camel-lang` can be built from the same tree; see [docs/pypi-packaging.md](docs/pypi-packaging.md).
+The executable is `out/latest/bin/camel` on Linux and macOS and `out/latest/bin/camel.exe` on Windows. Put `out/latest/bin` on your `PATH` and set `CAMEL_HOME` to `out/latest` (the directory that holds `bin/`, `libs/`, `include/` and `stdlib/`). Release CI builds and tests Linux x64 and Windows x64; the macOS arm64 leg is an opt-in experimental job, so treat macOS as untested by CI.
+
+The `python` and `pyplot` modules are built only when a CPython with development headers is found; without one they are skipped, and `CAMEL_SKIP_PYTHON=1` skips them explicitly. A Python wheel named `camel-lang` can be built from the same tree with `npm run pypi:rollup`; see [docs/pypi-packaging.md](docs/pypi-packaging.md).
 
 ### VS Code
 
@@ -97,7 +99,7 @@ Install [OpenCML-Ext from the VS Code Marketplace](https://marketplace.visualstu
 ### Hello, Camel
 
 ```camel
-// hello.cml
+// greeting.cml
 module hello
 
 func main(): int sync {
@@ -107,7 +109,7 @@ func main(): int sync {
 ```
 
 ```bash
-camel hello.cml
+camel greeting.cml
 ```
 
 ```text
