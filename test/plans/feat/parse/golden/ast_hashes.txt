@@ -317,6 +317,7 @@ e0b5e276c052e5ee ok stdlib/algo.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
 f8a426c8e96936da ok stdlib/bytes.cml
 dd4c782619481c22 ok stdlib/fs.cml
+5f1b2c71c5757202 ok stdlib/graph.cml
 81d50d711442ef6b ok stdlib/io.cml
 6020479adef220b0 ok stdlib/json.cml
 f234da727937674c ok stdlib/math.cml
@@ -334,7 +335,6 @@ f26840bc30a7d5b4 ok stdlib/time.cml
 985ec586154e41fa ok stdlib/signatures/ckpt.cml
 351e27ad8c07e562 ok stdlib/signatures/env.cml
 3364937d4942b0ed no stdlib/signatures/globals.cml
-7b8935da68ae2c54 ok stdlib/signatures/graph.cml
 b465908c31d8462a ok stdlib/signatures/hash.cml
 df6e9b39c870578c ok stdlib/signatures/json.cml
 a6332d59a0e18fb4 ok stdlib/signatures/para.cml
@@ -809,6 +809,9 @@ c2c51d0f82162052 ok test/cases/compile/native/foreign_operator.cml
 c761ac0a444fedfe ok test/cases/compile/native/fs_arity.cml
 066e31efc9c6b094 ok test/cases/compile/native/fs_declaration_import.cml
 bca42e188ef0d258 ok test/cases/compile/native/fs_type.cml
+c9484a1d3db7f75f ok test/cases/compile/native/graph_arity.cml
+bafd2e2f00e83f2c ok test/cases/compile/native/graph_declaration_import.cml
+8685d4927143a68c ok test/cases/compile/native/graph_type.cml
 73e34f5410cddf22 ok test/cases/compile/native/generic.cml
 56df9aa3996cbbf9 ok test/cases/compile/native/generic_module.cml
 1f22e98f50629dfd ok test/cases/compile/native/generic_qualified.cml

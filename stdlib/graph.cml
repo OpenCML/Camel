@@ -1,13 +1,30 @@
-// Signatures of the graph module: a program as a value. A Program is an immutable snapshot of
-// the graphs; the handles Graph, Node, Op and TypeRef name things inside one Program and compare
-// with `==` and `!=`. Reads are pure. A change is made in a transaction (`open`, `replace`,
-// `erase`, `commit`) that gives a new Program; a pass written in Camel is a function
-// `(p: Program) => Program!` exported by a module, named on the pipeline as `<module>::<function>`.
-// These declarations are reference metadata.
+// The graph module: a program as a value. A Program is an immutable snapshot of the graphs; the
+// handles Graph, Node, Op and TypeRef name things inside one Program and compare with `==` and
+// `!=`. Reads are pure. A change is made in a transaction (`open`, `replace`, `erase`, `commit`)
+// that gives a new Program; a pass written in Camel is a function `(p: Program) => Program!`
+// exported by a module, named on the pipeline as `<module>::<function>`.
 //
 // A module that holds passes is compiled as a program of its own, whose entry is the pass: its
 // module-level values are computed before the pass runs. It may import modules written in C++ and
 // libraries written in Camel (for example `array`); the imports are declared and built with it.
+//
+// The declarations of the operators of the C++ module `modules/graph` (design principles 6.4;
+// handover H19, step 10). This file is the one source of the fixed signatures a declaration can
+// carry: the C++ side keeps the kernels, the executor, the handles and the purity of every
+// operator. Two shapes are not declarations:
+//   - `// dynamic func` records a reference entry whose type C++ computes from the argument:
+//     `constant` and `add_constant` take the type of `sample`, and `program_of`, `graph_of`,
+//     `open_function` and `to_function` take a function value's type. They stay operator groups
+//     of the C++ module: a `(typeas T)` or `(typeas F)` declaration would accept every type, and
+//     a call the operator must refuse would pass the check (standard library conventions 2).
+//   - `operator ==` is declared as the reserved group `__eq__`. `operator !=` cannot be declared
+//     (design principles 4.3: an overload of `==` gives it, and `operator !=` is
+//     OperatorNotOverloadable), and the compiler negates a Camel overload of `==`, not a native
+//     one, so `modules/graph` keeps the `__neq__` group the compiler asks for. Both are reserved
+//     names: the reference page lists operators by their Camel name, and `inspect --ops` does not
+//     list these.
+
+module graph
 
 // ---- the program ----
 
@@ -101,7 +118,7 @@ export func is_constant(n: Node): bool
 /// The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
 /// @pure
 /// @example constant(n, 0)    // int?
-export func constant(n: Node, sample: T): T?
+// dynamic func constant(n: Node, sample: T): T?
 
 /// The type of the node's value, null when it has none.
 /// @pure
@@ -155,7 +172,12 @@ export func show(n: Node): string
 /// The number a graph, a node or an operator is known by inside its Program: the GraphId, the NodeId or the OperId. Stable for the Program, so a pass can key a map by it.
 /// @pure
 /// @example id(n)
+#op<'graph:id'>
 export func id(h: Graph): int
+#op<'graph:id'>
+export func id(h: Node): int
+#op<'graph:id'>
+export func id(h: Op): int
 
 // ---- facts ----
 
@@ -179,12 +201,12 @@ export func permissions(n: Node): int
 /// The Program a function value lives in.
 /// @pure
 /// @example program_of(f)
-export func program_of(f: F): Program
+// dynamic func program_of(f: F): Program
 
 /// The graph of a function value.
 /// @pure
 /// @example graph_of(f)
-export func graph_of(f: F): Graph
+// dynamic func graph_of(f: F): Graph
 
 // ---- transactions ----
 
@@ -204,7 +226,7 @@ export func replace(t: Txn, old: Node, new: Node): void
 /// traced.
 /// @effect changes the transaction
 /// @example add_constant(t, g, 7)
-export func add_constant(t: Txn, g: Graph, value: T): Node
+// dynamic func add_constant(t: Txn, g: Graph, value: T): Node
 
 /// Removes a node whose value nobody reads. A fault when the value is read or the node anchors its graph.
 /// @effect changes the transaction
@@ -224,9 +246,33 @@ export func abort(t: Txn): void
 /// Opens a transaction on a function value's graph and the graphs it reaches.
 /// @effect opens a transaction
 /// @example open_function(f)
-export func open_function(f: F): Txn
+// dynamic func open_function(f: F): Txn
 
 /// Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
 /// @effect changes the transaction
 /// @example to_function(t, f)
-export func to_function(t: Txn, sample: F): F!
+// dynamic func to_function(t: Txn, sample: F): F!
+
+// ---- comparison ----
+// `==` of the handle types (design principles 4.3): a library defines the operators of its own
+// types. Two handles are equal when they name the same thing of the same Program. `!=` follows
+// `==` for a Camel overload, but a native module registers its own group for it (the note at the
+// top), so only `==` is declared here.
+
+// Two handles of one kind compare by what they name in the Program.
+#op<'graph:eq'>
+export func operator ==(a: Program, b: Program): bool
+#op<'graph:eq'>
+export func operator ==(a: Graph, b: Graph): bool
+#op<'graph:eq'>
+export func operator ==(a: Node, b: Node): bool
+#op<'graph:eq'>
+export func operator ==(a: Region, b: Region): bool
+#op<'graph:eq'>
+export func operator ==(a: TypeRef, b: TypeRef): bool
+#op<'graph:eq'>
+export func operator ==(a: Op, b: Op): bool
+#op<'graph:eq'>
+export func operator ==(a: Tag, b: Tag): bool
+#op<'graph:eq'>
+export func operator ==(a: Txn, b: Txn): bool

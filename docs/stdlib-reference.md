@@ -3344,6 +3344,8 @@ The node on one line: its id, kind, operator and type.
 
 ```camel
 id: (h: Graph) => int
+id: (h: Node) => int
+id: (h: Op) => int
 ```
 
 The number a graph, a node or an operator is known by inside its Program: the GraphId, the NodeId or the OperId. Stable for the Program, so a pass can key a map by it.

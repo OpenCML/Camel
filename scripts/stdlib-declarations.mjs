@@ -44,6 +44,13 @@
 //      shows the calls; this check resolves the loops over `get*Groups()` so it also sees the
 //      groups exported by `exportEntity(group->name(), group)`.
 //
+// The reserved group `__neq__` is the one exception to (1) and (4): `!=` cannot be declared
+// (design principles 4.3 — an overload of `==` gives it, and `operator !=` is
+// OperatorNotOverloadable), and the compiler negates a *Camel* overload of `==`, not a native
+// one, so a module whose types have their own `==` keeps the `__neq__` group in C++. It has no
+// Camel name: neither the declaration file nor the reference page carries it, and
+// `--verify-ops` filters reserved names out. Every other reserved group stays checked.
+//
 // The output is one line per problem, each naming the file, the module and the operator, and a
 // final line starting `migrated modules stay migrated:`. Exit 1 when there is a problem.
 
@@ -59,6 +66,9 @@ const MODULES_DIR = path.join(REPO_ROOT, 'modules')
 const REFERENCE = path.join(REPO_ROOT, 'scripts', 'stdlib-reference.mjs')
 
 const relative = (file) => path.relative(REPO_ROOT, file).replace(/\\/g, '/')
+
+// The one group a migrated module may keep outside its declarations: see the note above.
+const UNDERIVABLE_OPERATORS = new Set(['__neq__'])
 
 function read(file) {
     return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
@@ -503,6 +513,7 @@ function staticChecks() {
 
         // (1) no StaticFuncTypeResolver for a name the declaration fixes.
         for (const group of analysis.groups.filter((each) => each.static)) {
+            if (UNDERIVABLE_OPERATORS.has(group.name)) continue
             const candidates = []
             if (group.name) candidates.push(group.name)
             if (group.factory) candidates.push(...(analysis.factoryCalls.get(group.factory) || []))
@@ -528,7 +539,9 @@ function staticChecks() {
         // (4) the export group is the declaration's: C++ may export only computed names.
         const exported = new Set()
         for (const exportedCall of analysis.exports) {
-            if (exportedCall.name) exported.add(exportedCall.name)
+            if (exportedCall.name && !UNDERIVABLE_OPERATORS.has(exportedCall.name)) {
+                exported.add(exportedCall.name)
+            }
         }
         for (const loop of analysis.loops) {
             const names = loopGroupNames(loop, analysis)
