@@ -2604,9 +2604,11 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
     };
     // A discrete value: an integer or a boolean. Its derivative is zero by definition (design
     // principles 9.9), so it is never tainted and never refused, whatever it was computed from.
+    // The registry knows the module types too (an integer tensor is discrete by its element
+    // type), so an argmax result or a comparison mask converted back to float is zero, not a
+    // refusal.
     const auto discreteType = [](const Type *type) {
-        return type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64 ||
-               type->code() == TypeCode::Bool;
+        return camel::core::DerivativeRegistry::instance().isDiscrete(type);
     };
     // A branch's arms and a loop's condition and body are regions, not values the control node is
     // passed: what the node depends on is what its regions read from around them. Without this,

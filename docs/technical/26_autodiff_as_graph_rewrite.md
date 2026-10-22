@@ -174,6 +174,12 @@ let model2   = sgd(model, dm, 0.01)    // optimizers are functions over trees
   `float -> float`, `int`/`bool`/`string` have no tangent,
   structs/tuples/arrays map element-wise and drop non-differentiable members.
   `grad(loss)` therefore type-checks at compile time.
+- **Discrete values** (integers and booleans, scalar or held in a tensor) have
+  derivative zero by definition (design principles 9.9). A value computed from
+  a parameter and held in one -- an `argmax` result, a comparison mask, a label
+  -- converts back to float with a zero gradient, not a refusal. A module type
+  that is not discrete and has no tangent (a `Map`, an enum) is still refused
+  where the value is built or used as data.
 - `apply_gradients` was removed; a training step is `with_grad` + `sgd`.
 
 ## 4. The Transformation

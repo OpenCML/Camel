@@ -41,8 +41,8 @@ the table.  The Camel program uses only the environment variables the harness se
   `log_softmax`;
 - RMSNorm, GELU (the tanh approximation), Adam, and a `with_grad` backward pass.
 
-The labels are a one-hot product; `one_hot` has no VJP, so the labels are wrapped in
-`stop_gradient`, which is the correct spelling for a constant anyway.
+The labels are a one-hot product; a label is discrete, so its derivative is zero by definition
+(design principles 9.9). `one_hot` takes no gradient and the labels need no `stop_gradient`.
 
 ## The PyTorch counterparts
 
@@ -86,5 +86,4 @@ that rounds a `1` away.  `accuracy.cml` repeats the f32 measurements in Camel.
 - No fused QKV/attention operator and no `rules::accuracy`/`rules::fusion` pipeline, so the
   expert form is not produced from the naive source.  `softmax`, `log_softmax` and the fused
   cross-entropy exist as operators and are used by the PyTorch expert and the accuracy probes.
-- `one_hot` has no VJP; a label one-hot needs `stop_gradient`.
 - `explain` (the rule-rewrite chain) is not available yet, so this directory cannot show it.

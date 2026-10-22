@@ -64,6 +64,29 @@ const TangentSpace *DerivativeRegistry::findTangentSpace(const type::Type *type)
     return it == tangents_.end() ? nullptr : &it->second;
 }
 
+void DerivativeRegistry::setDiscretePredicate(
+    type::TypeCode code, bool (*predicate)(const type::Type *)) {
+    std::unique_lock lock(mutex_);
+    discrete_.insert_or_assign(code, predicate);
+}
+
+bool DerivativeRegistry::isDiscrete(const type::Type *type) const {
+    if (type == nullptr) {
+        return false;
+    }
+    switch (type->code()) {
+    case type::TypeCode::Int32:
+    case type::TypeCode::Int64:
+    case type::TypeCode::Bool:
+        return true;
+    default:
+        break;
+    }
+    std::shared_lock lock(mutex_);
+    auto it = discrete_.find(type->code());
+    return it != discrete_.end() && it->second(type);
+}
+
 // ---------------------------------------------------------------- tangent types
 
 using type::ArrayType;
