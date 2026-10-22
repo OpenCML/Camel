@@ -49,9 +49,9 @@
             "plans": ["smoke", "feat/linear", "feat/para", "feat/trans"]
         },
         {
-            "comment": "The optimization passes and the rewrite rule library they run: the opt plans, the pass dumps that print their effect, and the rewrite-rule plan. stdlib/rules.cml is the data these passes run, so it selects the same set. `feat/opt` is a directory target, so `--tier fast` keeps its fast plans and filters the slow progen plan (progen is never selected by a rule).",
+            "comment": "The optimization passes and the rewrite rule library they run: the opt plans, the pass dumps that print their effect, the rewrite-rule plan, and feat/compile for the module registration and operator declarations a rewrite-module change can break. stdlib/rules.cml is the data these passes run, so it selects the same set. `feat/opt` is a directory target, so `--tier fast` keeps its fast plans and filters the slow progen plan (progen is never selected by a rule).",
             "paths": ["src/passes/opt/", "stdlib/rules.cml", "modules/rewrite/"],
-            "plans": ["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml"]
+            "plans": ["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml", "feat/compile"]
         },
         {
             "comment": "The profiler pass: its own plan runs without a CUDA device (the host fallback), so it is safe from an ordinary change.",
@@ -216,9 +216,9 @@
             "plans": ["feat/modules/stdlib_registry.plan.toml"]
         },
         {
-            "comment": "The declaration bodies (stdlib/<module>.cml): a declaration is compiled (feat/compile), it is imported by every module plan that uses its operators (feat/modules, a directory so --tier fast keeps the ProGen/GC/PyTorch entries out), and --verify-ops/--verify-doc check it against the registry. stdlib/rules.cml is matched by the optimizer rule above, which is narrower.",
+            "comment": "The declaration bodies (stdlib/<module>.cml): a declaration is compiled (feat/compile) and loaded at startup (smoke), it is imported by every module plan that uses its operators (feat/modules, a directory so --tier fast keeps the ProGen/GC/PyTorch entries out), and --verify-ops/--verify-doc check it against the registry. stdlib/rules.cml is matched by the optimizer rule above, which is narrower.",
             "paths": ["stdlib/"],
-            "plans": ["feat/modules", "feat/compile", "feat/modules/stdlib_registry.plan.toml"]
+            "plans": ["smoke", "feat/modules", "feat/compile", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
             "comment": "The std facade over the modules: the module plan that exercises it, the compile checks of its imports, and the registry that lists its operators.",
@@ -286,9 +286,9 @@
             "plans": ["feat/compile/diag_catalog.plan.toml", "feat/docs_links.plan.toml"]
         },
         {
-            "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct); agents/ is the development guide.",
+            "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct); agents/ is the development guide. Smoke is included because a documentation change is usually part of a code change and the report's gate runs it; it is ten tests, not a mirror of the tree.",
             "paths": ["docs/", "AGENTS.md", "agents/", "README.md", "CONTRIBUTING.md", "ROADMAP.md", "CODE_OF_CONDUCT.md", "SECURITY.md"],
-            "plans": ["feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
+            "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
         },
         {
             "comment": "Images the documents link to: docs_links checks that a relative link's target file exists, so adding or removing an asset is a documentation-link change. Images have no plan of their own.",

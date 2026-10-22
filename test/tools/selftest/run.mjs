@@ -614,7 +614,13 @@ const RULELESS_ALLOWED = [
         why: 'these GPU plans are GC stress and deliberately not selectable',
     },
 ]
-const trackedFiles = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8' })
+// The index plus the files git would add: a class added but not committed yet must be caught
+// too (the red proof adds one, and the remote host receives it as an untracked file). Ignored
+// paths stay out, so build output and tmp/ do not trip the check.
+const trackedFiles = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+})
     .split('\0')
     .filter(Boolean)
 const uncoveredFiles = trackedFiles.filter(
