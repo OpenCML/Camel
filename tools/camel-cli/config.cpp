@@ -867,6 +867,8 @@ bool parseArgs(int argc, char *argv[]) {
         }
         if (!Run::timeitSpec.empty()) {
             if (!parseTimeitSpecValue(Run::timeitSpec, Run::timeitPass, Run::timeitIterations)) {
+                // A usage error is not a successful run (H181): the value was refused above.
+                exitCode = 1;
                 return false;
             }
             Run::timeitEnabled = true;
@@ -995,6 +997,7 @@ bool parseArgs(int argc, char *argv[]) {
 
         if (Run::timeitEnabled && Run::profile) {
             std::cerr << "Error: --timeit cannot be combined with --profile." << std::endl;
+            exitCode = 1;
             return false;
         }
     }
@@ -1004,6 +1007,7 @@ bool parseArgs(int argc, char *argv[]) {
         std::cerr
             << "Error: Run requires an input file. Use --input <file> or provide a positional file."
             << std::endl;
+        exitCode = 1;
         return false;
     }
 

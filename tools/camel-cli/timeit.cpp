@@ -47,6 +47,7 @@
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
 #include "config.h"
+#include "module_failures.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/tns/topo_node_seq.h"
 #include "service/codegen/source/generator.h"
@@ -465,7 +466,10 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             CAMEL_LOG_INFO_S("Main", "run | parse | done | {}", inputPath);
 
             invocation->mainModule->compile(CompileStage::Done);
-            if (!invocation->mainModule->loaded()) {
+            // The same question every output path asks (module_failures.h): a program that did
+            // not compile has no time to report, and a declaration module that did not load is
+            // an error in a module's diagnostics like any other.
+            if (camel_cli::findModuleFailures(invocation->ctx).any) {
                 reportTimeitIterationFailure(
                     os,
                     useJsonFormat,
