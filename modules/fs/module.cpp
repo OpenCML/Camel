@@ -1,117 +1,24 @@
+/*
+ * The file system: reading and writing files, the few questions about a path, and the two
+ * removals. Every operator touches the file system, outside the program (design principles 3.3),
+ * so every one has an effect: its call runs only when it is reachable from a sync block, and no
+ * pass folds or merges it. The resources each operator touches are declared here, with the
+ * executor and the operator traits.
+ *
+ * The signatures are written once, in the declaration module `stdlib/fs.cml` (design principles
+ * 6.4; handover H19, step 10). A declaration carries a signature, not an effect: the effect and
+ * resource facts stay here, where only C++ knows them.
+ */
+
 #include "module.h"
 #include "camel/core/context/context.h"
-#include "camel/core/operator.h"
 #include "camel/core/operator_traits.h"
-#include "camel/core/type/bytes.h"
-#include "camel/core/type/composite/tuple.h"
-#include "camel/core/type/resolver.h"
 #include "executor.h"
 
 using namespace camel::core::context;
 using namespace camel::core::module;
-using namespace camel::core::type;
 
-FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
-    exportEntity(
-        "read_bytes",
-        OperatorGroup::create(
-            "read_bytes",
-            {{"fs:read_bytes",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, BytesType::get())}}));
-    for (const std::string name : {"write_bytes", "replace"})
-        exportEntity(
-            name,
-            OperatorGroup::create(
-                name,
-                {{"fs:" + name,
-                  StaticFuncTypeResolver::create(
-                      {},
-                      {{Type::String(), false}, {BytesType::get(), false}},
-                      Type::Void())}}));
-    exportEntity(
-        "read_text",
-        OperatorGroup::create(
-            "read_text",
-            {{"fs:read_text",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String())}}));
-    exportEntity(
-        "write_text",
-        OperatorGroup::create(
-            "write_text",
-            {{"fs:write_text",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::String(), false}, {Type::String(), false}},
-                  Type::Void())}}));
-    // The same read as an operation that can fail (design principles 3.9): an error value
-    // instead of a fault when the file cannot be opened.
-    exportEntity(
-        "try_read_text",
-        OperatorGroup::create(
-            "try_read_text",
-            {{"fs:try_read_text",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::String(), false}},
-                  TupleType::fallible(Type::String()))}}));
-    exportEntity(
-        "exists",
-        OperatorGroup::create(
-            "exists",
-            {{"fs:exists",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Bool())}}));
-    exportEntity(
-        "is_file",
-        OperatorGroup::create(
-            "is_file",
-            {{"fs:is_file",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Bool())}}));
-    exportEntity(
-        "is_dir",
-        OperatorGroup::create(
-            "is_dir",
-            {{"fs:is_dir",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Bool())}}));
-    exportEntity(
-        "file_size",
-        OperatorGroup::create(
-            "file_size",
-            {{"fs:file_size",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Int64())}}));
-    exportEntity(
-        "read_chunk",
-        OperatorGroup::create(
-            "read_chunk",
-            {{"fs:read_chunk",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::String(), false}, {Type::Int64(), false}, {Type::Int64(), false}},
-                  BytesType::get())}}));
-    exportEntity(
-        "mkdir",
-        OperatorGroup::create(
-            "mkdir",
-            {{"fs:mkdir",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Bool())}}));
-    exportEntity(
-        "mkdirs",
-        OperatorGroup::create(
-            "mkdirs",
-            {{"fs:mkdirs",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Bool())}}));
-    // Deleting as an operation that can fail (design principles 3.9): a missing path is an
-    // error value with kind NotFound, not a silent success, and a refusal is PermissionDenied.
-    for (const std::string name : {"remove", "remove_dir"})
-        exportEntity(
-            name,
-            OperatorGroup::create(
-                name,
-                {{"fs:" + name,
-                  StaticFuncTypeResolver::create(
-                      {},
-                      {{Type::String(), false}},
-                      TupleType::fallible(Type::Void()))}}));
-}
+FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {}
 
 module_ptr_t FsModule::create(context_ptr_t ctx) { return std::make_shared<FsModule>(ctx); }
 
@@ -119,7 +26,8 @@ bool FsModule::load() {
     if (loaded_)
         return true;
     context_->registerExecutorFactory("fs", [ctx = context_]() { return createFsExecutor(ctx); });
-    // The purity of every operator (design principles 3.3).
+    // The purity of every operator (design principles 3.3): each reads or writes the file system,
+    // so none is a function of its arguments.
     camel::core::OperatorTable::instance().declare(
         "fs",
         {
