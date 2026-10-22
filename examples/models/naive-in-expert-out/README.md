@@ -146,11 +146,12 @@ the cell; neither number measures the frameworks. What the run does support is t
 
 **Conditions.** Host `tangshan88`: AMD EPYC 7343, 16 physical cores and 32 hardware threads, 503
 GiB RAM, Ubuntu 22.04 (kernel 6.8.0-138), Python 3.10.12, NumPy 2.2.6, PyTorch 2.14.1+cu130 (a
-CUDA build; every variant ran on the CPU), Camel v0.2.24. The binary is the committed source:
-fingerprint `808a7e445efc`, built 21:07:38 UTC. The build that produced the numbers was stamped
-`2adf18c04` with seven dirty paths, because the compiler change it contains was committed as
-`539ad3808` while the sweep ran; rebuilding that commit here gives the same fingerprint, so the
-measured and the committed sources are one build. The
+CUDA build; every variant ran on the CPU), Camel v0.2.24. The numbers were measured on a binary
+with fingerprint `808a7e445efc`, built 21:07:38 UTC from `2adf18c04` plus this directory's
+`is_numeric` change (that change was committed as `539ad3808` while the sweep ran, and rebuilding
+that tree gave the same fingerprint). The tree has since merged develop (`bf6fe3a54`), and the
+tree as committed here rebuilds to fingerprint `8d3a616b7faa`: these are measurements of the
+earlier build, and no row was re-measured after the merge. The
 harness is the `measure.py` committed with this table; it is Python, and nothing in the measured
 binary changed while the numbers were taken. The host is **shared**: other builds and tests ran
 throughout, and the 1-minute load average over the run ranged from 12 to 109 on 32 hardware
