@@ -10,6 +10,6 @@ import { rule_name } from rewrite
 rule guarded(x: int) { x + 0 => x } when true
 
 func main(): int sync {
-    println(rule_name(guarded()))
+    println(rule_name(guarded))
     return 0
 }

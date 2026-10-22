@@ -5152,7 +5152,19 @@ The type query '{0}' cannot be answered for '{1}' in the 'when' condition of '{2
 A query is answered when the declaration is instantiated, where every type parameter has a type. Write the query on a type parameter the call binds, or guard the declaration so that it is only instantiated for a concrete type.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/when/open_type.cml`, run as `camel test/cases/compile/when/open_type.cml`)
+
+```camel
+module when_open_type
+
+func bad::<T>(x: int): int when is_numeric::<T>() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
 
 ### WhenConditionUnmet
 

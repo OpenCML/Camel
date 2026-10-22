@@ -98,6 +98,43 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "when.open_type"
+desc = "A query on a type the declaration cannot answer: T is declared at the head but written nowhere in the signature, so at instantiation it is still open. The condition is reported as WhenTypeQueryNotConcrete, never taken for false."
+kind = "negative"
+case = "../../../cases/compile/when/open_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenTypeQueryNotConcrete"
+expect_diagnostic_line = 8
+expect_output_contains = ["cannot be answered for 'T'", "still has a type variable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.with_constant"
+desc = "A `when` that reads a `with` parameter is answered when the call gives a compile-time constant (`add<true>(41)`); the declaration applies and the value is not a body name."
+kind = "behavior"
+case = "../../../cases/compile/when/with_constant.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.with_name"
+desc = "A `when` that reads a `with` parameter given a runtime name (`add<flag>`) is reported as WhenConditionNotConstant at the declaration, never taken for true."
+kind = "negative"
+case = "../../../cases/compile/when/with_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionNotConstant"
+expect_diagnostic_line = 8
+expect_output_contains = ["The 'when' condition of 'add' cannot be evaluated"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "when.rule"
 desc = "A rule with `when` keeps the same surface: the declaration compiles the condition into the third function of the rule (`guarded__when`) and passes it to the Rule value. This pins the rule half independently of the combinator names another branch adds."
 kind = "behavior"
