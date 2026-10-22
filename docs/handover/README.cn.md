@@ -678,8 +678,8 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 3. **按模块分批迁移**：去重（`sleep`、排序、`has`/`contains`、`min`/`max`/`sum` 等）、改名与拆分（`stats`、`env`、`process`、`io`）、错误约定（`fs`、`env`、`time`）、资源名、能用 Camel 写的改为 Camel（`array`、`stats`、`random` 的组合部分、`Map`/`Set` 的组合操作、排序之外的 `algo`）；工具类移出（`test`、`bench`、`profiler`；`this`、`rendezvous` 进测试设施）。每批一次提交，能构建、相关测试通过；测试与示例随之改写（内测阶段不考虑兼容）。
 4. 不在本项：网络、流、键式随机数、优化器、扩展库（另行指派）。
 
-**剩下什么**：第 0、1 步已入（`handover/H76-stdlib-step1`，报告 note ⟨05673a8⟩）；H94 的六条裁定解决了第 1 步报告第 6 节的大部分待决问题（`.cml` 与 `.cmo` 是同一个模块、泛型声明之间的重叠检查、私有声明、入口前缀、只能声明自己的算子）。第 10 步的模块批次已由 H104 开始（`str`，报告 note ⟨73ce85e⟩）；`io` 的终端部分已由 H116 从 `os` 拆出并声明化（`stdlib/io.cml`，5 个算子；报告 note ⟨e6a16f6⟩）；`math`/`fs`/`time`/`json`/`re`/`random` 已按同一做法迁完；`graph` 由 H141 声明化（45 条无体声明，6 条计算签名与 `__neq__` 留在 C++；报告 note ⟨9a5ec0a⟩）。`globals` 不是模块（`BuiltinModule("")`、不可导入、通配 URI、变参、非标识符名、`sleep`/`exit` 绑 `process:` 前缀），H141 只做了调查，**要不要给语言全局一个声明宿主需要作者裁定**。第 4 步其余的 `exit`/`sleep`（全局内建，URI 已是 `process:*`）、第 8 步的 `str::bytes`/`from_bytes` 删除（已由 H122 完成），以及第 2–3、5–9 步仍未开始。
-**剩下什么**：第 0、1 步已入（note ⟨05673a8⟩）；H94 的六条裁定解决了第 1 步报告第 6 节的大部分待决问题。第 10 步已声明化 13 个模块（`bytes`、`str`、`math`、`json`、`io`、`re`、`random`、`fs`、`time`、`algo`、`statistics`、`para`、`this`）；第 4 步的改名由 H114 完成、`io` 由 H116 重建，第 8 步的 `str::bytes` 由 H122 删除，第 9 步的资源名由 H134 改完（`io:terminal` 与 `eprintln` 未做），第 11 步由 H127 收尾；第 2 步的删除计划由 H116/H146 取代。未做：第 3 步（`perf`+`sim`→`bench`）、第 5 步（`algo`→`array`）、第 6 步（`statistics`→`stats`）、第 7 步的错误约定，以及 `env`/`process`/`hash` 的声明化与 `ckpt`（阻塞，H140）。逐模块账本见下。（H153 校正，依据 H114、H116、H122、H127、H134、H135、H146）
+**剩下什么**：第 0、1 步已入（`handover/H76-stdlib-step1`，报告 note ⟨05673a8⟩）；H94 的六条裁定解决了第 1 步报告第 6 节的大部分待决问题（`.cml` 与 `.cmo` 是同一个模块、泛型声明之间的重叠检查、私有声明、入口前缀、只能声明自己的算子）。第 10 步的模块批次已由 H104 开始（`str`，报告 note ⟨73ce85e⟩）；`io` 的终端部分已由 H116 从 `os` 拆出并声明化（`stdlib/io.cml`，5 个算子；报告 note ⟨e6a16f6⟩）；`math`/`fs`/`time`/`json`/`re`/`random` 已按同一做法迁完；`graph` 由 H141 声明化（45 条无体声明，6 条计算签名与 `__neq__` 留在 C++；报告 note ⟨9a5ec0a⟩）；`env`/`process`/`hash` 由 H163 迁完（三份签名文件已删）。`globals` 不是模块（`BuiltinModule("")`、不可导入、通配 URI、变参、非标识符名、`sleep`/`exit` 绑 `process:` 前缀），H141 只做了调查，**要不要给语言全局一个声明宿主需要作者裁定**。第 4 步其余的 `exit`/`sleep`（全局内建，URI 已是 `process:*`）、第 8 步的 `str::bytes`/`from_bytes` 删除（已由 H122 完成），以及第 3、5、6 步与第 7 步的错误约定未做；第 2 步由 H116/H146 取代、第 4 步由 H114/H116 完成、第 9 步由 H134 改完（`io:terminal`/`eprintln` 未做）、第 11 步由 H127 收尾。
+**剩下什么**：第 0、1 步已入（note ⟨05673a8⟩）；H94 的六条裁定解决了第 1 步报告第 6 节的大部分待决问题。第 10 步已声明化 26 个模块（本段 H153 时的 13 个名单已过时，现值见「当前树计数」与 `docs/technical/48_declaration_migration.md`）；第 4 步的改名由 H114 完成、`io` 由 H116 重建，第 8 步的 `str::bytes` 由 H122 删除，第 9 步的资源名由 H134 改完（`io:terminal` 与 `eprintln` 未做），第 11 步由 H127 收尾；第 2 步的删除计划由 H116/H146 取代。未做：第 3 步（`perf`+`sim`→`bench`）、第 5 步（`algo`→`array`）、第 6 步（`statistics`→`stats`）、第 7 步的错误约定，以及 `ckpt`（阻塞，H140）与 `globals`（内建，声明宿主待作者裁定）。逐模块账本见下。（H153 校正，依据 H114、H116、H122、H127、H134、H135、H146；H208 校正，依据 H163）
 
 #### H19 模块账本（H153 重建，2026-10-22）
 
@@ -871,7 +871,7 @@ nvm、taskflow 得 `(1, 30)`（正确），fvm、jit 得 `(3, 20)`。`feat/examp
 2. **命令行遍参数**：`mymod::p(k=v)` 映射到函数的 `with` 参数（配置，设计原则 4.4）。
 3. **事务中新建值的根规则**：编辑可以创建常量等新值（常量折叠类改写需要），草稿的静态槽在 NodeVM 安全点不得被移动或回收。
 4. **区域的读取**（`region_of`、种类、父区域）与校验器的区域规则（2）（3）：在协调者一方的 R2c/R2b 合入后。
-5. H19 落地后把 `constant(n, sample)` 改为 `constant::<T>(n)`。
+5. Q1 类型实参落地后把 `constant(n, sample)` 改为 `constant::<T>(n)`（`graph` 已由 H141 声明化；H19 只剩 `ckpt`、`globals`）。
 6. 测试：每项在 `modules.graph` 计划中加用例；差分测试（Camel 遍对 C++ 遍逐字节）保持通过。
 
 **剩下什么**：第 5 项 `constant::<T>(n)` 只等 Q1 类型实参（`graph` 已由 H141 声明化；H19 现在只剩 `ckpt`、`globals`）；第 1–4、6 项已合入。
