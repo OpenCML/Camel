@@ -1,0 +1,272 @@
+# H182：`--changed` 的覆盖清单、空规则类与自检
+
+**任务**：盘点仓库里的文件类，按“改动能弄坏什么”分类；用每类一个合成改动测
+`node scripts/test.js --changed --list` 今天选出哪些计划；找出选了“无”的类并说明应该跑什么；
+在 H161 的约束下补规则；加自检让新的类不能悄悄出现；用红证明验证自检；最后用几个真实提交
+核对选择与报告实际跑的计划。
+
+**结论：旧规则真正的洞不是“单文件改动跑 0 个计划”，而是混合改动里的静默丢弃。**
+一个文件没有规则时，单文件改动会回退到整个 fast 层；可一旦同一改动里还有另一个文件命中规则，
+聚合回退不会发生，这个文件就一个计划也不加，也没有任何输出说明它被丢了。H182 用全树探针
+（`git ls-files`）找到这些类，补了规则，并让 `--changed` 在混合改动里点名无规则文件；自检
+则让“已提交或未提交的新类”在没有规则、也不在允许清单时直接红。
+
+## 0. 结论
+
+- 基线 `origin/develop` `58881b837`，工作树 `h182-changed-coverage`，分支
+  `handover/H182-changed-coverage`。
+- 新增/改写 `test/plan-selection.json`：目录规则 4 条（新增 `test/cases/feat/`），文件规则
+  **60 条 / 103 个前缀 / 152 个计划条目**，其中 1 条是 `test/plans/` 的 self 规则。
+- 覆盖的新类：`stdlib/<module>.cml` 声明体、`stdlib/signatures/` 计算半、文档/发布/标准库
+  生成脚本、debugger race harness、`include/`（镜像 `src/`）、`src/` 其余部分、smoke 用例、
+  `test/cases/feat/` 下的 mm 用例、golden、exemplars、根文档与图片、`CMakeLists.txt`。
+- 仍无规则的 **262 个文件**全部落在自检允许清单里：perf/GC-stress/progen/PyTorch 政策层，
+  以及 vendored、打包、CI 配置、仓库元数据等“没有任何计划读”的类。它们不是洞。
+- 自检红证明：新增 `test/fixtures/h182-probe.xyz`（未跟踪、未忽略）后，自检点名
+  `test/fixtures/*.xyz` 并以 1 退出；删除后恢复绿。
+- 代表性提交：H175、H173、H171 的 `--changed --list` 覆盖了报告实际跑的计划；H167 的选择
+  不包含 perf 计划，这是 H167 的“perf 手动”政策，选择里点名了 `test/perf-baseline.json`
+  并以 `smoke + feat/docs_links` 代替。
+- 验收：`feat/docs_links`、`smoke`、`feat/consistency/runner`（自检）在 Linux 主机上通过。
+
+## 1. 方法
+
+每个类取一个代表文件，做一次合成改动，测完还原：
+
+```powershell
+# 追加一个空格（或新建一个未跟踪文件），让 --changed 看见它
+Add-Content -LiteralPath <file> -Value ' '
+$env:CAMEL_TEST_BASE = 'HEAD'
+node scripts/test.js --changed --list
+git checkout -- <file>        # 新建的文件则 Remove-Item
+Remove-Item Env:CAMEL_TEST_BASE
+```
+
+`--changed --list` 只打印选择，不跑计划；输出里的路径是绝对路径，报告里统一写成
+`test/plans/` 下的相对名字。单文件测“这个类有没有规则”，混合测“另一个文件命中规则时它是否
+被静默丢掉”。
+
+旧规则用 `git show 58881b837:test/plan-selection.json` 复现；旧 runner 的 self 规则只看
+`.plan.toml`，所以 golden 在旧行为下确实什么都不选（新 runner 的 golden 处理是 H182 加的）。
+
+## 2. 清单：按“改动能弄坏什么”分类
+
+### 2.1 编译器与运行时（C++）
+
+| 类 | 代表改动 | 新选择（`--changed --list`） | 旧选择 |
+|---|---|---|---|
+| 调度器 / FastVM | `src/passes/sched/fastvm/compile.cpp` | smoke, feat/linear, feat/para, feat/trans | 同左 |
+| 优化 pass / 重写引擎 | `src/passes/opt/inline/inline.cpp` | smoke, feat/opt, feat/trans/pass_dump, feat/modules/rules, feat/compile | 少 feat/compile |
+| 翻译 pass | `src/passes/trans/cpp/code.cpp` | smoke, feat/trans, feat/compile/gir, feat/consistency/print_formats | 同左 |
+| 前端 | `src/parse/syntax/lexer.cpp` | smoke, feat/parse, feat/compile, feat/consistency | 同左 |
+| GIR/编译 | `src/compile/gir/graph.cpp` | smoke, feat/compile, feat/consistency, feat/trans | 同左 |
+| 核心 / GC | `src/core/mm/gc.cpp` | smoke, feat/linear, feat/consistency, feat/mm | 同左 |
+| 执行器 | `src/execute/executor.cpp` | smoke, feat/linear, feat/para | 同左 |
+| 内建算子（`src/builtin`） | `src/builtin/operators/ops.cpp` | smoke, feat/compile, feat/trans, feat/linear, feat/modules | **回退 whole fast** |
+| 公共头 | `include/camel/core/value.h` | smoke, feat/linear, feat/consistency, feat/mm | **回退 whole fast** |
+
+`src/` 的通用规则只给没有更具体规则的路径兜底；具体规则（`src/passes/sched/`、
+`src/passes/opt/`、`src/parse/`、`src/core/`、`src/runtime/`、`src/execute/`）仍在前面，窄规则
+先命中。`include/` 一一镜像这些规则；`include/camel/core/value.h` 与 `src/core/` 选同一组计划。
+
+### 2.2 模块
+
+| 类 | 代表改动 | 新选择 | 旧选择 |
+|---|---|---|---|
+| tensor C++ + 用例 | `modules/tensor/ops/utility_ops.cpp` | feat/modules/tensor.plan.toml, feat/modules/tensor, index_semantics, operator_semantics, autodiff (layer) | 同左 |
+| tiles / CUDA | `modules/tiles/kernel.cu` | feat/modules/tiles.plan.toml, gpu/tiles, gpu/tiles_rows, gpu/tiles_transfer, gpu/profile, feat/modules/ddpm_primitives | 同左 |
+| ONNX | `modules/onnx/...` | feat/modules/onnx.plan.toml (layer), feat/trans, feat/compile/enum | 同左 |
+| 其余模块 | `modules/io/...` | 对应的 `feat/modules/<module>` 或 `feat/modules` | 同左 |
+
+`modules/tiles/**` 仍选 6 个计划文件、其中 88 条 GPU 用例；这是 H161 就接受的成本。
+`modules/onnx` 与 autodiff 的 `layer: true` 让慢的 PyTorch/ONNX Runtime 对比在默认
+`--tier fast` 下被过滤，`--tier all` 才跑。
+
+### 2.3 标准库声明
+
+| 类 | 代表改动 | 新选择 | 旧选择 |
+|---|---|---|---|
+| 声明体 | `stdlib/tensor.cml` | **smoke, feat/modules, feat/compile, feat/modules/stdlib_registry.plan.toml** | feat/compile, feat/modules/std, feat/modules/stdlib_registry, feat/trans/macro（**缺 feat/modules**） |
+| 计算半 | `stdlib/signatures/tensor.cml` | **feat/modules/stdlib_registry.plan.toml** | feat/compile, feat/modules/std, feat/modules/stdlib_registry, feat/trans/macro（过宽） |
+| 重写规则数据 | `stdlib/rules.cml` | smoke, feat/opt, feat/trans/pass_dump, feat/modules/rules, feat/compile | 少 feat/compile |
+
+声明体不是“没有规则”，而是选错了：旧规则选了声明语法所在的 compile、std 门面和 registry，
+却没选真正 import 这条声明的 `feat/modules`；`feat/modules` 是目录目标，`--tier fast` 会把
+ProGen/GC/PyTorch 条目挡在外面。计算半只被 `stdlib-reference.mjs --verify-ops/--verify-doc`
+读，所以只选 registry，不再顺带跑 compile/std/macro。
+
+### 2.4 工具、文档、脚本、用例
+
+| 类 | 代表改动 | 新选择 | 旧选择 |
+|---|---|---|---|
+| LSP | `tools/lsp/main.cpp` | feat/tools, feat/format, feat/tools/lsp.plan.toml | 同左 |
+| 编辑器语法 | `editors/vscode/package.json` | feat/tools/grammar.plan.toml | 同左 |
+| 示例 | `examples/fib.cml` | feat/examples | 同左 |
+| exemplars | `exemplars/01_scalar_boundary/program.cml` | feat/exemplars.plan.toml | **回退** |
+| 文档守卫 | `scripts/check-doc-counts.mjs` | **feat/docs_links.plan.toml** | **回退** |
+| 发布闸门 | `scripts/release-gate.mjs` | **feat/docs_links.plan.toml** | **回退** |
+| 标准库生成器 | `scripts/stdlib-reference.mjs` | **feat/modules/stdlib_registry.plan.toml** | **回退** |
+| 通用构建脚本 | `scripts/build.js` | **smoke** | **回退** |
+| 生成的标准库页 | `docs/stdlib-reference.md` | **registry + feat/docs_links** | feat/docs_links + portability（**缺 registry**） |
+| 根文档 | `README.md` | smoke, feat/docs_links, portability | **回退** |
+| 图片 | `logo.png` | feat/docs_links.plan.toml | **回退** |
+| smoke 用例 | `test/cases/smoke/core/fib10_pipeline.cml` | **smoke** | **回退** |
+| 带 `feat/` 的用例 | `test/cases/feat/mm/blocks.cml` | **feat/mm** | **回退**（旧目录规则拼成 `feat/feat/mm`） |
+| 循环用例 | `test/cases/loops/onnx_refused.cml` | feat/linear/loops.plan.toml | 同左 |
+| 编译用例 | `test/cases/compile/enum/shapes.cml` | feat/compile/enum.plan.toml | 同左 |
+| debugger harness | `test/tools/debugger/race-harness.mjs` | **feat/tools/debugger.plan.toml** | **回退** |
+| LSP harness | `test/tools/lsp/client.mjs` | **feat/tools/lsp.plan.toml** | **回退** |
+| 其余 harness | `test/tools/cppexec/...` | smoke, feat/consistency/runner.plan.toml | **回退** |
+| golden / fixture | `test/plans/feat/parse/golden/ast_hashes.txt` | **feat/parse（最近的有计划的目录）** | **什么都不选**（旧 self 只看 `.plan.toml`） |
+| 计划文件 | `test/plans/smoke/core.plan.toml` | 自己 | 自己 |
+| 构建定义 | `CMakeLists.txt` | smoke, feat/linear, feat/para, feat/modules | 同左 |
+
+`test/cases/feat/` 的目录规则放在通用 `test/cases/` 之前：旧规则会把
+`test/cases/feat/mm/...` 拼成 `test/plans/feat/feat/mm`，找不到就回退；新规则把它映射到
+`feat/mm`。golden 走 self 规则的“非计划文件选最近的有计划目录”，不再要求 golden 自己有计划。
+
+### 2.5 政策层：仍然不可选
+
+| 类 | 代表改动 | 选择 | 为什么 |
+|---|---|---|---|
+| perf 计划 | `test/plans/perf/fib.plan.toml` | 回退（不选） | H161/H167：perf 只在安静机器上手动跑 |
+| perf 基线 | `test/perf-baseline.json` | 回退（不选） | H167：perf 手动；改基线不能自动跑 perf |
+| perf 闸门脚本 | `scripts/perf-gate.mjs` | smoke（普通构建脚本规则） | 不选 perf；smoke 只验证工具链 |
+| GC-stress 计划 | `test/plans/feat/mm/gc*.plan.toml` | 回退（不选） | H161：分钟级 soak，共享主机不跑 |
+| progen | `test/plans/feat/opt/progen.plan.toml` | 回退（不选） | H161：慢计划，手动 |
+| GPU 压力计划 | `test/plans/gpu/tiles_regions|decorator` | 回退（不选） | H161：压力测试，手动 |
+| PyTorch 慢用例 | `feat/modules/autodiff`、`feat/modules/onnx` 的慢用例 | 选计划但默认 `layer` 过滤 | H161：命名计划仍要跑 fast 子集，慢对比只在 `--tier all` |
+
+这 262 个无规则文件里，绝大多数是这些政策层，以及 `benchmarks/`、`showcase/`、`pypi/`、
+`third_party/`、`.github/`、`.vscode/`、`.husky/`、根元数据、`test/README.md` 等没有计划读的类。
+自检的允许清单逐类给出理由；新增类若不进清单，自检红。
+
+## 3. 旧规则到底漏了什么
+
+1. **混合改动里的静默文件**：`scripts/check-doc-counts.mjs`、`release-gate.mjs`、
+   `stdlib-reference.mjs`、`stdlib-declarations.mjs`、`check-grammar.mjs`、
+   `check-std-includes.mjs`、`diagnostics-catalog.mjs`、`build.js`、`test/tools/debugger/`、
+   `test/tools/lsp/`、`exemplars/`、`include/`、`src/builtin/`、`test/cases/smoke/`、
+   `test/cases/feat/`、golden 等。单文件测时它们都打印
+   `no rule matches ... running the whole fast layer`；混合改动里另一个文件命中规则后，它们
+   一个计划也不加。
+2. **选错/缺关键计划**：`stdlib/tensor.cml` 缺 `feat/modules`；`docs/stdlib-reference.md`
+   缺 registry；`test/cases/feat/mm` 拼错路径；`stdlib/signatures/` 选得过宽。
+3. **不是洞但需要说的**：`src/passes/opt/` 的 `stdlib/rules.cml` 仍选整个 `feat/opt`
+   目录（重写引擎可改变任何优化结果），代价是 710 条 + smoke；`modules/tiles/**` 仍选 6 个
+   计划文件（88 条 GPU 用例）；这两条在 H161 已经写明成本，H182 不改。
+
+## 4. 新增/修改的规则与理由
+
+- `test/cases/feat/` → `feat/`：修 `test/cases/feat/mm` 被拼成 `feat/feat/mm` 的旧错。
+- `stdlib/signatures/` → registry（窄），`stdlib/` → smoke + feat/modules + feat/compile +
+  registry（宽）：计算半只被 `--verify-ops/--verify-doc` 读；声明体既被编译、又在启动时装载、
+  又被每个 import 它的模块计划使用。
+- `scripts/check-doc-*.mjs`、`check-retired-names.mjs`、`release-gate.mjs` → `feat/docs_links`：
+  这四个文档守卫由该计划实际调用；`release-gate.mjs --dry-run` 的输出被
+  `docs.counts_current` 读取。
+- `scripts/stdlib-reference.mjs`、`stdlib-declarations.mjs` → registry：`--verify-ops`、
+  `--verify-doc`、`--check` 就在这个计划里。
+- `scripts/check-grammar.mjs` → `feat/parse/frontend.plan.toml`；`check-std-includes.mjs` →
+  `feat/tools/portability.plan.toml`；`diagnostics-catalog.mjs` →
+  `feat/compile/diag_catalog.plan.toml`：各自是计划里那条 `grammar.reference_in_step`、
+  `portability.std_includes`、`diag_catalog` 检查的实现。
+- `test/tools/debugger/`、`test/tools/lsp/` → 各自的计划；其余 `test/tools/` → smoke +
+  runner：没有计划直接测 harness，smoke 先验证工具链，runner 计划测 runner 本身。
+- `exemplars/` → `feat/exemplars.plan.toml`；`include/` 镜像 `src/`；通用 `src/` 兜底；
+  `test/cases/smoke/` → smoke；`test/cases/feat/` → `feat/`；golden → 最近的计划目录。
+- `docs/stdlib-reference.md` → registry + docs_links；`docs/diagnostics.md` →
+  diag_catalog + docs_links；根文档/`agents/` → smoke + docs_links + portability；`assets/`、
+  `logo.png` → docs_links。
+- 通用 `scripts/` → smoke（`perf-gate.mjs` 也走这条，但 smoke 不跑 perf）；通用 `test/tools/`
+  → smoke + runner。
+- `test/runner.mjs`：规则缓存；self 规则支持“非计划文件选最近计划目录”；混合改动时用
+  `[WARN]` 点名无规则文件（perf/GC/progen 的 except 文件除外，因为政策上就不选）。
+- `test/tools/selftest/run.mjs`：全树（index + 未跟踪未忽略）逐文件检查；无规则且不在允许
+  清单就红；允许清单逐条带理由，并反查“清单里的类是否还真的有文件”。
+
+## 5. 自检与红证明
+
+自检代码在 `test/tools/selftest/run.mjs`，属于 `feat/consistency/runner.plan.toml`。它做两件事：
+
+1. `git ls-files --cached --others --exclude-standard` 得到全部文件（包括未提交的新文件），
+   逐个跑 `plansForChanges([file])`；返回 `null` 且不匹配 `RULELESS_ALLOWED` 就记问题。
+2. 反查允许清单的每条规则至少匹配一个真实文件，防止清单腐烂。
+
+红证明（主机，`-NoBuild`，未提交文件通过 tar 送到主机）：
+
+```text
+# 新建 test/fixtures/h182-probe.xyz（未跟踪、未被 .gitignore 忽略）
+test/fixtures/h182-probe.xyz
+plan-selection: 1 tracked file(s) match no rule and are not an allowed rule-less class:
+  test/fixtures/*.xyz: test/fixtures/h182-probe.xyz
+[SUMMARY] ... fail: 1
+exit 1
+```
+
+删除 `test/fixtures/h182-probe.xyz` 后，同一计划恢复绿。
+
+## 6. 代表性真实提交
+
+用当前规则对每个 merge 的第一父提交做 `git diff --name-only`，把文件列表喂给
+`plansForChanges`，再看报告 §验证实际跑了哪些计划。
+
+| 提交 | 报告实际跑的计划 | 当前 `--changed` 选择（关键项） | 结论 |
+|---|---|---|---|
+| H175 `a84577b8b` | smoke, feat/compile, feat/modules, feat/parse, feat/docs_links | smoke, feat/compile, feat/modules, feat/parse（golden）, feat/docs_links, registry, tensor, autodiff(layer) | 全覆盖，且新增 stdlib 声明 → feat/modules |
+| H173 `53f7c05dc` | smoke, feat/modules, feat/compile, feat/parse/frontend | smoke, feat/modules, feat/compile, feat/parse（golden）, registry, feat/opt, rules | 全覆盖；旧规则会漏 parse/frontend（golden 当时不选） |
+| H171 `7aa76e8a6` | smoke, feat/docs_links | smoke, feat/docs_links, portability | 全覆盖（portability 是额外的小计划） |
+| H167 `7c0b6a70f` | perf.startup, perf.fib（手动） | smoke, feat/docs_links；`test/perf-baseline.json` 被 WARN 点名 | 不选 perf 是政策；选择里明确说了基线文件没有规则 |
+
+H173 是最好的反例：它的 golden（`ast_hashes.txt`）在旧规则下什么都不选，而报告确实跑了一次
+`frontend.ast_snapshot` 并红过（签名文件头改了没重生成）。H182 的 golden 规则现在会选
+`feat/parse`。
+
+## 7. 验证
+
+全部在 Linux 主机上构建/运行（本机不构建）：
+
+```text
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+     -Path D:\Projects\Camel-wt\h182-changed-coverage `
+     -Plan "test/plans/smoke,test/plans/feat/docs_links.plan.toml,test/plans/feat/consistency/runner.plan.toml" `
+     -Jobs 8
+```
+
+主机结果（构建 + 三个计划）：
+
+```text
+[STEP] Building Release... (261022_041020_20068051a)
+[STEP] Stamped out/latest/build-info.json: 20068051a5 (clean), 1138 source files,
+       fingerprint 96b23e371fe2
+[SUMMARY] total: 15, pass: 15, fail: 0
+[INFO] wall: 6.7 s, jobs: 8, tier: fast
+```
+
+- `smoke` 10/10，`feat/docs_links` 4/4（含 `docs.counts_current`），
+  `feat/consistency/runner` 1/1（runner 自检）。
+- 最终树复跑（文档提交后）：`smoke + feat/docs_links` **14/14、0 失败**；runner 自检
+  **1/1**。构建 367.5 s（625 个目标），传输 12.7 s；`exit 0`。
+- 红证明：`feat/consistency/runner` 单独跑，`exit 1`，selftest 输出
+  `plan-selection: 1 tracked file(s) match no rule and are not an allowed rule-less class:
+  test/*.xyz (test/fixtures/h182-probe.xyz)`；删除探针后同一计划 `1/1` 通过、`exit 0`。
+
+## 8. 提交
+
+- `6d5971203` `feat(test): cover the file classes --changed was dropping (H182)`：规则、
+  runner、自检、`docs/test-plans.md`。
+- `20068051a` `test(selection): include smoke for declarations/docs and the self-test's
+  untracked files`：声明/文档规则加 smoke；自检读 index + 未跟踪文件。
+- `0b435f8fe` `fix(selection): keep the policy-excluded plans out of the unmatched warning`：
+  perf/GC/progen 的 except 文件不再被 WARN 当作洞。
+- `6db90c16e` `docs(handover): record the H182 coverage inventory and its red proof`：
+  本报告、看板行与 `docs/test-plans.md` 的最后一段；随后只改了本节的最终复跑数字。
+
+## 9. 不做
+
+- 不让 `--changed` 选 perf、GC-stress、progen 或 PyTorch 慢用例：政策是共享主机不跑，
+  改了会让普通改动误跑分钟级计划。
+- 不把 `test/perf-baseline.json` 映射到任何计划：perf 是手动的（H167）；它现在在混合改动里
+  会被 WARN 点名，但不会选计划。
+- 不为 `benchmarks/`、`showcase/`、`pypi/`、`third_party/` 编计划：没有计划读它们；自检的
+  允许清单写明理由。
