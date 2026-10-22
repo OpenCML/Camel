@@ -19,9 +19,9 @@
  */
 module rules
 import { Program, Node, constant } from graph
-import { abs, trunc } from math
+import { abs, exp as math_exp, expm1, log as math_log, log1p, trunc } from math
 import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
-import { Tensor } from tensor
+import { Tensor, log, log_softmax, softmax } from tensor
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
 
@@ -532,9 +532,77 @@ export rule tensor_i64_distribute(a: Tensor<int>, b: Tensor<int>, c: Tensor<int>
     a * (b + c) <=> a * b + a * c
 }
 
+// ---- Accuracy rules (rewrite design 2 (second version) 8.10) ----
+//
+// These rules compute the same value in a form with no larger error. They change the bits on
+// purpose, so each one requires the numeric permission `refine_accuracy`
+// ("replace a form with one whose error is not larger"), which is not granted by default and is
+// not applicable under `#strict`: the policy of the pass and the strict tag of the program both
+// keep them from firing. `check` verifies them against a higher-precision reference, not bit for
+// bit (modules/rewrite/module.cpp, `checkKernel`), and reports the worst-case error ratio.
+//
+// The name `refine_accuracy` is the one rewrite design 8.10 proposes; the design says it may be
+// overturned. It is used as written.
+
+/// `exp(x) / sum(exp(x), axis, true) => softmax(x, axis)` is deliberately absent: over f32 the
+/// stable form subtracts m = max(x, axis, true), and when m is far from an element, `x - m`
+/// rounds. The relative error of that subtraction is small, but `exp` turns the absolute error
+/// back into a relative one: for `x = [-1e-16, 27.004, -33.563]` the naive form's tiny
+/// probability is accurate to 4.98e-8 and the stable form's to 1.91e-6, so the check rejects the
+/// rewrite on that sample. The same subtraction is shared by both sides of the log-of-softmax
+/// rule below, which is why that one holds.
+///
+/// `log(softmax(x, axis))` where the program already calls `softmax`: the rounding of each
+/// probability to f32 becomes an absolute error in its log, and a probability that rounds to zero
+/// gives -inf where the true log-softmax is finite. `log_softmax` avoids both; the check verifies
+/// it on vectors, matrices and rank-3 tensors.
+#requires<refine_accuracy>
+export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
+    log(softmax(x, axis)) => log_softmax(x, axis)
+}
+
+/// The design's own scalar example, `log(1 + x) => log1p(x)`, in f64 and in f32.
+///
+/// `1 + x` rounds before the log: for |x| below the spacing of 1 (2^-52 in f64, 2^-23 in f32)
+/// the naive log is 0 and its relative error is 100%; `log1p` computes log(1 + x) without
+/// forming 1 + x, and its error does not grow as x -> 0. The check passes only if the right
+/// side's error is not larger on every sample, including the near-zero region.
+#requires<refine_accuracy>
+export rule float_log1p(x: float) {
+    math_log(1.0 + x) => log1p(x)
+}
+
+#requires<refine_accuracy>
+export rule f32_log1p(x: f32) {
+    math_log(1.0 + x) => log1p(x)
+}
+
+/// The design's second scalar example, `exp(x) - 1 => expm1(x)`, in f64 and in f32.
+///
+/// For |x| below the spacing of 1 the naive `exp(x)` rounds to exactly 1 and the subtraction
+/// gives 0; `expm1` evaluates exp(x) - 1 directly, without that cancellation.
+#requires<refine_accuracy>
+export rule float_expm1(x: float) {
+    math_exp(x) - 1.0 => expm1(x)
+}
+
+#requires<refine_accuracy>
+export rule f32_expm1(x: f32) {
+    math_exp(x) - 1.0 => expm1(x)
+}
+
+/// The design's third scalar example, `sqrt(x*x + y*y) => hypot(x, y)`, is deliberately absent:
+/// `hypot` returns +inf when one operand is +inf and the other NaN, where squaring first returns
+/// NaN, so the rewrite would not be "no worse" on the whole domain. No permission can ask for
+/// that exception here.
+
 /// The rules that make an expression smaller, applied one way to a fixpoint, under the numeric
 /// policy of the pass. `tensor_i64_distribute` is not here: it grows a writing, and `simplify`
 /// only takes steps that make one smaller.
+///
+/// The accuracy rules are in the set: they fire only on a node whose effective permissions grant
+/// `refine_accuracy`, so a `#strict` program and an untagged one are untouched, and the pass
+/// still needs no second switch for them.
 func simplifyWith(p: Program, strict: bool): Program! {
     return rewrite(p, [
         int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero,
@@ -556,6 +624,8 @@ func simplifyWith(p: Program, strict: bool): Program! {
         tensor_f32_div_one, tensor_f32_neg_neg, tensor_f32_add_self, tensor_f32_combine,
         tensor_f32_combine_mixed, tensor_f32_fold, tensor_f32_double, tensor_f32_combine_one,
         tensor_f32_combine_one_mixed, tensor_f32_one_combine, tensor_f32_one_combine_mixed,
+        // Accuracy rules (8.10): their `#requires<refine_accuracy>` decides whether they fire.
+        tensor_log_softmax_of_softmax, float_log1p, f32_log1p, float_expm1, f32_expm1,
     ], strict)
 }
 
