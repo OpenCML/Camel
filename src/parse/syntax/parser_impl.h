@@ -385,6 +385,7 @@ class ParserImpl {
     void parseKeyInterType();
     void parseTypeUnit();
     void parseArrayType();
+    void parseArrayDim();
     void parseSpecType();
     void parsePrimaryType();
     void parseStructType();

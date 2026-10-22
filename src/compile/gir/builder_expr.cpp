@@ -981,12 +981,13 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             return entered;
         }
     }
-    // Safe conversions always; an Unsafe one only into a module type, which then checks the
-    // value when the conversion runs (Type::castSlotFrom of that type). Primitive conversions
-    // that may lose information stay refused.
+    // Safe conversions always; an Unsafe one only into a module type or an array, which then
+    // check the value when the conversion runs (Type::castSlotFrom: an array checks its shape).
+    // Primitive conversions that may lose information stay refused.
     const CastSafety safety = targetType->castSafetyFrom(sourceType);
     if (safety != CastSafety::Safe &&
-        !(safety == CastSafety::Unsafe && targetType->isOtherType())) {
+        !(safety == CastSafety::Unsafe &&
+          (targetType->isOtherType() || targetType->code() == TypeCode::Array))) {
         // An explicit `as` between struct types whose fields are the same by name but in
         // another order (or between two named types) is a copy, field by field (design
         // principles 5.2). A shape that does not match at all stays refused.

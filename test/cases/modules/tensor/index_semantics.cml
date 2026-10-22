@@ -13,7 +13,7 @@ import { Tensor, ones, reshape, transpose, permute, slice, sum, max, matmul, rel
 import { max_pool2d } from nn
 import { unordered_reduce } from para
 
-func layers(x: Tensor<f32, const [2, 3]>, b: Tensor<f32, const [3]>, w: Tensor<f32, const [3, 4]>): float {
+func layers(x: Tensor<f32, [2, 3]>, b: Tensor<f32, [3]>, w: Tensor<f32, [3, 4]>): float {
     let h = relu(matmul(x, w))
     let y = x + b
     let s = slice(transpose(y), 0, 1, 3)
@@ -22,12 +22,12 @@ func layers(x: Tensor<f32, const [2, 3]>, b: Tensor<f32, const [3]>, w: Tensor<f
 }
 
 /// The first extent is open: a parameter without a value; the bias broadcasts on the other.
-func rows(x: Tensor<f32, const [-1, 3]>, b: Tensor<f32, const [3]>): Tensor {
+func rows(x: Tensor<f32, [?, 3]>, b: Tensor<f32, [3]>): Tensor {
     return x + b
 }
 
 /// Both first extents are open: either may be 1, so whether it broadcasts is not known (Q9).
-func open(x: Tensor<f32, const [-1, 3]>, y: Tensor<f32, const [-1, 3]>): Tensor {
+func open(x: Tensor<f32, [?, 3]>, y: Tensor<f32, [?, 3]>): Tensor {
     return x + y
 }
 
@@ -38,24 +38,24 @@ func unknown(x: Tensor<f32>, y: Tensor<f32>): Tensor {
 
 /// The program allows the sum to be regrouped.
 #[reassociate]
-func regrouped(x: Tensor<f32, const [4, 5]>): Tensor {
+func regrouped(x: Tensor<f32, [4, 5]>): Tensor {
     return sum(x, 1)
 }
 
-func pooled(x: Tensor<f32, const [1, 1, 4, 4]>): Tensor {
+func pooled(x: Tensor<f32, [1, 1, 4, 4]>): Tensor {
     return max_pool2d(x, 2, 2, 1)
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) as Tensor<f32, const [2, 3]>
-    let b = reshape([0.5, -0.5, 1.5], [3]) as Tensor<f32, const [3]>
-    let w = ones([3, 4]) as Tensor<f32, const [3, 4]>
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) as Tensor<f32, [2, 3]>
+    let b = reshape([0.5, -0.5, 1.5], [3]) as Tensor<f32, [3]>
+    let w = ones([3, 4]) as Tensor<f32, [3, 4]>
     println(layers(x, b, w))
     println(rows(x, b))
     println(open(x, x))
     println(unknown(x, x))
-    println(regrouped(ones([4, 5]) as Tensor<f32, const [4, 5]>))
-    println(pooled(ones([1, 1, 4, 4]) as Tensor<f32, const [1, 1, 4, 4]>))
+    println(regrouped(ones([4, 5]) as Tensor<f32, [4, 5]>))
+    println(pooled(ones([1, 1, 4, 4]) as Tensor<f32, [1, 1, 4, 4]>))
     println(unordered_reduce<(acc: int, item: int): int => acc + item, 0>(range(1, 11)))
     return 0
 }

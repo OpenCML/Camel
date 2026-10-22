@@ -206,6 +206,9 @@ class Builder {
     Value visitKeyInterType(syntax::cst::KeyInterType context);
     Value visitTypeUnit(syntax::cst::TypeUnit context);
     Value visitArrayType(syntax::cst::ArrayType context);
+    Value visitArrayDim(syntax::cst::ArrayDim context);
+    /// The extents and the pack one `[...]` was written with.
+    DimGroup dimGroupOf(syntax::cst::ArrayDim context);
     Value visitConstData(syntax::cst::ConstData context);
     Value visitSpecType(syntax::cst::SpecType context);
     Value visitRefType(syntax::cst::RefType context);

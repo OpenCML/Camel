@@ -3,9 +3,9 @@ import { Tensor, ones, sum } from tensor
 // A product of two named dimensions is not linear: its value is unknown, so the third
 // argument is accepted whatever its extent is (design principles 5.4).
 func scaled(
-    a: Tensor<f32, const [constas n]>,
-    b: Tensor<f32, const [constas m]>,
-    c: Tensor<f32, const [n * m]>
+    a: Tensor<f32, [n]>,
+    b: Tensor<f32, [m]>,
+    c: Tensor<f32, [n * m]>
 ): float {
     return sum(a) + sum(b) + sum(c)
 }

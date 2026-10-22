@@ -1426,11 +1426,7 @@ string Generator::generateTypeLoad(const AST::node_ptr_t &node) {
         if (typeLoad->typeType() == AST::TypeType::Array) {
             auto arrayTypeLoad = dynamic_pointer_cast<AST::ArrayTypeLoad>(typeLoad);
             if (arrayTypeLoad) {
-                size_t dims        = arrayTypeLoad->dims();
-                string arraySuffix = "";
-                for (size_t i = 0; i < dims; i++) {
-                    arraySuffix += "[]";
-                }
+                const string arraySuffix = arrayTypeLoad->geneCode();
 
                 if (node->size() > 0) {
                     auto child = node->at(0);

@@ -1,16 +1,16 @@
 module tiles_compiled_region
 import { Tensor, reshape } from tensor
-func chain(x: Tensor<f32, const [3]>): Tensor<f32, const [3]> {
+func chain(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
     let doubled = x + x
     return doubled * doubled
 }
-func captured(w: Tensor<f32, const [3]>): Tensor<f32, const [3]> {
-    let f = (x: Tensor<f32, const [3]>): Tensor<f32, const [3]> => x + w
+func captured(w: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    let f = (x: Tensor<f32, [3]>): Tensor<f32, [3]> => x + w
     return f(w)
 }
 func main(): int sync {
-    let a = reshape([1.0, 2.0, 3.0], [3]) as Tensor<f32, const [3]>
-    let b = reshape([4.0, 5.0, 6.0], [3]) as Tensor<f32, const [3]>
+    let a = reshape([1.0, 2.0, 3.0], [3]) as Tensor<f32, [3]>
+    let b = reshape([4.0, 5.0, 6.0], [3]) as Tensor<f32, [3]>
     println(chain(a))
     println(captured(a))
     println(captured(b))

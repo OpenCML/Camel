@@ -5,7 +5,7 @@
 module cost_many_tensor
 import { Tensor, reshape, sum, matmul } from tensor
 
-func mm00(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm00(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -13,11 +13,11 @@ func lp00(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm00(x: Tensor<f32, const [2, 2]>): float {
+func sm00(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm01(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm01(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -25,11 +25,11 @@ func lp01(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm01(x: Tensor<f32, const [2, 2]>): float {
+func sm01(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm02(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm02(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -37,11 +37,11 @@ func lp02(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm02(x: Tensor<f32, const [2, 2]>): float {
+func sm02(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm03(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm03(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -49,11 +49,11 @@ func lp03(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm03(x: Tensor<f32, const [2, 2]>): float {
+func sm03(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm04(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm04(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -61,11 +61,11 @@ func lp04(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm04(x: Tensor<f32, const [2, 2]>): float {
+func sm04(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm05(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm05(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -73,11 +73,11 @@ func lp05(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm05(x: Tensor<f32, const [2, 2]>): float {
+func sm05(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm06(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm06(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -85,11 +85,11 @@ func lp06(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm06(x: Tensor<f32, const [2, 2]>): float {
+func sm06(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm07(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm07(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -97,11 +97,11 @@ func lp07(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm07(x: Tensor<f32, const [2, 2]>): float {
+func sm07(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm08(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm08(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -109,11 +109,11 @@ func lp08(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm08(x: Tensor<f32, const [2, 2]>): float {
+func sm08(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm09(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm09(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -121,11 +121,11 @@ func lp09(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm09(x: Tensor<f32, const [2, 2]>): float {
+func sm09(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm10(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm10(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -133,11 +133,11 @@ func lp10(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm10(x: Tensor<f32, const [2, 2]>): float {
+func sm10(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm11(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm11(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -145,11 +145,11 @@ func lp11(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm11(x: Tensor<f32, const [2, 2]>): float {
+func sm11(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm12(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm12(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -157,11 +157,11 @@ func lp12(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm12(x: Tensor<f32, const [2, 2]>): float {
+func sm12(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm13(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm13(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -169,11 +169,11 @@ func lp13(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm13(x: Tensor<f32, const [2, 2]>): float {
+func sm13(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm14(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm14(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -181,11 +181,11 @@ func lp14(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm14(x: Tensor<f32, const [2, 2]>): float {
+func sm14(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm15(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm15(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -193,11 +193,11 @@ func lp15(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm15(x: Tensor<f32, const [2, 2]>): float {
+func sm15(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm16(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm16(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -205,11 +205,11 @@ func lp16(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm16(x: Tensor<f32, const [2, 2]>): float {
+func sm16(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm17(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm17(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -217,11 +217,11 @@ func lp17(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm17(x: Tensor<f32, const [2, 2]>): float {
+func sm17(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm18(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm18(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -229,11 +229,11 @@ func lp18(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm18(x: Tensor<f32, const [2, 2]>): float {
+func sm18(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm19(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm19(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -241,11 +241,11 @@ func lp19(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm19(x: Tensor<f32, const [2, 2]>): float {
+func sm19(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm20(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm20(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -253,11 +253,11 @@ func lp20(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm20(x: Tensor<f32, const [2, 2]>): float {
+func sm20(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm21(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm21(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -265,11 +265,11 @@ func lp21(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm21(x: Tensor<f32, const [2, 2]>): float {
+func sm21(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm22(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm22(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -277,11 +277,11 @@ func lp22(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm22(x: Tensor<f32, const [2, 2]>): float {
+func sm22(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 
-func mm23(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>): Tensor<f32, const [2, 2]> {
+func mm23(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>): Tensor<f32, [2, 2]> {
     return matmul(x, w)
 }
 
@@ -289,7 +289,7 @@ func lp23(a: Tensor<f32>): Tensor<f32> {
     return loop y = a for k in [1, 2] do y + a
 }
 
-func sm23(x: Tensor<f32, const [2, 2]>): float {
+func sm23(x: Tensor<f32, [2, 2]>): float {
     return sum(x)
 }
 

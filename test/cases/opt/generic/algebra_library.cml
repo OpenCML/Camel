@@ -8,7 +8,7 @@ module algebra_library
 
 import { Tensor } from tensor
 
-type Vec = Tensor<f32, const [3]>
+type Vec = Tensor<f32, [3]>
 
 func int_zero(x: int): int {
     return x * 0

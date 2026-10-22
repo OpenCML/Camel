@@ -225,6 +225,8 @@ enum class SemanticDiag : uint32_t {
     ConstasArgumentMissing = 0x00019B,
     /// A tag gives a fact one value where the node already has another.
     TagValueConflict = 0x00019D,
+    /// A dimension pack (`..rest`) is not the last item of its `[...]`, or is written twice.
+    DimensionAfterAnyRank = 0x00019E,
 
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
@@ -261,6 +263,9 @@ enum class SemanticDiag : uint32_t {
     // Tags (design principles 6.2): the tag is declared for no pass in the pipeline, so nothing
     // reads what was written.
     TagHasNoReader = 0x100160,
+    // A dimension name is written once in a signature, so it relates nothing (design principles
+    // 5.4): write `?` if the size is not meant as a relation.
+    DimensionNameUsedOnce = 0x100161,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

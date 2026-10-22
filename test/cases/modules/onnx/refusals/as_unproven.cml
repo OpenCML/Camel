@@ -10,7 +10,7 @@ import { Tensor, reshape, tanh } from tensor
 import { export_model } from onnx
 
 func f(x: Tensor): Tensor {
-    let y = tanh(x) as Tensor<f32, const [2, 3]>
+    let y = tanh(x) as Tensor<f32, [2, 3]>
     return y * 2.0
 }
 

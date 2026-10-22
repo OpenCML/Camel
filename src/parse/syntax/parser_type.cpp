@@ -155,14 +155,13 @@ void ParserImpl::parseTypeUnit() {
     parseArrayType();
 }
 
-/// arrayType : specType ('[' ']')*
+/// arrayType : specType arrayDim+
 void ParserImpl::parseArrayType() {
     const size_t m = mark();
     parseSpecType();
     bool any = false;
-    while (cur_ == TK::LBracket && peek(1) == TK::RBracket && !lineBreak() && !panic_) {
-        bump();
-        bump();
+    while (cur_ == TK::LBracket && !lineBreak() && !panic_) {
+        parseArrayDim();
         any = true;
     }
     if (any) {
@@ -170,9 +169,46 @@ void ParserImpl::parseArrayType() {
     }
 }
 
+/// arrayDim     : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+/// arrayDimItem : '?' | '..' identDef? | dataExpr
+/// A dimension is an unknown extent (`?`, or the empty `[]`), an expression over integers and
+/// dimension names, or the trailing pack (`..`, `..rest`). The parser keeps a pack that is not
+/// last (and a second pack) so the tree still holds what was written; GCT reports it.
+void ParserImpl::parseArrayDim() {
+    const size_t m = mark();
+    bump();
+    {
+        Scope scope(*this, false);
+        if (cur_ != TK::RBracket && !panic_) {
+            while (!panic_) {
+                if (cur_ == TK::Question) {
+                    bump();
+                } else if (cur_ == TK::DotDot) {
+                    bump();
+                    if (cur_ == TK::Identifier) {
+                        parseIdentDef();
+                    }
+                } else {
+                    parseExpr();
+                }
+                if (!eat(TK::Comma) || cur_ == TK::RBracket) {
+                    break;
+                }
+            }
+        }
+        if (!panic_ && cur_ != TK::RBracket) {
+            unexpected({e(TK::Comma), e(TK::RBracket)});
+        }
+    }
+    eat(TK::RBracket);
+    close(m, NK::ArrayDim);
+}
+
 /// specType   : primaryType ('<' typeOrData (',' typeOrData)* '>')?
-/// typeOrData : typeExpr | 'const' dataExpr
+/// typeOrData : typeExpr | arrayDim | 'const' dataExpr
 /// Rule 1: the `<` of type arguments touches the type (LAngle), as that of `with` arguments.
+/// A shape argument (`Tensor<f32, [n, 784]>`) is written without `const`; the `const` branch
+/// stays for the other constant arguments a module type may take.
 void ParserImpl::parseSpecType() {
     const size_t m = mark();
     parsePrimaryType();
@@ -193,6 +229,8 @@ void ParserImpl::parseSpecType() {
                     parseExpr();
                 }
                 close(cm, NK::ConstData);
+            } else if (cur_ == TK::LBracket) {
+                parseArrayDim();
             } else {
                 parseType();
             }

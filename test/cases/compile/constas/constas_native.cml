@@ -3,7 +3,7 @@ import { Tensor } from tensor
 
 // A body-less declaration names a C++ operator whose signature does not carry a compile-time
 // value parameter, even when the value writes the result's extent.
-func zeros(constas n: int): Tensor<f32, const [n]>
+func zeros(constas n: int): Tensor<f32, [n]>
 
 func main(): int sync {
     println(zeros(3))

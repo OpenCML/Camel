@@ -8,13 +8,13 @@ module with_params
 
 import { Tensor, tanh } from tensor
 
-with <w: Tensor<f32, const [3, 4]>, b: Tensor<f32, const [4]>>
+with <w: Tensor<f32, [3, 4]>, b: Tensor<f32, [4]>>
 func layer(x: Tensor): Tensor {
     return tanh(x @ w + b)
 }
 
-with <w: Tensor<f32, const [3, 4]>, b: Tensor<f32, const [4]>>
-func main(x: Tensor<f32, const [-1, 3]>): int sync {
+with <w: Tensor<f32, [3, 4]>, b: Tensor<f32, [4]>>
+func main(x: Tensor<f32, [?, 3]>): int sync {
     println(layer<w, b>(x))
     println(x->layer<w, b>)
     return 0

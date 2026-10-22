@@ -20,6 +20,7 @@
 #pragma once
 
 #include <iostream>
+#include <map>
 #include <memory>
 #include <regex>
 #include <set>
@@ -153,16 +154,18 @@ class Builder {
     std::vector<Tree::UnwrittenParam> pendingUnwrittenParams_;
 
     // Named dimensions of type extents (design principles 5.4): a name denotes an extent, not a
-    // type. Like `typeas T`, a name is bound only in the parameter types of the function
-    // declaration being visited (`constas n`), and the rest of its signature writes `n`.
-    // `dimNames_` is the binding of the signature being visited (empty outside a signature);
-    // it is filled from every parameter type before the extents are read, so a parameter may
-    // write a name that another parameter binds. `boundDims_` holds the names whose `constas`
-    // has been visited, so a second `constas` of the same name is reported.
-    // `dimBindAllowed_` is true only while its parameter types are visited, so a `constas` in a
-    // return type, in a body, or inside a nested function type is reported.
+    // type. A name is bound the first time it is written in the parameter types of the function
+    // declaration being visited; later occurrences in the same signature use it, and the return
+    // type may use the names the parameters bound. `dimNames_` holds the names the signature
+    // binds (empty outside a signature); `boundDims_` holds the names already visited, so a
+    // second plain name binds as a reference, not a new dimension. `dimUses_` counts the
+    // occurrences in the parameter types so a name used only once can be suggested as `?`.
+    // `dimBindAllowed_` is true only while the parameter types are visited, so a name in a
+    // return type, in a body, or inside a nested function type is reported as unbound.
     std::shared_ptr<std::set<std::string>> dimNames_;
     std::shared_ptr<std::set<std::string>> boundDims_;
+    std::shared_ptr<std::set<std::string>> dimPacks_;
+    std::shared_ptr<std::map<std::string, size_t>> dimUses_;
     bool dimBindAllowed_ = false;
 
     // Where the value of what is being lowered goes, as far as the warning
@@ -336,14 +339,10 @@ class Builder {
     Type *visitDataType(const AST::node_ptr_t &ast);
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
-    /// Whether the expression of a `const` type argument writes a dimension name: `constas n`, or
-    /// a name already bound in `dimNames_`.
-    bool namesDimension(const AST::node_ptr_t &ast) const;
-    /// The extents of `const [e0, e1, ...]` as linear forms (design principles 5.4). Reports a
-    /// `constas` that cannot bind here, a name that is not bound, and an expression that is not
-    /// a shape. nullptr with a diagnostic reported.
+    /// The extents of one `[...]` as linear forms (design principles 5.4). An unknown extent
+    /// (`?`, or the empty `[]`) is `ExtentForm::unknown()`; nullptr with a diagnostic reported.
     std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>
-    visitNamedExtents(const AST::node_ptr_t &ast);
+    visitExtents(const AST::DimGroup &group, const AST::node_ptr_t &ast);
     /// One extent as a linear form: a constant, a name, `+`/`-`, and `*` by a constant. Any
     /// other expression is unknown.
     camel::core::type::ExtentForm visitExtent(const AST::node_ptr_t &ast);

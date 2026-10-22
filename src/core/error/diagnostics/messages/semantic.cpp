@@ -1005,9 +1005,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ConstasNotAllowed",
                 "The dimension name '{0}' is bound here, but only a parameter type can bind one.",
-                "Write 'constas n' where the dimension first appears in a parameter type, "
-                "'x: Tensor<f32, const [constas n, 3]>'. Every later occurrence, including one in "
-                "the return type, writes 'n'.",
+                "A dimension name binds where it first appears in a parameter type, "
+                "'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return "
+                "type, writes 'n'.",
             },
         },
         {
@@ -1015,20 +1015,20 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "DimensionNameNotBound",
                 "The dimension name '{0}' is not bound by any parameter of this signature.",
-                "A name in a type's extents is bound by 'constas name' where it first appears in "
-                "a parameter type. A name that appears only in the return type is an error: the "
-                "caller has no argument that could say what it is.",
+                "A name in a type's extents is bound by its first plain occurrence in a parameter "
+                "type, 'x: f32[n]', and later occurrences write it. A name that appears only in "
+                "the return type is an error: the caller has no argument that could say what it "
+                "is.",
             },
         },
         {
             SemanticDiag::DimensionNameAlreadyBound,
             {
                 "DimensionNameAlreadyBound",
-                "The dimension name '{0}' is already bound; write '{0}' here instead of "
-                "'constas {0}'.",
-                "Only the first occurrence of a dimension name in the parameter types binds it "
-                "('constas n'). Writing 'constas' again would ask for a second binding of the "
-                "same name.",
+                "The dimension name '{0}' is already bound; write '{0}' here.",
+                "Only the first occurrence of a dimension name in the parameter types binds it; "
+                "later occurrences write it. Dimension names and pack names are separate "
+                "namespaces, so one name cannot be both.",
             },
         },
         {
@@ -1048,10 +1048,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "InvalidExtentExpression",
                 "This is not a shape: the extents of a type written with dimension names are "
-                "integers, bound names, or linear expressions over them ('const [n, 3]').",
-                "Each extent is an integer, a dimension name bound by the signature, or a linear "
-                "expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is "
-                "not linear is unknown.",
+                "integers, bound names, or linear expressions over them ('f32[n, 3]').",
+                "Each extent is a non-negative integer, a dimension name bound by the signature, "
+                "or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A "
+                "dimension that is not linear is unknown, and an unknown extent is written '?'.",
             },
         },
         {
@@ -1446,6 +1446,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::DimensionAfterAnyRank,
+            {
+                "DimensionAfterAnyRank",
+                "A dimension pack ('..') must be the last item of its '[...]', and only one may "
+                "be written.",
+                "A pack stands for the dimensions the type does not name, so nothing can follow "
+                "it. Write it after the extents: 'f32[3, ..rest]', not 'f32[..rest, 3]'.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationIncomplete,
             {
                 "NativeDeclarationIncomplete",
@@ -1547,6 +1557,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "The tag '{0}' is written, but none of the passes it names ({1}) is in the pipeline.",
                 "A tag only allows a pass to do something; with no such pass in the pipeline the "
                 "tag has no effect. Add the pass it names ('read_by'), or remove the tag.",
+            },
+        },
+        {
+            SemanticDiag::DimensionNameUsedOnce,
+            {
+                "DimensionNameUsedOnce",
+                "The dimension name '{0}' is written once in this signature, so it relates nothing.",
+                "A name relates the extents that write it. If the size is not a relation, write "
+                "'?' instead; if it is, write the name in another parameter or in the return type.",
             },
         },
     };

@@ -1535,16 +1535,60 @@ any Formatter::visitTypeUnit(cst::TypeUnit context) {
 
 /*
 arrayType
-    : specType ('[' ']')*
+    : specType arrayDim+
     ;
 */
 any Formatter::visitArrayType(cst::ArrayType context) {
-    string result     = any_cast<string>(visitType(context->type()));
-    const size_t size = (context->childCount() - 1) / 2;
-    for (size_t i = 0; i < size; i++) {
-        result += "[]";
+    string result = any_cast<string>(visitType(context->type()));
+    for (const auto dim : context->all<cst::ArrayDim>()) {
+        result += any_cast<string>(visitArrayDim(dim));
     }
     return result;
+}
+
+/*
+arrayDim
+    : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+    ;
+arrayDimItem : '?' | '..' identDef? | dataExpr
+*/
+any Formatter::visitArrayDim(cst::ArrayDim context) {
+    string result;
+    bool first    = true;
+    bool packName = false;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        const auto child = context->child(i);
+        if (child.isToken()) {
+            const TK kind = child.token()->kind();
+            if (kind == TK::Question) {
+                if (!first) {
+                    result += ", ";
+                }
+                first = false;
+                result += "?";
+            } else if (kind == TK::DotDot) {
+                if (!first) {
+                    result += ", ";
+                }
+                first    = false;
+                result += "..";
+                packName = true;
+            }
+            continue;
+        }
+        const auto node = child.node();
+        if (packName && node.is(NK::IdentDef)) {
+            result += node.text();
+            packName = false;
+        } else if (node.isExpr()) {
+            if (!first) {
+                result += ", ";
+            }
+            first = false;
+            result += any_cast<string>(visitExpr(node));
+        }
+    }
+    return "[" + result + "]";
 }
 
 /*
@@ -1864,6 +1908,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(KeyInterType)
         CAMEL_FORMAT(TypeUnit)
         CAMEL_FORMAT(ArrayType)
+        CAMEL_FORMAT(ArrayDim)
         CAMEL_FORMAT(SpecType)
         CAMEL_FORMAT(ConstData)
         CAMEL_FORMAT(StructType)

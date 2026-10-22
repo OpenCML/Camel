@@ -1,0 +1,12 @@
+// A shape argument is written without `const`; the old spelling is refused and the message
+// gives the new one.
+module array_shape_err_const
+import { Tensor } from tensor
+
+func bad(x: Tensor<f32, const [3]>): int {
+    return 0
+}
+
+func main(): int sync {
+    return 0
+}

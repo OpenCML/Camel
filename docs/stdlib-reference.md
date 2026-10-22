@@ -410,10 +410,10 @@ The strings of xs joined with sep between them.
 
 ```camel
 len: (x: string) => int
-len: (x: T[]) => int
+len: (x: T[..]) => int
 ```
 
-The number of bytes of a string, or of elements of an array.
+The number of bytes of a string, or of the first dimension of an array of any rank.
 
 - Pure.
 - Example: `len('h€')` gives `4`
@@ -557,7 +557,8 @@ A new array: the elements of xs, then those of other. xs is unchanged.
 
 `map` and `filter` apply f to the elements with no order among the calls: the parallel
 scheduler may run them at the same time, and the result is by position. `foreach` and
-`reduce` call f element by element in order. They are declared with effects because what a
+`reduce` call f element by element in order. `T[]` is an array of that element type (rank 1); the rank-n meaning is P5
+work. They are declared with effects because what a
 call does is what f does.
 
 #### `map`
@@ -1953,7 +1954,7 @@ the program runs (check them with `as`, or read them with `shape`).
 
 - With effects: reads a file.
 - Failure: fault `RuntimeError` when the file is missing, is not a NumPy file, or holds a storage type the module does not read.
-- Example: `load_npy('x.npy') as Tensor<f32, const [2, 2]>`
+- Example: `load_npy('x.npy') as Tensor<f32, [2, 2]>`
 
 #### `save_npy`
 
