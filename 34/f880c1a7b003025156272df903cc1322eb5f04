@@ -330,3 +330,4 @@ pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
 - 门禁（快层，`-Jobs 8`）：**5046 条，5028 通过 / 7 失败 / 11 跳过**；构建 716.6 s，计划 98.9 s。`--verify-ops` **385** 条一致；`--verify-doc` 一致；诊断目录 **202** 条；文档链接 **377** 篇 0 断链。
 - 判定：**不建议直接发**。`lsp.editing`（`math::` 的补全为空）与 `compile_bench.smoke`（模块数 4 → 6）是这一轮声明化留下的两条真回归；3 条 `rename.*_graph_identity` 是过期摘要（改名正例全绿）；`debugger.dap_protocol` 是 slow 层红（80 个检查里 4 个）。
 - 详见 [H147-release.md](H147-release.md)：版本规则、20 条发布说明与逐条依据、旧草案逐条处置、就绪清单、看板不一致、门禁数字与复现命令、发布步骤。
+
