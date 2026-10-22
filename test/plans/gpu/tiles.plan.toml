@@ -1306,3 +1306,16 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::GpuScopeNoDeviceProgram"
 expect_output_contains = ["`#gpu` scope 'product'", "operator 'tensor:matmul'", "no device program for this shape"]
 timeout_ms = 60000
+
+[[tests]]
+name = "nofallback.cpu_escape_is_visible_in_the_source"
+kind = "behavior"
+case = "../../cases/gpu/nofallback/cpu_escape.cml"
+# The other side of the rule: a `#cpu` block inside the scope wins, so the operator the scope
+# refuses one line up runs on the host, and the program says so.
+args = ["${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_contains = ["1.9633"]
+timeout_ms = 30000
+
