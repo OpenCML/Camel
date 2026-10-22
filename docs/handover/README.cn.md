@@ -292,6 +292,14 @@
 3. **对单个函数就是普通调用**：`loss->simplify`、`loss->rules::simplify->with_grad`；不需要 `optimize<pass>` 一类的包装。捕获了值的函数（闭包）照样可以变换，捕获随新函数带上。
 4. **`rewrite` 模块**同样改为函数变换：`f->saturate<rules>`、`f->extract<cost>`；`stdlib/rules.cml` 的 `simplify` 等随之改签名。
 5. C++ 的遍内部仍按快照工作；只有写遍的公开接口与流水线的约定变化。规则语言第二版（v2.cn.md 8.5）已按此改写。
+6. **内置的遍也是函数**（负责人 2026-10-22 追问后补充）：今天的 37 个内置遍是 C++ 的 `GraphIRPass` 子类，登记在 `src/execute/pass.cpp` 的一张表里，不是函数。改为按设计原则 10.4 的同一约定——**每个内置遍是标准库里的一条无体声明**（原生实现的函数），带类型参数、`with` 参数与默认值、`when is_function::<F>()`：
+   ```camel
+   // stdlib/std/opt.cml（目录随 H216 的标准库布局）
+   with <safe_fp: bool = false, growth_budget: int = 4096>
+   export func opt::<F>(f: F): F! when is_function::<F>()
+   ```
+   模块遍同样（`tiles::compile` 在 `tiles` 的声明里）。于是：流水线上的每个名字都按模块与名字解析成一个函数，**删除独立的遍注册表**；`camel inspect --passes` 就是列出这些函数；Camel 里 `f->std::opt<safe_fp: true>` 与命令行 `std::opt safe_fp=true` 是同一个调用。打印、导出、执行类遍是带副作用、给出空图的函数（`std::gir`、`std::fvm`）。
+7. **与 H227 对接**：Camel 写的遍是语义与参考，C++ 是实现，两者用 `#impl` 连起来——`opt::cse` 的 Camel 定义标 `#impl<cse_native>`，默认执行 C++ 版本，差分测试保证一致（设计原则 10.4 在遍上的形态）。
 
 ### 5.13 H234 适用条件 `when`（决策者 2026-10-22，负责人同意）
 
