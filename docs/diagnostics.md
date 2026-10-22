@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-227 diagnostics: 208 errors, 19 warnings.
+229 diagnostics: 210 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -189,6 +189,8 @@ prints one entry.
 | `0x030001A2` | [SemanticDiag::ResourceGroupCycle](#resourcegroupcycle) | Error |
 | `0x030001A3` | [SemanticDiag::HandleTypeNotNominal](#handletypenotnominal) | Error |
 | `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
+| `0x030001A5` | [SemanticDiag::CmlUnsupportedConstruct](#cmlunsupportedconstruct) | Error |
+| `0x030001A6` | [SemanticDiag::CmlBigConstant](#cmlbigconstant) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5063,6 +5065,42 @@ func main(): int sync {
     return 0
 }
 ```
+
+### CmlUnsupportedConstruct
+
+`0x030001A5` · Error · `SemanticDiag::CmlUnsupportedConstruct`
+
+**Message**
+
+```text
+std::cml cannot print {0}: {1}.
+```
+
+**Help**
+
+```text
+This version prints straight-line code only: arithmetic, comparisons, conversions, direct calls, `let` and `var` (handover H240, step S1). Control flow, regions, tags, named types and generic instances come in later steps.
+```
+
+*No example: no test small enough to show raises it.*
+
+### CmlBigConstant
+
+`0x030001A6` · Error · `SemanticDiag::CmlBigConstant`
+
+**Message**
+
+```text
+std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_literal_bytes ({4}).
+```
+
+**Help**
+
+```text
+Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a module the printed program imports.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### VarParamInAsyncFunction
 

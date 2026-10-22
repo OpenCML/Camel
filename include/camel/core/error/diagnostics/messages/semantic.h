@@ -228,6 +228,12 @@ enum class SemanticDiag : uint32_t {
     /// A body-less declaration's clause differs from the operator's declared resources.
     NativeResourceMismatch = 0x0001A4,
 
+    // `std::cml`, the source printer (handover H240, step S1). 0x1A5 and up.
+    /// A graph holds a construct the printer does not turn into source (yet).
+    CmlUnsupportedConstruct = 0x0001A5,
+    /// A constant is larger than the printer's max_literal_bytes.
+    CmlBigConstant = 0x0001A6,
+
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,
