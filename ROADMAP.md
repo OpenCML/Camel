@@ -96,7 +96,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 - **标准库** `[定]`：原语用 C++，组合逻辑用 Camel。（状态：部分完成——原语在 C++ 模块里（`modules/`），用 Camel 写的库已有 `stdlib/array.cml`（数组与高阶函数，建立在内建算子与 `algo` 的三个原语之上）；其余组合逻辑还没有用 Camel 写的库，见下面各子项）
   - 字符串（切分、修剪、大小写、替换、查找；`[定]` 按字节，另有码点算子）、数组与高阶函数、位运算：已有（`str`、`array`、`math`，见 `docs/stdlib-reference.md`）。未做：字节缓冲区、带比较函数的排序、`group_by`（等映射类型）。（状态：部分完成——`str`（C++）、`array`（Camel，`stdlib/array.cml`）与 `math` 的位运算函数已有，由 `test/plans/feat/modules/stdlib_values.plan.toml`、`stdlib_faults.plan.toml` 测试；字节缓冲区、带比较函数的排序（现有 `sort_by` 按键排序）、`group_by` 未做）
   - `math`、`statistics` 已补全；`time` 的补全；`fs` 补全与路径处理；子进程、套接字、日志；CSV、TOML、base64、压缩。（状态：部分完成——`math`、`statistics` 已补全（`docs/stdlib-reference.md`），`fs` 有 `try_read_text`、`read_chunk`、`is_file`、`is_dir`、`mkdir`、`mkdirs`；`time` 仍只有 `now`、`strftime`、`strptime`，路径处理、子进程、套接字、日志、CSV、TOML、base64、压缩未做）
-  - 签名文件已与实现对齐并由测试约束（`scripts/stdlib-reference.mjs --verify-ops`），参考文档由签名文件生成；纯度已逐个算子声明并由测试约束。（状态：部分完成——14 个签名文件（`stdlib/signatures/`）与注册的算子一致（`scripts/stdlib-reference.mjs --verify-ops`），`docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 生成（`--verify-doc`），纯度逐个算子声明（`camel inspect --ops`），三者都由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束；`onnx`、`sim` 没有签名文件）
+  - 签名文件已与实现对齐并由测试约束（`scripts/stdlib-reference.mjs --verify-ops`），参考文档由签名文件生成；纯度已逐个算子声明并由测试约束。（状态：部分完成——16 个签名文件（`stdlib/signatures/`）与注册的算子一致（`scripts/stdlib-reference.mjs --verify-ops`），`docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 生成（`--verify-doc`），纯度逐个算子声明（`camel inspect --ops`），三者都由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束；`onnx` 没有签名文件）
   - 用 Camel 写的测试框架与断言库。（状态：未开始）
 - **模块接口** `[定]`：整理出一层公开的 C++ 接口并按版本承诺兼容；纯度声明进入这层接口。（状态：未开始）
 - **跨语言互操作**：Python 桥的自动类型转换；从 Python 里 `import camel` 运行图；C FFI。（状态：未开始）

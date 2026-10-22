@@ -1867,11 +1867,7 @@ f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 4137dad18f1c4711 ok test/cases/modules/stdlib/math_bits.cml
 9f305a00d4e93445 ok test/cases/modules/stdlib/math_functions.cml
 040bb7f614cb1861 ok test/cases/modules/stdlib/math_numbers.cml
-<<<<<<< HEAD
-25ea5511b8d74b97 ok test/cases/modules/stdlib/registry_all.cml
-=======
-aa0f7c9fec2d803a ok test/cases/modules/stdlib/registry_all.cml
->>>>>>> handover/H173-registry-coverage
+20fc4a33fb470123 ok test/cases/modules/stdlib/registry_all.cml
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
 bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 f38819c872dbb5e4 ok test/cases/modules/stdlib/str_chars.cml

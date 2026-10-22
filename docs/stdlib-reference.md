@@ -31,13 +31,7 @@ How to read an entry:
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
-<<<<<<< HEAD
-Not in this reference: the `onnx` exporter, the simulation types of `sim` and the
-profiler (`perf`).
-=======
-Not in this reference: the tensor stack's own layers (`nn`, `autodiff`, `onnx`)
-and the profiler (`perf`).
->>>>>>> handover/H173-registry-coverage
+Not in this reference: the `onnx` exporter and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
