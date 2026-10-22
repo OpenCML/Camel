@@ -50,6 +50,9 @@ using namespace camel::core::type;
 
 namespace camel::compile::gct {
 
+// The resource model of a function type (design effects plan 2.2, 3.1): short, as `Type` is.
+namespace sem = camel::core::sem;
+
 inline camel::source::origin_id_t nodeOrigin(const node_ptr_t &node) {
     return node ? node->origin() : camel::source::kInvalidOriginId;
 }
@@ -497,6 +500,24 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
         } catch (const BuildAbortException &) {
         }
     }
+    // A resource declaration is registered before anything is lowered (design effects plan
+    // 3.2): a clause written above it reads it, and so does every signature. It lowers to no
+    // node, so it takes no part in the two passes below. The groups are checked once every
+    // member is known, so a group may name a resource declared later in the module.
+    for (const auto &stmt : *stmtNodes) {
+        if (stmt->type() != AST::LoadType::Stmt ||
+            stmt->loadAs<AST::StmtLoad>()->stmtType() != AST::StmtType::Resource) {
+            continue;
+        }
+        try {
+            visitResourceDecl(stmt);
+        } catch (const BuildAbortException &) {
+        }
+    }
+    try {
+        checkResourceGroups();
+    } catch (const BuildAbortException &) {
+    }
     for (size_t i = 0; i < stmtNodes->size(); ++i) {
         const auto &stmt = stmtNodes->at(i);
         if (!isTypeDecl(stmt)) {
@@ -822,6 +843,11 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
         // (visitTagDecl, visitModule), so that a use written before it reads it.
         LEAVE("Stmt");
         return nullptr;
+    case AST::StmtType::Resource:
+        // A resource declaration has no node either: it is registered when the module is
+        // entered (visitResourceDecl, visitModule), before any clause reads it.
+        LEAVE("Stmt");
+        return nullptr;
     default:
         throw std::runtime_error("Unknown statement type");
     }
@@ -1115,6 +1141,235 @@ void Builder::visitTagDecl(const AST::node_ptr_t &ast) {
     LEAVE("TagDecl");
 }
 
+namespace {
+/// The text of a resource name as a diagnostic shows it: a resource of the module it is
+/// declared in is written with that module (`fs::handle`), a standard one as itself.
+std::string resourceCycleText(const std::vector<std::string> &chain, const std::string &closing) {
+    std::string text;
+    for (const std::string &step : chain) {
+        text += (text.empty() ? "" : " -> ") + step;
+    }
+    text += (text.empty() ? "" : " -> ") + closing;
+    return text;
+}
+} // namespace
+
+node_ptr_t Builder::visitResourceDecl(const AST::node_ptr_t &ast) {
+    ENTER("ResourceDecl");
+    const auto decl = ast->loadAs<AST::ResourceDeclLoad>();
+    camel::core::module::Module::ResourceDecl resource;
+    resource.unordered = decl->unordered();
+    for (const Reference &member : decl->members()) {
+        resource.members.push_back(member);
+    }
+    const std::string name = decl->ref().toString();
+    if (module_->resource(decl->ref()) != nullptr) {
+        // One name, one resource (design principles 10.2: a name is declared once in a scope).
+        diags_->of(SemanticDiag::Redeclaration)
+            .at(ast->load()->tokenRange())
+            .commit(name);
+        throw BuildAbortException();
+    }
+    module_->declareResource(decl->ref(), std::move(resource));
+    if (exportedRefs_.contains(name)) {
+        module_->setResourceExported(decl->ref());
+    }
+    resourceDecls_[name] = ast;
+    LEAVE("ResourceDecl");
+    return nullptr;
+}
+
+void Builder::checkResourceGroups() {
+    for (const auto &[name, ast] : resourceDecls_) {
+        const auto *decl = module_->resource(Reference(name));
+        if (decl == nullptr || decl->members.empty()) {
+            continue;
+        }
+        std::vector<std::string> expanded;
+        std::vector<std::string> active;
+        std::string failed;
+        if (!resolveAmbientResource(
+                module_, Reference(name), expanded, active, &failed, ast)) {
+            diags_->of(SemanticDiag::UnknownResource)
+                .at(ast->load()->tokenRange())
+                .commit(failed, name);
+            throw BuildAbortException();
+        }
+    }
+}
+
+bool Builder::resolveAmbientResource(
+    const camel::core::module::module_ptr_t &in, const Reference &name,
+    std::vector<std::string> &out, std::vector<std::string> &active, std::string *failed,
+    const AST::node_ptr_t &where) {
+    const std::string written = name.toString();
+    const std::string key   = (in ? in->name() : std::string()) + "::" + written;
+    if (std::find(active.begin(), active.end(), key) != active.end()) {
+        diags_->of(SemanticDiag::ResourceGroupCycle)
+            .at(where->load()->tokenRange())
+            .commit(written, resourceCycleText(active, key));
+        throw BuildAbortException();
+    }
+    struct ActiveGuard {
+        std::vector<std::string> &active;
+        ~ActiveGuard() { active.pop_back(); }
+    } guard{active};
+    active.push_back(key);
+    if (in) {
+        if (const auto *decl = in->resource(name)) {
+            if (in.get() == module_.get() || decl->exported) {
+                if (decl->members.empty()) {
+                    // A resource of a module is named with the module, as an operator of one is
+                    // (design principles 10.2): `fs::handle` is one thing, wherever it is used.
+                    // A resource of this module keeps the name it was declared with.
+                    out.push_back(
+                        in.get() == module_.get() ? written : in->name() + "::" + written);
+                    return true;
+                }
+                for (const Reference &member : decl->members) {
+                    if (!resolveAmbientResource(in, member, out, active, failed, where)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+    }
+    if (sem::isStandardResource(written)) {
+        out.push_back(written);
+        return true;
+    }
+    if (in) {
+        // A name imported by name (`import { r } from m`), then a module prefix (`m::r`).
+        if (auto source = in->importedSource(name)) {
+            return resolveAmbientResource(source->first, source->second, out, active, failed, where);
+        }
+        for (const auto &[prefix, mod] : in->importedNamespaces()) {
+            if (written.size() > prefix.size() + 2 &&
+                written.compare(0, prefix.size(), prefix) == 0 &&
+                written.compare(prefix.size(), 2, "::") == 0) {
+                return resolveAmbientResource(
+                    mod, Reference(written.substr(prefix.size() + 2)), out, active, failed, where);
+            }
+        }
+    }
+    if (failed != nullptr) {
+        *failed = written;
+    }
+    return false;
+}
+
+sem::ResourceSignature
+Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionType *built) {
+    sem::ResourceSignature signature;
+    const AST::ResourceClauseLoad *clause = nullptr;
+    if (funcTypeAst != nullptr && funcTypeAst->size() > 3) {
+        const AST::node_ptr_t &clauseNode = funcTypeAst->at(3);
+        if (clauseNode != nullptr &&
+            clauseNode->load()->type() == AST::LoadType::ResourceClause) {
+            clause = clauseNode->loadAs<AST::ResourceClauseLoad>().get();
+        }
+    }
+    if (clause == nullptr || built == nullptr) {
+        // No clause: a type that promises nothing about resources (Generic).
+        return signature;
+    }
+    signature.mode = sem::ResourceSignature::Mode::Concrete;
+    if (clause->pure() && !clause->uses().empty()) {
+        diags_->of(SemanticDiag::PureAndUses)
+            .at(clause->tokenRange())
+            .commit(built->toString());
+        throw BuildAbortException();
+    }
+    if (clause->pure()) {
+        return signature;
+    }
+    // The parameters the clause may name, in the numbering a call uses: with parameters first,
+    // ordinary ones after them; the `constas` parameter is not a runtime argument and is
+    // dropped from that numbering (builder_generics.cpp: signatureIndexAt).
+    struct Parameter {
+        std::string name;
+        uint8_t index = 0;
+        Type *type     = nullptr;
+        bool isVar     = false;
+    };
+    std::vector<Parameter> parameters;
+    const size_t withCount = built->withTypesCount();
+    const size_t normCount = built->normTypesCount();
+    size_t runtimeIndex    = 0;
+    for (size_t i = 0; i < withCount + normCount; ++i) {
+        const bool isWith = i < withCount;
+        if (!isWith && built->normIsConstasAt(i - withCount)) {
+            continue;
+        }
+        Parameter param;
+        param.name  = std::string(built->argNameAt(i));
+        param.index = static_cast<uint8_t>(runtimeIndex++);
+        param.type  = isWith ? built->withTypeAt(i) : built->normTypeAt(i - withCount);
+        param.isVar = isWith ? built->withIsVarAt(i) : built->normIsVarAt(i - withCount);
+        parameters.push_back(std::move(param));
+    }
+    std::vector<std::string> ambient;
+    std::vector<std::string> active;
+    std::string failed;
+    for (const Reference &use : clause->uses()) {
+        const std::string written = use.toString();
+        const auto param = std::find_if(
+            parameters.begin(), parameters.end(), [&](const Parameter &candidate) {
+                return use.plain() && candidate.name == use.ident();
+            });
+        if (param != parameters.end()) {
+            sem::ResourceSignature::ParamUse paramUse;
+            paramUse.index = param->index;
+            paramUse.mode  = sem::AccessMode::ReadModifyWrite;
+            if (sem::isHandleType(param->type)) {
+                paramUse.cls  = sem::ResourceClass::Handle;
+                paramUse.name = sem::handleResourceName(param->type);
+            } else if (param->isVar) {
+                paramUse.cls = sem::ResourceClass::Variable;
+            } else {
+                paramUse.cls = sem::ResourceClass::Object;
+            }
+            const bool known = std::any_of(
+                signature.params.begin(), signature.params.end(),
+                [&](const auto &other) { return other.index == paramUse.index; });
+            if (known) {
+                // One parameter is one resource: `uses x, x` says nothing twice.
+                continue;
+            }
+            signature.params.push_back(std::move(paramUse));
+            continue;
+        }
+        if (use.plain() && std::any_of(parameters.begin(), parameters.end(),
+                                       [&](const Parameter &candidate) {
+                                           return candidate.name == use.ident();
+                                       })) {
+            continue;
+        }
+        if (!resolveAmbientResource(module_, use, ambient, active, &failed, funcTypeAst)) {
+            diags_->of(SemanticDiag::UnknownResource)
+                .at(clause->tokenRange())
+                .commit(written, built->toString());
+            throw BuildAbortException();
+        }
+    }
+    std::sort(signature.params.begin(), signature.params.end(), [](const auto &a, const auto &b) {
+        return a.index < b.index;
+    });
+    std::sort(ambient.begin(), ambient.end());
+    ambient.erase(std::unique(ambient.begin(), ambient.end()), ambient.end());
+    for (std::string &name : ambient) {
+        signature.ambient.push_back(
+            sem::ResourceSignature::AmbientUse{
+                .name = std::move(name), .mode = sem::AccessMode::ReadModifyWrite});
+    }
+    if (clause->pure()) {
+        signature.params.clear();
+        signature.ambient.clear();
+    }
+    return signature;
+}
+
 std::vector<GCT::TagUse> Builder::tagUsesOf(const AST::node_ptr_t &ast) {
     std::vector<GCT::TagUse> uses;
     if (ast == nullptr) {
@@ -1370,6 +1625,50 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     if (const auto builtin = typeScope_->get(typeLoad->ref(), false);
         builtin.has_value() && isCollectionPrototype(builtin.value())) {
         typeScope_->erase(typeLoad->ref(), false);
+    }
+    // `#resource` (design effects plan 3.1, 3.2): a value of the type is a handle, one resource
+    // per value, named by the declaration. The tag is the only spelling. The type's own flag is
+    // what a signature reads (isHandleType), and the tag still reaches the declaration facts in
+    // GIR, where the standard tag machinery attaches it (attachTagUses, below).
+    //
+    // The uses are read here, not through tagUsesOf: that lowers their arguments and this pass
+    // must not lower them twice (the facts are attached at the end of the declaration).
+    for (size_t i = 0; i < ast->size(); ++i) {
+        const AST::node_ptr_t &child = ast->at(i);
+        if (child == nullptr || child->type() != AST::LoadType::Repeated ||
+            child->loadAs<AST::RepeatedLoad>()->nodeName() != "TagUse") {
+            continue;
+        }
+        for (const AST::node_ptr_t &useAst : *child) {
+            const auto use = useAst->loadAs<AST::TagUseLoad>();
+            if (use->name().toString() != "resource") {
+                continue;
+            }
+            bool nominal = false;
+            if (type->code() == TypeCode::Struct) {
+                const auto *structType = static_cast<camel::core::type::StructType *>(type);
+                camel::core::type::StructDecl *decl = structType->decl();
+                nominal = decl != nullptr && decl->moduleName() == module_->name() &&
+                          decl->name() == typeLoad->ref().toString();
+                if (nominal) {
+                    decl->setHandle();
+                }
+            } else if (type->code() == camel::core::type::EnumType::typeCode()) {
+                const auto *enumType = static_cast<camel::core::type::EnumType *>(type);
+                camel::core::type::EnumDecl *decl = enumType->decl();
+                nominal = decl != nullptr && decl->moduleName() == module_->name() &&
+                          decl->name() == typeLoad->ref().toString();
+                if (nominal) {
+                    decl->setHandle();
+                }
+            }
+            if (!nominal) {
+                diags_->of(SemanticDiag::HandleTypeNotNominal)
+                    .atOrigin(useAst->load()->origin())
+                    .commit(typeLoad->ref().toString());
+                throw BuildAbortException();
+            }
+        }
     }
     typeScope_->insert(typeLoad->ref(), type);
     if (auto *recorder = context_ ? context_->semanticRecorder() : nullptr) {
@@ -4929,6 +5228,20 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
                     .at(ast->load()->tokenRange())
                     .commit(name);
             }
+        }
+    }
+    // The clause the type writes (design effects plan 3.1): what a call through a value of this
+    // type touches. A type without one stays Generic, which promises nothing, so nothing is set
+    // and a call through it is read conservatively.
+    const sem::ResourceSignature resources = resourceSignatureOf(ast, built);
+    if (resources.mode == sem::ResourceSignature::Mode::Concrete) {
+        if (built->asOpen() != nullptr) {
+            // An open signature is not interned and is resolved by each call site; it is this
+            // object the resolver copies from (step 2: instantiateFunctionType copies the
+            // resources), so the clause is set on it in place.
+            built->asOpen()->setResources(resources);
+        } else {
+            built = built->withResources(resources);
         }
     }
     return built;

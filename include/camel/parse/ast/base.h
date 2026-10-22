@@ -54,6 +54,10 @@ enum class LoadType {
     /// A tag use (`#name`, `#name<args>`, design principles 6.2), attached to the declaration or
     /// block it is written on.
     TagUse,
+
+    /// The resources a function type says a call touches (`uses s, fs`, `pure`; design effects
+    /// plan 3.1), attached to the function type it is written after.
+    ResourceClause,
 };
 
 std::string to_string(LoadType type);

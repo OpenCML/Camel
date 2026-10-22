@@ -1471,6 +1471,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+<<<<<<< HEAD
             SemanticDiag::DimensionAfterAnyRank,
             {
                 "DimensionAfterAnyRank",
@@ -1478,6 +1479,55 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "be written.",
                 "A pack stands for the dimensions the type does not name, so nothing can follow "
                 "it. Write it after the extents: 'f32[3, ..rest]', not 'f32[..rest, 3]'.",
+=======
+            SemanticDiag::UnknownResource,
+            {
+                "UnknownResource",
+                "The name '{0}' in the resource clause of '{1}' is neither a parameter nor a "
+                "resource.",
+                "A clause names a parameter of the function (the value a call touches), a "
+                "resource the module declares (`resource {0}`), one of the resources every "
+                "program has (stdout, stderr, stdin, clock, env, fs), or a resource imported "
+                "from another module. Check the spelling, or declare the resource.",
+            },
+        },
+        {
+            SemanticDiag::PureAndUses,
+            {
+                "PureAndUses",
+                "The signature of '{0}' says both 'pure' and 'uses'.",
+                "'pure' says the call touches no resource at all; 'uses' names the resources it "
+                "touches. Write one of the two.",
+            },
+        },
+        {
+            SemanticDiag::ResourceGroupCycle,
+            {
+                "ResourceGroupCycle",
+                "The resource group '{0}' contains itself: {1}.",
+                "A group names resources, or other groups that name resources. Expand them in "
+                "an order: a group cannot be one of its own members.",
+            },
+        },
+        {
+            SemanticDiag::HandleTypeNotNominal,
+            {
+                "HandleTypeNotNominal",
+                "'{0}' is not a nominal type declaration, so '#resource' says nothing about it.",
+                "A handle is a type with an identity of its own, one resource per value. Write "
+                "the tag before a struct or an enum declaration (a `type` that names its fields "
+                "or variants), not before an alias or a type function.",
+            },
+        },
+        {
+            SemanticDiag::NativeResourceMismatch,
+            {
+                "NativeResourceMismatch",
+                "The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'.",
+                "A body-less declaration is the whole signature of a C++ operator, its resources "
+                "included: write the clause the operator declares, or remove the clause and let "
+                "the operator's declaration be the one the module publishes.",
+>>>>>>> handover/h238-effects-syntax
             },
         },
         {

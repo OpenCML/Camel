@@ -153,6 +153,12 @@ class StructDecl {
     const std::vector<std::string> &params() const { return params_; }
     bool generic() const { return !params_.empty(); }
 
+    /// The declaration is written `#resource` (design effects plan 3.1): a value of the type is
+    /// a handle, one resource per value, named by this declaration. The tag is the only way to
+    /// say it; the flag caches what the tag decided, so the type predicates need no module.
+    bool handle() const { return handle_; }
+    void setHandle(bool handle = true) { handle_ = handle; }
+
     /// The field types as written, in the order of the declaration, with the parameters still
     /// in them. Called once, when the declaration is read.
     void define(std::vector<std::pair<std::string, Type *>> fields);
@@ -172,6 +178,7 @@ class StructDecl {
     std::vector<std::pair<std::string, Type *>> fields_;
     uint32_t id_;
     bool defined_ = false;
+    bool handle_  = false;
 };
 
 // Immutable StructType: type information is embedded directly in the object.
