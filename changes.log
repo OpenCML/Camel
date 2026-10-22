@@ -1,3 +1,5 @@
+[0.2.26]
+
 [0.2.25]
 Changes:
 - 声明化收尾：`algo`、`math`、`graph`、`para`、`random` 的可声明算子搬进 `stdlib/<模块>.cml`；此后声明写不下的只剩按类型计算的名字，和尚未迁移的 `ckpt`。
