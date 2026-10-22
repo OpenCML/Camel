@@ -538,6 +538,25 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             // capture could hold (it was captured as a port of type void, and the call of
             // it then failed with "Function of type 'void' cannot be called").
             rejectNameWithoutValue(node, name, gct);
+            // A value can only be captured from a graph that encloses this one (the root
+            // graph for a value of a module's top level). A rest function expanded at a call
+            // in another module is built in that caller's graph, so a name that is a value of
+            // the function's own module has no path to it: say so instead of asserting.
+            bool enclosed = false;
+            for (auto outer = currGraph_; outer != nullptr && !enclosed;
+                 outer      = outer->outerGraph()) {
+                enclosed = outer.get() == nodeGraphOf(node);
+            }
+            if (!enclosed) {
+                diags_->of(SemanticDiag::RestFunctionNeedsExpansion)
+                    .atOrigin(gct->origin())
+                    .commit(
+                        captureNameOf(node, name),
+                        "its body names a value of its own module, which a call in another "
+                        "module cannot reach; a rest function expanded at a foreign call may "
+                        "only name functions and its own arguments");
+                throw BuildAbortException();
+            }
             node = captureInto(currGraph_, node, name);
         }
         if (recorder_ && !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
@@ -1129,6 +1148,31 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     node_handle_t targetNode = valueNodeOf(targetNodeRes);
     vector<Argument> inputs;
     FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
+    // A call of a rest function is expanded at the call (inlineRestCall), so a with-argument
+    // that names a generic function or a set of overloads stays a compile-time callable: every
+    // call of it in the body picks the instance for that call's arguments (`tree_map<twice>`,
+    // `tree_map<bump>`). Making it a function value here would need the one type it does not
+    // have yet, and a set of overloads has no single value at all.
+    const auto restInfo = genericDrefs_.find(targetNode);
+    const bool restCall = restInfo != genericDrefs_.end() &&
+                          restInfo->second->funcType->hasRest();
+    const auto isCallableName = [&](node_handle_t node) {
+        if (genericDrefs_.contains(node)) {
+            return true;
+        }
+        if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+            return false;
+        }
+        const auto &target = nodeGraphOf(node)->drefTarget(node);
+        if (std::holds_alternative<oper_group_ptr_t>(target)) {
+            return true;
+        }
+        if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+            auto graphs = asCompileGraphVec(target);
+            return graphs && graphs->size() > 1;
+        }
+        return false;
+    };
     for (size_t i = 1; i < gct->size(); i++) {
         Type *wanted = argumentSignature && i <= argumentSignature->withTypesCount()
                            ? argumentSignature->withTypeAt(i - 1)
@@ -1136,7 +1180,18 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         ExpectedValueScope argumentScope(
             expectedValueType_,
             wanted && !containsTypeVar(wanted) ? wanted : nullptr);
-        inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i)});
+        if (!restCall) {
+            inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i)});
+            continue;
+        }
+        any res              = visit(gct->at(i));
+        node_handle_t argNode = res.type() == typeid(graph_ptr_t)
+                                    ? createFuncDataNode(any_cast<graph_ptr_t>(res), true, false)
+                                    : valueNodeOf(res);
+        if (!isCallableName(argNode)) {
+            argNode = functionValueOf(argNode, gct->at(i));
+        }
+        inputs.push_back({argNode, gct->at(i)});
     }
     auto &bound = boundWithArgs_[targetNode];
     bound.insert(bound.end(), inputs.begin(), inputs.end());

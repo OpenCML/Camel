@@ -8,8 +8,10 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-// The native module `ckpt`: the checkpoint operators (save_tree, load_tree) and, until the
-// type-directed tree intrinsics are rewritten in Camel (H51 step 13), the four they expand to.
+// The native module `ckpt`: the checkpoint operators (`save_tree`, `load_tree`) and the one tree
+// operator that is not written in Camel yet (`tree_leaves`, which needs value-tuple expansion).
+// `tree_map`, `tree_reduce` and `tree_unzip` are in `stdlib/tree.cml`: the compiler expands them
+// from their Camel bodies like any other function, with no intrinsic left here.
 // The module is not called `tree`: `stdlib/tree.cml` is the Camel tree library, and a `.cml`
 // beside a same-named `.cmo` would be that native module's declaration file instead of the
 // library (H19 plan section 1.6).
@@ -25,20 +27,16 @@ namespace {
 using namespace camel::core::type;
 using namespace camel::core::module;
 using namespace camel::core::context;
-class TreeResolver final : public FuncTypeResolver {
+// The checkpoint operators run; `tree_leaves` is still an operator whose result type comes from
+// its argument, so its resolver leaves the signature to the compiler that expands it.
+class TreeLeavesResolver final : public FuncTypeResolver {
   public:
-    explicit TreeResolver(std::string name) : name_(std::move(name)) {}
     std::optional<FunctionType *>
     resolve(const type_vec_t &, const type_vec_t &, const ModifierSet &) const override {
-        return std::nullopt; // The compiler resolves callbacks separately for each leaf.
+        return std::nullopt; // The compiler resolves the leaf tuple from the tree's type.
     }
-    std::string signature() const override { return name_ + " (type-directed tree intrinsic)"; }
-
-  private:
-    std::string name_;
+    std::string signature() const override { return "tree_leaves (type-directed)"; }
 };
-// The checkpoint operators (save_tree, load_tree) are the only ones that run; the others are
-// expanded by the compiler.
 class CkptExecutor final : public Executor {
   public:
     CkptExecutor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
@@ -51,25 +49,17 @@ class CkptModule final : public BuiltinModule {
         camel::tensor::ops::registerTensorOps();
         for (const auto &group : camel::ckptlib::checkpointOperatorGroups())
             exportEntity(group->name(), group);
-        for (const std::string name :
-             {"tree_map", "tree_reduce", "tree_unzip", "tree_leaves"}) {
-            exportEntity(
-                name,
-                OperatorGroup::create(
-                    name, {{"ckpt:" + name, std::make_shared<TreeResolver>(name)}}));
-        }
+        exportEntity(
+            "tree_leaves",
+            OperatorGroup::create(
+                "tree_leaves", {{"ckpt:tree_leaves", std::make_shared<TreeLeavesResolver>()}}));
     }
     bool load() override {
         context_->registerExecutorFactory("ckpt", [ctx = context_]() {
             return std::make_shared<CkptExecutor>(ctx, camel::ckptlib::checkpointKernels());
         });
         camel::ckptlib::declareCheckpointResources();
-        camel::core::OperatorTable::instance().declare(
-            "ckpt",
-            {{"tree_map", false},
-             {"tree_reduce", false},
-             {"tree_unzip", true},
-             {"tree_leaves", true}});
+        camel::core::OperatorTable::instance().declare("ckpt", {{"tree_leaves", true}});
         loaded_ = true;
         return true;
     }

@@ -115,6 +115,16 @@ void Builder::walkStaticBodyNames(
         for (auto it = locals.rbegin(); it != locals.rend() && !found; ++it) {
             found = it->contains(node->name());
         }
+        // The rest parameter and the `constas` values of the instance being expanded are
+        // compile-time names, not nodes of a scope: a case that is not selected must still see
+        // them, or the unselected case of a `match type` would resolve differently from the
+        // selected one (H51 step 13 writes `tree_map` this way).
+        if (!found && restBindingNamed(node->name()) != nullptr) {
+            found = true;
+        }
+        if (!found && staticValueNamed(node->name()).has_value()) {
+            found = true;
+        }
         if (!found && !valueNameExists(node->name(), node)) {
             diags_->of(SemanticDiag::UnresolvedReference)
                 .atOrigin(node->origin())
@@ -696,8 +706,8 @@ node_handle_t Builder::materializeStaticTuple(
 node_handle_t Builder::fillStaticValues(
     Type *type, const std::vector<node_handle_t> &values, const GCT::node_ptr_t &origin,
     const char *originKind) {
-    // The same construction as the C++ expansion of `tree_map` (src/compile/gir/tree.cpp): a
-    // static value of the shape's size, and a FILL that reads one slot per value.
+    // A static value of the shape's size, and a FILL that reads one slot per value: the same
+    // construction `tree_map` now reaches through a comprehension over the fields.
     core::mm::NoCollectionScope guard;
     const bool tuple = type->code() == TypeCode::Tuple;
     const slot_t empty =
@@ -833,8 +843,8 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
         }
     }
 
-    // The tuple key is the `uint32_t` index and the struct key its field name: the same nodes
-    // the C++ expansion of `tree_map` builds for the same tree (src/compile/gir/tree.cpp).
+    // The tuple key is the `uint32_t` index and the struct key its field name: the nodes a
+    // comprehension over `fields T` builds for the same tree.
     node_handle_t accsNode =
         byIndex ? currGraph_->addAccsNode(fieldType, index)
                 : currGraph_->addAccsNode(fieldType, fieldId);
