@@ -1,6 +1,6 @@
 /**
  * `rewrite`'s declarations are what an importer sees: the engines take a `Program` and an array
- * of the functions that make a rule, the two arities of `rewrite` and `saturate` both resolve, and
+ * of `Rule` values, the two arities of `rewrite` and `saturate` both resolve, and
  * `extract` and `check` answer `Program!` and `string` from `stdlib/rewrite.cml` (handover H183).
  * Checked, not run: the engines need a compiled program, and the rules plans run them.
  */
