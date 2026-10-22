@@ -31,8 +31,10 @@
 #include "camel/runtime/fact_persist.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/reachable.h"
+#include "execute/camel_pass.h"
 
 #include <algorithm>
+#include <chrono>
 #include <format>
 #include <map>
 #include <unordered_map>
@@ -455,6 +457,30 @@ size_t tally(
 } // namespace
 
 const camel::runtime::Program *
+FactLoadRulesTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    // The control for H158: load the library `std::opt`'s algebra stage would load, before any
+    // fact exists. The facts seeded later are then stamped with the epoch the load leaves behind,
+    // so a later `std::opt` declares nothing new and they stay valid; without this pass they are
+    // invalidated by the epoch alone although their graphs did not change.
+    //
+    // Importing alone is not enough: a module written in Camel has its declarations compiled by
+    // whoever compiles it, and a pass named `<module>::<function>` is what makes the executor do
+    // that (`registerCamelPass`). `std::opt`'s algebra stage gets the same effect from
+    // `resolvePassWithModule("rules::simplify")`; this pass asks for the same compilation without
+    // running the pass on the program.
+    const auto &table     = camel::core::OperatorTable::instance();
+    const uint64_t before = table.declarationEpoch();
+    std::string problem;
+    camel::execute::registerCamelPass(context_, "rules", "simplify", problem);
+    os << std::format(
+        "FACTS rules_loaded epoch {} -> {} problem={}\n",
+        before,
+        table.declarationEpoch(),
+        problem.empty() ? 0 : 1);
+    return program;
+}
+
+const camel::runtime::Program *
 FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     FactStore &store = context_->facts();
     computeFacts(store, *program);
@@ -483,9 +509,31 @@ FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     printRevisions(os, *program, graph, "check");
 
     // What was stale is computed again; then every stored fact must equal a fresh computation.
+    // The wall time and the number of (re)computed and (re)stored facts say what reading the
+    // stale facts costs (H158); the count is the measurement, the time only says its size.
+    std::map<std::string, size_t> storedBefore;
+    store.forEach([&](const StoredFact &fact) { ++storedBefore[kindInfo(fact.kind).key]; });
     const Counts before = store.counts();
+    const auto started   = std::chrono::steady_clock::now();
     computeFacts(store, *program);
-    os << "FACTS recomputed " << store.counts().computed - before.computed << "\n";
+    const std::chrono::duration<double, std::micro> elapsed =
+        std::chrono::steady_clock::now() - started;
+    const Counts after = store.counts();
+    std::map<std::string, size_t> storedAfter;
+    store.forEach([&](const StoredFact &fact) { ++storedAfter[kindInfo(fact.kind).key]; });
+    os << "FACTS recomputed " << after.computed - before.computed << "\n";
+    os << std::format(
+        "FACTS recompute us={:.1f} calls={} stored={}\n",
+        elapsed.count(),
+        after.computed - before.computed,
+        after.puts - before.puts);
+    for (const auto &[kind, n] : storedAfter) {
+        const auto was = storedBefore.find(kind);
+        const size_t had = was == storedBefore.end() ? 0 : was->second;
+        if (n != had) {
+            os << std::format("FACTS recomputed kind {} {}\n", kind, n - had);
+        }
+    }
     const auto byId = graphsById(*program, graph);
     size_t equal = 0, differ = 0;
     // Every fact a consumer could read — one whose graphs and nodes the program still has — must
@@ -526,6 +574,19 @@ FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     os << std::format(
         "FACTS after recompute valid={} stale={} gone={}\n", readableValid, readableStale, unreadable);
     os << std::format("FACTS verify equal={} differ={}\n", equal, differ);
+    const Counts total = store.counts();
+    // What the store did over this pass: `stale` counts the facts a read found stale (the tally
+    // above reads each stored fact once), `computed` the times a computation ran, `puts` the facts
+    // stored. H158 reads these beside the epoch pair to say how many facts the conservative rule
+    // invalidated and how many were derived again.
+    os << std::format(
+        "FACTS counts puts={} hits={} misses={} stale={} revalidated={} computed={}\n",
+        total.puts,
+        total.hits,
+        total.misses,
+        total.stale,
+        total.revalidated,
+        total.computed);
     return program;
 }
 
