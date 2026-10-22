@@ -31,7 +31,7 @@ How to read an entry:
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
-Not in this reference: the `autodiff` module, the `onnx` exporter and `sim`'s simulation types, the Python
+Not in this reference: the `onnx` exporter and `sim`'s simulation types, the Python
 bridge (`python`, `pyplot`) and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
@@ -59,6 +59,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
 | [tiles](#tiles) | `import { ... } from tiles` | C++ | 12 |
 | [nn](#nn) | `import { ... } from nn` | C++ | 19 |
+| [autodiff](#autodiff) | `import { ... } from autodiff` | C++ | 3 |
 
 <a id="built-in-functions"></a>
 
@@ -4717,3 +4718,52 @@ created when missing.
 - With effects: writes files under `dir`.
 - Failure: fault `RuntimeError` when the directory cannot be created or a leaf cannot be written.
 - Example: `save_params({ w: new([1.0, 2.0]), b: new([0.0]) }, 'checkpoints/step-1')`
+
+<a id="autodiff"></a>
+
+## `autodiff`: gradients of functions
+
+Automatic differentiation: `grad` turns a function into its gradient function, `with_grad`
+returns the value together with that gradient, and `stop_gradient` marks a value as a
+constant. The gradient of a function is a function of the same parameters, so the useful
+signature is the type of the function it differentiates.
+
+#### `grad`
+
+```camel
+grad: (f: (x: float) => float) => (x: float) => float
+```
+
+The gradient function of `f`: it takes the same parameters and returns the gradient of `f`'s
+result with respect to its first `with` parameter (for a scalar result, a value of the same
+shape). A function with no `with` parameter, or whose first `with` parameter has no
+differentiable tangent, is refused when the call is compiled.
+
+- With effects: differentiates the function's graph.
+- Example: `let dh = grad(h)`
+
+#### `with_grad`
+
+```camel
+with_grad: (f: (x: float) => float) => (x: float) => (float, float)
+```
+
+The value and the gradient together: the result function returns `f`'s result followed by its
+gradient with respect to the first `with` parameter. The same compile-time refusal as `grad`
+applies.
+
+- With effects: differentiates the function's graph.
+- Example: `let value_and_grad = with_grad(h)`
+
+#### `stop_gradient`
+
+```camel
+stop_gradient: (x: typeas T) => T
+```
+
+Returns its argument unchanged, and cuts the gradient at this point: a value passed through
+`stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
+argument's own type.
+
+- Pure.
+- Example: `stop_gradient(3.0)` gives `3.0`

@@ -230,6 +230,17 @@ const MODULES = [
         declaration: true,
         computed: 'signatures/nn.cml',
     },
+    {
+        name: 'autodiff',
+        title: '`autodiff`: gradients of functions',
+        kind: 'cpp',
+        // `stop_gradient` is declared in stdlib/autodiff.cml; `grad` and `with_grad` answer a
+        // function built from their argument's type, so their entries are in the signature file
+        // named by `computed:` (handover H165).
+        source: 'autodiff.cml',
+        declaration: true,
+        computed: 'signatures/autodiff.cml',
+    },
 ]
 
 function sourceOf(module) {
@@ -675,7 +686,7 @@ function renderDoc() {
     out.push('- Write one call that has with-arguments per statement when several appear in one argument')
     out.push('  list: `f<a>(x), g<b>(y)` is read as comparisons.')
     out.push('')
-    out.push('Not in this reference: the `autodiff` module, the `onnx` exporter and `sim`\'s simulation types, the Python')
+    out.push('Not in this reference: the `onnx` exporter and `sim`\'s simulation types, the Python')
     out.push('bridge (`python`, `pyplot`) and the profiler (`perf`).')
     out.push('')
     out.push('| Module | Import | Written in | Functions |')

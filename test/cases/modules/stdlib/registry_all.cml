@@ -25,10 +25,11 @@ import time
 import ckpt
 import tensor
 import array
-// `nn` loads without PyTorch, a GPU or a Python interpreter: `inspect --ops` lists its
-// operators, and the stdlib registry tests hold them to the module's declarations (handover
-// H165).
+// `nn` and `autodiff` load without PyTorch, a GPU or a Python interpreter: `inspect --ops`
+// lists their operators, and the stdlib registry tests hold them to the modules' declarations
+// (handover H165).
 import nn
+import autodiff
 // `tiles` needs no device to load: `inspect --ops` lists its operators, and the stdlib registry
 // tests hold them to the module's purity and signature declarations (handover H156).
 import tiles

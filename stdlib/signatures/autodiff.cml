@@ -1,0 +1,30 @@
+/**
+ * Computed signatures of the `autodiff` module (C++ operators, modules/autodiff).
+ *
+ * `stop_gradient` has one fixed signature and is declared in stdlib/autodiff.cml. The two entries
+ * here take a function and answer a function:
+ *   - `grad` returns a function of the argument function's parameters that computes the gradient
+ *     of its result type (the gradient of a scalar result is a value of the same tree shape);
+ *   - `with_grad` returns the same function, whose result is the value and its gradient together.
+ * Both are `gradientSignature(f)` inside `GradResolver`: the result's parameter list and result
+ * type come from the argument, which a declaration cannot express. Each entry below writes one
+ * instance of the rule.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the operators
+ * the module registers, and docs/stdlib-reference.md is generated from them.
+ */
+
+/// The gradient function of `f`: it takes the same parameters and returns the gradient of `f`'s
+/// result with respect to its first `with` parameter (for a scalar result, a value of the same
+/// shape). A function with no `with` parameter, or whose first `with` parameter has no
+/// differentiable tangent, is refused when the call is compiled.
+/// @effect differentiates the function's graph
+/// @example let dh = grad(h)
+export func grad(f: (x: float) => float): (x: float) => float
+
+/// The value and the gradient together: the result function returns `f`'s result followed by its
+/// gradient with respect to the first `with` parameter. The same compile-time refusal as `grad`
+/// applies.
+/// @effect differentiates the function's graph
+/// @example let value_and_grad = with_grad(h)
+export func with_grad(f: (x: float) => float): (x: float) => (float, float)

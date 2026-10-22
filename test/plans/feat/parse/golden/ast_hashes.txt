@@ -315,6 +315,7 @@ bab3430dab252a98 ok showcase/c2-mlp-mnist/train.cml
 4fff9407e41ec7ae ok showcase/d5-tree-lstm/train.cml
 e0b5e276c052e5ee ok stdlib/algo.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
+700d7499f9bc23ce ok stdlib/autodiff.cml
 f8a426c8e96936da ok stdlib/bytes.cml
 dd4c782619481c22 ok stdlib/fs.cml
 5f1b2c71c5757202 ok stdlib/graph.cml
@@ -335,6 +336,7 @@ baf632062421ca18 ok stdlib/this.cml
 34ac0521ab709cc5 ok stdlib/tiles.cml
 f26840bc30a7d5b4 ok stdlib/time.cml
 6451a1f63fbca717 ok stdlib/signatures/algo.cml
+62fdf24f59bff66c ok stdlib/signatures/autodiff.cml
 985ec586154e41fa ok stdlib/signatures/ckpt.cml
 351e27ad8c07e562 ok stdlib/signatures/env.cml
 3364937d4942b0ed no stdlib/signatures/globals.cml
@@ -804,6 +806,9 @@ aa6e3c1cddb68984 ok test/cases/compile/namespace_rules/p29_using_block.cml
 7d4b7d2cbe566da2 ok test/cases/compile/native/algo_arity.cml
 c3909d2fbc7c1025 ok test/cases/compile/native/algo_declaration_import.cml
 47020d9a3e7b57ce ok test/cases/compile/native/algo_type.cml
+5b76a5fba93101ea ok test/cases/compile/native/autodiff_arity.cml
+0c07bc19cf9fdf1a ok test/cases/compile/native/autodiff_declaration_import.cml
+c5b342036147478f ok test/cases/compile/native/autodiff_result_type.cml
 f2039bef9588c755 ok test/cases/compile/native/bytes_arity.cml
 a431cbcdbd666629 ok test/cases/compile/native/bytes_tag.cml
 a08398ab5e4ba3b7 ok test/cases/compile/native/bytes_type.cml
@@ -1847,7 +1852,7 @@ f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 4137dad18f1c4711 ok test/cases/modules/stdlib/math_bits.cml
 9f305a00d4e93445 ok test/cases/modules/stdlib/math_functions.cml
 040bb7f614cb1861 ok test/cases/modules/stdlib/math_numbers.cml
-fb0512a753b9b5aa ok test/cases/modules/stdlib/registry_all.cml
+1eb39e79dc2ba3cb ok test/cases/modules/stdlib/registry_all.cml
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
 bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 f38819c872dbb5e4 ok test/cases/modules/stdlib/str_chars.cml

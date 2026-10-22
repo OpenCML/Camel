@@ -1,0 +1,16 @@
+/**
+ * The declaration of `autodiff:stop_gradient` is what an importer sees: one parameter bound by a
+ * type variable, and the result of the same type. Each call reaches the C++ operator, which
+ * returns its argument (handover H19, step 10; H165).
+ */
+module autodiff_declaration_import
+
+import { stop_gradient } from autodiff
+import { new, shape } from tensor
+
+func main(): int sync {
+    println(stop_gradient(7))
+    println(stop_gradient('text'))
+    println(shape(stop_gradient(new([1.0, 2.0])))[0])
+    return 0
+}
