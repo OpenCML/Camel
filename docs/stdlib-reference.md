@@ -39,6 +39,7 @@ Not in this reference: the profiler (`perf`).
 | [str](#str) | `import { ... } from str` | C++ |
 | [bytes](#bytes) | `import { ... } from bytes` | C++ |
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
+| [tree](#tree) | `import { ... } from tree` | Camel |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
 | [array](#array) | `import { ... } from array` | Camel |
 | [math](#math) | `import { ... } from math` | C++ |
@@ -68,6 +69,7 @@ Not in this reference: the profiler (`perf`).
 | [str](#str) | `import { ... } from str` |  |
 | [bytes](#bytes) | `import { ... } from bytes` |  |
 | [ckpt](#ckpt) | `import { ... } from ckpt` |  |
+| [tree](#tree) | `import { ... } from tree` |  |
 | [tensor](#tensor) | `import { ... } from tensor` |  |
 | [array](#array) | `import { ... } from array` |  |
 | [math](#math) | `import { ... } from math` |  |
@@ -1124,17 +1126,6 @@ The leaves of a tree, as a tuple.
 - Pure.
 - Example: `tree_leaves({ a: 1, b: (2, 3) })` gives `(1, 2, 3)`
 
-#### `tree_paths`
-
-```camel
-tree_paths: (tree: T) => P
-```
-
-The paths of the leaves, as a tree of the same shape.
-
-- Pure.
-- Example: `tree_paths({ a: 1, b: (2, 3) })` gives `{ a: 'a', b: ('b.0', 'b.1') }`
-
 #### `save_tree`
 
 ```camel
@@ -1181,6 +1172,33 @@ standard error; the next save restores it before replacing it.
 - With effects: reads the directory.
 - Failure: error value `CheckpointError` when the directory does not hold a tree of the type T, or a file is missing or does not match its recorded sum.
 - Example: `load_tree::<{ w: float, step: int }>('out/ckpt') !! { w: 0.0, step: 0 }`
+
+<a id="tree"></a>
+
+## `tree`: parameter trees written in Camel
+
+The parameter-tree library written in Camel (design principles 13.5): a tree is a value made
+of nested structs and tuples, and everything else is a leaf.
+
+`tree_paths` is here. `tree_map`, `tree_reduce`, `tree_unzip` and `tree_leaves` still live in
+the native module `ckpt`: they need the compiler's per-leaf expansion of a callback or of a
+value tuple, which arrives with H51 step 13; keeping them in `ckpt` until then is the split
+this library exists for, not a wrapper around them.
+
+The path of a leaf is its field names (tuple indices) from the root, joined by dots; the
+root's own path is the empty string. The path values are ordinary strings, so the result is
+the same tree with a `string` at every leaf.
+
+#### `tree_paths`
+
+```camel
+tree_paths: (t: typeas T) => ?
+```
+
+The path of every leaf, as a tree of the same shape.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `tree_paths({ a: 1, b: (2, 3) })` gives `{ a: 'a', b: ('b.0', 'b.1') }`
 
 <a id="tensor"></a>
 

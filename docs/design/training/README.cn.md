@@ -89,7 +89,7 @@ let next = run_preferred_resident<update>((m, vg.1, mu, nu, ...))               
 
 ### 3.2 操作
 
-新模块 `tree`（`modules/tree`，也可放进现有标准库模块，技术选择）导出：
+树操作分在两处：`tree_paths` 在纯 Camel 的 `tree` 库（`stdlib/tree.cml`），其余四个在原生模块 `ckpt`（`modules/ckpt`）：
 
 | 操作 | 含义 | 类型规则 |
 |---|---|---|
@@ -129,7 +129,7 @@ Device<{ a: A, b: (B, C) }>  ≡  { a: Device<A>, b: (Device<B>, Device<C>) }
 `params_ff.cml` 里的 12 个函数与镜像类型全部不再需要。优化器与 EMA 对所有结构通用：
 
 ```cml
-import { tree_map, tree_unzip, tree_reduce } from tree
+import { tree_map, tree_unzip, tree_reduce } from ckpt
 import { Tensor, sum, sqrt } from tensor
 
 func adam_leaf(p: Tensor<f32>, g: Tensor<f32>, m: Tensor<f32>, v: Tensor<f32>, h: Hyper): (Tensor<f32>, Tensor<f32>, Tensor<f32>) {

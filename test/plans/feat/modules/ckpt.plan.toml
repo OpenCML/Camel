@@ -20,3 +20,34 @@ args = ["${case}", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["tree leaf 'block'", "tree structure differs"]
 timeout_ms = 10000
+
+[[tests]]
+name = "tree_library_and_ckpt_run_together"
+desc = "`tree_paths` is the Camel tree library (`stdlib/tree.cml`); `tree_map` and `tree_leaves` are still the native intrinsics of `ckpt`. A program importing both runs and gets the same values the old single module gave."
+kind = "behavior"
+case = "../../../cases/modules/tree_library.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "{ w: w, block: (block.0, block.1) }\n(3.0, 4.0, 5.0)\n{ w: 4.0, block: (5.0, 6.0) }\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "tree_is_a_camel_library_not_a_native_module"
+desc = "The dead-code guard: `inspect --ops` on a program importing both names lists the operators of the native `ckpt` module and no operator of a module `tree`. A surviving native `tree.cmo` would be listed here (and would shadow `stdlib/tree.cml` in the same directory)."
+kind = "behavior"
+case = "../../../cases/modules/tree_library.cml"
+args = ["inspect", "--ops", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const ops = input.normalized.stdout.split('\n').filter((line) => line.startsWith('OPERATOR ')).map((line) => JSON.parse(line.slice('OPERATOR '.length)))
+const names = new Set(ops.map((op) => op.name))
+for (const name of ['tree_map', 'tree_reduce', 'tree_unzip', 'tree_leaves']) {
+  assert(names.has(name), 'ckpt lost the tree intrinsic ' + name)
+}
+assert(!names.has('tree_paths'), 'tree_paths is still a native operator: it belongs to stdlib/tree.cml')
+assert(!ops.some((op) => op.module === 'tree'), 'a native module tree is still registered; stdlib/tree.cml would be dead code')
+}
+"""
+timeout_ms = 20000

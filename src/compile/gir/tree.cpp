@@ -12,7 +12,6 @@
 #include "camel/core/type/tree.h"
 #include "builder.h"
 #include "builder_support.h"
-#include "camel/core/data/primary.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/struct.h"
@@ -42,7 +41,7 @@ node_handle_t Builder::expandTreeCall(
         return nullptr;
     const std::string uri = ops->resolvers().front().first;
     if (uri != "ckpt:tree_map" && uri != "ckpt:tree_reduce" && uri != "ckpt:tree_unzip" &&
-        uri != "ckpt:tree_paths" && uri != "ckpt:tree_leaves")
+        uri != "ckpt:tree_leaves")
         return nullptr;
     const auto fail = [&](const std::string &path, const std::string &why) -> void {
         diags_->of(SemanticDiag::ArgumentsRejected)
@@ -51,7 +50,7 @@ node_handle_t Builder::expandTreeCall(
         throw BuildAbortException();
     };
     const bool map = uri == "ckpt:tree_map", reduce = uri == "ckpt:tree_reduce";
-    const bool unzip = uri == "ckpt:tree_unzip", paths = uri == "ckpt:tree_paths";
+    const bool unzip = uri == "ckpt:tree_unzip";
     if ((map && (with.size() != 1 || norm.empty())) ||
         (reduce && (with.size() != 1 || norm.size() != 2)) ||
         (unzip && (!with.empty() || norm.size() != 2)) ||
@@ -158,7 +157,7 @@ node_handle_t Builder::expandTreeCall(
                 children.push_back(
                     self(self, fieldType(shape, i), inputs, childPath(path, shape, i)));
             }
-            return map || paths ? pack(shape, children) : nullptr;
+            return map ? pack(shape, children) : nullptr;
         }
         if (map)
             return invoke(values, path);
@@ -168,10 +167,6 @@ node_handle_t Builder::expandTreeCall(
                 fail(
                     path,
                     "reducer must return its accumulator type " + accumulatorType->toString());
-        } else if (paths) {
-            auto out = currGraph_->addStaticDataNode(std::make_shared<StringData>(path));
-            registerTreeOrigin(out, origin, "gir.tree.path");
-            return out;
         } else if (unzip) {
             Type *type = valueTypeOf(nodeTypeOf(values.front()));
             if (!internal(type) || type->code() != TypeCode::Tuple)
@@ -197,7 +192,7 @@ node_handle_t Builder::expandTreeCall(
     else
         inputs.push_back(valueOf(norm.front().node));
     auto result = walk(walk, shape, inputs, "");
-    if (map || paths)
+    if (map)
         return result;
     if (reduce)
         return accumulator;

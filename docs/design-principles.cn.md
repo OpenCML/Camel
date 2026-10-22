@@ -697,7 +697,7 @@ func main(): int sync {
 详见 [训练基础设施设计](design/training/README.cn.md)。
 
 - **参数树**：标准库提供 `tree_map`（可同时作用于多棵同构的树，对位的叶子作为多个实参传给回调）、`tree_unzip`、`tree_reduce` 等操作，作用于由结构体与元组嵌套成的值，叶子顺序为深度优先、按字段声明顺序；叶子边界永远由树实参的类型决定（`tree_map` 以第一棵树为准，`tree_unzip` 以给出的参照树为准），不由回调的形参类型决定；树的形状由类型决定，操作在编译期展开为逐叶的普通节点。
-- **参数树的路径**写作 `blocks.0.w`，根是空路径；检查点中的名字与 `tree_paths` 的结果逐字一致；`save_tree`、`load_tree` 属于 `tree` 模块。
+- **参数树的路径**写作 `blocks.0.w`，根是空路径；检查点中的名字与 `tree_paths` 的结果逐字一致；`save_tree`、`load_tree` 属于 `ckpt` 模块，`tree_paths` 属于纯 Camel 的 `tree` 库。
 - **无状态随机数**：在现有带全局状态的随机数之外，提供由键决定的随机数（`key`、`fold`、`split`、`normal`、`uniform`、`randint`）。它们是纯函数，不是外部效应；规范算法为 Philox4x32-10，整数与均匀分布的结果跨设备逐位相同，正态分布按超越函数的 ulp 上界。
 
 ### 13.6 部署与数据管线

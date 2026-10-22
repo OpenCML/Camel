@@ -608,7 +608,7 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 设计稿：[泛型按结构展开](../design/generic-structure/README.cn.md)（已定，第 6 节的 11 项与设计原则 5.5–5.10）。
 
 1. **值位置的结构展开**：`match type T { case struct / tuple / #leaf / _ }`、`static for (n, F) in fields T => …`、`static loop`、编译期字段访问 `t.[n]`、推导式 `{ … => [n]: e }` 与 `( … => e )`、可变元数 `..ts` 与展开调用；含静态构造的实例自动内联；实例化链诊断与 `static error`；路径作为运行时字符串（由常量折叠）。
-2. **用 Camel 重写**今天由核心硬编码展开的 `tree_map`、`tree_reduce`、`tree_unzip`、`tree_leaves`、`tree_paths`（`modules/tree`），输出与现在逐字节相同；删除核心里的硬编码展开。
+2. **用 Camel 重写**今天由核心硬编码展开的 `tree_map`、`tree_reduce`、`tree_unzip`、`tree_leaves`（`modules/ckpt`；`tree_paths` 已由 `stdlib/tree.cml` 写出），输出与现在逐字节相同；删除核心里的硬编码展开。
 3. **Optax 式优化器库**（`optim`：`sgd`、`adam`、`adamw`、学习率调度，纯函数 `init`/`update`）用 Camel 写在 `tree` 上；C2 与其他示例改用它，删除 `nn` 中的 C++ 优化器。
 4. 类型位置的同一套写法（类型函数）与 `where` 约束属于第二期，本项只预留位置。
 5. 性能：`tree_map` 展开后与现在的内联结果相同，自动微分与 Tiles 看到的图不变。

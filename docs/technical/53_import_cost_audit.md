@@ -54,7 +54,7 @@ CPython，41 ms 的运行里 9.9 ms，见 [50](50_pyplot_cpython_init.md)）；3
 | 16 | `str` | c | — | clean |
 | 17 | `this` | c | — | clean |
 | 18 | `time` | c | 时钟算子的资源 | clean |
-| 19 | `ckpt` | c | 张量算子目录、5 个 tree 内建、checkpoint 资源（源码在 `modules/tree`） | clean |
+| 19 | `ckpt` | c | 张量算子目录、4 个 tree 内建、checkpoint 资源（源码在 `modules/ckpt`） | clean |
 | 20 | `tensor` | c | 张量属性键、算子目录、fuse pass、`Tensor` 类型、`from_bytes`、入口参数 loader/saver、类型精化器、节点角色 | clean |
 | 21 | `array` | c | 纯 Camel 声明模块（145 行、20 个导出），没有 `.cmo`；导入只编译它 | clean |
 | 22 | `nn` | c | 张量算子目录、nn 目录、optimizer 组 | clean |
@@ -122,7 +122,7 @@ CPython，41 ms 的运行里 9.9 ms，见 [50](50_pyplot_cpython_init.md)）；3
 `test/tools/import-audit.mjs`：
 
 - 对 28 个模块各生成一个只导入它的程序，跑 `camel <file> std::nvm`，断言退出 0、stdout/stderr 空、无新文件；
-- 扫描每个模块的 `load()` 与构造函数（`ckpt` 走 `modules/tree`），五种形状见 53.1；lambda 体内的工作不算——
+- 扫描每个模块的 `load()` 与构造函数（`ckpt` 走 `modules/ckpt`），五种形状见 53.1；lambda 体内的工作不算——
   那是注册一个回调，回调在之后才跑（`tensor` 的入口参数 loader 读 `.npy` 就是这种形状）；
 - 一个形状出现在判为 (c) 的行上就失败，并点名模块、行列与原因；class (b) 的形状必须出现在具名表里。
   这就是“工作回到导入期就变红”的守门：它不依赖墙钟，也不依赖日志级别。

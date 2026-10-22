@@ -2,11 +2,11 @@
 // (design principles 13.5), and the checkpoints that save such a value to a directory and
 // read it back. These declarations are reference metadata.
 //
-// A tree is a struct or an ordinary tuple (not a `T?`/`T!`) and everything else is a leaf; the
-// leaves come depth first in declaration order. The path of a leaf is its field names (tuple
-// indices) joined by dots, `blocks.0.w`; the root's path is empty. The tree operations are
-// expanded by the compiler, for the types of the call, into ordinary nodes; a checkpoint's
-// file for a leaf is named by the same path.
+// The tree operations that remain native: `tree_map`, `tree_reduce`, `tree_unzip` and
+// `tree_leaves` are expanded by the compiler, for the types of the call, into ordinary nodes;
+// `save_tree` and `load_tree` are the checkpoint operators that run. The Camel tree library
+// (`stdlib/tree.cml`) holds `tree_paths`; a checkpoint's file for a leaf is named by the same
+// path.
 
 /// Applies f to the leaves in the same place of the trees (one tree, or several of the same
 /// shape: the callback then takes one leaf of each), and gives a tree of the results. The shape
@@ -32,11 +32,6 @@ export func tree_unzip(tree: T, reference: S): U
 /// @pure
 /// @example tree_leaves({ a: 1, b: (2, 3) })    // (1, 2, 3)
 export func tree_leaves(tree: T): L
-
-/// The paths of the leaves, as a tree of the same shape.
-/// @pure
-/// @example tree_paths({ a: 1, b: (2, 3) })    // { a: 'a', b: ('b.0', 'b.1') }
-export func tree_paths(tree: T): P
 
 /// Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
 /// tensor), with a manifest that records the types, sizes and SHA-256 sums and, when

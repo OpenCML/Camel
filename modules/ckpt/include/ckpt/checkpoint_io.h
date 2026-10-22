@@ -25,7 +25,7 @@
 #include <string>
 #include <utility>
 #include <vector>
-namespace camel::treelib {
+namespace camel::ckptlib {
 using CheckpointFiles = std::vector<std::pair<std::string, std::string>>;
 
 /// Writes `files` into a new sibling directory of `directory` and publishes it there as a
@@ -42,4 +42,4 @@ std::filesystem::path
 checkpointReadDirectory(const std::filesystem::path &directory, bool &recovered);
 
 std::string readCheckpointFile(const std::filesystem::path &directory, const std::string &name);
-} // namespace camel::treelib
+} // namespace camel::ckptlib
