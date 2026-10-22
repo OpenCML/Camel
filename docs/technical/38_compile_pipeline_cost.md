@@ -30,7 +30,9 @@
  "counters":{"modules":…, "ast.nodes":…, "gct.nodes":…, "graph.graphs":…, "graph.nodes":…, "graph.edges":…}}
 ```
 
-`counters.modules` 数的是本次运行从 Camel 源码编译过的**每一个**模块，包括遍按需编译的库模块：H100 之后 `std::opt` 的代数阶段会编译 `stdlib/rules.cml`，它 `import math` 时又把 C++ 模块 `math` 的声明模块 `stdlib/math.cml` 一起编译（H112、H121）。所以 chain-3（`main` 加三个模块，共四个**程序自己的**模块）在带遍的流水线上是 6 个。计数器本身分不出这四与二，`gct` 阶段的 `detail` 里有模块名，`bench.py` 从它得到完整名单，并把「程序自己的模块」与「库模块」分开报告：前者是输入集的横轴，后者是流水线带出来的真实额外开销，两个数都不能消失（见第 5 节）。
+`counters.modules` 数的是本次运行从 Camel 源码编译过的**每一个**模块，包括遍按需编译的库模块：H100 之后 `std::opt` 的代数阶段会编译 `stdlib/rules.cml`，它 `import graph`、`math`、`tensor`，而这三个 C++ 模块现在都有自己的声明模块 `stdlib/graph.cml`（H141）、`stdlib/math.cml`（H112/H113）、`stdlib/tensor.cml`（H151），所以它们也各自 parse / GCT / declare 一次（H121）。chain-3（`main` 加三个模块，共四个**程序自己的**模块）在带遍的流水线上因此是 4 + 4 = 8 个，不是 4 + 2。计数器本身分不出这两半，`gct` 阶段的 `detail` 里有模块名，`bench.py` 从它得到完整名单。
+
+「库模块」不是 `bench.py` 里的一张名单：它是**阶段树证明是遍加载的、并且在自己的声明文件里声明了自己**的模块。`UserDefinedModule::compileAsProgram` 为遍加载的 Camel 库打开一个 `library` 阶段（`detail` 是模块名），该库 `import` 的声明模块在它的 `gct` 阶段里编译；`bench.py` 的 `pass_loaded_modules()` 从这两个事实取集合，`stdlib_declaration()` 再要求 `stdlib/<name>.cml` 写着 `module <name>`。每个库模块的 `parse` / `gct` / `declare` / `library` 自身时间单列成表（`library modules compiled on demand`），`check` 也逐个打印。H144 当初钉死 `rules, math` 两个名字；H141 加了 `graph`、H151 又加了 `tensor`，一天之内两次过期，所以名单不能硬编码。程序自己的模块数仍是输入集的横轴，库模块数是流水线带出来的真实额外开销，两个数都不消失（见第 5 节）。
 
 各阶段的名字：
 
@@ -179,7 +181,20 @@ scale-4000 只编译，重构前，10 次运行（12.1 s 用户态、3.4 s 内�
 
 ## 5. 多模块
 
-`bench.py` 的表里，`modules` 是 `gen_modules.py` 要求的模块数 N（不含 `main`），`user` 是程序自己的模块数（N+1，含 `main`），`total` 是这次运行编译过的全部模块数（`user` 加库模块）；阶段表另有一行 `library modules`，写出库模块的名字。这里的横轴是 `user`：它才是「每多一个程序自己的模块要花多少」的量。`total` 与库模块是遍按需加载的真实成本，例如带 `std::opt` 的 chain-128 是 131（129 + `rules`、`math`），不是 129。
+`bench.py` 的表里，`modules` 是 `gen_modules.py` 要求的模块数 N（不含 `main`），`user` 是程序自己的模块数（N+1，含 `main`），`total` 是这次运行编译过的全部模块数（`user` 加库模块）；阶段表另有一行 `library modules`，写出库模块的名字。这里的横轴是 `user`：它才是「每多一个程序自己的模块要花多少」的量。`total` 与库模块是遍按需加载的真实成本，例如带 `std::opt` 的 chain-128 是 133（129 + `rules`、`graph`、`math`、`tensor`），不是 129。
+
+### 5.1 库模块的逐模块开销（H169）
+
+`std::opt` 的代数阶段按需编译一个 Camel 库（`rules`），并编译它导入的每个**有 Camel 声明文件**的模块；只在 C++ 里注册、没有 `stdlib/<name>.cml` 的模块（例如 `rewrite`）只有 `cmo_load`，不进入 `counters.modules`，也不该出现在库模块表里。主机 `88zjwei` 上，十行、无 import 的程序跑 `std::opt`；下表是一次 `check` 运行（Release，单轮，负载 15–25）的逐阶段自身时间，下面一段是 61 轮交错（负载 21–28）的中位数：
+
+| 库模块 | parse | gct | declare | 该库的体（`library`） | 合计（中位数） |
+|---|---:|---:|---:|---:|---:|
+| `rules` | 3.87 | 4.13 | — | 14.14 | 22.13 ms |
+| `graph` | 0.40 | 0.25 | 0.20 | — | **0.84 ms** |
+| `math` | 0.99 | 0.48 | 0.36 | — | 1.83 ms |
+| `tensor` | 0.13 | 0.06 | 0.09 | — | 0.28 ms |
+
+`graph` 一次 61 轮的中位数 0.844 ms（p10 0.796、p90 0.931、min 0.768、max 1.085）；`rules` 22.68（p10 21.40、p90 23.97），`math` 1.79，`tensor` 0.28。整次运行 39.89 ms（p10 37.13、p90 43.66）。这就是 H141 把 `graph` 变成声明模块之后，每个跑 `std::opt` 的程序为它付的钱：**真实的、可归因到单个模块的成本**，不是测量噪声（逐轮 spread 约 ±0.07 ms）。它是不是必须付，是 H142 的 Q2（惰性声明）：实验删掉安装里的 `graph.cml` 后 `std::opt` 仍编译通过、`std::jgir` 逐字节相同、模块数 5→4，说明 `rules` 只需要 `graph` 导出的名字，不需要把声明文件解析一遍；但那是"何时加载声明"的设计问题，本基准按现状记录这笔钱。
 
 chain 形状，重构前，最小值：
 
