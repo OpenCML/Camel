@@ -1,0 +1,176 @@
+# H32 — The Debug build's native stack
+
+Branch: `handover/H32-debug-stack` (from `develop`). Everything is in the working tree; nothing was
+committed, branched or pushed.
+
+The ruling: the recursion limit a program meets must be the language's own (design principles 3.9:
+1000 open calls), and a native stack that fills first is an accident of the implementation. A
+Debug build of the tools now reserves a larger `/STACK`; Release keeps what it had. The numbers
+below are measured on Windows x64, this machine (28 logical cores), on a Debug build at `-O0`.
+
+## 1. What changed
+
+`tools/libcamel_tool.cmake`:
+
+```cmake
+set(CAMEL_STACK_SIZE_BYTES 33554432)        # every configuration, as before
+set(CAMEL_DEBUG_STACK_SIZE_BYTES 134217728) # Debug only
+target_link_options(${target} PRIVATE
+  "LINKER:/STACK:$<IF:$<CONFIG:Debug>,${CAMEL_DEBUG_STACK_SIZE_BYTES},${CAMEL_STACK_SIZE_BYTES}>")
+```
+
+The option is chosen by `$<CONFIG>` in one link option. Two separate `-Xlinker` options do not
+work: CMake drops the second as a duplicate and the linker then reads `/STACK:...` as an input
+file (this failed once here). Release and RelWithDebInfo keep 32 MiB.
+
+`docs/cli.md`, "Limits", states the Debug value and its derivation next to the existing Windows
+stack paragraph.
+
+Verified in the linked PE headers (`llvm-readobj --file-headers`):
+
+| Tree | Binary | `SizeOfStackReserve` | `SizeOfStackCommit` |
+|---|---|---|---|
+| `out/latest` (Release) | `camel.exe` | 33,554,432 (32 MiB) | 4,096 |
+| `out/debug` (Debug) | `camel.exe` | 134,217,728 (128 MiB) | 4,096 |
+| `out/latest` | `camel-ls.exe` | 33,554,432 | 4,096 |
+| `out/debug` | `camel-ls.exe` | 134,217,728 | 4,096 |
+
+`SizeOfStackCommit` is one page in both trees: the build passes a **reserve only**, and Windows
+commits stack pages as they are touched. On Windows the executable's reserve is also the default
+of every thread the process creates, and `BigStackThread` takes it when it is larger than 8 MiB
+(`include/camel/utils/big_stack_thread.h`), so the `std::tf` / `std::prl` workers get 128 MiB too.
+
+## 2. The frame size of an interpreted call
+
+**Method.** A nested call is refused when less than fifteen sixteenths of the thread's stack is
+left (`src/execute/limits.cpp`, Windows: the SEH reserve), i.e. when more than `stack/16` is used.
+The diagnostic reports the number of open calls at that moment. Running the same program twice,
+on the 32 MiB and on the 128 MiB build, gives the per-call cost as a difference, so the run's own
+baseline cancels:
+
+```
+frame = (128 MiB - 32 MiB) / 16 / (1605 - 399) = 6144 KiB / 1206 = 5.09 KiB per open call
+```
+
+The program (`--max-recursion-depth 1000000`, `std::nvm`, `func depth(n) = n == 0 ? 0 : 1 + depth(n-1)`):
+
+| Stack reserve | Refused at | Diagnostic |
+|---|---|---|
+| 32 MiB | open call 400 (399 open) | `(399 open calls: the native stack of the thread, 32768 KiB, is full)` |
+| 128 MiB | open call 1606 (1605 open) | `(1605 open calls: the native stack of the thread, 131072 KiB, is full)` |
+
+The linear model fits both points exactly (baseline 15.3 KiB: `2048 = 15.3 + 399 x 5.0945`,
+`8192 = 15.3 + 1605 x 5.0945` KiB). `test/cases/loops/recursion.cml` (`inside_recursion`) gives
+the same 399 on the 32 MiB build, so the function's shape does not change the figure at this
+precision.
+
+**This corrects H30's estimate.** H30 estimated "about 90 KiB" by dividing the whole 32 MiB by the
+363 calls it reached — it assumed the stack was exhausted. It was not: the Windows guard stops a
+call at 1/16 of the stack, so 32 MiB was worth 2 MiB of recursion, and only 399 calls of about
+5.1 KiB. The Debug frame is about 5.1 KiB, not 90 KiB; the reason a Debug build failed early is
+the 16x the guard holds back, not a 16x frame.
+
+## 3. The language limit
+
+1000 open calls, the same on every scheduler (`kDefaultMaxRecursionDepth`,
+`include/camel/execute/limits.h`; design principles 3.9; `docs/cli.md`). Measured on the Debug
+`std::nvm`, default limit:
+
+| Program | Result |
+|---|---|
+| `depth(999)` | prints `999`, exit 0 — 1000 calls open at the bottom, and they fit |
+| `depth(1000)` | `Maximum recursion depth (1000) exceeded ...` — the language diagnostic |
+| `test/cases/linear/runtime/recursion_depth_limit.cml` | prints `200`, then the same diagnostic at `depth(1200)` |
+
+Before the change the same `inside_recursion` case stopped at 399 open calls with the native-stack
+text; after it, the count is reached first on the same binary tree.
+
+## 4. The chosen reserve
+
+The minimum reserve that reaches open call 1001 is
+
+```
+16 x (1001 x 5.0945 KiB + 15.3 KiB) = 81,840 KiB = 79.9 MiB
+```
+
+because Windows only lets a sixteenth of it be used. **128 MiB** was chosen: 8 MiB usable, which
+is 1605 calls, **1.6x the default limit** — a margin of 604 calls, or room for a function whose
+per-call native cost is 60% larger than the measured one. It is the next power of two above the
+minimum and is not so large that it is worth questioning.
+
+No language limit was changed, and no per-build default depth was introduced.
+
+## 5. What it costs
+
+- **Address space, not memory.** The reserve is 128 MiB per thread; the commit is one page at
+  start and grows only as the stack is touched. A recursion at the language limit commits about
+  5.0 MiB, and the guard refuses the next call once about 8 MiB is touched, so a deeply recursive
+  thread stays at roughly 8 MiB of committed stack. The 120 MiB below that is the SEH reserve the
+  guard exists to preserve; it is never touched by ordinary nesting.
+- **Per process.** The `std::prl` executor starts one worker per hardware thread (Taskflow's
+  default, 28 here), each with the executable's reserve: at most 28 x 128 MiB = 3.5 GiB of
+  reserved address space while a parallel pass runs. That is under 0.1% of an x64 process's user
+  address space (8 TiB or more), and none of it is committed unless used.
+- **32-bit.** A 32-bit build would not fit this (3.5 GiB against a 2 GiB user address space); this
+  tree has no 32-bit configuration (the JIT and the arch flags are x86-64 only), so the question
+  does not arise today. If one appears, the Debug reserve has to be smaller and a Debug-lower
+  default depth would be the honest alternative — but that would change a language limit, which
+  is the language author's decision, not this lane's.
+- **Release is untouched**: 32 MiB, the same header as before.
+
+## 6. Evidence
+
+`inside_recursion` (`test/cases/loops/recursion.cml`, `deep(500)`, 5000-round loop at the bottom),
+Debug build, by hand:
+
+```
+std::nvm  12498000  exit 0
+std::fvm  12498000  exit 0
+std::jit  12498000  exit 0
+std::prl  12498000  exit 0
+```
+
+`node scripts/test.js test/plans/feat/linear/loops.plan.toml --build debug`: 101 tests, **99 pass,
+2 fail**; the two are `loops.fault.fvm` and `loops.fault.prl` (the frame-ownership question of
+H31 section 4.1, exit 3, not this lane), all four `loops.inside_recursion.*` pass (0.11-0.24 s).
+
+The whole debug tier, once, on the final artifacts:
+
+```
+node scripts/test.js --tier debug --jobs 12
+[SUMMARY] total: 324, pass: 322, fail: 2
+[INFO] wall: 104.4 s, jobs: 12, tier: debug
+[FAIL] loops.fault.fvm
+[FAIL] loops.fault.prl
+[PASS] loops.inside_recursion.nvm / .fvm / .jit / .prl
+```
+
+322 of 324, with only the two frame-ownership tests red, as expected.
+
+Release side: `camel-build.ps1 -Config Release` is green (32 MiB in the header, above), and
+`node scripts/test.js test/plans/smoke` gives **10 / 10 pass** in `out/latest`.
+
+## 7. Open questions
+
+1. **The Windows guard's 15/16 reserve.** It is why the Debug reserve had to be 16x the depth
+   cost (and why the old 32 MiB was worth only 2 MiB of recursion). With the reserve at 1/4 the
+   Debug `/STACK` could be 20 MiB. The ratio is the SEH decision recorded in
+   `src/execute/limits.cpp` and was not touched here; if it is ever revisited, this sizing should
+   be redone.
+2. **Per-function cost.** 5.09 KiB is for a three-slot function; a function with a much larger
+   interpreted frame can still meet the native diagnostic before 1000 on this build. The 1.6x
+   margin covers 60% more per call, not every program. There is no per-program check.
+3. **A raised limit.** `--max-recursion-depth` above about 1600 in Debug (and above the stack in
+   Release) still ends in the native-stack diagnostic. That is the documented fallback and the
+   reason the option's range exists; it is not a defect.
+4. **The older number.** H30/H31 recorded 363 open calls at 32 MiB; this tree measures 399 for
+   the same case. The derivation above uses the differential measured on this tree, so the
+   conclusion does not depend on the older figure, but the difference is unexplained.
+5. **The tier's timeout budget.** `inside_recursion` now runs in 0.1-0.25 s per back end; the 4x
+   Debug timeout multiplier is unchanged and no test parameter was touched.
+
+## 8. Changed files
+
+Build: `tools/libcamel_tool.cmake`.
+
+Docs: `docs/cli.md` (the Windows stack paragraph), this report.
