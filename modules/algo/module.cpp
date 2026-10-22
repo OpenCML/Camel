@@ -34,114 +34,12 @@ using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::type;
 
-namespace {
-// The signatures that take their result type from the element type of their array argument stay
-// in the C++ resolver (design principles 6.4; handover H94, ruling 1, H135): `sort` and its
-// three demonstrators, `merge_sorted_arrays`, `flatten` and `unique` (the last two in
-// sequence.cpp). `argsort` has no such computation and is the six declarations of
-// `algo:argsort` in `stdlib/algo.cml`.
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "sort",
-            {
-                {
-                    "algo:sort",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (array: T[]) => T[]",
-                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            return tt::as_ptr<ArrayType>(norm[0]);
-                        }),
-                },
-            }),
+// Every operator of this module is declared in `stdlib/algo.cml`: `argsort` and the seven names
+// that take the element type of their array argument are generic declarations, and the C++ side
+// keeps the kernels, the executor, the operator traits and the in-place forms (design principles
+// 6.4; handover H19, step 10, H202).
 
-        OperatorGroup::create(
-            "insert_sort",
-            {
-                {
-                    "algo:insert_sort",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (array: T[]) => T[]",
-                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            return tt::as_ptr<ArrayType>(norm[0]);
-                        }),
-                },
-            }),
-
-        OperatorGroup::create(
-            "quick_sort",
-            {
-                {
-                    "algo:quick_sort",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (array: T[]) => T[]",
-                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            return tt::as_ptr<ArrayType>(norm[0]);
-                        }),
-                },
-            }),
-
-        OperatorGroup::create(
-            "merge_sort",
-            {
-                {
-                    "algo:merge_sort",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (array: T[]) => T[]",
-                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            return tt::as_ptr<ArrayType>(norm[0]);
-                        }),
-                },
-            }),
-
-        OperatorGroup::create(
-            "merge_sorted_arrays",
-            {
-                {
-                    "algo:merge_sorted_arrays",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "<> (lft: T[], rgt: T[]) => T[]",
-                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array ||
-                                norm[1]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            const auto &lftElemType = tt::as_ptr<ArrayType>(norm[0])->elemType();
-                            const auto &rgtElemType = tt::as_ptr<ArrayType>(norm[1])->elemType();
-                            if (!lftElemType->equals(rgtElemType))
-                                return std::nullopt;
-                            return tt::as_ptr<ArrayType>(norm[0]);
-                        }),
-                },
-            }),
-    };
-    return groups;
-}
-} // namespace
-
-AlgoModule::AlgoModule(context_ptr_t ctx) : BuiltinModule("algo", ctx) {
-    for (const auto &group : getOperatorGroups())
-        exportEntity(group->name(), group);
-    for (const auto &group : getAlgoSequenceGroups())
-        exportEntity(group->name(), group);
-}
+AlgoModule::AlgoModule(context_ptr_t ctx) : BuiltinModule("algo", ctx) {}
 
 module_ptr_t AlgoModule::create(context_ptr_t ctx) { return std::make_shared<AlgoModule>(ctx); }
 

@@ -391,27 +391,17 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     auto resolver = camel::core::type::DeclaredFuncTypeResolver::create(funcType);
     // A declaration stands for an operator of this module (design principles 10.1; handover
     // H94, ruling 5): the prefix of its URI is the name the module declares, or one of the
-    // protocols its loaded implementation answers under (a module whose operators are not named
-    // after it, like `random`), or empty for an operator the compiler itself names (`:op/...`).
+    // protocols the module answers on (a module whose operators are not named after it, like
+    // `random`, answers on `rand:`), or empty for an operator the compiler itself names
+    // (`:op/...`). The protocols are the module's own statement, not the groups it exported: a
+    // module that declares every operator has no group left to read them from (handover H202).
     // Naming another module's operator is refused here: that operator's own module is where its
     // signature belongs, and replacing its resolver from here would be one module writing
     // another's signature.
     const std::string protocol = uri.substr(0, uri.find(':'));
     if (!protocol.empty() && protocol != where && protocol != unit_->module->name()) {
-        bool ownProtocol = false;
-        unit_->module->nativeEntityNS()->forEach(
-            [&](const Reference &, const camel::core::module::entity &ent) {
-                if (ownProtocol || !ent.isOperGroup() || ent.operGroup() == nullptr) {
-                    return;
-                }
-                for (const auto &[groupUri, rule] : ent.operGroup()->resolvers()) {
-                    if (groupUri.rfind(protocol + ":", 0) == 0) {
-                        ownProtocol = true;
-                        return;
-                    }
-                }
-            });
-        if (!ownProtocol) {
+        const auto protocols = unit_->module->operatorProtocols();
+        if (std::find(protocols.begin(), protocols.end(), protocol) == protocols.end()) {
             diags_->of(SemanticDiag::NativeDeclarationForeignOperator)
                 .atOrigin(gct->origin())
                 .commit(name, uri);

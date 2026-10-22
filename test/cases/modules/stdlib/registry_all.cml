@@ -53,6 +53,9 @@ import rewrite
 // `onnx` loads without the ONNX runtime: `inspect --ops` lists its two operators, and the
 // stdlib registry tests hold them to the declaration and the computed signature (handover H179).
 import onnx
+// `algo`, `math`, `para` and `random` have no computed signature left (H202), and `graph` keeps
+// only the four operators of a function value: the other names of those five modules are
+// declared in `stdlib/<m>.cml`, so `inspect --ops` lists the operators their declarations name.
 
 func main(): int {
     return 0

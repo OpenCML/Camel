@@ -1,0 +1,13 @@
+/**
+ * `rand:choice` is declared with an array: a number is refused at the call, and the message names
+ * the declaration's type variable and parameter (`xs`) — `stdlib/random.cml`, not the C++, is the
+ * source (handover H202; H194 bucket 1).
+ */
+module random_choice_type
+
+import { choice } from random
+
+func main(): int sync {
+    println(choice(42))
+    return 0
+}

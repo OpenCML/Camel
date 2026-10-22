@@ -105,13 +105,10 @@ const MODULES = [
         name: 'math',
         title: '`math`: numbers and bits',
         kind: 'cpp',
-        // The declarations, and, in the signature file, the reference entries of the three names
-        // whose result type C++ computes from their argument (sqrt; the mixed-integer shifts).
-        // One convention for every declaration module: the computed half is a signature file
-        // named by `computed:` (handover H180).
+        // The declarations only: the three names whose result type C++ computed from their
+        // argument (sqrt; the mixed-integer shifts) are written out per spelling (handover H202).
         source: 'math.cml',
         declaration: true,
-        computed: 'signatures/math.cml',
     },
     {
         name: 'statistics',
@@ -125,23 +122,20 @@ const MODULES = [
         name: 'algo',
         title: '`algo`: sorting and array primitives',
         kind: 'cpp',
-        // The declaration of `argsort`, and, in the signature file, the reference entries of the
-        // seven names whose result type C++ computes from their array argument (handover H115,
-        // H128, H135).
+        // The declarations only: the seven names whose result type C++ computed from their array
+        // argument are generic declarations (handover H202).
         source: 'algo.cml',
         declaration: true,
-        computed: 'signatures/algo.cml',
     },
     {
         name: 'random',
         title: '`random`',
         kind: 'cpp',
         // The declarations, not a signature file: they are what the module compiles (H19). The
-        // three operators whose result type comes from their array argument stay in the C++
-        // resolver; the signature file keeps only their reference entries (handover H115, H128).
+        // three operators whose result type comes from their array argument are generic
+        // declarations too (handover H202).
         source: 'random.cml',
         declaration: true,
-        computed: 'signatures/random.cml',
     },
     {
         name: 'time',
@@ -219,12 +213,10 @@ const MODULES = [
         name: 'para',
         title: '`para`: unordered iteration',
         kind: 'cpp',
-        // The declaration of `rendezvous`, and, in the signature file, the reference entries of
-        // the two names whose signature C++ computes from their array argument (handover H115,
-        // H128, H146).
+        // The declarations of `rendezvous` and of the two names that take the element type of
+        // their array argument (handover H202).
         source: 'para.cml',
         declaration: true,
-        computed: 'signatures/para.cml',
     },
     {
         name: 'this',
@@ -238,11 +230,10 @@ const MODULES = [
         name: 'graph',
         title: '`graph`: a program as a value',
         kind: 'cpp',
-        // The declarations, and, in the signature file, the reference entries of the operators
-        // whose type C++ computes (`constant` and `add_constant` take the type of their sample;
-        // the four of a function value take the function's type). One convention for every
-        // declaration module: the computed half is a signature file named by `computed:`
-        // (handover H180).
+        // The declarations, and, in the signature file, the reference entries of the four
+        // operators whose type C++ computes (a function value's type). `constant` and
+        // `add_constant` take the type of their sample and are written out per sample type
+        // (handover H180, H202).
         source: 'graph.cml',
         declaration: true,
         computed: 'signatures/graph.cml',

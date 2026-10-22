@@ -440,3 +440,7 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
 void UserDefinedModule::declareTypes() { (void)compile(CompileStage::GCT); }
 
 void UserDefinedModule::declareEntities() { (void)compile(CompileStage::Declared); }
+
+std::vector<std::string> UserDefinedModule::operatorProtocols() const {
+    return implementation_ ? implementation_->operatorProtocols() : Module::operatorProtocols();
+}

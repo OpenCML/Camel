@@ -34,80 +34,15 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 
 /*
- * Unordered iteration. `unordered_foreach` and `unordered_reduce` take the element type of their
- * array argument as the type of the function they call, so their signature is computed by a
- * `DynamicFuncTypeResolver` and stays here (design principles 6.4; handover H19, step 10). The
- * fixed signature of `rendezvous` is written once, in the declaration module `stdlib/para.cml`:
- * what is left here is what only C++ knows, the kernels in operators.cpp, the executor that runs
- * them, and the operator traits and resources declared at load.
+ * Unordered iteration. Every signature is a declaration of `stdlib/para.cml`: the fixed one of
+ * `rendezvous` and the two that take the element type of their array argument
+ * (`unordered_foreach`, `unordered_reduce`), which a `(typeas T)` declaration states exactly
+ * (design principles 6.4; handover H19, step 10, H202). What is left here is what only C++ knows:
+ * the kernels in operators.cpp, the executor that runs them, and the operator traits and
+ * resources declared at load.
  */
 
-namespace {
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "unordered_reduce",
-            {
-                {
-                    ":mark/unordered_reduce_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{2, {false, false}}, {1, {false}}},
-                        "<func: (acc: T, item: T) => T, initial: T> (collect: T[]) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
-                            if (with[0]->code() != TypeCode::Function)
-                                return std::nullopt;
-                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                            if (funcType->normTypesCount() < 2)
-                                return std::nullopt;
-                            if (!funcType->normTypeAt(1)->equals(vecType->elemType()))
-                                return std::nullopt;
-                            if (!funcType->normTypeAt(0)->equals(vecType->elemType()))
-                                return std::nullopt;
-                            if (!with[1]->equals(vecType->elemType()))
-                                return std::nullopt;
-                            if (!funcType->exitType()->equals(vecType->elemType()))
-                                return std::nullopt;
-                            return vecType->elemType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "unordered_foreach",
-            {
-                {
-                    ":mark/unordered_foreach_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<func: (item: T) => void> (collect: T[]) => void",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            const auto &vecType = tt::as_ptr<ArrayType>(norm[0]);
-                            if (with[0]->code() != TypeCode::Function)
-                                return std::nullopt;
-                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                            if (funcType->normTypesCount() != 1)
-                                return std::nullopt;
-                            if (!funcType->normTypeAt(0)->equals(vecType->elemType()))
-                                return std::nullopt;
-                            return Type::Void();
-                        }),
-                },
-            }),
-    };
-    return groups;
-}
-} // namespace
-
-ParaModule::ParaModule(context_ptr_t ctx) : BuiltinModule("para", ctx) {
-    for (const auto &group : getOperatorGroups())
-        exportEntity(group->name(), group);
-}
+ParaModule::ParaModule(context_ptr_t ctx) : BuiltinModule("para", ctx) {}
 
 module_ptr_t ParaModule::create(context_ptr_t ctx) { return std::make_shared<ParaModule>(ctx); }
 

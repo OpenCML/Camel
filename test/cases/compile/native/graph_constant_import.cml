@@ -1,0 +1,20 @@
+/**
+ * The declarations of `graph:constant` are per sample type: an importer reads a node with an
+ * `i32`, an `int`, an `f32`, a `float`, a `bool` and a `string` sample, and each call reaches the
+ * C++ operator of the same URI (handover H202; H194 bucket 1). The sample's value is not read, so
+ * the first node of the root graph is a node of no constant type and every answer is null.
+ */
+module graph_constant_import
+
+import { current, root, nodes, constant } from graph
+
+func main(): int sync {
+    let ns = nodes(root(current()))
+    println(constant(ns[0], i32(0)) == null)
+    println(constant(ns[0], 0) == null)
+    println(constant(ns[0], f32(0.0)) == null)
+    println(constant(ns[0], 0.0) == null)
+    println(constant(ns[0], false) == null)
+    println(constant(ns[0], '') == null)
+    return 0
+}

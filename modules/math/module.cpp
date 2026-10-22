@@ -61,40 +61,13 @@ void sqrtVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call)
     }
 }
 
-// The square root's result type is computed from its argument (i32 gives f32, int gives float):
-// a `DynamicFuncTypeResolver` stays the one source of its type and cannot be a declaration
-// (design principles 6.4; handover H94, ruling 1 and H113). Every other group of this file is
-// now a declaration of `stdlib/math.cml`; the shifts of numeric.cpp are the only other exception.
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "sqrt",
-            {{"math:sqrt",
-              DynamicFuncTypeResolver::create(
-                  {{0, {}}, {1, {false}}},
-                  "(val: float | double) => float | double",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      TypeCode tp = norm[0]->code();
-                      if (tp == TypeCode::Float32 || tp == TypeCode::Int32)
-                          return Type::Float32();
-                      if (tp == TypeCode::Float64 || tp == TypeCode::Int64)
-                          return Type::Float64();
-                      return std::nullopt;
-                  })},
-        }),
-    };
-    return groups;
-}
 } // namespace
 
 MathModule::MathModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
-    // The fixed signatures are the declarations of `stdlib/math.cml`. These two loops are the
-    // operators whose signature the C++ resolver computes, and no declaration may replace it.
-    for (const auto &group : getOperatorGroups())
-        exportEntity(group->name(), group);
-    for (const auto &group : getMathNumericGroups())
-        exportEntity(group->name(), group);
+    // Every signature is a declaration of `stdlib/math.cml`: the fixed ones and the ones whose
+    // result type C++ computed before (`sqrt`, `shl`, `shr`, written out per spelling; handover
+    // H202). The C++ side keeps the kernels, the executor, the operator traits, the numeric
+    // semantics and the values.
     // The constants are values (design principles 10.1): `math::pi`, written without
     // parentheses, is the constant itself where it is used. (They were functions of no
     // arguments, `pi()`, while a module could export nothing but functions and types.)

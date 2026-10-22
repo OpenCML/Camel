@@ -1,10 +1,11 @@
 /**
- * The computed signatures of the `graph` module: the operators whose type C++ computes from an
- * argument (`constant` and `add_constant` take the type of their sample; `program_of`, `graph_of`,
- * `open_function` and `to_function` take a function value's type). The C++ operators in
- * `modules/graph` are the one source of these types; this file is for reference only (it is not
- * compiled) and feeds `docs/stdlib-reference.md` and the `--verify-ops` check. The fixed
- * signatures are declared in `stdlib/graph.cml` (design principles 6.4; handover H19, H141, H180).
+ * The computed signatures of the `graph` module: the four operators whose type C++ computes from
+ * a function value's type (`program_of`, `graph_of`, `open_function` and `to_function`). A
+ * declaration cannot state it: `(typeas F)` accepts every type, and a call the operator must
+ * refuse would pass the check. The C++ operators in `modules/graph` are the one source of these
+ * types; this file is for reference only (it is not compiled) and feeds
+ * `docs/stdlib-reference.md` and the `--verify-ops` check. The fixed signatures are declared in
+ * `stdlib/graph.cml` (design principles 6.4; handover H19, H141, H180, H202).
  *
  * The section lines follow `stdlib/graph.cml`, including the sections that hold no computed
  * signature, so the reference page reads in the module's order (handover H180).
@@ -13,11 +14,6 @@
 // ---- the program ----
 
 // ---- reading nodes ----
-
-/// The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
-/// @pure
-/// @example constant(n, 0)    // int?
-export func constant(n: Node, sample: T): T?
 
 // ---- regions ----
 
@@ -36,14 +32,6 @@ export func program_of(f: F): Program
 export func graph_of(f: F): Graph
 
 // ---- transactions ----
-
-/// Adds a value the transaction creates to the graph's static values and gives the node that
-/// holds it. The value may be a number, a bool or a string; a string is copied into the permanent
-/// space because a value a transaction creates may be live at a safepoint where its draft is not
-/// traced.
-/// @effect changes the transaction
-/// @example add_constant(t, g, 7)
-export func add_constant(t: Txn, g: Graph, value: T): Node
 
 /// Opens a transaction on a function value's graph and the graphs it reaches.
 /// @effect opens a transaction

@@ -51,7 +51,6 @@ using camel::graphmod::effectsType;
 using camel::graphmod::nodeKindType;
 using camel::graphmod::regionKindType;
 using camel::graphmod::factKernels;
-using camel::graphmod::readGroups;
 using camel::graphmod::readKernels;
 using camel::graphmod::txnGroups;
 using camel::graphmod::txnKernels;
@@ -128,12 +127,10 @@ class GraphModule final : public BuiltinModule {
         // The type of the value `effects` gives: a structural type has no name of its own, and
         // the declaration of `effects` names its result (handover H141).
         exportType(Reference("Effects"), effectsType());
-        // The signatures C++ computes (standard library conventions 2): `constant`, the four
-        // operators of a function value and `add_constant` take the type of an argument, so a
-        // declaration cannot express them. Everything else is declared in stdlib/graph.cml.
-        for (const auto &group : readGroups()) {
-            exportEntity(group->name(), group);
-        }
+        // The signatures C++ computes (standard library conventions 2): the four operators of a
+        // function value take the type of an argument, so a declaration cannot express them.
+        // Everything else is declared in stdlib/graph.cml, `constant` and `add_constant` per
+        // sample type included (handover H202).
         for (const auto &group : txnGroups()) {
             exportEntity(group->name(), group);
         }
