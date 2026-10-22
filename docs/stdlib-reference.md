@@ -3883,6 +3883,17 @@ The nodes of the graph in NodeId order; the places of removed nodes are skipped.
 
 ### Reading nodes
 
+#### `constant`
+
+```camel
+constant: (n: Node, sample: T) => T?
+```
+
+The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
+
+- Pure.
+- Example: `constant(n, 0)` gives `int?`
+
 #### `inputs`
 
 ```camel
@@ -4014,17 +4025,6 @@ Whether the node is a constant of the graph.
 
 - Pure.
 - Example: `is_constant(n)`
-
-#### `constant`
-
-```camel
-constant: (n: Node, sample: T) => T?
-```
-
-The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
-
-- Pure.
-- Example: `constant(n, 0)` gives `int?`
 
 #### `type_of`
 
@@ -4203,6 +4203,42 @@ The graph of a function value.
 
 ### Transactions
 
+#### `add_constant`
+
+```camel
+add_constant: (t: Txn, g: Graph, value: T) => Node
+```
+
+Adds a value the transaction creates to the graph's static values and gives the node that
+holds it. The value may be a number, a bool or a string; a string is copied into the permanent
+space because a value a transaction creates may be live at a safepoint where its draft is not
+traced.
+
+- With effects: changes the transaction.
+- Example: `add_constant(t, g, 7)`
+
+#### `open_function`
+
+```camel
+open_function: (f: F) => Txn
+```
+
+Opens a transaction on a function value's graph and the graphs it reaches.
+
+- With effects: opens a transaction.
+- Example: `open_function(f)`
+
+#### `to_function`
+
+```camel
+to_function: (t: Txn, sample: F) => F!
+```
+
+Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
+
+- With effects: changes the transaction.
+- Example: `to_function(t, f)`
+
 #### `open`
 
 ```camel
@@ -4224,20 +4260,6 @@ Puts the node `new` of the same graph in the place of `old`, which is removed; w
 
 - With effects: changes the transaction.
 - Example: `replace(t, n, inputs(n)[0])`
-
-#### `add_constant`
-
-```camel
-add_constant: (t: Txn, g: Graph, value: T) => Node
-```
-
-Adds a value the transaction creates to the graph's static values and gives the node that
-holds it. The value may be a number, a bool or a string; a string is copied into the permanent
-space because a value a transaction creates may be live at a safepoint where its draft is not
-traced.
-
-- With effects: changes the transaction.
-- Example: `add_constant(t, g, 7)`
 
 #### `erase`
 
@@ -4271,28 +4293,6 @@ Drops the transaction.
 
 - With effects: changes the transaction.
 - Example: `abort(t)`
-
-#### `open_function`
-
-```camel
-open_function: (f: F) => Txn
-```
-
-Opens a transaction on a function value's graph and the graphs it reaches.
-
-- With effects: opens a transaction.
-- Example: `open_function(f)`
-
-#### `to_function`
-
-```camel
-to_function: (t: Txn, sample: F) => F!
-```
-
-Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
-
-- With effects: changes the transaction.
-- Example: `to_function(t, f)`
 
 <a id="tiles"></a>
 

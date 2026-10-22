@@ -203,12 +203,14 @@ const MODULES = [
         name: 'graph',
         title: '`graph`: a program as a value',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles (H19). The
-        // operators whose type C++ computes (`constant` and `add_constant` take the type of their
-        // sample; the four of a function value take the function's type) stay in the C++ resolver
-        // and are recorded in the declaration file as `// dynamic func` (handover H141).
+        // The declarations, and, in the signature file, the reference entries of the operators
+        // whose type C++ computes (`constant` and `add_constant` take the type of their sample;
+        // the four of a function value take the function's type). One convention for every
+        // declaration module: the computed half is a signature file named by `computed:`
+        // (handover H180).
         source: 'graph.cml',
         declaration: true,
+        computed: 'signatures/graph.cml',
     },
     {
         name: 'tiles',
