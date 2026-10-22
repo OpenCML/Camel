@@ -15,10 +15,10 @@ type State = {
 func initial(): State {
     return {
         params: {
-            w: new([1.0, -2.0]), odd: new([9007199254740993, -2]),
+            w: new([1.0, -2.0] as f32[]), odd: new([9007199254740993, -2]),
             empty: zeros([2, 0])
         },
-        m: zeros([2]), v: zeros([2]), ema: new([1.0, -2.0]),
+        m: zeros([2]), v: zeros([2]), ema: new([1.0, -2.0] as f32[]),
         step: 0, seed: 20261019, cursor: (3, 17), note: '中文 checkpoint',
         raw: from_array([0, 255, 128, 1]), enabled: true, gain: f32(-0.0), scale: -0.0
     }

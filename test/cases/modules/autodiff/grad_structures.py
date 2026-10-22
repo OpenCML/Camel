@@ -159,7 +159,7 @@ def main() -> int:
                 f"module grad_structures_{k}\n"
                 "import { Tensor, mean, reshape, save_npy, sigmoid, sum, tanh } from tensor\n"
                 "import { grad } from autodiff\n\n" + "\n".join(camel) + "\nfunc main(): int sync {\n"
-                "    let x = reshape([0.3, -0.2, 0.7], [3])\n"
+                "    let xs: f32[] = [0.3, -0.2, 0.7]\n" + "    let x = reshape(xs, [3])\n"
                 + "".join(f"    save_npy(grad(loss{j})<x>(), 'g{k}_{j}.npy')\n" for j in range(args.losses))
                 + "    return 0\n}\n")
             (work / f"p{k}.cml").write_text(source, encoding="utf-8")

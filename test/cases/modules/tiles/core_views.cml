@@ -6,7 +6,7 @@ import { Tensor, load_npy, save_npy, reshape, permute, slice, sum, zeros } from 
 import { grad } from autodiff
 import { source, inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
-let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0], [2, 3])
+let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0] as f32[], [2, 3])
 func chained(x: Tensor<f32>): Tensor<f32> { return slice(permute(x, [2, 0, 1]), 0, 1, 4, 2) }
 func fixed(x: Tensor<f32, [2, 3, 4]>): Tensor<f32> { return permute(x, [2, 0, 1]) }
 with <axes: int[]>

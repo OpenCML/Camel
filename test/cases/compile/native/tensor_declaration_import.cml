@@ -30,14 +30,14 @@ func round_trip(t: Tensor, path: string): Tensor sync {
 }
 
 func main(): int sync {
-    let t = new([[1.0, 2.0], [3.0, 4.0]])
+    let t = new([[1.0, 2.0], [3.0, 4.0]] as f32[][])
     let extents = shape(t)
     println(extents[0] * 10 + extents[1])
     println(numel(t))
     println(dim(t, 1))
     println(dim(t, i32(0)))
     println(shape(reshape(t, [4]))[0])
-    let encoded = to_bytes(new([1.0]))
+    let encoded = to_bytes(new([1.0] as f32[]))
     println(shape(from_bytes::<f32>(encoded, [1]))[0])
     set_num_threads(2)
     println(num_threads())

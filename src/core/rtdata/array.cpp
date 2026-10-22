@@ -1260,6 +1260,17 @@ std::string Array::formatTensorElement(uint64_t flatIndex) const {
         oss << buf;
         break;
     }
+    case TypeCode::Float64: {
+        const double value = getAsDouble(flatIndex);
+        if (value == std::floor(value) && std::abs(value) < 1e10) {
+            (void)std::snprintf(buf, sizeof(buf), "% 7.0f.", value);
+        } else {
+            (void)std::snprintf(buf, sizeof(buf), "% 11.7g", value);
+        }
+        oss << buf;
+        break;
+    }
+    case TypeCode::Int32:
     case TypeCode::Int64:
         oss << std::setw(7) << getAsInt64(flatIndex);
         break;

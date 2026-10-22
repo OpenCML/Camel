@@ -1,0 +1,16 @@
+/**
+ * A default is a compile-time constant, and a struct literal is not one: the struct is
+ * constructed at the call, so it cannot be the declaration's value (design principles 4.4,
+ * handover H276). A struct default has to be written out at each call.
+ */
+module param_default_struct_not_constant
+
+type Point = { x: int, y: int }
+
+func shift(q: Point, p: Point = { x: 3, y: 4 }): int {
+    return q.x + p.x + q.y + p.y
+}
+
+func main(): int sync {
+    return shift({ x: 1, y: 1 })
+}

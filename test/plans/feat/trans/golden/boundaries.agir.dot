@@ -39,10 +39,10 @@ digraph GraphIR {
             N0B -> N0C [label="0|1", type="NORM"];
         }
         O01 [label="EXIT", type="EXIT"];
-        N0D [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=<ORIGIN>, span="16:25-16:46", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="float[]"];
-        N0E [label="[4]", type="DATA", origin=<ORIGIN>, span="16:48-16:51", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="int[]"];
+        N0D [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=<ORIGIN>, span="16:25-16:55", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="f32[]"];
+        N0E [label="[4]", type="DATA", origin=<ORIGIN>, span="16:57-16:60", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="int[]"];
         N0F [label="tensor:reshape", type="OPER", origin=<ORIGIN>, span="16:17-16:24", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="Tensor<float32, [4]>"];
-        N10 [label="gate", type="FUNC", origin=<ORIGIN>, span="16:12-16:53", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="Tensor"];
+        N10 [label="gate", type="FUNC", origin=<ORIGIN>, span="16:12-16:62", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="Tensor"];
         N11 [label="0", type="DATA", origin=<ORIGIN>, span="17:24-17:25", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="int"];
         N12 [label="tensor:idx", type="OPER", role="scalar-boundary", origin=<ORIGIN>, span="17:23-17:24", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="float"];
         N13 [label="gate={}", type="DATA", origin=<ORIGIN>, span="17:4-17:13", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="string"];

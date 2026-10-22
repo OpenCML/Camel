@@ -29,31 +29,31 @@ import { grad, with_grad } from autodiff
 
 with <x: Tensor>
 func slice_loss(): float {
-    let c = reshape([2.0, 3.0, 5.0], [3])
+    let c = reshape([2.0, 3.0, 5.0] as f32[], [3])
     return sum(x[1:4] * c)
 }
 
 with <x: Tensor>
 func nested_loss(): float {
-    let c = reshape([7.0, 11.0], [2])
+    let c = reshape([7.0, 11.0] as f32[], [2])
     return sum(x[1:5][1:3] * c)
 }
 
 with <x: Tensor>
 func stepped_loss(): float {
-    let c = reshape([2.0, 3.0, 5.0], [3])
+    let c = reshape([2.0, 3.0, 5.0] as f32[], [3])
     return sum(slice(x, 0, 0, 6, 2) * c)
 }
 
 with <x: Tensor>
 func round_trip(): float {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [6])
+    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
     return sum(reshape(transpose(transpose(reshape(x, [2, 3]))), [6]) * w)
 }
 
 with <x: Tensor>
 func plain(): float {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [6])
+    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
     return sum(x * w)
 }
 
@@ -69,8 +69,8 @@ func distance(g: Tensor, expected: Tensor): float {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [6])
-    let zero = reshape([0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [6])
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
+    let zero = reshape([0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as f32[], [6])
     let g1 = grad(slice_loss)<x>()
     let g2 = grad(nested_loss)<x>()
     let g3 = grad(stepped_loss)<x>()
@@ -78,11 +78,11 @@ func main(): int sync {
     let g5 = grad(plain)<x>()
     let g6 = grad(shape_queries)<x>()
     let (v, g7) = with_grad(slice_loss)<x>()
-    let slice_d = distance(g1, reshape([0.0, 2.0, 3.0, 5.0, 0.0, 0.0], [6]))
-    let nested_d = distance(g2, reshape([0.0, 0.0, 7.0, 11.0, 0.0, 0.0], [6]))
-    let stepped_d = distance(g3, reshape([2.0, 0.0, 3.0, 0.0, 5.0, 0.0], [6]))
+    let slice_d = distance(g1, reshape([0.0, 2.0, 3.0, 5.0, 0.0, 0.0] as f32[], [6]))
+    let nested_d = distance(g2, reshape([0.0, 0.0, 7.0, 11.0, 0.0, 0.0] as f32[], [6]))
+    let stepped_d = distance(g3, reshape([2.0, 0.0, 3.0, 0.0, 5.0, 0.0] as f32[], [6]))
     let round_d = distance(g4, g5)
-    let query_d = distance(g6, reshape([2.0, 4.0, 6.0, 8.0, 10.0, 12.0], [6]))
+    let query_d = distance(g6, reshape([2.0, 4.0, 6.0, 8.0, 10.0, 12.0] as f32[], [6]))
     let with_grad_d = distance(g7, g1)
     let nonzero = distance(g1, zero) + distance(g2, zero) + distance(g6, zero)
     'slice_grad slice_d={:.1f} nested_d={:.1f} stepped_d={:.1f} roundtrip_d={:.1f} query_d={:.1f} with_grad_d={:.1f} value={:.1f} nonzero={:.1f}'->format<

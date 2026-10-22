@@ -736,6 +736,32 @@ void ParserImpl::parsePairedValues(TK closer) {
     close(m, NK::PairedValues);
 }
 
+/// argumentValues : (keyValuePair | indexValue) (',' (keyValuePair | indexValue))*
+/// The named arguments of a call come first; a positional one after them is kept as its own
+/// `StrayPositional`, so that the call reports it where it is written instead of the parser
+/// failing on a name that is not there (design principles 4.4, handover H276).
+void ParserImpl::parseArgumentValues(TK closer) {
+    const size_t m = mark();
+    if (pairStartsAt(0)) {
+        parseKeyValuePair();
+    } else {
+        const size_t im = mark();
+        parseIndexValue();
+        close(im, NK::StrayPositional);
+    }
+    while (cur_ == TK::Comma && peek(1) != closer && !panic_) {
+        bump();
+        if (pairStartsAt(0)) {
+            parseKeyValuePair();
+        } else {
+            const size_t im = mark();
+            parseIndexValue();
+            close(im, NK::StrayPositional);
+        }
+    }
+    close(m, NK::PairedValues);
+}
+
 /// dataList : dataExpr (',' dataExpr)*
 /// Inside brackets a comma before the closing bracket is the bracket's trailing comma.
 void ParserImpl::parseDataList(TK closer) {
@@ -751,7 +777,8 @@ void ParserImpl::parseDataList(TK closer) {
 /// argumentList : indexValues (',' pairedValues)? | pairedValues
 /// indexValues  : indexValue (',' indexValue)*
 /// Positional arguments come first; the first `name:` starts the named ones. A `...` before
-/// that is a positional spread, after it a named one.
+/// that is a positional spread, after it a named one. A positional written after a name is
+/// kept for the call to refuse in its parentheses; in angle brackets it stays a parse error.
 void ParserImpl::parseArguments(TK closer) {
     if (cur_ == closer) {
         return;
@@ -776,7 +803,11 @@ void ParserImpl::parseArguments(TK closer) {
         }
     }
     if (named) {
-        parsePairedValues(closer);
+        if (closer == TK::RParen) {
+            parseArgumentValues(closer);
+        } else {
+            parsePairedValues(closer);
+        }
     }
     close(m, NK::ArgumentList);
     eat(TK::Comma);

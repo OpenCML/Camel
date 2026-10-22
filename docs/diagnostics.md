@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-255 diagnostics: 236 errors, 19 warnings.
+262 diagnostics: 243 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -189,7 +189,6 @@ prints one entry.
 | `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
 | `0x030001A5` | [SemanticDiag::CmlUnsupportedConstruct](#cmlunsupportedconstruct) | Error |
 | `0x030001A6` | [SemanticDiag::CmlBigConstant](#cmlbigconstant) | Error |
-| `0x030001A7` | [SemanticDiag::TensorElementTypeNotStored](#tensorelementtypenotstored) | Error |
 | `0x030001A8` | [SemanticDiag::WhenConditionNotBool](#whenconditionnotbool) | Error |
 | `0x030001A9` | [SemanticDiag::WhenConditionNotConstant](#whenconditionnotconstant) | Error |
 | `0x030001AA` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error |
@@ -216,6 +215,14 @@ prints one entry.
 | `0x030001C7` | [SemanticDiag::FoldCallTooDeep](#foldcalltoodeep) | Error |
 | `0x030001C8` | [SemanticDiag::FoldCallResultNotConstant](#foldcallresultnotconstant) | Error |
 | `0x030001C9` | [SemanticDiag::FoldCallNotEvaluable](#foldcallnotevaluable) | Error |
+| `0x030001CD` | [SemanticDiag::ParamArgumentUnknown](#paramargumentunknown) | Error |
+| `0x030001CE` | [SemanticDiag::ParamArgumentDuplicate](#paramargumentduplicate) | Error |
+| `0x030001CF` | [SemanticDiag::ParamArgumentMissing](#paramargumentmissing) | Error |
+| `0x030001D0` | [SemanticDiag::ParamArgumentCallee](#paramargumentcallee) | Error |
+| `0x030001D1` | [SemanticDiag::ParamArgumentPositionalAfterNamed](#paramargumentpositionalafternamed) | Error |
+| `0x030001D2` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error |
+| `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error |
+| `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5080,42 +5087,6 @@ Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a m
 
 *No example: no test small enough to show raises it.*
 
-### TensorElementTypeNotStored
-
-`0x030001A7` · Error · `SemanticDiag::TensorElementTypeNotStored`
-
-**Message**
-
-```text
-'{0}' is not stored as written: a tensor of '{0}' holds '{1}' here, so this declaration would silently run with '{1}'. Tensors that keep the element type they are written with are not implemented yet.
-```
-
-**Help**
-
-```text
-Write '{1}' and convert the values explicitly where they enter the tensor; element-type-exact tensor storage (design/arrays-memory, P4) removes this restriction. 'zeros' and 'ones' already build f32 tensors.
-```
-
-**Example** (`test/cases/modules/tensor/dtype/f64_refused.cml`, run as `camel test/cases/modules/tensor/dtype/f64_refused.cml`)
-
-```camel
-// `Tensor<f64>` asks for f64 elements. This build stores every tensor as f32, int64 or bool, so
-// the declaration is refused at the type expression (SemanticDiag::TensorElementTypeNotStored)
-// instead of the program silently running in f32.
-//
-// Before the diagnostic this program compiled: the cast target was normalized to `Tensor<f32>`,
-// and `sum` answered 10.0 from f32 storage.
-module tensor_dtype_f64_refused
-
-import { Tensor, new, sum } from tensor
-
-func main(): int sync {
-    let x = new([[1.0, 2.0], [3.0, 4.0]]) as Tensor<f64>
-    println(sum(x))
-    return 0
-}
-```
-
 ### WhenConditionNotBool
 
 `0x030001A8` · Error · `SemanticDiag::WhenConditionNotBool`
@@ -5950,6 +5921,250 @@ func first_of_list(): int {
 func main(): int {
     let t = (10, 20, 30)
     return t.[first_of_list()]
+}
+```
+
+### ParamArgumentUnknown
+
+`0x030001CD` · Error · `SemanticDiag::ParamArgumentUnknown`
+
+**Message**
+
+```text
+'{0}' is not a parameter of '{1}'.
+```
+
+**Help**
+
+```text
+A named argument is written as in a struct literal, 'name: value', and must be one of the callee's ordinary parameters.
+```
+
+**Example** (`test/cases/compile/param_defaults/unknown_name.cml`, run as `camel test/cases/compile/param_defaults/unknown_name.cml`)
+
+```camel
+module param_argument_unknown
+
+func f(a: int, b: int = 0): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(1, z: 2)
+}
+```
+
+### ParamArgumentDuplicate
+
+`0x030001CE` · Error · `SemanticDiag::ParamArgumentDuplicate`
+
+**Message**
+
+```text
+The parameter '{0}' of '{1}' is given twice.
+```
+
+**Help**
+
+```text
+Give each parameter once: positionally, or by name after the positional arguments.
+```
+
+**Example** (`test/cases/compile/param_defaults/duplicate.cml`, run as `camel test/cases/compile/param_defaults/duplicate.cml`)
+
+```camel
+module param_argument_duplicate
+
+func f(a: int, b: int = 0): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(1, a: 2)
+}
+```
+
+### ParamArgumentMissing
+
+`0x030001CF` · Error · `SemanticDiag::ParamArgumentMissing`
+
+**Message**
+
+```text
+The call gives no value for the parameter '{0}' of '{1}', and it has no default.
+```
+
+**Help**
+
+```text
+Give the parameter, or write a default where the parameter is declared ('name: type = value').
+```
+
+**Example** (`test/cases/compile/param_defaults/missing.cml`, run as `camel test/cases/compile/param_defaults/missing.cml`)
+
+```camel
+module param_argument_missing
+
+func f(a: int, b: int, c: int = 3): int {
+    return a + b + c
+}
+
+func main(): int sync {
+    return f(1, c: 5)
+}
+```
+
+### ParamArgumentCallee
+
+`0x030001D0` · Error · `SemanticDiag::ParamArgumentCallee`
+
+**Message**
+
+```text
+The argument '{0}' is given by name, and the signature of '{1}' is not known where the call is written.
+```
+
+**Help**
+
+```text
+Name one function, or give the arguments positionally.
+```
+
+**Example** (`test/cases/compile/param_defaults/callee_unknown.cml`, run as `camel test/cases/compile/param_defaults/callee_unknown.cml`)
+
+```camel
+module param_argument_callee
+
+func f(x: int): int {
+    return x
+}
+
+func f(x: int, y: int): int {
+    return x + y
+}
+
+func main(): int sync {
+    return f(1, y: 2)
+}
+```
+
+### ParamArgumentPositionalAfterNamed
+
+`0x030001D1` · Error · `SemanticDiag::ParamArgumentPositionalAfterNamed`
+
+**Message**
+
+```text
+A positional argument follows a named one in the call of '{0}'.
+```
+
+**Help**
+
+```text
+Write the positional arguments first, then the named ones ('f(1, by: 2)').
+```
+
+**Example** (`test/cases/compile/param_defaults/positional_after_name.cml`, run as `camel test/cases/compile/param_defaults/positional_after_name.cml`)
+
+```camel
+module param_argument_after_name
+
+func f(a: int, b: int = 0): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(a: 1, 2)
+}
+```
+
+### ParamDefaultNotConstant
+
+`0x030001D2` · Error · `SemanticDiag::ParamDefaultNotConstant`
+
+**Message**
+
+```text
+The default of the parameter '{0}' is not a compile-time constant: {1}.
+```
+
+**Help**
+
+```text
+A default is evaluated where the declaration is, not at each call, so it can only be a constant expression.
+```
+
+**Example** (`test/cases/compile/param_defaults/default_not_constant.cml`, run as `camel test/cases/compile/param_defaults/default_not_constant.cml`)
+
+```camel
+module param_default_not_constant
+
+func f(a: int, b: int = a): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(1)
+}
+```
+
+### ParamDefaultWrongType
+
+`0x030001D3` · Error · `SemanticDiag::ParamDefaultWrongType`
+
+**Message**
+
+```text
+The default of the parameter '{0}' has type '{1}', not '{2}'.
+```
+
+**Help**
+
+```text
+The default is a value of the parameter's type, as an argument at the call would be.
+```
+
+**Example** (`test/cases/compile/param_defaults/default_wrong_type.cml`, run as `camel test/cases/compile/param_defaults/default_wrong_type.cml`)
+
+```camel
+module param_default_wrong_type
+
+func f(a: int = "x"): int {
+    return a
+}
+
+func main(): int sync {
+    return f()
+}
+```
+
+### ParamAfterDefault
+
+`0x030001D4` · Error · `SemanticDiag::ParamAfterDefault`
+
+**Message**
+
+```text
+The parameter '{0}' has no default and follows '{1}', which has one.
+```
+
+**Help**
+
+```text
+Write a default here too, so that a call that leaves '{1}' out can still give '{0}' by name.
+```
+
+**Example** (`test/cases/compile/param_defaults/after_default.cml`, run as `camel test/cases/compile/param_defaults/after_default.cml`)
+
+```camel
+module param_after_default
+
+func f(a: int = 1, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(2, 3)
 }
 ```
 
@@ -7009,7 +7224,27 @@ A replacement field is a pair of braces, optionally holding a format specificati
 Convert the value to a supported type before the call.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/tensor/dtype/f32_only.cml`, run as `camel test/cases/modules/tensor/dtype/f32_only.cml`)
+
+```camel
+// `conv2d` computes in f32 only, and says so: an f64 tensor is refused at the call with a
+// diagnostic naming the operator, the argument's element type and the set the kernel takes.
+// It is never narrowed to f32 (design principles 5.1, 13.1).
+module tensor_dtype_f32_only
+
+import { new, reshape, ones, sum } from tensor
+import { conv2d } from nn
+
+func main(): int sync {
+    let values: f64[] = [1.0, 2.0, 3.0, 4.0]
+    let x = reshape(new(values), [1, 1, 2, 2])
+    let kernel = ones([1, 1, 1, 1])
+    let bias = ones([1])
+    let y = conv2d(x, kernel, bias, 1, 0)
+    println(sum(y))
+    return 0
+}
+```
 
 ### FieldNotFound
 
@@ -7426,7 +7661,7 @@ import { Tensor, reshape, tanh, sum } from tensor
 func activate(x: Tensor<f32>): Tensor<f32> { return tanh(x) }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(sum(activate(x)))
     return 0
 }
@@ -7524,7 +7759,7 @@ func step(x: Tensor<f32>): Tensor<f32> {
 }
 
 func main() {
-    let x = reshape([1.0, 2.0], [2])
+    let x = reshape([1.0, 2.0] as f32[], [2])
     println(step(x))
 }
 ```

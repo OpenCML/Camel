@@ -17,8 +17,8 @@ sync func step(x: Tensor, var acc: Tensor): Tensor sync {
 }
 
 func main(): int sync {
-    let ex = reshape([0.5, -1.0, 0.25], [3])
-    let es = reshape([0.0, 0.0, 0.0], [3])
+    let ex = reshape([0.5, -1.0, 0.25] as f32[], [3])
+    let es = reshape([0.0, 0.0, 0.0] as f32[], [3])
     let f = (x: Tensor, s: Tensor): (Tensor, Tensor) => sync {
         var acc = s
         let o = wait step(x, acc)

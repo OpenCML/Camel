@@ -20,12 +20,12 @@ func loss(x: Tensor): float {
 func step(w: Tensor, x: Tensor): (Tensor, Tensor) {
     let m = { w: w }
     let vg = with_grad(loss)<m>(x)
-    return (reshape([vg.0], [1]), vg.1.w)
+    return (reshape([f32(vg.0)], [1]), vg.1.w)
 }
 
 func main(): int sync {
-    let w = reshape([0.5, 0.25, -1.0, 2.0, 1.5, -0.5], [3, 2])
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [3, 2])
+    let w = reshape([0.5, 0.25, -1.0, 2.0, 1.5, -0.5] as f32[], [3, 2])
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [3, 2])
     let r = step(w, x)
     println(r.0)
     println(r.1)

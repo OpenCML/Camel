@@ -1,0 +1,13 @@
+/**
+ * A positional argument is written after a named one (design principles 4.4, handover H276):
+ * the named arguments come after the positional ones, so `2` here has no place to go.
+ */
+module param_argument_after_name
+
+func f(a: int, b: int = 0): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(a: 1, 2)
+}

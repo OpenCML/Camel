@@ -49,15 +49,15 @@ digraph GraphIR {
             N0B -> N0C [label="0|1", type="NORM"];
         }
         O01 [label="EXIT", type="EXIT"];
-        N0D [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=<ORIGIN>, span="15:25-15:46", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="float[]"];
-        N0E [label="[4]", type="DATA", origin=<ORIGIN>, span="15:48-15:51", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="int[]"];
+        N0D [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=<ORIGIN>, span="15:25-15:55", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="f32[]"];
+        N0E [label="[4]", type="DATA", origin=<ORIGIN>, span="15:57-15:60", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="int[]"];
         N0F [label="tensor:reshape", type="OPER", origin=<ORIGIN>, span="15:17-15:24", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor<float32, [4]>"];
-        N10 [label="gate", type="FUNC", origin=<ORIGIN>, span="15:12-15:53", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
+        N10 [label="gate", type="FUNC", origin=<ORIGIN>, span="15:12-15:62", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
         N11 [label=":io/println", type="OPER", role="effect", origin=<ORIGIN>, span="15:4-15:11", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
-        N12 [label="[0.25, -2.0, 3.0, 0.5]", type="DATA", origin=<ORIGIN>, span="16:25-16:47", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="float[]"];
-        N13 [label="[4]", type="DATA", origin=<ORIGIN>, span="16:49-16:52", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="int[]"];
+        N12 [label="[0.25, -2.0, 3.0, 0.5]", type="DATA", origin=<ORIGIN>, span="16:25-16:56", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="f32[]"];
+        N13 [label="[4]", type="DATA", origin=<ORIGIN>, span="16:58-16:61", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="int[]"];
         N14 [label="tensor:reshape", type="OPER", origin=<ORIGIN>, span="16:17-16:24", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor<float32, [4]>"];
-        N15 [label="gate", type="FUNC", origin=<ORIGIN>, span="16:12-16:54", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
+        N15 [label="gate", type="FUNC", origin=<ORIGIN>, span="16:12-16:63", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
         N16 [label=":io/println", type="OPER", role="effect", origin=<ORIGIN>, span="16:4-16:11", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
         N17 [label="0", type="DATA", origin=<ORIGIN>, span="17:11-17:12", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="int"];
         N18 [label="GATE", type="GATE", value_type="int"];

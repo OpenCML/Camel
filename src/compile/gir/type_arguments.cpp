@@ -144,9 +144,9 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
         currGraph_->addDependencyGraph(graph);
         node_handle_t value = createFuncDataNode(graph, true, false);
         // The instance is made here, so a call of `f::<int>(...)` reaches the value, not the
-        // declaration: the declaration's `with`-parameter defaults travel with the value.
-        if (const auto found = withDefaults_.find(graph.get()); found != withDefaults_.end()) {
-            withDefaultsOfValue_[value] = found->second;
+        // declaration: the declaration's parameter defaults travel with the value.
+        if (const auto found = defaults_.find(graph.get()); found != defaults_.end()) {
+            defaultsOfValue_[value] = found->second;
         }
         return value;
     }

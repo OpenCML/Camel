@@ -145,12 +145,10 @@ float64 中计算、存回 float32），与 `nn.adam` 一致；优化器不是�
 
 ## 发现的缺口（Camel 侧）
 
-- **H238（优先）：张量仍只有一种存储类型。** 公开的张量元素类型实际上只有 f32、i64 与 bool；
-  f64 在创建和转换时被 `normalizeTensorDType` 归一为 f32，i32 归一为 i64。这段是暂行的：
-  **H238** 落地后（分支 `handover/h259-dtype`，拒绝 `Tensor<f64>`/`Tensor<i32>` 而不是替换；
-  `handover/h260-tensor-storage`，删掉归一化表）删掉它；若 f64 可用，再给表加一列。在那之前，
-  bf16 溢出与训练步的 fp64 误差无法在 Camel 里测量；它的 f32 阈值与 PyTorch 的 f32 阈值逐项
-  一致。
+- The public `Tensor` element types are f32, f64, i32, i64 and bool: a tensor stores the element
+  type it is written with, so the fp64 error of the step can be measured in Camel today. There is
+  still no bf16/f16 element type, so bf16 overflow cannot be measured in Camel; its f32 thresholds
+  match PyTorch's f32 thresholds exactly.
 - **两层块现在是一个 `Block[]`，前向是普通的 `loop h = x for b in m.blocks`。** 数组的切向量
   就是元素切向量组成的数组，所以 `for` 能对依赖可微参数的数组求导：反向把每一轮的梯度按该轮
   的下标散射回数组，优化器与 `save_params` 逐元素走过它。只有当**元素类型本身没有切向量**

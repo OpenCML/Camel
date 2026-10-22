@@ -8,7 +8,7 @@ func cpu(x: Tensor<f32>): Tensor<f32> sync {
 }
 func square(x: Tensor<f32>): Tensor<f32> { return x * x }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
     let input = upload(x)
     let host = run_preferred_resident<cpu>(input)
     let device = run_preferred_resident<square>(host)

@@ -12,13 +12,13 @@ func mixed(x: Tensor<f32>): (float, Tensor<f32>, float) {
 }
 func read(x: Device<float>): float { return download(x) }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     let vg = (v: Tensor<f32>): (float, Tensor<f32>) => with_grad(loss)<v>()
     let result = run_preferred_resident<vg>(upload(x))
     println(read(result.0) - 14.0)
     println(sum(abs(download(result.1) - x * 2.0)))
     println(sum(abs(download(run_preferred_resident<scale>((result.1, result.0))) - x * 28.0)))
-    let exact = reshape([16777216.0, 1.0], [2])
+    let exact = reshape([16777216.0, 1.0] as f32[], [2])
     let p = run_preferred_resident<mixed>(exact)
     println(read(p.0) - 16777217.0)
     println(read(p.2) - 1.0000000000000002)

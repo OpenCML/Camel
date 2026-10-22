@@ -13,7 +13,7 @@ func shrink(t: Tensor): Tensor {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
     export_model((t: Tensor): Tensor => shrink(t), x, get_env('ONNX_OUT'))
     println('exported')
     return 0

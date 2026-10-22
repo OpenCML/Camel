@@ -36,7 +36,7 @@ func main(): int sync {
     println(sum(abs(download(run_preferred_resident<softmax>(narrow)) - softmax(narrow))))
     let wide = random([2,2049], -1.0, 1.0)
     println(sum(abs(download(run_preferred_resident<reused>(wide)) - reused(wide))))
-    let cancellation = reshape([1267650600228229401496703205376.0, 1.0, -1267650600228229401496703205376.0, 1.0], [1,4])
+    let cancellation = reshape([1267650600228229401496703205376.0, 1.0, -1267650600228229401496703205376.0, 1.0] as f32[], [1,4])
     println(sum(download(run_preferred_resident<ordered_fallback>(cancellation))))
     println(sum(abs(download(run_preferred_resident<ordered_fallback>(cancellation)) - ordered_fallback(cancellation))))
     return 0

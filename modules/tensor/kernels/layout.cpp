@@ -355,6 +355,22 @@ Array *takeGrad(
             }
             break;
         }
+        case TypeCode::Float64: {
+            auto *to = reinterpret_cast<double *>(row);
+            const auto *from = reinterpret_cast<const double *>(part);
+            for (int64_t k = 0; k < width; ++k) {
+                to[k] += from[k];
+            }
+            break;
+        }
+        case TypeCode::Int32: {
+            auto *to = reinterpret_cast<int32_t *>(row);
+            const auto *from = reinterpret_cast<const int32_t *>(part);
+            for (int64_t k = 0; k < width; ++k) {
+                to[k] = static_cast<int32_t>(to[k] + from[k]);
+            }
+            break;
+        }
         case TypeCode::Int64: {
             auto *to = reinterpret_cast<int64_t *>(row);
             const auto *from = reinterpret_cast<const int64_t *>(part);

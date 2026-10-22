@@ -1,0 +1,13 @@
+/**
+ * A parameter without a default may not follow one with a default (design principles 4.4,
+ * handover H276): a call that leaves `a` out could not go on to give `b` by position.
+ */
+module param_after_default
+
+func f(a: int = 1, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(2, 3)
+}

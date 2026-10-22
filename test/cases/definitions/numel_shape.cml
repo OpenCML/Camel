@@ -12,7 +12,7 @@ func mean_of(): float {
 }
 
 func main(): int sync {
-    let x: Tensor<f32> = new([[1.0, 2.0, 3.0, 4.0]])
+    let x: Tensor<f32> = new([[1.0, 2.0, 3.0, 4.0]] as f32[][])
     println(mean_of<x>())
     println(sum(grad(mean_of)<x>()))
     return 0

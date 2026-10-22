@@ -354,6 +354,9 @@ class ParserImpl {
     void parseIndexValue();
     void parseKeyValuePair();
     void parsePairedValues(TK closer);
+    /// `pairedValues`, and in a call's parentheses also a positional written after a named one,
+    /// kept apart so that the call can refuse it (design principles 4.4, handover H276).
+    void parseArgumentValues(TK closer);
     void parseDataList(TK closer);
     void parseArguments(TK closer);
     void parseIndices();

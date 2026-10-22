@@ -115,11 +115,15 @@ def main() -> int:
             print(f"{model}: {sum(ops.values())} nodes, {loops} Loop, {ops.get('If', 0)} If, outputs {kinds}")
             ok &= loops == 1 and len(kinds) == MODELS[model] and kinds[1] == "tensor(int64)"
             if model == "nested":
-                ok &= kinds[2] == "tensor(float)" and kinds[3] == "tensor(bool)"
+                # `e` is a Camel `float`, which is 64-bit, and the `sum` it accumulates is
+                # computed in double: the carried float and its output are tensor(double).
+                ok &= kinds[2] == "tensor(double)" and kinds[3] == "tensor(bool)"
         depths = set()
+        case_depths = []
         for x in cases:
             np.save(tmp / "x.npy", x)
             camel(tmp, "", "")
+            case_depths.append(reference("pair", x)[1])
             for model, count in MODELS.items():
                 sess = sessions[model]
                 got = sess.run(None, {sess.get_inputs()[0].name: x})
@@ -135,6 +139,12 @@ def main() -> int:
                 print(
                     f"{model}, {k} steps: counter {int(np.asarray(got[1]).reshape(-1)[0])}, "
                     f"vs NumPy {e_ref:.2e}, vs native {e_native:.2e} {'ok' if good else 'MISMATCH'}")
+    reaching = [i for i, k in enumerate(case_depths) if k == LIMIT]
+    early = [i for i, k in enumerate(case_depths) if k < LIMIT]
+    print(
+        f"ort loop coverage: steps per input {case_depths}; "
+        f"at the limit ({LIMIT}) on input(s) {reaching}, stopping early on input(s) {early}"
+    )
     covered = {0, 1, LIMIT} <= depths and any(1 < d < LIMIT for d in depths)
     print(f"ort loop values: worst vs NumPy {worst_ref:.2e}, vs native {worst_native:.2e}, steps {sorted(depths)}")
     print("PASS" if ok and covered else "FAIL")

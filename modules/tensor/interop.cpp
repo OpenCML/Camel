@@ -32,9 +32,11 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
         type::Type *elemType = arrayType->elemType();
         type::TypeCode inferredDType;
         if (elemType->code() == type::TypeCode::Array) {
+            // An empty nested array has no element to take a type from; like `zeros` and `ones`,
+            // a constructor that names no element type builds f32.
             inferredDType = type::TypeCode::Float32;
         } else {
-            inferredDType = normalizeTensorDType(arrayType->elemTypeCode());
+            inferredDType = arrayType->elemTypeCode();
         }
 
         ArrayInference inferred{inferredDType, {size}};
@@ -53,7 +55,7 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
                 }
             }
         } else {
-            inferred.dtype = normalizeTensorDType(elemType->code());
+            inferred.dtype = elemType->code();
         }
         return inferred;
     }
@@ -61,7 +63,7 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
     if (!isSupportedTensorScalar(valueType->code())) {
         throw std::invalid_argument("Only numeric arrays can be converted to Tensor");
     }
-    return ArrayInference{normalizeTensorDType(valueType->code()), {}};
+    return ArrayInference{valueType->code(), {}};
 }
 
 void flattenArray(
@@ -78,8 +80,10 @@ void flattenArray(
 
         switch (tensor->dtype()) {
         case type::TypeCode::Float32:
+        case type::TypeCode::Float64:
             tensor->setFromDouble(offset++, scalarToDouble(elemType->code(), value));
             break;
+        case type::TypeCode::Int32:
         case type::TypeCode::Int64:
             tensor->setFromInt64(offset++, scalarToInt64(elemType->code(), value));
             break;
