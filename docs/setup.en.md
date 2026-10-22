@@ -17,7 +17,7 @@ The following table lists the required components and their version specificatio
 | Python    | 3.9             | 3.11               | `python --version`      |
 | Node.js   | 18              | 20 LTS             | `node -v`               |
 | Clang     | 19              | 20                 | `clang --version`       |
-| CMake     | 3.20            | 3.28               | `cmake --version`       |
+| CMake     | 3.25            | 3.28               | `cmake --version`       |
 | Conan     | 2.10            | 2.12               | `conan --version`       |
 | Ninja     | 1.11            | 1.11               | `ninja --version`       |
 

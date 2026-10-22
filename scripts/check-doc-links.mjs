@@ -3,6 +3,7 @@
 // with a fragment into a Markdown file, a heading with that anchor exists.
 //
 //   node scripts/check-doc-links.mjs            the reader-facing documents (see SCOPE)
+//   node scripts/check-doc-links.mjs --default-roots  the same, ignoring a script path argument
 //   node scripts/check-doc-links.mjs --all      every tracked *.md of the repository
 //   node scripts/check-doc-links.mjs a.md b/    the given files and directories
 //
@@ -103,7 +104,12 @@ function check(file) {
 }
 
 const args = process.argv.slice(2)
-const entries = args.includes('--all') ? ['.'] : args.filter((a) => !a.startsWith('--')).length > 0 ? args.filter((a) => !a.startsWith('--')) : SCOPE
+const explicit = args.filter((a) => !a.startsWith('--'))
+const entries = args.includes('--all')
+    ? ['.']
+    : args.includes('--default-roots') || explicit.length === 0
+      ? SCOPE
+      : explicit
 const files = [...new Set(entries.flatMap(markdownFiles))].sort()
 const problems = files.flatMap(check)
 for (const p of problems) console.log(p.replace(/\\/g, '/'))

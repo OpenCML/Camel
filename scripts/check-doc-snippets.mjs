@@ -3,6 +3,7 @@
 // accept, or whose printed output is not what the page says it is.
 //
 //   node scripts/check-doc-snippets.mjs              check the reader-facing pages
+//   node scripts/check-doc-snippets.mjs --default-roots  the same, ignoring a script path argument
 //   node scripts/check-doc-snippets.mjs a.md b/      check the given files and directories
 //
 // A Camel fence is a fenced block tagged `camel` or `cml` (both tags are used in the tree).
@@ -600,7 +601,8 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
 // ---- Main ----------------------------------------------------------------------------------
 
 const args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'))
-const entries = args.length > 0 ? args : ['README.md', 'docs']
+const entries =
+    process.argv.includes('--default-roots') || args.length === 0 ? ['README.md', 'docs'] : args
 const files = []
 for (const entry of entries) collect(entry, files)
 const unique = [...new Set(files)].sort()

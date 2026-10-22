@@ -14,7 +14,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 ## 2. 当前基线
 
 - 开发分支 `fsh-dev`；默认测试集（`smoke` 加全部 `feat` 计划）2255 条，全部通过，没有遗留失败。
-- 核心（`src/` 与 `include/`）约 9.8 万行，库（`modules/` 与 `stdlib/`）约 3.8 万行，工具（`tools/`）另有约 1.6 万行；42 个内建遍（另有 35 个别名）加 2 个由模块提供的遍（`tensor::fuse`、`onnx::export`）；四种执行后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）以及到 C++ 的转译。
+- 核心（`src/` 与 `include/`）约 9.8 万行，库（`modules/` 与 `stdlib/`）约 3.8 万行，工具（`tools/`）另有约 1.6 万行；42 个内建遍（另有 37 个别名）加 2 个由模块提供的遍（`tensor::fuse`、`onnx::export`）；四种执行后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）以及到 C++ 的转译。
 - 持续集成在推送（`main`、`develop`、`fsh-dev`）与合并请求时构建并运行默认测试集：Linux x64 与 Windows x64 必须通过，macOS arm64 是试验项，失败不阻断；打标签时另外构建发布包。
 
 下面各项前的记号：`[定]` 语义已裁定，可以直接做；`[稿]` 要先出设计稿，经语言作者过目；`[问]` 还有未决的问题（见设计原则第 15 节）。没有记号的不涉及语义。
@@ -32,7 +32,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
   - 统一的效应与别名分析，供各遍共用；分析结果的缓存与失效。（状态：未开始）
   - `[定]` 给标准库各模块的算子补上纯度声明。（状态：已完成——内建算子与 `algo`、`hash`、`fs`、`json`、`math`、`process`、`para`、`random`、`re`、`sim`、`statistics`、`str`、`env`、`this`、`time`、`tensor`、`nn`、`autodiff`、`onnx`、`pyplot`、`python` 的每个算子都有声明，由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束（`camel inspect --ops` 可查））
 - **图的容量** `[定]`：单张图 65,535 的上限不放宽。查清是哪个遍把子图压平到超限（已知案例：gru 的一步需要 100,533 个边表项），让它在容量内工作。（状态：部分完成——上限没有放宽，超限是带位置的 `RuntimeDiag::GraphTooLarge` 或导出时的拒绝（`test/plans/feat/opt/generic.plan.toml`）；已查明压平到超限的是 ONNX 导出时不设上限的内联与展开（`benchmarks/README.md`），但它还不能在容量内工作）
-- **下游工具链的适配**：导出器覆盖更多构造；与封闭语言近邻（Futhark、Dex、Relay 等）做同一批程序的实测对比。（状态：部分完成——导出能力见 `export_matrix.md`（106 个算子中 66 个前向算子、23 个梯度算子有 ONNX 下降）；与 Futhark、Dex、Relay 等的同批程序实测对比未做）
+- **下游工具链的适配**：导出器覆盖更多构造；与封闭语言近邻（Futhark、Dex、Relay 等）做同一批程序的实测对比。（状态：部分完成——导出能力见 `export_matrix.md`（119 个算子中 65 个前向算子、23 个梯度算子有 ONNX 下降）；与 Futhark、Dex、Relay 等的同批程序实测对比未做）
 - **论文**：稿件与证据在归档仓库中维护，不在本文档展开。（状态：未核实——稿件与证据不在本仓库中）
 
 ## 4. 方面二：运行时核心
@@ -74,8 +74,8 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 
 - 一次报告多个错误（构建器里已有继续机制，但命令行把错误上限设成了 0）。（状态：部分完成——一次运行报告全部互相独立的编译错误，上限为 `--max-errors`（默认 20，`test/plans/feat/compile/diag_options.plan.toml`）；一个文件只报第一个语法错误，标为 `DESIGN-QUESTION(diagnostics)`，待裁定）
 - 带代码片段、下划线和次要位置的呈现。（状态：已完成，见 `--error-format text`，`test/plans/feat/compile/diag_render.plan.toml`）
-- 运行期的诊断码细分：兜底码现被引用 147 次，消息应带上下标、长度、实际值。（状态：部分完成——内建算子与 `fs`、`json`、`re`、`time`、`math` 等模块的故障已有各自的码并带上实际值；兜底码 `RuntimeDiag::RuntimeError` 仍被引用 81 次，其中 `python` 模块 53 次）
-- 语法错误专门化（现在只有一个码，正文是解析器的原文）。（状态：已完成，见 `include/camel/core/error/diagnostics/messages/syntax.h` 中的 12 个码）
+- 运行期的诊断码细分：兜底码原本被引用 147 次，消息应带上下标、长度、实际值。（状态：部分完成——内建算子与 `fs`、`json`、`re`、`time`、`math` 等模块的故障已有各自的码并带上实际值；兜底码 `RuntimeDiag::RuntimeError` 仍被引用 89 次，其中 `python` 模块 53 次）
+- 语法错误专门化（原本只有一个码，正文是解析器的原文）。（状态：已完成，见 `include/camel/core/error/diagnostics/messages/syntax.h` 中的 16 个错误码）
 - 调用栈回溯与内联链；警告的按码开关与升级为错误；错误码目录与 `--explain`。（状态：部分完成——警告的按码开关与升级为错误（`-Wno-<name>`、`-Werror`、`-Werror=<name>`）、错误码目录（`docs/diagnostics.md`）与 `--explain` 已做；调用栈回溯与内联链未做）
 - 把用户可触发的 C++ 异常与断言转成带位置的诊断。（状态：部分完成——内存耗尽、图超限、转译拒绝、遍内部的异常已是诊断（`MemoryExhausted`、`GraphTooLarge`、`TranslationRefused`、`PassInternalError`）；其余异常仍由命令行兜底为不带位置的文本，发布构建下的断言不生效）
 
@@ -96,7 +96,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 - **标准库** `[定]`：原语用 C++，组合逻辑用 Camel。（状态：部分完成——原语在 C++ 模块里（`modules/`），用 Camel 写的库已有 `stdlib/array.cml`（数组与高阶函数，建立在内建算子与 `algo` 的三个原语之上）；其余组合逻辑还没有用 Camel 写的库，见下面各子项）
   - 字符串（切分、修剪、大小写、替换、查找；`[定]` 按字节，另有码点算子）、数组与高阶函数、位运算：已有（`str`、`array`、`math`，见 `docs/stdlib-reference.md`）。未做：字节缓冲区、带比较函数的排序、`group_by`（等映射类型）。（状态：部分完成——`str`（C++）、`array`（Camel，`stdlib/array.cml`）与 `math` 的位运算函数已有，由 `test/plans/feat/modules/stdlib_values.plan.toml`、`stdlib_faults.plan.toml` 测试；字节缓冲区、带比较函数的排序（现有 `sort_by` 按键排序）、`group_by` 未做）
   - `math`、`statistics` 已补全；`time` 的补全；`fs` 补全与路径处理；子进程、套接字、日志；CSV、TOML、base64、压缩。（状态：部分完成——`math`、`statistics` 已补全（`docs/stdlib-reference.md`），`fs` 有 `try_read_text`、`read_chunk`、`is_file`、`is_dir`、`mkdir`、`mkdirs`；`time` 仍只有 `now`、`strftime`、`strptime`，路径处理、子进程、套接字、日志、CSV、TOML、base64、压缩未做）
-  - 签名文件已与实现对齐并由测试约束（`scripts/stdlib-reference.mjs --verify-ops`），参考文档由签名文件生成；纯度已逐个算子声明并由测试约束。`tensor`、`nn` 等模块的签名文件未做。（状态：部分完成——十五个签名文件（`stdlib/signatures/`）与注册的算子一致（`scripts/stdlib-reference.mjs --verify-ops`），`docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 生成（`--verify-doc`），纯度逐个算子声明（`camel inspect --ops`），三者都由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束；`tensor`、`nn`、`autodiff`、`onnx`、`sim` 没有签名文件）
+  - 签名文件已与实现对齐并由测试约束（`scripts/stdlib-reference.mjs --verify-ops`），参考文档由签名文件生成；纯度已逐个算子声明并由测试约束。`nn` 等模块的签名文件未做。（状态：部分完成——11 个签名文件（`stdlib/signatures/`）与注册的算子一致（`scripts/stdlib-reference.mjs --verify-ops`），`docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 生成（`--verify-doc`），纯度逐个算子声明（`camel inspect --ops`），三者都由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束；`nn`、`autodiff`、`onnx`、`sim` 没有签名文件）
   - 用 Camel 写的测试框架与断言库。（状态：未开始）
 - **模块接口** `[定]`：整理出一层公开的 C++ 接口并按版本承诺兼容；纯度声明进入这层接口。（状态：未开始）
 - **跨语言互操作**：Python 桥的自动类型转换；从 Python 里 `import camel` 运行图；C FFI。（状态：未开始）
