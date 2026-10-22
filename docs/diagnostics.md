@@ -211,14 +211,14 @@ prints one entry.
 | `0x030001C0` | [SemanticDiag::WhenPredicateNotCompileTime](#whenpredicatenotcompiletime) | Error |
 | `0x030001C1` | [SemanticDiag::WhenPredicateAmbiguous](#whenpredicateambiguous) | Error |
 | `0x030001C2` | [SemanticDiag::StaticMatchPatternCannotMatch](#staticmatchpatterncannotmatch) | Error |
-| `0x030001C5` | [SemanticDiag::ParamArgumentUnknown](#paramargumentunknown) | Error |
-| `0x030001C6` | [SemanticDiag::ParamArgumentDuplicate](#paramargumentduplicate) | Error |
-| `0x030001C7` | [SemanticDiag::ParamArgumentMissing](#paramargumentmissing) | Error |
-| `0x030001C8` | [SemanticDiag::ParamArgumentCallee](#paramargumentcallee) | Error |
-| `0x030001C9` | [SemanticDiag::ParamArgumentPositionalAfterNamed](#paramargumentpositionalafternamed) | Error |
-| `0x030001CA` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error |
-| `0x030001CB` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error |
-| `0x030001CC` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error |
+| `0x030001CD` | [SemanticDiag::ParamArgumentUnknown](#paramargumentunknown) | Error |
+| `0x030001CE` | [SemanticDiag::ParamArgumentDuplicate](#paramargumentduplicate) | Error |
+| `0x030001CF` | [SemanticDiag::ParamArgumentMissing](#paramargumentmissing) | Error |
+| `0x030001D0` | [SemanticDiag::ParamArgumentCallee](#paramargumentcallee) | Error |
+| `0x030001D1` | [SemanticDiag::ParamArgumentPositionalAfterNamed](#paramargumentpositionalafternamed) | Error |
+| `0x030001D2` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error |
+| `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error |
+| `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5798,7 +5798,7 @@ func main(): int sync {
 
 ### ParamArgumentUnknown
 
-`0x030001C5` · Error · `SemanticDiag::ParamArgumentUnknown`
+`0x030001CD` · Error · `SemanticDiag::ParamArgumentUnknown`
 
 **Message**
 
@@ -5828,7 +5828,7 @@ func main(): int sync {
 
 ### ParamArgumentDuplicate
 
-`0x030001C6` · Error · `SemanticDiag::ParamArgumentDuplicate`
+`0x030001CE` · Error · `SemanticDiag::ParamArgumentDuplicate`
 
 **Message**
 
@@ -5858,7 +5858,7 @@ func main(): int sync {
 
 ### ParamArgumentMissing
 
-`0x030001C7` · Error · `SemanticDiag::ParamArgumentMissing`
+`0x030001CF` · Error · `SemanticDiag::ParamArgumentMissing`
 
 **Message**
 
@@ -5888,7 +5888,7 @@ func main(): int sync {
 
 ### ParamArgumentCallee
 
-`0x030001C8` · Error · `SemanticDiag::ParamArgumentCallee`
+`0x030001D0` · Error · `SemanticDiag::ParamArgumentCallee`
 
 **Message**
 
@@ -5922,7 +5922,7 @@ func main(): int sync {
 
 ### ParamArgumentPositionalAfterNamed
 
-`0x030001C9` · Error · `SemanticDiag::ParamArgumentPositionalAfterNamed`
+`0x030001D1` · Error · `SemanticDiag::ParamArgumentPositionalAfterNamed`
 
 **Message**
 
@@ -5952,7 +5952,7 @@ func main(): int sync {
 
 ### ParamDefaultNotConstant
 
-`0x030001CA` · Error · `SemanticDiag::ParamDefaultNotConstant`
+`0x030001D2` · Error · `SemanticDiag::ParamDefaultNotConstant`
 
 **Message**
 
@@ -5982,7 +5982,7 @@ func main(): int sync {
 
 ### ParamDefaultWrongType
 
-`0x030001CB` · Error · `SemanticDiag::ParamDefaultWrongType`
+`0x030001D3` · Error · `SemanticDiag::ParamDefaultWrongType`
 
 **Message**
 
@@ -6012,7 +6012,7 @@ func main(): int sync {
 
 ### ParamAfterDefault
 
-`0x030001CC` · Error · `SemanticDiag::ParamAfterDefault`
+`0x030001D4` · Error · `SemanticDiag::ParamAfterDefault`
 
 **Message**
 
