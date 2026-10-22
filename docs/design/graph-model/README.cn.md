@@ -4,7 +4,7 @@
 
 状态：**设计稿，待语言作者过目。** 第 7 节的第 1 步与第 2 步已经在分支 `lane/graph-storage`、`lane/graph-storage2` 上实施，进度与实测数字见第 7 节的"实施状态"；其余各节描述的仍是设计。
 依据：`docs/design-principles.cn.md`（2.1 对应表、第 2–4 节、10.1、3.10、第 14 节、第 15 节）。
-基线提交：`e4652d81`（Camel v0.2.9）。文中的图与数字都可以用附录 A 的命令复现。
+基线提交：`e4652d81`（Camel v0.2.9）。文中的图与数字的来源见附录 A。
 
 文中每条事实标注来源：
 
@@ -12,7 +12,7 @@
 - 【读码】读代码得到、没有运行验证的（给出文件与行号）；
 - 【未查】没有核实的。
 
-图用 `std::rgir` 的记法，去掉了 `origin`/`span`/`srcfile` 属性并把每行缩短（`tools/rgir.sh` 做这件事）：`N02 [OPER :op/mul_l]` 是一个节点，`N00 -> N02 [NORM 0|1]` 是一条边，方括号里是边的种类与"在源节点出边中的序号 | 在目标节点同种入边中的序号"。标"拟议"的图是手写的，现有编译器不产生；其余是实际输出。
+图用 `std::rgir` 的记法，去掉了 `origin`/`span`/`srcfile` 属性并把每行缩短：`N02 [OPER :op/mul_l]` 是一个节点，`N00 -> N02 [NORM 0|1]` 是一条边，方括号里是边的种类与"在源节点出边中的序号 | 在目标节点同种入边中的序号"。标"拟议"的图是手写的，现有编译器不产生；其余是实际输出。
 
 文中写作 `examples/x`、`tools/x` 的路径都相对于 `docs/design/graph-model/`（评审语料与脚本已删除；节点卡片与不变量仍是现行实现的依据）。
 
@@ -102,7 +102,7 @@
 - `staticGraphRefs`：静态区里函数常量指向的图。
 - `outerGraph`：词法上的外层图。
 
-三张表都能从节点重新推出来，实际上提交时也确实按节点的引用重建前者（`collectDraftDependencyGraphs`，文档 17 的 2.3）。它们的用途只有一个：从 root 出发求可达闭包（编码、每次提交、垃圾回收的图根）。`std::rgir` 输出里图的嵌套反映的是"第一次被谁引用"，不是词法结构：1.1 之后所有例子里用户函数都印在 `main` 的簇里面。【实测 `tools/rgir.sh examples/nodes/oper.cml`】
+三张表都能从节点重新推出来，实际上提交时也确实按节点的引用重建前者（`collectDraftDependencyGraphs`，文档 17 的 2.3）。它们的用途只有一个：从 root 出发求可达闭包（编码、每次提交、垃圾回收的图根）。`std::rgir` 输出里图的嵌套反映的是"第一次被谁引用"，不是词法结构：1.1 之后所有例子里用户函数都印在 `main` 的簇里面。【实测】
 
 ### 1.5 名字、类型、源码位置各存在哪里
 
@@ -120,17 +120,17 @@
 
 类型没有驻留：`TupleType::create` 每次调用都在永久空间里新分配一个（`src/core/type/composite/tuple.cpp:120-147`）；变量单元类型 `TupleType::cell` 用一把互斥锁加线性查找去重（`:151-163`）。每张图有自己的帧布局元组类型，改写后重新编码又生成新的，旧的留在永久空间里。函数类型对象是可变的：返回类型在建图时才填（`setExitType`，`builder.cpp:81-89`），捕获名也往里加。
 
-函数类型的形参名不参与类型相容：`func sub(a: int, b: int)` 可以传给 `(x: int, y: int) => int` 的位置【实测 `examples/misc/func_type_names.cml`，打印 7】；按名字传参尚未支持（`FeatureNotSupported: kwargs`）【实测 `examples/misc/kwargs.cml`】。
+函数类型的形参名不参与类型相容：`func sub(a: int, b: int)` 可以传给 `(x: int, y: int) => int` 的位置【实测，打印 7】；按名字传参尚未支持（`FeatureNotSupported: kwargs`）【实测】。
 
 ### 1.6 顺序、效应、捕获、泛型在图上的表示
 
-- **`sync` 块**：没有专门的节点。块内相邻表达式之间一条 `Ctrl` 边；块的值经一个 `GATE`（Norm 接值，Ctrl 接链尾）交出去。【实测 `examples/nodes/sync_gate.cml`，3.5】
-- **`wait` 与 `var`**：变量是一个单元（`:var/new` 建，`:var/get` 读，赋值算子写）；排序靠 `Ctrl` 边，依据是"谁用过这个变量"。【实测 `examples/nodes/wait_var.cml`】
+- **`sync` 块**：没有专门的节点。块内相邻表达式之间一条 `Ctrl` 边；块的值经一个 `GATE`（Norm 接值，Ctrl 接链尾）交出去。【实测，见 3.5】
+- **`wait` 与 `var`**：变量是一个单元（`:var/new` 建，`:var/get` 读，赋值算子写）；排序靠 `Ctrl` 边，依据是"谁用过这个变量"。【实测】
 - **纯度**：不在图上。算子的纯度在一张全局的、以 URI 字符串为键、带读写锁的注册表里（`OperatorTraitsRegistry`，`include/camel/core/operator_traits.h:44-97`），三个位：`pure`、`elementwise`、`stateOnly`；遍每问一次做一次字符串哈希查找。函数的效应：`sync` 修饰符在函数类型上；"这张图的出口是否依赖效应""它写了哪些捕获的变量"是建图器内部的表（`effectfulGraphs_`、`captures_`，`src/compile/gir/builder.h:180-225`），建完就丢，遍看不到。
 - **故障**：没有任何声明。哪些节点可能故障只能由读者自己按算子名判断。
 - **捕获**：闭包捕获的值是图上的一类端口（`closureNodes`）；函数第一次被直接调用时，捕获端口就地改成 `with` 端口，此后每个调用处按**名字**在调用处的作用域里再解析一次并连 `WITH` 边。【读码 `builder.cpp:988-1041`、`:3591-3625`；模块 root 设计稿 1.2】这段逻辑依赖"这张图用过没有"（`usedGraphs_`），函数被调用之后再发现新的捕获就是 `ClosureCaptureAfterSelfCall`。
-- **泛型**：模板是建图器里的一个对象（GCT 子树 + 声明处的四个作用域），不是图；每组类型建一张名为 `first<int>` 的普通图。【读码 `builder.h:237-296`；实测 `examples/nodes/generic.cml`】
-- **分支臂是独立的图**：前端为每条臂建一张子图，外层图里是一个 `FUNC` 节点，既是臂头也是臂尾；臂用到的外层值是它的 `with` 端口。【读码 `builder.cpp:5697-5798`；实测 `examples/nodes/branch.cml`】内联之后臂的节点并进外层图，成为 `BRCH` 与 `JOIN` 之间的一段。
+- **泛型**：模板是建图器里的一个对象（GCT 子树 + 声明处的四个作用域），不是图；每组类型建一张名为 `first<int>` 的普通图。【读码 `builder.h:237-296`；实测】
+- **分支臂是独立的图**：前端为每条臂建一张子图，外层图里是一个 `FUNC` 节点，既是臂头也是臂尾；臂用到的外层值是它的 `with` 端口。【读码 `builder.cpp:5697-5798`；实测】内联之后臂的节点并进外层图，成为 `BRCH` 与 `JOIN` 之间的一段。
 
 ### 1.7 "提交"是什么，校验哪些不变量
 
@@ -189,7 +189,7 @@
 
 ### 1.10 用仓库里的程序量出来的数字
 
-**普查。** `python3 docs/design/graph-model/tools/graph_census.py examples exemplars benchmarks test/cases stdlib`【实测】：1099 个 `.cml` 文件，1053 个有 `main`，769 个能直接编译（其余是负例测试或需要参数）。
+**普查。** 对仓库里的 `.cml` 语料普查一次【实测】：1099 个 `.cml` 文件，1053 个有 `main`，769 个能直接编译（其余是负例测试或需要参数）。
 
 | | 不加遍 | `std::opt::inline` 之后 | `std::macro std::opt` 之后 |
 |---|---|---|---|
@@ -213,11 +213,11 @@
 - **类型比图大。** 扣掉内建算子的基线（24 KB、163 次分配），每张图平均仍为类型分配 1.4 KB；化简之后每个节点摊到 185 字节的类型，比节点自己（137 字节）还多，并且这部分从不释放。
 - **重复。** 同一张图里 16.9% 的 `DATA` 节点与已有的某个常量标签相同（化简后 39.5%）；`OPER` 节点 14,028 个，全语料里不同的算子名只有 373 个，而每个节点各存一份名字；6,502 个端口里 2,715 个（捕获端口）没有名字。
 
-**一次编译的分配次数。** `bash docs/design/graph-model/tools/compile_cost.sh <文件>`（`tools/malloc_count.c` 是一个统计 `malloc` 的预加载库；1 MiB 以上的请求是三块空间的保留段，单列）【实测】：
+**一次编译的分配次数。** 用一个统计 `malloc` 的预加载库量一次编译（1 MiB 以上的请求是三块空间的保留段，单列）【实测】：
 
 | 程序 | 源码 | 图 / 节点 | `malloc` 次数 | 其中建图 + 编码 | 用时 |
 |---|---|---|---|---|---|
-| `examples/nodes/empty.cml`（空的 `main`） | 4 行 | 2 / 3 | 8,589 | — | 7 ms |
+| 空的 `main` | 4 行 | 2 / 3 | 8,589 | — | 7 ms |
 | `test/cases/compile/function_values/value_positions.cml` | 84 行 | 36 / 368 | 42,768 | 24,800（每节点 67 次） | 22 ms |
 | `test/cases/modules/stdlib/array_basic.cml`（导入用 Camel 写的 `array`） | 36 + 171 行 | 122 / 656 | 83,454 | 54,381（每节点 83 次） | 35 ms |
 | 同上，加 `std::macro std::opt` | | 122 / 1,414 | 891,848 | — | 164 ms |
@@ -420,7 +420,7 @@ Graph（一张图）
 func hyp2(a: int, b: int): int { return a * a + b * b + 1 }
 ```
 
-`bash docs/design/graph-model/tools/rgir.sh docs/design/graph-model/examples/nodes/oper.cml`【实测】：
+以上面的程序为例，`std::rgir` 的输出【实测】：
 
 ```
 subgraph "hyp2" {
@@ -459,7 +459,7 @@ subgraph "hyp2" {
 | 纯度与故障 | 按函数值的**类型**：带 `sync` 修饰符的有效应，否则只可能故障。写捕获变量的函数必须声明 `sync`（设计原则 3.5 的闭环），所以类型足以判断 |
 | 不变量 | `With` 至少一条；第 0 条的类型是函数类型，实参个数与之相符 |
 
-`examples/nodes/func_call.cml`【实测】，`apply(f, x) = f(x)`：
+`apply(f, x) = f(x)`【实测】：
 
 ```
 subgraph "apply" {
@@ -484,7 +484,7 @@ N09 -> N0B [NORM 0|0]; N0A -> N0B [NORM 0|1]
 | 纯度与故障 | 纯（分配一个新对象）；不故障 |
 | 不变量 | 位置数等于 `With` 入边数，各不相同，都在模板范围内 |
 
-`examples/nodes/fill_accs.cml`【实测】：
+一段含三种字面量的程序【实测】：
 
 ```
 N02 [DATA (0, 0)]        N03 [FILL]      // let t = (a, b)
@@ -493,7 +493,7 @@ N06 [DATA { x: 0, y: 0 }] N07 [FILL]     // let p = { x: a, y: b }
 N02 -> N03 [NORM 0|0]; N00 -> N03 [WITH 0|0]; N01 -> N03 [WITH 0|1]
 ```
 
-闭包（`examples/nodes/closure.cml`，`adder(n) = (x) => x + n`）【实测】：
+闭包（`adder(n) = (x) => x + n`）【实测】：
 
 ```
 subgraph "__g_4__" {                              // lambda：一张自己的图
@@ -530,7 +530,7 @@ subgraph "adder" {
 | 输出与类型 | 节点的类型就是目标类型 |
 | 纯度与故障 | 纯（装入时分配一个盒子）；带检查的 `as`（如 `t as Tensor<const [3]>`）可能故障，其余不故障 |
 
-数值之间的转换（`float(x)`、`int('12')`）是算子，不是 `CAST`。`examples/nodes/cast.cml`【实测】：`return if c then 7 else null`（函数声明返回 `int?`）的两条臂分别是 `DATA 7 → CAST` 与 `DATA null → CAST`。
+数值之间的转换（`float(x)`、`int('12')`）是算子，不是 `CAST`。【实测】：`return if c then 7 else null`（函数声明返回 `int?`）的两条臂分别是 `DATA 7 → CAST` 与 `DATA null → CAST`。
 
 #### `COPY` 拷贝
 
@@ -560,7 +560,7 @@ subgraph "adder" {
 
 **分支臂不变量**沿用现有定义（`docs/technical/17_graph_rewrite_api_contracts.md` 4.1 的五条）：对每个活的 `BRCH`，分支内部的每个活节点恰好属于一条臂；臂以臂尾定义；两个分支要么不相交要么嵌套；臂读到的分支外的值排在 `BRCH` 之前、无条件执行。
 
-`examples/nodes/branch.cml`【实测】，`abs(x) = if x < 0 then 0 - x else x`：
+`abs(x) = if x < 0 then 0 - x else x`【实测】：
 
 ```
 subgraph "abs" {
@@ -579,7 +579,7 @@ subgraph "abs" {
 }
 ```
 
-`match`（`examples/nodes/match.cml`）【实测】多出的只是 `BRCH` 的 `With` 输入：`N06 [DATA 0] -> N05 [WITH 0|0]`、`N08 [DATA 1] -> N05 [WITH 0|1]`，三条臂。
+`match`【实测】多出的只是 `BRCH` 的 `With` 输入：`N06 [DATA 0] -> N05 [WITH 0|0]`、`N08 [DATA 1] -> N05 [WITH 0|1]`，三条臂。
 
 #### `LOOP` 循环（新增）
 
@@ -598,7 +598,7 @@ subgraph "abs" {
 
 状态写在循环头上，所以 k、各状态的类型、初值都在 `LOOP` 节点的入边上，与循环体里写了什么无关（R1）。循环体是独立的子图，不并入外层图：外层图保持无环，容量也不被循环体占用。
 
-`examples/nodes/loop.cml`：
+`sum_to` 的例子：
 
 ```camel
 func sum_to(n: int): int {
@@ -632,7 +632,7 @@ subgraph "sum_to" {
 }
 ```
 
-条件与循环体是图里的两个控制区域（`GCRegionKind::LoopCond` / `LoopBody`），没有把 `LOOP` 降级成子图的改写：每个后端都在程序自己的图上按 `camel/execute/loop_frame.h` 的轮次协议执行这两个区域（`docs/technical/39_loops.md`；op-semantics 11.4）。`examples/nodes/loop_tail.cml` 是手写尾递归的图，供对照，不是运行时走的路。
+条件与循环体是图里的两个控制区域（`GCRegionKind::LoopCond` / `LoopBody`），没有把 `LOOP` 降级成子图的改写：每个后端都在程序自己的图上按 `camel/execute/loop_frame.h` 的轮次协议执行这两个区域（`docs/technical/39_loops.md`；op-semantics 11.4）。对照用的手写尾递归图不是运行时走的路。
 
 #### `GATE` 门
 
@@ -653,7 +653,7 @@ subgraph "sum_to" {
 | 输出 | 无值；别的节点以 `Ctrl` 边等它 |
 | 纯度与故障 | 纯；不故障；承载顺序 |
 
-`examples/nodes/sync_gate.cml`【实测】：
+同步块的例子【实测】：
 
 ```camel
 func twice(x: int): int sync {
@@ -683,39 +683,39 @@ subgraph "twice" {
 
 下面每一行都不添加节点种类。"原则表"一列：已在设计原则 2.1 对应表里的写"已有"，没有的写"建议写入"。
 
-| 语言元素 | 在图上是什么 | 例子 | 原则表 |
-|---|---|---|---|
-| 表达式、算子调用 | `OPER` / `FUNC` / `CALL` 节点与数据边 | `oper.cml` | 已有 |
-| `sync` 块 | 相邻表达式之间的 `Ctrl` 边；块的值经 `GATE` 交出 | `sync_gate.cml` | 已有 |
-| `wait e` | `e` 与此前直接用过同一个变量的节点、此后读它的节点之间的 `Ctrl` 边 | `wait_var.cml` | 已有 |
-| `var x = v`、读、赋值 | `:var/new`、`:var/get`、赋值算子三种 `OPER`；`x` 这个名字绑定的是单元 | `wait_var.cml` | 建议写入 |
-| 函数 | 一张图 | | 已有 |
-| lambda、函数作为值 | 无捕获：一个函数常量 `DATA`；有捕获：`DATA` 函数常量 + `FILL` | `closure.cml` | 建议写入 |
-| `if`、`match` | `BRCH`/`JOIN`，每条臂一张子图 | `branch.cml`、`match.cml` | 建议写入（现表只在 `??` 一行顺带提到） |
-| `a ?? b`、`a !! b`、`x ?-> f` | 以标记为选择子的分支：`OPER :op/tag_is_null`（或 `tag_is_error`）→ `BRCH`；臂 0 是替代，臂 1 取出原值 | `cast.cml` | 已有 |
-| **`a && b`、`a \|\| b`** | 分支：`a && b` ≡ `if a then b else false`，`a \|\| b` ≡ `if a then true else b`；右边是一条臂的子图，只在被选中时求值。不可重载 | `and_as_if.cml` | 建议写入 |
-| `a & b`、`a \| b` | 普通的 `OPER`，两边都求值，可重载 | | 建议写入 |
-| **`if x != null then A else B`**（`x` 是 `let` 或形参，条件就是这个比较本身） | 与 `match x { case null => B  case v => A }` 同一张图：`OPER :op/tag_is_null` → `BRCH`；臂 0（空）是 `B`；臂 1 的子图以 `OPER :op/tag_null_value` 开头，臂内 `x` 这个名字绑定到拆开后的值 | `narrow_match.cml` | 建议写入 |
-| 值进入 `T?`/`T!` | 每层一个 `CAST` | `cast.cml` | 建议写入 |
-| `throw e` | 图的出口，与 `return` 相同 | | 已有 |
-| `attempt(f, args…)` | `OPER :mark/isolate`：`Norm` 第 0 条是函数值，其余是实参；类型 `T!`。算子带 `callsGraphs` 标志 | `attempt.cml` | 已有 |
-| `map`、`filter`、`reduce`、`foreach` | `OPER :mark/…`：`With` 第 0 条是元素函数的函数值，`Norm` 是被处理的值 | `map_hof.cml` | 建议写入 |
-| **`f<w>` 作为值（部分应用）** | 一个带捕获槽的函数值：一张 `role = Forwarder` 的图，它的普通形参是 `f` 剩下的参数，捕获是被绑定的 `w`，图体是一个把两者都传给 `f` 的 `FUNC`；使用处是 `DATA` 函数常量 + `FILL` 装入 `w` | `partial.cml` | 建议写入 |
-| 泛型函数 | 模板不在图上；每组类型一张 `Function` 图，名字用源码里的类型名 | `generic.cml` | 已有 |
-| 类型函数 | 建图时求值，图上不留节点 | | 已有 |
-| `macro` 函数 | 普通的图，签名带 `macro` 修饰符，调用它的节点带 `macro` 标志；`std::macro` 把实参全是常量的调用换成 `DATA` | `macro.cml` | 已有 |
-| `loop` | `LOOP` 节点 | `loop.cml` | 已有 |
-| **模块顶层的 `let`** | `__root__` 上的节点（初始化表达式的那几个节点），实体表里有一项指着其中给出值的那个 | `toplevel.cml` | 已有 |
-| **函数用到模块顶层的值** | 函数图上一个捕获端口，绑定到那个实体；值沿调用边（`With`）传下来 | `toplevel.cml` | 建议写入 |
-| **`import { f } from m`（函数）** | 不建任何节点；导入方调用它时是一个 `FUNC`，引用表里是 `m` 的那张图 | | 建议写入 |
-| **`import { v } from m`（值）** | 不建任何节点；名字 `v` 绑定到实体 `m::v`。在 root 上用它是一条普通的边；在函数里用它是捕获端口 | | 建议写入 |
-| **导入泛型函数** | 不建任何节点；调用处指向实例。实例全程序每组类型一张，属于声明模板的模块 | | 建议写入 |
-| `namespace N { … }`、`using namespace`、`m::f` | 只影响名字怎样解析到实体；图上没有任何痕迹 | 第 8 节 | 建议写入 |
-| 遍 | 把一个程序快照变成另一个（或消费它）的程序 | | 已有 |
+| 语言元素 | 在图上是什么 | 原则表 |
+|---|---|---|
+| 表达式、算子调用 | `OPER` / `FUNC` / `CALL` 节点与数据边 | 已有 |
+| `sync` 块 | 相邻表达式之间的 `Ctrl` 边；块的值经 `GATE` 交出 | 已有 |
+| `wait e` | `e` 与此前直接用过同一个变量的节点、此后读它的节点之间的 `Ctrl` 边 | 已有 |
+| `var x = v`、读、赋值 | `:var/new`、`:var/get`、赋值算子三种 `OPER`；`x` 这个名字绑定的是单元 | 建议写入 |
+| 函数 | 一张图 | 已有 |
+| lambda、函数作为值 | 无捕获：一个函数常量 `DATA`；有捕获：`DATA` 函数常量 + `FILL` | 建议写入 |
+| `if`、`match` | `BRCH`/`JOIN`，每条臂一张子图 | 建议写入（现表只在 `??` 一行顺带提到） |
+| `a ?? b`、`a !! b`、`x ?-> f` | 以标记为选择子的分支：`OPER :op/tag_is_null`（或 `tag_is_error`）→ `BRCH`；臂 0 是替代，臂 1 取出原值 | 已有 |
+| **`a && b`、`a \|\| b`** | 分支：`a && b` ≡ `if a then b else false`，`a \|\| b` ≡ `if a then true else b`；右边是一条臂的子图，只在被选中时求值。不可重载 | 建议写入 |
+| `a & b`、`a \| b` | 普通的 `OPER`，两边都求值，可重载 | 建议写入 |
+| **`if x != null then A else B`**（`x` 是 `let` 或形参，条件就是这个比较本身） | 与 `match x { case null => B  case v => A }` 同一张图：`OPER :op/tag_is_null` → `BRCH`；臂 0（空）是 `B`；臂 1 的子图以 `OPER :op/tag_null_value` 开头，臂内 `x` 这个名字绑定到拆开后的值 | 建议写入 |
+| 值进入 `T?`/`T!` | 每层一个 `CAST` | 建议写入 |
+| `throw e` | 图的出口，与 `return` 相同 | 已有 |
+| `attempt(f, args…)` | `OPER :mark/isolate`：`Norm` 第 0 条是函数值，其余是实参；类型 `T!`。算子带 `callsGraphs` 标志 | 已有 |
+| `map`、`filter`、`reduce`、`foreach` | `OPER :mark/…`：`With` 第 0 条是元素函数的函数值，`Norm` 是被处理的值 | 建议写入 |
+| **`f<w>` 作为值（部分应用）** | 一个带捕获槽的函数值：一张 `role = Forwarder` 的图，它的普通形参是 `f` 剩下的参数，捕获是被绑定的 `w`，图体是一个把两者都传给 `f` 的 `FUNC`；使用处是 `DATA` 函数常量 + `FILL` 装入 `w` | 建议写入 |
+| 泛型函数 | 模板不在图上；每组类型一张 `Function` 图，名字用源码里的类型名 | 已有 |
+| 类型函数 | 建图时求值，图上不留节点 | 已有 |
+| `macro` 函数 | 普通的图，签名带 `macro` 修饰符，调用它的节点带 `macro` 标志；`std::macro` 把实参全是常量的调用换成 `DATA` | 已有 |
+| `loop` | `LOOP` 节点 | 已有 |
+| **模块顶层的 `let`** | `__root__` 上的节点（初始化表达式的那几个节点），实体表里有一项指着其中给出值的那个 | 已有 |
+| **函数用到模块顶层的值** | 函数图上一个捕获端口，绑定到那个实体；值沿调用边（`With`）传下来 | 建议写入 |
+| **`import { f } from m`（函数）** | 不建任何节点；导入方调用它时是一个 `FUNC`，引用表里是 `m` 的那张图 | 建议写入 |
+| **`import { v } from m`（值）** | 不建任何节点；名字 `v` 绑定到实体 `m::v`。在 root 上用它是一条普通的边；在函数里用它是捕获端口 | 建议写入 |
+| **导入泛型函数** | 不建任何节点；调用处指向实例。实例全程序每组类型一张，属于声明模板的模块 | 建议写入 |
+| `namespace N { … }`、`using namespace`、`m::f` | 只影响名字怎样解析到实体；图上没有任何痕迹 | 建议写入 |
+| 遍 | 把一个程序快照变成另一个（或消费它）的程序 | 已有 |
 
 几个新形状的图：
 
-**`&&` 与 `||`。** 今天两边都求值（`OPER :op/and`）：`examples/nodes/and_or.cml` 打印 `l1 r1 l2 r2`【实测】。按已定的规则它们是分支；把同一个程序写成 `if` 得到的就是将来 `&&`/`||` 的图，`examples/nodes/and_as_if.cml` 打印 `l1 l2`【实测】：
+**`&&` 与 `||`。** 今天两边都求值（`OPER :op/and`）：这段程序打印 `l1 r1 l2 r2`【实测】。按已定的规则它们是分支；把同一个程序写成 `if` 得到的就是将来 `&&`/`||` 的图，打印 `l1 l2`【实测】：
 
 ```
 // let a = noisy('l1', false) && noisy('r1', true)
@@ -731,7 +731,7 @@ N11 -> N0F [WITH 0|0]; N12 -> N0F [WITH 0|1]; N10 -> N0F [NORM 0|0]
 
 `||` 的两条臂对调：臂 0 是 `DATA true`，臂 1 是右边。
 
-**可空收窄。** `if s != null then len(s) else 0` 今天不通过（`!=` 对 `string?` 与 `null` 没有定义）【实测 `examples/nodes/narrow.cml`】。它的图就是今天写成 `match` 的图，`examples/nodes/narrow_match.cml`【实测，打印 `3 0`】：
+**可空收窄。** `if s != null then len(s) else 0` 今天不通过（`!=` 对 `string?` 与 `null` 没有定义）【实测】。它的图就是今天写成 `match` 的图【实测，打印 `3 0`】：
 
 ```
 subgraph "len_or_zero" {
@@ -752,7 +752,7 @@ subgraph "len_or_zero" {
 
 "进入非空臂的端口带拆开后的值"在这张图上的读法：捕获端口 `N01` 带进来的仍是 `string?`，臂的第一个节点 `N02` 把它拆开，臂内 `s` 这个名字解析到 `N02`。把拆开放在臂内而不是外层图里，是因为拆开只在这条臂被选中时才有意义。写成 `x == null` 时两条臂对调。
 
-**部分应用。** `examples/nodes/partial.cml`【实测，打印 `6 10`】：
+**部分应用。** 【实测，打印 `6 10`】：
 
 ```camel
 with <w: int>
@@ -773,7 +773,7 @@ N0A [CALL]   N08 -> N0A [WITH 0|0]; N09 -> N0A [NORM 0|0]                     //
 N0D [FUNC scale]   N0B -> N0D [WITH 0|0]; N0C -> N0D [NORM 0|0]               // scale<5>(2)
 ```
 
-**`attempt`。** `examples/nodes/attempt.cml`【实测，打印 `-1`】：`let b = attempt(risky, 0) !! -1`
+**`attempt`。** 【实测，打印 `-1`】：`let b = attempt(risky, 0) !! -1`
 
 ```
 N06 [DATA Function(graph=risky, tupleSlots=0)]  N07 [DATA 0]
@@ -782,7 +782,7 @@ N06 -> N08 [NORM 0|0]; N07 -> N08 [NORM 0|1]
 N09 [OPER :op/tag_is_error]   N08 -> N09       // 接下来是 !! 的分支
 ```
 
-**模块顶层的值与捕获。** `examples/nodes/toplevel.cml`【实测】：
+**模块顶层的值与捕获。** 【实测】：
 
 ```camel
 let k = 10
@@ -954,7 +954,7 @@ N0D -> N0F [WITH 0|0]; N0E -> N0F [NORM 0|0]; N0F -> N10 [WITH 0|0]; N10 -> EXIT
 **第二步：建图。** 按需建每个实体的定义，每个实体有三个状态：已声明、正在建、已建成。
 
 - 建一个函数体或一个顶层值的初始化表达式时，遇到对别的实体的引用：需要它的类型而它"待定"，就先去建它；它"正在建"，就是环——
-  - 函数：环上的函数必须写明返回类型。没写的报现有的 `CallingIncompleteFunction`（今天同一个模块里没写返回类型的互递归就是这条诊断【实测 `examples/misc/rec_no_type.cml`】），跨模块时消息里列出环上的函数与各自的文件。
+  - 函数：环上的函数必须写明返回类型。没写的报现有的 `CallingIncompleteFunction`（今天同一个模块里没写返回类型的互递归就是这条诊断【实测】），跨模块时消息里列出环上的函数与各自的文件。
   - 值：`ModuleValueCycle`（新），定位在闭合环的那次引用，列出整条链：`a::x (a.cml:3) → b::y (b.cml:5) → a::x`。
 - 调用一个函数时只按它**声明的**形参连实参边，不管它捕获了什么；函数体里直接用到的模块级值登记为绑定到实体的捕获端口。泛型实例在这一步按需建，全程序每组类型一张。
 - 缓存有效的模块没有这一步：它的图已经在单元里。
@@ -1151,7 +1151,7 @@ GraphDraft
 
 化简之后的差距更大：今天每个最终留下的图平均被重新编码 6 次（1.10），模型下只有被改的图重新冻结；永久空间里每节点 185 字节的类型不再产生。
 
-这些是按排布算出来的预期，不是测量；第 7 节的第 2、3 步各自以"普查脚本在同一语料上的字节数与 `malloc` 次数"为验收数字。
+这些是按排布算出来的预期，不是测量；第 7 节的第 2、3 步各自以"同一语料上的字节数与 `malloc` 次数"为验收数字。
 
 ### 4.5 缓存文件格式（草案）
 
@@ -1495,10 +1495,10 @@ export func simplify(p: Program): Program! {
 | 步 | 内容 | 规模 | 风险 | 验收 / 之后用户能做什么 |
 |---|---|---|---|---|
 | 1 | **清理**：删 `validate.cpp`、`debug_json.cpp`、`looped_`；`BIND`、`DREF` 从运行期枚举里标为保留并删掉各后端的死分支；四个锚点收成 `exit`/`result` | 净减约 900 行 | 低 | 行为不变 |
-| 2 | **驻留表**：符号表；类型驻留（`TypeId`；函数类型不可变，捕获名移到图上）；算子表（`OperId`，`OPER` 节点不再内嵌 URI；加 `mayFault`、`callsGraphs` 声明，仓库内模块逐个算子声明） | 1,000–1,500 行 | 高：类型对象今天可变，并且处处按指针比较 | 普查脚本：永久空间"每图字节数"从 1,364 降到 200 以内；化简流水线下不再随提交增长 |
-| 3 | **冻结块新排布**：定长节点、稠密序号、边存一份、图引用表、位置列；`ExecPlan` 由四个后端与宏求值器共用 | 1,500–2,500 行 | 中高：所有后端的访问器都动 | 普查脚本：图空间每节点字节数从 97 降到 50 以内；化简后最大的图的边表占用减半；四个后端输出不变 |
-| 4 | **一个草稿**：前端直接建在草稿上；节点句柄是（图，序号），图句柄是 `GraphId`；删掉建图期的 7 张哈希表与编码时的第二个草稿 | 约 2,000 行，多为机械替换 | 中 | `compile_cost.sh`：建图 + 编码的 `malloc` 从每节点约 67 次降到个位数 |
-| 5 | **快照与局部提交**：`Program` 不可变快照；全程序图表与改写前后不变的 `GraphId`（从第 3 步移来，见实施状态 3c）；`Rewrite` 事务只重新冻结改过的图；删掉 `GraphDraftGroup` 与提交时的全闭包重编码 | 600–1,000 行 | 中：回收器的图根、脱离主程序的导出 | `compile_cost.sh`：化简流水线下图空间分配次数从"每图约 6 次"降到接近 1 |
+| 2 | **驻留表**：符号表；类型驻留（`TypeId`；函数类型不可变，捕获名移到图上）；算子表（`OperId`，`OPER` 节点不再内嵌 URI；加 `mayFault`、`callsGraphs` 声明，仓库内模块逐个算子声明） | 1,000–1,500 行 | 高：类型对象今天可变，并且处处按指针比较 | 数字：永久空间"每图字节数"从 1,364 降到 200 以内；化简流水线下不再随提交增长 |
+| 3 | **冻结块新排布**：定长节点、稠密序号、边存一份、图引用表、位置列；`ExecPlan` 由四个后端与宏求值器共用 | 1,500–2,500 行 | 中高：所有后端的访问器都动 | 数字：图空间每节点字节数从 97 降到 50 以内；化简后最大的图的边表占用减半；四个后端输出不变 |
+| 4 | **一个草稿**：前端直接建在草稿上；节点句柄是（图，序号），图句柄是 `GraphId`；删掉建图期的 7 张哈希表与编码时的第二个草稿 | 约 2,000 行，多为机械替换 | 中 | 数字：建图 + 编码的 `malloc` 从每节点约 67 次降到个位数 |
+| 5 | **快照与局部提交**：`Program` 不可变快照；全程序图表与改写前后不变的 `GraphId`（从第 3 步移来，见实施状态 3c）；`Rewrite` 事务只重新冻结改过的图；删掉 `GraphDraftGroup` 与提交时的全闭包重编码 | 600–1,000 行 | 中：回收器的图根、脱离主程序的导出 | 数字：化简流水线下图空间分配次数从"每图约 6 次"降到接近 1 |
 | 6 | **实体表与公共 root**：全程序一个建图会话、一张 root；捕获端口绑定到实体（此时仍是单遍加载：被导入模块先编译完，无环导入下成立） | 400–600 行 | 中：建图器里按模块各存一份的状态要逐个提升 | **导出的函数可以使用自己模块顶层的 `let` 与 `var`** |
 | 7 | **导入值**；泛型实例全程序每组类型一张、归声明模块；C++ 模块的值 | 约 400 行 | 低到中 | **`export let pi = 3.14159` 可用**；`math::pi` |
 | 8 | **三步加载**：声明、建图、链接；捕获接线挪到链接步；`ModuleValueCycle` | 600–900 行 | 高：加载过程与建图器的入口都变 | **模块互相导入可用**；顶层声明与书写顺序无关；`ClosureCaptureAfterSelfCall` 消失 |
@@ -1507,7 +1507,7 @@ export func simplify(p: Program): Program! {
 | 11 | **Camel 一侧的 `graph` 模块**：值类型、查询算子、`apply`、规则驱动 | 约 1,200 行 | 中：接口一旦发布要稳定 | 用 Camel 写的遍可以放进流水线 |
 | 12 | **命名空间补全**（第 8 节） | 每项 50–200 行 | 低 | 见第 8 节 |
 
-**实施状态（2026-10-14，分支 `lane/graph-storage` 与 `lane/graph-storage2`）。** 第 1 步与第 2 步已完成；数字是在同一语料、同一容器里用附录 A 的命令量的【实测】。
+**实施状态（2026-10-14，分支 `lane/graph-storage` 与 `lane/graph-storage2`）。** 第 1 步与第 2 步已完成；数字是在同一语料、同一容器里量的【实测】。
 
 | 步 | 状态 | 做了什么 | 没做的与原因 |
 |---|---|---|---|
@@ -1527,9 +1527,9 @@ export func simplify(p: Program): Program! {
 | 6 | **已完成** | 全程序一个建图器（`camel::compile::gir::Builder::of(context)`，`src/compile/gir/program.cpp`），每个模块一组顶层作用域，所有模块建在同一张 `__root__` 上；捕获端口绑定到它代表的节点（"来源"，模块顶层的值即 root 上的节点），调用处与函数值处按来源在调用者里取值，不再按名字重找（`src/compile/gir/captures.cpp`）；直接调用的捕获在链接步按被调图的端口次序接线，取到不动点；泛型实例全程序每组类型一张、挂在声明它的图下 | 实体表没有单独做成一张表：值的实体就是 root 上的节点（`topLevelValues_` 记着它属于哪个模块、叫什么）；捕获的绑定只用到"来源节点"，3.7 的 `Local`/`Entity` 两种绑定在实现里是同一种。被导入模块的函数图不登记为 root 的子图，可达性与以前一样只沿调用与函数值 |
 | 7 | **已完成** | 导出值：`export let` 导出的是 root 上的那个节点，导入方在 root 上直接用、在函数里经捕获端口取（`import { pi } from m`、`m::pi`）；不能导出 `var`（`ExportedVariable`）；按名字导入的同名值是 `ImportNameConflict`；语言服务器把导入的值作为值显示。泛型实例全程序每组类型一张已在第 6 步完成 | C++ 模块没有"值"这种导出物（`math::pi()` 是无参算子），本步没有给模块接口加这一类（属于公开接口的改动，见报告的问题） |
 | 8 | **已完成** | 三步加载：`import` 只绑定名字；每个模块先声明类型，再把被导入的模块编译到"已声明"（`CompileStage::Declared`：函数图无函数体、模板、顶层值、导出表），最后建自己的其余部分；入口模块建全程序（`Builder::buildProgram`）：按导入次序建函数体与顶层值，第一次用到时按需建（跨模块也是），之后链接（捕获接线的不动点、入口调用、效应摘要的不动点与告警）。模块可以互相导入；顶层声明与书写顺序无关；`ModuleValueCycle` 带整条链；被导入模块的 `main` 是普通函数；`ImportCycle`、`ClosureCaptureAfterSelfCall` 退役，后者在递归里余下的情形改为带位置的 `CaptureAfterRecursiveCall` | 写入追踪（`recordWrite`）仍在建图时做：被调函数在调用处之前按需建完，所以调用处看到的变量集合是完整的；只有递归中"调用自己之后才第一次用到变量"这一种得不到完整集合，报错而不是在链接步补顺序。类型在互相导入中可以互用，但类型定义本身互相依赖成环时报 `UnresolvedTypeReference` |
-| 12 | **已完成** | N1 命名空间块内不带前缀的查找（名字与类型）；N2 `using namespace` 可对本模块的命名空间用、按块生效（模块顶层、命名空间块、函数体里的块），歧义在使用处报 `AmbiguousName`；N3 一条优先级规则（局部 > 本模块 > 按名字导入 > `using` > 内建，跨层不合并，运算符例外）；N4 `import a from m` 引入一个名字、`import m as x` 起别名（仓库里依赖旧含义的程序只有设计稿的探针 `p09` 与缺陷例 `import_one_name.cml`）；N5 命名空间块里的 `let`/`var`；N6 `use` 退役、`import { … } from m::N`；N7 模块用自己的名字（`module` 声明的名字或文件名）限定自己的东西；N8 别的模块的函数图与泛型实例名带模块名。8.1 表的各行在 `test/plans/feat/compile/namespace_rules.plan.toml` 里逐行有测试 | 再次打开的同名命名空间块不共享各自块里的 `using`（按块而不是按命名空间）。语言服务器的查询层没有为命名空间成员做新的显示 |
+| 12 | **已完成** | N1 命名空间块内不带前缀的查找（名字与类型）；N2 `using namespace` 可对本模块的命名空间用、按块生效（模块顶层、命名空间块、函数体里的块），歧义在使用处报 `AmbiguousName`；N3 一条优先级规则（局部 > 本模块 > 按名字导入 > `using` > 内建，跨层不合并，运算符例外）；N4 `import a from m` 引入一个名字、`import m as x` 起别名（仓库里依赖旧含义的程序只有探针 `p09`）；N5 命名空间块里的 `let`/`var`；N6 `use` 退役、`import { … } from m::N`；N7 模块用自己的名字（`module` 声明的名字或文件名）限定自己的东西；N8 别的模块的函数图与泛型实例名带模块名。8.1 表的各行在 `test/plans/feat/compile/namespace_rules.plan.toml` 里逐行有测试 | 再次打开的同名命名空间块不共享各自块里的 `using`（按块而不是按命名空间）。语言服务器的查询层没有为命名空间成员做新的显示 |
 
-第 2 步的验收数字（永久空间，扣除空程序的基线后；同一语料、同一容器、附录 A 的普查命令；"第 2 步前"是本次在 `fsh-dev` 05d29922 上重量的）：
+第 2 步的验收数字（永久空间，扣除空程序的基线后；同一语料、同一容器；"第 2 步前"是本次在 `fsh-dev` 05d29922 上重量的）：
 
 | | 迁移前 | 第 2 步前 | 第 2 步后 | 设计的目标 |
 |---|---|---|---|---|
@@ -1542,7 +1542,7 @@ export func simplify(p: Program): Program! {
 
 `array_basic.cml`（122 张图）：永久空间 140 KB → 36 KB；数组类型 347 个 → 38 个，函数类型 491 个（另有 267 个名字记录）→ 214 个；`std::macro` 后接一到三次 `std::opt`，永久空间都是 105 KB（第 2 步前 234 KB）。全语料 1,069 个程序按种类合计（含基线）：函数类型 26,203 KB → 3,825 KB，元组 2,349 KB → 1,801 KB，数组 196 KB → 63 KB，函数名字记录 489 KB → 0。
 
-**第 3 步的第一小步（帧布局进图块）之后**（同一语料，`fsh-dev` ce3637cb 上的第 2 步对照；附录 A 的普查命令）：
+**第 3 步的第一小步（帧布局进图块）之后**（同一语料，`fsh-dev` ce3637cb 上的第 2 步对照）：
 
 | | 第 2 步后 | 3a 之后 |
 |---|---|---|
@@ -1591,7 +1591,7 @@ AST/GCT 重构 ──► 6 ──► 7 ──► 8 ──┐
 
 内部形式【读码】：命名空间不是一种对象。AST 建造时维护一个路径栈，把块里声明的函数与类型的名字加上前缀（`src/parse/ast/builder.cpp:235-253、786-815`）；之后各层看到的就是一个带路径的名字 `Tools::inc`。建图器把函数登记在以完整名字为键的作用域里。模块的导出表是一棵按路径分层的名字树（`include/camel/common/ns.h`）；`import m` 登记"本地前缀 `m` → 模块 `m`"的绑定，`using namespace m::Tools` 把匹配前缀的导出名逐个登记为本地名（`src/core/module/module.cpp:173-295`）。名字解析的顺序在 `visitDRefNode`（`builder.cpp:2799-2969`）：局部值与捕获 → 泛型模板 → 带装饰器的函数 → 本模块的函数 → 导入的实体 → 报错。
 
-逐项【实测，`bash docs/design/graph-model/tools/run_examples.sh docs/design/graph-model/examples/ns`】：
+逐项【实测】（`pNN` 指 `test/cases/compile/namespace_rules/pNN_*.cml`）：
 
 | # | 写法 | 结果 | 例子 |
 |---|---|---|---|
@@ -1603,7 +1603,7 @@ AST/GCT 重构 ──► 6 ──► 7 ──► 8 ──┐
 | 6 | `using namespace N`，`N` 是本模块的命名空间 | **`UnresolvedReference: 'N'`**：`using` 只认导入的 | `p06` |
 | 7 | 同一个命名空间写成两块 | 可用，合并 | `p07` |
 | 8 | `namespace Config { let limit = 10 }` | **语法错误**：块内不能写 `let`/`var` | `p08` |
-| 9 | `import T from lib` | 可用，含义是**给模块起别名**：`T::root()`。语言文档 5.2 说它是"引入一个名字" | `p09`、`examples/defects/import_one_name.cml` |
+| 9 | `import T from lib` | 可用，含义是**给模块起别名**：`T::root()`。语言文档 5.2 说它是"引入一个名字" | `p09` |
 | 10 | `import lib as L` | 语法错误 | `p10` |
 | 11 | `import { root as lib_root } from lib` | 语法错误（设计原则 10.2 已定要有，未实现） | `p11` |
 | 12 | `use inc = lib::Tools::inc` | `FeatureNotSupported` | `p12` |
@@ -1716,8 +1716,8 @@ DATA  PORT  OPER  FUNC  CALL  FILL  ACCS  CAST  COPY  BRCH  JOIN  LOOP  GATE  SY
 
 三点需要点头：
 
-- (1) **移出 `BIND` 与 `DREF`。** `BIND` 没有任何代码创建；部分应用今天就是闭包（`examples/nodes/partial.cml` 的图在 3.6）。`DREF` 是建图器内部"这个名字还没定下来指谁"的占位，不出现在任何建成的图里。
-- (2) **高阶算子与 `attempt` 保持为 `OPER`**，在算子表里带一个 `callsGraphs` 标志，不为它们另设节点种类。图上的样子就是今天的样子（3.6 的 `attempt`、`map_hof.cml`）。
+- (1) **移出 `BIND` 与 `DREF`。** `BIND` 没有任何代码创建；部分应用今天就是闭包（图在 3.6）。`DREF` 是建图器内部"这个名字还没定下来指谁"的占位，不出现在任何建成的图里。
+- (2) **高阶算子与 `attempt` 保持为 `OPER`**，在算子表里带一个 `callsGraphs` 标志，不为它们另设节点种类。图上的样子就是今天的样子（3.6 的 `attempt` 与 `map`/`filter`）。
 - (3) **算子除纯度外再声明"是否可能故障"（`mayFault`）。** 3.3 已定纯度必须声明；可能故障今天没有任何声明，折叠遍、GPU 内核与 `std::cpp` 都得自己按算子名猜。
 
 ```camel
@@ -1877,48 +1877,9 @@ let u  = t as (int, int)    // 今天：同上，'(int, int)' to '(int, int)'
 
 ---
 
-## 附录 A 复现
+## 附录 A 数字的来源
 
-在仓库根目录、已构建的环境里执行（`camel`、`python3`、`clang` 在 `PATH` 上）。
-
-```
-# 1.10 普查
-python3 docs/design/graph-model/tools/graph_census.py examples exemplars benchmarks test/cases stdlib
-python3 docs/design/graph-model/tools/graph_census.py --passes "std::opt::inline" examples exemplars benchmarks test/cases stdlib
-python3 docs/design/graph-model/tools/graph_census.py --passes "std::macro std::opt" examples exemplars benchmarks test/cases stdlib
-
-# 1.10 一次编译的分配次数
-bash docs/design/graph-model/tools/compile_cost.sh docs/design/graph-model/examples/nodes/empty.cml \
-     test/cases/compile/function_values/value_positions.cml test/cases/modules/stdlib/array_basic.cml
-GM_PASSES="std::macro std::opt" bash docs/design/graph-model/tools/compile_cost.sh test/cases/modules/stdlib/array_basic.cml
-
-# 3.5、3.6 的图
-bash docs/design/graph-model/tools/rgir.sh docs/design/graph-model/examples/nodes/oper.cml
-bash docs/design/graph-model/tools/rgir.sh docs/design/graph-model/examples/nodes/branch.cml
-bash docs/design/graph-model/tools/rgir.sh docs/design/graph-model/examples/nodes/macro.cml std::macro
-#   其余：把文件名换成 examples/nodes/ 下的任何一个
-
-# 3.6 &&、|| 今天两边都求值；写成 if 则短路
-camel docs/design/graph-model/examples/nodes/and_or.cml         # l1 r1 l2 r2
-camel docs/design/graph-model/examples/nodes/and_as_if.cml      # l1 l2
-
-# 第 8 节 命名空间逐项
-bash docs/design/graph-model/tools/run_examples.sh docs/design/graph-model/examples/ns
-
-# 附录 B
-bash docs/design/graph-model/tools/run_examples.sh docs/design/graph-model/examples/defects
-```
-
-| 目录 | 内容 |
-|---|---|
-| `examples/nodes/` | 每种节点与 3.6 各构造的最小程序；`loop.cml` 与 `narrow.cml` 是已定但本基线尚未实现的写法 |
-| `examples/ns/` | 命名空间的 26 个探针（`p01`–`p26`）与它们导入的 `lib.cml`、`lib2.cml`、`hidden.cml` |
-| `examples/misc/` | 函数类型与形参名、按名字传参、没写返回类型的互递归 |
-| `examples/defects/` | 附录 B 的最小复现 |
-| `tools/graph_census.py` | 普查：节点与边的种类分布、每图规模、嵌套、输入与使用者数、分支臂、重复度、三块空间的字节数 |
-| `tools/compile_cost.sh`、`tools/malloc_count.c` | 一次编译的 `malloc` 次数与字节数、三块空间的用量、用时 |
-| `tools/rgir.sh` | 把 `std::rgir` 的输出缩成文中的记法 |
-| `tools/run_examples.sh` | 逐个运行一个目录下的例子，印出退出码与输出 |
+本稿的数字与图是用当时的例子与脚本（`examples/`、`tools/` 两个目录）量的；这两个目录随设计稿的评审语料一起删除，来源在 git 历史里。文中保留的是当时的输出。
 
 ## 附录 B 调研中发现的现有缺陷
 
@@ -1926,10 +1887,10 @@ bash docs/design/graph-model/tools/run_examples.sh docs/design/graph-model/examp
 
 | 编号 | 现象 | 最小复现 | 期望 |
 |---|---|---|---|
-| D1 | 两条 `using namespace` 从两个模块带来同名、同签名的函数，**静默取先写的那个**，没有任何诊断。按名字的导入已有 `ImportNameConflict`，`using` 这条路没有覆盖 | `camel docs/design/graph-model/examples/defects/using_conflict.cml` 打印 `2` | 使用处的歧义错误（8.2 N2） |
-| D2 | `import sqrt from math` 之后 `sqrt(9.0)` 是 `UnresolvedReference`：实现把单个名字当作模块的别名，而 `docs/language/05_modules.md` 5.2 把这种写法列为"引入一个名字" | `camel docs/design/graph-model/examples/defects/import_one_name.cml` | 实现与文档一致（8.2 N4） |
-| D3 | 写在函数体里的 `using namespace` 对整个模块生效 | `camel docs/design/graph-model/examples/ns/p24_using_scope.cml` 打印 `2 11`（`b` 里没有写 `using` 也能用 `inc`） | 按 8.2 N2：`b` 里的 `inc` 是 `UnresolvedReference` |
-| D4 | 带类型标注的结构体字面量里有算出来的字段时是 `LiteralNotRepresentable`：`let p: P = { x: a, y: b }`；去掉标注可以 | `camel docs/design/graph-model/examples/defects/struct_annotated.cml` | 通过，打印 `2` |
+| D1 | 两条 `using namespace` 从两个模块带来同名、同签名的函数，**静默取先写的那个**，没有任何诊断。按名字的导入已有 `ImportNameConflict`，`using` 这条路没有覆盖 | 两个模块各写一条 `using namespace`，带来同名同签名的函数 | 使用处的歧义错误（8.2 N2） |
+| D2 | `import sqrt from math` 之后 `sqrt(9.0)` 是 `UnresolvedReference`：实现把单个名字当作模块的别名，而 `docs/language/05_modules.md` 5.2 把这种写法列为"引入一个名字" | `import sqrt from math` 之后调用 `sqrt(9.0)` | 实现与文档一致（8.2 N4） |
+| D3 | 写在函数体里的 `using namespace` 对整个模块生效 | `camel test/cases/compile/namespace_rules/p24_using_scope.cml` 打印 `2 11`（`b` 里没有写 `using` 也能用 `inc`） | 按 8.2 N2：`b` 里的 `inc` 是 `UnresolvedReference` |
+| D4 | 带类型标注的结构体字面量里有算出来的字段时是 `LiteralNotRepresentable`：`let p: P = { x: a, y: b }`；去掉标注可以 | 带类型标注的结构体字面量，字段是算出来的 | 通过，打印 `2` |
 | D5 | `src/compile/gir/validate.cpp` 没有调用点（`debug_json.cpp` 原列在此处，有误：调试器在用，见第 7 节的实施状态）；`GCNodeKind::Bind` 没有创建者；`DraftGraphBuilder::looped_` 没有读写者 | 检索 `assertGraphTreeSealingPreconditions`、`getGirJsonFromCompileGraph`、`addBindNode`、`setLooped` | 删除（第 7 节第 1 步） |
 | D6 | NodeVM 对冻结的图做 `const_cast` 并写入（把解析到的算子函数指针写回节点负载）。冻结图按约定是只读的（`docs/technical/17_graph_rewrite_api_contracts.md` 2.2） | 【读码 `src/passes/sched/nodevm/nodevm.cpp:754-766`】；未构造出可观察的错误 | 解析结果放在后端自己的结构里（4.1 的 `ExecPlan`） |
 

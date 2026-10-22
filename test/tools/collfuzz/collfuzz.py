@@ -463,8 +463,7 @@ class Program:
             (f"merge({a}, {a}) == {a}", BOOL, True),
         ]
         # `!=` on two maps resolves to the generic `:op/ne`, which compares values that are
-        # objects by identity, so it is the negation of `==` for scalar values only
-        # (docs/issues/2026-10-12-language-surface-findings.md).
+        # objects by identity, so it is the negation of `==` for scalar values only.
         if typ.value is INT:
             parts.append((f"{a} != {b}", BOOL, ma != mb))
         self.show(parts)

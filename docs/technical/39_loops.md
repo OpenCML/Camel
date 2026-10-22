@@ -283,8 +283,8 @@ A loop with several values of state builds the tuple of the next state every rou
 FILL), which a hand-written recursion over separate parameters does not.
 
 That was where the time went: on a 32-core EPYC 7343 (shared, load average 20 to 130), whole-process
-CPU time of ten million rounds, `bench_loop.cml` against the same loop written as a tail recursion
-(`bench_tail.cml`), in ns per round:
+CPU time of ten million rounds, the loop against the same loop written as a tail recursion, in ns
+per round:
 
 | round | `std::nvm` | `std::fvm` |
 |---|---|---|

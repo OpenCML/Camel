@@ -4,8 +4,8 @@ tier = "fast"
 tags = ["feat", "compile", "semantic", "negative", "surface"]
 desc = "Located diagnostics for ways of writing a program that ended in an internal error, in a diagnostic without a position, or in one that named types the program does not show"
 
-# docs/issues/2026-10-12-language-surface-findings.md. No program here may print the text of a
-# C++ exception or an internal error.
+# No program here may print the text of a C++ exception or an internal error, and no diagnostic
+# may be missing its position.
 
 [defaults]
 expect_output_not_contains = ["bad any_cast", "live DREF", "internal error", "Internal", "Segmentation fault", "dumped core", ":?:?"]

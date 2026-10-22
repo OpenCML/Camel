@@ -618,8 +618,8 @@ Context::findModuleUnder(const std::string &baseDir, const std::string &moduleNa
     /// Lookup order within directory D: 1) D/xx.cmo  2) D/xx.* (any text/source file with the
     /// same name)
     /// If D/xx is a directory, also search: 3) D/xx/xx.cmo  4) D/xx/xx.*
-    // A directory is listed once per context (doc 38, section 8 item 5): looking every
-    // module up by listing its directory again made N modules in one directory O(N^2).
+    // A directory is listed once per context (docs/technical/53_import_cost_audit.md, 53.3.2):
+    // looking every module up by listing its directory again made N modules in one directory O(N^2).
     auto findIn = [&](const fs::path &directory) -> std::pair<std::string, bool> {
         const std::string key = camel::utils::pathToUtf8(directory.lexically_normal());
         auto listing          = directoryListings_.find(key);

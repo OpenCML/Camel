@@ -194,8 +194,7 @@ timeout_ms = 8000
 
 # A literal its type cannot hold is a located compile-time error. It used to wrap around or to
 # be cut off silently: 9223372036854775808 and 1e400 were the smallest int, and
-# `let b: i32 = 3000000000` was -1294967296
-# (docs/issues/2026-10-12-language-surface-findings.md, 2).
+# `let b: i32 = 3000000000` was -1294967296.
 
 [[tests]]
 name = "literal_range.limits"

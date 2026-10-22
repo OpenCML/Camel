@@ -21,6 +21,13 @@ desc = "The relative links of the reader-facing documents point at files and hea
 # snippet runs in its own process because every fence can declare its own module and entry.
 # Task reports and dated reviews are records and are not scanned.
 #
+# scripts/check-doc-links.mjs --citations covers what a link checker cannot see: a `*.md` path
+# cited in a code comment, a `.cml` comment, a plan description or README prose is not a Markdown
+# link, but it still promises that the file exists. The mode reads every page, plan and code
+# comment of the tree, resolves each citation (relative to the citing file, to the repository
+# root, or by a file name that exists in the tree) and fails naming the file, the line and the
+# target. It prints how many citations it examined, and a run that examined none fails.
+#
 
 [[tests]]
 name = "docs.links.reader_facing"
@@ -45,6 +52,18 @@ expect_exit = 0
 expect_stdout_contains = ["every page under docs/technical is listed in docs/technical/README.md"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+
+[[tests]]
+name = "docs.links.citations"
+desc = "Every *.md path cited in a page, a plan or a code comment resolves to a file in the tree; the check names the citing file, the line and the target, reports how many citations it examined, and fails when it examined none."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-links.mjs"
+args = ["${case}", "--citations"]
+expect_exit = 0
+expect_stdout_contains = ["no missing citation target in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
 
 [[tests]]
 name = "docs.snippets_compile"

@@ -1,5 +1,5 @@
 /**
- * Regression for the zero-pass transformer segfault (docs/issues/2026-10-02):
+ * Regression for the zero-pass transformer segfault:
  * differentiating at run time builds pullback sub-graphs whose static constants
  * (e.g. the permutation array of permute_inverse) were not reachable from any
  * GC root, so a collection while the gradient executed freed them mid-flight.

@@ -5,7 +5,7 @@ tags = ["feat", "consistency", "runtime", "surface"]
 desc = "The surface of the language on the four back ends: signs and numbers, chained member access, calls of function-valued expressions"
 
 # Ways of writing ordinary programs that used to be read as something else, to fail in the
-# parser, or to end in an internal error (docs/issues/2026-10-12-language-surface-findings.md).
+# parser, or to end in an internal error.
 # Each case runs on std::nvm, std::fvm, std::jit and std::prl; the four agree on exit code and
 # standard output, and the output is the golden file's.
 

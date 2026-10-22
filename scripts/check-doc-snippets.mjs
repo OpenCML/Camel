@@ -4,7 +4,7 @@
 //
 //   node scripts/check-doc-snippets.mjs              check the reader-facing pages
 //   node scripts/check-doc-snippets.mjs --default-roots  the same, ignoring a script path argument
-//   node scripts/check-doc-snippets.mjs a.md b/      check the given files and directories
+//   node scripts/check-doc-snippets.mjs FILE DIR  check the given files and directories
 //
 // A Camel fence is a fenced block tagged `camel` or `cml` (both tags are used in the tree).
 // The page itself is the source of truth for what the snippet means:

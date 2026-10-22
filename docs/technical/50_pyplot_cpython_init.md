@@ -11,7 +11,7 @@ H203 那一版"能否推迟"的论证到此为止（原文在 git 历史里）�
 ### 1.1 量法
 
 Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住整个子进程；阶段用
-`CAMEL_TIME_PHASES=-`（doc 38 的计数器），`cmo_load` 是自身时间（已减去嵌套阶段）。改动前后的两个
+`CAMEL_TIME_PHASES=-`（`docs/cli.md` 里 `--time-phases` 的计数器），`cmo_load` 是自身时间（已减去嵌套阶段）。改动前后的两个
 安装**在同一窗口内交错**跑（每个 rep 两边各一次，并交替谁先），所以负载对两边一样；窗口的
 `/proc/loadavg` 记在每张表下。每组 3 次预热 + 21 次计时（`startup-cost` 那组 41 次）。
 
