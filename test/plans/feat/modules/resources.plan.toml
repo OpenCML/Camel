@@ -31,7 +31,7 @@ for (const [check, reason] of [
   ['pure_touches', 'a pure operator touches no resource'],
   ['effectful_touches_nothing', 'an operator that is not pure touches, allocates or affects something'],
   ['external_against_state_only', 'its traits give it no external effect'],
-  ['allocates_ambient', 'an operator allocates a variable, an object or a foreign resource'],
+  ['allocates_ambient', 'an operator allocates a variable, an object, a handle or a foreign resource'],
   ['var_param_not_written', 'the signature has a var ordinary parameter 0 that the declaration does not write'],
   ['written_without_var', 'the declaration writes a variable through ordinary parameter 0, which is not a var parameter'],
   ['late_resolver', 'the signature has a var ordinary parameter 0 that the declaration does not write'],
@@ -51,13 +51,13 @@ for (const l of [
   'RESOURCES overlap a-b 0 a-c 1 a-empty 0 a-unknown 1',
   'RESOURCES footprint bump rmw variable norm 0 whole',
   'RESOURCES footprint countdown rmw variable norm 0 whole',
-  'RESOURCES footprint __g_5__ rmw variable capture 0 whole',
+  'RESOURCES footprint __g_5__ rmw variable capture 0 whole; result fresh',
   'RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw object (any); external',
   'RESOURCES node main 2 :var/new: allocates variable',
   'RESOURCES node main 9 :op/assn_l: write variable (node 2); result may_alias 1',
   'RESOURCES node main 10 FUNC bump: rmw variable (node 2); result unknown',
   'RESOURCES node main 12 FUNC countdown: rmw variable (node 5); result unknown',
-  'RESOURCES node main 15 CALL: rmw variable (node 2); result unknown',
+  'RESOURCES node main 15 CALL: rmw variable (node 2)',
   'RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0',
   'RESOURCES node main 20 algo:sort_in_place: rmw object (node 19); result same 0',
   'RESOURCES node main 23 rand:seed: write ambient rng; external',
@@ -75,6 +75,39 @@ assert(!out.includes('RESOURCES order countdown 9 12'), 'the two arms of a branc
 assert(!/RESOURCES order main (2|5|18) /.test(out), 'making a cell conflicts with nothing')
 assert(!/RESOURCES order main 12 (8|9|10|15|32) /.test(out), 'the cells of c and d are different resources')
 assert(!out.includes(' unordered'), 'the program orders every conflicting pair')
+
+// ---- Synthetic graphs: the internal model of steps 1-2 (no syntax yet). ----
+// (3c) A function that returns its parameter: the result is that port, not a fresh value.
+line('RESOURCES synth result passthrough result same 0')
+line('RESOURCES synth result same read handle semtest:Stream norm 0 whole; result same 0')
+line('RESOURCES synth result open result fresh')
+line('RESOURCES synth type intern same pure_generic different')
+// (3a) open() then two operations on the same returned value: one object, serialised by the
+// control edge the graph has.
+const order = (name) => out.split('\n').filter((l) => l.startsWith(`RESOURCES synth order ${name} `))
+const sameOne = order('same-one-ctrl')
+assert(sameOne.some((l) => / 2 3 resource ordered by control$/.test(l)), `same-one-ctrl: ${sameOne}`)
+// (3b) same(open()) of two different fresh objects: the results are Same of each, not Unknown,
+// so the two chains are not serialised against each other (only each chain's own data edge is
+// ordered: same -> next).
+const sameTwice = order('same-twice')
+assert(sameTwice.length === 2 && sameTwice.every((l) => l.endsWith('resource ordered by data')), `same-twice: ${sameTwice}`)
+assert(!sameTwice.some((l) => / (2 5|3 4|4 5) /.test(l)), `same-twice must keep the two objects apart: ${sameTwice}`)
+assert(order('open-twice').length === 0, `two open() results are different objects: ${order('open-twice')}`)
+assert(order('open-twice-ctrl').length === 0, `two open() results are different objects: ${order('open-twice-ctrl')}`)
+// A typed callee: the call's footprint comes from its type, not from its (empty) body. Two calls
+// with different arguments bind different values...
+const typed = out.split('\n').filter((l) => l.includes('RESOURCES synth node typed-caller') && l.includes('FUNC synth:typed:'))
+assert(typed.length === 2, `typed calls: ${typed}`)
+const bound = typed.map((l) => (l.match(/object \(node (\d+)\)/) || [])[1])
+assert(bound[0] && bound[1] && bound[0] !== bound[1], `per-argument footprints: ${typed}`)
+assert(order('typed-caller').length === 0, 'different arguments are different resources')
+// ...and two calls with one argument are one resource, ordered by the control edge.
+const typedSame = order('typed-same')
+assert(typedSame.length === 1 && typedSame[0].endsWith('resource ordered by control'), `typed-same: ${typedSame}`)
+// A `var` argument the signature says is unused produces no access.
+const unused = out.split('\n').find((l) => l.includes('FUNC synth:typed-unused:'))
+assert(unused && unused.endsWith(': none'), `unused var argument: ${unused}`)
 }
 """
 

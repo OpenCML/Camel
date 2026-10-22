@@ -107,6 +107,10 @@ struct GraphFootprint {
     /// It touches resources it cannot name (an undeclared operator on a value of unknown origin,
     /// a call through a value): any resource of the classes listed may be read and written.
     std::vector<sem::ResourceClass> anyOf;
+    /// Where the graph's return value comes from (design effects plan 3.3): Fresh when it makes
+    /// one, Same when it returns one of its norm ports (directly, through a GATE or through a
+    /// call that returns the parameter), Unknown otherwise. A `Same` names the norm port.
+    sem::ResultAlias result;
     bool external = false;
     bool declared = true;
 
@@ -128,13 +132,15 @@ struct ValueOrigin {
     bool operator==(const ValueOrigin &) const = default;
 };
 
-ValueOrigin originOf(const GCGraph &graph, gc_node_ref_t value);
+/// `program` is needed to resolve a call's result: a FUNC or CALL node's value may be its
+/// callee's result, which is a fact about the callee's graph (or its function type).
+ValueOrigin originOf(const Program &program, const GCGraph &graph, gc_node_ref_t value);
 
 /// Whether the values of `a` and `b` (nodes of `graph`) may be the same resource: the same
 /// origin; never two different fresh allocations, nor a fresh allocation and a received value
 /// (what a caller passes exists before the activation that allocates); otherwise yes (two ports
 /// may receive one cell).
-bool mayAlias(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b);
+bool mayAlias(const Program &program, const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b);
 
 /// The bounding box of the elements a mapped region reaches: one inclusive [lo, hi] per axis
 /// of the resource, or `empty` when the instance's domain has no point.

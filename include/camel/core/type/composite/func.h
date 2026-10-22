@@ -48,6 +48,7 @@
 #pragma once
 
 #include "camel/core/func.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/composite/composite.h"
 
@@ -80,6 +81,8 @@ class FunctionTypeFactory {
 
     void setModifiers(ModifierSet mod) { modifiers_ = mod; }
     void setExitType(Type *type) { exitType_ = type; }
+    /// The resources the signature publishes (design effects plan 2.2); Generic when not set.
+    void setResources(const sem::ResourceSignature &resources) { resources_ = resources; }
 
     void addWithArg(const std::string &ident, Type *type, bool isVar) {
         withTypes_.emplace_back(type, isVar);
@@ -131,6 +134,7 @@ class FunctionTypeFactory {
     bool hasRest_   = false;
     std::vector<std::string> argNames_;
     uint16_t constasIndex_ = kNoConstas;
+    sem::ResourceSignature resources_;
 };
 
 class FunctionType : public CompositeType {
@@ -153,6 +157,11 @@ class FunctionType : public CompositeType {
 
     /// The interned signature equal to this one in everything but the result type.
     FunctionType *withExitType(Type *exitType) const;
+
+    /// The resources this function type publishes (design effects plan 2.2).
+    const sem::ResourceSignature &resources() const { return resources_; }
+    /// The interned signature equal to this one in everything but its resources.
+    FunctionType *withResources(const sem::ResourceSignature &resources) const;
 
     /// This signature as an OpenFunctionType, or nullptr when it is not open.
     OpenFunctionType *asOpen() const;
@@ -247,6 +256,7 @@ class FunctionType : public CompositeType {
         bool hasRest     = false;
         uint16_t constasIndex = kNoConstas;
         std::vector<SymId> names;
+        sem::ResourceSignature resources;
     };
 
     FunctionType(const Parts &parts, bool open);
@@ -292,6 +302,8 @@ class FunctionType : public CompositeType {
     /// The index of the `constas` parameter, or kNoConstas.
     uint16_t constasIndex_ = kNoConstas;
     bool open_          = false;
+    /// The resources the signature publishes (Generic when it says nothing).
+    sem::ResourceSignature resources_;
     // Followed in memory by the parameter arrays (see the file comment).
 };
 
@@ -305,6 +317,8 @@ class OpenFunctionType final : public FunctionType {
   public:
     /// Sets the result type, once the body that decides it is built.
     void setExitType(Type *type) { exitType_ = type; }
+    /// Sets the resources once the body (or the declaration) decides them.
+    void setResources(const sem::ResourceSignature &resources) { resources_ = resources; }
 
     /// A new open signature with the same parts as `type`, its parameter names included.
     static OpenFunctionType *copyOf(const FunctionType *type);

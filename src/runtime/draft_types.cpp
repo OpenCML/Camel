@@ -267,6 +267,7 @@ size_t reinferDraftTypes(GraphDraft &draft) {
         factory.setHasCompileInfo(funcType->hasArgNames());
         factory.setModifiers(funcType->modifiers());
         factory.setExitType(exitType);
+        factory.setResources(funcType->resources());
         size_t arg      = 0;
         const auto name = [&]() {
             return funcType->hasArgNames() ? std::string(funcType->argNameAt(arg++))

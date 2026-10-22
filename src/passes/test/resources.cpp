@@ -24,13 +24,19 @@
 #include "resources.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/core/type/base.h"
+#include "camel/core/type/composite/func.h"
+#include "camel/runtime/draft.h"
 #include "camel/runtime/reachable.h"
 #include "camel/runtime/resources.h"
 
 #include <algorithm>
+#include <array>
 #include <format>
+#include <memory>
 #include <ostream>
 #include <stdexcept>
+#include <vector>
 
 namespace {
 
@@ -91,6 +97,312 @@ std::string label(const rt::Program &program, const rt::GCGraph &graph, rt::gc_n
     }
 }
 
+using camel::core::type::FunctionType;
+using camel::core::type::FunctionTypeFactory;
+using camel::core::type::Type;
+
+FunctionType *nullaryInt() {
+    FunctionTypeFactory factory;
+    factory.setExitType(Type::Int64());
+    return factory.build();
+}
+
+FunctionType *unaryInt() {
+    FunctionTypeFactory factory;
+    factory.addNormArg("x", Type::Int64(), false);
+    factory.setExitType(Type::Int64());
+    return factory.build();
+}
+
+/// A function type that publishes `uses h` (or `pure`) while its body says nothing: the call's
+/// footprint must come from the type (design effects plan 2.3).
+FunctionType *typedUnaryInt(bool usesParameter, bool isVar = false) {
+    FunctionTypeFactory factory;
+    factory.addNormArg("h", Type::Int64(), isVar);
+    factory.setExitType(Type::Int64());
+    ResourceSignature signature;
+    signature.mode = ResourceSignature::Mode::Concrete;
+    if (usesParameter) {
+        signature.params.push_back(
+            ResourceSignature::ParamUse{
+                .index = 0,
+                .cls   = ResourceClass::Object,
+                .name  = {},
+                .mode  = AccessMode::ReadModifyWrite,
+            });
+    }
+    factory.setResources(signature);
+    return factory.build();
+}
+
+/// Graphs built here rather than by the front end: the model's FUNC/CALL result inference has no
+/// syntax yet (design effects plan steps 1-2 are the internal model), so the shapes the plan
+/// names are built directly and asked the public queries.
+void syntheticGraphs(std::ostream &os, const rt::Program &base) {
+    uint32_t nextId = static_cast<uint32_t>(base.tableSize()) + 1000;
+    const auto alloc = [&] { return static_cast<rt::GraphId>(nextId++); };
+    const rt::GraphId idOpen  = alloc();
+    const rt::GraphId idSame  = alloc();
+    const rt::GraphId idView  = alloc();
+    const rt::GraphId idNext  = alloc();
+    const rt::GraphId idPass  = alloc();
+    const rt::GraphId idTyped = alloc();
+    const rt::GraphId idTypedUnused = alloc();
+    const rt::GraphId idTypedCaller = alloc();
+    const rt::GraphId idTypedSame   = alloc();
+    enum Caller {
+        kOpenTwice,
+        kOpenTwiceCtrl,
+        kSameTwice,
+        kSameOneCtrl,
+        kCallerCount,
+    };
+    std::array<rt::GraphId, kCallerCount> callerIds{};
+    for (auto &id : callerIds) {
+        id = alloc();
+    }
+
+    std::vector<rt::GCGraph *> graphs;
+    const auto addPort = [](rt::GraphDraft &draft, Type *type) {
+        const rt::gc_slot_idx_t slot = draft.allocateRuntimeSlot(type);
+        const rt::gc_node_ref_t port = draft.addPortNode(type, slot);
+        draft.appendNormPort(port);
+        return port;
+    };
+    const auto finish = [](rt::GraphDraft &draft, rt::gc_node_ref_t value) {
+        draft.setReturnNode(value, rt::GCReturnKind::Self);
+        draft.setOutputNode(value);
+        draft.setExitNode(value);
+    };
+    const auto encode = [&](rt::GraphDraft &draft, const std::string &name) {
+        rt::GCGraph *graph = draft.encode("synth_" + name, "synth:" + name);
+        graphs.push_back(graph);
+        return graph;
+    };
+    const auto makeDraft = [](rt::GraphId id, FunctionType *type) {
+        auto draft = std::make_unique<rt::GraphDraft>();
+        draft->setId(id);
+        draft->setFuncType(type);
+        return draft;
+    };
+
+    // `open()` makes a fresh object, `same(x)` returns its parameter, `view(x)` a view of it,
+    // `next(h)` touches the object the handle names.
+    {
+        auto draft = makeDraft(idOpen, nullaryInt());
+        const rt::gc_node_ref_t value =
+            draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_open");
+        finish(*draft, value);
+        encode(*draft, "open");
+    }
+    {
+        auto draft = makeDraft(idSame, unaryInt());
+        const rt::gc_node_ref_t port = addPort(*draft, Type::Int64());
+        const std::array<rt::gc_node_ref_t, 1> inputs{port};
+        const rt::gc_node_ref_t value =
+            draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_same");
+        draft->setNormInputs(value, inputs);
+        finish(*draft, value);
+        encode(*draft, "same");
+    }
+    {
+        auto draft = makeDraft(idView, unaryInt());
+        const rt::gc_node_ref_t port = addPort(*draft, Type::Int64());
+        const std::array<rt::gc_node_ref_t, 1> inputs{port};
+        const rt::gc_node_ref_t value =
+            draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_view");
+        draft->setNormInputs(value, inputs);
+        finish(*draft, value);
+        encode(*draft, "view");
+    }
+    {
+        auto draft = makeDraft(idNext, unaryInt());
+        const rt::gc_node_ref_t port = addPort(*draft, Type::Int64());
+        const std::array<rt::gc_node_ref_t, 1> inputs{port};
+        const rt::gc_node_ref_t value =
+            draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+        draft->setNormInputs(value, inputs);
+        finish(*draft, value);
+        encode(*draft, "next");
+    }
+    {
+        // A function whose return is its parameter: the result is the port, not fresh.
+        auto draft = makeDraft(idPass, unaryInt());
+        finish(*draft, addPort(*draft, Type::Int64()));
+        encode(*draft, "passthrough");
+    }
+    {
+        // The same body, but the type publishes `uses h`: the call touches the argument even
+        // though the body does not.
+        auto draft = makeDraft(idTyped, typedUnaryInt(true));
+        finish(*draft, addPort(*draft, Type::Int64()));
+        encode(*draft, "typed");
+    }
+    {
+        // `pure` with a `var` parameter: a call that passes a cell the signature says is unused
+        // touches nothing (the plan's 2.2/2.3 property).
+        auto draft = makeDraft(idTypedUnused, typedUnaryInt(false, true));
+        finish(*draft, addPort(*draft, Type::Int64()));
+        encode(*draft, "typed-unused");
+    }
+    {
+        auto draft = makeDraft(idTypedCaller, nullaryInt());
+        draft->addDependency(idOpen);
+        draft->addDependency(idPass);
+        draft->addDependency(idTyped);
+        draft->addDependency(idTypedUnused);
+        const rt::gc_node_ref_t a = draft->addFuncNode(idOpen, Type::Int64());
+        const rt::gc_node_ref_t b = draft->addFuncNode(idOpen, Type::Int64());
+        const std::array<rt::gc_node_ref_t, 1> ax{a};
+        const std::array<rt::gc_node_ref_t, 1> by{b};
+        const rt::gc_node_ref_t generic = draft->addFuncNode(idPass, Type::Int64());
+        draft->setNormInputs(generic, ax);
+        const rt::gc_node_ref_t ca = draft->addFuncNode(idTyped, Type::Int64());
+        const rt::gc_node_ref_t cb = draft->addFuncNode(idTyped, Type::Int64());
+        const rt::gc_node_ref_t ua = draft->addFuncNode(idTypedUnused, Type::Int64());
+        draft->setNormInputs(ca, ax);
+        draft->setNormInputs(cb, by);
+        draft->setNormInputs(ua, ax);
+        finish(*draft, cb);
+        encode(*draft, "typed-caller");
+    }
+    {
+        // Two calls of the same typed function on one value: one resource, serialised. The body
+        // says nothing, so before step 2 there is no pair at all.
+        auto draft = makeDraft(idTypedSame, nullaryInt());
+        draft->addDependency(idOpen);
+        draft->addDependency(idTyped);
+        const rt::gc_node_ref_t a = draft->addFuncNode(idOpen, Type::Int64());
+        const std::array<rt::gc_node_ref_t, 1> ax{a};
+        const rt::gc_node_ref_t ca = draft->addFuncNode(idTyped, Type::Int64());
+        const rt::gc_node_ref_t cb = draft->addFuncNode(idTyped, Type::Int64());
+        draft->setNormInputs(ca, ax);
+        draft->setNormInputs(cb, ax);
+        const std::array<rt::gc_node_ref_t, 1> after{ca};
+        draft->setCtrlInputs(cb, after);
+        finish(*draft, cb);
+        encode(*draft, "typed-same");
+    }
+
+    // (a) open() then two operations on the same returned value: one object, serialised.
+    for (const Caller caller : {kOpenTwice, kOpenTwiceCtrl, kSameTwice, kSameOneCtrl}) {
+        const bool withCtrl = caller == kOpenTwiceCtrl || caller == kSameOneCtrl;
+        auto draft = makeDraft(callerIds[caller], nullaryInt());
+        draft->addDependency(idOpen);
+        if (caller != kOpenTwice && caller != kOpenTwiceCtrl) {
+            draft->addDependency(idSame);
+        }
+        const rt::gc_node_ref_t a = draft->addFuncNode(idOpen, Type::Int64());
+        const rt::gc_node_ref_t b = caller != kSameOneCtrl
+                                        ? draft->addFuncNode(idOpen, Type::Int64())
+                                        : rt::kInvalidNodeRef;
+        rt::gc_node_ref_t first = rt::kInvalidNodeRef;
+        rt::gc_node_ref_t second = rt::kInvalidNodeRef;
+        if (caller == kOpenTwice || caller == kOpenTwiceCtrl) {
+            // Two open() results: before result inference both are Unknown, so the model cannot
+            // tell them apart and has to serialise them.
+            first  = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            second = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            const std::array<rt::gc_node_ref_t, 1> x{a};
+            const std::array<rt::gc_node_ref_t, 1> y{b};
+            draft->setNormInputs(first, x);
+            draft->setNormInputs(second, y);
+        } else if (caller == kSameTwice) {
+            // same(open()) twice: the result is Same of each fresh object.
+            const std::array<rt::gc_node_ref_t, 1> ax{a};
+            const std::array<rt::gc_node_ref_t, 1> by{b};
+            const rt::gc_node_ref_t ia = draft->addFuncNode(idSame, Type::Int64());
+            const rt::gc_node_ref_t ib = draft->addFuncNode(idSame, Type::Int64());
+            draft->setNormInputs(ia, ax);
+            draft->setNormInputs(ib, by);
+            first  = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            second = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            const std::array<rt::gc_node_ref_t, 1> x{ia};
+            const std::array<rt::gc_node_ref_t, 1> y{ib};
+            draft->setNormInputs(first, x);
+            draft->setNormInputs(second, y);
+        } else {
+            // same(open()) and open() are one object (Same), so the two next calls conflict.
+            const std::array<rt::gc_node_ref_t, 1> ax{a};
+            const rt::gc_node_ref_t ia = draft->addFuncNode(idSame, Type::Int64());
+            draft->setNormInputs(ia, ax);
+            first  = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            second = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            const std::array<rt::gc_node_ref_t, 1> x{ia};
+            const std::array<rt::gc_node_ref_t, 1> y{a};
+            draft->setNormInputs(first, x);
+            draft->setNormInputs(second, y);
+        }
+        if (withCtrl) {
+            const std::array<rt::gc_node_ref_t, 1> after{first};
+            draft->setCtrlInputs(second, after);
+        }
+        finish(*draft, second);
+        encode(*draft, caller == kOpenTwice       ? "open-twice"
+                           : caller == kOpenTwiceCtrl ? "open-twice-ctrl"
+                           : caller == kSameTwice     ? "same-twice"
+                                                      : "same-one-ctrl");
+    }
+
+    // The signature is part of the type: equal signatures intern to one object, and a Concrete
+    // signature is not the Generic type of the same parameters (design effects plan 2.2).
+    {
+        FunctionType *a = typedUnaryInt(true);
+        FunctionType *b = typedUnaryInt(true);
+        FunctionType *pure = typedUnaryInt(false);
+        FunctionType *generic = unaryInt();
+        os << "RESOURCES synth type intern " << (a == b ? "same" : "different") << " pure_generic "
+           << (pure->equals(generic) ? "same" : "different") << "\n";
+    }
+
+    rt::Program synthetic(base);
+    for (rt::GCGraph *graph : graphs) {
+        synthetic.bind(graph->id(), graph);
+    }
+
+    const auto byName = [&](const std::string &name) -> rt::GCGraph * {
+        for (rt::GCGraph *graph : graphs) {
+            if (graph->name() == name) {
+                return graph;
+            }
+        }
+        return nullptr;
+    };
+    for (const char *name :
+         {"open", "same", "view", "next", "passthrough", "typed", "typed-unused"}) {
+        const rt::GCGraph *graph = byName(std::string("synth:") + name);
+        os << "RESOURCES synth result " << name << " "
+           << rt::toString(rt::footprintOf(synthetic, graph)) << "\n";
+    }
+    for (const char *name : {
+             "open-twice",
+             "open-twice-ctrl",
+             "same-twice",
+             "same-one-ctrl",
+             "typed-caller",
+             "typed-same",
+         }) {
+        const rt::GCGraph *graph = byName(std::string("synth:") + name);
+        for (rt::gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            if (graph->node(ref)->kind != rt::GCNodeKind::Func) {
+                continue;
+            }
+            const rt::GCGraph *callee = synthetic.calleeOf(*graph, ref);
+            os << "RESOURCES synth node " << name << " " << ref << " FUNC "
+               << (callee != nullptr ? callee->name() : std::string("<unresolved>")) << ": "
+               << rt::toString(rt::resourcesOf(synthetic, *graph, ref)) << "\n";
+        }
+        for (const rt::RequiredOrdering &o : rt::requiredOrderings(synthetic, *graph)) {
+            os << "RESOURCES synth order " << name << " " << o.first << " " << o.second << " "
+               << rt::conflictKindName(o.why) << " " << (o.ordered ? "ordered" : "unordered");
+            if (o.ordered) {
+                os << " by " << (o.byData ? "data" : "control");
+            }
+            os << "\n";
+        }
+    }
+}
+
 } // namespace
 
 const camel::runtime::Program *
@@ -102,6 +414,33 @@ ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     table.set("semtest:cell_write", {.stateOnly = true});
     table.set("semtest:io", {.pure = false});
     table.set("semtest:pure", {.pure = true});
+    // Synthetic handle operators: the model's shapes before the `#resource`/`uses` syntax exists.
+    table.set("semtest:handle_open", {.stateOnly = true});
+    table.set("semtest:handle_next", {.stateOnly = true});
+    table.set("semtest:handle_same", {.stateOnly = true});
+    table.set("semtest:handle_view", {.stateOnly = true});
+    // A handle: one resource per value, named by the declaration that introduces it.
+    constexpr const char *kStream = "semtest:Stream";
+    table.declareResources(
+        "semtest:handle_open",
+        ResourceSpec{.result    = ResultAlias{.kind = ResultAlias::Kind::Fresh},
+                     .allocates = Resource{.cls = ResourceClass::Handle, .name = kStream}});
+    table.declareResources(
+        "semtest:handle_next",
+        ResourceSpec{
+            .accesses = {operandAccess(
+                ResourceClass::Handle, 0, AccessMode::ReadModifyWrite, kStream)},
+            .result   = ResultAlias{.kind = ResultAlias::Kind::Fresh}});
+    table.declareResources(
+        "semtest:handle_same",
+        ResourceSpec{
+            .accesses = {operandAccess(ResourceClass::Handle, 0, AccessMode::Read, kStream)},
+            .result   = ResultAlias{.kind = ResultAlias::Kind::Same, .operand = 0}});
+    table.declareResources(
+        "semtest:handle_view",
+        ResourceSpec{
+            .accesses = {operandAccess(ResourceClass::Handle, 0, AccessMode::Read, kStream)},
+            .result   = ResultAlias{.kind = ResultAlias::Kind::View, .operand = 0}});
     const ResourceAccess cellWrite = operandAccess(ResourceClass::Variable, 0, AccessMode::Write);
     attempt(os, "valid", "semtest:cell_write", ResourceSpec{.accesses = {cellWrite}});
     attempt(
@@ -268,5 +607,6 @@ ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             os << "\n";
         }
     }
+    syntheticGraphs(os, *program);
     return program;
 }

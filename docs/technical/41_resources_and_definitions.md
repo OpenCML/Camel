@@ -79,7 +79,7 @@ The higher-order `:mark/` operators (they run the functions they are given), `py
 
 ### 1.3 Queries (`camel/runtime/resources.h`)
 
-- `resourcesOf(graph, node)`: the accesses of one node, each with the node of the same graph whose
+- `resourcesOf(program, graph, node)`: the accesses of one node, each with the node of the same graph whose
   value names the resource (`NodeAccess::value`), or `anyValue` when it cannot be told. An OPER
   reads its declaration; a FUNC, a LOOP, and a CALL whose callee is a constant function or a
   closure the graph builds from one read the footprints of the graphs they run, mapped onto
@@ -88,12 +88,15 @@ The higher-order `:mark/` operators (they run the functions they are given), `py
   unknown value is conservative.
 - `footprintOf(graph)`: what running a graph once does to resources it receives (its norm ports,
   with ports and closure ports), to ambient state and outside the program; resources it makes
-  itself are not part of it. Footprints of recursive graphs are a least fixpoint; a finished one
+  itself are not part of it, and its `result` says whether the value it returns is fresh, one of
+  its norm ports, or unknown. Footprints of recursive graphs are a least fixpoint; a finished one
   is cached by the graph's serial and the declaration epoch.
-- `originOf(graph, value)` and `mayAlias(graph, a, b)`: within one activation, a value is a fresh
-  allocation of a node (an operator whose result is fresh, a COPY), a received value (a port), or
-  unknown; two fresh allocations of different nodes, or a fresh one and a received one, are never
-  one resource; two ports may be.
+- `originOf(program, graph, value)` and `mayAlias(program, graph, a, b)`: within one activation, a
+  value is a fresh allocation of a node (an operator whose result is fresh, a COPY), a received
+  value (a port), or unknown; a FUNC or CALL whose callee returns the value it was given (a
+  `Same`/`View` result, from the callee's footprint or its function type) is its argument's
+  origin. Two fresh allocations of different nodes, or a fresh one and a received one, are never
+  one resource; two ports may be. The program is needed to resolve a callee.
 - `regionBounds(instance, region)` and `regionsMayOverlap`: the bounding box of a mapped region
   over the instance's domain, and whether two may overlap.
 - `resourceConflict(graph, a, b)`: `External` when both have external effects (the outside world
