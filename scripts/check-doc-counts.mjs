@@ -401,7 +401,7 @@ const RULES = [
         check(file, text) {
             const findings = []
             text.split(/\r?\n/).forEach((line, index) => {
-                if (!line.includes('快照')) return
+                if (!line.includes('AST') || !line.includes('快照')) return
                 const match = line.match(/([\d,]+)\s*个文件/)
                 if (!match) return
                 const says = int(match[1])
@@ -422,6 +422,7 @@ const RULES = [
         check(file, text) {
             const findings = []
             text.split(/\r?\n/).forEach((line, index) => {
+                if (!line.includes('modules')) return
                 const match = line.match(/([\d,]+)\s*个子目录/)
                 if (!match) return
                 const says = int(match[1])
