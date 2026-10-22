@@ -1,0 +1,18 @@
+/**
+ * A call whose argument is a parameter of the enclosing function is not a constant: a key that
+ * needs one refuses the call by name (FoldCallArgumentNotConstant), not as an anonymous
+ * expression. `half(n)` folds only where `n` is a constant; here `n` is known at run time.
+ */
+module fold_call_argument
+
+func half(n: int): int {
+    return n / 2
+}
+
+func at(t: (int, int, int), n: int): int {
+    return t.[half(n)]
+}
+
+func main(): int {
+    return at((10, 20, 30), 4)
+}

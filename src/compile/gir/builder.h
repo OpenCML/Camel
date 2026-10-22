@@ -1200,6 +1200,59 @@ class Builder {
     /// The graphs whose declaration has a `when` condition, with its source text.
     std::unordered_map<const DraftGraphBuilder *, GCT::Tree::WhenClause> whenClauses_;
 
+    // ---- A call of a pure function with constant arguments is that constant ----
+    // The same evaluator a `when` condition uses reads the call's body; a call in a place that
+    // needs a compile-time constant is a diagnostic when it does not reduce to one.
+
+    /// Why a call in a constant position did not become one. `NotAProgramCall` is not a
+    /// refusal: the call is not one this evaluation knows (a function value, an operator, a
+    /// name with several candidates), so the ordinary build decides and its diagnostics apply.
+    enum class FoldRefusal {
+        None,
+        NotAProgramCall,
+        ArgumentNotConstant,
+        HasEffects,
+        TooDeep,
+        ResultNotConstantKind,
+        NotEvaluable,
+    };
+    struct FoldedCall {
+        FoldRefusal refusal = FoldRefusal::NotAProgramCall;
+        data_ptr_t data;
+        /// The call as written (`first_field`), for a diagnostic.
+        std::string call;
+        std::string reason;
+    };
+    /// How many nested calls a build-time evaluation follows before it says the call is not a
+    /// constant here (`FoldCallTooDeep`). A recursion that reaches its base case in fewer steps
+    /// folds; one that does not is reported where a constant is required.
+    static constexpr size_t kMaxFoldedCallDepth = 64;
+    /// Evaluates `call` as a constant when it is a call of a pure function whose arguments are
+    /// constants.
+    FoldedCall foldConstantCall(const GCT::node_ptr_t &call);
+    /// The evaluation of one call: resolves the callee, checks its purity, and runs its body
+    /// through the evaluator `when` conditions use. `arguments` are the ordinary arguments,
+    /// already evaluated; `evalArgument` evaluates a `with` argument expression. `buildFirst`
+    /// builds the callee's body (and the generic instance) before reading it, so a body that
+    /// does not build keeps its own diagnostics instead of disappearing into a folded value.
+    FoldedCall evaluateCallAtBuildTime(
+        const GCT::node_ptr_t &call, GCT::node_ptr_t callee,
+        const std::vector<data_ptr_t> &arguments,
+        const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
+        const camel::core::type::type_bindings_t &vars, size_t depth, bool buildFirst);
+    /// evaluateCallAtBuildTime for a call inside a body being evaluated: a refusal becomes an
+    /// exception carrying the matching problem.
+    data_ptr_t evaluateCallInsideBody(
+        const GCT::node_ptr_t &call, const GCT::node_ptr_t &callee,
+        const std::vector<data_ptr_t> &arguments,
+        const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
+        const camel::core::type::type_bindings_t &vars, size_t depth);
+    /// The value of an expression the compiler can compute at build time. Throws when it cannot
+    /// (the evaluator's failure type is internal to builder_when.cpp).
+    data_ptr_t compileTimeExpression(const GCT::node_ptr_t &expression);
+    /// Reports a refusal at `origin`, naming `folded.call`. Never returns.
+    [[noreturn]] void reportFoldRefusal(const FoldedCall &folded, const GCT::node_ptr_t &origin);
+
     std::optional<node_handle_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
             std::stringstream ss;

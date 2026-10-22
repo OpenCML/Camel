@@ -1,0 +1,25 @@
+/**
+ * A call of a pure function with constant arguments is a compile-time constant (design
+ * principles 5.1, 6.5): `first_field` computes the first field name with `static for`, and its
+ * call is the key of a static access, where only a constant is allowed.
+ */
+module fold_call_key
+
+type Point = { x: int, y: (int, int) }
+type Size = { w: float, h: float }
+
+/// The name of the first field of S.
+func first_field::<S>(): string {
+    return ( static for (n, _) in fields S => n ).[0]
+}
+
+/// The first field of a value of S, read with the folded name.
+func first_of::<S>(v: S) {
+    return v.[first_field::<S>()]
+}
+
+func main(): int sync {
+    println(first_of({ x: 7, y: (8, 9) }))
+    println(first_of({ w: 1.5, h: 2.5 }))
+    return 0
+}
