@@ -57,6 +57,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [para](#para) | `import { ... } from para` | C++ | 3 |
 | [this](#this) | `import { ... } from this` | C++ | 1 |
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
+| [tiles](#tiles) | `import { ... } from tiles` | C++ | 12 |
 
 <a id="built-in-functions"></a>
 
@@ -3504,3 +3505,164 @@ Commits a transaction of `open_function` to a Program of its own (the running pr
 
 - With effects: changes the transaction.
 - Example: `to_function(t, f)`
+
+<a id="tiles"></a>
+
+## `tiles`: programs on a CUDA device
+
+Programs on a CUDA device: a function value is compiled to device code, its inputs are uploaded,
+the device computes, and the results come back to the host. `gpu` marks a function to prefer the
+device, `run`/`run_device` run one explicitly, `source`/`inspect`/`benchmark` show what would
+run, and `upload`/`download` move a value by hand. The device holds a foreign resource
+(`tiles:device`) and the driver is ambient state (`tiles:driver`), so every operator of this
+module has effects and none is folded or dropped.
+
+#### `gpu`
+
+```camel
+gpu: (fn: (x: float) => float) => (x: float) => float
+```
+
+Compiles the function to device code and returns a function of the same type that prefers the
+device: it runs there when the device can take it, and on the host otherwise. The function
+takes no with-parameter, has at least one ordinary parameter, and every leaf of its parameters
+and result is a float or an f32 tensor. The result is the argument's own type, which a
+declaration cannot say without also dropping that restriction.
+
+- With effects: marks a function to prefer the device.
+- Example: `let fast = gpu((x: float): float => x + 1.0)`
+
+#### `upload`
+
+```camel
+upload: (value: Tensor<f32>) => Device<Tensor<f32>>
+```
+
+Uploads every leaf of the value — a float or an f32 tensor, alone or inside a tuple or a
+struct — and returns the same tree with each leaf wrapped in `Device<...>`. A leaf of any other
+type is refused when the call is compiled.
+
+- With effects: transfers to the device.
+- Example: `upload(new([1.0, 2.0]))` gives `a Device<Tensor<f32>>`
+
+#### `download`
+
+```camel
+download: (value: Device<Tensor<f32>>) => Tensor<f32>
+```
+
+Downloads every device leaf of the value and returns the host value it came from. A tree with a
+leaf that is not a device value is refused when the call is compiled.
+
+- With effects: transfers from the device.
+- Example: `download(d)` gives `the tensor d holds`
+
+#### `run`
+
+```camel
+run: <fn: (a: float, b: float) => float> (inputs: (float, float)) => float
+```
+
+Runs the function on the CUDA device: its parameter (or the tuple of its parameters) is
+uploaded, the device computes, and the result is downloaded again. The result type is the
+function's result type.
+
+- With effects: transfers both ways and runs device code.
+- Example: `run<add>((2.0, 3.0))` gives `5.0`
+
+#### `run_device`
+
+```camel
+run_device: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
+```
+
+Runs the function as `run` does but leaves the result on the device: each leaf of it comes back
+wrapped in `Device<...>`.
+
+- With effects: transfers to the device and runs device code.
+- Example: `run_device<add>((2.0, 3.0))` gives `a Device<float>`
+
+#### `run_preferred_resident`
+
+```camel
+run_preferred_resident: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
+```
+
+Runs the function the way `@gpu` does — a prepared device program when one can be made, the
+host otherwise — and answers the resident form of its result.
+
+- With effects: transfers to the device and runs device code.
+- Example: `run_preferred_resident<add>((2.0, 3.0))` gives `a Device<float>`
+
+#### `source`
+
+```camel
+source: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+```
+
+The CUDA source the function compiles to, without running it.
+
+- With effects: compiles device code.
+- Example: `println(source<add>((2.0, 3.0)))`
+
+#### `inspect`
+
+```camel
+inspect: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+```
+
+A report on the function's device plan, without running it: the kernel, its launch shape and
+the values it would keep on the device.
+
+- With effects: compiles device code.
+- Example: `println(inspect<add>((2.0, 3.0)))`
+
+#### `benchmark`
+
+```camel
+benchmark: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+```
+
+Times the function on the device, and on the host for comparison, and returns the report as
+JSON text.
+
+- With effects: transfers both ways and runs device code.
+- Example: `println(benchmark<add>((2.0, 3.0)))`
+
+#### `regions`
+
+```camel
+regions: <fn: (a: float, b: float) => float> () => string
+```
+
+The regions the compiler would take for the whole program, as text: which nodes would run on
+the device and why the others would not.
+
+- With effects: compiles device code.
+- Example: `println(regions<work>())`
+
+#### `available`
+
+```camel
+available: () => bool
+```
+
+Whether this machine can run a program on a CUDA device: false when the driver, the toolkit or
+a visible device is missing. A capability question only — a device the run names with
+`--devices` and that is not there is a fault, never `false`.
+
+- With effects: probes the driver.
+- Example: `available()`
+
+#### `device`
+
+```camel
+device: () => string
+```
+
+A description of the CUDA device the run selects: its ordinal, name, compute capability and
+memory. Asking is a requirement, not a preference: with no device the call is a fault.
+
+- With effects: probes the driver.
+- Failure: fault `RuntimeError` when this build or this machine has no CUDA device; fault `DeviceUnavailable` when `--devices` names a device that is not there.
+- Example: `println(device())`

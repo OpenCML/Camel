@@ -620,3 +620,42 @@ case = "../../../cases/compile/native/this_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "this_type.cml:13:16", "argument types: <> (int)", "<this:zen>: () => string"]
+
+# ---- The declarations of `tiles` (handover H156) ----
+#
+# `tiles:available` and `tiles:device` have fixed signatures and are declared in stdlib/tiles.cml;
+# the module's other ten operators take their signature from an argument and stay computed in C++.
+# `available` runs here (CUDA_VISIBLE_DEVICES=-1 makes it false on every machine, with or without a
+# device); `device` is only type-checked, because asking for a device without one is a fault.
+
+[[tests]]
+name = "native.tiles_declaration_import"
+desc = "`tiles:available` and `tiles:device` are declared with no parameters, a `bool` and a `string` result; the importer reads both from `stdlib/tiles.cml`, `available` reaches the C++ operator, and `device` type-checks as `() => string` without being called."
+kind = "behavior"
+case = "../../../cases/compile/native/tiles_declaration_import.cml"
+args = ["${case}"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "false\n"
+
+[[tests]]
+name = "native.tiles_wrong_arity"
+desc = "`tiles:available` is declared with no ordinary argument: extra ones are refused at the call, and the overload the message lists is the declaration's `() => bool`."
+kind = "negative"
+case = "../../../cases/compile/native/tiles_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tiles_arity.cml:11:22", "argument types: <> (int, int)", "<tiles:available>: () => bool"]
+
+[[tests]]
+name = "native.tiles_result_type"
+desc = "The result type of `tiles:available` is the declaration's `bool`: binding the call to an `int` is refused, and the message's `bool` is the type `stdlib/tiles.cml` gives the operator."
+kind = "negative"
+case = "../../../cases/compile/native/tiles_result_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_code = "0x03000110"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'bool', which is not the declared type 'int'"]

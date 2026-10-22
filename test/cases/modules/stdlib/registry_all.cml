@@ -25,6 +25,9 @@ import time
 import ckpt
 import tensor
 import array
+// `tiles` needs no device to load: `inspect --ops` lists its operators, and the stdlib registry
+// tests hold them to the module's purity and signature declarations (handover H156).
+import tiles
 
 func main(): int {
     return 0
