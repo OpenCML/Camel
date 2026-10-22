@@ -119,7 +119,7 @@ Clang, CMake, Conan and Ninja are required for the build itself. Python is neede
 
 ### Submitting Pull Requests
 
-1. Branch from the latest `develop`. `main` is release-only: never commit to `main` or `develop` directly
+1. Branch from the latest `develop` and open the PR against `develop`. `main` is release-only: never commit to `main` or `develop` directly
 2. Keep PRs focused for easier review
 3. Run `npm run test` locally before opening the PR. No CI runs on pull requests: `.github/workflows/ci.yml` builds and tests on release tags (`v*`) and on manual dispatch, so a PR is not gated automatically
 4. Request review from a maintainer. A reviewed PR is merged into `develop` with a merge commit (`git merge --no-ff`), not squashed or rebased; the merge commit summarizes the integrated work

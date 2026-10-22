@@ -121,7 +121,7 @@ Clang、CMake、Conan、Ninja 是构建本身需要的。Python 只用于 `pytho
 
 ### 提交 Pull Request
 
-1. 基于最新的 `develop` 创建分支。`main` 只用于发布：不要直接向 `main` 或 `develop` 提交
+1. 基于最新的 `develop` 创建分支，并向 `develop` 提交 PR。`main` 只用于发布：不要直接向 `main` 或 `develop` 提交
 2. 保持 PR 范围聚焦，便于审查
 3. 提交 PR 前在本地运行 `npm run test`。拉取请求不会自动运行 CI：`.github/workflows/ci.yml` 在发布标签（`v*`）与手动触发时构建并测试，PR 不会被自动门禁
 4. 请求维护者 Review。通过审查的 PR 以合并提交（`git merge --no-ff`）合入 `develop`，不 squash、不 rebase；合并提交概括整合的工作
