@@ -76,6 +76,28 @@ std::string to_string(TypeOp op) {
     }
 }
 
+const std::string ResourceClauseLoad::toString() const {
+    if (pure_) {
+        return "ResourceClause: pure";
+    }
+    std::string result = "ResourceClause: ";
+    for (size_t i = 0; i < uses_.size(); ++i) {
+        result += (i > 0 ? ", " : "") + uses_[i].toString();
+    }
+    return result;
+}
+
+const std::string ResourceClauseLoad::geneCode() const {
+    if (pure_) {
+        return "pure";
+    }
+    std::string result = "uses ";
+    for (size_t i = 0; i < uses_.size(); ++i) {
+        result += (i > 0 ? ", " : "") + uses_[i].toString();
+    }
+    return result;
+}
+
 const std::string FuncTypeLoad::toString() const {
     std::string result = "FuncType:";
     if (!modifiers_.empty()) {

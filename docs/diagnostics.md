@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-224 diagnostics: 207 errors, 17 warnings.
+229 diagnostics: 212 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -188,6 +188,11 @@ prints one entry.
 | `0x0300019B` | [SemanticDiag::ConstasArgumentMissing](#constasargumentmissing) | Error |
 | `0x0300019C` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error |
 | `0x0300019D` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error |
+| `0x0300019E` | [SemanticDiag::UnknownResource](#unknownresource) | Error |
+| `0x0300019F` | [SemanticDiag::PureAndUses](#pureanduses) | Error |
+| `0x030001A0` | [SemanticDiag::ResourceGroupCycle](#resourcegroupcycle) | Error |
+| `0x030001A1` | [SemanticDiag::HandleTypeNotNominal](#handletypenotnominal) | Error |
+| `0x030001A2` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5036,6 +5041,154 @@ func both(x: int): int {
 
 func main(): int {
     return both(1)
+}
+```
+
+### UnknownResource
+
+`0x0300019E` · Error · `SemanticDiag::UnknownResource`
+
+**Message**
+
+```text
+The name '{0}' in the resource clause of '{1}' is neither a parameter nor a resource.
+```
+
+**Help**
+
+```text
+A clause names a parameter of the function (the value a call touches), a resource the module declares (`resource {0}`), one of the resources every program has (stdout, stderr, stdin, clock, env, fs), or a resource imported from another module. Check the spelling, or declare the resource.
+```
+
+**Example** (`test/cases/effects/err_unknown_resource.cml`, run as `camel test/cases/effects/err_unknown_resource.cml`)
+
+```camel
+// A clause names a parameter, a resource the module declares, one of the standard resources, or
+// one imported from another module. `nowhere` is none of those (UnknownResource).
+func f(x: int): int uses nowhere {
+    return x
+}
+
+func main(): int {
+    return f(1)
+}
+```
+
+### PureAndUses
+
+`0x0300019F` · Error · `SemanticDiag::PureAndUses`
+
+**Message**
+
+```text
+The signature of '{0}' says both 'pure' and 'uses'.
+```
+
+**Help**
+
+```text
+'pure' says the call touches no resource at all; 'uses' names the resources it touches. Write one of the two.
+```
+
+**Example** (`test/cases/effects/err_pure_and_uses.cml`, run as `camel test/cases/effects/err_pure_and_uses.cml`)
+
+```camel
+// `pure` says a call touches no resource at all; `uses` names the resources it touches. A
+// signature cannot say both (PureAndUses).
+func f(): int pure uses fs {
+    return 0
+}
+
+func main(): int {
+    return f()
+}
+```
+
+### ResourceGroupCycle
+
+`0x030001A0` · Error · `SemanticDiag::ResourceGroupCycle`
+
+**Message**
+
+```text
+The resource group '{0}' contains itself: {1}.
+```
+
+**Help**
+
+```text
+A group names resources, or other groups that name resources. Expand them in an order: a group cannot be one of its own members.
+```
+
+**Example** (`test/cases/effects/err_group_cycle.cml`, run as `camel test/cases/effects/err_group_cycle.cml`)
+
+```camel
+// A group names resources, or other groups that name resources, in an order: `a` contains itself
+// through `b` (ResourceGroupCycle).
+resource a = [b]
+resource b = [a]
+
+func main(): int {
+    return 0
+}
+```
+
+### HandleTypeNotNominal
+
+`0x030001A1` · Error · `SemanticDiag::HandleTypeNotNominal`
+
+**Message**
+
+```text
+'{0}' is not a nominal type declaration, so '#resource' says nothing about it.
+```
+
+**Help**
+
+```text
+A handle is a type with an identity of its own, one resource per value. Write the tag before a struct or an enum declaration (a `type` that names its fields or variants), not before an alias or a type function.
+```
+
+**Example** (`test/cases/effects/err_handle_not_nominal.cml`, run as `camel test/cases/effects/err_handle_not_nominal.cml`)
+
+```camel
+// `#resource` says a type is a handle: one resource per value, named by the declaration. An alias
+// has no identity of its own to name (HandleTypeNotNominal).
+#resource type Id = int
+
+func main(): int {
+    return 0
+}
+```
+
+### NativeResourceMismatch
+
+`0x030001A2` · Error · `SemanticDiag::NativeResourceMismatch`
+
+**Message**
+
+```text
+The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'.
+```
+
+**Help**
+
+```text
+A body-less declaration is the whole signature of a C++ operator, its resources included: write the clause the operator declares, or remove the clause and let the operator's declaration be the one the module publishes.
+```
+
+**Example** (`test/cases/effects/native_clause_wrong.cml`, run as `camel test/cases/effects/native_clause_wrong.cml`)
+
+```camel
+module fs
+
+import { read_text } from fs
+
+export func exists(path: string): bool pure
+
+func main(): int sync {
+    println(exists("no/such/file"))
+    return 0
 }
 ```
 

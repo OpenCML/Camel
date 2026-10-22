@@ -1,0 +1,9 @@
+// A clause names a parameter, a resource the module declares, one of the standard resources, or
+// one imported from another module. `nowhere` is none of those (UnknownResource).
+func f(x: int): int uses nowhere {
+    return x
+}
+
+func main(): int {
+    return f(1)
+}

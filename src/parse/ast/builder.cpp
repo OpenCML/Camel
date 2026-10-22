@@ -435,6 +435,8 @@ Value Builder::visitDecl(syn::Node context) {
         return visitFuncDecl(cst::FuncDecl(context));
     case NK::TypeDecl:
         return visitTypeDecl(cst::TypeDecl(context));
+    case NK::ResourceDecl:
+        return visitResourceDecl(cst::ResourceDecl(context));
     case NK::TagDecl:
         return visitTagDecl(cst::TagDecl(context));
     case NK::RuleDecl:
@@ -1664,6 +1666,9 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         *typeOptNode << typeNode;
     }
     *funcTypeNode << typeOptNode;
+    if (context->get<cst::ResourceClause>()) {
+        *funcTypeNode << any2node(visitResourceClause(context->get<cst::ResourceClause>()));
+    }
 
     // The name: an identifier, or the operator of an overload (`func operator +(a, b)`, design
     // principles 4.3). An overload is a function under the reserved name of its operator
@@ -1878,6 +1883,62 @@ typeDecl
       (typeExpr | STRING)
     ;
 */
+/*
+resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+*/
+Value Builder::visitResourceDecl(cst::ResourceDecl context) {
+    ENTER("ResourceDecl");
+    const auto name  = context->get<cst::IdentDef>();
+    node_ptr_t declNode = createNodeAs<ResourceDeclLoad>(
+        qualifyRef(Reference(name ? name->text() : std::string{})));
+    setNodeTokenRangeByContext(declNode, context);
+    auto decl = declNode->loadAs<ResourceDeclLoad>();
+    decl->setDoc(docOf(context));
+    if (const auto group = context->get<cst::BracketIdents>()) {
+        decl->setGroup(true);
+        if (const auto list = group->get<cst::IdentList>()) {
+            for (const auto member : list->all<cst::IdentDef>()) {
+                // A member is a name as written: `stdout` is the resource every program has,
+                // and `m::r` one of another module's. An enclosing namespace is not implied
+                // (a group may name a standard resource from inside a namespace block).
+                decl->addMember(Reference(member->text()));
+            }
+        }
+    } else if (context->lastToken() && context->lastToken()->text() == "unordered") {
+        // `resource net unordered`: the word after the name is the contextual `unordered`.
+        decl->setUnordered(true);
+    }
+    if (context->tok(TK::KwExport)) {
+        // `export resource` is this declaration, not an `ExportDecl` around it (the word
+        // `resource` follows `export`): it is exported like a type or a data declaration.
+        export_->addRef(decl->ref());
+    }
+    LEAVE("ResourceDecl");
+    return declNode;
+}
+
+/*
+resourceClause : 'uses' identRef (',' identRef)* | 'pure'
+*/
+Value Builder::visitResourceClause(cst::ResourceClause context) {
+    ENTER("ResourceClause");
+    node_ptr_t clauseNode = createNodeAs<ResourceClauseLoad>();
+    setNodeTokenRangeByContext(clauseNode, context);
+    auto clause = unwrapNodeAs<ResourceClauseLoad>(clauseNode);
+    // The clause's tokens run together without white space or comments: a leading `pure` is the
+    // word, while `uses pure` (a parameter of that name) starts with `uses`. The parser reads
+    // both words so that `pure uses fs` is reported where it is written (PureAndUses) rather
+    // than as a syntax error.
+    if (context->text().starts_with("pure")) {
+        clause->setPure(true);
+    }
+    for (const auto use : context->all<cst::IdentRef>()) {
+        clause->addUse(value_cast<Reference>(visitIdentRef(use)));
+    }
+    LEAVE("ResourceClause");
+    return clauseNode;
+}
+
 Value Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
     string uri;
@@ -4608,6 +4669,10 @@ Value Builder::visitFuncType(cst::FuncType context) {
         *typeOptNode << typeNode;
     }
     *funcTypeNode << typeOptNode;
+
+    if (context->get<cst::ResourceClause>()) {
+        *funcTypeNode << any2node(visitResourceClause(context->get<cst::ResourceClause>()));
+    }
 
     LEAVE("FuncType");
     return funcTypeNode;

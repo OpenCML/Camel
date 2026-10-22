@@ -140,6 +140,8 @@ class Builder {
     /// `Config::limit`, design principles 10.2); a local declaration does not.
     Value visitDataDecl(syntax::cst::DataDecl context, bool topLevel = false);
     Value visitTypeDecl(syntax::cst::TypeDecl context);
+    Value visitResourceDecl(syntax::cst::ResourceDecl context);
+    Value visitResourceClause(syntax::cst::ResourceClause context);
     Value visitRetStmt(syntax::cst::RetStmt context);
     Value visitSpreadValue(syntax::cst::SpreadValue context);
     Value visitRestValue(syntax::cst::RestValue context);

@@ -50,6 +50,8 @@ std::string to_string(LoadType type) {
         return "Optional";
     case LoadType::TagUse:
         return "TagUse";
+    case LoadType::ResourceClause:
+        return "ResourceClause";
     default:
         throw std::runtime_error("Unknown LoadType");
     }

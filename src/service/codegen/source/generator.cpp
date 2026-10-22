@@ -474,7 +474,7 @@ string Generator::generateFuncDeclLoad(const AST::node_ptr_t &node) {
     string code     = "";
     string funcName = funcDeclLoad->geneCode();
     // cout << "[generateFuncDeclLoad] original funcName: " << funcName << endl;
-    string withParamsCode, paramsCode, returnTypeCode, bodyCode;
+    string withParamsCode, paramsCode, returnTypeCode, bodyCode, resourceClauseCode;
     bool hasWithParams = false;
     bool isMacro = false, isSync = false;
     for (size_t i = 0; i < node->size(); ++i) {
@@ -542,6 +542,14 @@ string Generator::generateFuncDeclLoad(const AST::node_ptr_t &node) {
                             }
                         } else if (k == 1) {
                             collectParamsFromNode(funcTypeChildNode, normalParamsVec, this);
+                        } else if (
+                            funcTypeChildNode->load()->type() == AST::LoadType::ResourceClause) {
+                            // `uses s, fs` / `pure` after the result type (design effects plan
+                            // 3.1): the clause of the declaration, printed where it was written.
+                            if (const auto clause = dynamic_pointer_cast<AST::ResourceClauseLoad>(
+                                    funcTypeChildNode->load())) {
+                                resourceClauseCode = clause->geneCode();
+                            }
                         } else {
                             string returnType = extractReturnType(funcTypeChildNode);
                             if (!returnType.empty()) {
@@ -586,6 +594,10 @@ string Generator::generateFuncDeclLoad(const AST::node_ptr_t &node) {
 
     if (!returnTypeCode.empty()) {
         code += ": " + returnTypeCode;
+    }
+
+    if (!resourceClauseCode.empty()) {
+        code += " " + resourceClauseCode;
     }
 
     if (!bodyCode.empty()) {
@@ -650,6 +662,15 @@ string Generator::generateFuncTypeLoad(const AST::node_ptr_t &node) {
     return code;
 }
 
+string Generator::generateResourceDeclLoad(const AST::node_ptr_t &node) {
+    if (!node)
+        return "";
+    auto decl = dynamic_pointer_cast<AST::ResourceDeclLoad>(node->load());
+    if (!decl)
+        return "";
+    return decl->geneCode() + ";\n";
+}
+
 string Generator::generateTypeDeclLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
@@ -693,6 +714,8 @@ string Generator::generateStmtLoad(const AST::node_ptr_t &node) {
         return generateFuncDeclLoad(node);
     case AST::StmtType::Type:
         return generateTypeDeclLoad(node);
+    case AST::StmtType::Resource:
+        return generateResourceDeclLoad(node);
     case AST::StmtType::Expr:
         return generateExprStmtLoad(node);
     case AST::StmtType::Exit:
@@ -1448,6 +1471,7 @@ string Generator::generateTypeLoad(const AST::node_ptr_t &node) {
 
             string paramsCode;
             string returnTypeCode = "void";
+            string resourceClauseCode;
 
             if (node->size() >= 2) {
                 auto normParamsNode = node->at(1);
@@ -1469,10 +1493,23 @@ string Generator::generateTypeLoad(const AST::node_ptr_t &node) {
                 }
             }
 
+            if (node->size() >= 4) {
+                auto clauseNode = node->at(3);
+                if (clauseNode) {
+                    auto clauseAstNode = static_pointer_cast<AST::Node>(clauseNode);
+                    if (const auto clause = dynamic_pointer_cast<AST::ResourceClauseLoad>(
+                            clauseAstNode->load())) {
+                        resourceClauseCode = clause->geneCode();
+                    }
+                }
+            }
+
             if (paramsCode.empty()) {
-                return "() => " + returnTypeCode;
+                return "() => " + returnTypeCode +
+                       (resourceClauseCode.empty() ? "" : " " + resourceClauseCode);
             } else {
-                return "(" + paramsCode + ") => " + returnTypeCode;
+                return "(" + paramsCode + ") => " + returnTypeCode +
+                       (resourceClauseCode.empty() ? "" : " " + resourceClauseCode);
             }
         } else {
             string childrenCode = generateChildren(node);

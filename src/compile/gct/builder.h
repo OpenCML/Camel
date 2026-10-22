@@ -20,6 +20,7 @@
 #pragma once
 
 #include <iostream>
+#include <map>
 #include <memory>
 #include <regex>
 #include <set>
@@ -32,6 +33,7 @@
 #include "camel/core/error/abort.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/module/module.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/type/enum.h"
 #include "camel/parse/ast.h"
 
@@ -39,6 +41,8 @@ namespace camel::compile::gct {
 
 using FunctionType = camel::core::type::FunctionType;
 using void_ptr_t   = void *;
+// The resource model a function type publishes (design effects plan 2.2).
+namespace sem = camel::core::sem;
 
 class Builder {
   public:
@@ -211,6 +215,29 @@ class Builder {
     /// A `tag` declaration (design principles 6.2): the tag is registered here, before the types
     /// are declared, and lowers to no node.
     void visitTagDecl(const AST::node_ptr_t &ast);
+    /// A `resource` declaration (design effects plan 3.2): the resource is registered in the
+    /// module before any declaration is lowered, and lowers to no node.
+    node_ptr_t visitResourceDecl(const AST::node_ptr_t &ast);
+    /// The declaration each registered resource was written at, for the diagnostics of
+    /// checkResourceGroups.
+    std::map<std::string, AST::node_ptr_t> resourceDecls_;
+    /// Checks the members of every group the module declares: a member that is neither a
+    /// parameter nor a resource (UnknownResource) and a group that contains itself
+    /// (ResourceGroupCycle) are reported here, before a clause expands one.
+    void checkResourceGroups();
+    /// The resources a function type's `uses`/`pure` clause publishes (design effects plan 3.1),
+    /// in the numbering of `built`: parameters by class (a handle type a Handle, a `var` a
+    /// Variable, any other an Object), ambient resources (a group expanded), or nothing for
+    /// `pure`. Generic when the type writes no clause.
+    sem::ResourceSignature
+    resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionType *built);
+    /// The ambient resources a name stands for, as written: a standard resource, one the module
+    /// declares, one it imports, or a group of them (expanded). False when the name is none of
+    /// those; `where` locates the diagnostic (UnknownResource, ResourceGroupCycle).
+    bool resolveAmbientResource(
+        const camel::core::module::module_ptr_t &in, const Reference &name,
+        std::vector<std::string> &out, std::vector<std::string> &active,
+        std::string *failed, const AST::node_ptr_t &where);
     /// The tag uses written before `ast`, lowered: the `RepeatedLoad("TagUse")` child of a
     /// function, type or block declaration, and the one of each of its fields.
     std::vector<GCT::TagUse> tagUsesOf(const AST::node_ptr_t &ast);

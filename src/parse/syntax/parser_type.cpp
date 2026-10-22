@@ -320,7 +320,7 @@ void ParserImpl::parseStructType() {
     close(m, NK::StructType);
 }
 
-/// funcType : modifiers? angledParams? parentParams '=>' typeExpr
+/// funcType : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
 void ParserImpl::parseFuncType() {
     const size_t m = mark();
     if (isModifier(cur_)) {
@@ -337,7 +337,34 @@ void ParserImpl::parseFuncType() {
     if (!panic_ && expect(TK::FatArrow)) {
         parseType();
     }
+    if (atWord(0, "uses") || atWord(0, "pure")) {
+        parseResourceClause();
+    }
     close(m, NK::FuncType);
+}
+
+/// resourceClause : ('uses' identRef (',' identRef)* | 'pure')+
+///
+/// What a function type says about the resources a call touches (design effects plan 3.1):
+/// `pure` says none; `uses` names parameters (the values a call touches) and resources
+/// (ambient state, a module's resource, or a group of them). `uses` and `pure` are contextual.
+/// A `pure` followed by a `uses` is read here and refused when the clause is compiled
+/// (PureAndUses), so the error names the two words rather than the token after them.
+void ParserImpl::parseResourceClause() {
+    const size_t m = mark();
+    while (!panic_ && (atWord(0, "pure") || atWord(0, "uses"))) {
+        if (atWord(0, "pure")) {
+            bump();
+            continue;
+        }
+        bump(); // `uses`
+        parseIdentRef(NK::IdentRef);
+        while (cur_ == TK::Comma && peek(1) == TK::Identifier && !panic_) {
+            bump();
+            parseIdentRef(NK::IdentRef);
+        }
+    }
+    close(m, NK::ResourceClause);
 }
 
 /// typeList : typeExpr (',' typeExpr)*

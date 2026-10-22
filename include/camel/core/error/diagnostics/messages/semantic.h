@@ -238,6 +238,19 @@ enum class SemanticDiag : uint32_t {
     /// A tag gives a fact one value where the node already has another.
     TagValueConflict = 0x00019D,
 
+    // The resource surface of a program (docs/design/effects/plan.cn.md step 3): the `resource`
+    // declaration, `uses`/`pure` and the `#resource` tag. 0x19E and up.
+    /// A name in a `uses` clause is neither a parameter nor a declared resource.
+    UnknownResource = 0x00019E,
+    /// A signature says both `pure` and `uses`.
+    PureAndUses = 0x00019F,
+    /// A resource group names itself, directly or through other groups.
+    ResourceGroupCycle = 0x0001A0,
+    /// `#resource` is written before a type declaration that is not nominal.
+    HandleTypeNotNominal = 0x0001A1,
+    /// A body-less declaration's clause differs from the operator's declared resources.
+    NativeResourceMismatch = 0x0001A2,
+
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,

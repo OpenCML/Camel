@@ -97,7 +97,7 @@ Every production of the language, one for one with the parser: each production i
 ```
 program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-                     | tagDecl | dataDecl | funcDecl | typeDecl | ruleDecl
+                     | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt | staticForExpr
 blockStmt          : 'wait'? stmtBlock | funcAnno+ stmtBlock
@@ -113,11 +113,12 @@ exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
 usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-                     | typeDecl | dataDecl
+                     | typeDecl | dataDecl | resourceDecl
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
-                     'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock?
+                     'func' (identRef | operatorName) parentParams (':' typeExpr)? resourceClause?
+                     stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
                      | 'export'? 'tag' identDef '=' bracketIdents
 tagPositions       : tagPositionName (',' tagPositionName)* ','?
@@ -132,6 +133,7 @@ carrier            : identList | parentIdents | bracedIdents | bracketIdents
 typeDecl           : frontMatter? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
+resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 retStmt            : ('return' | 'throw') dataList
 modifiers          : 'sync'+
 identDef           : IDENTIFIER
@@ -225,7 +227,8 @@ primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tuple
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
-funcType           : modifiers? angledParams? parentParams '=>' typeExpr
+funcType           : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
+resourceClause     : ('uses' identRef (',' identRef)* | 'pure')+
 typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
