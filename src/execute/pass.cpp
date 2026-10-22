@@ -1166,6 +1166,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
+        TEST_PASS(kFactLoadRulesTestPass, FactLoadRulesTestPass),
         TEST_PASS(kFactSeedTestPass, FactSeedTestPass),
         TEST_PASS(kFactCheckTestPass, FactCheckTestPass),
         TEST_PASS(kFactPersistTestPass, FactPersistTestPass),
