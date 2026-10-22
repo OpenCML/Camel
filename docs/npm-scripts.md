@@ -12,8 +12,48 @@ This document describes the `package.json` scripts in the repository root.
 | `npm run config` | Edit CMake options interactively |
 | `npm run check` | Run repository checks |
 | `npm run format` | Format C++ sources under `src/` and `include/` |
-| `npm run clean` | Remove build artifacts |
+| `npm run clean` | Remove build trees, installs, test scratch and polluted source files |
 | `npm run pypi:rollup` | Build the PyPI wheel bundle |
+
+## Cleaning (`npm run clean`)
+
+`scripts/clean.js` removes the trees a build, an install and a test run leave behind. It never
+builds and never needs an install to exist.
+
+| Tier | Paths | Flag | Ignored by |
+|---|---|---|---|
+| Build trees | `build/` (all three configurations) and `cmake-build-*` at the repository root | `--build` | `.gitignore` `build/`, `cmake-build-*/` |
+| Installed artifacts | every child of `out/`: `out/latest`, `out/debug`, and any release tag mirror | `--out` | `.gitignore` `out/` |
+| Test scratch | `tmp/test/run-*` and `test/results/log` | `--tmp` | `.gitignore` `tmp/`, `test/.gitignore` `results/` |
+| Source-tree pollution | the `.cmo` under `stdlib/` or `modules/`, and linker output under the directories a build reads, that `scripts/check-source-artifacts.mjs` reports (vendored Python SDKs excluded) | `--source` | none: they are untracked build output |
+
+The default selects all four tiers: `npm run clean` is the same set as `npm run clean -- --all`.
+A build tree, an install, a test scratch directory and a polluted source file are all ignored by
+git and reproduced by the next build or test run, so the default deletes instead of defaulting to
+`--dry-run`; the safety rules below are enforced, not advisory.
+
+| Option | Effect |
+|---|---|
+| `--build` / `--out` / `--tmp` / `--source` | Select one tier; repeat to select several |
+| `--all` | All four tiers, spelled out (the same set as the default) |
+| `--dry-run` | Print `would remove <path>` for every path and the skips; delete nothing |
+| `--root <dir>` | Clean that checkout instead of this one (used by the guard's `--clean`) |
+
+There is no keep flag for `out/latest`: a caller who wants the install to survive asks for
+`--build --tmp`, which is narrower and explicit.
+
+A path is removed only when it resolves inside `--root` and belongs to a tier above; a symlink
+whose target is outside is left alone. `.git` is never deleted: a directory candidate that
+contains a `.git` entry is left in place and named. `stdlib/*.cml`, the tracked fixture
+`test/cases/modules/pass_not_found/unloadable.cmo`, and any path `git ls-files` reports are never
+deleted; a tracked path inside a tier is reported as `clean: skip <path>: tracked by git` and makes
+the command exit 1. The delete is `fs.rmSync` after resolving and checking the path, never a shell
+`rm -rf`.
+
+`node scripts/check-source-artifacts.mjs --clean` delegates to `node scripts/clean.js --source`
+(`--clean --dry-run` to `--source --dry-run`), so the H191 guard and `npm run clean` share one
+implementation of the delete. The build's guard and `feat/tools/portability` still run the scan
+without deleting; `feat/tools/clean` pins the tiers, the dry run and the tracked-file rule.
 
 ## Build Stamp (`out/<tag>/build-info.json`)
 

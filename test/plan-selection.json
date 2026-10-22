@@ -251,9 +251,9 @@
             "plans": ["feat/parse/frontend.plan.toml"]
         },
         {
-            "comment": "The standard-include check: portability.std_includes runs it over src, include, modules and tools. The source-tree artifact check is the same kind of property of the sources, and portability.source_artifacts runs it.",
-            "paths": ["scripts/check-std-includes.mjs", "scripts/check-source-artifacts.mjs"],
-            "plans": ["feat/tools/portability.plan.toml"]
+            "comment": "The standard-include check: portability.std_includes runs it over src, include, modules and tools. The source-tree artifact check is the same kind of property of the sources, and portability.source_artifacts runs it. The checker's --clean delegates to scripts/clean.js, whose own plan pins the tiers and the tracked-file rule.",
+            "paths": ["scripts/check-std-includes.mjs", "scripts/check-source-artifacts.mjs", "scripts/clean.js"],
+            "plans": ["feat/tools/portability.plan.toml", "feat/tools/clean.plan.toml"]
         },
         {
             "comment": "The diagnostics catalog: compile.diag_catalog runs --check, --verify-doc and --coverage.",
