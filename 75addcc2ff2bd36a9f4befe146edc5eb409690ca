@@ -1,0 +1,240 @@
+# H78 报告
+
+工作树 `D:\Projects\Camel-wt\h78-interp`，分支 `handover/H78-interpolation-tidy`（基于 `origin/develop` 的 `60c39d4e`），2026-10-22。
+判据：`docs/handover/README.cn.md` 的 H20 第 1 条，`docs/handover/reviews/H13-H14.md` 的第 5、6、7 项与 `docs/handover/reports/H14.md` 8.1。
+本项只动插值这一条线：词法器不重排，测试只增不改语义；其余并行分支在改 `builder_operators.cpp`，所以 diff 保持窄。
+
+构建与测试都在 Linux 主机上，经 `camel-remote.ps1`：
+
+```text
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\h78-interp -Plan <计划> -Jobs 8
+```
+
+`-NoBuild` 复用同一份 `out/latest`。
+
+---
+
+## H78-1 格式说明不合法且含 `=>`：提示给 lambda 加括号
+
+### 具体缺陷
+
+插值在第一个不在括号里的 `:` 处分成表达式和格式说明。带返回类型的 lambda 在顶层正好有这样一个 `:`，于是
+
+```camel
+print(`A ${(x: int): int => x}`)
+```
+
+的表达式被切成 `(x: int)`，`:` 之后的 `int => x` 成了格式说明，表达式本身不完整。修复前只报一个普通的语法错误，读者看不出问题是那个 `:`：
+
+```text
+error[SyntaxDiag::MissingToken]: Expected '=>' before the end of the file.
+  --> probe.cml:3:24
+   |
+ 3 |     print(`A ${(x: int): int => x}`)
+   |                        ^
+
+camel: 1 error
+```
+
+修复后仍是同一个主诊断（位置、名称不变，仍是该位置的语法错误），但多了一条指向整个插值的 `note`，给出修法：
+
+```text
+error[SyntaxDiag::MissingToken]: Expected '=>' before the end of the file.
+  --> probe.cml:3:24
+   |
+ 3 |     print(`A ${(x: int): int => x}`)
+   |                        ^
+note: a lambda with a return type needs its own parentheses at the top level of an interpolation: the ':' of the return type is read as the start of the format specification. Write it as ${((x: int): int => x)}
+  --> probe.cml:3:14
+   |
+ 3 |     print(`A ${(x: int): int => x}`)
+   |              ---------------------
+
+camel: 1 error
+```
+
+另一条路径：表达式本身能解析、失败的是**格式说明**（例如 `${x: int => x}`），此时由 GIR 的格式检查报 `SemanticDiag::ArgumentsRejected`。修复前它只有通用的 “argument properties” 帮助；修复后在同一个诊断上加同样的 `note`：
+
+```text
+error[SemanticDiag::ArgumentsRejected]: Invalid call to 'format' with argument types format specifier '{: int => x}' of an interpolation: invalid format specifier.
+  --> probe.cml:4:16
+   |
+ 4 |     print(`A ${x: int => x}`)
+   |                ^
+note: a lambda with a return type needs its own parentheses at the top level of an interpolation: the ':' of the return type is read as the start of the format specification. Write it as ${((x: int): int => x)}
+help: The argument kinds match the operator's signature, but their statically known properties (such as tensor shapes or dtypes) are incompatible. Fix the arguments or relax their static types.
+```
+
+### 实现
+
+- `src/parse/ast/builder.cpp::visitFStringData`：解析表达式前记下 `diags_->count()`；解析失败且 `part.hasSpec`、`specBegin..specEnd` 中含 `=>` 时，`addRelatedToErrorsFrom` 把提示作为 related 标签挂到该插值范围（`$` 到 `}` 之后）上。主诊断不动，`note` 指向整个插值，读者能直接看到要包起来的是哪一段。
+- `src/compile/gir/builder_operators.cpp`：逐个占位符的 `ArgumentsRejected` 分支在 `placeholders[i]` 含 `=>` 时 `.note(...)` 同一句话。两处各有一份完整句子，注释互相指出对方；条件就只有“格式说明不合法且含 `=>`”。
+
+### 测试
+
+`test/cases/compile/fstring/lambda_spec.cml` 与 `lambda_spec_format.cml`，计划 `fstring_lambda_spec`、`fstring_lambda_spec_format`：断言主诊断名称、行、列，以及输出含
+`needs its own parentheses at the top level of an interpolation`。修复前两条都不含这句话（探针输出见上），修复后通过。
+
+---
+
+## H78-2 所有字符串共用一张转义表
+
+### 改法
+
+- `include/camel/utils/escape.h`：`decodeEscapes` 增加 `` case '`' ``，与 `\'`、`\"` 同级；文件头注释写明这是**所有**字符串字面量（单引号、双引号、三引号、格式化字符串的 pattern 文本）唯一的转义表。
+- `src/parse/ast/builder.cpp::decodeFStringText`：删掉 `` \` `` 分支，只保留 `\${`。`\${` 不是字符转义，而是格式化字符串特有的“结构转义”（它决定 `${` 是否开始插值），由词法器和 AST 构造器负责；注释把这个边界写清楚。这样新增一个字符转义只可能加在 `decodeEscapes` 里，不会再出现两张表。
+- 编辑器语法 `editors/vscode/syntaxes/camel.tmLanguage.json`：`` \` `` 从无名字的兜底模式移进 `constant.character.escape.camel` 的字符类；对应的作用域 golden 行随之改变。
+
+修复前，普通字符串里的 `` \` `` 落到 `decodeEscapes` 的 default 分支，原样保留反斜杠；格式化字符串里的 `` \` `` 却在 `decodeFStringText` 里被解码，两张表不一致。修复后的程序与输出（`test/cases/compile/fstring/escapes.cml`，四个调度器一致）：
+
+```camel
+println('single: \`')
+println("double: \`")
+println(`formatted: \``)
+println('literal interpolation: \${x}')
+```
+
+```text
+single: `
+double: `
+formatted: `
+literal interpolation: \${x}
+```
+
+最后一行锁定边界：普通字符串里的 `\${` 不是插值转义，仍是原样保留的未知转义（见待决问题 2）。
+
+### 语义影响
+
+仓库里没有普通字符串使用 `` \` `` 的既有 `.cml`（格式化字符串里的 `` \` `` 本来就被解码），所以没有既有程序的输出发生变化。内部可见的变化是：格式化字符串的 pattern 文本在 AST 中保留 `` \` ``，到 GCT 才由 `decodeEscapes` 解码，与普通字符串的处理阶段一致。因此 AST 快照里 `test/cases/compile/fstring/basic.cml` 与 `test/cases/tools/grammar/literals.cml` 的哈希改变，但解码后的字符串和运行输出逐字节不变；这是本次唯一“读得不一样”的 AST 变化，已在提交说明里写明。
+
+### 测试
+
+`test/cases/compile/fstring/escapes.cml`，计划 `fstring_escapes`：四个后端各跑一遍，`verify_script` 断言逐行输出。修复前第一行输出是 `single: \``（带反斜杠），断言失败；修复后通过。
+
+文档：`docs/language/02_lexical.md` 与 `docs/language/en/02_lexical.md` 的 2.5.4 转义列表加上 `` \` ``，并写明所有字符串共用一张表；2.5.4.1 的 `\${` 条目区分“普通字符串里的未知转义”和“格式化字符串的结构转义”，并补一句 `${}` 的专用诊断。
+
+---
+
+## H78-3 GCT 的 `FString` 分支改为内部错误断言
+
+修复前（`src/compile/gct/builder.cpp`）：
+
+```cpp
+case LiteralType::FString: {
+    // FString (formatted string) is not supported
+    diags_->of(SemanticDiag::FeatureNotSupported)
+        .at(ast->load()->tokenRange())
+        .commit("FString");
+    throw BuildAbortException();
+} break;
+```
+
+修复后：
+
+```cpp
+case LiteralType::FString: {
+    // Unreachable: ...
+    ASSERT(false, "A formatted-string literal reached the GCT: ...");
+    diags_->of(InternalDiag::UnknownInternalError)
+        .at(ast->load()->tokenRange())
+        .commit("a formatted-string literal reached the GCT; ...");
+    throw BuildAbortException();
+} break;
+```
+
+`ASSERT` 在 Release（`NDEBUG`）下是空操作，所以 Release 仍会以 `InternalDiag::UnknownInternalError` 报告并中止；Debug 构建在断言处直接带着栈终止。**这是一个编译器内部不变量，不是用户错误**，所以不再用 `FeatureNotSupported` 把编译器缺陷说成“程序用了不支持的功能”。
+
+它要真的触发，必须有一颗 `LiteralLoad(LiteralType::FString)` 不经 AST 构造器而进入 GCT。从源码出发现在做不到：
+
+- 表达式位置的格式化字符串全部由 `Builder::visitFStringData` 改写成 `format` 调用；失败时也返回 `LiteralType::String` 的占位，不留 `FString`。
+- 模式（pattern）位置的格式化字符串在 `visitLiteral` 就报 `ConstructNotSupported`，返回 `LiteralType::String`。
+- 全仓库没有别处构造 `LiteralType::FString`（`pass_spec.cpp` 只处理 pass 参数的常量字面量，进不了 GCT）。
+
+所以会触发的情形只有：新增的 AST 变换/手工构造节点直接造出 `FString` 字面量、AST 缓存或反序列化把 `FString` 节点带进 GCT、或者以后有人绕过 `visitFStringData`。这正是要在 Debug 里立刻炸出来的那类缺陷，无法写成源码级负面用例（不可达本身就是结论）；现有 `test/cases/compile/fstring/*` 覆盖的是“每条源码路径都会降低成 `format` 调用”。
+
+---
+
+## H78-4 `${}` 的专用“空插值”诊断
+
+修复前，`${}` 交给子表达式的解析器，得到的是“文件在构造中间结束”的通用诊断：
+
+```text
+error[SyntaxDiag::UnexpectedEndOfFile]: The file ends in the middle of a construct; expected an expression.
+  --> probe.cml:3:16
+   |
+ 3 |     print(`A ${}`)
+   |                ^
+help: Something opened earlier is not finished: check the last declaration of the file.
+```
+
+修复后：
+
+```text
+error[SyntaxDiag::EmptyInterpolation]: An interpolation has no expression to format.
+  --> probe.cml:3:14
+   |
+ 3 |     print(`A ${}`)
+   |              ^^^
+help: Write an expression between '${' and '}': ${value}. For a literal '${' write '\${'.
+```
+
+### 实现
+
+- `SyntaxDiag::EmptyInterpolation = 0x00000F`（`include/camel/core/error/diagnostics/messages/syntax.h`），消息与帮助在 `src/core/error/diagnostics/messages/syntax.cpp`。
+- `visitFStringData` 在解析前先看子缓冲区：只有 `Eof` 就是没有表达式，报在从 `$` 到 `}` 之后的整个插值范围上（`^` 覆盖 `${}`），置 `failed` 并放占位符，不再走通用解析错误。`${ }`、`${:d}` 同样命中；`${/*c*/}` 里有注释 token，不算空，仍报表达式的语法错误（见待决问题 3）。
+- `docs/diagnostics.md` 由 `node scripts/diagnostics-catalog.mjs --write` 重新生成：188 条（171 error、17 warn）。
+
+### 测试
+
+`test/cases/compile/fstring/empty_interpolation.cml`，计划 `fstring_empty_interpolation`：断言 `SyntaxDiag::EmptyInterpolation`、第 3 行第 14 列、输出含 `no expression to format`。修复前名称、列、文案都不对，测试失败。
+
+---
+
+## H78-5 `grammar.tables` 的 `constas`
+
+本分支上**已经满足**，无需改动：
+
+- 编辑器语法：`ee3b69ef`（“...the editor grammar knows constas”）已把 `constas` 加入关键字模式。
+- 语言参考：`c1734432` 已在 `docs/language/02_lexical.md` 的关键字表中加入 `constas`。
+- 对照测试：`node editors/vscode/scripts/check-grammar.mjs` 输出
+  `grammar check passed: 45 keywords, 55 operator and punctuation tokens, 14 built-in types`；
+  `node scripts/check-grammar.mjs --check` 输出
+  `grammar: 117 productions, in step with the parser, the token table and the language reference`。
+  `feat/tools` 的 `grammar.tables` 通过；在 `ee3b69ef` 之前它会以“缺少关键字 constas”失败，回归已经存在，本轮只是确认它保持绿色。
+
+---
+
+## 验证
+
+| 命令 | 结果 |
+|---|---|
+| `camel-remote.ps1 ... -Plan test/plans/feat/compile/fstring.plan.toml -Jobs 8` | 21/21 通过（14 个旧用例 + 4 个 `fstring_escapes` 后端 + 3 个新负面用例） |
+| `... -NoBuild -Plan feat/parse,feat/compile,feat/trans,smoke -Jobs 8` | 1031/1031 通过 |
+| `... -NoBuild -Plan feat/tools -Jobs 8` | 19 通过、0 失败、10 跳过（`grammar.scopes.*` 缺少 `vscode-textmate`/`vscode-oniguruma`，与本项无关） |
+| `node scripts/diagnostics-catalog.mjs --verify-doc` | `docs/diagnostics.md is up to date` |
+| `node scripts/check-grammar.mjs --check` | 117 条产生式，与解析器、token 表、语言参考一致 |
+| `node editors/vscode/scripts/check-grammar.mjs` / `check-manifest.mjs` | 45 个关键字；清单一致 |
+
+AST 快照按约定重新生成（`python3 test/tools/parsecheck/check.py snapshot --update`，主机上执行后取回 golden）：新增本轮的 4 个 `.cml`；`basic.cml`、`grammar/literals.cml` 因 H78-2 的解码阶段变化而改变（解码结果不变）；同时补上了 golden 里本来缺的两个 `test/cases/modules/tiles/cast_*.cml` 条目（它们已在基线提交 `f66aa7de` 中，只是快照没更新；不是本轮改动）。
+
+`feat/tools` 的 `grammar.scopes.literals` 在本机与主机构建上都被跳过（依赖未安装）。它的 golden 中 `` \` `` 那一行的作用域已按新语法改为 `string.interpolated.backtick.camel constant.character.escape.camel`；这项没有实际跑过，装好 `editors/vscode` 依赖后应重跑一次。
+
+---
+
+## 预期变化（逐条理由）
+
+1. **格式化字符串的 AST 文本保留 `` \` ``**：为了只有一张解码表，解码从 AST 构造器挪到 GCT，与普通字符串一致。运行输出不变；AST 快照的两行哈希变化就是这件事，见 H78-2。
+2. **普通字符串的 `` \` `` 现在输出反引号**：这是评审要求的“同一张表”。仓库中没有既有程序依赖旧的“保留反斜杠”行为。
+3. **`Grammar scopes` 里 `` \` `` 得到转义作用域**：它现在真的会被解码，编辑器不应再把它显示成普通文本。只有 golden 的一行改变。
+4. **`MissingToken` 的文档示例**变成 `lambda_spec.cml`：`docs/diagnostics.md` 的示例由“哪个测试最小”自动选，新增的 lambda 用例恰好是最小的 `MissingToken` 程序；这只是文档生成结果。
+5. **GCT 的 `FString` 不再报 `FeatureNotSupported`**：该分支不可达；Release 下改报内部错误，Debug 下断言中止。没有源码程序会看到这条诊断。
+
+---
+
+## 待决问题
+
+1. **提示的措辞在“没有 lambda”时也会出现**：条件是评审给的“格式说明不合法且含 `=>`”，例如 `${x: int => x}` 也会得到“给 lambda 加括号”。`fmt` 的格式说明本来不会合法地包含 `=>`，所以这基本总是笔误；但如果希望提示更精确，可以只在表达式以 `(` 开头或格式说明以类型注解形状开头时才给。是否收窄，请语言作者定。
+2. **普通字符串里的 `\${` 仍是 `\${`**：本轮只把 `` \` `` 并入共享表，没有顺手把 `\$` 解码成 `$`（那会改变普通字符串的既有含义，超出评审范围）。若希望“所有反斜杠对都按同一规则”，需要单独裁定；测试目前锁定的是“原样保留”。
+3. **注释算不算空插值**：`${/*c*/}` 目前不算空（有注释 token），落到表达式解析错误。若“空”应包含“只有注释”，判定条件要从“只有 Eof”改成“没有非 trivia token”。
+4. **模式位置的 `${}`**：`case` 模式里的格式化字符串在 `visitLiteral` 就先报 `ConstructNotSupported`，到不了 `EmptyInterpolation`。模式中的格式化字符串整体尚不支持，所以本轮没有改；若以后支持模式中的格式化字符串，空插值的判定要在那条路径上补一次。
+5. **Release 下的 `FString` 分支**：保留了内部错误诊断再中止，而不是直接 abort。Debug 的断言已经足够暴露缺陷；如果希望 Release 也硬失败（便于尽早发现），可以去掉诊断只留 `ASSERT` + `abort()`，但那样 CI 只能看到崩溃而没有诊断。
