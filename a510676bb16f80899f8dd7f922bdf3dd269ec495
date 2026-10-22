@@ -1,0 +1,212 @@
+# H100 让代数遍就是规则库
+
+## 0. 结论
+
+`std::opt::algebra` 现在就是规则库的 `rules::simplify`：`safe_fp=false` 走 `rules::simplify`，
+`safe_fp=true` 走 `rules::simplify_strict`。`std::opt` 的 algebra 阶段也通过
+`applyRegisteredPass("std::opt::algebra")` 调用同一个遍，不再直接写 `rules::simplify`，所以
+"一条定律写一次"在两条路径上都成立。
+
+C++ 的定律表现在只剩 `neutral_only` 的整数单位元（`x + 0`、`0 + x`、`x - 0`、`x * 1`、
+`1 * x`）。同类项、系数合并、精确加倍、张量元素族这些定律从 `src/passes/opt/generic/algebra.cpp`
+删掉了，由 `stdlib/rules.cml` 的 92 条规则承担。
+
+两个必须说清的结果：
+
+- **H65 的元素语料多重集没有变**：`8 mul_d, 2 add_d, 2 mul_l, 1 mul_i, 1 mul_f, 1 dtof`。
+- **集成后的 `std::opt` 多重集变了**：默认策略 `integrated.graph.false` 的 main 从 11 个
+  add/mul 变成 15，梯度图从 4 个变成 5。原因不是少写了定律，而是规则引擎不肯把**带控制边的
+  子项**当子项（`src/runtime/writings.cpp` 的 `shapeTakesPart`：`ctrlInputs != 0` 直接返回
+  false）。内联后的乘积带 GATE 控制边，`float_combine`/`float_fold` 因此不触发；旧 C++ 的
+  `term`/`multiply` 会把控制前驱搬到新节点上，所以能触发。值不变，四个后端一致。详见 §4。
+
+## 1. 这个遍现在是什么
+
+### 1.1 注册
+
+`include/camel/execute/pass/base.h` 新增：
+
+```cpp
+struct PassRunResult { const Program *program; bool changed; };
+PassRunResult applyRegisteredPass(
+    const Program *, const std::string &spec, const context_ptr_t &, std::ostream &);
+```
+
+`src/execute/pass.cpp` 的 `std::opt::algebra` 描述符：
+
+- `neutral_only=true`：仍返回 C++ `AlgebraPass`（只做整数单位元；见 §3）。
+- 否则：返回 `RulesAlgebraPass`，它的 `apply` 调 `runRulesAlgebra`，后者调
+  `applyRegisteredPass(program, safe_fp ? "rules::simplify_strict" : "rules::simplify", ...)`。
+  `rules` 模块按需导入，Camel 遍按需注册（`resolvePassWithModule`）。
+
+`std::opt` 的 `generic.cpp` 里，algebra 阶段改为：
+
+```cpp
+const std::string algebraPass =
+    config.safeFloatingPoint ? "std::opt::algebra(safe_fp=true)" : "std::opt::algebra";
+const PassRunResult algebra = applyRegisteredPass(program, algebraPass, context, os);
+program = algebra.program;
+if (algebra.changed) ++simplified;
+```
+
+所以 `std::opt` 和单独点名 `std::opt::algebra` 走的是同一个 `RulesAlgebraPass`，没有再各写一份。
+
+### 1.2 安装语义
+
+`CamelPass::apply` 从无条件 `installRuntimeProgram(produced)` 改为
+`installRuntimeProgramIfCurrent(program, produced)`。规则库的遍在一个私有或已过期的 program 上
+运行时，不再把上下文里的当前 program 覆盖掉；`applyRegisteredPass` 也只在
+`ctx->currentRuntimeProgram() == produced` 时才 `settleRuntimeGraphs(produced)`。
+
+这不是 H100 的附带清理：`test::regions` 会在 `apply` 末尾再 commit 一次、却返回 commit 前的
+program，旧代码下 `std::opt` 的 C++ 遍不检查，Camel 遍一 commit 就报
+`RewriteInvalid: The commit conflicts with a newer program`。H100 把测试夹具 `regions.cpp` 改成
+返回最后 commit 的 program（同一张图，版本一致），`regions.survive_optimization` 恢复。这是
+"遍必须返回流水线要用的当前 program"的契约，不是放宽检查。
+
+### 1.3 前置条件
+
+**没有加"必须先跑 `std::opt::fold`"的前置条件。** `rules::simplify` 在任意 program 上都是合法
+的；`std::opt` 仍按原有顺序先 fold 再 algebra，H65 的语料计数本来就在这个顺序下测。单独
+`std::opt::algebra` 不先 fold 也正确，只是 `(x*3)*2` 这类需要 fold 先暴露的形式不会合并。库
+不会诊断"缺少 fold"——它不是正确性前提，只是计数语料的前提；报告里明确这个选择，避免把
+`fold` 变成隐式必需。
+
+## 2. 平价证据
+
+### 2.1 H65 元素语料：多重集不变
+
+命令：`camel test/cases/opt/generic/algebra.cml std::opt::fold std::opt::algebra std::jgir`，
+统计所有图的算符标签：
+
+```
+2 add_d, 1 dtof, 8 mul_d, 1 mul_f, 1 mul_i, 2 mul_l
+```
+
+即 `8 mul_d, 2 add_d, 2 mul_l, 1 mul_i, 1 mul_f, 1 dtof`，与 H65/H87 钉住的完全一致。
+`graph.default` / `graph.safe` / 执行四条（nvm/fvm/jit/prl）都通过。
+
+### 2.2 张量三例：多重集不变
+
+`test/cases/opt/generic/algebra_tensor.cml`，同样先 `std::opt::fold`：
+
+| 例 | `std::opt::algebra` | `rules::simplify` | 值（四后端） |
+|---|---|---|---|
+| merged | 0 add, 1 mul | 0 add, 1 mul | `8., 16., 24.` |
+| merged_explicit | 0 add, 1 mul | 0 add, 1 mul | `6., 12., 18.` |
+| shared_product | 0 add, 2 mul | 0 add, 2 mul | `0.3, 0.6, 0.9` |
+| chain | 0 add, 2 mul | 0 add, 2 mul | 无法 fold（无 `no_infs`） |
+| inexact | 1 add, 2 mul | 1 add, 2 mul | 系数非 f32 精确，守卫不读 |
+
+### 2.3 `feat/opt` 里**变**的计数
+
+| 计划 | 旧 | 新 | 原因 |
+|---|---|---|---|
+| `graph.safe` 的 `underflow_sensitive` | 0 add, 1 mul | 0 add, 2 mul | `float_double` 在 strict 下也触发 `t + t => t*2`（7.4 的精确加倍），之后没有 `no_infs` 折叠 `(x*0.1)*2` |
+| `tensor.graph.safe` 的 `shared_product` | 0 add, 1 mul | 0 add, 2 mul | 同上，`tensor_f32_add_self` |
+| `integrated.graph.false` 的 main | 11 add/mul | 15 add/mul | 内联后的乘积带控制边，规则不作为子项匹配；见 §4 |
+| `integrated.graph.true` 的 main | 15 add/mul | 15 add/mul | 与旧值同；`strict_coefficients` 仍 1（false）对 3（true），策略区分保留 |
+| `gradient.false/true` 的 main | 4 add/mul | 5 add/mul | `(x*3)*2` 不再折成 `x*6`；常数从 `6.0` 变为 `3.0` + `2.0` |
+| `equal_branch.graph.fold` 的 main | 2 mul_d | 1 mul_d | 相等分支折叠后，库把两个 arm 的同一乘积并成一个 |
+| `simplify_growth_budget.table_is_not_an_owner` | 425 nodes | 424 nodes | 库多消掉一个运算 |
+
+这些变化都是**算符多重集**的变化，不是值的变化：所有 execution 条目在 nvm/fvm/jit/prl
+上仍逐字节一致；`safe_fp` 的两条只改算符数（7.4 允许），值不变。`graph.safe` 的 `strict` 例
+仍是 0 add/1 mul 且带 `6.0`，`strict_coefficients`/`relaxed_coefficients` 的 3 对 1 仍区分
+safe 与默认。
+
+## 3. C++ 定律还剩什么
+
+只剩 `neutral_only=true` 的五条整数单位元，在 `algebra.cpp` 的 `simplify<T>` 里：
+
+| 定律 | 条件 | 为什么还留着 |
+|---|---|---|
+| `x + 0`、`0 + x` | 整数标量 | 规则库没有"只做单位元"的模式；`neutral_only` 是文档化参数，`feat/modules/graph.plan.toml` 用它作 `neutral::integers` 的对照基准。这不是库表达不了的定律，是库没有对应**模式**的参数；按任务要求上报，不新造 `rules::simplify_neutral` |
+| `x - 0` | 整数标量 | 同上 |
+| `x * 1`、`1 * x` | 整数标量 | 同上 |
+
+其余 C++ 定律全部删除（`algebra.cpp` 从 603 行降到 297 行）：`term`/`multiply`/
+`exactDoubling`/`fold`/`combine`/`combine_one`/`one_combine`/`scaledBase`/`exactIn` 以及张量
+元素族那条通用路径。它们由 `stdlib/rules.cml` 的 92 条规则覆盖；H87 的 `check` 92/92 是这些
+规则的语义证据，H65 的多重集是元素语料的等价证据。
+
+**文档更正**：H87 §1.1（以及 H38 的"只差张量零定律"）说 `algebra.cpp` 还留着张量零定律
+`t*0`、`0*t`、`t-t`、`t+0`、`0+t`。按代码，`simplify<T>` 的中性块只在
+`if constexpr (std::is_integral_v<T>)` 里，张量/浮点从未实现这族；H65 §1.1 也记着"C++ 没有
+张量零定律"。所以**没有"留给 C++ 的张量零定律"可删**。这个缺口两边都没有，是未实现，不是
+H100 的删除对象；规则写不出匹配形状的零张量，仍按 H87 的问题上报。
+
+`safe_fp` 参数保留原名和默认值；它的语义是 `rewrite(p, rules, strict)` 的 `strict`，由
+`rules::simplify_strict` 表达，没有另造参数。
+
+## 4. 为什么集成后的多重集变了（控制边子项）
+
+`src/runtime/writings.cpp` 的 `shapeTakesPart`：
+
+```cpp
+if (shape.ctrlInputs != 0) return false;
+```
+
+规则匹配只允许**根**节点带控制边，不允许子项带。`std::opt` 先 inline，内联后的函数体乘积
+（`x*c`）从被调函数带来 GATE 控制边；于是 `float_combine`/`float_fold` 的模式 `x*c1 + x*c2`
+里，两个乘积是带控制边的子项，直接不匹配。旧 C++ 的 `term` 会把乘积节点的控制前驱搬到新
+乘积上，所以能合并。
+
+这不是"库少了一条定律"：同一条 `float_combine` 在无控制边的 standalone 图上触发，H65 多重集
+因此不变。它是**引擎作用域**的限制。H100 没有改 `writings.cpp`：让规则改写控制边子项需要把
+控制前驱搬运和 effect order 的证明一起做，属于引擎语义改动，不应塞进"让遍就是库"这一轮。
+报告把它作为后续项：要么在 `writings.cpp` 里给规则匹配加"控制前驱转移"，要么给
+`std::opt` 的 algebra 阶段加一个显式的控制子项 residual；后者会重新引入第二份定律实现，本轮
+没有采用。
+
+`integrated.graph.*` 的测试因此改成 main 15/15，同时保留 `strict_coefficients` 的 1 对 3
+断言来继续区分 safe 与默认；只改总数会让这两条测试失去意义。
+
+## 5. 新用例：库特有的定律真的在触发
+
+`test/cases/opt/generic/algebra_library.cml`（`std::opt::algebra`，不先 fold）：
+
+| 函数 | 定律 | 图里剩余算符 |
+|---|---|---|
+| `int_zero` | `x * 0 => 0` | 0 |
+| `int_sub_self` | `x - x => 0` | 0 |
+| `int_div_one` | `x / 1 => x` | 0 |
+| `int_neg_neg` | `-(-x) => x` | 0 |
+| `int_combine` | `x*3 + x*5 => x*8` | 1 个 `mul_l`，常数 8 |
+| `tensor_div_one` | `t / 1.0 => t` | 0 |
+| `tensor_neg_neg` | `-(-t) => t` | 0 |
+
+`library.laws.graph` 钉图，`library.laws.execution` 在四个后端钉值
+`0 0 7 7 16`。这是"遍是库"的可观察证据：这些定律旧 C++ 遍没有。
+
+## 6. 测试
+
+- `test/plans/feat/opt/algebra.plan.toml`：**179/179**（含新 `library.laws.graph`、
+  `library.laws.execution.*`、四个后端）。
+- `feat/opt`：**696/697**。唯一失败：
+  - `fold_struct_cast.in_return_position`：H106 的已知问题（`std::opt::inline` 后结构体常量
+    的类型是结构类型而不是声明的 `P`；单独 `std::opt::fold` 已能复现，与 algebra 无关）。
+- 计划计数随 H100 更新（不是失败）：
+  - `equal_branch.graph.fold` 的 `mul_d` 从 2 改为 1：相等分支折叠后，库把两个 arm 里的
+    同一乘积合并成一个，旧 C++ 留下两个；值不变。
+  - `regions.survive_optimization` 修夹具返回的 program；
+    `simplify_growth_budget.table_is_not_an_owner` 的 424 是库多消一个运算的直接结果。
+  - 所以 `feat/opt` 只剩 `fold_struct_cast` 一个非 H100 失败；它在 `origin/develop` 上由
+    H106 负责。
+- `feat/modules/rules`：**67/67**。
+- `feat/modules/graph`：**51/51**（含 `neutral_elements_by_std_opt_algebra` 与两条 Camel
+  对照遍，确认 `neutral_only` 的 C++ 参考模式未变）。
+- `feat/linear`：**721/723**；两个失败是 `loops.onnx_refused` / `loops.onnx_refused_prl`
+  （ONNX 导出的拒绝信息），本轮没有改导出器，与代数无关。
+- `smoke`：**10/10**。
+
+## 7. 提交与最终记录
+
+- `e8c290554`：让 `std::opt::algebra` / `std::opt` 走规则库，安装语义与测试期望随行为更新。
+- `a510676bb`：删 C++ 定律表（只留 `neutral_only`），加 H100 报告与任务板。
+- `11a49ed81`：H100 的计数变化与最终结果写进计划/报告/任务板。
+- `0b45b04d7`：`applyRegisteredPass` 先读旧 program 的图版本再 settle，避免 settle 释放旧
+  program 后读它。
+- 最终二进制重跑 `feat/opt/algebra.plan.toml`：179/179；`feat/opt` 696/697。
+
+不推送，不合并 `develop`/`main`。
