@@ -2,7 +2,7 @@
 // so reusing this source under two sweeps gives two different outputs.
 module reuse
 
-import { get_env } from sys
+import { get_env } from env
 
 func main(): int sync {
     println(get_env('SELFTEST_SWEEP'))
