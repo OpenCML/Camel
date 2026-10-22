@@ -1,0 +1,264 @@
+# H103 报告
+
+分支：`handover/H103-h6-leftovers`（工作树 `D:\Projects\Camel-wt\h103-h6-leftovers`），起点
+`origin/develop` `c310fd89d`。最后提交：本文件所在的提交。
+
+任务：H6 第 1 项剩下的两条——`from_bytes::<T>` 与 `load_tree`，"运行时读取一个由编译期实参命名的
+类型"。要求是：能在现有机制上建就建；建不了就写清各自需要语言补什么、该由 H94 的哪条裁定或哪条设计
+原则定，并把最小的失败用例作为**有诊断、有位置**的用例提交，不许在模块里按类型特判糊过去。
+
+结论先说：
+
+- **`from_bytes::<T>` 不需要再建，它已经是"按类型分 URI、编译期选定"**：`tensor:from_bytes_f32`、
+  `_i64`、`_bool` 三条规则，`FromBytesResolver::resolveForCall` 按 `::<T>` 或期望的结果张量类型选
+  一条，内核的 dtype 是模板参数（跟着 URI 走），内核只收 `Bytes` 与形状，不读静态类型。任务里说的
+  `bytes:from_bytes` 不存在（`modules/bytes` 没有这个算子；`str:from_bytes` 是 `int[] → string`）。
+- **`load_tree` 今天能跑，但内核读静态结果类型（5.5 不允许）**。把它改成编译期展开，现有语言机制
+  **够用**：`match type`、`static for`、推导式、字段类型作 `::<F>`、返回位置 `typeas T` 全部可用
+  （§2 的用例）；叶子算子按设计稿本来就是"每种叶子一个重载"的 C++ 原生算子，`::<L>` 已经能调用
+  （`tensor::from_bytes` 与 `tree::load_tree` 自己就是证明）。没建的原因不是语言缺口，而是它就是
+  H51 计划里"把 C++ 的 `tree` 改名 `ckpt`、同一个提交里用 Camel 重写 `tree.*`"的那一步迁移
+  （`docs/handover/README.cn.md` H51 行的"写 `tree_*.cml` 前必读"），是把约一千行 C++ 的类型遍历与
+  清单代码搬到库里并保持格式，不是本任务能顺手补上的量。
+- **唯一真正的语言缺口**：按类型分 URI 的算子**不能在 `.cml` 里声明**。一条声明只有一条签名、一个
+  URI；同名同参、只差结果类型的两条规则是 `Redeclaration`；声明不接受 `::<T>`，也不从期望类型绑定
+  返回位置的类型变量。仓库今天对这类算子只有**文档层**的写法（`stdlib/signatures/tensor.cml` 的
+  `'tensor:from_bytes_*'` 通配 URI 加注释里的类型实参），编译层没有对应形式。两个诊断用例钉住它
+  （§3）。这一条要作者裁定，H94 六条都不覆盖（§4）。
+
+两个代码/用例提交，一件一个；本文件、看板行与 `07_statements.md` 的过期半句由第三个提交
+（本文件所在的提交）收尾：
+
+- `491ab015d` fix: let an unselected `match type` case see the module's own declarations
+- `af7577ae2` test: pin what a declaration cannot name and what the walk can (H103)
+
+## 1 `from_bytes::<T>`：已经是按类型分 URI
+
+`modules/tensor/ops/binary_ops.cpp`：`FromBytesResolver` 每条规则一个 dtype（`f32`、`i64`、
+`bool`），注册成三个 URI——`tensor:from_bytes_f32`、`tensor:from_bytes_i64`、
+`tensor:from_bytes_bool`（第 135–139 行）。`resolveForCall`（第 60–89 行）做两件事：
+
+- 找 dtype：`types.size() == 1` 时取 `types[0]->code()`，否则按 `expected` 是 `Tensor<dtype>` 取；
+- 用常量形状算出结果类型 `Tensor<dtype, shape>`，返回这一条规则的函数类型；`dtype` 不等就
+  `nullopt`，由重载解析试下一条。
+
+于是图上拿到的是**那个 dtype 的 URI 的调用**，内核 `fromBytesKernel<DType>` 的 `DType` 是模板参数，
+运行时没有类型可读。设计稿 `docs/design/training/type-arguments.cn.md:14` 要的就是这个。
+
+实测（临时工程，不入库）：把类型变量接到 `::<T>` 上，落到正确的那条 URI。
+
+```camel
+func decode(t: typeas T, b: Bytes, shape: int[]): Tensor<f32> {
+    return from_bytes::<T>(b, shape)
+}
+// decode(f32(0.0), to_bytes(new([1.0, 2.0])), [2])  →  tensor([1., 2.], dtype=float32)
+```
+
+`test/cases/modules/tensor/binary_roundtrip.cml` 已有的九行输出把 `::<f32>`、`::<int>`、`::<bool>`、
+期望类型、函数值五种入口都钉住了。
+
+所以这条上**没有要建的东西**；剩下的只是"签名写在哪儿"的问题：
+
+- 它的签名今天在 C++（`FromBytesResolver::signature()`），`stdlib/signatures/tensor.cml` 是只读
+  参考（`inner func from_bytes(bytes: Bytes, shape: int[]): Tensor { return 'tensor:from_bytes_*' }`），
+  不参与编译。6.4 要的"原生实现由无函数体的声明表达"在这一族上做不到，原因见 §3。
+- **URI 约定**：现有的是 `模块:名字_<dtype>`（下划线），不是 `模块:名字<dtype>`；参考文件用
+  `模块:名字_*` 通配一族。这是一条**已有的**约定（`scripts/stdlib-reference.mjs:17` 写明 `*` 代表
+  "同一算子的、按类型区分的重载组"），本文的建议是沿用参考文件的通配写法，不改任何已注册的 URI（§4）。
+
+## 2 `load_tree`：展开机制够用，差的是迁移
+
+### 2.1 今天的样子
+
+`modules/tree/src/checkpoint.cpp`：
+
+- `LoadResolver::resolveForCall`（第 391–401 行）只把结果类型定成 `T!`，不产生每条叶子的调用；
+- `loadKernel`（第 311 行）在第 319 行取 `norm.resultType()`，`readNode`/`rebuild` 在运行时按这个
+  静态类型递归遍历清单与数据；`saveKernel`（第 285 行）同样从 `norm.type(1)` 取值的静态类型。
+
+`docs/technical/09_operator_registration.md:225` 把 `ArgsView::resultType()` 的用途写得很清楚
+（"供 `tree::load_tree::<T>` 等仅凭输入类型无法确定返回布局的原生算子使用"）。这正是设计原则 5.5
+最后一条要消掉的东西："原生算子的内核不在运行时读取调用的静态类型；需要按类型变化的，在编译期展开。"
+
+### 2.2 设计稿的写法在现有语言里能写
+
+设计稿 `docs/design/generic-structure/README.cn.md` 3.1.3 的 `load_at` 是 `match type` 递归加
+`static for`；实测等价写法全部通过（`test/cases/compile/static_expansion/type_arguments_from_fields.cml`，
+计划 `compile.static_expansion.type_arguments_from_fields`，输出 `1 2 3`）：
+
+```camel
+func leaf(depth: int): typeas L { return depth }
+func load_at(depth: int): typeas T {
+    return match type T {
+        case struct => { static for (n, F) in fields T => load_at::<F>(depth + 1) }
+        case tuple => ( static for (n, F) in fields T => load_at::<F>(depth + 1) )
+        case _ => leaf::<T>(depth)
+    }
+}
+```
+
+两处与设计稿的字面写法不同，都是**写法**而不是缺口：
+
+- 设计稿写 `func load_at::<T>(h, here): T`，解析器不接受定义处的 `::<T>`
+  （`SyntaxDiag::MissingToken`，"Expected '(' before '::'"）；把变量写到返回类型上
+  （`: typeas T`）即可，`let x: int = f(...)` 与 `f::<int>(...)` 两种调用都成立（实验 V1b）。
+- 叶子处设计稿写 `ckpt_get::<T>(h, here)`。`T` 来自 `static for` 绑定的字段类型，正是 §2.2 用例里
+  `load_at::<F>` 的同一件事。
+
+### 2.3 叶子算子
+
+设计稿说的是 C++ 原生算子，"每种叶子一个重载"，`L` 为显式类型实参
+（`docs/design/generic-structure/README.cn.md:109-114`）。这种算子今天**已经能建也能调用**：
+`tensor:from_bytes`（§1）与 `tree:load_tree` 自己都接受 `::<T>` 并返回它。把 `load_at` 写在一个
+Camel 模块里、叶子调用一个带 `resolveForCall` 的 C++ 算子，语言层面没有拦路的东西；§2.2 的用例里
+叶子换成"无体声明"时，报的已经不是"找不到名字"，而是 §3 的声明问题（实例化链完整）：
+
+```text
+error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (Bytes, int[]).
+   --> …/w4_walk_declared_leaf.cml:16:19
+ 16 |         case _ => decode::<T>(encoded, shape)
+note: in the instance 'load_at<Tensor<float32>>' … instantiated by the call
+note: in the instance 'load_at<{ a: Tensor<float32> }>' … instantiated by the call
+help: … Available overloads:
+          <tensor:from_bytes_f32>: (encoded: Bytes, shape: int[]) => typeas L
+```
+
+### 2.4 那为什么没建
+
+因为"把 `load_tree` 改成编译期展开"= 设计稿的 phase 1，= H51 计划里的那一步迁移：
+
+1. **改名**：C++ 的 `tree` 模块必须改名（H51 行给的方案是 `ckpt`），否则同名的 `stdlib/tree.cml`
+   永远不生效——`Context::getModulePathAndKind` 在同一个名字下先找 `.cmo`、再找源文件
+   （`src/core/context/context.cpp:551-553`），同名的 `.cml` 是静默死代码。改名会动所有 `tree:*`
+   URI、`stdlib/signatures/tree.cml`、`docs/stdlib-reference.md` 与相关用例。
+2. **新内核**：`ckpt_begin`、`ckpt_put`（每种叶子一个重载）、`ckpt_commit`、`ckpt_open`、
+   `ckpt_get::<L>`；清单与"结构说明"字符串的拼法要写成 `type_spec::<T>` 那样的 Camel 函数。
+3. **搬代码**：`checkpoint.cpp`（449 行）与 `checkpoint_io.cpp`（507 行）的类型遍历、清单校验、
+   `.npy`/`.bin`/`.txt` 读写，按叶子拆到内核与库里，同时保持文件格式与恢复语义（隐藏的
+   `.<name>.ckpt-previous`、两次 rename 之间死亡、清单的 schema 与 SHA-256）。
+4. **两侧对称**：`save_tree` 与 `load_tree` 共用清单与路径拼法，只改一侧会让读写不一致。
+
+这是一个有明确计划的迁移：`docs/handover/plans/H51.md` 的步骤 13（"用 Camel 重写五个 `tree_*`，
+拆出 `ckpt`，删 `tree.cpp`"）与第 7 节已经把改名、"`stdlib/tree.cml` 做薄包装转调 `ckpt`"、
+`stdlib/signatures/tree.cml → ckpt.cml` 的去向写好了（第 120–126、675 行），不是"H6 剩下的一条"。
+本次没有做；要做的话建议单开一条任务并先定 §4 的 Q1/Q2。
+
+## 3 真正的语言缺口：按类型分 URI 的算子不能在 `.cml` 里声明
+
+四个观察，都是既有诊断、带位置，不是崩溃：
+
+| 编号 | 写法 | 结果 |
+|---|---|---|
+| V3 | `match type T { case f32 => … }` | `SyntaxDiag::UnexpectedToken`："Unexpected 'f32'; expected a name."——`case` 后面只认形状名（`struct`/`tuple`/`#leaf`/`_`），**不能按具体叶子类型分支**（R3 边界；这也是 `from_bytes` 的 dtype 分发不能写成 Camel 泛型的原因） |
+| V4 | 两条同名、同参数、只差结果类型的无体声明 | `SemanticDiag::Redeclaration`（第二条声明处） |
+| V5 | 无体声明 + `::<f32>` 调用 | `SemanticDiag::NoMatchingFunction`（调用处），可用重载列成 `<tensor:from_bytes_f32>: (bytes: Bytes, shape: int[]) => Tensor<float32>` |
+| V6 | 无体声明 `=> typeas L` + 期望类型 `let t: Tensor<f32> = …` | `SemanticDiag::NoMatchingFunction`（调用处），可用重载列成 `(…) => typeas L`——**变量印出来了，但调用绑不上** |
+
+原因在实现里是结构性的：
+
+- `DeclaredFuncTypeResolver`（`include/camel/core/type/resolver.h:261`、`src/core/type/resolver.cpp`）
+  只从**实参类型**绑定变量；基类 `resolveForCall`（`resolver.h:105-110`）遇到非空显式类型实参直接
+  拒绝。返回位置的变量（V6 的 `L`）没有实参可绑，所以永远定不下来。
+- `declareNativeOperator`（`src/compile/gir/builder_modules.cpp:197`）给一条声明**一个** URI：
+  `模块名:名字` 或 `#op` 指定的那一个；`sameParameters` 只比较 `with`/普通参数的类型，不看结果类型，
+  所以两条只差结果类型的规则连"重载"都不算，直接 `Redeclaration`。
+
+也就是说：**声明 = 一条签名 = 一个 URI**。H94 的六条都假定这个前提（第 1 条是模块归属，第 2 条是
+"泛型声明之间按固定签名一样检查重叠"——恰恰把"签名固定"当成了输入，第 3、4、5 条是归属与私有性，
+第 6 条是签名文本带参数名）。**没有一条覆盖"一条声明、多个 URI、类型实参选其一"**。
+
+仓库里唯一已有的对应约定在**文档层**：`stdlib/signatures/tensor.cml:19-21` 一条
+`from_bytes(bytes: Bytes, shape: int[]): Tensor`，URI 写 `'tensor:from_bytes_*'`，`*` 代表
+"按类型区分的一组重载"（`scripts/stdlib-reference.mjs:17`），类型实参写在 `///` 注释里，由
+`stdlib_registry` 计划核对名字、参数个数与纯度。编译层的声明没有这个形式。
+
+两个诊断用例（计划 `compile.native_declarations`）：
+
+- `test/cases/compile/native/declaration_type_argument.cml` + `native.declaration_type_argument`
+  ——`#op<'tensor:from_bytes_f32'>` 声明 `leaf_decode(encoded: Bytes, shape: int[]): typeas L`，
+  用 `::<Tensor<f32>>` 调用：`NoMatchingFunction`，可用重载里原样印着 `=> typeas L`。这是
+  `from_bytes::<T>` / `ckpt_get::<L>` 的最小形态。
+- `test/cases/compile/native/declaration_per_result_type.cml` + `native.declaration_per_result_type`
+  ——`from_bytes` 的 f32 与 i64 两条规则写成两条声明：第二条 `Redeclaration`。这是"按类型分 URI"
+  的最小形态。
+
+## 4 需要哪条裁定 / 给作者的问题
+
+**Q1（核心）**：要不要"参数化声明"？即一条无体声明里写返回位置的类型变量（5.9 已经允许*定义*
+这么写，也允许 `::<T>` 与期望类型绑定它），调用时按类型实参选一条规则、每条规则一个 URI。
+若不要，则 6.4 的"签名只写一处"对这一族算子只能停在 C++（现状），`stdlib/signatures/*.cml`
+继续是只读参考；若不要，也请明确写进规范，免得下一个人再试一遍。这是 H94 之外的第 7 条裁定。
+
+**Q2（若 Q1 要）URI 怎么拼**？建议沿用已注册的形式 `模块:名字_<判别>`（`tensor:from_bytes_f32`），
+`*` 只出现在参考文件的通配写法里；不建议引入 `模块:名字<类型>`，那会改掉所有已注册 URI。声明处写
+`#op<'tensor:from_bytes_*'>`（与参考文件同一个通配符）还是每条规则一个 `#op`，请作者定；前者更接近
+今天参考文件的写法，后者不用新语法。
+
+**Q3（若 Q1 要）重叠怎么查**？H94 第 2 条说泛型声明之间按固定签名查重叠；有了类型实参，两条规则的
+签名可以相同，区别只在 URI/类型实参，重叠检查得把"类型实参或 URI"算进去，否则 V4 的
+`Redeclaration` 会误报。
+
+**Q4（`load_tree` 的迁移何时做）**：`tree`→`ckpt` 的改名 + Camel 重写是 H51 计划里的一步，建议单开
+任务。它需要 `save_tree` 与 `load_tree` 同一个提交（读写共用清单与路径），并确认 `.cml` 里的
+`export func load_tree(dir: string): typeas T!` 这种**定义**（不是声明）的签名与文档生成能接受
+（本文 §2.2 已证明定义形式可用；`stdlib-reference` 读 `stdlib/tree.cml` 的 `///`，不需要改脚本）。
+
+**Q5（名字）**：任务里的 `bytes:from_bytes` 不存在。是笔误（指 `tensor:from_bytes`），还是想要一个
+`bytes` 模块上的"按类型解码一个标量"的算子？后者与 `tensor:from_bytes` 是两件事，需要单独设计。
+
+## 5 顺手修的缺陷：未选中的 `case` 看不见本模块的声明
+
+写 §2.2 的 `load_at`（叶子用无体声明）时发现：`match type` 里**没被选中**的分支仍要做名字解析，
+而那条路径（`Builder::valueNameExists`，`src/compile/gir/builder_expr.cpp:746`）不查本模块的原生
+声明；真正建图时的 `visitDRefNode`（同文件 595–609 行）查。于是同一个名字在"选中的分支"里能用、
+在"没选中的分支"里报 `SemanticDiag::UnresolvedReference`：
+
+```text
+error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'decode'.
+   --> …/w4_walk_declared_leaf.cml:16:19
+note: in the instance 'load_at<{ a: Tensor<float32> }>' … instantiated by the call
+```
+
+修法是让 `valueNameExists` 走与 `visitDRefNode` 相同的本模块声明查找（只多接受真实建图也会接受的
+名字，不会放过真错误）。用例 `native.unselected_case_sees_declaration`
+（`test/cases/compile/native/unselected_case_declaration.cml`）：`case _` 调用本模块的无体声明、
+`case struct` 被选中，修复前 `UnresolvedReference`，修复后输出 `0`。设计稿的 `load_at` 正是这个
+形状，谁先写谁撞。
+
+## 6 没做、留给谁
+
+- **`load_tree` 的编译期重写**：见 §2.4，建议单开任务（Q4）。
+- **参数化声明**：语言特性，等 Q1–Q3 的裁定（§4）。
+- **`from_bytes` 的签名搬进 `.cml`**：同上；不搬也不影响运行，只影响 6.4 的"一处"目标。
+- **文档缺陷（已在本提交顺手改）**：`docs/language/07_statements.md:292`（与英文版
+  `en/07_statements.md:292`）还写着"调用时不能显式给出类型实参（是否允许尚未决定）"，而同一节上面
+  两段就在讲 `empty::<int>()`、`f::<A = int>`，实现也早已支持。删掉这半句，其余两条限制未动
+  （"泛型函数不能加标注"、"`f<w>` 不能作值"未在本次核实）。
+- **`match type` 的其余边界**：`case` 不能按具体类型分支（V3）是 R3 的既定边界，不是缺陷；如果
+  以后要写"按 dtype 分派的库函数"，得走 Q1 的声明形式或 C++ 解析器，不能靠 `match type`。
+
+## 7 测试
+
+新增四条（两条诊断、两条行为），都用既有诊断名与码，没有改诊断编号：
+
+| 计划 / 用例 | 钉住什么 |
+|---|---|
+| `compile.native_declarations.native.declaration_type_argument` | 无体声明带返回位置类型变量时，`::<T>` 与期望类型都绑不上（`NoMatchingFunction`，`0x0300000F`，调用处；重载列 `=> typeas L`） |
+| `compile.native_declarations.native.declaration_per_result_type` | 同名同参、只差结果类型的两条声明是 `Redeclaration`（`0x03000001`，第二条声明处） |
+| `compile.native_declarations.native.unselected_case_sees_declaration` | 未选中的 `case` 能看见本模块的无体声明（修复前 `UnresolvedReference`），输出 `0` |
+| `compile.static_expansion.type_arguments_from_fields` | `static for` 绑定的字段类型可以作递归调用的显式类型实参；设计稿的 `load_at` 形状可写，输出 `1 2 3` |
+
+运行（Linux 主机，`camel-remote.ps1 -Jobs 8`，Release）：
+
+- `test/plans/feat/compile/native_declarations.plan.toml`：12/12
+- `test/plans/feat/compile/static_expansion.plan.toml`：28/28
+- `test/plans/feat/compile`：981/981
+- `test/plans/feat/modules`：1041 条，1040 通过 / 0 失败 / 1 跳过（`unicode.paths` 只在 Windows 上跑）
+- `test/plans/smoke`：10/10
+- `test/plans/feat/docs_links.plan.toml`：1/1（新报告与看板行没有坏链接）
+- 合起来一次：`feat/compile` + `feat/modules` + `smoke` 共 2032 条，2031 通过 / 0 失败 / 1 跳过
+  （第一次跑这条计划时 `native.declaration_type_argument` 的断言本身写错了一处，改的是断言，不是实现）
+
+`feat/modules` 单独跑第一次时有一条 `expected exit 0, got null`（进程没有退出码，不是诊断）；紧接着
+重跑同一计划 1040/1041 全绿，合跑也是全绿，判为负载下的偶发，与本次改动无关（本次只碰 GIR 的名字解析
+与编译期用例，`feat/modules` 里没有受它影响的程序）。
