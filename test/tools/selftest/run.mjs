@@ -5,6 +5,8 @@
 //   * the plan schema: a misspelled key or a known key of the wrong type fails its own plan with
 //     the file, the test and the key named, while a valid plan in the same directory still runs;
 //     `expect_stdout_exact` (and its legacy name `expect_stdout`) compares the whole output;
+//   * the payload a `verify_script_path` receives: the resolved case path under `case_path` and
+//     the other fields docs/test-plans.md documents (H143);
 //   * the per-test scratch directory: scratch.plan.toml is run twice, and a test must not see
 //     another test's (or an earlier run's) files in its `${test_tmp}` directory; the scratch
 //     directory must lie under this run's `tmp/test/run-<pid>`; a file another run keeps under
@@ -158,6 +160,21 @@ if (!strict.output.includes(`[INFO] test scratch kept: ${strictRoot}`)) {
     problems.push('strict: the failed run did not print the kept test root')
 }
 fs.rmSync(strictRoot, { recursive: true, force: true })
+
+// --- the verify payload (H143) ----------------------------------------------------------------
+// The fixture's script asserts that `case_path` is the resolved case path and that the other
+// documented fields are present. Before the fix `case_path` was undefined here, so this plan
+// failed with `undefined !== <path>`.
+const payloadPlan = path.join(here, 'verify_payload.plan.toml')
+const payload = runRunner([payloadPlan])
+if (payload.status !== 0) problems.push(`verify payload: runner exit ${payload.status}, expected 0`)
+if (!payload.output.includes('[SUMMARY] total: 1, pass: 1, fail: 0')) {
+    problems.push(`verify payload: unexpected summary (${summaryLine(payload.output)})`)
+}
+if (!payload.output.includes('[PASS] payload.case_path')) {
+    problems.push(`verify payload: case_path was not delivered:\n${payload.output}`)
+}
+fs.rmSync(path.join(scratchRoot, `run-${payload.pid}`), { recursive: true, force: true })
 
 // --- the per-test scratch directory -----------------------------------------------------------
 // A model written by one test must not be visible to another; a second run must inherit nothing

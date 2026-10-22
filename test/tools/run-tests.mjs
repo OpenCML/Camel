@@ -932,6 +932,10 @@ async function runVerification(test, result) {
     }
 
     const payloadPath = path.join(tempDir, 'input.json')
+    // The documented payload fields are listed in docs/test-plans.md; every one of them must be
+    // present, and a missing key is silently dropped by `JSON.stringify` (H143: `case_path` was
+    // assembled from a result that did not carry it yet, so a script normalizing the absolute
+    // source path out of its output could not, and its digest varied with the checkout).
     const payload = {
         repo_root: REPO_ROOT,
         test_root: TEST_ROOT,
@@ -1284,6 +1288,9 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         diagnostics: parseDiagnostics(raw.output),
         testTmp: scratch,
         testTmpRelative: scratchRelative,
+        // Set before validation: the verify script payload carries this as `case_path`, and the
+        // script that normalizes a source path out of its output needs it (H143).
+        casePath,
     }
 
     if (test.kind === 'benchmark' && raw.stdout) {
@@ -1294,7 +1301,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // only after this returns.
     const failures = await validateTest(test, result, { ...logContext, scope })
     const status = failures.length === 0 ? 'pass' : 'fail'
-    return { ...result, failures, status, casePath }
+    return { ...result, failures, status }
 }
 
 function writeLogFiles(plan, test, result, status, logDir) {

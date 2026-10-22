@@ -1,0 +1,18 @@
+# Fixture of test/tools/selftest/run.mjs: the payload a `verify_script_path` receives carries the
+# fields docs/test-plans.md documents. `JSON.stringify` drops an `undefined` key, so a field the
+# runner assembles from a value it does not have is absent here rather than null (H143).
+id = "selftest.verify_payload"
+order = 9
+tier = "fast"
+
+[[tests]]
+name = "payload.case_path"
+desc = "A verify script sees the resolved case path under `case_path` and the other location fields."
+kind = "behavior"
+tool = "node"
+case = "backend_echo.mjs"
+args = ["${case}", "same"]
+normalizers = ["normalize_newlines"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+verify_script_path = "verify_payload.mjs"

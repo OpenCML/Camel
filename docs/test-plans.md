@@ -454,6 +454,17 @@ Important payload fields:
 - `input.normalized.output`
 - `input.diagnostics`
 - `input.benchmark`
+- `input.case_path` — the resolved absolute path of the case: the plan's `case` resolved against
+  the plan's directory, which is what the tool was invoked with. The output may repeat it (a
+  graph dump names its source file), and it is absolute, so it differs between two checkouts of
+  the same commit. A verify script that digests such output must replace `case_path` (or the
+  absolute prefix of the case's file name) before hashing; a digest that still contains it is
+  only valid in the checkout that recorded it (H143).
+- `input.repo_root`, `input.test_root` — the repository root and the `test/` root, absolute.
+- `input.plan_path`, `input.test_name` — the plan file and the test's name, including a sweep
+  prefix when the test is a sweep copy.
+- `input.test_tmp`, `input.test_tmp_relative` — the test's scratch directory, absolute and
+  repository-relative.
 
 ### `verify_script_path`
 
