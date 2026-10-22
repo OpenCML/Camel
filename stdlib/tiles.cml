@@ -1,0 +1,43 @@
+/**
+ * Programs on a CUDA device: a function value is compiled to device code, its inputs are uploaded,
+ * the device computes, and the results come back to the host. `gpu` marks a function to prefer the
+ * device, `run`/`run_device` run one explicitly, `source`/`inspect`/`benchmark` show what would
+ * run, and `upload`/`download` move a value by hand. The device holds a foreign resource
+ * (`tiles:device`) and the driver is ambient state (`tiles:driver`), so every operator of this
+ * module has effects and none is folded or dropped.
+ */
+
+// The declarations of the operators of the C++ module `modules/tiles` (design principles 6.4;
+// handover H19, step 10; H156). This file is the one source of the two fixed signatures; the C++
+// side keeps the kernels, the executor, the operator traits, the resources and the semantics.
+//
+// The other ten operators the module exports compute their signature from an argument, so they
+// stay in C++ (`DynamicFuncTypeResolver`): `upload`/`download` wrap and unwrap every leaf of their
+// argument in the module's `Device<...>` handle; `run`, `run_device` and `run_preferred_resident`
+// take the function's parameter list as the ordinary parameter and answer its result type
+// (wrapped in `Device<...>` for the resident ones); `source`, `inspect` and `benchmark` answer
+// text but their ordinary parameter is the function's parameter list; `regions` takes any
+// function value; `gpu` gives its function argument back. `stdlib/signatures/tiles.cml` keeps
+// their reference entries, as `json` and `random` do with their computed signatures (handover
+// H115, H128).
+//
+// No signature of this module depends on which device the run selects, or on a shape known at
+// compile time: `available` and `device` answer a capability question at run time and their types
+// are fixed. Device-dependent types are the `Device<...>` results of the computed operators, and
+// their host type — a tensor's static shape included — comes from the argument.
+
+module tiles
+
+/// Whether this machine can run a program on a CUDA device: false when the driver, the toolkit or
+/// a visible device is missing. A capability question only — a device the run names with
+/// `--devices` and that is not there is a fault, never `false`.
+/// @effect probes the driver
+/// @example available()
+export func available(): bool
+
+/// A description of the CUDA device the run selects: its ordinal, name, compute capability and
+/// memory. Asking is a requirement, not a preference: with no device the call is a fault.
+/// @effect probes the driver
+/// @fails fault `RuntimeError` when this build or this machine has no CUDA device; fault `DeviceUnavailable` when `--devices` names a device that is not there
+/// @example println(device())
+export func device(): string

@@ -197,6 +197,18 @@ const MODULES = [
         source: 'graph.cml',
         declaration: true,
     },
+    {
+        name: 'tiles',
+        title: '`tiles`: programs on a CUDA device',
+        kind: 'cpp',
+        // `available` and `device` are declared in stdlib/tiles.cml; the ten operators whose
+        // signature C++ computes from an argument (the function value's parameter list and result,
+        // or the leaves a transfer wraps in `Device<...>`) keep their reference entries in the
+        // signature file named by `computed:` (handover H156).
+        source: 'tiles.cml',
+        declaration: true,
+        computed: 'signatures/tiles.cml',
+    },
 ]
 
 function sourceOf(module) {

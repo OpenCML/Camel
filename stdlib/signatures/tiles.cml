@@ -1,0 +1,94 @@
+/**
+ * Computed signatures of the `tiles` module (C++ operators, modules/tiles).
+ *
+ * Of the twelve operators the module exports, `available` and `device` have fixed signatures and
+ * are declared in stdlib/tiles.cml. The ten entries here take their signature from an argument
+ * that a declaration cannot name:
+ *   - `gpu` gives its function argument back, after checking that every leaf of it is a float or
+ *     an f32 tensor;
+ *   - `upload` wraps every leaf of its argument in the device handle `Device<...>`, `download`
+ *     strips that handle from every leaf;
+ *   - `run`, `run_device` and `run_preferred_resident` take the function's parameter list (or the
+ *     tuple of it) as the ordinary parameter and answer the function's result type, wrapped in
+ *     `Device<...>` for the two resident forms;
+ *   - `source`, `inspect` and `benchmark` answer text, but their ordinary parameter is still the
+ *     function's parameter list;
+ *   - `regions` takes any function value as its with-parameter.
+ * The `DynamicFuncTypeResolver` of modules/tiles is the one source of these signatures, and the
+ * `tiles` module keeps `Device<...>` as its own type (exported by C++, named here for the
+ * reference text). Each entry below writes one instance of its rule.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the operators
+ * the module registers, and docs/stdlib-reference.md is generated from them.
+ */
+
+/// Compiles the function to device code and returns a function of the same type that prefers the
+/// device: it runs there when the device can take it, and on the host otherwise. The function
+/// takes no with-parameter, has at least one ordinary parameter, and every leaf of its parameters
+/// and result is a float or an f32 tensor. The result is the argument's own type, which a
+/// declaration cannot say without also dropping that restriction.
+/// @effect marks a function to prefer the device
+/// @example let fast = gpu((x: float): float => x + 1.0)
+export func gpu(fn: (x: float) => float): (x: float) => float
+
+/// Uploads every leaf of the value — a float or an f32 tensor, alone or inside a tuple or a
+/// struct — and returns the same tree with each leaf wrapped in `Device<...>`. A leaf of any other
+/// type is refused when the call is compiled.
+/// @effect transfers to the device
+/// @example upload(new([1.0, 2.0]))    // a Device<Tensor<f32>>
+export func upload(value: Tensor<f32>): Device<Tensor<f32>>
+
+/// Downloads every device leaf of the value and returns the host value it came from. A tree with a
+/// leaf that is not a device value is refused when the call is compiled.
+/// @effect transfers from the device
+/// @example download(d)    // the tensor d holds
+export func download(value: Device<Tensor<f32>>): Tensor<f32>
+
+/// Runs the function on the CUDA device: its parameter (or the tuple of its parameters) is
+/// uploaded, the device computes, and the result is downloaded again. The result type is the
+/// function's result type.
+/// @effect transfers both ways and runs device code
+/// @example run<add>((2.0, 3.0))    // 5.0
+with <fn: (a: float, b: float) => float>
+export func run(inputs: (float, float)): float
+
+/// Runs the function as `run` does but leaves the result on the device: each leaf of it comes back
+/// wrapped in `Device<...>`.
+/// @effect transfers to the device and runs device code
+/// @example run_device<add>((2.0, 3.0))    // a Device<float>
+with <fn: (a: float, b: float) => float>
+export func run_device(inputs: (float, float)): Device<float>
+
+/// Runs the function the way `@gpu` does — a prepared device program when one can be made, the
+/// host otherwise — and answers the resident form of its result.
+/// @effect transfers to the device and runs device code
+/// @example run_preferred_resident<add>((2.0, 3.0))    // a Device<float>
+with <fn: (a: float, b: float) => float>
+export func run_preferred_resident(inputs: (float, float)): Device<float>
+
+/// The CUDA source the function compiles to, without running it.
+/// @effect compiles device code
+/// @example println(source<add>((2.0, 3.0)))
+with <fn: (a: float, b: float) => float>
+export func source(inputs: (float, float)): string
+
+/// A report on the function's device plan, without running it: the kernel, its launch shape and
+/// the values it would keep on the device.
+/// @effect compiles device code
+/// @example println(inspect<add>((2.0, 3.0)))
+with <fn: (a: float, b: float) => float>
+export func inspect(inputs: (float, float)): string
+
+/// Times the function on the device, and on the host for comparison, and returns the report as
+/// JSON text.
+/// @effect transfers both ways and runs device code
+/// @example println(benchmark<add>((2.0, 3.0)))
+with <fn: (a: float, b: float) => float>
+export func benchmark(inputs: (float, float)): string
+
+/// The regions the compiler would take for the whole program, as text: which nodes would run on
+/// the device and why the others would not.
+/// @effect compiles device code
+/// @example println(regions<work>())
+with <fn: (a: float, b: float) => float>
+export func regions(): string

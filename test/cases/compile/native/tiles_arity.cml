@@ -1,0 +1,13 @@
+/**
+ * The declaration of `tiles:available` takes no ordinary argument: extra ones are refused at the
+ * call, and the overload the message lists is the declaration's `() => bool` — `stdlib/tiles.cml`,
+ * not the C++ module (handover H19, step 10; H156).
+ */
+module tiles_arity
+
+import { available } from tiles
+
+func main(): int sync {
+    println(available(1, 2))
+    return 0
+}
