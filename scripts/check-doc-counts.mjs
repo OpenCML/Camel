@@ -234,6 +234,17 @@ async function declarationModuleCount() {
     }
 }
 
+function passAliases() {
+    const text = read('src/execute/pass.cpp')
+    const start = text.indexOf('passAliases')
+    if (start < 0) throw new Error('src/execute/pass.cpp has no passAliases map')
+    const open = text.indexOf('{', start)
+    const close = text.indexOf('};', open)
+    if (open < 0 || close < 0) throw new Error('cannot delimit the passAliases map')
+    const entries = text.slice(open, close).match(/\{\s*"std::[^"]+"\s*,\s*"std::[^"]+"\s*\}/g) || []
+    return { value: entries.length, source: 'src/execute/pass.cpp passAliases map' }
+}
+
 const TRUTHS = {
     cmake: cmakeMinimum,
     exportMatrix,
@@ -246,6 +257,7 @@ const TRUTHS = {
     syntax: syntaxErrorCodes,
     runtimeErrors: runtimeErrorReferences,
     declarationModules: declarationModuleCount,
+    passAliases,
 }
 
 const RULES = [
@@ -483,6 +495,26 @@ const RULES = [
                     ok: plans === truth.plans && gpuTests === truth.gpuTests,
                 })
             }
+            return findings
+        },
+    },
+    {
+        id: 'pass-aliases',
+        check(file, text) {
+            const findings = []
+            text.split(/\r?\n/).forEach((line, index) => {
+                const match = line.match(/另有\s*([\d,]+)\s*个别名/)
+                if (!match) return
+                const says = int(match[1])
+                findings.push({
+                    line: index + 1,
+                    claim: 'built-in pass aliases',
+                    says,
+                    truth: TRUTHS.passAliases.value,
+                    source: TRUTHS.passAliases.source,
+                    ok: says === TRUTHS.passAliases.value,
+                })
+            })
             return findings
         },
     },
