@@ -1,0 +1,361 @@
+# H178：惰性声明加载——开关、度量、断点
+
+> 状态：**试验完成，原型不合并**。分支 `handover/H178-lazy-decl`，起点 `origin/develop`
+> `b1fb58b63`。构建与全部计划在 Linux 主机 `88zjwei` 上跑（EPYC 7343、32 核，与别的任务共用，
+> 负载 20–35），`-Jobs 8`。原型提交 `4ce692992`（2 个文件，+34/−1 行）；中性对比的干净基线
+> 在同一工作树里用临时分支从 `b1fb58b63` 构建（构建戳 `b1fb58b632 (clean)`），比对完删除该分支。
+> 本报告与看板行在原型之后的一个提交里。没有 push，没有碰 `develop`/`main`。
+
+## 0. 结论
+
+- **惰性在本试验里的定义**：导入仍然在 `visitImport` 绑定模块，但 `compileImportedModules` 不再
+  把每个 Camel 导入编译到 Declared；某个导入模块的声明在**第一次需要它的名字/类型/算子**时编译
+  （`Module::getImportedType`、`ProgramExports::importedEntity`、`ProgramExports::exportedOperatorOverloads`）。
+  因此"导入了、从未命名、也从未触发任何算子"的模块**一个字节都不会被解析**。
+- **开关节省的钱只在一种程序形状上存在**：导入很多 Camel 模块、几乎不使用。`registry_all.cml`
+  （26 个导入，其中 21 个有 Camel 源文件；`main` 只 `return 0`）走 `std::nvm`：CPU 中位数
+  **43.18 → 32.59 ms（−9.33 ms，−21.8%，配对中位数比 0.778，p10 −16.39 / p90 −2.15）**；同一程序
+  `camel check`：**39.85 → 30.17 ms（−9.89 ms，0.751）**。同样四命令里的 `--version`、`imports_nothing`、
+  `inspect --ops` **不动**（`inspect --ops` 自己也必须把所有模块声明装进来才能列算子，见 §4.4）。
+- **第一笔使用立刻付账，而且算子使用会让"每模块惰性"归零**：导入九个声明模块、只用 `math::sqrt`，
+  省 **2.35 ms**（16.43 → 14.39，0.866），因为 `math` 仍然被编译（parse 1.1、gct ~0.5、declare 0.4 ms）；
+  只导入 `math` 且**使用 `+`**：**−0.10 ms（0.989，p10 −2.06 / p90 +2.05）**。原因不是实现取巧，而是
+  设计原则 10.2：算子的重载来自**每一层导入**，解析一个 `+` 会走过所有导入模块的
+  `exportedOperatorOverloads` → `declareEntities()`，于是 `math` 在 body 阶段被按需声明，省下的
+  又付了回去（§4.5）。`std::opt`（`rules` 使用算子并导入 `graph/math/tensor`）也是 0：
+  **45.15 → 45.25 ms（+0.50，1.012，p10 −2.53 / p90 +2.96）**，所有三个模块照旧编译。
+- **打开时坏掉的东西比省下的钱更重，而且有一条是错值不是错诊断**：语料 1954 个 `.cml` 逐个跑
+  `std::jgir`，开关打开后 8 个用例**从退出 1 变成退出 0**（导入的模块有错、类型环、值环、导出冲突
+  都不再报），6 个用例的诊断文本改变，17 个用例的图有差异（其中 5 个是图集合/组成真的变了，其余
+  是 `__g_N__` 辅助图或节点编号随创建顺序平移）；此外手工构造的"调用一个有错误的导入函数"的用例在
+  打开时**打印 `0`、退出 0**（应为 2 个错误）——`buildFrom` 的建体顺序在惰性声明之前就固定了，
+  惰性声明的模块不在 `order` 里，错误没人收、调用拿到默认值。这条不修，惰性声明是**错程序**，
+  不是慢程序（§5.2）。
+- **原型本身很小（34 行），但"安全地惰性"不是 34 行**：最小修法是让 `buildFrom` 在建体后对
+  新出现的模块做定点（fixpoint），再把它们的错误映射回导入点；这会改程序建图的顺序与错误归属，
+  是独立的设计改动。原型还暴露并修掉了一个真 UAF：`importedEntity` 在解析循环前取了
+  `imported_` 缓存引用，而按需声明会经 `exportEntity` 清空该缓存（语料里 2 个 SIGSEGV、1 个堆损坏）；
+  修法是循环后重新查表（开关关着时是同一张表，逐字节不变，§3.2）。
+- **作者要选的是承诺，不是这 9 ms**：P1"每个导入在导入处就被声明检查"（今天的
+  `docs/design-principles.cn.md` §10.1 与 `docs/design/graph-model/README.cn.md` §3.9.4 的写法），
+  还是 P2"导入在被使用时才检查"。数字支持的事实是：P2 只在"导入很多、几乎不用"时值 9–12 ms；
+  四个启动命令里三个不动；使用算子、`std::opt`、`inspect --ops` 都归零。代价是 §5 的清单，外加
+  修 §5.2 的建体定点。**本试验不替作者做这个选择，也不把原型合入。**
+
+## 1. 设计：哪些事实在什么时候需要
+
+### 1.1 今天的急切加载
+
+`Builder::visitImport` 把导入绑定到 `Context`（`importModule` / `loadModuleFrom`：`.cmo` 旁边有
+`stdlib/<m>.cml` 就返回声明模块并 `inheritExportsFrom`）。随后 `compileImportedModules`
+（`src/compile/gct/builder.cpp:732`，在 `visitModule` 里于本模块类型声明之后、其余语句之前调用）
+把每个 Camel 导入编译到 `Declared`：parse → GCT → declare。这一步把模块的**签名**登记进共享的
+`GIR::Builder` 与 `ProgramExports`，所以：
+
+- 任何导入模块的声明错误（含类型环、值环、同名冲突）都在**导入处**报
+  `SemanticDiag::ImportedModuleHasErrors`，与程序是否使用它无关；
+- `buildFrom` 用 `units_` 里的全部模块算 `order`，**导入闭包的每个模块体都会建**，再统一 link；
+- 声明模块的 `load()` 在非入口模块上停在 Declared（`userdef.cpp:192`），所以 `inspect --ops`
+  能列它们的算子而不建体。
+
+### 1.2 原型里的惰性
+
+`compileImportedModules` 在开关打开时直接 `return`（`src/compile/gct/builder.cpp`，`lazyDeclarationLoading()`
+为真时）。导入只剩绑定；已有三个按需入口负责把模块补到所需阶段：
+
+| 消费者 | 需要的事实 | 入口 | 编译到 |
+|---|---|---|---|
+| 类型标注/类型引用 `m::T` | 类型名 | `Module::getImportedType` → `declareTypes()` | GCT |
+| 命名导入、`m::f`、`m::v`、导出读取 | 实体（函数/值/算子组） | `ProgramExports::importedEntity` → `declareEntities()` | Declared |
+| 任意算子 `+`/`==`/`->` 等 | **每一层导入**的算子重载 | `Builder::importedOperatorOverloadsOf` → `exportedOperatorOverloads` → `declareEntities()` | Declared |
+| 程序建体/link | 被调用函数的图 | `buildFrom` 的 `order`（**建体前算好**） | Done |
+| `inspect --ops` | 每个模块的算子/声明 | 主模块 `compile(Done)` 后对 `allUserModules()` 逐个 `load()` | Declared |
+| `inspect --tags` | 每个模块的 `declaredTags_` | 只遍历已声明的模块 | 不触发编译 |
+| LSP/语言服务 | 实体/类型 | 同上两个入口（按查询） | GCT/Declared |
+
+`--tags` 和 LSP 这两行是原型没有覆盖到的：`--ops` **会**补装（所以它的数字不动），`--tags`
+**不会**（所以它少输出，§5.3）；LSP 走按查询的入口，但本次没有为它跑计划。表里"程序建体/link"
+是关键：`buildFrom` 在第一个函数体之前就把 `order` 定死；之后惰性声明出来的模块不在 `order` 里，
+被调用函数的体仍可能在调用点按需建出来（`use_lib` 的 `twice(21)` 能算出 42），但**模块级的建体、
+错误收集和 link 不经过 `order` 的检查**：体建失败时诊断没人收，调用拿到默认值——这就是 §5.2 的错值。
+
+### 1.3 一个模块的"第一次使用"到底付多少
+
+`math` 是九个声明模块里最贵的（H169 的一次模块编译是 1.789 ms），本试验在自己的用例上量到
+（阶段自身时间，`uses_one_of_all` 打开时）：parse 1.12 ms、gct ≈0.5 ms、declare 0.40 ms，合计约
+2.0 ms。21 个有 Camel 源的模块在 `registry_all` 上合计约 9.3 ms，与开关省下的 9.33 ms（CPU）对得上；
+其中**体构建只有约 0.9 ms**（`imports_all` 关闭时 `gir main` 0.93 ms，打开时 0.14 ms），所以
+"声明急切、体惰性"这个折中最多省 0.9 ms，不是这 9 ms。**这 9 ms 就是声明本身。** 想不付它，
+只能不检查那些声明。
+
+## 2. 开关与实现
+
+### 2.1 位置、默认值、行数
+
+- 环境变量 **`CAMEL_H178_LAZY_DECLARATIONS=1`**，函数内 `static` 缓存；只认字面 `"1"`；不设或
+  设成别的值都是关闭。**默认关闭**，不是命令行选项，发布构建里没有任何路径会打开它。
+- `src/compile/gct/builder.cpp`：匿名 namespace 的 `lazyDeclarationLoading()` + `compileImportedModules`
+  开头的一个守卫（`if (lazy) return;`，带注释说明它改变的是错误时机）。
+- `src/core/module/module.cpp`：`ProgramExports::importedEntity` 在 `declareEntities()` 循环之后
+  **重新查表**写合并缓存。这不是开关的一部分，而是惰性声明必需的前置修复：旧代码在循环前取
+  `auto &cache = imported_[...]`，循环里的按需声明会走 `exportEntity` → `imported_.clear()`，引用悬空。
+  关闭时循环里没有任何声明，`imported_` 不会变，行为逐字节相同（§3.2 的 1954/1954 是证据）。
+- 合计：2 个文件、+34/−1 行。可控。
+
+### 2.2 没有改的路径（也因此没有节省）
+
+- **`compileAsProgram`（Camel 遍的工具程序，如 `std::opt` 的 `rules`）** 自己先
+  `compile(GCT)`，再 `collectImports()` 逐个 `compile(Declared)`（`userdef.cpp:319`）。这条路径不受
+  开关影响。即便把它也改成惰性，`rules` 的体使用算子，会按 10.2 把 `graph/math/tensor` 全部声明，
+  所以 `std::opt` 仍然 0 收益（§4.3 实测），没有为它写第二处改动。
+- `inspect --ops` 的 `load()` 循环：它必须列出所有模块的算子，所以打开时只是把声明从主模块的
+  GCT 挪到循环里，总量不变；实测 0。
+- `inspect --tags`：它只读 `declaredTags_`，不触发编译，所以打开时少信息（§5.3）。
+- 语言服务器：同样走 `declareEntities`/`declareTypes` 的按查询路径，没有为它单独适配；本次没跑
+  LSP 计划。
+
+## 3. 中性证明（开关关闭）
+
+### 3.1 源码层面
+
+关闭时唯一的执行差异是那个恒假的守卫；`importedEntity` 的重新查表在"循环里不发生声明"时与旧写法
+写同一张表、同一个键。没有别的分支、没有别的读 `getenv` 的地方。
+
+### 3.2 语料逐字节（对干净基线 `b1fb58b63`）
+
+方法：`h178_diff.py` 对 `test/cases` 下全部 1954 个 `.cml` 跑 `camel <file> std::jgir`，
+比较退出码、stdout、stderr 的**原始字节**（只把诊断里出现的安装路径 `<home>/...` 归一成 `<HOME>`，
+那是两份安装的位置不同，不是编译器行为）。
+
+- **关闭 vs 基线（中性）**：基线关闭 vs 原型关闭，**1954/1954 逐字节相同**。这条覆盖了所有 31 个
+  "打开会有差异"的用例；它也证明 §2.1 的 `importedEntity` 修改在关闭时没有行为变化。
+- **关闭 vs 打开（开关的效果）**：1536 个逐字节相同；387 个只在 `"origin": "<n>"` 上不同
+  （节点来源编号随"先解析了哪些文件"变化，H141/H169 的同类规范化；图结构相同）；31 个有实质差异
+  （8 个退出码 + 23 个字节，清单见 §5）。这 31 个的**关闭侧**与基线逐字节相同（上面那条已覆盖）。
+- `inspect --ops`：`registry_all.cml` 关闭/打开/基线三者 stdout 的 SHA-256 都是
+  `fc1bdb7193a86489…`，len 相同。`inspect --tags` 对 `registry_all` 三者都是
+  `7298e0062b67dcd3…`（该程序没有带标签的模块）。
+- `std::jgir` 的 `origin` 在打开时会变：这是预期内的"先解析了谁"编号，不是图变化（387 个用例
+  规范化后逐字节相同）。`inspect --gct` **不能**用于字节对比：它打印 DATA 节点的堆地址
+  （同一个二进制两次运行也不同），本次没有把它算进中性证据。
+- 四个启动命令的关闭侧与基线：`perf.startup` 全绿；`startup-cost.mjs --json` 的关闭数字见 §4.2。
+
+### 3.3 计划门禁（关闭）
+
+主机 `-Plan smoke,test/plans/feat/compile,test/plans/feat/parse,test/plans/perf/startup.plan.toml -Jobs 8`：
+**1137/1137 通过、0 失败**（构建 10.5 s、计划 10.4 s）。其中 `feat/compile` 的负例（`d5_conflict`、
+`value_cycle_modules`、`type_cycle`、`export_var`、`value_conflict` 等）在关闭时仍然按期望报错
+（计划里是 PASS），`perf.startup` 的 `startup.cost` 与 `declaration.cost` 都过。
+
+## 4. 打开时的数字
+
+### 4.1 方法
+
+- **CPU**：`h178_measure.py`，`subprocess.run` + `os.times()`/`getrusage(RUSAGE_CHILDREN)` 的
+  前后差（用户+系统），每个用例 3 次预热后 **61 轮**，同一轮内按随机顺序交替 off/on（配对），
+  取中位数、p10、p90、配对差与配对比。主机负载 20–35。
+- **墙钟**：同一脚本的 `time.perf_counter()`；另有 `test/tools/startup-cost.mjs --reps 41 --json`
+  （计划 `perf.startup` 的同一量具，进程启动到退出的整段），先 ON 后 OFF 跑一遍以排除"先跑的那组
+  碰上负载突发"（第一遍 OFF 先跑时 `version` 读到 11.1 ms、`imports_nothing` 17.1 ms，是同一次突发；
+  数值见 §4.2 下方的说明）。
+- **阶段**：`CAMEL_TIME_PHASES=-` 的 stderr JSON，按模块/阶段求自身时间；每条目 5 次取第一次展示，
+  中位数没有单独列（阶段数只用于归因，结论用进程级数字）。
+
+### 4.2 四个启动命令（`startup-cost.mjs --reps 41`，ON 先跑、OFF 后跑）
+
+| 命令 | OFF 中位数（p10–p90） | ON 中位数（p10–p90） | 差 |
+|---|---:|---:|---:|
+| `camel --version` | 4.01（3.93–4.38） | 4.48（4.15–6.04） | +0.47（噪声） |
+| `imports_nothing.cml std::nvm` | 6.77（6.13–11.71） | 6.27（5.97–7.05） | −0.50（噪声） |
+| `camel inspect --ops registry_all.cml` | 38.96（36.17–44.53） | 39.90（36.34–43.38） | +0.94（噪声） |
+| `registry_all.cml std::nvm` | **38.73（34.99–44.01）** | **26.83（24.81–33.14）** | **−11.90（−30.7%）** |
+
+同一窗口 `declaration.cost`（九个声明模块 parse+gct+declare / 182 条声明）：**OFF 20.9 µs/条、
+ON 20.2 µs/条**——惰性没有让"每条声明"变便宜，只是让不用的模块不出现；`share` 在两种模式下不可比
+（关闭时模块阶段嵌套在主模块 GCT 里，阶段树会重复计父阶段；打开时它们与主 GCT 平级），所以这里只
+报 µs/条。
+
+`h178_measure.py` 的随机交错 61 轮（CPU）给同一结论，且把噪声压得更窄：
+`version −0.13`、`imports_nothing −0.25`、`inspect_ops −0.49`、`imports_all −9.33`（p10 −16.39 /
+p90 −2.15）。**四个命令里只有第四个动，约 −9 到 −12 ms。**
+
+### 4.3 程序形状（CPU，61 轮随机交错，中位数；括号 p10–p90）
+
+| 用例 | 形状 | OFF | ON | 配对差 | 比 |
+|---|---|---:|---:|---:|---:|
+| `imports_all` | 导入 26 个模块（21 个有 Camel 源），`main` 空 | 43.18 | 32.59 | **−9.33（−16.39…−2.15）** | 0.778 |
+| `check_all` | 同上，`camel check` | 39.85 | 30.17 | **−9.89（−13.97…−3.90）** | 0.751 |
+| `imports_math` | 只 `import math`，不用 | 12.10 | 9.54 | **−2.04（−4.44…−0.50）** | 0.803 |
+| `uses_one_of_all` | 导入九个声明模块，只用 `math::sqrt` | 16.43 | 14.39 | **−2.35（−5.05…−0.34）** | 0.866 |
+| `uses_operator_after_import` | 只 `import math`，用 `+` | 11.34 | 10.74 | −0.10（−2.06…+2.05） | 0.989 |
+| `opt_no_import` | 无导入，`std::opt std::nvm` | 45.15 | 45.25 | +0.50（−2.53…+2.96） | 1.012 |
+| `inspect_ops` | 列出 26 个导入的算子 | 41.18 | 40.98 | −0.49（−4.95…+4.01） | 0.988 |
+| `version` | 进程本身 | 5.75 | 5.58 | −0.13（−1.77…+0.87） | 0.971 |
+| `imports_nothing` | 最小编译+运行 | 9.13 | 9.50 | −0.25（−1.38…+2.25） | 0.972 |
+
+### 4.4 阶段证据：省掉的是谁，付给谁
+
+- `imports_all`：关闭时阶段树里出现 22 个模块单元（`algo,array,autodiff,bytes,fs,graph,io,json,main,math,nn,para,pyplot,python,random,re,statistics,str,tensor,this,tiles,time`，
+  21 个导入 + `main`），主模块 `gct` 27.94 ms，模块的 parse+gct+declare 求和约 9.3 ms；打开时只有
+  `main` 与 `cmo_load`（C++ 模块的 `.cmo` 照旧要加载，`hash/env/process/sim/ckpt` 没有 Camel 源，
+  只走 `cmo_load`），`gct` 18.15 ms，主模块 `gir` 0.14 ms。**省下的就是这 21 个有 Camel 源的导入里
+  没有一个是"使用的"**。
+- `uses_one_of_all`：关闭 10 个模块，`gct main` 6.85、`gir main` 0.29；打开只剩 `main` + `math`，
+  `gct main` 3.26、`gir main` 2.51——`math` 的 parse/gct/declare 在 `gir`（建体）里按需发生，
+  净省 2.35 ms。**八个模块被跳过，最贵的 `math` 照付。**
+- `uses_operator_after_import`：关闭/打开模块列表都是 `main` + `math`；打开时 `gct main` 4.07→0.91、
+  `gir main` 0.44→2.37——`math` 从 GCT 挪到建体阶段，总量不变。**这是 10.2 的直接证据。**
+- `opt_no_import`：两种模式都是 `graph,main,math,rules,tensor`；打开时 `gct rules` 9.77→7.62、
+  `library rules` 14.68→17.81——三个模块在 `rules` 的 library 阶段按需声明，总量不变。
+- `inspect_ops`：打开时主模块 `gct` 变小，各模块的 parse/gct/declare 出现在 `--ops` 的 `load()`
+  循环里，总量不变；进程级 0。
+
+### 4.5 为什么"每模块惰性"省不到算子用户
+
+设计原则 10.2：一个导入带来的算子重载与它命名的名字无关，全部进入该层的重载集合。解析 `1 + 2`
+时 `Builder::importedOperatorOverloadsOf("+")` 遍历**所有导入点**，对每个模块调
+`ProgramExports::exportedOperatorOverloads` → `module.declareEntities()`。声明就是整个模块的
+parse+GCT+declare，所以只要程序里有一个算子，**每个导入的 Camel 模块都被声明**，每模块惰性回到
+急切（`uses_operator_after_import` 的 −0.10 ms 是噪声）。`std::opt` 更明显：`rules` 的规则体全是
+算子，`graph/math/tensor` 全被拉进来。
+
+这也解释了 H169 的 `graph` 0.844 ms 为什么不能靠本原型拿掉：它被 `rules` 的算子使用拉进来，不是被
+`rules` 的命名导入拉进来（命名导入只会让 `graph` 在第一次用到 `Program`/`Node` 时编译，但 `rules`
+的规则体第一行就用了算子/名字）。要拿掉它，需要"按名字惰性"——即"名字已由 C++ 导出满足时就不编译
+声明文件"，那会改变哪个签名胜出，是语义决定，不在本原型里。
+
+## 5. 打开时的破坏清单
+
+### 5.1 八个用例从"错误"变成"成功"（退出 1 → 0）
+
+逐文件 `std::jgir`，语料 1954 个：
+
+| 用例 | 关闭时 | 打开时 |
+|---|---|---|
+| `test/cases/compile/diag_render/sem_import_errors.cml` | 1（`broken_lib` 体内错误 + 导入点 `ImportedModuleHasErrors`） | **0** |
+| `test/cases/compile/module_load/cycle_x.cml`、`cycle_y.cml` | 1（模块值环） | **0** |
+| `test/cases/compile/module_load/value_cycle_modules.cml` | 1（`ModuleValueCycle`） | **0** |
+| `test/cases/compile/module_root/export_var.cml` | 1（`ExportedVariable` + 导入点） | **0** |
+| `test/cases/compile/module_root/value_conflict.cml` | 1（两个模块同名值） | **0** |
+| `test/cases/compile/modules_213/type_cycle.cml` | 1（`ModuleTypeCycle`） | **0**（`import { A }` 从未被使用，`A` 不再触发 `declareTypes`） |
+| `test/cases/consistency/operator_overloads/mods/conflict_import.cml` | 1（算子冲突） | **0** |
+
+这些都是 `kind = negative` 的计划用例（在 `feat/compile/*` 里），所以**打开开关跑 `feat/compile`
+会红这 8 条**；`[[sweeps]]` 只扫 behavior/snapshot，不会替作者发现它们（这也是本报告用逐文件语料
+而不是 sweep 的原因）。是否接受"未使用的导入不检查"是 §6 的承诺问题，不是 bug 修复。
+
+### 5.2 使用一个"体有错"的导入函数：打印 `0`，退出 0
+
+最小复现（`/tmp/h178-cases/lazy/`，`lib_bad.cml` 的 `twice` 体里引用不存在的 `nope`）：
+
+```camel
+import { twice } from lib_bad
+func main(): int sync { println(twice(21)); return 0 }
+```
+
+- 关闭：2 个错误（`UnresolvedReference` + 导入点 `ImportedModuleHasErrors`），退出 1；
+- 打开：打印 **`0`**，退出 0。
+
+原因（`program.cpp:568-630`）：`buildFrom` 在**建第一个体之前**用 `units_` 算出 `order`；`lib_bad`
+是在 `main` 的体里解析 `twice` 时才 `declareEntities` 的，加入 `units_` 但不加入 `order`。调用点按
+声明解析到了 `twice`，按需建它的体时触发 `lib_bad` 的体错误，`BuildAbortException` 让调用没有图；
+`order` 里没有这个 unit，`inError` 不会看到它，诊断也没人收，运行期这个调用得到默认值 `0`。
+`use_bad_unused.cml`（导入但不调用）则安静地退出 0——那是 §5.1 的"未使用不检查"。
+
+**这条使"惰性声明"不能按本原型合入**：它不是诊断时机，而是"类型检查通过、程序算错"。最小修法
+是在 `buildFrom` 建体后做定点（把新出现的 unit 补进 `order`、建体、收集错误、再 link），并把错误
+按导入点报 `ImportedModuleHasErrors`；这要改程序建图顺序与错误归属，属于独立改动，本原型没做。
+
+### 5.3 工具输出
+
+- **`inspect --tags`**：`tag_unused.cml`（`import tag_lib`，不使用）关闭/基线都打印
+  `tags of tag_lib: ...`，打开时**什么都不打印**、退出 0。`tag_used.cml`（使用 `quick()`）打开后
+  仍有标签（声明被触发）。即"未被使用的导入模块的标签消失"。
+- **`inspect --ops`**：对合法模块逐字节相同（§3.2）；对**有错的未使用导入**，关闭/基线退出 1 并报
+  `ImportedModuleHasErrors`，打开退出 **0** 并打印完整算子列表——H172 的"有错就不出列表"在惰性下
+  被绕过（因为错误发生在 `--ops` 之前没人读的模块里）。
+- **`inspect --gct`**：本来就打印堆地址，不能做字节对比（与开关无关，记录以免误读）。
+
+### 5.4 诊断文本改变（6 个用例，退出码相同或不同）
+
+| 用例 | 关闭 | 打开 |
+|---|---|---|
+| `compile/module_imports/include_path/prog/library_via_include.cml` | `ImportedModuleHasErrors`（在导入点） | `ImportNameNotExported`（在引用点） |
+| `compile/native/foreign_operator.cml` | `ImportedModuleHasErrors` | `ImportNameNotExported` |
+| `compile/native/missing.cml` | `ImportedModuleHasErrors` | `ImportNameNotExported` |
+| `compile/modules_213/cycle_a.cml`、`cycle_b.cml` | `ImportedModuleHasErrors` | `UnresolvedReference`（先看到的是对方模块里的名字） |
+| `compile/module_imports/d5_conflict.cml` | `ImportNameConflict` | `AmbiguousCall`（`conf_b::f` 的重载） |
+
+这是"错误时机/错误归属"的直接体现：关闭时错误在导入点归因给被导入模块，打开时在第一个使用点
+归因给引用。若承诺改成 P2，这些期望要逐条重写；若保持 P1，就不能惰性。
+
+### 5.5 图差异（23 个字节差异里的 17 个）
+
+按"图的名字/节点数/边数"逐图比较（不规范化 `origin`），17 个分成三类：
+
+1. **图集合与组成真变（5 个）**：
+   - `module_root/values_unused`：关闭时存在 `geometry::make_unit`（4 节点/3 边），打开时**没有**——
+     未使用的模块函数体不再建，这是惰性省下的东西在 jgir 里的可见形状；
+   - `module_root/lib_uses`：`main` 24 节点/31 边 → 22/29，并多出三个 `__g_*`（3 节点/2 边）；
+   - `modules/autodiff/vjp_cross_module`、`vjp_user_a`、`vjp_user_b`：`vjp_lib::scale_rule`
+     **4 节点/2 边 → 2 节点/0 边**。`vjp_user_a`/`vjp_user_b` 没有 `main`，`vjp_cross_module` 有，
+     但三者的差异都落在 `vjp_lib` 的库/规则辅助图上；本试验没有证明它们与关闭时等价，若要合入
+     必须先解释这一条。
+2. **`__g_N__` 辅助图编号平移（9 个）**：`consistency/attempt/library`、`consistency/generic_values/values`、
+   `modules/graph_pass/fold_constants`、`typed_constants`、`modules/stdlib/array_basic`、`array_hof`、
+   `array_large`、`fault_zip_with`、`parse/rulings/import_rename`。形状相同的图换了编号（少声明模块，
+   泛型实例/辅助图的创建计数变小），例如 `__g_20__` → `__g_15__`。
+3. **同一组图、只变节点编号/`source`（3 个）**：`module_root/values`、`own_values_shadow`、
+   `linear/jit/perf_fib_smoke`——图的名字、节点数、边数都相同，差异是 `g0n0` → `g0n2` 之类的端口
+   编号和 `origin`。
+
+另外 387 个用例只在 `"origin": "<n>"` 上不同（图结构逐字节相同），属于第 3 类的轻量版：解析顺序
+变了，节点来源编号跟着变。**这 17 个和 387 个都不是"关掉开关就消失"的噪声**：只要打开开关，jgir
+基线、按图名/节点 id 的快照、以及任何把 `__g_N__` 当稳定名字的工具都要重写。运行结果在本次语料里
+没有因此改变，但第 1 类（尤其 `vjp_*`）没有等价性证明，不能按"只是编号"处理。
+
+### 5.6 原型自身的一个真 UAF（已修）
+
+第一版在语料上跑出 2 个 SIGSEGV（`d5_conflict`、`d5_overload`）和 1 个堆损坏
+（`parse/rulings/import_rename`，`malloc(): unaligned tcache chunk detected`）。定位到
+`ProgramExports::importedEntity`：缓存的引用在按需声明前取，而 `exportEntity` 每次写都
+`imported_.clear()`。修法见 §2.1；修后在同样的 1954 个用例上**0 崩溃**（31 个差异全部是上面的
+语义/图差异）。这条记录两个事实：(a) 惰性会把"声明发生在查找中间"变成常态，缓存/引用必须重审；
+(b) 这个修复本身在关闭时逐字节中性（§3.2）。
+
+## 6. 作者要做的决定
+
+**承诺**：
+
+- **P1（今天）**：每个导入在导入处被声明检查；未使用的导入也检查；`--tags` 能看到未使用模块的标签；
+  类型环/值环/同名冲突都在导入点报。§10.1 与图模型 §3.9.4 的写法就是它。
+- **P2（惰性）**："导入在被使用时才检查"；未使用模块不解析、不检查、不列标签；错误在使用点报；
+  错误集合从"整个导入闭包"缩到"被用到的模块"。这要改 §10.1/§3.9.4 的文字，并且必须先修 §5.2 的
+  建体定点，否则是错值。
+
+**数字支持的事实**（不替作者选）：
+
+- P2 的收益只在"导入很多 Camel 模块、几乎不用"：`registry_all` 空程序 −9.3 ms CPU / −11.9 ms 墙钟
+  （约 −22% / −31%）；四个启动命令里只有这一个动，`--version`、`imports_nothing`、`inspect --ops`
+  都不动。
+- 一旦程序使用算子（哪怕一个 `+`）或 `std::opt`，每模块惰性归零（−0.1 ms、+0.5 ms，都在噪声内），
+  因为 10.2 要求所有导入的算子重载可见。要再进一步，得做"按名字惰性"，那是另一个语义决定。
+- 使用一个模块就付它的声明钱（`math` 约 2 ms）；所有导入都被用到时等于急切（总量相同，只是阶段
+  位置变了）。
+- 代价：8 条负例不再报错、6 条诊断文本要改、`--tags` 少信息、`--ops` 对坏导入静默、17 个 jgir
+  用例的图/编号要重写（其中 5 个是图集合/组成真变，`vjp_*` 没有等价性证明），外加 §5.2 的建体定点。
+
+**本试验的建议性结论（不是决定）**：如果目标只是 H142 的启动成本，9–12 ms 只出现在"导入整库、
+什么也不用"的形状上，而四个启动门禁里三个完全不动；用承诺换这个数，收益面很窄，且要先付 §5.2 的
+实现代价。因此数字**不支持**为了启动而默认开启惰性；是否为了"未使用导入不编译"这个独立目标接受
+P2，是作者的决定。原型与开关保留在分支上供复现，不合入。
+
+## 7. 没做什么 / 遗留
+
+- 没有改 `compileAsProgram`（Camel 遍）的急切声明；实测对 `std::opt` 无收益（10.2 会全拉进来）。
+- 没有做"按名字惰性"（C++ 导出已满足的名字不编译声明文件）：会改变签名胜出，属语义决定。
+- 没有为 LSP 适配；没有跑 LSP 计划。
+- 没有改任何文档里的承诺（§10.1、§3.9.4 原样）；没有新增诊断码；没有改算子/纯度/资源。
+- 测量脚本不进仓库（沿用 H142 的做法）：主机 `~/h178-bench/h178_measure.py`、`h178_diff.py`、
+  `h178_bytes.py`，用例在 `/tmp/h178-cases/`；基线安装 `~/h178-bench/baseline-out`。
+- 没有跑 stress / progen / GC 压力 / PyTorch 计划；没有 push，没有碰 `develop`/`main`。
