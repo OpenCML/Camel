@@ -143,7 +143,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         }
         const std::string name = child->name();
         Type *type             = child->at(0)->dataType();
-        if (!name.empty() && !isGenericHere(type)) {
+        if (!name.empty() && !isGenericHere(type, child)) {
             plainNames.insert(name);
         }
     }
@@ -160,7 +160,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             continue;
         }
         Type *type = child->at(0)->dataType();
-        if (name.empty() || !isGenericHere(type)) {
+        if (name.empty() || !isGenericHere(type, child)) {
             continue;
         }
         // One name is either a generic function or a set of ordinary ones: which of two
@@ -183,6 +183,9 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->name           = isOperator ? displayNameOf(name) : name;
         tmpl->func           = child;
         tmpl->funcType       = tt::as_ptr<FunctionType>(boundType(type));
+        if (const auto *head = GCT::Tree::of(child)->headTypeParamsOf(child)) {
+            tmpl->headParams = *head;
+        }
         tmpl->outerBindings  = typeBindings_;
         tmpl->ownerGraph     = currGraph_;
         tmpl->module         = module_;
@@ -204,6 +207,18 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             templateScope_->insert(name, tmpl);
         }
     }
+}
+
+std::vector<std::string> Builder::typeParameterNames(const template_ptr_t &tmpl) const {
+    std::vector<std::string> names = tmpl->headParams;
+    std::vector<std::string> fromSignature;
+    collectTypeVars(tmpl->funcType, fromSignature);
+    for (const std::string &name : fromSignature) {
+        if (std::find(names.begin(), names.end(), name) == names.end()) {
+            names.push_back(name);
+        }
+    }
+    return names;
 }
 
 node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
@@ -376,8 +391,7 @@ Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr
         throw BuildAbortException();
     }
     if (expected == nullptr) {
-        std::vector<std::string> names;
-        collectTypeVars(tmpl->funcType, names);
+        std::vector<std::string> names = typeParameterNames(tmpl);
         rejectGenericValue(
             tmpl,
             origin,

@@ -1,0 +1,22 @@
+/**
+ * A `when` calls a predicate the user wrote with `match type`, not a fixed table of the
+ * compiler: `is_compound` matches the shape of T when the declaration is instantiated.
+ */
+module when_user_predicate
+
+func is_compound::<T>(): bool {
+    return match type T {
+        case struct => true
+        case tuple => true
+        case _ => false
+    }
+}
+
+func describe::<T>(x: T): string when is_compound::<T>() {
+    return 'compound'
+}
+
+func main(): int sync {
+    println(describe((1, 2)))
+    return 0
+}

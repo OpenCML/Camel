@@ -41,6 +41,48 @@ inline camel::source::origin_id_t nodeOrigin(const node_ptr_t &node) {
     return node ? node->origin() : camel::source::kInvalidOriginId;
 }
 
+/// Whether the type variable `name` occurs in a type written below `node`. A head parameter a
+/// declaration writes only in its body (`match type T`, a cast to `T`) is used by the body even
+/// though the signature never names it, and is not an unused one.
+bool usesTypeVar(const node_ptr_t &node, const std::string &name) {
+    if (node == nullptr) {
+        return false;
+    }
+    const auto inType = [&](Type *type) {
+        if (type == nullptr) {
+            return false;
+        }
+        std::vector<std::string> names;
+        collectTypeVars(type, names);
+        return std::find(names.begin(), names.end(), name) != names.end();
+    };
+    switch (node->type()) {
+    case NodeKind::TYPE:
+        if (inType(node->dataType())) {
+            return true;
+        }
+        break;
+    case NodeKind::DATA:
+        if (node->data() != nullptr && inType(node->data()->type())) {
+            return true;
+        }
+        break;
+    case NodeKind::CAST:
+        if (inType(node->targetType())) {
+            return true;
+        }
+        break;
+    default:
+        break;
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        if (usesTypeVar(node->at(i), name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 inline camel::source::SemanticPart semanticPart(
     camel::source::SemanticRole role, camel::source::origin_id_t origin, int32_t slot = -1,
     const std::string &label = "") {
@@ -4416,6 +4458,21 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     openSignature_  = true;
     FunctionType *funcType =
         tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    // The head parameters the signature never wrote; the body may still use them (`match type
+    // T`), so the warning waits until the body is built.
+    const std::vector<std::string> unusedHeadVars = std::exchange(pendingUnusedHeadVars_, {});
+    const auto reportUnusedHead = [&](const node_ptr_t &body, const node_ptr_t &when) {
+        for (const std::string &name : unusedHeadVars) {
+            if (usesTypeVar(body, name) || usesTypeVar(when, name)) {
+                continue;
+            }
+            diags_->of(SemanticDiag::TypeVariableUnused)
+                .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+                .commit(
+                    name,
+                    "the declaration declares it at its head and its signature never writes it");
+        }
+    };
     signatureVisit_ = false;
     // The parameters of a lambda whose type was left out (design principles 5.9), filled by GIR
     // from the function type the lambda stands in.
@@ -4523,11 +4580,14 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         }
         node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
         funcNode->setNativeDeclaration();
+        tree_->setHeadTypeParams(
+            funcNode, ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
         if (whenNode != nullptr) {
             tree_->setWhen(
                 funcNode,
                 {whenNode, funcData->whenText(), whenNode->origin()});
         }
+        reportUnusedHead(nullptr, whenNode);
         *funcNode << typeNode;
         setOriginFromAst(
             context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
@@ -4556,7 +4616,10 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     const ValueUseScope valueUseScope(*this);
     valueUse_            = {};
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
+    reportUnusedHead(stmtsNode, whenNode);
     node_ptr_t funcNode  = tree_->makeFunc(funcData->ref().toString());
+    tree_->setHeadTypeParams(
+        funcNode, ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
     *funcNode << typeNode << stmtsNode;
     if (whenNode != nullptr) {
         tree_->setWhen(funcNode, {whenNode, funcData->whenText(), whenNode->origin()});
@@ -5202,12 +5265,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     if (signature) {
         std::vector<std::string> used;
         collectTypeVars(built, used);
+        pendingUnusedHeadVars_.clear();
         for (const std::string &name : declaredTypeVars_) {
             if (std::find(used.begin(), used.end(), name) == used.end() &&
                 !writtenHeadVars_.contains(name)) {
-                diags_->of(SemanticDiag::TypeVariableUnused)
-                    .at(ast->load()->tokenRange())
-                    .commit(name, "the declaration declares it at its head and its signature never writes it");
+                pendingUnusedHeadVars_.push_back(name);
             }
         }
     }

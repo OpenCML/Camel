@@ -64,8 +64,7 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
     }
     if (const auto found = genericDrefs_.find(target); found != genericDrefs_.end()) {
         const auto tmpl = found->second;
-        std::vector<std::string> names;
-        collectTypeVars(tmpl->funcType, names);
+        std::vector<std::string> names = typeParameterNames(tmpl);
         if (!given.empty()) {
             // By name: each type variable of the signature once, in any order.
             std::vector<Type *> byPosition(names.size(), nullptr);
