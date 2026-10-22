@@ -118,7 +118,7 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings);
  * with n = 4 is `Tensor<f32, [4]>`). A `constas` parameter is not substituted: it is a
  * parameter, not an extent. Returns `type` itself when nothing in it was replaced.
  */
-Type *substituteExtentValues(Type *type, const ExtentValues &values);
+Type *substituteExtentValues(Type *type, const ExtentValues &values, const ExtentPacks &packs = {});
 
 /**
  * A new open function type (camel/core/type/composite/func.h): `type` with the variables
@@ -174,3 +174,4 @@ TupleType *findRepeatedMark(Type *type);
 std::string typeBindingsToString(const type_bindings_t &bindings);
 
 } // namespace camel::core::type
+

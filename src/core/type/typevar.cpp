@@ -376,14 +376,14 @@ OpenFunctionType *instantiateFunctionType(
     return rebuildFunctionType(type, bindings, extents, extents != nullptr, changed).buildOpen();
 }
 
-Type *substituteExtentValues(Type *type, const ExtentValues &values) {
+Type *substituteExtentValues(Type *type, const ExtentValues &values, const ExtentPacks &packs) {
     if (type == nullptr || values.empty()) {
         return type;
     }
     switch (type->code()) {
     case TypeCode::Array: {
         auto *array = static_cast<ArrayType *>(type);
-        Type *elem  = substituteExtentValues(array->elemType(), values);
+        Type *elem  = substituteExtentValues(array->elemType(), values, packs);
         return elem == array->elemType() ? type : ArrayType::create(elem);
     }
     case TypeCode::Tuple: {
@@ -392,7 +392,7 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values) {
         std::vector<Type *> types;
         types.reserve(tuple->size());
         for (Type *elem : tuple->types()) {
-            types.push_back(substituteExtentValues(elem, values));
+            types.push_back(substituteExtentValues(elem, values, packs));
             changed |= types.back() != elem;
         }
         if (!changed) {
@@ -413,14 +413,14 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values) {
             std::vector<Type *> args;
             args.reserve(record->typeArgCount());
             for (Type *arg : record->typeArgs()) {
-                args.push_back(substituteExtentValues(arg, values));
+                args.push_back(substituteExtentValues(arg, values, packs));
                 changed |= args.back() != arg;
             }
             return changed ? StructType::get(record->decl(), args) : type;
         }
         StructTypeFactory factory;
         for (size_t i = 0; i < record->size(); ++i) {
-            Type *field = substituteExtentValues(record->typeAt(i), values);
+            Type *field = substituteExtentValues(record->typeAt(i), values, packs);
             changed |= field != record->typeAt(i);
             factory.add(std::string(record->fieldName(i)), field);
         }
@@ -438,9 +438,9 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values) {
     if (type->isOtherType()) {
         // A module type decides what its named extents mean (`Tensor` keeps them as a shape).
         // A type that knows nothing of them leaves the type alone.
-        if (OtherType *replaced = static_cast<OtherType *>(type)->withExtentValues(values);
+        if (const Type *replaced = type->withExtentValues(values, packs);
             replaced != nullptr && replaced != type) {
-            return replaced;
+            return const_cast<Type *>(replaced);
         }
     }
     return type;
@@ -784,3 +784,6 @@ std::string typeBindingsToString(const type_bindings_t &bindings) {
 }
 
 } // namespace camel::core::type
+
+
+
