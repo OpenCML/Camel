@@ -557,3 +557,41 @@ case = "../../../cases/compile/native/fs_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "fs_type.cml:11:19", "argument types: <> (int)", "<fs:exists>: (path: string) => bool"]
+# ---- The declarations of `tensor` (handover H151) ----
+#
+# `tensor` is the largest module of the batch: 64 public operators, of which only ten have a
+# signature a declaration can state (an extent, an element count, the binary form, a NumPy file,
+# the worker pool and the generator seed). The other 54 take their element type or their shape
+# from an argument (`new`, `add`, `where`, `reshape`, `sum`'s axis form, `from_bytes`'s type
+# argument, ...), or accept a tensor-or-number operand, or an optional parameter, none of which
+# a body-less `export func` can write; they stay in C++ and are recorded in
+# `stdlib/signatures/tensor.cml` as computed signatures. The cases below prove the declared
+# half: an importer reads it, a call checks against it, and a type-qualified alias
+# (`Tensor::numel`) is the same declaration, not a second signature.
+
+[[tests]]
+name = "native.tensor_declaration_import"
+desc = "`tensor`'s declarations are the module's signature for the ten fixed operators: `shape`, `numel`, `dim` (both integer forms), the NumPy file pair and the module state reach the C++ operators, `from_bytes` still takes its element type as a type argument, and `reshape` (computed) is imported beside them."
+kind = "behavior"
+case = "../../../cases/compile/native/tensor_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "22\n4\n2\n2\n4\n1\n2\n4\n"
+
+[[tests]]
+name = "native.tensor_wrong_arity"
+desc = "`tensor:numel` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's — `stdlib/tensor.cml`, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/tensor_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:12:18", "argument types: <> (Tensor<float32, [?, ?]>, int)", "<tensor:numel>: (t: Tensor) => int"]
+
+[[tests]]
+name = "native.tensor_wrong_type"
+desc = "A `string` where the declaration of `to_bytes` says `Tensor`: refused at the call against the declared parameter name, and the computed operators of the same module are untouched."
+kind = "negative"
+case = "../../../cases/compile/native/tensor_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:11:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: Tensor) => Bytes"]
