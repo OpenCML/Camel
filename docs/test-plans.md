@@ -51,8 +51,8 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
 
 - `fast` is the default layer and the one `npm run test` runs. It must stay useful for a
   developer loop: on an 8-core machine a parallel fast run is expected to finish in about two
-  minutes (H10 measured it on a machine that other worktrees were using at the same time, so it
-  took longer; the numbers are in `docs/handover/reports/H10.md`).
+  minutes (measured on a machine that other worktrees were using at the same time, so it
+  took longer).
 - `slow` is everything whose result is still worth having but whose cost does not belong in
   the loop: the comparisons against PyTorch, the collector stress and poison scans, the random
   program checks (progen and fuzzing), the performance benchmarks, and any other single test
@@ -198,7 +198,7 @@ under `feat/modules/tensor/` runs that plan directory. The file has no plan of i
 is the plan that reads it.
 
 A tracked file that matches no rule used to be invisible in a mixed change: another file's rule
-kept the fallback away, and this file contributed nothing (H182). Two things now make that
+kept the fallback away, and this file contributed nothing. Two things now make that
 visible. `--changed` prints a `[WARN]` naming every changed file no rule matched (the plan files
 the policy excludes are not called holes). And the self-test `test/tools/selftest/run.mjs` walks
 every file in the index plus the untracked, not ignored files, and fails on a class that neither
@@ -208,14 +208,14 @@ comparisons) and files no plan reads (vendored code, packaging, CI configuration
 metadata). A new kind of file therefore cannot appear without a rule or a reason: add
 the rule, or add the class and its reason to the self-test.
 
-That check is why the file rules now cover the classes H161 could not have known about: the
+That check is why the file rules now cover the classes the first rule set could not have known about: the
 `stdlib/<module>.cml` declaration bodies (`feat/modules` plus `feat/compile`) and their computed
 halves in `stdlib/signatures/` (the registry plan, which runs `--verify-ops` and `--verify-doc`),
 the documentation and release-gate scripts (`feat/docs_links`), the debugger race harness
 (`feat/tools/debugger`), exemplars, root Markdown and assets, the public headers under
 `include/` (mirroring `src/`), the rest of `src/` and the test harnesses. `test/perf-baseline.json`
 and `scripts/perf-gate.mjs` are the one class left without a perf plan on purpose: perf is manual
-(H167), so a change there must not select a perf plan.
+(the rule that perf is manual), so a change there must not select a perf plan.
 
 Keep the file short and honest: map the smallest set of plans that would catch a regression in
 that area, specific rules first (`src/passes/sched/` before `src/passes/`, `modules/tiles/` before
@@ -257,7 +257,7 @@ of the kind it configures is an **error**, not a comment. A plan with an unknown
 one failing `<invalid plan>` test in that plan — the error names the plan file, the test and the
 key (with a suggestion when the key is a near miss), the plan's tests do not run, and the rest of
 the run continues to its summary. A key the runner silently ignored used to be the worse
-failure: the test passed while asserting nothing (H52). There is deliberately no escape hatch,
+failure: the test passed while asserting nothing. There is deliberately no escape hatch,
 neither in the plan file nor in the environment: a plan the runner only partly understands is
 not evidence.
 
@@ -522,7 +522,7 @@ Important payload fields:
   graph dump names its source file), and it is absolute, so it differs between two checkouts of
   the same commit. A verify script that digests such output must replace `case_path` (or the
   absolute prefix of the case's file name) before hashing; a digest that still contains it is
-  only valid in the checkout that recorded it (H143).
+  only valid in the checkout that recorded it.
 - `input.repo_root`, `input.test_root` — the repository root and the `test/` root, absolute.
 - `input.plan_path`, `input.test_name` — the plan file and the test's name, including a sweep
   prefix when the test is a sweep copy.
@@ -559,7 +559,7 @@ under an extra environment, with all their assertions; the copies are named
 sweep. The source plan's `id` (its file name when it has none) is part of the name because two
 source plans may both have a test called `shapes` — `feat/compile/enum` and `feat/para/handoff`
 do. Without it the copies collide, and a back end waits for, and compares against, whichever
-copy of its first back end ran last: the run reports a failure although every test ran (H120).
+copy of its first back end ran last: the run reports a failure although every test ran.
 One source test reused under two sweeps keeps two distinct copies, one per sweep name. A source
 plan listed twice in the same sweep is expanded once.
 
@@ -685,11 +685,10 @@ How the numbers are read:
 
 `test/perf-baseline.json` is data, not a ceiling: the medians, both spreads, the exact command of
 every case, the commit, the build's own stamp, the repetition count and the host load. Seed it on
-the host whose numbers it records; a baseline from another machine is not comparable. H167's
-[report](handover/reports/H167.md) has the cost of each of the ten plans and the evidence for the
+the host whose numbers it records; a baseline from another machine is not comparable. The
+performance notes have the cost of each of the ten plans and the evidence for the
 split. The plans left out keep the measurement they already have: `perf.startup` carries its own
-ceilings and `declaration.cost` share ([H142](handover/reports/H142.md),
-[H152](handover/reports/H152.md)), `perf.gc` asserts what must not grow with the length of the
+ceilings and `declaration.cost` share, `perf.gc` asserts what must not grow with the length of the
 run, the showcases compare against PyTorch, and `docs/performance/graph-store-baseline.md` is a
 separate manual baseline of the graph store.
 
