@@ -170,14 +170,14 @@ function declarationCost(reps) {
 }
 
 // The ceilings. The medians they are built on, measured on the Linux host at H142 (21-101
-// samples, the numbers and their spread are in docs/handover/reports/H142.md): 5.0 / 8.5 / 26.1 /
+// samples, the numbers and their spread are in handover note ⟨c49da87⟩ (H142)): 5.0 / 8.5 / 26.1 /
 // 23.6 ms on a quiet host. The last two ceilings are about four times that; the first two are five
 // to eight times, because 5-8 ms is below this host's scheduling noise: 3 x 5 ms would flake at the
 // 20 / 36.5 ms medians seen at load average 215. For the same reason the ceilings are above the
 // medians at load average 150 (16.5 / 19.3 / 53.4 / 51.5 ms) and 215 (20 / 36 / 87 / 72 ms). The
 // gate is a smoke alarm ("the standard library is loaded before the program runs", "a declaration
 // module costs milliseconds"), not a percentage budget; it cannot see the 4.6 ms the declaration
-// modules cost in H142's day, and docs/handover/reports/H142.md is where that number is recorded.
+// modules cost in H142's day, and handover note ⟨c49da87⟩ (H142) is where that number is recorded.
 //
 // They were re-measured, not re-set, at H177 (same host, load average 21-22): 5.1 / 7.4 / 38.3 /
 // 37.0 ms. The two commands that import every module grew, but not from declarations: `pyplot`
@@ -185,6 +185,7 @@ function declarationCost(reps) {
 // `tiles`, `tensor`, `nn` and `autodiff` load too, so `inspect_ops` and `imports_all` are about 2.6
 // and 2.4 times the quiet median here instead of four. That is a real cost of importing those
 // modules, not a reason to move a ceiling; the numbers are recorded in docs/handover/reports/H177.md.
+// modules cost today, and handover note ⟨c49da87⟩ (H142) is where that number is recorded.
 const CASES = [
     {
         name: 'version',

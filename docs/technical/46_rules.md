@@ -137,7 +137,7 @@ them.
 ## 6. The rest of the engine (H38)
 
 The rule declaration, the engines and the check are the first step; `when` is implemented (H38
-item 1), the rest is planned in the H38 report (`docs/handover/reports/H38.md`, section 1). In
+item 1), the rest is planned in the H38 report (`handover note ⟨50954d0⟩ (H38)`, section 1). In
 short:
 
 **`when` (implemented).** `rule … { lhs => rhs } when expr` compiles to a fourth function

@@ -10,7 +10,7 @@
 # The ceilings are about four times the H142 quiet median for `inspect_ops` and `imports_all`, and
 # five to eight times for `--version` and `imports_nothing`, whose 5-8 ms medians are below this
 # host's scheduling noise; at H142 all four were above the medians seen at load average 150 and 215.
-# The numbers and their spread are in docs/handover/reports/H142.md. They are a smoke alarm for "the
+# The numbers and their spread are in handover note ⟨c49da87⟩ (H142). They are a smoke alarm for "the
 # standard library is now loaded before the program runs", not a percentage budget: this host is
 # shared, and a few milliseconds of spread is normal. H177 re-measured them at load average 21-22:
 # 5.1 / 7.4 / 38.3 / 37.0 ms. The two full-import commands are now about 2.6 and 2.4 times the quiet
@@ -20,6 +20,13 @@
 # for the two full-import commands, over the 100 / 90 ceilings, so a later re-baseline may need
 # 150 / 140. The gate passes at every load measured here. The test prints one `startup.cost` line per
 # command (median, p10, p90, min, max, n) and fails only when a median crosses its ceiling.
+# The ceilings are about four times the quiet median for `inspect_ops` and `imports_all`, and five
+# to eight times for `--version` and `imports_nothing`, whose 5-8 ms medians are below this host's
+# scheduling noise; all four are above the medians seen at load average 150 and 215. The numbers and
+# their spread are in handover note ⟨c49da87⟩ (H142). They are a smoke alarm for "the standard
+# library is now loaded before the program runs", not a percentage budget: this host is shared, and
+# a few milliseconds of spread is normal. The test prints one `startup.cost` line per command
+# (median, p10, p90, min, max, n) and fails only when a median crosses its ceiling.
 #
 # `declaration.cost` is the same idea one level down (handover H152): the compiler's own
 # `--time-phases` report of the declaration modules, added up and divided by their declarations.

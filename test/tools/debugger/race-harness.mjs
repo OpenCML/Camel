@@ -19,7 +19,7 @@
 // The harness measures the load-dependent rate; it does not prove the mechanism. Before H159
 // the two tests were red about once in ten rounds on a loaded machine. A deterministic red
 // needs a probe that widens the window between the command's answer and the end of the run:
-// docs/handover/reports/H159.md records the probe, the rate with and without it, and the trace.
+// handover note ⟨55d39bb⟩ (H159) records the probe, the rate with and without it, and the trace.
 //
 // Exit code is 1 when at least one round failed, 0 otherwise: a CI job can use it directly,
 // but a green run proves nothing unless --rounds is large enough to have seen a red before.

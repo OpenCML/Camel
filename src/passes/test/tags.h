@@ -21,7 +21,7 @@
  * TEST-ONLY: `test::tags` reads a declaration fact back from the runtime graph, the way a
  * scheduler does, and prints one line per graph: `TAGS independent <name> yes|no`. It covers
  * the runtime query of the standard tag `independent` (design principles 3.6), which no
- * scheduler consumes yet (the question is in docs/handover/reports/H85.md).
+ * scheduler consumes yet (the question is in handover note ⟨e2a6ce0⟩ (H85)).
  *
  * Only nameable when CAMEL_ENABLE_TEST_PASSES is set (fault.h). The program is returned
  * unchanged.

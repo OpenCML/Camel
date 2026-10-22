@@ -51,7 +51,7 @@
 //
 // The plans this script refuses are refused by name, with the policy that keeps them out of every
 // gate. `--list` prints the whole classification; the numbers behind it are in
-// docs/handover/reports/H167.md, and docs/test-plans.md "Performance measurement" states the rule.
+// handover note ⟨f14c90d⟩ (H167), and docs/test-plans.md "Performance measurement" states the rule.
 
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -348,7 +348,7 @@ function refuse(plan) {
                 `  ${plan.cost}.\n` +
                 '  A repetition costs minutes, so the median cannot be repeated often enough to be a\n' +
                 '  gate; H167 measured the plan once and recorded the number in\n' +
-                '  docs/handover/reports/H167.md. If a milestone needs it, run that plan itself\n' +
+                '  handover note ⟨f14c90d⟩ (H167). If a milestone needs it, run that plan itself\n' +
                 '  (docs/test-plans.md, "Layers: fast, slow And debug").\n'
         )
     } else {
@@ -358,7 +358,7 @@ function refuse(plan) {
                 `  ${plan.id} ${plan.measures}.\n` +
                 `  ${plan.cost}.\n` +
                 `  policy -- ${POLICY}\n` +
-                '  docs/handover/reports/H154.md section 2 records this plan as not run for exactly that\n' +
+                '  handover note ⟨0ee01ba⟩ (H154) section 2 records this plan as not run for exactly that\n' +
                 '  reason, and test/plan-selection.json keeps it out of --changed.\n' +
                 '  A milestone run names the plan file to the test runner itself; this gate never\n' +
                 '  measures it.\n'

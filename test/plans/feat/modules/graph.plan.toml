@@ -250,7 +250,7 @@ timeout_ms = 20000
 # turns its test red. They are not a byte-for-byte differential: the C++ draft rewrite leaves the
 # neutral operand constant dead and attaches the parameter's source span to the port it keeps,
 # while the rule engine prunes the constant and its commit leaves the port without a span. Both are
-# engine artefacts, not the laws; reports/H160.md §4 has the diff.
+# engine artefacts, not the laws; handover note ⟨c7b6133⟩ (H160) §4 has the diff.
 
 [[tests]]
 name = "neutral_identities_by_std_opt_algebra"

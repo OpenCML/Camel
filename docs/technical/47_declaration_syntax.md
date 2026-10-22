@@ -2,7 +2,7 @@
 
 本文件是 H168 的提案部分：声明（模块 `.cml` 里没有函数体的 `export func`）今天能写什么、
 写不出什么，每一处要不要新语法、依据是哪一段、代价是什么。逐名字的盘点与排序见
-[`docs/handover/reports/H168.md`](../handover/reports/H168.md)。规范文本是
+handover note ⟨7734c9a⟩ (H168)。规范文本是
 [`docs/design-principles.cn.md`](../design-principles.cn.md)，标准库写法以
 [`docs/stdlib-conventions.cn.md`](../stdlib-conventions.cn.md) 为准；本文只把它们落到声明上。
 
@@ -242,7 +242,7 @@ H166 §6 已经把这一题写成“待作者裁定”，并给了三个方向�
 `ckpt:load_tree`；不在本表但同一形状：`json::decode_as`。
 
 **完整的选项表与非决定记录**在 H148 Q1 的 A/B/C（A 参数化声明、B 永远留 C++、C 只接受
-`::<T>`），`docs/handover/reports/H148.md:54-74`。本文不重复、不改写。要补的只有一句：
+`::<T>`），`handover note ⟨0a5036b⟩ (H148:54-74)`。本文不重复、不改写。要补的只有一句：
 语言参考 7.5 已经允许调用侧这么写（“只出现在返回类型中的变量由期望类型推出…没有足够上下文
 时写显式类型实参”），缺的只是声明侧。
 
@@ -251,7 +251,7 @@ H166 §6 已经把这一题写成“待作者裁定”，并给了三个方向�
 **影响**：`ckpt:save_tree`（独占）、`tiles:gpu`、`onnx:export_model`（这两个还要 Q-F）。
 
 H148 Q3 的 A/B/C（`where`/类型谓词、接受编译期检查退化、维持 C++），
-`docs/handover/reports/H148.md:106-126`。**不建议顺手加**：H140 §7 已经写过它比 H108 的选项 1
+`handover note ⟨0a5036b⟩ (H148:106-126)`。**不建议顺手加**：H140 §7 已经写过它比 H108 的选项 1
 更大。
 
 ## 4. 不是语法缺口，不要动
@@ -329,6 +329,6 @@ resolver（`modules/tree/module.cpp:30-60`），没有执行器；声明要求
 
 ## 7. 顺序
 
-排序与建议见 [`docs/handover/reports/H168.md`](../handover/reports/H168.md) 第 7、8 节：
+排序与建议见 handover note ⟨7734c9a⟩ (H168) 第 7、8 节：
 先做 0 语法成本的声明（基点上 16 条：`python` 6 + `pyplot` 8 + `show` 2；`develop` 上
 `python`/`pyplot` 的 14 条已由 H166 迁完，`show` 2 条已由 H175 迁完），再看 Q-M。

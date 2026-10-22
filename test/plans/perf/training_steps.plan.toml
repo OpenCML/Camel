@@ -16,11 +16,11 @@ tags = ["perf", "training", "gpu"]
 #
 # The budgets are the mean of ten runs on the reference host (32 cores, Release); they are a
 # regression guard, not a goal, and the per-step numbers these programs print are in
-# docs/handover/reports/H54.md and H48.md. The host is shared: the same plan measures 1.3-1.6x
+# handover note ⟨f9dbbfe⟩ (H54) and handover note ⟨058be18⟩ (H48). The host is shared: the same plan measures 1.3-1.6x
 # slower while eight agents are building on it, so the tolerance is 100 % -- a real regression is
 # still caught, a busy neighbour is not a failure.
 #
-# H54 (the cost of one operator, reports/H54.md) took the thread pool out of these steps: a range
+# H54 (the cost of one operator; handover note ⟨f9dbbfe⟩) took the thread pool out of these steps: a range
 # whose chunks are smaller than 40 us of work now runs on the calling thread, and the pool is only
 # created by a range that really splits. What the plan measured before and after it, medians of ten
 # runs (before at load 29-70, after at load 34-41):
@@ -34,7 +34,7 @@ tags = ["perf", "training", "gpu"]
 # step 118 us. H48's 16.2 ms step and 45-78 us matmul were measured on the same host at load 85-90,
 # where the pool's wakeup storm dominated.
 #
-# H64 (the optimizer's own step, reports/H64.md) made Adam one pass over whole tensors instead of a
+# H64 (the optimizer's own step; handover note ⟨00719c9⟩) made Adam one pass over whole tensors instead of a
 # double loop per parameter with a libm sqrt call. What the plan measured before and after it,
 # medians of ten runs, alternating baseline and new in one window at load 31-32:
 #
