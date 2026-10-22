@@ -1,0 +1,60 @@
+/**
+ * The accuracy rules as values, applied one at a time and as two schedules, with the cost of the
+ * application printed. `direct` and `inner` are the order case: the same source, the same final
+ * program, a different number of rewrites because the stage written first owns the match.
+ */
+module accuracy_schedule
+
+import { Program } from graph
+import { Rule, Run, run } from rewrite
+import {
+    seq, tensor_log_softmax_naive, tensor_softmax_naive, tensor_log_softmax_of_softmax,
+} from rules
+
+func reported(label: string, r: Run<Program>): Program sync {
+    println(label, 'rewrites', r.rewrites, 'rounds', r.rounds)
+    return r.result
+}
+
+func one(label: string, p: Program, rules: Rule[]): Program! sync {
+    return run(p, rules, 16, false) ?-> sync (r: Run<Program>) => reported(label, r)
+}
+
+export func only_softmax(p: Program): Program! sync {
+    return one('only_softmax', p, [tensor_softmax_naive])
+}
+
+export func only_log_softmax(p: Program): Program! sync {
+    return one('only_log_softmax', p, [tensor_log_softmax_naive])
+}
+
+export func only_log_of_softmax(p: Program): Program! sync {
+    return one('only_log_of_softmax', p, [tensor_log_softmax_of_softmax])
+}
+
+export func all(p: Program): Program! sync {
+    return one(
+        'all', p,
+        [tensor_log_softmax_naive, tensor_softmax_naive, tensor_log_softmax_of_softmax])
+}
+
+/// The direct rule's stage first: `log(exp/sum(exp))` is one rewrite.
+export func direct(p: Program): Program! sync {
+    return p->seq<[[tensor_log_softmax_naive], [tensor_softmax_naive, tensor_log_softmax_of_softmax]], false>
+        ?-> sync (r: Run<Program>) => reported('direct', r)
+}
+
+/// The inner rule's stage first: the softmax is rewritten inside the log, then the log of that
+/// softmax is rewritten -- two rewrites for the same final program.
+export func inner(p: Program): Program! sync {
+    return p->seq<[[tensor_softmax_naive], [tensor_log_softmax_naive, tensor_log_softmax_of_softmax]], false>
+        ?-> sync (r: Run<Program>) => reported('inner', r)
+}
+
+/// Both rules in one stage: the engine visits the nodes bottom up, so the rule for the inner
+/// division fires first and the count is the `inner` one, whatever the array order says.
+export func single(p: Program): Program! sync {
+    return one(
+        'single', p,
+        [tensor_log_softmax_naive, tensor_softmax_naive, tensor_log_softmax_of_softmax])
+}

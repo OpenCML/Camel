@@ -1,0 +1,23 @@
+/**
+ * The naive softmax of the showcase, next to the stable operator it is rewritten to:
+ * `exp(x) / sum(exp(x), -1, true)` and `softmax(x, -1)`. Run without the pass, the two differ
+ * where f32 exp overflows or underflows; run after `rules::accuracy` they are the same text,
+ * because the left one *is* `softmax(x, -1)`.
+ */
+module accuracy_softmax_target
+
+import { Tensor, reshape, exp, softmax, sum } from tensor
+
+func naive(x: Tensor<f32>): Tensor<f32> {
+    return exp(x) / sum(exp(x), -1, true)
+}
+
+func main(): int sync {
+    let clean = reshape([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2], [2, 4])
+    let overflow = reshape([100.0, 99.0, 98.0, 100.0], [2, 2])
+    let underflow = reshape([-200.0, -201.0, -200.5, -202.0], [2, 2])
+    println('softmax clean    ', sum(naive(clean)), sum(softmax(clean, -1)))
+    println('softmax overflow ', sum(naive(overflow)), sum(softmax(overflow, -1)))
+    println('softmax underflow', sum(naive(underflow)), sum(softmax(underflow, -1)))
+    return 0
+}

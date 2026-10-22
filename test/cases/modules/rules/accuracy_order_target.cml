@@ -1,0 +1,19 @@
+/**
+ * One source both accuracy rules can match: `log(exp(x) / sum(exp(x), -1, true))` is
+ * `log_softmax_naive` at the root and `softmax_naive` at the division inside it. Which rule does
+ * the work is the schedule's decision, and the two schedules print different rewrite counts for
+ * the same final program.
+ */
+module accuracy_order_target
+
+import { Tensor, reshape, exp, log, sum } from tensor
+
+func logits(x: Tensor<f32>): Tensor<f32> {
+    return log(exp(x) / sum(exp(x), -1, true))
+}
+
+func main(): int sync {
+    let clean = reshape([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2], [2, 4])
+    println(logits(clean))
+    return 0
+}

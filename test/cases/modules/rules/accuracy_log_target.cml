@@ -1,0 +1,23 @@
+/**
+ * The naive log-softmax of the showcase, next to `log_softmax(x, -1)`:
+ * `log(exp(x) / sum(exp(x), -1, true))`. Without the pass the left side is NaN on the logits
+ * whose exp overflows and -inf where the probability underflows to zero; after
+ * `rules::accuracy` it prints the same text as the operator.
+ */
+module accuracy_log_target
+
+import { Tensor, reshape, exp, log, log_softmax, sum } from tensor
+
+func naive(x: Tensor<f32>): Tensor<f32> {
+    return log(exp(x) / sum(exp(x), -1, true))
+}
+
+func main(): int sync {
+    let clean = reshape([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2], [2, 4])
+    let overflow = reshape([100.0, 99.0, 98.0, 100.0], [2, 2])
+    let underflow = reshape([-200.0, -201.0, -200.5, -202.0], [2, 2])
+    println('log softmax clean    ', sum(naive(clean)), sum(log_softmax(clean, -1)))
+    println('log softmax overflow ', sum(naive(overflow)), sum(log_softmax(overflow, -1)))
+    println('log softmax underflow', sum(naive(underflow)), sum(log_softmax(underflow, -1)))
+    return 0
+}

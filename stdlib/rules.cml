@@ -21,7 +21,7 @@ module rules
 import { Program, Node, constant } from graph
 import { abs, trunc } from math
 import { Rule, Run, rewrite, saturate, extract, run } from rewrite
-import { Tensor } from tensor
+import { Tensor, exp, log, log_softmax, sigmoid, softmax, sum } from tensor
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
 
@@ -754,4 +754,122 @@ func pair(r: Run<Program>, left: Rule[], right: Rule[], strict: bool): Run<Progr
             return out
         }
     }
+}
+
+// ---- rules::accuracy (rewrite design 2 (second version) 8.10) ----
+//
+// These rules compute the same value in a form with no larger error. They are not part of
+// `simplify`: they change the rounding path on purpose, and the numeric permission that 8.10 puts
+// around that (`refine_accuracy`, default not granted, not applicable under `#strict`) is not in
+// the engine yet -- `operator_semantics.h` stops at `nondeterministic`, and no tag registers the
+// name. `check`, for the same reason, compares the two sides bit for bit (a rule with no
+// permission) or inside a rounding bound; it cannot state "the right side is the more accurate
+// one". So the three rules below carry no `#requires`, they are applied only by the opt-in
+// `rules::accuracy` pass, and they must not be added to `simplify` or to any default pipeline.
+// When `refine_accuracy` lands, they take `#requires<refine_accuracy>` and the existing policy
+// makes them drop out under `#strict` and under `std::opt(safe_fp=true)`; that, and the
+// accuracy-aware check of 8.10, is the whole remaining work of this library.
+
+/// The naive softmax of the showcase: `exp(x) / sum(exp(x), axis, true)`.
+///
+/// Numeric argument. Over f32, `exp` overflows to +inf above ln(FLT_MAX) = 88.722839 (exp(88)
+/// = 1.65e38 is finite, exp(89) = 4.49e38 is +inf) and underflows to +0 below ln(2^-150) =
+/// -103.97208. The naive form then sums +infs (so inf/inf = NaN) or sums zeros (so 0/0 = NaN
+/// when every term is zero), and its error is unbounded there. The stable form subtracts
+/// m = max(x, axis, true) first: x - m <= 0, so exp(x - m) <= 1, the sum lies in [1, n] (the
+/// maximum contributes exp(0) = 1 exactly), and the division gives a value in [0, 1] with no
+/// overflow and no 0/0. Rounding: both forms pay exp (<= 2 ulp, its declared bound), one f32
+/// division, and a sum that the definition accumulates in f64 and rounds once; the stable form
+/// adds one f32 subtraction, which is exact when x and m are within a factor of two (Sterbenz)
+/// and at most 0.5 ulp otherwise. So where the naive form is finite the error grows by at most
+/// half an ulp, and over the whole f32 domain it does not grow at all: the naive error is
+/// unbounded (NaN), the stable one is bounded by the operators' declarations. That is "no
+/// worse" in the sense of the library: the worst case over the domain is not larger.
+export rule tensor_softmax_naive(x: Tensor<f32>, const axis: int) {
+    exp(x) / sum(exp(x), axis, true) => softmax(x, axis)
+}
+
+/// The naive log-softmax of the showcase: `log(exp(x) / sum(exp(x), axis, true))`.
+///
+/// Numeric argument. Same overflow/underflow as `tensor_softmax_naive`, plus `log(0) = -inf`
+/// for every probability that underflowed to zero. `log_softmax(x, axis)` is, by its definition
+/// (stdlib/tensor_definitions.cml), `d - log(sum(exp(d), axis, true))` with `d = x - max(x)`;
+/// that is the same expression mathematically (log(e/s) = (x-m) - log s) with no division --
+/// so the rounding of `e/s` disappears -- and no log of a rounded probability. The direct form's
+/// error is the stable softmax's minus one rounding (a division, <= 0.5 ulp) and without the
+/// log(0) failure; the value it computes is the same one, and no input maps to -inf that has a
+/// finite log-softmax. Strictly no worse.
+export rule tensor_log_softmax_naive(x: Tensor<f32>, const axis: int) {
+    log(exp(x) / sum(exp(x), axis, true)) => log_softmax(x, axis)
+}
+
+/// `log(softmax(x, axis))` where the program already calls `softmax`: the showcase's
+/// `let p = softmax(logits); ... log(p)` (or `log(exp/sum(exp))` after `tensor_softmax_naive`).
+///
+/// Numeric argument. softmax rounds each probability to f32 before `log` sees it: a relative
+/// rounding of at most 2^-24 (0.5 ulp) becomes an absolute error of up to 2^-24 in log(p), and a
+/// probability that rounds to zero gives log(0) = -inf while the true log-softmax is finite at
+/// (x - m) - log(s). `log_softmax` computes that value without the division and without the log
+/// of a value in [0, 1]; it adds no rounding the softmax path did not already make. No worse.
+export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
+    log(softmax(x, axis)) => log_softmax(x, axis)
+}
+
+/// The accuracy library, as the opt-in pass `rules::accuracy`: the direct log-softmax pattern
+/// first, so `log(exp(x)/sum(exp(x)))` is one rewrite (`log_softmax_naive`); then the softmax
+/// pattern and the log-of-softmax one, for a program that computes a softmax first. The two
+/// stages are the schedule: whichever stage is written first decides which rule is the one that
+/// fires on a source both can match (the test `rules.accuracy_schedule_order` pins both counts).
+export func accuracy(p: Program): Program! {
+    return p->seq<[[tensor_log_softmax_naive], [tensor_softmax_naive, tensor_log_softmax_of_softmax]], false>
+        ?-> (r: Run<Program>) => r.result
+}
+
+// ---- rules::fusion ----
+//
+// What is here: one chain of elementwise operators replaced by one operator whose kernel does the
+// same work in a single pass over the data, bit for bit.
+//
+// What is deliberately *not* here, and the mechanism each would need. Writing a rule that only
+// renames the same chain would not be a fusion, and a fusion that changes a bit is not a rule of
+// this library.
+//
+//   - `exp` then `sum` (a fused logsumexp): no such operator is registered. A rule's right side
+//     can only write operators, constants and its parameters (src/runtime/rules.cpp,
+//     SideReader::term), so the fused form has to exist as an operator with a kernel and a
+//     normative definition. Needed: a `tensor:logsumexp` operator, its definition in
+//     stdlib/tensor_definitions.cml, and a kernel that agrees with it.
+//   - `mul` then `add` (a fused multiply-add): no `tensor:mul_add` operator, and the two
+//     roundings of `a*b + c` must not collapse into one without `#contract` (design principles
+//     7.2), so the operator has to say which of the two it rounds. Needed: the operator and its
+//     permission.
+//   - a fusion *region*: `tensor::fuse` marks `x @ w + b` with the `tensor.fusion` attribute and
+//     a backend runs the group as one kernel while the graph keeps the operators (modules/tensor/
+//     passes/fuse.h). A rule cannot do that: its right side writes nodes, and neither the rule
+//     form nor the `graph` module's transaction has an attribute or region writer. Needed: an
+//     attribute/region form on a rule's right side (rewrite design 2 (second version) 4 and 7).
+//   - the QKV multi-root fusion `(x @ wq, x @ wk, x @ wv) => split(x @ concat(...))`: a rule's
+//     left side must be one operator applied to something (src/runtime/rules.cpp refuses a tuple),
+//     so the multi-root patterns of v2 section 3 are the missing piece.
+//
+// These are gaps in the engine, not in this file: none of them can be written as a rule today
+// without either changing the answer or merely renaming the chain.
+
+/// The sigmoid chain of the showcase and of every hand-written logistic: `1/(1+exp(-x))`.
+///
+/// It is exactly the definition of `tensor:sigmoid` (stdlib/tensor_definitions.cml:
+/// `1.0 / (1.0 + exp(-x))`), and a kernel must agree with its operator's definition bit for bit
+/// (design principles 7.1; the definition file's header). The same `vmath::exp` runs on both
+/// sides, the negation is exact, and the `+` and `/` are the same f32 IEEE operations in the same
+/// order, so the rewrite changes no bit -- the test `rules.fusion_bit_identical` prints the chain
+/// and `sigmoid(x)` next to each other before the pass and the same text after it. What changes
+/// is the cost: neg, exp, add and divide are four kernels and four passes over the data; sigmoid
+/// is one kernel and one pass.
+export rule tensor_sigmoid_chain(x: Tensor<f32>) {
+    1.0 / (1.0 + exp(-x)) => sigmoid(x)
+}
+
+/// The fusion library, as the opt-in pass `rules::fusion`.
+export func fusion(p: Program): Program! {
+    return rewrite(p, [tensor_sigmoid_chain])
 }

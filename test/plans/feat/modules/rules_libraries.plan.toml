@@ -1,0 +1,174 @@
+id = "modules.rules_libraries"
+order = 393
+tier = "fast"
+tags = ["feat", "modules", "rules", "rewrite", "accuracy", "fusion"]
+desc = "The first two standard rule libraries (rewrite design 2 (second version) 8.9-8.10): `rules::accuracy`, which turns a naive softmax, a naive log-softmax and a log of a softmax into the stable operators, and `rules::fusion`, which turns the sigmoid chain 1/(1+exp(-x)) into the sigmoid kernel. Each rule is shown firing on a real program with its rewrite count and the operator cost before and after, on the programs it must not match, and with the same bits on nvm, fvm and jit."
+
+[[tests]]
+name = "rules.accuracy_softmax_rule"
+desc = "`tensor_softmax_naive` fires once on `exp(x) / sum(exp(x), -1, true)`: the cost of the function goes from three operators (exp, sum_axis, divide) to one (softmax)."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_softmax_target.cml"
+args = ["${case}", "library_counts::report", "accuracy_schedule::only_softmax", "library_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["cost naive 3 1 1 1 0 0 0 0 0 0 0", "only_softmax rewrites 1 rounds 2", "cost naive 1 0 0 0 0 1 0 0 0 0 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_log_softmax_rule"
+desc = "`tensor_log_softmax_naive` fires once on `log(exp(x) / sum(exp(x), -1, true))`: four operators (log, exp, sum_axis, divide) become one `log_softmax`."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_log_target.cml"
+args = ["${case}", "library_counts::report", "accuracy_schedule::only_log_softmax", "library_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["cost naive 4 1 1 1 1 0 0 0 0 0 0", "only_log_softmax rewrites 1 rounds 2", "cost naive 1 0 0 0 0 0 1 0 0 0 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_log_of_softmax_rule"
+desc = "`tensor_log_softmax_of_softmax` fires once on `log(softmax(x, -1))`: two operators become one `log_softmax`."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_logsoftmax_target.cml"
+args = ["${case}", "library_counts::report", "accuracy_schedule::only_log_of_softmax", "library_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["cost composed 2 0 0 0 1 1 0 0 0 0 0", "only_log_of_softmax rewrites 1 rounds 2", "cost composed 1 0 0 0 0 0 1 0 0 0 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_pipeline"
+desc = "`rules::accuracy` on the naive softmax: after the pass the naive spelling sums to the stable operator's value, including the logits whose f32 exp overflows (the naive form is NaN there) and the logits whose exp underflows (0/0, also NaN)."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_softmax_target.cml"
+args = ["${case}", "rules::accuracy", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["softmax clean     2.000000048428774 2.000000048428774", "softmax overflow  1.9999999776482582 1.9999999776482582", "softmax underflow 1.9999999850988388 1.9999999850988388"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_pipeline_every_backend"
+desc = "The same rewritten program prints the same text on the interpreter, the byte-code VM and the JIT: the accuracy rewrite is not a backend feature."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_softmax_target.cml"
+args = ["${case}", "rules::accuracy", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["softmax overflow  1.9999999776482582 1.9999999776482582"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_log_values"
+desc = "The naive log-softmax after the pass sums to `log_softmax`'s value; before it, the overflowing and the underflowing logits are NaN."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_log_target.cml"
+args = ["${case}", "rules::accuracy", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["log softmax clean     -14.18400290608406 -14.18400290608406", "log softmax overflow  -3.8803794234991074 -3.8803794234991074", "log softmax underflow -3.5293500125408173 -3.5293500125408173"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_log_of_softmax_values"
+desc = "`log(softmax(x))` after the pass is `log_softmax(x)`: the gap that rounds a probability to zero gives -300 instead of -inf."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_logsoftmax_target.cml"
+args = ["${case}", "rules::accuracy", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["log of softmax clean -14.18400290608406 -14.18400290608406", "log of softmax gap   -300.0 -300.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_guards_hold"
+desc = "Neither accuracy rule matches `log(exp(x) * 2)` (not a softmax) nor `log(exp(a) / sum(exp(b)))` (the sum is of another tensor): the pass reports zero rewrites and the values are the ones the program computed."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_guard_target.cml"
+args = ["${case}", "accuracy_schedule::all", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["all rewrites 0 rounds 1", "multiplied sum 4.372588634490967", "mismatched sum -3.806684565381147"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_guards_unchanged"
+desc = "The same program without any pass prints exactly the same two values, so the zero rewrites are not a test that would pass on a changed answer."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_guard_target.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "multiplied sum 4.372588634490967\nmismatched sum -3.806684565381147\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_schedule_direct"
+desc = "The order case, direct first: `log(exp/sum(exp))` is one rewrite when the stage holding the log-softmax rule runs first."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_order_target.cml"
+args = ["${case}", "accuracy_schedule::direct", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["direct rewrites 1 rounds 3", "-14.18400290608406"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_schedule_inner"
+desc = "The order case, inner first: the same source takes two rewrites -- the softmax inside the log, then the log of that softmax -- and ends at the same program and the same value."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_order_target.cml"
+args = ["${case}", "accuracy_schedule::inner", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["inner rewrites 2 rounds 4", "-14.18400290608406"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_schedule_single_stage"
+desc = "Both rules in one stage: the engine visits nodes bottom up, the inner division is rewritten before the log above it, and the count is the inner one whatever the array order says."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_order_target.cml"
+args = ["${case}", "accuracy_schedule::single", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["single rewrites 2 rounds 2", "-14.18400290608406"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fusion_sigmoid_rule"
+desc = "`tensor_sigmoid_chain` fires once: the cost of `chain` goes from four operators (neg, exp, add, divide) to one `sigmoid`; `doubled` and `positive` are left alone, and `after_matmul` fuses only the elementwise part -- the matmul stays a node."
+kind = "behavior"
+case = "../../../cases/modules/rules/fusion_target.cml"
+args = ["${case}", "library_counts::report", "fusion_schedule::only_sigmoid", "library_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["cost chain 4 1 0 1 0 0 0 0 0 1 1", "only_sigmoid rewrites 1 rounds 2", "cost chain 1 0 0 0 0 0 0 1 0 0 0", "cost doubled 4 1 0 1 0 0 0 0 0 1 1", "cost positive 3 1 0 1 0 0 0 0 0 0 1", "cost after_matmul 5 1 0 1 0 0 0 0 1 1 1", "cost after_matmul 2 0 0 0 0 0 0 1 1 0 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fusion_bit_identical_unfused"
+desc = "The program before the pass: the chain's value against the sigmoid kernel is zero at every element, and the two guarded forms print their own bits."
+kind = "behavior"
+case = "../../../cases/modules/rules/fusion_target.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "chain minus sigmoid 0.0\ndoubled sum         7.31624373793602\npositive sum        2.341878153383732\nafter matmul minus sigmoid 0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fusion_bit_identical_fused"
+desc = "The same program after `rules::fusion`, run on the interpreter, the byte-code VM and the JIT: the stdout is the same text as the unfused run, so the fused kernel is bit for bit the chain it replaced."
+kind = "behavior"
+case = "../../../cases/modules/rules/fusion_target.cml"
+args = ["${case}", "rules::fusion", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "chain minus sigmoid 0.0\ndoubled sum         7.31624373793602\npositive sum        2.341878153383732\nafter matmul minus sigmoid 0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
