@@ -81,6 +81,19 @@ C++ 模块不再重复写签名：没有函数体的声明就是签名本身，�
 
 模块名就是导入名，也是算子 URI 的前缀。新模块按分层放：前奏（内置，尽量小）／基础（`str`、`bytes`、`array`、`math`、`random`、`stats`、`time`、`re`、`json`、`hash`）／系统（`fs`、`io`、`env`、`process`）／数值（`tensor` 栈）／工具（`test_support`、`bench`、`profiler`）。
 
+## 6.5 写法：标准库是 Camel 的范本
+
+标准库是用户最常读、最常照抄的 Camel 代码，它的写法就是推荐写法。每个用 Camel 写的函数都按下面几条写；做不到的地方是语言的缺口，提出来补进语言，不在库里绕路。
+
+- **一个定义覆盖所有类型。** 不为 `int`、`float`、`i32`、`f32` 各写一份：类型变量自动绑定（设计原则 5.5），字面量在实例里按实例的类型取型；结果类型随输入变化的，用固定签名加泛型签名，或类型函数。
+- **用语言自己的构造，不拼装。** 提前结束用 `loop … for … while`，不先 `map` 出一个中间数组再 `reduce`；取一组位置用 `xs[idx]`，切片用 `xs[a:b]`；列表推导 `[e for x in xs if c]`；字符串用插值；按类型选择用 `match type`；按字段展开用 `static for`。
+- **不写推得出的东西。** lambda 的参数类型、类型变量的 `typeas`、和默认 URI 相同的 `#op` 都不写。
+- **同名同义。** 一个名字在各模块里语义相同：数组的 `min`/`max` 与 `math::min`/`math::max` 同样按 7.7 处理 NaN 与 ±0；不透明类型的 `==` 都按身份。
+- **不存在用 `T?`，会失败用 `T!`**，不用 `-1`、空串之类的哨兵值。
+- **配置放尖括号，数据放圆括号**（设计原则 4.4）：`xs->take<3>`、`xs->sort_by<key>`。
+- **语义在函数体，速度在 `#impl`**（设计原则 10.4）：先写清楚、写对的 Camel 定义；常用而热的再配原生内核，不为了快把定义写得晦涩。
+- **短**：一个函数体通常一两行；超过五行的先想是不是缺了一个更基础的函数或语言构造。
+
 ## 7. 文档
 
 参考页 `docs/stdlib-reference.md` 的每一条都要是读者真能照着做的，`///` 注释里的东西就是参考页的全部内容。规则如下，由 [`scripts/stdlib-reference.mjs`](../scripts/stdlib-reference.mjs) 的 `--verify-docs` 检查，跑它的是 [`stdlib_registry.plan.toml`](../test/plans/feat/modules/stdlib_registry.plan.toml) 里的 `registry.docs_complete`（`feat/modules`）：

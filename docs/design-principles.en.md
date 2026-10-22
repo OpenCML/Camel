@@ -321,10 +321,12 @@ A `sync` written before a block (including the postfix form on a function body, 
 ### 5.5 Generics
 
 - **A generic function is instantiated by the types of its arguments.** A generic function is a subgraph template; each call with a set of concrete types instantiates a subgraph whose types are all concrete, and the body is checked at that time. Only concrete types are on the graph, and the runtime needs no type information.
-- **A type variable is bound in place with `typeas T`**: write `typeas T` at its first occurrence in the signature to bind the type at that position as `T`, and use `T` directly afterwards.
+- **Type variables follow the same rule as dimension names and bind automatically**: a name that first appears in a parameter type (including the type of a `with` parameter) and is not an existing type name binds a type variable, and later occurrences refer to it; a name that appears only in the return type is an error; one that appears only once draws a warning (a misspelt type name usually appears once). `typeas T` stays as the explicit binding form, for a name that coincides with an existing type and must say "this is a new binding".
 
   ```camel
-  func first(xs: (typeas T)[]): T { return xs[0] }   // sketch
+  func first(xs: T[]): T { return xs[0] }
+  with <key: (x: T) => K>
+  func sort_by(xs: T[]): T[]
   ```
 
 - **A generic function can appear in any position that expects a function**, including being passed to another generic function. The compiler defers its instantiation until the type variables can be determined from the context; if they cannot be determined it is a compile-time error that points out which variable cannot be fixed. The deferral happens only at compile time, and only concrete instances are on the graph.
@@ -343,7 +345,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 
   ```camel
   type Pair<T> = (T, T)                    // sketch
-  func swap(p: Pair<typeas T>): Pair<T>
+  func swap(p: Pair<T>): Pair<T>
   ```
 
 - **New primitives are used only for what the main language cannot express**, and appear as marks, fixed in number: `typeas T`, `constas n` (binding at a position in the signature), `typeof x` (the static type of an expression), `fields T` (the field table of a type). Whatever can be computed from the primitives (such as `keyof`, which takes the field names) is written in a library, as a type function or an ordinary function, not as a keyword.
@@ -596,7 +598,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 - **Semantic atoms and implementation atoms are separate.** A function's **semantics** comes from one of two sources, a primitive operator or a definition written in Camel; its **execution** may in addition have a native kernel. With the two separated, the library need not choose between expressiveness and performance.
 - **Primitive operators (body-less C++ declarations) only in three cases**: dealing with the outside world (I/O, the operating system, foreign libraries, devices); kernels that need memory and layout control the language does not expose (matrix multiplication, convolution, `take` and scatter, sorting); scalar mathematical functions. The primitive set is **minimal and orthogonal**: what other primitives compose cheaply is not a primitive. Every primitive declares its semantic facts (purity, resources, index maps, laws, derivative).
 - **Everything else is defined in Camel** (the default): softmax, normalisation, losses, optimisers, `tree_*`, statistics, the array and string utilities. The compiler sees through them, so fusion, differentiation, export and rules apply without a derivative or export rule written for each.
-- **Common hot definitions carry a native kernel**: the Camel body remains the semantics, and `#kernel` names the native kernel that implements it. **It is not expanded by default**: ordinary passes and executors treat it as one operator, so its compile and run cost is that of a primitive; only passes that need to look inside (differentiation, fusion, export, rules) expand it on demand. A differential test keeps the two in agreement. The common numeric operations (`sum`, `min`, `max`, `all`, `map`/`reduce` over numeric arrays and the like) have a kernel from the start; the others get one when measurement shows the compiler's result clearly slower, and lose it once the compiler catches up.
+- **Common hot definitions carry a native kernel**: the Camel body remains the semantics, and `#impl<f>` names the native kernel `f` that implements it (a private body-less declaration of the same module). **It is not expanded by default**: ordinary passes and executors treat it as one operator, so its compile and run cost is that of a primitive; only passes that need to look inside (differentiation, fusion, export, rules) expand it on demand. A differential test keeps the two in agreement. The common numeric operations (`sum`, `min`, `max`, `all`, `map`/`reduce` over numeric arrays and the like) have a kernel from the start; the others get one when measurement shows the compiler's result clearly slower, and lose it once the compiler catches up.
 - **A library is compiled once**: library functions are compiled and optimised once per instance, into the module cache (10.3) and the specialisation cache; a call site pays a call or an inlining, not a re-optimisation of the library body.
 - Expressiveness problems exposed in the implementation are discussed one by one, and common needs are absorbed into the language core rather than worked around in the library.
 
