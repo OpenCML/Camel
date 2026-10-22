@@ -8,7 +8,7 @@
 - [设计原则](../../design-principles.cn.md) 3.1（按依赖求值）、3.6（由声明的性质并行）、3.10（循环）、6.2（标签只声明事实）、9.4（标签的读者与无效果警告）、9.6（优化保持算子身份）、10.5（库的边界与数据块）、13.3（`Device<T>` 与异步不在语义里）、13.4（分布式与放置）；
 - [H24–H26 检查意见](../../handover/reviews/H24-H25-H26.md) 对 H47/H48 的三条硬要求：动态形状必须能编译、反向图必须带同元素类型与形状、设备不可用必须启动时报错；
 - [H77–H140 检查意见](../../handover/reviews/H77-H140.md)（H85 `#independent`、H102 融合记在图的分组属性上）；[H141–H213 检查意见](../../handover/reviews/H141-H213.md) 的 Q5（删除 `@gpu`/`run`/`run_device`，由 H49 执行）与 Q6（只有 `--devices`，没有 `tiles::compile(device=)`；源码里的设备是放置标签，永远不是遍参数）；
-- [模块缓存与失效面](../technical/52_cmc_cache_cost.md)：源哈希不能证明接口未变，这是缓存键的界线；
+- [模块缓存与失效面](模块缓存的成本账（原技术页 52，已删除）)：源哈希不能证明接口未变，这是缓存键的界线；
 - [Tiles 路线的区域与传输](../tiles-route/README.cn.md) §3.2–§3.6（区域 → `OPER :tiles/exec`、显式 upload/download、符号形状编一次、键是语义指纹、故障记在调用点）；
 - [索引化计算](../indexed-computation/README.md) §6.3（异步：完成事件、依赖保证完成与可见性、没有隐式同步）；
 - 在途的 H218（`handover/H218-GPU-REMOVAL`）：删除 `@gpu`/`run`/`run_device` 与旧分派，落 `tiles.gpu` 与 `RuntimeDiag::GpuScopeUnsupported = 0x000071`。本计划按它合入后的树写，第 7 节说明它未合入时的顺序。

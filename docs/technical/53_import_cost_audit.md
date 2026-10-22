@@ -96,7 +96,7 @@ CPython，41 ms 的运行里 9.9 ms，见 [50](50_pyplot_cpython_init.md)）；3
   `CAMEL_STD_LIB`、`CAMEL_PACKAGES`（`;` 或 `:` 分隔）与命令行 `-I`，只做字符串展开与绝对化，**不 stat、不列目录**。
 - **每次 `import`**：`Context::importModule` → `getModulePathAndKind` → `findModuleUnder` 按搜索根顺序列举
   `<root>/<name>` 与 `<root>/<name>/` 的目录项，命中即停；列举结果按目录路径缓存在 `Context::directoryListings_`，
-  同一 context 内后续 `import` 不再列举（[38](38_compile_pipeline_cost.md) §8 第 5 条）。这就是“标准库扫描”：
+  同一 context 内后续 `import` 不再列举（编译流水线的成本账 §8 第 5 条（该页已随测量报告清理删除，结论见本节））。这就是“标准库扫描”：
   一次 `$CAMEL_HOME/stdlib` 的 `directory_iterator`，加上入口目录一次，之后全是缓存命中。
 - **价格**：每次 import 的 `resolve` 相位 ≈0.2 ms；10 个 `CAMEL_PACKAGES` 根把首次 resolve 从 **0.233 ms 抬到
   0.410 ms**（+0.18 ms），整程序 +1.2 ms；3 个 `-I` 根 +1.8 ms（单次测量）。
@@ -114,7 +114,7 @@ CPython，41 ms 的运行里 9.9 ms，见 [50](50_pyplot_cpython_init.md)）；3
 | `array`（纯 Camel，无 `.cmo`） | 145 | 20 | **4.67 ms** |
 | `graph`（`.cmo` + `.cml`） | 225 | 57 | **3.33 ms** |
 
-`registry_all` 的全集是 345 条声明、约 20 µs/条、合计约 7 ms（[52](52_cmc_cache_cost.md) 的启动账本）；与它相比，
+`registry_all` 的全集是 345 条声明、约 20 µs/条、合计约 7 ms（模块缓存的成本账（该页已随测量报告清理删除） 的启动账本）；与它相比，
 `.cmo` 装载的 0.2–2 ms 是小头。
 
 ## 53.4 探针与守门
