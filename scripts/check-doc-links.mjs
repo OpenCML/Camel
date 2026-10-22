@@ -14,9 +14,10 @@
 //                                               document, a code or .cml comment, a plan — exists, and
 //                                               every line citation with a quoted anchor is verified
 //                                               against the cited line; one without an anchor fails
-//   node scripts/check-doc-links.mjs --citations --allow-unanchored
-//                                               list the line citations that have no anchor instead
-//                                               of failing them (a tree that predates the convention)
+//   node scripts/check-doc-links.mjs --citations --list FILE
+//                                               allow the unanchored citations named one per line in
+//                                               FILE; any other unanchored citation fails, and a line
+//                                               that no longer names an unanchored citation fails too
 //   node scripts/check-doc-links.mjs --citations --root DIR
 //                                               check a fixture tree instead of the repository
 //   node scripts/check-doc-links.mjs FILE DIR  the given files and directories
@@ -205,12 +206,12 @@ function checkTechnicalIndex() {
 // target, what the line holds and what was claimed, plus the line the anchor moved to, so a sweep
 // that only shifts lines can be repaired by re-deriving the line from the tree instead of adding an
 // offset. A citation with no anchor fails: the check refuses to certify a claim it cannot read.
-// `--allow-unanchored` is the one exception, for a tree whose citations predate the convention: it
-// lists each such citation with the line it holds and keeps going, so the debt stays visible
-// instead of being blessed. Taking the anchor from the line itself would do exactly that blessing,
-// which is the defect this check exists to prevent. A bare file name that exists nowhere is an
-// example in prose (a diagnostic's `a.cml:3`), not a citation of the tree; a missing path with a
-// directory or a missing `.md` path is still a failure.
+// `--list FILE` is the one checked exception: it names each tolerated unanchored citation, one per
+// line with a reason, and the set can only shrink. An unanchored citation not in the file fails, and
+// so does a line whose citation has since been anchored or deleted. Taking the anchor from the line
+// itself would bless a stale pointer, which is the defect this check exists to prevent. A bare file
+// name that exists nowhere is an example in prose (a diagnostic's `a.cml:3`), not a citation of the
+// tree; a missing path with a directory or a missing `.md` path is still a failure.
 //
 // Not every `*.md` string is a citation: a script that writes its report names a run output. Only
 // the files listed above are read, and in code only a comment line is (a string literal that names
@@ -294,16 +295,65 @@ function checkCitations() {
     const lineCitation =
         /(?<![\w./*-])((?:\.{1,2}\/|[\w@-]+\/)*[\w-][\w.-]*\.(?:c|cc|cpp|cxx|h|hpp|inl|cml|mjs|js|ts|py|sh|ps1|cmake|md|toml|json|yml|yaml))\b:(\d+)(?:[-–](\d+))?(?: # "([^"\n]*)")?(?![\d:])(?!\s*:\d)/g
     const problems = []
-    const unanchored = []
-    const allowUnanchored = args.includes('--allow-unanchored')
+    const unanchored = new Map()
+    let unanchoredCount = 0
+    let newUnanchored = 0
+    let staleListEntries = 0
     let pathCitations = 0
     let lineCitations = 0
     let verified = 0
+    const listFlag = args.indexOf('--list')
+    const listPath = listFlag < 0 ? null : path.resolve(args[listFlag + 1] ?? '')
+    if (listFlag >= 0 && (args[listFlag + 1] === undefined || !fs.existsSync(listPath))) {
+        console.log(`--list ${args[listFlag + 1] ?? ''}: no such file`)
+        return 2
+    }
+    // One line per tolerated unanchored citation: `<citing file>|<cited path>  # reason`. The target
+    // as written, not its line numbers, is the key: an edit that only moves a citation does not
+    // churn the list, while a second citation to the same target does, because each line permits one
+    // occurrence. A key that is now anchored or gone is an error, so the list can only shrink.
+    const allowed = new Map()
+    if (listPath !== null) {
+        for (const [number, raw] of fs.readFileSync(listPath, 'utf8').split(/\r?\n/).entries()) {
+            const line = raw.trim()
+            if (line === '' || line.startsWith('#')) continue
+            const match = /^(\S.*?)\s+#\s*(.+)$/.exec(line)
+            const key = (match === null ? line : match[1]).trim()
+            const reason = match === null ? '' : match[2].trim()
+            if (!key.includes('|') || reason === '') {
+                console.log(
+                    `${path.relative(process.cwd(), listPath)}:${number + 1}: ` +
+                        `want '<citing file>|<cited path>  # <reason>'`,
+                )
+                return 2
+            }
+            if (!allowed.has(key)) allowed.set(key, [])
+            allowed.get(key).push(reason)
+        }
+    }
     const relative = (file) => path.relative(root, file).replace(/\\/g, '/')
     const outside = (text) => text.replace(/\s+/g, ' ').trim()
     const lineProblem = (file, line, cite, message) =>
         problems.push(`${relative(file)}:${line}: '${cite}': ${message}`)
     const excerpt = (text) => (text.length > 160 ? `${text.slice(0, 157)}...` : text)
+    // Records one unanchored citation and decides whether the list tolerates it.
+    const unanchoredAt = (file, line, cite, decoded, message) => {
+        const key = `${relative(file)}|${decoded}`
+        const seen = (unanchored.get(key) ?? 0) + 1
+        unanchored.set(key, seen)
+        unanchoredCount++
+        if (seen <= (allowed.get(key)?.length ?? 0)) return
+        newUnanchored++
+        lineProblem(
+            file,
+            line,
+            cite,
+            listPath === null
+                ? message
+                : `unanchored citation is not in ${relative(listPath)}; anchor it or add ` +
+                      `"${key}  # <reason>" (${message})`,
+        )
+    }
 
     // The cited text may be written with the file's short name (`graph.h`), which two files share.
     // The anchor is the tie-break: exactly one candidate must hold it in the cited range.
@@ -383,9 +433,14 @@ function checkCitations() {
             if (!resolved) {
                 if (ambiguous) {
                     if (anchor === null) {
-                        const message = `cannot be verified: ${ambiguous.length} files are named '${path.basename(decoded)}' and there is no quoted anchor to say which`
-                        if (allowUnanchored) unanchored.push(`${relative(file)}:${line}: '${cite}': ${message}`)
-                        else lineProblem(file, line, cite, message)
+                        unanchoredAt(
+                            file,
+                            line,
+                            cite,
+                            decoded,
+                            `cannot be verified: ${ambiguous.length} files are named '${path.basename(decoded)}' ` +
+                                'and there is no quoted anchor to say which',
+                        )
                     } else {
                         lineProblem(file, line, cite, `cannot be verified: ${ambiguous.length} files are named '${path.basename(decoded)}' and none holds the claimed "${excerpt(anchor)}" in its cited range`)
                     }
@@ -401,19 +456,22 @@ function checkCitations() {
             lineCitations++
             const lines = fs.readFileSync(resolved, 'utf8').split(/\r?\n/)
             const actual = lines[start - 1] === undefined ? '' : outside(lines[start - 1])
-            // A citation with no quoted anchor makes no claim this check can confirm. It fails by
-            // default. `--allow-unanchored` is the one explicit exception: it lists the citation with
-            // the line it holds and keeps going, for a tree whose citations predate the convention.
-            // Taking the anchor from the line instead would bless whatever a stale pointer holds,
-            // which is the defect this check exists to prevent.
+            // The citation with no quoted anchor makes no claim this check can read. It fails unless the
+            // checked-in list names it, one line per citation: an unanchored citation that is not in
+            // the list cannot enter, and a line whose citation has since been anchored or deleted is
+            // itself an error. Taking the anchor from the line instead would bless whatever a stale
+            // pointer holds, which is the defect this check exists to prevent.
             if (anchor === null || anchor === '') {
-                const message =
+                unanchoredAt(
+                    file,
+                    line,
+                    cite,
+                    decoded,
                     'cannot be verified: no quoted anchor; ' +
-                    (start < 1 || end > lines.length
-                        ? `line ${start}${end === start ? '' : `-${end}`} does not exist (the file has ${lines.length} lines)`
-                        : `the cited line holds "${excerpt(actual)}"`)
-                if (allowUnanchored) unanchored.push(`${file.replace(/\\/g, '/')}:${line}: '${cite}': ${message}`)
-                else lineProblem(file, line, cite, message)
+                        (start < 1 || end > lines.length
+                            ? `line ${start}${end === start ? '' : `-${end}`} does not exist (the file has ${lines.length} lines)`
+                            : `the cited line holds "${excerpt(actual)}"`),
+                )
                 continue
             }
             if (start < 1 || end < start || end > lines.length) {
@@ -441,11 +499,22 @@ function checkCitations() {
         }
     }
 
+    if (listPath !== null) {
+        for (const [key, reasons] of allowed) {
+            const missing = reasons.length - (unanchored.get(key) ?? 0)
+            if (missing <= 0) continue
+            staleListEntries += missing
+            problems.push(
+                `${relative(listPath)}: '${key}': ${missing} listed unanchored citation(s) no longer exist ` +
+                    '(anchored or deleted); delete the line',
+            )
+        }
+    }
     for (const problem of problems) console.log(problem)
-    for (const note of unanchored) console.log(note)
     if (problems.length > 0) {
         console.log(
-            `${problems.length} unverified citation(s) in ${lineCitations} line citation(s) and ${pathCitations} path citation(s)`,
+            `${problems.length} unverified citation(s); ${verified} anchored, ${unanchoredCount} unanchored ` +
+                `(${newUnanchored} new, ${staleListEntries} stale list entr${staleListEntries === 1 ? 'y' : 'ies'})`,
         )
         return 1
     }
@@ -458,8 +527,7 @@ function checkCitations() {
         return 2
     }
     console.log(
-        `no unverified anchored citation in ${verified} of ${verified + unanchored.length} line citation(s); ` +
-            `${unanchored.length} line citation(s) carry no anchor and were listed above; ` +
+        `no unverified anchored citation: ${verified} anchored, ${unanchoredCount} unanchored (0 new), ` +
             `${pathCitations} path citation(s) across ${files.length} file(s)`,
     )
     return 0

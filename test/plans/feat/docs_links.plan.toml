@@ -28,10 +28,12 @@ desc = "The relative links of the reader-facing documents point at files and hea
 # trailing anchor, `path:12 # "text on that line"`, and the mode fails when the anchor is not in
 # the cited range, naming the citing file and line, what the line holds, what was claimed and,
 # when the text moved, the line that now holds it. A citation with no anchor fails too: the mode
-# will not certify a claim it cannot read. `--allow-unanchored` is the explicit exception used by
-# the first case below, for the line citations that predate the convention: it lists each one with
-# the line it holds, so the debt is visible in every run instead of being blessed. A run that
-# verified none fails, so a green run always checked something.
+# will not certify a claim it cannot read. `--list test/plans/feat/docs_links/unanchored.txt` is the
+# checked exception: it names each tolerated unanchored citation, one line per citation with a
+# reason. An unanchored citation that is not in the file fails (a new one cannot enter), and a line
+# whose citation has since been anchored or deleted fails too (the file only shrinks). The summary
+# prints the counts every run, e.g. `64 anchored, 143 unanchored (0 new)`. A run that verified none
+# fails, so a green run always checked something.
 #
 
 [[tests]]
@@ -60,13 +62,13 @@ timeout_ms = 20000
 
 [[tests]]
 name = "docs.links.citations"
-desc = "Every citation that carries a quoted anchor points at a range that holds that text; a wrong line fails naming the citing file, the line, what the line holds, what was claimed and where the text is; the citations that predate the convention are listed, not certified, by --allow-unanchored; a run that verified none fails."
+desc = "Every citation that carries a quoted anchor points at a range that holds that text; a wrong line fails naming the citing file, the line, what the line holds, what was claimed and where the text is; the checked-in list tolerates the unanchored citations it names, and only those; a run that verified none fails."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-links.mjs"
-args = ["${case}", "--citations", "--allow-unanchored"]
+args = ["${case}", "--citations", "--list", "test/plans/feat/docs_links/unanchored.txt"]
 expect_exit = 0
-expect_stdout_contains = ["no unverified anchored citation"]
+expect_stdout_contains = ["no unverified anchored citation", "0 new"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
@@ -78,7 +80,7 @@ tool = "node"
 case = "../../../scripts/check-doc-links.mjs"
 args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/unverifiable"]
 expect_exit = 1
-expect_stdout_contains = ["notes.md:3: 'src/thing.c:3': cannot be verified: no quoted anchor; the cited line holds \"int value = 2;\"", "1 unverified citation(s) in 1 line citation(s)"]
+expect_stdout_contains = ["notes.md:3: 'src/thing.c:3': cannot be verified: no quoted anchor; the cited line holds \"int value = 2;\"", "1 unverified citation(s); 0 anchored, 1 unanchored (1 new, 0 stale list entries)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
@@ -90,8 +92,44 @@ tool = "node"
 case = "../../../scripts/check-doc-links.mjs"
 args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/anchored"]
 expect_exit = 1
-expect_stdout_contains = ["wrong.md:5: 'src/thing.c:4': line 4 holds \"int value = 3;\"", "the citation claims \"int value = 2;\"", "that text is at line 3", "1 unverified citation(s) in 3 line citation(s)"]
+expect_stdout_contains = ["wrong.md:5: 'src/thing.c:4': line 4 holds \"int value = 3;\"", "the citation claims \"int value = 2;\"", "that text is at line 3", "1 unverified citation(s); 2 anchored, 0 unanchored (0 new, 0 stale list entries)"]
 expect_stdout_not_contains = ["good.md:", "wrong.md:3:"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "docs.links.citations_ratchet"
+desc = "The unanchored citation the list names is tolerated, and the run prints the counts: one anchored, one unanchored, none new."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-links.mjs"
+args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/ratchet", "--list", "test/plans/feat/docs_links/fixture/ratchet/list.txt"]
+expect_exit = 0
+expect_stdout_contains = ["1 anchored, 1 unanchored (0 new)"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "docs.links.citations_ratchet_new"
+desc = "An unanchored citation that the list does not name fails, naming the citing file and line and the list; the number of new citations is reported."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-links.mjs"
+args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/ratchet-new", "--list", "test/plans/feat/docs_links/fixture/ratchet-new/list.txt"]
+expect_exit = 1
+expect_stdout_contains = ["notes.md:4: 'src/thing.c:4': unanchored citation is not in", "1 unverified citation(s); 1 anchored, 1 unanchored (1 new, 0 stale list entries)"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "docs.links.citations_ratchet_stale"
+desc = "A list line whose citation has since been anchored is a failure, so the list can only shrink; the stale count is reported."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-links.mjs"
+args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/ratchet-stale", "--list", "test/plans/feat/docs_links/fixture/ratchet-stale/list.txt"]
+expect_exit = 1
+expect_stdout_contains = ["1 listed unanchored citation(s) no longer exist", "1 unverified citation(s); 1 anchored, 0 unanchored (0 new, 1 stale list entry)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
