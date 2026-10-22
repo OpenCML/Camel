@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E13/T5 Level-2 (data-dependent control flow) probes: PyTorch references.
 
 Mirrors the four programs under benchmarks/e13/ exactly (same literals, same

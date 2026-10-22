@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 r"""T10 mechanism counts -- counting engine. Runs locally (Camel repo) and on the
 server (onnxruntime / executorch clones). Python 3.10+, stdlib only.
 

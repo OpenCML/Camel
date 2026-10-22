@@ -83,6 +83,12 @@ jobs:
           node-version: "20"
           cache: npm
 
+      # The header of every hand-written source (scripts/headers.mjs). Checked before the build:
+      # a missing or stale header fails here in a second instead of after thirteen minutes of
+      # compiling, and the step names every file that is wrong.
+      - name: Check source headers
+        run: node scripts/headers.mjs --check
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

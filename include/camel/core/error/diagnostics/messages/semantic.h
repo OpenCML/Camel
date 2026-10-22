@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Sep. 11, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -78,7 +62,6 @@ enum class SemanticDiag : uint32_t {
     // dropped while the rest of the program went on.
     FeatureNotSupported = 0x000040,
     // Generic functions and type functions (design principles 5.6).
-    TypeVariableNotAllowed      = 0x000050,
     TypeVariableRedeclared      = 0x000051,
     TypeVariableNotBindable     = 0x000052,
     GenericArgumentsMismatch    = 0x000053,
@@ -227,9 +210,6 @@ enum class SemanticDiag : uint32_t {
     TagValueConflict = 0x00019D,
     /// A dimension pack (`..rest`) is not the last item of its `[...]`, or is written twice.
     DimensionAfterAnyRank = 0x00019E,
-    /// A plain name that no type answers is written only in the return type of a signature:
-    /// it binds no type variable, since there is no argument to take a type from (5.5).
-    TypeVariableOnlyInReturn = 0x00019F,
 
     // The resource surface of a program (docs/design/effects/plan.cn.md step 3): the `resource`
     // declaration, `uses`/`pure` and the `#resource` tag. 0x1A0 and up.
@@ -243,6 +223,12 @@ enum class SemanticDiag : uint32_t {
     HandleTypeNotNominal = 0x0001A3,
     /// A body-less declaration's clause differs from the operator's declared resources.
     NativeResourceMismatch = 0x0001A4,
+
+    // `std::cml`, the source printer (handover H240, step S1). 0x1A5 and up.
+    /// A graph holds a construct the printer does not turn into source (yet).
+    CmlUnsupportedConstruct = 0x0001A5,
+    /// A constant is larger than the printer's max_literal_bytes.
+    CmlBigConstant = 0x0001A6,
 
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
@@ -282,10 +268,11 @@ enum class SemanticDiag : uint32_t {
     // A dimension name is written once in a signature, so it relates nothing (design principles
     // 5.4): write `?` if the size is not meant as a relation.
     DimensionNameUsedOnce = 0x100161,
-    // Type variables (design principles 5.5), 0x161 and up.
-    /// A type variable is bound automatically and written only once: its name is most likely a
-    /// misspelt type name.
-    TypeVariableUsedOnce = 0x100162,
+    // Type variables (design principles 5.5). A head name written nowhere is a warning: the
+    // declaration is still well formed, it just declares a parameter nothing can fill.
+    /// A type parameter is declared at the head of a declaration and written nowhere in its
+    /// signature, so no argument could ever give it a type.
+    TypeVariableUnused = 0x1001A5,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

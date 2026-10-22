@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E5 server re-measurement driver (MLSys 2027 eval, §A.5 protocol).
 
 One command on the 8x3090 server produces every performance table of the paper:

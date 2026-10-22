@@ -1,13 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Feb. 22, 2026
- * Updated: Oct. 16, 2026
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "camel/core/mm.h"
 #include "camel/core/mm/block.h"

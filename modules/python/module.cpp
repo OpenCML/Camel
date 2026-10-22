@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Feb. 20, 2026
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "module.h"
 #include "camel/compile/gir.h"
@@ -268,7 +252,7 @@ bool PythonModule::load() {
     context_->registerExecutorFactory("python", [ctx]() { return createPythonExecutor(ctx); });
     // The purity of every operator of the module (design principles 3.3), which the declaration
     // loader requires before it accepts a body-less declaration (`Builder::declareNativeOperator`,
-    // src/compile/gir/builder_modules.cpp:385; H157, H166). All twelve are effectful: each one
+    // src/compile/gir/builder_modules.cpp:369; H157, H166). All twelve are effectful: each one
     // observes or advances the interpreter, which no argument names. `py_call`, `py_exec`,
     // `py_eval` and `py_run` execute arbitrary Python; `py_attr` may run a descriptor or a
     // property; `py_import` runs a module body and writes `sys.modules`; `py_print`/`py_println`

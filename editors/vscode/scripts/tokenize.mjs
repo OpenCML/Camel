@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Tokenises Camel source files with syntaxes/camel.tmLanguage.json, the way VS Code does
 // (vscode-textmate + vscode-oniguruma), and prints the scopes of every token:
 //

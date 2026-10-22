@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // A module that has moved to a declaration module stays migrated (handover H137), and the
 // computed signatures a declaration cannot express have one recorded place (handover H180).
 //
@@ -521,7 +524,7 @@ function readDeclarations(file, moduleName) {
             pendingUri = null
             continue
         }
-        const declaration = trimmed.match(/^(?:export\s+)?func\s+([A-Za-z_]\w*)\s*\(/)
+        const declaration = trimmed.match(/^(?:export\s+)?func\s+([A-Za-z_]\w*)\s*(?:::<[^>]*>)?\s*\(/)
         if (declaration) {
             declarations.push({
                 name: declaration[1],

@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E12 three-way numerical agreement for the MLP forward graph (MLSys T8).
 
 One Camel program (benchmarks/mlp/model.cml forward) is executed four ways:

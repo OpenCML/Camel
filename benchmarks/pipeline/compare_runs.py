@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Compares two runs of the pipeline experiment on the SAME cells.
 
     compare_runs.py --old OLD_SUMMARY --new NEW_SUMMARY --out DIR

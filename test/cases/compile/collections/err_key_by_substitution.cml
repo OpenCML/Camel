@@ -2,7 +2,7 @@ module main
 
 // `Set<T>` is checked again when `T` is replaced: with a float it is rejected at the call.
 
-func to_set(x: typeas T): Set<T> {
+func to_set::<T>(x: T): Set<T> {
     return [x] as Set<T>
 }
 

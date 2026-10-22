@@ -1,6 +1,6 @@
 /** Uses `+` on an enum type declared elsewhere, through a generic function. */
 module enum_gen
 
-export func combine(a: typeas T, b: T): T {
+export func combine::<T>(a: T, b: T): T {
     return a + b
 }

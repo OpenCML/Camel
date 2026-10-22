@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Jul. 29, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "globals.h"
 #include "builtin/executors/builtin.h"
@@ -460,7 +444,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/assn",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
+                        "(var self: T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             // The target keeps its declared type; the value only has to fit it.
@@ -1706,7 +1690,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":struct/zip",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {-1, {}}},
-                        "(...args: (typeas T)[]) => (T, T, ...)[]",
+                        "(...args: T[]) => (T, T, ...)[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (norm.size() < 2)

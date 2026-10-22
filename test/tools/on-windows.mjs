@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Precondition of the tests that assert Windows' wide-character process boundary
 // (`skip_unless = ["node", "test/tools/on-windows.mjs"]`).
 //

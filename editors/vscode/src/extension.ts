@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Camel for VS Code: a thin client of the camel-ls language server.
 //
 // The extension itself only contributes the grammar and the language configuration (see

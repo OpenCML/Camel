@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 __version__ = '0.2.24'
 __author__ = 'Zhenjie Wei'
 __author_email__ = 'Kogler_S@outlook.com'

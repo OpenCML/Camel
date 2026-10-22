@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The declarations of the operators of the C++ module `modules/hash` (design principles 6.4;
 // handover H19, step 10; H163). This file is the one source of their signatures; the C++ side
 // keeps the kernels, the executor and the purity.

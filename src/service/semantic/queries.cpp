@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 12, 2026
- * Updated: Oct. 20, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The questions a semantic model answers (see model.h), and the line / column arithmetic.
@@ -667,7 +651,7 @@ std::string SemanticModel::declLabel(uint32_t file, uint32_t decl) const {
         return withShownName(d, "func ");
     case DeclKind::Parameter:
     case DeclKind::WithParameter: {
-        // As written (`x: typeas T`), which says more than one instance's type.
+        // As written (`x: T`), which says more than one instance's type.
         std::string label = d.header.empty() ? typed("") : d.header;
         return label;
     }
@@ -682,7 +666,7 @@ std::string SemanticModel::declLabel(uint32_t file, uint32_t decl) const {
     case DeclKind::TypeParameter:
         return "type parameter " + d.name;
     case DeclKind::TypeVariable:
-        return "typeas " + d.name;
+        return "type parameter " + d.name;
     case DeclKind::Import: {
         std::string label = "import { " + d.name + " } from " + d.importedFrom;
         for (const std::string &signature : facts.importedSignatures) {

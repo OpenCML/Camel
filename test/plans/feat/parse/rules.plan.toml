@@ -16,6 +16,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
+name = "rules.generic_head"
+desc = "A rule declares its type parameters after its name, like a function: `rule keep::<T>(x: T, y: T)` parses into the same pair of functions. The type parameters are visible at the head; instantiating a generic rule as a value is not supported yet (the rule constructor takes no type arguments), so this locks the syntax."
+kind = "behavior"
+case = "../../../cases/parse/rules/generic_head.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["FuncDecl: keep__lhs", "FuncDecl: keep__rhs", "FuncDecl: keep"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
 name = "rules.pending_parts"
 desc = "A condition is compiled since H38; the context of a rule (`rule fuse<f, g>`) is read but not compiled yet: a located ConstructNotSupported."
 kind = "behavior"

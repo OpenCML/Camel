@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The manual entry point for performance measurement (handover H167).
 //
 // The perf layer is deliberately outside `--changed` and outside `npm run test` (H154 section 6,

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Synthetic checks of classify.py: under the frozen rules, payload comparison by value and its
 hash fallback, tolerances, the benchmark timing mask, the time limit, written files; under
 `frozen+D1-D9`, the deviations D2 (unlocated refusals), D4 (exclusion list), D5 (must-refuse

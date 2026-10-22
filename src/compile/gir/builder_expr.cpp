@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 20, 2026
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The expression nodes of the GIR builder: data, names and dereferences (visitDataNode,
@@ -346,6 +330,17 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     if (!success) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(ident);
         throw BuildAbortException();
+    }
+    // The source name of the value, for the readers of the graph (`std::cml` prints it, the
+    // debugger and diagnostics show it). A name the compiler made (a literal's element, a
+    // capture) is not source, and a node that already has a name keeps it (`let y = x` binds
+    // two names to one value; the first name wins).
+    if (!ident.empty() && !std::isdigit(static_cast<unsigned char>(ident.front())) &&
+        ident.front() != '$') {
+        runtime::GraphDraft &draft = currGraph_->draft();
+        if (draft.nodeName(bound.id) == camel::core::kEmptySym) {
+            draft.setNodeName(bound.id, camel::core::internSymbol(ident));
+        }
     }
     if (currGraph_ == rootGraph_ && !ident.empty() &&
         !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {

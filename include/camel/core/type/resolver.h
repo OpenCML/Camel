@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 03, 2024
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -250,7 +234,7 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
  *
  *  - a signature without type variables is a fixed rule: an argument list of the declared
  *    shape whose argument types are assignable to the declared parameter types;
- *  - a signature with `typeas` variables is a family: the variables are bound from the argument
+ *  - a signature with type parameters declared at its head is a family: the variables are bound from the argument
  *    types, every variable must be bound, and the resulting concrete signature is checked
  *    against the arguments. Each call therefore resolves to its own concrete signature while
  *    the operator URI stays one.

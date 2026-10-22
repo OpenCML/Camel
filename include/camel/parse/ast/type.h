@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details
- *
- * Author: Zhenjie Wei
- * Created: Jul. 03, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -43,7 +27,7 @@ enum class TypeType {
     Enum
 };
 
-enum class TypeOp { Inter, Diff, KeyUnion, KeyInter, KeyDiff, Specialize, TypeOf, TypeAs };
+enum class TypeOp { Inter, Diff, KeyUnion, KeyInter, KeyDiff, Specialize, TypeOf };
 
 std::string to_string(TypeType type);
 std::string to_string(TypeOp op);
@@ -161,11 +145,19 @@ class FuncTypeLoad : public TypeLoad {
     void setUri(const std::string &uri) { uri_ = uri; }
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &modifiers) { modifiers_ = modifiers; }
+    /// The type parameters a declaration declares at its head (design principles 5.5):
+    /// `T` and `U` in `func first::<T, U>(xs: T[]): U`. Empty for an ordinary function type
+    /// and for a declaration that is not generic.
+    const std::vector<std::string> &typeParams() const { return typeParams_; }
+    void setTypeParams(std::vector<std::string> typeParams) {
+        typeParams_ = std::move(typeParams);
+    }
     const std::string geneCode() const override;
 
   private:
     ModifierSet modifiers_;
     std::string uri_;
+    std::vector<std::string> typeParams_;
 };
 
 /// The resources a function type publishes (design effects plan 3.1): `pure` says a call

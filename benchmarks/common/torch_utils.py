@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """PyTorch helpers shared by the ``<model>/model_torch.py`` modules.
 
 Responsibilities: thread pinning, weight loading into ``nn.Linear`` / ``nn.Conv2d``

@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The types and the generic instantiation of the GIR builder: the generic templates a
@@ -603,9 +587,9 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             paramName,
             patternAt(i)->toString());
     };
-    // 1. Each variable takes the type found at its `typeas` position. An argument that is
+    // 1. Each variable takes the type found at its first binding position. An argument that is
     // not of the form of a `T?` / `T!` parameter enters it (design principles 3.8), so it
-    // binds the variables of the payload: `or_zero(5, 0)` with `x: (typeas T)?` gives
+    // binds the variables of the payload: `or_zero(5, 0)` with `x: T?` gives
     // `T = int`. `null` binds nothing.
     type_bindings_t bindings;
     const std::function<bool(Type *, Type *)> bindEntering = [&](Type *pattern, Type *actual) {
@@ -628,7 +612,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             reject(describe(i) + " needs a type of that form to bind its type variables");
         }
     }
-    // 2. A variable that its `typeas` position left open (the argument there is `null`, or a
+    // 2. A variable that its first binding position left open (the argument there is `null`, or a
     // generic function that is still waiting) takes the type found at any other occurrence:
     // the constraints of all arguments are collected before any is held to its parameter.
     for (size_t i = 0; i < withCount + normCount; ++i) {

@@ -7,28 +7,28 @@ module pipelines
 
 type Pair<T> = (T, T)
 
-func first(xs: (typeas T)[]): T {
+func first::<T>(xs: T[]): T {
     return xs[0]
 }
 
-func swap(p: Pair<typeas T>): Pair<T> {
+func swap::<T>(p: Pair<T>): Pair<T> {
     return (p.1, p.0)
 }
 
-func zip2(a: typeas A, b: typeas B): (A, B) {
+func zip2::<A, B>(a: A, b: B): (A, B) {
     return (a, b)
 }
 
-func count(xs: (typeas T)[], i: int): int {
+func count::<T>(xs: T[], i: int): int {
     return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
 }
 
-func sum_to(xs: (typeas T)[], i: int, acc: T): T {
+func sum_to::<T>(xs: T[], i: int, acc: T): T {
     return if i >= len(xs) then acc else sum_to(xs, i + 1, acc + xs[i])
 }
 
-with <f: (x: typeas T) => typeas U>
-func my_map(xs: T[]): U[] {
+with <f: (x: T) => U>
+func my_map::<T, U>(xs: T[]): U[] {
     return xs->map<f>
 }
 

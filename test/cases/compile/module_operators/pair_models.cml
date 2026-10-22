@@ -6,7 +6,7 @@ module pair_models
 
 export type Pair<T> = { a: T, b: T }
 
-export func operator +(p: Pair<(typeas T)>, q: Pair<T>): Pair<T> {
+export func operator +::<T>(p: Pair<(T)>, q: Pair<T>): Pair<T> {
     return { a: p.a + q.a, b: p.b + q.b }
 }
 

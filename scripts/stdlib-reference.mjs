@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The standard library reference, read from the signature files and the library sources.
 //
 //   node scripts/stdlib-reference.mjs --write       regenerate docs/stdlib-reference.md
@@ -480,7 +483,7 @@ function signatureBodyProblems() {
         const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
         for (let i = 0; i < lines.length; i++) {
             const trimmed = lines[i].trim()
-            const decl = trimmed.match(/^(?:export\s+)?func\s+([A-Za-z_][\w:]*)\s*\(/)
+            const decl = trimmed.match(/^(?:export\s+)?func\s+([A-Za-z_][\w:]*)\s*(?:::<[^>]*>)?\s*\(/)
             if (!decl) continue
             const close = closingBracket(trimmed, decl[0].length - 1)
             if (close < 0) continue
@@ -661,7 +664,7 @@ function readDeclarations(file, module) {
     }
     if (trimmed.startsWith(keyword + ' ')) {
             const rest = trimmed.slice(keyword.length + 1)
-            const name = rest.slice(0, rest.indexOf('('))
+            const name = rest.slice(0, rest.indexOf('(')).replace(/::<.*>$/, '')
             const args = bracketed(rest, rest.indexOf('('))
             const after = rest.slice(args.end + 1)
             const result = after.replace(/^\s*:\s*/, '').replace(/\s*(sync\s*)?\{\s*$/, '').trim()
@@ -743,10 +746,12 @@ function parseDeclarations(module) {
     return entries
 }
 
-// The comment at the top of the file, without the note that it is not compiled.
+// The comment at the top of the file, without the two-line header, the blank line after it and the
+// note that the file is not compiled.
 function parseHeader(module) {
     const text = fs.readFileSync(sourceOf(module), 'utf8').replace(/\r\n/g, '\n')
-    const match = text.match(/^\/\*\*\n([\s\S]*?)\n \*\//)
+    const body = text.replace(/^(?:\/\/[^\n]*\n){2}\n/, '')
+    const match = body.match(/^\/\*\*\n([\s\S]*?)\n \*\//)
     if (!match) return []
     const lines = match[1].split('\n').map((l) => l.replace(/^ \* ?/, ''))
     const stop = lines.findIndex((l) => l.startsWith('For reference only'))
@@ -1019,7 +1024,7 @@ function bindArguments(entry, code) {
         // A parameter typed by a type variable cannot be written in the wrapper: its type is not a
         // type of the program (`T[]`, `Map<K, V>`, `(...args: A) => T`). The example has to
         // supply a concrete value instead; the compile below reports the name as unresolved.
-        if (/\btypeas\b/.test(param.type) || /\b[A-Z]\b/.test(param.type)) return
+        if (/\b[A-Z]\b/.test(param.type)) return
         if (!bindings.some((binding) => binding.name === name)) bindings.push({ name, type: param.type })
     }
     if (call.receiver) bind(call.receiver, params[0])

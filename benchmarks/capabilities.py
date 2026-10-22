@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Write the ONNX backend's operator capability table.
 
 Runs ``tools/onnx_capabilities.cml`` (which prints ``onnx.supported_operators()``)

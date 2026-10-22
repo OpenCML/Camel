@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Repeat the `--timeit` command of the H9/2 crash report until it fails, and count how often.
 
 The command

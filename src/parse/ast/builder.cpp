@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Mar. 26, 2024
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "camel/parse/ast/builder.h"
 #include "camel/core/operator_names.h"
@@ -862,6 +846,15 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();
     const auto when   = context->expr();
+    // A rule declares its type parameters the way a function does, after its name
+    // (`rule sub_self::<T>(x: T) { ... }`): every function the rule becomes is generic over
+    // them, so the sides bind and instantiate like an ordinary generic function.
+    std::vector<std::string> typeParams;
+    if (const auto declared = context->get<cst::TypeParams>()) {
+        for (const auto ident : declared->all<cst::IdentDef>()) {
+            typeParams.emplace_back(ident->text());
+        }
+    }
     int64_t consts    = 0;
     if (const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams()) {
         int bit = 0;
@@ -975,6 +968,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         const Reference sideRef = qualifyRef(Reference(name + suffix));
         node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcTypeNode, context);
+        unwrapNodeAs<FuncTypeLoad>(funcTypeNode)->setTypeParams(typeParams);
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
         if (params) {
             *funcTypeNode << any2node(visitParentParams(params));
@@ -1639,6 +1633,17 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         }
     }
     funcType->setModifiers(modSet);
+
+    // The type parameters declared at the head (`func first::<T>(...)`, design principles 5.5).
+    // They are the names the declaration's type variables are; the GCT builder puts them in
+    // scope before it visits a parameter type, so one of them wins over a type of the same name.
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        std::vector<std::string> names;
+        for (const auto ident : typeParams->all<cst::IdentDef>()) {
+            names.emplace_back(ident->text());
+        }
+        funcType->setTypeParams(std::move(names));
+    }
 
     if (context->get<cst::AngledParams>()) {
         node_ptr_t withParams = any2node(visitAngledParams(context->get<cst::AngledParams>()));
@@ -4673,15 +4678,6 @@ Value Builder::visitTypeOfType(cst::TypeOfType context) {
     return res;
 }
 
-Value Builder::visitTypeAsType(cst::TypeAsType context) {
-    node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeAs);
-    setNodeTokenRangeByContext(res, context);
-    Reference ref(context->get<cst::IdentDef>()->text());
-    *res << createNodeAs<RefTypeLoad>(ref);
-    setNodeTokenRangeByContext(res, context->get<cst::IdentDef>());
-    return res;
-}
-
 /*
 structType
     : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
@@ -4955,8 +4951,6 @@ Value Builder::visitType(syn::Node context) {
         return visitFuncType(cst::FuncType(context));
     case NK::TypeOfType:
         return visitTypeOfType(cst::TypeOfType(context));
-    case NK::TypeAsType:
-        return visitTypeAsType(cst::TypeAsType(context));
     case NK::EnumType:
         return visitEnumType(cst::EnumType(context));
     default:

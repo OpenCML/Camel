@@ -1162,7 +1162,7 @@ the same tree with a `string` at every leaf.
 #### `tree_paths`
 
 ```camel
-tree_paths: (t: typeas T) => ?
+tree_paths: (t: T) => ?
 ```
 
 The path of every leaf, as a tree of the same shape.
@@ -1173,7 +1173,7 @@ The path of every leaf, as a tree of the same shape.
 #### `tree_map`
 
 ```camel
-tree_map: <f: typeas F> (t: typeas T, ..ts) => ?
+tree_map: <f: F> (t: T, ..ts) => ?
 ```
 
 Applies f to the leaves in the same place of the trees (one tree, or several of the same
@@ -1186,7 +1186,7 @@ is that of the first tree.
 #### `tree_reduce`
 
 ```camel
-tree_reduce: <f: (acc: typeas R, leaf: typeas A) => R> (t: typeas T, init: R) => R
+tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 ```
 
 Folds the leaves from the first to the last with f, starting from init.
@@ -1197,7 +1197,7 @@ Folds the leaves from the first to the last with f, starting from init.
 #### `tree_unzip`
 
 ```camel
-tree_unzip: (r: typeas R, s: typeas S) => ?
+tree_unzip: (r: R, s: S) => ?
 ```
 
 Turns a tree of tuples into a tuple of trees: the shape is that of `reference`, and every
@@ -1912,7 +1912,7 @@ not change.
 
 ```camel
 show: (t: Tensor) => void
-show: (t: (typeas A)[]) => void
+show: (t: A[]) => void
 ```
 
 Prints t to the console, in the module's layout.
@@ -2984,7 +2984,7 @@ primitive behind `sort_by` of the `array` module.
 #### `sort`
 
 ```camel
-sort: (xs: (typeas T)[]) => T[]
+sort: (xs: T[]) => T[]
 ```
 
 A sorted copy of xs (quicksort).
@@ -2996,7 +2996,7 @@ A sorted copy of xs (quicksort).
 #### `insert_sort`
 
 ```camel
-insert_sort: (xs: (typeas T)[]) => T[]
+insert_sort: (xs: T[]) => T[]
 ```
 
 A sorted copy of xs, by insertion sort.
@@ -3008,7 +3008,7 @@ A sorted copy of xs, by insertion sort.
 #### `quick_sort`
 
 ```camel
-quick_sort: (xs: (typeas T)[]) => T[]
+quick_sort: (xs: T[]) => T[]
 ```
 
 A sorted copy of xs, by quicksort.
@@ -3020,7 +3020,7 @@ A sorted copy of xs, by quicksort.
 #### `merge_sort`
 
 ```camel
-merge_sort: (xs: (typeas T)[]) => T[]
+merge_sort: (xs: T[]) => T[]
 ```
 
 A sorted copy of xs, by merge sort.
@@ -3032,7 +3032,7 @@ A sorted copy of xs, by merge sort.
 #### `merge_sorted_arrays`
 
 ```camel
-merge_sorted_arrays: (left: (typeas T)[], right: T[]) => T[]
+merge_sorted_arrays: (left: T[], right: T[]) => T[]
 ```
 
 The sorted array made of the elements of two sorted arrays of numbers.
@@ -3044,7 +3044,7 @@ The sorted array made of the elements of two sorted arrays of numbers.
 #### `flatten`
 
 ```camel
-flatten: (xss: (typeas T)[][]) => T[]
+flatten: (xss: T[][]) => T[]
 ```
 
 The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
@@ -3056,7 +3056,7 @@ of the `array` module.
 #### `unique`
 
 ```camel
-unique: (xs: (typeas T)[]) => T[]
+unique: (xs: T[]) => T[]
 ```
 
 The first occurrence of every value, in order; values are compared as `==` compares them
@@ -3130,7 +3130,7 @@ above high.
 #### `choice`
 
 ```camel
-choice: (xs: (typeas T)[]) => T
+choice: (xs: T[]) => T
 ```
 
 One element of xs, drawn uniformly.
@@ -3142,7 +3142,7 @@ One element of xs, drawn uniformly.
 #### `sample`
 
 ```camel
-sample: (xs: (typeas T)[], n: int) => T[]
+sample: (xs: T[], n: int) => T[]
 ```
 
 n elements of xs drawn without replacement, as a new array.
@@ -3154,7 +3154,7 @@ n elements of xs drawn without replacement, as a new array.
 #### `shuffle`
 
 ```camel
-shuffle: (xs: (typeas T)[]) => T[]
+shuffle: (xs: T[]) => T[]
 ```
 
 The elements of xs in a random order, as a new array; xs is not changed.
@@ -3165,7 +3165,7 @@ The elements of xs in a random order, as a new array; xs is not changed.
 #### `key`
 
 ```camel
-key: (seed: int) => Key
+key: (seed: int) => { hi: int, lo: int }
 ```
 
 A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
@@ -3178,7 +3178,7 @@ on every scheduler, in translated C++, and on every platform.
 #### `split`
 
 ```camel
-split: (key: Key) => (Key, Key)
+split: (key: { hi: int, lo: int }) => ({ hi: int, lo: int }, { hi: int, lo: int })
 ```
 
 Two independent keys derived from key: split(key) gives the same pair every time, and does
@@ -3190,7 +3190,7 @@ not change key.
 #### `permutation`
 
 ```camel
-permutation: (key: Key, n: int) => int[]
+permutation: (key: { hi: int, lo: int }, n: int) => int[]
 ```
 
 A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
@@ -3858,7 +3858,7 @@ were waiting). A tool for showing that calls really run at the same time.
 #### `unordered_foreach`
 
 ```camel
-unordered_foreach: <f: (item: typeas T) => typeas R> (xs: T[]) => void
+unordered_foreach: <f: (item: T) => R> (xs: T[]) => void
 ```
 
 Calls f for every element; the calls have no order among them.
@@ -3869,7 +3869,7 @@ Calls f for every element; the calls have no order among them.
 #### `unordered_reduce`
 
 ```camel
-unordered_reduce: <f: (acc: typeas T, item: T) => T, initial: T> (xs: T[]) => T
+unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 ```
 
 Combines the elements with f starting from initial; the order in which elements are
@@ -4626,7 +4626,7 @@ keeps the kernel, the executor, the operator traits and the purity.
 
 `plot` is one operator with one URI, over four element types and two arities: an array of
 `i32`, `int`, `f32` or `float`, with or without the name of the output file. A declaration
-cannot write "an array of one of these four" as one rule, and a `(typeas T)[]` declaration
+cannot write "an array of one of these four" as one rule, and a declaration generic over `T`
 would accept a `string[]` that the kernel refuses, so the four types are written out for each
 arity: eight declarations of the one operator. A declaration cannot write the optional
 parameter `filename?: string` either, which is why the two arities are separate.
@@ -5074,7 +5074,7 @@ One step of Adam on a parameter tree: answers `(new_params, new_state)`, both sh
 #### `save_params`
 
 ```camel
-save_params: (params: typeas P, dir: string) => void
+save_params: (params: P, dir: string) => void
 ```
 
 Saves every tensor leaf of `params` under `dir`, as `<dir>/<path>.npy`, the path joining struct
@@ -5127,7 +5127,7 @@ applies.
 #### `stop_gradient`
 
 ```camel
-stop_gradient: (x: typeas T) => T
+stop_gradient: (x: T) => T
 ```
 
 Returns its argument unchanged, and cuts the gradient at this point: a value passed through

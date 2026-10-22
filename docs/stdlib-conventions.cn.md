@@ -24,7 +24,7 @@
 
 C++ 模块不再重复写签名：没有函数体的声明就是签名本身，调用方按它检查，运行时由 `module:function`（例如 `bytes:len`）找到算子的执行器。声明名与算子名不同、或同一模块的算子用别的前缀（`random` 的 `rand:`）时用 `#op<'...'>` 标出；另一个模块的算子不能在这里声明。`docs/stdlib-reference.md` 由声明与计算签名文件生成，不手改。
 
-- 一个名字按类型有各自的执行器 URI 时（`math` 的 `abs_i`、`abs_l`、…），声明逐个写、各带确切的 `#op<'模块:算子'>`；不能用一个 `(typeas T)` 的泛型声明代替，因为泛型声明仍只绑定一个 URI，而执行器是按类型分名的。签名文件里的 `*` 通配只作参考，不是声明可用的写法：`ExecutorManager` 与 `OperatorTable` 都按确切的 URI 查找。
+- 一个名字按类型有各自的执行器 URI 时（`math` 的 `abs_i`、`abs_l`、…），声明逐个写、各带确切的 `#op<'模块:算子'>`；不能用一个 `func f::<T>` 的泛型声明代替，因为泛型声明仍只绑定一个 URI，而执行器是按类型分名的。签名文件里的 `*` 通配只作参考，不是声明可用的写法：`ExecutorManager` 与 `OperatorTable` 都按确切的 URI 查找。
 - **一个计算签名只在 `stdlib/signatures/<模块>.cml` 一处记录，由模块条目的 `computed` 字段指名；声明文件里不写 `// dynamic func`，同一个名字不能两处都有、也不能两处都没有。** 计算签名的算子（C++ 的 `DynamicFuncTypeResolver`，结果类型取自实参）的类型规则留在 C++；参考条目、`///` 文档与 `@example` 写进签名文件，写成无函数体的 `export func`，只作参考、不参与编译。内联写法是一条注释，URI 只能读成 `<模块>:<名字>`，没有 `#op` 的位置——`tensor:sum_axis` 的 Camel 名字是 `sum`，`nn:softmax_cross_entropy_labels` 的是 `softmax_cross_entropy`，`python:py_call_kw` 的是 `py_call`——所以文件是唯一能覆盖全部计算名字的记法。`math` 的 `sqrt`（`i32`→`f32`、`int`→`float`）与 `shl`/`shr`（结果取第一个参数的类型）现在记在 `stdlib/signatures/math.cml`，`graph`、`json`、`random` 同样；参考页与 `--verify-ops` 把声明文件与它合起来对账。哪些签名算不出来、为什么，见第 8 节；本页只定记录位置。
 - 这条规则由 [`scripts/stdlib-declarations.mjs`](../scripts/stdlib-declarations.mjs) 的 `--check` 守住，检查器把它读成一句话：“a computed name has exactly one place: `stdlib/signatures/<module>.cml`, named by the MODULES entry's `computed:` field (handover H180)”——内联记录、两处都有、`computed` 指名却一个名字都不记录，都报问题；两处都没有由它的导出组检查报 “no computed signature records it”。跑它的是 [`stdlib_registry.plan.toml`](../test/plans/feat/modules/stdlib_registry.plan.toml) 里的 `registry.migrations_stay_migrated`，同计划的 `registry.signatures_match` 跑 `--verify-ops`；两条都在 `feat/modules`。
 - C++ 导出的值（`math::pi`）没有可写的声明：`export let` 必须有初始值，写了就是第二份值。声明模块里用 `// value 名字: 类型` 的注释记录参考页条目，`///` 说明与 `@example` 照常写在它上方；值本身仍由 C++ 导出。
@@ -110,7 +110,7 @@ C++ 模块不再重复写签名：没有函数体的声明就是签名本身，�
 
 一条声明写不出的判据有四条：结果类型不取自任何参数或类型实参；每个参数都能写成一个类型；一个名字的所有 URI 能写进同一组声明；写出来的声明接受的调用集合与 C++ 相同。近似声明会让本该拒绝的调用通过，少写一条规则会让本该通过的调用被拒绝，两者都不行。按这四条给不出的签名留在 C++ 的 `DynamicFuncTypeResolver` / `OpDef`，参考条目记在 `stdlib/signatures/<模块>.cml`（第 1 节）。
 
-**已有裁定，不加语法。** 可选参数按元数写重载（缺省的那个实参不写；`?` 只出现在不编译的签名文件里，不是声明语法）；整数宽度按拼写各写一条（`int` 与 `i32` 之间没有隐式转换）；伞形参数写 `Tensor`、`(typeas A)[]` 或逐类型重载（`tensor` 的 `show` 就是这样写的）。声明替换整个算子组而不是追加，所以一个名字不能一半写声明、一半留 C++：一半写不出，整个名字留 C++（`range`、`sum`、`mean` 即此）。
+**已有裁定，不加语法。** 可选参数按元数写重载（缺省的那个实参不写；`?` 只出现在不编译的签名文件里，不是声明语法）；整数宽度按拼写各写一条（`int` 与 `i32` 之间没有隐式转换）；伞形参数写 `Tensor`、`A[]`（函数头声明 `A`）或逐类型重载（`tensor` 的 `show` 就是这样写的）。声明替换整个算子组而不是追加，所以一个名字不能一半写声明、一半留 C++：一半写不出，整个名字留 C++（`range`、`sum`、`mean` 即此）。
 
 **只有语言作者能答的缺口。** 任意参数表的函数类型（`rewrite` 的 `__rule`、`onnx::export_model`、`tiles` 的 `source`/`inspect`/`benchmark` 等；今天只能留 C++）；声明看不见调用点的类型实参（`from_bytes::<T>`、`load_tree`、`decode_as`）；类型变量谓词（`save_tree` 等）；模块类型的类型变量实参（`Device<T>` 接受、`PyObject<T>` 不接受，是 `typeArguments()` 覆写与否的问题）；变参（`..ts` 已落地第一阶段，剩余形参带类型与展开调用仍未做）。这些不是新语法提案，就是待裁定的问题。
 

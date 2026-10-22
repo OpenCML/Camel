@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The cost of everything `camel` does before the program runs (handover H142).
 //
 // Four commands, each a fresh process, timed with `process.hrtime.bigint()` around the whole

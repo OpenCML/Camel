@@ -1,12 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license: https://opensource.org/license/mit
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
- * Author: Camel Contributors
- * Created: Oct. 18, 2026
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // The native module `ckpt`: the checkpoint operators (`save_tree`, `load_tree`) and the one tree
 // operator that is not written in Camel yet (`tree_leaves`, which needs value-tuple expansion).
@@ -15,6 +8,7 @@
 // The module is not called `tree`: `stdlib/tree.cml` is the Camel tree library, and a `.cml`
 // beside a same-named `.cmo` would be that native module's declaration file instead of the
 // library (H19 plan section 1.6).
+
 #include "../tensor/ops/registry.h"
 #include "camel/core/context/context.h"
 #include "camel/core/module/builtin.h"

@@ -6,7 +6,7 @@ import { Device, upload, download, run_preferred_resident } from tiles
 type Model = { weight: Tensor<f32>, block: (Tensor<f32>, float) }
 type ExplicitDeviceModel = { weight: Device<Tensor<f32>>, block: (Device<Tensor<f32>>, Device<float>) }
 func identity(p: Device<Model>): ExplicitDeviceModel { return p }
-func typed_upload(p: typeas P): Device<P> sync { return upload(p) }
+func typed_upload::<P>(p: P): Device<P> sync { return upload(p) }
 with <p: Model>
 func loss(): float { return sum(p.weight * p.weight) + sum(p.block.0 * p.block.0) }
 func descend(p: Model, g: Model): Model {

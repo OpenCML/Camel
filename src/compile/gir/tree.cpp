@@ -1,18 +1,12 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license: https://opensource.org/license/mit
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
- * Author: Camel Contributors
- * Created: Oct. 18, 2026
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // The leaves of a parameter tree, as one flat tuple. `tree_map`, `tree_reduce` and `tree_unzip`
 // are Camel functions in `stdlib/tree.cml` now; this one cannot be: the result's type is the
 // concatenation of the leaves of every field, and Camel has no way to splice a tuple value's
 // elements into a tuple being built (a rest argument is only a call argument). The boundary
 // comes from the tree's own type (core::type::tree).
+
 #include "camel/core/type/tree.h"
 #include "builder.h"
 #include "builder_helpers.h"

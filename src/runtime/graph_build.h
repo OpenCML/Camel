@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Apr. 11, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Internal GCGraph construction helpers shared by runtime graph materializers.
@@ -45,6 +29,10 @@ struct GCGraphDebugRecord {
     std::string name;
     // The names the graph captures, in the order it captured them (GCGraph::captureNames).
     std::vector<camel::core::SymId> captureNames;
+    // The source name of each node's value (`let x`, `var x`), indexed by node reference;
+    // empty when no node has one (GCGraph::nodeName). Cold debug data like the names above:
+    // it is not a column of the graph and not part of the canonical document.
+    std::vector<camel::core::SymId> nodeNames;
 };
 
 struct GCGraphPayloadShape {

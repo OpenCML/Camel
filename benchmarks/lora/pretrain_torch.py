@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E9: pretrain the MLP backbone on upright MNIST (torch, Adam, 3 epochs), then
 save the backbone weights plus zero-initialized LoRA adapters (rank 8, same
 deterministic A init as make_init.py's rng(2001)) to artifacts/lora/pretrained/.

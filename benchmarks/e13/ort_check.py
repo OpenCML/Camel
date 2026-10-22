@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E13/T5 Level-2 probes: ONNX checker + ONNX Runtime vs Camel native dumps.
 
 For every exported graph under <artifacts>/onnx/<probe>_<what>.onnx this runs

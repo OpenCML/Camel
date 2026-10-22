@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Peak resident-set-size measurement for the current process and child processes.
 
 On POSIX, ``resource.getrusage`` reports the kernel-tracked high-water mark.

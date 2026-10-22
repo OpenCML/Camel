@@ -1,6 +1,6 @@
 module err_count
 
-func first(xs: (typeas T)[]): T {
+func first::<T>(xs: T[]): T {
     return xs[0]
 }
 

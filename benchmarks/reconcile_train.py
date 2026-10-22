@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Operator-count reconciliation of the training workload (run before any timing).
 
 A step time only means "a training step" if the configuration executed one: the

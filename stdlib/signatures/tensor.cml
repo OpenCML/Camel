@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The computed signatures of the `tensor` module: the operators whose element type or shape
  * follows their arguments, so a declaration cannot state them (a declaration has one signature

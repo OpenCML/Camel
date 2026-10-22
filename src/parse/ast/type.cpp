@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details
- *
- * Author: Zhenjie Wei
- * Created: Jul. 03, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "camel/parse/ast/type.h"
 #include "camel/utils/str.h"
@@ -98,8 +82,6 @@ std::string to_string(TypeOp op) {
         return "SPEC";
     case TypeOp::TypeOf:
         return "typeof";
-    case TypeOp::TypeAs:
-        return "typeas";
     default:
         ASSERT(false, "Unknown TypeOp");
         return "Unknown";
@@ -174,6 +156,13 @@ const std::string FuncTypeLoad::geneCode() const {
     std::string result = "";
     if (!modifiers_.empty()) {
         result += std::string(modifiers_) + " ";
+    }
+    if (!typeParams_.empty()) {
+        result += "::<";
+        for (size_t i = 0; i < typeParams_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + typeParams_[i];
+        }
+        result += "> ";
     }
     return result;
 }

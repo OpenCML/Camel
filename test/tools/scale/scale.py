@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Scale tests: programs made of N ordinary functions.
 
 A program of a given shape has N small functions and a `main` that calls every one of them and

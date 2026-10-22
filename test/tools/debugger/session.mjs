@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // A scripted session with a camel-db worker over its debug API, for looking at behaviour by
 // hand while developing tests:
 //

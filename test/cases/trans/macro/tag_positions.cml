@@ -15,7 +15,7 @@ func wrapper(): int {
     return twice(3)
 }
 
-#macro func pick(x: typeas T): T {
+#macro func pick::<T>(x: T): T {
     return x
 }
 

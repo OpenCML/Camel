@@ -5,6 +5,9 @@
 // values below again because `std::jgir` prints each operator's resources and these samples call
 // `println`, whose resource was renamed from `io:stdout` to `stdout` (the module rename itself
 // still changes only the module name; the samples differ from their `_old` twins in that only).
+// `std::cml`'s first step made `std::jgir` print each node's source name (`let path`), so the
+// digests were recorded once more for that field: deleting the node `name` entries from the
+// document reproduces the previous values exactly.
 //
 // The sample programs hold literals only and `std::jgir` is a translation pass: no environment
 // read, hash or machine query is executed, so the graph is the same on every machine.
@@ -32,7 +35,7 @@ const CASES = {
         old: 'sys',
         now: 'env',
         file: 'env_identity.cml',
-        expected: '8c4c5bb6a665c76cffd390b58ea9cb16cc9457d1062f2ed855c6239157ade91a',
+        expected: 'c4fa5b6d526c7512aa5f334b6562203fbe0668ea7e2edc9c63db9e71296dd17a',
     },
     process: {
         old: 'os',
@@ -44,7 +47,7 @@ const CASES = {
         old: 'crypto',
         now: 'hash',
         file: 'hash_identity.cml',
-        expected: '60047e7fdacbf33f83930d498911ca166d01ba47444335de78f955952a9b0ba5',
+        expected: 'bebd95ad22e8b2e17167b82b5de00bfcaae2befbf95d73c42f187fe7bcde2808',
     },
 }
 

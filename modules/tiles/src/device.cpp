@@ -1,14 +1,8 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license: https://opensource.org/license/mit
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
- * Author: Camel Contributors
- * Created: Oct. 15, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // Interned device storage types preserve the host tensor's static refinements.
+
 #include "tiles/device.h"
 #include "camel/core/mm.h"
 #include "camel/core/type/composite/struct.h"

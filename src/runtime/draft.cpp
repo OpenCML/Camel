@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Apr. 10, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Runtime graph draft decode layer.
@@ -117,6 +101,8 @@ DraftNodeInit makeInitFromNode(const DraftNode *node) {
     init.origin       = node->header.origin;
     init.permissions  = node->header.permissions;
     init.attrs        = node->header.attrs;
+    init.region       = node->header.region;
+    init.name         = node->header.name;
     init.payload      = DraftNodeView::payload(node);
     init.normInputs   = DraftNodeView::normInputs(node);
     init.withInputs   = DraftNodeView::withInputs(node);
@@ -142,6 +128,7 @@ void initializeNodeStorage(
     draftNode->header.origin         = init.origin;
     draftNode->header.permissions    = init.permissions;
     draftNode->header.attrs          = init.attrs;
+    draftNode->header.name           = init.name;
     draftNode->header.storageCls     = storageClass;
 
     if (capacityBytes != 0) {
@@ -590,6 +577,7 @@ DraftNode *GraphDraft::createDecodedNode(
     draftNode->header.permissions      = graph->nodePermissions(sourceRef);
     draftNode->header.attrs            = graph->nodeAttrs(sourceRef);
     draftNode->header.region           = graph->nodeRegion(sourceRef);
+    draftNode->header.name             = graph->nodeNameSym(sourceRef);
     draftNode->header.storageCls       = storageClass;
 
     if (sourceNode->kind == GCNodeKind::Brch) {
@@ -764,6 +752,7 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
             .origin       = init.origin,
             .permissions  = init.permissions,
             .attrs        = init.attrs,
+            .name         = init.name,
             .payload      = payloadCopy,
             .normInputs   = normInputsCopy,
             .withInputs   = withInputsCopy,
@@ -926,6 +915,18 @@ void GraphDraft::setNodeAttrs(gc_node_ref_t id, uint32_t attrs) {
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set the attributes of a missing draft node.");
     draftNode->header.attrs = attrs;
+}
+
+uint32_t GraphDraft::nodeName(gc_node_ref_t id) const {
+    const DraftNodeHeader *h = header(id);
+    return h ? h->name : 0;
+}
+
+void GraphDraft::setNodeName(gc_node_ref_t id, uint32_t name) {
+    ++mutations_;
+    DraftNode *draftNode = node(id);
+    ASSERT(draftNode != nullptr, "Cannot set the name of a missing draft node.");
+    draftNode->header.name = name;
 }
 
 void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {

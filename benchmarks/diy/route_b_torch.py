@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E7 route B: torch.onnx through autograd — nail the gray area with artifacts.
 
 Unified model: Linear(10,32)->ReLU->Linear(32,1), MSE, SGD lr 0.01, params as

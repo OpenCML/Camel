@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """progen: random Camel programs with a reference output, and differential runs over pipelines.
 
     progen.py show      --seed N [--features LIST]            print the program and its reference

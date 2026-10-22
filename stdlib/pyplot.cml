@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Plots: draw an array of numbers with matplotlib, and fall back to an SVG file when matplotlib
  * is not installed. The operator writes an image file and is never folded or dropped by a pass.
@@ -8,7 +11,7 @@
  *
  * `plot` is one operator with one URI, over four element types and two arities: an array of
  * `i32`, `int`, `f32` or `float`, with or without the name of the output file. A declaration
- * cannot write "an array of one of these four" as one rule, and a `(typeas T)[]` declaration
+ * cannot write "an array of one of these four" as one rule, and a declaration generic over `T`
  * would accept a `string[]` that the kernel refuses, so the four types are written out for each
  * arity: eight declarations of the one operator. A declaration cannot write the optional
  * parameter `filename?: string` either, which is why the two arities are separate.

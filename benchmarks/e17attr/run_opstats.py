@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T13 account 2: per-operator kernel time vs step time (CAMEL_TENSOR_OPSTATS=1).
 
 Two estimators, reported side by side:

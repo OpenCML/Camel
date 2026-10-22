@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /*
  * allocshim: a counting allocator shim for measuring a Camel run (Linux, glibc).
  *

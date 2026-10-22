@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 r"""Where a Camel run spends its time and makes its allocations, by function and by cause.
 
     python3 benchmarks/compile/hotspots.py cpu    FILE [PASS...] [--runs N] [--hz 1000] [--out DIR]
