@@ -315,6 +315,7 @@ bab3430dab252a98 ok showcase/c2-mlp-mnist/train.cml
 4fff9407e41ec7ae ok showcase/d5-tree-lstm/train.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
 f8a426c8e96936da ok stdlib/bytes.cml
+dd4c782619481c22 ok stdlib/fs.cml
 81d50d711442ef6b ok stdlib/io.cml
 6020479adef220b0 ok stdlib/json.cml
 f234da727937674c ok stdlib/math.cml
@@ -327,7 +328,6 @@ c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 68408c82f05916d6 ok stdlib/signatures/algo.cml
 985ec586154e41fa ok stdlib/signatures/ckpt.cml
 351e27ad8c07e562 ok stdlib/signatures/env.cml
-e46e8d8f1dd87a8f ok stdlib/signatures/fs.cml
 3364937d4942b0ed no stdlib/signatures/globals.cml
 7b8935da68ae2c54 ok stdlib/signatures/graph.cml
 b465908c31d8462a ok stdlib/signatures/hash.cml
@@ -801,6 +801,9 @@ a08398ab5e4ba3b7 ok test/cases/compile/native/bytes_type.cml
 917a73791cd842bb ok test/cases/compile/native/declaration_type_argument.cml
 1909bd6cef907947 ok test/cases/compile/native/entry_uri.cml
 c2c51d0f82162052 ok test/cases/compile/native/foreign_operator.cml
+c761ac0a444fedfe ok test/cases/compile/native/fs_arity.cml
+066e31efc9c6b094 ok test/cases/compile/native/fs_declaration_import.cml
+bca42e188ef0d258 ok test/cases/compile/native/fs_type.cml
 73e34f5410cddf22 ok test/cases/compile/native/generic.cml
 56df9aa3996cbbf9 ok test/cases/compile/native/generic_module.cml
 1f22e98f50629dfd ok test/cases/compile/native/generic_qualified.cml
