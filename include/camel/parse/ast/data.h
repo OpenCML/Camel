@@ -413,10 +413,20 @@ class FuncDataLoad : public DataLoad {
     }
 
     const Reference &ref() const { return ref_; }
+    /// The declaration's applicability condition: the expression after `when`, or null. It is
+    /// not one of the node's children (a body-less declaration has one child), because it is
+    /// not part of the signature or the body: it is evaluated when the declaration is
+    /// instantiated (design principles 5.13).
+    const node_ptr_t &when() const { return when_; }
+    void setWhen(const node_ptr_t &when) { when_ = when; }
+    const std::string &whenText() const { return whenText_; }
+    void setWhenText(std::string text) { whenText_ = std::move(text); }
     const std::string geneCode() const override;
 
   private:
     Reference ref_;
+    node_ptr_t when_;
+    std::string whenText_;
 };
 
 class RefDataLoad : public DataLoad {

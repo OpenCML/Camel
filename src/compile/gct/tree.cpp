@@ -142,6 +142,20 @@ const std::vector<Tree::UnwrittenParam> *Tree::unwrittenParamsOf(const Node *fun
     return it == unwrittenParams_.end() ? nullptr : &it->second;
 }
 
+void Tree::setWhen(const Node *func, WhenClause clause) {
+    if (func != nullptr && clause.condition != nullptr) {
+        whenClauses_[func] = std::move(clause);
+    }
+}
+
+const Tree::WhenClause *Tree::whenOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = whenClauses_.find(func);
+    return it == whenClauses_.end() ? nullptr : &it->second;
+}
+
 Tree *Tree::of(const Node *node) {
     const auto address = reinterpret_cast<uintptr_t>(node);
     return reinterpret_cast<const Chunk *>(address & ~(static_cast<uintptr_t>(kChunkBytes) - 1))
@@ -520,6 +534,11 @@ node_ptr_t Tree::clone(const Node *node) {
         // A lambda's unwritten parameters come with it: the copy is the same lambda.
         if (const auto *params = Tree::of(node)->unwrittenParamsOf(node)) {
             unwrittenParams_[copy] = *params;
+        }
+        // A declaration's `when` condition is part of the copy too: the copy is instantiated
+        // with the same rules.
+        if (const auto *when = Tree::of(node)->whenOf(node)) {
+            whenClauses_[copy] = WhenClause{clone(when->condition), when->text, when->origin};
         }
     }
     return copy;

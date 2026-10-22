@@ -237,6 +237,9 @@ class ParserImpl {
     /// The clause after a function's result type (design effects plan 3.1): the resources a call
     /// touches. `uses` and `pure` are contextual keywords.
     void parseResourceClause();
+    /// whenClause : 'when' logicalOrExpr
+    /// A declaration's applicability condition, after its signature (design principles 5.13).
+    void parseWhenClause();
     void parseRetStmt();
 
     void parseModifiers();

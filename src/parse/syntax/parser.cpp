@@ -782,12 +782,13 @@ void ParserImpl::parseFrontMatter() {
 
 /// funcDecl : frontMatter ('with' angledParams)? 'export'? modifiers?
 ///            'func' (identRef | operatorName) parentParams (':' typeExpr)? resourceClause?
-///            stmtBlock?
+///            whenClause? stmtBlock?
 ///
 /// Without a body the declaration stands for a C++ operator of the module the name is bound in
 /// (design principles 6.4): it has no block, and what it declares is its signature. The
 /// `uses`/`pure` clause after the result type says which resources a call touches (design
-/// effects plan 3.1).
+/// effects plan 3.1). The optional `when` after it is the applicability condition (design
+/// principles 5.13, handover H234).
 void ParserImpl::parseFuncDecl() {
     const size_t m = mark();
     parseFrontMatter();
@@ -923,6 +924,21 @@ void ParserImpl::parseTagRef() {
     close(m, NK::TagRef);
 }
 
+/// whenClause : IDENTIFIER logicalOrExpr
+/// The IDENTIFIER is the name `when`, read here only: a declaration's applicability condition,
+/// after its signature (design principles 5.13). It is evaluated when the declaration is
+/// instantiated, not when it is parsed, and a false condition makes the declaration
+/// inapplicable rather than erroneous. It follows the return type and the resource clause and
+/// precedes the body, so a body-less native declaration may carry one too.
+/// The `funcDecl` production above gains this clause between `resourceClause` and `stmtBlock`;
+/// see the comment there.
+void ParserImpl::parseWhenClause() {
+    const size_t m = mark();
+    bump(); // `when`
+    parseExpr();
+    close(m, NK::WhenClause);
+}
+
 /// The part of funcDecl after its annotations; `m` marks where the declaration began.
 void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::KwWith)) {
@@ -947,6 +963,9 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     }
     if (atWord(0, "uses") || atWord(0, "pure")) {
         parseResourceClause();
+    }
+    if (atWord(0, "when")) {
+        parseWhenClause();
     }
     // A function written without a body is the declaration of an operator of a C++ module: the
     // signature is the whole of it (design principles 6.4, handover H19 step 1). A block is

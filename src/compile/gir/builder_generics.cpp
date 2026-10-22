@@ -316,6 +316,26 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
             return nullptr;
         }
     }
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        // A function value has no `with` arguments of its own, so a condition that reads one
+        // cannot be answered here; a false one makes this candidate inapplicable.
+        const WhenResult verdict =
+            evaluateWhenCondition(when->condition, signature, bindings, {});
+        if (verdict.fails()) {
+            why = std::format("its 'when' condition is false: when {}", when->text);
+            return nullptr;
+        }
+        if (verdict.outcome == WhenOutcome::NeedsWithValue) {
+            why = std::format(
+                "its 'when' condition reads the 'with' parameter '{}', and a function value "
+                "gives no 'with' arguments",
+                verdict.subject);
+            return nullptr;
+        }
+        if (!verdict.holds()) {
+            reportWhenProblem(verdict, tmpl->name, when->condition);
+        }
+    }
     compile_graph_ptr_t graph = instantiateGeneric(tmpl, bindings, {}, {}, origin);
     if (!graph->funcType()->hasExitType()) {
         diags_->of(SemanticDiag::CallingIncompleteFunction)
@@ -742,6 +762,34 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             }
         }
         value.type = wanted;
+    }
+    // The declaration's `when`, now that every type variable has a type: a false condition
+    // makes this candidate inapplicable (design principles 5.13), so the call is reported with
+    // the condition it could not meet rather than with a mismatch of types.
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        std::unordered_map<std::string, data_ptr_t> withValues;
+        for (size_t i = 0; i < withCount && i < withInputs.size(); ++i) {
+            data_ptr_t value = constantOfNode(withInputs[i].node);
+            if (value != nullptr) {
+                withValues.emplace(std::string(signature->argNameAt(i)), value);
+            }
+        }
+        const WhenResult verdict =
+            evaluateWhenCondition(when->condition, signature, bindings, withValues);
+        if (verdict.fails()) {
+            std::vector<Type *> all(withTypes);
+            all.insert(all.end(), normTypes.begin(), normTypes.end());
+            diags_->of(SemanticDiag::WhenConditionUnmet)
+                .atOrigin(call->origin())
+                .commit(
+                    tmpl->name,
+                    strutil::join(all, ", ", [](Type *t) { return t->toString(); }),
+                    tmpl->name + " — when " + when->text);
+            throw BuildAbortException();
+        }
+        if (!verdict.holds()) {
+            reportWhenProblem(verdict, tmpl->name, when->condition);
+        }
     }
     return instantiateGeneric(tmpl, bindings, extents, constas, call);
 }

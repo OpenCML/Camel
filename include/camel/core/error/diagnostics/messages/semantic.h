@@ -234,6 +234,18 @@ enum class SemanticDiag : uint32_t {
     /// A constant is larger than the printer's max_literal_bytes.
     CmlBigConstant = 0x0001A6,
 
+    // Applicability conditions (`when`, design principles 5.13; handover H234). 0x1A7 and up.
+    /// The condition's value is not a bool.
+    WhenConditionNotBool = 0x0001A7,
+    /// The condition is not a compile-time predicate the compiler can evaluate.
+    WhenConditionNotConstant = 0x0001A8,
+    /// The condition names something outside the declaration.
+    WhenUnknownName = 0x0001A9,
+    /// A type query is asked about a type that is still open (a type variable).
+    WhenTypeQueryNotConcrete = 0x0001AA,
+    /// No candidate of a call applies: every condition that could take it is false.
+    WhenConditionUnmet = 0x0001AB,
+
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,

@@ -1684,8 +1684,17 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         blockNode = any2node(visitStmtBlock(blockContext));
     }
 
+    node_ptr_t whenNode = nullptr;
+    std::string whenText;
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        whenNode = any2node(visitExpr(whenClause->expr()));
+        whenText = std::string(whenClause->expr().sourceText());
+    }
+
     node_ptr_t funcNode = createNodeAs<FuncDataLoad>(ref);
     setNodeTokenRangeByContext(funcNode, context);
+    unwrapNodeAs<FuncDataLoad>(funcNode)->setWhen(whenNode);
+    unwrapNodeAs<FuncDataLoad>(funcNode)->setWhenText(std::move(whenText));
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
 

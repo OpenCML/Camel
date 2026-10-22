@@ -549,6 +549,23 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     rejectOperatorConflict(name, funcType, gct);
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name);
+    if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
+        // The condition belongs to the function, not to its instance: it is evaluated when
+        // this graph is selected by a call, where the types and the `with` arguments of the
+        // call are known (design principles 5.13).
+        whenClauses_[graph.get()] = *when;
+        // A condition that is malformed -- not a bool, a name the declaration does not make
+        // visible, a query an open type cannot answer -- is a declaration-site error, and is
+        // reported here rather than only when a call happens to select the function. A
+        // condition that reads a `with` parameter is left for the call, which alone knows the
+        // value.
+        const WhenResult early =
+            evaluateWhenCondition(when->condition, funcType, typeBindings_, {});
+        if (early.outcome != WhenOutcome::Holds && early.outcome != WhenOutcome::Fails &&
+            early.outcome != WhenOutcome::NeedsWithValue) {
+            reportWhenProblem(early, name, when->condition);
+        }
+    }
     if (camel::core::tag::declaresMacro(tags.declaration)) {
         graph->draft().setFlags(static_cast<uint8_t>(
             graph->draft().flags() | camel::runtime::kGraphFlagMacro));

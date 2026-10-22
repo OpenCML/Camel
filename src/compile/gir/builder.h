@@ -46,6 +46,30 @@ using graph_scope_ptr_t     = std::shared_ptr<graph_scope_t>;
 using decorated_scope_t     = Scope<std::string, compile_graph_ptr_t>;
 using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
 
+/// What a declaration's `when` condition says at one instantiation (design principles 5.13).
+/// The condition is a compile-time predicate over the declaration's type parameters and `with`
+/// parameters; it is evaluated when the declaration is instantiated or selected, never when it
+/// is parsed. A condition the compiler cannot answer is never taken for `true`.
+enum class WhenOutcome {
+    Holds,          // it is true
+    Fails,          // it is false: the declaration is not applicable here
+    NeedsWithValue, // it reads a `with` parameter whose value the call did not give
+    NotBool,        // its value is not a bool
+    NotEvaluable,   // it is not a compile-time predicate (a runtime value, a user call, ...)
+    TypeNotConcrete,// a type query still sees a type variable
+    UnknownName,    // a name outside the declaration (an ordinary parameter, a body name, ...)
+};
+
+struct WhenResult {
+    WhenOutcome outcome = WhenOutcome::NotEvaluable;
+    /// The name, type or expression the outcome is about, for the report.
+    std::string subject;
+    /// A sentence saying what is wrong or missing, for the report.
+    std::string detail;
+    bool holds() const { return outcome == WhenOutcome::Holds; }
+    bool fails() const { return outcome == WhenOutcome::Fails; }
+};
+
 /// The value of a `constas` constant as the key it stands for when it names a field or a
 /// position (`t.[n]`): the text of a string, the digits of an integer, `true` / `false`.
 std::string constasKeyOf(const camel::core::data::data_ptr_t &data);
@@ -1055,6 +1079,24 @@ class Builder {
     void buildFuncBody(
         const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
         const std::string &name, const TagFacts &bodyTags);
+
+    /// Evaluates a declaration's `when` condition at one instantiation. `signature` is the
+    /// declaration's signature with the instance's types bound, so the `with` parameter names
+    /// are known; `bindings` substitutes the declaration's type variables in the condition's
+    /// type arguments. `withValues` holds the call's `with` arguments that are compile-time
+    /// constants, by parameter name. The condition is a bool expression over the compiler's
+    /// type queries (`is_numeric`, `is_integer`, `is_float`, `is_ordered`, `is_function`,
+    /// `is_string`, `is_bool`), `!`, `&&`, `||` and parentheses.
+    WhenResult evaluateWhenCondition(
+        const GCT::node_ptr_t &condition, FunctionType *signature,
+        const camel::core::type::type_bindings_t &bindings,
+        const std::unordered_map<std::string, data_ptr_t> &withValues);
+    /// Reports why a condition is not applicable at `origin`, for the declaration named `name`.
+    /// Never returns: every outcome except Holds is a diagnostic.
+    [[noreturn]] void reportWhenProblem(
+        const WhenResult &result, const std::string &name, const GCT::node_ptr_t &origin);
+    /// The graphs whose declaration has a `when` condition, with its source text.
+    std::unordered_map<const DraftGraphBuilder *, GCT::Tree::WhenClause> whenClauses_;
 
     std::optional<node_handle_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
