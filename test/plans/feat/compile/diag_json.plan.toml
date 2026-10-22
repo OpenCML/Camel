@@ -356,10 +356,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "unknown_pass_of_known_module"
-desc = "A C++ module that exists but contributes no pass of that name: still an unknown pass (the module is loaded, the name stays unknown), and the program does not run. (`onnx` was the example until H179; it is a declaration module now, so its missing pass gets the H130 module-specific diagnostic, tested in feat/modules/pass_not_found.)"
+desc = "A C++ module that exists but contributes no pass of that name: still an unknown pass (the module is loaded, the name stays unknown), and the program does not run. (`onnx` was the example until H179 and `hash` until H163; both are declaration modules now, so their missing pass gets the H130 module-specific diagnostic, tested in feat/modules/pass_not_found. `tree` is the one C++ module with no declaration file, so it is the only remaining subject here.)"
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_direct_user.cml"
-args = ["--output-format", "json", "${case}", "std::nvm", "hash::nosuchpass"]
+args = ["--output-format", "json", "${case}", "std::nvm", "tree::nosuchpass"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
