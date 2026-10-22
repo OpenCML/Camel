@@ -42,9 +42,17 @@ enum class DataType {
     SpreadArg
 };
 
-/// The shapes a `match type` case selects (design principles 5.5, R3):
-/// a structure, an ordinary tuple, every leaf (including `T?` / `T!` and cells), or anything.
-enum class TypeCaseKind : uint8_t { Struct = 0, Tuple = 1, Leaf = 2, Wildcard = 3 };
+/// What a `match type` case selects (design principles 5.5, R3): the shape of a type
+/// (a structure, an ordinary tuple, a function, every leaf, or anything) or its identity
+/// (`case int`, `case MyStruct`, `case T`).
+enum class TypeCaseKind : uint8_t {
+    Struct   = 0,
+    Tuple    = 1,
+    Leaf     = 2,
+    Wildcard = 3,
+    Func     = 4,
+    Identity = 5
+};
 
 std::string to_string(TypeCaseKind kind);
 
@@ -208,19 +216,28 @@ class TypeMatchLoad : public DataLoad {
     const std::string geneCode() const override { return "match type"; }
 };
 
-/// One case of `match type`; the body is child [0]. The patterns are kept in the load
-/// because they are shapes, not expressions or types.
+/// One pattern of a `match type` case. `kind` is a shape, or Identity with the type written
+/// in `type` (a TypeLoad): `case int`, `case Tensor<f32, [..]>`, `case T`.
+struct TypeCasePattern {
+    TypeCaseKind kind = TypeCaseKind::Wildcard;
+    node_ptr_t type; // Identity only
+};
+
+/// One case of `match type`; the body is child [0]. The patterns are kept in the load because
+/// they are shapes and types, not expressions: the shapes select a kind, and an identity
+/// pattern keeps the type it names so the graph builder can resolve it (and report an unknown
+/// name) where the declaration is read.
 class TypeCaseLoad : public DataLoad {
   public:
-    explicit TypeCaseLoad(std::vector<TypeCaseKind> patterns)
+    explicit TypeCaseLoad(std::vector<TypeCasePattern> patterns)
         : DataLoad(DataType::TypeCase), patterns_(std::move(patterns)) {}
 
-    const std::vector<TypeCaseKind> &patterns() const { return patterns_; }
+    const std::vector<TypeCasePattern> &patterns() const { return patterns_; }
     const std::string toString() const override;
     const std::string geneCode() const override;
 
   private:
-    std::vector<TypeCaseKind> patterns_;
+    std::vector<TypeCasePattern> patterns_;
 };
 
 /// `static for (n, F) in fields T => body` or `static for (j) in indices ts => body`:

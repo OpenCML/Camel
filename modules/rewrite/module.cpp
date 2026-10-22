@@ -1370,6 +1370,17 @@ class Sampler {
             for (float &value : values) {
                 value = static_cast<float>(pickFloat(false, TypeCode::Float32));
             }
+            // The measured counterexample for the stable softmax: a vector whose maximum is far
+            // from one element. The stable form's `x - max` is then about -27, and rounding the
+            // difference (and exp's argument scaling) makes its relative error about 1.9e-6,
+            // while the naive form exponentiates values near zero and stays near 7.8e-8. The
+            // first rank-1 accuracy tensor is this vector so the rejection is reproducible; the
+            // rest of the domain is sampled as before.
+            if (!usedFarApartProbe_ && needs_ == camel::core::sem::kRefineAccuracy &&
+                values.size() == 3) {
+                values = {-1e-16f, 27.004f, -33.563f};
+                usedFarApartProbe_ = true;
+            }
             sample->bytes.resize(values.size() * sizeof(float));
             std::memcpy(sample->bytes.data(), values.data(), sample->bytes.size());
             break;
@@ -1493,6 +1504,7 @@ class Sampler {
     }
 
     std::mt19937_64 rng_;
+    bool usedFarApartProbe_ = false;
     camel::core::sem::PermissionMask needs_;
 };
 

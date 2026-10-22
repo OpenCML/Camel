@@ -1943,7 +1943,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             }
                         }
                         const WhenResult verdict = evaluateWhenCondition(
-                            when->second.condition, g->funcType(), {}, withValues);
+                            when->second.condition, g->funcType(), {}, withValues, nullptr,
+                            unitOfFunction(g));
                         if (verdict.fails()) {
                             unmetConditions.emplace_back(g->name(), when->second.text);
                             continue;

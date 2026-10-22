@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-238 diagnostics: 219 errors, 19 warnings.
+242 diagnostics: 223 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -199,6 +199,10 @@ prints one entry.
 | `0x030001B4` | [SemanticDiag::TypeOfNotWholeType](#typeofnotwholetype) | Error |
 | `0x030001B5` | [SemanticDiag::SameShapeComprehensionNotComposite](#sameshapecomprehensionnotcomposite) | Error |
 | `0x030001B6` | [SemanticDiag::SameShapeComprehensionMismatch](#sameshapecomprehensionmismatch) | Error |
+| `0x030001BF` | [SemanticDiag::WhenPredicateNotImported](#whenpredicatenotimported) | Error |
+| `0x030001C0` | [SemanticDiag::WhenPredicateNotCompileTime](#whenpredicatenotcompiletime) | Error |
+| `0x030001C1` | [SemanticDiag::WhenPredicateAmbiguous](#whenpredicateambiguous) | Error |
+| `0x030001C2` | [SemanticDiag::StaticMatchPatternCannotMatch](#staticmatchpatterncannotmatch) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -3948,7 +3952,7 @@ No case of this 'match type' selects the type '{0}'.
 **Help**
 
 ```text
-The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a structure or an ordinary tuple, including 'T?' and 'T!'), and '_' for every type. Add the case for this shape, or end with '#leaf' or '_'.
+The cases name shapes: 'struct', 'tuple', 'func', '#leaf' (every type that is not a structure or an ordinary tuple, including 'T?' and 'T!'), '_' for every type, and a type's identity ('int', 'MyStruct', T). Add the case for this type, or end with '#leaf' or '_'.
 ```
 
 **Example** (`test/cases/compile/static_expansion/match_type_exhaustive.cml`, run as `camel test/cases/compile/static_expansion/match_type_exhaustive.cml`)
@@ -3982,7 +3986,7 @@ The case '{0}' selects every type the cases after it could select.
 **Help**
 
 ```text
-'#leaf' and '_' select every type, so they must be the last case of a 'match type'.
+'#leaf' and '_' select every type, so they must be the last case of a 'match type'. An identity pattern that repeats a type an earlier case already selects is the same kind of dead case.
 ```
 
 **Example** (`test/cases/compile/static_expansion/match_type_unreachable.cml`, run as `camel test/cases/compile/static_expansion/match_type_unreachable.cml`)
@@ -5112,7 +5116,7 @@ The 'when' condition of '{0}' is not a bool (it is '{1}').
 **Help**
 
 ```text
-A 'when' is a compile-time predicate over the declaration's type parameters and 'with' parameters: write one of the standard type queries ('is_numeric::<T>()', 'is_function::<F>()') or call a pure function of the library ('has_field::<T>('w')'), possibly combined with '!', '&&' and '||'. It is not a runtime value.
+A 'when' is a compile-time predicate over the declaration's type parameters and 'with' parameters: call a generic function this module declares that reduces to a constant over its type arguments ('is_numeric::<T>()' is one, written in the standard module 'types'), possibly combined with '!', '&&' and '||'. It is not a runtime value.
 ```
 
 **Example** (`test/cases/compile/when/non_bool.cml`, run as `camel test/cases/compile/when/non_bool.cml`)
@@ -5206,13 +5210,20 @@ The type query '{0}' cannot be answered for '{1}' in the 'when' condition of '{2
 **Help**
 
 ```text
-A query is answered when the declaration is instantiated, where every type parameter has a type. Write the query on a type parameter the call binds, or guard the declaration so that it is only instantiated for a concrete type.
+A predicate is evaluated when the declaration is instantiated, where every type parameter has a type. Give the predicate a type parameter the call binds, or guard the declaration so that it is only instantiated for a concrete type.
 ```
 
 **Example** (`test/cases/compile/when/open_type.cml`, run as `camel test/cases/compile/when/open_type.cml`)
 
 ```camel
 module when_open_type
+
+func is_numeric::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 | c64 | c128 => true
+        case _ => false
+    }
+}
 
 func bad::<T>(x: int): int when is_numeric::<T>() {
     return x
@@ -5243,6 +5254,13 @@ A 'when' that is false makes its declaration inapplicable, not erroneous, and th
 
 ```camel
 module when_not_applicable
+
+func is_float::<T>(): bool {
+    return match type T {
+        case float | f32 => true
+        case _ => false
+    }
+}
 
 /// The condition asks about int, so this overload never applies here.
 func needs_float(x: float): float when is_float::<int>() {
@@ -5374,6 +5392,136 @@ func build(u: B) {
 
 func main(): int sync {
     println(build({b: 1, c: 2}))
+    return 0
+}
+```
+
+### WhenPredicateNotImported
+
+`0x030001BF` · Error · `SemanticDiag::WhenPredicateNotImported`
+
+**Message**
+
+```text
+'{1}' is declared in module '{2}', but that name is not imported where the 'when' condition of '{0}' is written.
+```
+
+**Help**
+
+```text
+A condition resolves names where its declaration is written, as a call in its body does: the module's own names, then what it imports by name, selectively or as a module prefix, then the prelude. Import the module that declares the predicate, or move the predicate into the module that uses it.
+```
+
+**Example** (`test/cases/compile/when_import/not_imported.cml`, run as `camel test/cases/compile/when_import/not_imported.cml`)
+
+```camel
+module when_import_not_imported
+
+import predicates
+import unimported_user
+
+func main(): int sync {
+    println(unimported_user::describe((1, 2)))
+    return 0
+}
+```
+
+### WhenPredicateNotCompileTime
+
+`0x030001C0` · Error · `SemanticDiag::WhenPredicateNotCompileTime`
+
+**Message**
+
+```text
+'{1}' is not a compile-time predicate that the 'when' condition of '{0}' can call: {2}.
+```
+
+**Help**
+
+```text
+A condition calls a generic function whose body reduces to a constant over the types it is given: a 'match type', a 'static for' or a 'static loop' over 'fields T', and the comparison operators. An ordinary function runs at run time, and a value is read there too.
+```
+
+**Example** (`test/cases/compile/when_import/not_predicate.cml`, run as `camel test/cases/compile/when_import/not_predicate.cml`)
+
+```camel
+module when_import_not_predicate
+
+import { ready } from predicates
+
+func bad(x: int): int when ready() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenPredicateAmbiguous
+
+`0x030001C1` · Error · `SemanticDiag::WhenPredicateAmbiguous`
+
+**Message**
+
+```text
+The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is imported from {2}.
+```
+
+**Help**
+
+```text
+Two imports that bring one name do not choose between them. Import the predicate by another name ('import { p as q } from m') or qualify it with the module it comes from ('m::p').
+```
+
+**Example** (`test/cases/compile/when_import/ambiguous.cml`, run as `camel test/cases/compile/when_import/ambiguous.cml`)
+
+```camel
+module when_import_ambiguous
+
+import { is_compound } from predicates
+import { is_compound } from predicates_other
+
+func describe::<T>(x: T): string when is_compound::<T>() {
+    return 'compound'
+}
+
+func main(): int sync {
+    println(describe((1, 2)))
+    return 0
+}
+```
+
+### StaticMatchPatternCannotMatch
+
+`0x030001C2` · Error · `SemanticDiag::StaticMatchPatternCannotMatch`
+
+**Message**
+
+```text
+The identity pattern '{0}' cannot select a type here: {1}.
+```
+
+**Help**
+
+```text
+An identity pattern is exact: it selects only the type it names, after the declaration's type variables are bound. Name a concrete type, do not write the same type twice in one case, and put a pattern an earlier case already selects before that case or remove it.
+```
+
+**Example** (`test/cases/compile/static_expansion/type_identity_duplicate.cml`, run as `camel test/cases/compile/static_expansion/type_identity_duplicate.cml`)
+
+```camel
+module type_identity_duplicate
+
+func twice::<T>(t: T): int {
+    return match type T {
+        case int | int => 1
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    println(twice(1))
     return 0
 }
 ```

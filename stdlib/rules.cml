@@ -21,7 +21,7 @@ module rules
 import { Program, Node, constant } from graph
 import { abs, exp as math_exp, expm1, log as math_log, log1p, trunc } from math
 import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
-import { Tensor, log, log_softmax, softmax } from tensor
+import { Tensor, exp, log, log_softmax, sigmoid, softmax, sum } from tensor
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
 
@@ -532,77 +532,9 @@ export rule tensor_i64_distribute(a: Tensor<int>, b: Tensor<int>, c: Tensor<int>
     a * (b + c) <=> a * b + a * c
 }
 
-// ---- Accuracy rules (rewrite design 2 (second version) 8.10) ----
-//
-// These rules compute the same value in a form with no larger error. They change the bits on
-// purpose, so each one requires the numeric permission `refine_accuracy`
-// ("replace a form with one whose error is not larger"), which is not granted by default and is
-// not applicable under `#strict`: the policy of the pass and the strict tag of the program both
-// keep them from firing. `check` verifies them against a higher-precision reference, not bit for
-// bit (modules/rewrite/module.cpp, `checkKernel`), and reports the worst-case error ratio.
-//
-// The name `refine_accuracy` is the one rewrite design 8.10 proposes; the design says it may be
-// overturned. It is used as written.
-
-/// `exp(x) / sum(exp(x), axis, true) => softmax(x, axis)` is deliberately absent: over f32 the
-/// stable form subtracts m = max(x, axis, true), and when m is far from an element, `x - m`
-/// rounds. The relative error of that subtraction is small, but `exp` turns the absolute error
-/// back into a relative one: for `x = [-1e-16, 27.004, -33.563]` the naive form's tiny
-/// probability is accurate to 4.98e-8 and the stable form's to 1.91e-6, so the check rejects the
-/// rewrite on that sample. The same subtraction is shared by both sides of the log-of-softmax
-/// rule below, which is why that one holds.
-///
-/// `log(softmax(x, axis))` where the program already calls `softmax`: the rounding of each
-/// probability to f32 becomes an absolute error in its log, and a probability that rounds to zero
-/// gives -inf where the true log-softmax is finite. `log_softmax` avoids both; the check verifies
-/// it on vectors, matrices and rank-3 tensors.
-#requires<refine_accuracy>
-export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
-    log(softmax(x, axis)) => log_softmax(x, axis)
-}
-
-/// The design's own scalar example, `log(1 + x) => log1p(x)`, in f64 and in f32.
-///
-/// `1 + x` rounds before the log: for |x| below the spacing of 1 (2^-52 in f64, 2^-23 in f32)
-/// the naive log is 0 and its relative error is 100%; `log1p` computes log(1 + x) without
-/// forming 1 + x, and its error does not grow as x -> 0. The check passes only if the right
-/// side's error is not larger on every sample, including the near-zero region.
-#requires<refine_accuracy>
-export rule float_log1p(x: float) {
-    math_log(1.0 + x) => log1p(x)
-}
-
-#requires<refine_accuracy>
-export rule f32_log1p(x: f32) {
-    math_log(1.0 + x) => log1p(x)
-}
-
-/// The design's second scalar example, `exp(x) - 1 => expm1(x)`, in f64 and in f32.
-///
-/// For |x| below the spacing of 1 the naive `exp(x)` rounds to exactly 1 and the subtraction
-/// gives 0; `expm1` evaluates exp(x) - 1 directly, without that cancellation.
-#requires<refine_accuracy>
-export rule float_expm1(x: float) {
-    math_exp(x) - 1.0 => expm1(x)
-}
-
-#requires<refine_accuracy>
-export rule f32_expm1(x: f32) {
-    math_exp(x) - 1.0 => expm1(x)
-}
-
-/// The design's third scalar example, `sqrt(x*x + y*y) => hypot(x, y)`, is deliberately absent:
-/// `hypot` returns +inf when one operand is +inf and the other NaN, where squaring first returns
-/// NaN, so the rewrite would not be "no worse" on the whole domain. No permission can ask for
-/// that exception here.
-
 /// The rules that make an expression smaller, applied one way to a fixpoint, under the numeric
 /// policy of the pass. `tensor_i64_distribute` is not here: it grows a writing, and `simplify`
 /// only takes steps that make one smaller.
-///
-/// The accuracy rules are in the set: they fire only on a node whose effective permissions grant
-/// `refine_accuracy`, so a `#strict` program and an untagged one are untouched, and the pass
-/// still needs no second switch for them.
 func simplifyWith(p: Program, strict: bool): Program! {
     return rewrite(p, [
         int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero,
@@ -828,4 +760,124 @@ func pair(r: Run<Program>, left: Rule[], right: Rule[], strict: bool): Run<Progr
             return out
         }
     }
+}
+
+// ---- rules::accuracy (rewrite design 2 (second version) 8.10) ----
+//
+// These rules compute the same value in a form with no larger error. They change the bits on
+// purpose, so each one carries the numeric permission `refine_accuracy` ("replace a form with one
+// whose error is not larger"). The permission is not granted by default and is not applicable
+// under `#strict`; both the pass policy and the strict tag keep the rules from firing. `check`
+// measures them against a higher-precision reference, sample by sample, and rejects a right side
+// that is worse anywhere.
+//
+// The naive softmax and naive log-softmax are deliberately not here. `exp(x) / sum(exp(x), axis,
+// true) => softmax(x, axis)` is rejected by `check` on f32 `[-1e-16, 27.004, -33.563]`: the naive
+// form's small element has error 7.76e-8, the stable form's 1.91e-6. The stable form subtracts
+// the maximum first, and `exp`'s argument-scaling error grows with the magnitude of its argument:
+// `x - max` is about -27, so the relative error of `exp` is about 27 * 2^-24 * ln 2, near 1e-6.
+// The exclusion is pinned by `test/cases/modules/rules/check_rejected_softmax.cml`; the mechanism
+// and the trade are in `docs/handover/reports/accuracy-softmax-trade.md`.
+//
+// `log(softmax(x, axis))` is different: both sides share the same subtraction, so the log-of-
+// softmax rule is accepted and `check` passes it on vectors, matrices and rank-3 tensors.
+
+/// `log(softmax(x, axis))` where the program already calls `softmax`: rounding each probability to
+/// f32 becomes an absolute error in its log, and a probability that rounds to zero gives -inf where
+/// the true log-softmax is finite. `log_softmax` avoids both.
+#requires<refine_accuracy>
+export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
+    log(softmax(x, axis)) => log_softmax(x, axis)
+}
+
+/// The design's own scalar example, `log(1 + x) => log1p(x)`, in f64 and in f32.
+///
+/// `1 + x` rounds before the log: for |x| below the spacing of 1 the naive log is 0 and its
+/// relative error is 100%; `log1p` computes log(1 + x) without forming 1 + x, and its error does
+/// not grow as x -> 0.
+#requires<refine_accuracy>
+export rule float_log1p(x: float) {
+    math_log(1.0 + x) => log1p(x)
+}
+
+#requires<refine_accuracy>
+export rule f32_log1p(x: f32) {
+    math_log(1.0 + x) => log1p(x)
+}
+
+/// The design's second scalar example, `exp(x) - 1 => expm1(x)`, in f64 and in f32.
+///
+/// For |x| below the spacing of 1 the naive `exp(x)` rounds to exactly 1 and the subtraction gives
+/// 0; `expm1` evaluates exp(x) - 1 directly, without that cancellation.
+#requires<refine_accuracy>
+export rule float_expm1(x: float) {
+    math_exp(x) - 1.0 => expm1(x)
+}
+
+#requires<refine_accuracy>
+export rule f32_expm1(x: f32) {
+    math_exp(x) - 1.0 => expm1(x)
+}
+
+/// The design's third scalar example, `sqrt(x*x + y*y) => hypot(x, y)`, is deliberately absent:
+/// `hypot` returns +inf when one operand is +inf and the other NaN, where squaring first returns
+/// NaN, so the rewrite would not be "no worse" on the whole domain.
+
+/// The accuracy library, as the opt-in pass `rules::accuracy`. Every rule carries
+/// `#requires<refine_accuracy>`, so an unlicensed or `#strict` program is returned unchanged.
+/// The naive softmax and naive log-softmax are not in the set: the check rejects the first on the
+/// sample above, and the second shares its subtraction.
+export func accuracy(p: Program): Program! {
+    return rewrite(p, [
+        tensor_log_softmax_of_softmax, float_log1p, f32_log1p, float_expm1, f32_expm1,
+    ])
+}
+
+// ---- rules::fusion ----
+//
+// What is here: one chain of elementwise operators replaced by one operator whose kernel does the
+// same work in a single pass over the data, bit for bit.
+//
+// What is deliberately *not* here, and the mechanism each would need. Writing a rule that only
+// renames the same chain would not be a fusion, and a fusion that changes a bit is not a rule of
+// this library.
+//
+//   - `exp` then `sum` (a fused logsumexp): no such operator is registered. A rule's right side
+//     can only write operators, constants and its parameters (src/runtime/rules.cpp,
+//     SideReader::term), so the fused form has to exist as an operator with a kernel and a
+//     normative definition. Needed: a `tensor:logsumexp` operator, its definition in
+//     stdlib/tensor_definitions.cml, and a kernel that agrees with it.
+//   - `mul` then `add` (a fused multiply-add): no `tensor:mul_add` operator, and the two
+//     roundings of `a*b + c` must not collapse into one without `#contract` (design principles
+//     7.2), so the operator has to say which of the two it rounds. Needed: the operator and its
+//     permission.
+//   - a fusion *region*: `tensor::fuse` marks `x @ w + b` with the `tensor.fusion` attribute and
+//     a backend runs the group as one kernel while the graph keeps the operators (modules/tensor/
+//     passes/fuse.h). A rule cannot do that: its right side writes nodes, and neither the rule
+//     form nor the `graph` module's transaction has an attribute or region writer. Needed: an
+//     attribute/region form on a rule's right side (rewrite design 2 (second version) 4 and 7).
+//   - the QKV multi-root fusion `(x @ wq, x @ wk, x @ wv) => split(x @ concat(...))`: a rule's
+//     left side must be one operator applied to something (src/runtime/rules.cpp refuses a tuple),
+//     so the multi-root patterns of v2 section 3 are the missing piece.
+//
+// These are gaps in the engine, not in this file: none of them can be written as a rule today
+// without either changing the answer or merely renaming the chain.
+
+/// The sigmoid chain of the showcase and of every hand-written logistic: `1/(1+exp(-x))`.
+///
+/// It is exactly the definition of `tensor:sigmoid` (stdlib/tensor_definitions.cml:
+/// `1.0 / (1.0 + exp(-x))`), and a kernel must agree with its operator's definition bit for bit
+/// (design principles 7.1; the definition file's header). The same `vmath::exp` runs on both
+/// sides, the negation is exact, and the `+` and `/` are the same f32 IEEE operations in the same
+/// order, so the rewrite changes no bit -- the test `rules.fusion_bit_identical` prints the chain
+/// and `sigmoid(x)` next to each other before the pass and the same text after it. What changes
+/// is the cost: neg, exp, add and divide are four kernels and four passes over the data; sigmoid
+/// is one kernel and one pass.
+export rule tensor_sigmoid_chain(x: Tensor<f32>) {
+    1.0 / (1.0 + exp(-x)) => sigmoid(x)
+}
+
+/// The fusion library, as the opt-in pass `rules::fusion`.
+export func fusion(p: Program): Program! {
+    return rewrite(p, [tensor_sigmoid_chain])
 }

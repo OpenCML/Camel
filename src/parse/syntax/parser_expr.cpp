@@ -1234,17 +1234,25 @@ void ParserImpl::parseStaticLoop() {
     close(m, NK::StaticLoopExpr);
 }
 
-/// typeCasePattern : 'struct' | 'tuple' | '#' 'leaf' | '_'
-/// The words are contextual: only here do they name a shape, not a type.
+/// typeCasePattern : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
+/// The words are contextual: only here do they name a shape, not a type. Anything else that
+/// starts a type is an identity pattern (`case int`, `case Tensor<f32, [..]>`, `case T`): the
+/// same clause with a type written in it (design principles 5.5).
 void ParserImpl::parseTypeCasePattern() {
     const size_t m = mark();
     switch (cur_) {
     case TK::Identifier: {
         const std::string_view word = tree_.tokens().text(pos_);
-        if (word != "struct" && word != "tuple") {
-            unexpected({e(TK::Identifier)});
+        if (word == "struct" || word == "tuple") {
+            bump();
+            break;
         }
-        bump();
+        if (!typeStartsAt(0)) {
+            unexpected({e(TK::Identifier)});
+            break;
+        }
+        TypeHeadScope typeHead(*this);
+        parseType();
         break;
     }
     case TK::Hash:
@@ -1258,7 +1266,16 @@ void ParserImpl::parseTypeCasePattern() {
     case TK::Underscore:
         bump();
         break;
+    case TK::KwFunc:
+        // `func` is a keyword, and here it names the shape of a function type.
+        bump();
+        break;
     default:
+        if (typeStartsAt(0)) {
+            TypeHeadScope typeHead(*this);
+            parseType();
+            break;
+        }
         unexpected({e(TK::Identifier), e(TK::Hash), e(TK::Underscore)});
         break;
     }

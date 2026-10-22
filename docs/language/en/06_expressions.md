@@ -387,21 +387,27 @@ Tuple patterns, struct patterns, and identifier patterns on values of ordinary t
 
 ### 6.8.3 `match type`
 
-`match type` selects a branch by the **shape of a type**, for generic functions (design principles 5.5): `T` is concrete when the function is instantiated, the compiler builds only the selected branch, and the other branches are neither built nor type-checked (their names are still resolved).
+`match type` selects a branch by the **shape or the identity of a type**, for generic functions (design principles 5.5): `T` is concrete when the function is instantiated, the compiler builds only the selected branch, and the other branches are neither built nor type-checked (their names are still resolved).
 
 ```
 match type type {
     case struct => branch
     case tuple  => branch
+    case func   => branch
     case #leaf  => branch
+    case int    => branch
+    case MyStruct => branch
+    case T      => branch
     case _      => branch
 }
 ```
 
-- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
-- `_` selects everything, like `#leaf`, and is the fallback spelling; both must be the last case. `case struct | tuple` selects either shape.
-- The type after `match type` is a type position: a `(` there is always the start of a type, so `match type () { ... }` matches the empty tuple type; a function type takes one more pair of parentheses, `match type ((x: int) => int) { ... }`.
-- With no matching case the error is `SemanticDiag::StaticMatchNotExhaustive`; a case after `#leaf`/`_` is `SemanticDiag::StaticMatchUnreachableCase`. The construct does not compare concrete type names: `case int` or `case MyStruct` is not part of it, and every scalar goes through `#leaf`.
+- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `func` selects a function type; `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
+- A type written in the pattern is an **identity pattern**: `case int`, `case Tensor<f32, [..]>`, `case MyStruct`, `case T`. Identity is **exact**: `case float` does not select `int` (`float` and `f64` are the same type, and so are `int` and `i64`; `int` and `i32` are not); `case f32` does not select `f64`; `case MyStruct` selects the declared name, not another structure with the same fields; `case T` substitutes the binding of `T` at the instantiation, so it selects exactly that type. Shapes and identities share one case and one `|` (`case tuple | MyStruct`), judged in the order written: a type an earlier case already selects is `SemanticDiag::StaticMatchPatternCannotMatch` in a later identity pattern.
+- `_` selects everything, like `#leaf`, and is the fallback spelling; both must be the last case. `case struct | tuple` selects either shape. `case int` before `case #leaf` is normal; after `#leaf`/`_` it is `SemanticDiag::StaticMatchUnreachableCase`.
+- The type after `match type` is a type position: a `(` there is always the start of a type, so `match type () { ... }` matches the empty tuple type; a function type takes one more pair of parentheses, `match type ((x: int) => int) { ... }`. The pattern after `case` is a type position too, with the same rule: `case (int, int)` and `case ()` are tuples, and a function type is written `case ((x: int) => int)`.
+- The type name in an identity pattern is resolved here: an unknown name is `SemanticDiag::UnresolvedTypeReference`; `void` and a `typeof` expression are not a type identity, and are `SemanticDiag::StaticMatchPatternCannotMatch`. Writing the same type twice in one case is also `StaticMatchPatternCannotMatch`.
+- With no matching case the error is `SemanticDiag::StaticMatchNotExhaustive`; a case after `#leaf`/`_` is `SemanticDiag::StaticMatchUnreachableCase`. The construct compares concrete type names: `case int` or `case MyStruct` is part of it, and a scalar no longer has to go through `#leaf`.
 - The selected branch becomes straight-line code at that position; the graph has no branch node. Its value is the value of the `match type`, and an empty branch has type `void`.
 - A generic function may omit its return type: each instance gets it from the selected branch (return-type inference). A recursive call that comes back to the **same type instance** while that instance's return type is still unknown reports `SemanticDiag::GenericInstantiationCycle`; recursion with strictly smaller type arguments finishes the child instance first as usual.
 

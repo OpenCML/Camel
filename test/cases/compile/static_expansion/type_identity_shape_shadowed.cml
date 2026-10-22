@@ -1,0 +1,22 @@
+/**
+ * A shape an earlier case selects covers every type of that shape: `case struct` already
+ * selects `Point`, so the identity case after it is dead, and it is reported rather than
+ * silently ignored (design principles 5.5).
+ */
+module type_identity_shape_shadowed
+
+type Point = { x: int }
+
+func kind::<T>(t: T): int {
+    return match type T {
+        case struct => 1
+        case Point => 2
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    let p: Point = { x: 1 }
+    println(kind(p))
+    return 0
+}

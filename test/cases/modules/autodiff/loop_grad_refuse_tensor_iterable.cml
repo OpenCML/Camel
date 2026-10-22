@@ -1,0 +1,22 @@
+/**
+ * Verifies the refusal of a loop that iterates over a tensor whose value depends on the
+ * differentiated parameter: an array's iteration has a reverse (each round's element gradient is
+ * scattered back at that round's index), but iterating a tensor walks its first axis, so each
+ * round's element is a slice of the tensor's gradient and the loop's reverse pass does not write
+ * it back. The diagnostic is located at the loop and says what to iterate instead.
+ */
+module loop_grad_refuse_tensor_iterable
+
+import { Tensor, reshape, sum } from tensor
+import { grad } from autodiff
+
+with <w: Tensor<f32, [2, 3]>>
+func f(): float {
+    return loop acc = 0.0 for row in w do acc + sum(row)
+}
+
+func main(): int sync {
+    let d = grad(f)<reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])>()
+    'loop_grad_refuse_tensor_iterable d={}'->format<d>->println
+    return 0
+}

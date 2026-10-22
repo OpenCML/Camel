@@ -58,6 +58,10 @@ enum class WhenOutcome {
     NotEvaluable,   // it is not a compile-time predicate (a runtime value, a user call, ...)
     TypeNotConcrete,// a type query still sees a type variable
     UnknownName,    // a name outside the declaration (an ordinary parameter, a body name, ...)
+    // A predicate call the condition cannot make, though the name exists.
+    NotImported,    // declared by a module this one does not import
+    NotCompileTime, // imported, but not a generic function answered at compile time
+    PredicateAmbiguous, // two imports bring predicates of that name, and neither is chosen
 };
 
 struct WhenResult {
@@ -1109,10 +1113,33 @@ class Builder {
     /// constants, by parameter name. The condition is a bool expression over the compiler's
     /// type queries (`is_numeric`, `is_integer`, `is_float`, `is_ordered`, `is_function`,
     /// `is_string`, `is_bool`), `!`, `&&`, `||` and parentheses.
+    /// A condition belongs to the declaration that writes it, and is answered in that module
+    /// even when another one selects the declaration: `declaring` is the generic template, and
+    /// `contextUnit` the module of a function that is not generic. Names are resolved there,
+    /// as a call in the declaration's body would be.
     WhenResult evaluateWhenCondition(
         const GCT::node_ptr_t &condition, FunctionType *signature,
         const camel::core::type::type_bindings_t &bindings,
-        const std::unordered_map<std::string, data_ptr_t> &withValues);
+        const std::unordered_map<std::string, data_ptr_t> &withValues,
+        const template_ptr_t &declaring = nullptr, const ModuleUnit *contextUnit = nullptr);
+    /// Switches the builder to the module a condition is written in for as long as it lives:
+    /// the search for a predicate is the declaration's, wherever the selection happens.
+    class ConditionContext;
+    /// The template a condition's call names where the declaration is written: the module's
+    /// own generic functions first, then those its imports bring by name or through a module
+    /// prefix, then the prelude. `problem` is set when the name exists but cannot be called at
+    /// compile time (imported and not a generic function, or two imports that both bring it).
+    /// nullopt with `problem` still NotEvaluable when the name is not found by those layers.
+    std::optional<template_ptr_t> whenPredicateNamed(
+        const std::string &written, const GCT::node_ptr_t &at, WhenResult &problem);
+    /// Whether two selective imports bring a predicate of the name, in which case `problem`
+    /// says so and neither is chosen.
+    bool whenPredicateAmbiguous(const std::string &written, WhenResult &problem);
+    /// The module that declares a predicate called `written` when this module does not import
+    /// it, for the "not imported" report; empty when no loaded module declares it.
+    std::string whenPredicateElsewhere(const std::string &written) const;
+    /// The module of a top-level function or of an instance of one, by its graph.
+    const ModuleUnit *unitOfFunction(const compile_graph_ptr_t &graph) const;
     /// Reports why a condition is not applicable at `origin`, for the declaration named `name`.
     /// Never returns: every outcome except Holds is a diagnostic.
     [[noreturn]] void reportWhenProblem(
@@ -1417,7 +1444,7 @@ class Builder {
         const char *originKind);
     /// `t.[key]`: the field or tuple element is chosen at compile time.
     node_handle_t visitStaticAccessNode(const GCT::node_ptr_t &gct);
-    bool typeCaseMatches(Type *subject, uint16_t patterns) const;
+    bool typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) const;
 
     /// Whether a name read in a case body that is not selected names something. It walks the
     /// same layers as visitDRefNode, but builds no node and checks no type (H51 step 1, Q10).

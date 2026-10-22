@@ -879,6 +879,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
 [[tests]]
+name = "rules.accuracy_rejects_naive_softmax"
+desc = "The naive softmax is not in the licensed set, and the refusal is visible: `check` measures `exp(x) / sum(exp(x), axis, true) => softmax(x, axis)` on f32 `[-1e-16, 27.004, -33.563]` and fails it, printing the sample, both errors (1.91128e-06 against 7.75714e-08) and the ratio. The stable form subtracts the maximum before exp, so exp's argument-scaling error grows with |x - max|."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_rejected_softmax.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["FAIL tensor_softmax_naive: the right side is worse at (tensor<f32> [3] {-1e-16, 27.004, -33.563}, 0)", "1.91128e-06", "7.75714e-08", "ratio 8.01648"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
 name = "rules.accuracy_library_passes_the_check"
 desc = "Every rule of `rules::accuracy` passes the error check: the scalar log1p and expm1 laws in f64 and f32, and the log-of-softmax rule over vectors, matrices and rank-3 tensors (overflow, underflow, denormals and the near-zero log). The report carries the worst-case error ratio."
 kind = "behavior"

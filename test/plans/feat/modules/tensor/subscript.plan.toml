@@ -72,3 +72,15 @@ expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["a slice step other than the constant 1", "H17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
+
+[[tests]]
+name = "slice_step_negative"
+desc = "A negative step is refused like a positive one on a tensor: `t[a:b:-1]` is still a view with strides (H17), refused at compile time rather than read as a backwards copy, so no gradient is ever built from an unsupported step (design principles 5.4)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/subscript/slice_step_negative.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["a slice step other than the constant 1", "H17"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

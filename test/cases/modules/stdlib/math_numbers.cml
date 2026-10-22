@@ -15,6 +15,11 @@ func main(): int sync {
     // a NaN on either side gives NaN
     println(is_nan(min(nan, 1.0)), is_nan(min(1.0, nan)), is_nan(max(nan, 1.0)), is_nan(max(1.0, nan)))
 
+    // the other ordered types: strings by their bytes (a proper prefix first), false below true
+    println(min('b', 'a'), max('a', 'b'), min('ab', 'a'), max('a', 'ab'))
+    println(min('é', 'e'), max('é', 'e'))
+    println(min(true, false), max(false, true), min(false, false), max(true, true))
+
     println(clamp(15, 0, 10), clamp(-5, 0, 10), clamp(5, 0, 10), clamp(5, 5, 5), clamp(top, bottom, 0))
     println(clamp(1.5, 0.0, 1.0), clamp(-0.5, 0.0, 1.0), clamp(0.25, 0.0, 1.0), clamp(inf, 0.0, 1.0))
     println(is_nan(clamp(nan, 0.0, 1.0)))

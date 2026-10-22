@@ -7,6 +7,8 @@
 
 #include "vjp.h"
 
+#include "camel/core/error/runtime.h"
+
 #include "../type.h"
 #include "op_def.h"
 
@@ -92,6 +94,17 @@ void setVjp(std::vector<OpDef> &defs, std::string_view name, VjpFn rule) {
         }
     }
     throw std::logic_error("setVjp: no operator definition named " + std::string(name));
+}
+
+void refuseVjp(const VjpCall &call, std::string_view reason) {
+    throw camel::core::error::RuntimeFault(
+        camel::core::error::RuntimeDiag::RuntimeError,
+        {"autodiff: cannot differentiate operator '" + std::string(call.uri) + "': " +
+         std::string(reason)},
+        "",
+        nullptr,
+        camel::core::error::ExecutionSiteHint{
+            .cachedOrigin = static_cast<camel::source::origin_id_t>(call.origin)});
 }
 
 } // namespace camel::tensor::ops
