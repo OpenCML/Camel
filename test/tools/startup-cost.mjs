@@ -160,14 +160,14 @@ function declarationCost(reps) {
 }
 
 // The ceilings. The medians they are built on, measured on the Linux host at H142 (21-101
-// samples, the numbers and their spread are in docs/handover/reports/H142.md): 5.0 / 8.5 / 26.1 /
+// samples, the numbers and their spread are in handover note ⟨c49da87⟩ (H142)): 5.0 / 8.5 / 26.1 /
 // 23.6 ms on a quiet host. The last two ceilings are about four times that; the first two are five
 // to eight times, because 5-8 ms is below this host's scheduling noise: 3 x 5 ms would flake at the
 // 20 / 36.5 ms medians seen at load average 215. For the same reason the ceilings are above the
 // medians at load average 150 (16.5 / 19.3 / 53.4 / 51.5 ms) and 215 (20 / 36 / 87 / 72 ms). The
 // gate is a smoke alarm ("the standard library is loaded before the program runs", "a declaration
 // module costs milliseconds"), not a percentage budget; it cannot see the 4.6 ms the declaration
-// modules cost today, and docs/handover/reports/H142.md is where that number is recorded.
+// modules cost today, and handover note ⟨c49da87⟩ (H142) is where that number is recorded.
 const CASES = [
     {
         name: 'version',

@@ -176,7 +176,7 @@ stand-in) differs at the `2.4e-4` level.
 ## Problems
 
 The genuinely awkward parts of writing this example, with the question each raises in the
-"Open questions" section of `docs/handover/reports/H13.md`.
+"Open questions" section of `handover note ⟨9981995⟩ (H13)`.
 
 1. **Subscript and slice syntax is not implemented.** Design principles 5.4 and H21 describe
    `t[i]`, `t[a:b]` and `t[idx]`; the language reference (`06_expressions.md`) still says the

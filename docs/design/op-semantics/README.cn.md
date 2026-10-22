@@ -1063,7 +1063,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 
 ### 11.6 收集输出（`s > 0`）
 
-循环可以在每轮交出一个值，由执行器收进数组：这是 `s` 个**收集槽**，节点载荷里的 `collectionCount`。它是 H4d 的第一步（`docs/handover/reports/H4.md`），为自动微分的磁带、以及将来 ONNX `Loop` 的 scan output 准备；源码语法尚未定义如何写收集槽，测试用一个只读遍给循环加槽。
+循环可以在每轮交出一个值，由执行器收进数组：这是 `s` 个**收集槽**，节点载荷里的 `collectionCount`。它是 H4d 的第一步（`handover note ⟨77e9e83⟩ (H4)`），为自动微分的磁带、以及将来 ONNX `Loop` 的 scan output 准备；源码语法尚未定义如何写收集槽，测试用一个只读遍给循环加槽。
 
 - **节点的值与循环体的返回值**：`k + s` 元组。值的前 k 个分量是状态（与无收集槽时相同，所以忽略磁带的消费者读到状态的位置不变），后 s 个是 `Tc[]`；循环体返回 `(s1' … sk', v1 … vs)`，`vc` 的类型是 `Tc`。`s = 0` 时节点形状与 11.1 完全一样。
 - **计数为什么必须在节点里**：`k = 2` 时值 `(状态, 数组)` 与“两个状态、第二个恰是数组”在类型上无法区分；类型本身不能说明有收集槽。
@@ -1071,7 +1071,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 - **收集槽在区域里**：循环体区域的结果的末尾 s 个分量是收集值；执行器每轮把 `vc` 原地追加到对应数组，不需要另建算子。
 - **消费**：`LoopView` 的 `collectionCount`、`valueIsTuple`、`valueComponentCount`、`stateValueIndex`、`collectionValueIndex`、`collectionArrayType`、`collectionElemType`、`nextStateIsTuple`、`bodyResultType`、`bodyStateResultIndex`、`bodyCollectionResultIndex`、`nextCollectionComponent` 以及自由函数 `loopValueComponent`、`loopStateValue`、`loopCollectedValue`；自动微分不必自己重新推导布局。改写一个还没编码的循环（自动微分给自己建的两个循环）用同一组访问器的 `LoopDraftView`（`camel/runtime/loop.h`，读的是 `GraphDraft` 里的节点）。
 - **自动微分**（H4d 第二步，2026-10-20）：磁带就是这些收集槽。残差是循环体回传真正读到的值（每条导数规则的入运算；循环体里一次调用的回传闭包整个作为一个 `Function` 值收进去，数组元素可以是函数，GC 追踪），所以一次循环的磁带是 `s` 个数组、每轮原地追加，没有复制。反向是一个 `While` 型 `LOOP`（`collectionCount = 0`）：状态是轮次下标加各状态与各捕获的梯度（只给能承载梯度的类型留位置），循环体用 `:op/idx_arr` 读这一轮的残差、调循环体的回传、接状态梯度、累加捕获梯度；零轮时状态梯度为种子、捕获梯度为零。循环体回传不读残差时仍收一个常量 `1`，反向循环靠它知道轮数。循环迭代或捕获的数组若依赖被微分的参数，按设计原则 9.9 在循环处拒绝并指出数组位置；不依赖的可以读，梯度在读处停住。
-- **导出**：残差是普通值（数组），不是闭包，所以 ONNX 与 `std::cpp` 都能表示：磁带是前向 `Loop` 的 scan output、反向 `Loop` 的输入。导出本身仍未做；`docs/handover/reports/H4.md`"H4d 第二步"列了它需要什么（其中循环体里一次调用的回传闭包不能作为 ONNX 的值，要按捕获的叶子展开）。
+- **导出**：残差是普通值（数组），不是闭包，所以 ONNX 与 `std::cpp` 都能表示：磁带是前向 `Loop` 的 scan output、反向 `Loop` 的输入。导出本身仍未做；`handover note ⟨77e9e83⟩ (H4)`"H4d 第二步"列了它需要什么（其中循环体里一次调用的回传闭包不能作为 ONNX 的值，要按捕获的叶子展开）。
 
 ---
 

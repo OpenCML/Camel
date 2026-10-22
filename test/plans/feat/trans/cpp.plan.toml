@@ -29,7 +29,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "agree_with_fvm"
-# Slow layer: measured 23.8 s in the full serial run (docs/handover/reports/H10.md).
+# Slow layer: measured 23.8 s in the full serial run (handover note ⟨617198c⟩ (H10)).
 tier = "slow"
 desc = "The programs of test/tools/cppexec/expect.txt are translated with std::cpp, built with the system's C++ compiler and run; each prints what std::fvm prints and exits with its code: scalars and their text, strings, branches as statements, the order of effects, faults with their located report, the recursion limit, tail calls as loops (also between two functions), exit codes, complex numbers (arithmetic, `^`, the math functions, their text and formatting, a faulting division), and operators of runtime modules through the bridge."
 kind = "behavior"

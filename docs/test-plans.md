@@ -52,7 +52,7 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
 - `fast` is the default layer and the one `npm run test` runs. It must stay useful for a
   developer loop: on an 8-core machine a parallel fast run is expected to finish in about two
   minutes (H10 measured it on a machine that other worktrees were using at the same time, so it
-  took longer; the numbers are in `docs/handover/reports/H10.md`).
+  took longer; the numbers are in `handover note ⟨617198c⟩ (H10)`).
 - `slow` is everything whose result is still worth having but whose cost does not belong in
   the loop: the comparisons against PyTorch, the collector stress and poison scans, the random
   program checks (progen and fuzzing), the performance benchmarks, and any other single test
@@ -627,7 +627,7 @@ The ten plans under `test/plans/perf/` are measured on purpose, never by a gate.
 (see "Selecting Plans From A Change"), and no CI job runs them. That is the policy, not an
 oversight: `agents/test.md` calls the perf/timeit plans heavy -- "they saturate every core for
 minutes and are worth running only at a milestone, by the coordinator, on a quiet machine" -- and
-[H154](handover/reports/H154.md) section 2 records what running the whole layer on the shared host
+handover note ⟨0ee01ba⟩ (H154) section 2 records what running the whole layer on the shared host
 would cost. The price of the exclusion is that nothing notices a performance regression, so the
 measurement has one manual entry point:
 
@@ -661,10 +661,10 @@ How the numbers are read:
 `test/perf-baseline.json` is data, not a ceiling: the medians, both spreads, the exact command of
 every case, the commit, the build's own stamp, the repetition count and the host load. Seed it on
 the host whose numbers it records; a baseline from another machine is not comparable. H167's
-[report](handover/reports/H167.md) has the cost of each of the ten plans and the evidence for the
+handover note ⟨f14c90d⟩ (H167) has the cost of each of the ten plans and the evidence for the
 split. The plans left out keep the measurement they already have: `perf.startup` carries its own
-ceilings and `declaration.cost` share ([H142](handover/reports/H142.md),
-[H152](handover/reports/H152.md)), `perf.gc` asserts what must not grow with the length of the
+ceilings and `declaration.cost` share (handover note ⟨c49da87⟩ (H142),
+handover note ⟨1276707⟩ (H152)), `perf.gc` asserts what must not grow with the length of the
 run, the showcases compare against PyTorch, and `docs/performance/graph-store-baseline.md` is a
 separate manual baseline of the graph store.
 
