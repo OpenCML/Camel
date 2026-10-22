@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Model registry: the single source of truth for benchmark model contracts.
 
 Each entry fixes the RNG seed, input shape, and the ordered list of weight

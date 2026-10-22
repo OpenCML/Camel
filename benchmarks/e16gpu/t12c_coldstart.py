@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T12c GPU cold start (MLSys 2027 eval; e8_cold_start.py's GPU counterpart).
 
 Wall time from "fresh process" to the FIRST completed training step, for:

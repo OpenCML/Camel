@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Statistics for repeated benchmark trials (pure Python, no NumPy needed).
 
 ``run.py --trials N`` measures every (model, config) N times in shuffled

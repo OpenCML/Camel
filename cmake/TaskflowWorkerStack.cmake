@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 # The workers of the parallel scheduler (std::tf / std::prl) are threads of tf::Executor, which
 # creates them with std::thread: there is no way to say how large their native stack is. That
 # size is the process's stack limit with glibc (8 MiB by default), the value in the executable's

@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 export function normalizeRepoPath(file) {
     return file.replaceAll('\\', '/').replace(/^\.\//, '')
 }

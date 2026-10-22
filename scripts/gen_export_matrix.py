@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """M6: generate the ONNX export capability matrix from the lowering registries.
 
 Scans the Camel source for:

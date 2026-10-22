@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 import fs from 'fs'
 import path from 'path'
 import os from 'os'

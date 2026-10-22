@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Precondition of the grammar snapshot tests (test/plans/feat/tools/grammar.plan.toml):
 // exits 0 when the tokeniser's packages are installed, 1 with a one-line reason otherwise, so
 // that a checkout that has not run `npm install` in editors/vscode skips those tests.

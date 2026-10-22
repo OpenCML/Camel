@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """TensorFlow helpers shared by the ``<model>/model_tf.py`` modules.
 
 Responsibilities: thread pinning, NCHW <-> NHWC conversions for convolution and

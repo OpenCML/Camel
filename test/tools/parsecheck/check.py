@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """The corpus checks of the front end, as the test plan runs them.
 
     python3 test/tools/parsecheck/check.py snapshot [--update] [--only GLOB ...]

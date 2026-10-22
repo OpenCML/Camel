@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E1 transformer real sequence data: tiny-shakespeare (char-rnn) bytes, sliced
 into non-overlapping [N,64] token windows and projected to d=128 by a fixed
 seeded matrix E[256,128] ~ N(0,0.2). The projection is data prep only (the

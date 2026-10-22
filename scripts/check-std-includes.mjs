@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // A source file that names something of the C++ standard library must get the header that
 // declares it from its own include lines or from the project headers it includes, not from
 // whatever one standard library happens to include inside another header. libstdc++, libc++

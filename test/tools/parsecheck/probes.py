@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Writes the probe programs of the parser harness: one small file per place where the grammar
 is ambiguous or a decision needs more than one token (docs/technical/34_handwritten_parser.md,
 section 4).

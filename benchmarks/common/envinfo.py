@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Machine-readable environment metadata for benchmark results.
 
 Every result file gets a ``<result>.meta.json`` sidecar describing where and how

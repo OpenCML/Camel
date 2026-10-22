@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """TensorFlow implementation of the ``mlp`` benchmark model (see README.md)."""
 
 from __future__ import annotations

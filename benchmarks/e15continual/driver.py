@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E15/T11 on-device CONTINUAL learning driver (MLSys 2027 eval).
 
 Five "users" arrive in order — MNIST sub-distributions rotated by

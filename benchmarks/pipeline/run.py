@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """pipeline-runner: run Camel programs under a set of pass pipelines, one fresh process each.
 
 For every cell (program, pipeline, repeat) it writes one JSON run record:

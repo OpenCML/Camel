@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T10 mechanism counts -- one-key orchestrator.
 
 Runs counts.py locally (Camel repo: camel + relax modes) and on the server

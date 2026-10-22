@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Builds the corpus of EXISTING programs for the pipeline-invariance experiment (X1a).
 
 Everything is tagged `dev`: the programs were written by the developers of the passes under

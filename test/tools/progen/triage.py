@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Lists the bad cells of a progen run, grouped, with the source line a diagnostic points at.
 
     triage.py DIR [--outcome MISMATCH] [--limit 5] [--cell SUBSTR] [--patterns]

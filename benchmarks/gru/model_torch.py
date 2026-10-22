@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """PyTorch implementation of the ``gru`` benchmark model (see README.md).
 
 The primary model is an explicit GRU cell loop over time using the PyTorch GRU

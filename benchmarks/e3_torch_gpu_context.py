@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E3 context only (§A.4): PyTorch eager GPU training-step latency for the same
 workload (loss mean(y*y), one SGD step lr 0.01, same weights and input).
 

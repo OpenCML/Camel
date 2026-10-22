@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """PyTorch implementation of the ``transformer4`` benchmark model (E6).
 
 Four stacked pre-LN encoder blocks, each identical to the ``transformer``

@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Load harness for the debug adapter <-> worker request lifecycle (H159).
 //
 // The two DAP tests that flaked under load ("The program being debugged has ended." instead of

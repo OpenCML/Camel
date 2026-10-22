@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E7 route A: jax2tf -> tf2onnx — the route is structurally dead; produce the evidence.
 
 Phases (choose by --phase):

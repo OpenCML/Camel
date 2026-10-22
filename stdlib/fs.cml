@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The file system: the content of a file, writing and atomically replacing it, the few questions
  * about a path, and the two removals. Every operator of the module touches the file system, which

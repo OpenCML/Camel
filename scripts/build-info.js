@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * `out/<tag>/build-info.json`: what a build stamped, and whether an install still matches the tree.
  *

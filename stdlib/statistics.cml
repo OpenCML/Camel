@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Signatures of the `statistics` module (C++ operators, modules/statistics).
  *

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Performance and memory baseline of the graph store (docs/performance/graph-store-baseline.md).
 
 For every program of the list below, on this machine and with the build in out/latest:

@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Interactive CMake options config - Linux kernel menuconfig style
  * Run: npm run config

@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Stands in for `camel` in the runner's self-test: prints the same thing for every back end
 // except the one the mode singles out.
 const [mode, backend] = process.argv.slice(2)
