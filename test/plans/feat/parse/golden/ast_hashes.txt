@@ -809,12 +809,12 @@ c2c51d0f82162052 ok test/cases/compile/native/foreign_operator.cml
 c761ac0a444fedfe ok test/cases/compile/native/fs_arity.cml
 066e31efc9c6b094 ok test/cases/compile/native/fs_declaration_import.cml
 bca42e188ef0d258 ok test/cases/compile/native/fs_type.cml
-c9484a1d3db7f75f ok test/cases/compile/native/graph_arity.cml
-bafd2e2f00e83f2c ok test/cases/compile/native/graph_declaration_import.cml
-8685d4927143a68c ok test/cases/compile/native/graph_type.cml
 73e34f5410cddf22 ok test/cases/compile/native/generic.cml
 56df9aa3996cbbf9 ok test/cases/compile/native/generic_module.cml
 1f22e98f50629dfd ok test/cases/compile/native/generic_qualified.cml
+c9484a1d3db7f75f ok test/cases/compile/native/graph_arity.cml
+bafd2e2f00e83f2c ok test/cases/compile/native/graph_declaration_import.cml
+8685d4927143a68c ok test/cases/compile/native/graph_type.cml
 78043fe82b639d0d ok test/cases/compile/native/io_arity.cml
 47f21302cd3cdf4b ok test/cases/compile/native/io_type.cml
 e5636cacc6799eda ok test/cases/compile/native/json_arity.cml
