@@ -607,7 +607,8 @@ def library_cost_table(columns: List[dict]) -> str:
             cost = r.get("module_cost_ms", {}).get(module, {})
             if not cost:
                 continue
-            cell = lambda kind: fmt_ms(cost[kind]["median"]) if kind in cost else ""  # noqa: E731
+            def cell(kind: str) -> str:
+                return fmt_ms(cost[kind]["median"]) if kind in cost else ""
             total = sum(cost[kind]["median"] for kind in cost)
             rows.append([f"{r['input']} / {r['pipeline']}", module, cell("parse"), cell("gct"),
                          cell("declare"), cell("library"), f"**{fmt_ms(total)}**"])
