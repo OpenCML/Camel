@@ -1,0 +1,42 @@
+/**
+ * The zero that stays legal (design principles 9.9), beside the zeros that are now refused: an
+ * integer index array takes no gradient by definition, and the operator's own rule is what says
+ * so. `take` never accumulates into its indices, so what the accumulator materializes for them is
+ * the zero of their own type -- not a gradient of another width converted or dropped on the way.
+ *
+ * The rows the indices name receive their real gradient: the weights' gradient is 1 everywhere
+ * (6.0 summed), while the labels' gradient is exactly 0.0. Both numbers are printed, so neither a
+ * pass that produced nothing nor a rule that leaked the weights' gradient into the indices passes.
+ *
+ * This is the case the new refusal must not touch: the labels' zero is what a discrete input's
+ * derivative is, and it is decided by `take`'s rule, not by the accumulator guessing from a type.
+ */
+module gather_discrete_index_zero
+
+import { Tensor, cast, reshape, sum } from tensor
+import { with_grad } from autodiff
+
+type Model = {
+    weights: Tensor,
+    labels: Tensor, // statically a Tensor; an integer tensor at run time
+}
+
+with <m: Model>
+func gather_loss(): float {
+    return sum(m.weights[m.labels])
+}
+
+func main(): int sync {
+    let model = {
+        weights: reshape([1.0, 2.0, 3.0, -4.0, 5.0, -6.0] as f32[], [2, 3]),
+        labels: cast([1, 0], 'int64'),
+    }
+    let (v, g) = with_grad(gather_loss)<model>()
+    let weights_grad = sum(g.weights)
+    let index_grad = sum(cast(g.labels, 'float32'))
+    'gather_discrete_index_zero value={:.1f} weights_grad={:.1f} index_grad={:.1f}'->format<
+        v,
+        weights_grad,
+        index_grad>->println
+    return 0
+}

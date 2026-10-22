@@ -67,12 +67,16 @@ slot_t sumToKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t broadcastLikeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("broadcast_like", [&] {
-        const auto shape = likeArg(norm, 1)->shapeSpan();
-        if (norm.type(0)->code() == TypeCode::Float64 ||
-            norm.type(0)->code() == TypeCode::Float32) {
-            return wrap(k::fill(numberArg(norm, 0), shape, resultAllocator()));
+        const Array *like = likeArg(norm, 1);
+        // A scalar is spread at the element type of the value it is made like: the result is that
+        // value's gradient, and it is read at the width that value's type names. Filling at any
+        // other width puts a number of one width behind a type of another -- an f32 1.0 read as
+        // f64 is 0.0078125, and a row of them is not the adjoint.
+        const TypeCode dtype = like->dtype();
+        if (norm.type(0)->code() == TypeCode::Float64 || norm.type(0)->code() == TypeCode::Float32) {
+            return wrap(k::fill(numberArg(norm, 0), dtype, like->shapeSpan(), resultAllocator()));
         }
-        return wrap(k::broadcastTo(tensorArg(norm, 0), shape, resultAllocator()));
+        return wrap(k::broadcastTo(tensorArg(norm, 0), like->shapeSpan(), resultAllocator()));
     });
 }
 
@@ -170,10 +174,20 @@ std::optional<Type *> sameAsFirst(const InferContext &ctx) { return tensorOf(ctx
 
 std::optional<Type *> intScalar(const InferContext &) { return Type::Int64(); }
 
-/// A float gradient shaped like argument `index`.
+/// A float gradient shaped like argument `index`. The kernels behind these operators compute in
+/// f32 only (they refuse another element type rather than narrowing it), so they declare f32.
 InferFn gradientLike(size_t index) {
     return [index](const InferContext &ctx) -> std::optional<Type *> {
         return tensorOf(TypeCode::Float32, ctx.facts(index).shape);
+    };
+}
+
+/// A gradient of the value it is made like: that value's shape and element type. The operator it is
+/// used for builds the adjoint of `index`, and a gradient is read at the width of the value it is
+/// the gradient of (design principles 9.9): an f32 fill read as f64 is 0.0078125, not the derivative.
+InferFn gradientLikeTyped(size_t index) {
+    return [index](const InferContext &ctx) -> std::optional<Type *> {
+        return tensorOf(ctx.facts(index).dtype, ctx.facts(index).shape);
     };
 }
 
@@ -269,7 +283,11 @@ void broadcastLikeVjp(VjpBuilder &b, const VjpCall &call) {
         if (isTensorNode(b, g)) {
             b.accumulateGradient(g, addTensorOper(b, "tensor:sum_to", {*dy, g}));
         } else if (isFloatNode(b, g)) {
-            b.accumulateGradient(g, addFloatOper(b, "tensor:sum", {*dy}));
+            // tensor:sum answers at float64; a value of type f32 keeps the gradient at its own
+            // width (see floatGradientAtWidth).
+            b.accumulateGradient(
+                g,
+                floatGradientAtWidth(b, g, addFloatOper(b, "tensor:sum", {*dy})));
         }
     }
 }
@@ -390,7 +408,7 @@ std::vector<OpDef> gradientOps() {
     defs.push_back(internal(
         "broadcast_like",
         {{"g", ParamKind::TensorOrScalar}, {"like", ParamKind::Tensor}},
-        gradientLike(1),
+        gradientLikeTyped(1),
         &broadcastLikeKernel));
     defs.push_back(internal(
         "expand_axis",

@@ -49,7 +49,7 @@
 - 工作中只跑相关的测试计划；**任务结束前在主机上跑一次快速层**（`smoke` + `feat/**`）与相关计划。
 - **验收**：快速层必须全绿；`skip` 不是失败；基线是零——没有“已知失败名单”，任何一条红都要由变红的分支解释。
 - 改了语法、`test/cases/parse` 下的用例或 `test/tools/parsecheck/probes.py`：在主机上更新 AST 快照 `python3 test/tools/parsecheck/check.py snapshot --update`。快照只含解析用例与探针（H188），改 `examples/`、`stdlib/`、`benchmarks/` 或别的计划的用例不会再动它。
-- 改了诊断：`node scripts/diagnostics-catalog.mjs --write`。
+- 改了诊断：在 `diagnostics/registry.tsv` 里加一行（编号留空），再跑 `node scripts/diagnostics-catalog.mjs --write`；编号由它在该区段末尾分配，不要手写。
 - 每次提交前：`node scripts/check-doc-links.mjs --all`、`node scripts/check-std-includes.mjs`。
 
 ### 1.3 提交

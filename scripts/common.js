@@ -329,6 +329,11 @@ export function getGitVersion() {
  */
 export function runCmakeBuild(config, cmakeOptionFlags) {
     process.chdir(BASEDIR)
+    // The diagnostic numbers are assigned in diagnostics/registry.tsv and the headers and message
+    // tables are generated from it (H239). Generate before CMake configures, so a new declaration
+    // is numbered and the tree CMake reads already carries the emitted files; CMake then runs
+    // --check again as a dependency of libcamel_objects, so a direct cmake build is guarded too.
+    execSync('node scripts/diagnostics-catalog.mjs --generate', { cwd: BASEDIR, stdio: 'inherit' })
     const buildDir = path.join(BASEDIR, 'build')
     const conanToolchain = path.join(buildDir, 'conan_toolchain.cmake')
     if (!fs.existsSync(conanToolchain)) {
