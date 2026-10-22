@@ -37,7 +37,10 @@ const CASES = {
     },
 }
 
-const key = input.test_name.split('.')[1].split('_')[0]
+// A sweep copy is named `<sweep>:<source plan>:<test name>` (H120), so the last dot-segment is
+// the test name whether this runs from its own plan (`rename.env_graph_identity`) or from a copy
+// of it (`poison:modules.rename_identity:rename.env_graph_identity`).
+const key = input.test_name.split('.').pop().split('_')[0]
 const kase = CASES[key]
 if (!kase) throw new Error(`no identity case for test ${input.test_name}`)
 
