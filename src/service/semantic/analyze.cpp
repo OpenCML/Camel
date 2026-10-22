@@ -996,7 +996,7 @@ class ModelBuilder {
                     continue;
                 }
                 try {
-                    if (auto mod = context->importModule(decl.importedFrom, module.name())) {
+                    if (auto mod = context->importModule(decl.importedFrom, &module)) {
                         spaces.emplace_back(decl.name, mod);
                     }
                 } catch (...) {

@@ -128,10 +128,10 @@ inline void pushUniquePath(
 
 struct ModuleSearchPathOptions {
     std::string stdlibOverride;
-    /// Extra roots from `-I` / `--include`, in command-line order. They follow the entry
-    /// directory and precede every environment-provided root (docs/language/05_modules.md
-    /// "Search order": the entry's own imports, the `-I` roots, `CAMEL_PACKAGES`, then the
-    /// standard library).
+    /// Extra roots from `-I` / `--include`, in command-line order. They come first among the
+    /// module roots and precede every environment-provided root (design principles 10.2: a
+    /// module's own directory, then the `-I` roots in the order given, then the standard
+    /// library; `CAMEL_PACKAGES` adds roots of the same kind as `-I`, after them).
     std::vector<std::string> includeDirs;
     bool includeInstallRoot       = true;
     bool includeExecutableRelated = true;
@@ -165,11 +165,16 @@ inline std::vector<std::string> buildModuleSearchPaths(
     std::unordered_set<std::string> seen;
     fs::path baseEntry = entryDir.empty() ? fs::current_path() : pathFromUtf8(entryDir);
     baseEntry          = fs::absolute(baseEntry).lexically_normal();
-    detail::pushUniquePath(paths, seen, baseEntry);
 
-    // `-I` / `--include`: after the entry directory, before every root that comes from the
-    // environment. A relative root is resolved against the entry directory, like the roots of
-    // CAMEL_PACKAGES below (the whole module search list has one base).
+    // The entry file's directory is *not* one of the roots: it is the entry program's own
+    // directory, and a module's own directory comes before these roots (design principles
+    // 10.2). Baking it in here made it a root for every library too, so a library's import
+    // resolved differently depending on who imported it (H220). The context puts the importing
+    // module's directory in front of this list.
+    //
+    // `-I` / `--include`: the module roots, in command-line order, before every root that comes
+    // from the environment. A relative root is resolved against the entry directory, like the
+    // roots of CAMEL_PACKAGES below (the whole module root list has one base).
     for (const auto &item : opts.includeDirs) {
         detail::pushUniquePath(paths, seen, pathFromUtf8(item), baseEntry);
     }

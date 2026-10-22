@@ -1,0 +1,12 @@
+/// H220 trap 1: two modules in different directories import the same name `lib` and must get
+/// different files, 1 and 2. A cache keyed by the import name returned `a/lib.cml` for both and
+/// printed `1 1`; the cache is keyed by the file a name resolved to.
+module main_two
+
+import a.one as one_a
+import b.one as one_b
+
+func main(): int sync {
+    println(one_a::n(), one_b::n())
+    return 0
+}

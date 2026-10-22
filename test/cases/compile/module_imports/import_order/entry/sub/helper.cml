@@ -1,0 +1,9 @@
+/// H220: a library in its own directory; `import lib` must take the `lib.cml` beside it (value
+/// `sub`), not the entry directory's one (value `root`).
+module helper
+
+import lib
+
+export func name(): string {
+    return 'helper+' + lib::name()
+}

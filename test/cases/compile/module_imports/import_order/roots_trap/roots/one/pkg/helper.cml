@@ -1,0 +1,8 @@
+/// H220 trap 3: the first root's `pkg/` library; `import lib` takes the `pkg/lib.cml` beside it.
+module pkg_helper
+
+import lib
+
+export func n(): int {
+    return lib::n()
+}

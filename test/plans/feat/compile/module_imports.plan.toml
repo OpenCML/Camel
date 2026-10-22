@@ -254,10 +254,11 @@ expect_exit = 0
 expect_stdout_exact = "42\n"
 
 # ---- H129: -I / --include adds module search roots ----
-# Documented order (docs/cli.md, docs/language/05_modules.md): the entry file's directory, then
-# each -I directory in the order given, then CAMEL_PACKAGES, then the standard library. A
-# library's own import still starts in its own directory (H112). `-I` paths are resolved against
-# the entry file's directory, like CAMEL_PACKAGES, hence the `../roots/...` paths here.
+# Documented order since H220 (design principles 10.2, docs/cli.md): a module's own directory,
+# then each -I directory in the order given, then CAMEL_PACKAGES, then CAMEL_MODULE_PATH, then
+# the standard library; the entry program follows the same rule, so the entry file's directory is
+# its own directory and is not a root for another module. `-I` paths are resolved against the
+# entry file's directory, like CAMEL_PACKAGES, hence the `../roots/...` paths here.
 
 [[tests]]
 name = "imports.include_root_only"
@@ -332,6 +333,103 @@ args = ["-E", "short", "${case}"]
 envs = ["CAMEL_PACKAGES=../packages"]
 expect_exit = 0
 expect_stdout_exact = "200\n"
+
+# ---- H220: the import order of design principles 10.2 ----
+# A module's import looks in its own directory, then the module roots (-I in the order given,
+# CAMEL_PACKAGES, CAMEL_MODULE_PATH), then the standard library; the entry program follows the
+# same rule. The fixtures live under import_order/: before this change the entry file's directory
+# was the first global root, so a library's import fell back to it (`helper+root` where the
+# module root said `root1`) and the import cache was keyed by name (two `lib`s printed `1 1`).
+
+[[tests]]
+name = "imports.order_library_own_dir"
+desc = "sub/helper.cml imports `lib` and gets sub/lib.cml (helper+sub), not the entry directory's lib.cml (root): the module's own directory comes first."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/import_order/entry/main_sub.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "helper+sub\n"
+
+[[tests]]
+name = "imports.order_entry_own_dir"
+desc = "The entry program follows the same rule: `import lib` beside the entry file takes that file (root)."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/import_order/entry/main_lib.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "root\n"
+
+[[tests]]
+name = "imports.order_library_ignores_entry_dir"
+desc = "deep/helper.cml imports `lib`, has no lib.cml beside it, and there is no -I root: the entry directory is not a module root, so the import fails (it used to take ../lib.cml and print helper+root). The search attempts start with the library's own directory."
+kind = "negative"
+case = "../../../cases/compile/module_imports/import_order/entry/main_deep.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["deep/helper.cml:6:1", "Module 'lib' not found", "name=SemanticDiag::ModuleNotFound", "entry/deep", "path does not exist"]
+
+[[tests]]
+name = "imports.order_library_via_include_root"
+desc = "The same library resolves `import lib` through the -I root (helper+root1): a library's fallback runs over the module roots, not over the entry directory (which used to win with root)."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/import_order/entry/main_deep_include.cml"
+args = ["-E", "short", "-I", "../roots/one", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "helper+root1\n"
+
+[[tests]]
+name = "imports.order_same_name_two_files"
+desc = "two/a/one.cml and two/b/one.cml both import `lib`; each gets the file beside it, so this prints `1 2`. The cache used to be keyed by the import name and printed `1 1` (trap 1)."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/import_order/two/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "1 2\n"
+
+[[tests]]
+name = "imports.order_local_shadows_stdlib"
+desc = "A library beside a graph.cml imports `graph`: the local file shadows the standard library's graph with no diagnostic (41; stdlib/graph has no `answer`). Pinned as the ruling's consequence; whether a warning is wanted is an open author question (H220 report)."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/import_order/stdlib_shadow/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "41\n"
+
+[[tests]]
+name = "imports.order_first_root_subtree"
+desc = "A module root holds pkg/helper.cml and pkg/lib.cml; the helper's own directory is the first root's pkg/, so `lib` is that root's (1), not the entry directory's pkg/lib.cml (9)."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/import_order/roots_trap/main.cml"
+args = ["-E", "short", "-I", "roots/one", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
+
+[[tests]]
+name = "imports.order_first_root_wins_same_relative_path"
+desc = "Both roots hold pkg/: the first -I root supplies pkg.helper, and that helper's own directory supplies its pkg/lib.cml, so the second root's pkg/lib.cml is not used (1)."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/import_order/roots_trap/main.cml"
+args = ["-E", "short", "-I", "roots/one", "-I", "roots/two", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
+
+[[tests]]
+name = "imports.order_root_order_selects_subtree"
+desc = "The same two roots in the other order: pkg.helper comes from roots/two, so its own directory supplies 2. The -I order selects the subtree, and each library still reads its own directory."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/import_order/roots_trap/main.cml"
+args = ["-E", "short", "-I", "roots/two", "-I", "roots/one", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n"
+
+[[tests]]
+name = "imports.order_upward_path_is_syntax_error"
+desc = "`import ../lib` is not a module name and never was: an import names a module, and the own-directory rule adds no file-path traversal. The parent `lib.cml` exists, so a silent upward lookup would show up here."
+kind = "negative"
+case = "../../../cases/compile/module_imports/import_order/up/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["name=SyntaxDiag::UnexpectedToken", "Unexpected '/'", "expected a name"]
 
 # ---- D6: port names of a function that captures, in std::rgir ----
 
