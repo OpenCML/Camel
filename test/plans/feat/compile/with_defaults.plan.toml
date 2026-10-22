@@ -1,0 +1,174 @@
+id = "compile.with_defaults"
+order = 329
+tier = "fast"
+tags = ["feat", "compile", "with", "defaults"]
+desc = "Defaults of `with` parameters and `with` arguments given by name (design principles 4.4, handover H235): a default is a compile-time constant evaluated where the declaration is and filled into each call that leaves the parameter out; a call gives the parameters by position, or by name after the positional ones."
+
+# A default belongs to the declaration, not to the call site: it is evaluated once, where the
+# declaration is (so `2 + 3` is 5, and a value it cannot compute is a declaration error), and a
+# call that leaves the parameter out gets that value. A function value made from the
+# declaration carries no default, and a partial application keeps exactly what it was given.
+
+[[tests]]
+name = "with_defaults.applied"
+desc = "A call may leave a defaulted `with` parameter out (both defaults, then one by position), override it by position, or give it by name after the positional ones (`f<strict: true>` skips `rounds`). A default is the declaration's constant (`2 + 3`), a generic declaration's default reaches its instances, and a function value made from the declaration carries no default while a partial application keeps what it was given."
+kind = "behavior"
+case = "../../../cases/compile/with_defaults/defaults.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "18\n20\n80\n26\n10\n12\n12\n4\n3\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "with_defaults.not_constant"
+desc = "A default that reads another `with` parameter of the same declaration is not a compile-time constant: the declaration is reported as WithDefaultNotConstant, at the default expression, not at a call."
+kind = "negative"
+case = "../../../cases/compile/with_defaults/default_not_constant.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithDefaultNotConstant"
+expect_diagnostic_line = 8
+expect_output_contains = ["default of the 'with' parameter 'b' is not a compile-time constant"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.wrong_type"
+desc = "A default is a value of its parameter's type: a string default of an `int` parameter is WithDefaultWrongType, at the default expression."
+kind = "negative"
+case = "../../../cases/compile/with_defaults/default_wrong_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithDefaultWrongType"
+expect_diagnostic_line = 7
+expect_output_contains = ["default of the 'with' parameter 'rounds' has type 'string', not 'int'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.unknown_name"
+desc = "A named `with` argument names one of the callee's `with` parameters: `f<round: 2>` is WithArgumentUnknown at the argument."
+kind = "negative"
+case = "../../../cases/compile/with_defaults/unknown_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithArgumentUnknown"
+expect_diagnostic_line = 13
+expect_output_contains = ["'round' is not a 'with' parameter of 'f'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.duplicate"
+desc = "A `with` parameter is given once: `f<2, rounds: 3>` is WithArgumentDuplicate at the named argument."
+kind = "negative"
+case = "../../../cases/compile/with_defaults/duplicate.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithArgumentDuplicate"
+expect_diagnostic_line = 13
+expect_output_contains = ["The 'with' parameter 'rounds' of 'f' is given twice"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.missing"
+desc = "A call that leaves out a `with` parameter with no default is WithArgumentMissing: `f<strict: true>` gives `strict` by name and leaves `rounds` without a value."
+kind = "negative"
+case = "../../../cases/compile/with_defaults/missing.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithArgumentMissing"
+expect_output_contains = ["The call gives no value for the 'with' parameter 'rounds' of 'f'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.after_default"
+desc = "A `with` parameter without a default may not follow one with a default: the declaration is reported as WithParameterAfterDefault, at the parameter."
+kind = "negative"
+case = "../../../cases/compile/with_defaults/after_default.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithParameterAfterDefault"
+expect_diagnostic_line = 8
+expect_output_contains = ["The 'with' parameter 'b' has no default and follows 'a'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.callee_unknown"
+desc = "A named `with` argument needs a callee that is one declaration: with two overloads of `f`, the name does not say which declaration's parameter it means, and the binding is reported as WithArgumentCallee."
+kind = "negative"
+case = "../../../cases/compile/with_defaults/callee_unknown.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithArgumentCallee"
+expect_diagnostic_line = 18
+expect_output_contains = ["is given by name"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.in_value"
+desc = "A name is resolved at a call: `let g = f<rounds: 2>` binds what it is given in order and is reported as WithArgumentInValue, since a function value carries no names."
+kind = "negative"
+case = "../../../cases/compile/with_defaults/in_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithArgumentInValue"
+expect_diagnostic_line = 13
+expect_output_contains = ["this binding is used as a function value"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.one_constant"
+desc = "The claim that the default is evaluated once is visible in the graph: two calls that leave `rounds` out make two call nodes, and both read the one constant node holding 4242 — one DATA node, two edges from it, printed by `std::gir` (design principles 4.4)."
+kind = "behavior"
+case = "../../../cases/compile/with_defaults/one_constant.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const marker = '[label="4242"'
+const nodes = out.split(marker).length - 1
+assert(nodes === 1, `the default is one constant node, got ${nodes}`)
+const line = out.split('\n').find((l) => l.includes(marker)) || ''
+const id = line.trim().split(' ')[0]
+const readers = out.split(id + ' ->').length - 1
+assert(readers === 2, `both calls read that one node, got ${readers} edges`)
+const calls = out.split('label="bump", type="FUNC"').length - 1
+assert(calls === 2, `two call nodes, got ${calls}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.instances"
+desc = "A generic declaration's default reaches every instance: `tag` is instantiated at int, string and float, each instance leaves `n` out and takes 3, and each keeps its own type (`3:7`, `3:a`, `3:2.5`). An instance may still override it by position (`tag::<int><9>` is `9:7`)."
+kind = "behavior"
+case = "../../../cases/compile/with_defaults/instances.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3:7\n3:a\n3:2.5\n9:7\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.type_parameter"
+desc = "A default whose type is the declaration's own type parameter is not a constant where the template is registered (T has no value there), and is refused as WithDefaultWrongType at the default."
+kind = "negative"
+case = "../../../cases/compile/with_defaults/type_parameter.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithDefaultWrongType"
+expect_diagnostic_line = 8
+expect_output_contains = ["The default of the 'with' parameter 'v' has type 'int', not 'T'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

@@ -1,0 +1,14 @@
+/**
+ * A call that leaves out a `with` parameter with no default is WithArgumentMissing (design
+ * principles 4.4): `rounds` is not given, and only `strict` has a default.
+ */
+module with_argument_missing
+
+with <rounds: int, strict: bool = false>
+func f(x: int): int {
+    return if strict then x * rounds else x + rounds
+}
+
+func main(): int sync {
+    return f<strict: true>(1)
+}

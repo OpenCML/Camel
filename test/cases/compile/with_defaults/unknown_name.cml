@@ -1,0 +1,14 @@
+/**
+ * A `with` argument written by name names one of the callee's `with` parameters (design
+ * principles 4.4): `round` names none of them.
+ */
+module with_argument_unknown
+
+with <rounds: int = 8>
+func f(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    return f<round: 2>(1)
+}

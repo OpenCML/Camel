@@ -581,6 +581,12 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 node_ptr_t declNode = tree_->makeDecl(node->name(), true);
                 node_ptr_t typeNode = node->at(0);
                 *declNode << tree_->clone(typeNode);
+                // The defaults of the declaration's `with` parameters are the declaration's, and
+                // the graph builder evaluates them when it sees the declaration (before any body
+                // is built, so that a call written above the definition finds them too).
+                if (const auto *defaults = tree_->withDefaultsOf(node)) {
+                    tree_->setWithDefaults(declNode, *defaults);
+                }
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
                     // makes an operator rule of it instead of a graph (handover H19 step 1),
@@ -2821,7 +2827,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     case AST::ReservedDataOp::Bind: {
         const auto &argsNode   = ast->atAs<AST::RepeatedLoad>(1);
         const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
-        res                    = tree_->makeWith(argsNode->size());
+        res                    = tree_->makeWith(argsNode->size() + kwargsNode->size());
         node_ptr_t calleeNode  = visitData(lhsASTNode);
         *res << calleeNode;
         std::vector<camel::source::SemanticPart> parts = {
@@ -2829,9 +2835,14 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         };
         std::vector<camel::source::origin_id_t> mergedInputs = {nodeOrigin(calleeNode)};
         int32_t argSlot                                      = 0;
+        // The name of each argument, aligned with the arguments; empty for a positional one.
+        // The name is not a child of the WITH: the binding checks it against the callee when
+        // the call is resolved (design principles 4.4, handover H235).
+        std::vector<std::optional<std::string>> argNames;
         for (auto &argNode : *argsNode) {
             node_ptr_t gctArg = visitData(argNode);
             *res << gctArg;
+            argNames.push_back(std::nullopt);
             mergedInputs.push_back(nodeOrigin(gctArg));
             parts.push_back(semanticPart(
                 camel::source::SemanticRole::GenericArgument,
@@ -2839,12 +2850,19 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 argSlot++,
                 "withArg"));
         }
-        if (kwargsNode->size() > 0) {
-            diags_->of(SemanticDiag::FeatureNotSupported)
-                .at(ast->load()->tokenRange())
-                .commit("kwargs");
-            throw BuildAbortException();
+        for (auto &argNode : *kwargsNode) {
+            const auto &named = argNode->loadAs<AST::NamedDataLoad>();
+            node_ptr_t gctArg = visitData(argNode->at(0));
+            *res << gctArg;
+            argNames.push_back(named->ref().ident());
+            mergedInputs.push_back(nodeOrigin(gctArg));
+            parts.push_back(semanticPart(
+                camel::source::SemanticRole::GenericArgument,
+                nodeOrigin(gctArg),
+                argSlot++,
+                "withArg"));
         }
+        tree_->setWithArgumentNames(res, std::move(argNames));
         setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.bind");
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
     } break;
@@ -4485,8 +4503,9 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     signatureVisit_ = true;
     declSignature_  = isDecl;
     openSignature_  = true;
-    FunctionType *funcType =
-        tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+std::vector<Tree::WithDefault> withDefaults;
+    FunctionType *funcType = tt::as_ptr<FunctionType>(
+        visitFuncType(ast->atAs<AST::FuncTypeLoad>(0), &withDefaults));
     // The head parameters the signature never wrote; the body may still use them (`match type
     // T`), so the warning waits until the body is built.
     const std::vector<std::string> unusedHeadVars = std::exchange(pendingUnusedHeadVars_, {});
@@ -4616,7 +4635,10 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
                 funcNode,
                 {whenNode, funcData->whenText(), whenNode->origin()});
         }
-        reportUnusedHead(nullptr, whenNode);
+reportUnusedHead(nullptr, whenNode);
+        if (!withDefaults.empty()) {
+            tree_->setWithDefaults(funcNode, withDefaults);
+        }
         *funcNode << typeNode;
         setOriginFromAst(
             context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
@@ -4652,6 +4674,9 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     *funcNode << typeNode << stmtsNode;
     if (whenNode != nullptr) {
         tree_->setWhen(funcNode, {whenNode, funcData->whenText(), whenNode->origin()});
+    }
+    if (!withDefaults.empty()) {
+        tree_->setWithDefaults(funcNode, withDefaults);
     }
     if (!unwrittenParams.empty()) {
         tree_->setUnwrittenParams(funcNode, unwrittenParams);
@@ -5003,8 +5028,13 @@ Type *Builder::visitTupleType(const AST::node_ptr_t &ast) {
 /*
 FuncType(Modifier[] modifiers, string uri)
     : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
+A `with` parameter may write a default (`with <rounds: int = 8>`). The default is not part of
+the function type: it is lowered here, in the scope of the signature, and handed to the caller
+(visitFuncData keeps it on the FUNC node) so that GIR evaluates it once, where the declaration
+is, and fills the value into each call that leaves the parameter out (design principles 4.4).
 */
-Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
+Type *Builder::visitFuncType(
+    const AST::node_ptr_t &ast, std::vector<Tree::WithDefault> *defaultsOut) {
     ENTER("FuncType");
     // Ensure the AST node is of the expected type (Type)
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for FuncType");
@@ -5117,6 +5147,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     // Process "with" parameters (context parameters)
     // Their types use the type variables the head declares (design principles 5.5), like the
     // ordinary parameters below.
+    std::vector<Tree::WithDefault> defaults;
+    // The last `with` parameter that wrote a default: a later parameter without one is refused,
+    // since a call that leaves the earlier ones out can then only give the others by name.
+    std::string lastDefaultName;
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         bool isVar            = paramLoad->isVar();
@@ -5139,25 +5173,24 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             type            = paramTypeOf(paramPair, name);
             dimBindAllowed_ = false;
         }
-        data_ptr_t data = nullptr;
 
-        // Process optional default values for parameters
-        const auto &dataNode = paramPair->optAtAs<AST::DataLoad>(1);
+        // The default of a `with` parameter (design principles 4.4, handover H235). The
+        // expression is lowered here, in the scope of the signature; GIR evaluates it where the
+        // declaration is, once, when it builds the graph (visitFuncNode / visitDeclNode).
+        node_ptr_t defaultExpr = nullptr;
+        const auto &dataNode   = paramPair->optAtAs<AST::DataLoad>(1);
         if (dataNode) {
-            data = extractStaticDataFromNode(visitData(dataNode));
-            if (!data) {
-                // Default parameter values must be static
-                diags_->of(SemanticDiag::ParamDataMustBeStatic)
-                    .at(dataNode->load()->tokenRange())
-                    .commit(paramRef.toString());
-                throw BuildAbortException();
-            }
-            // Default parameter values are not supported
-            diags_->of(SemanticDiag::FeatureNotSupported)
-                .at(dataNode->load()->tokenRange())
-                .commit("default parameter values");
+            defaultExpr = visitData(dataNode);
+            lastDefaultName = name;
+        } else if (!lastDefaultName.empty()) {
+            diags_->of(SemanticDiag::WithParameterAfterDefault)
+                .at(paramLoad->tokenRange())
+                .commit(name, lastDefaultName);
             throw BuildAbortException();
         }
+        defaults.push_back(
+            {defaultExpr,
+             dataNode ? dataNode->load()->origin() : camel::source::kInvalidOriginId});
 
         if (!paramNames.insert(name).second) {
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
@@ -5329,6 +5362,9 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         } else {
             built = built->withResources(resources);
         }
+    }
+    if (defaultsOut != nullptr) {
+        *defaultsOut = std::move(defaults);
     }
     return built;
 }
