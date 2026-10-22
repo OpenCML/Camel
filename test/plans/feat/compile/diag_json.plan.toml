@@ -69,6 +69,9 @@ assert(input.stderr.includes('available passes are'), 'the pass listing goes to 
 assert(d.data.stage === 'pass:std::no_such_pass', 'stage is pass:std::no_such_pass, got ' + d.data.stage)
 assert(d.data.name === 'RuntimeDiag::UnrecognizedGraphPass', 'name is RuntimeDiag::UnrecognizedGraphPass, got ' + d.data.name)
 assert(d.range.end.line === 0 && d.range.end.character === 0, 'no source range')
+// H209: `data` says where the diagnostic is, not what it is about. A command line has no file,
+// so both location fields are empty and the pass is in data.stage; a consumer reads that.
+assert(d.data.moduleName === '' && d.data.modulePath === '', 'a command-line diagnostic has no file: ' + JSON.stringify(d.data))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
@@ -138,6 +141,7 @@ assert(d.data.name === 'RuntimeDiag::PassInternalError', 'name is RuntimeDiag::P
 assert(d.code === '0x0400000C', 'code is 0x0400000C, got ' + d.code)
 assert(d.message.startsWith("Pass 'test::drop_call_argument' failed with an internal error: "), 'message names the pass, got ' + d.message)
 assert(d.message.includes("passing 0 arguments and 0 'with' arguments to 'twice'"), 'message carries the exception text, got ' + d.message)
+assert(d.data.moduleName === '' && d.data.modulePath === '', 'a pass that gives up has no file to name: ' + JSON.stringify(d.data))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
@@ -416,6 +420,7 @@ const d = diags[0]
 assert(d.severity === 'Warn' && d.data.name === 'RuntimeDiag::PassesNeverRun' && d.code === '0x0410000F', JSON.stringify(d))
 assert(d.data.stage === 'pass:std::rgir', 'stage ' + d.data.stage)
 assert(d.message === "Pass 'std::rgir' consumes the graph, so 'std::nvm' written after it will not run.", d.message)
+assert(d.data.moduleName === '' && d.data.modulePath === '', 'a pipeline warning has no file to name: ' + JSON.stringify(d.data))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000

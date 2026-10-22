@@ -41,6 +41,37 @@ the column of a position is counted from the start of its line when it is shown.
 - Without the file's text in the source context the file is read from disk; if that fails, the
   `-->` line stands alone.
 
+### The JSON `data` object
+
+`--output-format json` prints a diagnostic as an object with the rendered `message` and a `data`
+object; tooling reads `data`. The command line produces it in one place (`Diagnostic::toJson`)
+and every code gets the same envelope — no code adds a key of its own, so there is no per-code
+schema to grow:
+
+| Key | When | Meaning |
+|-----|------|---------|
+| `stage` | always | Where the diagnostic was raised: `parse`, `typecheck`, `compile`, `pass:<name>`, `run` or `internal`. For a pass it is the specification as written on the command line, so `pass:hash::nosuchpass` names the module and the pass. |
+| `name` | always | `<Type>::<Name>`, the catalog entry. |
+| `moduleName` | always | The name the diagnostic carries for its module: the compilation unit's — the declared `module` name, or `main` for an entry file that declares none — and, for a diagnostic located only by a position (a run-time fault, a tag warning), the stem of `modulePath`. It is `""` exactly when `modulePath` is. |
+| `modulePath` | always | The file the diagnostic is *located* in; `""` exactly when it has no source position. |
+| `suggestion` | when non-empty | The help text. |
+| `notes` | when non-empty | The remark lines. |
+| `relatedElided`, `promotedFromWarning` | when true | See section 5. |
+
+The two module fields describe the diagnostic's own file, never a module its message happens to
+name. `ModuleNotFound` at an import is located at the import: `data` names the importing module
+and its file, and the module that was not found is `{0}` of the message. A run-time fault of
+`fs`, `json` or `re` is located at the call in the program's file, and the path the fault is
+about is in the message. A diagnostic the command line itself raises — an unknown pass name, a
+pass a module does not provide, a pass that gives up, the passes written after one that consumes
+the graph — has no file at all, so both are `""`; the same diagnostic prints `():?:?:` in the
+short text form. Its subject is not lost: `stage` carries `pass:<module>::<pass>` (or
+`pass:<name>`), and the message carries the rest. A consumer that needs the module or pass of a
+command-line diagnostic reads `stage`; it must not invent one from `moduleName`.
+
+The language server builds its own `data` from the semantic model, and it carries only `name`
+(plus `suggestion` and `notes` when non-empty): no `stage`, `moduleName` or `modulePath`.
+
 ## 3. Several errors in one compilation
 
 The builders already skipped a statement that failed and went on (`BuildAbortException`); the
