@@ -420,11 +420,11 @@ func duplicate::<T>(t: T) {
 `static for (n, F) in fields T => 块` 把 `T` 的**字段表**在实例化时展开（[5.5](../design-principles.cn.md)）：每个字段执行一次块，展开出的代码直接成为当前位置的直线代码，运行时没有循环节点。
 
 - `T` 必须是具体类型，而且是 [R3 内部节点](../design/generic-structure/README.cn.md)：结构体或**普通**元组。`T?`、`T!`、可变单元格、标量、数组和函数都是叶子，报 `SemanticDiag::StaticForNotComposite`；先用 `match type` 处理它们。
-- `n` 是字段名；元组的字段名是十进制下标（`"0"`、`"1"`，……），按声明顺序。`F` 是字段类型。两者只在块内可见；`F` 可以写在类型位置（`let x: F`），不能当值用。
+- `n` 是字段名；元组的字段名是十进制下标（`"0"`、`"1"`，……），按声明顺序。`F` 是字段类型。两者只在块内可见；`F` 可以写在类型位置（`let x: F`），不能当值用。其中任何一个写成 `_` 表示这一轮不绑定它，与 `match` 的 `_` 同义：`static for (n, _) in fields T => e` 只取字段名，`static for (_, F) in fields T => e` 只取字段类型（`_` 不是名字，块里写 `_` 仍然未定义）。
 - `fields` 后面也是类型位置：紧跟的 `(` 一律读作类型的开头，所以空元组直接写 `fields ()`，不需要先 `type EmptyTuple = ()`；函数类型要再包一层括号，写成 `fields ((x: int) => int)`。
 - 字段按声明顺序展开，每个字段的块有独立的块作用域。空结构体或空元组展开零次，块一次也不建。
 - `static for` 作为语句时块的值总是被丢弃，整个构造的值是 `void`；需要值的位置写 comprehension 形式（见下）。
-- `t.[n]` 取结构体的字段或元组的元素，`n` 必须是编译期常量：字符串或整数字面量、外层 `static for` 的 `n`/`j`，或一个编译期能算出常量的表达式（如 `( static for (n, F) in fields S => n ).[0]`）。只有选中的那个字段建进图里（一个 `ACCS`），运行时不选择字段，所以运行期的值不能当键（`SemanticDiag::StaticAccessNotConstant`）。
+- `t.[n]` 取结构体的字段或元组的元素，`n` 必须是编译期常量：字符串或整数字面量、外层 `static for` 的 `n`/`j`、绑定了常量的 `let` 名字（`let first = …; t.[first]`；`var` 不算，它可以在访问前改掉），或一个编译期能算出常量的表达式（如 `( static for (n, F) in fields S => n ).[0]`）。只有选中的那个字段建进图里（一个 `ACCS`），运行时不选择字段，所以运行期的值不能当键（`SemanticDiag::StaticAccessNotConstant`）。
 - 结构体没有这个字段报 `SemanticDiag::StaticAccessUnknownField`；元组的下标越界（或键不是下标）报 `SemanticDiag::StaticAccessIndexOutOfRange`；目标不是结构体或普通元组报 `SemanticDiag::StaticAccessNotInternal`。`t.["0"]` 与 `t.[0]` 对元组是同一个元素。
 - 字段的值被丢弃时（`t.[n];` 单独成句），只检查字段，不建 `ACCS`；目标表达式仍然求值，以保留它的副作用。
 
