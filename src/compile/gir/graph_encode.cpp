@@ -465,6 +465,7 @@ class EncodeSession {
                 .permissions  = header->permissions,
                 .attrs        = header->attrs,
                 .region       = header->region,
+                .name         = header->name,
             };
             std::vector<std::byte> payloadStorage;
 

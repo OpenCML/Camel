@@ -1,0 +1,15 @@
+id = "trans.cml"
+order = 340
+tier = "fast"
+tags = ["feat", "trans", "dump", "cml", "roundtrip"]
+
+[[tests]]
+name = "print_and_recompile"
+desc = "std::cml prints straight-line runtime programs as Camel source. The printed source compiles to a canonical graph isomorphic to the original (test/tools/cml_roundtrip.py, version 2), printing is deterministic, `let` names survive, a construct outside S1 is refused with CmlUnsupportedConstruct without partial output, and a constant over max_literal_bytes is refused with CmlBigConstant naming the size and the limit."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/cml_contract.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["cml round trip: PASS"]
+timeout_ms = 180000

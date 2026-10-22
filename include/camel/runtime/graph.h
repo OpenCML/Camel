@@ -514,6 +514,13 @@ class GCGraph : public camel::core::rtdata::Object {
     const std::string &name() const;
     /// Source origin (camel::source::origin_id_t) of node `ref`, 0 when unknown.
     uint64_t nodeOrigin(gc_node_ref_t ref) const;
+    /// The source name of the value at node `ref` (`let x`, `var x`), empty when it has none
+    /// (camel::core::kEmptySym). Cold debug data: it is not a column of the graph.
+    std::string_view nodeName(gc_node_ref_t ref) const;
+    /// The symbol of the source name of node `ref` (kEmptySym when it has none).
+    camel::core::SymId nodeNameSym(gc_node_ref_t ref) const;
+    /// True when some node of the graph has a source name.
+    bool hasNodeNames() const;
     /// Numeric permissions (camel/core/operator_semantics.h, PermissionMask) the program granted
     /// to node `ref`, 0 when none; the graph has no permission column when no node has any.
     camel::core::sem::PermissionMask nodePermissions(gc_node_ref_t ref) const;

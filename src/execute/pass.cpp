@@ -52,6 +52,7 @@
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/arm_loop_regions.h"
 #include "camel/passes/test/loop_inputs.h"
+#include "camel/passes/trans/cml/cml.h"
 #include "camel/passes/trans/json/gir.h"
 #include "macro/macro.h"
 #include "pass_spec.h"
@@ -759,6 +760,7 @@ PassScopePtr initPassScope() {
                      def(PASS1(
                          GraphVizDumpPass, (GraphVizDumpConfig{.rich = true, .regions = true})))},
                     {"jgir", def(jgirDescriptor())},
+                    {"cml", def(cmlDescriptor())},
                     {"agir",
                      def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.annotateRoles = true}))},
                     {"argir",

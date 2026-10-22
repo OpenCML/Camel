@@ -503,11 +503,12 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
         removeUserRef(oldInput, id, false, false, true);
     }
 
-    // A rewritten node keeps its source origin, its numeric permissions and its attributes
-    // unless the rewrite gives it others.
+    // A rewritten node keeps its source origin, its numeric permissions, its attributes and
+    // its source name unless the rewrite gives it others.
     const uint64_t origin     = draftNode->header.origin;
     const camel::core::sem::PermissionMask permissions = draftNode->header.permissions;
     const uint32_t attrs      = draftNode->header.attrs;
+    const uint32_t name       = draftNode->header.name;
     const GCNodeKind oldKind  = draftNode->header.kind;
     replaceNodeStorage(id, rebuildNode(id, init));
     if (init.kind != oldKind) {
@@ -521,6 +522,9 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     }
     if (init.attrs == 0) {
         node(id)->header.attrs = attrs;
+    }
+    if (init.name == 0) {
+        node(id)->header.name = name;
     }
     if (init.region != 0) {
         node(id)->header.region = init.region;

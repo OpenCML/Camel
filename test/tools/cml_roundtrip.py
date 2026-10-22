@@ -398,10 +398,27 @@ def equivalent(left, right, max_steps):
         return lout[u] == rout[v] and lin[u] == rin[v]
 
     def verify():
+        # `assigned` maps left vertices to right ones; the edges of a right vertex point at
+        # right vertices, so they are read back through the inverse map.
+        inverse = {v: u for u, v in assigned.items()}
         for u, v in assigned.items():
-            if Counter(left.out[u]) != Counter((label, assigned[o]) for label, o in right.out[v]):
+            left_out = Counter(left.out[u])
+            right_out = Counter()
+            for label, o in right.out[v]:
+                image = inverse.get(o)
+                if image is None:
+                    return False
+                right_out[(label, image)] += 1
+            if left_out != right_out:
                 return False
-            if Counter(left.inn[u]) != Counter((label, assigned[o]) for label, o in right.inn[v]):
+            left_in = Counter(left.inn[u])
+            right_in = Counter()
+            for label, o in right.inn[v]:
+                image = inverse.get(o)
+                if image is None:
+                    return False
+                right_in[(label, image)] += 1
+            if left_in != right_in:
                 return False
         return True
 

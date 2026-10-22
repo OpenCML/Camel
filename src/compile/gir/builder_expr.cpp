@@ -345,6 +345,17 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(ident);
         throw BuildAbortException();
     }
+    // The source name of the value, for the readers of the graph (`std::cml` prints it, the
+    // debugger and diagnostics show it). A name the compiler made (a literal's element, a
+    // capture) is not source, and a node that already has a name keeps it (`let y = x` binds
+    // two names to one value; the first name wins).
+    if (!ident.empty() && !std::isdigit(static_cast<unsigned char>(ident.front())) &&
+        ident.front() != '$') {
+        runtime::GraphDraft &draft = currGraph_->draft();
+        if (draft.nodeName(bound.id) == camel::core::kEmptySym) {
+            draft.setNodeName(bound.id, camel::core::internSymbol(ident));
+        }
+    }
     if (currGraph_ == rootGraph_ && !ident.empty() &&
         !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
         // A value of the top level of the module: what the functions that use it capture.

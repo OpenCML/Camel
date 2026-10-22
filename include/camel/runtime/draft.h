@@ -102,6 +102,12 @@ struct DraftNodeHeader {
     // kept by rewrites like the permissions above; the encoder writes it to the frozen graph's
     // attribute column (GCGraph::nodeAttrs).
     uint32_t attrs = 0;
+    // The source name of the value the node holds (`let x`, `var x`; camel::core::SymId), 0 when
+    // the value has none. This is debug metadata, not graph content: it stays out of the frozen
+    // graph's columns and out of the canonical document, and the encoder keeps it in the graph's
+    // cold debug record (GCGraph::nodeName). A rewrite keeps it like the origin unless the init
+    // gives the node another name.
+    uint32_t name = 0;
     // Source origin (camel::source::origin_id_t) of the node, 0 when unknown. Rewrites keep it:
     // a node that replaces another inherits its origin, inlined nodes keep the callee's.
     uint64_t origin = 0;
@@ -130,6 +136,7 @@ struct DraftNodeInit {
     camel::core::sem::PermissionMask permissions = 0; // see DraftNodeHeader::permissions
     uint32_t attrs                    = 0; // see DraftNodeHeader::attrs
     uint32_t region                   = 0; // see DraftNodeHeader::region; 0 on a rewrite: kept
+    uint32_t name                     = 0; // see DraftNodeHeader::name; 0 on a rewrite: kept
     std::span<const std::byte> payload{};
     std::span<const gc_node_ref_t> normInputs{};
     std::span<const gc_node_ref_t> withInputs{};
@@ -578,6 +585,10 @@ class GraphDraft {
     /// Attributes of node `id` (camel/core/node_attrs.h; see DraftNodeHeader::attrs).
     uint32_t nodeAttrs(gc_node_ref_t id) const;
     void setNodeAttrs(gc_node_ref_t id, uint32_t attrs);
+    /// The source name of the value at node `id` (camel::core::SymId), camel::core::kEmptySym
+    /// when it has none. Cold metadata: it never enters a frozen graph's columns (GCGraph::nodeName).
+    uint32_t nodeName(gc_node_ref_t id) const;
+    void setNodeName(gc_node_ref_t id, uint32_t name);
     void rewriteNode(gc_node_ref_t id, const DraftNodeInit &init);
     void appendNormPort(gc_node_ref_t id);
     void appendWithPort(gc_node_ref_t id);

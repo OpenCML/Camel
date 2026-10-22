@@ -45,6 +45,10 @@ struct GCGraphDebugRecord {
     std::string name;
     // The names the graph captures, in the order it captured them (GCGraph::captureNames).
     std::vector<camel::core::SymId> captureNames;
+    // The source name of each node's value (`let x`, `var x`), indexed by node reference;
+    // empty when no node has one (GCGraph::nodeName). Cold debug data like the names above:
+    // it is not a column of the graph and not part of the canonical document.
+    std::vector<camel::core::SymId> nodeNames;
 };
 
 struct GCGraphPayloadShape {

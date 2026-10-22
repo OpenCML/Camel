@@ -1504,6 +1504,26 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::CmlUnsupportedConstruct,
+            {
+                "CmlUnsupportedConstruct",
+                "std::cml cannot print {0}: {1}.",
+                "This version prints straight-line code only: arithmetic, comparisons, "
+                "conversions, direct calls, `let` and `var` (handover H240, step S1). Control "
+                "flow, regions, tags, named types and generic instances come in later steps.",
+            },
+        },
+        {
+            SemanticDiag::CmlBigConstant,
+            {
+                "CmlBigConstant",
+                "std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over "
+                "max_literal_bytes ({4}).",
+                "Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a "
+                "module the printed program imports.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationIncomplete,
             {
                 "NativeDeclarationIncomplete",
