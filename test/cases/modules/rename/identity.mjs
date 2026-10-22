@@ -8,9 +8,14 @@
 //
 // A `verify_script_path` is a stand-alone Node program: it reads the test's JSON payload from
 // its first argument and exits non-zero when an assertion fails.
+//
+// The jgir document names each node's source file by absolute path. Where the checkout sits is
+// not part of the graph, so that path is replaced with a marker before hashing; a digest that
+// still contains it is only valid in the checkout that recorded it (H143).
 
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import path from 'node:path'
 
 const input = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
 const assert = (condition, message) => {
@@ -18,22 +23,25 @@ const assert = (condition, message) => {
 }
 
 const CASES = {
-    // test name -> the old spelling, the spelling now, and the digest of the graph with the
-    // module name normalized away.
+    // test name -> the old spelling, the spelling now, the case's file name, and the digest of
+    // the graph with the module name and the checkout path normalized away.
     env: {
         old: 'sys',
         now: 'env',
-        expected: 'e25ec979452a20c9cc3eaaa82733755c84c855ae93edf92908e5999050807eab',
+        file: 'env_identity.cml',
+        expected: '8c4c5bb6a665c76cffd390b58ea9cb16cc9457d1062f2ed855c6239157ade91a',
     },
     process: {
         old: 'os',
         now: 'process',
-        expected: '01e668a034a724c249cdbf147322958c7a425cd8dbb38a73583d50e436b0d758',
+        file: 'process_identity.cml',
+        expected: '8c8b9948ab1c22852eb6e4e4a84b71bdef4435303fa8b7134cf3894a96d21c43',
     },
     hash: {
         old: 'crypto',
         now: 'hash',
-        expected: '29ae6c2ed66a698bcaeeb3113261c57b556b58cdaafa9b2968f05ce615c453a2',
+        file: 'hash_identity.cml',
+        expected: '60047e7fdacbf33f83930d498911ca166d01ba47444335de78f955952a9b0ba5',
     },
 }
 
@@ -52,14 +60,43 @@ try {
 }
 
 const marker = 'MODULE'
+const caseMarker = 'CASE'
+const caseFile = kase.file
+
+// The runner passes the resolved case path as `case_path` (docs/test-plans.md); it is the exact
+// string `std::jgir` writes into every node's `source.file`. The file name is enough to find the
+// path in a payload that lacks the key, because an absolute path that ends with this file name
+// has only the checkout as its prefix.
+const casePath =
+    typeof input.case_path === 'string' && path.isAbsolute(input.case_path) ? input.case_path : null
+const casePathMarker = `${caseMarker}/${caseFile}`
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+// An absolute root (POSIX or Windows) followed by this case's file name, with any character that
+// can sit before it in a document string. The prefix is the checkout and is replaced; the file
+// name is kept, so a node that moved to another source file still changes the digest.
+const checkoutPrefix = new RegExp(
+    `(^|[^A-Za-z0-9._\\\\/-])(?:[A-Za-z]:[\\\\/]|/)[^"']*?[\\\\/]${escapeRegExp(caseFile)}`,
+    'g',
+)
+
+const normalizeSourcePath = (text) => {
+    const exact = casePath ? text.split(casePath).join(casePathMarker) : text
+    return exact.replace(checkoutPrefix, (_match, before) => `${before}${casePathMarker}`)
+}
+
 const rewrite = (value) => {
     if (typeof value === 'string') {
-        // The source path is where the sample sits in this checkout; it says nothing about the
-        // graph, so it is replaced with a marker too (the same digest on any machine).
-        return value
-            .split(input.case_path)
-            .join('CASE')
-            .replace(new RegExp(`\\b${kase.now}:`, 'g'), `${marker}:`)
+        const normalized = normalizeSourcePath(value)
+        // The digest must not depend on where the checkout sits. A path that survived
+        // normalization means the payload had no usable `case_path` and the fallback did not
+        // recognize the source path: fail loudly instead of hashing an absolute path (H143).
+        if (path.isAbsolute(normalized)) {
+            throw new Error(
+                `the payload has no usable case_path and ${JSON.stringify(normalized)} does not ` +
+                    `end with ${caseFile}; refusing to hash a checkout-dependent digest`,
+            )
+        }
+        return normalized.replace(new RegExp(`\\b${kase.now}:`, 'g'), `${marker}:`)
     }
     if (Array.isArray(value)) return value.map(rewrite)
     if (value && typeof value === 'object') {
