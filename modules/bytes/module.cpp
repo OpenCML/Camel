@@ -19,9 +19,7 @@
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tagged.h"
-#include "camel/core/type/bytes.h"
 #include "camel/core/type/composite/array.h"
-#include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
 #include <cstring>
 #include <limits>
