@@ -4298,29 +4298,6 @@ Drops the transaction.
 - With effects: changes the transaction.
 - Example: `abort(t)`
 
-<<<<<<< HEAD
-#### `open_function`
-
-```camel
-open_function: (f: F) => Txn
-```
-
-Opens a transaction on a function value's graph and the graphs it reaches.
-
-- With effects: opens a transaction.
-- Example: `open_function(f)`
-
-#### `to_function`
-
-```camel
-to_function: (t: Txn, sample: F) => F!
-```
-
-Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
-
-- With effects: changes the transaction.
-- Example: `to_function(t, f)`
-
 <a id="rewrite"></a>
 
 ## `rewrite`: rules applied to a program
@@ -4427,8 +4404,6 @@ How many constants the rule `r` adds to the program.
 - Pure.
 - Example: `rule_consts(r)` gives `0`
 
-=======
->>>>>>> handover/H180-computed-notation
 <a id="tiles"></a>
 
 ## `tiles`: programs on a CUDA device
