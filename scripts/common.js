@@ -214,6 +214,45 @@ export function findBuiltLibcamel(config) {
 }
 
 /**
+ * CMake 在 configure 时写出的模块清单（H138）：每个配置一份，每行一个本次会构建的 `.cmo`
+ * 绝对路径。见顶层 `CMakeLists.txt` 末尾的 `file(GENERATE)`。
+ * @param {'Release'|'Debug'|'RelWithDebInfo'} config
+ */
+export function moduleManifestPath(config) {
+    return path.join(BASEDIR, 'build', `camel-module-outputs-${config}.txt`)
+}
+
+/**
+ * 本次 configure 会构建的 `.cmo` 文件（绝对路径），按清单顺序返回其中已存在的那些。
+ *
+ * 清单是唯一权威：目录扫描会把“模块改名/删除后留在 build/ 里的旧 `.cmo`”一起收进安装，
+ * 于是旧名仍然可导入（H138）。旧构建树没有清单时这里报错而不是退回到扫描——退回等于把缺陷
+ * 原样保留。
+ *
+ * @param {'Release'|'Debug'|'RelWithDebInfo'} config
+ * @returns {string[]}
+ */
+export function moduleCmoFiles(config) {
+    const manifest = moduleManifestPath(config)
+    if (!fs.existsSync(manifest)) {
+        throw new Error(
+            `module manifest not found: ${path.relative(BASEDIR, manifest)}; ` +
+                'configure and build this tree first (the manifest is written at configure time)'
+        )
+    }
+    const files = []
+    for (const line of fs.readFileSync(manifest, 'utf-8').split(/\r?\n/)) {
+        const file = line.trim()
+        // A configuration that was never built has its manifest but no files yet; only the
+        // modules that were actually linked are installed.
+        if (file && fs.existsSync(file)) {
+            files.push(file)
+        }
+    }
+    return files
+}
+
+/**
  * collect-out 主写入 `out/latest/`；若有 tag 则另镜像 `out/<tag>/`。与 pypi-rollup 读取路径须一致。
  * @param {string} tag - 通常为 "latest"（collect-out 主输出）或 CAMEL_PYPI_TAG 指定的镜像目录名
  */
@@ -314,13 +353,44 @@ export function runCmakeBuild(config, cmakeOptionFlags) {
 }
 
 /**
- * 将构建产物复制到项目根目录与 stdlib：camel 可执行文件、libcamel、以及 libs/* 下的所有 .cmo 到 stdlib/。
+ * 删掉本次 configure 不构建的模块产物：`build/{libs,modules}/<目录>/<config>/*.cmo` 里不在清单上
+ * 的那些。CMake 不会删除已被改名或移除的 target 留下的文件，而那个文件正是旧实现“扫描 build/
+ * 并复制到 stdlib/”时把旧模块名带回来的来源（H138）。只动当前配置的输出目录；`build/` 其余部分
+ * 是 CMake 的缓存，不属于这里管。
+ *
+ * @param {'Release'|'Debug'|'RelWithDebInfo'} config
+ * @param {string[]} moduleFiles - `moduleCmoFiles(config)` 的结果
+ */
+function removeStaleModuleArtifacts(config, moduleFiles) {
+    const built = new Set(moduleFiles.map((file) => path.resolve(file)))
+    const baseDirs = [path.join(BASEDIR, 'build', 'libs'), path.join(BASEDIR, 'build', 'modules')]
+    for (const baseDir of baseDirs) {
+        if (!fs.existsSync(baseDir)) continue
+        for (const ent of fs.readdirSync(baseDir, { withFileTypes: true })) {
+            if (!ent.isDirectory()) continue
+            const configDir = path.join(baseDir, ent.name, config)
+            if (!fs.existsSync(configDir)) continue
+            for (const f of fs.readdirSync(configDir)) {
+                if (!f.endsWith('.cmo')) continue
+                const file = path.resolve(configDir, f)
+                if (built.has(file)) continue
+                fs.rmSync(file)
+                logWarn(
+                    `Removed stale build artifact ${path.relative(BASEDIR, file)}: ` +
+                        'no module of that name is built'
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 将构建产物复制到项目根目录与 stdlib：camel 可执行文件、libcamel、以及本次构建的 `.cmo` 到
+ * stdlib/；不在本次构建里的 `.cmo` 从 stdlib/ 与 build/ 删除（H138）。
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
  */
 export function copyBuildArtifacts(config) {
     const exeSrcDir = path.join(BASEDIR, 'build', 'tools', 'camel-cli', config)
-    const libsBuildDir = path.join(BASEDIR, 'build', 'libs')
-    const modulesBuildDir = path.join(BASEDIR, 'build', 'modules')
     const stdlibDir = path.join(BASEDIR, 'stdlib')
 
     const libSrc = findBuiltLibcamel(config)
@@ -340,24 +410,24 @@ export function copyBuildArtifacts(config) {
         logWarn(`Built ${libName} not found under build/ for ${config}`)
     }
 
-    const cmoDirs = [libsBuildDir, modulesBuildDir]
-    for (const baseDir of cmoDirs) {
-        if (!fs.existsSync(baseDir)) continue
-        if (!fs.existsSync(stdlibDir)) {
-            fs.mkdirSync(stdlibDir, { recursive: true })
-        }
-        const subdirs = fs.readdirSync(baseDir, { withFileTypes: true })
-        for (const ent of subdirs) {
-            if (!ent.isDirectory()) continue
-            const configDir = path.join(baseDir, ent.name, config)
-            if (!fs.existsSync(configDir)) continue
-            const files = fs.readdirSync(configDir)
-            for (const f of files) {
-                if (f.endsWith('.cmo')) {
-                    copyFile(path.join(configDir, f), path.join(stdlibDir, f))
-                }
-            }
-        }
+    if (!fs.existsSync(stdlibDir)) {
+        fs.mkdirSync(stdlibDir, { recursive: true })
     }
+    const moduleFiles = moduleCmoFiles(config)
+    const installed = new Set()
+    for (const src of moduleFiles) {
+        const name = path.basename(src)
+        copyFile(src, path.join(stdlibDir, name))
+        installed.add(name)
+    }
+    // 一个 `.cmo` 不能比它的模块活得久：collect-out 会把 stdlib/ 原样复制到 out/<tag>/stdlib，
+    // 而模块查找会在这个目录里命中它；旧名因此会“碰巧还能导入”（H114 曾手工删掉这些文件，
+    // H138 把删除放进构建）。
+    for (const f of fs.readdirSync(stdlibDir)) {
+        if (!f.endsWith('.cmo') || installed.has(f)) continue
+        fs.rmSync(path.join(stdlibDir, f))
+        logWarn(`Removed stale stdlib/${f}: no module of that name is built`)
+    }
+    removeStaleModuleArtifacts(config, moduleFiles)
     logDone(`Copied all build artifacts`)
 }
