@@ -1,0 +1,146 @@
+# H46 报告
+
+分支：`handover/H46-cpp-site`，最后提交：本文件所在的提交。
+
+## 做了什么
+
+- **`std::cpp` 的递归上限 site 不再写占位符**：每个调用点都会预渲染一个
+  `MaxRecursionDepthExceeded` 的 `rt::Site`，旧代码把上限当作“运行时才知道的实参”，用
+  `SiteTable::valueMark(0)` 的占位符（字节 0x1F 加 `'0'`）写进去；`cppStringLiteral` 把这个字节写成
+  C++ 转义 `\037`，于是生成的源码里出现 `Maximum recursion depth (\0370) exceeded ...`。现在转译时
+  已知的上限直接写成 `1000`；`Site` 多一个 `filled` 字段记住这段文字，`rt::call` 真的超限时
+  `fault()` 用它把报告里的数字换成**生效的**上限，所以 `CAMEL_MAX_RECURSION_DEPTH` 仍然有效。
+- **新增回归用例**：`test/cases/trans/cpp/exec/site_message.cml`（普通调用 + 递归超限，先打印
+  `3` 再按默认上限 1000 故障），加进 `test/tools/cppexec/expect.txt`，由
+  `feat.trans.cpp.agree_with_fvm` 用系统 C++ 编译器编译生成物并和 `std::fvm` 比对。
+- **新增源码断言**：`test/plans/feat/trans/cpp.plan.toml` 的 `recursion_site_message` 直接检查
+  `camel ... std::cpp` 的输出含 `Maximum recursion depth (1000) exceeded when evaluating graph
+  'depth'.`，且不再含 `Maximum recursion depth (\037` / `\0370) exceeded`。旧代码在同一个用例上生成
+  `\0370`（证据见下），所以这条断言修复前失败、修复后通过。
+- **文档**：`docs/design/cpp-standalone/README.cn.md` 的 7.1 改成实际做法（整份报告在转译时渲染；
+  运行时才知道的值留占位符；转译时已知的上限写成该值并由 `Site::filled` 在故障时替换），7.4 补上
+  环境改上限时报告数字仍跟着改。
+
+## 证据：修复前
+
+用 develop `cc0a6deb` 的 `camel.exe`（`out/latest/bin`，2026-10-21 15:15）跑本任务的新用例：
+
+```text
+$ camel.exe test/cases/trans/cpp/exec/site_message.cml std::cpp
+...
+"Maximum recursion depth (\0370) exceeded when evaluating graph 'main'."
+"Maximum recursion depth (\0370) exceeded when evaluating graph 'depth'."
+```
+
+生成文件 `D:\Temp\H46\site_message-before.cpp` 第 24、25、27 行（`main` 里的 `add` 调用）、第 31、32、
+34 行（`main` 里的 `depth` 调用）、第 38、39、41 行（`depth` 的递归调用）都是 `\0370`。字节层面
+`\0370` 是五个 ASCII 字符 `5C 30 33 37 30`，不是文件里真的有一个 0x1F；它是 C++ 的八进制转义
+`\037`（0x1F）后跟字面量 `'0'`，即“第 0 个运行时实参”的占位符，C++ 编译合法，所以此前没有被编译器
+拦下。
+
+`func add` 的简单程序也有：`D:\Temp\H46\add2.cpp` 第 18、19、21 行是
+`Maximum recursion depth (\0370) exceeded when evaluating graph 'main'.`。
+
+## 根因
+
+`src/passes/trans/cpp/function_emitter.cpp` 的 `callDepth` 与 `lowerHigherOrder` 为每个调用点建
+`MaxRecursionDepthExceeded` 的 site，实参是 `{graph->name(), SiteTable::valueMark(0)}`。上限在转译时
+其实已经知道（`camel::execute::recursionLimit(*context_).frames`，默认 1000，写进生成程序的
+`run(<limit>, ...)`），但这里仍按“运行时才知道”处理。`makeSite` 用
+`DiagnosticBuilder` 把消息渲染成
+`Maximum recursion depth (<占位符>) exceeded ...`，`definitions()` 再经 `cppStringLiteral` 输出；0x1F
+被转义成 `\037`，后面的 `'0'` 原样留下，于是源码里是 `\0370`。
+
+运行时本身没有坏：`rt::call(depth, site)` 只在真的超限时调用 `fault(site, {std::to_string(limit)})`，
+`withValues` 把 0x1F + `'0'` 换成实参，所以生成的程序**跑起来**打印的报告一直是对的（H45 的“用户看到
+的报错文本是错的”只在“用户读生成的 C++ 源码”这个层面成立）。修复不能只把 `valueMark(0)` 删掉，否则
+环境用 `CAMEL_MAX_RECURSION_DEPTH` 改上限时，报告会永远写着转译时的 1000。
+
+## 改动
+
+- `src/passes/trans/cpp/function_emitter.h`：`ProgramParts` 加 `size_t recursionLimit`（默认 1000）。
+- `src/passes/trans/cpp/program_emitter.cpp`：`emit()` 开头把它设为
+  `camel::execute::recursionLimit(*context_).frames`；后面生成 `run(<limit>, ...)` 复用这个值，只读一次。
+- `src/passes/trans/cpp/function_emitter.cpp`：两处递归 site 的第二个实参从
+  `SiteTable::valueMark(0)` 改成 `std::to_string(program_.recursionLimit)`，并把同一段文字作为
+  `siteFor` 的新 `filled` 参数传入。
+- `src/passes/trans/cpp/fault_sites.{h,cpp}`：`Site` 表项加 `filled`；`siteFor`/`makeSite` 接受它；
+  `definitions()` 在 `rt::Site` 初始化列表末尾输出 `"1000"` 或 `nullptr`。`placeFor`/`unlocated`
+  显式给空串，避免 `-Wmissing-designated-field-initializers`。
+- `include/camel/standalone/core.h`：`Site` 加 `const char *filled`；`fault()` 在把报告里的标记
+  替换掉之后，若 `filled` 非空且有实参，就把 `site.message` 里 `filled` 的第一次出现换成生效值，
+  再用“旧消息 → 新消息”整体替换 `text` 和 `brief` 里的那一份。整体替换而不是在整份报告里找第一个
+  `1000`，是为了不让源文件路径或图名里恰好出现的 `1000` 被误换。
+- 文档与测试如上。
+
+## 决策
+
+1. **只修递归上限这一类 site，不改所有 site 的占位符。** 越界下标、数组长度、入口参数名等是真正的
+   运行时值，转译时不可能知道；把它们写成可打印的假值会让报告在运行时说谎。H46 的问题是“上限其实
+   已知却仍用占位符”，所以只改这一处。
+2. **保留 `CAMEL_MAX_RECURSION_DEPTH` 的语义**，没有把上限“焊死”在生成物里。`filled` 是现有“标记 +
+   运行时填值”机制的延伸：标记用于完全未知的值，`filled` 用于“转译时知道一个默认值、运行时可能
+   覆盖”的值；没有另造一套报告模板或渲染器。
+3. **不把占位符本身改成可打印字符**（如 `{0}`）。那会让源码“看起来”没有控制字节，但会给源码摘录
+   里本来就可能出现的 `{0}` 制造替换冲突，而且仍不是运行时真正会打印的文字；`filled` 让源码里直接
+   是 `1000`。
+4. **测试分两层**：`cppexec` 的那条保证生成物实际编译、运行、和 `std::fvm` 逐字节一致；
+   `recursion_site_message` 只检查生成源码的可读性，是这次缺陷的直接回归。两者都保留。
+
+## 测试
+
+- `camel-test.ps1 -Path D:\Projects\Camel-wt\h5c-cpp -Plan
+  test\plans\feat\trans\cpp.plan.toml -Jobs 8`：
+  `[SUMMARY] total: 10, pass: 10, fail: 0`，wall 29.1 s。逐项：
+  - `recursion_site_message` PASS 33.13 ms（本次新增的源码断言）；
+  - `agree_with_fvm` PASS 28.99 s，`run.py` 的记录是 `programs: 118`、
+    `118 100.0% same`（其中 115 个 standalone）、`PASS: 117 of 117 programs agree with
+    std::fvm`（118 次运行里有 1 次是同一条程序的第二组入口参数，期望集合按“程序 + 参数”去重后
+    是 117）；
+  - 其余 8 项 PASS：`exec_mod_scalar` 60.57 ms、`complex_numbers` 45.96 ms、
+    `named_struct_types` 66.61 ms、`main_io` 60.00 ms、`refuse_tensor` 53.21 ms、
+    `refuse_tensor_json` 28.05 ms、`enum_types` 44.29 ms、`recursive_enum_types` 32.49 ms。
+- 单用例手动跑 `run.py test/cases/trans/cpp/exec/site_message.cml --jobs 1`：
+  `1 100.0% same`，standalone 1，C++ compile median 1.44 s。
+- 手动检查环境上限：生成物默认输出
+  `Maximum recursion depth (1000) exceeded when evaluating graph 'depth'.`；把
+  `CAMEL_MAX_RECURSION_DEPTH` 设为 3，生成物与 `std::fvm` 都输出 `(3)`，两份报告逐行只差路径
+  分隔符（生成物 `test/cases/...`，fvm `test\cases\...`），退出码都是 1。
+- 修复前：`add2.cpp` 第 18、19、21 行是
+  `Maximum recursion depth (\0370) exceeded when evaluating graph 'main'.`；用旧 `camel.exe`
+  对新用例生成时，`main` 的两个调用点和 `depth` 的递归点也都是 `\0370`，所以
+  `recursion_site_message` 的 `(1000)` 断言在旧代码上必失败。
+
+## 自检
+
+- **语义有没有变**：运行时报告不变。默认上限下 `(1000)` 替换成 `(1000)` 是恒等；环境改成 3 时
+  报告从 `(1000)` 变成 `(3)`，与修复前 `withValues` 用实际值的行为一致。尾调用、`attempt`、入口参数
+  等路径没有改。
+- **有没有“另一套类似机制”**：`filled` 是 `Site` 现有“预渲染 + 运行时填值”的字段扩展，不是新的
+  渲染器或新的报告格式；`withValues` 仍在，只有“编译时已知”的值走 `filled`。
+- **有没有只修一个后端**：这是 `std::cpp` 的生成器与它自带的头文件，只影响 `std::cpp`；解释器路径
+  没有改，`agree_with_fvm` 会同时跑 `std::fvm` 与生成物。
+- **有没有为了让测试通过而改**：没有改既有期望；新期望按修复前的实际输出与修复后的实际输出各跑过。
+- **兼容层/过渡方案**：没有开关、别名或旧行为。旧版 `camel` 生成的 5 字段 `rt::Site` 用新头文件
+  编译时，末尾 `filled` 会按聚合初始化缺省为 `nullptr`，不会坏。
+
+## 待决问题
+
+### Q1：`Site::filled` 是否该推广成通用的“编译时已知值”机制
+
+现在只有递归上限用。若以后有别的“转译时知道默认值、运行时可能覆盖”的实参（例如某个可配置的
+资源上限），可以复用 `filled`；若出现多个这样的值，`const char *filled` 需要改成列表。当前按小项
+处理，没有提前抽象。
+
+## 没做完的
+
+- **没有跑全套测试**：按工作站规则只跑相关计划，且构建/测试共用一把锁；结果见“测试”。
+- **`docs/design/cpp-standalone/README.cn.md` 第 2 节的 `rt::Site` 示例仍是旧布局**
+  （`site_1{"文件", 4, 36, "__g_6__", "摘录"}`）。它在本次之前就与实现不一致（实现早已是
+  text/brief/kind/message/location 五字段），不是 H46 引入的；这次只改了 7.1/7.4，没有重写整段示例。
+- **入口参数的 site 仍带占位符**：`main` 有参数时，`EntryArgumentInvalid`/`EntryArgumentMissing`
+  的参数名与原因确实是运行时值，仍用 0x1F 标记；一个没有参数的 `main` 也会生成这两个 site，所以
+  在生成源码里仍能搜到 `\0370`。它们与 H46 的递归消息无关，但“生成源码里完全看不到 `\037`”这个
+  更强的目标没有做。
+- **没有把 `filled` 写进 `docs/technical/`**：该机制只在 `docs/design/cpp-standalone/README.cn.md`
+  与实际代码注释里说明；如果协调者认为需要一份技术文档，另开小项。
