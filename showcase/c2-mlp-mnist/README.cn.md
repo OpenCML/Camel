@@ -147,7 +147,7 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
 `handover note ⟨9981995⟩ (H13)` 的“待决问题”。
 
 1. **下标与切片语法尚未实现。** 设计原则 5.4 与 H21 描述了 `t[i]`、`t[a:b]`、`t[idx]`；
-   语言参考（`06_expressions.md`）仍写着切片写法保留、报 `NoMatchingFunction`。于是最自然
+   语言参考（`docs/language/06_expressions.md`）仍写着切片写法保留、报 `NoMatchingFunction`。于是最自然
    的 `train_x[order[offset : offset + batch]]` 只能写成
    `take(train_x, slice(order, 0, offset, offset + batch))`。能跑，但读者要把设计里当作
    下标的东西翻译回函数调用。
