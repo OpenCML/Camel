@@ -1,5 +1,7 @@
 # FuncNode 运行时表示收敛（已落地）
 
+> **历史（已被取代）。** 本页记录的编译期 `Graph` / `FuncNode` 与 `src/compile/gir/nodes.cpp` 已删除。当前 compile/runtime 分层见 [21](21_gcgraph_runtime_bridge.md)，运行期生命周期见 [23](23_gc_runtime_lifetime.md)。保留本页作为记录。
+
 ## 1. 背景
 
 第三节核心收敛已经完成，GIR 侧不再依赖编译期 `FunctionData` / registry：

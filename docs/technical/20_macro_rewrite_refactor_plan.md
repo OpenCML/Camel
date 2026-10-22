@@ -1,5 +1,7 @@
 # `std::macro` Rewrite Refactor Plan
 
+> **Status (2026-10-22): historical plan.** `std::macro` now rewrites through `GraphDraft` and `RuntimeGraphDraftSession` (`src/execute/macro/rewrite.cpp`), not the workspace API this page proposed; the semantics are design principles section 8. Kept as the design record.
+
 > **先读 [`../design-principles.cn.md`](../design-principles.cn.md)。** 它是语言作者对 Camel 根本定位与执行模型的规范性说明：与实现或其他文档冲突时以它为准；它没有覆盖或标为“未定”的问题，向语言作者提问，不要自行选择。
 >
 > 本文是 `std::macro` 的重构计划。语义以设计原则第 8 节为准：`std::macro` 是可选的遍，不定义阶段；macro 函数体的副作用按普通函数处理。
