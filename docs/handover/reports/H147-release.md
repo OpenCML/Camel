@@ -291,7 +291,7 @@ pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
 
 **仓库现在有自己的门禁**：`npm run release-gate`（`scripts/release-gate.mjs`，契约与跳过清单见 `H162.md`）。它按顺序跑快层（`smoke` + `feat/**` + 以前没有任何闸门目标的 `gpu/profile`）、slow 层（H154 §3 的 11 个计划文件，逐个点名，**不用** §3.5 的 `-Plan test/plans -Tier all`）、八项静态检查；任何阶段失败即非零退出；不构建，并用构建戳拒绝与本树来源不符的安装。`agents/test.md` 禁止在共享主机上跑的 19 个计划文件 / 200 条，它按名字打印为“未跑”。
 
-**数字**（`8439c65a7` = `origin/develop` `87a5a1455` + 门禁脚本 + 一条基准期望修正；主机负载 9–29）：
+**数字**（`8439c65a7` = `origin/develop` `87a5a1455` + 门禁脚本 + 一条基准期望修正；四次门禁运行的 1 分钟负载在 9–57，H147 当时是 150–210）：
 
 | 层 | 总数 | 通过 | 失败 | 跳过 |
 |---|---|---|---|---|
