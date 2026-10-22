@@ -106,6 +106,7 @@ const expect = {
   ':op/assn_add_l': 'rmw variable norm 0 whole',
   ':op/assn_owned': 'write variable norm 0 whole; result may_alias 1',
   ':io/println': 'write ambient stdout; external',
+  ':io/eprintln': 'write ambient stderr; external',
   ':io/input': 'rmw ambient stdin; external',
   'fs:read_text': 'read ambient fs; external',
   'fs:write_text': 'rmw ambient fs; external',
@@ -123,7 +124,7 @@ for (const [uri, text] of Object.entries(expect)) {
 
 [[tests]]
 name = "resource_names"
-desc = "The resource set of the standard library is pinned (H134): `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:generator`, `tensor:threads`, `tiles:driver`, `tiles:device`, `para:rendezvous`, `process`); raw mode keeps `io:terminal` because folding it into `stdin` would be a change of the resource set, not a spelling."
+desc = "The resource set of the standard library is pinned (H134): `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:generator`, `tensor:threads`, `tiles:driver`, `tiles:device`, `para:rendezvous`, `process`); raw mode writes `stdin`, the one resource the terminal mode was merged into (the author's ruling on H134 question 1)."
 kind = "behavior"
 case = "../../../cases/resources/names.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -143,7 +144,7 @@ for (const op of ops) {
   for (const m of text.matchAll(/(?:ambient|foreign) ([^\s;]+)/g)) names.add(m[1])
 }
 const expected = [
-  'clock', 'env', 'fs', 'io:terminal', 'para:rendezvous', 'process', 'rng', 'stderr',
+  'clock', 'env', 'fs', 'para:rendezvous', 'process', 'rng', 'stderr',
   'stdin', 'stdout', 'tensor:generator', 'tensor:threads', 'tiles:device', 'tiles:driver',
 ]
 const got = [...names].sort()
@@ -155,10 +156,11 @@ for (const old of ['io:stdout', 'io:stdin', 'io:stderr', 'time:clock', 'process:
 const expect = {
   ':io/print': 'write ambient stdout; external',
   ':io/println': 'write ambient stdout; external',
+  ':io/eprintln': 'write ambient stderr; external',
   ':io/input': 'rmw ambient stdin; external',
   'io:has_input': 'read ambient stdin; external',
   'io:get_char': 'rmw ambient stdin; external',
-  'io:set_terminal_raw_mode': 'write ambient io:terminal; external',
+  'io:set_terminal_raw_mode': 'write ambient stdin; external',
   'fs:read_text': 'read ambient fs; external',
   'fs:write_text': 'rmw ambient fs; external',
   'rand:seed': 'write ambient rng; external',
@@ -181,3 +183,14 @@ for (const [uri, text] of Object.entries(expect)) {
 }
 }
 """
+
+[[tests]]
+name = "inspect_resources_is_not_an_option"
+desc = "There is no `inspect --resources` flag (the author's ruling on H134 question 3): the command line is refused before anything runs, and the unknown option is named. The resources are read per operator from `inspect --ops` instead."
+kind = "negative"
+case = "../../../cases/resources/names.cml"
+args = ["inspect", "--resources", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["unknown option", "'--resources'"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 10000

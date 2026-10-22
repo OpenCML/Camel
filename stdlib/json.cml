@@ -26,7 +26,7 @@ module json
 /// its error is passed on unchanged); read a part whose shape is known with decode_as. Prints as
 /// its JSON text. In the examples below, `j` is a Json decoded so.
 /// @pure
-/// @fails error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 by default, set by `CAMEL_JSON_MAX_DEPTH`; the message gives the line and column of the bracket that goes too deep)
+/// @fails error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 levels; the message gives the line and column of the bracket that goes too deep)
 /// @example decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1    // 80
 export func decode(text: string): Json!
 

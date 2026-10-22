@@ -20,7 +20,7 @@ value: the file system, the console, a module's random generator. An operator's
 
 | Part | Values |
 |---|---|
-| resource | `Variable`, `Object`, `Foreign` (with a name: `tiles:device`), `Ambient` (with a name: `fs`, `stdout`, `rng`, `tensor:generator`, `io:terminal`); `Unknown` only in the conservative reading |
+| resource | `Variable`, `Object`, `Foreign` (with a name: `tiles:device`), `Ambient` (with a name: `fs`, `stdout`, `stderr`, `stdin`, `rng`, `tensor:generator`); `Unknown` only in the conservative reading |
 | binding | the ordinary or with operand that names it; none for an ambient resource (`Capture` appears in graph footprints only) |
 | region | `Whole`; `Mapped` (the elements an access or the write map of the node's index instance reaches); `Unknown` (read as whole) |
 | mode | `Read`, `Write`, `ReadModifyWrite` |
@@ -57,9 +57,10 @@ result may be any of them, and it has an external effect when its traits say so.
 | `:struct/append_arr_in_place`, `:op/set_index_in_place` | read-modify-write of operand 0; the result is that object |
 | `algo:*_in_place` | read-modify-write of an object (operand 0); the result is that object |
 | `:io/print`, `:io/println`, `tensor:show` | write `stdout`, external |
+| `:io/eprintln` | write `stderr`, external |
 | `:io/input`, `io:get_char(s)`, `io:clear_input_buffer` | read-modify-write `stdin`, external |
 | `io:has_input` | read `stdin`, external |
-| `io:set_terminal_raw_mode` | write `io:terminal`, external; its own resource, not folded into `stdin` (a set change, H134) |
+| `io:set_terminal_raw_mode` | write `stdin`, external; the one resource of the terminal, so raw mode and a read order each other (H134 question 1) |
 | `fs:*`, `nn:save_params`, `tensor:load_npy`, `tensor:save_npy`, `ckpt:save_tree` | read or read-modify-write `fs`, external |
 | `ckpt:load_tree` | read `fs` and write `stderr`, external |
 | `rand:*` | write or read-modify-write `rng`, external |

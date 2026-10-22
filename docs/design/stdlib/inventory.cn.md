@@ -109,7 +109,7 @@
 ### 2.5 效应、资源、纯度声明
 
 - 纯度：仓库内模块有测试强制逐个声明（`warnUndeclaredOperatorTraits` 对第三方给警告；test/plans/feat/modules/stdlib_registry.plan.toml）。但 `tree` 为过测试把永不成节点的名字声明为有副作用（评审 frontend #10）；`math` 无数值声明（评审 modules #15）。
-- 资源：C++ 侧已有 `declareResources`（fs、process、env、time、random、para、algo、nn::save_params、tree、tiles 都有），内建 print/println/input 在 builtin_semantics.cpp 声明。H134 之后资源名是 `stdout`、`stdin`、`stderr`、`clock`、`env`、`fs`、`process`、`rng`、`tensor:generator`、`tensor:threads`、`tiles:driver`、`tiles:device`、`para:rendezvous`，与原则 3.3 一致；`io:terminal` 是 raw mode 自己的资源（并入 `stdin` 是资源集变化，留给作者）。`stderr` 还没有对应的输出函数。
+- 资源：C++ 侧已有 `declareResources`（fs、process、env、time、random、para、algo、nn::save_params、tree、tiles 都有），内建 print/println/eprintln/input 在 builtin_semantics.cpp 声明。H134 之后资源名是 `stdout`、`stdin`、`stderr`、`clock`、`env`、`fs`、`process`、`rng`、`tensor:generator`、`tensor:threads`、`tiles:driver`、`tiles:device`、`para:rendezvous`，与原则 3.3 一致；raw mode 写的是 `stdin`（作者裁定把终端模式并入读输入的同一个资源，两者必须互相有序），`eprintln` 写 `stderr`。
 - 签名文件里的 `@effect` 是自由文本（"reads a file"、"advances the generator"、"what f does"），不是资源名；`.cml` 签名头注明"for reference only: not compiled"。算子的类型规则、纯度、资源、故障在 C++ 注册、OperatorTable 声明、signatures/*.cml 三处各写一遍（评审 frontend #10）。
 - 语言层面 `uses`/`pure`/`resource` 的语法：docs/language 里没有出现（只有 design-principles 与 blueprint 描述），推断尚未实现；所以库作者现在无法用 Camel 声明资源。
 - `random` 全部 @effect（全局生成器）；原则 13.5 的键式纯随机数尚未实现。
@@ -148,7 +148,7 @@
 | 日志 | 无 | 长时间训练与智能体 |
 | 哈希与摘要扩展 | 只有 sha256；无 md5/sha1/blake3/hmac、随机字节、编码（base64/hex） | 检查点清单哈希、数据版本（训练稿 8.2） |
 | 序列化格式 | 只有 json、.npy、tree 检查点；无 safetensors/msgpack/yaml/toml | 模型权重交换（PyTorch/HF 生态） |
-| stderr 输出与错误打印 | 无 `eprintln`；资源名 stderr 已在原则中，库里没有 | 原则 3.9 要求未处理错误打印到标准错误 |
+| stderr 输出与错误打印 | `eprintln` 已进前奏（作者裁定，H134）；未处理错误仍不自动打印 | 原则 3.9 要求未处理错误打印到标准错误 |
 | 路径与目录操作 | fs 无 list_dir/remove/rename/copy/path join/临时文件 | 数据集分片、检查点轮转（训练稿 8.2/8.4） |
 | 数值函数 | math 无 cbrt/exp2/asinh 等反双曲、isfinite、整数除余/floor_div、gamma/erf（tensor 里有 erf） | 科学计算、示例 ode/hmc |
 | 线性代数以外的数值库 | 无 FFT、稀疏、量化（arrays-memory 稿说"标准库先给样板"）、复数函数 | D8 图神经网络、I3 推荐、复数类型已进语言 |

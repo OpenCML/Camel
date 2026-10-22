@@ -197,6 +197,15 @@ export func print(x: T, ...rest: U...): T
 #op<':io/println'>
 export func println(x: T, ...rest: U...): T
 
+/// Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
+/// the first one (so that the write can be part of the data flow). The other arguments may each
+/// have a type of their own. With a format, eprintln<fmt>(...), writes the format with the
+/// arguments put in and one line end.
+/// @effect writes to standard error
+/// @example eprintln('a', 1)    // a 1
+#op<':io/eprintln'>
+export func eprintln(x: T, ...rest: U...): T
+
 /// Writes prompt and reads one line from standard input.
 /// @effect reads standard input
 /// @example input('name: ')    // what the user typed

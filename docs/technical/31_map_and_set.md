@@ -485,7 +485,7 @@ let xs = json::decode_as(text, [0])                                    // int[]!
 A call cannot be handed a type (whether type arguments may be written at a call is undecided,
 principles section 15), so the type is that of a **shape** argument whose value is not read.
 The result is a `T!`: text that is not JSON is an error value of kind `JsonParseError`, a
-document nested deeper than the limit (10000 by default, `CAMEL_JSON_MAX_DEPTH`) one of kind
+document nested deeper than the fixed limit (10000 levels) one of kind
 `JsonTooDeep` whose message names the limit and the position of the bracket that goes too deep,
 and JSON that does not have the shape of `T` one of kind `JsonTypeError` whose message names the
 path (`at $.b: expected an integer, found a string`). None of them is a fault.
