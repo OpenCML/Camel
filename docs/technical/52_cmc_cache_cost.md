@@ -72,7 +72,9 @@ p10 / p90。数字来自这些命令；驱动只做算术，不做任何插桩�
 全导入程序编译了 **28 个模块**：入口、26 个声明模块（`stdlib/<m>.cml` 里只有不带体的
 `export func`）和一个有函数体的 `array`。`ckpt` 是第 27 个原生模块，没有声明文件，只出现在
 `cmo_load` 里。表中 `Σ` 是 `parse + gct + declare + GIR`，也就是 `.cmc` 命中时能省掉的
-前端工作；`cmo_load` 单列，因为 `.cmc` 不能省它。
+前端工作；`cmo_load` 单列，因为 `.cmc` 不能省它。（下表是 H216 基点上的测量。H221 之后
+`pyplot` 的 `cmo_load` 不再是 9.88 ms：CPython 初始化已移到第一次 `plot`，见
+[50](50_pyplot_cpython_init.md)；本页关于 `.cmc` 能省什么的结论不受影响。）
 
 | 模块 | parse | gct | declare | GIR | Σ | cmo_load |
 |---|---:|---:|---:|---:|---:|---:|

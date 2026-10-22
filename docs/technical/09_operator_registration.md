@@ -242,7 +242,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 | **纯度默认保守** | 未在算子表中声明的算子视为有副作用、可能出故障；只有确实不读写外部状态的算子才能登记为 `pure`。 |
 | **工厂只注册一次** | 同一 protocol 重复调用 `registerExecutorFactory` 会触发断言；`load()` 应以 `loaded_` 判重。 |
 | **Executor 加载时机** | Executor 按需懒加载，首次查找该 protocol 的算子时才实例化。并行调度器可能从多个工作线程同时查找，`ExecutorManager` 内部已加锁。 |
-| **`load()` 的职责** | `load()` 中应完成 Executor 工厂注册、性质登记和所需初始化（如 Python 解释器）。 |
+| **`load()` 的职责** | `load()` 中只做让声明能成立的事：Executor 工厂注册、性质登记、类型导出。`import` 不执行代码（设计原则 3.1），所以进程级资源（如 CPython 解释器）不在这里获取，而在第一次真正使用它的算子里（`modules/python/embed.h`；见 [50](50_pyplot_cpython_init.md)）。 |
 
 ## 7. 纯度声明的规则与检查
 
