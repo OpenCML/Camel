@@ -1,0 +1,143 @@
+# H155 — 文档片段门禁：编译、运行、对输出
+
+分支：`handover/H155-doc-snippets`（起点 `origin/develop` `37079f9f5`）。检查器、计划与文档修正的提交是 `c584e751b`；本文件所在的提交记录本报告与看板。
+
+任务：给面向读者的文档加一道门禁。每个 `cml`/`camel` 片段至少要通过**解析 + GCT + GIR**（`camel <file> std::gir`）；片段声明了命令与期望输出时，还要**真的运行并比对输出**。故意不完整的片段（节选、`...` 省略、错误示例）必须带**显式标记与理由**，不能静默跳过；反例还要在页面上看得见。发现文档过期时**改文档，不改检查器**，也不放宽期望。
+
+## 1 结论
+
+- 新增 `scripts/check-doc-snippets.mjs`，接入 `test/plans/feat/docs_links.plan.toml` 的 `docs.snippets_compile`，与 `docs.retired_names_absent` 并列。
+- 干净树：**142 篇**面向读者的文档，**211 个**片段通过编译；其中 **123 个**运行并比对了文本块；**42 个**带标记的不完整片段（`fragment` / `counter-example`）不编译；**102 个**设计/技术页的节选按页策略跳过；**3 个**生成/日期化参考页在允许名单里；`docs/handover/` 与 `docs/reviews/` 是记录，不扫描。
+- 成本：检查器 **2.0 s**（8 个并行 worker）；计划里的 `docs.snippets_compile` 用例 **1.98 s**，整个 `feat/docs_links` **2.0 s**。每个片段一个进程：片段可以各自声明模块与入口，多文件示例还要在临时目录里写多个文件，共用一个进程会混模块表与静态缓存。
+- 修正 **20 篇**文档：10 个顶层语句片段（5 个片段 × 中英两份）包进 `func main`，6 个输出块（3 个片段 × 两份）按当前格式化器改，其余是标记与可见标签。没有删除片段，没有削弱期望。
+- 红证：把 `len(xs)` 改成 `len(xs, 1)` 后，检查器在 `docs/language/en/03_data_model.md:90` 报 `NoMatchingFunction`；计划 `docs.snippets_compile` 红，`total: 3, pass: 2, fail: 1`。撤销后 3/3 绿。
+
+## 2 约定
+
+### 2.1 哪些片段被检查
+
+扫描根 `README.md` 与 `docs/**/*.md`。以下不扫描，理由写在脚本的允许名单里：
+
+- `docs/handover/`、`docs/reviews/`：任务报告与日期化审查是**记录**，不是面向读者的页面；
+- `docs/stdlib-reference.md`、`docs/diagnostics.md`：生成的参考页（签名行、故意失败的诊断示例）；
+- `docs/design-principles-log.cn.md`：日期化的设计原则旧文与裁定记录。
+
+`docs/design/**` 与 `docs/technical/**` 的**非入口**片段按“节选”处理：这些页在讲设计或测量，片段常是上下文的一部分。策略只有一条，理由在脚本的 `EXCERPTS` 里；**带 `func main` 的完整程序仍然检查**，所以提案里能编译成完整程序的片段不会被放过。节选数在汇总行里报出（当前 102 个），不会静默消失。
+
+### 2.2 片段怎么组成一个程序
+
+- 相邻的 `cml`/`camel` 围栏，如果每个围栏第一行是 `// name.cml`，算同一个多文件程序（标准库模块、入口模块各一个文件）。
+- 有 `func main` 的围栏是入口；没有入口的围栏按模块编译，检查器在末尾补一个 `func main(): int sync { return 0 }`，所以“只有声明”的片段也会经过 GCT/GIR。
+- 紧接着的 `bash`/`sh` 围栏是运行命令；命令之后的 `text` 围栏是期望输出。片段内部第一行 `// camel ...` 也可以给出命令（如 `--arg name=Camel`），这时直接用它。
+- 没有命令时，运行 `camel <入口文件>`（默认后端）；编译检查始终是 `camel <入口文件> std::gir`，即解析、GCT、GIR 都走到。
+
+### 2.3 怎么比对
+
+- 先编译；编译失败就报 `file:line: does not compile: <第一条诊断>`。
+- 有 `text` 块时运行：比较 **stdout**、**退出码**（期望错误是 1，否则 0）和**诊断名**。警告在 stderr，仍按文本块里写的 `warning[...]` 断言。
+- 路径归一化：`.../snippet.cml:4:15` 与页面上的 `fault.cml:4:15` 都变成 `<file>:4:15`，所以临时目录不影响比较；源码摘录行逐字比较。
+- 错误块带 `-->` 位置时比较整段（含帮助行）；页面故意截断、只留诊断名时，只比较诊断之前的 stdout 并断言诊断名。
+
+### 2.4 标记
+
+标记是紧挨围栏的 HTML 注释（页面上不可见），格式：
+
+```text
+<!-- camel-snippet: fragment: <理由> -->
+<!-- camel-snippet: counter-example: <理由> -->
+<!-- camel-snippet: compile-only: <理由> -->
+<!-- camel-snippet: graph-dump: <理由> -->
+```
+
+- `fragment`：不完整的节选，不编译（例如只展示签名、省略号、上下文里的变量）。
+- `counter-example`：**故意错误**的片段，不编译；同时在围栏前 8 行内要有可见标签（`反例`、`错误`、`wrong`、`counter-example` 等）。日期化缺陷记录里的四条都加了 `反例（本条记录的行为）：`。
+- `compile-only`：片段本身能编译，但后面的文本块是**另一个文件**的输出（教程 6.2 的 `greet` 只改了函数体，输出属于 `examples/06_sync_block.cml`）。
+- `graph-dump`：只编译、不运行（当前没有使用）。
+
+没有标记、又不在节选策略/允许名单里的片段，就是被检查的片段；检查器不会按语言或按“看起来像伪代码”静默跳过。
+
+## 3 改过的文档
+
+**顶层语句（10 个片段，中英各 5 个）**：Camel 顶层只能有声明，入口是 `func main`（语言参考 8.1）。以下片段的 `let`/`println` 原本写在顶层，现包进 `func main(): int sync { ... return 0 }`，输出不变：
+
+- `docs/language/02_lexical.md`、`en/02_lexical.md`：格式化字符串；
+- `docs/language/03_data_model.md`、`en/03_data_model.md`：数组、元组、结构体三个；
+- `docs/language/06_expressions.md`、`en/06_expressions.md`：格式化字符串。
+
+**输出过期（6 个片段，中英各 3 个）**：`println` 现在按值的静态类型打印，`5` 是 `5.0`：
+
+- `05_modules.md`、`en/05_modules.md`：导出示例的 `5`/`10` → `5.0`/`10.0`；
+- `tutorial.cn.md`、`tutorial.en.md`：`sqrt(2.0)` → `1.4142135623730951`，`hypot`/`area` → `5.0`/`10.0`；第 16 节梯度 → `20.0`、`12.0`、`(20.0, 12.0)`。
+
+**标记（42 个不完整片段）**：
+
+- 设计原则中英各 3 个：`risky` 片段、循环形式、`Pair`/`swap` 签名示意；
+- `docs/design/any-typing/README.cn.md` 2 个（`any` 是提案）；
+- `docs/design/cpp-memory/README.cn.md` 1 个（生成代码的输入被省略）；
+- `docs/design/module-root/README.cn.md` 4 个（顶层 `noisy` 节选、两个文件并排比较、`read_config` 假设、`export var` 开放问题）；
+- `docs/design/training/README.cn.md` 1 个（`Device`/`@gpu` 提案）；
+- `docs/technical/37_generational_gc_report.md` 1 个（日期化报告明确说这段已不能编译）；
+- `docs/issues/2026-10-12-language-surface-findings.md` 4 个（`i32` 越界、`int('4x')`、`===`、联合类型形参），都加了可见的“反例”标签；
+- 语言参考：`03` 的 `Shape` 续例 2 个；`05` 的 import/`using namespace` 形式 2×2 个；`06` 的 5 种形式 5×2 个；`07` 的 `save` 省略体 2 个、标签形式 3 个；
+- 教程 2 个：6.2 的 `greet` 只编译（输出属于示例文件）。
+
+**计划**：`test/plans/feat/docs_links.plan.toml` 增加 `docs.snippets_compile`，并在文件头注释里写明约定与成本。
+
+## 4 成本与红证
+
+### 4.1 成本
+
+```text
+no stale snippet in 142 reader-facing document(s): 211 snippet(s), 211 compiled,
+123 ran their text block, 0 graph dump(s) compiled only, 42 marked incomplete,
+102 excerpt(s) on design/technical pages (3 generated/dated reference(s) allowlisted;
+2 record directories not scanned; 2.0 s)
+```
+
+在 Linux 主机（`88zjwei`）上，`-Jobs 8`，Release 构建：
+
+```text
+[PASS] docs.links.reader_facing                             275.81 ms
+[PASS] docs.retired_names_absent                            295.34 ms
+[PASS] docs.snippets_compile                                   1.98 s
+[SUMMARY] total: 3, pass: 3, fail: 0
+```
+
+最终提交上的暖跑（同一构建，页面已在系统缓存里）：
+
+```text
+[PASS] docs.snippets_compile                                 975.13 ms
+[SUMMARY] total: 3, pass: 3, fail: 0
+```
+
+所以冷跑约 2 s、暖跑约 1 s，都在“几秒”的目标内。
+
+**为什么不是批处理**：每个片段可以有自己的 `module`、入口和多文件目录；运行还要独立的临时目录，避免多文件示例互相覆盖。把这些放进一个进程需要编译器内部的会话/模块隔离 API，收益也只有几秒；每个片段一个进程、8 个并行，已经满足“几秒”的目标。片段超时 15 s，失败时不会拖住整个计划。
+
+### 4.2 红证
+
+把 `docs/language/en/03_data_model.md` 数组示例里的 `len(xs)` 改成 `len(xs, 1)`（错误元数），同步到主机后：
+
+```text
+docs/language/en/03_data_model.md:90: does not compile:
+error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (int[], int).
+1 stale snippet problem(s) in 142 reader-facing document(s) (211 snippet(s) checked, 1.0 s)
+```
+
+计划红（`camel-remote.ps1 ... -Jobs 8`，完整构建）：
+
+```text
+[FAIL] docs.snippets_compile                                   1.04 s
+[INFO] expected exit 0, got 1
+[SUMMARY] total: 3, pass: 2, fail: 1
+```
+
+撤销后同一计划 3/3 绿（§4.1）。红证期间没有改编译器、没有改期望，只改了文档里的一个实参。
+
+## 5 自检
+
+- `node scripts/check-doc-links.mjs --all`：385 篇，0 断链。
+- `feat/docs_links`：3/3，2.0 s。
+- 没有改 `src/`、`include/`、`modules/`、`stdlib/`；没有新诊断；没有改 AST 快照。
+- 提交前删除了本地的 `tmp-*.mjs`/`tmp-*.txt` 扫描脚本；仓库里只留 `scripts/check-doc-snippets.mjs`。
+- 提交：`c584e751b`（检查器、计划、20 篇文档）；本报告与看板行在下一个提交。
