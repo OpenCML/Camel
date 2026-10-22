@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-227 diagnostics: 208 errors, 19 warnings.
+228 diagnostics: 209 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -189,6 +189,7 @@ prints one entry.
 | `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
 | `0x030001A5` | [SemanticDiag::CmlUnsupportedConstruct](#cmlunsupportedconstruct) | Error |
 | `0x030001A6` | [SemanticDiag::CmlBigConstant](#cmlbigconstant) | Error |
+| `0x030001A7` | [SemanticDiag::TensorElementTypeNotStored](#tensorelementtypenotstored) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5051,6 +5052,42 @@ Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a m
 ```
 
 *No example: no test small enough to show raises it.*
+
+### TensorElementTypeNotStored
+
+`0x030001A7` · Error · `SemanticDiag::TensorElementTypeNotStored`
+
+**Message**
+
+```text
+'{0}' is not stored as written: a tensor of '{0}' holds '{1}' here, so this declaration would silently run with '{1}'. Tensors that keep the element type they are written with are not implemented yet.
+```
+
+**Help**
+
+```text
+Write '{1}' and convert the values explicitly where they enter the tensor; element-type-exact tensor storage (design/arrays-memory, P4) removes this restriction. 'zeros' and 'ones' already build f32 tensors.
+```
+
+**Example** (`test/cases/modules/tensor/dtype/f64_refused.cml`, run as `camel test/cases/modules/tensor/dtype/f64_refused.cml`)
+
+```camel
+// `Tensor<f64>` asks for f64 elements. This build stores every tensor as f32, int64 or bool, so
+// the declaration is refused at the type expression (SemanticDiag::TensorElementTypeNotStored)
+// instead of the program silently running in f32.
+//
+// Before the diagnostic this program compiled: the cast target was normalized to `Tensor<f32>`,
+// and `sum` answered 10.0 from f32 storage.
+module tensor_dtype_f64_refused
+
+import { Tensor, new, sum } from tensor
+
+func main(): int sync {
+    let x = new([[1.0, 2.0], [3.0, 4.0]]) as Tensor<f64>
+    println(sum(x))
+    return 0
+}
+```
 
 ### VarParamInAsyncFunction
 
