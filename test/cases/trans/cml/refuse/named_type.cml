@@ -1,0 +1,12 @@
+// A named record type: printing the declaration and its name is S4 (declarations), so the
+// printer refuses the graph instead of writing an anonymous record that would not recompile to
+// the same type.
+type Point = { x: int }
+
+func get(p: Point): int {
+    return p.x
+}
+
+func main(): int {
+    return get({ x: 1 })
+}
