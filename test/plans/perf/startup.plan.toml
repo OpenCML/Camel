@@ -46,7 +46,7 @@ tool = "node"
 case = "../../tools/startup-cost.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=291"]
+expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=301"]
 # Four commands, 21 timed runs each after three warm-ups, are a few seconds on a quiet host and
 # well under half a minute under load. 120 s catches a hang, not a slow run.
 timeout_ms = 120000
