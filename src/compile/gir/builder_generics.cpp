@@ -143,7 +143,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         }
         const std::string name = child->name();
         Type *type             = child->at(0)->dataType();
-        if (!name.empty() && !isGenericHere(type)) {
+        if (!name.empty() && !isGenericHere(type, child)) {
             plainNames.insert(name);
         }
     }
@@ -160,7 +160,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             continue;
         }
         Type *type = child->at(0)->dataType();
-        if (name.empty() || !isGenericHere(type)) {
+        if (name.empty() || !isGenericHere(type, child)) {
             continue;
         }
         // One name is either a generic function or a set of ordinary ones: which of two
@@ -183,6 +183,9 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->name           = isOperator ? displayNameOf(name) : name;
         tmpl->func           = child;
         tmpl->funcType       = tt::as_ptr<FunctionType>(boundType(type));
+        if (const auto *head = GCT::Tree::of(child)->headTypeParamsOf(child)) {
+            tmpl->headParams = *head;
+        }
         tmpl->outerBindings  = typeBindings_;
         tmpl->ownerGraph     = currGraph_;
         tmpl->module         = module_;
@@ -204,6 +207,18 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             templateScope_->insert(name, tmpl);
         }
     }
+}
+
+std::vector<std::string> Builder::typeParameterNames(const template_ptr_t &tmpl) const {
+    std::vector<std::string> names = tmpl->headParams;
+    std::vector<std::string> fromSignature;
+    collectTypeVars(tmpl->funcType, fromSignature);
+    for (const std::string &name : fromSignature) {
+        if (std::find(names.begin(), names.end(), name) == names.end()) {
+            names.push_back(name);
+        }
+    }
+    return names;
 }
 
 node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
@@ -316,6 +331,26 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
             return nullptr;
         }
     }
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        // A function value has no `with` arguments of its own, so a condition that reads one
+        // cannot be answered here; a false one makes this candidate inapplicable.
+        const WhenResult verdict =
+            evaluateWhenCondition(when->condition, signature, bindings, {}, tmpl);
+        if (verdict.fails()) {
+            why = std::format("its 'when' condition is false: when {}", when->text);
+            return nullptr;
+        }
+        if (verdict.outcome == WhenOutcome::NeedsWithValue) {
+            why = std::format(
+                "its 'when' condition reads the 'with' parameter '{}', and a function value "
+                "gives no 'with' arguments",
+                verdict.subject);
+            return nullptr;
+        }
+        if (!verdict.holds()) {
+            reportWhenProblem(verdict, tmpl->name, when->condition);
+        }
+    }
     compile_graph_ptr_t graph = instantiateGeneric(tmpl, bindings, {}, {}, origin);
     if (!graph->funcType()->hasExitType()) {
         diags_->of(SemanticDiag::CallingIncompleteFunction)
@@ -356,8 +391,7 @@ Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr
         throw BuildAbortException();
     }
     if (expected == nullptr) {
-        std::vector<std::string> names;
-        collectTypeVars(tmpl->funcType, names);
+        std::vector<std::string> names = typeParameterNames(tmpl);
         rejectGenericValue(
             tmpl,
             origin,
@@ -742,6 +776,34 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             }
         }
         value.type = wanted;
+    }
+    // The declaration's `when`, now that every type variable has a type: a false condition
+    // makes this candidate inapplicable (design principles 5.13), so the call is reported with
+    // the condition it could not meet rather than with a mismatch of types.
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        std::unordered_map<std::string, data_ptr_t> withValues;
+        for (size_t i = 0; i < withCount && i < withInputs.size(); ++i) {
+            data_ptr_t value = constantOfNode(withInputs[i].node);
+            if (value != nullptr) {
+                withValues.emplace(std::string(signature->argNameAt(i)), value);
+            }
+        }
+        const WhenResult verdict =
+            evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
+        if (verdict.fails()) {
+            std::vector<Type *> all(withTypes);
+            all.insert(all.end(), normTypes.begin(), normTypes.end());
+            diags_->of(SemanticDiag::WhenConditionUnmet)
+                .atOrigin(call->origin())
+                .commit(
+                    tmpl->name,
+                    strutil::join(all, ", ", [](Type *t) { return t->toString(); }),
+                    tmpl->name + " — when " + when->text);
+            throw BuildAbortException();
+        }
+        if (!verdict.holds()) {
+            reportWhenProblem(verdict, tmpl->name, when->condition);
+        }
     }
     return instantiateGeneric(tmpl, bindings, extents, constas, call);
 }
@@ -1314,9 +1376,44 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     return graph;
 }
 
+Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
+    if (type == nullptr) {
+        return nullptr;
+    }
+    if (type->code() == TypeCode::TypeOf) {
+        // `typeof e`: build e where the type is used and take the type of the value it makes.
+        // A build-time tuple is taken without a FILL, as `indices` and `...` take one.
+        const auto *placeholder = tt::as_ptr<TypeOfType>(type);
+        const auto *held       = static_cast<const GCT::Node *>(placeholder->expression());
+        ASSERT(held != nullptr, "typeof holds the expression it was made with.");
+        GCT::Node *expression = const_cast<GCT::Node *>(held);
+        Type *valueType       = nullptr;
+        const std::any result = visit(expression);
+        if (result.type() == typeid(StaticTuple)) {
+            valueType = any_cast<const StaticTuple &>(result).type;
+        } else if (node_handle_t value = valueNodeOf(result)) {
+            valueType = valueTypeOf(nodeTypeOf(value));
+        }
+        if (valueType == nullptr || valueType->code() == TypeCode::Void) {
+            diags_->of(SemanticDiag::TypeOfNotAValue)
+                .atOrigin(expression->origin())
+                .commit(sourceTextOf(expression), valueType == nullptr ? "no value" : "void");
+            throw BuildAbortException();
+        }
+        return boundType(valueType);
+    }
+    if (containsTypeOf(type)) {
+        diags_->of(SemanticDiag::TypeOfNotWholeType)
+            .atOrigin(at != nullptr ? at->origin() : 0)
+            .commit(type->toString());
+        throw BuildAbortException();
+    }
+    return boundType(type);
+}
+
 Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     ENTER("TYPE");
-    Type *type = boundType(gct->dataType());
+    Type *type = resolveTypeNode(gct->dataType(), gct);
     LEAVE("TYPE");
     return type;
 }

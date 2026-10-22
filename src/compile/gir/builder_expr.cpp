@@ -1142,8 +1142,16 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     genericCalleeAllowed_ = false;
     // As in visitLinkNode: a lambda written in place gives its graph.
     node_handle_t targetNode = valueNodeOf(targetNodeRes);
+    // Whether the value bound here is the callee of the call being built (`withArgsOfCall_`).
+    const bool inCall = std::exchange(withArgsOfCall_, false);
+    // A callee with a signature of its own: the only kind whose with-parameter types the call
+    // itself completes. `reduce<(a, b) => a + b, 0>`: the element type comes from the array,
+    // and the type of the result of the reduction from the position the call stands at, so the
+    // lambda and the literal take their types there. A name is not deferred: a generic function
+    // or a set of overloads bound as a with-argument stays a name until the callee resolves it.
     vector<Argument> inputs;
     FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
+    const bool parameterTypesFollowCall = inCall && argumentSignature != nullptr;
     // A call of a rest function is expanded at the call (inlineRestCall), so a with-argument
     // that names a generic function or a set of overloads stays a compile-time callable: every
     // call of it in the body picks the instance for that call's arguments (`tree_map<twice>`,
@@ -1177,6 +1185,27 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             expectedValueType_,
             wanted && !containsTypeVar(wanted) ? wanted : nullptr);
         if (!restCall) {
+            const GCT::NodeKind kind = gct->at(i)->type();
+            // A literal whose type the signature still leaves open takes its type from the
+            // position (`reduce<(a, b) => a + b, 0>`), and a lambda that writes no parameter
+            // type needs the completed signature for it; both are built at the call, after the
+            // ordinary arguments are typed. A lambda that writes every type is built here, as
+            // before: nothing about it waits for the call.
+            bool deferred = kind == GCT::NodeKind::DATA;
+            if (!deferred && kind == GCT::NodeKind::FUNC) {
+                const auto &lambda = gct->at(i);
+                const auto *unwritten =
+                    GCT::Tree::of(lambda)->unwrittenParamsOf(lambda);
+                deferred = unwritten == nullptr || !unwritten->empty();
+            }
+            if (parameterTypesFollowCall && deferred && wanted != nullptr &&
+                containsTypeVar(wanted)) {
+                // Built at the call, where the ordinary arguments are typed and the signature's
+                // variables have their types (visitLinkNode). A lambda's parameters come from
+                // the parameter it is passed to (design principles 5.9).
+                inputs.push_back({nullptr, gct->at(i)});
+                continue;
+            }
             inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i)});
             continue;
         }

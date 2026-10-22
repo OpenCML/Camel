@@ -1,0 +1,31 @@
+/**
+ * `concat` accepts a numeric array where it accepts a tensor. A float array is a continuous
+ * value with a tangent (design principles 9.9): its adjoint would be the elements of its slice
+ * of the output gradient, and no operator of the tensor module produces an array from a tensor
+ * gradient. An array part that depends on the differentiated parameter is therefore refused by
+ * name at the operator, not silently left out of the gradient. A constant array part still
+ * takes no gradient and is skipped.
+ *
+ * Red when the refusal is removed (the program runs and exits 0), when it stops naming the
+ * operator, or when it is no longer located at the concat call on line 20.
+ */
+module refuse_concat_array
+
+import { concat, reshape, sum } from tensor
+import { with_grad } from autodiff
+
+type Model = { w: float }
+
+with <m: Model>
+func loss(): float {
+    let a = [m.w * 2.0]
+    let b = reshape([1.0, 2.0], [2])
+    return sum(concat(a, b, 0))
+}
+
+func main(): int sync {
+    let model = { w: 2.0 }
+    let (v, g) = with_grad(loss)<model>()
+    println('{} {}'->format<v, g>)
+    return 0
+}

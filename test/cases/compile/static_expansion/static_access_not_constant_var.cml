@@ -1,0 +1,15 @@
+/**
+ * A `var` is not a constant even when it starts as a literal: it can be assigned another key
+ * before the access, so `t.[k]` stays a compile-time error (`SemanticDiag::StaticAccessNotConstant`).
+ */
+module static_access_not_constant_var
+
+func field(t: {a: int, b: int}): int {
+    var k = 'a'
+    k = 'b'
+    return t.[k]
+}
+
+func main(): int {
+    return field({a: 1, b: 2})
+}

@@ -1,0 +1,17 @@
+/**
+ * The with-arguments of a call take the types of its parameters once the ordinary arguments are
+ * typed (design principles 5.9): the lambda's parameters and a literal's type follow the
+ * operator's signature, not an annotation in the program. `reduce` binds its element type from
+ * the array and its accumulator type from the position the call stands in, so the same
+ * `(a, b) => a + b, 0` works for an int array (the `0` is the accumulator), and an
+ * accumulator that is a float is written `0.0`. The tuple parameter of `map` follows the element
+ * type of the array it maps over.
+ */
+module lambda_inference_with_arguments
+
+func main(): int sync {
+    println([1, 2, 3]->reduce<(a, b) => a + b, 0>)
+    println([1.5, 2.5]->reduce<(a, b) => a + b, 0.0>)
+    println([(1, 10), (2, 20)]->map<((a, b)) => a + b>)
+    return 0
+}

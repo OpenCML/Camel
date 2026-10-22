@@ -17,6 +17,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/tree.h"
 #include "camel/utils/scope.h"
 
@@ -32,7 +33,8 @@ using namespace camel::core::type;
 
 namespace {
 
-std::string typePatternText(uint16_t patterns) {
+std::string typePatternText(const GCT::node_ptr_t &caseNode) {
+    const uint16_t patterns = caseNode->typeCasePatterns();
     std::string text;
     const auto add = [&](GCT::TypeCaseKind kind, const char *name) {
         if ((patterns & GCT::typeCaseBit(kind)) == 0) {
@@ -45,8 +47,15 @@ std::string typePatternText(uint16_t patterns) {
     };
     add(GCT::TypeCaseKind::Struct, "struct");
     add(GCT::TypeCaseKind::Tuple, "tuple");
+    add(GCT::TypeCaseKind::Func, "func");
     add(GCT::TypeCaseKind::Leaf, "#leaf");
     add(GCT::TypeCaseKind::Wildcard, "_");
+    for (size_t i = 0; i < caseNode->typeCaseTypeCount(); ++i) {
+        if (!text.empty()) {
+            text += " | ";
+        }
+        text += caseNode->typeCaseTypeAt(i)->toString();
+    }
     return text.empty() ? std::string("(none)") : text;
 }
 
@@ -119,10 +128,12 @@ void Builder::walkStaticBodyNames(
     }
     case GCT::NodeKind::SFOR: {
         // `n` is bound in the body only. The type name `F` is not a value, so a use of it in
-        // a value position stays unresolved, as it should.
+        // a value position stays unresolved, as it should. `_` (the wildcard of `match`) binds
+        // nothing, so a use of it stays unresolved too.
         locals.emplace_back();
-        if (!node->staticForValueName().empty()) {
-            locals.back().insert(node->staticForValueName());
+        const std::string &valueName = node->staticForValueName();
+        if (!valueName.empty() && valueName != "_") {
+            locals.back().insert(valueName);
         }
         walkStaticBodyNames(node->staticForBody(), locals);
         locals.pop_back();
@@ -135,7 +146,10 @@ void Builder::walkStaticBodyNames(
             walkStaticBodyNames(node->staticLoopInitial(j), locals);
         }
         locals.emplace_back();
-        locals.back().insert(node->staticLoopValueName());
+        const std::string &valueName = node->staticLoopValueName();
+        if (valueName != "_") {
+            locals.back().insert(valueName);
+        }
         for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
             locals.back().insert(node->staticLoopStateName(j));
         }
@@ -151,9 +165,11 @@ void Builder::walkStaticBodyNames(
     }
 }
 
-bool Builder::typeCaseMatches(Type *subject, uint16_t patterns) const {
-    const bool isStruct = subject->code() == TypeCode::Struct;
-    const bool isTuple  = subject->code() == TypeCode::Tuple && tree::isInternal(subject);
+bool Builder::typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) const {
+    const uint16_t patterns = caseNode->typeCasePatterns();
+    const bool isStruct     = subject->code() == TypeCode::Struct;
+    const bool isTuple = subject->code() == TypeCode::Tuple && tree::isInternal(subject);
+    const bool isFunc  = subject->code() == TypeCode::Function;
     if ((patterns & typeCaseBit(GCT::TypeCaseKind::Wildcard)) != 0) {
         return true;
     }
@@ -163,15 +179,34 @@ bool Builder::typeCaseMatches(Type *subject, uint16_t patterns) const {
     if (isTuple && (patterns & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0) {
         return true;
     }
-    return (patterns & typeCaseBit(GCT::TypeCaseKind::Leaf)) != 0 && !isStruct && !isTuple;
+    if (isFunc && (patterns & typeCaseBit(GCT::TypeCaseKind::Func)) != 0) {
+        return true;
+    }
+    if ((patterns & typeCaseBit(GCT::TypeCaseKind::Leaf)) != 0 && !isStruct && !isTuple) {
+        return true;
+    }
+    // An identity pattern is exact: `case float` does not select `int`, `case f32` does not
+    // select `f64`, and a named struct is its declaration, not merely a struct of that shape.
+    // The pattern's type variables have the bindings of the instance being built, so `case T`
+    // selects exactly the type `T` was bound to. A pattern that is still open is reported by
+    // visitTypeMatchNode before any case is selected.
+    for (size_t i = 0; i < caseNode->typeCaseTypeCount(); ++i) {
+        Type *pattern = boundType(caseNode->typeCaseTypeAt(i));
+        if (pattern == nullptr || containsTypeVar(pattern)) {
+            continue;
+        }
+        if (typeEquals(subject, pattern)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
     ENTER("TMTCH");
     ASSERT(gct->size() >= 2, "A match type has a subject type and cases.");
-    Type *subject = boundType(gct->at(0)->dataType());
-    if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
-        containsTypeVar(subject)) {
+    Type *subject = resolveTypeNode(gct->at(0)->dataType(), gct->at(0));
+    if (subject == nullptr || subject->code() == TypeCode::TypeVar || containsTypeVar(subject)) {
         diags_->of(SemanticDiag::StaticTypeNotConcrete)
             .atOrigin(gct->origin())
             .commit(subject == nullptr ? std::string("unknown") : subject->toString());
@@ -199,15 +234,78 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
             if (catchesAll && i + 1 < caseCount) {
                 diags_->of(SemanticDiag::StaticMatchUnreachableCase)
                     .atOrigin(caseNode->origin())
-                    .commit(typePatternText(patterns));
+                    .commit(typePatternText(caseNode));
                 throw BuildAbortException();
+            }
+            // An identity pattern must name a type by the time the case is selected: a type
+            // variable of the pattern that the instance does not bind cannot match anything.
+            std::vector<Type *> earlier;
+            uint16_t earlierShapes = 0;
+            for (size_t j = 0; j < i; ++j) {
+                const auto &other = gct->at(j + 1);
+                for (size_t k = 0; k < other->typeCaseTypeCount(); ++k) {
+                    earlier.push_back(other->typeCaseTypeAt(k));
+                }
+                earlierShapes |= other->typeCasePatterns();
+                if ((other->typeCasePatterns() & typeCaseBit(GCT::TypeCaseKind::Wildcard)) != 0) {
+                    earlier.clear(); // every type is selected before this case
+                }
+            }
+            for (size_t k = 0; k < caseNode->typeCaseTypeCount(); ++k) {
+                Type *written = caseNode->typeCaseTypeAt(k);
+                Type *pattern = boundType(written);
+                if (pattern == nullptr) {
+                    continue;
+                }
+                if (containsTypeVar(pattern)) {
+                    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                        .atOrigin(caseNode->origin())
+                        .commit(
+                            pattern->toString(),
+                            "a type variable of the pattern is not bound here");
+                    throw BuildAbortException();
+                }
+                // A shape an earlier case selects covers whole families: `case struct` before
+                // `case Point` makes the latter dead, exactly as `case #leaf` before it does.
+                const bool isStruct = pattern->code() == TypeCode::Struct;
+                const bool isTuple =
+                    pattern->code() == TypeCode::Tuple && tree::isInternal(pattern);
+                const bool isFunc = pattern->code() == TypeCode::Function;
+                const bool coveredByShape =
+                    (isStruct &&
+                     (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Struct)) != 0) ||
+                    (isTuple && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0) ||
+                    (isFunc && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Func)) != 0);
+                if (coveredByShape) {
+                    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                        .atOrigin(caseNode->origin())
+                        .commit(
+                            pattern->toString(),
+                            "an earlier case selects every type of this shape");
+                    throw BuildAbortException();
+                }
+                for (Type *before : earlier) {
+                    Type *bound = boundType(before);
+                    if (bound == nullptr || containsTypeVar(bound)) {
+                        continue;
+                    }
+                    if (typeEquals(pattern, bound)) {
+                        // The type is selected by an earlier case, which is written before
+                        // this one: no subject can reach this pattern.
+                        diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                            .atOrigin(caseNode->origin())
+                            .commit(
+                                pattern->toString(), "an earlier case already selects this type");
+                        throw BuildAbortException();
+                    }
+                }
             }
         }
 
         GCT::node_ptr_t selected = nullptr;
         for (size_t i = 0; i < caseCount; ++i) {
             const auto &caseNode = gct->at(i + 1);
-            if (typeCaseMatches(subject, caseNode->typeCasePatterns())) {
+            if (typeCaseMatches(subject, caseNode)) {
                 selected = caseNode;
                 break;
             }
@@ -303,7 +401,7 @@ node_handle_t Builder::visitStaticForNode(
             throw BuildAbortException();
         }
     } else {
-        subject = boundType(gct->staticForOperand()->dataType());
+        subject = resolveTypeNode(gct->staticForOperand()->dataType(), gct->staticForOperand());
         if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
             containsTypeVar(subject)) {
             diags_->of(SemanticDiag::StaticTypeNotConcrete)
@@ -343,7 +441,11 @@ node_handle_t Builder::visitStaticForNode(
             registerNodeOrigin(context_, indexNode, body, "gir.static.index");
         }
         staticValueScopes_.emplace_back();
-        staticValueScopes_.back().push_back({valueName, entryName, indexNode});
+        if (valueName != "_") {
+            // `_` is a place that binds nothing (the wildcard of `match`): a use of it must not
+            // find a value. Every other name of the head becomes a compile-time value here.
+            staticValueScopes_.back().push_back({valueName, entryName, indexNode});
+        }
         enterBlockScope();
         const GCT::Node *outerUnused = std::exchange(unusedStatement_, body);
         const GCT::Node *outerSyncedBlock =
@@ -436,7 +538,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
     } else {
-        subject = boundType(gct->staticLoopOperand()->dataType());
+        subject = resolveTypeNode(gct->staticLoopOperand()->dataType(), gct->staticLoopOperand());
         if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
             containsTypeVar(subject)) {
             diags_->of(SemanticDiag::StaticTypeNotConcrete)
@@ -462,7 +564,9 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     // (n, F)` would read the state where it meant the field.
     {
         std::unordered_set<std::string> names;
-        names.insert(valueName);
+        if (valueName != "_") {
+            names.insert(valueName);
+        }
         for (size_t j = 0; j < k; ++j) {
             if (!names.insert(gct->staticLoopStateName(j)).second) {
                 diags_->of(SemanticDiag::LoopNameRepeated)
@@ -507,7 +611,9 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
             registerNodeOrigin(context_, indexNode, body, "gir.static.index");
         }
         staticValueScopes_.emplace_back();
-        staticValueScopes_.back().push_back({valueName, entryName, indexNode});
+        if (valueName != "_") {
+            staticValueScopes_.back().push_back({valueName, entryName, indexNode});
+        }
         enterBlockScope();
         for (size_t j = 0; j < k; ++j) {
             // The state names read the previous round's value; each round has its own block
@@ -620,10 +726,33 @@ std::any Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
     // The comprehension is its generator plus the pack: the rounds' values are the fields of a
     // struct (or the elements of a tuple) of the same shape. Nothing of it is left in the graph
     // but the straight-line code of the rounds and one FILL.
+    //
+    // `T { ... }` names the shape: the field names and the kind come from `T`, which must be the
+    // type the generator walks.
+    const bool sameShape = gct->comprehensionSameShape();
+    Type *declaredShape  = nullptr;
+    if (sameShape) {
+        const GCT::node_ptr_t shapeNode = gct->comprehensionShapeType();
+        declaredShape                   = resolveTypeNode(shapeNode->dataType(), shapeNode);
+        if (declaredShape == nullptr || declaredShape->code() == TypeCode::TypeVar ||
+            containsTypeVar(declaredShape)) {
+            diags_->of(SemanticDiag::StaticTypeNotConcrete)
+                .atOrigin(shapeNode->origin())
+                .commit(
+                    declaredShape == nullptr ? std::string("unknown") : declaredShape->toString());
+            throw BuildAbortException();
+        }
+        if (!tree::isInternal(declaredShape)) {
+            diags_->of(SemanticDiag::SameShapeComprehensionNotComposite)
+                .atOrigin(shapeNode->origin())
+                .commit(declaredShape->toString());
+            throw BuildAbortException();
+        }
+    }
     std::vector<node_handle_t> values;
     Type *shape = nullptr;
     const GCT::node_ptr_t generator = gct->comprehensionGenerator();
-    if (gct->comprehensionIsStruct() && generator->staticForIndices()) {
+    if (!sameShape && gct->comprehensionIsStruct() && generator->staticForIndices()) {
         // A struct comprehension names its fields from the walked type; positions have no
         // names, so there is nothing to name the fields.
         diags_->of(SemanticDiag::ConstructNotSupported)
@@ -635,7 +764,17 @@ std::any Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
         throw BuildAbortException();
     }
     (void)visitStaticForNode(generator, &values, &shape);
-    if (!gct->comprehensionIsStruct()) {
+    if (sameShape) {
+        if (shape == nullptr || shape != declaredShape) {
+            diags_->of(SemanticDiag::SameShapeComprehensionMismatch)
+                .atOrigin(generator->origin())
+                .commit(
+                    declaredShape->toString(),
+                    shape == nullptr ? std::string("an unknown type") : shape->toString());
+            throw BuildAbortException();
+        }
+    }
+    if (!sameShape && !gct->comprehensionIsStruct()) {
         // A tuple comprehension is a build-time tuple: its rounds are separate element nodes,
         // and the FILL is built only if the value is used at runtime (valueNodeOf).
         type_vec_t types;
@@ -651,8 +790,30 @@ std::any Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
         LEAVE("SCOMP");
         return tuple;
     }
-    node_handle_t packed = packStaticValues(
-        true, shape, values, gct, "gir.static.comprehension.fill");
+    if (sameShape && declaredShape->code() != TypeCode::Struct) {
+        // A tuple shape fills the elements by position; the field names it does not have are
+        // the positions the rounds already give.
+        type_vec_t types;
+        types.reserve(values.size());
+        for (const node_handle_t &value : values) {
+            types.push_back(valueTypeOf(nodeTypeOf(value)));
+        }
+        StaticTuple tuple;
+        tuple.type           = TupleType::create(std::move(types));
+        tuple.elements       = std::move(values);
+        tuple.materializable = true;
+        tuple.origin         = gct;
+        LEAVE("SCOMP");
+        return tuple;
+    }
+    if (sameShape) {
+        node_handle_t packed =
+            packStaticValues(true, declaredShape, values, gct, "gir.static.shape.fill");
+        LEAVE("SCOMP");
+        return packed;
+    }
+    node_handle_t packed =
+        packStaticValues(true, shape, values, gct, "gir.static.comprehension.fill");
     LEAVE("SCOMP");
     return packed;
 }
@@ -718,19 +879,48 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
     ENTER("SACC");
     const GCT::node_ptr_t keyNode = gct->staticAccessKey();
 
-    // The key is a compile-time constant: a literal, or the `n` of an enclosing `static for`.
+    // The key is a compile-time constant: a literal, the `n` of an enclosing `static for`, a
+    // name bound once to a constant (`let first = ( static for ... ).[0]`), or an expression
+    // whose value is known at build time (`( static for (n, F) in fields S => n ).[0]` in the
+    // library is such an expression: a comprehension over the field names, indexed at 0).
+    const auto keyOfData = [](const data_ptr_t &data) -> std::optional<std::string> {
+        if (auto text = std::dynamic_pointer_cast<StringData>(data)) {
+            return text->data();
+        }
+        if (data->type() != nullptr && data->type()->code() == TypeCode::Int64) {
+            return std::to_string(std::dynamic_pointer_cast<PrimaryData<int64_t>>(data)->data());
+        }
+        if (data->type() != nullptr && data->type()->code() == TypeCode::Int32) {
+            return std::to_string(std::dynamic_pointer_cast<PrimaryData<int32_t>>(data)->data());
+        }
+        return std::nullopt;
+    };
     std::optional<std::string> key;
     if (keyNode->type() == GCT::NodeKind::DATA) {
-        const data_ptr_t data = keyNode->data();
-        if (auto text = std::dynamic_pointer_cast<StringData>(data)) {
-            key = text->data();
-        } else if (data->type() != nullptr && data->type()->code() == TypeCode::Int64) {
-            key = std::to_string(std::dynamic_pointer_cast<PrimaryData<int64_t>>(data)->data());
-        } else if (data->type() != nullptr && data->type()->code() == TypeCode::Int32) {
-            key = std::to_string(std::dynamic_pointer_cast<PrimaryData<int32_t>>(data)->data());
+        key = keyOfData(keyNode->data());
+    } else if (keyNode->type() == GCT::NodeKind::DREF) {
+        const auto bound = nodeAt(keyNode->name());
+        if (!bound.has_value()) {
+            key = staticValueNamed(keyNode->name());
+        } else if (!isVariable(*bound)) {
+            // A `let` bound to a value the compiler knows is a constant too: the binding is
+            // immutable, and `first_leaf` in the library names the first field once this way.
+            // A `var` is not: it can be assigned another key before the access.
+            if (data_ptr_t data = constantOfNode(*bound)) {
+                key = keyOfData(data);
+            }
         }
-    } else if (keyNode->type() == GCT::NodeKind::DREF && !nodeAt(keyNode->name()).has_value()) {
-        key = staticValueNamed(keyNode->name());
+    }
+    if (!key.has_value() && keyNode->type() != GCT::NodeKind::DATA &&
+        keyNode->type() != GCT::NodeKind::DREF) {
+        // A key written as an expression: build it where the access is and take its constant.
+        // A value that is not constant is still refused below.
+        const std::any keyRes = visit(keyNode);
+        if (node_handle_t keyValue = valueNodeOf(keyRes)) {
+            if (data_ptr_t data = constantOfNode(keyValue)) {
+                key = keyOfData(data);
+            }
+        }
     }
     if (!key.has_value()) {
         diags_->of(SemanticDiag::StaticAccessNotConstant)

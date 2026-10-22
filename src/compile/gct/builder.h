@@ -150,6 +150,9 @@ class Builder {
     // Only the signature of a FuncData (openSignature_) may leave one out; the flag is taken
     // by visitFuncData right after the signature.
     std::vector<Tree::UnwrittenParam> pendingUnwrittenParams_;
+    // Head type parameters the signature never wrote, held until the body is built: a body that
+    // uses the name (`match type T`) makes it a used parameter, not an unused one.
+    std::vector<std::string> pendingUnusedHeadVars_;
 
     // Named dimensions of type extents (design principles 5.4): a name denotes an extent, not a
     // type. A name is bound the first time it is written in the parameter types of the function
@@ -344,6 +347,8 @@ class Builder {
     /// `{ static for ... }` / `( static for ... )` (H51 step 4): an SCOMP holding the generator.
     /// The rounds are packed into a shape of the same fields in the graph builder.
     node_ptr_t visitStaticComprehension(const AST::node_ptr_t &ast, bool isStruct);
+    /// `T { static for ... }`: an SCOMP holding the generator and the type node naming `T`.
+    node_ptr_t visitShapeComprehension(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncData(const AST::node_ptr_t &ast);
     node_ptr_t visitRefData(const AST::node_ptr_t &ast);
 

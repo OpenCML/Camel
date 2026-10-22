@@ -782,12 +782,13 @@ void ParserImpl::parseFrontMatter() {
 
 /// funcDecl : frontMatter ('with' angledParams)? 'export'? modifiers?
 ///            'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
-///            resourceClause? stmtBlock?
+///            resourceClause? whenClause? stmtBlock?
 ///
 /// Without a body the declaration stands for a C++ operator of the module the name is bound in
 /// (design principles 6.4): it has no block, and what it declares is its signature. The
 /// `uses`/`pure` clause after the result type says which resources a call touches (design
-/// effects plan 3.1).
+/// effects plan 3.1). The optional `when` after it is the applicability condition (design
+/// principles 5.13, handover H234).
 void ParserImpl::parseFuncDecl() {
     const size_t m = mark();
     parseFrontMatter();
@@ -923,6 +924,21 @@ void ParserImpl::parseTagRef() {
     close(m, NK::TagRef);
 }
 
+/// whenClause : IDENTIFIER logicalOrExpr
+/// The IDENTIFIER is the name `when`, read here only: a declaration's applicability condition,
+/// after its signature (design principles 5.13). It is evaluated when the declaration is
+/// instantiated, not when it is parsed, and a false condition makes the declaration
+/// inapplicable rather than erroneous. It follows the return type and the resource clause and
+/// precedes the body, so a body-less native declaration may carry one too.
+/// The `funcDecl` production above gains this clause between `resourceClause` and `stmtBlock`;
+/// see the comment there.
+void ParserImpl::parseWhenClause() {
+    const size_t m = mark();
+    bump(); // `when`
+    parseExpr();
+    close(m, NK::WhenClause);
+}
+
 /// The part of funcDecl after its annotations; `m` marks where the declaration began.
 void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::KwWith)) {
@@ -950,6 +966,9 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     }
     if (atWord(0, "uses") || atWord(0, "pure")) {
         parseResourceClause();
+    }
+    if (atWord(0, "when")) {
+        parseWhenClause();
     }
     // A function written without a body is the declaration of an operator of a C++ module: the
     // signature is the whole of it (design principles 6.4, handover H19 step 1). A block is
@@ -1242,6 +1261,22 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
 /// report it; the parameter lists of a lambda, a function type and a rule take neither.
 void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
     const size_t m = mark();
+    if (lambdaParams_ && cur_ == TK::LParen) {
+        // A lambda parameter destructured as a tuple: `((a, b)) => ...`. The rule is the one of
+        // `let (a, b) = p`: the names take the elements of the tuple the position passes.
+        bump();
+        parseIdentDef();
+        while (cur_ == TK::Comma && peek(1) != TK::RParen && !panic_) {
+            bump();
+            parseIdentDef();
+        }
+        eat(TK::Comma);
+        if (!panic_) {
+            expect(TK::RParen);
+        }
+        close(m, NK::TupleParam);
+        return;
+    }
     if (allowRest && cur_ == TK::DotDot) {
         bump();
         parseIdentDef();
@@ -1298,6 +1333,7 @@ void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
     {
         Scope scope(*this, false);
         if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst ||
+            (lambdaParams_ && cur_ == TK::LParen) ||
             (allowRest && cur_ == TK::DotDot) || (allowConstas && cur_ == TK::KwConstas)) {
             parsePairedParams(TK::RParen, allowRest, allowConstas);
         } else if (cur_ != TK::RParen && cur_ != TK::Comma) {

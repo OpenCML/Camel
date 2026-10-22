@@ -1480,26 +1480,94 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "loop_grad_refuse_iterable"
-desc = "A loop that iterates over an array built from the differentiated parameter is refused at the loop: the reverse pass has no per-round scatter of each element's gradient back into the iterated array. The diagnostic names the loop (line 14), says what the loop does with the array, and tells the program to capture it and read by index instead."
-kind = "negative"
-case = "../../../cases/modules/autodiff/loop_grad_refuse_iterable.cml"
+name = "loop_grad_iterable"
+desc = "A loop that iterates over an array built from the differentiated parameter differentiates: the reverse of a read by index is a scatter-add, so each round's element gradient goes back into the array's gradient at that round's index (design principles 9.9). f(w) = sum([w, 2w, 3w]) = 12 at w = 2, gradient 6. This used to be refused."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_iterable.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_line = 14
-expect_output_contains = ["a 'loop' iterates over an array that depends on a differentiated parameter", "scattered back into the array", "Capture the array and read its elements by index"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_iterable v=12.0 d=6.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "loop_grad_refuse_iterable.fvm"
-desc = "The same refusal when std::fvm runs grad: the back end and grad read the same LOOP node of the program, so the diagnostic is the same and is reported at the loop."
-kind = "negative"
-case = "../../../cases/modules/autodiff/loop_grad_refuse_iterable.cml"
+name = "loop_grad_iterable.fvm"
+desc = "The same iterated-array gradient when std::fvm runs grad: the reverse loop the transformation builds is scheduled by the back end like any other loop."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_iterable.cml"
 args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_iterable v=12.0 d=6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_iterable_records"
+desc = "A loop over an array of records of floats: ps = [{a: w, b: 1}, {a: 2w, b: 3}] sums to 7w, so at w = 2 the value is 14 and the gradient is 7. The structural zero and sum of tangents run one level down from the array."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_iterable_records.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_iterable_records v=14.0 d=7.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_iterable_tensors"
+desc = "A loop over an array of records that own tensors differentiates, and its gradient is bit for bit the gradient of the same model written as a tuple and walked by `static loop`: the element type has no structural tangent, so its zero and its sums go through the derivative registry to `tensor:zeros_like` and `tensor:add`. Both the loss difference and the sum of the absolute gradient differences must print exactly 0."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_iterable_tensors.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_output_contains = ["loss_gap=0.000000000", "grad_gap=0.000000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loop_grad_iterable_tensors.fvm"
+desc = "The same tuple-against-array bit-identical gradient when std::fvm runs grad."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_iterable_tensors.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_output_contains = ["loss_gap=0.000000000", "grad_gap=0.000000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loop_grad_iterable_length"
+desc = "The length of an iterated array is taken from the value the forward loop walked, not from the type: the same function called with n = 2 and n = 4 differentiates to 3 and 10."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_iterable_length.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_iterable_length n2=3.0 n4=10.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_refuse_no_element_tangent"
+desc = "A loop that iterates over a `string[]` computed from the differentiated parameter is refused at the loop: the element type has no tangent, so the array has none and each round's element gradient could not be scattered back. The diagnostic is located at the loop (line 15) and names the array's type, its element type, and what to do instead."
+kind = "negative"
+case = "../../../cases/modules/autodiff/loop_grad_refuse_no_element_tangent.cml"
+args = ["${case}", "${run_nvm}"]
 expect_exit = 1
-expect_diagnostic_line = 14
-expect_output_contains = ["a 'loop' iterates over an array that depends on a differentiated parameter", "scattered back into the array", "Capture the array and read its elements by index"]
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 15
+expect_output_contains = ["a 'loop' iterates over an array of type 'string[]'", "element type 'string' has none", "could not be scattered back"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_refuse_tensor_iterable"
+desc = "A loop that iterates over a tensor computed from the differentiated parameter is refused before the loop: iterating a tensor walks its first axis through the operator `tensor:iter`, whose result is an array of slices and which has no derivative rule, so the diagnostic names that operator at the iteration (line 15) instead of dropping the slices' gradient."
+kind = "negative"
+case = "../../../cases/modules/autodiff/loop_grad_refuse_tensor_iterable.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 15
+expect_output_contains = ["no derivative rule for operator 'tensor:iter'", "cannot be dropped silently"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -2386,4 +2454,98 @@ expect_diagnostic_line = 10
 expect_diagnostic_column = 1
 expect_output_contains = ["#vjp<rule>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# ---- Discrete values have zero derivative (design principles 9.9) ----
+#
+# A label, an argmax result and a comparison mask are discrete: their derivative is zero by
+# definition, so a backward pass that reaches one must materialize an exact zero and must not
+# refuse. These cases put each of them inside the differentiated region, assert the exact
+# zeros beside real gradients, and pin that a value with no gradient channel at all (a Map)
+# is still refused where it is built.
+
+[[tests]]
+name = "discrete_zero"
+desc = "one_hot's labels, argmax's result and a comparison mask take no gradient: no error, no stop_gradient, and exactly 0.0; the differentiable weights still receive their real gradient. The one_hot check reaches the new zero rule through a callee whose label port is differentiated, the shape that used to fail."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/discrete_zero.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "discrete_zero one_hot=(-2.0,0.0,2.0) argmax=(3.0,0.0) mask=(4.0,0.0) where=(11.0,4.0) gather=(1.0,6.0,0.0) zero=1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "discrete_zero.macro.nvm"
+desc = "The same zeros when std::macro builds the gradient ahead of time: one_hot's zero rule is applied while differentiating, and the labels' exact zero is in the compiled gradient graph."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/discrete_zero.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "discrete_zero one_hot=(-2.0,0.0,2.0) argmax=(3.0,0.0) mask=(4.0,0.0) where=(11.0,4.0) gather=(1.0,6.0,0.0) zero=1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "discrete_zero_refuse_map"
+desc = "A continuous value put into a Map is still refused where the map is built, with the collection named: the zero rule for discrete values does not silence a path that would drop the gradient."
+kind = "negative"
+case = "../../../cases/modules/autodiff/discrete_zero_refuse.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 17
+expect_output_contains = ["is put into a Map or a Set 'Map<int, float>'", "Gradients do not flow through it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "slice_grad.runtime.nvm"
+desc = "The adjoint of `t[a:b]` is the zero-padded scatter of the upstream gradient back into the parent at the same indices. Checked against adjoints written out by hand from the forward expression: a slice ([0,2,3,5,0,0]), a slice of a slice ([0,0,7,11,0,0]), a slice with step 2 ([2,0,3,0,5,0]), a reshape/transpose round trip whose gradient must equal the unreshaped sum's, and shape queries (dim, numel) that contribute exactly zero. The last number is the total distance to the zero tensor, so a rule that returned zeros for everything would print 0.0 and fail. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/slice_grad.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "slice_grad slice_d=0.0 nested_d=0.0 stepped_d=0.0 roundtrip_d=0.0 query_d=0.0 with_grad_d=0.0 value=33.0 nonzero=70.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "slice_grad.macro.fvm"
+desc = "The same slice, nested, stepped and round-trip adjoints when std::macro builds the gradient ahead of time and the FastVM runs it: the rule is applied to the compiled graph, not only at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/slice_grad.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "slice_grad slice_d=0.0 nested_d=0.0 stepped_d=0.0 roundtrip_d=0.0 query_d=0.0 with_grad_d=0.0 value=33.0 nonzero=70.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "slice_grad_refuse_reshape_array"
+desc = "A float array is continuous (design principles 9.9). Reshaping one into a tensor has a known adjoint, but no operator here carries a tensor's gradient back into an array, so reshape refuses at the operator and names it instead of dropping the array's gradient; the refusal is located at the reshape call (line 22)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_reshape_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 22
+expect_output_contains = ["cannot differentiate operator 'tensor:reshape'", "no operator that carries a tensor's gradient back into an array"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "slice_grad_refuse_concat_array"
+desc = "concat's array part is continuous too: an array part that depends on the differentiated parameter is refused at the concat call (line 23), naming the operator, rather than being left out of the gradient. A constant array part is still skipped, not refused."
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_concat_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 23
+expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "carries a tensor's gradient back into an array"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

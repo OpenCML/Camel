@@ -75,6 +75,9 @@ camel::core::rtdata::Object *newAggregate(Type *type) {
 }
 
 slot_t elementOf(Type *type, slot_t value, size_t index) {
+    if (type->code() == TypeCode::Array) {
+        return fromSlot<::Array *>(value)->get<slot_t>(index);
+    }
     if (type->code() == TypeCode::Struct) {
         return fromSlot<::Struct *>(value)->get<slot_t>(index);
     }
@@ -82,6 +85,11 @@ slot_t elementOf(Type *type, slot_t value, size_t index) {
 }
 
 void setElement(Type *type, slot_t aggregate, size_t index, slot_t value) {
+    if (type->code() == TypeCode::Array) {
+        fromSlot<::Array *>(aggregate)->set<slot_t>(
+            index, value, tt::as_ptr<camel::core::type::ArrayType>(type));
+        return;
+    }
     if (type->code() == TypeCode::Struct) {
         fromSlot<::Struct *>(aggregate)->set<slot_t>(
             index,
@@ -92,9 +100,46 @@ void setElement(Type *type, slot_t aggregate, size_t index, slot_t value) {
     }
 }
 
+/// Rebuilds one array of a trainable tree, element by element and with the length the primal
+/// value has. An array is walked like a record: its tangent is the array of its elements'
+/// tangents (design principles 9.9), so `blocks.0.wq` and `blocks.1.wq` are separate leaves.
+void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const LeafUpdate &leaf);
+
+void walkArray(
+    Type *type, std::span<const slot_t> in, std::span<slot_t> out, const LeafUpdate &leaf) {
+    auto *arrayType     = tt::as_ptr<camel::core::type::ArrayType>(type);
+    Type *const tangent = tangentTypeOf(type);
+    if (tangent == nullptr) {
+        throw std::invalid_argument("the optimizer was given an array without a tangent");
+    }
+    auto *const primal     = fromSlot<::Array *>(in[0]);
+    const size_t length    = primal->size();
+    auto *tangentArrayType = tt::as_ptr<camel::core::type::ArrayType>(tangent);
+    out[0]                 = toSlot<::Array *>(::Array::create(mm::autoSpace(), length));
+    for (size_t t = 1; t < out.size(); ++t) {
+        out[t] = toSlot<::Array *>(::Array::create(mm::autoSpace(), length));
+    }
+    std::vector<slot_t> childIn(in.size()), childOut(out.size());
+    for (size_t i = 0; i < length; ++i) {
+        childIn[0] = primal->get<slot_t>(i);
+        for (size_t t = 1; t < in.size(); ++t) {
+            childIn[t] = fromSlot<::Array *>(in[t])->get<slot_t>(i);
+        }
+        walk(arrayType->elemType(), childIn, childOut, leaf);
+        fromSlot<::Array *>(out[0])->set<slot_t>(i, childOut[0], arrayType);
+        for (size_t t = 1; t < out.size(); ++t) {
+            fromSlot<::Array *>(out[t])->set<slot_t>(i, childOut[t], tangentArrayType);
+        }
+    }
+}
+
 /// Walks a primal tree of type `type` together with tangent-shaped trees, rebuilding all of
 /// them with `leaf` applied to every trainable leaf.
 void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const LeafUpdate &leaf) {
+    if (type->code() == TypeCode::Array) {
+        walkArray(type, in, out, leaf);
+        return;
+    }
     if (!isAggregate(type)) {
         leaf(type, in, out);
         return;
@@ -339,6 +384,21 @@ void saveLeaves(
     Type *type, slot_t value, const std::filesystem::path &dir, const std::string &path) {
     if (isTensorLeaf(type)) {
         camel::tensor::saveNpy(fromSlot<Array *>(value), dir / (path + ".npy"));
+        return;
+    }
+    if (type->code() == TypeCode::Array) {
+        // An array's elements are named by their index, like a tuple's: `blocks.0.wq` and
+        // `blocks.1.wq` are the two blocks, whichever the model calls them.
+        auto *arrayType = tt::as_ptr<camel::core::type::ArrayType>(type);
+        auto *array     = fromSlot<::Array *>(value);
+        for (size_t i = 0; i < array->size(); ++i) {
+            const std::string name = std::to_string(i);
+            saveLeaves(
+                arrayType->elemType(),
+                array->get<slot_t>(i),
+                dir,
+                path.empty() ? name : path + "." + name);
+        }
         return;
     }
     if (!isAggregate(type)) {

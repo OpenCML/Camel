@@ -118,7 +118,7 @@ funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
                      'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
-                     resourceClause? stmtBlock?
+                     resourceClause? whenClause? stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
                      | 'export'? 'tag' identDef '=' bracketIdents
 tagPositions       : tagPositionName (',' tagPositionName)* ','?
@@ -126,6 +126,7 @@ tagPositionName    : IDENTIFIER
 tagReaders         : identRef (',' identRef)* ','?
 tagUse             : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
 tagRef             : identRef angledValues?
+whenClause         : IDENTIFIER logicalOrExpr
 typeParams         : '::' '<' identDef (',' identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
@@ -175,6 +176,7 @@ compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
+shapeComp          : typeExpr '{' staticForExpr '}'
 primaryData        : identRef | constasData | literal | arrayData | structData | tupleData
                      | funcData
 constasData        : 'constas' identDef
@@ -200,10 +202,10 @@ funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' 
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
 staticForExpr      : 'static' staticForHeader '=>' blockExpr
-staticForHeader    : 'for' '(' identDef (',' identDef)? ')' 'in' ('fields' typeExpr
-                     | 'indices' dataExpr)
+staticForHeader    : 'for' '(' (identDef | '_') (',' (identDef | '_'))? ')' 'in'
+                     ('fields' typeExpr | 'indices' dataExpr)
 staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
-typeCasePattern    : 'struct' | 'tuple' | '#' 'leaf' | '_'
+typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
 pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
                      | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
@@ -295,7 +297,7 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | A slice subscript that slices a dimension other than the first, `xs[:, 0]`, `xs[a:b, c]` | `SemanticDiag::ConstructNotSupported` (the diagnostic names H17) | Take the rows with `take`, or slice one dimension at a time |
 | A slice subscript whose step is not 1, `xs[a:b:s]` | Array: the run-time `RuntimeDiag::InvalidArgument`; tensor: the compile-time `ArgumentsRejected` (both name H17) | `xs->slice<0, a, b, s>` |
 | Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `FeatureNotSupported` | None |
-| `typeof e`, `name of T` | `FeatureNotSupported` | None |
+| `name of T` | `FeatureNotSupported` | None |
 | `keyof` | Syntax error | None |
 
 In addition there is one thing that "can be written but cannot be used at present": a declaration with a function type `let f: (x: int) => int = g`.

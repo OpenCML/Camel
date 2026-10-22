@@ -132,6 +132,7 @@ class Builder {
     Value visitKeyTypePair(syntax::cst::KeyTypePair context);
     Value visitKeyValuePair(syntax::cst::KeyValuePair context);
     Value visitKeyParamPair(syntax::cst::KeyParamPair context);
+    Value visitTupleParam(syntax::cst::TupleParam context);
     Value visitDataList(syntax::cst::DataList context);
     Value visitIdentList(syntax::cst::IdentList context);
     Value visitIndexValues(syntax::cst::IndexValues context);
@@ -179,6 +180,8 @@ class Builder {
     Value visitStructData(syntax::cst::StructData context);
     Value visitArrayData(syntax::cst::ArrayData context);
     Value visitTupleData(syntax::cst::TupleData context);
+    /// `T { static for ... }`: the rounds' values under the field names and kind of `T`.
+    Value visitShapeComp(syntax::cst::ShapeComp context);
     Value visitRefData(syntax::cst::RefData context);
     Value visitConstasData(syntax::cst::ConstasData context);
     Value visitLiteralData(syntax::cst::Literal context);

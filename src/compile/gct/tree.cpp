@@ -142,6 +142,48 @@ const std::vector<Tree::UnwrittenParam> *Tree::unwrittenParamsOf(const Node *fun
     return it == unwrittenParams_.end() ? nullptr : &it->second;
 }
 
+void Tree::setTupleParams(const Node *func, std::vector<TupleParamBinding> params) {
+    if (func != nullptr && !params.empty()) {
+        tupleParams_[func] = std::move(params);
+    }
+}
+
+const std::vector<Tree::TupleParamBinding> *Tree::tupleParamsOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = tupleParams_.find(func);
+    return it == tupleParams_.end() ? nullptr : &it->second;
+}
+
+void Tree::setWhen(const Node *func, WhenClause clause) {
+    if (func != nullptr && clause.condition != nullptr) {
+        whenClauses_[func] = std::move(clause);
+    }
+}
+
+const Tree::WhenClause *Tree::whenOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = whenClauses_.find(func);
+    return it == whenClauses_.end() ? nullptr : &it->second;
+}
+
+void Tree::setHeadTypeParams(const Node *func, std::vector<std::string> names) {
+    if (func != nullptr && !names.empty()) {
+        headTypeParams_[func] = std::move(names);
+    }
+}
+
+const std::vector<std::string> *Tree::headTypeParamsOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = headTypeParams_.find(func);
+    return it == headTypeParams_.end() ? nullptr : &it->second;
+}
+
 Tree *Tree::of(const Node *node) {
     const auto address = reinterpret_cast<uintptr_t>(node);
     return reinterpret_cast<const Chunk *>(address & ~(static_cast<uintptr_t>(kChunkBytes) - 1))
@@ -313,9 +355,18 @@ node_ptr_t Tree::makeCase(CaseType type, const std::string &binding) {
 
 node_ptr_t Tree::makeTypeMatch() { return makeNode(NodeKind::TMTCH); }
 
-node_ptr_t Tree::makeTypeCase(uint16_t patterns) {
+node_ptr_t Tree::makeTypeCase(uint16_t patterns, const std::vector<Type *> &types) {
     Node *node = makeNode(NodeKind::TCASE);
     node->tag_ = patterns;
+    if (!types.empty()) {
+        auto *list =
+            static_cast<Node::TypeList *>(allocate(Node::TypeList::bytesFor(types.size())));
+        list->count = types.size();
+        for (size_t i = 0; i < types.size(); ++i) {
+            list->items[i] = types[i];
+        }
+        node->payload_.types = list;
+    }
     return node;
 }
 
@@ -359,6 +410,12 @@ node_ptr_t Tree::makeSpreadArg() { return makeNode(NodeKind::SPRD); }
 node_ptr_t Tree::makeComprehension(bool isStruct) {
     Node *node = makeNode(NodeKind::SCOMP);
     node->tag_ = static_cast<uint16_t>(isStruct ? 0 : 1);
+    return node;
+}
+
+node_ptr_t Tree::makeShapeComprehension() {
+    Node *node = makeNode(NodeKind::SCOMP);
+    node->tag_ = 2;
     return node;
 }
 
@@ -495,6 +552,18 @@ node_ptr_t Tree::clone(const Node *node) {
             copy->payload_.name = intern(*node->payload_.name);
         }
         break;
+    case NodeKind::TCASE:
+        if (node->typeCaseTypeCount() > 0) {
+            const size_t count = node->typeCaseTypeCount();
+            auto *list =
+                static_cast<Node::TypeList *>(allocate(Node::TypeList::bytesFor(count)));
+            list->count = count;
+            for (size_t i = 0; i < count; ++i) {
+                list->items[i] = node->typeCaseTypeAt(i);
+            }
+            copy->payload_.types = list;
+        }
+        break;
     case NodeKind::EXPT:
     case NodeKind::LOOP:
     case NodeKind::SFOR:
@@ -520,6 +589,17 @@ node_ptr_t Tree::clone(const Node *node) {
         // A lambda's unwritten parameters come with it: the copy is the same lambda.
         if (const auto *params = Tree::of(node)->unwrittenParamsOf(node)) {
             unwrittenParams_[copy] = *params;
+        }
+        if (const auto *tuples = Tree::of(node)->tupleParamsOf(node)) {
+            tupleParams_[copy] = *tuples;
+        }
+        // A declaration's `when` condition is part of the copy too: the copy is instantiated
+        // with the same rules.
+        if (const auto *when = Tree::of(node)->whenOf(node)) {
+            whenClauses_[copy] = WhenClause{clone(when->condition), when->text, when->origin};
+        }
+        if (const auto *head = Tree::of(node)->headTypeParamsOf(node)) {
+            headTypeParams_[copy] = *head;
         }
     }
     return copy;
@@ -614,8 +694,12 @@ std::string Node::toString() const {
         return "SACC";
     case NodeKind::SPRD:
         return "SPRD";
-    case NodeKind::SCOMP:
-        return std::string("SCOMP: ") + (comprehensionIsStruct() ? "struct" : "tuple");
+    case NodeKind::SCOMP: {
+        const char *kind = comprehensionSameShape() ? "same shape"
+                           : comprehensionIsStruct() ? "struct"
+                                                     : "tuple";
+        return std::string("SCOMP: ") + kind;
+    }
     case NodeKind::SLOOP: {
         std::string text = "SLOOP: ";
         for (size_t j = 0; j < staticLoopStateCount(); ++j) {
@@ -627,7 +711,7 @@ std::string Node::toString() const {
         std::string text = "TCASE: (";
         bool first       = true;
         for (const TypeCaseKind kind :
-             {TypeCaseKind::Struct, TypeCaseKind::Tuple, TypeCaseKind::Leaf,
+             {TypeCaseKind::Struct, TypeCaseKind::Tuple, TypeCaseKind::Func, TypeCaseKind::Leaf,
               TypeCaseKind::Wildcard}) {
             if ((typeCasePatterns() & typeCaseBit(kind)) == 0) {
                 continue;
@@ -641,13 +725,23 @@ std::string Node::toString() const {
             case TypeCaseKind::Tuple:
                 text += "tuple";
                 break;
+            case TypeCaseKind::Func:
+                text += "func";
+                break;
             case TypeCaseKind::Leaf:
                 text += "#leaf";
                 break;
             case TypeCaseKind::Wildcard:
                 text += "_";
                 break;
+            case TypeCaseKind::Identity:
+                break;
             }
+        }
+        for (size_t i = 0; i < typeCaseTypeCount(); ++i) {
+            text += first ? "" : " | ";
+            first = false;
+            text += typeCaseTypeAt(i)->toString();
         }
         return text + ")";
     }

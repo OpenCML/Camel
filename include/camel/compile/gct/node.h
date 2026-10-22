@@ -29,11 +29,15 @@
  *     EXPT              payload: the list of exported names
  *     LOOP              payload: the names of the state, then the name of the element with
  *                       `for`; tag: camel::core::LoopKind
+ *     TMTCH             children: the subject type, then the TCASEs
+ *     TCASE             tag: the shape mask; payload: the identity pattern types (if any);
+ *                       child 0: the body
  *     SFOR              payload: the name of the walked entry, then the name of its type
  *                       (empty for `indices`); flag A: the generator is `indices`
  *     SLOOP             payload: the names of the state, then the name of the walked entry and
  *                       the name of its type (empty for `indices`); flag A: `indices`
- *     SCOMP             tag: 0 for `{ ... }`, 1 for `( ... )`
+ *     SCOMP             tag: 0 for `{ ... }`, 1 for `( ... )`, 2 for `T { ... }` (then child 1
+ *                       is the type node naming `T`)
  *     VARI, WAIT, ANNO, SACC  nothing
  *
  * Ownership and lifetime. Nodes are made by a Tree (tree.h) in its arena and are never freed
@@ -301,6 +305,18 @@ class Node {
         check(NodeKind::TCASE);
         return tag_;
     }
+    /// TCASE: the identity patterns of the case (`case int`, `case T`), in the order written
+    /// after the shapes. Each is compared with the subject type exactly when the case is
+    /// selected; a type variable is replaced by its binding first.
+    size_t typeCaseTypeCount() const {
+        check(NodeKind::TCASE);
+        return payload_.types != nullptr ? payload_.types->count : 0;
+    }
+    Type *typeCaseTypeAt(size_t index) const {
+        check(NodeKind::TCASE);
+        ASSERT(payload_.types != nullptr && index < payload_.types->count, "No pattern type here");
+        return payload_.types->items[index];
+    }
 
     /// SFOR: the name bound to the walked entry in the body (`n`, or `j` for `indices`).
     const std::string &staticForValueName() const {
@@ -345,10 +361,22 @@ class Node {
         check(NodeKind::SCOMP);
         return tag_ == 0;
     }
+    /// SCOMP: the declared shape of `T { ... }`: a struct or tuple comprehension written with
+    /// the shape it fills. The rounds then take both the field names and the kind from `T`.
+    bool comprehensionSameShape() const {
+        check(NodeKind::SCOMP);
+        return tag_ == 2;
+    }
     /// SCOMP: the `static for` whose rounds fill the result (child 0).
     node_ptr_t comprehensionGenerator() const {
         check(NodeKind::SCOMP);
         return at(0);
+    }
+    /// SCOMP: the type node naming the shape of `T { ... }` (child 1, same-shape only).
+    node_ptr_t comprehensionShapeType() const {
+        check(NodeKind::SCOMP);
+        ASSERT(comprehensionSameShape(), "Only a same-shape comprehension has a shape type.");
+        return at(1);
     }
 
     /// SLOOP: the number of names of the state (k).
@@ -425,12 +453,23 @@ class Node {
         }
     };
 
+    /// The identity patterns of a TCASE: a counted array of types in the tree's arena.
+    struct TypeList {
+        size_t count;
+        Type *items[1]; // `count` entries
+
+        static size_t bytesFor(size_t count) {
+            return sizeof(TypeList) + (count > 1 ? count - 1 : 0) * sizeof(Type *);
+        }
+    };
+
     union Payload {
         const data_ptr_t *data;
         Type *type;
         const std::string *name;
         uint64_t number;
         const NameList *names;
+        const TypeList *types;
         const EnumCase *enumCase;
     };
 

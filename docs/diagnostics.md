@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-227 diagnostics: 208 errors, 19 warnings.
+241 diagnostics: 222 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -189,6 +189,19 @@ prints one entry.
 | `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
 | `0x030001A5` | [SemanticDiag::CmlUnsupportedConstruct](#cmlunsupportedconstruct) | Error |
 | `0x030001A6` | [SemanticDiag::CmlBigConstant](#cmlbigconstant) | Error |
+| `0x030001A8` | [SemanticDiag::WhenConditionNotBool](#whenconditionnotbool) | Error |
+| `0x030001A9` | [SemanticDiag::WhenConditionNotConstant](#whenconditionnotconstant) | Error |
+| `0x030001AA` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error |
+| `0x030001AB` | [SemanticDiag::WhenTypeQueryNotConcrete](#whentypequerynotconcrete) | Error |
+| `0x030001AC` | [SemanticDiag::WhenConditionUnmet](#whenconditionunmet) | Error |
+| `0x030001B3` | [SemanticDiag::TypeOfNotAValue](#typeofnotavalue) | Error |
+| `0x030001B4` | [SemanticDiag::TypeOfNotWholeType](#typeofnotwholetype) | Error |
+| `0x030001B5` | [SemanticDiag::SameShapeComprehensionNotComposite](#sameshapecomprehensionnotcomposite) | Error |
+| `0x030001B6` | [SemanticDiag::SameShapeComprehensionMismatch](#sameshapecomprehensionmismatch) | Error |
+| `0x030001BF` | [SemanticDiag::WhenPredicateNotImported](#whenpredicatenotimported) | Error |
+| `0x030001C0` | [SemanticDiag::WhenPredicateNotCompileTime](#whenpredicatenotcompiletime) | Error |
+| `0x030001C1` | [SemanticDiag::WhenPredicateAmbiguous](#whenpredicateambiguous) | Error |
+| `0x030001C2` | [SemanticDiag::StaticMatchPatternCannotMatch](#staticmatchpatterncannotmatch) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -242,6 +255,7 @@ prints one entry.
 | `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error |
 | `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error |
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error |
+| `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -889,7 +903,22 @@ Tuple unpacking requires the same number of references and data nodes, or exactl
 Ensure the number of variables matches the number of unpacked data elements, or use a single tuple value.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/err_lambda_tuple_arity.cml`, run as `camel test/cases/compile/err_lambda_tuple_arity.cml`)
+
+```camel
+module lambda_tuple_arity
+
+// More names than the tuple has elements is refused, not read past the end.
+with <f: (p: (int, int)) => int>
+func apply_all(ps: (int, int)[]): int[] {
+    return ps->map<f>
+}
+
+func main(): int sync {
+    println(apply_all<((a, b, c)) => a + b + c>([(1, 2)]))
+    return 0
+}
+```
 
 ### InvalidLiteral
 
@@ -3922,7 +3951,7 @@ No case of this 'match type' selects the type '{0}'.
 **Help**
 
 ```text
-The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a structure or an ordinary tuple, including 'T?' and 'T!'), and '_' for every type. Add the case for this shape, or end with '#leaf' or '_'.
+The cases name shapes: 'struct', 'tuple', 'func', '#leaf' (every type that is not a structure or an ordinary tuple, including 'T?' and 'T!'), '_' for every type, and a type's identity ('int', 'MyStruct', T). Add the case for this type, or end with '#leaf' or '_'.
 ```
 
 **Example** (`test/cases/compile/static_expansion/match_type_exhaustive.cml`, run as `camel test/cases/compile/static_expansion/match_type_exhaustive.cml`)
@@ -3956,7 +3985,7 @@ The case '{0}' selects every type the cases after it could select.
 **Help**
 
 ```text
-'#leaf' and '_' select every type, so they must be the last case of a 'match type'.
+'#leaf' and '_' select every type, so they must be the last case of a 'match type'. An identity pattern that repeats a type an earlier case already selects is the same kind of dead case.
 ```
 
 **Example** (`test/cases/compile/static_expansion/match_type_unreachable.cml`, run as `camel test/cases/compile/static_expansion/match_type_unreachable.cml`)
@@ -4177,7 +4206,7 @@ The key '{0}' of a 't.[...]' access is not known when the function is compiled.
 **Help**
 
 ```text
-The key is a string or integer literal, or the 'n' of an enclosing 'static for'. A runtime value cannot choose a field, because only the selected field is built into the graph.
+The key is a string or integer literal, the 'n' of an enclosing 'static for', or an expression whose value is known at compile time, such as a 'let' bound once to such a value. A run-time value (a 'var', a parameter) cannot choose a field, because only the selected field is built into the graph.
 ```
 
 **Example** (`test/cases/compile/static_expansion/static_access_not_constant.cml`, run as `camel test/cases/compile/static_expansion/static_access_not_constant.cml`)
@@ -5036,6 +5065,429 @@ Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a m
 ```
 
 *No example: no test small enough to show raises it.*
+
+### WhenConditionNotBool
+
+`0x030001A8` · Error · `SemanticDiag::WhenConditionNotBool`
+
+**Message**
+
+```text
+The 'when' condition of '{0}' is not a bool (it is '{1}').
+```
+
+**Help**
+
+```text
+A 'when' is a compile-time predicate over the declaration's type parameters and 'with' parameters: call a generic function this module declares that reduces to a constant over its type arguments ('is_numeric::<T>()' is one, written in the standard module 'types'), possibly combined with '!', '&&' and '||'. It is not a runtime value.
+```
+
+**Example** (`test/cases/compile/when/non_bool.cml`, run as `camel test/cases/compile/when/non_bool.cml`)
+
+```camel
+module when_non_bool
+
+func bad(x: int): int when 1 {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenConditionNotConstant
+
+`0x030001A9` · Error · `SemanticDiag::WhenConditionNotConstant`
+
+**Message**
+
+```text
+The 'when' condition of '{0}' cannot be evaluated when the declaration is instantiated: {1}.
+```
+
+**Help**
+
+```text
+The condition is checked at instantiation, before the body is built, so it can only read what is known there: the types bound to the declaration's type parameters, and the 'with' arguments the call writes as compile-time constants. Move a runtime test into the body, or make the value a constant.
+```
+
+**Example** (`test/cases/compile/when/not_constant.cml`, run as `camel test/cases/compile/when/not_constant.cml`)
+
+```camel
+module when_not_constant
+
+func is_positive(x: int): bool {
+    return x > 0
+}
+
+func bad(x: int): int when is_positive(1) {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenUnknownName
+
+`0x030001AA` · Error · `SemanticDiag::WhenUnknownName`
+
+**Message**
+
+```text
+'{0}' is not visible to the 'when' condition of '{1}'.
+```
+
+**Help**
+
+```text
+A condition sees the declaration's type parameters and its 'with' parameters. Ordinary parameters and the names of the body do not exist yet when the condition is evaluated: test those in the body, or move the value to a 'with' parameter.
+```
+
+**Example** (`test/cases/compile/when/unknown_name.cml`, run as `camel test/cases/compile/when/unknown_name.cml`)
+
+```camel
+module when_unknown_name
+
+func bad(x: int): int when x {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenTypeQueryNotConcrete
+
+`0x030001AB` · Error · `SemanticDiag::WhenTypeQueryNotConcrete`
+
+**Message**
+
+```text
+The type query '{0}' cannot be answered for '{1}' in the 'when' condition of '{2}': the type still has a type variable.
+```
+
+**Help**
+
+```text
+A predicate is evaluated when the declaration is instantiated, where every type parameter has a type. Give the predicate a type parameter the call binds, or guard the declaration so that it is only instantiated for a concrete type.
+```
+
+**Example** (`test/cases/compile/when/open_type.cml`, run as `camel test/cases/compile/when/open_type.cml`)
+
+```camel
+module when_open_type
+
+func is_numeric::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 | c64 | c128 => true
+        case _ => false
+    }
+}
+
+func bad::<T>(x: int): int when is_numeric::<T>() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenConditionUnmet
+
+`0x030001AC` · Error · `SemanticDiag::WhenConditionUnmet`
+
+**Message**
+
+```text
+No candidate of '{0}' applies to ({1}): every candidate's 'when' condition is false. Candidates: {2}
+```
+
+**Help**
+
+```text
+A 'when' that is false makes its declaration inapplicable, not erroneous, and the call goes on to the other candidates. Pass an argument or a type that satisfies a condition, or write another overload for this call.
+```
+
+**Example** (`test/cases/compile/when/not_applicable.cml`, run as `camel test/cases/compile/when/not_applicable.cml`)
+
+```camel
+module when_not_applicable
+
+func is_float::<T>(): bool {
+    return match type T {
+        case float | f32 => true
+        case _ => false
+    }
+}
+
+/// The condition asks about int, so this overload never applies here.
+func needs_float(x: float): float when is_float::<int>() {
+    return x
+}
+
+func main(): int sync {
+    return int(needs_float(1.0))
+}
+```
+
+### TypeOfNotAValue
+
+`0x030001B3` · Error · `SemanticDiag::TypeOfNotAValue`
+
+**Message**
+
+```text
+typeof {0} has no value type: {1}.
+```
+
+**Help**
+
+```text
+`typeof` takes the type of a value. Write an expression that produces one, or name the type directly.
+```
+
+**Example** (`test/cases/compile/static_expansion/typeof_void.cml`, run as `camel test/cases/compile/static_expansion/typeof_void.cml`)
+
+```camel
+module typeof_void
+
+func nothing(): void {
+}
+
+func main(): int sync {
+    static for (j, C) in fields typeof(nothing()) => println(j)
+    return 0
+}
+```
+
+### TypeOfNotWholeType
+
+`0x030001B4` · Error · `SemanticDiag::TypeOfNotWholeType`
+
+**Message**
+
+```text
+typeof is written inside the larger type {0}.
+```
+
+**Help**
+
+```text
+`typeof` stands for a whole type. Bind the value in a `let` and name its type, or write the enclosing type out.
+```
+
+**Example** (`test/cases/compile/static_expansion/typeof_inside_type.cml`, run as `camel test/cases/compile/static_expansion/typeof_inside_type.cml`)
+
+```camel
+module typeof_inside_type
+
+func main(): int sync {
+    static for (j, C) in fields typeof(1)[] => println(j)
+    return 0
+}
+```
+
+### SameShapeComprehensionNotComposite
+
+`0x030001B5` · Error · `SemanticDiag::SameShapeComprehensionNotComposite`
+
+**Message**
+
+```text
+{0} is not a struct or a tuple, so it has no shape to fill.
+```
+
+**Help**
+
+```text
+A same-shape comprehension names a struct or a tuple type; a leaf has no fields.
+```
+
+**Example** (`test/cases/compile/static_expansion/shape_not_composite.cml`, run as `camel test/cases/compile/static_expansion/shape_not_composite.cml`)
+
+```camel
+module shape_not_composite
+
+type N = int
+
+func build(t: int) {
+    return N { static for (n, F) in fields N => t }
+}
+
+func main(): int sync {
+    println(build(1))
+    return 0
+}
+```
+
+### SameShapeComprehensionMismatch
+
+`0x030001B6` · Error · `SemanticDiag::SameShapeComprehensionMismatch`
+
+**Message**
+
+```text
+The shape {0} is filled from the fields of {1}.
+```
+
+**Help**
+
+```text
+Write `T { static for (n, F) in fields T => ... }`: the generator must walk the shape the comprehension constructs.
+```
+
+**Example** (`test/cases/compile/static_expansion/shape_mismatch.cml`, run as `camel test/cases/compile/static_expansion/shape_mismatch.cml`)
+
+```camel
+module shape_mismatch
+
+type A = {a: int}
+type B = {b: int, c: int}
+
+func build(u: B) {
+    return A { static for (n, F) in fields B => u.[n] }
+}
+
+func main(): int sync {
+    println(build({b: 1, c: 2}))
+    return 0
+}
+```
+
+### WhenPredicateNotImported
+
+`0x030001BF` · Error · `SemanticDiag::WhenPredicateNotImported`
+
+**Message**
+
+```text
+'{1}' is declared in module '{2}', but that name is not imported where the 'when' condition of '{0}' is written.
+```
+
+**Help**
+
+```text
+A condition resolves names where its declaration is written, as a call in its body does: the module's own names, then what it imports by name, selectively or as a module prefix, then the prelude. Import the module that declares the predicate, or move the predicate into the module that uses it.
+```
+
+**Example** (`test/cases/compile/when_import/not_imported.cml`, run as `camel test/cases/compile/when_import/not_imported.cml`)
+
+```camel
+module when_import_not_imported
+
+import predicates
+import unimported_user
+
+func main(): int sync {
+    println(unimported_user::describe((1, 2)))
+    return 0
+}
+```
+
+### WhenPredicateNotCompileTime
+
+`0x030001C0` · Error · `SemanticDiag::WhenPredicateNotCompileTime`
+
+**Message**
+
+```text
+'{1}' is not a compile-time predicate that the 'when' condition of '{0}' can call: {2}.
+```
+
+**Help**
+
+```text
+A condition calls a generic function whose body reduces to a constant over the types it is given: a 'match type', a 'static for' or a 'static loop' over 'fields T', and the comparison operators. An ordinary function runs at run time, and a value is read there too.
+```
+
+**Example** (`test/cases/compile/when_import/not_predicate.cml`, run as `camel test/cases/compile/when_import/not_predicate.cml`)
+
+```camel
+module when_import_not_predicate
+
+import { ready } from predicates
+
+func bad(x: int): int when ready() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenPredicateAmbiguous
+
+`0x030001C1` · Error · `SemanticDiag::WhenPredicateAmbiguous`
+
+**Message**
+
+```text
+The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is imported from {2}.
+```
+
+**Help**
+
+```text
+Two imports that bring one name do not choose between them. Import the predicate by another name ('import { p as q } from m') or qualify it with the module it comes from ('m::p').
+```
+
+**Example** (`test/cases/compile/when_import/ambiguous.cml`, run as `camel test/cases/compile/when_import/ambiguous.cml`)
+
+```camel
+module when_import_ambiguous
+
+import { is_compound } from predicates
+import { is_compound } from predicates_other
+
+func describe::<T>(x: T): string when is_compound::<T>() {
+    return 'compound'
+}
+
+func main(): int sync {
+    println(describe((1, 2)))
+    return 0
+}
+```
+
+### StaticMatchPatternCannotMatch
+
+`0x030001C2` · Error · `SemanticDiag::StaticMatchPatternCannotMatch`
+
+**Message**
+
+```text
+The identity pattern '{0}' cannot select a type here: {1}.
+```
+
+**Help**
+
+```text
+An identity pattern is exact: it selects only the type it names, after the declaration's type variables are bound. Name a concrete type, do not write the same type twice in one case, and put a pattern an earlier case already selects before that case or remove it.
+```
+
+**Example** (`test/cases/compile/static_expansion/type_identity_duplicate.cml`, run as `camel test/cases/compile/static_expansion/type_identity_duplicate.cml`)
+
+```camel
+module type_identity_duplicate
+
+func twice::<T>(t: T): int {
+    return match type T {
+        case int | int => 1
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    println(twice(1))
+    return 0
+}
+```
 
 ### VarParamInAsyncFunction
 
@@ -6588,6 +7040,48 @@ module main
 func main(): int sync {
     println(42)
     return 0
+}
+```
+
+### GpuScopeNoDeviceProgram
+
+`0x040001A7` · Error · `RuntimeDiag::GpuScopeNoDeviceProgram`
+
+**Message**
+
+```text
+`#gpu` scope '{0}': operator '{1}' has no device program ({2}).
+```
+
+**Help**
+
+```text
+The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is a compile-time error there, never a host execution. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.
+```
+
+**Example** (`test/cases/gpu/nofallback/refused_operator.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/gpu/nofallback/refused_operator.cml tiles::compile std::nvm`)
+
+```camel
+/// (b) An operator without a device program, written in a function a `#gpu` scope calls. The
+/// scope covers the functions it calls (GPU design 2.3), so `tanh` here is inside it; `tanh` has
+/// no device implementation, and the compiler refuses the program instead of running it on the
+/// host. `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
+module gpu_nofallback_refused_operator
+
+import { Tensor, tanh, reshape } from tensor
+
+func activate(x: Tensor<f32>): Tensor<f32> {
+    return tanh(x)
+}
+
+#gpu
+func step(x: Tensor<f32>): Tensor<f32> {
+    return activate(x)
+}
+
+func main() {
+    let x = reshape([1.0, 2.0] as f32[], [2])
+    println(step(x))
 }
 ```
 

@@ -171,6 +171,24 @@ PlacementDecision placementOf(const runtime::GCGraph &graph, runtime::gc_node_re
     return decision;
 }
 
+PlacementDecision bodyPlacementOf(const runtime::GCGraph &graph) {
+    PlacementDecision decision;
+    const attr::AttrKey key = attr::key("tiles.placement");
+    if (key == attr::kNoKey) {
+        return decision;
+    }
+    const attr::AttrValueId value = attr::valueOf(bodyAttrs(graph), key);
+    if (value == attr::kNoValue) {
+        return decision;
+    }
+    // A body fact is the graph's own scope, so a "gpu" here is GpuRequired, not Gpu.
+    decision.placement = classify(value, /*bodyGpu=*/true);
+    decision.scope     = PlacementScope::Body;
+    decision.fact      = factText(value);
+    decision.region    = 0;
+    return decision;
+}
+
 bool hasPlacementFact(const runtime::GCGraph &graph) {
     const attr::AttrKey key = attr::key("tiles.placement");
     if (key == attr::kNoKey) {

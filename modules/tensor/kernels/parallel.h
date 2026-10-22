@@ -18,8 +18,10 @@
  * Chunk bodies run on worker threads, so they must not allocate GC objects or
  * otherwise touch the runtime; kernels allocate outputs before the region.
  *
- * The worker count defaults to the hardware concurrency and can be overridden
- * with the CAMEL_NUM_THREADS environment variable or `setNumThreads`.
+ * The worker count defaults to the hardware concurrency. A run's `-t` sets it for every pool,
+ * and the tensor module installs that number once when it loads (setNumThreads); a program can
+ * change it later with `setNumThreads` / `Tensor.set_num_threads`. No environment variable takes
+ * part: a setting is not an environment variable (design principles 9.3).
  */
 
 #pragma once

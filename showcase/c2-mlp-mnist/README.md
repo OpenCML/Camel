@@ -179,7 +179,7 @@ The genuinely awkward parts of writing this example, with the question each rais
 "Open questions" section of `handover note ⟨9981995⟩ (H13)`.
 
 1. **Subscript and slice syntax is not implemented.** Design principles 5.4 and H21 describe
-   `t[i]`, `t[a:b]` and `t[idx]`; the language reference (`06_expressions.md`) still says the
+   `t[i]`, `t[a:b]` and `t[idx]`; the language reference (`docs/language/06_expressions.md`) still says the
    slice spelling is reserved and reports `NoMatchingFunction`. The natural showcase line
    `train_x[order[offset : offset + batch]]` therefore has to be written as
    `take(train_x, slice(order, 0, offset, offset + batch))`. It works, but a reader has to

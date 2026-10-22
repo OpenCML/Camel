@@ -1,0 +1,17 @@
+/**
+ * The type name in an identity pattern is resolved where the declaration is read, like every
+ * other type: an unknown name is reported at the pattern.
+ */
+module type_identity_unknown
+
+func bad::<T>(t: T): int {
+    return match type T {
+        case NoSuchType => 1
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    println(bad(1))
+    return 0
+}

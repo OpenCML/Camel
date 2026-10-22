@@ -1,0 +1,15 @@
+/**
+ * A rule with a `when` condition: the desugaring keeps the condition as the third function of
+ * the rule (`guarded__when`) and passes it to the Rule value (design principles 5.13; handover
+ * H234 item 3). The surface is the same `when` a function uses.
+ */
+module when_rule
+
+import { rule_name } from rewrite
+
+rule guarded(x: int) { x + 0 => x } when true
+
+func main(): int sync {
+    println(rule_name(guarded))
+    return 0
+}

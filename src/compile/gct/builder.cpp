@@ -15,6 +15,7 @@
 #include "camel/core/type/collection.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
@@ -39,6 +40,57 @@ namespace sem = camel::core::sem;
 
 inline camel::source::origin_id_t nodeOrigin(const node_ptr_t &node) {
     return node ? node->origin() : camel::source::kInvalidOriginId;
+}
+
+/// Whether the type variable `name` occurs in a type written below `node`. A head parameter a
+/// declaration writes only in its body (`match type T`, a cast to `T`) is used by the body even
+/// though the signature never names it, and is not an unused one.
+bool usesTypeVar(const node_ptr_t &node, const std::string &name) {
+    if (node == nullptr) {
+        return false;
+    }
+    const auto inType = [&](Type *type) {
+        if (type == nullptr) {
+            return false;
+        }
+        std::vector<std::string> names;
+        collectTypeVars(type, names);
+        return std::find(names.begin(), names.end(), name) != names.end();
+    };
+    switch (node->type()) {
+    case NodeKind::TYPE:
+        if (inType(node->dataType())) {
+            return true;
+        }
+        break;
+    case NodeKind::DATA:
+        if (node->data() != nullptr && inType(node->data()->type())) {
+            return true;
+        }
+        break;
+    case NodeKind::CAST:
+        if (inType(node->targetType())) {
+            return true;
+        }
+        break;
+    case NodeKind::TCASE:
+        // An identity pattern names its type in the payload, not as a child node, so the walk
+        // below does not reach it.
+        for (size_t i = 0; i < node->typeCaseTypeCount(); ++i) {
+            if (inType(node->typeCaseTypeAt(i))) {
+                return true;
+            }
+        }
+        break;
+    default:
+        break;
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        if (usesTypeVar(node->at(i), name)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 inline camel::source::SemanticPart semanticPart(
@@ -539,6 +591,12 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 node_ptr_t declNode = tree_->makeDecl(node->name(), true);
                 node_ptr_t typeNode = node->at(0);
                 *declNode << tree_->clone(typeNode);
+                // The declaration record is the same declaration: a head type the signature
+                // never writes (`func is_numeric::<T>(): bool`) makes it a template there too,
+                // so the graph builder does not give the declaration an empty graph of its own.
+                if (const auto *head = tree_->headTypeParamsOf(node)) {
+                    tree_->setHeadTypeParams(declNode, *head);
+                }
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
                     // makes an operator rule of it instead of a graph (handover H19 step 1),
@@ -2177,6 +2235,9 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::TupleComp:
         dataNode = visitStaticComprehension(ast, false);
         break;
+    case AST::DataType::ShapeComp:
+        dataNode = visitShapeComprehension(ast);
+        break;
     case AST::DataType::Func:
         dataNode = visitFuncData(ast);
         break;
@@ -2423,9 +2484,11 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 throw BuildAbortException();
             }
             // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the three parts of the dimension
-            // (an unwritten one a null load) and whether the end was written at all (`t[a:]`
-            // runs to the end). A part that was not written is passed as the value it stands
-            // for, 0 for the start and 1 for the step; the end is read only when written.
+            // (an unwritten one a null load) and which of the start and the end were written.
+            // A part that was not written is passed as the value it stands for, 0 for the
+            // start and 1 for the step; the end is read only when written. The last argument
+            // is a two-bit mask (bit 0 end, bit 1 start): `t[a:]` and `t[:b]` differ, and a
+            // negative step needs to know whether the start was given.
             node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
             bool written[3]     = {false, false, false};
             for (size_t i = 0; i < 3; ++i) {
@@ -2441,7 +2504,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
             bound[0]                  = written[0] ? bound[0] : intConstant(0);
             bound[1]                  = written[1] ? bound[1] : intConstant(0);
             bound[2]                  = written[2] ? bound[2] : intConstant(1);
-            node_ptr_t endWrittenNode = intConstant(written[1] ? 1 : 0);
+            node_ptr_t endWrittenNode = intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
             for (size_t i = 0; i < 3; ++i) {
                 *res << bound[i];
                 if (written[i]) {
@@ -3265,10 +3328,55 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
     for (const auto &caseAst : *ast->atAs<AST::RepeatedLoad>(1)) {
         const auto &caseLoad = caseAst->loadAs<AST::TypeCaseLoad>();
         uint16_t patterns    = 0;
-        for (const AST::TypeCaseKind kind : caseLoad->patterns()) {
-            patterns |= typeCaseBit(static_cast<GCT::TypeCaseKind>(kind));
+        std::vector<Type *> identities;
+        bool catchAll         = false;
+        bool unreachableSeen  = false;
+        for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
+            const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
+            if (kind == GCT::TypeCaseKind::Identity) {
+                Type *patternType = visitType(pattern.type);
+                if (patternType == nullptr) {
+                    continue;
+                }
+                const std::string written = pattern.type->load()->geneCode();
+                if (patternType->code() == TypeCode::Void) {
+                    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                        .atOrigin(pattern.type->load()->origin())
+                        .commit(written, "'void' is not the type of a value");
+                    throw BuildAbortException();
+                }
+                if (patternType->code() == TypeCode::TypeOf) {
+                    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                        .atOrigin(pattern.type->load()->origin())
+                        .commit(written, "a 'typeof' expression is not a type identity");
+                    throw BuildAbortException();
+                }
+                for (Type *earlier : identities) {
+                    if (earlier == patternType || typeEquals(earlier, patternType)) {
+                        diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                            .atOrigin(pattern.type->load()->origin())
+                            .commit(
+                                written,
+                                "the same type is already written earlier in this case");
+                        throw BuildAbortException();
+                    }
+                }
+                if (catchAll && !unreachableSeen) {
+                    // `#leaf` and `_` select every type, so nothing after them can be selected.
+                    diags_->of(SemanticDiag::StaticMatchUnreachableCase)
+                        .at(caseAst->load()->tokenRange())
+                        .commit("this case");
+                    unreachableSeen = true;
+                }
+                identities.push_back(patternType);
+                continue;
+            }
+            patterns |= typeCaseBit(kind);
+            if (kind == GCT::TypeCaseKind::Leaf || kind == GCT::TypeCaseKind::Wildcard) {
+                catchAll = true;
+            }
         }
-        node_ptr_t caseNode = tree_->makeTypeCase(patterns);
+        node_ptr_t caseNode = tree_->makeTypeCase(patterns, identities);
         setOriginFromAst(
             context_, caseNode, caseAst, camel::source::OriginKind::GctNode, "gct.match.type.case");
         node_ptr_t bodyNode = visitStmtBlock(caseAst->atAs<AST::StmtBlockLoad>(0));
@@ -3411,6 +3519,32 @@ node_ptr_t Builder::visitStaticComprehension(const AST::node_ptr_t &ast, bool is
     ASSERT(ast->size() == 1, "A static comprehension has its generator as its only child.");
     *compNode << visitStaticFor(ast->at(0));
     LEAVE("StaticComprehension");
+    return compNode;
+}
+
+node_ptr_t Builder::visitShapeComprehension(const AST::node_ptr_t &ast) {
+    ENTER("ShapeComprehension");
+    ASSERT(
+        ast->size() == 2 && ast->at(0)->type() == AST::LoadType::Type,
+        "A shape comprehension has its type first, its generator second.");
+    node_ptr_t compNode = tree_->makeShapeComprehension();
+    setOriginFromAst(
+        context_,
+        compNode,
+        ast,
+        camel::source::OriginKind::GctNode,
+        "gct.static.shape");
+    *compNode << visitStaticFor(ast->at(1));
+    Type *shape          = visitType(ast->at(0));
+    node_ptr_t shapeNode = tree_->makeType(shape);
+    setOriginFromAst(
+        context_,
+        shapeNode,
+        ast->at(0),
+        camel::source::OriginKind::GctNode,
+        "gct.static.shape.type");
+    *compNode << shapeNode;
+    LEAVE("ShapeComprehension");
     return compNode;
 }
 
@@ -4414,11 +4548,42 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     openSignature_  = true;
     FunctionType *funcType =
         tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    // The head parameters the signature never wrote; the body may still use them (`match type
+    // T`), so the warning waits until the body is built.
+    const std::vector<std::string> unusedHeadVars = std::exchange(pendingUnusedHeadVars_, {});
+    const auto reportUnusedHead = [&](const node_ptr_t &body, const node_ptr_t &when) {
+        for (const std::string &name : unusedHeadVars) {
+            if (usesTypeVar(body, name) || usesTypeVar(when, name)) {
+                continue;
+            }
+            diags_->of(SemanticDiag::TypeVariableUnused)
+                .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+                .commit(
+                    name,
+                    "the declaration declares it at its head and its signature never writes it");
+        }
+    };
     signatureVisit_ = false;
     // The parameters of a lambda whose type was left out (design principles 5.9), filled by GIR
     // from the function type the lambda stands in.
     const std::vector<Tree::UnwrittenParam> unwrittenParams =
         std::exchange(pendingUnwrittenParams_, {});
+    // A parameter destructured as a tuple (`((a, b)) => ...`) is bound by GIR when it starts the
+    // body: the parameter is one value, and the names take its elements.
+    std::vector<Tree::TupleParamBinding> tupleParams;
+    {
+        size_t index = 0;
+        for (size_t group = 0; group < 2; ++group) {
+            for (const auto &paramPair :
+                 *ast->atAs<AST::FuncTypeLoad>(0)->atAs<AST::RepeatedLoad>(group)) {
+                const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+                if (paramLoad->isTupleParam()) {
+                    tupleParams.push_back({index, paramLoad->tupleNames()});
+                }
+                ++index;
+            }
+        }
+    }
     // A parameter of a reserved name would stand in front of the operator of that name.
     for (size_t i = 0; i < funcType->argNamesCount(); ++i) {
         if (!validateIdent(std::string(funcType->argNameAt(i)))) {
@@ -4471,6 +4636,14 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         }
     }
     node_ptr_t typeNode = tree_->makeType(funcType);
+    // The applicability condition is built in the scope of the signature: it sees the type
+    // parameters declared at the head and the `with` parameters (design principles 5.13). It is
+    // not evaluated here -- instantiation is where its type parameters have types -- so it is
+    // kept on the FUNC, beside the type, for the graph builder.
+    node_ptr_t whenNode = nullptr;
+    if (funcData->when() != nullptr) {
+        whenNode = visitData(funcData->when());
+    }
     // A declaration without a body declares an operator of a C++ module (design principles 6.4):
     // it has a signature and nothing to build, so the FUNC carries its type alone and is marked
     // as a declaration. The graph builder turns it into an operator group instead of a graph
@@ -4497,6 +4670,14 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         }
         node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
         funcNode->setNativeDeclaration();
+        tree_->setHeadTypeParams(
+            funcNode, ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
+        if (whenNode != nullptr) {
+            tree_->setWhen(
+                funcNode,
+                {whenNode, funcData->whenText(), whenNode->origin()});
+        }
+        reportUnusedHead(nullptr, whenNode);
         *funcNode << typeNode;
         setOriginFromAst(
             context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
@@ -4525,10 +4706,19 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     const ValueUseScope valueUseScope(*this);
     valueUse_            = {};
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
+    reportUnusedHead(stmtsNode, whenNode);
     node_ptr_t funcNode  = tree_->makeFunc(funcData->ref().toString());
+    tree_->setHeadTypeParams(
+        funcNode, ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
     *funcNode << typeNode << stmtsNode;
+    if (whenNode != nullptr) {
+        tree_->setWhen(funcNode, {whenNode, funcData->whenText(), whenNode->origin()});
+    }
     if (!unwrittenParams.empty()) {
         tree_->setUnwrittenParams(funcNode, unwrittenParams);
+    }
+    if (!tupleParams.empty()) {
+        tree_->setTupleParams(funcNode, tupleParams);
     }
     setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
     setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.func");
@@ -4757,10 +4947,13 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::TypeOp::TypeOf: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::TypeOf");
-        throw BuildAbortException();
+        // `typeof e`: the type of the value `e` will have. The placeholder keeps the expression
+        // node; the graph builder builds it where this type is used and replaces the
+        // placeholder by its type. The node is not attached to a parent: it is reachable from
+        // the type and is visited per instance.
+        ASSERT(ast->size() == 1, "typeof has its expression as its only child.");
+        node_ptr_t expression = visitData(ast->at(0));
+        res                   = TypeOfType::create(expression);
     } break;
 
     default:
@@ -5165,12 +5358,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     if (signature) {
         std::vector<std::string> used;
         collectTypeVars(built, used);
+        pendingUnusedHeadVars_.clear();
         for (const std::string &name : declaredTypeVars_) {
             if (std::find(used.begin(), used.end(), name) == used.end() &&
                 !writtenHeadVars_.contains(name)) {
-                diags_->of(SemanticDiag::TypeVariableUnused)
-                    .at(ast->load()->tokenRange())
-                    .commit(name, "the declaration declares it at its head and its signature never writes it");
+                pendingUnusedHeadVars_.push_back(name);
             }
         }
     }

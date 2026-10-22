@@ -14,7 +14,7 @@ One script, selected by ``--variant``:
   reference  the same mathematics in float64, used only as the numerical reference.
 
 The harness runs all four with the same starting weights and data, which the Camel program
-writes as .npy files (``NAIVE_INIT_DIR``).  Adam is the same explicit formula in every variant,
+writes as .npy files (``--arg init_dir=...``).  Adam is the same explicit formula in every variant,
 computed in float64 and stored in float32, because that is what ``nn.adam`` does; the optimizer
 is not one of the differences under test.
 
@@ -49,7 +49,7 @@ BETA2 = 0.999
 EPS = 1e-8
 NORM_EPS = 1e-6
 
-BLOCKS = ("block0", "block1")
+BLOCKS = ("blocks.0", "blocks.1")
 # The order every variant is compared in.  The expert's fused QKV is split back into wq/wk/wv.
 CANONICAL = [
     f"{block}.{name}"
@@ -159,8 +159,8 @@ def expert_block(params: dict, block: str, x: torch.Tensor) -> torch.Tensor:
 
 def logits(params: dict, x: torch.Tensor, expert: bool) -> torch.Tensor:
     block = expert_block if expert else naive_block
-    h = block(params, "block0", x)
-    h = block(params, "block1", h)
+    h = block(params, "blocks.0", x)
+    h = block(params, "blocks.1", h)
     return rmsnorm(h, params["norm_f"]) @ params["head"]
 
 

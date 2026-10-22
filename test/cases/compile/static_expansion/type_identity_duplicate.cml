@@ -1,0 +1,17 @@
+/**
+ * The same type written twice in one case: the second pattern can never select anything, and
+ * the declaration is reported rather than silently dropping it.
+ */
+module type_identity_duplicate
+
+func twice::<T>(t: T): int {
+    return match type T {
+        case int | int => 1
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    println(twice(1))
+    return 0
+}

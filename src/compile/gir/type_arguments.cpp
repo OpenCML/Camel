@@ -60,12 +60,11 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
                 std::static_pointer_cast<core::data::StringData>(gct->at(i)->data())->data());
             ++i;
         }
-        types.push_back(boundType(gct->at(i)->dataType()));
+        types.push_back(resolveTypeNode(gct->at(i)->dataType(), gct->at(i)));
     }
     if (const auto found = genericDrefs_.find(target); found != genericDrefs_.end()) {
         const auto tmpl = found->second;
-        std::vector<std::string> names;
-        collectTypeVars(tmpl->funcType, names);
+        std::vector<std::string> names = typeParameterNames(tmpl);
         if (!given.empty()) {
             // By name: each type variable of the signature once, in any order.
             std::vector<Type *> byPosition(names.size(), nullptr);
@@ -124,6 +123,22 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
                 .atOrigin(gct->origin())
                 .commit(tmpl->name);
             throw BuildAbortException();
+        }
+        if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+            const WhenResult verdict =
+                evaluateWhenCondition(when->condition, tmpl->funcType, bindings, {}, tmpl);
+            if (verdict.fails()) {
+                diags_->of(SemanticDiag::WhenConditionUnmet)
+                    .atOrigin(gct->origin())
+                    .commit(
+                        tmpl->name,
+                        "explicit type arguments",
+                        tmpl->name + " — when " + when->text);
+                throw BuildAbortException();
+            }
+            if (!verdict.holds()) {
+                reportWhenProblem(verdict, tmpl->name, when->condition);
+            }
         }
         auto graph = instantiateGeneric(tmpl, bindings, {}, {}, gct);
         currGraph_->addDependencyGraph(graph);

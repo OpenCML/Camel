@@ -173,10 +173,18 @@ any Formatter::visitProgram(cst::Program context) {
     string headStr, tailStr;
     if (moduleDecl) {
         // The comments above `module` (the description of the file) stay above it; they used
-        // to be dropped.
+        // to be dropped. A blank line between two of them is kept: it is what separates the
+        // licence header from the file's own description, and without it the two runs of
+        // comments become one, which changes how the parser reads the file.
+        size_t previousEnd = 0;
         for (size_t i = 0; i < moduleDecl.firstToken().index(); i++) {
             if (tokens[i].channel > 1) {
+                const size_t line = tokens[i].line();
+                if (previousEnd != 0 && line > previousEnd + 1) {
+                    headStr += lineEnd();
+                }
                 headStr += tokens[i].text() + lineEnd();
+                previousEnd = line + std::count(tokens[i].text().begin(), tokens[i].text().end(), '\n');
             }
         }
         headStr += any_cast<string>(visit(moduleDecl));
@@ -521,12 +529,28 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         result += " " + any_cast<string>(visitResourceClause(clause));
     }
 
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        // The declaration's applicability condition, after the signature and before the body
+        // (design principles 5.13): it is part of the declaration, so leaving it out changes
+        // the AST the text parses to and, with it, the names synthesized from positions.
+        result += " " + any_cast<string>(visitWhenClause(whenClause));
+    }
+
     if (!stmtBlock) {
         // A body-less declaration of a C++ operator: the signature is the whole of it (design
         // principles 6.4; handover H19, step 1).
         return result;
     }
     return result + " " + any_cast<string>(visitStmtBlock(stmtBlock));
+}
+
+/*
+whenClause : IDENTIFIER logicalOrExpr
+*/
+any Formatter::visitWhenClause(cst::WhenClause context) {
+    // The applicability condition of a declaration (design principles 5.13): `when` and the
+    // expression, as written, after the signature and before the body.
+    return "when " + any_cast<string>(visitExpr(context->expr()));
 }
 
 /*
@@ -885,13 +909,30 @@ any Formatter::visitPairedValues(cst::PairedValues context) {
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
+any Formatter::visitTupleParam(cst::TupleParam context) {
+    string result = "(";
+    bool first    = true;
+    for (const auto &identDef : context->all<cst::IdentDef>()) {
+        if (!first) {
+            result += ", ";
+        }
+        first   = false;
+        result += any_cast<string>(visitIdentDef(identDef));
+    }
+    return result + ")";
+}
+
+/*
+pairedParams : keyParamPair (',' keyParamPair)* ;
+*/
 any Formatter::visitPairedParams(cst::PairedParams context) {
-    return formatList(
-        vec(context->all<cst::KeyParamPair>()),
-        context,
-        ", ",
-        ",",
-        PaddingNL | PushScope);
+    std::vector<syn::Node> params;
+    for (const syn::Node child : context->nodes()) {
+        if (child.is(NK::KeyParamPair) || child.is(NK::TupleParam)) {
+            params.push_back(child);
+        }
+    }
+    return formatList(params, context, ", ", ",", PaddingNL | PushScope);
 }
 
 /*
@@ -940,16 +981,14 @@ sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)?, a part not written left
 */
 any Formatter::visitSliceIndices(cst::SliceIndices context) {
     // The tree keeps the colons it consumed, so the text is the parts and the colons in the
-    // order they were written. A colon is followed by a space only when a part follows it.
+    // order they were written. Nothing separates a colon from the part that follows it: a
+    // slice is written `xs[a:b:s]`, `xs[:n]`, `xs[n:]` and `xs[::-1]`.
     string result;
     for (size_t i = 0; i < context->childCount(); ++i) {
         const auto child = context->child(i);
         if (child.isToken()) {
-            result += ":";
+            result += child.token().kind() == TK::ColonColon ? "::" : ":";
             continue;
-        }
-        if (!result.empty() && result.back() == ':') {
-            result += " ";
         }
         result += any_cast<string>(visitExpr(child.node()));
     }
@@ -1858,6 +1897,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(TagRef)
         CAMEL_FORMAT(FuncDecl)
         CAMEL_FORMAT(RuleDecl)
+        CAMEL_FORMAT(WhenClause)
         CAMEL_FORMAT(AnalysisDecl)
         CAMEL_FORMAT(AnalysisClause)
         CAMEL_FORMAT(RuleContext)
@@ -1875,6 +1915,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(KeyTypePair)
         CAMEL_FORMAT(KeyValuePair)
         CAMEL_FORMAT(KeyParamPair)
+        CAMEL_FORMAT(TupleParam)
         CAMEL_FORMAT(DataList)
         CAMEL_FORMAT(IdentList)
         CAMEL_FORMAT(IndexValues)
@@ -1985,6 +2026,14 @@ any Formatter::visit(syn::Node context) {
         return "(" + any_cast<string>(visit(context.type())) + ")";
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
+    case NK::ShapeComp: {
+        // `T { static for (n, F) in fields U => e }`: the shape is written as a type, and the
+        // generator prints as it does on its own; the braces are tokens, so the generator is
+        // taken by kind and not by child index.
+        const auto generator = context.get<cst::StaticForExpr>();
+        return formatTypeInTypePosition(context.type()) + " { " +
+               any_cast<string>(visitStaticForExpr(generator)) + " }";
+    }
     case NK::ConstasData:
         return "constas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
     case NK::SliceIndices:

@@ -120,7 +120,9 @@ class Tree {
     node_ptr_t makeCase(CaseType type, const std::string &binding = {});
     /// `match type` (children: TYPE, TCASE...) and one of its cases (child: the body).
     node_ptr_t makeTypeMatch();
-    node_ptr_t makeTypeCase(uint16_t patterns);
+    /// `patterns` are the shapes the case selects; `types` its identity patterns (`case int`,
+    /// `case T`), in the order written after the shapes.
+    node_ptr_t makeTypeCase(uint16_t patterns, const std::vector<Type *> &types);
     /// `static for (n, F) in fields T` (children: TYPE, body) or `static for (j) in indices ts`
     /// (children: the operand value, body). `valueName` is `n` (or `j`), `typeName` is `F`
     /// (empty for `indices`); both are bound only while the body is built.
@@ -140,6 +142,9 @@ class Tree {
     /// A comprehension (child: the `static for` that generates it): `isStruct` for
     /// `{ static for ... }`, false for `( static for ... )` (H51 step 4).
     node_ptr_t makeComprehension(bool isStruct);
+    /// `T { static for ... }` (children: the generator, then the type node naming `T`): the
+    /// rounds give the fields' values, `T` gives their names and the kind.
+    node_ptr_t makeShapeComprehension();
     /// A CASE of an enum variant: `label` the variant as written (`Shape::Rect`), `fields` and
     /// `bindings` the entries of the pattern in the order written (see Node::EnumCase).
     node_ptr_t makeEnumCase(
@@ -214,6 +219,37 @@ class Tree {
     void setUnwrittenParams(const Node *func, std::vector<UnwrittenParam> params);
     const std::vector<UnwrittenParam> *unwrittenParamsOf(const Node *func) const;
 
+    /// A parameter of a function that is destructured as a tuple (`((a, b)) => ...`): the names
+    /// the elements are bound to, in order, and the parameter's index over all parameters.
+    struct TupleParamBinding {
+        size_t index = 0;
+        std::vector<std::string> names;
+    };
+
+    /// The parameters of `func` destructured as tuples. Null when there are none.
+    void setTupleParams(const Node *func, std::vector<TupleParamBinding> params);
+    const std::vector<TupleParamBinding> *tupleParamsOf(const Node *func) const;
+
+    /// The applicability condition a declaration was written with: the expression after its
+    /// `when`, and the source text as written, for the report at a call site. Null when the
+    /// declaration has no condition. The condition is not a child of the FUNC: it is evaluated
+    /// when the declaration is instantiated (design principles 5.13), not when its body is
+    /// built.
+    struct WhenClause {
+        node_ptr_t condition               = nullptr;
+        std::string text;
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    };
+    void setWhen(const Node *func, WhenClause clause);
+    const WhenClause *whenOf(const Node *func) const;
+
+    /// The type parameters a declaration put at its head (`func f::<T, U>`), in order. They
+    /// make the declaration generic even when its signature writes none of them: a predicate
+    /// such as `func is_plain::<T>(): bool { match type T { ... } }` is instantiated by its
+    /// explicit type arguments, and its body is where the names occur (design principles 5.5).
+    void setHeadTypeParams(const Node *func, std::vector<std::string> names);
+    const std::vector<std::string> *headTypeParamsOf(const Node *func) const;
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -272,6 +308,9 @@ class Tree {
     std::unordered_map<const Node *, std::map<size_t, std::vector<TagUse>>> fieldTagUses_;
     std::unordered_map<const Node *, literal::Value> literalValues_;
     std::unordered_map<const Node *, std::vector<UnwrittenParam>> unwrittenParams_;
+    std::unordered_map<const Node *, std::vector<TupleParamBinding>> tupleParams_;
+    std::unordered_map<const Node *, WhenClause> whenClauses_;
+    std::unordered_map<const Node *, std::vector<std::string>> headTypeParams_;
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.
     std::unordered_map<const camel::core::data::Data *, std::vector<LiteralElement>>

@@ -174,6 +174,12 @@ let model2   = sgd(model, dm, 0.01)    // optimizers are functions over trees
   `float -> float`, `int`/`bool`/`string` have no tangent,
   structs/tuples/arrays map element-wise and drop non-differentiable members.
   `grad(loss)` therefore type-checks at compile time.
+- **Discrete values** (integers and booleans, scalar or held in a tensor) have
+  derivative zero by definition (design principles 9.9). A value computed from
+  a parameter and held in one -- an `argmax` result, a comparison mask, a label
+  -- converts back to float with a zero gradient, not a refusal. A module type
+  that is not discrete and has no tangent (a `Map`, an enum) is still refused
+  where the value is built or used as data.
 - `apply_gradients` was removed; a training step is `with_grad` + `sgd`.
 
 ## 4. The Transformation
@@ -300,11 +306,22 @@ wrapping of function-typed parameters described above is not implemented.)
 everything the function's own result waited for, so effects after the last
 value the gradient reads still happen.
 
-Arrays are not differentiable values today (`:op/idx_arr` and `map` have no
-derivative rule), so a lambda passed to `map` is refused for that reason.
+Arrays are differentiable values: an array's tangent is the array of its elements'
+tangents (design principles 9.9). A read by index scatters the element's gradient
+back at that index (`:op/idx_arr`'s rule, `:tangent/scatter_add_arr`); a `loop`
+that iterates an array carries the array's gradient beside the state gradients
+and scatters each round's element gradient at that round's index into it, taking
+the length of the zero array from the value the forward loop walked; and the
+structural zero and sum of tangents fall back to the tangent space the derivative
+registry holds for the element type (a tensor's `tensor:zeros_like` and
+`tensor:add`). An array whose element type has no tangent has none either, and a
+loop that iterates or captures one while it depends on the differentiated
+parameter is refused with a located diagnostic. A lambda passed to `map` is still
+refused: `map` has no derivative rule.
 Tests: `grad_closure.*`, `grad_function_values*.*` (accepted structures,
 against finite differences), `grad_function_value_*.*` (each refusal with its
-position), `grad_effects_kept.*`.
+position), `grad_effects_kept.*`, `loop_grad_iterable*.*`,
+`loop_grad_refuse_no_element_tangent.*`.
 
 ### 4.4a Variables
 
@@ -363,10 +380,21 @@ Precedence, most specific first:
    the abstract `VjpBuilder`.
 
 Operators without a rule are an error on differentiated paths. Structurally
-non-differentiable operators (`shape`, `zeros`, comparisons, integer arithmetic)
-stop gradients silently. The builder interface and the rule registry move from
-the nn module to core, beside the operator table (`OperatorTable`), because the transform
-is a core pass and must not depend on nn.
+non-differentiable operators (`shape`, `numel`, `dim`, `zeros`, comparisons,
+integer arithmetic) stop gradients silently. The builder interface and the rule
+registry move from the nn module to core, beside the operator table
+(`OperatorTable`), because the transform is a core pass and must not depend on
+nn.
+
+A rule that knows the mathematics of its input but has no operator with which
+to express it refuses instead of returning a zero: `tensor::ops::refuseVjp`
+reports a fault located at the operator's own origin (`VjpCall::origin`) and
+naming it, and asks the builder `isActive` whether the input it cannot handle
+depends on a differentiated parameter at all (a constant array is skipped; a
+float array is continuous, design principles 9.9, and is refused). `t[a:b]`
+(`tensor:slice_sub`) is a selection of indices, so its adjoint is the upstream
+gradient scattered back into the parent's shape at those indices, padded with
+zeros — `tensor:slice_grad` is that scatter.
 
 Correctness is checked mechanically: every rule gets a finite-difference test,
 and the benchmark models are compared parameter by parameter with PyTorch

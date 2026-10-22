@@ -1,0 +1,18 @@
+/// (b) An operator inside a `#gpu` scope whose lowering the device back end refuses for this
+/// shape: `@` takes rank >= 2, and these static types make the right operand rank 1. The host
+/// computes it, so the scope would silently fall back there; the compiler refuses instead.
+/// `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
+module gpu_nofallback_refused_shape
+
+import { Tensor, reshape, sum } from tensor
+
+#gpu
+func product(a: Tensor<f32, [2, 3]>, b: Tensor<f32, [3]>): Tensor<f32, [2]> {
+    return a @ b
+}
+
+func main() {
+    let a = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let b = reshape([1.0, 1.0, 1.0] as f32[], [3])
+    println(sum(product(a, b)))
+}

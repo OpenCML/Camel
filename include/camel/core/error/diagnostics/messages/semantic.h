@@ -230,6 +230,30 @@ enum class SemanticDiag : uint32_t {
     /// A constant is larger than the printer's max_literal_bytes.
     CmlBigConstant = 0x0001A6,
 
+    // Tensor element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
+    // tensor keeps the element type it is written with, so nothing rewrites it and there is no
+    // such diagnostic. The code is not reused.
+
+    // Applicability conditions (`when`, design principles 5.13; handover H234). 0x1A8 and up.
+    /// The condition's value is not a bool.
+    WhenConditionNotBool = 0x0001A8,
+    /// The condition is not a compile-time predicate the compiler can evaluate.
+    WhenConditionNotConstant = 0x0001A9,
+    /// The condition names something outside the declaration.
+    WhenUnknownName = 0x0001AA,
+    /// A type query is asked about a type that is still open (a type variable).
+    WhenTypeQueryNotConcrete = 0x0001AB,
+    /// No candidate of a call applies: every condition that could take it is false.
+    WhenConditionUnmet = 0x0001AC,
+
+    // Predicate lookup in a `when` condition (design principles 5.13, 10.2). 0x1BF and up.
+    /// A predicate another module declares, but this module does not import it.
+    WhenPredicateNotImported = 0x0001BF,
+    /// A name an import brings exists, but it is not a generic function answered at compile time.
+    WhenPredicateNotCompileTime = 0x0001C0,
+    /// Two imports bring a predicate of the same name, and neither is chosen.
+    WhenPredicateAmbiguous = 0x0001C1,
+
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,
@@ -244,6 +268,23 @@ enum class SemanticDiag : uint32_t {
     // A lambda's parameter that writes no type and that the function type of its position does
     // not determine (design principles 5.9). 0x17E and up.
     LambdaParameterWithoutType = 0x00017E,
+
+    // `typeof` and the same-shape comprehension (design principles 5.6, generic-structure
+    // README R3). 0x1B3 and up.
+    /// The expression after `typeof` has no value, so the type it stands for cannot be taken.
+    TypeOfNotAValue = 0x0001B3,
+    /// `typeof` is written inside a larger type (`typeof e[]`, `(typeof e, int)`).
+    TypeOfNotWholeType = 0x0001B4,
+    /// `T { static for ... }` names a type that is not a struct or a tuple.
+    SameShapeComprehensionNotComposite = 0x0001B5,
+    /// `T { static for (n, F) in fields U }` walks a type other than the shape `T`.
+    SameShapeComprehensionMismatch = 0x0001B6,
+
+    // Type identity in `match type` (`case int`, `case T`; design principles 5.5). 0x1C2.
+    /// An identity pattern names a type that cannot select the subject: `void`, a `typeof`
+    /// expression, an open type variable, a type written twice in one case, or a type that an
+    /// earlier case already selects.
+    StaticMatchPatternCannotMatch = 0x0001C2,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
@@ -280,4 +321,3 @@ constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }
 const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap();
 
 } // namespace camel::core::error
-

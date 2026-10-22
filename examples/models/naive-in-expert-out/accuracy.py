@@ -240,13 +240,12 @@ def camel_env(camel: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["CAMEL_HOME"] = str(install)
     env["PATH"] = str(install / "bin") + os.pathsep + env.get("PATH", "")
-    env["CAMEL_NUM_THREADS"] = "1"
     return env
 
 
 def run_camel(camel: Path) -> dict:
     result = subprocess.run(
-        [str(camel), str(HERE / "accuracy.cml"), "std::fvm"],
+        [str(camel), "-t", "1", str(HERE / "accuracy.cml"), "std::fvm"],
         capture_output=True, text=True, env=camel_env(camel),
     )
     if result.returncode != 0:

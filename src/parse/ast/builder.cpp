@@ -1710,8 +1710,17 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         blockNode = any2node(visitStmtBlock(blockContext));
     }
 
+    node_ptr_t whenNode = nullptr;
+    std::string whenText;
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        whenNode = any2node(visitExpr(whenClause->expr()));
+        whenText = std::string(whenClause->expr().sourceText());
+    }
+
     node_ptr_t funcNode = createNodeAs<FuncDataLoad>(ref);
     setNodeTokenRangeByContext(funcNode, context);
+    unwrapNodeAs<FuncDataLoad>(funcNode)->setWhen(whenNode);
+    unwrapNodeAs<FuncDataLoad>(funcNode)->setWhenText(std::move(whenText));
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
 
@@ -2125,6 +2134,31 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
 }
 
 /*
+tupleParam : '(' identDef (',' identDef)* ','? ')' ;
+A lambda parameter destructured as a tuple: the parameter has a name the program does not write,
+and the names take the elements of the tuple it is passed (the rule of `let (a, b) = p`).
+*/
+Value Builder::visitTupleParam(cst::TupleParam context) {
+    ENTER("TupleParam");
+    std::vector<std::string> names;
+    for (const auto &identDef : context->all<cst::IdentDef>()) {
+        names.push_back(identDef->text());
+    }
+    // The name is internal: no program writes it, and the position makes it unique.
+    Reference ref("_tuple_" + std::to_string(context->begin()));
+    node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref);
+    namedPairNode->loadAs<NamedPairLoad>()->setTupleNames(std::move(names));
+    setNodeTokenRangeByContext(namedPairNode, context);
+    node_ptr_t inferNode = createNodeAs<InferTypeLoad>(Reference());
+    setNodeTokenRangeByContext(inferNode, context);
+    *namedPairNode << inferNode;
+    node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");
+    *namedPairNode << dataExprOptNode;
+    LEAVE("TupleParam");
+    return namedPairNode;
+}
+
+/*
 dataList     : dataExpr (',' dataExpr)* ;
 */
 Value Builder::visitDataList(cst::DataList context) {
@@ -2186,8 +2220,12 @@ Value Builder::visitPairedParams(cst::PairedParams context) {
     ENTER("PairedParams");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(rep, context);
-    for (const auto &keyParamPair : context->all<cst::KeyParamPair>()) {
-        *rep << any2node(visitKeyParamPair(keyParamPair));
+    for (const syn::Node child : context->nodes()) {
+        if (child.is(NK::KeyParamPair)) {
+            *rep << any2node(visitKeyParamPair(cst::KeyParamPair(child)));
+        } else if (child.is(NK::TupleParam)) {
+            *rep << any2node(visitTupleParam(cst::TupleParam(child)));
+        }
     }
     LEAVE("PairedParams");
     return rep;
@@ -2236,6 +2274,9 @@ Value Builder::visitIndices(cst::Indices context) {
                 if (child.isToken()) {
                     if (child.token().kind() == TK::Colon) {
                         ++colons;
+                    } else if (child.token().kind() == TK::ColonColon) {
+                        // `xs[:: -1]`: the two colons of an omitted start and end are one token.
+                        colons += 2;
                     }
                     continue;
                 }
@@ -2596,6 +2637,9 @@ TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     if (text == "tuple") {
         return TypeCaseKind::Tuple;
     }
+    if (text == "func") {
+        return TypeCaseKind::Func;
+    }
     if (text == "#leaf") {
         return TypeCaseKind::Leaf;
     }
@@ -2610,9 +2654,18 @@ typeCase
 */
 Value Builder::visitTypeCase(cst::TypeCase context) {
     ENTER("TypeCase");
-    std::vector<TypeCaseKind> patterns;
+    std::vector<TypeCasePattern> patterns;
     for (const auto pattern : context->all<cst::TypeCasePattern>()) {
-        patterns.push_back(typeCaseKindOf(pattern));
+        TypeCasePattern entry;
+        // A pattern with a type child is an identity pattern (`case int`, `case T`); the
+        // shape words carry no type.
+        if (const auto typeNode = pattern.type()) {
+            entry.kind = TypeCaseKind::Identity;
+            entry.type = any2node(visitType(typeNode));
+        } else {
+            entry.kind = typeCaseKindOf(pattern);
+        }
+        patterns.push_back(std::move(entry));
     }
     node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(std::move(patterns));
     setNodeTokenRangeByContext(caseNode, context);
@@ -3948,6 +4001,21 @@ Value Builder::visitTupleData(cst::TupleData context) {
 }
 
 /*
+shapeComp : typeExpr '{' staticForExpr '}' ;
+The shape is child 0, the generator child 1. The tree keeps both: the graph builder reads the
+generator's rounds and takes the field names and the kind from the shape.
+*/
+Value Builder::visitShapeComp(cst::ShapeComp context) {
+    ENTER("ShapeComp");
+    node_ptr_t compNode = createNodeAs<ShapeCompLoad>();
+    setNodeTokenRangeByContext(compNode, context);
+    *compNode << any2node(visitType(context->type()));
+    *compNode << any2node(visitStaticForExpr(context->get<cst::StaticForExpr>()));
+    LEAVE("ShapeComp");
+    return compNode;
+}
+
+/*
 primaryData : identRef | literal | arrayData | structData | tupleData | funcData ;
 The tree has no node for the rule. A name as an operand is a RefData node, a literal a Literal.
 */
@@ -4881,6 +4949,8 @@ Value Builder::visitExpr(syn::Node context) {
         return visitStructData(cst::StructData(context));
     case NK::TupleData:
         return visitTupleData(cst::TupleData(context));
+    case NK::ShapeComp:
+        return visitShapeComp(cst::ShapeComp(context));
     case NK::FuncData:
         return visitFuncData(cst::FuncData(context));
     default:

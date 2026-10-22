@@ -49,7 +49,7 @@ def prepare_data(data: Path, profile: dict) -> None:
 
 def camel_command(camel: Path, data: Path, profile: dict, passes: list[str]) -> list[str]:
     return [
-        str(camel), str(HERE / "train.cml"),
+        str(camel), "-t", "1", str(HERE / "train.cml"),
         "--arg", f"data={data}",
         "--arg", f"steps={profile['steps']}",
         "--arg", f"lr={profile['lr']}",
@@ -110,7 +110,7 @@ def main() -> int:
     camel = camel_executable(args.camel)
 
     prepare_data(data, profile)
-    c = run_command(camel_command(camel, data, profile, ["std::macro", "std::nvm"]), camel_env(REPO, 1))
+    c = run_command(camel_command(camel, data, profile, ["std::macro", "std::nvm"]), camel_env(REPO))
     t = run_command(torch_command(data, profile), python_env(1))
     for name, run in (("Camel", c), ("PyTorch", t)):
         if run["exit"] != 0:
@@ -124,7 +124,7 @@ def main() -> int:
     for _ in range(3):
         compile_times.append(run_command(
             camel_command(camel, data, profile, ["std::macro", "std::stats", "std::null"]),
-            camel_env(REPO, 1))["seconds"])
+            camel_env(REPO))["seconds"])
     compile_time = statistics.median(compile_times)
 
     worst = max(cr["steps"], key=lambda step: relative(cr["steps"][step], tr["steps"].get(step, 0.0)))
@@ -143,7 +143,7 @@ def main() -> int:
     ]
     failures = sum(1 for row in rows if row[-1] == "FAIL")
 
-    version = run_command([str(camel), "--version"], camel_env(REPO, 1))
+    version = run_command([str(camel), "--version"], camel_env(REPO))
     lines = []
     lines.append("# D5 — Tree-LSTM sentiment: measured results")
     lines.append("")

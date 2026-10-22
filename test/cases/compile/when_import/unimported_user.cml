@@ -1,0 +1,11 @@
+/**
+ * A predicate in a module this one does not import. `unimported_user` calls
+ * `is_compound::<T>()` without importing `predicates`; the program loads that module for the
+ * entry, so the report can say the predicate is not imported here instead of calling the name
+ * unknown.
+ */
+module when_import_unimported_user
+
+export func describe::<T>(x: T): string when is_compound::<T>() {
+    return 'compound'
+}

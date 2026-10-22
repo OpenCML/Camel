@@ -272,7 +272,7 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
             }
             if (child->type() == GCT::NodeKind::FUNC) {
                 FunctionType *declared = tt::as_ptr<FunctionType>(child->at(0)->dataType());
-                if (isGenericHere(declared)) {
+                if (isGenericHere(declared, child)) {
                     continue; // a template: its instances are built where they are called
                 }
                 // The graph its DECL made: found by the declared type object, like overloads.

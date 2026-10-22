@@ -46,6 +46,34 @@ using graph_scope_ptr_t     = std::shared_ptr<graph_scope_t>;
 using decorated_scope_t     = Scope<std::string, compile_graph_ptr_t>;
 using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
 
+/// What a declaration's `when` condition says at one instantiation (design principles 5.13).
+/// The condition is a compile-time predicate over the declaration's type parameters and `with`
+/// parameters; it is evaluated when the declaration is instantiated or selected, never when it
+/// is parsed. A condition the compiler cannot answer is never taken for `true`.
+enum class WhenOutcome {
+    Holds,          // it is true
+    Fails,          // it is false: the declaration is not applicable here
+    NeedsWithValue, // it reads a `with` parameter whose value the call did not give
+    NotBool,        // its value is not a bool
+    NotEvaluable,   // it is not a compile-time predicate (a runtime value, a user call, ...)
+    TypeNotConcrete,// a type query still sees a type variable
+    UnknownName,    // a name outside the declaration (an ordinary parameter, a body name, ...)
+    // A predicate call the condition cannot make, though the name exists.
+    NotImported,    // declared by a module this one does not import
+    NotCompileTime, // imported, but not a generic function answered at compile time
+    PredicateAmbiguous, // two imports bring predicates of that name, and neither is chosen
+};
+
+struct WhenResult {
+    WhenOutcome outcome = WhenOutcome::NotEvaluable;
+    /// The name, type or expression the outcome is about, for the report.
+    std::string subject;
+    /// A sentence saying what is wrong or missing, for the report.
+    std::string detail;
+    bool holds() const { return outcome == WhenOutcome::Holds; }
+    bool fails() const { return outcome == WhenOutcome::Fails; }
+};
+
 /// The value of a `constas` constant as the key it stands for when it names a field or a
 /// position (`t.[n]`): the text of a string, the digits of an integer, `true` / `false`.
 std::string constasKeyOf(const camel::core::data::data_ptr_t &data);
@@ -803,6 +831,9 @@ class Builder {
         // The declared type with the variables of enclosing instances replaced; the function's
         // own variables remain.
         FunctionType *funcType = nullptr;
+        // The type parameters the declaration put at its head, in order, whether or not the
+        // signature writes them; an explicit `::<...>` binds them by position or by name.
+        std::vector<std::string> headParams;
         // The bindings in force where the template was declared (a generic function declared
         // inside an instance of another one).
         camel::core::type::type_bindings_t outerBindings;
@@ -847,6 +878,12 @@ class Builder {
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
     bool genericCalleeAllowed_ = false;
+    // Set while the callee of a call is visited, when that callee is a `WITH`: the arguments
+    // bound there are arguments of this call, so one whose parameter type is only known after
+    // the ordinary arguments are typed can be built at the call instead (design principles 5.9:
+    // a lambda's parameter types come from the parameter it is passed to, and `reduce<f, 0>`
+    // binds the element type from the array it reduces).
+    bool withArgsOfCall_ = false;
     // The type of the position the expression being built stands at: the value the expression
     // produces must be of this type (design principles 5.1). Every syntax position that knows
     // the type passes it down with an ExpectedValueScope or visitInPosition; checkValue applies
@@ -886,6 +923,19 @@ class Builder {
         return rest || constas || (camel::core::type::containsTypeVar(type) &&
                                    camel::core::type::containsTypeVar(boundType(type)));
     }
+    // Whether the declaration `node` is a template: its head may declare type parameters that
+    // its signature never writes (a predicate such as `is_plain::<T>()` matched in its body),
+    // and those are bound by an explicit `::<...>` at the call all the same.
+    bool isGenericHere(Type *type, const GCT::node_ptr_t &node) const {
+        if (node != nullptr &&
+            camel::compile::gct::Tree::of(node)->headTypeParamsOf(node) != nullptr) {
+            return true;
+        }
+        return isGenericHere(type);
+    }
+    // The type parameters of a template in declaration order: the head names first, then the
+    // variables its signature writes that the head did not declare.
+    std::vector<std::string> typeParameterNames(const template_ptr_t &tmpl) const;
     // Registers the generic functions declared directly in the block `exec`, before anything
     // in the block is built: a call may precede the declaration.
     void registerGenericTemplates(const GCT::node_ptr_t &exec);
@@ -1055,6 +1105,47 @@ class Builder {
     void buildFuncBody(
         const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
         const std::string &name, const TagFacts &bodyTags);
+
+    /// Evaluates a declaration's `when` condition at one instantiation. `signature` is the
+    /// declaration's signature with the instance's types bound, so the `with` parameter names
+    /// are known; `bindings` substitutes the declaration's type variables in the condition's
+    /// type arguments. `withValues` holds the call's `with` arguments that are compile-time
+    /// constants, by parameter name. The condition is a bool expression over the compiler's
+    /// type queries (`is_numeric`, `is_integer`, `is_float`, `is_ordered`, `is_function`,
+    /// `is_string`, `is_bool`), `!`, `&&`, `||` and parentheses.
+    /// A condition belongs to the declaration that writes it, and is answered in that module
+    /// even when another one selects the declaration: `declaring` is the generic template, and
+    /// `contextUnit` the module of a function that is not generic. Names are resolved there,
+    /// as a call in the declaration's body would be.
+    WhenResult evaluateWhenCondition(
+        const GCT::node_ptr_t &condition, FunctionType *signature,
+        const camel::core::type::type_bindings_t &bindings,
+        const std::unordered_map<std::string, data_ptr_t> &withValues,
+        const template_ptr_t &declaring = nullptr, const ModuleUnit *contextUnit = nullptr);
+    /// Switches the builder to the module a condition is written in for as long as it lives:
+    /// the search for a predicate is the declaration's, wherever the selection happens.
+    class ConditionContext;
+    /// The template a condition's call names where the declaration is written: the module's
+    /// own generic functions first, then those its imports bring by name or through a module
+    /// prefix, then the prelude. `problem` is set when the name exists but cannot be called at
+    /// compile time (imported and not a generic function, or two imports that both bring it).
+    /// nullopt with `problem` still NotEvaluable when the name is not found by those layers.
+    std::optional<template_ptr_t> whenPredicateNamed(
+        const std::string &written, const GCT::node_ptr_t &at, WhenResult &problem);
+    /// Whether two selective imports bring a predicate of the name, in which case `problem`
+    /// says so and neither is chosen.
+    bool whenPredicateAmbiguous(const std::string &written, WhenResult &problem);
+    /// The module that declares a predicate called `written` when this module does not import
+    /// it, for the "not imported" report; empty when no loaded module declares it.
+    std::string whenPredicateElsewhere(const std::string &written) const;
+    /// The module of a top-level function or of an instance of one, by its graph.
+    const ModuleUnit *unitOfFunction(const compile_graph_ptr_t &graph) const;
+    /// Reports why a condition is not applicable at `origin`, for the declaration named `name`.
+    /// Never returns: every outcome except Holds is a diagnostic.
+    [[noreturn]] void reportWhenProblem(
+        const WhenResult &result, const std::string &name, const GCT::node_ptr_t &origin);
+    /// The graphs whose declaration has a `when` condition, with its source text.
+    std::unordered_map<const DraftGraphBuilder *, GCT::Tree::WhenClause> whenClauses_;
 
     std::optional<node_handle_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
@@ -1304,6 +1395,13 @@ class Builder {
     completeLambdaSignature(const GCT::node_ptr_t &gct, FunctionType *funcType, Type *expected);
     node_handle_t visitDataNode(const GCT::node_ptr_t &gct);
     Type *visitTypeNode(const GCT::node_ptr_t &gct);
+    /**
+     * The type a type expression denotes once its `typeof` placeholders are resolved: the
+     * expression is built where the type is used, and the placeholder is replaced by its value
+     * type. Any other type is bound by `boundType`. A placeholder nested inside a larger type
+     * is refused: `typeof` stands for a whole type.
+     */
+    Type *resolveTypeNode(Type *type, const GCT::node_ptr_t &at);
     node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
     /// A name: its value node, or the build-time tuple a rest parameter names (no node).
     std::any visitDRefNode(const GCT::node_ptr_t &gct);
@@ -1346,7 +1444,7 @@ class Builder {
         const char *originKind);
     /// `t.[key]`: the field or tuple element is chosen at compile time.
     node_handle_t visitStaticAccessNode(const GCT::node_ptr_t &gct);
-    bool typeCaseMatches(Type *subject, uint16_t patterns) const;
+    bool typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) const;
 
     /// Whether a name read in a case body that is not selected names something. It walks the
     /// same layers as visitDRefNode, but builds no node and checks no type (H51 step 1, Q10).

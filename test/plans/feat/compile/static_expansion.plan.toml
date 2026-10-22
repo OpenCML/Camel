@@ -308,7 +308,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_access_shadowed_key"
-desc = "A local named like the field name shadows the static `n`; the key is then a runtime value, not a constant."
+desc = "A `var` named like the field name shadows the static `n`: its value can change before the access, so the key is a run-time value even though it starts as a literal."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/static_access_shadowed_key.cml"
 args = ["${case}"]
@@ -698,4 +698,207 @@ const adds = body.filter((line) => line.includes('label=":op/add_l"'))
 assert(adds.length === 3, `the expansion lost an addition: ${adds.length}`)
 }
 """
+
+[[tests]]
+name = "same_shape_comprehension"
+desc = "`T { ... }` fills a struct with its field names, a tuple with its positions, and one `case struct | tuple` branch covers both: the values are the names of the fields."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/same_shape_comprehension.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "{ x: x, y: y }\n(0, 1)\n{ a: a, b: b }\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "typeof_in_fields_and_match_type"
+desc = "`typeof e` gives the type of the value `e`; `fields typeof(pair_of(t))` walks the two fields and `match type typeof(pair_of(t))` selects the tuple case, inside a generic function whose pair type has no name."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/typeof_type.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "2\npair\n2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "typeof_void_is_refused"
+desc = "The operand of `typeof` must have a value: a call that returns void has no type to take."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/typeof_void.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeOfNotAValue"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "typeof_inside_type_is_refused"
+desc = "`typeof` stands for a whole type: `typeof(1)[]` is refused where the array type is expanded."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/typeof_inside_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeOfNotWholeType"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "same_shape_comprehension_mismatch"
+desc = "The shape being filled and the type the generator walks must be the same type."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/shape_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::SameShapeComprehensionMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "same_shape_comprehension_needs_a_shape"
+desc = "A leaf has no fields: `N { ... }`, with `N = int`, is refused before the generator is expanded."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/shape_not_composite.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::SameShapeComprehensionNotComposite"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_for_wildcard"
+desc = "`_` in the head of `static for`/`static loop` is the wildcard of `match`: `(n, _)` keeps the field name and drops the type name, `(_, F)` keeps the type name while the field name binds nothing, and each is walked once per field."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_for_wildcard.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "(a, b)\n(0, 1)\n2\n2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "type_identity_leaf"
+desc = "Identity is exact for the leaf types: `case int` selects int and not float, `case i32` selects i32 and not int, `case float` selects float, `case f32` selects f32 and not float, and `#leaf` still selects every scalar no identity case named."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/type_identity.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "int\nfloat\nf32\ni32\nleaf\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_named_constant"
+desc = "A `let` bound once to a compile-time constant is a key of `t.[...]`: the first field name is written once and used on every tree, which is what `first_leaf` in the tree library does."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_access_named_constant.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "type_identity_nominal_struct"
+desc = "A named struct is matched by its declaration: `Point` and `Pair` have the same fields and select different cases, an anonymous struct of that shape is selected by `case struct`, and a tuple falls to `_`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/type_identity_nominal.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "Point\nPair\nstruct\nother\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_var_is_not_constant"
+desc = "A `var` that starts as a literal is still a run-time value: it can hold another key at the access, so `t.[k]` is refused like any other run-time key."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_access_not_constant_var.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessNotConstant"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "type_identity_type_parameter"
+desc = "`case U` compares the binding of U with the binding of the subject T at the instantiation: `same::<int, int>()` is true, `same::<int, float>()` is false, and `same::<float, float>()` is true."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/type_identity_typevar.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "true\nfalse\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "type_identity_duplicate_pattern"
+desc = "The same type written twice in one case is refused: the second `int` can never select anything."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/type_identity_duplicate.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchPatternCannotMatch"
+expect_diagnostic_line = 9
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "type_identity_shadowed"
+desc = "A type an earlier case already selects cannot be selected again: the second `case int` is dead, and the report names the later case instead of leaving it silently unreachable."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/type_identity_shadowed.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchPatternCannotMatch"
+expect_diagnostic_line = 10
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "type_identity_shape_shadowed"
+desc = "An earlier `case struct` selects every struct, so a later `case Point` is dead: the shape semantics of the existing cases are unchanged, and the identity case that adds nothing is reported."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/type_identity_shape_shadowed.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchPatternCannotMatch"
+expect_diagnostic_line = 13
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "type_identity_after_leaf"
+desc = "An identity pattern after `#leaf` can never be selected, exactly as a shape after `#leaf` cannot: the report is at the `#leaf` case."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/type_identity_after_leaf.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchUnreachableCase"
+expect_diagnostic_line = 9
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "type_identity_unknown_name"
+desc = "The type name of an identity pattern is resolved at the declaration: an unknown name is UnresolvedTypeReference at the pattern."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/type_identity_unknown.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedTypeReference"
+expect_diagnostic_line = 9
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "type_identity_void"
+desc = "`void` is not the type of a value: an identity pattern naming it cannot select a subject and is StaticMatchPatternCannotMatch."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/type_identity_void.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchPatternCannotMatch"
+expect_diagnostic_line = 9
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

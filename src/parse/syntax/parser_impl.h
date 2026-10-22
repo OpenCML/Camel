@@ -240,6 +240,9 @@ class ParserImpl {
     /// The clause after a function's result type (design effects plan 3.1): the resources a call
     /// touches. `uses` and `pure` are contextual keywords.
     void parseResourceClause();
+    /// whenClause : 'when' logicalOrExpr
+    /// A declaration's applicability condition, after its signature (design principles 5.13).
+    void parseWhenClause();
     void parseRetStmt();
 
     void parseModifiers();
@@ -327,12 +330,14 @@ class ParserImpl {
     void parseArrayData();
     void parseStructData();
     void parseTupleData();
+    void parseShapeComp();
     void parseFuncData();
     void parseIf();
     void parseMatch();
     void parseMatchType();
     void parseStaticFor();
     void parseStaticForHeader();
+    void parseStaticForName();
     void parseStaticLoop();
     void parseMatchCase();
     void parseTypeCase();
@@ -369,6 +374,8 @@ class ParserImpl {
         return peek(n) == TK::Identifier && peek(n + 1) == TK::Colon;
     }
     bool lambdaAhead() const;
+    /// A shape comprehension is ahead: a name path, `{`, and the `static for` that fills it.
+    bool shapeCompAhead() const;
 
     // ---- Types (parser_type.cpp) ----
     bool typeStartsAt(uint32_t n) const;

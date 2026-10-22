@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -74,6 +75,89 @@ camel::core::type::Type *writingType(
         return const_cast<camel::core::type::Type *>(nodeType);
     }
     return const_cast<camel::core::type::Type *>(patternType);
+}
+
+/// The text of a node while the draft still has it: its id, kind, operator and type, and the
+/// value of a static constant (bounded, so a large constant does not turn a proof into a data
+/// dump). This is the text an attribution step keeps, because a node a rewrite erases has no
+/// later text to read. It is made only when a log was asked for.
+std::string nodeText(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr) {
+        return "%" + std::to_string(id);
+    }
+    std::string text = "%" + std::to_string(id) + " ";
+    switch (header->kind) {
+    case GCNodeKind::Data:
+        text += "data";
+        break;
+    case GCNodeKind::Port:
+        text += "port";
+        break;
+    case GCNodeKind::Cast:
+        text += "cast";
+        break;
+    case GCNodeKind::Copy:
+        text += "copy";
+        break;
+    case GCNodeKind::Fill:
+        text += "fill";
+        break;
+    case GCNodeKind::Accs:
+        text += "access";
+        break;
+    case GCNodeKind::Brch:
+        text += "branch";
+        break;
+    case GCNodeKind::Join:
+        text += "join";
+        break;
+    case GCNodeKind::Call:
+        text += "call";
+        break;
+    case GCNodeKind::Bind:
+        text += "bind";
+        break;
+    case GCNodeKind::Func:
+        text += "func";
+        break;
+    case GCNodeKind::Oper: {
+        const auto bytes = draft.payloadOf(id);
+        text += bytes.size() >= sizeof(GCOperBody)
+                    ? std::string(reinterpret_cast<const GCOperBody *>(bytes.data())->uri())
+                    : std::string("oper");
+        break;
+    }
+    case GCNodeKind::Sync:
+        text += "sync";
+        break;
+    case GCNodeKind::Gate:
+        text += "gate";
+        break;
+    case GCNodeKind::Dref:
+        text += "dref";
+        break;
+    case GCNodeKind::Loop:
+        text += "loop";
+        break;
+    case GCNodeKind::Dead:
+        text += "dead";
+        break;
+    }
+    if (header->kind == GCNodeKind::Data && header->dataType != nullptr) {
+        const auto index = static_cast<long long>(header->dataIndex);
+        const auto slots = draft.staticSlots();
+        if (index < 0 && static_cast<size_t>(-index) < slots.size()) {
+            std::ostringstream value;
+            camel::core::rtdata::printSlotCapped(
+                value, slots[static_cast<size_t>(-index)], header->dataType, /*arrayLimit=*/4);
+            text += " " + value.str();
+        }
+    }
+    if (header->dataType != nullptr) {
+        text += " : " + header->dataType->toString();
+    }
+    return text;
 }
 
 /// The bits of a constant that are its value. A slot is 64 bits, but an f32 or an i32 occupies the
@@ -1321,7 +1405,8 @@ DraftWritings::build(const Pattern &pattern, const Match &match, const DraftNode
     return kInvalidNodeRef;
 }
 
-RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds) {
+RewriteStats DraftWritings::rewrite(
+    std::span<const Rule> rules, size_t maxRounds, RewriteLog *log) {
     for (const Rule &rule : rules) {
         if (rule.twoWay) {
             throw std::invalid_argument(
@@ -1397,8 +1482,9 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
         return draft_.normUsersOf(node).empty() && draft_.withUsersOf(node).empty() &&
                draft_.ctrlUsersOf(node).empty();
     };
-    // Erases a node nothing reads, then what only it was reading (pure nodes only).
-    const auto eraseUnused = [&](gc_node_ref_t first) {
+    // Erases a node nothing reads, then what only it was reading (pure nodes only). `step`, when
+    // given, notes each node and its text before the draft forgets both.
+    const auto eraseUnused = [&](gc_node_ref_t first, RewriteStep *step) {
         std::vector<gc_node_ref_t> work{first};
         while (!work.empty()) {
             const gc_node_ref_t node = work.back();
@@ -1419,6 +1505,10 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
                     ix.byKey.erase(found);
                 }
                 ix.keyOf[node].reset();
+            }
+            if (step != nullptr) {
+                step->erased.push_back(node);
+                step->erasedText.push_back(nodeText(draft_, node));
             }
             draft_.eraseNode(node);
             ++stats.erased;
@@ -1487,6 +1577,31 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
                 if (!waits.empty() && made < before) {
                     continue;
                 }
+                // The attribution of this rewrite (rewrite design 8.7). The step is made only
+                // when a log was asked for, so a plain rewrite allocates nothing for it; the
+                // text of the nodes is read now, because the erased ones lose it below.
+                std::optional<RewriteStep> step;
+                RewriteStep *recorded = nullptr;
+                if (log != nullptr) {
+                    step.emplace();
+                    step->rule   = rule.name;
+                    step->ruleId = rule.id;
+                    step->round  = stats.rounds;
+                    step->matched.push_back(node);
+                    step->matchedText.push_back(nodeText(draft_, node));
+                    for (gc_node_ref_t bound : *chosen) {
+                        if (bound == kInvalidNodeRef ||
+                            std::find(step->matched.begin(), step->matched.end(), bound) !=
+                                step->matched.end()) {
+                            continue;
+                        }
+                        step->matched.push_back(bound);
+                        step->matchedText.push_back(nodeText(draft_, bound));
+                    }
+                    step->produced     = made;
+                    step->producedText = nodeText(draft_, made);
+                    recorded           = &*step;
+                }
                 draft_.replaceAllValueUses(node, made);
                 draft_.replaceAllCtrlUses(node, made);
                 for (gc_node_ref_t wait : waits) {
@@ -1509,7 +1624,10 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
                 }
                 ++appliedInRound;
                 ++stats.applied;
-                eraseUnused(node);
+                eraseUnused(node, recorded);
+                if (log != nullptr) {
+                    log->push_back(std::move(*step));
+                }
                 break;
             }
         }

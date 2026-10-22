@@ -41,6 +41,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
 | [tree](#tree) | `import { ... } from tree` | Camel |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
+| [types](#types) | `import { ... } from types` | Camel |
 | [array](#array) | `import { ... } from array` | Camel |
 | [math](#math) | `import { ... } from math` | C++ |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ |
@@ -71,6 +72,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` |  |
 | [tree](#tree) | `import { ... } from tree` |  |
 | [tensor](#tensor) | `import { ... } from tensor` |  |
+| [types](#types) | `import { ... } from types` |  |
 | [array](#array) | `import { ... } from array` |  |
 | [math](#math) | `import { ... } from math` |  |
 | [statistics](#statistics) | `import { ... } from statistics` |  |
@@ -1146,8 +1148,12 @@ The parameter-tree library written in Camel (design principles 13.5): a tree is 
 of nested structs and tuples, and everything else is a leaf.
 
 `tree_paths`, `tree_map`, `tree_reduce` and `tree_unzip` are written here, with `match type`,
-`static for`/`static loop`, `fields`, `indices` and rest parameters: the walk is expanded at
-each call into ordinary access and fill nodes, with no function of its own per leaf type.
+`static for`/`static loop`, `fields`, `indices`, `typeof` and rest parameters: the walk is
+expanded at each call into ordinary access and fill nodes, with no function of its own per
+leaf type. Each exported function recurses itself. `paths_at` and `unzip_at` stay because
+they carry a value the exported signature does not have (the path built so far, the component
+of the leaf tuple): a default argument would fold the first one into `tree_paths` (the
+language has none yet), and the second is not a hand-off but the walk of one component.
 
 `tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
 leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being
@@ -2022,29 +2028,138 @@ Reseeds the module's random generator, which `random` and `randn` draw from.
 - With effects: writes the random generator.
 - Example: `seed(42)`
 
+<a id="types"></a>
+
+## `types`: the properties of types
+
+The properties of types that an applicability condition asks about. These are ordinary Camel
+functions: each one matches the type it is given with `match type` and returns a constant, so
+`func f::<T>(x: T) when is_numeric::<T>()` is applicable exactly where `T` is a number.
+
+`match type` compares a type's identity as well as its shape (design principles 5.5): the
+cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `c64`, `c128`,
+`string`, `bool`), and `case func` is the shape of every function type.
+
+#### `is_numeric`
+
+```camel
+is_numeric: () => bool
+```
+
+True when `T` is a number: an integer, a float or a complex number.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_numeric::<int>()` gives `true`
+- Example: `is_numeric::<string>()` gives `false`
+
+#### `is_integer`
+
+```camel
+is_integer: () => bool
+```
+
+True when `T` is an integer type (`int` is 64-bit, `i32` is 32-bit).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_integer::<int>()` gives `true`
+- Example: `is_integer::<float>()` gives `false`
+
+#### `is_float`
+
+```camel
+is_float: () => bool
+```
+
+True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_float::<float>()` gives `true`
+- Example: `is_float::<int>()` gives `false`
+
+#### `is_ordered`
+
+```camel
+is_ordered: () => bool
+```
+
+True when `T` has a total order: the number types, `string` and `bool`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_ordered::<string>()` gives `true`
+- Example: `is_ordered::<bool>()` gives `true`
+
+#### `is_function`
+
+```camel
+is_function: () => bool
+```
+
+True when `T` is a function type, whatever its parameters and result.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_function::<(x: int) => int>()` gives `true`
+
+#### `is_string`
+
+```camel
+is_string: () => bool
+```
+
+True when `T` is `string`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_string::<string>()` gives `true`
+- Example: `is_string::<int>()` gives `false`
+
+#### `is_bool`
+
+```camel
+is_bool: () => bool
+```
+
+True when `T` is `bool`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_bool::<bool>()` gives `true`
+- Example: `is_bool::<int>()` gives `false`
+
 <a id="array"></a>
 
 ## `array`: arrays and higher-order functions
 
 Array functions and higher-order functions, written in Camel on top of the built-in
-operators (map, filter, reduce, range, zip, slice, len) and three primitives of the algo
-module (flatten, unique, argsort). Every function returns a new value; none changes its
-argument.
+operators (map, filter, reduce, range, zip, slice, len) and three primitives of this module
+(flatten, unique, argsort), whose kernels are the C++ module's. Every function returns a new
+value; none changes its argument.
 
 - The array a function works on is its ordinary argument; a function or a value that
   configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
   so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
 - A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
   returns an error value, and a wrong argument is a fault of the operator that meets it.
-- Order of evaluation (design principles 3.6). A function passed to one of these is applied
-  with `map`: its calls on different elements have NO order among them and the parallel
-  scheduler may run them at the same time; the result is put together by position and is
-  the same on every back end. That holds for `find`, `any`, `all`, `count`, `flat_map`,
-  `sort_by` and `zip_with`. None of them stops early: the function is applied to every
-  element. A function with side effects belongs in `foreach` or `reduce`, which are ordered.
+- A function passed to any of these must be pure. The implementation may stop early
+  (`find`, `index_of`, `any`, `all`) or, when a fast path is added under `#impl`, apply it to
+  several elements at once; the result is the same either way, and no call observes another.
+  A function with side effects belongs in `foreach` or `reduce`, which run in order.
 - These are generic functions: there is one instance per set of element types in the whole
   program, whichever module calls it (one root graph, design principles 10.1). `group_by`
   is not here: it needs the map type.
+
+#### `argsort`
+
+```camel
+argsort: (keys: i32[]) => int[]
+argsort: (keys: int[]) => int[]
+argsort: (keys: f32[]) => int[]
+argsort: (keys: float[]) => int[]
+argsort: (keys: bool[]) => int[]
+argsort: (keys: string[]) => int[]
+```
+
+The indices that sort the keys ascending; equal keys keep their order (stable).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `argsort([3, 1, 2])` gives `[1, 2, 0]`
 
 ### Rearranging
 
@@ -2098,7 +2213,7 @@ Each element with its index.
 flatten: (xss: T[][]) => T[]
 ```
 
-The elements of the inner arrays, in order. (Primitive: algo::flatten.)
+The elements of the inner arrays, in order.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
@@ -2110,7 +2225,6 @@ unique: (xs: T[]) => T[]
 ```
 
 The first occurrence of every value, in order; values are compared as `==` compares them.
-(Primitive: algo::unique.)
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
@@ -2177,14 +2291,10 @@ The number of elements for which pred is true.
 #### `sum`
 
 ```camel
-sum: (xs: int[]) => int
-sum: (xs: float[]) => float
-sum: (xs: i32[]) => i32
-sum: (xs: f32[]) => f32
+sum: (xs: T[]) => T when is_numeric::<T>()
 ```
 
-The sum of the elements, 0 for an empty array. One function per numeric type (the zero of a
-type variable cannot be written). Integers wrap around on overflow, as `+` does.
+The sum of the elements, 0 for an empty array. Integers wrap around on overflow, as `+` does.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `sum([1, 2, 3])` gives `6`
@@ -2192,12 +2302,11 @@ type variable cannot be written). Integers wrap around on overflow, as `+` does.
 #### `min`
 
 ```camel
-min: (xs: T[]) => T?
+min: (xs: T[]) => T? when is_numeric::<T>()
 ```
 
-The smallest element by `<` (numbers, or strings by byte), or null for an empty array;
-among equal elements the first. A NaN compares false with everything: it is the result only
-when it is the first element.
+The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
++0), or null for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `min([3, 9, 2]) ?? 0` gives `2`
@@ -2205,13 +2314,14 @@ when it is the first element.
 #### `max`
 
 ```camel
-max: (xs: T[]) => T?
+max: (xs: T[]) => T? when is_numeric::<T>()
 ```
 
-The largest element by `>`, or null for an empty array; among equal elements the first.
+The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
+-0), or null for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `max(['pear', 'fig']) ?? ''` gives `'pear'`
+- Example: `max([3, 9, 2]) ?? 0` gives `9`
 
 ### Transforming
 
@@ -2233,9 +2343,9 @@ sort_by: <key: (x: T) => K> (xs: T[]) => T[]
 ```
 
 The elements in ascending order of key(x); elements with equal keys keep their order (the
-sort is stable, so sorting by one key and then by another works). A key is a number, a
-string (ordered by byte) or a bool; NaN keys come last. For a descending order of numbers
-use the negated key. (Primitive: algo::argsort.)
+sort is stable, so sorting by one key and then by another works). A key is a number, a string
+(ordered by byte) or a bool; NaN keys come last. For a descending order of numbers use the
+negated key.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `['pear', 'fig', 'apple']->sort_by<(w: string) => len(w)>` gives `['fig', 'pear', 'apple']`
@@ -2250,7 +2360,7 @@ f(xs[i], ys[i]) for every i.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
-- Example: `zip_with<(a: int, b: int): int => a + b>([1, 2], [10, 20])` gives `[11, 22]`
+- Example: `zip_with<(a: int, b: int) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
 
 <a id="math"></a>
 
@@ -4394,10 +4504,11 @@ traced.
 Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of `Rule`
 values to a `Program`, `check` tests rules on random programs, and the four readers report a
 `Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
-round budget explicit and the cost kept: its readers give the program, the rewrites applied, the
-rounds, the nodes visited, the nodes erased and the wall time (H226). A rule that stops a
-rewrite without changing the program is a fault, and `strict` restricts the float rules to the
-ones that hold bit for bit.
+round budget explicit and the cost kept: it answers a `Run`, the program and what the
+application cost (H226). Its fifth parameter opens the attribution record, and `explain` prints
+it as the chain of rewrites, each with the rule, round, graph and nodes that made it (rewrite
+design 8.7). A rule that stops a rewrite without changing the program is a fault,
+and `strict` restricts the float rules to the ones that hold bit for bit.
 
 The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
 `analysis` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
@@ -4458,95 +4569,35 @@ that fails, or that all of them hold.
 #### `run`
 
 ```camel
-run: (p: Program, rules: Rule[], rounds: int, strict: bool) => Run!
+run: (p: Program, rules: Rule[], rounds: int, strict: bool) => Run<Program>!
+run: (p: Program, rules: Rule[], rounds: int, strict: bool, explain: bool) => Run<Program>!
 ```
 
-Applies `rules` to `p` one way, for at most `rounds` rounds, and keeps what the application
-cost: the readers below give the program it produced, the rewrites, the rounds, the nodes
-visited, the nodes erased, whether it reached a fixpoint and the wall time. This is `rewrite`
-with the round budget explicit and the cost measurable (H226).
+Applies `rules` to `p` one way, for at most `rounds` rounds, and gives the program it produced
+and what the application cost. This is `rewrite` with the round budget explicit and the cost
+kept (H226). The fifth parameter of the same call opens the attribution record (rewrite design
+8.7): `explain` then reads back the rule that made each rewrite, its round, its graph and the
+nodes it matched, produced and erased. Recording is off unless it is asked for, so a plain
+application pays nothing for it.
 
 - With effects: runs the rules' functions, and nothing else.
 - Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out.
 - Example: `run(p, rules, 16, false)` gives `the run`
 
-#### `run_program`
+#### `explain`
 
 ```camel
-run_program: (r: Run) => Program
+explain: (r: Run<Program>) => Proof!
 ```
 
-The program the run `r` produced.
+The proof of the run `r`: the chain of the rewrites it made, in the order it made them, each
+naming the rule that made it, the round and the graph it was made in, and the nodes that
+matched, were produced and were erased (rewrite design 8.7). A run that applied nothing is
+explained as such, not as an empty table.
 
 - Pure.
-- Example: `run_program(r)` gives `the rewritten program`
-
-#### `run_rewrites`
-
-```camel
-run_rewrites: (r: Run) => int
-```
-
-How many rewrites the run `r` applied.
-
-- Pure.
-- Example: `run_rewrites(r)` gives `3`
-
-#### `run_rounds`
-
-```camel
-run_rounds: (r: Run) => int
-```
-
-How many rounds the run `r` made; the last one applied nothing when it reached a fixpoint.
-
-- Pure.
-- Example: `run_rounds(r)` gives `2`
-
-#### `run_visited`
-
-```camel
-run_visited: (r: Run) => int
-```
-
-How many nodes the matcher looked at during the run `r`, over all graphs and rounds.
-
-- Pure.
-- Example: `run_visited(r)` gives `24`
-
-#### `run_erased`
-
-```camel
-run_erased: (r: Run) => int
-```
-
-How many nodes the run `r` erased as no longer read.
-
-- Pure.
-- Example: `run_erased(r)` gives `3`
-
-#### `run_fixpoint`
-
-```camel
-run_fixpoint: (r: Run) => bool
-```
-
-Whether the run `r` reached a fixpoint (a round applied nothing).
-
-- Pure.
-- Example: `run_fixpoint(r)` gives `true`
-
-#### `run_seconds`
-
-```camel
-run_seconds: (r: Run) => float
-```
-
-The wall time of the run `r`, in seconds: compiling the rules, matching, rewriting and the
-commit.
-
-- Pure.
-- Example: `run_seconds(r)` gives `0.0012`
+- Failure: error value `NoAttribution` when the run was made without `explain: true`.
+- Example: `explain(r)` gives `the chain of rewrites`
 
 #### `rule_name`
 

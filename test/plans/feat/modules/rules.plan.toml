@@ -764,3 +764,105 @@ expect_exit = 0
 expect_stdout_contains = ["run_first rewrites 200 rounds 2 ", "run_again rewrites 0 rounds 1 ", "\n200\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "rules.attribution_records_without_changing_the_counters"
+desc = "The attribution record is optional (rewrite design 8.7): `bench::compare` runs the same application twice on the same 200-function program, once without the record and once with it, and prints both. The counters must agree (200 rewrites, 2 rounds, the same visited count) and the program must be unchanged; the wall times are printed for the comparison and not pinned, because they depend on the machine."
+kind = "behavior"
+case = "../../../cases/modules/rules/bench_target.cml"
+args = ["${case}", "bench::compare", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["bench off_seconds", "on_rewrites 200", "on_rounds 2", "\n200\n"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = out.split(String.fromCharCode(10)).find((l) => l.startsWith('bench off_seconds'))
+assert(line, `the comparison did not run: ${JSON.stringify(out)}`)
+const field = (name) => {
+const match = line.match(new RegExp(` ${name} (-?[0-9.eE+]+)`))
+return match ? match[1] : null
+}
+assert(field('off_rewrites') === field('on_rewrites'), `rewrites differ: ${line}`)
+assert(field('off_rounds') === field('on_rounds'), `rounds differ: ${line}`)
+assert(field('off_visited') === field('on_visited'), `visited differ: ${line}`)
+assert(field('on_rewrites') === '200', `the benchmark makes 200 rewrites: ${line}`)
+assert(field('on_rounds') === '2', `the benchmark makes 2 rounds: ${line}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "rules.explain_names_the_rule_that_fired"
+desc = "Attribution (rewrite design 8.7): two rules match the same `x + 0` and only the first fires. The proof of the run names `zero_to_one`, the rule that made the rewrite, and never `zero_to_two`, the rule that could have matched but did not."
+kind = "behavior"
+case = "../../../cases/modules/rules/explain_target.cml"
+args = ["${case}", "explain_pass::two_rules", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["by zero_to_one", "\n6\n"]
+expect_output_not_contains = ["zero_to_two"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.explain_follows_the_seq_schedule"
+desc = "A `seq` schedule of two stages (rewrite design 8.5): the first stage's `zero_to_one` proof prints before the second stage's `bump_one` proof, and the chain follows the order of the stages, not their names or the node order."
+kind = "behavior"
+case = "../../../cases/modules/rules/explain_target.cml"
+args = ["${case}", "explain_pass::seq_order", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["by zero_to_one", "by bump_one", "\n7\n"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const first = out.indexOf('by zero_to_one')
+const second = out.indexOf('by bump_one')
+assert(first >= 0 && second >= 0, `both stages must be in the proof: ${JSON.stringify(out)}`)
+assert(first < second, `the schedule is zero_to_one then bump_one, the proof was: ${JSON.stringify(out)}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.explain_reports_a_rule_twice_in_one_round"
+desc = "Two `x + 0` sites in one function: the zero law fires twice in round 1, and the proof carries two steps for that rule in that round. A proof that collapsed them into one would be missing a rewrite the run counted."
+kind = "behavior"
+case = "../../../cases/modules/rules/explain_twice.cml"
+args = ["${case}", "explain_pass::twice_one_round", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["by add_zero", "\n12\n"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (text, needle) => text.split(needle).length - 1
+assert(count(out, 'by add_zero') === 2, `two rewrites must be two steps: ${JSON.stringify(out)}`)
+assert(count(out, 'round 1:') === 2, `both fired in round 1: ${JSON.stringify(out)}`)
+assert(!out.includes('round 2:'), `the fixpoint round has no step: ${JSON.stringify(out)}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.explain_says_nothing_matched"
+desc = "A rule set that matches nothing: the proof says in words that no rewrite matched and the program is unchanged, instead of printing an empty step table. The run still counts one round, the round that proved the fixpoint."
+kind = "behavior"
+case = "../../../cases/modules/rules/explain_target.cml"
+args = ["${case}", "explain_pass::nothing", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["no rewrite matched in 1 round: the program is unchanged", "\n5\n"]
+expect_output_not_contains = ["by mul_zero"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.explain_refuses_a_run_without_attribution"
+desc = "The record is optional: a run made without `explain: true` pays nothing and keeps nothing, so `explain` refuses it with `NoAttribution` and the name of the parameter that would have recorded it, rather than answering with an empty chain."
+kind = "negative"
+case = "../../../cases/modules/rules/explain_target.cml"
+args = ["${case}", "explain_pass::without_attribution", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GraphPassFailed", "NoAttribution", "the run was made without attribution"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

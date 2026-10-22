@@ -77,6 +77,9 @@ enum class TypeCode : uint32_t {
     // The argument of a pending enum instance that its value does not determine (`Option<_>`).
     // Compile time only: no value has this type.
     EnumHole = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x010),
+    // `typeof e` before e is built (design principles 5.6): the type of the value the expression
+    // will have. Compile time only; the graph builder replaces it by the expression's type.
+    TypeOf = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x013),
     // Complex numbers (design principles 5.1): two IEEE parts, `c64` (two f32) and `c128` (two
     // f64). They are numbers, but not primitive in the encoding's sense: a value does not fit
     // in one slot (c128 is 16 bytes, c64 needs a box so that a number is one kind of value),

@@ -1190,9 +1190,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "StaticMatchNotExhaustive",
                 "No case of this 'match type' selects the type '{0}'.",
-                "The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a "
-                "structure or an ordinary tuple, including 'T?' and 'T!'), and '_' for every "
-                "type. Add the case for this shape, or end with '#leaf' or '_'.",
+                "The cases name shapes: 'struct', 'tuple', 'func', '#leaf' (every type that is "
+                "not a structure or an ordinary tuple, including 'T?' and 'T!'), '_' for every "
+                "type, and a type's identity ('int', 'MyStruct', T). Add the case for this type, "
+                "or end with '#leaf' or '_'.",
             },
         },
         {
@@ -1201,7 +1202,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StaticMatchUnreachableCase",
                 "The case '{0}' selects every type the cases after it could select.",
                 "'#leaf' and '_' select every type, so they must be the last case of a "
-                "'match type'.",
+                "'match type'. An identity pattern that repeats a type an earlier case already "
+                "selects is the same kind of dead case.",
             },
         },
         {
@@ -1277,9 +1279,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StaticAccessNotConstant",
                 "The key '{0}' of a 't.[...]' access is not known when the function is "
                 "compiled.",
-                "The key is a string or integer literal, or the 'n' of an enclosing "
-                "'static for'. A runtime value cannot choose a field, because only the "
-                "selected field is built into the graph.",
+                "The key is a string or integer literal, the 'n' of an enclosing "
+                "'static for', or an expression whose value is known at compile time, such "
+                "as a 'let' bound once to such a value. A run-time value (a 'var', a "
+                "parameter) cannot choose a field, because only the selected field is built "
+                "into the graph.",
             },
         },
         {
@@ -1521,6 +1525,53 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TypeOfNotAValue,
+            {
+                "TypeOfNotAValue",
+                "typeof {0} has no value type: {1}.",
+                "`typeof` takes the type of a value. Write an expression that produces one, or "
+                "name the type directly.",
+            },
+        },
+        {
+            SemanticDiag::TypeOfNotWholeType,
+            {
+                "TypeOfNotWholeType",
+                "typeof is written inside the larger type {0}.",
+                "`typeof` stands for a whole type. Bind the value in a `let` and name its type, "
+                "or write the enclosing type out.",
+            },
+        },
+        {
+            SemanticDiag::SameShapeComprehensionNotComposite,
+            {
+                "SameShapeComprehensionNotComposite",
+                "{0} is not a struct or a tuple, so it has no shape to fill.",
+                "A same-shape comprehension names a struct or a tuple type; a leaf has no "
+                "fields.",
+            },
+        },
+        {
+            SemanticDiag::SameShapeComprehensionMismatch,
+            {
+                "SameShapeComprehensionMismatch",
+                "The shape {0} is filled from the fields of {1}.",
+                "Write `T {{ static for (n, F) in fields T => ... }}`: the generator must walk the "
+                "shape the comprehension constructs.",
+            },
+        },
+        {
+            SemanticDiag::StaticMatchPatternCannotMatch,
+            {
+                "StaticMatchPatternCannotMatch",
+                "The identity pattern '{0}' cannot select a type here: {1}.",
+                "An identity pattern is exact: it selects only the type it names, after the "
+                "declaration's type variables are bound. Name a concrete type, do not write the "
+                "same type twice in one case, and put a pattern an earlier case already selects "
+                "before that case or remove it.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationNotLoaded,
             {
                 "NativeDeclarationNotLoaded",
@@ -1622,6 +1673,98 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "The dimension name '{0}' is written once in this signature, so it relates nothing.",
                 "A name relates the extents that write it. If the size is not a relation, write "
                 "'?' instead; if it is, write the name in another parameter or in the return type.",
+            },
+        },
+        {
+            SemanticDiag::WhenConditionNotBool,
+            {
+                "WhenConditionNotBool",
+                "The 'when' condition of '{0}' is not a bool (it is '{1}').",
+                "A 'when' is a compile-time predicate over the declaration's type parameters "
+                "and 'with' parameters: call a generic function this module declares that "
+                "reduces to a constant over its type arguments ('is_numeric::<T>()' is one, "
+                "written in the standard module 'types'), possibly combined with '!', '&&' "
+                "and '||'. It is not a runtime value.",
+            },
+        },
+        {
+            SemanticDiag::WhenConditionNotConstant,
+            {
+                "WhenConditionNotConstant",
+                "The 'when' condition of '{0}' cannot be evaluated when the declaration is "
+                "instantiated: {1}.",
+                "The condition is checked at instantiation, before the body is built, so it "
+                "can only read what is known there: the types bound to the declaration's type "
+                "parameters, and the 'with' arguments the call writes as compile-time "
+                "constants. Move a runtime test into the body, or make the value a constant.",
+            },
+        },
+        {
+            SemanticDiag::WhenUnknownName,
+            {
+                "WhenUnknownName",
+                "'{0}' is not visible to the 'when' condition of '{1}'.",
+                "A condition sees the declaration's type parameters and its 'with' "
+                "parameters. Ordinary parameters and the names of the body do not exist yet "
+                "when the condition is evaluated: test those in the body, or move the value "
+                "to a 'with' parameter.",
+            },
+        },
+        {
+            SemanticDiag::WhenTypeQueryNotConcrete,
+            {
+                "WhenTypeQueryNotConcrete",
+                "The type query '{0}' cannot be answered for '{1}' in the 'when' condition of "
+                "'{2}': the type still has a type variable.",
+                "A predicate is evaluated when the declaration is instantiated, where every type "
+                "parameter has a type. Give the predicate a type parameter the call binds, or "
+                "guard the declaration so that it is only instantiated for a concrete type.",
+            },
+        },
+        {
+            SemanticDiag::WhenConditionUnmet,
+            {
+                "WhenConditionUnmet",
+                "No candidate of '{0}' applies to ({1}): every candidate's 'when' condition is "
+                "false. Candidates: {2}",
+                "A 'when' that is false makes its declaration inapplicable, not erroneous, and "
+                "the call goes on to the other candidates. Pass an argument or a type that "
+                "satisfies a condition, or write another overload for this call.",
+            },
+        },
+        {
+            SemanticDiag::WhenPredicateNotImported,
+            {
+                "WhenPredicateNotImported",
+                "'{1}' is declared in module '{2}', but that name is not imported where the "
+                "'when' condition of '{0}' is written.",
+                "A condition resolves names where its declaration is written, as a call in its "
+                "body does: the module's own names, then what it imports by name, selectively "
+                "or as a module prefix, then the prelude. Import the module that declares the "
+                "predicate, or move the predicate into the module that uses it.",
+            },
+        },
+        {
+            SemanticDiag::WhenPredicateNotCompileTime,
+            {
+                "WhenPredicateNotCompileTime",
+                "'{1}' is not a compile-time predicate that the 'when' condition of '{0}' can "
+                "call: {2}.",
+                "A condition calls a generic function whose body reduces to a constant over the "
+                "types it is given: a 'match type', a 'static for' or a 'static loop' over "
+                "'fields T', and the comparison operators. An ordinary function runs at run "
+                "time, and a value is read there too.",
+            },
+        },
+        {
+            SemanticDiag::WhenPredicateAmbiguous,
+            {
+                "WhenPredicateAmbiguous",
+                "The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is "
+                "imported from {2}.",
+                "Two imports that bring one name do not choose between them. Import the "
+                "predicate by another name ('import {{ p as q }} from m') or qualify it with the "
+                "module it comes from ('m::p').",
             },
         },
     };

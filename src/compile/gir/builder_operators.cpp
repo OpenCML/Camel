@@ -1251,7 +1251,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     genericCalleeAllowed_ = gct->at(0)->type() == GCT::NodeKind::DREF ||
                             gct->at(0)->type() == GCT::NodeKind::WITH ||
                             gct->at(0)->type() == GCT::NodeKind::TAPP;
+    const bool outerWithArgsOfCall = withArgsOfCall_;
+    withArgsOfCall_ = gct->at(0)->type() == GCT::NodeKind::WITH;
     any targetNodeRes     = visit(gct->at(0));
+    withArgsOfCall_       = outerWithArgsOfCall;
     genericCalleeAllowed_ = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
     // `v ?-> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
@@ -1270,9 +1273,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         withInputs = std::move(bound->second);
         boundWithArgs_.erase(bound);
         boundWithCallee_.erase(targetNode);
-    }
-    for (const Argument &input : withInputs) {
-        withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
 
     // Call results take the callee's current exit type (a recursive callee's
@@ -1375,6 +1375,88 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 assignedType = place;
             }
         }
+    }
+    // A with-argument whose parameter still had type variables when the callee was visited was
+    // left for this point (visitWithNode): the ordinary arguments are typed now, so the
+    // signature's variables have their types. `reduce<(a, b) => a + b, 0>`: the element type
+    // comes from the array and the accumulator type from the position the call stands at. A
+    // variable that nothing binds stays open, and the argument is built without an expected
+    // type, as it was before.
+    bool hasDeferredWith = false;
+    for (const Argument &input : withInputs) {
+        hasDeferredWith = hasDeferredWith || input.node == nullptr;
+    }
+    if (hasDeferredWith) {
+        type_bindings_t bindings;
+        if (argumentSignature != nullptr) {
+            for (size_t i = 0;
+                 i < normInputTypes.size() && i < argumentSignature->normTypesCount(); ++i) {
+                unifyTypeVars(argumentSignature->normTypeAt(i), normInputTypes[i], bindings);
+            }
+            if (expectedResult != nullptr && argumentSignature->hasExitType()) {
+                unifyTypeVars(argumentSignature->exitType(), expectedResult, bindings);
+            }
+        }
+        const auto parameterOf = [&](size_t i) -> Type * {
+            return argumentSignature != nullptr && i < argumentSignature->withTypesCount()
+                       ? argumentSignature->withTypeAt(i)
+                       : nullptr;
+        };
+        // A function type is a usable expected type for a lambda when its parameters are
+        // concrete; a type variable in its result says nothing and the body decides
+        // (completeLambdaSignature). Any other type must be concrete.
+        const auto usableExpected = [](Type *wanted) {
+            if (wanted == nullptr) {
+                return false;
+            }
+            if (wanted->code() != TypeCode::Function) {
+                return !containsTypeVar(wanted);
+            }
+            const auto *funcType = tt::as_ptr<FunctionType>(wanted);
+            for (size_t p = 0; p < funcType->withTypesCount(); ++p) {
+                if (containsTypeVar(funcType->withTypeAt(p))) {
+                    return false;
+                }
+            }
+            for (size_t p = 0; p < funcType->normTypesCount(); ++p) {
+                if (containsTypeVar(funcType->normTypeAt(p))) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        // A value that is not a function (the initial value of a reduction, a shape literal)
+        // can be built before the function is: its own type binds the variables the signature
+        // still leaves open (`reduce<(a, b) => a + b, 0>` with nothing else fixing the
+        // accumulator type takes it from the `0`). Then the functions follow, with their
+        // parameter types known.
+        for (const bool functionsPass : {false, true}) {
+            for (size_t i = 0; i < withInputs.size(); ++i) {
+                if (withInputs[i].node != nullptr) {
+                    continue;
+                }
+                Type *pattern = parameterOf(i);
+                Type *wanted = pattern != nullptr ? substituteTypeVars(pattern, bindings) : nullptr;
+                const bool isFunction = wanted != nullptr && wanted->code() == TypeCode::Function;
+                if (isFunction != functionsPass) {
+                    continue;
+                }
+                const bool usable = usableExpected(wanted);
+                withInputs[i].node =
+                    visitInPosition(withInputs[i].expr, usable ? wanted : nullptr);
+                if (!usable && pattern != nullptr) {
+                    // The value's own type is what this position gives the variables: an `int`
+                    // literal makes the accumulator an `int`, and the lambda takes that type.
+                    unifyTypeVars(
+                        pattern,
+                        valueTypeOf(nodeTypeOf(withInputs[i].node)),
+                        bindings);
+                }
+            }
+        }
+    }
+    for (const Argument &input : withInputs) {
+        withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
     if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         // An operator that declares it takes the position of its call at this many arguments
@@ -1812,6 +1894,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // A decorated overload is what its decorators return: it is chosen by that
             // function's parameters and called through it.
             compile_graph_ptr_t chosenDecorated = nullptr;
+            // Candidates that took the arguments but whose `when` condition is false: if no
+            // other candidate applies, the call is reported as one whose conditions are unmet
+            // (design principles 5.13), not as an ordinary mismatch.
+            std::vector<std::pair<std::string, std::string>> unmetConditions;
             const auto signatureOf = [&](const compile_graph_ptr_t &g) -> FunctionType * {
                 if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
                     return tt::as_ptr<FunctionType>(it->second->funcType()->exitType());
@@ -1843,6 +1929,30 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     // may come from its body, its decorated form exists once it is built (step
                     // two of loading builds on demand).
                     ensureFunctionBuilt(g);
+                    if (auto when = whenClauses_.find(g.get()); when != whenClauses_.end()) {
+                        // The condition is checked at selection, before the candidate is
+                        // called: a false one makes it inapplicable, not erroneous.
+                        std::unordered_map<std::string, data_ptr_t> withValues;
+                        for (size_t i = 0;
+                             i < g->funcType()->withTypesCount() && i < withInputs.size();
+                             ++i) {
+                            data_ptr_t value = constantOfNode(withInputs[i].node);
+                            if (value != nullptr) {
+                                withValues.emplace(
+                                    std::string(g->funcType()->argNameAt(i)), value);
+                            }
+                        }
+                        const WhenResult verdict = evaluateWhenCondition(
+                            when->second.condition, g->funcType(), {}, withValues, nullptr,
+                            unitOfFunction(g));
+                        if (verdict.fails()) {
+                            unmetConditions.emplace_back(g->name(), when->second.text);
+                            continue;
+                        }
+                        if (!verdict.holds()) {
+                            reportWhenProblem(verdict, g->name(), when->second.condition);
+                        }
+                    }
                     fitted.push_back(g);
                 }
                 if (fitted.empty()) {
@@ -1879,6 +1989,24 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 targetGraph = g;
             }
             if (!targetGraph && !chosenDecorated) {
+                if (!unmetConditions.empty()) {
+                    // Every candidate that took the arguments was made inapplicable by its
+                    // condition. The report names each candidate and the condition it wrote
+                    // (design principles 5.13: the call-site error lists the unmet conditions).
+                    std::map<std::string, std::string> listed;
+                    for (const auto &[name, text] : unmetConditions) {
+                        listed.emplace(name, text);
+                    }
+                    std::string conditions;
+                    for (const auto &[name, text] : listed) {
+                        conditions +=
+                            (conditions.empty() ? "" : "; ") + name + " — when " + text;
+                    }
+                    diags_->of(SemanticDiag::WhenConditionUnmet)
+                        .atOrigin(gct->origin())
+                        .commit(graphs->front()->name(), argumentTypes, conditions);
+                    throw BuildAbortException();
+                }
                 std::vector<std::pair<std::string, FunctionType *>> candidates;
                 for (const auto &g : *graphs) {
                     candidates.emplace_back(g->name(), signatureOf(g));

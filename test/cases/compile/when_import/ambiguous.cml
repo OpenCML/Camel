@@ -1,0 +1,17 @@
+/**
+ * Two selective imports bring a predicate of the same name. The condition does not silently
+ * take the first: the report says the name is ambiguous and lists the modules.
+ */
+module when_import_ambiguous
+
+import { is_compound } from predicates
+import { is_compound } from predicates_other
+
+func describe::<T>(x: T): string when is_compound::<T>() {
+    return 'compound'
+}
+
+func main(): int sync {
+    println(describe((1, 2)))
+    return 0
+}

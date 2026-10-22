@@ -166,12 +166,23 @@ std::string reduceAxes(
     Emitter &e, const std::string &op, const std::string &x, std::vector<int64_t> axes,
     bool keepDims);
 
-/// Every argument converted to the result dtype, then one node.
+/// The element type an elementwise operator computes in, mirroring the kernels' `operandType`:
+/// one scalar takes the tensor's element type (a float scalar meeting an integer tensor computes
+/// in f32), and two tensors promote by widening. A bare `Tensor` operand has no facts and takes
+/// the graph's element type. The whole node is emitted in this one type, so ONNX never sees a
+/// double constant beside a float tensor.
+std::optional<TypeCode> operandDtype(const LowerContext &ctx);
+
+/// Every argument converted to the dtype the operator computes in, then one node.
 LowerFn sameTypeOp(std::string opType, size_t operands) {
     return [opType = std::move(opType), operands](const LowerContext &ctx) {
+        std::optional<TypeCode> dtype = operands == 1 ? ctx.facts(0).dtype : operandDtype(ctx);
+        if (!dtype) {
+            dtype = ctx.elementDtype();
+        }
         std::vector<std::string> inputs;
         for (size_t i = 0; i < operands; ++i) {
-            inputs.push_back(ctx.input(i, ctx.elementDtype()));
+            inputs.push_back(ctx.input(i, dtype));
         }
         return ctx.emit(opType, std::move(inputs));
     };
@@ -191,11 +202,7 @@ bool isScalarOperand(const Value &value) {
            code == TypeCode::Float64 || code == TypeCode::Bool;
 }
 
-/// The element type a comparison runs in: the operand that is data fixes it, exactly as the
-/// kernel does (a scalar meeting a tensor is computed in the tensor's element type), and a bare
-/// `Tensor` operand — exported as f32 — makes a float scalar f32 rather than mixing a double into
-/// a float graph. Two data operands promote.
-std::optional<TypeCode> compareOperandDtype(const LowerContext &ctx) {
+std::optional<TypeCode> operandDtype(const LowerContext &ctx) {
     const auto left  = ctx.facts(0);
     const auto right = ctx.facts(1);
     const bool leftData  = !isScalarOperand(ctx.arg(0));
@@ -220,7 +227,7 @@ std::optional<TypeCode> compareOperandDtype(const LowerContext &ctx) {
 
 LowerFn compareOp(std::string opType, bool negate) {
     return [opType = std::move(opType), negate](const LowerContext &ctx) {
-        auto dtype = compareOperandDtype(ctx);
+        auto dtype = operandDtype(ctx);
         std::vector<std::string> inputs{ctx.input(0, dtype), ctx.input(1, dtype)};
         if (!negate) {
             return ctx.emit(opType, std::move(inputs));

@@ -1,0 +1,13 @@
+module when_clause_format
+
+func pick::<T>(x: T): T when is_ordered::<T>() {
+    return x
+}
+
+func total(xs: int[]): int when is_numeric::<int>() {
+    return xs->reduce<(a, b) => a + b, 0>
+}
+
+func maybeSum(xs: float[]): float? when is_numeric::<float>() {
+    return xs->reduce<(a, b) => a + b, 0.0>
+}

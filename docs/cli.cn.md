@@ -46,7 +46,7 @@
 - `-o`, `--output <file>`：`main` 的返回值写到哪里（默认：标准输出；见同一节）  
 - `-P`, `--profile`：记录各阶段耗时，把跟踪文件写到 `profile_reports/`。只在 debug 构建中生效；release 构建接受这个选项，但不产生报告  
 - `-S`, `--scheduler <type>`：指定调度器类型  
-- `-t`, `--threads <num>`：最大线程数  
+- `-t`, `--threads <num>`：一次运行可用的线程数，作用于它的每个池：并行调度器与各模块自己的工作者池（张量内核的池也在内）。每个池都从这一个数取大小；不给选项时各用机器的核数。它没有环境变量，`CAMEL_NUM_THREADS` 不再读取。`Tensor.num_threads()` 报告池的大小；程序自己可以用 `Tensor.set_num_threads` 在运行时改动  
 - `--max-recursion-depth <n>`：可同时处于打开状态且不是尾调用的调用数上限（1 到 1000000；见“资源上限”）。也可用 `CAMEL_MAX_RECURSION_DEPTH=<n>`；选项优先  
 - `--max-macro-depth <n>`：`std::macro` 提前求值一次调用时嵌套调用的上限（默认 64；取值范围相同）。也可用 `CAMEL_MAX_MACRO_DEPTH=<n>`  
 - `--max-macro-rounds <n>`：`std::macro` 提前求值时一个循环至多运行的轮数（默认 1000000，取值 1 到 2^40）；超过则这次求值失败。也可用 `CAMEL_MAX_MACRO_ROUNDS=<n>`，选项优先  

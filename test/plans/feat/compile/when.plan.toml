@@ -1,0 +1,227 @@
+id = "compile.when"
+order = 328
+tier = "fast"
+tags = ["feat", "compile", "generics", "overloads"]
+desc = "Applicability conditions: `when` after a function signature (design principles 5.13, handover H234). The condition is a compile-time predicate over the declaration's type parameters and `with` parameters, evaluated at instantiation; a false condition makes the overload inapplicable, not erroneous, and the call site lists the unmet conditions."
+
+# Each case states what it pins. A condition that does not hold must not become a declaration
+# error, and a condition that cannot be evaluated must not be taken for `true`; the call-site
+# report names the candidates and the conditions they wrote.
+
+[[tests]]
+name = "when.applied"
+desc = "A satisfiable `when` applies: a query on a written type (`is_integer::<int>()`) and a query on the declaration's own type parameter T (`is_numeric::<T>()`), for two instances (int and float). Both are evaluated before the body is built."
+kind = "behavior"
+case = "../../../cases/compile/when/applied.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "42\n8\n3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.function_query"
+desc = "`is_function::<F>()` is true for a function argument: a pass-shaped declaration `func apply::<F>(f: F, x: int) when is_function::<F>()` is selected and its body calls `f`."
+kind = "behavior"
+case = "../../../cases/compile/when/function_query.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.not_applicable"
+desc = "An unsatisfiable `when` makes the only fitting candidate inapplicable: the call is reported as WhenConditionUnmet at the call site, listing the candidate and its condition, rather than as a type mismatch."
+kind = "negative"
+case = "../../../cases/compile/when/not_applicable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 20
+expect_output_contains = ["needs_float — when is_float::<int>()", "every candidate's 'when' condition is false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.generic_false"
+desc = "A generic declaration's condition is evaluated with its type parameter bound: `add(\"a\", \"b\")` binds T = string, `is_numeric::<T>()` is false, and the candidate is not instantiated into a body that would not typecheck. The call site names the unmet condition."
+kind = "negative"
+case = "../../../cases/compile/when/generic_false.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 20
+expect_output_contains = ["add — when is_numeric::<T>()", "string, string"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.non_bool"
+desc = "A `when` whose value is not a bool is a declaration-site error (WhenConditionNotBool). It is never treated as true, and the report is at the condition, not at a call."
+kind = "negative"
+case = "../../../cases/compile/when/non_bool.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionNotBool"
+expect_diagnostic_line = 6
+expect_output_contains = ["The 'when' condition of 'bad' is not a bool", "'int'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.unknown_name"
+desc = "A `when` that names an ordinary parameter is a declaration-site error (WhenUnknownName): the condition sees the declaration's type parameters and `with` parameters only."
+kind = "negative"
+case = "../../../cases/compile/when/unknown_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenUnknownName"
+expect_diagnostic_line = 8
+expect_output_contains = ["'x' is not visible to the 'when' condition of 'bad'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.not_constant"
+desc = "A `when` that calls an ordinary function is not a compile-time predicate: it is a declaration-site error (WhenConditionNotConstant) and is never taken for true."
+kind = "negative"
+case = "../../../cases/compile/when/not_constant.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionNotConstant"
+expect_diagnostic_line = 11
+expect_output_contains = ["The 'when' condition of 'bad' cannot be evaluated"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.open_type"
+desc = "A query on a type the declaration cannot answer: T is declared at the head but written nowhere in the signature, so at instantiation it is still open. The condition is reported as WhenTypeQueryNotConcrete, never taken for false."
+kind = "negative"
+case = "../../../cases/compile/when/open_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenTypeQueryNotConcrete"
+expect_diagnostic_line = 15
+expect_output_contains = ["cannot be answered for 'T'", "still has a type variable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.user_predicate"
+desc = "A `when` calls a predicate the user wrote with `match type` (`is_compound::<T>()`), not a closed set of compiler operators; the condition is answered when the declaration is instantiated."
+kind = "behavior"
+case = "../../../cases/compile/when/user_predicate.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "compound\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.user_predicate_false"
+desc = "The same user-written predicate where it does not hold: the call site lists the condition the candidate wrote (`is_compound::<T>()`) and no candidate applies."
+kind = "negative"
+case = "../../../cases/compile/when/user_predicate_false.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 20
+expect_output_contains = ["is_compound::<T>()", "every candidate's 'when' condition is false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.user_predicate_has_field"
+desc = "A user predicate that folds a value argument (`has_field::<Point>('w')` walks `fields T` with a `static loop`) is answered at instantiation and the declaration applies."
+kind = "behavior"
+case = "../../../cases/compile/when/user_predicate_has_field.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.user_predicate_has_field_false"
+desc = "The folded predicate with a field that does not exist: the condition is false, the declaration does not apply, and the call site lists `has_field::<Point>('d')`."
+kind = "negative"
+case = "../../../cases/compile/when/user_predicate_has_field_false.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 21
+expect_output_contains = ["has_field::<Point>('d')", "every candidate's 'when' condition is false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.user_predicate_open_type"
+desc = "A user predicate called with an open type (T is at the head but not in the signature) is reported by the compile-time evaluator as WhenTypeQueryNotConcrete, naming `probe`, not taken for false."
+kind = "negative"
+case = "../../../cases/compile/when/user_predicate_open_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenTypeQueryNotConcrete"
+expect_diagnostic_line = 14
+expect_output_contains = ["type query 'probe'", "cannot be answered for 'T'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.with_constant"
+desc = "A `when` that reads a `with` parameter is answered when the call gives a compile-time constant (`add<true>(41)`); the declaration applies and the value is not a body name."
+kind = "behavior"
+case = "../../../cases/compile/when/with_constant.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.with_name"
+desc = "A `when` that reads a `with` parameter given a runtime name (`add<flag>`) is reported as WhenConditionNotConstant at the declaration, never taken for true."
+kind = "negative"
+case = "../../../cases/compile/when/with_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionNotConstant"
+expect_diagnostic_line = 8
+expect_output_contains = ["The 'when' condition of 'add' cannot be evaluated"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.rule"
+desc = "A rule with `when` keeps the same surface: the declaration compiles the condition into the third function of the rule (`guarded__when`) and passes it to the Rule value. This pins the rule half independently of the combinator names another branch adds."
+kind = "behavior"
+case = "../../../cases/compile/when/rule_when.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "guarded\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+[[tests]]
+name = "when.type_predicates"
+desc = "Each of the seven standard type predicates is used as a `when` condition in both directions: one declaration fires when it holds, one when `!` makes it false, so an identity pattern that answers wrongly on either side changes the output. The bodies are the standard ones, written locally because a condition sees the generic functions of its own module only."
+kind = "behavior"
+case = "../../../cases/compile/when/type_predicates.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "numeric\nnot numeric\ninteger\nnot integer\nfloat\nnot float\nordered\nnot ordered\nfunction\nnot function\nstring\nnot string\nbool\nnot bool\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+[[tests]]
+name = "when.types_module"
+desc = "The standard module `types` is imported and one of its head-only predicates is called from a `when` condition: the imported template keeps its type parameter, is instantiated with `T`, and its identity cases answer the condition."
+kind = "behavior"
+case = "../../../cases/compile/when/types_module.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "numeric\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

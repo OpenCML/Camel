@@ -1,0 +1,17 @@
+/**
+ * A predicate lives in another module and the condition calls it through that module: an
+ * ordinary module import binds the module's name, and `predicates::is_compound::<T>()` is a
+ * call in the declaration's module, resolved there (design principles 10.2).
+ */
+module when_import_qualified_true
+
+import predicates
+
+func describe::<T>(x: T): string when predicates::is_compound::<T>() {
+    return 'compound'
+}
+
+func main(): int sync {
+    println(describe((1, 2)))
+    return 0
+}

@@ -330,16 +330,28 @@ class Formatter {
             if (i == 0 && list[0]->firstToken()->index() > 0) {
                 auto [predCmtStart, predCmtEnd] = findCmtRange(0, true);
                 int cmtSkips                    = 0;
+                bool firstComment               = true;
                 for (size_t j = predCmtStart; j < predCmtEnd; j++) {
-                    const auto &comment     = tokens[j];
+                    const auto &comment = tokens[j];
+                    // A token that is not a comment gets no line of its own: the range may
+                    // include the separator after the element, and writing a line end for it
+                    // left a blank line that the next pass turned into two.
+                    if (comment.channel <= 1) {
+                        continue;
+                    }
                     const auto &commentText = comment.text();
 
-                    cmtSkips = comment.line() - lastStopLine;
+                    // The break after `{` (or after `;`) has been written already: the first
+                    // comment goes on the line it opened, not one line further down. Counting
+                    // from the element's own last line made every pass add another blank line
+                    // before a comment that starts a `match type` body.
+                    cmtSkips = firstComment ? 0 : comment.line() - lastStopLine;
 
                     for (int k = 0; k < cmtSkips; k++) {
                         result += lineEnd();
                     }
 
+                    firstComment = false;
                     insertComment(comment, result);
                     lastStopLine = comment.line() + countLines(commentText);
                 }
@@ -359,7 +371,15 @@ class Formatter {
             lastStopLine                    = list[i]->lastToken()->endLine();
             auto [predCmtStart, predCmtEnd] = findCmtRange(i, false);
             for (size_t j = predCmtStart; j < predCmtEnd; j++) {
-                const auto &comment     = tokens[j];
+                const auto &comment = tokens[j];
+                // A token that is not a comment still ends the line a comment above it is on:
+                // skipping it joined `} from ...` onto the comment, which commented the code out
+                // (the fuzz check caught it).
+                if (comment.channel <= 1) {
+                    result += lineEnd();
+                    ++lastStopLine;
+                    continue;
+                }
                 const auto &commentText = comment.text();
 
                 const int cmtSkips = comment.line() - lastStopLine;
@@ -449,6 +469,7 @@ class Formatter {
     std::any visitTagRef(cst::TagRef context);
 
     std::any visitFuncDecl(cst::FuncDecl context);
+    std::any visitWhenClause(cst::WhenClause context);
     std::any visitRuleDecl(cst::RuleDecl context);
     std::any visitAnalysisDecl(cst::AnalysisDecl context);
     std::any visitAnalysisClause(cst::AnalysisClause context);
@@ -484,6 +505,7 @@ class Formatter {
     std::any visitKeyValuePair(cst::KeyValuePair context);
 
     std::any visitKeyParamPair(cst::KeyParamPair context);
+    std::any visitTupleParam(cst::TupleParam context);
 
     std::any visitDataList(cst::DataList context);
 
