@@ -36,14 +36,14 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 | 项 | 数字 | 来源 |
 |---|---:|---|
 | 声明模块（`stdlib/<m>.cml` + C++ `BuiltinModule`） | **23** | `--check` |
-| 声明名 / 声明条数（`export func`） | **170 / 283** | 读 22 个声明文件 |
+| 声明名 / 声明条数（`export func`） | **178 / 293** | 读 22 个声明文件 |
 | 计算名（C++ 算签名） | **112** | `--check` |
 | 其中因语言机制写不出（阻塞） | **14** | 本页 §2.4 的口径，逐条见表 |
-| 注册重载（22 个模块） | **403** | `inspect --ops`，283 条由声明回答、120 条由 C++ 计算 |
-| 注册重载（参考页全部模块，含 `<builtin>`） | **522** | `--verify-ops`；`<builtin>` 占 96 条 |
+| 注册重载（22 个模块） | **413** | `inspect --ops`，293 条由声明回答、120 条由 C++ 计算 |
+| 注册重载（参考页全部模块，含 `<builtin>`） | **524** | `--verify-ops`；`<builtin>` 占 96 条 |
 | `stdlib/signatures/` 的文件 | **16** | 10 个是已迁移模块的计算签名，6 个属于尚未迁移的模块 |
 
-这 22 个模块的 282 个公开名 = 170 个声明名 + 112 个计算名。12 个模块有计算签名、10 个没有；
+这 23 个模块的 290 个公开名 = 178 个声明名 + 112 个计算名。12 个模块有计算签名、10 个没有；
 5 个模块有阻塞名（`json`、`onnx`、`python`、`tensor`、`tiles`）。
 
 ### 2.2 逐模块
@@ -76,7 +76,7 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 | `this` | 1 | 1 / 1 | 0 | — | 1 | [H146](../handover/reports/H146.md) |
 | `tiles` | 12 | 2 / 2 | 10 | 5：`gpu`、`source`、`inspect`、`benchmark`、`regions`（Q-F；`gpu` 另有 Q3） | 12 | [H156](../handover/reports/H156.md)；[H157](../handover/reports/H157.md) §7；[47](47_declaration_syntax.md) §3.1、§3.5 |
 | `time` | 3 | 3 / 3 | 0 | — | 3 | [H133](../handover/reports/H133.md) |
-| **合计** | **282** | **170 / 283** | **112** | **14** | **403** | |
+| **合计** | **290** | **178 / 293** | **112** | **14** | **413** | |
 
 计算名里没有阻塞的 98 个，按约定是「结果类型或参数类型取自实参」的计算签名：`algo` 的 `sort`
 族、`autodiff` 的 `grad`/`with_grad`、`graph` 的 6 个、`math` 的 `sqrt`/`shl`/`shr`、`nn` 的
@@ -87,9 +87,9 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 ### 2.3 旧报告与树不一致时
 
 - [H179](../handover/reports/H179.md) 记的是 **22 / 113 / 513**（声明模块 / 计算名 / 注册重载），
-  那是它自己基点上的数。今天的树是 **22 / 112 / 522**：`show` 已由
+  那是它自己基点上的数。今天的树是 **23 / 112 / 524**：`show` 已由
   [H175](../handover/reports/H175.md) 从计算签名改成两条声明，所以计算名少 1；重载数以今天
-  `--verify-ops` 打印的 522 为准，旧报告不能相加。
+  `--verify-ops` 打印的 524 为准，旧报告不能相加。
 - [H170](../handover/reports/H170.md) 的「16 个模块 / 87 条计算签名」、
   [H173](../handover/reports/H173.md) 的「18 / 92」、H165 的「18 / 107」、H175 的「20 / 111」
   都是各自基点的快照。它们不能相加，也不能拿来当今天的总数。
@@ -114,8 +114,8 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
   Q-M（模块类型不接受类型变量）、Q1（声明看不见类型实参）、Q3（类型变量谓词），加上 H140 的
   「没有执行器」。由实参算结果、但写法本身合法的名字算**计算**，不算阻塞；这是 H157 §0 与
   47 §4.3 的分法。
-- **重载** = `inspect --ops` 的 `OPERATOR` 行去掉 `::` 别名与 `__` 组后的条数。522 =
-  403（22 个声明模块）+ 23（`ckpt` 7、`env` 2、`hash` 3、`process` 3、`rewrite` 8）+
+- **重载** = `inspect --ops` 的 `OPERATOR` 行去掉 `::` 别名与 `__` 组后的条数。524 =
+  403（23 个声明模块）+ 15（`ckpt` 7、`env` 2、`hash` 3、`process` 3）+
   96（`<builtin>`）。
 
 ## 3. 机制
@@ -235,7 +235,7 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 | 命令 | 今天打印 |
 |---|---|
 | `node scripts/stdlib-declarations.mjs --check` | `23 declaration module(s), 112 computed signature(s) ... 0 problem(s)`，并确认 `522 registered operator overloads` |
-| `node scripts/stdlib-reference.mjs --verify-ops` | `the declarations agree with the 522 registered operator overloads` |
+| `node scripts/stdlib-reference.mjs --verify-ops` | `the declarations agree with the 524 registered operator overloads` |
 | `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | 354 个公开名（其中 `<builtin>` 50 个）/ 522 条公开重载（其中 `<builtin>` 96 条），另含 `__` 组与 `::` 别名 |
 | `node scripts/check-doc-counts.mjs` | `no stale count in ...` |
 | `node scripts/check-doc-links.mjs --default-roots` | `no broken links in ...` |
