@@ -1,0 +1,20 @@
+/// The one way code inside a `#gpu` scope runs on the host is a `#cpu` block written in the
+/// program (GPU design 2.1: the inner scope wins). `tanh` would be refused one line up; the label
+/// says the host runs this part on purpose, so the escape is visible in the source, not inferred
+/// from a diagnostic.
+module gpu_nofallback_cpu_escape
+
+import { Tensor, reshape, tanh, sum } from tensor
+
+#gpu
+func step(x: Tensor<f32>): Tensor<f32> {
+    let y = x * 2.0
+    #cpu {
+        return tanh(y)
+    }
+}
+
+func main() {
+    let x = reshape([1.0, 2.0], [2])
+    println(sum(step(x)))
+}
