@@ -43,7 +43,8 @@
 // snippet is its own entry file and its own temp directory; batching them into one process
 // would mix module names and entries. The summary prints the wall time.
 //
-// Exit status 1 when a snippet is stale.
+// Exit status 1 when a snippet is stale, 2 when the scope holds no document or no Camel fence: a
+// check of nothing is refused, never reported as a pass.
 
 import fs from 'node:fs'
 import os from 'node:os'
@@ -603,9 +604,21 @@ async function checkSnippet(documentAbs, snippet, lines, fences) {
 const args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'))
 const entries =
     process.argv.includes('--default-roots') || args.length === 0 ? ['README.md', 'docs'] : args
+// The H171 defect: the plan passed the script's own path, the scope came out empty, and the guard
+// reported a pass. A scope entry that does not exist and a scan of no document are now refusals.
+const missing = entries.filter((entry) => !fs.existsSync(path.resolve(ROOT, entry)))
+if (missing.length > 0) {
+    for (const entry of missing) console.log(`${entry}: no such file or directory`)
+    console.log(`${missing.length} scope entr${missing.length === 1 ? 'y does' : 'ies do'} not exist; refusing to check a smaller tree`)
+    process.exit(2)
+}
 const files = []
 for (const entry of entries) collect(entry, files)
 const unique = [...new Set(files)].sort()
+if (unique.length === 0) {
+    console.log('no reader-facing document in the given scope: nothing was checked')
+    process.exit(2)
+}
 
 const started = Date.now()
 const problems = []
@@ -674,6 +687,12 @@ const checkedSnippets = snippets.filter((entry) => {
     }
     return !(excerptPage(entry.abs) && !entry.snippet.fences.some(entryOf))
 })
+// A page with no Camel fence is not a checked snippet: if the scope holds none at all, the guard
+// examined no code and must say so instead of printing "no stale snippet".
+if (checkedSnippets.length === 0) {
+    console.log(`no Camel fence in ${scanned.length} reader-facing document(s): nothing was compiled`)
+    process.exit(2)
+}
 
 let cursor = 0
 const results = []

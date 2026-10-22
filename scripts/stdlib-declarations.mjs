@@ -758,6 +758,15 @@ function staticChecks() {
     const modules = declarationModules()
     let computedCount = 0
 
+    // Declared modules derive from `stdlib/<module>.cml` + the C++ module's `BuiltinModule`; if
+    // that derivation finds nothing, every loop below passes over nothing.
+    if (modules.length === 0) {
+        problems.push(
+            'no declaration module under stdlib/: no `<module>.cml` matches a C++ `BuiltinModule`; ' +
+                'the migration this check proves cannot be empty, so its derivation is broken',
+        )
+    }
+
     for (const module of modules) {
         const entry = reference.find((each) => each.name === module.name)
         const source = relative(module.source)

@@ -26,12 +26,14 @@
 // declarations alike, so the share is the half of the pair that does not move with the host.
 //
 // The declaration modules are read from the tree, not listed here (handover H177): H152 pinned
-// the nine of its day, eleven more were migrated, and this tool kept pricing 182 declarations
-// while the run compiled 286 -- and the share's denominator, which includes the modules the
-// numerator no longer covered, went on growing. The set comes from
-// `scripts/stdlib-declarations.mjs`, which already derives it from `stdlib/<module>.cml` + the
-// C++ module's `BuiltinModule` (handover H137); the next migration is measured the day its
-// `.cml` lands.
+// The declaration modules are read from the tree, not listed here (H177): H152 pinned the nine of
+// its day, thirteen more were migrated, and this tool kept pricing 182 declarations while this tree
+// compiled 291 -- and the share's denominator, which includes the modules the numerator no longer
+// covered, went on growing. The set comes from `scripts/stdlib-declarations.mjs`, which already
+// derives it from `stdlib/<module>.cml` + the C++ module's `BuiltinModule` (handover H137); the next
+// migration is measured the day its `.cml` lands. The measurement also refuses to run when a derived
+// module has no phase in the report or no declaration in its `.cml`: those would price a subset and
+// call it the whole.
 
 import { spawnSync } from 'child_process'
 import fs from 'fs'
@@ -47,6 +49,9 @@ const IMPORTS_NOTHING = path.join(REPO_ROOT, 'test', 'cases', 'perf', 'startup',
 // principles 6.4): their declarations are the work `declaration.cost` measures. Derived from the
 // tree (H177), so a new declaration module is counted without editing this tool.
 const DECLARATION_MODULES = declarationModules().map((module) => module.name)
+if (DECLARATION_MODULES.length === 0) {
+    throw new Error('no declaration module under stdlib/: the measurement would price no declaration')
+}
 
 function camelExe() {
     if (process.env.CAMEL_EXE) {
@@ -105,7 +110,11 @@ function declarationCount() {
     let count = 0
     for (const module of DECLARATION_MODULES) {
         const text = fs.readFileSync(path.join(REPO_ROOT, 'stdlib', `${module}.cml`), 'utf8')
-        count += (text.match(/^\s*export\s+func\s/gm) || []).length
+        const declarations = (text.match(/^\s*export\s+func\s/gm) || []).length
+        if (declarations === 0) {
+            throw new Error(`stdlib/${module}.cml declares no \`export func\`: the unit of declaration.cost would come from nothing`)
+        }
+        count += declarations
     }
     return count
 }
@@ -134,6 +143,7 @@ function declarationCost(reps) {
     const declarations = declarationCount()
     const samples = []
     const shares = []
+    const seen = new Set()
     for (let i = 0; i < reps; i++) {
         const run = spawnSync(argv[0], argv.slice(1), {
             cwd: REPO_ROOT,
@@ -161,10 +171,24 @@ function declarationCost(reps) {
             total += phase.wall_ns
             if (DECLARATION_MODULES.includes(phase.detail)) {
                 nanos += phase.wall_ns
+                seen.add(phase.detail)
             }
+        }
+        if (total === 0) {
+            throw new Error(`${argv.join(' ')} reported no parse, gct or declare phase: the share has no denominator`)
         }
         samples.push(nanos / 1e3 / declarations)
         shares.push(nanos / total)
+    }
+    // A derived module that the compiler did not compile (a `.cml` that no program imports, a
+    // registry that stopped reaching it) contributes declarations to the unit but no time to the
+    // numerator: the measurement would price a subset and print it as the whole. Name it instead.
+    const missing = DECLARATION_MODULES.filter((module) => !seen.has(module))
+    if (missing.length > 0) {
+        throw new Error(
+            `no phase report line for declaration module(s) ${missing.join(', ')}: ` +
+                'the measurement would price only the modules the run compiled',
+        )
     }
     return { declarations, ...summarize(samples), share: summarize(shares.map((s) => s * 100)) }
 }

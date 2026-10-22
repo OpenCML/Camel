@@ -5,6 +5,9 @@
 //   node scripts/stdlib-reference.mjs --verify-ops  the signature files list exactly the operators the
 //                                                   modules register (needs a built compiler)
 //
+// A run that renders no entry or compares no registered operator is refused (exit 1): agreement
+// over nothing is not a pass.
+//
 // stdlib/signatures/<module>.cml declares the operators a C++ module exports (globals.cml: the
 // built-in ones), one body-less `export func` each, with a doc comment:
 //
@@ -1030,6 +1033,11 @@ if (bodyProblems.length > 0) {
 }
 if (mode === '--write' || mode === '--verify-doc') {
     const text = renderDoc()
+    const rendered = (text.match(/^#### /gm) || []).length
+    if (rendered === 0) {
+        console.log('the reference would have no entry: MODULES and the declarations it reads produced nothing')
+        process.exit(1)
+    }
     if (mode === '--write') {
         fs.writeFileSync(DOC_PATH, text)
         console.log(`wrote docs/stdlib-reference.md (${(text.match(/^#### /gm) || []).length} entries)`)
@@ -1046,6 +1054,12 @@ if (mode === '--write' || mode === '--verify-doc') {
     for (const problem of problems) console.log(problem)
     if (problems.length > 0) {
         console.log(`${problems.length} difference(s) between the declarations and the registered operators`)
+        process.exit(1)
+    }
+    // A run that reached no operator compared nothing: the probe imported nothing the reference
+    // lists, or MODULES is empty. It has to say that, not report agreement.
+    if (checked === 0) {
+        console.log('verified 0 registered operator overloads: the declarations were compared with nothing')
         process.exit(1)
     }
     console.log(`the declarations agree with the ${checked} registered operator overloads`)

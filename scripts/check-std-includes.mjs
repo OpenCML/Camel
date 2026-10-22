@@ -12,6 +12,9 @@
 //                                                  the file itself (or, for x.cpp, by its x.h)
 //   node scripts/check-std-includes.mjs <path>...  only these files or directories
 //
+// Exit status 2 when a target does not exist, the scan holds no source file, or no file uses a
+// name in the table: a check of nothing is refused, never reported as a pass.
+//
 // What is checked: every .h / .cpp under src/, include/, modules/ and tools/. For each file the
 // standard headers it reaches are collected: its own `#include <...>` lines and those of the
 // project headers it includes with `#include "..."`, transitively. Headers of third-party
@@ -399,11 +402,17 @@ function main() {
         }
         walk(entry, files)
     }
+    if (files.length === 0) {
+        console.error('std includes: no .h/.cpp under the given targets: nothing was checked')
+        process.exit(2)
+    }
     let findings = 0
     let filesWithFindings = 0
+    let filesWithUses = 0
     for (const file of files) {
         const info = read(file)
         if (info.uses.size === 0) continue
+        filesWithUses++
         const have = reached(file, direct)
         const missing = new Map() // header -> [what, line]
         for (const [rule, line] of info.uses) {
@@ -418,6 +427,10 @@ function main() {
             console.log(`${rel(file)}:${line}: uses ${what} without <${header}>`)
         }
         if (fix) addIncludes(file, [...missing.keys()])
+    }
+    if (filesWithUses === 0) {
+        console.error(`std includes: none of the ${files.length} file(s) names a standard-library name: nothing was checked`)
+        process.exit(2)
     }
     const mode = direct ? 'named by the file itself' : 'reached through its includes'
     if (findings > 0) {
