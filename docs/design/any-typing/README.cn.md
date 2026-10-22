@@ -243,6 +243,8 @@ let ys = decode('[[1], [2]]') as int[]     // 元素是两个数组的地址
 
 - **内联抹掉 `any`。** `examples/t18_inline_changes_print.cml`：
 
+  <!-- camel-snippet: fragment: a proposal; any is not a type the current language has -->
+
   ```camel
   func wrap(x: int): any { return x }
   func main(): int sync {
@@ -321,6 +323,8 @@ $ camel docs/design/any-typing/examples/t06_json.cml std::cpp
 - **`t11` 只把 `any` 用在一个用户函数的形参和返回类型上**——这正是"泛型还不好写时拿 `any` 顶一下"的典型用法，分代下四个后端全部崩溃。
 
 **默认回收器、不加任何开关。** 上表的"默认"一列全对，是因为标记-清除要分配到几十兆才回收一次，而且释放的内存要被重新分出去才看得出错。把两件事都凑齐：
+
+<!-- camel-snippet: fragment: a proposal; any is not a type the current language has -->
 
 ```camel
 // examples/t20_default_collector.cml

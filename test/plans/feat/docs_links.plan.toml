@@ -15,6 +15,14 @@ desc = "The relative links of the reader-facing documents point at files and hea
 # used as if it were current: `sys:`/`os:`/`crypto:`, `str::bytes`/`str::from_bytes`, the
 # `inner`/`outer`/`atomic`/`shared` function modifiers, and the body-carrying signature form.
 # Task reports and dated reviews are records, not pages, and are not scanned.
+#
+# scripts/check-doc-snippets.mjs compiles every `cml`/`camel` fence of the reader-facing pages
+# with `camel <file> std::gir`, runs the fences that carry a command and a `text` block, and
+# compares stdout, the exit code and the diagnostic name. A fence that is deliberately a
+# fragment, a counter-example, a graph dump or compile-only carries an HTML comment marker
+# with a reason. Cost: 211 snippets in about 2 s on the Linux build host, with 8 workers; each
+# snippet runs in its own process because every fence can declare its own module and entry.
+# Task reports and dated reviews are records and are not scanned.
 
 [[tests]]
 name = "docs.links.reader_facing"
@@ -39,3 +47,15 @@ expect_exit = 0
 expect_stdout_contains = ["no retired spelling in"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+
+[[tests]]
+name = "docs.snippets_compile"
+desc = "Every Camel fence in a reader-facing page compiles; when the fence has a command and a text block it runs and prints that text. Incomplete or deliberately wrong fences carry a marker with a reason."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["no stale snippet in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000

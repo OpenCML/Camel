@@ -197,6 +197,8 @@ let t     = randint(fold(ks, 1), 0, 999)
 
 ### 4.3 一个函数完成一步
 
+<!-- camel-snippet: fragment: a design proposal; Device, @gpu and the body are not current syntax -->
+
 ```cml
 type State = { params: Params, m: Params, v: Params, ema: Params, key: Key, step: int }
 

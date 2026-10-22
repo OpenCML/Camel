@@ -184,6 +184,8 @@ func main(): int sync {
 - **错误与故障是两回事。** 只有声明为可能失败的操作（读文件、解析、网络等）才返回错误值。除零、越界、递归过深是故障，不变成错误值，否则每个除法和下标都要处理错误。
 - **故障默认带位置终止，但可以在子图边界上隔离。** 提供一个隔离算子 `attempt`：被它包住的函数里发生的故障，在边界上变成一个错误值，再用 `!!` 处理。终止之前保证清理：刷新输出，释放外部资源。
 
+  <!-- camel-snippet: fragment: a fragment of the fault example; risky is the function of the paragraph above -->
+
   ```camel
   let a = risky(0)                 // 故障：整个程序带位置终止
   let b = attempt(risky, 0) !! -1  // 故障被隔离，b = -1（示意）
@@ -202,6 +204,8 @@ func main(): int sync {
 - **引入 `LOOP` 节点。** 现代的计算图标准大多有这类节点，要与它们接轨就需要它。循环体是独立的子图，不并入外层图。条件子图与循环体子图共用一份捕获表；`for … while` 是同一种节点的第三种形式；有多个状态时循环体返回一个元组，`LOOP` 的值也是这个元组。
 - **循环是一个带状态的表达式。** 状态写在循环头上，循环体的值是下一轮的状态，整个循环的值是最终状态。不为"循环外的 `var` 当状态"另设语句形式；只为效应而遍历用 `foreach` 等已有的办法。
 - **循环头的写法是 `do` 式**：状态只声明一次，多个状态用逗号分开，循环的值是它们组成的元组；`do` 后面是一个表达式，`{` 的读法与 `then` 之后相同（`{ x: 1 }` 是结构体，`{ 5 }` 是块）。
+
+  <!-- camel-snippet: fragment: the loop forms; xs, n and ds are the surrounding example's values -->
 
   ```camel
   let total    = loop acc = 0 for x in xs do acc + x * x
@@ -331,6 +335,8 @@ func main(): int sync {
 ### 5.6 类型函数与原语
 
 - **类型函数用专门的类型表达式来写**，在类型位置上用尖括号调用。类型总是写在 `:` 之后，所以这里的尖括号与 `with` 参数的尖括号没有歧义。带参数的类型声明就是类型函数。
+
+  <!-- camel-snippet: fragment: a signature sketch; swap has no body and is not a loaded operator -->
 
   ```camel
   type Pair<T> = (T, T)                    // 示意

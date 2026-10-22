@@ -187,6 +187,8 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **Errors and faults are two different things.** Only operations declared as able to fail (reading a file, parsing, the network and so on) return an error value. Division by zero, out-of-bounds access and recursion that is too deep are faults; they do not become error values, otherwise every division and every subscript would have to handle an error.
 - **A fault terminates with a location by default, but can be isolated at a subgraph boundary.** An isolation operator `attempt` is provided: a fault that occurs in the function it wraps becomes an error value at the boundary, to be handled with `!!`. Clean-up is guaranteed before termination: output is flushed and external resources are released.
 
+  <!-- camel-snippet: fragment: a fragment of the fault example; risky is the function of the paragraph above -->
+
   ```camel
   let a = risky(0)                 // fault: the whole program terminates with a location
   let b = attempt(risky, 0) !! -1  // the fault is isolated, b = -1 (sketch)
@@ -205,6 +207,8 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **The `LOOP` node is introduced.** Most modern computation-graph standards have such a node, and interoperating with them needs it. The loop body is an independent subgraph and is not merged into the outer graph. The condition subgraph and the body subgraph share one capture table; `for … while` is a third form of the same node; with several states the body returns a tuple, and the value of `LOOP` is also this tuple.
 - **A loop is an expression with state.** The state is written in the loop header, the value of the body is the next round's state, and the value of the whole loop is the final state. No statement form is added for "a `var` outside the loop as the state"; to iterate only for effect, use existing means such as `foreach`.
 - **The loop header is written in the `do` form**: the state is declared once, several states are separated by commas, and the value of the loop is the tuple they form; what follows `do` is one expression, and `{` is read as after `then` (`{ x: 1 }` is a struct, `{ 5 }` is a block).
+
+  <!-- camel-snippet: fragment: the loop forms; xs, n and ds are the surrounding example's values -->
 
   ```camel
   let total    = loop acc = 0 for x in xs do acc + x * x
@@ -334,6 +338,8 @@ A `sync` written before a block (including the postfix form on a function body, 
 ### 5.6 Type functions and primitives
 
 - **Type functions are written with dedicated type expressions**, called with angle brackets in type positions. A type is always written after `:`, so these angle brackets are not ambiguous with the angle brackets of `with` parameters. A type declaration with parameters is a type function.
+
+  <!-- camel-snippet: fragment: a signature sketch; swap has no body and is not a loaded operator -->
 
   ```camel
   type Pair<T> = (T, T)                    // sketch

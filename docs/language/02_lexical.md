@@ -150,12 +150,15 @@ let c = a + b
 - 它可以写成 `'...'->format<...>`，两者是同一棵语法树、同一语义（[6.2](06_expressions.md#62-字面量与构造)）。
 
 ```cml
-let name = 'Camel'
-let n = 42
-println(`hello, ${name}!`)                    // 等价于 'hello, {}!'->format<name>
-println(`n = ${n}, twice = ${n * 2}`)
-println(`pi = ${3.14159:.2f}`)                // 等价于 'pi = {:.2f}'->format<3.14159>
-println(`literal { } and \${not} interpolated`)
+func main(): int sync {
+    let name = 'Camel'
+    let n = 42
+    println(`hello, ${name}!`)                    // 等价于 'hello, {}!'->format<name>
+    println(`n = ${n}, twice = ${n * 2}`)
+    println(`pi = ${3.14159:.2f}`)                // 等价于 'pi = {:.2f}'->format<3.14159>
+    println(`literal { } and \${not} interpolated`)
+    return 0
+}
 ```
 
 ```text

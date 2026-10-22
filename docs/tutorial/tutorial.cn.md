@@ -379,6 +379,8 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 
 写在块前的 `sync` 使它成为同步块：块里的表达式按书写顺序执行，相当于编译器在相邻的表达式之间加了控制边。[`examples/06_sync_block.cml`](examples/06_sync_block.cml) 只把 `greet` 的函数体改成同步块：
 
+<!-- camel-snippet: compile-only: the fence is the changed function only; the text block is the output of examples/06_sync_block.cml -->
+
 ```cml
 func greet(): int sync {
     println('hello from greet')
@@ -767,9 +769,9 @@ func main(): int sync {
 ```
 
 ```text
-1.41421
-5
-10
+1.4142135623730951
+5.0
+10.0
 ```
 
 - `import { a, b } from m` 引入列出的名字；`import m` 只引入命名空间，用 `m::name` 访问。
@@ -1068,9 +1070,9 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 ```
 
 ```text
-20
-12
-(20, 12)
+20.0
+12.0
+(20.0, 12.0)
 ```
 
 - `grad(f)` 返回一个函数，它对 `f` 的第一个 `with` 参数求导；其余 `with` 参数当作常量，普通参数是数据。

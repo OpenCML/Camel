@@ -16,6 +16,8 @@ module shapes
 
 ## 5.2 导入
 
+<!-- camel-snippet: fragment: the forms of import; lib and its namespace are examples -->
+
 ```cml
 import { sqrt, floor } from math     // 引入列出的名字
 import sqrt from math                // 引入一个名字，与 import { sqrt } from math 相同
@@ -105,8 +107,8 @@ func main(): int sync {
 ```
 
 ```text
-5
-10
+5.0
+10.0
 ```
 
 - `export` 写在 `func`、`type`、`let`/`var` 声明之前，或写成 `export { a, b }` 列出已声明的名字。
@@ -203,6 +205,8 @@ func main(): int sync {
 - 诊断、调试器与图里显示完整的名字：别的模块的函数显示为 `模块::路径::名字`，入口模块自己的省略模块名。
 
 **`using namespace`** 让一个命名空间里的名字可以不带前缀使用：
+
+<!-- camel-snippet: fragment: the forms of using namespace; lib, Tools and Inner are examples -->
 
 ```cml
 import lib
