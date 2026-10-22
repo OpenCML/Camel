@@ -323,6 +323,7 @@ f234da727937674c ok stdlib/math.cml
 e02c37ac47d43974 ok stdlib/random.cml
 a8be31ddfa495bf4 ok stdlib/re.cml
 dc425a313698f684 ok stdlib/rules.cml
+94e8811447b8d758 ok stdlib/statistics.cml
 1c94db09ee5e88dd ok stdlib/str.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 6451a1f63fbca717 ok stdlib/signatures/algo.cml
@@ -336,7 +337,6 @@ df6e9b39c870578c ok stdlib/signatures/json.cml
 288f3bfd8801992a ok stdlib/signatures/para.cml
 c80b5667335e55a8 ok stdlib/signatures/process.cml
 82c91a732389ed7e ok stdlib/signatures/random.cml
-4b1e6e35d1c406b9 ok stdlib/signatures/statistics.cml
 a54b7af54487e60a ok stdlib/signatures/tensor.cml
 9f41932d10f1e591 ok stdlib/signatures/this.cml
 1bf7539617c07ad8 ok stdlib/signatures/time.cml
@@ -830,6 +830,9 @@ f6fd74743a748615 ok test/cases/compile/native/re_declaration_import.cml
 25dc1f76b4a5c95e ok test/cases/compile/native/re_type.cml
 cbd832547e7cdf8d ok test/cases/compile/native/retired_str_bytes.cml
 bcac67bf72834a87 ok test/cases/compile/native/retired_str_from_bytes.cml
+e07fef78ecc9b9ab ok test/cases/compile/native/statistics_arity.cml
+1b5127468a081d7b ok test/cases/compile/native/statistics_declaration_import.cml
+da06782ea199dba8 ok test/cases/compile/native/statistics_type.cml
 17dafaa791a6d02c ok test/cases/compile/native/str_arity.cml
 6b93edd476faf370 ok test/cases/compile/native/str_declaration_import.cml
 18c99cf48eb6a338 ok test/cases/compile/native/str_type.cml

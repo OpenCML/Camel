@@ -2078,9 +2078,9 @@ count; null for an empty array, NaN when an element is NaN.
 
 ```camel
 quantile: <q: float> (xs: i32[]) => float?
-quantile: (xs: int[]) => float?
-quantile: (xs: f32[]) => float?
-quantile: (xs: float[]) => float?
+quantile: <q: float> (xs: int[]) => float?
+quantile: <q: float> (xs: f32[]) => float?
+quantile: <q: float> (xs: float[]) => float?
 ```
 
 The q-quantile, q from 0 to 1, by linear interpolation between the two nearest ranks

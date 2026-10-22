@@ -1,0 +1,14 @@
+/**
+ * An `int` where the declarations of `statistics:mean` take an array of numbers: the call is
+ * refused at the declarations' type, and the signatures in the message have their own parameter
+ * name (`xs`) — the one source is `stdlib/statistics.cml`, not the C++ module (handover H19,
+ * step 10; H135).
+ */
+module statistics_type
+
+import { mean } from statistics
+
+func main(): int sync {
+    println(mean(42))
+    return 0
+}

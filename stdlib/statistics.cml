@@ -3,11 +3,24 @@
  *
  * Every function takes an array of numbers of one type (i32, int, f32 or float) and computes
  * in float.
- *
- * For reference only: these declarations are not compiled. They are checked against the
- * operators the module registers, and docs/stdlib-reference.md is generated from them
- * (scripts/stdlib-reference.mjs).
  */
+
+// The declarations of the operators of the C++ module `statistics` (`modules/statistics`). This
+// file is the one source of their signatures (design principles 6.4; handover H19, step 10): the
+// C++ side keeps the kernels, the executor and the operator traits.
+//
+// None of them has a computed result type: the answer is `float` (or `float?`) whatever the
+// element type is. The C++ resolver was one umbrella rule that accepted a numeric array and gave
+// `float`; the four numeric element types are enumerated here, as they already were in the
+// reference signature file, and each name's four declarations share its one operator URI
+// (`statistics:mean`, ...). A call picks the rule of its element type, exactly as the resolver
+// did.
+//
+// `quantile`'s with-parameter is part of every one of its four signatures: a with-parameter
+// written above a declaration belongs to that declaration only, so each overload repeats it and
+// `[...]->quantile<q>` is checked the same way for an i32, an int, an f32 and a float array.
+
+module statistics
 
 /// The arithmetic mean; 0 for an empty array.
 /// @pure
@@ -50,6 +63,9 @@ export func median(xs: float[]): float?
 /// @example [1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25> ?? 0.0    // 2
 with <q: float>
 export func quantile(xs: i32[]): float?
+with <q: float>
 export func quantile(xs: int[]): float?
+with <q: float>
 export func quantile(xs: f32[]): float?
+with <q: float>
 export func quantile(xs: float[]): float?
