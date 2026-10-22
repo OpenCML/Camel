@@ -6,6 +6,7 @@ import { spawn, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { parseTomlFile } from './toml-lite.mjs'
 import { compareGirDotIsomorphic } from './gir-dot.mjs'
+import { applyNormalizers } from './normalizers.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -411,11 +412,19 @@ function parseArgs(argv) {
         // compares parallel output with serial output.
         jobs: DEFAULT_JOBS,
         targets: [],
+        // Plan files that `--changed` selected through a `layer: true` rule: they stay named
+        // targets but follow `--tier`, so a plan whose slow cases must not run from an ordinary
+        // change runs only its fast layer. `--run-changed` produces this; it is not a user knob.
+        layeredPlans: new Set(),
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         if (arg === '--update-golden') {
             options.updateGolden = true
+        } else if (arg === '--selection-layer' && i + 1 < argv.length) {
+            for (const entry of argv[++i].split(',')) {
+                if (entry.trim()) options.layeredPlans.add(path.resolve(process.cwd(), entry.trim()))
+            }
         } else if (arg === '--tier' && i + 1 < argv.length) {
             const tier = argv[++i]
             if (!TIERS.has(tier)) throw new Error(`--tier must be one of ${[...TIERS].join(', ')}, got '${tier}'`)
@@ -510,67 +519,6 @@ function loadVars() {
     const builtins = { python: pythonExecutable() }
     if (!fs.existsSync(VARS_PATH)) return builtins
     return { ...builtins, ...parseTomlFile(VARS_PATH) }
-}
-
-/**
- * Replace the repository root with `<ROOT>` and write the rest of that path with forward slashes,
- * so a snapshot does not depend on where the checkout lives or on the platform's separator. The
- * root is recognised with forward slashes, with native separators, and with escaped backslashes
- * (a Windows path inside a quoted DOT or JSON string), in its own case and in lower case.
- */
-function normalizePathText(text, repoRoot = REPO_ROOT) {
-    const forward = repoRoot.replace(/\\/g, '/')
-    let output = text
-    if (repoRoot.includes('\\')) {
-        // Windows: `C:\\repo\\a\\b` (escaped) first, then `C:\repo\a\b` (native). Only the
-        // separator form the root itself was written in is rewritten in the rest of the path,
-        // so an escape that follows the path (`\"`, `\n`) is left alone.
-        const quote = (root) => root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const rest = '[^\\s"\'`<>|*?,;]*'
-        for (const [root, separator] of [
-            [repoRoot.replace(/\\/g, '\\\\'), /\\\\/g],
-            [repoRoot, /\\/g],
-        ]) {
-            const pattern = new RegExp(`${quote(root)}(${rest})`, 'gi')
-            output = output.replace(pattern, (_, tail) => `<ROOT>${tail.replace(separator, '/')}`)
-        }
-    }
-    return output.replaceAll(forward, '<ROOT>').replaceAll(forward.toLowerCase(), '<ROOT>')
-}
-
-function applyNormalizers(text, names) {
-    let output = text
-    for (const name of names || []) {
-        if (name === 'strip_ansi') {
-            output = output.replace(/\x1b\[[0-9;]*m/g, '')
-        } else if (name === 'normalize_newlines') {
-            output = output.replace(/\r\n/g, '\n')
-        } else if (name === 'trim_trailing_space') {
-            output = output
-                .split('\n')
-                .map((line) => line.replace(/[ \t]+$/g, ''))
-                .join('\n')
-        } else if (name === 'normalize_paths') {
-            output = normalizePathText(output)
-        } else if (name === 'normalize_addresses') {
-            output = output.replace(/0x[0-9a-fA-F]+/g, '<ADDR>')
-        } else if (name === 'normalize_origins') {
-            // An origin id is an opaque per-build identifier for a source position, not graph
-            // structure: it is renumbered whenever any other file is parsed or compiled before the
-            // dumped program (a pass module written in Camel takes some tokens, a declaration
-            // module adds some). The source position itself is printed next to it -- `span` and
-            // `srcfile` in the DOT dumps, the span fields in `std::jgir` -- so normalizing the id
-            // keeps the assertion on where a node comes from and drops the snapshot of the tree.
-            // `origin=<ORIGIN>` still asserts that a node has an origin (a node without one prints
-            // no attribute at all).
-            output = output
-                .replace(/"origin": "[0-9]+"/g, '"origin": "<ORIGIN>"')
-                .replace(/\borigin=[0-9]+/g, 'origin=<ORIGIN>')
-        } else if (name === 'normalize_duration_seconds') {
-            output = output.replace(/computed in [0-9]+\.[0-9]+ seconds/g, 'computed in <TIME> seconds')
-        }
-    }
-    return output
 }
 
 function parseDiagnostics(text) {
@@ -932,6 +880,10 @@ async function runVerification(test, result) {
     }
 
     const payloadPath = path.join(tempDir, 'input.json')
+    // The documented payload fields are listed in docs/test-plans.md; every one of them must be
+    // present, and a missing key is silently dropped by `JSON.stringify` (H143: `case_path` was
+    // assembled from a result that did not carry it yet, so a script normalizing the absolute
+    // source path out of its output could not, and its digest varied with the checkout).
     const payload = {
         repo_root: REPO_ROOT,
         test_root: TEST_ROOT,
@@ -1284,6 +1236,9 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         diagnostics: parseDiagnostics(raw.output),
         testTmp: scratch,
         testTmpRelative: scratchRelative,
+        // Set before validation: the verify script payload carries this as `case_path`, and the
+        // script that normalizes a source path out of its output needs it (H143).
+        casePath,
     }
 
     if (test.kind === 'benchmark' && raw.stdout) {
@@ -1294,7 +1249,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // only after this returns.
     const failures = await validateTest(test, result, { ...logContext, scope })
     const status = failures.length === 0 ? 'pass' : 'fail'
-    return { ...result, failures, status, casePath }
+    return { ...result, failures, status }
 }
 
 function writeLogFiles(plan, test, result, status, logDir) {
@@ -1597,14 +1552,15 @@ function selectTier(plans, tier, namedPlans = new Set()) {
     return selectedPlans
 }
 
-function loadPlans(targets, tier) {
+function loadPlans(targets, tier, layeredPlans = new Set()) {
     // A plan file named on the command line (or by `--changed`'s self rule) runs in full; the
-    // plans a directory reaches follow the layer. The same plan reached both ways is named.
+    // plans a directory reaches follow the layer. The same plan reached both ways is named,
+    // unless `--changed` marked it `layer: true`: then the tier filter applies to it as well.
     const namedPlans = new Set()
     const discovered = []
     for (const target of targets) {
         const resolved = path.resolve(target)
-        if (fs.statSync(resolved).isFile()) namedPlans.add(resolved)
+        if (fs.statSync(resolved).isFile() && !layeredPlans.has(resolved)) namedPlans.add(resolved)
         discovered.push(...walkPlans(target))
     }
     if (targets.length === 0) discovered.push(...walkPlans(PLANS_ROOT))
@@ -1820,12 +1776,12 @@ async function main() {
     const sharedVars = loadVars()
     const namedPlans = options.targets.filter((target) => {
         try {
-            return fs.statSync(target).isFile()
+            return fs.statSync(target).isFile() && !options.layeredPlans.has(path.resolve(target))
         } catch {
             return false
         }
     })
-    const plans = loadPlans(options.targets, options.tier)
+    const plans = loadPlans(options.targets, options.tier, options.layeredPlans)
     ensureDir(LOG_ROOT)
     // The pid keeps two runs started in the same second (the self-test does this) out of one
     // directory, whose logs and summary.json would otherwise overwrite each other.
@@ -1838,6 +1794,14 @@ async function main() {
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
     )
+    if (options.layeredPlans.size > 0 && options.tier !== 'all') {
+        // `--changed` marked these plans `layer: true`: naming them is not "run the whole file",
+        // it is "run the cases of this layer", so the slow cases that must not run from an
+        // ordinary change are filtered while the fast ones still run.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} selected plan target(s) follow --tier ${options.tier}: ${options.layeredPlans.size}`
+        )
+    }
     if (namedPlans.length > 0 && options.tier !== 'all') {
         // Naming a plan is the user's intent: it runs in full, whatever `--tier` says. A
         // directory target still selects the layer (see loadPlans).

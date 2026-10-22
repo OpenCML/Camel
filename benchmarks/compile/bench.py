@@ -23,6 +23,13 @@ What is measured, and how:
     under the counting shim test/tools/allocshim, built here with the C compiler found on
     PATH. That run is not timed.
   * The peak resident set size is the one the phase report reads from /proc/self/status.
+  * Which modules were compiled on demand is read from the same report: a pass that loads a Camel
+    library opens a `library` phase, and the modules that library imports are compiled inside its
+    `gct` phase. Each such module is a *library module* only if it declares itself in the standard
+    library (`stdlib/<name>.cml` says `module <name>`); the tables give the parse/gct/declare/
+    body time of each. No list of names is kept in this file: H141 (`graph`) and H151 (`tensor`)
+    each added a declaration module after H144 had pinned two names, and a third copy goes stale
+    the same way.
 
 Method. Every (input, pipeline) is run `--rounds` times, pinned with `taskset -c K` when
 taskset exists; when several compilers are compared (`--camel base=/path/one --camel
@@ -92,6 +99,16 @@ DEFAULT_MODULE_COUNTS = [1, 2, 4, 8, 16, 32, 64, 128]
 LARGE_SEED, LARGE_SIZE = 2, 20  # the generator rarely finds a usable program above size 20
 SCALE_FUNCTIONS = 4000
 SLOW_CASE_MS, SLOW_CASE_ROUNDS = 5000.0, 2  # a run longer than this is repeated only this often
+
+# A library module is not a list of names kept here. It is a module the run compiled because a
+# pass loaded it as its tool program, and it names itself in the standard library
+# (`stdlib/<name>.cml` says `module <name>`). The compiler marks the first fact with a `library`
+# phase; see pass_loaded_modules. The second is the module's own declaration; see
+# stdlib_declaration. H144 pinned two names, then H141 added `graph` and H151 added `tensor`, so
+# the tuple went stale twice in one day. Neither number may disappear: the benchmark reports the
+# set and what each module costs, and the check derives the set from these two facts instead of
+# carrying a third copy of it.
+STDLIB = REPO / "stdlib"
 
 # The order of the rows of the phase tables; phases not listed follow alphabetically.
 PHASE_ORDER = ["(process)", "startup", "mm_init", "context", "builtin_module", "parse", "resolve", "cmo_load",
@@ -163,7 +180,11 @@ def build_inputs(sets: List[str], work: Path, module_counts: List[int], large_si
             for count in module_counts:
                 project = work / f"modules_{shape}_{count}"
                 gen_modules.generate(project, count, shape, funcs=8, fan=4)
-                add(f"{shape}-{count}", "modules", project / "main.cml", True, modules=count, shape=shape)
+                # The project's own modules, by name: `main` plus the N generated ones. Anything
+                # else the run compiles is a library module (see module_names()).
+                own = ["main"] + [gen_modules.module_name(i) for i in range(count)]
+                add(f"{shape}-{count}", "modules", project / "main.cml", True, modules=count,
+                    shape=shape, own_modules=own)
     for item in inputs:
         text = Path(item["path"]).read_bytes()
         item["bytes"] = len(text)
@@ -260,6 +281,146 @@ def self_costs(report: dict) -> Dict[str, Dict[str, float]]:
     return out
 
 
+def declared_module_name(path: Path) -> Optional[str]:
+    """The name a module declares for itself (`module <name>`), or None if it declares none."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = re.search(r"^\s*module\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*$",
+                      text, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def stdlib_declaration(name: str) -> Optional[Path]:
+    """The standard-library file that declares module `name`, if there is one.
+
+    This is what "library module" means here: the module is named by its own declaration, in the
+    library, not by a tuple in this file. A migration that adds a declaration module (H141's
+    `graph`, H151's `tensor`) changes the set with the source, and the benchmark reports the new
+    module and its cost instead of failing on a list that was true last week.
+    """
+    path = STDLIB.joinpath(*name.split(".")).with_suffix(".cml")
+    if path.is_file() and declared_module_name(path) == name:
+        return path
+    return None
+
+
+def pass_loaded_modules(report: dict) -> List[str]:
+    """Modules a pass caused to be compiled, in the order they first reached GCT.
+
+    The compiler marks the work: a Camel library a pass loads as its tool program opens a
+    `library` phase whose detail is the module's name (UserDefinedModule::compileAsProgram,
+    src/core/module/userdef.cpp), and the modules that library imports are compiled inside the
+    library's `gct` phase. So a module is pass-loaded when it has a `library` phase, or its `gct`
+    phase is nested inside the `gct` of a pass-loaded module. The program's own build has no such
+    ancestor above it, which is what separates the input's modules from what a pass costs. A module
+    the library imports that is not written in Camel (no `stdlib/<name>.cml`, e.g. `rewrite`) never
+    reaches GCT, so it is not in this list: it costs a `cmo_load`, not a module compile, and the
+    library table must not charge for it.
+    """
+    phases = report.get("phases", [])
+    roots = {p.get("detail") for p in phases
+             if p.get("name") == "library" and p.get("detail")}
+    loaded: List[str] = []
+    marks: Dict[int, bool] = {}
+    stack: List[int] = []
+    for index, phase in enumerate(phases):
+        del stack[phase["depth"]:]
+        inside = any(marks.get(parent, False) for parent in stack)
+        name, detail = phase.get("name"), phase.get("detail")
+        if name == "library" and detail in roots:
+            marks[index] = True
+        elif name == "gct" and detail:
+            marks[index] = detail in roots or inside
+            if marks[index] and detail not in loaded:
+                loaded.append(detail)
+        else:
+            marks[index] = inside
+        stack.append(index)
+    return loaded
+
+
+def module_phase_costs(report: dict) -> Dict[str, Dict[str, float]]:
+    """Module name -> self wall ms of its compile phases (`parse`, `gct`, `declare`, `library`)."""
+    phases = report.get("phases", [])
+    stack: List[int] = []
+    inner = [0] * len(phases)
+    for index, phase in enumerate(phases):
+        del stack[phase["depth"]:]
+        if stack:
+            inner[stack[-1]] += phase.get("wall_ns", 0)
+        stack.append(index)
+    out: Dict[str, Dict[str, float]] = {}
+    for phase, nested in zip(phases, inner):
+        name, detail = phase.get("name"), phase.get("detail")
+        if name not in ("parse", "gct", "declare", "library") or not detail:
+            continue
+        row = out.setdefault(detail, {})
+        row[name] = row.get(name, 0.0) + (phase.get("wall_ns", 0) - nested) / 1e6
+    return out
+
+
+def module_names(report: dict) -> List[str]:
+    """Which modules a run compiled, in the order they first reached GCT.
+
+    Every module compiled from Camel source opens one `gct` phase whose detail is the module's
+    name (src/core/module/userdef.cpp), and the phase report keeps that name, so the list is
+    available without a counter of its own. It is exactly what `counters.modules` counts — and
+    that count includes library modules a pass compiles on demand: the algebra step of `std::opt`
+    compiles stdlib/rules.cml, and `rules` imports `graph`, `math` and `tensor`, whose own
+    declaration modules (stdlib/<name>.cml) are written in Camel and compiled too (H100, H112,
+    H121, H141, H151). The count alone cannot tell the program's own modules from the libraries
+    it caused to be loaded; the names can, and those are two different cost numbers.
+    """
+    names: List[str] = []
+    for phase in report.get("phases", []):
+        if phase.get("name") == "gct":
+            name = phase.get("detail") or ""
+            if name and name not in names:
+                names.append(name)
+    return names
+
+
+def module_split(entry: dict) -> Optional[Tuple[int, int]]:
+    """(user, total) module counts of a results entry, or None for a file written before the
+    phase report's module names were kept (rendering it must not claim 0 / 0)."""
+    if "modules_loaded" not in entry:
+        return None
+    return len(entry.get("modules_user", [])), len(entry["modules_loaded"])
+
+
+def entry_module(report: dict) -> Optional[str]:
+    """The name of the program's entry module, from the `gir` phase.
+
+    `gir` is opened only by the program's own build (src/core/module/userdef.cpp); a module built
+    as a library for a pass opens `library` instead. The entry module is the one module every
+    program has, so it anchors the split when the benchmark does not know the project's names.
+    """
+    for phase in report.get("phases", []):
+        if phase.get("name") == "gir" and phase.get("detail"):
+            return phase["detail"]
+    return None
+
+
+def classify_modules(item: dict, report: dict) -> Tuple[List[str], List[str], List[str]]:
+    """(loaded, own, library) modules of one run.
+
+    A generated project declares its own module names (`own_modules`); for a single-file program
+    the program's own module is its entry module. Every other compiled module is a library
+    module — loaded because a pass or the program imports it, not part of what was measured.
+    """
+    loaded = module_names(report)
+    own_names = item.get("own_modules")
+    if own_names is None:
+        entry = entry_module(report)
+        own_names = [entry] if entry else list(loaded)
+    own_set = set(own_names)
+    own = [name for name in loaded if name in own_set]
+    library = [name for name in loaded if name not in own_set]
+    return loaded, own, library
+
+
 def parse_bench(home: Path, source: str, cpu: Optional[int], rounds: int) -> Optional[dict]:
     """Lexer / CST / AST split of one file in microseconds (min and median)."""
     tool = tool_path(home, "camel-parsecheck")
@@ -313,6 +474,16 @@ def measure(inputs: List[dict], versions: List[Tuple[str, Path]], rounds: int, c
                 case["_phases"].setdefault(kind, []).append(row["wall_ns"] / 1e6)
             case["_phases"].setdefault("(process)", []).append(wall * 1e3 - data["total_ns"] / 1e6)
             case["counters"] = data.get("counters", {})
+            loaded, own, library = classify_modules(item, data)
+            case["modules_loaded"] = loaded
+            case["modules_user"] = own
+            case["modules_library"] = library
+            case["modules_entry"] = entry_module(data)
+            case["pass_loaded"] = pass_loaded_modules(data)
+            for module, costs in module_phase_costs(data).items():
+                target = case.setdefault("_module_cost", {}).setdefault(module, {})
+                for kind, value in costs.items():
+                    target.setdefault(kind, []).append(value)
         loads.append(loadavg())
         print(f"bench: round {round_index + 1}/{rounds} done, load {loads[-1]}", file=sys.stderr)
     results = []
@@ -329,6 +500,10 @@ def measure(inputs: List[dict], versions: List[Tuple[str, Path]], rounds: int, c
             entry["in_process_ms"] = summarize(case["_total"])
             entry["peak_rss_kb"] = int(statistics.median(case["_rss"]))
             entry["phases_ms"] = {kind: summarize(values) for kind, values in case["_phases"].items()}
+            if "_module_cost" in case:
+                entry["module_cost_ms"] = {
+                    module: {kind: summarize(values) for kind, values in kinds.items()}
+                    for module, kinds in case["_module_cost"].items()}
             if shim is not None:
                 _, code, data = run_camel(home, item["path"], PIPELINES[case["pipeline"]],
                                           camel_env(home, item["env"]), cpu, report, preload=shim)
@@ -395,6 +570,12 @@ def phase_table(columns: List[dict], stat: str) -> str:
     rows = [[k] + [fmt_ms(r["phases_ms"][k][stat]) if k in r["phases_ms"] else "" for r in columns] for k in kinds]
     rows.append(["**wall**"] + [f"**{fmt_ms(r['wall_ms'][stat])}**" for r in columns])
     rows.append(["peak RSS (MB)"] + [f"{r['peak_rss_kb'] / 1024:.1f}" for r in columns])
+    # Both module numbers: the program's own modules are what the input set varies, and the
+    # library modules are what the pipeline cost on top of it. Neither may disappear.
+    split = [module_split(r) for r in columns]
+    rows.append(["modules (user / total)"] + ["—" if s is None else f"{s[0]} / {s[1]}" for s in split])
+    rows.append(["library modules"] + [
+        "—" if "modules_library" not in r else (", ".join(r["modules_library"]) or "—") for r in columns])
     return table(["phase (self, ms)"] + [f"{r['input']} ({r['lines']} lines)" for r in columns], rows)
 
 
@@ -416,6 +597,25 @@ def alloc_table(columns: List[dict]) -> str:
     for name in ("modules", "ast.nodes", "gct.nodes", "graph.nodes"):
         rows.append([name] + [fmt_count(r.get("counters", {}).get(name, 0)) for r in columns])
     return table(["phase (allocations / bytes)"] + [r["input"] for r in columns], rows)
+
+
+def library_cost_table(columns: List[dict]) -> str:
+    """What each module compiled on demand cost, by compile phase, so the set cannot hide a price."""
+    rows = []
+    for r in columns:
+        for module in r.get("modules_library", []):
+            cost = r.get("module_cost_ms", {}).get(module, {})
+            if not cost:
+                continue
+            def cell(kind: str) -> str:
+                return fmt_ms(cost[kind]["median"]) if kind in cost else ""
+            total = sum(cost[kind]["median"] for kind in cost)
+            rows.append([f"{r['input']} / {r['pipeline']}", module, cell("parse"), cell("gct"),
+                         cell("declare"), cell("library"), f"**{fmt_ms(total)}**"])
+    if not rows:
+        return ""
+    return table(["input / pipeline", "library module", "parse", "gct", "declare", "library (body)",
+                  "total"], rows)
 
 
 def render(data: dict) -> str:
@@ -457,6 +657,10 @@ def render(data: dict) -> str:
             if columns:
                 out += [f"## Pipeline `{' '.join(PIPELINES[pipeline])}`{heading}: median", "",
                         phase_table(columns, "median")]
+        library_rows = library_cost_table(pick(results, version=label))
+        if library_rows:
+            out += [f"## Library modules compiled on demand{heading}: self time (median, ms)", "",
+                    library_rows]
         scaling = pick(results, pipeline="compile", version=label, set="modules")
         if scaling:
             out += [f"## Modules: compile time against the number of modules{heading}", ""]
@@ -466,12 +670,15 @@ def render(data: dict) -> str:
                     p = r["phases_ms"]
                     cell = lambda k: fmt_ms(p[k]["min"]) if k in p else ""  # noqa: E731
                     alloc = fmt_count(r["alloc"]["allocations"]) if "alloc" in r else ""
-                    rows.append([str(r["modules"]), fmt_ms(r["wall_ms"]["min"]), fmt_ms(r["wall_ms"]["median"]),
-                                 cell("resolve"), cell("parse"), cell("gct"), cell("gir"), cell("import"),
-                                 cell("encode"), cell("teardown"), alloc, f"{r['peak_rss_kb'] / 1024:.1f}"])
+                    split = module_split(r)
+                    rows.append([str(r["modules"]), "—" if split is None else str(split[0]),
+                                 "—" if split is None else str(split[1]), fmt_ms(r["wall_ms"]["min"]),
+                                 fmt_ms(r["wall_ms"]["median"]), cell("resolve"), cell("parse"), cell("gct"),
+                                 cell("gir"), cell("import"), cell("encode"), cell("teardown"), alloc,
+                                 f"{r['peak_rss_kb'] / 1024:.1f}"])
                 out += [f"Shape `{shape}` (minimum over the rounds unless stated):", "",
-                        table(["modules", "wall min", "wall median", "resolve", "parse", "gct", "gir", "import",
-                               "encode", "teardown", "allocations", "RSS MB"], rows)]
+                        table(["modules", "user", "total", "wall min", "wall median", "resolve", "parse", "gct",
+                               "gir", "import", "encode", "teardown", "allocations", "RSS MB"], rows)]
     if len(labels) > 1:
         out += [f"## Versions compared with `{first}` (wall and compile phases, minimum)", ""]
         rows = []
@@ -552,6 +759,7 @@ def cmd_check(_args) -> int:
         inputs = [i for i in inputs if i["id"] in ("arith10", "chain-3")]
         shim = build_shim(work)
         data = measure(inputs, [("current", default_home())], 1, None, work, ["compile", "passes", "fvm"], shim)
+        expected_own = {item["id"]: item.get("own_modules") for item in inputs}
         problems = []
         for r in data["results"]:
             name = f"{r['input']}/{r['pipeline']}"
@@ -565,8 +773,54 @@ def cmd_check(_args) -> int:
                     problems.append(f"{name}: no phase '{kind}'")
             if r["pipeline"] == "passes" and "pass:std::opt::inline" not in phases:
                 problems.append(f"{name}: the passes are not phases")
-            if r["input"] == "chain-3" and r.get("counters", {}).get("modules") != 4:
-                problems.append(f"{name}: expected 4 user modules, got {r.get('counters')}")
+            # The module numbers. `counters.modules` counts every module compiled from Camel
+            # source, libraries included; `modules_user` is the program's own modules (what the
+            # input set varies) and `modules_library` the ones a pass or the program imported.
+            # Both are cost: the user count is pinned to what the project has, and the library
+            # set is the set the phase tree proves the pass loaded, each module named by its own
+            # declaration in the standard library (see pass_loaded_modules/stdlib_declaration).
+            loaded = r.get("modules_loaded", [])
+            user = r.get("modules_user", [])
+            library = r.get("modules_library", [])
+            counter = r.get("counters", {}).get("modules")
+            if not loaded:
+                problems.append(f"{name}: the phase report names no module: {r.get('counters')}")
+            elif counter != len(loaded):
+                problems.append(
+                    f"{name}: the modules counter says {counter} but the phases name {len(loaded)}: "
+                    f"{loaded} (the program's own: {user}; library: {library})")
+            own = expected_own.get(r["input"])
+            if own is None:
+                own = [r["modules_entry"]] if r.get("modules_entry") else []
+            if sorted(user) != sorted(own):
+                problems.append(
+                    f"{name}: the program's own modules are {own} ({len(own)}), but the run loaded "
+                    f"{len(loaded)} in total: own {user}; library {library}")
+            if r["pipeline"] == "passes":
+                demanded = r.get("pass_loaded", [])
+                if not library:
+                    problems.append(
+                        f"{name}: the passes pipeline compiled no library module, so the on-demand "
+                        f"path this benchmark measures did not run. The program's own modules were {user}")
+                elif sorted(library) != sorted(demanded):
+                    problems.append(
+                        f"{name}: the run counts {library} as library modules, but the phase tree "
+                        f"says the pass loaded {demanded} (a module is pass-loaded when it has a "
+                        f"`library` phase or is compiled inside the `gct` of one). The program's "
+                        f"own modules were {user}")
+                for module in library:
+                    if stdlib_declaration(module) is None:
+                        problems.append(
+                            f"{name}: '{module}' was compiled on demand but is not a standard-library "
+                            f"declaration module: stdlib/{module}.cml must declare `module {module}`. "
+                            f"Library modules are named by their own declaration, not by a list in "
+                            f"this file, so a module loaded from outside the library is a defect, "
+                            f"not a pin to update.")
+            elif library:
+                problems.append(
+                    f"{name}: the {r['pipeline']} pipeline loaded library modules {library}; "
+                    f"expected none (only a pass compiles a library on demand). The program's own "
+                    f"modules were {user}")
             if r.get("counters", {}).get("gct.nodes", 0) <= 0 or r.get("counters", {}).get("graph.nodes", 0) <= 0:
                 problems.append(f"{name}: object counters missing: {r.get('counters')}")
             if shim is not None and r.get("alloc", {}).get("allocations", 0) <= 0:
@@ -602,6 +856,27 @@ def cmd_check(_args) -> int:
             return 1
         print(f"ok compile benchmark: {len(data['results'])} cases, allocation shim "
               f"{'used' if shim is not None else 'not available'}")
+        # Which modules, not just how many: the count alone is what stayed red for so long.
+        # What they cost, not just that they are library modules: a set that is honest about who
+        # is in it but silent about the price would rename a real cost into an expected one.
+        for r in data["results"]:
+            own, library = r.get("modules_user", []), r.get("modules_library", [])
+            print(f"  {r['input']}/{r['pipeline']}: {len(r.get('modules_loaded', []))} modules loaded: "
+                  f"{len(own)} user ({', '.join(own)}); {len(library)} library "
+                  f"({', '.join(library) or 'none'})")
+            costs = r.get("module_cost_ms", {})
+            if library and costs:
+                spent = 0.0
+                for module in library:
+                    cost = costs.get(module, {})
+                    if not cost:
+                        continue
+                    total = sum(cost[kind]["median"] for kind in cost)
+                    spent += total
+                    detail = ", ".join(f"{kind} {cost[kind]['median']:.2f}"
+                                       for kind in ("parse", "gct", "declare", "library") if kind in cost)
+                    print(f"    library {module}: {total:.2f} ms ({detail})")
+                print(f"    library total: {spent:.2f} ms of {r['wall_ms']['median']:.2f} ms wall")
         return 0
 
 

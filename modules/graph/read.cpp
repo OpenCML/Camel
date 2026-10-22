@@ -643,88 +643,45 @@ slot_t showKernel(ArgsView &, ArgsView &norm, Context &) {
 
 // ---- the tables ----
 
+// Every read but `constant`: its signature is in stdlib/graph.cml, so the table carries the
+// kernel of each name and nothing else (handover H141).
 struct ReadOp {
     const char *name;
     operator_t kernel;
-    Type *param;
-    Type *result;
 };
 
 const std::vector<ReadOp> &readOps() {
-    static const std::vector<ReadOp> ops = [] {
-        const auto handle = [](HandleKind kind) -> Type * { return HandleType::get(kind); };
-        const auto array  = [&](HandleKind kind) -> Type  *{
-            return ArrayType::create(HandleType::get(kind));
-        };
-        const auto maybe = [&](HandleKind kind) -> Type * {
-            return TupleType::nullable(HandleType::get(kind));
-        };
-        Type *program = handle(HandleKind::Program);
-        Type *graph   = handle(HandleKind::Graph);
-        Type *node    = handle(HandleKind::Node);
-        return std::vector<ReadOp>{
-            {"graphs", graphsKernel, program, array(HandleKind::Graph)},
-            {"root", rootKernel, program, graph},
-            {"name", nameKernel, graph, Type::String()},
-            {"nodes", nodesKernel, graph, array(HandleKind::Node)},
-            {"inputs", inputsKernel, node, array(HandleKind::Node)},
-            {"with_inputs", withInputsKernel, node, array(HandleKind::Node)},
-            {"ctrl_inputs", ctrlInputsKernel, node, array(HandleKind::Node)},
-            {"users", usersKernel, node, array(HandleKind::Node)},
-            {"value_users", valueUsersKernel, node, array(HandleKind::Node)},
-            {"is_constant", isConstantKernel, node, Type::Bool()},
-            {"kind", kindKernel, node, nodeKindType()},
-            {"op", opKernel, node, maybe(HandleKind::Op)},
-            {"op_name", opNameKernel, handle(HandleKind::Op), Type::String()},
-            {"is_pure", isPureKernel, node, Type::Bool()},
-            {"type_of", typeOfKernel, node, maybe(HandleKind::TypeRef)},
-            {"type_name", typeNameKernel, handle(HandleKind::TypeRef), Type::String()},
-            {"callee", calleeKernel, node, maybe(HandleKind::Graph)},
-            {"tags", tagsKernel, node, Type::String()},
-            {"is_anchor", isAnchorKernel, node, Type::Bool()},
-            {"is_written_slot", isWrittenSlotKernel, node, Type::Bool()},
-            {"origin", originKernel, node, Type::Int64()},
-            {"show", showKernel, node, Type::String()},
-            {"region_of", regionOfKernel, node, handle(HandleKind::Region)},
-            {"region_kind", regionKindKernel, handle(HandleKind::Region), regionKindType()},
-            {"region_parent",
-             regionParentKernel,
-             handle(HandleKind::Region),
-             maybe(HandleKind::Region)},
-        };
-    }();
+    static const std::vector<ReadOp> ops = {
+        {"graphs", graphsKernel},
+        {"root", rootKernel},
+        {"name", nameKernel},
+        {"nodes", nodesKernel},
+        {"inputs", inputsKernel},
+        {"with_inputs", withInputsKernel},
+        {"ctrl_inputs", ctrlInputsKernel},
+        {"users", usersKernel},
+        {"value_users", valueUsersKernel},
+        {"is_constant", isConstantKernel},
+        {"kind", kindKernel},
+        {"op", opKernel},
+        {"op_name", opNameKernel},
+        {"is_pure", isPureKernel},
+        {"type_of", typeOfKernel},
+        {"type_name", typeNameKernel},
+        {"callee", calleeKernel},
+        {"tags", tagsKernel},
+        {"is_anchor", isAnchorKernel},
+        {"is_written_slot", isWrittenSlotKernel},
+        {"origin", originKernel},
+        {"show", showKernel},
+        {"region_of", regionOfKernel},
+        {"region_kind", regionKindKernel},
+        {"region_parent", regionParentKernel},
+    };
     return ops;
 }
 
 } // namespace
-
-const std::vector<oper_group_ptr_t> &readGroups() {
-    static const std::vector<oper_group_ptr_t> groups = [] {
-        std::vector<oper_group_ptr_t> out;
-        for (const ReadOp &op : readOps()) {
-            out.push_back(
-                OperatorGroup::create(
-                    op.name,
-                    {{std::string("graph:") + op.name,
-                      StaticFuncTypeResolver::create({}, {{op.param, false}}, op.result)}}));
-        }
-        out.push_back(
-            OperatorGroup::create(
-                "constant",
-                {{"graph:constant",
-                  DynamicFuncTypeResolver::create(
-                      {{0, {}}, {2, {false, false}}},
-                      "(n: Node, sample: T) => T?, T a number, bool or string",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                          -> std::optional<Type *> {
-                          if (!HandleType::is(norm[0], HandleKind::Node) || !constantType(norm[1]))
-                              return std::nullopt;
-                          return TupleType::nullable(norm[1]);
-                      })}}));
-        return out;
-    }();
-    return groups;
-}
 
 const std::unordered_map<std::string, operator_t> &readKernels() {
     static const std::unordered_map<std::string, operator_t> kernels = [] {

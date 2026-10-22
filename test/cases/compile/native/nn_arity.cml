@@ -1,0 +1,13 @@
+/**
+ * The declaration of `nn:save_params` takes two ordinary arguments: one is refused at the call,
+ * and the overload the message lists is the declaration's — `stdlib/nn.cml`, not the C++ module
+ * (handover H19, step 10; H165).
+ */
+module nn_arity
+
+import { save_params } from nn
+
+func main(): int sync {
+    save_params('params')
+    return 0
+}

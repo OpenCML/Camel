@@ -19,10 +19,17 @@ When adding a new feature or test case, manually run the case from the command l
 - `npm run test` runs the **fast** layer: what a developer runs after a change.
 - `npm run test:all` runs everything, fast and slow (`--tier all`). It does **not** run the debug
   layer, which needs a Debug build.
+- `npm run release-gate` runs the release evidence instead of everything: the fast layer, then the
+  runnable slow plans **by explicit plan file** (never a directory, never `--tier all`), then the
+  static checks. It skips the plans `agents/test.md` reserves for a milestone on a quiet machine,
+  prints them by name, and refuses when asked for one; see `docs/npm-scripts.md`.
 - `node scripts/test.js <plan file>` runs that plan in full: naming the file is the intent, so
   its slow tests run whatever `--tier` says. A **directory** target selects test by test and
   follows `--tier`; add `--tier all` to include the slow tests of a directory or of the whole
-  tree.
+  tree. A target that is not a directory but names a plan may omit the suffix:
+  `test/plans/feat/exemplars` resolves to `test/plans/feat/exemplars.plan.toml`, and a bare plan
+  id such as `feat.exemplars` resolves the same way. A path that is neither a directory nor a
+  plan is still an error.
 - `node scripts/test.js --tier debug` runs the debug layer (see "The Debug Build And The Debug
   Layer"); it builds nothing and refuses to run without a Debug binary.
 - `--build release|debug` picks the build a run addresses: `release` is `out/latest` (the
@@ -37,8 +44,12 @@ the job count and layer.
 
 `node test/tools/selftest/run.mjs` checks the runner itself: the back-end matrix, the per-test
 scratch directories and the run root, parallel versus serial output, the tier filter and the
-named-plan rule, the risk-based sweep sample, and the `--changed` mapping (directory rule,
-file rules, `CAMEL_TEST_BASE`).
+named-plan rule, the risk-based sweep sample, and the `--changed` mapping (directory rule, file
+rules, `ownCases`, the layered plans, `CAMEL_TEST_BASE`). It also walks every plan file under
+`test/plans/` and fails, by name, when no case path a plan names selects it, and it checks the
+suffix-less plan target (H201). Its mirror (H205) fails, by name, when a fast case path selects a
+slow-cost plan in full, unless the plan is the only one running that case or
+`test/plan-selection.json` records the shared case in `slowCaseOwners` with a reason.
 
 ## Layers: fast, slow And debug
 
@@ -47,8 +58,8 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
 
 - `fast` is the default layer and the one `npm run test` runs. It must stay useful for a
   developer loop: on an 8-core machine a parallel fast run is expected to finish in about two
-  minutes (H10 measured it on a machine that other worktrees were using at the same time, so it
-  took longer; the numbers are in `docs/handover/reports/H10.md`).
+  minutes (measured on a machine that other worktrees were using at the same time, so it
+  took longer).
 - `slow` is everything whose result is still worth having but whose cost does not belong in
   the loop: the comparisons against PyTorch, the collector stress and poison scans, the random
   program checks (progen and fuzzing), the performance benchmarks, and any other single test
@@ -142,26 +153,124 @@ staged or not) and runs the plans they touch, so a small change does not start t
 layer. The base is `origin/develop`; `CAMEL_TEST_BASE` overrides it for a release branch or a
 local comparison.
 
-`test/plan-selection.json` is applied in two steps:
+`test/plan-selection.json` is applied to every changed file, and both kinds of rule contribute:
 
-- **Directory rules first** (`directoryRules`): a change under `modules/`, `tools/` or
-  `test/cases/` selects the plan mirroring its directory. The deepest existing match wins, so
+- **Directory rules** (`directoryRules`): a change under `modules/`, `tools/` or `test/cases/`
+  selects the plan mirroring its directory. The deepest existing match wins, so
   `modules/tensor/ops/matmul.cpp` selects `test/plans/feat/modules/tensor/`,
   `test/cases/compile/enum/shapes.cml` selects `test/plans/feat/compile/enum.plan.toml`, and
-  `test/cases/modules/tensor/bounds.cml` selects `test/plans/feat/modules/tensor/`. A plan file
-  found this way is a named target and runs in full.
-- **File rules second**: only when no plan directory mirrors the path. Each rule is a path
-  prefix and the plans it selects, as paths under `test/plans`; a rule with `"self": true`
-  selects the changed plan file itself (a change to `test/plans/...` runs that plan). Rules
-  may name plan directories or plan files; the first matching rule wins.
+  `test/cases/modules/tensor/bounds.cml` selects `test/plans/feat/modules/tensor/`. This names
+  the plan that mirrors the path; it cannot name a plan that lives outside that tree.
+- **File rules** (`rules`): the first matching prefix adds the plans the directory rule cannot
+  reach but the same change can break. This is how `modules/tiles/**` selects the GPU plans under
+  `test/plans/gpu/` (a change to the tiles C++ used to select only the CPU tiles plan),
+  `modules/onnx/**` selects the exporter dumps in `feat/trans`, and `modules/tensor/**` selects
+  autodiff and the operator/index semantics plans. The union of the directory match and the file
+  rule is the selection; a file rule with `"self": true` selects the changed plan file itself, and
+  its `"except"` list keeps the forbidden plans out (see below).
 
-The union of everything selected runs in plan order. When no rule matches, or git cannot read the
-base branch, the whole fast layer runs. `--tier all` combines with `--changed` to run the slow
-tests of directory targets too.
+A rule entry is a path under `test/plans` (a directory or a `*.plan.toml`), or
+`{ "plan": "...", "layer": true }`; `"layer": true` on the rule is the default for its entries. A
+layered plan stays a named target but follows `--tier` like a directory: `--tier fast` runs its
+fast cases and filters its slow ones. That is the honest rule for a plan whose slow cases are
+comparisons the project will not run from an ordinary change (autodiff's five PyTorch gradients,
+onnx's four ONNX Runtime/PyTorch comparisons): naming the file in full would run them, and naming
+a directory would filter cases the change does need. A plan without `layer` is named and runs in
+full whatever `--tier` says.
+
+An entry may also be `{ "plan": "...", "ownCases": true }`: the plan is added only when the
+changed file is one of the `case` paths that plan names. A plan that does not run the changed case
+cannot be invalidated by it, so a slow plan must not ride a shared directory into an edit it never
+reads (H205). This is how a tiles case edit stops selecting the three GPU plans; the
+`modules/tiles/` rule still names them in full, because a change to the module can invalidate all
+of them, while the case-directory rule adds each GPU plan only for the cases it runs.
+
+The rules are checked in the other direction too (H201): `test/tools/selftest/run.mjs` walks every
+plan file under `test/plans/`, resolves the `case` paths it names the way the runner does, and
+feeds each path and its directory to the same selection function `--changed` uses. A plan that no
+case path selects is a plan whose cases nobody runs on the change that breaks them, and the
+self-test fails by name. Only the plans the project deliberately keeps out of an ordinary change
+are exempt: `perf/**`, the GC-stress/`progen` plans on the self rule's `except` list, plans in the
+debug layer, and a sweep-only plan (`feat/mm/gc_poison_sweep`), which has no cases of its own. The
+rules that came out of that check name the plans a directory mirror cannot reach: the linear plans
+whose cases are under `test/cases/loops/` and `test/cases/macro/` (`hof_declared`,
+`loops_in_arms`, `loop_collect`), the JSON cases under `test/cases/modules/std/json/` (the three
+JSON plans and the std facade), the unicode-path case (`feat/modules/unicode_paths`),
+`feat/consistency/print_formats`, the compiler benchmark (`feat/tools/compile_bench`), and the
+progen finding cases (`progen_simplify` with `capacity`). That last rule also stops those cases
+from resolving, through the generic `test/cases/` rule, to `feat/opt/progen.plan.toml`, the slow
+random-program check an ordinary change must not run: a narrower directory rule for
+`test/cases/opt/progen/` comes first and selects no plan for the finding directory by itself.
+
+The opposite direction is checked as well (H205). A plan file named as a target runs in full
+whatever `--tier` says, so a directory rule that resolves a fast case directory to a slow plan
+makes every edit in that directory pay for the whole plan. `test/tools/selftest/over-selection.mjs`
+derives each plan's cost class from the tree (its `tier`, its tests' tiers, a test timeout of five
+minutes or more), the plans that run each case from their `case` entries, and the selection
+`--changed` returns; a fast case path that selects a slow-cost plan in full fails by name unless
+that plan is the only plan running the case. The two exceptions the original rules hid are named
+now: the graph-space gradient case in `test/cases/feat/mm/gc/` and the formatted-print case in
+`test/cases/trans/cpp/exec/` each resolve through their directory to a slow plan that does not run
+them, so a narrower directory rule comes first and the file rule names the plan that does. A slow
+plan that genuinely shares a case with a fast plan (the GPU tiles plan) is recorded in
+`slowCaseOwners` with its reason; the self-test rejects an entry that is not slow-cost or that
+shares no case with a fast plan, so the list cannot excuse nothing.
+
+What a rule deliberately does **not** select, because the project forbids it on a shared host:
+
+- `test/plans/perf/**` (benchmarks and the PyTorch showcase comparisons);
+- the GC-stress plans `feat/mm/gc`, `feat/mm/gc_collections`, `feat/mm/gc_elder_exhaustion`,
+  `gpu/tiles_regions`, `gpu/tiles_decorator`;
+- the random-program check `feat/opt/progen.plan.toml`.
+
+No file rule names them, and the `test/plans/` self rule excludes them: editing one of those plan
+files falls back to the fast layer instead of running the plan. A change that is only relevant to
+one of them (say `benchmarks/`) therefore runs the fast layer, and the report says so; the only
+way to run them is to name the plan file deliberately. The ordinary opt selection still includes
+`feat/opt`, but as a **directory**, so `--tier fast` runs its fast plans and filters the slow
+progen plan while `--tier all` runs it.
+
+When no rule matches, or git cannot read the base branch, the whole fast layer runs. `--tier all`
+combines with `--changed` to run the slow tests of directory targets too; a layered plan then runs
+its slow cases, so `--tier all` is what reaches the autodiff/onnx comparisons. `--changed --list`
+prints the plan targets the changed files select without running them.
+
+A non-plan file under `test/plans/` (a golden, a fixture) selects the nearest directory that
+holds a plan: editing `feat/parse/golden/ast_hashes.txt` runs `feat/parse`, and editing a golden
+under `feat/modules/tensor/` runs that plan directory. The file has no plan of its own, and this
+is the plan that reads it.
+
+A tracked file that matches no rule used to be invisible in a mixed change: another file's rule
+kept the fallback away, and this file contributed nothing. Two things now make that
+visible. `--changed` prints a `[WARN]` naming every changed file no rule matched (the plan files
+the policy excludes are not called holes). And the self-test `test/tools/selftest/run.mjs` walks
+every file in the index plus the untracked, not ignored files, and fails on a class that neither
+a directory rule nor a file rule selects, unless the class is on its allowlist with a reason. The
+plan side is checked the same way: every plan file must be selected by a case path it names, or
+the self-test fails and names the plan (H201). The
+allowlist names only the deliberately unselectable layers (perf, GC stress, progen, the PyTorch
+comparisons) and files no plan reads (vendored code, packaging, CI configuration, repository
+metadata). A new kind of file therefore cannot appear without a rule or a reason: add
+the rule, or add the class and its reason to the self-test.
+
+That check is why the file rules now cover the classes the first rule set could not have known about: the
+`stdlib/<module>.cml` declaration bodies (`feat/modules` plus `feat/compile`) and their computed
+halves in `stdlib/signatures/` (the registry plan, which runs `--verify-ops` and `--verify-doc`),
+the documentation and release-gate scripts (`feat/docs_links`), the debugger race harness
+(`feat/tools/debugger`), exemplars, root Markdown and assets, the public headers under
+`include/` (mirroring `src/`), the rest of `src/` and the test harnesses. The plan-reachability
+check added the case directories whose plans live elsewhere: the loop, macro, JSON, unicode-path,
+print-format and compiler-benchmark cases (H201). `test/perf-baseline.json`
+and `scripts/perf-gate.mjs` are the one class left without a perf plan on purpose: perf is manual
+(the rule that perf is manual), so a change there must not select a perf plan.
 
 Keep the file short and honest: map the smallest set of plans that would catch a regression in
-that area, specific rules first (`src/passes/sched/` before `src/passes/`). Add a rule when a
-new subsystem gets a plan of its own; do not add a rule that maps every change to every plan.
+that area, specific rules first (`src/passes/sched/` before `src/passes/`, `modules/tiles/` before
+`modules/`). A rule that selects one plan too many is better than a rule that selects none, but say
+the cost: `stdlib/rules.cml` selects the whole `feat/opt` directory (the rewrite engine can change
+any optimized result), which is 710 tests plus smoke; `modules/tiles/**` selects six plan files and
+the 88 GPU tests among them. Add a rule when a new subsystem gets a plan of its own; do not add a
+rule that maps every change to every plan.
 
 ## Top-Level Plan Fields
 
@@ -195,7 +304,7 @@ of the kind it configures is an **error**, not a comment. A plan with an unknown
 one failing `<invalid plan>` test in that plan — the error names the plan file, the test and the
 key (with a suggestion when the key is a near miss), the plan's tests do not run, and the rest of
 the run continues to its summary. A key the runner silently ignored used to be the worse
-failure: the test passed while asserting nothing (H52). There is deliberately no escape hatch,
+failure: the test passed while asserting nothing. There is deliberately no escape hatch,
 neither in the plan file nor in the environment: a plan the runner only partly understands is
 not evidence.
 
@@ -280,8 +389,9 @@ everywhere is written once:
 ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a
 `parallel = false` test overlaps nothing), the tier filter (`fast`, `slow` and `all` select
 the expected tests) and the `--changed` mapping (`src/passes/sched/` selects the scheduler
-plans, `docs/` the documentation checks, a plan file itself, an unknown path nothing); it runs
-with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
+plans, `docs/` the documentation checks, `modules/tiles/` the GPU plans, `modules/onnx/` a
+layered plan, a plan file itself, the forbidden perf/GC-stress/progen plans nothing, an unknown
+path nothing); it runs with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
 
 ## Supported Normalizers
 
@@ -307,6 +417,12 @@ with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
   has an origin. Use it on a `text_exact` snapshot that prints origins; a `gir_dot_isomorphic`
   comparison already ignores them.
 - `normalize_duration_seconds`
+
+`test/tools/normalizers.mjs` holds the one definition of these; the plan runner and
+`exemplars/check.mjs` (whose goldens the plan only launches) both call it, so a separate
+comparison path cannot keep comparing less than a plan snapshot does. `exemplars/check.mjs`
+additionally refuses a golden that still records a raw origin id, so the next such pin fails
+where it is recorded instead of on another machine.
 
 Normalizers affect:
 
@@ -454,6 +570,17 @@ Important payload fields:
 - `input.normalized.output`
 - `input.diagnostics`
 - `input.benchmark`
+- `input.case_path` — the resolved absolute path of the case: the plan's `case` resolved against
+  the plan's directory, which is what the tool was invoked with. The output may repeat it (a
+  graph dump names its source file), and it is absolute, so it differs between two checkouts of
+  the same commit. A verify script that digests such output must replace `case_path` (or the
+  absolute prefix of the case's file name) before hashing; a digest that still contains it is
+  only valid in the checkout that recorded it.
+- `input.repo_root`, `input.test_root` — the repository root and the `test/` root, absolute.
+- `input.plan_path`, `input.test_name` — the plan file and the test's name, including a sweep
+  prefix when the test is a sweep copy.
+- `input.test_tmp`, `input.test_tmp_relative` — the test's scratch directory, absolute and
+  repository-relative.
 
 ### `verify_script_path`
 
@@ -485,7 +612,7 @@ under an extra environment, with all their assertions; the copies are named
 sweep. The source plan's `id` (its file name when it has none) is part of the name because two
 source plans may both have a test called `shapes` — `feat/compile/enum` and `feat/para/handoff`
 do. Without it the copies collide, and a back end waits for, and compares against, whichever
-copy of its first back end ran last: the run reports a failure although every test ran (H120).
+copy of its first back end ran last: the run reports a failure although every test ran.
 One source test reused under two sweeps keeps two distinct copies, one per sweep name. A source
 plan listed twice in the same sweep is expanded once.
 
@@ -570,6 +697,53 @@ Benchmark tests may use:
   into the test's `meta.json`, and does not change the budget comparison with it.
 
 The case must emit the expected JSON benchmark payload format used by the runner.
+
+## Performance Measurement
+
+The ten plans under `test/plans/perf/` are measured on purpose, never by a gate. They are not in
+`npm run test` (which runs `--tier fast`), editing one of them does not select it from `--changed`
+(see "Selecting Plans From A Change"), and no CI job runs them. That is the policy, not an
+oversight: `agents/test.md` treats the perf/timeit plans as heavy -- they saturate every core for
+minutes and are worth running only at a milestone, by a maintainer, on a quiet machine -- and the
+performance notes record what running the whole layer on a shared host would cost. The price of
+the exclusion is that nothing notices a performance regression, so the
+measurement has one manual entry point:
+
+```bash
+node scripts/perf-gate.mjs --list        # the ten plans, what each measures, and why it is in or out
+node scripts/perf-gate.mjs               # measure the gateable subset and compare with the baseline
+node scripts/perf-gate.mjs --update      # reseed test/perf-baseline.json on the host that measured it
+node scripts/perf-gate.mjs --reps 9 --threshold 20
+```
+
+It measures only the two plans whose commands can be repeated: `perf.startup` (a few seconds per
+repetition) and `perf.fib` (about 11 s). `perf.para` is refused as too expensive per repetition;
+`perf.gc`, `perf.collections_fuzz`, `perf.training_steps` and the four showcase plans are refused
+by name, with the policy quoted. Running one of those stays a milestone decision: name the plan
+file to the runner yourself.
+
+How the numbers are read:
+
+- one fresh `camel` process per repetition, with the repetitions interleaved and the order rotated;
+- the wall clock, and on Linux the child's own CPU time (user+system, from `/proc/self/stat`).
+  A case whose CPU median is at least 250 ms is judged on CPU, which does not grow when the host
+  is busy; the millisecond cases are judged on the wall clock, where the spread is the protection;
+- the median and its p10..p90 spread per case. A regression is never claimed when the spreads
+  overlap;
+- the host's 1-minute load is recorded. A wall-clock case is compared only when the run is inside
+  the baseline's band (`load + 2 + 10%`); outside it the case is **inconclusive**, never a pass:
+  it says "measured at load N", and the next step is to rerun inside the band. The CPU-judged
+  cases compare at any load, because child CPU time does not grow with the host's load. A gate
+  that reds for being busy is worse than no gate.
+
+`test/perf-baseline.json` is data, not a ceiling: the medians, both spreads, the exact command of
+every case, the commit, the build's own stamp, the repetition count and the host load. Seed it on
+the host whose numbers it records; a baseline from another machine is not comparable. The
+performance notes have the cost of each of the ten plans and the evidence for the
+split. The plans left out keep the measurement they already have: `perf.startup` carries its own
+ceilings and `declaration.cost` share, `perf.gc` asserts what must not grow with the length of the
+run, the showcases compare against PyTorch, and `docs/performance/graph-store-baseline.md` is a
+separate manual baseline of the graph store.
 
 ## Variable Expansion
 

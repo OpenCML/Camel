@@ -987,7 +987,8 @@ json Server::graph(const json &params) {
         if (!out) {
             throw RequestError{
                 RequestFailed,
-                "cannot write beside the document: " + scratch.string()};
+                "cannot write beside the document: " + scratch.string() + ": " +
+                    std::error_code(errno, std::generic_category()).message()};
         }
         out << doc->text;
     }

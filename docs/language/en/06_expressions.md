@@ -12,6 +12,8 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 
 ## 6.2 Literals and construction
 
+<!-- camel-snippet: fragment: a list of literal and lambda forms, not a program -->
+
 ```cml
 42          3.14        'text'      true        null
 [1, 2, 3]                   // array
@@ -30,11 +32,14 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 In a backquoted string `` `...` ``, `${expression}` interpolates, optionally with a format specification, `${expression:spec}` (the lexical rules are in [2.5.4.1](02_lexical.md#2541-formatted-strings)). It is **the same tree** as `'...'->format<...>`: each `${...}` becomes a placeholder of `format` (`{}` or `{:spec}`), a `{` or `}` of the literal text is written `{{` or `}}`, and `format` is called with the interpolated expressions as its with-arguments and that text as its ordinary argument.
 
 ```cml
-let name = 'Camel'
-let n = 42
-println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
-println(`n = ${n}, twice = ${n * 2}`)
-println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+func main(): int sync {
+    let name = 'Camel'
+    let n = 42
+    println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
+    println(`n = ${n}, twice = ${n * 2}`)
+    println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+    return 0
+}
 ```
 
 - An interpolated expression is evaluated where it is written, in the lexical scope there; name lookup, type checking and effects are exactly those of the same expression outside the string. They are the with-arguments of `format`, so when they are evaluated follows the dependency and effect rules ([4.2](04_execution_model.md#42-evaluation-by-dependency)), exactly as if the same expressions were written outside the string.
@@ -510,6 +515,8 @@ A loop is an expression with a state (design principles 3.10). The state is writ
 loop name = init (, name = init)* (for name in sequence)? (while condition)? do expression
 ```
 
+<!-- camel-snippet: fragment: the loop forms; xs, n and ds are the surrounding example's values -->
+
 ```cml
 let total    = loop acc = 0 for x in xs do acc + x * x
 let (i, acc) = loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)
@@ -538,6 +545,8 @@ On the graph a loop is one `LOOP` node in the graph it is written in; the condit
 
 A lambda is written `(parameters): return-type => body`; the return type can be omitted, and the body is an expression or a block:
 
+<!-- camel-snippet: fragment: a list of lambda forms; total comes from the surrounding example -->
+
 ```cml
 (x: int) => x + 1
 (x: int): int => { let y = x * 2; return y + 1 }
@@ -552,12 +561,16 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
 
 - An argument: a call of a function whose parameter is of function type, and a `with` argument in the same way.
 
+  <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
+
   ```cml
   func apply_twice(f: (x: int) => int, x: int): int { return f(f(x)) }
   apply_twice((x) => x + 1, 3)         // x: int
   ```
 
 - A declared binding: a `let` or `var` whose type is a function type, and an assignment of a new value to that variable.
+
+  <!-- camel-snippet: fragment: bindings shown inside the block they would be written in -->
 
   ```cml
   let g: (x: int) => int = (x) => x + 1    // x: int

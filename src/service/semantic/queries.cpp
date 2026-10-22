@@ -31,6 +31,7 @@
 #include "camel/service/semantic/model.h"
 
 #include "camel/parse/syntax/token.h"
+#include "camel/parse/syntax/lexer.h"
 
 #include <algorithm>
 #include <cstring>
@@ -397,16 +398,10 @@ SemanticModel::Target SemanticModel::targetAt(uint32_t offset) const {
             }
             if (s + 1 == ref.path.size()) {
                 const RefFacts &facts = file.refFacts[i];
-                if (facts.isOperator) {
-                    target.kind               = Target::Kind::External;
-                    target.operatorSignatures = facts.operatorSignatures;
-                    target.external = ref.path.size() == 1 ? external(ref.name()) : nullptr;
-                    return target;
-                }
-                // A name of the built-in module or of an imported namespace.
-                if (ref.path.size() == 1) {
-                    target.external = external(ref.name());
-                } else {
+                // The member of the namespace the path names, when the namespace is known:
+                // `math::sqrt` is the export `sqrt` of module `math`.
+                const ExternalName *member = nullptr;
+                if (ref.path.size() > 1) {
                     std::string prefix;
                     for (size_t k = 0; k + 1 < ref.path.size(); ++k) {
                         prefix += (k ? "::" : "") + ref.path[k].name;
@@ -414,11 +409,27 @@ SemanticModel::Target SemanticModel::targetAt(uint32_t offset) const {
                     if (auto ns = namespaces_.find(prefix); ns != namespaces_.end()) {
                         for (const ExternalName &ext : ns->second) {
                             if (ext.name == ref.name()) {
-                                target.external = &ext;
+                                member = &ext;
                                 break;
                             }
                         }
                     }
+                }
+                if (facts.isOperator) {
+                    // The signature here is the one the call resolved to (the operator the
+                    // compiler chose); the member only names the module. A call of an
+                    // operator of an imported module is that module's, not the built-in
+                    // module's.
+                    target.kind               = Target::Kind::External;
+                    target.operatorSignatures = facts.operatorSignatures;
+                    target.external = ref.path.size() == 1 ? external(ref.name()) : member;
+                    return target;
+                }
+                // A name of the built-in module or of an imported namespace.
+                if (ref.path.size() == 1) {
+                    target.external = external(ref.name());
+                } else {
+                    target.external = member;
                 }
                 // A name in a type is a type: `int` there is not the conversion function.
                 if (target.external != nullptr &&
@@ -1576,31 +1587,60 @@ std::vector<SemanticToken> SemanticModel::semanticTokens() const {
     }
 
     std::vector<SemanticToken> out;
-    for (const TokenInfo &token : file.syntax.tokens) {
-        if (token.channel != 0 || token.range.empty()) {
-            continue;
-        }
+    const auto appendToken = [&](uint16_t kind, Range range) {
+        if (range.empty()) return;
         const std::string_view text =
-            std::string_view(file.text).substr(token.range.start, token.range.length());
+            std::string_view(file.text).substr(range.start, range.length());
         if (text.find('\n') != std::string_view::npos) {
-            continue; // a token over several lines cannot be expressed; the grammar has it
+            return; // the grammar covers multi-line literal text
         }
-        if (isKind(token.type, TK::Identifier)) {
-            if (auto it = names.find(token.range.start); it != names.end()) {
+        if (isKind(kind, TK::Identifier)) {
+            if (auto it = names.find(range.start); it != names.end()) {
                 out.push_back(it->second);
             }
-        } else if (isKeywordToken(token.type)) {
-            out.push_back({token.range, TKeyword, 0});
-        } else if (isKind(token.type, TK::Integer) || isKind(token.type, TK::Real)) {
+        } else if (isKeywordToken(kind)) {
+            out.push_back({range, TKeyword, 0});
+        } else if (isKind(kind, TK::Integer) || isKind(kind, TK::Real) || isKind(kind, TK::Imaginary)) {
             // `.0` after a dot is a tuple index, lexed as an integer.
-            out.push_back({token.range, TNumber, 0});
-        } else if (isKind(token.type, TK::String) || isKind(token.type, TK::FString)) {
-            out.push_back({token.range, TString, 0});
+            out.push_back({range, TNumber, 0});
+        } else if (isKind(kind, TK::String) || isKind(kind, TK::FString)) {
+            out.push_back({range, TString, 0});
         } else if (
-            isKind(token.type, TK::DotDot) ||
-            (camel::parse::syntax::isPunctuation(static_cast<TK>(token.type)) &&
+            isKind(kind, TK::DotDot) ||
+            (camel::parse::syntax::isPunctuation(static_cast<TK>(kind)) &&
              text.find_first_of("+-*/%^@&|!=<>~?") != std::string_view::npos && text != "=>")) {
-            out.push_back({token.range, TOperator, 0});
+            out.push_back({range, TOperator, 0});
+        }
+    };
+    // A formatted string is one lexer token, but its expressions are ordinary Camel.
+    // Reuse the lexer's exact expression/specification boundaries, including nested strings;
+    // never paint a whole FString over the semantic names in its interpolations.
+    namespace syn = camel::parse::syntax;
+    std::function<void(const syn::TokenBuffer &)> appendBuffer;
+    appendBuffer = [&](const syn::TokenBuffer &buffer) {
+        for (size_t i = 0; i < buffer.size(); ++i) {
+            const auto &token = buffer[i];
+            if (token.kind == TK::Eof || syn::isTrivia(token.kind)) continue;
+            if (token.kind != TK::FString) {
+                appendToken(static_cast<uint16_t>(token.kind), {token.begin, token.end});
+                continue;
+            }
+            uint32_t cursor = token.begin;
+            for (const auto &part : buffer.interpolationsOf(static_cast<uint32_t>(i))) {
+                appendToken(static_cast<uint16_t>(TK::String), {cursor, part.open});
+                appendBuffer(syn::Lexer::tokenizeRange(file.text, part.exprBegin, part.exprEnd));
+                // Delimiters and the optional format specification retain their grammar scopes.
+                cursor = part.close + 1;
+            }
+            appendToken(static_cast<uint16_t>(TK::String), {cursor, token.end});
+        }
+    };
+    for (const TokenInfo &token : file.syntax.tokens) {
+        if (token.channel != 0 || token.range.empty()) continue;
+        if (isKind(token.type, TK::FString)) {
+            appendBuffer(syn::Lexer::tokenizeRange(file.text, token.range.start, token.range.end));
+        } else {
+            appendToken(token.type, token.range);
         }
     }
     return out;

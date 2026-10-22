@@ -21,6 +21,7 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
@@ -364,6 +365,10 @@ struct PythonInitEnvGuard {
 
 namespace {
 
+// The operators whose signature C++ computes stay here (design principles 6.4; handover H19,
+// step 10; H166). `py_call` (two URIs), `py_print` and `py_println` are variadic, and
+// `py_wrap`/`py_unwrap` move a type through the module type `PyObject<T>`; neither can be
+// written as a body-less declaration. The other six are declared in stdlib/python.cml.
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
@@ -425,90 +430,6 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                                         st->typeAt(i)->code() != PyObjectType::typeCode())
                                         return std::nullopt;
                             }
-                            return getPyObjectType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_exec",
-            {
-                {
-                    "python:py_exec",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(code: string) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 1 || norm[0]->code() != TypeCode::String)
-                                return std::nullopt;
-                            return getPyObjectType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_eval",
-            {
-                {
-                    "python:py_eval",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(expr: string) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 1 || norm[0]->code() != TypeCode::String)
-                                return std::nullopt;
-                            return getPyObjectType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_run",
-            {
-                {
-                    "python:py_run",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(file_path: string) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 1 || norm[0]->code() != TypeCode::String)
-                                return std::nullopt;
-                            return getPyObjectType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_attr",
-            {
-                {
-                    "python:py_attr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(obj: PyObject, attr: string) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 2)
-                                return std::nullopt;
-                            if (norm[0]->code() != PyObjectType::typeCode())
-                                return std::nullopt;
-                            if (norm[1]->code() != TypeCode::String)
-                                return std::nullopt;
-                            return getPyObjectType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_import",
-            {
-                {
-                    "python:py_import",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(module_name: string) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::String)
-                                return std::nullopt;
                             return getPyObjectType();
                         }),
                 },
@@ -579,25 +500,6 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             if (o->paramCount() == 0)
                                 return std::nullopt;
                             return o->params()[0];
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_dispose",
-            {
-                {
-                    "python:py_dispose",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(obj: PyObject) => void",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 1)
-                                return std::nullopt;
-                            Type *t = norm[0];
-                            if (!t->isOtherType() || t->code() != PyObjectType::typeCode())
-                                return std::nullopt;
-                            return Type::Void();
                         }),
                 },
             }),
@@ -737,6 +639,30 @@ bool PythonModule::load() {
     }
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("python", [ctx]() { return createPythonExecutor(ctx); });
+    // The purity of every operator of the module (design principles 3.3), which the declaration
+    // loader requires before it accepts a body-less declaration (`Builder::declareNativeOperator`,
+    // src/compile/gir/builder_modules.cpp:385; H157, H166). All twelve are effectful: each one
+    // observes or advances the interpreter, which no argument names. `py_call`, `py_exec`,
+    // `py_eval` and `py_run` execute arbitrary Python; `py_attr` may run a descriptor or a
+    // property; `py_import` runs a module body and writes `sys.modules`; `py_print`/`py_println`
+    // write the interpreter's standard output; `py_wrap` creates an object whose identity and
+    // reference count are interpreter state, `py_unwrap` reads an object that Python code can
+    // have changed, and `py_dispose` drops a reference. None is state-only: their state is the
+    // interpreter, not a variable of the program.
+    camel::core::OperatorTable::instance().declare(
+        "python",
+        {{"py_call", false},
+         {"py_call_kw", false},
+         {"py_exec", false},
+         {"py_eval", false},
+         {"py_run", false},
+         {"py_attr", false},
+         {"py_import", false},
+         {"py_print", false},
+         {"py_println", false},
+         {"py_wrap", false},
+         {"py_unwrap", false},
+         {"py_dispose", false}});
     loaded_ = true;
     return true;
 }

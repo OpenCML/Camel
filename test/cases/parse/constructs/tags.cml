@@ -1,0 +1,33 @@
+/**
+ * Tags (design principles 6.2): a tag is declared with the places it may be written on (and,
+ * optionally, the passes that read it), may be grouped into another tag, and is used as `#name`
+ * or `#[a, b]`, with an argument, before a function, a type, a field and a block.
+ */
+module parse_constructs_tags
+
+export tag kernel on nodes
+export tag fast on func, nodes
+export tag readable on func, read_by std::opt
+tag pure = [kernel, fast]
+tag width<w: int> on type, field
+
+#kernel
+func marked(): int { return 1 }
+
+#[pure]
+func grouped(): int { return 2 }
+
+#width<32>
+type Bits = {
+    #width<8> low: int,
+    high: int,
+}
+
+func main(): int sync {
+    #kernel
+    {
+        let a = marked()
+    }
+    println(grouped() + marked())
+    return 0
+}

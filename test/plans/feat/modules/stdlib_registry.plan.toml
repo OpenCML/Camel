@@ -80,8 +80,20 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
 [[tests]]
+name = "registry.docs_complete"
+desc = "Every name the reference prints has a description and an @example, every example compiles as a call of its declaration (its arguments bound to the declared parameter types, the types it mentions imported), a fallible result has an @fails line naming the error, and an example the checker cannot compile says why with @example-fragment <reason>."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-reference.mjs"
+args = ["${case}", "--verify-docs"]
+expect_exit = 0
+expect_stdout_contains = ["every declared name has a description and an @example"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
 name = "registry.migrations_stay_migrated"
-desc = "A module that has moved to a declaration module stays migrated: C++ has no StaticFuncTypeResolver for a name the declaration fixes, no stray stdlib/signatures/<module>.cml survives unless the reference generator names it in computed:, every declaration is behind a registered operator (--verify-ops, reused), and the C++ export groups are the declaration's plus the computed signatures."
+desc = "A module that has moved to a declaration module stays migrated: C++ has no StaticFuncTypeResolver for a name the declaration fixes, no stray stdlib/signatures/<module>.cml survives unless the reference generator names it in computed:, every declaration is behind a registered operator (--verify-ops, reused), the C++ export groups are the declaration's plus the computed signatures, and a computed name has exactly one recorded place (its computed: signature file, never an inline // dynamic func; handover H180)."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-declarations.mjs"
@@ -90,6 +102,82 @@ expect_exit = 0
 expect_stdout_contains = ["migrated modules stay migrated"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+
+# ---- The account pages' numbers are the tree's (H200), or say which build they are (H213) ----
+#
+# docs/technical/48_declaration_migration.md is the ledger of the migration: the declaration
+# modules, their declared names and declarations, their computed names, the registered overloads
+# and public names, the signature files, and one row per module. docs/technical/49_computed_signatures.md
+# is the ledger of the signature directory: the files, entries and names, the four buckets, the
+# per-file table, the size predictions, and the operator-line count. Every one of those is a claim
+# about the tree, and a hand edit is how it goes stale: H200 found 48 still listing `rewrite` as
+# pending although H183 had migrated it, and 49 drifted twice — its counts were patched by hand
+# while the table kept the old numbers. `--check-ledger` reads each number from both pages and
+# compares it with the tree, naming the file, so this test is red when a number is edited (it
+# prints "<file>:<line>: <what>: page says X, tree has Y"), when a row or a fact is dropped, and
+# when the rows and the totals disagree.
+#
+# The numbers split by where their truth comes from (H213):
+#   * the tree decides 48's declaration modules (26), declared names / declarations (185 / 301),
+#     computed names (112), signature files (14), each module's declared and computed columns, and
+#     49's files / entries / names / four buckets / per-file rows / size predictions. Those are read
+#     from `stdlib/`, `modules/`, the signature files and `scripts/computed-gaps.mjs`; a worktree
+#     with no build still checks them, and the red proof is setting 26 -> 27 in 48 §2.1.
+#   * the binary decides `camel inspect --ops` on registry_all.cml: the 794 OPERATOR lines, the 354
+#     public names (50 builtin), the 524 public overloads (96 builtin), 48's per-module public-name
+#     and overload columns, its §2.4 split, the §6 quotes of --check / --verify-ops / inspect --ops,
+#     and 49 §1's operator-line count. Those need `out/latest` built from this commit.
+#
+# The plan runs after `camel-remote.ps1` has built (a -NoBuild run is already guarded by H149), and
+# it passes --require-build: without a build-info.json that names this HEAD the checker exits 5
+# instead of quietly passing the tree half, so the build-dependent numbers cannot go unchecked by
+# a run that forgot to build. `node scripts/stdlib-declarations.mjs --check-ledger` without that
+# flag still exits 0 on a no-build tree, with the nine skipped claims listed; the guard itself is
+# exercised by `registry.ledger_build_stamp` below.
+
+[[tests]]
+name = "registry.ledger_matches_tree"
+desc = "Every number docs/technical/48_declaration_migration.md and docs/technical/49_computed_signatures.md state is the tree's number, and the binary's numbers are read only from a build of this commit: 48's declaration modules, declared names and declarations, computed names, overloads, public names, signature files, per-module rows and re-check quotes; 49's files, entries, names, four buckets, per-file rows, size predictions and operator-line count. A hand edit fails with '<file>:<line>: <what>: page says X, tree has Y', and a dropped row or fact fails instead of passing over a hole. --require-build makes a run without a build of this commit exit 5, so the binary half cannot pass unchecked."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-declarations.mjs"
+args = ["${case}", "--check-ledger", "--require-build"]
+expect_exit = 0
+expect_stdout_contains = ["the ledgers agree with the tree"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "registry.ledger_build_stamp"
+desc = "A no-build tree still checks the tree-decidable ledger claims and lists the nine build-dependent ones it skipped (exit 0); a build-info.json naming another commit is refused with exit 4 and one line naming that commit, HEAD and camel-remote.ps1; --allow-stale-build prints the warning and continues; --require-build without a build exits 5. The scratch installs are named through CAMEL_EXE, so the real out/latest is never touched."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/ledger_build_stamp.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 180000
+
+# ---- A declaration file that failed to load is an error, not a shorter list (H172) ----
+
+# `inspect --ops` is the tool people use to check what the modules register. A declaration module
+# that exists and does not load leaves its operators out of the listing; before H172 the tool
+# printed the rest and exited 0 (that is how H166 found its seven names only by counting them).
+# The case makes the declaration module in its scratch directory out of a real `.cmo` and points
+# `CAMEL_STD_LIB` at it.
+
+[[tests]]
+name = "registry.declaration_load_failure_is_an_error"
+desc = "`camel inspect --ops` exits 1 and reports on stderr, with a line naming the module and its declaration file, when a declaration module a program imports fails to load; it prints no operator listing it cannot vouch for. A module that is not imported is not an error, and the module's real declaration still lists with the same `CAMEL_STD_LIB`."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/inspect/declaration_load_failure.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000
 
 [[tests]]
 name = "registry.reference_is_generated"

@@ -39,7 +39,8 @@ export func tree_leaves(tree: T): L
 export func tree_paths(tree: T): P
 
 /// Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
-/// tensor), with a manifest that records the types, sizes and SHA-256 sums. The directory is
+/// tensor), with a manifest that records the types, sizes and SHA-256 sums and, when
+/// `dataset_manifest_sha256` is given, that hash of the data manifest. The directory is
 /// replaced as a whole or not at all: the new checkpoint is written and flushed into a
 /// temporary sibling and renamed into place, and the old directory is kept beside it as the
 /// hidden sibling `.<name>.ckpt-previous` (the destination's own directory name between a
@@ -56,15 +57,18 @@ export func tree_paths(tree: T): P
 /// checkpoint.
 /// @effect writes and replaces the directory
 /// @fails fault `FileSystemError` when the directory cannot be written or published
-/// @example save_tree('out/ckpt', { w: zeros([2, 2]), step: 10 })
-export func save_tree(dir: string, tree: T, dataset_manifest_sha256: string): void
+/// @example save_tree('out/ckpt', { w: 1.0, step: 10 })
+export func save_tree(dir: string, tree: T, dataset_manifest_sha256?: string): void
 
 /// Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure,
 /// the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
-/// `CheckpointError` value, nothing is partly loaded. T is the explicit type argument or the
+/// `CheckpointError` value, nothing is partly loaded. A `dataset_manifest_sha256` that differs
+/// from the one the checkpoint records is a warning on standard error, not an error. T is the
+/// explicit type argument or the
 /// expected type of the result. When a save was interrupted after moving the old directory
 /// aside, the complete `.<name>.ckpt-previous` sibling is read instead, with a warning on
 /// standard error; the next save restores it before replacing it.
 /// @effect reads the directory
-/// @example load_tree::<{ w: Tensor<f32>, step: int }>('out/ckpt') !! initial()
-export func load_tree(dir: string, dataset_manifest_sha256: string): T!
+/// @fails error value `CheckpointError` when the directory does not hold a tree of the type T, or a file is missing or does not match its recorded sum
+/// @example load_tree::<{ w: float, step: int }>('out/ckpt') !! { w: 0.0, step: 0 }
+export func load_tree(dir: string, dataset_manifest_sha256?: string): T!

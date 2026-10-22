@@ -16,6 +16,8 @@ module shapes
 
 ## 5.2 Imports
 
+<!-- camel-snippet: fragment: the forms of import; lib and its namespace are examples -->
+
 ```cml
 import { sqrt, floor } from math     // bring in the names listed
 import sqrt from math                // bring in one name, the same as import { sqrt } from math
@@ -105,8 +107,8 @@ func main(): int sync {
 ```
 
 ```text
-5
-10
+5.0
+10.0
 ```
 
 - `export` is written before a `func`, `type` or `let`/`var` declaration, or in the form `export { a, b }` listing names already declared.
@@ -203,6 +205,8 @@ func main(): int sync {
 - Diagnostics, the debugger and the graphs show full names: a function of another module is shown as `module::path::name`; the entry module's own names are shown without the module.
 
 **`using namespace`** lets the names of a namespace be written without their prefix:
+
+<!-- camel-snippet: fragment: the forms of using namespace; lib, Tools and Inner are examples -->
 
 ```cml
 import lib

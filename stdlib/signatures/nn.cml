@@ -1,0 +1,161 @@
+/**
+ * Computed signatures of the `nn` module (C++ operators, modules/nn).
+ *
+ * `save_params` has one fixed signature and is declared in stdlib/nn.cml. The entries here take
+ * their signature from the tensors they receive, which a declaration cannot express:
+ *   - the convolution and pooling operators infer the result's dtype and shape from the input's
+ *     shape, the kernel's shape and the window parameters, and the gradient operators answer the
+ *     shape of the tensor they differentiate;
+ *   - `batch_norm` answers the input's shape, and `batch_norm_train`/`batch_norm_train_grad`
+ *     answer a tuple of three tensors whose shapes come from their arguments;
+ *   - `embedding` answers the table's rows at the given indices, and `embedding_table_grad` the
+ *     table's shape;
+ *   - `softmax_cross_entropy` answers `float` and picks one of two registered URIs by the target's
+ *     dtype (a distribution, or integer class labels);
+ *   - `sgd` answers the parameter tree's own type, `adam_state` the module's `OptimizerState`,
+ *     and `adam` the pair `(parameter tree, OptimizerState)`; the gradient parameter is typed by
+ *     the parameter tree, and `adam_state` accepts only a tree with a differentiable tangent,
+ *     which the source cannot write.
+ * The `OpDef` infer rules of modules/nn and the `OptimizerResolver` are the one source of these
+ * signatures. Each entry below writes one instance of its rule.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the operators
+ * the module registers, and docs/stdlib-reference.md is generated from them.
+ */
+
+// ---- convolution ----
+
+/// 2-D convolution: `input` is `[N, C, H, W]` f32, `kernel` is `[O, C, KH, KW]` f32 and `bias` is
+/// `[O]` f32. `stride` defaults to 1 and `padding` to 0; the result is `[N, O, OH, OW]` f32 with
+/// `OH = (H + 2*padding - KH) / stride + 1` and `OW` likewise. An input or kernel that is not
+/// rank 4, or a window that does not fit, is refused when the call is compiled.
+/// @pure
+/// @example conv2d(input, kernel, bias, 1, 0)    // [N, O, OH, OW]
+export func conv2d(input: Tensor, kernel: Tensor, bias: Tensor, stride?: int, padding?: int): Tensor
+
+/// The gradient of `conv2d` with respect to its input, given the upstream gradient `dy` shaped
+/// like the convolution's result; the result is shaped like `input`.
+/// @pure
+/// @example conv2d_input_grad(input, kernel, dy, 1, 0)    // like x
+export func conv2d_input_grad(input: Tensor, kernel: Tensor, dy: Tensor, stride?: int, padding?: int): Tensor
+
+/// The gradient of `conv2d` with respect to its kernel, given `dy` shaped like the convolution's
+/// result; the result is shaped like `kernel`.
+/// @pure
+/// @example conv2d_kernel_grad(input, kernel, dy, 1, 0)    // like w
+export func conv2d_kernel_grad(input: Tensor, kernel: Tensor, dy: Tensor, stride?: int, padding?: int): Tensor
+
+/// The gradient of `conv2d` with respect to its bias: the sum of `dy` over the batch and the
+/// spatial axes, shaped like `bias`.
+/// @pure
+/// @example conv2d_bias_grad(bias, dy)    // like b
+export func conv2d_bias_grad(bias: Tensor, dy: Tensor): Tensor
+
+// ---- pooling ----
+
+/// Max pooling over a square window of `kernel` on `input` `[N, C, H, W]` f32. `stride` defaults
+/// to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`. A window that lies entirely in
+/// the padding contributes -inf (the identity of the maximum).
+/// @pure
+/// @example max_pool2d(input, 2)    // [N, C, H/2, W/2]
+export func max_pool2d(input: Tensor, kernel: int, stride?: int, padding?: int): Tensor
+
+/// Average pooling over a square window of `kernel`: the window's elements plus +0 for those in
+/// the padding are summed in an f64 accumulator and divided by `kernel*kernel`. `stride` defaults
+/// to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`.
+/// @pure
+/// @example avg_pool2d(input, 2)    // [N, C, H/2, W/2]
+export func avg_pool2d(input: Tensor, kernel: int, stride?: int, padding?: int): Tensor
+
+/// The gradient of `max_pool2d` with respect to its input, given `dy` shaped like the pooling
+/// result; the result is shaped like `input`.
+/// @pure
+/// @example max_pool2d_grad(input, dy, 2)    // like x
+export func max_pool2d_grad(input: Tensor, dy: Tensor, kernel: int, stride?: int, padding?: int): Tensor
+
+/// The gradient of `avg_pool2d` with respect to its input, given `dy` shaped like the pooling
+/// result; the result is shaped like `input`.
+/// @pure
+/// @example avg_pool2d_grad(input, dy, 2)    // like x
+export func avg_pool2d_grad(input: Tensor, dy: Tensor, kernel: int, stride?: int, padding?: int): Tensor
+
+// ---- batch normalization ----
+
+/// Inference-mode batch normalization: `(input - mean) / sqrt(var + eps) * gamma + beta`, with
+/// `eps` defaulting to 1e-5. Every tensor is f32 and the result is shaped like `input`.
+/// @pure
+/// @example batch_norm(input, running_mean, running_var, gamma, beta)
+export func batch_norm(input: Tensor, mean: Tensor, var: Tensor, gamma: Tensor, beta: Tensor, eps?: number): Tensor
+
+/// Training-mode batch normalization: normalizes `input` with the batch statistics, and answers
+/// `(y, new_running_mean, new_running_var)`, where `y` is shaped like `input` and the running
+/// statistics are shaped like `running_mean`/`running_var`. `momentum` defaults to 0.1 and `eps`
+/// to 1e-5.
+/// @pure
+/// @example let (y, mean, variance) = batch_norm_train(input, gamma, beta, running_mean, running_var)
+export func batch_norm_train(input: Tensor, gamma: Tensor, beta: Tensor, running_mean: Tensor, running_var: Tensor, momentum?: number, eps?: number): (Tensor, Tensor, Tensor)
+
+/// The gradients of training-mode batch normalization: `(dx, dgamma, dbeta)`, shaped like
+/// `input`, `gamma` and `beta`. Only `y` carries gradient; the running-statistics blend is not
+/// differentiated, so the operator takes `dy` (the gradient of `y`) and `eps`.
+/// @pure
+/// @example let (dx, dgamma, dbeta) = batch_norm_train_grad(input, gamma, dy)
+export func batch_norm_train_grad(input: Tensor, gamma: Tensor, dy: Tensor, eps?: number): (Tensor, Tensor, Tensor)
+
+// ---- embedding ----
+
+/// Gathers rows of the rank-2 int-or-float table `[rows, dim]` by the rank-1 integer indices; the
+/// result is `[indices.length, dim]`. An index outside `[0, rows)` is a fault.
+/// @pure
+/// @fails fault `RuntimeError` when an index is outside the table
+/// @example embedding(table, indices)    // [2, dim]
+export func embedding(table: Tensor, indices: Tensor): Tensor
+
+/// The gradient of `embedding` with respect to its table: unvisited rows stay zero, and the
+/// result is shaped like `table`.
+/// @pure
+/// @example embedding_table_grad(table, indices, dy)    // like table
+export func embedding_table_grad(table: Tensor, indices: Tensor, dy: Tensor): Tensor
+
+// ---- loss ----
+
+/// The mean softmax cross-entropy of rank-2 `logits` `[batch, classes]` against a same-shaped
+/// target distribution. When the target is an integer array or a rank-1 integer tensor it is
+/// read as one class label per row (the URI `nn:softmax_cross_entropy_labels`), and the value is
+/// the same as the one-hot form's.
+/// @pure
+/// @fails fault `RuntimeError` when a label is outside `[0, classes)`
+/// @example softmax_cross_entropy(logits, target)    // a float
+export func softmax_cross_entropy(logits: Tensor, target: Tensor): float
+#op<'nn:softmax_cross_entropy_labels'>
+export func softmax_cross_entropy(logits: Tensor, target: Tensor | number[]): float
+
+/// The gradient of `softmax_cross_entropy` with respect to `logits`, scaled by `dy`; the result is
+/// shaped like `logits`. The label form (the URI `nn:softmax_cross_entropy_labels_grad`) takes
+/// integer class labels instead of a target distribution and answers the same shape.
+/// @pure
+/// @fails fault `RuntimeError` when a label is outside `[0, classes)`
+/// @example softmax_cross_entropy_grad(logits, target, 1.0)    // like logits
+export func softmax_cross_entropy_grad(logits: Tensor, target: Tensor, dy: number): Tensor
+#op<'nn:softmax_cross_entropy_labels_grad'>
+export func softmax_cross_entropy_grad(logits: Tensor, target: Tensor | number[], dy: number): Tensor
+
+// ---- optimizers ----
+
+/// One step of stochastic gradient descent on a parameter tree: `params - grads * lr`, with the
+/// result shaped like `params`. `grads` must be the gradient of `params` and `lr` is a number.
+/// @pure
+/// @example let next = sgd({ w: 1.0 }, { w: 0.1 }, 0.1)
+export func sgd(params: P, grads: P, lr: float): P
+
+/// The initial `OptimizerState` of a parameter tree: zero first and second moments, and step 0.
+/// The state's moment trees are shaped like `params`.
+/// @pure
+/// @example let state = adam_state({ w: 1.0 })
+export func adam_state(params: P): OptimizerState
+
+/// One step of Adam on a parameter tree: answers `(new_params, new_state)`, both shaped like
+/// `params`/`state`. `beta1` defaults to 0.9, `beta2` to 0.999 and `eps` to 1e-8.
+/// @pure
+/// @example let (next, state) = adam({ w: 1.0 }, { w: 0.1 }, adam_state({ w: 1.0 }), 0.001)
+export func adam(params: P, grads: P, state: OptimizerState, lr: float, beta1?: number, beta2?: number, eps?: number): (P, OptimizerState)

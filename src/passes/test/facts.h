@@ -51,6 +51,13 @@
  * them privately, as std::fvm does, and reads the facts on the copy (`FACTS lowered <name> ...`):
  * the graph that held the loop is new, the others are not.
  *
+ * `test::facts_load_rules` loads the `rules` library (and through it `math`) before the facts are
+ * seeded, and prints the declaration epoch before and after (`FACTS rules_loaded epoch <before> ->
+ * <after>`). It returns the program unchanged. It is the control for measuring the cost of
+ * invalidation by the declaration epoch (H158): the same pipeline without it lets `std::opt`'s
+ * algebra stage load `rules` after the facts exist, so those facts go stale although their graphs
+ * did not change.
+ *
  * `test::facts_persist` exports the program's facts as a cache would (fact_persist.h), checks
  * that each line of text reads back to the same fact, loads them into an empty store (every
  * fact stored or matching the graph, and equal to a fresh computation), then edits `main`
@@ -70,12 +77,21 @@
 
 inline constexpr const char *kFactStoreTestPass = "test::facts";
 
+inline constexpr const char *kFactLoadRulesTestPass = "test::facts_load_rules";
+
 inline constexpr const char *kFactSeedTestPass    = "test::facts_seed";
 inline constexpr const char *kFactCheckTestPass   = "test::facts_check";
 inline constexpr const char *kFactPersistTestPass = "test::facts_persist";
 inline constexpr const char *kFactNodeTestPass    = "test::facts_node";
 
 class FactStoreTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+class FactLoadRulesTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *

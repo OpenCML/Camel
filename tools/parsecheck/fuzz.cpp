@@ -174,7 +174,10 @@ int runFuzz(
         }
     }
     if (seeds.empty()) {
-        std::cerr << "no seed files\n";
+        // Every seed is a file of the list; none of the files read is under the seed limit (or
+        // the list itself was empty). Mutating nothing and reporting failures=0 is not a pass.
+        std::cerr << "fuzz: expected at least 1 seed file, got 0 from " << files.size()
+                  << " file(s) read; refusing to mutate nothing\n";
         return 2;
     }
     std::filesystem::create_directories(outDir);

@@ -128,6 +128,12 @@ function render(productions) {
 }
 
 const productions = readProductions()
+// A parser refactor that drops the `/// name : ...` comments would leave every check below
+// looping over nothing; the count is what makes that a failure instead of a pass.
+if (productions.length === 0) {
+    console.error('error: the parser sources hold no `/// name : ...` production; the guard checked nothing')
+    process.exit(1)
+}
 const names = new Set()
 for (const p of productions) {
     if (names.has(p.name)) errors.push(`production '${p.name}' is written twice`)
@@ -179,6 +185,9 @@ for (const m of readText(NODES).matchAll(/^CAMEL_NODE\((\w+), \w+\)\s*\/\/\s*(.*
 
 // The keyword table of the reference (2.4) lists exactly the keywords of the token table.
 const keywords = new Set([...tokenText.matchAll(/^CAMEL_KEYWORD\(\w+, "(\w+)"/gm)].map((m) => m[1]))
+if (keywords.size === 0) {
+    errors.push('the token table has no CAMEL_KEYWORD line; the keyword-table check would compare two empty sets')
+}
 for (const doc of DOCS.map((d) => d.replace('08_top_level_and_grammar.md', '02_lexical.md'))) {
     const rel = path.relative(ROOT, doc).split(path.sep).join('/')
     const text = readText(doc)

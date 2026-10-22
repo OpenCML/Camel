@@ -34,6 +34,7 @@
 #include "camel/core/rtdata/view_selftest.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
+#include "camel/execute/observer.h"
 #include "camel_pass.h"
 #include "camel/passes/test/chunks.h"
 #include "camel/passes/test/edges.h"
@@ -1165,6 +1166,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
+        TEST_PASS(kFactLoadRulesTestPass, FactLoadRulesTestPass),
         TEST_PASS(kFactSeedTestPass, FactSeedTestPass),
         TEST_PASS(kFactCheckTestPass, FactCheckTestPass),
         TEST_PASS(kFactPersistTestPass, FactPersistTestPass),
@@ -1214,6 +1216,16 @@ struct ResolvedPass {
     /// When the problem is a pass module that does not compile: its first error, as a secondary
     /// location (H36c).
     std::optional<DiagLabel> errorLocation;
+    /// A `<module>::<pass>` whose module is there and compiles but provides no such pass: the
+    /// module, the name, what the module does provide, and whether it declares the name without
+    /// exporting it (H130).
+    struct MissingPass {
+        std::string module;
+        std::string function;
+        std::vector<std::string> provided;
+        bool declaresUnexported = false;
+    };
+    std::optional<MissingPass> missingPass;
 };
 
 /// Resolves `name` or `name(key=value, ...)`. Prints nothing.
@@ -1306,6 +1318,54 @@ void listAvailablePasses(const std::string &name) {
             "(bool, int, float, string).\n";
 }
 
+/// The passes of a module, as the sentence of a diagnostic writes them: "no passes", "the pass
+/// 'x'", "the passes 'x', 'y'" (H130).
+std::string providedPassesText(const std::vector<std::string> &passes) {
+    if (passes.empty()) {
+        return "no passes";
+    }
+    std::string text       = passes.size() == 1 ? "the pass " : "the passes ";
+    std::string separator;
+    for (const auto &pass : passes) {
+        text += separator;
+        text += std::format("'{}'", pass);
+        separator = ", ";
+    }
+    return text;
+}
+
+/// The diagnostic for a pass name that does not resolve, told apart by what was found (H130):
+///   - a module that is there and cannot be used: its reason, chained to the module's own first
+///     error as a secondary location when that error has a position, exactly as any other
+///     refused pass specification;
+///   - a module that is there and provides no such pass: the short answer, naming the module and
+///     the passes it does provide, so that a name that is simply wrong does not read like a
+///     compiler that lost the module;
+///   - a name with no module behind it: unknown, followed by the list of passes that exist.
+[[noreturn]] void throwUnresolvedPass(const std::string &spec, const ResolvedPass &resolved) {
+    if (resolved.problem) {
+        throw invalidParameterDiagnostic(spec, *resolved.problem, resolved.errorLocation);
+    }
+    if (resolved.missingPass) {
+        const auto &missing        = *resolved.missingPass;
+        const std::string provided = providedPassesText(missing.provided);
+        setPipelineStage("pass:" + specName(spec));
+        const RuntimeDiag code = missing.declaresUnexported
+                                     ? RuntimeDiag::PassNotExportedByModule
+                                     : RuntimeDiag::PassNotProvidedByModule;
+        auto diag = DiagnosticBuilder::of(code).commit(missing.module, missing.function, provided);
+        diag.stage = "pass:" + specName(spec);
+        setPipelineStage("");
+        throw diag;
+    }
+    listAvailablePasses(spec);
+    setPipelineStage("pass:" + specName(spec));
+    auto unknown  = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(spec);
+    unknown.stage = "pass:" + specName(spec);
+    setPipelineStage("");
+    throw unknown;
+}
+
 } // namespace
 
 PassFactory findPassFactory(const std::string &name, std::ostream &os) {
@@ -1347,12 +1407,19 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
     // A function written in Camel: the module is a library of its own, compiled now.
     std::string problem;
     std::optional<DiagLabel> errorLocation;
+    camel::execute::MissingCamelPass missing;
     camel::execute::registerCamelPass(
-        ctx, name.substr(0, sep), name.substr(sep + 2), problem, &errorLocation);
+        ctx, name.substr(0, sep), name.substr(sep + 2), problem, &errorLocation, &missing);
     resolved = resolvePass(spec);
-    if (!resolved.factory && !problem.empty()) {
-        resolved.problem       = problem;
-        resolved.errorLocation = errorLocation;
+    if (!resolved.factory) {
+        if (!problem.empty()) {
+            resolved.problem       = problem;
+            resolved.errorLocation = errorLocation;
+        } else if (missing.moduleHasNoSuchPass) {
+            resolved.missingPass = ResolvedPass::MissingPass{
+                name.substr(0, sep), name.substr(sep + 2), std::move(missing.provided),
+                missing.declaresUnexported};
+        }
     }
     return resolved;
 }
@@ -1394,16 +1461,8 @@ PassRunResult applyRegisteredPass(
     const camel::runtime::Program *program, const std::string &spec, const context_ptr_t &ctx,
     std::ostream &os) {
     ResolvedPass resolved = resolvePassWithModule(spec, ctx);
-    if (resolved.problem) {
-        throw invalidParameterDiagnostic(spec, *resolved.problem, resolved.errorLocation);
-    }
     if (!resolved.factory) {
-        listAvailablePasses(spec);
-        setPipelineStage("pass:" + specName(spec));
-        auto unknown  = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(spec);
-        unknown.stage = "pass:" + specName(spec);
-        setPipelineStage("");
-        throw unknown;
+        throwUnresolvedPass(spec, resolved);
     }
     const bool publishes = ctx && ctx->currentRuntimeProgram() == program;
     auto pass            = resolved.factory(ctx);
@@ -1446,18 +1505,9 @@ const camel::runtime::Program *runRulesAlgebra(
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (const auto &name : passes) {
         auto resolved = resolvePassWithModule(name, ctx);
-        if (resolved.problem) {
-            throw invalidParameterDiagnostic(name, *resolved.problem, resolved.errorLocation);
+        if (!resolved.factory) {
+            throwUnresolvedPass(name, resolved);
         }
-        if (resolved.factory) {
-            continue;
-        }
-        listAvailablePasses(name);
-        setPipelineStage("pass:" + specName(name));
-        auto unknown  = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(name);
-        unknown.stage = "pass:" + specName(name);
-        setPipelineStage("");
-        throw unknown;
     }
 }
 
@@ -1686,18 +1736,23 @@ PassApplyResult applyPassesDetailed(
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), program->root()); });
             camel::utils::phase::Scope phaseScope("pass", p);
             auto pass = factory(ctx);
+            // The debugger's observer is told which pass runs: only a scheduling pass runs the
+            // program it debugs; a rewrite or translation pass may evaluate graphs of its own.
+            const bool schedules = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr;
+            if (auto *observer = camel::execute::executionObserver()) {
+                observer->passStarting(schedules, program->root());
+            }
             // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling
             // pass (the program executes), "pass:<name>" for rewrite and translation passes.
             struct StageScope {
                 explicit StageScope(std::string stage) { setPipelineStage(std::move(stage)); }
                 ~StageScope() { setPipelineStage(""); }
             } stageScope(
-                dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ? std::string("run")
-                                                                         : "pass:" + specName(p));
+                schedules ? std::string("run") : "pass:" + specName(p));
             // A program runs only when every parameter of `main` has a value. Parameters
             // left open are fine for rewriting and translation (they are the inputs of what
             // is translated); nothing may execute with a slot nobody filled.
-            if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
+            if (schedules) {
                 const auto open = camel::execute::unboundEntryParameters(program->root());
                 if (!open.empty()) {
                     std::string names;

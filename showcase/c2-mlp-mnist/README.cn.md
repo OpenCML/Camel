@@ -61,7 +61,7 @@ python showcase\c2-mlp-mnist\compare.py --profile small
 
 # 报告里的标准配置：仓库缓存有 MNIST 时用它，否则合成替身
 python showcase\c2-mlp-mnist\compare.py --profile standard `
-    --mnist D:\Projects\Camel\.cache\mnist\mnist.npz
+    --mnist .cache\mnist\mnist.npz
 ```
 
 `--profile`：`small`（1000/200，200 步，batch 50）、`standard`（10000/2000，1000 步，
@@ -144,7 +144,7 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
 ## 遇到的问题
 
 写这个示例时真正别扭的地方；每条都附了问题，按交接任务书第 4 节的格式写进
-`docs/handover/reports/H13.md` 的“待决问题”。
+`handover note ⟨9981995⟩ (H13)` 的“待决问题”。
 
 1. **下标与切片语法尚未实现。** 设计原则 5.4 与 H21 描述了 `t[i]`、`t[a:b]`、`t[idx]`；
    语言参考（`06_expressions.md`）仍写着切片写法保留、报 `NoMatchingFunction`。于是最自然

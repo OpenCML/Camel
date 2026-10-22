@@ -12,6 +12,8 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 
 ## 6.2 字面量与构造
 
+<!-- camel-snippet: fragment: a list of literal and lambda forms, not a program -->
+
 ```cml
 42          3.14        'text'      true        null
 [1, 2, 3]                   // 数组
@@ -30,11 +32,14 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 反引号字符串 `` `...` `` 里的 `${表达式}` 是插值，可以带格式说明 `${表达式:格式说明}`（词法见 [2.5.4.1](02_lexical.md#2541-格式化字符串)）。它与 `'...'->format<...>` 是**同一棵树**：把 `${...}` 换成 `format` 的占位符（`{}` 或 `{:格式说明}`），把文字里的 `{`、`}` 写成 `{{`、`}}`，再以各插值表达式为 with 实参、以这段文字为普通实参调用 `format`。
 
 ```cml
-let name = 'Camel'
-let n = 42
-println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
-println(`n = ${n}, twice = ${n * 2}`)
-println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+func main(): int sync {
+    let name = 'Camel'
+    let n = 42
+    println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
+    println(`n = ${n}, twice = ${n * 2}`)
+    println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+    return 0
+}
 ```
 
 - 插值表达式在它写的位置、按它所在的词法作用域求值；名字查找、类型检查、副作用与写在字符串外完全一样。它们是 `format` 的 with 实参，何时求值由依赖与副作用规则决定（[4.2](04_execution_model.md#42-按依赖求值)），与同一批表达式写在字符串外没有区别。
@@ -510,6 +515,8 @@ func total_and_max(t: {a: int, b: int}): (int, int) {
 loop 名字 = 初值 (, 名字 = 初值)* (for 名字 in 序列)? (while 条件)? do 表达式
 ```
 
+<!-- camel-snippet: fragment: the loop forms; xs, n and ds are the surrounding example's values -->
+
 ```cml
 let total    = loop acc = 0 for x in xs do acc + x * x
 let (i, acc) = loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)
@@ -538,6 +545,8 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 
 lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略；体是一个表达式或一个块：
 
+<!-- camel-snippet: fragment: a list of lambda forms; total comes from the surrounding example -->
+
 ```cml
 (x: int) => x + 1
 (x: int): int => { let y = x * 2; return y + 1 }
@@ -552,12 +561,16 @@ sync (x: int) => sync { total = total + x }     // 写入被捕获的变量：�
 
 - 实参：调用一个形参是函数类型的函数，`with` 实参同理。
 
+  <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
+
   ```cml
   func apply_twice(f: (x: int) => int, x: int): int { return f(f(x)) }
   apply_twice((x) => x + 1, 3)         // x: int
   ```
 
 - 带标注的绑定：`let` 或 `var` 的类型是函数类型；往这样的变量再赋一个新值同理。
+
+  <!-- camel-snippet: fragment: bindings shown inside the block they would be written in -->
 
   ```cml
   let g: (x: int) => int = (x) => x + 1    // x: int

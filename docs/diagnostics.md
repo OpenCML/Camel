@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-202 diagnostics: 185 errors, 17 warnings.
+204 diagnostics: 187 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -217,6 +217,8 @@ prints one entry.
 | `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error |
 | `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error |
 | `0x04000070` | [RuntimeDiag::DeviceUnavailable](#deviceunavailable) | Error |
+| `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error |
+| `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -1384,7 +1386,19 @@ Failed to parse module file: {0}.
 Check the file for syntax errors.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/graph_pass/imports_unparsable.cml`, run as `camel test/cases/modules/graph_pass/imports_unparsable.cml std::nvm`)
+
+```camel
+// A program whose import is a module that does not parse. The import is a dependency of the
+// program, so the program fails at the compile step with that module's parse diagnostic (H198) —
+// not later, and not with a pass diagnostic: nothing asked for a pass of it.
+module imports_unparsable
+import unparsable_pass
+
+func main(): int sync {
+    return 0
+}
+```
 
 ### InvalidOperatorURI
 
@@ -5752,6 +5766,61 @@ func main(): int sync {
     println(nested(2.0, 3.0))
     let p = pair(2.0, 3.0)
     println(p.0, p.1)
+    return 0
+}
+```
+
+### PassNotProvidedByModule
+
+`0x04000186` · Error · `RuntimeDiag::PassNotProvidedByModule`
+
+**Message**
+
+```text
+Module '{0}' provides no pass '{1}'; it provides {2}.
+```
+
+**Help**
+
+```text
+A pass of a module is one of its exported functions of type `(p: Program) => Program!`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
+```
+
+**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::nosuch std::nvm`)
+
+```camel
+module tiny
+func main(): int sync {
+    println(21 * 2)
+    return 0
+}
+```
+
+### PassNotExportedByModule
+
+`0x04000187` · Error · `RuntimeDiag::PassNotExportedByModule`
+
+**Message**
+
+```text
+Module '{0}' declares '{1}' but does not export it, so it cannot be named as a pass; it provides {2}.
+```
+
+**Help**
+
+```text
+Write `export func {1}(...)` in module {0}, or name a pass it exports. A pass is an exported function `(p: Program) => Program!`.
+```
+
+**Example** (`test/cases/modules/pass_not_found/main.cml`, run as `camel test/cases/modules/pass_not_found/main.cml declares_not_exported::run std::nvm`)
+
+```camel
+// A program to run a pass list against (H130). It imports nothing: the passes named on the
+// pipeline are the only modules the pipeline has to find.
+module main
+
+func main(): int sync {
+    println(42)
     return 0
 }
 ```

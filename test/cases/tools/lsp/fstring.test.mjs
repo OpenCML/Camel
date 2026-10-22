@@ -41,6 +41,24 @@ await withServer(async (ls) => {
         'the definition of a name inside an interpolation is in the same file', d)
     checkEq(d[0].range.start.line, 3, 'at its declaration')
 
+    // Semantic string tokens must leave room for the names the index resolved inside them.
+    const semantic = await ls.request('textDocument/semanticTokens/full', { textDocument: { uri } })
+    const legend = ls.initializeResult.capabilities.semanticTokensProvider.legend.tokenTypes
+    let line = 0, column = 0
+    const decoded = []
+    for (let i = 0; i < semantic.data.length; i += 5) {
+        const [dl, dc, length, type] = semantic.data.slice(i, i + 4)
+        column = dl ? dc : column + dc; line += dl
+        decoded.push({ line, column, length, type: legend[type] })
+    }
+    for (const [needle, delta, type] of [['${n}', 2, 'variable'], ['${add(', 2, 'function'], ['${p.s}', 4, 'property']]) {
+        const position = src.find(needle, 1, delta)
+        check(decoded.some(t => t.line === position.line && t.column === position.character && t.type === type),
+            `${type} inside an interpolation has its own semantic token`, decoded)
+        check(!decoded.some(t => t.line === position.line && t.type === 'string' && t.column <= position.character && t.column + t.length > position.character),
+            'a string token does not cover interpolation code', decoded)
+    }
+
     // ---- completion: the names in scope, inside `${...}` ----
     const text = SOURCE.replace('${n}', '${n/*c*/}')
     const m = marked(text)

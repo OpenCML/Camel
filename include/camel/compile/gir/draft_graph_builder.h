@@ -105,12 +105,12 @@ class DraftGraphBuilder {
 
     runtime::DraftNodeRef addStaticDataNode(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType = nullptr);
-    runtime::DraftNodeRef 
+    runtime::DraftNodeRef
     addPortNode(camel::core::type::Type *type, std::string name, bool isWith);
     runtime::DraftNodeRef addCastNode(camel::core::type::Type *type);
     runtime::DraftNodeRef addCopyNode(camel::core::type::Type *type);
     runtime::DraftNodeRef addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body);
-    runtime::DraftNodeRef 
+    runtime::DraftNodeRef
     addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload);
     runtime::DraftNodeRef addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex);
     runtime::DraftNodeRef addAccsNode(camel::core::type::Type *type, std::string key);
@@ -118,7 +118,7 @@ class DraftGraphBuilder {
         camel::core::type::Type *type, runtime::DraftNodeRef joinNode, runtime::gc_cnt_t armCount);
     runtime::DraftNodeRef addJoinNode(
         camel::core::type::Type *type, runtime::DraftNodeRef brchNode, runtime::gc_cnt_t armCount);
-    runtime::DraftNodeRef 
+    runtime::DraftNodeRef
     addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body = {});
     runtime::DraftNodeRef addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex);
     runtime::DraftNodeRef addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex);

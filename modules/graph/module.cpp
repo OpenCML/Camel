@@ -47,11 +47,10 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 using camel::graphmod::HandleKind;
 using camel::graphmod::HandleType;
+using camel::graphmod::effectsType;
 using camel::graphmod::nodeKindType;
 using camel::graphmod::regionKindType;
-using camel::graphmod::factGroups;
 using camel::graphmod::factKernels;
-using camel::graphmod::readGroups;
 using camel::graphmod::readKernels;
 using camel::graphmod::txnGroups;
 using camel::graphmod::txnKernels;
@@ -125,53 +124,30 @@ class GraphModule final : public BuiltinModule {
         }
         exportType(Reference("NodeKind"), nodeKindType());
         exportType(Reference("RegionKind"), regionKindType());
-        for (const auto &group : readGroups()) {
-            exportEntity(group->name(), group);
-        }
+        // The type of the value `effects` gives: a structural type has no name of its own, and
+        // the declaration of `effects` names its result (handover H141).
+        exportType(Reference("Effects"), effectsType());
+        // The signatures C++ computes (standard library conventions 2): the four operators of a
+        // function value take the type of an argument, so a declaration cannot express them.
+        // Everything else is declared in stdlib/graph.cml, `constant` and `add_constant` per
+        // sample type included (handover H202).
         for (const auto &group : txnGroups()) {
             exportEntity(group->name(), group);
         }
-        for (const auto &group : factGroups()) {
-            exportEntity(group->name(), group);
-        }
-        exportEntity(
-            "current",
-            OperatorGroup::create(
-                "current",
-                {{"graph:current",
-                  StaticFuncTypeResolver::create({}, {}, HandleType::get(HandleKind::Program))}}));
-        // `==` and `!=` of the handle types (design principles 4.3): a library defines the
-        // operators of its own types. Two handles are equal when they name the same thing of
-        // the same Program.
-        std::vector<std::pair<std::string, resolver_ptr_t>> eq, ne;
+        // `==` of the handle types is declared in stdlib/graph.cml (design principles 4.3): two
+        // handles are equal when they name the same thing of the same Program. `!=` cannot be
+        // declared — an overload of `==` gives it, and `operator !=` is OperatorNotOverloadable
+        // — so the module keeps the `__neq__` group the compiler asks for when it does not
+        // negate a Camel overload. Both names are default imported: an importer of `graph`
+        // finds them among a type's operators without naming them.
+        std::vector<std::pair<std::string, resolver_ptr_t>> ne;
         for (HandleKind kind : kHandleKinds) {
             Type *type = HandleType::get(kind);
-            eq.emplace_back("graph:eq", StaticFuncTypeResolver::create({}, {{type, false}, {type, false}}, Type::Bool()));
             ne.emplace_back("graph:ne", StaticFuncTypeResolver::create({}, {{type, false}, {type, false}}, Type::Bool()));
         }
-        exportEntity("__eq__", OperatorGroup::create("__eq__", eq));
         exportEntity("__neq__", OperatorGroup::create("__neq__", ne));
         exportDefaultImportRef("__eq__");
         exportDefaultImportRef("__neq__");
-        // The number a handle is known by inside its Program: the GraphId of a graph, the NodeId
-        // of a node, the OperId of an operator. Stable for the Program, so a pass can key a Map
-        // by it.
-        exportEntity(
-            "id",
-            OperatorGroup::create(
-                "id",
-                {{"graph:id",
-                  DynamicFuncTypeResolver::create(
-                      {{0, {}}, {1, {false}}},
-                      "(h: Graph | Node | Op) => int",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                          -> std::optional<Type *> {
-                          if (HandleType::is(norm[0], HandleKind::Graph) ||
-                              HandleType::is(norm[0], HandleKind::Node) ||
-                              HandleType::is(norm[0], HandleKind::Op))
-                              return Type::Int64();
-                          return std::nullopt;
-                      })}}));
         exportType(Reference("Value"), HandleType::get(HandleKind::Node));
     }
 
@@ -181,21 +157,63 @@ class GraphModule final : public BuiltinModule {
         context_->registerExecutorFactory("graph", [ctx = context_]() {
             return std::make_shared<GraphExecutor>(ctx);
         });
-        // The purity of every operator (design principles 3.3): a Program is immutable.
+        // The purity of every operator (design principles 3.3): a Program is immutable. The
+        // names are the ones stdlib/graph.cml declares; `eq`/`ne` belong to the operator groups
+        // (`==` is declared, `!=` stays in C++) and `current`/`id` to the read side.
         auto &table = camel::core::OperatorTable::instance();
-        table.declare("graph", {{"current", true}, {"eq", true}, {"ne", true}, {"id", true}});
-        for (const auto &group : readGroups()) {
-            table.declare("graph", {{group->name(), true}});
-        }
-        for (const auto &group : factGroups()) {
-            table.declare("graph", {{group->name(), true}});
-        }
-        // A transaction is a state that edits change: none of its operators is pure, except the
-        // two that read a function value.
-        for (const auto &group : txnGroups()) {
-            const bool reads = group->name() == "program_of" || group->name() == "graph_of";
-            table.declare("graph", {{group->name(), reads}});
-        }
+        table.declare(
+            "graph",
+            {
+                // the reads: a Program is not changed by them
+                {"graphs", true},
+                {"root", true},
+                {"name", true},
+                {"nodes", true},
+                {"inputs", true},
+                {"with_inputs", true},
+                {"ctrl_inputs", true},
+                {"users", true},
+                {"value_users", true},
+                {"is_constant", true},
+                {"kind", true},
+                {"op", true},
+                {"op_name", true},
+                {"is_pure", true},
+                {"type_of", true},
+                {"type_name", true},
+                {"callee", true},
+                {"tags", true},
+                {"is_anchor", true},
+                {"is_written_slot", true},
+                {"origin", true},
+                {"show", true},
+                {"region_of", true},
+                {"region_kind", true},
+                {"region_parent", true},
+                // the value's type: the program itself, the number a handle is known by, the
+                // constant a node holds, and the three facts
+                {"current", true},
+                {"id", true},
+                {"constant", true},
+                {"effects", true},
+                {"shape", true},
+                {"permissions", true},
+                // equality of two handles
+                {"eq", true},
+                {"ne", true},
+                // a transaction is a state that edits change: none of its operators is pure,
+                // except the two that read a function value
+                {"open", false},
+                {"replace", false},
+                {"erase", false},
+                {"commit", false},
+                {"abort", false},
+                {"open_function", false},
+                {"to_function", false},
+                {"program_of", true},
+                {"graph_of", true},
+                {"add_constant", false},
+            });
         loaded_ = true;
         return true;
     }

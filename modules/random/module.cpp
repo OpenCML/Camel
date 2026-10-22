@@ -35,57 +35,14 @@ using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::type;
 
-namespace {
-// The computed signatures of this module stay in C++ (design principles 6.4; handover H19,
-// step 10): `choice`, `sample` and `shuffle` take their result type from the element type of
-// their array argument, and `stdlib/signatures/random.cml` keeps their reference entries.
-// Every other operator is declared in `stdlib/random.cml`, the one source of its signature.
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "choice",
-            {{"rand:choice",
-              DynamicFuncTypeResolver::create(
-                  {{0, {}}, {1, {false}}},
-                  "<> (array: T[]) => T",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      if (norm[0]->code() != TypeCode::Array)
-                          return std::nullopt;
-                      return tt::as_ptr<ArrayType>(norm[0])->elemType();
-                  })}}),
-        OperatorGroup::create(
-            "sample",
-            {{"rand:sample",
-              DynamicFuncTypeResolver::create(
-                  {{0, {}}, {2, {false, false}}},
-                  "<> (array: T[], n: int) => T[]",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      if (norm[0]->code() != TypeCode::Array)
-                          return std::nullopt;
-                      return norm[0];
-                  })}}),
-        OperatorGroup::create(
-            "shuffle",
-            {{"rand:shuffle",
-              DynamicFuncTypeResolver::create(
-                  {{0, {}}, {1, {false}}},
-                  "<> (array: T[]) => T[]",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      if (norm[0]->code() != TypeCode::Array)
-                          return std::nullopt;
-                      return norm[0];
-                  })}}),
-    };
-    return groups;
-}
-} // namespace
+// Every operator of this module is declared in `stdlib/random.cml`, `choice`, `sample` and
+// `shuffle` included: their result type is the element type of their array argument, which a
+// `(typeas T)` declaration states exactly (design principles 6.4; handover H19, step 10, H202).
+// The C++ side keeps the kernels, the executor, the operator traits and the resources. The
+// module answers on `rand:`, not on its name, so the declaration module reads `rand:` from
+// `operatorProtocols()` (module.h) now that no group is exported to read it from.
 
 RandomModule::RandomModule(context_ptr_t ctx) : BuiltinModule("random", ctx) {
-    for (const auto &group : getOperatorGroups())
-        exportEntity(group->name(), group);
     exportType(Reference("Key"), camel::random::keyType());
 }
 

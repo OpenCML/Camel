@@ -1,0 +1,12 @@
+/**
+ * The declaration of `this:zen` takes no ordinary argument: an extra one is refused at the call,
+ * and the overload the message lists is the declaration's (handover H19, step 10; H146).
+ */
+module this_arity
+
+import { zen } from this
+
+func main(): int sync {
+    println(zen(1, 2))
+    return 0
+}

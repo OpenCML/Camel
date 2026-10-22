@@ -70,12 +70,13 @@ timeout_ms = 10000
 
 [[tests]]
 name = "unknown_camel_pass"
-desc = "A module that exports no such function leaves the pass unknown."
+desc = "A module that exports no such function names itself and the passes it does provide (H130), instead of leaving the pass unknown."
 kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "identity::nosuch", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["UnrecognizedGraphPass"]
+expect_output_contains = ["PassNotProvidedByModule", "Module 'identity' provides no pass 'nosuch'", "it provides the passes 'keep', 'refuse', 'report'"]
+expect_output_not_contains = ["not found, available passes are"]
 timeout_ms = 10000
 
 # A pass written in Camel has a top level of its own (task H37): the pass is the entry of a
@@ -240,6 +241,160 @@ case = "../../../cases/modules/graph_pass/neutral_target.cml"
 args = ["${case}", "neutral::integers", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "7\n11\n7\n10\n"
+timeout_ms = 20000
+
+# The five identities the C++ reference mode applies are the rules library's five integer rules
+# (stdlib/rules.cml: int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul and the
+# int32 versions). The case contains only those forms: the two tests below pin each implementation
+# to the same surviving graph (the operand add, and no other operator), so a change to either side
+# turns its test red. They are not a byte-for-byte differential: the C++ draft rewrite leaves the
+# neutral operand constant dead and attaches the parameter's source span to the port it keeps,
+# while the rule engine prunes the constant and its commit leaves the port without a span. Both are
+# engine artefacts, not the laws; handover note ⟨c7b6133⟩ (H160) §4 has the diff.
+
+[[tests]]
+name = "neutral_identities_by_std_opt_algebra"
+desc = "The reference: std::opt::algebra(neutral_only=true) removes all five identities of both integer types."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_identities.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::opt::dce(values_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
+ const ops=name=>g(name).nodes.filter(n=>n.kind==='OPER').map(n=>n.label);
+ for(const [name,add] of [['five64',':op/add_l'],['five32',':op/add_i']]){
+  const o=ops(name);
+  assert(o.length===1&&o[0]===add,name+': '+o.join(',')+' (the five identities did not all go)');
+  assert(g(name).nodes.every(n=>n.kind!=='DATA'),name+': a neutral operand constant survived dce');
+ }
+}
+'''
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_identities_by_the_rule_library"
+desc = "rules::simplify removes the same five identities and leaves the same graph: the library has these laws."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_identities.cml"
+args = ["${case}", "rules::simplify", "std::opt::dce(values_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
+ const ops=name=>g(name).nodes.filter(n=>n.kind==='OPER').map(n=>n.label);
+ for(const [name,add] of [['five64',':op/add_l'],['five32',':op/add_i']]){
+  const o=ops(name);
+  assert(o.length===1&&o[0]===add,name+': '+o.join(',')+' (the library did not apply the five)');
+  assert(g(name).nodes.every(n=>n.kind!=='DATA'),name+': a neutral operand constant survived dce');
+ }
+}
+'''
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_identities_execution"
+desc = "The five identities keep the value, including at the type's upper bound, on every back end."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_identities.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "7\n7\n9223372036854775806\n2147483646\n"
+timeout_ms = 20000
+
+# The mode is not the library's simplify: it applies the five laws and nothing else. These four
+# forms are exact laws of the library over the same integer names, and the mode must keep them.
+
+[[tests]]
+name = "neutral_mode_keeps_the_other_laws"
+desc = "neutral_only=true leaves x*0, x-x, x/1 and -(-x): the mode's set is only the five neutral elements."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_kept.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=d.graphs.find(g=>g.name==='other');assert(g,'missing other');
+ const ops=g.nodes.filter(n=>n.kind==='OPER').map(n=>n.label);
+ const count=l=>ops.filter(x=>x===l).length;
+ assert(count(':op/mul_l')===1,'x*0 was simplified by the neutral mode');
+ assert(count(':op/sub_l')===1,'x-x was simplified by the neutral mode');
+ assert(count(':op/div_l')===1,'x/1 was simplified by the neutral mode');
+ assert(count(':op/neg_l')===2,'-(-x) was simplified by the neutral mode');
+}
+'''
+timeout_ms = 20000
+
+[[tests]]
+name = "the_library_simplifies_the_other_laws"
+desc = "rules::simplify removes those same four forms: the difference is the mode, not a law the library lacks."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_kept.cml"
+args = ["${case}", "rules::simplify", "std::opt::dce(values_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=d.graphs.find(g=>g.name==='other');assert(g,'missing other');
+ const ops=g.nodes.filter(n=>n.kind==='OPER').map(n=>n.label);
+ const count=l=>ops.filter(x=>x===l).length;
+ assert(count(':op/mul_l')===1,'the library did not fold the four laws into the product');
+ assert(count(':op/sub_l')===0,'x-x survived the library');
+ assert(count(':op/div_l')===0,'x/1 survived the library');
+ assert(count(':op/neg_l')===0,'-(-x) survived the library');
+}
+'''
+timeout_ms = 20000
+
+# The precise limit of the reference mode, and the reason the C++ file is not deleted (H160): it
+# keeps the graph's named node (the C++ pass's isReplaceable), while the rule engine retargets it.
+# Both facts are pinned here so that neither can drift silently.
+
+[[tests]]
+name = "neutral_mode_keeps_the_named_node"
+desc = "neutral_only=true leaves x+0 when that add is the graph's return node."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_target.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=d.graphs.find(g=>g.name==='anchor');assert(g,'missing anchor');
+ const add=g.nodes.find(n=>n.label===':op/add_l');
+ assert(add,'the neutral mode simplified the graph\'s named node');
+ assert(g.exit===add.id,'the anchor graph exits at a node other than the add');
+}
+'''
+timeout_ms = 20000
+
+[[tests]]
+name = "the_rule_engine_retargets_the_named_node"
+desc = "rules::simplify rewrites the same add and moves the graph's return to the port."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_target.cml"
+args = ["${case}", "rules::simplify", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=d.graphs.find(g=>g.name==='anchor');assert(g,'missing anchor');
+ assert(!g.nodes.some(n=>n.label===':op/add_l'),'the rule engine kept the named add');
+ const x=g.nodes.find(n=>n.kind==='PORT');assert(x,'missing the port');
+ assert(g.exit===x.id,'the graph does not exit at the port');
+}
+'''
 timeout_ms = 20000
 
 # Unused values: after folding and inlining, constants and pure operations that no node reads are
@@ -447,6 +602,139 @@ expect_exit = 1
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "golden/graph_pass_unparsable_diagnostic.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The scope's other direction: an import is a dependency of the program, so a module that does
+# not compile makes the program fail at the compile step with that module's diagnostic, before any
+# pass runs. A pass library is not a dependency and is handled by pass resolution instead.
+
+[[tests]]
+name = "imported_module_that_does_not_compile"
+desc = "A program importing a module that does not parse fails at the compile step with that module's parse diagnostic, not with a pass diagnostic."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["ModuleParseFailed", "SyntaxDiag::MissingClosingDelimiter", "unparsable_pass.cml:8:5"]
+expect_output_not_contains = ["InvalidPassParameter", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# H210: the scope decides what is printed, not only whether the command stops. A pass library
+# on the command line is not a module the program is made of, so a run whose program compiles
+# and whose pass library does not reports the library through `InvalidPassParameter` (its first
+# error as a secondary location) and never through a bare parse diagnostic of its own.
+
+[[tests]]
+name = "run_reports_a_failing_pass_library_as_invalid_pass_parameter"
+desc = "A healthy program with an unparsable pass library on the pipeline reports InvalidPassParameter naming the library, with the parse error as a secondary location, and no bare SyntaxDiag of the library."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "unparsable_pass_lib::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::InvalidPassParameter", "its library 'unparsable_pass_lib' does not compile. [SyntaxDiag::MissingClosingDelimiter:", "unparsable_pass_lib.cml:10:5"]
+expect_output_not_contains = ["(name=SyntaxDiag::MissingClosingDelimiter", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The parse-error path: resolving the pass list loads the pass's library before the program is
+# parsed. When the program itself does not parse, that library is still not part of the program:
+# the report is the entry module's syntax error, and the library's file does not appear.
+
+[[tests]]
+name = "run_parse_failure_report_excludes_the_pass_library"
+desc = "A program that does not parse, with an unparsable pass library on the pipeline, reports only the program's syntax error; the pass library's file and diagnostic are absent."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/unparsable_pass.cml"
+args = ["${case}", "unparsable_pass_lib::run"]
+expect_exit = 1
+expect_output_contains = ["(name=SyntaxDiag::MissingClosingDelimiter", "unparsable_pass.cml:8:5"]
+expect_output_not_contains = ["unparsable_pass_lib.cml", "InvalidPassParameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "run_parse_failure_counts_only_the_program_files"
+desc = "The text format of the same parse failure prints one error in the summary (`camel: 1 error`) and no line from the pass library."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/unparsable_pass.cml"
+args = ["--error-format", "text", "${case}", "unparsable_pass_lib::run"]
+expect_exit = 1
+expect_output_contains = ["error[SyntaxDiag::MissingClosingDelimiter]", "unparsable_pass.cml:8:5", "camel: 1 error"]
+expect_output_not_contains = ["unparsable_pass_lib.cml", "InvalidPassParameter", "camel: 2 errors"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The compile path: the program's own imported module fails, so the program fails as a program;
+# the pass library that was loaded with the pass list is outside the report and outside the
+# error count. Before H210 its parse error was printed as a second module's diagnostics and
+# counted in the summary (`camel: 3 errors`).
+
+[[tests]]
+name = "run_compile_failure_report_excludes_the_pass_library"
+desc = "A program whose imported module does not parse, with an unrelated unparsable pass library on the pipeline, reports the program's two modules and not the library's diagnostic or file."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
+args = ["${case}", "unparsable_pass_lib::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["(name=SemanticDiag::ModuleParseFailed", "unparsable_pass.cml:8:5"]
+expect_output_not_contains = ["unparsable_pass_lib.cml"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "run_compile_failure_counts_only_the_program_modules"
+desc = "The text format of the same compile failure counts the program's two errors (`camel: 2 errors`), not a third from the pass library."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
+args = ["--error-format", "text", "${case}", "unparsable_pass_lib::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["[imported by main]", "unparsable_pass.cml:8:5", "camel: 2 errors"]
+expect_output_not_contains = ["unparsable_pass_lib.cml", "camel: 3 errors"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The same answer in JSON: `-E json` prints the failed modules of the scope. The library's module
+# object is in the context, but not in the answer.
+
+[[tests]]
+name = "run_json_compile_failure_report_excludes_the_pass_library"
+desc = "Under -E json the program's compile failure reports the program's modules only: the unrelated pass library's module and file do not appear."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
+args = ["-E", "json", "${case}", "unparsable_pass_lib::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["\"name\":\"SemanticDiag::ModuleParseFailed\"", "unparsable_pass.cml"]
+expect_output_not_contains = ["unparsable_pass_lib.cml", "\"moduleName\":\"unparsable_pass_lib\""]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# H198's remaining nuance: a `--timeit` iteration reports a failed pass library through the same
+# wrapper as a run. The iteration is a failed iteration (no elapsed time, no summary); the
+# library's raw parse diagnostic is not what the user sees.
+
+[[tests]]
+name = "timeit_reports_a_failing_pass_library_as_invalid_pass_parameter"
+desc = "`--timeit` on an unparsable pass library names the failed iteration, reports InvalidPassParameter with the library's parse error as a secondary location, and prints no bare SyntaxDiag, no elapsed time and no summary."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["--timeit", "unparsable_pass_lib::run/1", "${case}"]
+expect_exit = 1
+expect_output_contains = ["[timeit] 1/1 pass=unparsable_pass_lib::run failed", "RuntimeDiag::InvalidPassParameter", "its library 'unparsable_pass_lib' does not compile.", "unparsable_pass_lib.cml:10:5"]
+expect_output_not_contains = ["(name=SyntaxDiag::MissingClosingDelimiter", "elapsed=", "mean"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "timeit_json_reports_a_failing_pass_library_as_invalid_pass_parameter"
+desc = "The JSON form of the same failed iteration carries the InvalidPassParameter diagnostic with the library's file and location, not the bare SyntaxDiag object, and no summary fields."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["--output-format", "json", "--timeit", "unparsable_pass_lib::run/1", "${case}"]
+expect_exit = 1
+expect_output_contains = ["\"pass\": \"unparsable_pass_lib::run\"", "\"name\":\"RuntimeDiag::InvalidPassParameter\"", "unparsable_pass_lib.cml"]
+expect_output_not_contains = ["\"name\":\"SyntaxDiag::MissingClosingDelimiter\"", "\"mean_ms\""]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 

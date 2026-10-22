@@ -96,9 +96,9 @@
 所有宏测试位于 `test/macro/`，需手动传入 `std::macro`（当前未纳入默认 fallback）：
 
 ```powershell
-$env:PATH = "D:/Projects/Camel/build/Release;$env:PATH"
-$env:CAMEL_HOME = "D:/Projects/Camel/out/latest"
-& "D:/Projects/Camel/build/Release/camel.exe" test/macro/basic.cml std::macro
+$env:PATH = "<repo>/build/Release;$env:PATH"
+$env:CAMEL_HOME = "<repo>/out/latest"
+& "<repo>/build/Release/camel.exe" test/macro/basic.cml std::macro
 ```
 
 | 文件 | 场景 | 期望输出 |

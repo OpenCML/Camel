@@ -72,6 +72,12 @@ enum class RuntimeDiag : uint32_t {
     // A pass that does not know values with several writings was given a program that has them
     // (graph store design 3.7); an extraction before it fixes the pipeline.
     PassNeedsExtraction = 0x000062,
+    // A pass named as `<module>::<name>` whose module is there and compiles but provides no such
+    // pass (H130). The name is what is wrong, so the message names the module and the passes it
+    // does provide and says nothing else; a module that declares the function without exporting
+    // it is a different mistake, with the hint that fixes it.
+    PassNotProvidedByModule = 0x000186,
+    PassNotExportedByModule = 0x000187,
     // A device the run named with `--devices` that is not there. A capability miss stays
     // BackendUnavailable (the host runs the program); this is the run's own configuration
     // naming a device that must exist (design principles 13.4).

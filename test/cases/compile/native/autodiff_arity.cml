@@ -1,0 +1,13 @@
+/**
+ * The declaration of `autodiff:stop_gradient` takes one ordinary argument: a second one is
+ * refused at the call, and the overload the message lists is the declaration's —
+ * `stdlib/autodiff.cml`, not the C++ module (handover H19, step 10; H165).
+ */
+module autodiff_arity
+
+import { stop_gradient } from autodiff
+
+func main(): int sync {
+    println(stop_gradient(1.0, 2.0))
+    return 0
+}

@@ -71,7 +71,7 @@ python showcase\c2-mlp-mnist\compare.py --profile small
 
 # the reported configuration: MNIST when the cache has it, the stand-in otherwise
 python showcase\c2-mlp-mnist\compare.py --profile standard `
-    --mnist D:\Projects\Camel\.cache\mnist\mnist.npz
+    --mnist .cache\mnist\mnist.npz
 ```
 
 `--profile`: `small` (1000/200, 200 steps, batch 50), `standard` (10000/2000, 1000 steps,
@@ -176,7 +176,7 @@ stand-in) differs at the `2.4e-4` level.
 ## Problems
 
 The genuinely awkward parts of writing this example, with the question each raises in the
-"Open questions" section of `docs/handover/reports/H13.md`.
+"Open questions" section of `handover note ⟨9981995⟩ (H13)`.
 
 1. **Subscript and slice syntax is not implemented.** Design principles 5.4 and H21 describe
    `t[i]`, `t[a:b]` and `t[idx]`; the language reference (`06_expressions.md`) still says the

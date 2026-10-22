@@ -1,0 +1,14 @@
+/**
+ * Both declarations of `tensor:show` take one ordinary argument: a second one is refused at the
+ * call, and the overloads the message lists are the declarations' — the one source is
+ * `stdlib/tensor.cml`, not the C++ module (handover H175).
+ */
+module tensor_show_arity
+
+import { new, show } from tensor
+
+func main(): int sync {
+    let t = new([[1.0, 2.0]])
+    show(t, 1)
+    return 0
+}

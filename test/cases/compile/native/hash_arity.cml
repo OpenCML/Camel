@@ -1,0 +1,12 @@
+/**
+ * Both declarations of `hash:sha256` take one ordinary argument: a second one is refused at the
+ * call, and the overloads the message lists are the declaration's two (handover H163).
+ */
+module hash_arity
+
+import { sha256 } from hash
+
+func main(): int {
+    println(sha256('abc', 'def'))
+    return 0
+}

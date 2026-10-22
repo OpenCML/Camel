@@ -88,10 +88,13 @@ Faster computation whose results may differ is granted explicitly by the program
 ### 3.3.1 Arrays
 
 ```cml
-let xs = [1, 2, 3]
-let names: string[] = []          // an empty array needs its type written out
-let grid = [[1, 2], [3]]          // int[][]
-println(xs[0], len(xs), grid[0][1])
+func main(): int sync {
+    let xs = [1, 2, 3]
+    let names: string[] = []          // an empty array needs its type written out
+    let grid = [[1, 2], [3]]          // int[][]
+    println(xs[0], len(xs), grid[0][1])
+    return 0
+}
 ```
 
 ```text
@@ -123,9 +126,12 @@ println(xs[0], len(xs), grid[0][1])
 ### 3.3.2 Tuples
 
 ```cml
-let pair = (1, 'one')
-let (n, s) = pair              // destructuring
-println(pair.0, pair.1, n, s)
+func main(): int sync {
+    let pair = (1, 'one')
+    let (n, s) = pair              // destructuring
+    println(pair.0, pair.1, n, s)
+    return 0
+}
 ```
 
 ```text
@@ -139,9 +145,12 @@ A member index is a literal; one beyond the length is a compile-time error (`Sem
 ```cml
 type Point = { x: int, y: int }
 
-let p: Point = { x: 3, y: 4 }
-let q = { x: p.x + 1, y: p.y }     // "modifying" means building a new one
-println(p, q.x)
+func main(): int sync {
+    let p: Point = { x: 3, y: 4 }
+    let q = { x: p.x + 1, y: p.y }     // "modifying" means building a new one
+    println(p, q.x)
+    return 0
+}
 ```
 
 ```text
@@ -275,6 +284,8 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 **Construction.** A variant is written after the type name, qualified with `::`: `Shape::Circle(1.0)`, `Shape::Rect { w: 2.0, h: 3.0 }`, `Shape::Empty`. A struct variant takes every field it declares, in any order; a tuple variant takes its fields by position. A variant without data is the value itself, with no parentheses. The value has type `Shape`; the arguments of a generic instance are inferred from the field arguments (`Option::Some(42)` is `Option<int>`), or, when they cannot be (`Option::None`), from the type the position expects (`let x: Option<int> = Option::None`, an argument position, a return type), and failing both is a compile-time error (`EnumTypeArgumentNotInferred`). A field argument must have the declared type (`EnumFieldTypeMismatch`), and the number and names of the fields must agree with the declaration (`EnumVariantFieldCount`, `EnumConstructionMismatch`). Automatic wrapping into a field follows the usual rule: an `int` does not become a `float` by itself.
 
 **`match`.** An enum is taken apart by `match`; its fields are never read directly (`b.w` is `EnumFieldAccess`, and the diagnostic shows the `match`):
+
+<!-- camel-snippet: fragment: continues the Shape enum declared in the example above -->
 
 ```cml
 func area(s: Shape): float {

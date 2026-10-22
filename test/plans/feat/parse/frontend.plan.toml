@@ -2,7 +2,7 @@ id = "parse.frontend"
 order = 305
 tier = "fast"
 tags = ["feat", "parse", "grammar", "format"]
-desc = "The hand-written front end as a whole: the grammar in the language reference is the one the parser implements, every file of the repository is read as recorded, the formatter keeps the meaning of what it formats, and the parser returns a lossless tree for wrong programs."
+desc = "The hand-written front end as a whole: the grammar in the language reference is the one the parser implements, every case of the parse corpus is read as recorded, the formatter keeps the meaning of what it formats, and the parser returns a lossless tree for wrong programs."
 
 [[tests]]
 name = "grammar.reference_in_step"
@@ -18,7 +18,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "frontend.ast_snapshot"
-desc = "Every .cml file of the repository and every probe of the grammar's decisions (test/tools/parsecheck/probes.py) gives the AST, node for node with token ranges and origins, that was recorded when the parser was compared with the ANTLR parser it replaced."
+desc = "Every case of the parse corpus (test/cases/parse) and every probe of the grammar's decisions (test/tools/parsecheck/probes.py) gives the AST, node for node with token ranges and origins, that was recorded when the parser was compared with the ANTLR parser it replaced. The snapshot is of the parser's tests, not of the repository: a .cml file under examples/, stdlib/, benchmarks/ or another plan's cases is checked by the plan that owns it (H188)."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/parsecheck/check.py"
@@ -41,8 +41,20 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
 [[tests]]
+name = "frontend.examples_parse"
+desc = "Every .cml under docs/design/*/examples/ and seven named programs (hello.cml, workloads.cml and the five selftest fixtures) parses. A file that is deliberately refused says so on its first line with `// @refused-example <reason>`; the reason is required, a marked file must still fail to parse, and an unmarked file must parse. Both directions fail the check, every marked file is printed with its reason, and the selection is the tree's glob (never a count)."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/parsecheck/check.py"
+args = ["${case}", "examples"]
+expect_exit = 0
+expect_stdout_contains = ["examples: ", "0 failure(s)"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
 name = "frontend.fuzz_lossless_tree"
-# Slow layer: measured 9.7 s in the full serial run (docs/handover/reports/H10.md).
+# Slow layer: measured 9.7 s in the full serial run (handover note ⟨617198c⟩ (H10)).
 tier = "slow"
 desc = "3000 mutated programs (tokens deleted, duplicated, swapped, inserted, files cut and spliced, white space changed): the parser returns for each a tree whose leaves are exactly the tokens of the text, and the AST builder accepts every tree without errors."
 kind = "behavior"

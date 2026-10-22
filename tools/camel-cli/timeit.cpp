@@ -47,6 +47,7 @@
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
 #include "config.h"
+#include "module_failures.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/tns/topo_node_seq.h"
 #include "service/codegen/source/generator.h"
@@ -465,7 +466,16 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             CAMEL_LOG_INFO_S("Main", "run | parse | done | {}", inputPath);
 
             invocation->mainModule->compile(CompileStage::Done);
-            if (!invocation->mainModule->loaded()) {
+            // The same question every output path asks (module_failures.h): a program that did
+            // not compile has no time to report, and a declaration module that did not load is
+            // an error in a module's diagnostics like any other. The scope is the program's
+            // dependencies: a pass library the pass list loaded is not part of the program the
+            // iteration times, and its failure belongs to pass resolution, not to the compile.
+            const bool compileFailed =
+                camel_cli::findModuleFailures(
+                    invocation->ctx, camel_cli::ModuleScope::ProgramDependencies)
+                    .any;
+            if (compileFailed) {
                 reportTimeitIterationFailure(
                     os,
                     useJsonFormat,
@@ -473,7 +483,18 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                     samplesMs,
                     "",
                     [ctx = invocation->ctx](std::ostream &out, bool json) {
-                        ctx->dumpAllModuleDiagnostics(out, json, !json);
+                        // One scope, one report: the same `findModuleFailures` answer that
+                        // entered this branch decides what it prints. A bare
+                        // `dumpAllModuleDiagnostics` would print a module the earlier question
+                        // had already put out of scope (H198/H210).
+                        camel_cli::reportModuleFailures(
+                            ctx,
+                            camel_cli::findModuleFailures(
+                                ctx, camel_cli::ModuleScope::ProgramDependencies),
+                            out,
+                            json,
+                            nullptr,
+                            !json);
                         return true;
                     });
                 return 1;
@@ -606,7 +627,10 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             lastRunExitCode = invocation->ctx->processExitCodeOr(0);
         } catch (DiagnosticsLimitExceededBaseException &) {
             // The diagnostic that ended the run is a runtime one when a pass or the binding of
-            // main's arguments reported it; the module diagnostics otherwise.
+            // main's arguments reported it; the program's module diagnostics otherwise. The
+            // latter are the program's dependencies, the scope the compile gate above asked
+            // about: a pass library is not one of them, and its bare parse diagnostic belongs
+            // to pass resolution (H198/H210), not to this fallback.
             const TimeitDiagnosticsEmitter diagnostics =
                 invocation && invocation->ctx
                     ? TimeitDiagnosticsEmitter([ctx = invocation->ctx](
@@ -614,7 +638,14 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                           if (const auto &diags = ctx->runtimeDiagSink(); diags->hasErrors()) {
                               diags->dump(out, json, !json);
                           } else {
-                              ctx->dumpAllModuleDiagnostics(out, json, !json);
+                              camel_cli::reportModuleFailures(
+                                  ctx,
+                                  camel_cli::findModuleFailures(
+                                      ctx, camel_cli::ModuleScope::ProgramDependencies),
+                                  out,
+                                  json,
+                                  nullptr,
+                                  !json);
                           }
                           return true;
                       })

@@ -1,0 +1,271 @@
+// The graph module: a program as a value. A Program is an immutable snapshot of the graphs; the
+// handles Graph, Node, Op and TypeRef name things inside one Program and compare with `==` and
+// `!=`. Reads are pure. A change is made in a transaction (`open`, `replace`, `erase`, `commit`)
+// that gives a new Program; a pass written in Camel is a function `(p: Program) => Program!`
+// exported by a module, named on the pipeline as `<module>::<function>`.
+//
+// A module that holds passes is compiled as a program of its own, whose entry is the pass: its
+// module-level values are computed before the pass runs. It may import modules written in C++ and
+// libraries written in Camel (for example `array`); the imports are declared and built with it.
+//
+// The declarations of the operators of the C++ module `modules/graph` (design principles 6.4;
+// handover H19, step 10). This file is the one source of the fixed signatures a declaration can
+// carry: the C++ side keeps the kernels, the executor, the handles and the purity of every
+// operator. Two shapes are not declarations:
+//   - the computed signatures (`program_of`, `graph_of`, `open_function`, `to_function`) have the
+//     type of a function value, which C++ computes from the argument. Their reference entries are
+//     in `stdlib/signatures/graph.cml`, named by the module's `computed:` field (handover H180).
+//     A `(typeas F)` declaration would accept every type, and a call the operator must refuse
+//     would pass the check (standard library conventions 2). `constant` and `add_constant` take a
+//     sample's type and are written out per sample type instead (handover H202).
+//   - `operator ==` is declared as the reserved group `__eq__`. `operator !=` cannot be declared
+//     (design principles 4.3: an overload of `==` gives it, and `operator !=` is
+//     OperatorNotOverloadable), and the compiler negates a Camel overload of `==`, not a native
+//     one, so `modules/graph` keeps the `__neq__` group the compiler asks for. Both are reserved
+//     names: the reference page lists operators by their Camel name, and `inspect --ops` does not
+//     list these.
+
+module graph
+
+// ---- the program ----
+
+/// The Program the running program was compiled to: an immutable snapshot, whose graphs a pass reads.
+/// @pure
+/// @example graphs(current())
+export func current(): Program
+
+/// Every graph of the program, in the order of their ids.
+/// @pure
+/// @example len(graphs(current()))
+export func graphs(p: Program): Graph[]
+
+/// The entry graph of the program.
+/// @pure
+/// @example name(root(current()))
+export func root(p: Program): Graph
+
+/// The name of the graph.
+/// @pure
+/// @example name(root(current()))    // '__root__'
+export func name(g: Graph): string
+
+/// The nodes of the graph in NodeId order; the places of removed nodes are skipped.
+/// @pure
+/// @example nodes(root(current()))
+export func nodes(g: Graph): Node[]
+
+// ---- reading nodes ----
+
+/// The nodes whose values `n` takes as ordinary inputs, in order.
+/// @pure
+/// @example inputs(n)
+export func inputs(n: Node): Node[]
+
+/// The nodes whose values `n` takes as with inputs.
+/// @pure
+/// @example with_inputs(n)
+export func with_inputs(n: Node): Node[]
+
+/// The nodes `n` waits for (control inputs).
+/// @pure
+/// @example ctrl_inputs(n)
+export func ctrl_inputs(n: Node): Node[]
+
+/// The nodes that read `n` as an input of any kind, once each, in NodeId order.
+/// @pure
+/// @example users(n)
+export func users(n: Node): Node[]
+
+/// The nodes that read the value of `n` (ordinary or with input), once each.
+/// @pure
+/// @example len(value_users(n)) == 0
+export func value_users(n: Node): Node[]
+
+/// The kind of the node.
+/// @pure
+/// @example kind(n) == NodeKind::Oper
+export func kind(n: Node): NodeKind
+
+/// The operator of an operation node, null for any other node.
+/// @pure
+/// @example op(n)
+export func op(n: Node): Op?
+
+/// The URI of the operator, such as `:op/add_l`.
+/// @pure
+/// @example op_name(o)
+export func op_name(o: Op): string
+
+/// Whether the node is an operation whose operator is declared pure.
+/// @pure
+/// @example is_pure(n)
+export func is_pure(n: Node): bool
+
+/// Whether the node anchors its graph (its exit, output or return, or the end of a branch arm); a transaction does not replace or erase it.
+/// @pure
+/// @example is_anchor(n)
+export func is_anchor(n: Node): bool
+
+/// Whether the value of the node may be written in place: it is passed to a `var` parameter or to an operator that changes its operand, directly or through gates. A rewrite must not treat such a node as one value.
+/// @pure
+/// @example is_written_slot(n)
+export func is_written_slot(n: Node): bool
+
+/// Whether the node is a constant of the graph.
+/// @pure
+/// @example is_constant(n)
+export func is_constant(n: Node): bool
+
+/// The type of the node's value, null when it has none.
+/// @pure
+/// @example type_of(n)
+export func type_of(n: Node): TypeRef?
+
+/// The type as a program writes it.
+/// @pure
+/// @example type_name(t)    // 'int'
+export func type_name(t: TypeRef): string
+
+/// The graph a call or function node names, null for any other node.
+/// @pure
+/// @example callee(n)
+export func callee(n: Node): Graph?
+
+/// The attributes of the node as text (empty when there are none).
+/// @pure
+/// @example tags(n)
+export func tags(n: Node): string
+
+/// The source origin id of the node, 0 when unknown.
+/// @pure
+/// @example origin(n)
+export func origin(n: Node): int
+
+/// The value of a constant node of the type of the sample (a number, a bool or a string; the value
+/// of the sample is not read), null for any other node.
+/// @pure
+/// @example constant(n, 0)    // int?
+export func constant(n: Node, sample: i32): i32?
+export func constant(n: Node, sample: int): int?
+export func constant(n: Node, sample: f32): f32?
+export func constant(n: Node, sample: float): float?
+export func constant(n: Node, sample: bool): bool?
+export func constant(n: Node, sample: string): string?
+
+// ---- regions ----
+
+/// The innermost region the node is in. Every node is in one: region 0 is the body, also in a
+/// graph whose region table is empty.
+/// @pure
+/// @example region_of(n)
+export func region_of(n: Node): Region
+
+/// The kind of the region: `Root` (the function body, region 0), `Arm`, `LoopCond`, `LoopBody`,
+/// `Inline`, `Block` or `Dead`.
+/// @pure
+/// @example region_kind(r) == RegionKind::Inline
+export func region_kind(r: Region): RegionKind
+
+/// The region the region is in; null for the body (region 0).
+/// @pure
+/// @example region_parent(r)
+export func region_parent(r: Region): Region?
+
+/// The node on one line: its id, kind, operator and type.
+/// @pure
+/// @example show(n)    // '%2 Oper :op/mul_l : int'
+export func show(n: Node): string
+
+/// The number a graph, a node or an operator is known by inside its Program: the GraphId, the NodeId or the OperId. Stable for the Program, so a pass can key a map by it.
+/// @pure
+/// @example id(n)
+#op<'graph:id'>
+export func id(h: Graph): int
+#op<'graph:id'>
+export func id(h: Node): int
+#op<'graph:id'>
+export func id(h: Op): int
+
+// ---- facts ----
+
+/// What running the graph once does besides computing its value: `external`, `writes_variables`, `may_fault`, `may_not_terminate`.
+/// @pure
+/// @example effects(g).external
+export func effects(g: Graph): Effects
+
+/// The tensor shape of the node's value as text, null when its value is no tensor.
+/// @pure
+/// @example shape(n)    // 'f32 [2, 3]'
+export func shape(n: Node): string?
+
+/// The numeric permissions the program granted the node, as a bit set (0 for none).
+/// @pure
+/// @example permissions(n)
+export func permissions(n: Node): int
+
+// ---- function values ----
+
+// ---- transactions ----
+
+/// Opens a transaction on the Program: a private workspace in which graphs are edited. Nothing changes until `commit`.
+/// @effect opens a transaction
+/// @example let t = open(p)
+export func open(p: Program): Txn
+
+/// Puts the node `new` of the same graph in the place of `old`, which is removed; what `old` ordered stays ordered. A fault when a node anchors its graph, when `new` is computed from `old`, or when the transaction is over.
+/// @effect changes the transaction
+/// @example replace(t, n, inputs(n)[0])
+export func replace(t: Txn, old: Node, new: Node): void
+
+/// Removes a node whose value nobody reads. A fault when the value is read or the node anchors its graph.
+/// @effect changes the transaction
+/// @example erase(t, n)
+export func erase(t: Txn, n: Node): void
+
+/// Checks the edits and makes the new Program, which shares every graph nothing changed; the transaction is over. The error value has the kind `GraphConflict` (a graph the transaction touched changed since it was opened), `GraphInvalid` (an edit broke an invariant; the message names the graph, the node and the edge) or `TxnUsed` (the transaction was over already).
+/// @effect changes the transaction
+/// @fails error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant; error value `TxnUsed` when the transaction was over already
+/// @example commit(t)
+export func commit(t: Txn): Program!
+
+/// Drops the transaction.
+/// @effect changes the transaction
+/// @example abort(t)
+export func abort(t: Txn): void
+
+/// Adds a value the transaction creates to the graph's static values and gives the node that
+/// holds it. The value may be a number, a bool or a string; a string is copied into the permanent
+/// space because a value a transaction creates may be live at a safepoint where its draft is not
+/// traced.
+/// @effect changes the transaction
+/// @example add_constant(t, g, 7)
+export func add_constant(t: Txn, g: Graph, value: i32): Node
+export func add_constant(t: Txn, g: Graph, value: int): Node
+export func add_constant(t: Txn, g: Graph, value: f32): Node
+export func add_constant(t: Txn, g: Graph, value: float): Node
+export func add_constant(t: Txn, g: Graph, value: bool): Node
+export func add_constant(t: Txn, g: Graph, value: string): Node
+
+// ---- comparison ----
+// `==` of the handle types (design principles 4.3): a library defines the operators of its own
+// types. Two handles are equal when they name the same thing of the same Program. `!=` follows
+// `==` for a Camel overload, but a native module registers its own group for it (the note at the
+// top), so only `==` is declared here.
+
+// Two handles of one kind compare by what they name in the Program.
+#op<'graph:eq'>
+export func operator ==(a: Program, b: Program): bool
+#op<'graph:eq'>
+export func operator ==(a: Graph, b: Graph): bool
+#op<'graph:eq'>
+export func operator ==(a: Node, b: Node): bool
+#op<'graph:eq'>
+export func operator ==(a: Region, b: Region): bool
+#op<'graph:eq'>
+export func operator ==(a: TypeRef, b: TypeRef): bool
+#op<'graph:eq'>
+export func operator ==(a: Op, b: Op): bool
+#op<'graph:eq'>
+export func operator ==(a: Tag, b: Tag): bool
+#op<'graph:eq'>
+export func operator ==(a: Txn, b: Txn): bool

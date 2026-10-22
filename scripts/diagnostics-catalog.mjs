@@ -9,7 +9,8 @@
 // names, messages and suggestions are the tables of src/core/error/diagnostics/messages/*.cpp.
 // Both are read as text, so the check needs no build: two enumerators with one value compile
 // without complaint (and the table, a hash map, silently keeps one of them), which is how two
-// branches that each took "the next free number" collide unnoticed when they are merged.
+// branches that each took "the next free number" collide unnoticed when they are merged. A
+// catalog of no code is refused (exit 1), whichever mode asked: agreeing with nothing is not a pass.
 
 import fs from 'fs'
 import path from 'path'
@@ -359,6 +360,12 @@ function renderDoc(entries, tests) {
 // ---- Entry ----
 const mode = process.argv[2] || '--check'
 const { entries, problems } = loadCatalog()
+// An empty catalog would agree with itself in every mode below; name it as the guard failure it
+// is (the message tables moved or their enumeration stopped matching).
+if (entries.length === 0) {
+    console.log('diagnostics catalog: no diagnostic code was read from the message tables; nothing was checked')
+    process.exit(1)
+}
 
 if (mode === '--check') {
     if (problems.length > 0) {

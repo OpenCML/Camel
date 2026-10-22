@@ -265,9 +265,15 @@ size_t Context::dumpModuleWarnings(
 }
 
 void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json, bool wrapInArray) const {
+    dumpModuleDiagnostics(os, json, wrapInArray, allUserModules());
+}
+
+void Context::dumpModuleDiagnostics(
+    std::ostream &os, bool json, bool wrapInArray,
+    const std::vector<module_ptr_t> &modules) const {
     auto allMods = allUserModules();
     std::vector<module_ptr_t> modsErr;
-    for (const auto &mod : allMods) {
+    for (const auto &mod : modules) {
         auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
         if (ud && ud->diagnostics() && ud->diagnostics()->hasErrors()) {
             resolveTokenRanges(ud);

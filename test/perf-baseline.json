@@ -1,0 +1,266 @@
+{
+  "schema": "camel-perf-gate/1",
+  "description": "Medians and spreads of the commands of the gateable perf plans, measured on the host named below. `node scripts/perf-gate.mjs` compares against this file; `--update` rewrites it from a run on the same kind of host. A baseline from another machine is not comparable (docs/test-plans.md, \"Performance measurement\"; H167).",
+  "written_at": "2026-10-22T02:48:35.429Z",
+  "written_by": "node scripts/perf-gate.mjs --update",
+  "plans": [
+    "perf.startup",
+    "perf.fib"
+  ],
+  "reps": 5,
+  "warmup": 1,
+  "metric_rule": "child CPU time when its median is at least 250 ms (RUSAGE_CHILDREN via /proc/self/stat, Linux), else the wall clock",
+  "load_band": "a wall-clock case is comparable when its worst 1-minute load is at most baseline load + 2 + 10%; a CPU case is compared at any load, because child CPU time does not grow with load",
+  "load": {
+    "start": {
+      "load1": 37.45,
+      "load5": 25.7,
+      "load15": 25.88
+    },
+    "end": {
+      "load1": 29.19,
+      "load5": 25.96,
+      "load15": 25.98
+    },
+    "max": {
+      "load1": 37.84,
+      "load5": 26.74,
+      "load15": 26.21
+    },
+    "samples": 23
+  },
+  "host": {
+    "name": "tangshan88",
+    "platform": "linux",
+    "arch": "x64",
+    "cores": 32,
+    "cpu": "AMD EPYC 7343 16-Core Processor",
+    "kernel": "6.8.0-138-generic"
+  },
+  "commit": {
+    "available": true,
+    "revision": "4df0be103c06fb58381053693984477f6195cfbe",
+    "subject": "Merge H160: the five survivors are deliberate, because neutral_only is a different mode",
+    "dirty": true,
+    "dirtyFiles": 2
+  },
+  "build": {
+    "install": "out/latest",
+    "revision": "4df0be103c06fb58381053693984477f6195cfbe",
+    "dirty": false,
+    "fingerprint": "3840393569abf17b6d49bf107213efc678a8d157f4f38ca4f650afc469743639",
+    "built_at": "2026-10-22T02:36:49.627Z"
+  },
+  "cases": {
+    "startup.version": {
+      "plan": "perf.startup",
+      "command": "out/latest/bin/camel --version",
+      "metric": "wall",
+      "wall": {
+        "n": 21,
+        "median": 5.930444,
+        "p10": 4.915439,
+        "p90": 8.143154,
+        "min": 4.406868,
+        "max": 9.4651
+      },
+      "cpu": {
+        "n": 21,
+        "median": 9.999999999990905,
+        "p10": 0,
+        "p90": 10.000000000005116,
+        "min": 0,
+        "max": 19.99999999999602
+      }
+    },
+    "startup.imports_nothing": {
+      "plan": "perf.startup",
+      "command": "out/latest/bin/camel test/cases/perf/startup/imports_nothing.cml std::nvm",
+      "metric": "wall",
+      "wall": {
+        "n": 21,
+        "median": 7.949136,
+        "p10": 6.67191,
+        "p90": 10.782894,
+        "min": 6.629019,
+        "max": 14.467885
+      },
+      "cpu": {
+        "n": 21,
+        "median": 9.999999999990905,
+        "p10": 0,
+        "p90": 19.99999999999602,
+        "min": 0,
+        "max": 20.000000000010232
+      }
+    },
+    "startup.inspect_ops": {
+      "plan": "perf.startup",
+      "command": "out/latest/bin/camel inspect --ops test/cases/modules/stdlib/registry_all.cml",
+      "metric": "wall",
+      "wall": {
+        "n": 21,
+        "median": 26.150686,
+        "p10": 24.012206,
+        "p90": 30.686721,
+        "min": 22.87725,
+        "max": 39.138077
+      },
+      "cpu": {
+        "n": 21,
+        "median": 30.000000000001137,
+        "p10": 20.000000000010232,
+        "p90": 30.000000000001137,
+        "min": 20.000000000010232,
+        "max": 40.00000000000625
+      }
+    },
+    "startup.imports_all": {
+      "plan": "perf.startup",
+      "command": "out/latest/bin/camel test/cases/modules/stdlib/registry_all.cml std::nvm",
+      "metric": "wall",
+      "wall": {
+        "n": 21,
+        "median": 25.569557,
+        "p10": 22.056967,
+        "p90": 28.992619,
+        "min": 20.575458,
+        "max": 29.598039
+      },
+      "cpu": {
+        "n": 21,
+        "median": 19.99999999999602,
+        "p10": 10.000000000005116,
+        "p90": 30.000000000001137,
+        "min": 9.999999999990905,
+        "max": 30.000000000001137
+      }
+    },
+    "fib.nvm_timeit": {
+      "plan": "perf.fib",
+      "command": "out/latest/bin/camel --timeit std::nvm/10 --output-format json test/cases/perf/fib_recursive.cml std::nvm",
+      "metric": "cpu",
+      "wall": {
+        "n": 5,
+        "median": 4545.649033,
+        "p10": 4408.706465,
+        "p90": 4869.785845,
+        "min": 4408.706465,
+        "max": 4869.785845
+      },
+      "cpu": {
+        "n": 5,
+        "median": 4500,
+        "p10": 4399.999999999998,
+        "p90": 4649.999999999998,
+        "min": 4399.999999999998,
+        "max": 4649.999999999998
+      }
+    },
+    "fib.inline_nvm_timeit": {
+      "plan": "perf.fib",
+      "command": "out/latest/bin/camel --timeit std::nvm/10 --output-format json test/cases/perf/fib_recursive.cml std::opt::inline std::nvm",
+      "metric": "cpu",
+      "wall": {
+        "n": 5,
+        "median": 4605.675633,
+        "p10": 4421.534963,
+        "p90": 5573.974457,
+        "min": 4421.534963,
+        "max": 5573.974457
+      },
+      "cpu": {
+        "n": 5,
+        "median": 4529.999999999994,
+        "p10": 4420.000000000002,
+        "p90": 4710.000000000001,
+        "min": 4420.000000000002,
+        "max": 4710.000000000001
+      }
+    },
+    "fib.fvm_timeit": {
+      "plan": "perf.fib",
+      "command": "out/latest/bin/camel --timeit std::fvm/10 --output-format json test/cases/perf/fib_recursive.cml std::fvm",
+      "metric": "cpu",
+      "wall": {
+        "n": 5,
+        "median": 909.769157,
+        "p10": 867.371125,
+        "p90": 1403.061663,
+        "min": 867.371125,
+        "max": 1403.061663
+      },
+      "cpu": {
+        "n": 5,
+        "median": 900.0000000000022,
+        "p10": 860.0000000000136,
+        "p90": 970.0000000000024,
+        "min": 860.0000000000136,
+        "max": 970.0000000000024
+      }
+    },
+    "fib.inline_fvm_timeit": {
+      "plan": "perf.fib",
+      "command": "out/latest/bin/camel --timeit std::fvm/10 --output-format json test/cases/perf/fib_recursive.cml std::opt::inline std::fvm",
+      "metric": "cpu",
+      "wall": {
+        "n": 5,
+        "median": 878.258996,
+        "p10": 863.328189,
+        "p90": 957.113727,
+        "min": 863.328189,
+        "max": 957.113727
+      },
+      "cpu": {
+        "n": 5,
+        "median": 879.9999999999955,
+        "p10": 859.9999999999994,
+        "p90": 939.9999999999977,
+        "min": 859.9999999999994,
+        "max": 939.9999999999977
+      }
+    },
+    "fib.jit_timeit": {
+      "plan": "perf.fib",
+      "command": "out/latest/bin/camel --timeit std::jit/10 --output-format json test/cases/perf/fib_recursive.cml std::jit",
+      "metric": "wall",
+      "wall": {
+        "n": 5,
+        "median": 77.844269,
+        "p10": 73.681847,
+        "p90": 82.818868,
+        "min": 73.681847,
+        "max": 82.818868
+      },
+      "cpu": {
+        "n": 5,
+        "median": 79.9999999999983,
+        "p10": 70.00000000000028,
+        "p90": 90.00000000000341,
+        "min": 70.00000000000028,
+        "max": 90.00000000000341
+      }
+    },
+    "fib.inline_jit_timeit": {
+      "plan": "perf.fib",
+      "command": "out/latest/bin/camel --timeit std::jit/10 --output-format json test/cases/perf/fib_recursive.cml std::opt::inline std::jit",
+      "metric": "wall",
+      "wall": {
+        "n": 5,
+        "median": 77.380644,
+        "p10": 73.08121,
+        "p90": 96.471069,
+        "min": 73.08121,
+        "max": 96.471069
+      },
+      "cpu": {
+        "n": 5,
+        "median": 70.00000000000028,
+        "p10": 69.99999999999318,
+        "p90": 79.9999999999983,
+        "min": 69.99999999999318,
+        "max": 79.9999999999983
+      }
+    }
+  }
+}

@@ -38,6 +38,7 @@
 #include "camel/core/error/abort.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/range.h"
+#include "camel/core/module/dynamic.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
 #include "camel/core/type/enum.h"
@@ -540,6 +541,22 @@ class ModelBuilder {
         }
         if (parsed && failure.empty()) {
             try {
+                // Editing a declaration module must use the same native implementation and
+                // exports as importing its sibling .cmo. Compile the editor buffer itself,
+                // so unsaved declarations still receive the compiler's real validation.
+                const fs::path implementation =
+                    camel::utils::pathFromUtf8(path).replace_extension(".cmo");
+                std::error_code ec;
+                if (fs::is_regular_file(implementation, ec) && !ec) {
+                    auto native = camel::core::module::loadCmoModule(
+                        camel::utils::pathToUtf8(implementation.stem()),
+                        camel::utils::pathToUtf8(implementation), ctx);
+                    if (native && native->load()) {
+                        mainModule->setDeclarationModule(true);
+                        mainModule->setImplementation(native);
+                        mainModule->inheritExportsFrom(*native);
+                    }
+                }
                 compiled = mainModule->compile(camel::core::module::CompileStage::Done);
             } catch (const Diagnostic &d) {
                 diagnostics->add(Diagnostic(d));
@@ -988,8 +1005,28 @@ class ModelBuilder {
             }
         }
         for (const auto &[prefix, mod] : spaces) {
-            if (!mod || !mod->loaded()) {
+            if (!mod) {
                 continue;
+            }
+            // The members are the module's exports: what a C++ module registers, and — for a
+            // module whose signatures are declared in `stdlib/<m>.cml` — the declarations the
+            // loader compiles beside it (`Context::loadModuleFrom` returns one module with
+            // both; `Module::inheritExportsFrom` copies the C++ facts in, the declarations are
+            // exported on top). Those declarations are readable before the module's bodies are
+            // built, so a module a text imports but never calls is not `loaded()`: ask for
+            // them, as `camel inspect --ops` does before it reads a module's entities and as
+            // `ProgramExports::importedEntity` does before it resolves an imported name.
+            // Requiring `loaded()` here was the hole of handover H145: a migrated module
+            // registers no signature in C++ (`exportEntity` is gone for every declared name),
+            // so completion after `math::` was empty.
+            if (!mod->loaded()) {
+                try {
+                    mod->declareEntities();
+                } catch (...) {
+                    // A declaration module in error is reported where the file that imports it
+                    // is compiled; the other namespaces still list their members.
+                    continue;
+                }
             }
             model_->namespaces_[prefix];
             const auto visitEntity = [&](const Reference &ref,

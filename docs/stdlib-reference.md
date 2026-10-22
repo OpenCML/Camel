@@ -31,8 +31,7 @@ How to read an entry:
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
-Not in this reference: the tensor stack (`tensor`, `nn`, `autodiff`, `onnx`, `sim`), the Python
-bridge (`python`, `pyplot`) and the profiler (`perf`).
+Not in this reference: the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
@@ -40,7 +39,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [str](#str) | `import { ... } from str` | C++ | 14 |
 | [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ | 7 |
-| [tensor](#tensor) | `import { ... } from tensor` | C++ | 2 |
+| [tensor](#tensor) | `import { ... } from tensor` | C++ | 64 |
 | [array](#array) | `import { ... } from array` | Camel | 17 |
 | [math](#math) | `import { ... } from math` | C++ | 48 |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
@@ -57,6 +56,14 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [para](#para) | `import { ... } from para` | C++ | 3 |
 | [this](#this) | `import { ... } from this` | C++ | 1 |
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
+| [rewrite](#rewrite) | `import { ... } from rewrite` | C++ | 8 |
+| [tiles](#tiles) | `import { ... } from tiles` | C++ | 12 |
+| [pyplot](#pyplot) | `import { ... } from pyplot` | C++ | 1 |
+| [python](#python) | `import { ... } from python` | C++ | 11 |
+| [nn](#nn) | `import { ... } from nn` | C++ | 19 |
+| [autodiff](#autodiff) | `import { ... } from autodiff` | C++ | 3 |
+| [sim](#sim) | `import { ... } from sim` | C++ | 2 |
+| [onnx](#onnx) | `import { ... } from onnx` | C++ | 2 |
 
 <a id="built-in-functions"></a>
 
@@ -550,7 +557,7 @@ foreach: <f: (item: T) => void> (xs: T[]) => void
 Calls f for every element, in order.
 
 - With effects: what f does.
-- Example: `xs->foreach<(x: int) => println(x)>`
+- Example: `[1, 2, 3]->foreach<(x: int) => println(x)>`
 
 #### `apply`
 
@@ -583,8 +590,8 @@ before the fault is not undone; exit() and the failures of the compiler itself a
 isolated.
 
 - With effects: what f does.
-- Example: `attempt(risky, 0) !! -1`
-- Example: `attempt(() => xs->map<risky>) !! [-1]`
+- Example: `attempt((x: int) => 10 / x, 0) !! -1` gives `-1: the division fault becomes an error value`
+- Example: `attempt((x: int) => 10 / x, 2) !! -1` gives `5`
 
 #### `len`
 
@@ -607,7 +614,7 @@ get: <key: K> (m: Map<K, V>) => V?
 The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 
 - Pure.
-- Example: `m->get<'z'> ?? 0` gives `0 when m has no 'z'`
+- Example: `([('a', 1)] as Map<string, int>)->get<'z'> ?? 0` gives `0 when the map has no 'z'`
 
 #### `get_or`
 
@@ -618,7 +625,7 @@ get_or: <key: K, fallback: V> (m: Map<K, V>) => V
 The value stored under key, or fallback when the map has no such key.
 
 - Pure.
-- Example: `m->get_or<'z', -1>` gives `-1 when m has no 'z'`
+- Example: `([('a', 1)] as Map<string, int>)->get_or<'z', -1>` gives `-1 when the map has no 'z'`
 
 #### `put`
 
@@ -708,7 +715,7 @@ merge: (m: Map<K, V>, other: Map<K, V>) => Map<K, V>
 A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
 
 - Pure.
-- Example: `merge(m, n)` gives `{a: 1, b: 20, c: 30} for m = {a: 1, b: 2}, n = {b: 20, c: 30}`
+- Example: `merge([('a', 1), ('b', 2)] as Map<string, int>, [('b', 20), ('c', 30)] as Map<string, int>)` gives `{a: 1, b: 20, c: 30}`
 
 #### `contains`
 
@@ -975,6 +982,7 @@ decode: (content: Bytes) => string!
 Decodes UTF-8, returning an EncodingError value for malformed input.
 
 - Pure.
+- Failure: error value `EncodingError` when the bytes are not valid UTF-8 or the text is larger than a string.
 - Example: `decode(encode('中文')) !! ''`
 
 #### `from_array`
@@ -1087,11 +1095,12 @@ The paths of the leaves, as a tree of the same shape.
 #### `save_tree`
 
 ```camel
-save_tree: (dir: string, tree: T, dataset_manifest_sha256: string) => void
+save_tree: (dir: string, tree: T, dataset_manifest_sha256?: string) => void
 ```
 
 Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
-tensor), with a manifest that records the types, sizes and SHA-256 sums. The directory is
+tensor), with a manifest that records the types, sizes and SHA-256 sums and, when
+`dataset_manifest_sha256` is given, that hash of the data manifest. The directory is
 replaced as a whole or not at all: the new checkpoint is written and flushed into a
 temporary sibling and renamed into place, and the old directory is kept beside it as the
 hidden sibling `.<name>.ckpt-previous` (the destination's own directory name between a
@@ -1109,38 +1118,742 @@ checkpoint.
 
 - With effects: writes and replaces the directory.
 - Failure: fault `FileSystemError` when the directory cannot be written or published.
-- Example: `save_tree('out/ckpt', { w: zeros([2, 2]), step: 10 })`
+- Example: `save_tree('out/ckpt', { w: 1.0, step: 10 })`
 
 #### `load_tree`
 
 ```camel
-load_tree: (dir: string, dataset_manifest_sha256: string) => T!
+load_tree: (dir: string, dataset_manifest_sha256?: string) => T!
 ```
 
 Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure,
 the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
-`CheckpointError` value, nothing is partly loaded. T is the explicit type argument or the
+`CheckpointError` value, nothing is partly loaded. A `dataset_manifest_sha256` that differs
+from the one the checkpoint records is a warning on standard error, not an error. T is the
+explicit type argument or the
 expected type of the result. When a save was interrupted after moving the old directory
 aside, the complete `.<name>.ckpt-previous` sibling is read instead, with a warning on
 standard error; the next save restores it before replacing it.
 
 - With effects: reads the directory.
-- Example: `load_tree::<{ w: Tensor<f32>, step: int }>('out/ckpt') !! initial()`
+- Failure: error value `CheckpointError` when the directory does not hold a tree of the type T, or a file is missing or does not match its recorded sum.
+- Example: `load_tree::<{ w: float, step: int }>('out/ckpt') !! { w: 0.0, step: 0 }`
 
 <a id="tensor"></a>
 
-## `tensor`: binary conversion
+## `tensor`: multi-dimensional numeric arrays
 
-#### `to_bytes`
+The `tensor` module: multi-dimensional numeric arrays, their element type and extents, their
+binary form, a NumPy file, and the module's worker threads and random generator.
+
+The declarations written here are the operators whose signature is fixed. The ones whose element
+type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
+axis forms of a reduction — cannot be written as a declaration; they are implemented in
+`modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
+under the same sections (design principles 6.4; handover H19, H151). `show`'s umbrella parameter
+— a tensor, or any array — is written as one declaration per accepted type (handover H175).
+
+### Creation
+
+#### `new`
 
 ```camel
-to_bytes: (t: Tensor) => Bytes
+new: (values: Tensor | number[]) => Tensor
 ```
 
-The little-endian bytes of the elements of a tensor, in row-major order.
+A tensor made of a nested number array (or of a tensor, copied into contiguous row-major
+storage); the element type follows the values: `f32` for floats, `int64` for integers, `bool`
+for booleans.
 
 - Pure.
-- Example: `to_bytes(new([1.0, 2.0]))`
+- Example: `new([[1.0, 2.0], [3.0, 4.0]])`
+
+#### `empty`
+
+```camel
+empty: (shape: int[]) => Tensor
+```
+
+A tensor of the given extents; the allocation is zeroed, so it reads as `zeros` of the same
+shape.
+
+- Pure.
+- Example: `empty([2, 3])`
+
+#### `zeros`
+
+```camel
+zeros: (shape: int[]) => Tensor
+```
+
+A tensor of `f32` zeros with the given extents.
+
+- Pure.
+- Example: `zeros([2, 3])`
+
+#### `ones`
+
+```camel
+ones: (shape: int[]) => Tensor
+```
+
+A tensor of `f32` ones with the given extents.
+
+- Pure.
+- Example: `ones([2, 3])`
+
+#### `full`
+
+```camel
+full: (shape: int[], value: number) => Tensor
+```
+
+A tensor of the given extents whose elements are all value; the element type is the value's.
+
+- Pure.
+- Example: `full([2, 2], -1.0)`
+
+#### `eye`
+
+```camel
+eye: (n: int) => Tensor
+```
+
+The `f32` n by n identity matrix.
+
+- Pure.
+- Example: `eye(2)`
+
+#### `range`
+
+```camel
+range: (start: int, stop?: int, step?: int) => Tensor<int64>
+```
+
+The integer sequence start, start + step, ... below stop, as a rank-1 `int64` tensor: one
+argument is stop with start 0, step is 1 by default, and a step of 0 is a fault.
+
+- Pure.
+- Failure: fault `RuntimeError` when stop and start leave a step of 0.
+- Example: `range(0, 5)` gives `[0, 1, 2, 3, 4]`
+
+### Random
+
+#### `random`
+
+```camel
+random: (shape: int[], low: number, high: number) => Tensor
+```
+
+A tensor of `f32` values drawn uniformly from [low, high) with the given extents.
+
+- With effects: reads and advances the random generator.
+- Example: `random([2, 2], 0.0, 1.0)`
+
+#### `randn`
+
+```camel
+randn: (shape: int[], mean?: number, std?: number) => Tensor
+```
+
+A tensor of `f32` values drawn from the normal distribution with the given mean (0 by
+default) and standard deviation (1 by default), with the given extents.
+
+- With effects: reads and advances the random generator.
+- Example: `randn([2, 3])`
+
+### Elementwise
+
+#### `add`
+
+```camel
+add: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+a + b per element, with NumPy broadcasting: a scalar operand applies to every element, and
+the element type is the wider of the two (a float with an integer gives `f32`).
+
+- Pure.
+- Example: `add(new([1.0, 2.0]), 1.0)` gives `[2.0, 3.0]`
+
+#### `subtract`
+
+```camel
+subtract: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+a - b per element, with NumPy broadcasting.
+
+- Pure.
+- Example: `subtract(new([1.0, 2.0]), 0.5)` gives `[0.5, 1.5]`
+
+#### `multiply`
+
+```camel
+multiply: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+a * b per element, with NumPy broadcasting.
+
+- Pure.
+- Example: `multiply(new([1.0, 2.0]), new([3.0, 4.0]))` gives `[3.0, 8.0]`
+
+#### `divide`
+
+```camel
+divide: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+a / b per element, with NumPy broadcasting; IEEE division: x / 0 is an infinity or NaN, not a
+fault.
+
+- Pure.
+- Example: `divide(new([1.0, 2.0]), 2.0)` gives `[0.5, 1.0]`
+
+#### `pow`
+
+```camel
+pow: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+a raised to b per element, with NumPy broadcasting.
+
+- Pure.
+- Example: `pow(new([2.0, 3.0]), 2.0)` gives `[4.0, 9.0]`
+
+#### `maximum`
+
+```camel
+maximum: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+IEEE 754-2019 maximum per element, with NumPy broadcasting: NaN on either side gives the
+canonical quiet NaN, and -0 is below +0.
+
+- Pure.
+- Example: `maximum(new([1.0, -0.0]), 0.0)` gives `[1.0, 0.0]`
+
+#### `minimum`
+
+```camel
+minimum: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+IEEE 754-2019 minimum per element, with NumPy broadcasting: NaN on either side gives the
+canonical quiet NaN, and -0 is below +0.
+
+- Pure.
+- Example: `minimum(new([1.0, -0.0]), 0.0)` gives `[0.0, -0.0]`
+
+#### `where`
+
+```camel
+where: (cond: Tensor, lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+lhs where cond holds, rhs elsewhere, broadcast to one shape; the element type is the wider of
+lhs and rhs.
+
+- Pure.
+- Example: `where(new([true, false]), new([1.0, 2.0]), 0.0)` gives `[1.0, 0.0]`
+
+#### `neg`
+
+```camel
+neg: (t: Tensor) => Tensor
+```
+
+-x per element: the sign flipped.
+
+- Pure.
+- Example: `neg(new([1.0, -2.0]))` gives `[-1.0, 2.0]`
+
+#### `abs`
+
+```camel
+abs: (t: Tensor) => Tensor
+```
+
+|x| per element: the sign cleared.
+
+- Pure.
+- Example: `abs(new([-1.5, 2.0]))` gives `[1.5, 2.0]`
+
+#### `exp`
+
+```camel
+exp: (t: Tensor) => Tensor
+```
+
+e^x per element, within 2 ulp, subnormal results included.
+
+- Pure.
+- Example: `exp(new([0.0, 1.0]))` gives `[1.0, 2.7182817]`
+
+#### `log`
+
+```camel
+log: (t: Tensor) => Tensor
+```
+
+ln x per element, within 2 ulp; NaN, +-inf, +-0 and negative x are exact (negative x gives
+NaN).
+
+- Pure.
+- Example: `log(new([1.0, 2.7182817]))` gives `[0.0, 1.0]`
+
+#### `sqrt`
+
+```camel
+sqrt: (t: Tensor) => Tensor
+```
+
+sqrt(x) per element, rounded once in `f32`.
+
+- Pure.
+- Example: `sqrt(new([4.0, 9.0]))` gives `[2.0, 3.0]`
+
+#### `rsqrt`
+
+```camel
+rsqrt: (t: Tensor) => Tensor
+```
+
+1 / sqrt(x) per element: two steps, each rounded in `f32`.
+
+- Pure.
+- Example: `rsqrt(new([4.0]))` gives `[0.5]`
+
+#### `sigmoid`
+
+```camel
+sigmoid: (t: Tensor) => Tensor
+```
+
+The logistic function 1 / (1 + e^-x) per element.
+
+- Pure.
+- Example: `sigmoid(new([0.0]))` gives `[0.5]`
+
+#### `tanh`
+
+```camel
+tanh: (t: Tensor) => Tensor
+```
+
+The hyperbolic tangent per element.
+
+- Pure.
+- Example: `tanh(new([0.0]))` gives `[0.0]`
+
+#### `relu`
+
+```camel
+relu: (t: Tensor) => Tensor
+```
+
+maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
+
+- Pure.
+- Example: `relu(new([-1.0, 2.0]))` gives `[0.0, 2.0]`
+
+#### `gelu`
+
+```camel
+gelu: (t: Tensor) => Tensor
+```
+
+The Gaussian error linear unit per element, computed as its normative definition in Camel.
+
+- Pure.
+- Example: `gelu(new([0.0]))` gives `[0.0]`
+
+#### `erf`
+
+```camel
+erf: (t: Tensor) => Tensor
+```
+
+The Gauss error function per element.
+
+- Pure.
+- Example: `erf(new([0.0]))` gives `[0.0]`
+
+### Shape and reshaping
+
+#### `reshape`
+
+```camel
+reshape: (t: Tensor | number[], shape: int[]) => Tensor
+```
+
+The elements in row-major order, in a new shape; one extent may be -1, which the element
+count fills.
+
+- Pure.
+- Example: `reshape(new([1.0, 2.0, 3.0, 4.0]), [2, 2])`
+
+#### `flatten`
+
+```camel
+flatten: (t: Tensor, axis?: int) => Tensor
+```
+
+The elements in row-major order in two axes: the extents before axis multiplied into the
+first, the rest into the second (axis 1 by default).
+
+- Pure.
+- Example: `flatten(new([[1.0, 2.0], [3.0, 4.0]]))`
+
+#### `unsqueeze`
+
+```camel
+unsqueeze: (t: Tensor, axis: int) => Tensor
+```
+
+The elements unchanged, with an axis of extent 1 added at axis.
+
+- Pure.
+- Example: `unsqueeze(new([1.0, 2.0]), 0)` gives `shape [1, 2]`
+
+#### `transpose`
+
+```camel
+transpose: (t: Tensor) => Tensor
+```
+
+The last two axes swapped (a vector becomes a column, a matrix its transpose).
+
+- Pure.
+- Example: `transpose(new([[1.0, 2.0], [3.0, 4.0]]))`
+
+#### `permute`
+
+```camel
+permute: (t: Tensor, perm: int[]) => Tensor
+```
+
+The axes reordered as perm lists them.
+
+- Pure.
+- Example: `permute(new([[1.0, 2.0], [3.0, 4.0]]), [1, 0])`
+
+#### `concat`
+
+```camel
+concat: (a: Tensor | number[], b: Tensor | number[], axis: int) => Tensor
+```
+
+a and b joined along axis; every other extent must agree.
+
+- Pure.
+- Example: `concat(new([[1.0]]), new([[2.0]]), 0)` gives `shape [2, 1]`
+
+#### `slice`
+
+```camel
+slice: (t: Tensor, axis: int, start: int, end: int, step?: int) => Tensor
+```
+
+The elements start, start + step, ... of one axis before end; step is 1 by default.
+
+- Pure.
+- Example: `slice(new([1.0, 2.0, 3.0, 4.0]), 0, 1, 3)` gives `[2.0, 3.0]`
+
+#### `take`
+
+```camel
+take: (t: Tensor, indices: Tensor | number[]) => Tensor
+```
+
+The entries of the first axis that indices name, in that order.
+
+- Pure.
+- Failure: fault `RuntimeError` when an index is outside the first axis.
+- Example: `take(new([[1.0], [2.0], [3.0]]), [2, 0])` gives `[[3.0], [1.0]]`
+
+#### `one_hot`
+
+```camel
+one_hot: (labels: Tensor | number[], classes: int) => Tensor
+```
+
+Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
+an `int64` tensor of shape [labels, classes].
+
+- Pure.
+- Failure: fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative.
+- Example: `one_hot(new([0, 2]), 3)` gives `[[1, 0, 0], [0, 0, 1]]`
+
+#### `shape`
+
+```camel
+shape: (t: Tensor) => int[]
+```
+
+The extents of a tensor, in order.
+
+- Pure.
+- Example: `shape(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[2, 2]`
+
+#### `numel`
+
+```camel
+numel: (t: Tensor) => int
+```
+
+The number of elements in a tensor: the product of its extents.
+
+- Pure.
+- Example: `numel(zeros([2, 3]))` gives `6`
+
+#### `dim`
+
+```camel
+dim: (t: Tensor, axis: int) => int
+dim: (t: Tensor, axis: i32) => int
+```
+
+The extent of one axis; a negative axis counts from the last one (`-1` is the last axis).
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `dim(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `2`
+
+### Reduction
+
+#### `sum`
+
+```camel
+sum: (t: Tensor) => float
+```
+
+Every element converted to `f64` and summed in row-major order from +0; `int64` and `bool`
+elements are summed exactly in `int64` and converted once.
+
+- Pure.
+- Example: `sum(new([[1.0, 2.0], [3.0, 4.0]]))` gives `10.0`
+
+#### `sum`
+
+```camel
+sum: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `sum(new([[1.0, 2.0], [3.0, 4.0]]), 0)` gives `[4.0, 6.0]`
+
+#### `mean`
+
+```camel
+mean: (t: Tensor) => float
+```
+
+The sum of `sum` divided by the element count in `f64`; an empty tensor is a fault.
+
+- Pure.
+- Failure: fault `DivisionByZero` when the tensor has no element.
+- Example: `mean(new([[1.0, 2.0], [3.0, 4.0]]))` gives `2.5`
+
+#### `mean`
+
+```camel
+mean: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+The same mean over one axis; keepdims keeps the axis with extent 1.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty.
+- Example: `mean(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `[1.5, 3.5]`
+
+#### `max`
+
+```camel
+max: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
+the same bits); keepdims keeps the axis with extent 1.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Example: `max(new([[1.0, 2.0], [3.0, 4.0]]), 0)` gives `[3.0, 4.0]`
+
+#### `min`
+
+```camel
+min: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
+axis with extent 1.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Example: `min(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `[1.0, 3.0]`
+
+#### `argmax`
+
+```camel
+argmax: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+The position (`int64`) of the first maximum over the axis by IEEE 754-2019 maximum: the first
+NaN if there is one, +0 above -0, the earlier position on a tie.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Example: `argmax(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `[1, 1]`
+
+#### `argmin`
+
+```camel
+argmin: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+The position (`int64`) of the first minimum over the axis by IEEE 754-2019 minimum: the first
+NaN if there is one, -0 below +0, the earlier position on a tie.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Example: `argmin(new([[1.0, 2.0], [3.0, 4.0]]), 0)` gives `[0, 0]`
+
+#### `softmax`
+
+```camel
+softmax: (t: Tensor, axis?: int) => Tensor
+```
+
+The softmax over the axis (-1, the last axis, by default), computed as its normative
+definition in Camel, in `f32`.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `softmax(new([[1.0, 1.0]]))` gives `[[0.5, 0.5]]`
+
+#### `log_softmax`
+
+```camel
+log_softmax: (t: Tensor, axis?: int) => Tensor
+```
+
+The log of the softmax over the axis (-1 by default), computed as its normative definition in
+Camel, in `f32`.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `log_softmax(new([[1.0, 1.0]]))` gives `[[-0.6931472, -0.6931472]]`
+
+#### `softmax_grad`
+
+```camel
+softmax_grad: (y: Tensor, dy: Tensor, axis?: int) => Tensor
+```
+
+The gradient of the softmax of y with the incoming gradient dy, over the axis (-1 by default).
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `softmax_grad(y, dy)`
+
+#### `layer_norm`
+
+```camel
+layer_norm: (x: Tensor, gamma: Tensor, beta: Tensor, eps?: number) => Tensor
+```
+
+Layer normalization of x with gamma and beta, whose extents are the trailing ones of x, over
+the trailing axes; eps is 1e-5 by default. The result is `f32`.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x.
+- Example: `layer_norm(x, gamma, beta)`
+
+### Linear algebra
+
+#### `matmul`
+
+```camel
+matmul: (lhs: Tensor, rhs: Tensor) => Tensor
+```
+
+The matrix product of lhs and rhs: per output element acc = +0, then acc = fma(a[i][k],
+b[k][j], acc) for k ascending, every fused multiply-add rounded once in `f32`.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when the inner extents do not agree.
+- Example: `matmul(new([[1.0, 2.0]]), new([[3.0], [4.0]]))` gives `[[11.0]]`
+
+#### `linear`
+
+```camel
+linear: (x: Tensor, weight: Tensor, bias?: Tensor) => Tensor
+```
+
+The affine transform of x by a rank-2 weight [in, out] whose rows are the features of x, plus
+a rank-1 bias [out] when given.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent.
+- Example: `linear(x, weight, bias)`
+
+### Gradient
+
+#### `zeros_like`
+
+```camel
+zeros_like: (t: Tensor) => Tensor
+```
+
+A tensor of zeros shaped and typed like t.
+
+- Pure.
+- Example: `zeros_like(new([[1.0, 2.0]]))`
+
+#### `ones_like`
+
+```camel
+ones_like: (t: Tensor) => Tensor
+```
+
+A tensor of ones shaped and typed like t.
+
+- Pure.
+- Example: `ones_like(new([[1.0, 2.0]]))`
+
+### Conversion and display
+
+#### `cast`
+
+```camel
+cast: (t: Tensor | number[], dtype: string) => Tensor
+```
+
+t converted to the element type the name gives: "float32", "float", "double" or "float64"
+for `f32`; "int64", "int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do
+not change.
+
+- Pure.
+- Failure: fault `RuntimeError` when the name is not one of those.
+- Example: `cast(new([1.0, 2.0]), 'int64')` gives `[1, 2]`
+
+#### `show`
+
+```camel
+show: (t: Tensor) => void
+show: (t: (typeas A)[]) => void
+```
+
+Prints t to the console, in the module's layout.
+
+- With effects: writes the console.
+- Example: `show(new([[1.0, 2.0]]))`
+
+### Binary form
 
 #### `from_bytes`
 
@@ -1149,12 +1862,97 @@ from_bytes: (bytes: Bytes, shape: int[]) => Tensor
 ```
 
 A tensor of the given shape made of little-endian elements. The element type is the explicit
-type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result;
-it is `f32`, `i64` or `bool`. A byte count that does not fit the shape is a fault.
+type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result; it
+is `f32`, `i64` or `bool`. A byte count that does not fit the shape is a fault.
 
 - Pure.
-- Failure: fault `InvalidArgument` when the number of bytes does not fit the shape and the element type.
+- Failure: fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type.
 - Example: `from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])`
+
+#### `to_bytes`
+
+```camel
+to_bytes: (t: Tensor) => Bytes
+```
+
+The elements of a tensor as little-endian bytes, in row-major order: the payload `from_bytes`
+reads back.
+
+- Pure.
+- Example: `to_bytes(new([1.0, 2.0]))` gives `[0, 0, 128, 63, 0, 0, 0, 64]`
+
+#### `load_npy`
+
+```camel
+load_npy: (path: string) => Tensor
+```
+
+The tensor a NumPy `.npy` file holds: its element type and extents are the file's, known when
+the program runs (check them with `as`, or read them with `shape`).
+
+- With effects: reads a file.
+- Failure: fault `RuntimeError` when the file is missing, is not a NumPy file, or holds a storage type the module does not read.
+- Example: `load_npy('x.npy') as Tensor<f32, const [2, 2]>`
+
+#### `save_npy`
+
+```camel
+save_npy: (t: Tensor, path: string) => void
+```
+
+Writes a tensor to a NumPy `.npy` file, replacing it.
+
+- With effects: writes a file.
+- Failure: fault `RuntimeError` when the file cannot be written.
+- Example: `save_npy(zeros([2, 2]), 'x.npy')`
+
+### Module state
+
+#### `num_threads`
+
+```camel
+num_threads: () => int
+```
+
+The size of the module's worker pool.
+
+- With effects: reads the size of the worker pool.
+- Example: `num_threads()`
+
+#### `set_num_threads`
+
+```camel
+set_num_threads: (n: int) => void
+set_num_threads: (n: i32) => void
+```
+
+Sets the size of the module's worker pool; a value below 1 is read as 1.
+
+- With effects: changes the size of the worker pool.
+- Example: `set_num_threads(4)`
+
+#### `gemm_backend`
+
+```camel
+gemm_backend: () => string
+```
+
+The name of the matrix-multiplication kernel the module dispatches to.
+
+- Pure.
+- Example: `gemm_backend()`
+
+#### `seed`
+
+```camel
+seed: (seed: int) => void
+seed: (seed: i32) => void
+```
+
+Reseeds the module's random generator, which `random` and `randn` draw from.
+
+- With effects: writes the random generator.
+- Example: `seed(42)`
 
 <a id="array"></a>
 
@@ -1384,7 +2182,7 @@ f(xs[i], ys[i]) for every i.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
-- Example: `zip_with<add>([1, 2], [10, 20])` gives `[11, 22]`
+- Example: `zip_with<(a: int, b: int): int => a + b>([1, 2], [10, 20])` gives `[11, 22]`
 
 <a id="math"></a>
 
@@ -1445,6 +2243,20 @@ A NaN. It equals nothing, itself included: test with is_nan.
 
 ### Elementary functions
 
+#### `sqrt`
+
+```camel
+sqrt: (x: i32) => f32
+sqrt: (x: int) => float
+sqrt: (x: f32) => f32
+sqrt: (x: float) => float
+```
+
+The square root. An integer argument is converted: i32 gives f32, int gives float.
+
+- Pure.
+- Example: `sqrt(9.0)` gives `3`
+
 #### `abs`
 
 ```camel
@@ -1497,20 +2309,6 @@ The conjugate of a complex number: the imaginary part is negated.
 
 - Pure.
 - Example: `conj(3+4i)` gives `3-4i`
-
-#### `sqrt`
-
-```camel
-sqrt: (x: i32) => f32
-sqrt: (x: int) => float
-sqrt: (x: f32) => f32
-sqrt: (x: float) => float
-```
-
-The square root. An integer argument is converted: i32 gives f32, int gives float.
-
-- Pure.
-- Example: `sqrt(9.0)` gives `3`
 
 #### `exp`
 
@@ -1935,6 +2733,37 @@ The digits of x in base 16, in upper case, with the prefix 0x.
 Bit operations are functions, not operators. Integers are two's complement: `int` has 64
 bits, `i32` has 32.
 
+#### `shl`
+
+```camel
+shl: (x: i32, count: i32) => i32
+shl: (x: i32, count: int) => i32
+shl: (x: int, count: i32) => int
+shl: (x: int, count: int) => int
+```
+
+x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
+change. The count may be of either integer type.
+
+- Pure.
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
+- Example: `shl(1, 4)` gives `16`
+
+#### `shr`
+
+```camel
+shr: (x: i32, count: i32) => i32
+shr: (x: i32, count: int) => i32
+shr: (x: int, count: i32) => int
+shr: (x: int, count: int) => int
+```
+
+x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
+
+- Pure.
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
+- Example: `shr(256, 4)` gives `16`
+
 #### `bit_and`
 
 ```camel
@@ -1982,33 +2811,6 @@ Every bit of x inverted; the same as the operator ~.
 
 - Pure.
 - Example: `bit_not(0)` gives `-1`
-
-#### `shl`
-
-```camel
-shl: (x: i32, count: i32) => i32
-shl: (x: int, count: int) => int
-```
-
-x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
-change. The count may be of either integer type.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
-- Example: `shl(1, 4)` gives `16`
-
-#### `shr`
-
-```camel
-shr: (x: i32, count: i32) => i32
-shr: (x: int, count: int) => int
-```
-
-x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
-- Example: `shr(256, 4)` gives `16`
 
 <a id="statistics"></a>
 
@@ -2101,91 +2903,6 @@ variable, bind it to the result: `xs = xs->sort`. That rebinding sorts the varia
 array in place when nothing else refers to it, an optimisation that does not change what the
 program means (11.3). To sort anything else, or by a key, use `sort_by` of the `array` module.
 
-#### `sort`
-
-```camel
-sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs (quicksort).
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `insert_sort`
-
-```camel
-insert_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by insertion sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `quick_sort`
-
-```camel
-quick_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by quicksort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sort`
-
-```camel
-merge_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by merge sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sorted_arrays`
-
-```camel
-merge_sorted_arrays: (left: T[], right: T[]) => T[]
-```
-
-The sorted array made of the elements of two sorted arrays of numbers.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
-
-#### `flatten`
-
-```camel
-flatten: (xss: T[][]) => T[]
-```
-
-The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
-of the `array` module.
-
-- Pure.
-- Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
-
-#### `unique`
-
-```camel
-unique: (xs: T[]) => T[]
-```
-
-The first occurrence of every value, in order; values are compared as `==` compares them
-(a NaN equals nothing, so every NaN is kept). The primitive behind `unique` of the `array`
-module.
-
-- Pure.
-- Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
-
 #### `argsort`
 
 ```camel
@@ -2204,6 +2921,91 @@ primitive behind `sort_by` of the `array` module.
 - Pure.
 - Example: `argsort([30, 10, 20])` gives `[1, 2, 0]`
 
+#### `sort`
+
+```camel
+sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs (quicksort).
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `insert_sort`
+
+```camel
+insert_sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs, by insertion sort.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `quick_sort`
+
+```camel
+quick_sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs, by quicksort.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sort`
+
+```camel
+merge_sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs, by merge sort.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sorted_arrays`
+
+```camel
+merge_sorted_arrays: (left: (typeas T)[], right: T[]) => T[]
+```
+
+The sorted array made of the elements of two sorted arrays of numbers.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
+
+#### `flatten`
+
+```camel
+flatten: (xss: (typeas T)[][]) => T[]
+```
+
+The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
+of the `array` module.
+
+- Pure.
+- Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
+
+#### `unique`
+
+```camel
+unique: (xs: (typeas T)[]) => T[]
+```
+
+The first occurrence of every value, in order; values are compared as `==` compares them
+(a NaN equals nothing, so every NaN is kept). The primitive behind `unique` of the `array`
+module.
+
+- Pure.
+- Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
+
 <a id="random"></a>
 
 ## `random`
@@ -2219,41 +3021,6 @@ distributions, which differ between libraries: a float in [0, 1) is the generato
 times 2^-64; an integer in a range uses Lemire's method; a normal value uses Marsaglia's polar
 method (the second value of each pair is dropped); `shuffle` and `sample` take the generator's
 output modulo the number of places left.
-
-#### `choice`
-
-```camel
-choice: (xs: T[]) => T
-```
-
-One element of xs, drawn uniformly.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when xs is empty.
-- Example: `choice(['a', 'b', 'c'])` gives `'b'`
-
-#### `sample`
-
-```camel
-sample: (xs: T[], n: int) => T[]
-```
-
-n elements of xs drawn without replacement, as a new array.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when n is negative or above the number of elements.
-- Example: `sample([1, 2, 3, 4], 2)` gives `[3, 1]`
-
-#### `shuffle`
-
-```camel
-shuffle: (xs: T[]) => T[]
-```
-
-The elements of xs in a random order, as a new array; xs is not changed.
-
-- With effects: advances the generator.
-- Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
 
 #### `seed`
 
@@ -2299,6 +3066,41 @@ above high.
 
 - With effects: advances the generator.
 - Example: `randint(1, 6)` gives `4`
+
+#### `choice`
+
+```camel
+choice: (xs: (typeas T)[]) => T
+```
+
+One element of xs, drawn uniformly.
+
+- With effects: advances the generator.
+- Failure: fault `InvalidArgument` when xs is empty.
+- Example: `choice(['a', 'b', 'c'])` gives `'b'`
+
+#### `sample`
+
+```camel
+sample: (xs: (typeas T)[], n: int) => T[]
+```
+
+n elements of xs drawn without replacement, as a new array.
+
+- With effects: advances the generator.
+- Failure: fault `InvalidArgument` when n is negative or above the number of elements.
+- Example: `sample([1, 2, 3, 4], 2)` gives `[3, 1]`
+
+#### `shuffle`
+
+```camel
+shuffle: (xs: (typeas T)[]) => T[]
+```
+
+The elements of xs in a random order, as a new array; xs is not changed.
+
+- With effects: advances the generator.
+- Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
 
 #### `key`
 
@@ -2979,29 +3781,6 @@ Whether the regular expression (ECMAScript syntax) matches somewhere in text.
 The unordered counterparts of the built-in `foreach` and `reduce`: the scheduler may run the
 calls of the function in any order and at the same time.
 
-#### `unordered_foreach`
-
-```camel
-unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
-```
-
-Calls f for every element; the calls have no order among them.
-
-- With effects: what f does.
-- Example: `xs->unordered_foreach<work>`
-
-#### `unordered_reduce`
-
-```camel
-unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
-```
-
-Combines the elements with f starting from initial; the order in which elements are
-combined is not fixed, so f should be associative and commutative.
-
-- With effects: what f does.
-- Example: `xs->unordered_reduce<add, 0>`
-
 #### `rendezvous`
 
 ```camel
@@ -3015,6 +3794,29 @@ were waiting). A tool for showing that calls really run at the same time.
 - With effects: waits for other calls.
 - Failure: fault `RuntimeError` when parties is below 1 or timeout_ms is negative.
 - Example: `rendezvous(2, 1000)` gives `2 when another call arrived in time`
+
+#### `unordered_foreach`
+
+```camel
+unordered_foreach: <f: (item: typeas T) => typeas R> (xs: T[]) => void
+```
+
+Calls f for every element; the calls have no order among them.
+
+- With effects: what f does.
+- Example: `[1, 2]->unordered_foreach<(x: int) => println(x)>`
+
+#### `unordered_reduce`
+
+```camel
+unordered_reduce: <f: (acc: typeas T, item: T) => T, initial: T> (xs: T[]) => T
+```
+
+Combines the elements with f starting from initial; the order in which elements are
+combined is not fixed, so f should be associative and commutative.
+
+- With effects: what f does.
+- Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>`
 
 <a id="this"></a>
 
@@ -3226,17 +4028,6 @@ Whether the node is a constant of the graph.
 - Pure.
 - Example: `is_constant(n)`
 
-#### `constant`
-
-```camel
-constant: (n: Node, sample: T) => T?
-```
-
-The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
-
-- Pure.
-- Example: `constant(n, 0)` gives `int?`
-
 #### `type_of`
 
 ```camel
@@ -3292,6 +4083,23 @@ The source origin id of the node, 0 when unknown.
 - Pure.
 - Example: `origin(n)`
 
+#### `constant`
+
+```camel
+constant: (n: Node, sample: i32) => i32?
+constant: (n: Node, sample: int) => int?
+constant: (n: Node, sample: f32) => f32?
+constant: (n: Node, sample: float) => float?
+constant: (n: Node, sample: bool) => bool?
+constant: (n: Node, sample: string) => string?
+```
+
+The value of a constant node of the type of the sample (a number, a bool or a string; the value
+of the sample is not read), null for any other node.
+
+- Pure.
+- Example: `constant(n, 0)` gives `int?`
+
 ### Regions
 
 #### `region_of`
@@ -3344,6 +4152,8 @@ The node on one line: its id, kind, operator and type.
 
 ```camel
 id: (h: Graph) => int
+id: (h: Node) => int
+id: (h: Op) => int
 ```
 
 The number a graph, a node or an operator is known by inside its Program: the GraphId, the NodeId or the OperId. Stable for the Program, so a pass can key a map by it.
@@ -3397,7 +4207,7 @@ program_of: (f: F) => Program
 The Program a function value lives in.
 
 - Pure.
-- Example: `program_of(f)`
+- Example: `program_of((x: float): float => x + 1.0)`
 
 #### `graph_of`
 
@@ -3408,9 +4218,31 @@ graph_of: (f: F) => Graph
 The graph of a function value.
 
 - Pure.
-- Example: `graph_of(f)`
+- Example: `graph_of((x: float): float => x + 1.0)`
 
 ### Transactions
+
+#### `open_function`
+
+```camel
+open_function: (f: F) => Txn
+```
+
+Opens a transaction on a function value's graph and the graphs it reaches.
+
+- With effects: opens a transaction.
+- Example: `open_function((x: float): float => x + 1.0)`
+
+#### `to_function`
+
+```camel
+to_function: (t: Txn, sample: F) => F!
+```
+
+Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
+
+- With effects: changes the transaction.
+- Example: `to_function(t, (x: float): float => x + 1.0)`
 
 #### `open`
 
@@ -3434,20 +4266,6 @@ Puts the node `new` of the same graph in the place of `old`, which is removed; w
 - With effects: changes the transaction.
 - Example: `replace(t, n, inputs(n)[0])`
 
-#### `add_constant`
-
-```camel
-add_constant: (t: Txn, g: Graph, value: T) => Node
-```
-
-Adds a value the transaction creates to the graph's static values and gives the node that
-holds it. The value may be a number, a bool or a string; a string is copied into the permanent
-space because a value a transaction creates may be live at a safepoint where its draft is not
-traced.
-
-- With effects: changes the transaction.
-- Example: `add_constant(t, g, 7)`
-
 #### `erase`
 
 ```camel
@@ -3468,6 +4286,7 @@ commit: (t: Txn) => Program!
 Checks the edits and makes the new Program, which shares every graph nothing changed; the transaction is over. The error value has the kind `GraphConflict` (a graph the transaction touched changed since it was opened), `GraphInvalid` (an edit broke an invariant; the message names the graph, the node and the edge) or `TxnUsed` (the transaction was over already).
 
 - With effects: changes the transaction.
+- Failure: error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant; error value `TxnUsed` when the transaction was over already.
 - Example: `commit(t)`
 
 #### `abort`
@@ -3481,24 +4300,894 @@ Drops the transaction.
 - With effects: changes the transaction.
 - Example: `abort(t)`
 
-#### `open_function`
+#### `add_constant`
 
 ```camel
-open_function: (f: F) => Txn
+add_constant: (t: Txn, g: Graph, value: i32) => Node
+add_constant: (t: Txn, g: Graph, value: int) => Node
+add_constant: (t: Txn, g: Graph, value: f32) => Node
+add_constant: (t: Txn, g: Graph, value: float) => Node
+add_constant: (t: Txn, g: Graph, value: bool) => Node
+add_constant: (t: Txn, g: Graph, value: string) => Node
 ```
 
-Opens a transaction on a function value's graph and the graphs it reaches.
-
-- With effects: opens a transaction.
-- Example: `open_function(f)`
-
-#### `to_function`
-
-```camel
-to_function: (t: Txn, sample: F) => F!
-```
-
-Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
+Adds a value the transaction creates to the graph's static values and gives the node that
+holds it. The value may be a number, a bool or a string; a string is copied into the permanent
+space because a value a transaction creates may be live at a safepoint where its draft is not
+traced.
 
 - With effects: changes the transaction.
-- Example: `to_function(t, f)`
+- Example: `add_constant(t, g, 7)`
+
+<a id="rewrite"></a>
+
+## `rewrite`: rules applied to a program
+
+Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of the
+functions that make a rule to a `Program`, `check` tests rules on random programs, and the four
+readers report a `Rule`'s name, direction, required rewrites and added constants. The rules
+passed in are function values; a rule that stops a rewrite without changing the program is a
+fault, and `strict` restricts the float rules to the ones that hold bit for bit.
+
+The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
+`analysis` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
+`rewrite:analysis`). They have no callable Camel name, so they are not declared here and
+`inspect --ops` hides them from the name comparison.
+
+#### `rewrite`
+
+```camel
+rewrite: (p: Program, rules: (() => Rule)[]) => Program!
+rewrite: (p: Program, rules: (() => Rule)[], strict: bool) => Program!
+```
+
+Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
+
+- With effects: runs the rules' functions.
+- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out.
+- Example: `rewrite(p, rules)` gives `the rewritten program`
+
+#### `saturate`
+
+```camel
+saturate: (p: Program, rules: (() => Rule)[], rounds: int) => Program!
+saturate: (p: Program, rules: (() => Rule)[], rounds: int, strict: bool) => Program!
+```
+
+Applies the rearranging rules too, for at most `rounds` rounds, and gives the smallest
+writing of the value it finds.
+
+- With effects: runs the rules' functions.
+- Failure: error value `RuleInvalid` when a rule does not compile; error value `RewriteInvalid` when a rewrite cannot be carried out.
+- Example: `saturate(p, rules, 20)` gives `the smallest writing found`
+
+#### `extract`
+
+```camel
+extract: (p: Program, cost: string) => Program!
+```
+
+Extracts the program `p` in the cost model named `cost` (for example `"size"`).
+
+- With effects: rewrites the program and runs the cost model.
+- Failure: error value `NoCostModel` when there is no cost model named `cost`; error value `RewriteInvalid` when the extraction cannot be carried out.
+- Example: `extract(p, 'size')` gives `the extracted program`
+
+#### `check`
+
+```camel
+check: (rules: (() => Rule)[], samples: int, seed: int) => string
+```
+
+Checks `rules` on `samples` random programs drawn with `seed`, and reports the first rule
+that fails, or that all of them hold.
+
+- With effects: runs the rules' functions and draws random programs.
+- Example: `check(rules, 1000, 7)` gives `the report`
+
+#### `rule_name`
+
+```camel
+rule_name: (r: Rule) => string
+```
+
+The name of the rule `r`.
+
+- Pure.
+- Example: `rule_name(r)` gives `'int_add_zero'`
+
+#### `rule_two_way`
+
+```camel
+rule_two_way: (r: Rule) => bool
+```
+
+Whether the rule `r` may also be applied from right to left.
+
+- Pure.
+- Example: `rule_two_way(r)` gives `false`
+
+#### `rule_needs`
+
+```camel
+rule_needs: (r: Rule) => int
+```
+
+How many rewrites the rule `r` needs before it may fire.
+
+- Pure.
+- Example: `rule_needs(r)` gives `0`
+
+#### `rule_consts`
+
+```camel
+rule_consts: (r: Rule) => int
+```
+
+How many constants the rule `r` adds to the program.
+
+- Pure.
+- Example: `rule_consts(r)` gives `0`
+
+<a id="tiles"></a>
+
+## `tiles`: programs on a CUDA device
+
+Programs on a CUDA device: a function value is compiled to device code, its inputs are uploaded,
+the device computes, and the results come back to the host. `gpu` marks a function to prefer the
+device, `run`/`run_device` run one explicitly, `source`/`inspect`/`benchmark` show what would
+run, and `upload`/`download` move a value by hand. The device holds a foreign resource
+(`tiles:device`) and the driver is ambient state (`tiles:driver`), so every operator of this
+module has effects and none is folded or dropped.
+
+#### `gpu`
+
+```camel
+gpu: (fn: (x: float) => float) => (x: float) => float
+```
+
+Compiles the function to device code and returns a function of the same type that prefers the
+device: it runs there when the device can take it, and on the host otherwise. The function
+takes no with-parameter, has at least one ordinary parameter, and every leaf of its parameters
+and result is a float or an f32 tensor. The result is the argument's own type, which a
+declaration cannot say without also dropping that restriction.
+
+- With effects: marks a function to prefer the device.
+- Example: `let fast = gpu((x: float): float => x + 1.0)`
+
+#### `upload`
+
+```camel
+upload: (value: Tensor<f32>) => Device<Tensor<f32>>
+```
+
+Uploads every leaf of the value — a float or an f32 tensor, alone or inside a tuple or a
+struct — and returns the same tree with each leaf wrapped in `Device<...>`. A leaf of any other
+type is refused when the call is compiled.
+
+- With effects: transfers to the device.
+- Example: `upload(host)` gives `a Device<Tensor<f32>>`
+
+#### `download`
+
+```camel
+download: (value: Device<Tensor<f32>>) => Tensor<f32>
+```
+
+Downloads every device leaf of the value and returns the host value it came from. A tree with a
+leaf that is not a device value is refused when the call is compiled.
+
+- With effects: transfers from the device.
+- Example: `download(resident)` gives `the tensor resident holds`
+
+#### `run`
+
+```camel
+run: <fn: (a: float, b: float) => float> (inputs: (float, float)) => float
+```
+
+Runs the function on the CUDA device: its parameter (or the tuple of its parameters) is
+uploaded, the device computes, and the result is downloaded again. The result type is the
+function's result type.
+
+- With effects: transfers both ways and runs device code.
+- Example: `run<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `5.0`
+
+#### `run_device`
+
+```camel
+run_device: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
+```
+
+Runs the function as `run` does but leaves the result on the device: each leaf of it comes back
+wrapped in `Device<...>`.
+
+- With effects: transfers to the device and runs device code.
+- Example: `run_device<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`
+
+#### `run_preferred_resident`
+
+```camel
+run_preferred_resident: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
+```
+
+Runs the function the way `@gpu` does — a prepared device program when one can be made, the
+host otherwise — and answers the resident form of its result.
+
+- With effects: transfers to the device and runs device code.
+- Example: `run_preferred_resident<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`
+
+#### `source`
+
+```camel
+source: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+```
+
+The CUDA source the function compiles to, without running it.
+
+- With effects: compiles device code.
+- Example: `println(source<(a: float, b: float): float => a + b>((2.0, 3.0)))`
+
+#### `inspect`
+
+```camel
+inspect: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+```
+
+A report on the function's device plan, without running it: the kernel, its launch shape and
+the values it would keep on the device.
+
+- With effects: compiles device code.
+- Example: `println(inspect<(a: float, b: float): float => a + b>((2.0, 3.0)))`
+
+#### `benchmark`
+
+```camel
+benchmark: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
+```
+
+Times the function on the device, and on the host for comparison, and returns the report as
+JSON text.
+
+- With effects: transfers both ways and runs device code.
+- Example: `println(benchmark<(a: float, b: float): float => a + b>((2.0, 3.0)))`
+
+#### `regions`
+
+```camel
+regions: <fn: (a: float, b: float) => float> () => string
+```
+
+The regions the compiler would take for the whole program, as text: which nodes would run on
+the device and why the others would not.
+
+- With effects: compiles device code.
+- Example: `println(regions<(a: float, b: float): float => a + b>())`
+
+#### `available`
+
+```camel
+available: () => bool
+```
+
+Whether this machine can run a program on a CUDA device: false when the driver, the toolkit or
+a visible device is missing. A capability question only — a device the run names with
+`--devices` and that is not there is a fault, never `false`.
+
+- With effects: probes the driver.
+- Example: `available()`
+
+#### `device`
+
+```camel
+device: () => string
+```
+
+A description of the CUDA device the run selects: its ordinal, name, compute capability and
+memory. Asking is a requirement, not a preference: with no device the call is a fault.
+
+- With effects: probes the driver.
+- Failure: fault `RuntimeError` when this build or this machine has no CUDA device; fault `DeviceUnavailable` when `--devices` names a device that is not there.
+- Example: `println(device())`
+
+<a id="pyplot"></a>
+
+## `pyplot`: draw an array
+
+Plots: draw an array of numbers with matplotlib, and fall back to an SVG file when matplotlib
+is not installed. The operator writes an image file and is never folded or dropped by a pass.
+
+The declarations of the operator of the C++ module `modules/pyplot` (design principles 6.4;
+handover H19, step 10; H166). This file is the one source of its fixed signature; the C++ side
+keeps the kernel, the executor, the operator traits and the purity.
+
+`plot` is one operator with one URI, over four element types and two arities: an array of
+`i32`, `int`, `f32` or `float`, with or without the name of the output file. A declaration
+cannot write "an array of one of these four" as one rule, and a `(typeas T)[]` declaration
+would accept a `string[]` that the kernel refuses, so the four types are written out for each
+arity: eight declarations of the one operator. A declaration cannot write the optional
+parameter `filename?: string` either, which is why the two arities are separate.
+
+#### `plot`
+
+```camel
+plot: (data: i32[]) => void
+plot: (data: int[]) => void
+plot: (data: f32[]) => void
+plot: (data: float[]) => void
+plot: (data: i32[], filename: string) => void
+plot: (data: int[], filename: string) => void
+plot: (data: f32[], filename: string) => void
+plot: (data: float[], filename: string) => void
+```
+
+Draws the values of `data` and writes the image to `filename` (`plot.png` when it is omitted).
+`data` may be an `i32`, `int`, `f32` or `float` array; an empty array is drawn as an empty
+plot. matplotlib is used when it is importable, and an SVG file is written otherwise.
+
+- With effects: writes an image file.
+- Example: `plot([1.0, 2.0, 3.0], "myplot.png")`
+
+<a id="python"></a>
+
+## `python`: the embedded interpreter
+
+The Python bridge: run code in the embedded interpreter, import modules, read attributes and
+dispose of the handles the calls return. Every operator observes or advances the interpreter,
+which no argument names, so every one has effects and is never folded, merged or dropped by a
+pass. A result of type `PyObject` is a handle into the interpreter, not a value of the program.
+
+The declarations of the operators of the C++ module `modules/python` (design principles 6.4;
+handover H19, step 10; H166). This file is the one source of the six fixed signatures; the C++
+side keeps the kernels, the executor, the operator traits and the purity.
+
+Five operators stay in C++ and are recorded as computed signatures in
+`stdlib/signatures/python.cml`:
+  - `py_call` (two URIs, `python:py_call` and `python:py_call_kw`) and `py_print`/`py_println`
+    are variadic: a declaration cannot say "any number of `PyObject` arguments";
+  - `py_wrap` and `py_unwrap` move a type through the module type `PyObject<T>`, and a type
+    variable cannot be an argument of a module type in a declaration
+    (`SemanticDiag::InvalidTypeArgument`).
+
+#### `py_call`
+
+```camel
+py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject
+```
+
+Calls the Python callable `fn` -- a `PyObject`, or a dotted name such as `"math.sqrt"` -- with
+the `PyObject` arguments `args`, and returns its result. Any number of arguments is accepted.
+
+- With effects: runs arbitrary Python code.
+- Failure: fault `RuntimeError` when the call raises.
+- Example: `py_call("math.sqrt", py_wrap(2.0))`
+
+#### `py_call`
+
+```camel
+py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject
+```
+
+Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
+arguments. Both collections are optional; every element is a `PyObject`.
+
+- With effects: not pure.
+- Example: `py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})`
+
+#### `py_print`
+
+```camel
+py_print: (...objs: PyObject[]) => PyObject?
+```
+
+Writes the printed form of every `PyObject` argument to Python's standard output, with no
+separator and no newline, and returns the last argument (or `void` when there is none).
+
+- With effects: writes the interpreter's standard output.
+- Example: `py_print(py_wrap(1), py_wrap(2))`
+
+#### `py_println`
+
+```camel
+py_println: (...objs: PyObject[]) => PyObject?
+```
+
+Writes the printed form of every `PyObject` argument and a newline, as `py_print` does, and
+returns the last argument (or `void` when there is none).
+
+- With effects: writes the interpreter's standard output.
+- Example: `py_println(py_eval("1 + 1"))`
+
+#### `py_wrap`
+
+```camel
+py_wrap: (x: T) => PyObject<T>
+```
+
+Wraps the value `x` in a new Python object, keeping its Camel type as the type argument of
+`PyObject<T>`.
+
+- With effects: creates an interpreter object.
+- Example: `py_wrap(2.0)` gives `a PyObject<float>`
+
+#### `py_unwrap`
+
+```camel
+py_unwrap: (obj: PyObject<T>) => T
+```
+
+Unwraps a Python object wrapped from a value of type `T` and returns that value. An object
+that did not come from `py_wrap` has no type argument and is refused when the call is compiled.
+
+- With effects: reads an interpreter object.
+- Example: `py_unwrap(py_wrap(2.0))` gives `2.0`
+
+#### `py_exec`
+
+```camel
+py_exec: (code: string) => PyObject
+```
+
+Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
+assignments stay visible to later calls, as in a Python session.
+
+- With effects: runs arbitrary Python code.
+- Failure: fault `RuntimeError` when the code raises.
+- Example: `py_exec("x = 1")`
+
+#### `py_eval`
+
+```camel
+py_eval: (expr: string) => PyObject
+```
+
+Evaluates the Python expression `expr` and returns its value as a `PyObject`.
+
+- With effects: runs arbitrary Python code.
+- Failure: fault `RuntimeError` when the expression raises.
+- Example: `py_eval("1 + 2 * 3")` gives `7`
+
+#### `py_run`
+
+```camel
+py_run: (file_path: string) => PyObject
+```
+
+Runs the Python script at `file_path` and returns its `None`.
+
+- With effects: runs arbitrary Python code.
+- Failure: fault `RuntimeError` when the file cannot be read or the script raises.
+- Example: `py_run("scripts/hello.py")`
+
+#### `py_attr`
+
+```camel
+py_attr: (obj: PyObject, attr: string) => PyObject
+```
+
+The attribute `attr` of the Python object `obj`; a dotted `attr` walks the chain. Asking may
+run a property or a descriptor, so the read is an effect.
+
+- With effects: reads interpreter state and may run Python code.
+- Failure: fault `RuntimeError` when the attribute does not exist.
+- Example: `py_attr(py_import("math"), "sqrt")`
+
+#### `py_import`
+
+```camel
+py_import: (module_name: string) => PyObject
+```
+
+Imports the Python module `module_name` and returns it. Importing runs the module body and
+records the module in `sys.modules`.
+
+- With effects: imports a module and runs its body.
+- Failure: fault `RuntimeError` when the import raises.
+- Example: `py_import("math")`
+
+#### `py_dispose`
+
+```camel
+py_dispose: (obj: PyObject) => void
+```
+
+Drops this program's reference to the Python object `obj`.
+
+- With effects: advances the interpreter's reference counts.
+- Example: `py_dispose(py_import("math"))`
+
+<a id="nn"></a>
+
+## `nn`: neural-network primitives
+
+Neural-network primitives: 2-D convolution and its gradients, max and average pooling with
+their gradients, batch normalization, embedding, the fused softmax cross-entropy loss, the
+optimizers, and the checkpoint writer for a parameter tree. The operators work on the core
+`Tensor` type; nothing here needs PyTorch or a GPU.
+
+### Convolution
+
+#### `conv2d`
+
+```camel
+conv2d: (input: Tensor, kernel: Tensor, bias: Tensor, stride?: int, padding?: int) => Tensor
+```
+
+2-D convolution: `input` is `[N, C, H, W]` f32, `kernel` is `[O, C, KH, KW]` f32 and `bias` is
+`[O]` f32. `stride` defaults to 1 and `padding` to 0; the result is `[N, O, OH, OW]` f32 with
+`OH = (H + 2*padding - KH) / stride + 1` and `OW` likewise. An input or kernel that is not
+rank 4, or a window that does not fit, is refused when the call is compiled.
+
+- Pure.
+- Example: `conv2d(input, kernel, bias, 1, 0)` gives `[N, O, OH, OW]`
+
+#### `conv2d_input_grad`
+
+```camel
+conv2d_input_grad: (input: Tensor, kernel: Tensor, dy: Tensor, stride?: int, padding?: int) => Tensor
+```
+
+The gradient of `conv2d` with respect to its input, given the upstream gradient `dy` shaped
+like the convolution's result; the result is shaped like `input`.
+
+- Pure.
+- Example: `conv2d_input_grad(input, kernel, dy, 1, 0)` gives `like x`
+
+#### `conv2d_kernel_grad`
+
+```camel
+conv2d_kernel_grad: (input: Tensor, kernel: Tensor, dy: Tensor, stride?: int, padding?: int) => Tensor
+```
+
+The gradient of `conv2d` with respect to its kernel, given `dy` shaped like the convolution's
+result; the result is shaped like `kernel`.
+
+- Pure.
+- Example: `conv2d_kernel_grad(input, kernel, dy, 1, 0)` gives `like w`
+
+#### `conv2d_bias_grad`
+
+```camel
+conv2d_bias_grad: (bias: Tensor, dy: Tensor) => Tensor
+```
+
+The gradient of `conv2d` with respect to its bias: the sum of `dy` over the batch and the
+spatial axes, shaped like `bias`.
+
+- Pure.
+- Example: `conv2d_bias_grad(bias, dy)` gives `like b`
+
+### Pooling
+
+#### `max_pool2d`
+
+```camel
+max_pool2d: (input: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+```
+
+Max pooling over a square window of `kernel` on `input` `[N, C, H, W]` f32. `stride` defaults
+to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`. A window that lies entirely in
+the padding contributes -inf (the identity of the maximum).
+
+- Pure.
+- Example: `max_pool2d(input, 2)` gives `[N, C, H/2, W/2]`
+
+#### `avg_pool2d`
+
+```camel
+avg_pool2d: (input: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+```
+
+Average pooling over a square window of `kernel`: the window's elements plus +0 for those in
+the padding are summed in an f64 accumulator and divided by `kernel*kernel`. `stride` defaults
+to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`.
+
+- Pure.
+- Example: `avg_pool2d(input, 2)` gives `[N, C, H/2, W/2]`
+
+#### `max_pool2d_grad`
+
+```camel
+max_pool2d_grad: (input: Tensor, dy: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+```
+
+The gradient of `max_pool2d` with respect to its input, given `dy` shaped like the pooling
+result; the result is shaped like `input`.
+
+- Pure.
+- Example: `max_pool2d_grad(input, dy, 2)` gives `like x`
+
+#### `avg_pool2d_grad`
+
+```camel
+avg_pool2d_grad: (input: Tensor, dy: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+```
+
+The gradient of `avg_pool2d` with respect to its input, given `dy` shaped like the pooling
+result; the result is shaped like `input`.
+
+- Pure.
+- Example: `avg_pool2d_grad(input, dy, 2)` gives `like x`
+
+### Batch normalization
+
+#### `batch_norm`
+
+```camel
+batch_norm: (input: Tensor, mean: Tensor, var: Tensor, gamma: Tensor, beta: Tensor, eps?: number) => Tensor
+```
+
+Inference-mode batch normalization: `(input - mean) / sqrt(var + eps) * gamma + beta`, with
+`eps` defaulting to 1e-5. Every tensor is f32 and the result is shaped like `input`.
+
+- Pure.
+- Example: `batch_norm(input, running_mean, running_var, gamma, beta)`
+
+#### `batch_norm_train`
+
+```camel
+batch_norm_train: (input: Tensor, gamma: Tensor, beta: Tensor, running_mean: Tensor, running_var: Tensor, momentum?: number, eps?: number) => (Tensor, Tensor, Tensor)
+```
+
+Training-mode batch normalization: normalizes `input` with the batch statistics, and answers
+`(y, new_running_mean, new_running_var)`, where `y` is shaped like `input` and the running
+statistics are shaped like `running_mean`/`running_var`. `momentum` defaults to 0.1 and `eps`
+to 1e-5.
+
+- Pure.
+- Example: `let (y, mean, variance) = batch_norm_train(input, gamma, beta, running_mean, running_var)`
+
+#### `batch_norm_train_grad`
+
+```camel
+batch_norm_train_grad: (input: Tensor, gamma: Tensor, dy: Tensor, eps?: number) => (Tensor, Tensor, Tensor)
+```
+
+The gradients of training-mode batch normalization: `(dx, dgamma, dbeta)`, shaped like
+`input`, `gamma` and `beta`. Only `y` carries gradient; the running-statistics blend is not
+differentiated, so the operator takes `dy` (the gradient of `y`) and `eps`.
+
+- Pure.
+- Example: `let (dx, dgamma, dbeta) = batch_norm_train_grad(input, gamma, dy)`
+
+### Embedding
+
+#### `embedding`
+
+```camel
+embedding: (table: Tensor, indices: Tensor) => Tensor
+```
+
+Gathers rows of the rank-2 int-or-float table `[rows, dim]` by the rank-1 integer indices; the
+result is `[indices.length, dim]`. An index outside `[0, rows)` is a fault.
+
+- Pure.
+- Failure: fault `RuntimeError` when an index is outside the table.
+- Example: `embedding(table, indices)` gives `[2, dim]`
+
+#### `embedding_table_grad`
+
+```camel
+embedding_table_grad: (table: Tensor, indices: Tensor, dy: Tensor) => Tensor
+```
+
+The gradient of `embedding` with respect to its table: unvisited rows stay zero, and the
+result is shaped like `table`.
+
+- Pure.
+- Example: `embedding_table_grad(table, indices, dy)` gives `like table`
+
+### Loss
+
+#### `softmax_cross_entropy`
+
+```camel
+softmax_cross_entropy: (logits: Tensor, target: Tensor) => float
+softmax_cross_entropy: (logits: Tensor, target: Tensor | number[]) => float
+```
+
+The mean softmax cross-entropy of rank-2 `logits` `[batch, classes]` against a same-shaped
+target distribution. When the target is an integer array or a rank-1 integer tensor it is
+read as one class label per row (the URI `nn:softmax_cross_entropy_labels`), and the value is
+the same as the one-hot form's.
+
+- Pure.
+- Failure: fault `RuntimeError` when a label is outside `[0, classes)`.
+- Example: `softmax_cross_entropy(logits, target)` gives `a float`
+
+#### `softmax_cross_entropy_grad`
+
+```camel
+softmax_cross_entropy_grad: (logits: Tensor, target: Tensor, dy: number) => Tensor
+softmax_cross_entropy_grad: (logits: Tensor, target: Tensor | number[], dy: number) => Tensor
+```
+
+The gradient of `softmax_cross_entropy` with respect to `logits`, scaled by `dy`; the result is
+shaped like `logits`. The label form (the URI `nn:softmax_cross_entropy_labels_grad`) takes
+integer class labels instead of a target distribution and answers the same shape.
+
+- Pure.
+- Failure: fault `RuntimeError` when a label is outside `[0, classes)`.
+- Example: `softmax_cross_entropy_grad(logits, target, 1.0)` gives `like logits`
+
+### Optimizers
+
+#### `sgd`
+
+```camel
+sgd: (params: P, grads: P, lr: float) => P
+```
+
+One step of stochastic gradient descent on a parameter tree: `params - grads * lr`, with the
+result shaped like `params`. `grads` must be the gradient of `params` and `lr` is a number.
+
+- Pure.
+- Example: `let next = sgd({ w: 1.0 }, { w: 0.1 }, 0.1)`
+
+#### `adam_state`
+
+```camel
+adam_state: (params: P) => OptimizerState
+```
+
+The initial `OptimizerState` of a parameter tree: zero first and second moments, and step 0.
+The state's moment trees are shaped like `params`.
+
+- Pure.
+- Example: `let state = adam_state({ w: 1.0 })`
+
+#### `adam`
+
+```camel
+adam: (params: P, grads: P, state: OptimizerState, lr: float, beta1?: number, beta2?: number, eps?: number) => (P, OptimizerState)
+```
+
+One step of Adam on a parameter tree: answers `(new_params, new_state)`, both shaped like
+`params`/`state`. `beta1` defaults to 0.9, `beta2` to 0.999 and `eps` to 1e-8.
+
+- Pure.
+- Example: `let (next, state) = adam({ w: 1.0 }, { w: 0.1 }, adam_state({ w: 1.0 }), 0.001)`
+
+#### `save_params`
+
+```camel
+save_params: (params: typeas P, dir: string) => void
+```
+
+Saves every tensor leaf of `params` under `dir`, as `<dir>/<path>.npy`, the path joining struct
+field names and tuple indices with dots; other leaves are ignored. The directories are
+created when missing.
+
+- With effects: writes files under `dir`.
+- Failure: fault `RuntimeError` when the directory cannot be created or a leaf cannot be written.
+- Example (a fragment, not compiled): `save_params({ w: new([1.0, 2.0]), b: new([0.0]) }, 'checkpoints/step-1')`
+- Why it is not compiled: the example builds its tensors with `new` from the `tensor` module, which this page does not import
+
+<a id="autodiff"></a>
+
+## `autodiff`: gradients of functions
+
+Automatic differentiation: `grad` turns a function into its gradient function, `with_grad`
+returns the value together with that gradient, and `stop_gradient` marks a value as a
+constant. The gradient of a function is a function of the same parameters, so the useful
+signature is the type of the function it differentiates.
+
+#### `grad`
+
+```camel
+grad: (f: (x: float) => float) => (x: float) => float
+```
+
+The gradient function of `f`: it takes the same parameters and returns the gradient of `f`'s
+result with respect to its first `with` parameter (for a scalar result, a value of the same
+shape). A function with no `with` parameter, or whose first `with` parameter has no
+differentiable tangent, is refused when the call is compiled.
+
+- With effects: differentiates the function's graph.
+- Example (a fragment, not compiled): `let dh = grad(h)`
+- Why it is not compiled: `h` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
+
+#### `with_grad`
+
+```camel
+with_grad: (f: (x: float) => float) => (x: float) => (float, float)
+```
+
+The value and the gradient together: the result function returns `f`'s result followed by its
+gradient with respect to the first `with` parameter. The same compile-time refusal as `grad`
+applies.
+
+- With effects: differentiates the function's graph.
+- Example (a fragment, not compiled): `let value_and_grad = with_grad(h)`
+- Why it is not compiled: `h` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
+
+#### `stop_gradient`
+
+```camel
+stop_gradient: (x: typeas T) => T
+```
+
+Returns its argument unchanged, and cuts the gradient at this point: a value passed through
+`stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
+argument's own type.
+
+- Pure.
+- Example: `stop_gradient(3.0)` gives `3.0`
+
+<a id="sim"></a>
+
+## `sim`: Monte Carlo simulation
+
+Monte Carlo simulation: two kernels that estimate a number from random samples. `pi_hits`
+estimates pi from the fraction of points that fall inside the unit circle and
+`asian_call_price` prices a one-year Asian call by simulating the underlying's paths. Both
+take the sample count and the seed, so a seed reproduces the result exactly and the operators
+are pure.
+
+#### `pi_hits`
+
+```camel
+pi_hits: (samples: int, seed: int) => int
+```
+
+Draws `samples` points uniformly from the square [-1, 1]^2 with a generator seeded by `seed`
+and returns how many fall inside the unit circle. The estimate of pi is `4 * hits / samples`;
+a negative sample count is a fault.
+
+- Pure.
+- Failure: fault `RuntimeError` when `samples` is negative.
+- Example: `pi_hits(10000, 42)` gives `7863`
+
+#### `asian_call_price`
+
+```camel
+asian_call_price: (paths: int, steps: int, seed: int) => float
+```
+
+Prices a one-year Asian call on a geometric random walk with `paths` simulated paths of
+`steps` steps each, using the fixed parameters S0 = 100, K = 100, r = 0.05 and sigma = 0.2,
+and a generator seeded by `seed`; the result is the discounted average payoff. A negative
+path count or a non-positive step count is a fault.
+
+- Pure.
+- Failure: fault `RuntimeError` when `paths` is negative or `steps` is not positive.
+- Example: `asian_call_price(2000, 128, 42)` gives `5.894325529519635`
+
+<a id="onnx"></a>
+
+## `onnx`: export a program as an ONNX model
+
+Exporting Camel programs as ONNX models: `export_model` writes the model of a function applied
+to an example argument, and `supported_operators` lists the operator URIs the backend can
+lower. The module is the ONNX exporter, not a runtime: loading it and asking what it can lower
+needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a file.
+
+#### `export_model`
+
+```camel
+export_model: (fn: (x: Tensor<f32>) => void, example: Tensor<f32>, path: string) => void
+```
+
+Writes the ONNX model of `fn` applied to arguments like `example` to the file `path`, at the
+backend's default opset. `example` is one argument of a one-parameter `fn`, or a tuple with
+one example per parameter; the function's graph is translated after the generic passes, and a
+node the backend cannot lower is refused. The optional `dynamic_axes` leaves those axes of the
+tensor inputs unknown, and `target` names the runtime whose capability data the model is
+checked against.
+
+- With effects: writes a file and reads the function's graph.
+- Failure: fault `RuntimeError` when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node.
+- Example: `export_model(fn, example, "/tmp/model.onnx")`
+
+#### `supported_operators`
+
+```camel
+supported_operators: () => string[]
+```
+
+Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
+lowering table reports them. A capability report only: it reads the table compiled into the
+module and never touches the file system or the ONNX runtime.
+
+- With effects: reports the lowering table of the backend.
+- Example: `let uris = supported_operators()`

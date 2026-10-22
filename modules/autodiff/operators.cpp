@@ -101,22 +101,8 @@ class GradResolver final : public type::FuncTypeResolver {
     bool withValue_;
 };
 
-/// stop_gradient: (x: T) => T.
-class IdentityResolver final : public type::FuncTypeResolver {
-  public:
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        (void)modifiers;
-        if (!with.empty() || norm.size() != 1) {
-            return std::nullopt;
-        }
-        return FunctionType::create({}, {{norm[0], false}}, norm[0]);
-    }
-
-    std::string signature() const override { return "(x: T) => T"; }
-};
-
+/// stop_gradient: (x: T) => T is declared in `stdlib/autodiff.cml` (handover H19, step 10;
+/// H165); the kernel below and the traits in `AutodiffModule::load` stay here.
 slot_t gradFunction(ArgsView &norm, Context &ctx, bool withValue) {
     auto *function = norm.get<::Function *>(0);
     if (function == nullptr || function->graph() == nullptr) {
@@ -165,9 +151,8 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
         OperatorGroup::create(
             "with_grad",
             {{"autodiff:with_grad", std::make_shared<GradResolver>(true)}}),
-        OperatorGroup::create(
-            "stop_gradient",
-            {{"autodiff:stop_gradient", std::make_shared<IdentityResolver>()}}),
+        // `stop_gradient` is not here: its signature is declared in `stdlib/autodiff.cml`
+        // (handover H19, step 10; H165), and its kernel and traits stay in this module.
     };
     return groups;
 }

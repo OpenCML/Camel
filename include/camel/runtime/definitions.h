@@ -125,18 +125,38 @@ class DefinitionStore {
         const Program *program = nullptr;
         GCGraph *graph         = nullptr;
     };
+    /// What a lookup found besides the function: whether the library is there, whether the name
+    /// is absent from it, and the module itself so that a caller can say what it does provide
+    /// (H130: a pass named `module::name` whose module is there and provides no such pass).
+    struct LibraryLookup {
+        /// The library is there as a module written in Camel; it may still fail to load or
+        /// compile (that reason is in `problem`, not here).
+        bool moduleFound = false;
+        /// The lookup stopped at a name that is not there: the library itself is not there (no
+        /// file for it, or it is not written in Camel), or the library is there and has no such
+        /// function. A library that is there and *refused* (it did not load or compile) is not
+        /// absent in this sense: that reason is in `problem`.
+        bool absent = false;
+        /// `absent` because the library has no such function although the module declares the
+        /// name: it declares it without exporting it, which is a different mistake.
+        bool declaresUnexported = false;
+        /// The module, when it could be imported: its export list says what it provides.
+        std::shared_ptr<camel::core::module::UserDefinedModule> module;
+    };
     /// The function `function` exported by the library module `module`, compiled and encoded
     /// the first time it is asked for. It must be one non-generic function. Returns nothing
-    /// when it cannot be had, and then `problem` says why; the answer is remembered. `absent`
-    /// tells a library that is not there (no such module written in Camel, or it exports no
-    /// such function) from one that is there and refused.
+    /// when it cannot be had, and then `problem` says why; the answer is remembered. `lookup`,
+    /// when given, receives what the answer says about the module itself: the library not being
+    /// there, the name being absent from it, and the module, so that the caller can list what it
+    /// does export (H130).
     /// `errorLocation`, when given, receives the library's first error as a secondary location:
     /// its file, range and text (the same sentence the diagnostic table gives it). It is empty
     /// when the library could not be loaded, or when its first error has no position; the
     /// reason then stays in `problem`.
     std::optional<LibraryFunction> libraryFunction(
         const std::string &module, const std::string &function, std::string &problem,
-        bool &absent, std::optional<camel::core::error::DiagLabel> *errorLocation = nullptr);
+        std::optional<camel::core::error::DiagLabel> *errorLocation = nullptr,
+        LibraryLookup *lookup = nullptr);
 
   private:
     struct Entry {
@@ -165,22 +185,30 @@ class DefinitionStore {
     std::shared_ptr<camel::core::module::UserDefinedModule>
     library(const std::string &name, std::string &problem);
     /// The library module `name`, imported only: no compile of its own. What a pass written in
-    /// Camel needs before it is built as a program of its own (compileAsProgram).
-    std::shared_ptr<camel::core::module::UserDefinedModule>
-    importLibrary(const std::string &name, std::string &problem);
+    /// Camel needs before it is built as a program of its own (compileAsProgram). The answer is
+    /// remembered: a module that could not be loaded is not loaded again.
+    struct LibraryEntry {
+        std::shared_ptr<camel::core::module::UserDefinedModule> module;
+        /// Why the library is not available: its load failed, or it is not written in Camel.
+        std::string problem;
+        /// The library is not there (no file found for its name, or it is not written in
+        /// Camel) rather than there and refused (its load or compile failed).
+        bool absent = false;
+    };
+    const LibraryEntry &importLibrary(const std::string &name);
 
     camel::core::context::Context &context_;
     std::recursive_mutex mutex_;
     std::unordered_map<camel::core::OperId, Entry> entries_;
-    std::map<std::string, std::shared_ptr<camel::core::module::UserDefinedModule>> libraries_;
-    /// The libraries that are not there: no such module, or not written in Camel.
-    std::set<std::string> absentLibraries_;
+    std::map<std::string, LibraryEntry> libraries_;
     struct FunctionEntry {
         std::optional<LibraryFunction> found;
         std::string problem;
         bool absent = false;
         /// The library's first error, when it has one with a position (see libraryFunction).
         std::optional<camel::core::error::DiagLabel> errorLocation;
+        /// What the lookup said about the module (H130).
+        LibraryLookup lookup;
     };
     std::map<std::string, FunctionEntry> functions_;
 };

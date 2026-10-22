@@ -767,6 +767,11 @@ def cmd_check(args) -> int:
         print(failure)
     total = len(seeds) * runs
     print(f"{total - len(failures)} of {total} runs agree with the reference ({len(seeds)} programs x {runs} configurations)")
+    if total == 0:
+        # An empty seed range (--seeds 5:5) generated no program: there is nothing the reference
+        # answer could disagree with, so this is a failure, not a pass.
+        print("FAIL: the seed range holds no program; nothing was compared")
+        return 1
     print("PASS" if not failures else "FAIL")
     return 0 if not failures else 1
 

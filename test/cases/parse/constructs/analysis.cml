@@ -1,0 +1,25 @@
+/**
+ * `analysis` (rewrite design 4): a fact about values, declared with a result type and, optionally,
+ * parameters. The clauses are `initial` (before any part), `join` (two facts merged) and `on` (one
+ * part: a constant, or a pattern whose parts the fact is computed from).
+ */
+module parse_constructs_analysis
+import { max } from math
+import { rewrite } from rewrite
+
+analysis sign: int {
+    initial => 0
+    join(a, b) => max(a, b)
+    on (const c: int) => c
+}
+
+analysis depth: int {
+    initial => 0
+    join(a, b) => max(a, b)
+    on (const c: int) => 1
+    on (x + y) => max(depth(x), depth(y)) + 1
+}
+
+func main(): int sync {
+    return 0
+}

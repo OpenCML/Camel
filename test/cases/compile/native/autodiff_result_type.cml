@@ -1,0 +1,15 @@
+/**
+ * The result type of `autodiff:stop_gradient` is the declaration's type variable instantiated
+ * with the argument's type, not a type the C++ resolver decides per call: binding a `float`
+ * result to an `int` is refused with the value's type taken from the declaration (handover H19,
+ * step 10; H165). With a type-variable parameter this is the type case the declaration can have.
+ */
+module autodiff_result_type
+
+import { stop_gradient } from autodiff
+
+func main(): int sync {
+    let count: int = stop_gradient(1.0)
+    println(count)
+    return 0
+}

@@ -13,45 +13,30 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
+/*
+ * The process and the machine it runs on: how long to wait, who the user is and how many hardware
+ * threads there are. `exit` is the built-in operator of `src/builtin/modules/globals.cpp`, so it
+ * is not a group of this module; the terminal is `io`'s (H19 step 4).
+ *
+ * The signatures are written once, in the declaration module `stdlib/process.cml` (design
+ * principles 6.4; handover H19, step 10; H163). What is left here is what only C++ knows: the
+ * kernels in operators.cpp, the executor that runs them, and the operator traits declared at
+ * load -- the purity and the resources (`clock`, `env`, `process`).
+ */
+
 #include "module.h"
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
-#include "camel/core/type.h"
-#include "camel/core/type/resolver.h"
 #include "camel/core/operator_traits.h"
 #include "executor.h"
-#include "operators.h"
 
 using namespace camel::core::context;
 using namespace camel::core::module;
-using namespace camel::core::type;
 
-namespace {
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "sleep",
-            {{"process:sleep",
-              StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void())}}),
-        OperatorGroup::create(
-            "whoami",
-            {{"process:whoami", StaticFuncTypeResolver::create({}, {}, Type::String())}}),
-        OperatorGroup::create(
-            "cpu_count",
-            {{"process:cpu_count", StaticFuncTypeResolver::create({}, {}, Type::Int64())}}),
-    };
-    return groups;
-}
-} // namespace
-
-ProcessModule::ProcessModule(context_ptr_t ctx) : BuiltinModule("process", ctx) {
-    for (const auto &group : getOperatorGroups())
-        exportEntity(group->name(), group);
-}
+ProcessModule::ProcessModule(context_ptr_t ctx) : BuiltinModule("process", ctx) {}
 
 module_ptr_t ProcessModule::create(context_ptr_t ctx) { return std::make_shared<ProcessModule>(ctx); }
 

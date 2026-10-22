@@ -378,6 +378,8 @@ compiles (`d as string[]`); written with `decode_as` or the `Json` accessors it 
 all the settings of the table (`test/plans/feat/modules/json_value.plan.toml`). As it was
 reproduced for this report:
 
+<!-- camel-snippet: fragment: a historical reproduction; the report says this program no longer compiles -->
+
 ```camel
 module anyref
 import { decode } from json

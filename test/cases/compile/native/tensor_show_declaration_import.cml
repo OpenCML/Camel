@@ -1,0 +1,17 @@
+/**
+ * The two declarations of `tensor:show` are what an importer sees: `show` accepts a tensor and,
+ * as the second rule, any array (the umbrella parameter of the C++ operator, written as one
+ * declaration per accepted type). Both calls reach the C++ operator and print in the module's
+ * layout; the marker line proves the program ran to the end (handover H175).
+ */
+module tensor_show_declaration_import
+
+import { new, show } from tensor
+
+func main(): int sync {
+    let t = new([[1.0, 2.0]])
+    show(t)
+    show([3.0, 4.0])
+    println(7)
+    return 0
+}

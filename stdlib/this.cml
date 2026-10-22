@@ -1,0 +1,11 @@
+// The declaration of the operator of the C++ module `modules/this` (design principles 6.4;
+// handover H19, step 10). This file is the one source of its signature; the C++ side keeps the
+// kernel and the executor. A declaration names `this:<function>` by convention, so no `#op` tag
+// is needed.
+
+module this
+
+/// The Zen of Camel, the text of the file ZEN.
+/// @pure
+/// @example println(zen())
+export func zen(): string

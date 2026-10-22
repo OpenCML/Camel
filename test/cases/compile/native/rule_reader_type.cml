@@ -1,0 +1,13 @@
+/**
+ * The parameter of `rewrite:consts` is the declaration's `Rule`: an `int` there is refused at the
+ * call, and the overload the message lists is the declaration's `(r: Rule) => int` —
+ * `stdlib/rewrite.cml`, not the C++ module (handover H183).
+ */
+module rule_reader_type
+
+import { rule_consts } from rewrite
+
+func main(): int sync {
+    println(rule_consts(1))
+    return 0
+}

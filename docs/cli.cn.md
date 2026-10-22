@@ -134,7 +134,7 @@
 命令行上给出的遍按书写顺序运行。每个遍或者变换图，或者执行图（调度遍），或者翻译图（翻译遍）。
 
 - **默认流水线。** 不给出任何遍时运行 `std::default`；它是 `std::nodevm`（节点虚拟机）的别名，本文其余地方用的 `std::nvm` 是同一个遍的另一个别名（同样，`std::fvm` 是 `std::fastvm`，`std::jit` 是 `std::fastvm::jit`，`std::tf` 与 `std::prl` 是 `std::taskflow`）。给出的遍都没有消耗图时，在它们之后也运行这个默认遍。`.opencmlrc`（`passes.fallback`）可以改变它。
-- **所有遍的名字都在运行之前检查。** 程序编译之后（模块贡献的遍此时才存在）、第一个遍运行之前、第一份 `--dump-after-each-pass` 快照写出之前，流水线和后备遍的所有名字都被解析（先解析别名）。第一个未知的名字报告为 `RuntimeDiag::UnrecognizedGraphPass`，阶段为 `pass:<name>`，可用的遍和别名列在 stderr 上（`Pass <std::no_such_pass> not found, available passes are:`，然后是 `Available aliases are:`），退出码为 1。此时什么都没有执行：`camel f.cml std::nvm std::no_such_pass` 不会运行程序。
+- **所有遍的名字都在运行之前检查。** 程序编译之后（模块贡献的遍此时才存在）、第一个遍运行之前、第一份 `--dump-after-each-pass` 快照写出之前，流水线和后备遍的所有名字都被解析（先解析别名）。第一个未知的名字报告为 `RuntimeDiag::UnrecognizedGraphPass`，阶段为 `pass:<name>`，可用的遍和别名列在 stderr 上（`Pass <std::no_such_pass> not found, available passes are:`，然后是 `Available aliases are:`），退出码为 1。此时什么都没有执行：`camel f.cml std::nvm std::no_such_pass` 不会运行程序。`module::pass` 这样的名字按它所指的模块区分：模块在、但没有这个遍，报告为 `RuntimeDiag::PassNotProvidedByModule`（模块声明了该函数却没有 `export` 时是 `RuntimeDiag::PassNotExportedByModule`），只写出模块和它确实提供的遍，不再列出全部遍；模块在、但加载或编译失败，报告为 `RuntimeDiag::InvalidPassParameter`，带上加载器或编译器的原因（编译错误还带它的文件与位置）。
 - **写在消耗图的遍之后的遍永远不会运行。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）执行程序，翻译遍（`std::gir`、`std::rgir`、`std::cpp`、`onnx::export`、字节码和即时编译的转储）翻译程序；二者都不把图传下去，流水线到此结束。`camel f.cml std::nvm std::opt::inline` 在节点虚拟机上运行程序，永远不会运行 `std::opt::inline`。这种写法被接受，但在任何东西运行之前会在 stderr 上给出警告 `RuntimeDiag::PassesNeverRun`（`0x0410000F`，阶段 `pass:<消耗图的遍>`），列出不会运行的遍（见“警告”）。
 - **语言不限制遍的顺序，而顺序可能有影响。** 一个遍并不承诺得到与另一种顺序相同的图：它修改图，并且可能有副作用。“任意遍序列给出相同行为”不是 Camel 的性质。
 - **标准优化遍**（`std::opt::devirtualize`、`std::opt::specialize`、`std::opt::inline`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt`、`tensor::fuse`）力求保持程序的结果。这是对这些遍的质量要求，由测试检查，不是语言保证。
@@ -263,7 +263,7 @@
 ]
 ```
 
-- `range` 从 0 开始计数；`data.modulePath` 是文件。没有源码位置的诊断（未知的遍名、永远不会运行的遍）的 range 全为零，`modulePath` 为空。
+- `range` 从 0 开始计数；`data.modulePath` 是诊断所在的文件，`data.moduleName` 是诊断为它的模块携带的名字（声明的 `module` 名——入口文件没有声明时是 `main`——或者，仅由位置定位的诊断是文件的词干）。没有源码位置的诊断（未知的遍名、模块不提供的遍、永远不会运行的遍）的 range 全为零，二者均为空：它说的是什么在 `data.stage`（`pass:<模块>::<遍>`）和 `message` 里。
 - `data.name` 是稳定的诊断名；`code` 是它的数字形式。
 - 遍提交的每一张图（以及前端编码的每一张图）都做结构校验，release 构建中也是如此：节点、槽和边的引用在范围内，输入和输出互为镜像，`BRCH`/`JOIN` 的分支臂数目，`GATE` 有一个值输入和一个控制输入，直接调用传入的实参个数与被调用者接受的一致。违反时是 `RuntimeDiag::PassInternalError`，指出提交该图的遍，在任何东西运行之前报告。
 - 从某个遍逃逸出来而又不是诊断的异常（提交重写时的图校验、调度器构建执行顺序时遇到环）报告为 `RuntimeDiag::PassInternalError`（`0x0400000C`），阶段为 `pass:<name>`，消息里是异常的文本，没有源码位置，退出码为 1。它标志的是编译器的缺陷，不是对程序的拒绝。即使那是调度遍，阶段给出的也是遍的名字，所以它不能说明程序是否已经运行了一部分。任何遍之外的异常报告为 `InternalDiag::UnknownInternalError`，阶段为 `internal`。

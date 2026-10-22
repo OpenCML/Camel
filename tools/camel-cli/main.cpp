@@ -44,6 +44,7 @@
 #include "camel/utils/phase_timer.h"
 #include "check.h"
 #include "config.h"
+#include "module_failures.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/stats/stats.h"
 #include "passes/trans/tns/topo_node_seq.h"
@@ -306,9 +307,14 @@ int runCommand(int argc, char *argv[]) {
             return;
         }
         size_t errors = 0, warnings = 0;
-        for (const auto &mod : ctx->allUserModules()) {
+        // The same scope the diagnostic report used: a pass library the pass list loaded is not
+        // part of the program, so its errors are not counted in the program's summary either
+        // (H198/H210). `compileSummary` is only called on paths that asked ProgramDependencies.
+        for (const auto &mod :
+             camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies)
+                 .modules) {
             auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
-            if (ud && ud->diagnostics() && ud->diagnostics()->hasErrors()) {
+            if (ud && ud->diagnostics()) {
                 errors += ud->diagnostics()->count(Severity::Error);
                 warnings += ud->diagnostics()->count(Severity::Warn);
             }
@@ -340,7 +346,18 @@ int runCommand(int argc, char *argv[]) {
         if (!parsedOk) {
             // Syntax errors: nothing after the parser can run, and compiling the module would
             // only read and parse the file a second time.
-            ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+            //
+            // The program's dependencies, not every module in the context: resolving the pass
+            // list above imported the pass's library, and that library is not part of the
+            // program the user asked to run. Its own parse error is reported by pass resolution
+            // (as `InvalidPassParameter`) when the program gets that far; printing it here, as
+            // a bare `SyntaxDiag`, would answer a question the user did not ask (H198/H210).
+            camel_cli::reportModuleFailures(
+                ctx,
+                camel_cli::findModuleFailures(
+                    ctx, camel_cli::ModuleScope::ProgramDependencies),
+                os,
+                useJsonFormat);
             compileSummary(false);
             return 1;
         }
@@ -382,6 +399,28 @@ int runCommand(int argc, char *argv[]) {
                 Inspect::dumpInstances || Inspect::dumpFacts || Inspect::dumpTags) {
                 mainModule->compile(CompileStage::Done);
             }
+            // Every dump below reads something the compile produced, so the question is asked
+            // once, before the first one: did anything fail? A `--gct` dump used to print the
+            // construction tree even when the tree was partial and then exit 0 (H181), which is
+            // H172's `--ops` silence on a different output path. `--ops` keeps the contract that
+            // H172 gave it: the listing is what stdout carries, so the diagnostics and the
+            // declaration files that failed go to stderr.
+            //
+            // The scope is the program's dependencies: these dumps are of the program `inspect`
+            // compiled, and the failure that makes a dump untrue is one in its entry module or
+            // in a module it imports. Nothing else has been loaded on this path.
+            const bool listing = Inspect::dumpOps;
+            if (camel_cli::failIfModuleErrors(
+                    ctx,
+                    camel_cli::ModuleScope::ProgramDependencies,
+                    listing ? std::cerr : os,
+                    useJsonFormat,
+                    listing ? &std::cerr : nullptr)) {
+                if (!listing) {
+                    compileSummary(false);
+                }
+                return 1;
+            }
         } else {
             phase::Scope phaseScope("compile", "main");
             mainModule->compile(CompileStage::Done);
@@ -390,16 +429,6 @@ int runCommand(int argc, char *argv[]) {
         if (selectedCommand == Command::Inspect) {
             if (Inspect::dumpGCT && mainModule->gct()) {
                 mainModule->gct()->print(os);
-            }
-            // A `-g`/`--tns`/... dump reads the program graph: a failed build has none. Report
-            // the diagnostics instead of materializing a half-built graph (the shape of an
-            // access violation: the dump used to walk it and die).
-            if ((Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpInstances ||
-                 Inspect::dumpFacts || Inspect::dumpTags) &&
-                !mainModule->loaded()) {
-                ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
-                compileSummary(false);
-                return 1;
             }
             if (Inspect::dumpGIR) {
                 GraphVizDumpPass pass(ctx);
@@ -439,13 +468,46 @@ int runCommand(int argc, char *argv[]) {
                         module->load();
                     }
                 }
+                // A listing is only worth printing when nothing it should contain is missing. A
+                // module that failed to compile leaves its operators out, and this tool is how
+                // the inventory is checked: exiting 0 with a shorter list is the silence that
+                // hid the `pyplot`/`python` registration gap (handover H166, H172). Loading a
+                // module here can still fail (a module nothing compiled yet), so the same
+                // question the compile asked is asked again, after the load, by the same helper.
+                // A module that is not imported is not looked at, and a C++ module whose
+                // signatures are computed (no `.cml` beside its `.cmo`) has no declaration file
+                // to fail.
+                //
+                // The scope is every user module: the listing is the inventory of every module
+                // the context holds, including the imported ones just loaded above (H172). A
+                // module that failed to compile leaves its operators out wherever it sits, so
+                // this is the one command whose question is about all of them.
+                if (camel_cli::failIfModuleErrors(
+                        ctx,
+                        camel_cli::ModuleScope::AllUserModules,
+                        std::cerr,
+                        useJsonFormat,
+                        &std::cerr)) {
+                    return 1;
+                }
                 camel::core::module::dumpOperators(modules, os);
             }
             return 0;
         }
 
-        if (!mainModule->loaded()) {
-            ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+        // The program's dependencies, not every module in the context: a run is about the entry
+        // module and what it imports. Resolving the pass list above imported the pass's library
+        // (and compiling a pass written in Camel imported what that library imports), so a pass
+        // library that does not parse has its diagnostics in the context by now — but it is not
+        // a dependency of the program, and stopping here would replace the pass resolution's
+        // `InvalidPassParameter` (with the parse error as its secondary location) with the raw
+        // parse diagnostic (H198). A pass that is really unusable is reported by the pipeline,
+        // which runs next and has the pass's name to put in the message.
+        if (camel_cli::failIfModuleErrors(
+                ctx,
+                camel_cli::ModuleScope::ProgramDependencies,
+                os,
+                useJsonFormat)) {
             compileSummary(false);
             return 1;
         }
@@ -651,7 +713,13 @@ int runCommand(int argc, char *argv[]) {
             return ctx->processExitCodeOr(0);
         }
     } catch (DiagnosticsLimitExceededBaseException &e) {
-        ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+        // The compile stopped at its error limit. Report the program's own modules, the ones
+        // `module_failures.h` names; a pass library is not one of them (H198/H210).
+        camel_cli::reportModuleFailures(
+            ctx,
+            camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies),
+            os,
+            useJsonFormat);
         compileSummary(true);
         return 1;
     } catch (Diagnostic &d) {

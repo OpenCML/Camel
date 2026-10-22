@@ -27,7 +27,9 @@
 
 #include "camel/compile/gir/encode.h"
 #include "camel/core/debug_breakpoint.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/parse/parse.h"
+#include "camel/utils/type.h"
 #include "compile/gct/builder.h"
 #include "compile/gir/builder.h"
 
@@ -262,6 +264,58 @@ void UserDefinedModule::setProgramGraph(
     loaded_       = true;
 }
 
+std::vector<UserDefinedModule::ExportedFunction> UserDefinedModule::exportedFunctions() const {
+    std::vector<ExportedFunction> functions;
+    if (!gct_) {
+        return functions;
+    }
+    const auto root = gct_->root();
+    if (root == nullptr) {
+        return functions;
+    }
+    // The export list says what the module offers; the declarations say which of those names are
+    // functions and with which type. Both are read from the construction tree: no graph is built,
+    // so a module that is parsed answers this even when it does not compile.
+    std::unordered_set<std::string> exported;
+    for (size_t i = 0; i < root->size(); ++i) {
+        const auto &child = root->at(i);
+        if (child->type() != GCT::NodeKind::EXPT) {
+            continue;
+        }
+        for (size_t name = 0; name < child->exportCount(); ++name) {
+            exported.insert(child->exportName(name));
+        }
+    }
+    for (size_t i = 0; i < root->size(); ++i) {
+        const auto &child = root->at(i);
+        if (child->type() != GCT::NodeKind::DECL || !child->isFunc() ||
+            !exported.contains(child->name()) || child->at(0) == nullptr) {
+            continue;
+        }
+        functions.push_back(ExportedFunction{
+            child->name(),
+            tt::as_ptr<camel::core::type::FunctionType>(child->at(0)->dataType())});
+    }
+    return functions;
+}
+
+bool UserDefinedModule::declaresFunction(const std::string &name) const {
+    if (!gct_) {
+        return false;
+    }
+    const auto root = gct_->root();
+    if (root == nullptr) {
+        return false;
+    }
+    for (size_t i = 0; i < root->size(); ++i) {
+        const auto &child = root->at(i);
+        if (child->type() == GCT::NodeKind::DECL && child->isFunc() && child->name() == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
 UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     const std::string &entryFunction, std::string &problem,
     std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root) {
@@ -353,7 +407,11 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     // non-generic function of this module, exactly as registerCamelPass demands of a pass.
     const auto entity = builder->exports().exportedEntity(*this, Reference(entryFunction));
     if (!entity) {
-        problem = std::format("'{}' exports no '{}'", name_, entryFunction);
+        // A function that is there but not exported is the mistake `module::name` cannot tell
+        // from a name that is not there; only the construction tree can (H130).
+        problem = declaresFunction(entryFunction)
+                      ? std::format("'{}' declares '{}' but does not export it", name_, entryFunction)
+                      : std::format("'{}' exports no '{}'", name_, entryFunction);
         return ProgramStatus::NoSuchFunction;
     }
     using Access = detail::EntityAccess;
@@ -382,3 +440,7 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
 void UserDefinedModule::declareTypes() { (void)compile(CompileStage::GCT); }
 
 void UserDefinedModule::declareEntities() { (void)compile(CompileStage::Declared); }
+
+std::vector<std::string> UserDefinedModule::operatorProtocols() const {
+    return implementation_ ? implementation_->operatorProtocols() : Module::operatorProtocols();
+}

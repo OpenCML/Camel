@@ -749,7 +749,7 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
 // ---------------------------------------------------------------------------------------------
 // The Debug-only safepoint draft-root check.
 //
-// The red line (reports/H74.md): while a session holds a draft open, every safepoint the session
+// The red line (handover note ⟨b2dbdd6⟩ (H74)): while a session holds a draft open, every safepoint the session
 // reaches must keep the draft's static values relocatable, or a collection at that safepoint
 // leaves the raw slots in the draft pointing at where the objects were. The root registration
 // itself stays where it is: the session's RootScope registers an external tracer, and a

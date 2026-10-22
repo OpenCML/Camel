@@ -284,37 +284,7 @@ CAMEL_MATH_INTEGER(
 
 #undef CAMEL_MATH_INTEGER
 
-// The shifts' result type is computed from the first argument, and the count may be of either
-// integer type: a `DynamicFuncTypeResolver` stays the one source of their type and cannot be a
-// declaration (design principles 6.4; handover H94, ruling 1 and H113). They are the only groups
-// of this file the declarations of `stdlib/math.cml` do not replace.
-oper_group_ptr_t shift(const std::string &name) {
-    return OperatorGroup::create(
-        name,
-        {{"math:" + name,
-          DynamicFuncTypeResolver::create(
-              {{0, {}}, {2, {false, false}}},
-              "(x: i32 | int, count: i32 | int) => i32 | int",
-              [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                  -> std::optional<Type *> {
-                  const auto integer = [](Type *t) {
-                      return t->code() == TypeCode::Int32 || t->code() == TypeCode::Int64;
-                  };
-                  if (!integer(norm[0]) || !integer(norm[1]))
-                      return std::nullopt;
-                  return norm[0];
-              })}});
-}
-
 } // namespace
-
-const std::vector<oper_group_ptr_t> &getMathNumericGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        shift("shl"),
-        shift("shr"),
-    };
-    return groups;
-}
 
 std::unordered_map<std::string, operator_t> getMathNumericOpsMap() {
     std::unordered_map<std::string, operator_t> ops;

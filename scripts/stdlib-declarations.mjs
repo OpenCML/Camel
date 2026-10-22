@@ -1,7 +1,19 @@
 #!/usr/bin/env node
-// A module that has moved to a declaration module stays migrated (handover H137).
+// A module that has moved to a declaration module stays migrated (handover H137), and the
+// computed signatures a declaration cannot express have one recorded place (handover H180).
 //
 //   node scripts/stdlib-declarations.mjs --check
+//   node scripts/stdlib-declarations.mjs --check-ledger
+//
+// `--check-ledger` reads the numbers of the two account pages and compares each with the tree.
+// `docs/technical/48_declaration_migration.md` is the migration's page: the declaration modules,
+// their declared names and declarations, their computed names, the overloads and public names from
+// `camel inspect --ops`, the signature files, the per-module rows, and the output quotes of the
+// re-check table. `docs/technical/49_computed_signatures.md` is the signature directory's page:
+// the files, entries and names, the four buckets, the per-file table, the two size predictions and
+// the operator-line count. A number a human retypes drifts; this mode makes the page fail with
+// "page says X, tree has Y" and names the file instead (H200). A row or a fact that is dropped is
+// a problem too, so a hole cannot pass for an agreement.
 //
 // H19 moves a fixed-signature C++ module from `stdlib/signatures/<module>.cml` to
 // `stdlib/<module>.cml` and deletes the C++ `OperatorGroup` (H94, H104, H113, H115, H126,
@@ -16,14 +28,12 @@
 // set is read from the tree, not from a list in this script: the next batch (`time`, `algo`,
 // `statistics`, `tree`/`ckpt`) is covered the day its `.cml` lands.
 //
-// The four checks, for every declaration module:
+// The checks, for every declaration module:
 //
 //   1. C++ registers no `StaticFuncTypeResolver` for a name the declaration fixes. A name
-//      whose signature C++ computes (`DynamicFuncTypeResolver`) may stay in C++: `math`'s
-//      `sqrt`/`shl`/`shr` (recorded as `// dynamic func` in `stdlib/math.cml`), `random`'s
-//      `choice`/`sample`/`shuffle` and `json`'s `encode`/`decode_as` (recorded in the
-//      module's `computed:` signature file). This is "no static resolver for a declared
-//      name", not "no resolver at all".
+//      whose signature C++ computes (`DynamicFuncTypeResolver`) may stay in C++: this is
+//      "no static resolver for a declared name", not "no resolver at all". The computed
+//      names themselves are recorded in the module's `computed:` signature file (check 5).
 //
 //   2. `stdlib/signatures/<module>.cml` does not exist unless the reference generator
 //      (`scripts/stdlib-reference.mjs`) names it in that module's `computed:` field. A stray
@@ -44,13 +54,103 @@
 //      shows the calls; this check resolves the loops over `get*Groups()` so it also sees the
 //      groups exported by `exportEntity(group->name(), group)`.
 //
+// And one check for the registry as a whole:
+//
+//   5. Every C++ module of `modules/` that registers operators is either imported by
+//      `registry_all.cml` — the program `--verify-ops` reads — and listed in MODULES, or named
+//      in UNCHECKED_MODULES with a reason and a probe that imports it. A module that registers
+//      operators and is in neither place is a hole: `--verify-ops` never sees it and every check
+//      stays green (handover H166 found `python`/`pyplot` that way; H173 found `sim`, which
+//      registry_all imported while MODULES did not list it, and the four modules no program
+//      imported at all). A module imported but absent from MODULES is the same hole and is
+//      reported too.
+//
+// And one for the notation:
+//
+//   6. A computed name has exactly one place: `stdlib/signatures/<module>.cml`, named by the
+//      MODULES entry's `computed:` field. The inline `// dynamic func` form is retired (H180):
+//      it cannot carry an `#op` URI, so a computed name whose operator URI differs from
+//      `<module>:<name>` has no inline spelling. An inline record is a problem even when the
+//      name is also in the file (the pointer and the file are then two places); a module whose
+//      `computed:` field names a file that records no name is a pointer that does not agree
+//      with reality. A name recorded in neither place is caught by the exported-name loop of
+//      check 4 ("no computed signature records it").
+//
+// The reserved groups are the exception to (1) and (4): `__neq__` because `!=` cannot be declared
+// (design principles 4.3 — an overload of `==` gives it, and `operator !=` is
+// OperatorNotOverloadable), and the compiler negates a *Camel* overload of `==`, not a native
+// one, so a module whose types have their own `==` keeps the `__neq__` group in C++. Rewrite's
+// `__rule`, `__rule_when` and `__analysis` are the compiled form of the language's `rule` and
+// `analysis` declarations, so they are exported by C++ as well (handover H183). None of them has a
+// Camel name: neither the declaration file nor the reference page carries it, and `--verify-ops`
+// filters reserved names out. Every other reserved group stays checked.
+// Two shapes that the tensor module writes are resolved rather than reported:
+//
+//   - A module that exports the groups of its operator registry
+//     (`for (g : OpRegistry::instance().operatorGroups("<module>"))`, `modules/tensor` and
+//     `modules/nn`, where the registry is reached through `camel::tensor::ops::`). The names are
+//     the OpDef table, so the check reads the C++ skip list (`kDeclaredOperators`) and requires
+//     it to be exactly the declaration names, both ways; the loop then exports exactly the
+//     computed signatures, which `--verify-ops` proves is the rest of the registered operators.
+//     The loop must skip the declared names. A module that publishes a type-qualified alias must
+//     publish it for every registry operator, i.e. from this loop; a module that publishes no
+//     alias at all, like `nn`, need not invent one.
+//
+//   - A type-qualified alias (`exportEntity(Reference({"Tensor", name}), group)`). A
+//     declaration has no syntax for `Tensor.shape`, so C++ publishes it, and the compiler
+//     points it at the declaration when the declaration replaces the module's entity
+//     (`Module::replaceTypeQualifiedAliases`, handover H151). This is not a second signature:
+//     `--verify-ops` requires the alias to resolve to the same operator as the plain name
+//     (same URI, same parameter counts, which a stale C++ group would not report).
+//
+// A loop over a group factory (`for (g : getOperatorGroups())`, also when the call is qualified)
+// is resolved by reading the `OperatorGroup::create` calls in the factory's body. A module may
+// have both shapes: `nn` exports its tensor operators from the registry and its optimizers from
+// a literal group list.
+//
+// And one for the gap ledger:
+//
+//   7. Every entry of `stdlib/signatures/*.cml` is classified in `scripts/computed-gaps.mjs`
+//      (handover H194): one record per entry, in the file's order, with a bucket and a mechanism
+//      that are tags defined in that script. An entry the ledger does not name, a ledger record
+//      with no entry, and a bucket or mechanism tag that does not exist — or a mechanism that
+//      names a bucket the mechanism does not belong to — are problems. The directory's size is
+//      then an accounted number: every entry says what would move it, and deleting an entry from
+//      the ledger cannot silently shrink the count.
+//
 // The output is one line per problem, each naming the file, the module and the operator, and a
 // final line starting `migrated modules stay migrated:`. Exit 1 when there is a problem.
+//
+// `--check-ledger` splits its numbers by where they come from, because a tree without a build is
+// a normal tree and a stale build is not (H213). The declaration modules, their declared names and
+// declarations, their computed names, the signature files, and everything on
+// `49_computed_signatures.md` except its `inspect --ops` line count are read from the tree. They
+// are checked with no build at all, so a hand-edited page still fails on a fresh worktree. The
+// registered numbers are the binary's: `camel inspect --ops` supplies the OPERATOR lines, the
+// public names and the registered overloads, and the page's §6 quotes of `--check`,
+// `--verify-ops` and `inspect --ops` are compared with them. Those are read only from a build
+// that says it is this tree's: `out/latest/build-info.json` must exist, name HEAD, not say
+// "clean" over a dirty tree, and record this tree's source fingerprint. When it does not, the
+// build-dependent claims are skipped with a notice and the tree-decidable ones still run (exit 0
+// when only they pass). A stamp that names another commit, or a clean build over a dirty tree,
+// is refused instead: exit 4, one line naming the build, its commit, HEAD, and the
+// `camel-remote.ps1` run that builds this tree, unless `--allow-stale-build` is given (it prints
+// the same facts as a warning and reads the stale build). `--require-build` turns "no build" into
+// exit 5, so a plan that wants the binary claims cannot pass over their absence.
 
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+
+import { BUCKETS, classificationProblems, entryRecords, signatureEntries } from './computed-gaps.mjs'
+import {
+    BUILD_INFO_FILE,
+    BUILD_INFO_SCHEMA,
+    FINGERPRINT_VERSION,
+    gitState,
+    sourceFingerprint,
+} from './common.js'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
@@ -59,6 +159,27 @@ const MODULES_DIR = path.join(REPO_ROOT, 'modules')
 const REFERENCE = path.join(REPO_ROOT, 'scripts', 'stdlib-reference.mjs')
 
 const relative = (file) => path.relative(REPO_ROOT, file).replace(/\\/g, '/')
+
+// The reserved groups a migrated module may keep outside its declarations: see the note above.
+const UNDERIVABLE_OPERATORS = new Set(['__neq__', '__rule', '__rule_when', '__analysis'])
+
+// Modules that register operators but are deliberately not verified, each with the fact that
+// makes the exclusion true. `registry_all.cml` is the program `--verify-ops` reads, so a module
+// it does not import is not verified; an entry here must (a) have no declaration file
+// `stdlib/<module>.cml` and no `stdlib/signatures/<module>.cml`, so there is no signature source
+// being ignored, and (b) name a `covered_by` program that imports it, so `inspect --ops` still
+// lists its operators and another plan still checks their purity.
+//
+// `nn`, `autodiff` and `onnx` are the tensor stack's layers. Their signatures are computed by
+// the tensor OpRegistry and the C++ resolvers (H157 inventories them name by name); the
+// reference page excludes the tensor stack by design, and writing a signature file for them
+// would be the declaration migration the H19 ledger assigns, not coverage. Their purity is
+// checked by `registry.purity_declared_tensor_stack` over `registry_tensor.cml`.
+//
+// Empty since H179 declared `onnx` (`supported_operators` in stdlib/onnx.cml, `export_model` in
+// stdlib/signatures/onnx.cml): every module that registers operators is now in the probe and in
+// MODULES. The list stays, with its checks, so an exclusion has to be justified the same way.
+const UNCHECKED_MODULES = []
 
 function read(file) {
     return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
@@ -230,6 +351,7 @@ function readReferenceModules() {
             name: field(object, 'name'),
             kind: field(object, 'kind'),
             source: field(object, 'source'),
+            registered: field(object, 'registered'),
             declaration: /\bdeclaration\s*:\s*true\b/.test(object),
             computed: field(object, 'computed'),
         }))
@@ -238,24 +360,175 @@ function readReferenceModules() {
 
 // ---- the tree's declaration modules ---------------------------------------------------------
 
-function escapeRegExp(text) {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+// The name a module directory registers itself with, or null when its C++ side has no
+// `BuiltinModule` (a plain Camel module). Only `module.cpp` and `src/module.cpp` are read: a
+// `BuiltinModule` in some other file is not the module's registration.
+function builtinModuleName(dir) {
+    const pattern = /\bBuiltinModule\s*\(\s*"([^"]+)"/
+    for (const candidate of [path.join(dir, 'module.cpp'), path.join(dir, 'src', 'module.cpp')]) {
+        if (!fs.existsSync(candidate)) continue
+        const match = stripComments(read(candidate)).match(pattern)
+        if (match) return match[1]
+    }
+    return null
 }
 
 // A C++ module registers itself with `BuiltinModule("<name>", ...)` in its module.cpp (the
 // files at the top of a module directory or in its src/). A module whose C++ side has gone
 // away is a plain Camel module, not a declaration module.
 function cppModuleDir(name) {
-    const pattern = new RegExp(`\\bBuiltinModule\\s*\\(\\s*"${escapeRegExp(name)}"`)
     for (const entry of fs.readdirSync(MODULES_DIR, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue
         const dir = path.join(MODULES_DIR, entry.name)
-        for (const candidate of [path.join(dir, 'module.cpp'), path.join(dir, 'src', 'module.cpp')]) {
-            if (!fs.existsSync(candidate)) continue
-            if (pattern.test(stripComments(read(candidate)))) return dir
-        }
+        if (builtinModuleName(dir) === name) return dir
     }
     return null
+}
+
+// Every module of `modules/` that registers operators: a declaration module registers them
+// through `stdlib/<module>.cml`, and any other module through the operator groups its C++
+// exports (including the registry loop `tensor` writes). `io` is the shape that used to look
+// empty: it has no `exportEntity` but five declarations, so it is an operator module too.
+function operatorModules() {
+    const found = new Map()
+    for (const module of declarationModules()) {
+        const declared = readDeclarations(module.source, module.name).declarations
+        if (declared.length > 0) found.set(module.name, module.cppDir)
+    }
+    for (const entry of fs.readdirSync(MODULES_DIR, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue
+        const dir = path.join(MODULES_DIR, entry.name)
+        const name = builtinModuleName(dir)
+        if (!name || found.has(name)) continue
+        const analysis = analyseCpp(dir)
+        if (analysis.exports.length === 0 && analysis.registryLoops.length === 0) continue
+        found.set(name, dir)
+    }
+    return [...found.entries()].map(([name, dir]) => ({ name, dir }))
+}
+
+// The modules a Camel program imports. The reference probe is the only caller that matters, but
+// an exclusion names its own probe, so this takes the file.
+const IMPORT_RE =
+    /^[ \t]*import[ \t]+(?:[A-Za-z_]\w*[ \t]+as[ \t]+[A-Za-z_]\w*[ \t]+from[ \t]+|\{[^}]*\}[ \t]+from[ \t]+|\*[ \t]+as[ \t]+[A-Za-z_]\w*[ \t]+from[ \t]+)?([A-Za-z_]\w*)/gm
+
+function probeImportsOf(file) {
+    const names = new Set()
+    for (const match of stripComments(read(file)).matchAll(IMPORT_RE)) names.add(match[1])
+    return names
+}
+
+// (5) The registry is complete: every module that registers operators is either verified (the
+// reference probe imports it and MODULES lists it) or excluded with a reason that this check
+// proves. Read from the tree, so a new module cannot join the build without naming itself.
+function coverageProblems(reference) {
+    const problems = []
+    const probe = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
+    const imported = probeImportsOf(probe)
+    const operators = operatorModules()
+    const operatorNames = new Set(operators.map((module) => module.name))
+    const excluded = new Map(UNCHECKED_MODULES.map((entry) => [entry.name, entry]))
+    const inReference = (name) => reference.find((module) => module.name === name && module.kind === 'cpp')
+    const where = (module) => `modules/${path.basename(module.dir)}`
+
+    for (const module of operators) {
+        const entry = inReference(module.name)
+        const exclusion = excluded.get(module.name)
+        const inProbe = imported.has(module.name)
+        if (inProbe && !entry) {
+            problems.push(
+                `${where(module)}: '${module.name}' registers operators and registry_all.cml imports it, ` +
+                    `but MODULES in scripts/stdlib-reference.mjs does not list it, so --verify-ops never ` +
+                    `checks it (add the module to the reference, or drop the import and exclude it)`,
+            )
+        }
+        if (inProbe && exclusion) {
+            problems.push(
+                `${where(module)}: '${module.name}' is in UNCHECKED_MODULES but registry_all.cml imports it; ` +
+                    `a module that is in the probe must be verified, not excluded`,
+            )
+        }
+        if (!inProbe && !exclusion) {
+            problems.push(
+                `${where(module)}: '${module.name}' registers operators but registry_all.cml does not import ` +
+                    `it and UNCHECKED_MODULES in scripts/stdlib-declarations.mjs does not exclude it with a ` +
+                    `reason; --verify-ops never sees it`,
+            )
+        }
+        if (entry && !inProbe) {
+            problems.push(
+                `${where(module)}: MODULES lists '${module.name}' but registry_all.cml does not import it, so ` +
+                    `--verify-ops cannot see the module it is supposed to check`,
+            )
+        }
+    }
+
+    for (const module of reference) {
+        if (module.kind !== 'cpp' || module.registered === '<builtin>') continue
+        if (!operatorNames.has(module.name)) {
+            problems.push(
+                `scripts/stdlib-reference.mjs: MODULES lists '${module.name}', but no module of modules/ ` +
+                    `registers operators under that name`,
+            )
+        }
+    }
+
+    for (const entry of UNCHECKED_MODULES) {
+        if (!entry.reason || entry.reason.trim().length < 40) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: UNCHECKED_MODULES names '${entry.name}' without a reason`,
+            )
+        }
+        if (!operatorNames.has(entry.name)) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: UNCHECKED_MODULES names '${entry.name}', which registers no ` +
+                    `operators`,
+            )
+        }
+        if (inReference(entry.name)) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: '${entry.name}' is excluded but MODULES lists it; checked ` +
+                    `modules must not stay in the exclusion list`,
+            )
+        }
+        if (imported.has(entry.name)) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: '${entry.name}' is excluded but registry_all.cml imports it`,
+            )
+        }
+        for (const file of [
+            path.join(STDLIB_DIR, `${entry.name}.cml`),
+            path.join(SIGNATURE_DIR, `${entry.name}.cml`),
+        ]) {
+            if (fs.existsSync(file)) {
+                problems.push(
+                    `${relative(file)}: '${entry.name}' is excluded, but this signature source exists; check ` +
+                        `the module instead of excluding it`,
+                )
+            }
+        }
+        if (!entry.covered_by) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: UNCHECKED_MODULES names '${entry.name}' without covered_by; ` +
+                    `an exclusion must say which probe still imports and lists the module`,
+            )
+            continue
+        }
+        const coveredBy = path.join(REPO_ROOT, entry.covered_by)
+        if (!fs.existsSync(coveredBy)) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: the covered_by program '${entry.covered_by}' of '${entry.name}' ` +
+                    `does not exist`,
+            )
+        } else if (!probeImportsOf(coveredBy).has(entry.name)) {
+            problems.push(
+                `${entry.covered_by}: it does not import '${entry.name}', so the exclusion of '${entry.name}' ` +
+                    `names a probe that does not cover it`,
+            )
+        }
+    }
+
+    return problems
 }
 
 function declarationModules() {
@@ -308,23 +581,43 @@ function readDeclarations(file, moduleName) {
     return { declarations, dynamic }
 }
 
-// The signatures C++ computes and a declaration cannot express: `// dynamic func` entries in
-// the declaration file, and the declarations of the module's `computed:` signature file.
-function computedSignatures(module, entry) {
-    const result = new Map()
+// The computed signatures of a module, with the place each name is recorded in. A computed name
+// has exactly one such place (H180):
+//
+//   - `stdlib/signatures/<module>.cml`, named by the module's `computed:` field. This is the
+//     invariant; it is the only place a computed name is recorded.
+//   - an inline `// dynamic func` in the declaration file. This is the retired convention: it
+//     cannot carry an `#op` URI (a computed name whose operator URI differs from `<module>:<name>`
+//     has no inline spelling), so the check reports every inline record instead of accepting it.
+//
+// `inline` and `file` are maps from name to the first record, for the problem messages; `all` is
+// the union, which keeps `--verify-ops`'s "every computed name has an exported group" check going
+// while a wrong-place record is being reported.
+function computedPlaces(module, entry) {
     const own = readDeclarations(module.source, module.name)
+    const inline = new Map()
     for (const dynamic of own.dynamic) {
-        result.set(dynamic.name, { file: relative(module.source), line: dynamic.line })
+        if (!inline.has(dynamic.name)) {
+            inline.set(dynamic.name, { file: relative(module.source), line: dynamic.line })
+        }
     }
+    const file = new Map()
+    let filePath = null
     if (entry && entry.computed) {
-        const file = path.join(STDLIB_DIR, entry.computed)
-        if (fs.existsSync(file)) {
-            for (const declaration of readDeclarations(file, module.name).declarations) {
-                result.set(declaration.name, { file: relative(file), line: declaration.line })
+        filePath = path.join(STDLIB_DIR, entry.computed)
+        if (fs.existsSync(filePath)) {
+            for (const declaration of readDeclarations(filePath, module.name).declarations) {
+                if (!file.has(declaration.name)) {
+                    file.set(declaration.name, {
+                        file: relative(filePath),
+                        line: declaration.line,
+                    })
+                }
             }
         }
     }
-    return result
+    const all = new Map([...inline, ...file])
+    return { inline, file, all, filePath }
 }
 
 // ---- the C++ side ---------------------------------------------------------------------------
@@ -332,10 +625,24 @@ function computedSignatures(module, entry) {
 // The operator groups a module's C++ sources create, the groups it exports, and the functions
 // a `for (... : get*Groups()) exportEntity(group->name(), group)` loop iterates. Comments are
 // stripped first, so a name in a comment is not a resolver or an export.
+//
+// Two more shapes are read, both written by `modules/tensor`:
+// - a loop over the module's operator registry
+//   (`for (g : OpRegistry::instance().operatorGroups("<module>"))`), whose groups are the OpDef
+//   table rather than `OperatorGroup::create` calls; the names it exports are the module's
+//   operators minus the skip list `kDeclaredOperators`, and --verify-ops proves that set is the
+//   declarations plus the computed signatures;
+// - a type-qualified alias export (`exportEntity(Reference({"Tensor", leaf}), group)`), which
+//   publishes an operator under a type namespace. A declaration cannot write that name; the
+//   compiler points the alias at the declaration when it replaces the module's entity
+//   (Module::replaceTypeQualifiedAliases), and --verify-ops checks that every alias resolves to
+//   the same operator as the plain name.
 function analyseCpp(dir) {
     const groups = []
     const exports = []
     const loops = []
+    const registryLoops = []
+    const declaredList = []
     const factories = new Set()
     const loopFunctions = new Map()
     const files = listCppFiles(dir).map((file) => ({ file, text: stripComments(read(file)) }))
@@ -395,16 +702,51 @@ function analyseCpp(dir) {
             const literal = body.match(/^\s*"([^"]*)"/)
             const reference = body.match(/^\s*Reference\s*\(\s*"([^"]*)"\s*\)/)
             const loop = body.match(/^\s*([A-Za-z_]\w*)\s*->\s*name\s*\(\s*\)/)
+            // `Reference(std::vector<std::string>{"Tensor"}, ...)`: the same operator under a
+            // type namespace (see the comment above).
+            const alias = body.match(
+                /^\s*Reference\s*\(\s*(?:std\s*::\s*)?vector\s*<\s*(?:std\s*::\s*)?string\s*>\s*\{\s*"([^"]+)"\s*\}\s*,\s*(?:"([^"]+)"|([A-Za-z_]\w*)\s*->\s*name\s*\(\s*\))\s*\)/,
+            )
             exports.push({
                 file: relativeFile,
                 line: lineAt(text, open),
                 name: literal ? literal[1] : reference ? reference[1] : null,
                 loopVariable: loop ? loop[1] : null,
+                alias: alias ? { prefix: alias[1], leaf: alias[2] || null } : null,
+            })
+        }
+
+        // The skip list of a module that exports its operator registry: the names whose groups
+        // the module does not export because `stdlib/<module>.cml` declares them.
+        for (const match of text.matchAll(
+            /\bconstexpr\s+(?:std\s*::\s*)?string_view\s+kDeclaredOperators\s*\[\s*\]\s*=\s*\{([^}]*)\}/g,
+        )) {
+            for (const name of match[1].matchAll(/"([^"]+)"/g)) declaredList.push(name[1])
+        }
+
+        // `for (g : OpRegistry::instance().operatorGroups("<module>"))`: the group names are the
+        // module's operator table, which no text can list; the loop's body says whether the
+        // declared names are skipped and whether the type-qualified alias is exported. The
+        // registry may be reached through a namespace (`camel::tensor::ops::OpRegistry`, nn).
+        for (const match of text.matchAll(
+            /\bfor\s*\([^)]*?\b([A-Za-z_]\w*)\s*:\s*(?:(?:[A-Za-z_]\w*)\s*::\s*)*OpRegistry\s*::\s*instance\s*\(\s*\)\s*\.\s*operatorGroups\s*\(\s*"([^"]+)"\s*\)\s*\)/g,
+        )) {
+            const brace = text.indexOf('{', match.index + match[0].length)
+            const body = brace < 0 ? '' : text.slice(brace, matchDelimiter(text, brace) + 1)
+            registryLoops.push({
+                file: relativeFile,
+                line: lineAt(text, match.index),
+                variable: match[1],
+                module: match[2],
+                skipsDeclared: /\bisDeclaredOperators?\s*\(/.test(body),
+                alias: new RegExp(
+                    `Reference\\s*\\(\\s*(?:std\\s*::\\s*)?vector\\s*<\\s*(?:std\\s*::\\s*)?string\\s*>\\s*\\{\\s*"[^"]+"\\s*\\}\\s*,\\s*${match[1]}\\s*->\\s*name\\s*\\(\\s*\\)\\s*\\)`,
+                ).test(body),
             })
         }
 
         for (const match of text.matchAll(
-            /\bfor\s*\([^)]*?\b([A-Za-z_]\w*)\s*:\s*([A-Za-z_]\w*)\s*\(\s*\)\s*\)\s*\{?\s*exportEntity\s*\(\s*\1\s*->\s*name\s*\(\s*\)\s*,\s*\1\s*\)/g,
+            /\bfor\s*\([^)]*?\b([A-Za-z_]\w*)\s*:\s*(?:(?:[A-Za-z_]\w*)\s*::\s*)*([A-Za-z_]\w*)\s*\(\s*\)\s*\)\s*\{?\s*exportEntity\s*\(\s*\1\s*->\s*name\s*\(\s*\)\s*,\s*\1\s*\)/g,
         )) {
             loops.push({ file: relativeFile, line: lineAt(text, match.index), fn: match[2] })
         }
@@ -422,7 +764,16 @@ function analyseCpp(dir) {
         }
     }
 
-    return { groups, exports, loops, factories, factoryCalls, loopFunctions }
+    return {
+        groups,
+        exports,
+        loops,
+        registryLoops,
+        declaredList,
+        factories,
+        factoryCalls,
+        loopFunctions,
+    }
 }
 
 // The group names a `for (... : getOperatorGroups())` loop exports, or null when the names are
@@ -454,13 +805,23 @@ function staticChecks() {
     const modules = declarationModules()
     let computedCount = 0
 
+    // Declared modules derive from `stdlib/<module>.cml` + the C++ module's `BuiltinModule`; if
+    // that derivation finds nothing, every loop below passes over nothing.
+    if (modules.length === 0) {
+        problems.push(
+            'no declaration module under stdlib/: no `<module>.cml` matches a C++ `BuiltinModule`; ' +
+                'the migration this check proves cannot be empty, so its derivation is broken',
+        )
+    }
+
     for (const module of modules) {
         const entry = reference.find((each) => each.name === module.name)
         const source = relative(module.source)
         const declared = readDeclarations(module.source, module.name).declarations
         const declaredNames = new Set(declared.map((declaration) => declaration.name))
         const declaredUris = new Set(declared.map((declaration) => declaration.uri))
-        const computed = computedSignatures(module, entry)
+        const places = computedPlaces(module, entry)
+        const computed = places.all
         computedCount += computed.size
 
         // The reference generator must see the module, or --verify-ops never checks it.
@@ -491,6 +852,26 @@ function staticChecks() {
             problems.push(`${relative(signatureFile)}: the reference generator names it as the computed signatures of '${module.name}', but the file does not exist`)
         }
 
+        // (5) The computed half has one convention and one place (handover H180). It is the
+        // module's signature file, named by `computed:`. An inline `// dynamic func` cannot carry
+        // an `#op` URI, so it cannot record every computed name; it is not an alternative.
+        for (const [name, where] of places.inline) {
+            const also = places.file.get(name)
+            problems.push(
+                `${where.file}:${where.line}: the computed signature '${name}' of '${module.name}' is recorded inline as ` +
+                    `'// dynamic func'${also ? ` and in ${also.file}:${also.line}` : ''}; a computed name has exactly one ` +
+                    `place: stdlib/signatures/${module.name}.cml, named by the MODULES entry's computed: field (handover H180)`,
+            )
+        }
+        // The pointer must agree with the file: a module whose MODULES entry names a computed
+        // file has to record at least one computed name there. (A missing file is check 2.)
+        if (entry && entry.computed && places.filePath && fs.existsSync(places.filePath) && places.file.size === 0) {
+            problems.push(
+                `${relative(places.filePath)}: the MODULES entry names it as the computed signatures of '${module.name}', ` +
+                    `but it records no computed name`,
+            )
+        }
+
         // One signature, one place: a name cannot be both declared and computed.
         for (const name of declaredNames) {
             if (computed.has(name)) {
@@ -503,6 +884,7 @@ function staticChecks() {
 
         // (1) no StaticFuncTypeResolver for a name the declaration fixes.
         for (const group of analysis.groups.filter((each) => each.static)) {
+            if (UNDERIVABLE_OPERATORS.has(group.name)) continue
             const candidates = []
             if (group.name) candidates.push(group.name)
             if (group.factory) candidates.push(...(analysis.factoryCalls.get(group.factory) || []))
@@ -525,11 +907,31 @@ function staticChecks() {
             }
         }
 
-        // (4) the export group is the declaration's: C++ may export only computed names.
+        // (4) the export group is the declaration's: C++ may export only computed names, and a
+        // type-qualified alias (`Tensor.shape`) is not an export group of its own.
         const exported = new Set()
         for (const exportedCall of analysis.exports) {
-            if (exportedCall.name) exported.add(exportedCall.name)
+            if (exportedCall.alias) continue
+            if (exportedCall.name && !UNDERIVABLE_OPERATORS.has(exportedCall.name)) {
+                exported.add(exportedCall.name)
+            }
         }
+        const registryLoops = analysis.registryLoops.filter(
+            (loop) => loop.module === module.name,
+        )
+        if (analysis.registryLoops.length > registryLoops.length) {
+            for (const loop of analysis.registryLoops.filter(
+                (each) => each.module !== module.name,
+            )) {
+                problems.push(
+                    `${loop.file}:${loop.line}: the migrated module '${module.name}' exports the operator ` +
+                        `registry of '${loop.module}', not its own`,
+                )
+            }
+        }
+        // A loop over a group factory names the groups it exports by reading the factory's
+        // `OperatorGroup::create` calls, whether or not the module also exports a registry (`nn`
+        // has one of each).
         for (const loop of analysis.loops) {
             const names = loopGroupNames(loop, analysis)
             if (names === null) {
@@ -541,10 +943,57 @@ function staticChecks() {
             }
             for (const name of names) exported.add(name)
         }
-        for (const exportedCall of analysis.exports) {
-            if (!exportedCall.name && !exportedCall.loopVariable) {
-                problems.push(`${exportedCall.file}:${exportedCall.line}: the migrated module '${module.name}' exports a group this checker cannot name`)
+        // Whether the module publishes type-qualified aliases at all: `tensor` publishes
+        // `Tensor.<name>` for every operator, while `nn` publishes plain names only.
+        const publishesAliases = analysis.exports.some((exportedCall) => exportedCall.alias !== null)
+        if (registryLoops.length > 0) {
+            // The module exports the groups of its OpDef table: the names are not written in
+            // C++, so the set is the declarations plus the computed signatures (--verify-ops
+            // proves the registered operators are exactly that set), and the C++ skip list must
+            // be the declarations, both ways. A name that is not in the skip list is exported by
+            // the loop, so it may not be declared; a declared name that is missing from the skip
+            // list would be exported beside its declaration.
+            if (analysis.declaredList.length === 0) {
+                problems.push(
+                    `${registryLoops[0].file}:${registryLoops[0].line}: the loop over the operator registry exports ` +
+                        `every group; give it a kDeclaredOperators skip list so the declaration-only names are checked`,
+                )
             }
+            for (const loop of registryLoops) {
+                if (publishesAliases && !loop.alias) {
+                    problems.push(
+                        `${loop.file}:${loop.line}: the loop over the operator registry does not export the ` +
+                            `type-qualified alias of a name; a module that publishes 'Type.name' must publish it ` +
+                            `for every operator (handover H151)`,
+                    )
+                }
+                if (!loop.skipsDeclared) {
+                    problems.push(
+                        `${loop.file}:${loop.line}: the loop over the operator registry does not skip the declared ` +
+                            `names (isDeclaredOperators); a declared operator would be exported beside its declaration`,
+                    )
+                }
+            }
+            const skipped = new Set(analysis.declaredList)
+            for (const name of declaredNames) {
+                if (!skipped.has(name)) {
+                    problems.push(
+                        `${source}: '${name}' is declared, but kDeclaredOperators in C++ does not skip it`,
+                    )
+                }
+            }
+            for (const name of skipped) {
+                if (!declaredNames.has(name)) {
+                    problems.push(
+                        `kDeclaredOperators skips '${name}', but ${source} does not declare it`,
+                    )
+                }
+            }
+            for (const name of computed.keys()) exported.add(name)
+        }
+        for (const exportedCall of analysis.exports) {
+            if (exportedCall.alias || exportedCall.name || exportedCall.loopVariable) continue
+            problems.push(`${exportedCall.file}:${exportedCall.line}: the migrated module '${module.name}' exports a group this checker cannot name`)
         }
 
         for (const name of exported) {
@@ -569,7 +1018,13 @@ function staticChecks() {
         }
     }
 
-    return { problems, modules, computedCount }
+    problems.push(...coverageProblems(reference))
+
+    // (7) every entry of a signature file has one record in the gap ledger, and every record
+    // names a bucket and a mechanism that exist (handover H194).
+    problems.push(...classificationProblems(REPO_ROOT))
+
+    return { problems, modules, computedCount, excludedCount: UNCHECKED_MODULES.length }
 }
 
 // (3) Reused, not reimplemented: --verify-ops already checks both directions between the
@@ -590,14 +1045,866 @@ function verifyOps() {
     return { ok: true, summary: (run.stdout || '').trim().split('\n').filter(Boolean).pop() || '' }
 }
 
+// ---- the ledger page ------------------------------------------------------------------------
+//
+// `docs/technical/48_declaration_migration.md` is the account of the migration: how many modules
+// are declaration modules, how many names they declare, how many signatures C++ computes, how
+// many overloads are registered, how many names are public, and the same per module. Every one of
+// those is a claim about the tree, and a hand edit is how such a claim goes stale: H200 found the
+// page still listing `rewrite` as pending, although H183 had migrated it, and a total patched by
+// hand that no longer matched its own rows. This mode reads each number from the page and compares
+// it with the tree; the registered counts come from `camel inspect --ops` on the same probe
+// `--verify-ops` reads. A page that stops stating a fact is a problem too, because a check that
+// falls silent over a missing row would pass over a hole. The page stays a page: the mechanism,
+// the seven-step recipe and the history it records are not generated.
+
+const LEDGER = path.join(REPO_ROOT, 'docs', 'technical', '48_declaration_migration.md')
+const COMPUTED_LEDGER = path.join(REPO_ROOT, 'docs', 'technical', '49_computed_signatures.md')
+const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
+
+function camelExe() {
+    if (process.env.CAMEL_EXE) return process.env.CAMEL_EXE
+    return path.join(REPO_ROOT, 'out', 'latest', 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
+}
+
+// The registered operators, split the way the page counts them: a name and an overload of the
+// ledger are public, so a type-qualified alias (`Tensor.shape`) and a reserved group (`__rule`)
+// are out (the same filter `--verify-ops` applies to a name).
+function ledgerOperators() {
+    const run = spawnSync(camelExe(), ['inspect', '--ops', PROBE], { encoding: 'utf8', maxBuffer: 1 << 27 })
+    if (run.error) throw new Error(`could not run ${camelExe()} inspect --ops: ${run.error.message}`)
+    if (run.status !== 0) {
+        const first = `${run.stderr || ''}${run.stdout || ''}`.trim().split('\n')[0]
+        throw new Error(`camel inspect --ops failed (exit ${run.status}): ${first}`)
+    }
+    const operators = (run.stdout || '')
+        .split('\n')
+        .filter((line) => line.startsWith('OPERATOR '))
+        .map((line) => JSON.parse(line.slice('OPERATOR '.length)))
+    if (operators.length === 0) {
+        throw new Error('camel inspect --ops listed no operator, so the ledger would be compared with nothing')
+    }
+    return {
+        lines: operators.length,
+        public: operators.filter((op) => !op.name.startsWith('__') && !op.name.includes('::')),
+    }
+}
+
+// ---- where each ledger number comes from ----------------------------------------------------
+//
+// A worktree with no build of this commit is normal; a worktree with a build of another commit is
+// not. The two must not look alike, and neither may hide a page problem the tree can decide
+// (H213). The tree half below reads only `stdlib/`, `modules/`, the signature files and the
+// reference generator's table. The binary half reads `camel inspect --ops`, and it is allowed only
+// while `out/latest/build-info.json` says the install is this tree's.
+
+const EXIT_STALE = 4
+const EXIT_NO_BUILD = 5
+
+function installRoot() {
+    return path.resolve(path.dirname(camelExe()), '..')
+}
+
+function shortRevision(revision) {
+    return revision ? revision.slice(0, 10) : 'unknown'
+}
+
+// The helper lives beside the worktrees (`D:\Projects\Camel-wt\camel-remote.ps1`), not in the
+// repository, so name it with an absolute path when it is there and only by name otherwise.
+function remoteCommand() {
+    const helper = path.resolve(REPO_ROOT, '..', 'camel-remote.ps1')
+    if (fs.existsSync(helper)) {
+        return `pwsh -NoProfile -File "${helper}" -Path "${REPO_ROOT}"`
+    }
+    return `camel-remote.ps1 -Path "${REPO_ROOT}"`
+}
+
+// A stamp that disagrees with the tree is refused, not silently accepted and not silently skipped:
+// the numbers would look derived from this tree while describing another build. The message is one
+// line and names the install, the commit it was built at, HEAD, and the command that rebuilds.
+function staleBuild(where, why, allowStale) {
+    if (!allowStale) {
+        console.log(
+            `--check-ledger: refusing the build-dependent numbers: ${where} ${why}; ` +
+                `run ${remoteCommand()} to build this tree, or pass --allow-stale-build to read the stale build anyway.`,
+        )
+        process.exit(EXIT_STALE)
+    }
+    console.log(
+        `--check-ledger: warning: using a stale build: ${where} ${why}; ` +
+            'the build-dependent numbers below describe that build, not this tree.',
+    )
+}
+
+/**
+ * Whether the binary in the install `camelExe()` names may answer the ledger's binary numbers.
+ *
+ * Returns `{usable: false, why}` for a tree with no install at all (the normal fresh-worktree
+ * case), `{usable: true, stale: true}` when the stamp is absent/unreadable/from another commit,
+ * or when it says "clean" over a dirty tree, or when its source fingerprint differs -- with
+ * `--allow-stale-build` the stale facts are printed and the binary is still read. A stamp that
+ * names the current HEAD, a matching dirty flag and this tree's fingerprint is `stale: false`.
+ */
+function buildProvenance({ allowStale, requireBuild }) {
+    const dir = installRoot()
+    const where = relative(dir)
+    const binary = camelExe()
+    const hasStamp = fs.existsSync(path.join(dir, BUILD_INFO_FILE))
+    const hasBinary = fs.existsSync(binary)
+    if (!hasStamp && !hasBinary) {
+        if (requireBuild) {
+            console.log(
+                `--check-ledger: --require-build: no build of this tree in ${where} ` +
+                    `(no ${BUILD_INFO_FILE} and no camel binary); run ${remoteCommand()} to build this tree.`,
+            )
+            process.exit(EXIT_NO_BUILD)
+        }
+        return {
+            usable: false,
+            why: `no build of this tree in ${where} (no ${BUILD_INFO_FILE} and no camel binary)`,
+        }
+    }
+    if (!hasStamp) {
+        staleBuild(dir, `has no ${BUILD_INFO_FILE}, so it cannot name the commit it was built from`, allowStale)
+        return { usable: true, stale: true }
+    }
+    let stamp
+    try {
+        stamp = JSON.parse(fs.readFileSync(path.join(dir, BUILD_INFO_FILE), 'utf8'))
+    } catch (error) {
+        staleBuild(dir, `has a ${BUILD_INFO_FILE} that is not readable JSON (${error.message})`, allowStale)
+        return { usable: true, stale: true }
+    }
+    if (
+        !stamp ||
+        stamp.schema !== BUILD_INFO_SCHEMA ||
+        !stamp.fingerprint ||
+        stamp.fingerprint.version !== FINGERPRINT_VERSION
+    ) {
+        staleBuild(
+            dir,
+            `has a ${BUILD_INFO_FILE} written by a different form of the build stamp ` +
+                `(schema ${stamp && stamp.schema}, fingerprint ${stamp && stamp.fingerprint && stamp.fingerprint.version})`,
+            allowStale,
+        )
+        return { usable: true, stale: true }
+    }
+    const git = gitState(REPO_ROOT)
+    if (!git.available || !git.revision || !stamp.revision) {
+        staleBuild(
+            dir,
+            'cannot be matched to HEAD because git is unavailable or the stamp names no revision',
+            allowStale,
+        )
+        return { usable: true, stale: true }
+    }
+    if (stamp.revision !== git.revision) {
+        staleBuild(
+            dir,
+            `was built at ${shortRevision(stamp.revision)}${stamp.dirty ? ' (dirty)' : ''}, ` +
+                `but HEAD is ${shortRevision(git.revision)}`,
+            allowStale,
+        )
+        return { usable: true, stale: true }
+    }
+    if (git.dirty === true && stamp.dirty === false) {
+        staleBuild(
+            dir,
+            `was built clean at ${shortRevision(stamp.revision)}, but this tree has ` +
+                `${git.dirtyCount} uncommitted file(s)`,
+            allowStale,
+        )
+        return { usable: true, stale: true }
+    }
+    // The commit and the dirty flags agree, but the build inputs can still differ (a build from a
+    // dirty tree, edited further without a new commit). Compare the fingerprint `-NoBuild` already
+    // trusts rather than trust the metadata alone.
+    const fingerprint = sourceFingerprint(REPO_ROOT)
+    if (fingerprint.hash !== stamp.fingerprint.hash) {
+        staleBuild(
+            dir,
+            `was built at ${shortRevision(stamp.revision)} from different build inputs ` +
+                `(fingerprint ${stamp.fingerprint.hash.slice(0, 12)} vs ${fingerprint.hash.slice(0, 12)})`,
+            allowStale,
+        )
+        return { usable: true, stale: true }
+    }
+    return { usable: true, stale: false }
+}
+
+// What the tree says: the declaration modules and their declared names, their computed names (from
+// the signature file the reference generator names, never from the page), and the signature files.
+// It reads no binary, so it works on a fresh worktree.
+function ledgerTreeTruth() {
+    const modules = declarationModules()
+    const reference = readReferenceModules()
+    const signatureFiles = fs.readdirSync(SIGNATURE_DIR).filter((file) => file.endsWith('.cml'))
+    const computedFiles = new Set()
+    const rows = new Map()
+    let declaredNames = 0
+    let declarations = 0
+    let computedNames = 0
+    let computedEntries = 0
+    let withComputed = 0
+
+    for (const module of modules) {
+        const declared = readDeclarations(module.source, module.name).declarations
+        const declaredSet = new Set(declared.map((each) => each.name))
+        const entry = reference.find((each) => each.name === module.name)
+        const computedSet = new Set()
+        if (entry && entry.computed) {
+            withComputed += 1
+            computedFiles.add(entry.computed)
+            const computed = readDeclarations(path.join(STDLIB_DIR, entry.computed), module.name).declarations
+            computedEntries += computed.length
+            for (const each of computed) computedSet.add(each.name)
+        }
+        rows.set(module.name, {
+            declaredNames: declaredSet.size,
+            declarations: declared.length,
+            computed: computedSet.size,
+            // Kept for the binary half: which registered overloads are declared vs computed.
+            declaredSet,
+            computedSet,
+        })
+        declaredNames += declaredSet.size
+        declarations += declared.length
+        computedNames += computedSet.size
+    }
+
+    const migratedFiles = signatureFiles.filter((file) => computedFiles.has(`signatures/${file}`))
+    return {
+        modules,
+        rows,
+        declarationModuleNames: modules.map((module) => module.name),
+        moduleCount: modules.length,
+        declaredNames,
+        declarations,
+        computedNames,
+        computedEntries,
+        withComputed,
+        withoutComputed: modules.length - withComputed,
+        signatureFiles: signatureFiles.length,
+        migratedSignatureFiles: migratedFiles.length,
+        pendingSignatureFiles: signatureFiles.length - migratedFiles.length,
+    }
+}
+
+// What the binary says: the public operators `camel inspect --ops` lists on the probe
+// `--verify-ops` reads. This half may not run without a usable build (see buildProvenance).
+function ledgerBinaryTruth(tree) {
+    const operators = ledgerOperators()
+    let moduleNames = 0
+    let overloads = 0
+    let declaredOverloads = 0
+    let computedOverloads = 0
+    for (const module of tree.modules) {
+        const row = tree.rows.get(module.name)
+        const own = operators.public.filter((op) => op.module === module.name)
+        row.names = new Set(own.map((op) => op.name)).size
+        row.overloads = own.length
+        moduleNames += row.names
+        overloads += own.length
+        declaredOverloads += own.filter((op) => row.declaredSet.has(op.name)).length
+        computedOverloads += own.filter((op) => row.computedSet.has(op.name)).length
+    }
+    const publicNames = new Set(operators.public.map((op) => `${op.module}::${op.name}`)).size
+    const builtin = operators.public.filter((op) => op.module === '<builtin>')
+    return {
+        moduleNames,
+        overloads,
+        declaredOverloads,
+        computedOverloads,
+        publicNames,
+        publicOverloads: operators.public.length,
+        builtinNames: new Set(builtin.map((op) => op.name)).size,
+        builtinOverloads: builtin.length,
+        // The modules that are not declaration modules: `ckpt`, `env`, `hash`, `process` and
+        // `<builtin>` (the page's overload split needs the two parts separately).
+        otherModuleOverloads: operators.public.length - overloads - builtin.length,
+        operatorLines: operators.lines,
+    }
+}
+
+// The page's table rows as cells. A line that is not a table row is not scrutinized: the page
+// carries prose the check does not read.
+function ledgerRows(text) {
+    return text.split('\n').map((line, index) => {
+        const trimmed = line.trim()
+        const cells =
+            trimmed.startsWith('|') && trimmed.endsWith('|')
+                ? trimmed
+                      .slice(1, -1)
+                      .split('|')
+                      .map((cell) => cell.trim())
+                : null
+        return { line: index + 1, cells, text: line }
+    })
+}
+
+function numbersIn(cell) {
+    return [...String(cell).matchAll(/\d+/g)].map((match) => Number(match[0]))
+}
+
+function lineNumberOf(text, index) {
+    return text.slice(0, index).split('\n').length
+}
+
+function compareMigrationLedger(text, truth, binary, skip) {
+    const rows = ledgerRows(text)
+    const problems = []
+    const page = relative(LEDGER)
+    const build = binary !== null
+
+    const missing = (what) =>
+        problems.push(`${page}: the page no longer states ${what}, so --check-ledger cannot confirm it`)
+    const mismatch = (where, what, says, has) =>
+        problems.push(`${page}:${where.line}: ${what}: page says ${says}, tree has ${has}`)
+    const find = (predicate, what) => {
+        const found = rows.find((row) => row.cells && predicate(row.cells))
+        if (!found) missing(what)
+        return found
+    }
+    const statedNumber = (found, cell, what, has) => {
+        if (!found) return
+        const values = numbersIn(found.cells[cell])
+        if (values.length === 0) missing(`${what} (the row states no number)`)
+        else if (values[0] !== has) mismatch(found, what, values[0], has)
+    }
+    // A number whose truth comes from the binary. With no usable build, the row must still state a
+    // number (a dropped fact is a tree-decidable hole), but the number itself is not compared; the
+    // claim is recorded so the caller can print what was skipped.
+    const buildNumber = (found, cell, what, has, skipLabel = what) => {
+        if (!found) return
+        if (!build) {
+            if (numbersIn(found.cells[cell]).length === 0) missing(`${what} (the row states no number)`)
+            skip(skipLabel)
+            return
+        }
+        statedNumber(found, cell, what, has)
+    }
+    const statedPair = (found, cell, what, has) => {
+        if (!found) return
+        const values = numbersIn(found.cells[cell])
+        if (values.length < 2) missing(`${what} (expected "<first> / <second>")`)
+        else {
+            if (values[0] !== has[0]) mismatch(found, `${what} (first)`, values[0], has[0])
+            if (values[1] !== has[1]) mismatch(found, `${what} (second)`, values[1], has[1])
+        }
+    }
+    const proseNumber = (match, what, has) => {
+        if (!match) missing(what)
+        else if (Number(match[1]) !== has) mismatch({ line: lineNumberOf(text, match.index) }, what, Number(match[1]), has)
+    }
+
+    // §2.1, the one-line account. Every row is required: a renamed or dropped row is a fact the
+    // page no longer states, not a fact that changed.
+    statedNumber(find((cells) => cells[0].startsWith('声明模块'), 'the declaration-module count'), 1, 'declaration modules', truth.moduleCount)
+    statedPair(find((cells) => cells[0].startsWith('声明名'), 'the declared-name and declaration counts'), 1, 'declared names / declarations', [truth.declaredNames, truth.declarations])
+    statedNumber(find((cells) => cells[0].startsWith('计算名'), 'the computed-name count'), 1, 'computed names', truth.computedNames)
+    buildNumber(
+        find((cells) => cells[0].startsWith('公开名'), 'the public-name count'),
+        1,
+        'public names in the declaration modules',
+        binary && binary.moduleNames,
+    )
+    buildNumber(
+        find((cells) => cells[0].startsWith('注册重载') && cells[0].includes('声明模块'), 'the overload count of the declaration modules'),
+        1,
+        'overloads in the declaration modules',
+        binary && binary.overloads,
+    )
+    buildNumber(
+        find((cells) => cells[0].startsWith('注册重载') && cells[0].includes('参考页'), 'the registered-overload total'),
+        1,
+        'registered overloads',
+        binary && binary.publicOverloads,
+    )
+
+    const signatureRow = find((cells) => cells[0].includes('stdlib/signatures/'), 'the signature-file count')
+    statedNumber(signatureRow, 1, 'signature files', truth.signatureFiles)
+    if (signatureRow) {
+        const migrated = (signatureRow.cells[2] || '').match(/(\d+)\s*个是已迁移/)
+        const pending = (signatureRow.cells[2] || '').match(/(\d+)\s*个属于尚未迁移/)
+        if (!migrated || !pending) missing('the split of the signature files into computed files of migrated modules and files of modules still to migrate')
+        else {
+            if (Number(migrated[1]) !== truth.migratedSignatureFiles) {
+                mismatch(signatureRow, 'signature files of migrated modules', Number(migrated[1]), truth.migratedSignatureFiles)
+            }
+            if (Number(pending[1]) !== truth.pendingSignatureFiles) {
+                mismatch(signatureRow, 'signature files of modules still to migrate', Number(pending[1]), truth.pendingSignatureFiles)
+            }
+        }
+    }
+
+    // The prose that splits the modules by "has a computed signature": two numbers a hand edit can
+    // leave behind.
+    const computedSplit = text.match(/(\d+)\s*个模块有计算签名、(\d+)\s*个没有/)
+    if (!computedSplit) missing('the split of modules with and without a computed signature')
+    else {
+        const where = { line: lineNumberOf(text, computedSplit.index) }
+        if (Number(computedSplit[1]) !== truth.withComputed) mismatch(where, 'modules with a computed signature', Number(computedSplit[1]), truth.withComputed)
+        if (Number(computedSplit[2]) !== truth.withoutComputed) mismatch(where, 'modules without a computed signature', Number(computedSplit[2]), truth.withoutComputed)
+    }
+
+    // §2.4, the overload split: the total, the declaration modules, the rest, `<builtin>`, and the
+    // arithmetic between them.
+    const overloadSplit = text.match(
+        /(\d+)\s*=\s*(\d+)\s*（(\d+)\s*个声明模块）\s*\+\s*(\d+)\s*（[^）]*）\s*\+\s*(\d+)\s*（`<builtin>`）/,
+    )
+    if (!overloadSplit) missing('the split of the registered overloads (§2.4)')
+    else {
+        const where = { line: lineNumberOf(text, overloadSplit.index) }
+        const [total, declared, moduleCount, other, builtin] = overloadSplit.slice(1).map(Number)
+        // The arithmetic is between the page's own numbers, so it is checked without a build.
+        if (declared + other + builtin !== total) {
+            problems.push(`${page}:${where.line}: the overload split does not add up: ${declared} + ${other} + ${builtin} != ${total}`)
+        }
+        if (!build) skip('the overload split of §2.4')
+        else {
+            if (total !== binary.publicOverloads) mismatch(where, 'registered overloads', total, binary.publicOverloads)
+            if (declared !== binary.overloads) mismatch(where, 'overloads in the declaration modules', declared, binary.overloads)
+            if (moduleCount !== truth.moduleCount) mismatch(where, 'declaration modules in the overload split', moduleCount, truth.moduleCount)
+            if (other !== binary.otherModuleOverloads) mismatch(where, 'overloads of the modules that are not declaration modules', other, binary.otherModuleOverloads)
+            if (builtin !== binary.builtinOverloads) mismatch(where, 'overloads of <builtin>', builtin, binary.builtinOverloads)
+        }
+    }
+
+    // §2.2, the per-module ledger: one row per declaration module, none for a module that is not
+    // one, and the total row agrees with both the tree and the rows. The "blocked" column is not
+    // derived here (it is the mechanism judgement of 47 §3); only its arithmetic is checked.
+    const sectionStart = text.indexOf('### 2.2')
+    const sectionEnd = text.indexOf('### 2.3')
+    if (sectionStart < 0 || sectionEnd <= sectionStart) missing('the per-module table (§2.2)')
+    else {
+        const from = lineNumberOf(text, sectionStart)
+        const to = lineNumberOf(text, sectionEnd)
+        const seen = new Set()
+        let blocked = 0
+        let total = null
+        for (const row of rows.filter((each) => each.cells && each.line > from && each.line < to)) {
+            if (row.cells[0] === '**合计**') {
+                total = row
+                continue
+            }
+            const moduleName = row.cells[0].match(/^`([a-z_][a-z0-9_]*)`$/)
+            if (!moduleName) continue
+            const name = moduleName[1]
+            seen.add(name)
+            const expected = truth.rows.get(name)
+            if (!expected) {
+                problems.push(`${page}:${row.line}: the per-module table has a row for '${name}', but no declaration module has that name`)
+                continue
+            }
+            buildNumber(
+                row,
+                1,
+                `the name count of '${name}'`,
+                expected.names,
+                'the per-module public-name and overload columns (§2.2)',
+            )
+            statedPair(row, 2, `the declared-name / declaration count of '${name}'`, [expected.declaredNames, expected.declarations])
+            statedNumber(row, 3, `the computed-name count of '${name}'`, expected.computed)
+            buildNumber(
+                row,
+                5,
+                `the overload count of '${name}'`,
+                expected.overloads,
+                'the per-module public-name and overload columns (§2.2)',
+            )
+            const blockedCell = row.cells[4].match(/\d+/)
+            blocked += blockedCell ? Number(blockedCell[0]) : 0
+        }
+        for (const name of truth.declarationModuleNames) {
+            if (!seen.has(name)) {
+                problems.push(`${page}: the per-module table has no row for '${name}', which is a declaration module`)
+            }
+        }
+        if (!total) missing('the total row of the per-module table')
+        else {
+            buildNumber(
+                total,
+                1,
+                'the total of public names',
+                binary && binary.moduleNames,
+                'the per-module public-name and overload columns (§2.2)',
+            )
+            statedPair(total, 2, 'the total of declared names / declarations', [truth.declaredNames, truth.declarations])
+            statedNumber(total, 3, 'the total of computed names', truth.computedNames)
+            buildNumber(
+                total,
+                5,
+                'the total of overloads',
+                binary && binary.overloads,
+                'the per-module public-name and overload columns (§2.2)',
+            )
+            const totalBlocked = numbersIn(total.cells[4])
+            if (totalBlocked[0] !== blocked) {
+                mismatch(total, 'the total of blocked names', totalBlocked[0], blocked)
+            }
+        }
+        const headlineBlocked = find((cells) => cells[0].startsWith('其中因语言机制'), 'the blocked-name count')
+        if (headlineBlocked) {
+            const values = numbersIn(headlineBlocked.cells[1])
+            if (values[0] !== blocked) {
+                mismatch(headlineBlocked, 'the total of the blocked column', values[0], blocked)
+            }
+        }
+    }
+
+    // §6, what each command prints today. These are copies of a command's output, so they are
+    // checked against the command's output rather than against a count stated twice.
+    const checkRow = find((cells) => cells[0].includes('stdlib-declarations.mjs --check`'), 'the `--check` line of the re-check table (§6)')
+    if (checkRow) {
+        const counts = checkRow.text.match(/(\d+) declaration module\(s\), (\d+) computed signature/)
+        if (!counts) missing('the `--check` output quote (module / computed counts)')
+        else {
+            const where = { line: checkRow.line }
+            if (Number(counts[1]) !== truth.moduleCount) mismatch(where, 'the declaration-module count of --check', Number(counts[1]), truth.moduleCount)
+            if (Number(counts[2]) !== truth.computedNames) mismatch(where, 'the computed-signature count of --check', Number(counts[2]), truth.computedNames)
+        }
+        const overloads = checkRow.text.match(/(\d+) registered operator overloads/)
+        if (!overloads) missing('the `--check` output quote (overload count)')
+        else if (!build) skip('the overload count of --check (§6)')
+        else if (Number(overloads[1]) !== binary.publicOverloads) {
+            mismatch({ line: checkRow.line }, 'the overload count of --check', Number(overloads[1]), binary.publicOverloads)
+        }
+    }
+    const verifyRow = find((cells) => cells[0].includes('stdlib-reference.mjs --verify-ops`'), 'the `--verify-ops` line of the re-check table (§6)')
+    if (verifyRow) {
+        const match = verifyRow.text.match(/the declarations agree with the (\d+) registered operator overloads/)
+        if (!match) missing('the `--verify-ops` output quote')
+        else if (!build) skip('the overload count of --verify-ops (§6)')
+        else if (Number(match[1]) !== binary.publicOverloads) {
+            mismatch(verifyRow, 'the overload count of --verify-ops', Number(match[1]), binary.publicOverloads)
+        }
+    }
+    const inspectRow = find((cells) => cells[0].includes('camel inspect --ops test/cases/modules/stdlib/registry_all.cml'), 'the `inspect --ops` line of the re-check table (§6)')
+    if (inspectRow) {
+        const lines = inspectRow.text.match(/`OPERATOR`\s*行\s*(\d+)\s*条/)
+        const publicNames = inspectRow.text.match(/(\d+)\s*个公开名（其中 `<builtin>`\s*(\d+)\s*个）/)
+        const publicOverloads = inspectRow.text.match(/(\d+)\s*条公开重载（其中 `<builtin>`\s*(\d+)\s*条）/)
+        if (!lines || !publicNames || !publicOverloads) missing('the `inspect --ops` output quote (operator lines, public names, public overloads)')
+        else if (!build) skip('the inspect --ops quote (§6)')
+        else {
+            const where = { line: inspectRow.line }
+            if (Number(lines[1]) !== binary.operatorLines) mismatch(where, 'the OPERATOR lines of inspect --ops', Number(lines[1]), binary.operatorLines)
+            if (Number(publicNames[1]) !== binary.publicNames) mismatch(where, 'the public names of inspect --ops', Number(publicNames[1]), binary.publicNames)
+            if (Number(publicNames[2]) !== binary.builtinNames) mismatch(where, 'the <builtin> names of inspect --ops', Number(publicNames[2]), binary.builtinNames)
+            if (Number(publicOverloads[1]) !== binary.publicOverloads) mismatch(where, 'the public overloads of inspect --ops', Number(publicOverloads[1]), binary.publicOverloads)
+            if (Number(publicOverloads[2]) !== binary.builtinOverloads) mismatch(where, 'the <builtin> overloads of inspect --ops', Number(publicOverloads[2]), binary.builtinOverloads)
+        }
+    }
+
+    return { problems }
+}
+
+// ---- the computed-signature page ------------------------------------------------------------
+//
+// `docs/technical/49_computed_signatures.md` accounts for the entries of `stdlib/signatures/`:
+// how many files, entries and names there are, how the entries split into the four buckets, and
+// the same per file. Those are claims about the tree too, and 49 drifted twice before H200: the
+// counts were patched by hand while the table kept the old numbers. The truth here is read from
+// the files (`signatureEntries`) and from the classification the checker already trusts
+// (`scripts/computed-gaps.mjs`); the page is compared with both, and a missing table row is a
+// problem rather than a fact that quietly stopped being checked.
+
+function computedLedgerTruth(operatorLines) {
+    const entries = signatureEntries(REPO_ROOT)
+    const records = entryRecords()
+    // The page counts a name once per file, so a name that two files share counts twice (`sum` in
+    // `globals` and in `tensor`); "170 names / 54 entries that share a name" is that sum, not the
+    // number of distinct names across the whole directory.
+    const perFile = new Map()
+    for (const entry of entries) {
+        if (!perFile.has(entry.module)) {
+            perFile.set(entry.module, {
+                entries: 0,
+                names: new Set(),
+                buckets: [0, 0, 0, 0],
+                bucketNames: [new Set(), new Set(), new Set(), new Set()],
+            })
+        }
+        const row = perFile.get(entry.module)
+        row.entries += 1
+        row.names.add(entry.name)
+    }
+    const buckets = [
+        { entries: 0, names: 0 },
+        { entries: 0, names: 0 },
+        { entries: 0, names: 0 },
+        { entries: 0, names: 0 },
+    ]
+    const treeProblems = []
+    if (entries.length !== records.length) {
+        treeProblems.push(
+            `scripts/computed-gaps.mjs classifies ${records.length} entr(y/ies), but stdlib/signatures/ has ` +
+                `${entries.length}; the two must agree before 49 can be checked`,
+        )
+    }
+    for (const record of records) {
+        const id = BUCKETS[record.bucket] && BUCKETS[record.bucket].id
+        if (!id) {
+            treeProblems.push(`scripts/computed-gaps.mjs: '${record.name}' has the bucket '${record.bucket}', which is not in BUCKETS`)
+            continue
+        }
+        buckets[id - 1].entries += 1
+        if (perFile.has(record.module)) {
+            const row = perFile.get(record.module)
+            row.buckets[id - 1] += 1
+            row.bucketNames[id - 1].add(record.name)
+        }
+    }
+    for (let id = 1; id <= 4; id++) {
+        for (const row of perFile.values()) buckets[id - 1].names += row.bucketNames[id - 1].size
+    }
+    const names = [...perFile.values()].reduce((sum, row) => sum + row.names.size, 0)
+    const remainingAfterBucket1 = [...perFile.values()].filter(
+        (row) => row.entries > row.buckets[0],
+    ).length
+    const remainingWithBucket3Only = [...perFile.values()].filter((row) => row.buckets[2] > 0).length
+    return {
+        treeProblems,
+        files: perFile.size,
+        entries: entries.length,
+        names,
+        duplicateEntries: entries.length - names,
+        buckets,
+        perFile,
+        afterBucket1: { files: remainingAfterBucket1, entries: entries.length - buckets[0].entries },
+        onlyBucket3: { files: remainingWithBucket3Only, entries: buckets[2].entries },
+        operatorLines,
+    }
+}
+
+function compareComputedLedger(text, truth, binary, skip) {
+    const rows = ledgerRows(text)
+    const problems = []
+    const page = relative(COMPUTED_LEDGER)
+    const missing = (what) =>
+        problems.push(`${page}: the page no longer states ${what}, so --check-ledger cannot confirm it`)
+    const mismatch = (where, what, says, has) =>
+        problems.push(`${page}:${where.line}: ${what}: page says ${says}, tree has ${has}`)
+    const stated = (row, cell, what, has) => {
+        const values = numbersIn(row.cells[cell])
+        const says = values.length === 0 ? 0 : values[0]
+        if (says !== has) mismatch(row, what, values.length === 0 ? 'nothing' : says, has)
+    }
+
+    // §0, the headline: the three numbers the page opens with.
+    const headline = text.match(/\*\*(\d+)\s*个文件、(\d+)\s*条条目、(\d+)\s*个名字。\*\*/)
+    if (!headline) missing('the headline count of files, entries and names (§0)')
+    else {
+        const where = { line: lineNumberOf(text, headline.index) }
+        if (Number(headline[1]) !== truth.files) mismatch(where, 'signature files', Number(headline[1]), truth.files)
+        if (Number(headline[2]) !== truth.entries) mismatch(where, 'signature entries', Number(headline[2]), truth.entries)
+        if (Number(headline[3]) !== truth.names) mismatch(where, 'signature names', Number(headline[3]), truth.names)
+    }
+
+    // §0, the four bucket rows: the label is the bucket's Chinese tag, the id is its column.
+    const section0 = lineNumberOf(text, text.indexOf('## 0.'))
+    const section1 = lineNumberOf(text, text.indexOf('## 1.'))
+    if (section0 < 1 || section1 <= section0) missing('the bucket table (§0)')
+    else {
+        for (let id = 1; id <= 4; id++) {
+            const row = rows.find(
+                (each) =>
+                    each.cells && each.line > section0 && each.line < section1 && each.cells[0] === String(id),
+            )
+            if (!row) {
+                missing(`the row of bucket ${id} (§0)`)
+                continue
+            }
+            stated(row, 2, `the entries of bucket ${id}`, truth.buckets[id - 1].entries)
+            stated(row, 3, `the names of bucket ${id}`, truth.buckets[id - 1].names)
+        }
+    }
+
+    // §1, one sentence: 224 entries, 54 of them share a name with another entry, so 170 names.
+    const duplicates = text.match(/(\d+)\s*条里有\s*(\d+)\s*条与另一条同名/)
+    if (!duplicates) missing('the note that some entries share a name with another entry (§1)')
+    else {
+        const where = { line: lineNumberOf(text, duplicates.index) }
+        if (Number(duplicates[1]) !== truth.entries) mismatch(where, 'signature entries', Number(duplicates[1]), truth.entries)
+        if (Number(duplicates[2]) !== truth.duplicateEntries) {
+            mismatch(where, 'entries that share a name with another entry', Number(duplicates[2]), truth.duplicateEntries)
+        }
+    }
+
+    // §3, the per-file table: one row per file, and a total row that agrees with both the tree and
+    // the rows. A file the tree does not have is a problem, and a file with no row is a hole.
+    const section3 = lineNumberOf(text, text.indexOf('## 3.'))
+    const section4 = lineNumberOf(text, text.indexOf('## 4.'))
+    if (section3 < 1 || section4 <= section3) missing('the per-file table (§3)')
+    else {
+        const seen = new Set()
+        let total = null
+        for (const row of rows.filter((each) => each.cells && each.line > section3 && each.line < section4)) {
+            if (row.cells[0] === '**合计**') {
+                total = row
+                continue
+            }
+            const file = row.cells[0].match(/^`([a-z_][a-z0-9_]*)\.cml`$/)
+            if (!file) continue
+            const module = file[1]
+            seen.add(module)
+            const expected = truth.perFile.get(module)
+            if (!expected) {
+                problems.push(`${page}:${row.line}: the per-file table has a row for '${module}.cml', but stdlib/signatures/ has no such file`)
+                continue
+            }
+            stated(row, 1, `the entry count of '${module}.cml'`, expected.entries)
+            stated(row, 2, `the name count of '${module}.cml'`, expected.names.size)
+            for (let bucket = 0; bucket < 3; bucket++) {
+                stated(row, 3 + bucket, `the entries of '${module}.cml' in bucket ${bucket + 1}`, expected.buckets[bucket])
+            }
+        }
+        for (const module of truth.perFile.keys()) {
+            if (!seen.has(module)) {
+                problems.push(`${page}: the per-file table has no row for '${module}.cml', which is a signature file`)
+            }
+        }
+        if (!total) missing('the total row of the per-file table (§3)')
+        else {
+            stated(total, 1, 'the total of entries', truth.entries)
+            stated(total, 2, 'the total of names', truth.names)
+            for (let bucket = 0; bucket < 3; bucket++) {
+                stated(total, 3 + bucket, `the total of bucket ${bucket + 1}`, truth.buckets[bucket].entries)
+            }
+        }
+    }
+
+    // §0, the two size predictions: what removing bucket 1 leaves, and the floor after the two
+    // policy decisions. Both are arithmetic over the classification, so a changed bucket moves them.
+    const afterBucket1 = text.match(/先迁掉\s*桶 1，就只剩\s*(\d+)\s*个文件\s*(\d+)\s*条/)
+    if (!afterBucket1) missing('the prediction of the directory after bucket 1 is migrated (§0)')
+    else {
+        const where = { line: lineNumberOf(text, afterBucket1.index) }
+        if (Number(afterBucket1[1]) !== truth.afterBucket1.files) {
+            mismatch(where, 'files left after bucket 1', Number(afterBucket1[1]), truth.afterBucket1.files)
+        }
+        if (Number(afterBucket1[2]) !== truth.afterBucket1.entries) {
+            mismatch(where, 'entries left after bucket 1', Number(afterBucket1[2]), truth.afterBucket1.entries)
+        }
+    }
+    const floor = text.match(/下界是\s*\*\*(\d+)\s*个文件\s*(\d+)\s*条\*\*/)
+    if (!floor) missing('the predicted floor size of the directory (§0)')
+    else {
+        const where = { line: lineNumberOf(text, floor.index) }
+        if (Number(floor[1]) !== truth.onlyBucket3.files) mismatch(where, 'files left at the floor', Number(floor[1]), truth.onlyBucket3.files)
+        if (Number(floor[2]) !== truth.onlyBucket3.entries) mismatch(where, 'entries left at the floor', Number(floor[2]), truth.onlyBucket3.entries)
+    }
+
+    // §7, the size table: today, after bucket 1, and the floor. (The row that adds one policy is a
+    // composition with Q-V for `tiles`, so it is a decision, not arithmetic, and is not checked.)
+    const sizeRow = (label, files, entries) => {
+        const row = rows.find((each) => each.cells && each.cells[0].startsWith(label))
+        if (!row) {
+            missing(`the size table row '${label}' (§7)`)
+            return
+        }
+        stated(row, 1, `the files of '${label}' (§7)`, files)
+        stated(row, 2, `the entries of '${label}' (§7)`, entries)
+    }
+    sizeRow('什么都不做', truth.files, truth.entries)
+    sizeRow('只迁桶 1', truth.afterBucket1.files, truth.afterBucket1.entries)
+    sizeRow('所有机制都答完', truth.onlyBucket3.files, truth.onlyBucket3.entries)
+
+    // §1, the operator-line count the entries were matched against.
+    const inspectLines = text.match(/`inspect --ops`（(\d+)\s*行）/)
+    if (!inspectLines) missing('the inspect --ops line count (§1)')
+    else if (!binary) skip('the OPERATOR lines of inspect --ops (§1)')
+    else if (Number(inspectLines[1]) !== binary.operatorLines) {
+        mismatch(
+            { line: lineNumberOf(text, inspectLines.index) },
+            'the OPERATOR lines of inspect --ops',
+            Number(inspectLines[1]),
+            binary.operatorLines,
+        )
+    }
+
+    return { problems }
+}
+
 function main() {
-    const mode = process.argv[2] || '--check'
+    const args = process.argv.slice(2)
+    const mode = args[0] || '--check'
+    const allowStale = args.includes('--allow-stale-build')
+    const requireBuild = args.includes('--require-build')
+    const unknown = args.slice(1).filter((arg) => arg !== '--allow-stale-build' && arg !== '--require-build')
+    if (unknown.length > 0) {
+        console.log(`--check-ledger: unknown argument "${unknown[0]}"`)
+        console.log('usage: node scripts/stdlib-declarations.mjs --check | --check-ledger [--allow-stale-build] [--require-build]')
+        process.exit(2)
+    }
+    if (mode === '--check-ledger') {
+        const skipped = []
+        const skip = (what) => {
+            if (!skipped.includes(what)) skipped.push(what)
+        }
+        const build = buildProvenance({ allowStale, requireBuild })
+        if (!build.usable) {
+            console.log(
+                `--check-ledger: ${build.why}; the build-dependent claims are skipped, ` +
+                    'the tree-decidable ones are still checked.',
+            )
+        }
+        let truth
+        let computed
+        let binary = null
+        try {
+            truth = ledgerTreeTruth()
+            if (build.usable) binary = ledgerBinaryTruth(truth)
+            computed = computedLedgerTruth(binary ? binary.operatorLines : null)
+        } catch (error) {
+            console.log(`--check-ledger: ${error.message}`)
+            process.exit(1)
+        }
+        const migration = compareMigrationLedger(read(LEDGER), truth, binary, skip)
+        const computedPage = compareComputedLedger(read(COMPUTED_LEDGER), computed, binary, skip)
+        if (!build.usable && skipped.length > 0) {
+            console.log(`--check-ledger: skipped ${skipped.length} build-dependent claim(s): ${skipped.join('; ')}`)
+        }
+        const problems = [...computed.treeProblems, ...migration.problems, ...computedPage.problems]
+        for (const problem of problems) console.log(problem)
+        if (problems.length > 0) {
+            console.log(`the ledgers are stale: ${problems.length} problem(s)`)
+            process.exit(1)
+        }
+        const computedSummary =
+            `${computed.entries} signature entr(y/ies) in ${computed.files} file(s) under ${computed.names} name(s), ` +
+            `buckets ${computed.buckets.map((bucket) => bucket.entries).join('/')}`
+        if (!build.usable) {
+            console.log(
+                `the ledgers' tree-decidable numbers agree with the tree: ${truth.moduleCount} declaration module(s), ` +
+                    `${truth.declaredNames} declared name(s) in ${truth.declarations} declaration(s), ` +
+                    `${truth.computedNames} computed name(s) recorded in ${truth.computedEntries} signature declaration(s), ` +
+                    `${truth.signatureFiles} signature file(s); ${computedSummary}; ` +
+                    'the build-dependent numbers were skipped (no usable build).',
+            )
+            return
+        }
+        console.log(
+            `the ledgers agree with the tree: ${truth.moduleCount} declaration module(s), ` +
+                `${truth.declaredNames} declared name(s) in ${truth.declarations} declaration(s), ` +
+                `${truth.computedNames} computed name(s) recorded in ${truth.computedEntries} signature declaration(s), ` +
+                `${binary.overloads} overload(s) in the declaration modules ` +
+                `(${binary.declaredOverloads} declared + ${binary.computedOverloads} computed), ` +
+                `${binary.publicOverloads} registered public overload(s) under ${binary.publicNames} name(s), ` +
+                `${truth.signatureFiles} signature file(s); ${computedSummary}`,
+        )
+        return
+    }
     if (mode !== '--check') {
-        console.log('usage: node scripts/stdlib-declarations.mjs --check')
+        console.log('usage: node scripts/stdlib-declarations.mjs --check | --check-ledger [--allow-stale-build] [--require-build]')
+        process.exit(2)
+    }
+    if (allowStale || requireBuild) {
+        console.log('--allow-stale-build and --require-build apply to --check-ledger only')
         process.exit(2)
     }
 
-    const { problems, modules, computedCount } = staticChecks()
+    const { problems, modules, computedCount, excludedCount } = staticChecks()
     const ops = verifyOps()
     if (!ops.ok) problems.push(...ops.lines)
     for (const problem of problems) console.log(problem)
@@ -610,7 +1917,8 @@ function main() {
     }
     console.log(
         `migrated modules stay migrated: ${modules.length} declaration module(s), ${computedCount} computed signature(s) ` +
-            `left in C++, 0 problem(s)`,
+            `left in C++, ${excludedCount} excluded module(s), ${entryRecords().length} signature entries classified, ` +
+            `0 problem(s)`,
     )
     if (ops.summary) console.log(`every declaration is behind a registered operator (${ops.summary})`)
 }
