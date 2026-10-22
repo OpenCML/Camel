@@ -30,12 +30,16 @@
 //     of file (a new extension under a new path) cannot be dropped from `--changed` silently
 //     (H182);
 //   * every plan file under test/plans/ is selected by at least one case path it names, and a
-//     target may omit the `.plan.toml` suffix of a plan file (H201).
+//     target may omit the `.plan.toml` suffix of a plan file (H201);
+//   * the mirror image: no fast case path selects a slow-cost plan in full unless that plan is
+//     the only plan that runs the case, or the selection file records the shared case with a
+//     reason (H205).
 import fs from 'fs'
 import path from 'path'
 import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { changedBase, plansForChanges, resolvedSelection } from '../../runner.mjs'
+import { overSelectionProblems } from './over-selection.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..', '..')
@@ -763,6 +767,16 @@ if (unreachablePlans.length > 0) {
         + `${unreachablePlans.join('; ')}. Add a rule that names the plan for the directory its cases live in (H201).`
     )
 }
+
+// --- no fast case path selects a slow-cost plan in full (H205) --------------------------------
+// The mirror of the check above. A plan file target runs in full whatever `--tier` says, so a
+// directory rule that resolves a fast case directory to a slow plan makes every edit in that
+// directory pay for the whole plan. The check derives the cost class from the tree (the plan's
+// tier, its tests' tiers and timeouts), the plan that runs each case from the plans' `case`
+// entries, and the selection from `plansForChanges`; the only recorded exception is
+// `slowCaseOwners` in plan-selection.json, and it must name a slow plan that shares a case with
+// a fast plan, so an exception that excuses nothing fails too.
+problems.push(...overSelectionProblems(repoRoot))
 
 // --- a plan target may omit its `.plan.toml` suffix (H201) ------------------------------------
 // `node scripts/test.js test/plans/feat/exemplars` used to resolve to a directory that does not

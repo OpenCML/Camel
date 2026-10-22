@@ -45,9 +45,11 @@ the job count and layer.
 `node test/tools/selftest/run.mjs` checks the runner itself: the back-end matrix, the per-test
 scratch directories and the run root, parallel versus serial output, the tier filter and the
 named-plan rule, the risk-based sweep sample, and the `--changed` mapping (directory rule, file
-rules, the layered plans, `CAMEL_TEST_BASE`). It also walks every plan file under `test/plans/`
-and fails, by name, when no case path a plan names selects it, and it checks the suffix-less plan
-target (H201).
+rules, `ownCases`, the layered plans, `CAMEL_TEST_BASE`). It also walks every plan file under
+`test/plans/` and fails, by name, when no case path a plan names selects it, and it checks the
+suffix-less plan target (H201). Its mirror (H205) fails, by name, when a fast case path selects a
+slow-cost plan in full, unless the plan is the only one running that case or
+`test/plan-selection.json` records the shared case in `slowCaseOwners` with a reason.
 
 ## Layers: fast, slow And debug
 
@@ -174,9 +176,14 @@ fast cases and filters its slow ones. That is the honest rule for a plan whose s
 comparisons the project will not run from an ordinary change (autodiff's five PyTorch gradients,
 onnx's four ONNX Runtime/PyTorch comparisons): naming the file in full would run them, and naming
 a directory would filter cases the change does need. A plan without `layer` is named and runs in
-full whatever `--tier` says; the three GPU plans are the case that needs this, because they are
-`tier = "slow"` as a whole and a `--tier fast` run of the `gpu` directory would execute none of
-their 88 tests.
+full whatever `--tier` says.
+
+An entry may also be `{ "plan": "...", "ownCases": true }`: the plan is added only when the
+changed file is one of the `case` paths that plan names. A plan that does not run the changed case
+cannot be invalidated by it, so a slow plan must not ride a shared directory into an edit it never
+reads (H205). This is how a tiles case edit stops selecting the three GPU plans; the
+`modules/tiles/` rule still names them in full, because a change to the module can invalidate all
+of them, while the case-directory rule adds each GPU plan only for the cases it runs.
 
 The rules are checked in the other direction too (H201): `test/tools/selftest/run.mjs` walks every
 plan file under `test/plans/`, resolves the `case` paths it names the way the runner does, and
@@ -194,6 +201,20 @@ progen finding cases (`progen_simplify` with `capacity`). That last rule also st
 from resolving, through the generic `test/cases/` rule, to `feat/opt/progen.plan.toml`, the slow
 random-program check an ordinary change must not run: a narrower directory rule for
 `test/cases/opt/progen/` comes first and selects no plan for the finding directory by itself.
+
+The opposite direction is checked as well (H205). A plan file named as a target runs in full
+whatever `--tier` says, so a directory rule that resolves a fast case directory to a slow plan
+makes every edit in that directory pay for the whole plan. `test/tools/selftest/over-selection.mjs`
+derives each plan's cost class from the tree (its `tier`, its tests' tiers, a test timeout of five
+minutes or more), the plans that run each case from their `case` entries, and the selection
+`--changed` returns; a fast case path that selects a slow-cost plan in full fails by name unless
+that plan is the only plan running the case. The two exceptions the original rules hid are named
+now: the graph-space gradient case in `test/cases/feat/mm/gc/` and the formatted-print case in
+`test/cases/trans/cpp/exec/` each resolve through their directory to a slow plan that does not run
+them, so a narrower directory rule comes first and the file rule names the plan that does. A slow
+plan that genuinely shares a case with a fast plan (the GPU tiles plan) is recorded in
+`slowCaseOwners` with its reason; the self-test rejects an entry that is not slow-cost or that
+shares no case with a fast plan, so the list cannot excuse nothing.
 
 What a rule deliberately does **not** select, because the project forbids it on a shared host:
 

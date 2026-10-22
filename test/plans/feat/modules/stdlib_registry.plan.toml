@@ -103,28 +103,31 @@ expect_stdout_contains = ["migrated modules stay migrated"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
-# ---- The account page's numbers are the tree's (H200) ----
+# ---- The account pages' numbers are the tree's (H200) ----
 #
 # docs/technical/48_declaration_migration.md is the ledger of the migration: the declaration
 # modules, their declared names and declarations, their computed names, the registered overloads
-# and public names, the signature files, and one row per module. Every one of those is a claim
-# about the tree, and a hand edit is how it goes stale: H200 found the page still listing
-# `rewrite` as pending although H183 had migrated it, a headline patched by hand, and a per-module
-# total that did not match its own rows. `--check-ledger` reads each number from the page and
-# compares it with the tree, so this test is red when a number is edited (it prints
-# "page says X, tree has Y"), when a row or a fact is dropped, and when the rows and the totals
-# disagree. The registered counts come from `camel inspect --ops` on the same probe
-# `--verify-ops` reads, so a registry change that is not reflected on the page is red too.
+# and public names, the signature files, and one row per module. docs/technical/49_computed_signatures.md
+# is the ledger of the signature directory: the files, entries and names, the four buckets, the
+# per-file table, the size predictions, and the operator-line count. Every one of those is a claim
+# about the tree, and a hand edit is how it goes stale: H200 found 48 still listing `rewrite` as
+# pending although H183 had migrated it, and 49 drifted twice — its counts were patched by hand
+# while the table kept the old numbers. `--check-ledger` reads each number from both pages and
+# compares it with the tree, naming the file, so this test is red when a number is edited (it
+# prints "<file>:<line>: <what>: page says X, tree has Y"), when a row or a fact is dropped, and
+# when the rows and the totals disagree. The registered counts come from `camel inspect --ops` on
+# the same probe `--verify-ops` reads, and the bucket and per-file counts from the classification
+# `--check` rule 7 already trusts, so a change in either is red too.
 
 [[tests]]
 name = "registry.ledger_matches_tree"
-desc = "Every number docs/technical/48_declaration_migration.md states (declaration modules, declared names and declarations, computed names, overloads and public names, signature files, the per-module rows, and the output quotes of its re-check table) is the tree's number; a hand edit fails with 'page says X, tree has Y', and a dropped row or fact fails instead of passing over a hole."
+desc = "Every number docs/technical/48_declaration_migration.md and docs/technical/49_computed_signatures.md state is the tree's number: 48's declaration modules, declared names and declarations, computed names, overloads, public names, signature files, per-module rows and re-check quotes; 49's files, entries, names, four buckets, per-file rows, size predictions and operator-line count. A hand edit fails with '<file>:<line>: <what>: page says X, tree has Y', and a dropped row or fact fails instead of passing over a hole."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-declarations.mjs"
 args = ["${case}", "--check-ledger"]
 expect_exit = 0
-expect_stdout_contains = ["the ledger agrees with the tree"]
+expect_stdout_contains = ["the ledgers agree with the tree"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 

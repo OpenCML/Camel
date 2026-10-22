@@ -102,6 +102,16 @@ timeout_ms = 20000
 
 # A module whose file is there but that the loader refuses: the pass specification reports the
 # loader's reason. Before H130 this was "Pass <unloadable::run> not found" with the reason lost.
+#
+# H204: the fixture is one line of text, 72 bytes, not a shared library. The lookup finds it (a
+# `.cmo` of the name comes first), then `dlopen` / `LoadLibraryW` refuses it. The platform's own
+# words differ -- "invalid ELF header" on Linux, `Win32Error(193)` ("not a valid Win32
+# application", localized) on Windows -- so this case asserts only Camel's stable part:
+# InvalidPassParameter, "its library 'unloadable' cannot be loaded", and "Found .cmo but load
+# failed". The reason travels in the diagnostic and is not pinned. An empty file and a 21-byte
+# text fail too, but Linux then says "file too short"; at 72 bytes the reason reads as "not a
+# valid module" on both platforms. A real module in its place is accepted and the answer changes
+# to the generic unknown-pass one, which is this case's red direction.
 
 [[tests]]
 name = "pass_module_that_cannot_be_loaded"
@@ -113,6 +123,21 @@ expect_exit = 1
 expect_output_contains = ["InvalidPassParameter", "its library 'unloadable' cannot be loaded", "Found .cmo but load failed"]
 expect_output_not_contains = ["not found, available passes are", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# H204: the fixture stays text, so review can read it and no loader can accept it. A compiled
+# object (ELF, Mach-O, PE) has NUL bytes; committing one in the fixture's place fails here.
+
+[[tests]]
+name = "the_unloadable_fixture_is_text"
+desc = "unloadable.cmo is plain text (no NUL byte, valid UTF-8), not a compiled object: the fixture stays readable and no platform's loader can accept it."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/modules/pass_not_found/unloadable_is_text.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["unloadable.cmo is text"]
+normalizers = ["normalize_newlines"]
 timeout_ms = 10000
 
 # The third answer is unchanged: a name with no module behind it is the pipeline's unknown pass,

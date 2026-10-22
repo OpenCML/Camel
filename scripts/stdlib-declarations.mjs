@@ -5,12 +5,15 @@
 //   node scripts/stdlib-declarations.mjs --check
 //   node scripts/stdlib-declarations.mjs --check-ledger
 //
-// `--check-ledger` reads the numbers of `docs/technical/48_declaration_migration.md` (the
-// migration's account page) and compares each with the tree: the declaration modules, their
-// declared names and declarations, their computed names, the overloads and public names from
+// `--check-ledger` reads the numbers of the two account pages and compares each with the tree.
+// `docs/technical/48_declaration_migration.md` is the migration's page: the declaration modules,
+// their declared names and declarations, their computed names, the overloads and public names from
 // `camel inspect --ops`, the signature files, the per-module rows, and the output quotes of the
-// re-check table. A number a human retypes drifts; this mode makes the page fail with
-// "page says X, tree has Y" instead (H200).
+// re-check table. `docs/technical/49_computed_signatures.md` is the signature directory's page:
+// the files, entries and names, the four buckets, the per-file table, the two size predictions and
+// the operator-line count. A number a human retypes drifts; this mode makes the page fail with
+// "page says X, tree has Y" and names the file instead (H200). A row or a fact that is dropped is
+// a problem too, so a hole cannot pass for an agreement.
 //
 // H19 moves a fixed-signature C++ module from `stdlib/signatures/<module>.cml` to
 // `stdlib/<module>.cml` and deletes the C++ `OperatorGroup` (H94, H104, H113, H115, H126,
@@ -123,7 +126,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-import { classificationProblems, entryRecords } from './computed-gaps.mjs'
+import { BUCKETS, classificationProblems, entryRecords, signatureEntries } from './computed-gaps.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
@@ -1032,6 +1035,7 @@ function verifyOps() {
 // the seven-step recipe and the history it records are not generated.
 
 const LEDGER = path.join(REPO_ROOT, 'docs', 'technical', '48_declaration_migration.md')
+const COMPUTED_LEDGER = path.join(REPO_ROOT, 'docs', 'technical', '49_computed_signatures.md')
 const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
 
 function camelExe() {
@@ -1166,10 +1170,8 @@ function lineNumberOf(text, index) {
     return text.slice(0, index).split('\n').length
 }
 
-function compareLedger() {
-    const text = read(LEDGER).replace(/\r\n/g, '\n')
+function compareMigrationLedger(text, truth) {
     const rows = ledgerRows(text)
-    const truth = ledgerTruth()
     const problems = []
     const page = relative(LEDGER)
 
@@ -1363,30 +1365,262 @@ function compareLedger() {
     return { problems, truth }
 }
 
+// ---- the computed-signature page ------------------------------------------------------------
+//
+// `docs/technical/49_computed_signatures.md` accounts for the entries of `stdlib/signatures/`:
+// how many files, entries and names there are, how the entries split into the four buckets, and
+// the same per file. Those are claims about the tree too, and 49 drifted twice before H200: the
+// counts were patched by hand while the table kept the old numbers. The truth here is read from
+// the files (`signatureEntries`) and from the classification the checker already trusts
+// (`scripts/computed-gaps.mjs`); the page is compared with both, and a missing table row is a
+// problem rather than a fact that quietly stopped being checked.
+
+function computedLedgerTruth(operatorLines) {
+    const entries = signatureEntries(REPO_ROOT)
+    const records = entryRecords()
+    // The page counts a name once per file, so a name that two files share counts twice (`sum` in
+    // `globals` and in `tensor`); "170 names / 54 entries that share a name" is that sum, not the
+    // number of distinct names across the whole directory.
+    const perFile = new Map()
+    for (const entry of entries) {
+        if (!perFile.has(entry.module)) {
+            perFile.set(entry.module, {
+                entries: 0,
+                names: new Set(),
+                buckets: [0, 0, 0, 0],
+                bucketNames: [new Set(), new Set(), new Set(), new Set()],
+            })
+        }
+        const row = perFile.get(entry.module)
+        row.entries += 1
+        row.names.add(entry.name)
+    }
+    const buckets = [
+        { entries: 0, names: 0 },
+        { entries: 0, names: 0 },
+        { entries: 0, names: 0 },
+        { entries: 0, names: 0 },
+    ]
+    const treeProblems = []
+    if (entries.length !== records.length) {
+        treeProblems.push(
+            `scripts/computed-gaps.mjs classifies ${records.length} entr(y/ies), but stdlib/signatures/ has ` +
+                `${entries.length}; the two must agree before 49 can be checked`,
+        )
+    }
+    for (const record of records) {
+        const id = BUCKETS[record.bucket] && BUCKETS[record.bucket].id
+        if (!id) {
+            treeProblems.push(`scripts/computed-gaps.mjs: '${record.name}' has the bucket '${record.bucket}', which is not in BUCKETS`)
+            continue
+        }
+        buckets[id - 1].entries += 1
+        if (perFile.has(record.module)) {
+            const row = perFile.get(record.module)
+            row.buckets[id - 1] += 1
+            row.bucketNames[id - 1].add(record.name)
+        }
+    }
+    for (let id = 1; id <= 4; id++) {
+        for (const row of perFile.values()) buckets[id - 1].names += row.bucketNames[id - 1].size
+    }
+    const names = [...perFile.values()].reduce((sum, row) => sum + row.names.size, 0)
+    const remainingAfterBucket1 = [...perFile.values()].filter(
+        (row) => row.entries > row.buckets[0],
+    ).length
+    const remainingWithBucket3Only = [...perFile.values()].filter((row) => row.buckets[2] > 0).length
+    return {
+        treeProblems,
+        files: perFile.size,
+        entries: entries.length,
+        names,
+        duplicateEntries: entries.length - names,
+        buckets,
+        perFile,
+        afterBucket1: { files: remainingAfterBucket1, entries: entries.length - buckets[0].entries },
+        onlyBucket3: { files: remainingWithBucket3Only, entries: buckets[2].entries },
+        operatorLines,
+    }
+}
+
+function compareComputedLedger(text, truth) {
+    const rows = ledgerRows(text)
+    const problems = []
+    const page = relative(COMPUTED_LEDGER)
+    const missing = (what) =>
+        problems.push(`${page}: the page no longer states ${what}, so --check-ledger cannot confirm it`)
+    const mismatch = (where, what, says, has) =>
+        problems.push(`${page}:${where.line}: ${what}: page says ${says}, tree has ${has}`)
+    const stated = (row, cell, what, has) => {
+        const values = numbersIn(row.cells[cell])
+        const says = values.length === 0 ? 0 : values[0]
+        if (says !== has) mismatch(row, what, values.length === 0 ? 'nothing' : says, has)
+    }
+
+    // §0, the headline: the three numbers the page opens with.
+    const headline = text.match(/\*\*(\d+)\s*个文件、(\d+)\s*条条目、(\d+)\s*个名字。\*\*/)
+    if (!headline) missing('the headline count of files, entries and names (§0)')
+    else {
+        const where = { line: lineNumberOf(text, headline.index) }
+        if (Number(headline[1]) !== truth.files) mismatch(where, 'signature files', Number(headline[1]), truth.files)
+        if (Number(headline[2]) !== truth.entries) mismatch(where, 'signature entries', Number(headline[2]), truth.entries)
+        if (Number(headline[3]) !== truth.names) mismatch(where, 'signature names', Number(headline[3]), truth.names)
+    }
+
+    // §0, the four bucket rows: the label is the bucket's Chinese tag, the id is its column.
+    const section0 = lineNumberOf(text, text.indexOf('## 0.'))
+    const section1 = lineNumberOf(text, text.indexOf('## 1.'))
+    if (section0 < 1 || section1 <= section0) missing('the bucket table (§0)')
+    else {
+        for (let id = 1; id <= 4; id++) {
+            const row = rows.find(
+                (each) =>
+                    each.cells && each.line > section0 && each.line < section1 && each.cells[0] === String(id),
+            )
+            if (!row) {
+                missing(`the row of bucket ${id} (§0)`)
+                continue
+            }
+            stated(row, 2, `the entries of bucket ${id}`, truth.buckets[id - 1].entries)
+            stated(row, 3, `the names of bucket ${id}`, truth.buckets[id - 1].names)
+        }
+    }
+
+    // §1, one sentence: 224 entries, 54 of them share a name with another entry, so 170 names.
+    const duplicates = text.match(/(\d+)\s*条里有\s*(\d+)\s*条与另一条同名/)
+    if (!duplicates) missing('the note that some entries share a name with another entry (§1)')
+    else {
+        const where = { line: lineNumberOf(text, duplicates.index) }
+        if (Number(duplicates[1]) !== truth.entries) mismatch(where, 'signature entries', Number(duplicates[1]), truth.entries)
+        if (Number(duplicates[2]) !== truth.duplicateEntries) {
+            mismatch(where, 'entries that share a name with another entry', Number(duplicates[2]), truth.duplicateEntries)
+        }
+    }
+
+    // §3, the per-file table: one row per file, and a total row that agrees with both the tree and
+    // the rows. A file the tree does not have is a problem, and a file with no row is a hole.
+    const section3 = lineNumberOf(text, text.indexOf('## 3.'))
+    const section4 = lineNumberOf(text, text.indexOf('## 4.'))
+    if (section3 < 1 || section4 <= section3) missing('the per-file table (§3)')
+    else {
+        const seen = new Set()
+        let total = null
+        for (const row of rows.filter((each) => each.cells && each.line > section3 && each.line < section4)) {
+            if (row.cells[0] === '**合计**') {
+                total = row
+                continue
+            }
+            const file = row.cells[0].match(/^`([a-z_][a-z0-9_]*)\.cml`$/)
+            if (!file) continue
+            const module = file[1]
+            seen.add(module)
+            const expected = truth.perFile.get(module)
+            if (!expected) {
+                problems.push(`${page}:${row.line}: the per-file table has a row for '${module}.cml', but stdlib/signatures/ has no such file`)
+                continue
+            }
+            stated(row, 1, `the entry count of '${module}.cml'`, expected.entries)
+            stated(row, 2, `the name count of '${module}.cml'`, expected.names.size)
+            for (let bucket = 0; bucket < 3; bucket++) {
+                stated(row, 3 + bucket, `the entries of '${module}.cml' in bucket ${bucket + 1}`, expected.buckets[bucket])
+            }
+        }
+        for (const module of truth.perFile.keys()) {
+            if (!seen.has(module)) {
+                problems.push(`${page}: the per-file table has no row for '${module}.cml', which is a signature file`)
+            }
+        }
+        if (!total) missing('the total row of the per-file table (§3)')
+        else {
+            stated(total, 1, 'the total of entries', truth.entries)
+            stated(total, 2, 'the total of names', truth.names)
+            for (let bucket = 0; bucket < 3; bucket++) {
+                stated(total, 3 + bucket, `the total of bucket ${bucket + 1}`, truth.buckets[bucket].entries)
+            }
+        }
+    }
+
+    // §0, the two size predictions: what removing bucket 1 leaves, and the floor after the two
+    // policy decisions. Both are arithmetic over the classification, so a changed bucket moves them.
+    const afterBucket1 = text.match(/先迁掉\s*桶 1，就只剩\s*(\d+)\s*个文件\s*(\d+)\s*条/)
+    if (!afterBucket1) missing('the prediction of the directory after bucket 1 is migrated (§0)')
+    else {
+        const where = { line: lineNumberOf(text, afterBucket1.index) }
+        if (Number(afterBucket1[1]) !== truth.afterBucket1.files) {
+            mismatch(where, 'files left after bucket 1', Number(afterBucket1[1]), truth.afterBucket1.files)
+        }
+        if (Number(afterBucket1[2]) !== truth.afterBucket1.entries) {
+            mismatch(where, 'entries left after bucket 1', Number(afterBucket1[2]), truth.afterBucket1.entries)
+        }
+    }
+    const floor = text.match(/下界是\s*\*\*(\d+)\s*个文件\s*(\d+)\s*条\*\*/)
+    if (!floor) missing('the predicted floor size of the directory (§0)')
+    else {
+        const where = { line: lineNumberOf(text, floor.index) }
+        if (Number(floor[1]) !== truth.onlyBucket3.files) mismatch(where, 'files left at the floor', Number(floor[1]), truth.onlyBucket3.files)
+        if (Number(floor[2]) !== truth.onlyBucket3.entries) mismatch(where, 'entries left at the floor', Number(floor[2]), truth.onlyBucket3.entries)
+    }
+
+    // §7, the size table: today, after bucket 1, and the floor. (The row that adds one policy is a
+    // composition with Q-V for `tiles`, so it is a decision, not arithmetic, and is not checked.)
+    const sizeRow = (label, files, entries) => {
+        const row = rows.find((each) => each.cells && each.cells[0].startsWith(label))
+        if (!row) {
+            missing(`the size table row '${label}' (§7)`)
+            return
+        }
+        stated(row, 1, `the files of '${label}' (§7)`, files)
+        stated(row, 2, `the entries of '${label}' (§7)`, entries)
+    }
+    sizeRow('什么都不做', truth.files, truth.entries)
+    sizeRow('只迁桶 1', truth.afterBucket1.files, truth.afterBucket1.entries)
+    sizeRow('所有机制都答完', truth.onlyBucket3.files, truth.onlyBucket3.entries)
+
+    // §1, the operator-line count the entries were matched against.
+    const inspectLines = text.match(/`inspect --ops`（(\d+)\s*行）/)
+    if (!inspectLines) missing('the inspect --ops line count (§1)')
+    else if (Number(inspectLines[1]) !== truth.operatorLines) {
+        mismatch(
+            { line: lineNumberOf(text, inspectLines.index) },
+            'the OPERATOR lines of inspect --ops',
+            Number(inspectLines[1]),
+            truth.operatorLines,
+        )
+    }
+
+    return { problems }
+}
+
 function main() {
     const mode = process.argv[2] || '--check'
     if (mode === '--check-ledger') {
-        let result
+        let truth
+        let computed
         try {
-            result = compareLedger()
+            truth = ledgerTruth()
+            computed = computedLedgerTruth(truth.operatorLines)
         } catch (error) {
             console.log(`--check-ledger: ${error.message}`)
             process.exit(1)
         }
-        for (const problem of result.problems) console.log(problem)
-        if (result.problems.length > 0) {
-            console.log(`the ledger is stale: ${result.problems.length} problem(s) in ${relative(LEDGER)}`)
+        const migration = compareMigrationLedger(read(LEDGER), truth)
+        const computedPage = compareComputedLedger(read(COMPUTED_LEDGER), computed)
+        const problems = [...computed.treeProblems, ...migration.problems, ...computedPage.problems]
+        for (const problem of problems) console.log(problem)
+        if (problems.length > 0) {
+            console.log(`the ledgers are stale: ${problems.length} problem(s)`)
             process.exit(1)
         }
-        const truth = result.truth
         console.log(
-            `the ledger agrees with the tree: ${truth.moduleCount} declaration module(s), ` +
+            `the ledgers agree with the tree: ${truth.moduleCount} declaration module(s), ` +
                 `${truth.declaredNames} declared name(s) in ${truth.declarations} declaration(s), ` +
                 `${truth.computedNames} computed name(s) recorded in ${truth.computedEntries} signature declaration(s), ` +
                 `${truth.overloads} overload(s) in the declaration modules ` +
                 `(${truth.declaredOverloads} declared + ${truth.computedOverloads} computed), ` +
                 `${truth.publicOverloads} registered public overload(s) under ${truth.publicNames} name(s), ` +
-                `${truth.signatureFiles} signature file(s)`,
+                `${truth.signatureFiles} signature file(s); ` +
+                `${computed.entries} signature entr(y/ies) in ${computed.files} file(s) under ${computed.names} name(s), ` +
+                `buckets ${computed.buckets.map((bucket) => bucket.entries).join('/')}`,
         )
         return
     }

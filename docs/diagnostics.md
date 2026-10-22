@@ -1386,7 +1386,19 @@ Failed to parse module file: {0}.
 Check the file for syntax errors.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/graph_pass/imports_unparsable.cml`, run as `camel test/cases/modules/graph_pass/imports_unparsable.cml std::nvm`)
+
+```camel
+// A program whose import is a module that does not parse. The import is a dependency of the
+// program, so the program fails at the compile step with that module's parse diagnostic (H198) —
+// not later, and not with a pass diagnostic: nothing asked for a pass of it.
+module imports_unparsable
+import unparsable_pass
+
+func main(): int sync {
+    return 0
+}
+```
 
 ### InvalidOperatorURI
 

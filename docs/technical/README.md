@@ -58,6 +58,7 @@
 | [47_declaration_syntax.md](47_declaration_syntax.md) | 声明写不出的签名（H168）：哪些签名没有写法、每处是文档已裁定的重载还是只有作者能答的问题（任意函数类型、变参、`PyObject<T>`、类型实参、类型变量谓词），各自的依据、解锁名字数与代价 |
 | [48_declaration_migration.md](48_declaration_migration.md) | 声明迁移的结果与边界（H186）：22 个模块的账本（声明 / 计算 / 阻塞 / 注册重载）、机制与检查器、剩余项与 owner、迁移下一个模块的七步配方；缺口分类见 47 |
 | [49_computed_signatures.md](49_computed_signatures.md) | `stdlib/signatures/` 的逐条账本（H194）：14 个文件 224 条条目按四桶分类（今天可声明 22 / 差一条机制 104 / 永久只读 98 / 不是签名 0）、每条的证据与迁移任务、该先问作者的一件事、目录的下界与检查器第 7 条 |
+| [50_pyplot_cpython_init.md](50_pyplot_cpython_init.md) | `pyplot` 的 CPython 初始化能否推迟到首次 `plot`（H203）：H191 的 `cmo_load` 数字、边际导入测量、为什么导入期错误码与“第一个初始化者”设置使推迟可见，以及需要作者裁定的 P1/P2 |
 | [51_unchecked_examples.md](51_unchecked_examples.md) | 设计稿示例的解析现状（H206）：203 个 `examples/` 程序加 7 个其它文件在 `880ee74b1` 的解析结果（205 干净 / 3 故意拒绝 / 2 已坏）、每个失败文件的依据与损坏起点、它们各自被文档围栏或计划引用的情况，以及一次 15 行扫描会抓到什么、会误报什么 |
 | [nn-autograd.md](nn-autograd.md) | `nn` / `tensor` 自动求导架构：`nn.apply_gradients` 的图合成、helper 调用与参数别名、公共 API、内置 VJP 覆盖范围与已知限制 |
 | [jit/README.md](jit/README.md) | FastVM JIT 实现级注解的目录索引 |

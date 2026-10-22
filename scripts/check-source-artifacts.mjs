@@ -19,8 +19,9 @@
 // `.o`, `.obj`, `.a`, `.lib`, `.dylib`, `.exe`, `.ilk`) anywhere under them. Two directories hold
 // vendored binaries rather than build output and are skipped: `modules/python/sdks/` and
 // `modules/python/dlls/` (both git-ignored). The one tracked `.cmo` is
-// `test/cases/modules/pass_not_found/unloadable.cmo`, a test fixture; it lives outside the roots
-// above and this check never reads it.
+// `test/cases/modules/pass_not_found/unloadable.cmo`: a 72-byte text fixture (H204), outside the
+// roots above, which this check never reads; `feat/modules/pass_not_found` pins that it stays
+// text, so it is not a compiled object an audit should count.
 //
 // The build runs this at the end of `copyBuildArtifacts` (scripts/common.js), so a step that
 // starts writing next to the sources fails that build with the file named. The
