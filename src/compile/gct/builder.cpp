@@ -2183,6 +2183,9 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::TupleComp:
         dataNode = visitStaticComprehension(ast, false);
         break;
+    case AST::DataType::ShapeComp:
+        dataNode = visitShapeComprehension(ast);
+        break;
     case AST::DataType::Func:
         dataNode = visitFuncData(ast);
         break;
@@ -3431,6 +3434,32 @@ node_ptr_t Builder::visitStaticComprehension(const AST::node_ptr_t &ast, bool is
     ASSERT(ast->size() == 1, "A static comprehension has its generator as its only child.");
     *compNode << visitStaticFor(ast->at(0));
     LEAVE("StaticComprehension");
+    return compNode;
+}
+
+node_ptr_t Builder::visitShapeComprehension(const AST::node_ptr_t &ast) {
+    ENTER("ShapeComprehension");
+    ASSERT(
+        ast->size() == 2 && ast->at(0)->type() == AST::LoadType::Type,
+        "A shape comprehension has its type first, its generator second.");
+    node_ptr_t compNode = tree_->makeShapeComprehension();
+    setOriginFromAst(
+        context_,
+        compNode,
+        ast,
+        camel::source::OriginKind::GctNode,
+        "gct.static.shape");
+    *compNode << visitStaticFor(ast->at(1));
+    Type *shape          = visitType(ast->at(0));
+    node_ptr_t shapeNode = tree_->makeType(shape);
+    setOriginFromAst(
+        context_,
+        shapeNode,
+        ast->at(0),
+        camel::source::OriginKind::GctNode,
+        "gct.static.shape.type");
+    *compNode << shapeNode;
+    LEAVE("ShapeComprehension");
     return compNode;
 }
 
@@ -4819,10 +4848,13 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::TypeOp::TypeOf: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::TypeOf");
-        throw BuildAbortException();
+        // `typeof e`: the type of the value `e` will have. The placeholder keeps the expression
+        // node; the graph builder builds it where this type is used and replaces the
+        // placeholder by its type. The node is not attached to a parent: it is reachable from
+        // the type and is visited per instance.
+        ASSERT(ast->size() == 1, "typeof has its expression as its only child.");
+        node_ptr_t expression = visitData(ast->at(0));
+        res                   = TypeOfType::create(expression);
     } break;
 
     default:

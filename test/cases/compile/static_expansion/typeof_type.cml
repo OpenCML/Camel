@@ -1,0 +1,31 @@
+/**
+ * `typeof e`: the type of the value `e` has, read where the type is needed. The type of
+ * `pair_of(t)` inside a generic function has no name, so `fields typeof(...)` and
+ * `match type typeof(...)` are the two places that can state it without a sample value.
+ */
+module typeof_type
+
+/// A pair of the type parameter: `(T, T)` is not a name the function could write.
+func pair_of::<T>(t: T): (T, T) {
+    return (t, t)
+}
+
+/// Two rounds: the fields of the type of the call.
+func width::<T>(t: T): int {
+    return static loop n = 0 for (j, C) in fields typeof(pair_of(t)) do n + 1
+}
+
+/// The same type in a `match type` subject.
+func describe::<T>(t: T): string {
+    return match type typeof(pair_of(t)) {
+        case tuple => 'pair'
+        case _ => 'other'
+    }
+}
+
+func main(): int sync {
+    println(width(7))
+    println(describe(7))
+    println(width('x'))
+    return 0
+}

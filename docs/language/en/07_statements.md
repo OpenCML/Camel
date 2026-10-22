@@ -577,7 +577,7 @@ id
 - It can be `export`ed, and is used in another module as `module::Pair<int>`.
 - The angle brackets of a module type (such as `Tensor<f32, const [2, 3]>`) are interpreted by the type itself, and the arguments can be types or `const data`.
 
-The parts of type expressions that are reserved and not implemented: the type operations `&`, `\`, `+`, `-`, `^`, and `typeof`, `keyof`, `name of T` (`SemanticDiag::FeatureNotSupported` or a syntax error); their meaning is not yet decided.
+The parts of type expressions that are reserved and not implemented: the type operations `&`, `\`, `+`, `-`, `^`, and `keyof`, `name of T` (`SemanticDiag::FeatureNotSupported` or a syntax error); their meaning is not yet decided. `typeof e` is implemented: it is a whole type, the type of the value of `e`, expanded by the compiler where the type is used. It cannot be nested inside a larger type (`typeof(1)[]` is `SemanticDiag::TypeOfNotWholeType`), and an operand with no value (`void`) is `SemanticDiag::TypeOfNotAValue`.
 
 ## 7.8 Blocks
 

@@ -3989,6 +3989,21 @@ Value Builder::visitTupleData(cst::TupleData context) {
 }
 
 /*
+shapeComp : typeExpr '{' staticForExpr '}' ;
+The shape is child 0, the generator child 1. The tree keeps both: the graph builder reads the
+generator's rounds and takes the field names and the kind from the shape.
+*/
+Value Builder::visitShapeComp(cst::ShapeComp context) {
+    ENTER("ShapeComp");
+    node_ptr_t compNode = createNodeAs<ShapeCompLoad>();
+    setNodeTokenRangeByContext(compNode, context);
+    *compNode << any2node(visitType(context->type()));
+    *compNode << any2node(visitStaticForExpr(context->get<cst::StaticForExpr>()));
+    LEAVE("ShapeComp");
+    return compNode;
+}
+
+/*
 primaryData : identRef | literal | arrayData | structData | tupleData | funcData ;
 The tree has no node for the rule. A name as an operand is a RefData node, a literal a Literal.
 */
@@ -4922,6 +4937,8 @@ Value Builder::visitExpr(syn::Node context) {
         return visitStructData(cst::StructData(context));
     case NK::TupleData:
         return visitTupleData(cst::TupleData(context));
+    case NK::ShapeComp:
+        return visitShapeComp(cst::ShapeComp(context));
     case NK::FuncData:
         return visitFuncData(cst::FuncData(context));
     default:

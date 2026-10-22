@@ -1,0 +1,10 @@
+/** `typeof nothing()` is `void`: there is no value whose type could be taken. */
+module typeof_void
+
+func nothing(): void {
+}
+
+func main(): int sync {
+    static for (j, C) in fields typeof(nothing()) => println(j)
+    return 0
+}

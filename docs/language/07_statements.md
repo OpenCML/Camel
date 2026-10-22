@@ -580,7 +580,7 @@ id
 - 可以 `export`，在别的模块里以 `模块::Pair<int>` 使用。
 - 模块类型（如 `Tensor<f32, const [2, 3]>`）的尖括号由该类型自己解释，实参可以是类型或 `const 数据`。
 
-类型表达式里保留、尚未实现的部分：类型运算 `&`、`\`、`+`、`-`、`^`，以及 `typeof`、`keyof`、`名字 of T`（`SemanticDiag::FeatureNotSupported` 或语法错误），它们的含义尚未决定。
+类型表达式里保留、尚未实现的部分：类型运算 `&`、`\`、`+`、`-`、`^`，以及 `keyof`、`名字 of T`（`SemanticDiag::FeatureNotSupported` 或语法错误），它们的含义尚未决定。`typeof e` 已实现：它是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
 
 ## 7.8 块
 

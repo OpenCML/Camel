@@ -1521,6 +1521,42 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TypeOfNotAValue,
+            {
+                "TypeOfNotAValue",
+                "typeof {0} has no value type: {1}.",
+                "`typeof` takes the type of a value. Write an expression that produces one, or "
+                "name the type directly.",
+            },
+        },
+        {
+            SemanticDiag::TypeOfNotWholeType,
+            {
+                "TypeOfNotWholeType",
+                "typeof is written inside the larger type {0}.",
+                "`typeof` stands for a whole type. Bind the value in a `let` and name its type, "
+                "or write the enclosing type out.",
+            },
+        },
+        {
+            SemanticDiag::SameShapeComprehensionNotComposite,
+            {
+                "SameShapeComprehensionNotComposite",
+                "{0} is not a struct or a tuple, so it has no shape to fill.",
+                "A same-shape comprehension names a struct or a tuple type; a leaf has no "
+                "fields.",
+            },
+        },
+        {
+            SemanticDiag::SameShapeComprehensionMismatch,
+            {
+                "SameShapeComprehensionMismatch",
+                "The shape {0} is filled from the fields of {1}.",
+                "Write `T {{ static for (n, F) in fields T => ... }}`: the generator must walk the "
+                "shape the comprehension constructs.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationNotLoaded,
             {
                 "NativeDeclarationNotLoaded",

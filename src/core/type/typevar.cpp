@@ -51,6 +51,28 @@ CastSafety TypeVarType::castSafetyFrom(Type *sourceType) const {
     return equals(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
 }
 
+// ---- TypeOfType ----
+
+TypeOfType::TypeOfType(const void *expression) : Type(TypeCode::TypeOf), expression_(expression) {}
+
+TypeOfType *TypeOfType::create(const void *expression) {
+    void *mem = allocTypeStorage<TypeOfType>(TypeStorageKind::TypeVar);
+    return new (mem) TypeOfType(expression);
+}
+
+std::string TypeOfType::toString() const { return "typeof"; }
+
+std::string TypeOfType::mangle() const { return "O"; }
+
+Type *TypeOfType::clone(bool) const { return create(expression_); }
+
+// Two `typeof` placeholders are equal only when they are the same object: the expression they
+// stand for is not compared here, and the graph builder resolves them before any type check.
+bool TypeOfType::equals(Type *type) const { return this == type; }
+
+// A placeholder is not the type of any value: it is replaced where the type is used.
+CastSafety TypeOfType::castSafetyFrom(Type *) const { return CastSafety::Forbidden; }
+
 Type *findTypeBinding(const type_bindings_t &bindings, const std::string &name) {
     for (const auto &[bound, type] : bindings) {
         if (bound == name) {
@@ -264,6 +286,44 @@ bool containsTypeVar(Type *type) {
     if (type->isOtherType()) {
         const auto params = static_cast<OtherType *>(type)->paramsSpan();
         return std::any_of(params.begin(), params.end(), containsTypeVar);
+    }
+    return false;
+}
+
+bool containsTypeOf(Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    switch (type->code()) {
+    case TypeCode::TypeOf:
+        return true;
+    case TypeCode::TypeFunc:
+        return false;
+    case TypeCode::Array:
+        return containsTypeOf(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Tuple: {
+        const auto types = static_cast<TupleType *>(type)->types();
+        return std::any_of(types.begin(), types.end(), containsTypeOf);
+    }
+    case TypeCode::Struct: {
+        auto *record     = static_cast<StructType *>(type);
+        const auto types = record->named() ? record->typeArgs() : record->types();
+        return std::any_of(types.begin(), types.end(), containsTypeOf);
+    }
+    case TypeCode::Function: {
+        const auto *func = static_cast<FunctionType *>(type);
+        const auto with  = func->withTypesSpan();
+        const auto norm  = func->normTypesSpan();
+        return std::any_of(with.begin(), with.end(), containsTypeOf) ||
+               std::any_of(norm.begin(), norm.end(), containsTypeOf) ||
+               (func->hasExitType() && containsTypeOf(func->exitType()));
+    }
+    default:
+        break;
+    }
+    if (type->isOtherType()) {
+        const auto params = static_cast<OtherType *>(type)->paramsSpan();
+        return std::any_of(params.begin(), params.end(), containsTypeOf);
     }
     return false;
 }

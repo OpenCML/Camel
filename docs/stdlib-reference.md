@@ -1146,8 +1146,9 @@ The parameter-tree library written in Camel (design principles 13.5): a tree is 
 of nested structs and tuples, and everything else is a leaf.
 
 `tree_paths`, `tree_map`, `tree_reduce` and `tree_unzip` are written here, with `match type`,
-`static for`/`static loop`, `fields`, `indices` and rest parameters: the walk is expanded at
-each call into ordinary access and fill nodes, with no function of its own per leaf type.
+`static for`/`static loop`, `fields`, `indices`, `typeof` and rest parameters: the walk is
+expanded at each call into ordinary access and fill nodes, with no function of its own per
+leaf type.
 
 `tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
 leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being
@@ -4386,10 +4387,9 @@ traced.
 Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of `Rule`
 values to a `Program`, `check` tests rules on random programs, and the four readers report a
 `Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
-round budget explicit and the cost kept: its readers give the program, the rewrites applied, the
-rounds, the nodes visited, the nodes erased and the wall time (H226). A rule that stops a
-rewrite without changing the program is a fault, and `strict` restricts the float rules to the
-ones that hold bit for bit.
+round budget explicit and the cost kept: it answers a `Run`, the program and what the
+application cost (H226). A rule that stops a rewrite without changing the program is a fault,
+and `strict` restricts the float rules to the ones that hold bit for bit.
 
 The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
 `analysis` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
@@ -4450,95 +4450,16 @@ that fails, or that all of them hold.
 #### `run`
 
 ```camel
-run: (p: Program, rules: Rule[], rounds: int, strict: bool) => Run!
+run: (p: Program, rules: Rule[], rounds: int, strict: bool) => Run<Program>!
 ```
 
-Applies `rules` to `p` one way, for at most `rounds` rounds, and keeps what the application
-cost: the readers below give the program it produced, the rewrites, the rounds, the nodes
-visited, the nodes erased, whether it reached a fixpoint and the wall time. This is `rewrite`
-with the round budget explicit and the cost measurable (H226).
+Applies `rules` to `p` one way, for at most `rounds` rounds, and gives the program it produced
+and what the application cost. This is `rewrite` with the round budget explicit and the cost
+kept (H226).
 
 - With effects: runs the rules' functions, and nothing else.
 - Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out.
 - Example: `run(p, rules, 16, false)` gives `the run`
-
-#### `run_program`
-
-```camel
-run_program: (r: Run) => Program
-```
-
-The program the run `r` produced.
-
-- Pure.
-- Example: `run_program(r)` gives `the rewritten program`
-
-#### `run_rewrites`
-
-```camel
-run_rewrites: (r: Run) => int
-```
-
-How many rewrites the run `r` applied.
-
-- Pure.
-- Example: `run_rewrites(r)` gives `3`
-
-#### `run_rounds`
-
-```camel
-run_rounds: (r: Run) => int
-```
-
-How many rounds the run `r` made; the last one applied nothing when it reached a fixpoint.
-
-- Pure.
-- Example: `run_rounds(r)` gives `2`
-
-#### `run_visited`
-
-```camel
-run_visited: (r: Run) => int
-```
-
-How many nodes the matcher looked at during the run `r`, over all graphs and rounds.
-
-- Pure.
-- Example: `run_visited(r)` gives `24`
-
-#### `run_erased`
-
-```camel
-run_erased: (r: Run) => int
-```
-
-How many nodes the run `r` erased as no longer read.
-
-- Pure.
-- Example: `run_erased(r)` gives `3`
-
-#### `run_fixpoint`
-
-```camel
-run_fixpoint: (r: Run) => bool
-```
-
-Whether the run `r` reached a fixpoint (a round applied nothing).
-
-- Pure.
-- Example: `run_fixpoint(r)` gives `true`
-
-#### `run_seconds`
-
-```camel
-run_seconds: (r: Run) => float
-```
-
-The wall time of the run `r`, in seconds: compiling the rules, matching, rewriting and the
-commit.
-
-- Pure.
-- Example: `run_seconds(r)` gives `0.0012`
 
 #### `rule_name`
 

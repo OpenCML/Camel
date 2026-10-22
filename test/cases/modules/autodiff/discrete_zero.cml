@@ -1,0 +1,107 @@
+/**
+ * Design principles 9.9: the derivative of a discrete value is zero by definition.
+ *
+ * `one_hot`'s labels, `argmax`'s result and a comparison's mask all take no gradient, and no
+ * caller wraps them in `stop_gradient`. Each check puts the discrete value inside the
+ * differentiated region (it is derived from the first `with` parameter), so a backward pass
+ * really reaches it. What it pins: the pass neither refuses nor drops the value silently; the
+ * gradient it materializes is finite and exactly 0.0. The differentiable value's own gradient
+ * is printed beside each zero, so a pass that returned nothing at all does not pass either.
+ *
+ *   one_hot=(value, label_grad, weights_grad_sum): the labels select rows of the float one-hot
+ *     matrix; the weights still receive 2.0 (weights[0,1] + weights[1,0]) while the labels'
+ *     gradient is exactly 0.0.
+ *   argmax=(value, weights_grad_sum): argmax's int result has no tangent, so the weights'
+ *     gradient is 0.0.
+ *   mask=(value, weights_grad_sum): the comparison alone as a loss gives 0.0.
+ *   where=(value, weights_grad_sum): `where` shows the other direction: the selected values
+ *     get the gradient (4.0), only the condition does not.
+ *   gather=(value, weights_grad_sum, labels_grad_sum): `weights[labels]` is the subscript
+ *     gather: the rows the labels name receive their real gradient (6.0, every row), and the
+ *     indices, being discrete, receive exactly 0.0.
+ *   zero=1.0 when the four zero gradients are exactly 0.0 (a NaN would print nan, not 0.0).
+ */
+module discrete_zero
+
+import { Tensor, argmax, cast, one_hot, reshape, sum, where } from tensor
+import { with_grad } from autodiff
+
+type Model = {
+    weights: Tensor,
+    labels: Tensor, // statically a Tensor; an integer tensor at run time
+}
+
+// The labels are an ordinary parameter of the helper: the pullback plan for a callee returns a
+// tangent for every port that has one, so this is the shape the naive example had -- labels is
+// an active Tensor<int64> at run time and one_hot must return zero for it, not refuse.
+with <m: Model>
+func label_rows(labels: Tensor): float {
+    let oh = one_hot(labels, 3)
+    return sum(m.weights * oh)
+}
+
+with <m: Model>
+func one_hot_loss(): float {
+    return label_rows<m>(m.labels)
+}
+
+with <m: Model>
+func argmax_loss(): float {
+    let picked = argmax(m.weights, -1)
+    return sum(cast(picked, 'float32'))
+}
+
+with <m: Model>
+func mask_loss(): float {
+    let mask = m.weights > 0.0
+    return sum(cast(mask, 'float32'))
+}
+
+with <m: Model>
+func where_loss(): float {
+    let mask = m.weights > 0.0
+    return sum(where(mask, m.weights, 0.0))
+}
+
+with <m: Model>
+func gather_loss(): float {
+    return sum(m.weights[m.labels])
+}
+
+func main(): int sync {
+    let model = {
+        weights: reshape([1.0, 2.0, 3.0, -4.0, 5.0, -6.0], [2, 3]),
+        labels: cast([1, 0], 'int64'),
+    }
+    let (v1, g1) = with_grad(one_hot_loss)<model>()
+    let (v2, g2) = with_grad(argmax_loss)<model>()
+    let (v3, g3) = with_grad(mask_loss)<model>()
+    let (v4, g4) = with_grad(where_loss)<model>()
+    let (v5, g5) = with_grad(gather_loss)<model>()
+    let label_grad = sum(cast(g1.labels, 'float32'))
+    let weights_grad = sum(g1.weights)
+    let argmax_grad = sum(g2.weights)
+    let mask_grad = sum(g3.weights)
+    let where_grad = sum(g4.weights)
+    let gather_grad = sum(g5.weights)
+    let index_grad = sum(cast(g5.labels, 'float32'))
+    let zero =
+        if label_grad == 0.0 && argmax_grad == 0.0 && mask_grad == 0.0 && index_grad == 0.0
+        then 1.0
+        else 0.0
+    'discrete_zero one_hot=({:.1f},{:.1f},{:.1f}) argmax=({:.1f},{:.1f}) mask=({:.1f},{:.1f}) where=({:.1f},{:.1f}) gather=({:.1f},{:.1f},{:.1f}) zero={:.1f}'->format<
+        v1,
+        label_grad,
+        weights_grad,
+        v2,
+        argmax_grad,
+        v3,
+        mask_grad,
+        v4,
+        where_grad,
+        v5,
+        gather_grad,
+        index_grad,
+        zero>->println
+    return 0
+}

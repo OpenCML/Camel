@@ -49,7 +49,7 @@ TOL_PARAM = 2e-4      # absolute, any single final parameter against float64
 THREADS = 1
 
 CANONICAL = [
-    f"block{block}.{name}"
+    f"blocks.{block}.{name}"
     for block in (0, 1)
     for name in ("norm1", "wq", "wk", "wv", "wo", "norm2", "w1", "b1", "w2", "b2")
 ] + ["norm_f", "head"]
@@ -213,11 +213,16 @@ def main() -> int:
     environment = camel_env(Path(args.camel))
 
     # 1. Camel writes the shared starting point and its final model, then trains.
-    print(f"camel: {args.camel} train_step.cml std::{args.backend}")
+    print(f"camel: {args.camel} -t 1 train_step.cml std::{args.backend}")
     camel_run = run(
-        [args.camel, str(HERE / "train_step.cml"), f"std::{args.backend}"],
-        {**environment, "NAIVE_BENCH": "1",
-         "NAIVE_INIT_DIR": str(init), "NAIVE_FINAL_DIR": str(finals / "camel")},
+        [
+            args.camel, "-t", "1", str(HERE / "train_step.cml"),
+            f"std::{args.backend}",
+            "--arg", "bench=true",
+            "--arg", f"init_dir={init}",
+            "--arg", f"final_dir={finals / 'camel'}",
+        ],
+        environment,
         stats=work / "camel.time",
     )
     if camel_run["exit"] != 0:
