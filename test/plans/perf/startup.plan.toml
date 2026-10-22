@@ -16,7 +16,7 @@
 # shared, and a few milliseconds of spread is normal. H177 re-measured them at load average 21-22:
 # 5.1 / 7.4 / 38.3 / 37.0 ms. The two full-import commands are now about 2.6 and 2.4 times the quiet
 # median, not four, because importing `pyplot` initialises CPython in `load()` (~9.5 ms) and the
-# other new modules load too. The ceilings were left unchanged (reports/H177.md); their margin over
+# other new modules load too. The ceilings were left unchanged (handover note ⟨83d6558⟩ (H177)); their margin over
 # a load-215 window is thinner than it was, though: H142's load factors project about 127 / 113 ms
 # for the two full-import commands, over the 100 / 90 ceilings, so a later re-baseline may need
 # 150 / 140. The gate passes at every load measured here. The test prints one `startup.cost` line per
@@ -32,7 +32,7 @@
 # nine only). The share fell because the run's import work grew (CPython's initialisation is not
 # declaration work), so the ceiling is a coarse alarm, not a declaration budget: a re-added H142
 # 4.6 ms would read about 24% today, under the 30% ceiling. H177 left the ceiling unchanged and
-# recorded the numbers and the per-module table in docs/handover/reports/H177.md.
+# recorded the numbers and the per-module table in handover note ⟨83d6558⟩ (H177).
 id = "perf.startup"
 order = 401
 tier = "slow"

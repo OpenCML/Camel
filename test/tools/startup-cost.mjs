@@ -208,7 +208,7 @@ function declarationCost(reps) {
 // now initialises CPython in its `load()` (about 9.5 ms, modules/pyplot/module.cpp) and `python`,
 // `tiles`, `tensor`, `nn` and `autodiff` load too, so `inspect_ops` and `imports_all` are about 2.6
 // and 2.4 times the quiet median here instead of four. That is a real cost of importing those
-// modules, not a reason to move a ceiling; the numbers are recorded in docs/handover/reports/H177.md.
+// modules, not a reason to move a ceiling; the numbers are recorded in handover note ⟨83d6558⟩ (H177).
 // modules cost today, and handover note ⟨c49da87⟩ (H142) is where that number is recorded.
 const CASES = [
     {
@@ -270,7 +270,7 @@ function main() {
     // it as a coarse alarm, not as a declaration budget: the denominator is the whole import +
     // compile region of the run, which now includes CPython's initialisation in `pyplot` (~9.5 ms)
     // and the other new module loads, so a re-added 4.6 ms reads about 24% today instead of 45%
-    // (docs/handover/reports/H177.md, section on the share). The ceiling was left unchanged: it is
+    // (handover note ⟨83d6558⟩ (H177), section on the share). The ceiling was left unchanged: it is
     // not too tight, and lowering it would only trade one missed regression for host noise.
     const DECLARATION_SHARE_CEILING = 30
     const declarations = declarationCost(reps)
