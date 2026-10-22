@@ -3,6 +3,9 @@
 依据：docs/design-principles.cn.md（3、5、10、11、13 节）、docs/stdlib-reference.md、stdlib/、modules/、src/builtin/modules/、docs/design/{training,arrays-memory,showcase,io-concurrency-streams}、docs/language/05_modules.md、docs/reviews/2026-10-19/{frontend,modules}.cn.md。
 标注"未验证"的是只读下无法确认的判断（没有运行构建产物）。个数口径：stdlib/signatures 里按函数名去重，重载不重复计。
 
+> 2026-10-22 注：本文是 2026-10-20 的盘点，保留当时的名字；`str::bytes`/`str::from_bytes` 已由
+> H122 删除（字符串与 UTF-8 字节之间现在只用 `bytes::encode`/`bytes::decode`）。
+
 ## 1. 模块表
 
 "默认可见"：全局内建不需导入；其余都要 `import`。模块查找：入口文件同目录 .cml、`-I` 目录、`CAMEL_PACKAGES`、随安装的 `out/latest/stdlib/`（.cml 与 .cmo 都放在这里）。

@@ -190,5 +190,5 @@ use: syntax `0x01`-`0x0B`; run time `0x30`-`0x3B` for operator and module faults
 - **Q5. Names of the syntax diagnostics and wording of the messages** (`MissingThen`,
   `AssignmentInCondition`, `KeywordAsIdentifier`, ...): they describe mistakes against the
   current grammar and should follow it when it changes (`then` in particular).
-- **Q6. A fault raised by `os.exit`.** `<exit> operator invoked` is still the catch-all
+- **Q6. A fault raised by `process:exit`.** `<exit> operator invoked` is still the catch-all
   `RuntimeError`; whether leaving the program is a fault at all is not for this work to decide.

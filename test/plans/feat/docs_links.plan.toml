@@ -9,6 +9,12 @@ desc = "The relative links of the reader-facing documents point at files and hea
 # and checks every relative link: the file exists and, for a link with a fragment, the target
 # has a heading with that anchor. `node scripts/check-doc-links.mjs --all` checks every
 # document of the repository.
+#
+# scripts/check-retired-names.mjs reads the same reader-facing pages (plus the Markdown of
+# docs/, editors/, tools/ and scripts/, and the example programs) and fails on a retired name
+# used as if it were current: `sys:`/`os:`/`crypto:`, `str::bytes`/`str::from_bytes`, the
+# `inner`/`outer`/`atomic`/`shared` function modifiers, and the body-carrying signature form.
+# Task reports and dated reviews are records, not pages, and are not scanned.
 
 [[tests]]
 name = "docs.links.reader_facing"
@@ -19,5 +25,17 @@ case = "../../../scripts/check-doc-links.mjs"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["no broken links in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "docs.retired_names_absent"
+desc = "No reader-facing page uses a retired spelling as if it were current: the `sys:`/`os:`/`crypto:` module names, `str::bytes`/`str::from_bytes`, the `inner`/`outer`/`atomic`/`shared` function modifiers, or the body-carrying signature form. Reports and dated reviews are records and are not scanned; two dated snapshots are allowlisted with a reason."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-retired-names.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["no retired spelling in"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
