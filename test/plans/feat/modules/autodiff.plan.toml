@@ -1546,58 +1546,75 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 # The two cases below are twins: one loop body, iterating a literal array or an array built from
-# the parameter. `std::stats` runs before and after `std::macro`, so the first GRAPH_STATS line
-# counts the program's own graph and the second the graph with the gradient's reverse loop in it.
-# The counts are pinned exactly, so the cost is in the output rather than in prose:
-#   literal   19 nodes ->  92 nodes (5 -> 18 operators)
-#   parameter 24 nodes -> 122 nodes (7 -> 33 operators)
-# The parameter twin's forward array costs 5 nodes, and its own backward pass 25 more nodes than
-# the literal twin's. The reach test is worth 8 of those nodes: with `dependsOnTangentPort` removed
-# from the loop rule, the literal twin prints 100 nodes, 115 edges and 21 operators instead of 92,
-# 102 and 18, so this pair fails if every loop carries an array gradient unconditionally.
+# the parameter. `std::macro` builds the gradient's reverse loop, `std::jgir` prints the graphs as
+# JSON, and what is asserted is the array gradient's own machinery rather than a graph size:
+# `:tangent/zeros_arr` (the zero array a round's element gradient is scattered into) and
+# `:tangent/scatter_add_arr` (the scatter itself) must be absent for the literal and present for
+# the parameter-built array. No count is pinned, so a CSE or an inlining decision that moves node
+# numbers leaves these assertions alone; dropping the reach test from the loop rule adds exactly
+# those two operators to the literal twin and fails its assertion, which prints the labels it
+# found. The first entry of each pair asserts the shape, the second the printed value.
 
 [[tests]]
-name = "loop_grad_literal_array.stats"
-desc = "A differentiated loop over an array literal: nothing that can carry a gradient reaches the array, so the reverse pass carries no array gradient for it. std::stats before and after std::macro pins the program graph at 19 nodes and the graph with the gradient at 92 nodes, 102 edges and 18 operators, against 24 and 122, 148 and 33 for the parameter-built twin."
+name = "loop_grad_literal_array.shape"
+desc = "A differentiated loop over an array literal: no port reaches the array, so its reverse loop carries no array gradient and no tangent-space operator of the array kind (`:tangent/zeros_arr`, `:tangent/scatter_add_arr`) appears anywhere in the graphs std::jgir prints after std::macro. The reverse loop itself is there, so the absence is the rule's, not a missing transformation. The parameter-built twin has both operators."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_literal_array.cml"
-args = ["${case}", "std::stats", "std::macro", "std::stats", "${run_nvm}"]
+args = ["${case}", "std::macro", "std::jgir"]
 expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout
-const stats = [...out.matchAll(/GRAPH_STATS ([{].*[}])/g)].map((m) => JSON.parse(m[1]))
-assert(stats.length === 2, `expected two GRAPH_STATS lines: ${out}`)
-const [before, after] = stats
-assert(before.nodes === 19 && before.opers === 5, `program graph changed: ${JSON.stringify(before)}`)
-assert(after.nodes === 92 && after.edges === 102 && after.opers === 18, `gradient graph changed: ${JSON.stringify(after)}`)
-assert(after.loops === 3, `expected the forward and the reverse loop: ${JSON.stringify(after)}`)
-assert(out.includes('loop_grad_literal_array d=7.0'), `unexpected output: ${out}`)
+const doc = JSON.parse(input.normalized.stdout)
+const graphs = doc.graphs.map((g) => g.name)
+assert(graphs.some((name) => name.endsWith('.tape.reverse')), `no reverse loop to inspect: ${JSON.stringify(graphs)}`)
+const labels = doc.graphs.flatMap((g) => g.nodes).filter((n) => n.kind === 'OPER').map((n) => n.label)
+const tangents = labels.filter((label) => label.startsWith(':tangent/'))
+assert(tangents.length === 0, `the literal array's gradient is carried: ${JSON.stringify(tangents)}`)
 }
 """
 timeout_ms = 8000
 
 [[tests]]
-name = "loop_grad_parameter_array.stats"
-desc = "The twin of loop_grad_literal_array.stats over an array built from the parameter: the array takes part in the gradient, so the reverse loop carries its gradient and the gradient graph is 122 nodes, 148 edges and 33 operators, 25 nodes of gradient more than the literal twin's 92 (5 of them its forward array)."
+name = "loop_grad_literal_array"
+desc = "The same case runs: the gradient of w + w * (1 + 2 + 3) at 2 is 7."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_literal_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_literal_array d=7.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_parameter_array.shape"
+desc = "The twin over an array built from the parameter: the array takes part in the gradient, so the reverse loop carries it and both tangent operators are in the graphs: `:tangent/zeros_arr`, the zero array whose length is the forward value's, and `:tangent/scatter_add_arr`, each round's element gradient scattered at its index."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_parameter_array.cml"
-args = ["${case}", "std::stats", "std::macro", "std::stats", "${run_nvm}"]
+args = ["${case}", "std::macro", "std::jgir"]
 expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout
-const stats = [...out.matchAll(/GRAPH_STATS ([{].*[}])/g)].map((m) => JSON.parse(m[1]))
-assert(stats.length === 2, `expected two GRAPH_STATS lines: ${out}`)
-const [before, after] = stats
-assert(before.nodes === 24 && before.opers === 7, `program graph changed: ${JSON.stringify(before)}`)
-assert(after.nodes === 122 && after.edges === 148 && after.opers === 33, `gradient graph changed: ${JSON.stringify(after)}`)
-assert(after.loops === 3, `expected the forward and the reverse loop: ${JSON.stringify(after)}`)
-assert(out.includes('loop_grad_parameter_array d=25.0'), `unexpected output: ${out}`)
+const doc = JSON.parse(input.normalized.stdout)
+const graphs = doc.graphs.map((g) => g.name)
+assert(graphs.some((name) => name.endsWith('.tape.reverse')), `no reverse loop to inspect: ${JSON.stringify(graphs)}`)
+const labels = doc.graphs.flatMap((g) => g.nodes).filter((n) => n.kind === 'OPER').map((n) => n.label)
+assert(labels.includes(':tangent/zeros_arr'), `no zero array for the iterated array: ${JSON.stringify(labels)}`)
+assert(labels.includes(':tangent/scatter_add_arr'), `no scatter into the array's gradient: ${JSON.stringify(labels)}`)
 }
 """
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_parameter_array"
+desc = "The same case runs: the gradient of w + w * (w + 2w + 3w) at 2 is 25."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_parameter_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_parameter_array d=25.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
