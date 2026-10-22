@@ -942,11 +942,23 @@ void Builder::bindWithArguments(
             throw BuildAbortException();
         }
         // The default is one constant of the declaration: the call gets a static node holding
-        // it, and no expression is evaluated here (design principles 4.4).
+        // it, and no expression is evaluated here (design principles 4.4). Two calls in one
+        // graph that leave the same parameter out share that node: the value was computed once.
         const WithDefaultValue &value = *(*defaults)[i];
-        node_handle_t dataNode        = currGraph_->addStaticDataNode(value.data);
-        rememberConstant(dataNode, value.data);
-        registerNodeOrigin(context_, dataNode, value.expr, "gir.data.static.withdefault");
+        node_handle_t dataNode{};
+        if (const auto graph = withDefaultNodes_.find(currGraph_.get());
+            graph != withDefaultNodes_.end()) {
+            if (const auto found = graph->second.find(value.expr);
+                found != graph->second.end()) {
+                dataNode = found->second;
+            }
+        }
+        if (dataNode == nullptr) {
+            dataNode = currGraph_->addStaticDataNode(value.data);
+            rememberConstant(dataNode, value.data);
+            registerNodeOrigin(context_, dataNode, value.expr, "gir.data.static.withdefault");
+            withDefaultNodes_[currGraph_.get()][value.expr] = dataNode;
+        }
         ordered[i] = Argument{dataNode, value.expr, std::nullopt};
         filled[i]  = true;
     }

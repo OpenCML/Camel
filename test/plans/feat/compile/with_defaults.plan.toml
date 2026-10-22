@@ -124,3 +124,51 @@ expect_diagnostic_line = 13
 expect_output_contains = ["this binding is used as a function value"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.one_constant"
+desc = "The claim that the default is evaluated once is visible in the graph: two calls that leave `rounds` out make two call nodes, and both read the one constant node holding 4242 — one DATA node, two edges from it, printed by `std::gir` (design principles 4.4)."
+kind = "behavior"
+case = "../../../cases/compile/with_defaults/one_constant.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const marker = '[label="4242"'
+const nodes = out.split(marker).length - 1
+assert(nodes === 1, `the default is one constant node, got ${nodes}`)
+const line = out.split('\n').find((l) => l.includes(marker)) || ''
+const id = line.trim().split(' ')[0]
+const readers = out.split(id + ' ->').length - 1
+assert(readers === 2, `both calls read that one node, got ${readers} edges`)
+const calls = out.split('label="bump", type="FUNC"').length - 1
+assert(calls === 2, `two call nodes, got ${calls}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.instances"
+desc = "A generic declaration's default reaches every instance: `tag` is instantiated at int, string and float, each instance leaves `n` out and takes 3, and each keeps its own type (`3:7`, `3:a`, `3:2.5`). An instance may still override it by position (`tag::<int><9>` is `9:7`)."
+kind = "behavior"
+case = "../../../cases/compile/with_defaults/instances.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3:7\n3:a\n3:2.5\n9:7\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.type_parameter"
+desc = "A default whose type is the declaration's own type parameter is not a constant where the template is registered (T has no value there), and is refused as WithDefaultWrongType at the default."
+kind = "negative"
+case = "../../../cases/compile/with_defaults/type_parameter.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithDefaultWrongType"
+expect_diagnostic_line = 8
+expect_output_contains = ["The default of the 'with' parameter 'v' has type 'int', not 'T'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
