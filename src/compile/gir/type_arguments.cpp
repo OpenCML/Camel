@@ -143,7 +143,13 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
         }
         auto graph = instantiateGeneric(tmpl, bindings, {}, {}, gct);
         currGraph_->addDependencyGraph(graph);
-        return createFuncDataNode(graph, true, false);
+        node_handle_t value = createFuncDataNode(graph, true, false);
+        // The instance is made here, so a call of `f::<int>(...)` reaches the value, not the
+        // declaration: the declaration's `with`-parameter defaults travel with the value.
+        if (const auto found = withDefaults_.find(graph.get()); found != withDefaults_.end()) {
+            withDefaultsOfValue_[value] = found->second;
+        }
+        return value;
     }
     if (nodeIsKind(target, runtime::GCNodeKind::Dref) &&
         std::holds_alternative<oper_group_ptr_t>(nodeGraphOf(target)->drefTarget(target))) {

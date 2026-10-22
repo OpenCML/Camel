@@ -1274,6 +1274,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     for (const Argument &input : withInputs) {
         withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
+    // A `with` argument may be written by name and a parameter may have a default (design
+    // principles 4.4): bind what the call writes to the callee's parameters, filling the
+    // parameters it leaves out. This happens before the call is resolved, because it is the
+    // parameters, not the written order, that tell which argument is which.
+    bindWithArguments(withInputs, withInputTypes, targetNode, gct);
 
     // Call results take the callee's current exit type (a recursive callee's
     // exit type is only final after its body is built), unless the node was
@@ -1361,13 +1366,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                                                        : std::string("expression"),
                 gct);
             for (const node_handle_t &element : elements) {
-                normInputs.push_back({element, operand});
+                normInputs.push_back({element, operand, std::nullopt});
                 normInputTypes.push_back(valueTypeOf(callableValueType(element)));
             }
             continue;
         }
         node_handle_t inputNode = visitOperand(gct->at(i), gct);
-        normInputs.push_back({inputNode, gct->at(i)});
+        normInputs.push_back({inputNode, gct->at(i), std::nullopt});
         normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
         if (isAssignment && i == 1) {
             Type *place = valueTypeOf(nodeTypeOf(inputNode));
@@ -1404,7 +1409,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             node_handle_t location                 = currGraph_->addStaticDataNode(
                 tt::as_shared<Data>(std::make_shared<StringData>(sourceLocationOf(where))));
             registerNodeOrigin(context_, location, gct, "gir.data");
-            normInputs.push_back({location, gct});
+            normInputs.push_back({location, gct, std::nullopt});
             normInputTypes.push_back(Type::String());
         }
     }

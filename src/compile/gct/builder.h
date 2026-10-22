@@ -354,7 +354,8 @@ class Builder {
     Type *visitArrayType(const AST::node_ptr_t &ast);
     Type *visitStructType(const AST::node_ptr_t &ast);
     Type *visitTupleType(const AST::node_ptr_t &ast);
-    Type *visitFuncType(const AST::node_ptr_t &ast);
+    Type *visitFuncType(
+        const AST::node_ptr_t &ast, std::vector<Tree::WithDefault> *defaultsOut = nullptr);
     Type *visitUnitType(const AST::node_ptr_t &ast);
     Type *visitInferType(const AST::node_ptr_t &ast);
     Type *visitDataType(const AST::node_ptr_t &ast);

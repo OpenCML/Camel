@@ -107,7 +107,7 @@ func hello(name: string) sync {      // 没有返回值；同步的函数体
 - 返回类型可以省略，由函数体推出；递归函数必须写出返回类型。函数体里没有 `return` 时，函数的值是函数体最后一条语句的值：那是一个有值的表达式时返回它的值，否则返回 `void`。注意 `println(x)` 的值是 `x`（便于 `x->println->f` 这样接着写），所以 `func main() sync { println('a') }` 返回字符串 `'a'`，默认流水线又把 `main` 的结果写到输出，这一行会出现两次；把返回类型写成 `: void`，或以 `return 0` 结束。
 - 函数体前的 `sync` 使函数体成为同步块；`func` 前的 `sync` 是函数修饰符。两者含义不同（[4.3](04_execution_model.md#43-sync)）。
 - 函数可以声明在模块顶层、命名空间里，也可以声明在块里（局部函数）。函数之间可以相互递归，不要求先声明后使用。
-- 形参默认值 `b: int = 5` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）；用重载或 `with` 形参。
+- 普通形参的默认值 `b: int = 5` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）；用重载或 `with` 形参，`with` 形参的默认值已可用（[7.4.2](#742-with-形参)）。
 
 ### 7.4.2 `with` 形参
 
@@ -132,6 +132,28 @@ func main(): int sync {
 ```
 
 `with` 形参不是泛型参数，不能用来声明类型参数。
+
+`with` 形参可以写默认值，调用处可以按位置给，也可以按名字给：
+
+```cml
+with <rounds: int = 8, strict: bool = false>
+func repeat(x: int): int {
+    return if strict then x * rounds else x + rounds
+}
+
+func main(): int sync {
+    println(repeat(10))                 // 两个都用默认值：18
+    println(repeat<2, true>(10))        // 都按位置给出：20
+    println(repeat<strict: true>(10))   // 跳过 rounds，按名字给 strict：80
+    println(repeat<16>(10))             // rounds 按位置给：26
+    return 0
+}
+```
+
+- **默认值是编译期常量表达式**，在声明处求值一次，调用处补进图里：不是每次调用重新求值。所以它不能读同一个声明的 `with` 形参（`WithDefaultNotConstant`），也不能是运行期才算出来的值；类型不合是 `WithDefaultWrongType`。
+- **有默认值的形参之后的形参也必须有默认值**（`WithParameterAfterDefault`），这样按位置给出时不会出现"后面有值、前面没有"的洞。
+- **按名字的实参写在按位置的之后**，写法与结构体字面量一致：`f<rounds: 16>`、`f<strict: true>`。名字不是该函数的 `with` 形参是 `WithArgumentUnknown`，同一个形参给两次是 `WithArgumentDuplicate`，漏掉没有默认值的形参是 `WithArgumentMissing`。按名字的实参只能用在调用里；`f<rounds: 8>` 作函数值时按顺序绑定它给出的实参，不应用默认值。
+- **函数值不携带默认值**：`let g = repeat` 之后，`g` 的 `with` 形参都要自己给。默认值属于声明，不属于类型。
 
 ### 7.4.3 重载
 

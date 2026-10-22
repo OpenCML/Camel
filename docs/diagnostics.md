@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-234 diagnostics: 215 errors, 19 warnings.
+242 diagnostics: 223 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -195,6 +195,14 @@ prints one entry.
 | `0x030001AA` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error |
 | `0x030001AB` | [SemanticDiag::WhenTypeQueryNotConcrete](#whentypequerynotconcrete) | Error |
 | `0x030001AC` | [SemanticDiag::WhenConditionUnmet](#whenconditionunmet) | Error |
+| `0x030001B7` | [SemanticDiag::WithArgumentUnknown](#withargumentunknown) | Error |
+| `0x030001B8` | [SemanticDiag::WithArgumentDuplicate](#withargumentduplicate) | Error |
+| `0x030001B9` | [SemanticDiag::WithArgumentMissing](#withargumentmissing) | Error |
+| `0x030001BA` | [SemanticDiag::WithDefaultNotConstant](#withdefaultnotconstant) | Error |
+| `0x030001BB` | [SemanticDiag::WithDefaultWrongType](#withdefaultwrongtype) | Error |
+| `0x030001BC` | [SemanticDiag::WithParameterAfterDefault](#withparameterafterdefault) | Error |
+| `0x030001BD` | [SemanticDiag::WithArgumentCallee](#withargumentcallee) | Error |
+| `0x030001BE` | [SemanticDiag::WithArgumentInValue](#withargumentinvalue) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5247,6 +5255,260 @@ func needs_float(x: float): float when is_float::<int>() {
 
 func main(): int sync {
     return int(needs_float(1.0))
+}
+```
+
+### WithArgumentUnknown
+
+`0x030001B7` · Error · `SemanticDiag::WithArgumentUnknown`
+
+**Message**
+
+```text
+'{0}' is not a 'with' parameter of '{1}'.
+```
+
+**Help**
+
+```text
+A name in a 'with' argument is written as in a struct literal, 'name: value', and must be one of the callee's 'with' parameters.
+```
+
+**Example** (`test/cases/compile/with_defaults/unknown_name.cml`, run as `camel test/cases/compile/with_defaults/unknown_name.cml`)
+
+```camel
+module with_argument_unknown
+
+with <rounds: int = 8>
+func f(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    return f<round: 2>(1)
+}
+```
+
+### WithArgumentDuplicate
+
+`0x030001B8` · Error · `SemanticDiag::WithArgumentDuplicate`
+
+**Message**
+
+```text
+The 'with' parameter '{0}' of '{1}' is given twice.
+```
+
+**Help**
+
+```text
+Give each 'with' parameter once: positionally, or by name after the positional arguments.
+```
+
+**Example** (`test/cases/compile/with_defaults/duplicate.cml`, run as `camel test/cases/compile/with_defaults/duplicate.cml`)
+
+```camel
+module with_argument_duplicate
+
+with <rounds: int = 8>
+func f(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    return f<2, rounds: 3>(1)
+}
+```
+
+### WithArgumentMissing
+
+`0x030001B9` · Error · `SemanticDiag::WithArgumentMissing`
+
+**Message**
+
+```text
+The call gives no value for the 'with' parameter '{0}' of '{1}', and it has no default.
+```
+
+**Help**
+
+```text
+Give the parameter, or write a default where the parameter is declared ('with <name: type = value>').
+```
+
+**Example** (`test/cases/compile/with_defaults/missing.cml`, run as `camel test/cases/compile/with_defaults/missing.cml`)
+
+```camel
+module with_argument_missing
+
+with <rounds: int, strict: bool = false>
+func f(x: int): int {
+    return if strict then x * rounds else x + rounds
+}
+
+func main(): int sync {
+    return f<strict: true>(1)
+}
+```
+
+### WithDefaultNotConstant
+
+`0x030001BA` · Error · `SemanticDiag::WithDefaultNotConstant`
+
+**Message**
+
+```text
+The default of the 'with' parameter '{0}' is not a compile-time constant: {1}.
+```
+
+**Help**
+
+```text
+A default is evaluated where the declaration is, not at each call, so it can only be a constant expression: a literal, or operands of an operator that is computed at compile time.
+```
+
+**Example** (`test/cases/compile/with_defaults/default_not_constant.cml`, run as `camel test/cases/compile/with_defaults/default_not_constant.cml`)
+
+```camel
+module with_default_not_constant
+
+with <a: int = 1, b: int = a + 1>
+func f(x: int): int {
+    return x + b
+}
+
+func main(): int sync {
+    return f(1)
+}
+```
+
+### WithDefaultWrongType
+
+`0x030001BB` · Error · `SemanticDiag::WithDefaultWrongType`
+
+**Message**
+
+```text
+The default of the 'with' parameter '{0}' has type '{1}', not '{2}'.
+```
+
+**Help**
+
+```text
+The default is a value of the parameter's type, as an argument at the call would be.
+```
+
+**Example** (`test/cases/compile/with_defaults/default_wrong_type.cml`, run as `camel test/cases/compile/with_defaults/default_wrong_type.cml`)
+
+```camel
+module with_default_wrong_type
+
+with <rounds: int = "many">
+func f(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    return f(1)
+}
+```
+
+### WithParameterAfterDefault
+
+`0x030001BC` · Error · `SemanticDiag::WithParameterAfterDefault`
+
+**Message**
+
+```text
+The 'with' parameter '{0}' has no default and follows '{1}', which has one.
+```
+
+**Help**
+
+```text
+A parameter after one with a default must have a default too, so that a call that leaves the first out can be read as giving the others by name.
+```
+
+**Example** (`test/cases/compile/with_defaults/after_default.cml`, run as `camel test/cases/compile/with_defaults/after_default.cml`)
+
+```camel
+module with_parameter_after_default
+
+with <a: int = 1, b: int>
+func f(x: int): int {
+    return x + b
+}
+
+func main(): int sync {
+    return f(1)
+}
+```
+
+### WithArgumentCallee
+
+`0x030001BD` · Error · `SemanticDiag::WithArgumentCallee`
+
+**Message**
+
+```text
+The 'with' argument '{0}' is given by name, and the signature of '{1}' is not known where the binding is written.
+```
+
+**Help**
+
+```text
+Name the one function the binding is for, or give the 'with' arguments positionally.
+```
+
+**Example** (`test/cases/compile/with_defaults/callee_unknown.cml`, run as `camel test/cases/compile/with_defaults/callee_unknown.cml`)
+
+```camel
+module with_argument_callee
+
+with <rounds: int = 8>
+func f(x: int): int {
+    return x + rounds
+}
+
+with <rounds: int = 8>
+func f(x: string): string {
+    return x
+}
+
+func main(): int sync {
+    return f<rounds: 2>(1)
+}
+```
+
+### WithArgumentInValue
+
+`0x030001BE` · Error · `SemanticDiag::WithArgumentInValue`
+
+**Message**
+
+```text
+The 'with' argument '{0}' is given by name, and this binding is used as a function value.
+```
+
+**Help**
+
+```text
+A function value binds the 'with' arguments it is given in order; name a parameter only in a call, 'f<name: value>(x)'.
+```
+
+**Example** (`test/cases/compile/with_defaults/in_value.cml`, run as `camel test/cases/compile/with_defaults/in_value.cml`)
+
+```camel
+module with_argument_in_value
+
+with <rounds: int = 8>
+func f(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    let g = f<rounds: 2>
+    return g(1)
 }
 ```
 
