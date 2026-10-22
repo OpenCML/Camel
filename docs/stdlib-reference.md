@@ -2044,17 +2044,9 @@ functions: each one matches the type it is given with `match type` and returns a
 cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `c64`, `c128`,
 `string`, `bool`), and `case func` is the shape of every function type.
 
-#### `is_numeric`
-
-```camel
-is_numeric: () => bool
-```
-
-True when `T` is a number: an integer, a float or a complex number.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `is_numeric::<int>()` gives `true`
-- Example: `is_numeric::<string>()` gives `false`
+A type is named once: the family predicates (`is_integer`, `is_float`, `is_complex`,
+`is_string`, `is_bool`) carry the identity cases, and `is_numeric` and `is_ordered` ask them
+instead of listing the types again, so a new integer width is added in one place.
 
 #### `is_integer`
 
@@ -2079,6 +2071,35 @@ True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit).
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `is_float::<float>()` gives `true`
 - Example: `is_float::<int>()` gives `false`
+
+#### `is_complex`
+
+```camel
+is_complex: () => bool
+```
+
+True when `T` is a complex number (`c64` is 64-bit, `c128` is 128-bit).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_complex::<c64>()` gives `true`
+- Example: `is_complex::<float>()` gives `false`
+
+#### `is_numeric`
+
+```camel
+is_numeric: () => bool
+```
+
+True when `T` is a number: an integer, a float or a complex number.
+
+The three families are asked, not listed again: a type spelled in one of them is numeric
+without appearing here, so adding an integer width changes `is_integer` alone. The complex
+branch is `is_complex`, which is why `c64` is numeric.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_numeric::<int>()` gives `true`
+- Example: `is_numeric::<string>()` gives `false`
+- Example: `is_numeric::<c64>()` gives `true`
 
 #### `is_ordered`
 
