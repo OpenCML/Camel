@@ -2200,26 +2200,30 @@ The sum of the elements, 0 for an empty array. Integers wrap around on overflow,
 #### `min`
 
 ```camel
-min: (xs: T[]) => T? when is_numeric::<T>()
+min: (xs: T[]) => T? when is_ordered::<T>()
 ```
 
-The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
-+0), or null for an empty array.
+The smallest value, or null for an empty array. Numbers compare by the IEEE 754 minimum (a
+NaN anywhere makes the result NaN, and -0 is below +0), strings by their bytes (a proper
+prefix first), and false is below true.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `min([3, 9, 2]) ?? 0` gives `2`
+- Example: `min(['b', 'a']) ?? ''` gives `'a'`
 
 #### `max`
 
 ```camel
-max: (xs: T[]) => T? when is_numeric::<T>()
+max: (xs: T[]) => T? when is_ordered::<T>()
 ```
 
-The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
--0), or null for an empty array.
+The largest value, or null for an empty array. Numbers compare by the IEEE 754 maximum (a
+NaN anywhere makes the result NaN, and -0 is below +0), strings by their bytes (a proper
+prefix first), and false is below true.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `max([3, 9, 2]) ?? 0` gives `9`
+- Example: `max(['a', 'b']) ?? ''` gives `'b'`
 
 ### Transforming
 
@@ -2663,13 +2667,17 @@ min: (a: i32, b: i32) => i32
 min: (a: int, b: int) => int
 min: (a: f32, b: f32) => f32
 min: (a: float, b: float) => float
+min: (a: string, b: string) => string
+min: (a: bool, b: bool) => bool
 ```
 
-The smaller of two numbers of one type (IEEE 754 minimum). With a NaN on either side
-the result is NaN; -0 is below +0.
+The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
+NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
+prefix first), and false is below true.
 
 - Pure.
 - Example: `min(3, 5)` gives `3`
+- Example: `min('b', 'a')` gives `'a'`
 
 #### `max`
 
@@ -2678,13 +2686,17 @@ max: (a: i32, b: i32) => i32
 max: (a: int, b: int) => int
 max: (a: f32, b: f32) => f32
 max: (a: float, b: float) => float
+max: (a: string, b: string) => string
+max: (a: bool, b: bool) => bool
 ```
 
-The larger of two numbers of one type (IEEE 754 maximum). With a NaN on either side
-the result is NaN; -0 is below +0.
+The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
+NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
+prefix first), and false is below true.
 
 - Pure.
 - Example: `max(3, 5)` gives `5`
+- Example: `max('a', 'b')` gives `'b'`
 
 #### `clamp`
 
