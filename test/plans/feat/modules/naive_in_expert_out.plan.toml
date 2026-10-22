@@ -1,0 +1,37 @@
+id = "modules.naive_in_expert_out"
+order = 393
+tier = "fast"
+tags = ["feat", "modules", "showcase", "naive-in-expert-out"]
+
+# The naive Transformer training step of the showcase (examples/models/naive-in-expert-out).
+# It runs on the three CPU back ends and they agree on the whole standard output.  The fixed-seed
+# losses are recorded with a tolerance, so a regression in the language's tensor, autodiff or
+# optimizer layers shows up in the fast layer.  The PyTorch counterparts are not here: they need
+# torch, and the measurement harness (measure.py) drives them separately.
+
+[[tests]]
+name = "train_step.loss"
+desc = "Sixteen fixed-seed steps of the naive Transformer: the loss falls from 3.4656 to 1.5680, the same on std::nvm, std::fvm and std::jit."
+case = "../../../../examples/models/naive-in-expert-out/train_step.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const out = input.normalized.stdout
+const init = Number(match(/naive init loss=([0-9.eE+-]+)/, out)[1])
+const found = [...out.matchAll(/naive step=[0-9]+ loss=([0-9.eE+-]+)/g)].map(m => Number(m[1]))
+assert(found.length === 16, `expected 16 step losses, got ${found.length}`)
+assert(found.every(Number.isFinite), 'a step loss is not finite')
+assert(approx(init, 3.465590829, 1e-5), `initial loss changed: ${init}`)
+assert(approx(found[0], init, 1e-9), `the first step must evaluate the same loss: ${found[0]} vs ${init}`)
+assert(found[15] < found[0] - 1.0, `the loss did not fall: ${found[0]} -> ${found[15]}`)
+assert(approx(found[15], 1.710085423, 1e-5), `step 15 loss changed: ${found[15]}`)
+const final = Number(match(/naive final steps=16 loss=([0-9.eE+-]+)/, out)[1])
+assert(approx(final, 1.568042986, 1e-5), `final loss changed: ${final}`)
+}
+"""
+timeout_ms = 60000

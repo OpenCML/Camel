@@ -1,0 +1,4 @@
+results.json
+accuracy.json
+artifacts/
+__pycache__/

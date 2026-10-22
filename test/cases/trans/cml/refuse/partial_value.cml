@@ -1,0 +1,12 @@
+// A `with` function bound to its arguments as a value. The compiler wraps it in a lambda whose
+// capture port has no source name, so the printer refuses the value instead of printing an
+// anonymous capture.
+with <k: int>
+func inc(x: int): int {
+    return x + k
+}
+
+func main(): int {
+    let g = inc<1>
+    return g(2)
+}
