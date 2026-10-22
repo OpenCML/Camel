@@ -1184,7 +1184,10 @@ class RewriteModule final : public BuiltinModule {
         });
         // The readers are pure. `__rule` is not: constant folding would build the rule at
         // compile time and keep it in a static area, where the collector does not trace the
-        // functions it holds.
+        // functions it holds. `__analysis` compiles an `analysis` declaration at macro time and
+        // installs its facts, so it is effectful as well; it was the one operator of the module
+        // whose purity was never declared, which nothing noticed while no program imported the
+        // module (handover H173).
         camel::core::OperatorTable::instance().declare(
             "rewrite",
             {{"rule", false},
@@ -1196,7 +1199,8 @@ class RewriteModule final : public BuiltinModule {
              {"rewrite", false},
              {"saturate", false},
              {"extract", false},
-             {"check", false}});
+             {"check", false},
+             {"analysis", false}});
         loaded_ = true;
         return true;
     }

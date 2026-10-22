@@ -1,0 +1,68 @@
+/**
+ * Signatures of the `rewrite` module (C++ operators, modules/rewrite): rules applied to a
+ * program.
+ *
+ * The module also exports the reserved groups the language's own `rule` and `analysis`
+ * declarations compile to (`rewrite:rule`, `rewrite:rule_when`, `rewrite:analysis`). They have
+ * no callable Camel name, so they are not listed here and `inspect --ops` hides them from the
+ * name comparison.
+ *
+ * The rules passed in are function values; a rule that stops a rewrite without changing the
+ * program is a fault, and `strict` restricts the float rules to the ones that hold bit for bit.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ */
+
+/// Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
+/// @effect runs the rules' functions
+/// @example rewrite(p, rules)    // the rewritten program
+export func rewrite(p: Program, rules: (() => Rule)[]): Program!
+
+// The same call with the strict-float choice explicit.
+export func rewrite(p: Program, rules: (() => Rule)[], strict: bool): Program!
+
+/// Applies the rearranging rules too, for at most `rounds` rounds, and gives the smallest
+/// writing of the value it finds.
+/// @effect runs the rules' functions
+/// @example saturate(p, rules, 20)    // the smallest writing found
+export func saturate(p: Program, rules: (() => Rule)[], rounds: int): Program!
+
+// The same call with the strict-float choice explicit.
+export func saturate(p: Program, rules: (() => Rule)[], rounds: int, strict: bool): Program!
+
+/// Extracts the program `p` in the cost model named `cost` (for example `"size"`).
+/// @effect rewrites the program and runs the cost model
+/// @example extract(p, 'size')    // the extracted program
+export func extract(p: Program, cost: string): Program!
+
+/// Checks `rules` on `samples` random programs drawn with `seed`, and reports the first rule
+/// that fails, or that all of them hold.
+/// @effect runs the rules' functions and draws random programs
+/// @example check(rules, 1000, 7)    // the report
+export func check(rules: (() => Rule)[], samples: int, seed: int): string
+
+/// The name of the rule `r`.
+/// @pure
+/// @example rule_name(r)    // 'int_add_zero'
+#op<'rewrite:name'>
+export func rule_name(r: Rule): string
+
+/// Whether the rule `r` may also be applied from right to left.
+/// @pure
+/// @example rule_two_way(r)    // false
+#op<'rewrite:two_way'>
+export func rule_two_way(r: Rule): bool
+
+/// How many rewrites the rule `r` needs before it may fire.
+/// @pure
+/// @example rule_needs(r)    // 0
+#op<'rewrite:needs'>
+export func rule_needs(r: Rule): int
+
+/// How many constants the rule `r` adds to the program.
+/// @pure
+/// @example rule_consts(r)    // 0
+#op<'rewrite:consts'>
+export func rule_consts(r: Rule): int

@@ -129,6 +129,14 @@ const MODULES = [
         computed: 'signatures/random.cml',
     },
     {
+        name: 'sim',
+        title: '`sim`: Monte Carlo kernels',
+        kind: 'cpp',
+        // Two fixed signatures, so the module is covered by its signature file as `ckpt` is:
+        // `registry_all.cml` imported it for the purity check but the reference did not list it,
+        // so `--verify-ops` never saw it (handover H173).
+    },
+    {
         name: 'time',
         title: '`time`',
         kind: 'cpp',
@@ -205,6 +213,15 @@ const MODULES = [
         // and are recorded in the declaration file as `// dynamic func` (handover H141).
         source: 'graph.cml',
         declaration: true,
+    },
+    {
+        name: 'rewrite',
+        title: '`rewrite`: rules applied to a program',
+        kind: 'cpp',
+        // The signatures are fixed enough to write down; the module has no declaration module
+        // (`stdlib/rewrite.cml`) yet, so they are reference entries like `ckpt`'s (handover
+        // H173). The three reserved groups the `rule` and `analysis` declarations compile to are
+        // not listed: they have no callable Camel name.
     },
     {
         name: 'tiles',
@@ -688,7 +705,7 @@ function renderDoc() {
     out.push('- Write one call that has with-arguments per statement when several appear in one argument')
     out.push('  list: `f<a>(x), g<b>(y)` is read as comparisons.')
     out.push('')
-    out.push('Not in this reference: the tensor stack\'s own layers (`nn`, `autodiff`, `onnx`, `sim`)')
+    out.push('Not in this reference: the tensor stack\'s own layers (`nn`, `autodiff`, `onnx`)')
     out.push('and the profiler (`perf`).')
     out.push('')
     out.push('| Module | Import | Written in | Functions |')

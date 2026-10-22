@@ -31,7 +31,7 @@ How to read an entry:
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
-Not in this reference: the tensor stack's own layers (`nn`, `autodiff`, `onnx`, `sim`)
+Not in this reference: the tensor stack's own layers (`nn`, `autodiff`, `onnx`)
 and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
@@ -46,6 +46,7 @@ and the profiler (`perf`).
 | [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
 | [algo](#algo) | `import { ... } from algo` | C++ | 8 |
 | [random](#random) | `import { ... } from random` | C++ | 10 |
+| [sim](#sim) | `import { ... } from sim` | C++ | 2 |
 | [time](#time) | `import { ... } from time` | C++ | 3 |
 | [fs](#fs) | `import { ... } from fs` | C++ | 15 |
 | [io](#io) | `import { ... } from io` | C++ | 5 |
@@ -57,6 +58,7 @@ and the profiler (`perf`).
 | [para](#para) | `import { ... } from para` | C++ | 3 |
 | [this](#this) | `import { ... } from this` | C++ | 1 |
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
+| [rewrite](#rewrite) | `import { ... } from rewrite` | C++ | 8 |
 | [tiles](#tiles) | `import { ... } from tiles` | C++ | 12 |
 | [pyplot](#pyplot) | `import { ... } from pyplot` | C++ | 1 |
 | [python](#python) | `import { ... } from python` | C++ | 11 |
@@ -3126,6 +3128,39 @@ and does not change key; n = 0 gives [] and n = 1 gives [0].
 - Failure: fault `InvalidArgument` when n is negative.
 - Example: `permutation(key(42), 4)` gives `[1, 0, 2, 3]`
 
+<a id="sim"></a>
+
+## `sim`: Monte Carlo kernels
+
+Their randomness is local to the call and seeded by their last argument, so a call depends on
+its arguments only and the module registers them pure (a pass may fold, merge or run them
+concurrently). They are benchmark-sized building blocks, not policy: `pi_hits` estimates pi,
+`asian_call_price` prices an Asian call under the module's fixed model.
+
+#### `pi_hits`
+
+```camel
+pi_hits: (samples: int, seed: int) => int
+```
+
+Draws `samples` points in the unit square and counts the ones inside the unit circle:
+`4 * pi_hits(samples, seed) / samples` estimates pi.
+
+- Pure.
+- Example: `pi_hits(1000000, 7)` gives `the count for that seed`
+
+#### `asian_call_price`
+
+```camel
+asian_call_price: (paths: int, steps: int, seed: int) => float
+```
+
+Prices an Asian call by Monte Carlo: `paths` simulated paths of `steps` steps under the
+module's fixed spot, strike, rate and volatility, averaged and discounted.
+
+- Pure.
+- Example: `asian_call_price(100000, 30, 7)` gives `the discounted mean payoff for that seed`
+
 <a id="time"></a>
 
 ## `time`
@@ -4291,6 +4326,112 @@ Commits a transaction of `open_function` to a Program of its own (the running pr
 
 - With effects: changes the transaction.
 - Example: `to_function(t, f)`
+
+<a id="rewrite"></a>
+
+## `rewrite`: rules applied to a program
+
+program.
+
+The module also exports the reserved groups the language's own `rule` and `analysis`
+declarations compile to (`rewrite:rule`, `rewrite:rule_when`, `rewrite:analysis`). They have
+no callable Camel name, so they are not listed here and `inspect --ops` hides them from the
+name comparison.
+
+The rules passed in are function values; a rule that stops a rewrite without changing the
+program is a fault, and `strict` restricts the float rules to the ones that hold bit for bit.
+
+#### `rewrite`
+
+```camel
+rewrite: (p: Program, rules: (() => Rule)[]) => Program!
+rewrite: (p: Program, rules: (() => Rule)[], strict: bool) => Program!
+```
+
+Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
+
+- With effects: runs the rules' functions.
+- Example: `rewrite(p, rules)` gives `the rewritten program`
+
+#### `saturate`
+
+```camel
+saturate: (p: Program, rules: (() => Rule)[], rounds: int) => Program!
+saturate: (p: Program, rules: (() => Rule)[], rounds: int, strict: bool) => Program!
+```
+
+Applies the rearranging rules too, for at most `rounds` rounds, and gives the smallest
+writing of the value it finds.
+
+- With effects: runs the rules' functions.
+- Example: `saturate(p, rules, 20)` gives `the smallest writing found`
+
+#### `extract`
+
+```camel
+extract: (p: Program, cost: string) => Program!
+```
+
+Extracts the program `p` in the cost model named `cost` (for example `"size"`).
+
+- With effects: rewrites the program and runs the cost model.
+- Example: `extract(p, 'size')` gives `the extracted program`
+
+#### `check`
+
+```camel
+check: (rules: (() => Rule)[], samples: int, seed: int) => string
+```
+
+Checks `rules` on `samples` random programs drawn with `seed`, and reports the first rule
+that fails, or that all of them hold.
+
+- With effects: runs the rules' functions and draws random programs.
+- Example: `check(rules, 1000, 7)` gives `the report`
+
+#### `rule_name`
+
+```camel
+rule_name: (r: Rule) => string
+```
+
+The name of the rule `r`.
+
+- Pure.
+- Example: `rule_name(r)` gives `'int_add_zero'`
+
+#### `rule_two_way`
+
+```camel
+rule_two_way: (r: Rule) => bool
+```
+
+Whether the rule `r` may also be applied from right to left.
+
+- Pure.
+- Example: `rule_two_way(r)` gives `false`
+
+#### `rule_needs`
+
+```camel
+rule_needs: (r: Rule) => int
+```
+
+How many rewrites the rule `r` needs before it may fire.
+
+- Pure.
+- Example: `rule_needs(r)` gives `0`
+
+#### `rule_consts`
+
+```camel
+rule_consts: (r: Rule) => int
+```
+
+How many constants the rule `r` adds to the program.
+
+- Pure.
+- Example: `rule_consts(r)` gives `0`
 
 <a id="tiles"></a>
 
