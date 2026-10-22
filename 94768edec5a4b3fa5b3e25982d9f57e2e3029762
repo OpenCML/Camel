@@ -1,0 +1,146 @@
+# H60 报告
+
+分支 `handover/H60-cast-fold`，基于 `origin/develop` `0d44c36c`。只做 H44 第 2 项：让导出器用来折叠
+常量的 Safe 结构体 CAST 真正从图里消失，然后删掉 `modules/onnx/passes/export.cpp` 里 `constantOf`
+的 CAST 穿透。
+
+结论：H44c 列的三种形状（折叠写进了已分离的草稿；内联副本有自己的节点表；pass 在副本出现之前
+跑）**都不是**。真正的原因是折叠把"图的返回值"当成不可替换的锚点：`isReplaceable` 排除
+`exitNode`、`outputNode`、`returnNode`，而函数图里被返回的那个值在草稿里同时是这三者（编码时才
+画出 EXIT 标记）。返回位置的 `e as P` 正好就是被返回的值，所以折叠在最后一步永远跳过它。
+`main`、`__root__` 里内联副本上的 CAST 其实已经折叠成功——H44c 插桩看到的两次 `folded` 就是它们；
+留下的是 `mk` 自己的图，而它是后续每一轮内联的源。
+
+## 1. 复现
+
+`test/cases/opt/generic/fold_struct_cast.cml`（本次新增）：
+
+```camel
+type P = { a: int, b: float }
+func three(): int { return 3 }
+func mk(): P { return { a: three(), b: 1.5 } }
+func main(): int sync { let p = mk(); println(p.a); println(p.b); return 0 }
+```
+
+`main` 的 `p` 被内联后，`mk` 的字面量有一个字段来自调用，所以前端不能在声明类型里直接建它：返回
+位置生成一个 CAST（匿名 `{ a: int, b: float }` → `P`）。按 H44c 的状态（有 `safeStruct`、没有锚点
+修复）跑 `std::opt std::gir`：
+
+```
+mk:      N02 DATA { a: 3, b: 1.5 } -> N01 CAST(value_type="P") -> O02 EXIT
+main:    无 CAST（副本已折叠）
+__root__:无 CAST（副本已折叠）
+```
+
+`mk` 的 FILL 折叠了（DATA 就是折叠产物），CAST 没折叠。H44c 看到的 `N01 CAST → O02 EXIT`、输入是
+已折叠的 DATA，正是这张图。
+
+修好之后同样的命令：
+
+```
+mk:      N01 DATA { a: 3, b: 1.5 } value_type="P" -> O02 EXIT
+main / __root__: 无 CAST
+```
+
+`grep -c CAST` 为 0；`std::opt std::nvm` 输出 `3`、`1.5`。
+
+## 2. 三种形状都不是：证据
+
+临时插桩（已删除）在 `std::opt::fold` 处理 `mk` 的 CAST 时打印：
+
+```
+[H60][REWRITE] pass=std::opt::fold graph=0x...fb1a0 'mk' id=3
+[H60][REWRITE]   draft=0x...b56c0 mutations=0
+[H60][CASTNODE] draft=0x...b56c0 'mk' node=3 ret=3 exit=3 out=3 repl=0 written=0 foldable=0
+[H60][REWRITE]   made=1 mutations=32
+[H60][COMMIT] graph=0x...fb1a0 'mk' -> copy=0x...c070 'mk'
+[H60][COMMIT]   CAST 3 target=P source={ a: int, b: float }
+```
+
+- 草稿不是分离的：它由本轮提交出来的 `mk` 图（`0x...fb1a0`）解码，`foldStaticFill` 的改动写回后
+  同一个会话立刻提交成新版本（`made=1`），下一轮 `std::opt::dce` 解码到的就是这版。形状 (a) 排除。
+- 内联副本不是另一张节点表：留下 CAST 的是**被调方自己的图** `mk`，它是副本的源，不是副本的
+  目的地；`main`、`__root__` 里的副本是另外两张图，且都已折叠（两次 `folded`）。形状 (b) 排除。
+- pass 没有跑在副本出现之前：`[H60][INLINE]` 显示内联会话先跑（`three`→`mk`、`mk`→`main`、
+  `main`→`__root__`），随后 `fold` 在提交后的副本上运行并成功折叠了其中两张。形状 (c) 排除。
+
+真正的原因在这一行：`ret=3 exit=3 out=3 repl=0`。节点是 CAST，`isWrittenInPlace` 为假，唯一让它
+不可替换的是 `isReplaceable` 排除的三个锚点；三者都指向它，说明它就是图的返回值。折叠的
+`made=1` 是 FILL；CAST 分支根本没进。
+
+为什么副本能折叠：副本里的克隆 CAST 只是普通值节点，只有被调方自己的图让它处在返回位置。
+
+H44c 的"折叠没有可观察效果"由此得到解释：他们看到的两次折叠（节点 7、6）是 `__root__` 和 `main`
+的副本，剩下那一个 CAST 是 `mk` 的返回值；折叠确实生效了，只是没有作用在留下 CAST 的那张图上。
+
+## 3. 修复
+
+`src/passes/opt/generic/generic.cpp`：
+
+- `isFoldable` 允许"函数返回的值"被替换，条件是它不被就地写、且没有控制前驱：
+  `isReplaceable(id) || (id == draft.returnNode() && draft.ctrlInputsOf(id).empty())`。
+  带控制前驱的返回值不折叠——`sync` 函数体末尾会有一个承载效果顺序的 GATE，用常量替换它会把顺序
+  丢掉。`mk` 的 CAST 没有控制前驱。
+- `replaceFoldResult`：记下替换前 `exit`/`output`/`return` 是否指向该节点与 `returnKind`，调用
+  `replaceNode` 后把三者重新指向替换物。`replaceNode` 已经会通过 `replaceValueStructuralRefs`
+  重指 output/return，但 `eraseNode` 会清掉 exit，所以三者都补一次。折叠里所有"用等值节点替换值"
+  的路径（CAST、FILL、ACCS、元组投影、纯算子、按类型折叠）都改用它。
+- `foldStaticCast` 打开 `safeStruct`：`CastSafety::Safe` 且 target/source 都是 `TypeCode::Struct`。
+  按设计原则 5.1/5.2，这种转换只命名值被当作的类型、不移动任何东西（`castSlotFrom` 返回同一个
+  slot），物化出来的 DATA 直接带 `P` 类型。
+
+`isFoldable` 的注释写清了为什么返回锚点可以跟随替换：它就是函数最后一个表达式的值；把它钉住正是
+返回位置的转换永远折不掉、并且每次内联都把未折叠的转换复制一份的原因。
+
+## 4. 导出现在的样子
+
+`modules/onnx/passes/export.cpp` 的 `constantOf` 回到"只认 DATA"：删掉 CAST 分支和它里面
+`value->type = target` 的回填，函数头注释也相应简化。
+
+导出行为没有变。ONNX 计划 125/125 通过，其中包括：
+
+- `ort_struct_casts`：返回位置的字面量、重排字面量、`let r: Run = ...`、实参、循环返回臂五个模型，
+  算子与 pass 两条路径都过 `onnx.checker`、无 `Cast` 节点、与 NumPy 在 ONNX Runtime 上逐位一致。
+- `ort_const_under_as`、`ort_loop_loaded_weights`、`pass_export_entry.weights_as_initializers`
+  （H5d 加 `constantOf` 穿透的直接动机：捕获值作为常量/初始化器）照旧通过。
+- `typed_constant_ends_unrolling` 两条路径 87 ms / 85 ms：折叠没有让特化展开失控（H44/H44b 当时
+  打开 `safeStruct` 后 22–40 s 后被拒的原因由 H44c 的内联历史解决）。
+- `export_gated_gru_forward` 没有改动，没有出现第二个被重新编码的模型。
+
+## 5. 测试
+
+| 计划 | 结果 |
+|---|---|
+| `test/plans/feat/opt`（含 `generic.plan.toml`） | 683 / 683，5.9 s（-Jobs 8；其中 generic 85 / 85，1.2 s） |
+| `test/plans/feat/modules/onnx.plan.toml` | 125 / 125，18.7 s |
+| `test/plans/smoke` | 10 / 10，0.1 s |
+| `test/plans/feat/parse/frontend.plan.toml` | 4 / 4，1.0 s |
+
+新增用例：`fold_struct_cast.in_return_position`（`std::opt std::gir` 里 CAST 数为 0、常量类型仍是
+`P`、值 `{ a: 3, b: 1.5 }`）与 `fold_struct_cast.results`（`std::opt std::nvm` 输出 3 和 1.5）。
+
+`test/plans/feat/parse/golden/ast_hashes.txt` 没有 `--update`：新 `.cml` 在快照里显示 "not in the
+snapshot yet"，计划照样通过（和当初加 `fold_cast.cml` 时一样，下一次全量 `--update` 会收进去）。
+
+## 6. H44 第 3 项还欠什么
+
+结构体作为循环状态（H44.md 第 3 项）：ONNX `Loop` 的 carried 值目前只接受张量/标量，`isCarriable`
+处拒绝结构体；要做的是状态拍平/重组、非张量叶子用标量类型加 Cast、`If` 分支的标量处理复用，
+以及 `ort_struct_loop` 一类的 ORT 数值用例。本分支没有碰这一项。
+
+## 7. 用户可见的变化
+
+- `std::opt` 现在会折叠"函数最后一个表达式"上的常量：返回位置的 CAST、FILL、ACCS 和纯算子会被
+  替换成常量，图的 exit/output/return 锚点跟着指向常量。节点数会少一点，可达输出不变。
+- 需要"先 `std::opt` 再 `onnx::export`"的程序不再依赖 `constantOf` 穿透 CAST；导出的模型不变。
+
+## 8. 备注
+
+- `GraphDraft::replaceValueStructuralRefs` 只重指 output/return，不重指 exit；本次在
+  `replaceFoldResult` 里补上，没有改动 draft 的公共语义。如果以后别处也要替换"图的结果值"，这个
+  缺口值得在 draft 层统一。
+- 返回锚点可折叠是对 H44c 待决问题 1 的答案。设计原则 5.1/5.2 只说这种转换不移动值，没有禁止
+  折叠；如果作者认为"返回锚点不可动"是硬性语义，这一项需要复议。
+- 改动文件：`src/passes/opt/generic/generic.cpp`、`modules/onnx/passes/export.cpp`、
+  `test/cases/opt/generic/fold_struct_cast.cml`（新）、`test/plans/feat/opt/generic.plan.toml`、
+  `docs/handover/reports/H60.md`（本文件）。
