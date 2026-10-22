@@ -1,0 +1,390 @@
+# H23
+
+## 状态
+
+- 分支 `handover/H23-path-assign`（worktree `D:\Projects\Camel-wt\h23-path-assign`），最初基于
+  `wzj-dev` 的 `d3dd113a`（H17 的紧凑数组与 H22 的数组切向量已在其中）；作者已把这条工作提交为
+  `bbf854b2` 并 rebase 到含 H24/H26/H27/H17b 的 `develop`。本报告描述的是 rebase **之后**的
+  工作树状态（上一轮的两处补充：`std::mem::buffers()` 的分配计数断言，以及 rebase 带来的一处
+  空字面量修复），改动全部留在工作树，未提交、未建分支、未推送。
+- 构建：`pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h23-path-assign`，
+  最后一次 exit 0（20 s），产物 `out/latest`。
+- **第 1 项（路径赋值）已实现并验证。** 字段、下标、任意组合、复合赋值都从 `var` 出发；降级为
+  `set` 链的整值重绑；未共享的 `var` 数组原地写（30 次写零分配，`std::mem::buffers()` 数出来的，
+  见 1.4）；越界是故障。
+- **第 3 项（空数组字面量按上下文取类型）已实现。** `loop acc = []`（位置有类型时）与
+  `[] as T[]` 都成立；rebase 之后为"只有期望类型的位置"补了 GIR 侧的一处（第 2 节）。
+- **第 2 项只落了诊断的一半。** "直接包含自身的结构体是错误，并指出环"已实现；"经数组的递归
+  允许"（`type Node = { children: Node[] }`）**没有实现**，现在报 `FeatureNotSupported` 并说明
+  原因——见第 4 节，这是本次未完成的主要部分，根因不在 H23 范围内。
+- 第 4 项（文档）除了 `docs/design-principles-log.cn.md`（历史裁决记录，未改）之外全部完成。
+
+## 1. 路径赋值（第 1 项）
+
+### 1.1 规则
+
+设计原则 3.5（第 155 行）已经写定：目标是 `var` 本身，或以 `var` 开头的路径；含义是"用改好的
+新值整体替换 `v`"，等价于 `v = set(v, i, set(v[i], f, e))`；值语义不变；没有别人共享时原地改；
+下标越界是故障。这次工作就是把它实现出来。
+
+### 1.2 降级（lowering）
+
+实现位置：`src/compile/gir/builder_operators.cpp`，`Builder::pathAssignmentOf`（L883，紧接在
+`visitLinkNode` 之前），在 `visitLinkNode`（L1091）里对每个 `LINK` 先试一次：
+
+- 识别 `LINK(DREF <op/assn*>, <target>, <rhs>)`。目标是 `var` 的路径时接管，否则返回 `nullptr`，
+  仍走原来的路径（原路径对"根不是变量"给出 `AssignmentTargetNotVariable`）。
+- 目标从叶子往回走：`ACCS`（字段访问）与 `LINK(DREF __idx__, base, index)`（`v[i]`，3 个孩子），
+  直到根的 `DREF`。反序后得到写入顺序的步骤表（`struct PathStep`，L872）。根必须是变量
+  （`moduleLevelName` → 节点 → `isVariable`）。
+- 每一步的**类型**在访问任何子表达式之前先算好：结构体按字段名（`StructType::findField`）、
+  元组按下标（`TupleType::accessIndex`/`typeAt`）、数组按 `ArrayType::elemType`；别的类型（如
+  `map[k]`）返回 `nullptr`，交回原路径，行为不变。
+- 求值顺序与设计原则的写法一致，且每个下标只求值一次：根先读一次（原地时 `:var/peek`，否则
+  `:var/get`），每一步的基值 `bindTemporary`，每个下标/字段选择子求值一次并 `bindTemporary`。
+- 自底向上造 `set` 链：字段用
+  `LINK(DREF $builtin::__set_field__, <base>, LongData(字段序), <value>)`，下标用
+  `LINK(DREF $builtin::__set_index__, <base>, <selector>, <value>)`；最外层若是"原地根的下标"，
+  它的基值取 `LINK(DREF $builtin::__var_take__, <root>)` 并把这次调用记入 `inPlaceCalls_`，
+  让它在解析后换成 `:op/set_index_in_place`（`visitLinkNode` 用
+  `OperatorTable::inPlaceForm` 查表）。
+- 最外层是 `LINK(DREF $builtin::__assn_owned__ | $builtin::__assn__, <root>, <set 链>)`，仍由
+  `visitLinkNode` 正常访问（于是写入记到 `var` 上，同步块的写链、资源声明、副作用追踪都照旧）。
+- 复合赋值（`+=` 等）先用 `plainGroupOfCompoundAssignment` 找出纯算子，把叶子值写成
+  `LINK(DREF <plain>, <leaf>, <rhs>)` 再进同一个 `set` 链。
+
+`set` 算子：**内部算子，程序写不出名字**（没有导出成 `set` 实体）：
+
+- `src/builtin/operators/set_value.h`：三个 kernel 与 `getSetValueOperatorGroups()`。
+- `src/builtin/operators/set_value.cpp`：
+  - `__builtin__set_field__`（`:op/set_field`，L128）：克隆结构体/非单元元组（`clone(false)`），
+    `Tuple::set<slot_t>(index, value)`；越界 `RuntimeDiag::IndexOutOfRange`。
+  - `__builtin__set_index__`（`:op/set_index`，L164）：`source->clone(mm::autoSpace(), arrayType, false)`
+    后 `setSlot`——复制的形式。
+  - `__builtin__set_index_in_place__`（`:op/set_index_in_place`，L178）：数组已经没人共享时直接写
+    自己的存储；`isSlots()`（槽数组）与 `canWriteInPlace()`（唯一缓冲的紧凑数组）为真时原地写，
+    否则退回"复制再写"。
+  - 类型规则 `SetFieldTypeResolver`：`(A, int, V) => A`，字段序是编译期常量（`resolveWith`
+    读 `StaticArg`），`entersImplicitly(typeAt(index), norm[2])` 保证值能进字段类型。
+- 登记：`src/builtin/executors/builtin.cpp` L112–114（kernel 表）、L423–425
+  （`registry.set(":op/set_index_in_place", {.stateOnly = true, .mayFault = true})`、
+  `setInPlaceForm(":op/set_index", ":op/set_index_in_place")`、
+  `declareReusesOperand(":op/set_index_in_place")`）；资源声明在
+  `src/builtin/executors/builtin_semantics.cpp` L327（操作数 0 是 ReadModifyWrite，结果是 Itself）；
+  导出在 `src/builtin/modules/globals.cpp` L1762（只导出 `:op/set_field`、`:op/set_index` 两个组）。
+- 原地形式**不要**自己的 resolver / 组：类型来自被复用的操作数。曾经把 `:op/set_index_in_place`
+  和 `:op/set_index` 放进同一个 `OperatorGroup::create`，两个参数完全相同的规则让
+  `rejectOverlappingRules` 在启动时直接 abort（0xC0000409）；删掉那个 resolver 之后正常。
+
+### 1.3 原地写与"没共享"判据
+
+- 判定不是编译期的"新鲜度"标记，而是**运行时单元格上的 `Tuple::holdsUnsharedArray`**：
+  `:var/take` 在标记为真时把单元格里的数组交出来，否则交一份克隆；`:op/assn_owned` 存回结果
+  并置标记。这正是 `xs = xs->sort` 用的同一套机制，`src/builtin/operators/ops.cpp` L134 附近
+  的注释把形状写成
+  `:op/assn_owned(xs, <就地形式>(..., :var/take(xs)))`。
+- 所以路径赋值的 GIR 形状是
+  `:op/assn_owned(arr, :op/set_index_in_place(:var/take(arr), 0, 9))`，与上面那段注释逐字对应。
+- `:var/get` 会清掉标记（读到的值可能被留住），`:var/peek` 不清；`DATA`（全常量）字面量是静态
+  共享的，改它会破坏字面量，因此那种根只有一个持有者时也复制。
+- 槽数组的 `Array::canWriteInPlace()` 仍是 false（`FixedArray` 归 `Array` 对象所有、`clone`
+  总是复制它）：原地 kernel 只在 `take` 已经证明无人共享之后才写槽存储，这与 `canWriteInPlace`
+  的语义不冲突。紧凑数组按 H17 的表示判断（唯一缓冲）。
+
+### 1.4 "不复制"的证据：分配计数
+
+`std::mem::buffers()`（H17b）给出运行期的数字数组缓冲计数 `{allocs, frees, live, bytes}`，
+所以"不复制"可以**数出来**，不必从图结构推断。用例
+`test/cases/linear/byref/path_assigned_allocs.cml`，计划条目
+`linear.var_reference` 的 `path_assigned.allocs`（四个后端一致）。数组取 40 个 `int`
+（320 字节，超过"值内联 256 字节"的上限），所以一次复制真的会占一个缓冲。
+
+```
+func main(): int sync {
+    var v = [ …40 个 0… ]                 // 字面量转义时复制一次，在 s0 之前
+    let s0 = std::mem::buffers()
+    v[0] = 1                              // 第一次写：+1（见下）
+    let s1 = std::mem::buffers()
+    v[1] = 2 ; v[39] = 3                  // 之后的直写：+0
+    let s2 = std::mem::buffers()
+    loop i = 0 while i < 30 do sync { v[i] = i + 10; i + 1 }   // 30 次写：+0
+    let s3 = std::mem::buffers()
+    …
+}
+```
+
+| 断言 | 读到的 `allocs` 差 |
+|---|---|
+| 第一次写 `v[0] = 1` | **+1** |
+| 其后两次直写 `v[1]`、`v[39]` | **+0** |
+| 循环里 30 次路径写 | **+0**（不是 30） |
+| `let kept = v` 之后写 `v[0] = 100` | **+1**（被共享，先复制） |
+| 对照：10 轮，每轮先读 `last = v` 再写 `v[j] = j` | **+10**（每轮都复制） |
+
+四个后端（nvm/fvm/jit/prl）输出的数字逐字相同：
+`1 0 0` / `10 11 39 3` / `1` / `10 100` / `10` / `9 19`，其中最后两行是"值没有丢"的
+旁证（`v[9]` 是循环写进去的 9，`last[9]` 是上一轮读到的 19）。
+
+所以：**未共享的 `var` 数组上，路径赋值不复制**（30 次写零分配）；**被读过之后就复制**，
+旧名字不变。对照那一行的 10 次复制说明计数器本身不是恒为 0——上面的 0 是数出来的，不是
+计数器失灵。
+
+`std::mem::buffers()` 只数**数字数组缓冲**（内联数组、字符串、结构体的字段不占缓冲），
+所以用例刻意用 40 个 `int`；这一点写进了用例的注释。
+
+**第一次写仍然复制。** 单元格的"未共享"标记只在**拥有式存回**之后才置位（`:op/assn_owned`、
+`:op/assn_append`），`:var/new` 不置位（`src/builtin/operators/ops.cpp` L59）。所以
+`var v = [1, 2, 3]; v[0] = 9` 的第一次写里，`:var/take` 拿到的是"未标记"的单元格，会先克隆一次；
+从第二次写起（中间没有 `:var/get`）标记为真，直接改自己的存储。这与已有的
+`acc = acc->append<v>` 完全一样：`ops.cpp` L85 附近的注释说"第一次追加复制（并留出增长余量），
+之后只要中间没有读就在原地长"。要消掉第一次的复制，需要让 `:var/new` 在它存的确实是独占的新
+对象时置位（例如 `var v = [1, 2, 3]` 里 `:var/new` 的操作数就是一个 `COPY` 节点），这属于
+"未共享"追踪的通用改进，见第 8 节第 4 条。上面的 +1 就是它，按"今天的事实"断言。
+
+另有一条结构断言保留着（`element_assigned.in_place_form`，`std::jgir`）：
+`arr[0] = 9` 的图上 `:op/set_index_in_place` 的第一个操作数来自 `:var/take`，`take` 的操作数
+就是变量单元格 `:var/new`，结果交给 `:op/assn_owned`，**图上没有复制形式 `:op/set_index`**。
+计数回答"复制了几次"，结构回答"走的是哪条路"，两条互补。
+
+故障位置也仍在 `consistency.faults` 的 `fault.element_assigned_out_of_range`：越界写在四个
+后端上都是 `RuntimeDiag::IndexOutOfRange`，位置是下标，退出码 1。
+
+### 1.5 已记录的偏离
+
+- **路径赋值表达式的值**是重绑之后的整体（`:op/assn_owned`/`:op/assn` 的结果），不是被写的
+  那个叶子值。设计原则 6.11 的"值是所赋的值"在目标是变量本身时不变；路径形式下返回叶子值会
+  让效应节点成为孤儿（有被 DCE 丢掉的风险）。文档按"整体"写，并在 6.11 明说。
+- **降级对任何位置都做**，不只语句位置：`wait p.x = 9`（`unusedStatement_` 是 `WAIT` 节点，
+  不是内层 `LINK`）与 `let r = (v[0] = 5)` 都能降级。
+- 每个路径步骤都会读一次基值，因此单步 `v[i] = e` 在图上也有一个 `:op/idx_arr` 读；它同时是
+  "先检查下标、再 `take`"的控制依赖（越界时在 `take` 之前就报故障）。设计原则给的写法
+  `v = set(v, i, e)` 没有这个读；保留它是有意的（故障先于取走数组），代价是一次数值读。
+- 任务书说"槽数组上现在就可以原地写，紧凑数组等 H17"，实际相反：槽数组的存储
+  （`FixedArray`）归 `Array` 对象所有、`clone` 总是复制它，所以 `Array::canWriteInPlace()`
+  只对"唯一缓冲的紧凑数组"为真；原地 kernel 对槽数组走的是"`take` 已证明无人共享，于是直接写
+  槽存储"这条路。两者都不额外复制，差别只在"谁证明独占"。这一条请作者确认（第 8 节第 4 条）。
+
+## 2. 第 3 项：空数组字面量按上下文取类型
+
+- 位置有类型时 `[]` 取该类型，两条路各改一处：
+  - **声明位置**（`let a: T[] = []`、参数、字段、`as`）：`visitDataInto`
+    （`src/compile/gct/builder.cpp`）原先只在字面量**非空**时才按目标类型构造；现在空的也走
+    同一条路，得到"元素类型取自位置"的空数组常量（`ArrayData::create(elemType)`）。因此
+    `[] as int[]`、`[] as Node[]`、`let a: float[] = []`、`[[]]`（`int[][]`）都成立。
+  - **只有期望类型的位置**（函数体的值、臂的值、循环状态；它们没有写出来的声明类型）：
+    `compositeDataInType`（`src/compile/gir/builder_control.cpp`）在把字面量转成位置类型时，
+    遇到**没有元素**的数组返回 `ArrayData::create(目标元素类型)`。这一处是 rebase 到 H24/H26
+    之后必须补的：H24 让"没有声明类型的字面量取自己元素的 join"（`[1, 2.0]` 是 `float[]`），
+    而 `[]` 没有元素可取，位置类型是它唯一的来源；`ArrayDataFactory::build()` 在零个元素时给出
+    `void[]`，于是函数体尾部的 `[]`、循环状态的 `[]` 都会丢掉位置的类型。补这一条之后，
+    `func f(): int[] { [] }`、`func f(): int[] sync { loop acc = [] for … }`、
+    `let out: int[] = loop acc = [] for …` 都成立，而 `[1, 2.0]` 仍然按 H24 的规则是
+    `float[]`（`literal_context` 计划 36/36）。
+- 循环状态：`visitLoopNode`（`src/compile/gir/builder_control.cpp` L1379 起）在只有一个状态时，
+  把**循环自身位置**的类型当作状态的期望类型（"一个状态的循环，其类型就是状态的类型"），
+  状态的初值在那个期望类型下求值并 `coerceTo`。于是
+  `func collect(): int[] sync { loop acc = [] for i in ... do acc->append<i> }` 类型检查通过并
+  得到 `[0, 1, 4, 9]`。
+- 这是对设计原则 5.1 的**解释**：5.1 列出的期望类型位置（声明、参数、返回、数组元素、结构体
+  字段、match 模式、臂里的 `return`）没有"循环状态"这一项；这里把它算作"循环值的位置把类型
+  给状态"。请作者确认。没有期望类型时（`let out = loop acc = []`）仍报
+  `LoopStateWithoutType`——从循环体反推元素类型是另一个（未做的）推断。
+- 用例：`test/cases/compile/literals/empty_array_context.cml`，四个后端输出一致。
+
+## 3. 第 2 项：递归结构体
+
+### 3.1 已实现：直接包含自身是错误，并指出环
+
+`type A = { a: A }` 过去报 `UnresolvedTypeReference: 'A'`（名字还没进作用域），没有说清是环。
+现在 `visitTypeDecl`（`src/compile/gct/builder.cpp`）在访问右手边之前先做一次语法扫描
+（`findTypeMention`，同一文件）：如果右手边提到自己，且提到的地方**不在**数组/集合类型后面，
+就报 `ModuleTypeCycle`，链是 `A -> A`。
+
+- 诊断文案：`The type '{0}' is part of a cycle of types: {1}.`（原来说 "across modules"，现在
+  跨模块与模块内的环共用，帮助里补了"一个类型只能经由数组、映射、集合或 enum 包含自身
+  （设计原则 5.2）"）。
+- 用例：`test/cases/compile/semantic/type_contains_itself.cml`（在 `compile.surface` 计划里）。
+
+### 3.2 没实现：经数组的递归被拒绝，报"暂不支持"
+
+`type Node = { value: int, children: Node[] }` 是设计原则 5.2 明确允许的写法，本次仍做不到。
+现在它报 `FeatureNotSupported`："a type that mentions itself through an array or another
+collection ('Node')"，比原来的 `UnresolvedTypeReference` 诚实，但仍然是拒绝。
+用例：`test/cases/compile/semantic/type_recursion_through_array.cml`（同一计划）。
+
+**根因**（需要单独立项，不在 H23 范围内）：
+
+1. 设计原则 5.2 说"有名字的结构体与 `enum` 是命名类型"，但实现里命名结构体是按结构 intern 的
+   （`StructTypeFactory`/`StructType::fromFactory`，键是字段类型指针列表）。一个经数组包含自身
+   的结构体，其 intern 键要包含数组类型、数组类型的键又要包含结构体指针——构造顺序上成环，
+   结构 intern 无法表达。
+2. `enum` 能递归，是因为 `declareEnumType` 是两阶段的：先把名字进作用域（`EnumType` 原型地址
+   固定），再读变体。`StructType` 是一次建成的不可变对象，没有对应的"先占位、后填字段"。
+   `StructType::resolve(typeList)` 是这条路的半成品（`src/core/type/composite/struct.cpp`
+   L207 起，函数体里还留着 "Simplification: rebuild" 的注释和未使用的 `refName`），而且
+   `TypeCode::Ref` 没有对应的类型类，`resolve` 也只替换**直接**是 `Ref` 的字段，不处理数组里的。
+3. 因此正确的做法是先让命名类型真正有名字（nominal identity：`type X = ...` 得到唯一身份，
+   `sameType` 对命名类型按身份比，结构类型仍按结构比），再按 `enum` 的两阶段方式建结构体。
+   顺带还能修掉一个隐患：`sameType`（`src/core/type/text.cpp` L353 起）对结构化类型是无保护的
+   worklist，两个结构上相等但**不同**的递归命名类型会无限循环（今天构造不出这种类型，所以没
+   暴露）。
+
+**替代写法**（今天可用）：`type Nest = enum { Leaf(int), More(Nest[]) }`——经 `enum` 的递归。
+`test/cases/consistency/values/deep_nested_enum.cml` 就是它（十万层嵌套）。
+
+### 3.3 空数组字面量在递归类型里的位置
+
+第 3 项做完之后，`[]` 在"类型是 `T[]`"的位置都能取到 `T[]`，包括递归类型的数组字段
+（`children: []` 在 `type Node = {...}` 的构造里）——只要 3.2 的表示问题解决，字面量这一侧
+已经不再挡路。今天无法端到端验证，因为没有可用的递归结构体类型。
+
+## 4. 文档与诊断
+
+- `docs/language/06_expressions.md` 6.11：删去"目标必须是 `var` 变量或 `var` 形参本身"；
+  写清路径、`set` 降级等式、表达式的值（整体）、原地规则与越界故障；"复合赋值不原地修改"改成
+  "先算新值再重绑"，并说明路径复合赋值按原地规则写回。
+- `docs/language/en/06_expressions.md` 同步。
+- `docs/language/03_data_model.md` 3.7：原来"只能给整个变量赋值，`p.x = 5` 是错误"整条重写为
+  路径规则、越界故障与复制判据；英文版同步。
+- `docs/design-principles.cn.md` 3.5：删掉与第 155 行冲突的"字段与元素不可赋值"一条；英文版
+  同步。
+- `docs/design/cpp-memory/README.cn.md` L385："值不会成环"的论证从"字段与元素不可赋值"改为
+  "赋值得到新值 + 类型不能直接包含自身"。
+- `docs/tutorial/tutorial.cn.md` / `tutorial.en.md`：把"字段与元素不能赋值"改为"可以给字段/元素
+  赋值，得到整体新值"。
+- `AssignmentTargetNotVariable`：文案改为"The target of an assignment must be a variable, or a
+  path from one."，帮助说明路径是什么、并保留"其它表达式是临时值"；`docs/diagnostics.md` 用
+  `node scripts/diagnostics-catalog.mjs --write` 重新生成（示例自动换成新的
+  `assign_to_temporary.cml`）。
+- `ModuleTypeCycle`：文案去掉 "across modules"，帮助补 5.2 的递归规则；`docs/diagnostics.md`
+  同步（该诊断的示例现在自动选到模块内的 `type_contains_itself.cml`，因为它精确匹配
+  `expect_diagnostic_name`，而跨模块用例只用 `expect_output_contains`）。
+
+## 5. 用例与计划
+
+改成正例（原来期望 `AssignmentTargetNotVariable`）：
+
+- `test/cases/linear/byref/field_assigned.cml` → 输出 `{ x: 9, y: 2 }`。
+- `test/cases/linear/byref/element_assigned.cml` → 输出 `[9, 2, 3]`。
+
+新增用例：
+
+- `test/cases/linear/byref/path_assigned.cml`：`m[0].x`、`p.a[1]`、`n[1][0]`、`c[0] += 10`、
+  `s.x += 5`，五行输出。
+- `test/cases/linear/byref/element_assigned_copy.cml`：`let a = v` 之后写 `v[0]`，`a` 不变。
+- `test/cases/linear/byref/element_assigned_append.cml`：`v = v->append<4>`（对照用例，说明
+  `append` 走 `:op/assn_append`，路径赋值走 `take`/就地形式）。
+- `test/cases/consistency/faults/element_assigned_out_of_range.cml`：越界写，四后端一致。
+- `test/cases/linear/byref/path_assigned_allocs.cml`：分配计数（第 1.4 节），四后端一致。
+- `test/cases/compile/literals/empty_array_context.cml`：`[] as int[]`、声明、`[[]]`、
+  两种循环状态。
+- `test/cases/compile/semantic/type_contains_itself.cml`、
+  `type_recursion_through_array.cml`、`assign_to_temporary.cml`（非变量的根）。
+
+计划改动：
+
+- `test/plans/feat/linear/var_reference.plan.toml`：两条负例改行为例；加 `path_assigned`、
+  `element_assigned_copy`、`element_assigned.in_place_form`（`std::jgir` 结构断言，脚本检查
+  `set_index_in_place ← var/take ← var/new`、结果进 `assn_owned`、图上无 `:op/set_index`）、
+  `path_assigned.allocs`（四后端，`std::mem::buffers()` 读数，期望串
+  `1 0 0 / 10 11 39 3 / 1 / 10 100 / 10 / 9 19`）。
+- `test/plans/feat/consistency/faults.plan.toml`：加 `fault.element_assigned_out_of_range`。
+- `test/plans/feat/compile/literal_context.plan.toml`：加 `context.empty_array`（四后端）。
+- `test/plans/feat/compile/core.plan.toml`：加 `semantic.assign_to_temporary`。
+- `test/plans/feat/compile/surface.plan.toml`：加 `semantic.type_contains_itself`、
+  `semantic.type_recursion_through_array`（放在 `surface` 而不是 `core`，是为了不让新用例抢走
+  `FeatureNotSupported` 原来的示例 `struct_unpacking.cml`：`diagnostics-catalog` 按计划路径顺序
+  取第一个精确匹配）。
+- `test/plans/feat/compile/modules_213.plan.toml`：`ModuleTypeCycle` 期望文案去掉 "across
+  modules"（诊断文案变了，理由见第 4 节）。
+- `test/plans/feat/parse/golden/ast_hashes.txt`：用
+  `python test/tools/parsecheck/check.py snapshot --update`（venv 的 python）重新生成
+  （rebase 之后又生成一次，见第 7 节第 6、7 条）。
+
+## 6. 验证
+
+在 rebase 到含 H24/H26/H27/H17b 的 `develop` 之后重新构建并逐个计划运行
+（`node scripts/test.js <plan> --jobs 8`，一次一个）：
+
+| 计划 | 结果 |
+|---|---|
+| `feat/linear/var_reference.plan.toml` | 236/236 通过（含 4 个后端的 `path_assigned.allocs`） |
+| `feat/consistency/faults.plan.toml` | 168/168 通过（四后端一致） |
+| `feat/compile/literal_context.plan.toml` | 36/36 通过（四后端一致；rebase 后 develop 自己多了 8 条 `context_*`） |
+| `feat/compile/core.plan.toml` | 8/8 通过 |
+| `feat/compile/surface.plan.toml` | 18/18 通过 |
+| `feat/compile/modules_213.plan.toml` | 9/9 通过 |
+| `smoke` | 10/10 通过 |
+| `feat/compile`（整个目录，共 17 个计划） | 768/768 通过 |
+| `feat/linear/loops.plan.toml` | 94/94 通过（含 `loops.state_in_place`） |
+
+合计：上表前七行 485 条（236+168+36+8+18+9+10）全部通过；整个 `feat/compile` 目录
+768 条、`feat/linear/loops.plan.toml` 94 条（后两行含前两行的大部分）也全部通过。
+
+手工核对（`out/latest/bin/camel.exe`，`CAMEL_HOME` 指向本 worktree 的 `out/latest`）：
+
+- `t2`（同步块里 `p.x = 9`）→ `{ x: 9, y: 2 }`；`t3`（`arr[0] = 9`）→ `[9, 2, 3]`。
+- `t4`（嵌套字段/下标 + 复合）→ 五行与 `path_assigned` 相同的输出。
+- `t5`（`let a = v` 后写）→ `[1, 2, 3]` / `[9, 2, 3]`。
+- `t6`（`v[5] = 1`）→ `IndexOutOfRange`，位置 `5:6`，exit 1；四后端一致（用例里位置是 11:7）。
+- 分配计数：见第 1.4 节的表（`1 0 0`、`1`、`10`；四后端相同）。
+- 非同步块里的路径赋值不执行，仍有 `IgnoredSideEffect` / `EffectNotExecuted` 警告——与原来一致。
+- `type Node = { children: Node[] }` → `FeatureNotSupported`；`type A = { a: A }` →
+  `ModuleTypeCycle: A -> A`；`type Nest = enum { Leaf(int), More(Nest[]) }` 仍可用。
+- rebase 后重新核对空字面量的三个位置：`func f(): int[] { [] }`（0）、
+  `func f(): int[] sync { loop acc = [] for i in range(0,3) do acc->append<i * i> }`（3）、
+  `let out: int[] = loop acc = [] …`（3），以及 `[1, 2.0]` 仍是 `float[]`。
+
+没有运行：全量套件、poison sweep、GC stress、progen、PyTorch、perf 计划（按规则）。
+
+## 7. 改动的期望与理由
+
+1. `field_assigned`、`element_assigned` 由负例改正例——这正是任务第 1 项要的语义（3.5 第 155 行）。
+   原来断言的 `AssignmentTargetNotVariable` 对这两个程序已经不再成立。
+2. `AssignmentTargetNotVariable` 的文案与帮助——旧文案说"字段、元素不能赋值"，与新语义矛盾；
+   保留该诊断，用于"根不是变量"（`assign_to_temporary` 覆盖它）。
+3. `ModuleTypeCycle` 文案去掉 "across modules"——同一个诊断现在也报模块内的环；链的格式没变。
+4. `modules_213.type_cycle` 的 `expect_output_contains` 跟着第 3 条改了一个短语。
+5. `docs/diagnostics.md` 的示例：`AssignmentTargetNotVariable` 换成 `assign_to_temporary.cml`
+   （由目录生成器自动选择）；`ModuleTypeCycle` 换成 `type_contains_itself.cml`（精确匹配优先于
+   文本匹配）。`FeatureNotSupported` 仍是 `struct_unpacking.cml`（把新用例放进 `surface` 计划
+   就是为了这个）。rebase 之后重新生成为 167 条，与提交里的版本一致（无 diff）。
+6. `test/plans/feat/parse/golden/ast_hashes.txt`：本作用例之外，快照还**补上/更正了上一提交
+   `d3dd113a` 遗留的 10 条**——8 条 `compile/literals/context_*.cml` 新用例没有进快照，
+   `compile/literals/literal_context.cml` 与 `compile/surface/array_element_type.cml` 两条的
+   哈希与当前文件不符（那两个文件是 `d3dd113a` 改的，当时没有重新生成快照）。这是修好一个已有
+   的不一致，不是为了让测试通过；`parse` 计划不读这个文件（只有
+   `test/tools/parsecheck/check.py` 用），所以它不影响任何测试结果。
+7. rebase 之后又生成一次快照，除了加上新的 `path_assigned_allocs.cml`，还包含 develop 自己
+   没有重新生成的部分：`any_typing/written_*.cml` 里 7 个文件被改名/删除（现在只剩
+   `written_unknown_name.cml`），`state_in_place.cml`、`mem_buffers.cml`、
+   `context_arm_value.cml`、`context_composite_rounding.cml` 4 个新用例没有进快照，以及
+   `tools/grammar/types.cml` 的状态由 `no` 变 `ok`（解析器现在接受它）、`operators.cml` 的诊断
+   哈希变了。这些都不是本次改的代码，是 develop 的提交没有重新生成快照；同样不影响任何测试。
+8. `context.empty_array` **没有**改期望：rebase 之后它一度失败（四个后端都是
+   `LoopStateWithoutType`），原因是 H24 的"没有声明类型的字面量取元素的 join"让 `[]` 在只有
+   期望类型的位置上丢掉类型；修的是代码（`compositeDataInType` 的空数组分支，第 2 节），不是
+   期望值。
+
+## 8. 未决问题（请作者裁定）
+
+1. **经数组的递归结构体**（第 2 项的正半）需要命名类型的身份：`type X = ...` 应当是唯一的
+   名义类型，`sameType` 对命名类型按身份比。设计原则 5.2 已经这么写，实现没有。建议单独一个
+   交接项（"命名类型的身份"），H23 的两条诊断与空字面量规则可以直接复用。同时修 `sameType`
+   对递归类型的死循环（`src/core/type/text.cpp`），否则实现之后会挂。
+2. **分配计数**（已由 H17b 解决）：`std::mem::buffers()` 让"不复制"可以数出来，第 1.4 节就是
+   数出来的结果。留给作者的只是第 4 条的"第一次写仍复制一次"。
+3. **循环状态的期望类型**：本次把"循环值的位置"算作状态的期望类型（第 2 节）。5.1 的清单里
+   没有它，是从"一个状态的循环，其类型就是状态的类型"推出来的解释，请确认；如果不接受，
+   `loop acc = []` 需要另一种类型来源（从循环体反推）。
+4. **"未共享"标记的起点**：`var v = [1, 2, 3]` 之后第一次写 `v[0]` 仍会复制一次，因为
+   `:var/new` 不置位、只有拥有式存回才置位（第 1.4 节，数出来是 +1）。可行的改法是让 `:var/new`
+   在操作数确实是为变量新造的对象时置位（例如 `var v = [1, 2, 3]` 的 `:var/new` 操作数是一个
+   `COPY` 节点）；这会同时让第一次 `acc = acc->append<v>` 不再复制。要不要做、以及判据用"操作数
+   是 COPY"是否足够，请作者定。任务书里"槽数组现在就可以原地写、紧凑数组等 H17"的方向与实现
+   相反（槽数组的存储在 `Array` 对象里随克隆复制，`canWriteInPlace()` 只对唯一缓冲的紧凑数组
+   为真），也请确认。
+5. **路径赋值表达式的值**：现在是重绑后的整体（第 1.5 节）。若设计要求是叶子值，需要给效应
+   节点加一个"必须保留"的标记，否则它与 DCE 冲突。
+6. **`docs/design-principles-log.cn.md`** 里 3.5 的"字段与元素不可赋值"是历史裁决记录，本次
+   没有改；如果那份日志也要求跟上现规则，需要作者决定怎么改（它是按日期记录的）。
