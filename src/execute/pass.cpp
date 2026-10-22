@@ -745,7 +745,7 @@ PassScopePtr initPassScope() {
                     {"rgir_regions",
                      def(PASS1(
                          GraphVizDumpPass, (GraphVizDumpConfig{.rich = true, .regions = true})))},
-                    {"jgir", def(PASS(JsonGirDumpPass))},
+                    {"jgir", def(jgirDescriptor())},
                     {"agir",
                      def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.annotateRoles = true}))},
                     {"argir",

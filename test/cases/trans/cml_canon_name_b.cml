@@ -1,0 +1,19 @@
+/** `cml_canon_name_a.cml` with every name changed and nothing else: same graph. Its two
+ * functions have different parameter names, so the front end keeps two signature objects where
+ * the other file keeps one; the canonical type table must not see the difference. */
+module cml_canon_name_b
+
+func inc(y: int): int {
+    let delta = y + 1
+    return delta
+}
+
+func inc2(z: int): int {
+    let doubled = z * 2
+    return doubled
+}
+
+func main(): int sync {
+    println(inc(1), inc2(2))
+    return 0
+}

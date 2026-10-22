@@ -75,17 +75,23 @@ json attrValueJson(camel::core::attr::AttrValueId id) {
 using namespace camel::runtime;
 using namespace camel::passes::gir;
 
-std::string dumpJsonRuntimeGraph(GCGraph *root, const camel::core::context::context_ptr_t &ctx) {
+std::string dumpJsonRuntimeGraph(
+    GCGraph *root, const camel::core::context::context_ptr_t &ctx, const JsonGirOptions &options) {
     if (!root || !root->hasNodePayload())
         return {};
     const Program *program = ctx ? ctx->programOfRuntimeGraph(root) : nullptr;
-    return program ? dumpJsonRuntimeGraph(*program, root, ctx) : std::string{};
+    return program ? dumpJsonRuntimeGraph(*program, root, ctx, options) : std::string{};
 }
 
 std::string dumpJsonRuntimeGraph(
-    const Program &program, GCGraph *root, const camel::core::context::context_ptr_t &ctx) {
+    const Program &program, GCGraph *root, const camel::core::context::context_ptr_t &ctx,
+    const JsonGirOptions &options) {
     if (!root || !root->hasNodePayload())
         return {};
+    // The canonical document is a separate shape, not a variation of the display document: the
+    // version 1 body below is untouched so that every existing reader keeps the exact bytes.
+    if (options.canonical)
+        return dumpCanonicalRuntimeGraph(program, root);
     const auto graphs = collectReachableGraphs(program, root);
     std::unordered_map<const GCGraph *, std::string> ids;
     for (size_t i = 0; i < graphs.size(); ++i)
@@ -259,6 +265,26 @@ std::string dumpJsonRuntimeGraph(
 const camel::runtime::Program *
 JsonGirDumpPass::apply(const camel::runtime::Program *program, std::ostream &out) {
     camel::runtime::GCGraph *graph = program->root();
-    out << dumpJsonRuntimeGraph(*program, graph, context_) << '\n';
+    out << dumpJsonRuntimeGraph(*program, graph, context_, options_) << '\n';
     return nullptr;
+}
+
+PassDescriptor jgirDescriptor() {
+    PassDescriptor d;
+    d.doc    = "versioned JSON GIR (camel.gir); canonical=true writes the version 2 canonical "
+               "document that a graph-isomorphism checker compares, with names, origins, node ids "
+               "and annotation regions erased and a structural type table";
+    d.params = {PassParam{
+        "canonical",
+        PassParamType::Bool,
+        false,
+        "write the canonical document (version 2) instead of the display document (version 1): "
+        "only what graph equivalence is defined on, deterministic, for "
+        "test/tools/cml_roundtrip.py"}};
+    d.make   = [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<JsonGirDumpPass>(
+            ctx,
+            JsonGirOptions{.canonical = args.getBool("canonical")});
+    };
+    return d;
 }

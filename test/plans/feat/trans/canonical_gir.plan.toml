@@ -1,0 +1,15 @@
+id = "trans.canonical_gir"
+order = 339
+tier = "fast"
+tags = ["feat", "trans", "dump", "json", "canonical"]
+
+[[tests]]
+name = "canonical_document_and_equivalence"
+desc = "The canonical JSON GIR document (version 2, canonical=true): deterministic, no names/origins/original ids, attributes and permissions kept, default version 1 output untouched. The independent checker (test/tools/cml_roundtrip.py) says equal for the same program, for reordered input lists, for name-only differences and for a std::stats round trip, says different for an attribute-only difference, and reports over budget with exit 2 instead of passing."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/cml_canon_contract.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["canonical GIR: PASS"]
+timeout_ms = 120000
