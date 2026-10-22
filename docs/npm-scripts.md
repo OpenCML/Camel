@@ -15,6 +15,30 @@ This document describes the `package.json` scripts in the repository root.
 | `npm run clean` | Remove build artifacts |
 | `npm run pypi:rollup` | Build the PyPI wheel bundle |
 
+## Build Stamp (`out/<tag>/build-info.json`)
+
+`npm run build` (and `debug` / `profile`) ends with `scripts/collect-out.js`, which writes
+`out/<tag>/build-info.json`: the sources the install was produced from.
+
+| Field | Content |
+|---|---|
+| `revision`, `dirty`, `dirtyCount`, `dirtyPaths` | `git rev-parse HEAD`, whether the tree had uncommitted changes, and up to 40 of those paths. `null` when git is unavailable: the stamp then says so, and the content fingerprint still guards the run. |
+| `builtAt`, `config`, `tag` | When, which configuration, and which install directory (`latest`, `debug`, or a release mirror tag). |
+| `fingerprint` | SHA-256 over the content of every path a build reads — `src/`, `include/`, `modules/`, `tools/`, `stdlib/`, `third_party/`, `cmake/`, `CMakeLists.txt`, `conanfile.txt` — with the file count and a per-file hash map (used to name the files that moved). |
+| `schema`, `fingerprint.version` | The shape of the stamp, so a stamp written by an older build is refused instead of misread. |
+
+The build writes it, no runner does, so a local build, a host build and a release tarball all carry
+it; the PyPI rollup copies `out/<tag>/` whole and ships the file.
+
+`node scripts/build-info.js check --tag latest` prints nothing when the stamp matches the current
+tree, and exits 4 when it does not, naming both revisions (HEAD plus dirty state), both
+fingerprints, and the source files that changed. `show` prints the stamp. `camel-remote.ps1` runs
+`check` before a `-NoBuild` plan: an install is reused only while its fingerprint still matches, and
+`-AllowStale` is the explicit override. Changes under `docs/`, `test/`, `scripts/`, `agents/`,
+`editors/`, `pypi/`, `assets/`, `examples/` and `benchmarks/` do not move the fingerprint (a test
+case is read at plan time); changes under the paths above do — including `stdlib/`, which
+`collect-out` copies verbatim into `out/<tag>/stdlib`.
+
 ## Test Harness
 
 The repository uses the plan-based runner under `test/`.

@@ -27,7 +27,8 @@ import {
     outArtifactBin,
     outArtifactLibs,
     outArtifactInclude,
-    outArtifactStdlib
+    outArtifactStdlib,
+    writeBuildInfo
 } from './common.js'
 
 // The Debug build has its own artifact directory: the Release tree stays at out/latest, so the
@@ -311,6 +312,11 @@ function collect(config, tag) {
 
     logDone(`Artifacts collected to out/${tag}/`)
 
+    // The stamp the `-NoBuild` guard compares against. Written by the build, not by the runner: an
+    // install made by `npm run build` on this machine, in a release tarball or on the Linux host all
+    // carry it, and a collect that died leaves no stamp for an install it did not finish.
+    writeBuildInfo(config, tag)
+
     // Only the Release tree is the installation a tag names; the Debug tree is a local test
     // artifact and must not become a release mirror.
     if (tag !== COLLECT_PRIMARY_TAG) {
@@ -327,6 +333,9 @@ function collect(config, tag) {
             fs.rmSync(mirrorRoot, { recursive: true })
         }
         fs.cpSync(outRoot, mirrorRoot, { recursive: true })
+        // The mirror is the same install under another name; its stamp must name its own tag so a
+        // guard run against out/<tag> reports where it looked.
+        writeBuildInfo(config, mirrorTag)
         logDone(`Mirrored to out/${mirrorTag}/`)
     }
 }
