@@ -220,7 +220,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 19
-expect_output_contains = ["::<T> (a: T[], b: T[]) => T[] (this module)", "::<T, U> (a: T[], b: U[]) => T[] (this module)"]
+expect_output_contains = ["(a: T[], b: T[]) => T[] (this module)", "(a: T[], b: U[]) => T[] (this module)"]
 
 [[tests]]
 name = "operator_overloads.ambiguous_modules"
