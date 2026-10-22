@@ -41,14 +41,14 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 |---|---:|---|
 | 声明模块（`stdlib/<m>.cml` + C++ `BuiltinModule`） | **26** | `--check`（`declarationModules()`） |
 | 声明名 / 声明条数（`export func`） | **202 / 337** | 读 26 个声明文件 |
-| 计算名（C++ 算签名） | **95** | 8 个 `computed:` 签名文件，0 条内联 |
-| 其中因语言机制写不出（阻塞） | **14** | 本页 §2.4 的口径，逐条见表 |
-| 公开名（26 个声明模块） | **297** | `inspect --ops`：202 个声明名 + 95 个计算名 |
-| 注册重载（26 个声明模块） | **440** | `inspect --ops`，337 条由声明回答、103 条由 C++ 计算 |
-| 注册重载（参考页全部模块，含 `<builtin>`） | **544** | `--verify-ops`；`<builtin>` 占 97 条 |
+| 计算名（C++ 算签名） | **92** | 8 个 `computed:` 签名文件，0 条内联 |
+| 其中因语言机制写不出（阻塞） | **13** | 本页 §2.4 的口径，逐条见表 |
+| 公开名（26 个声明模块） | **294** | `inspect --ops`：202 个声明名 + 92 个计算名 |
+| 注册重载（26 个声明模块） | **437** | `inspect --ops`，337 条由声明回答、100 条由 C++ 计算 |
+| 注册重载（参考页全部模块，含 `<builtin>`） | **541** | `--verify-ops`；`<builtin>` 占 97 条 |
 | `stdlib/signatures/` 的文件 | **10** | 8 个是已迁移模块的计算签名，2 个属于尚未迁移的模块 |
 
-这 26 个模块的 297 个公开名 = 202 个声明名 + 95 个计算名。8 个模块有计算签名、18 个没有；
+这 26 个模块的 294 个公开名 = 202 个声明名 + 92 个计算名。8 个模块有计算签名、18 个没有；
 5 个模块有阻塞名（`json`、`onnx`、`python`、`tensor`、`tiles`）。
 
 ### 2.2 逐模块
@@ -84,11 +84,11 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 | `str` | 14 | 14 / 14 | 0 | — | 14 | handover note ⟨73ce85e⟩ (H104) |
 | `tensor` | 64 | 11 / 15 | 53 | 1：`from_bytes`（Q1） | 72 | handover note ⟨8dd93b7⟩ (H151) §3.2；[47](47_declaration_syntax.md) §3.4 |
 | `this` | 1 | 1 / 1 | 0 | — | 1 | handover note ⟨b083ff2⟩ (H146) |
-| `tiles` | 12 | 2 / 2 | 10 | 5：`gpu`、`source`、`inspect`、`benchmark`、`regions`（Q-F；`gpu` 另有 Q3） | 12 | handover note ⟨0ebbbbd⟩ (H156)；handover note ⟨cdf4d60⟩ (H157) §7；[47](47_declaration_syntax.md) §3.1、§3.5 |
+| `tiles` | 9 | 2 / 2 | 7 | 4：`source`、`inspect`、`benchmark`、`regions`（Q-F） | 9 | handover note ⟨0ebbbbd⟩ (H156)；handover note ⟨cdf4d60⟩ (H157) §7；[47](47_declaration_syntax.md) §3.1、§3.5 |
 | `time` | 3 | 3 / 3 | 0 | — | 3 | handover note ⟨55e0bf3⟩ (H133) |
-| **合计** | **297** | **202 / 337** | **95** | **14** | **440** | |
+| **合计** | **294** | **202 / 337** | **92** | **13** | **437** | |
 
-计算名里没有阻塞的 81 个，按约定是「结果类型或参数类型取自实参」的计算签名：`autodiff` 的
+计算名里没有阻塞的 79 个，按约定是「结果类型或参数类型取自实参」的计算签名：`autodiff` 的
 `grad`/`with_grad`、`graph` 的 4 个、`nn` 的 18 个张量算子、`tensor` 的其余 52 个、`tiles` 的
 `upload`/`download`/`run_preferred_resident`。它们不是「没做完」，是 C++
 必须保留的那一半。
@@ -135,7 +135,7 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
   「没有执行器」。由实参算结果、但写法本身合法的名字算**计算**，不算阻塞；这是 H157 §0 与
   47 §4.3 的分法。
 - **重载** = `inspect --ops` 的 `OPERATOR` 行去掉 `::` 别名与 `__` 组后的条数。
-  544 = 440（26 个声明模块）+ 7（只有 `ckpt` 仍是未迁移的非声明模块）+ 97（`<builtin>`）。
+  541 = 437（26 个声明模块）+ 7（只有 `ckpt` 仍是未迁移的非声明模块）+ 97（`<builtin>`）。
 - **签名文件** = `stdlib/signatures/*.cml`。其中 8 个是已迁移模块的 `computed:` 文件，2 个属于
   尚未迁移的模块（`ckpt`、`globals`）。
 
@@ -255,9 +255,9 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 
 | 命令 | 今天打印 |
 |---|---|
-| `node scripts/stdlib-declarations.mjs --check` | `26 declaration module(s), 95 computed signature(s) ... 0 problem(s)`，并确认 `544 registered operator overloads` |
+| `node scripts/stdlib-declarations.mjs --check` | `26 declaration module(s), 92 computed signature(s) ... 0 problem(s)`，并确认 `541 registered operator overloads` |
 | `node scripts/stdlib-declarations.mjs --check-ledger` | `the ledgers agree with the tree: ...`，本页与 [49](49_computed_signatures.md) 的每个数字都与树一致 |
-| `node scripts/stdlib-reference.mjs --verify-ops` | `the declarations agree with the 544 registered operator overloads` |
-| `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | `OPERATOR` 行 814 条；去掉 `::` 别名与 `__` 组后 355 个公开名（其中 `<builtin>` 51 个）/ 544 条公开重载（其中 `<builtin>` 97 条） |
+| `node scripts/stdlib-reference.mjs --verify-ops` | `the declarations agree with the 541 registered operator overloads` |
+| `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | `OPERATOR` 行 811 条；去掉 `::` 别名与 `__` 组后 352 个公开名（其中 `<builtin>` 51 个）/ 541 条公开重载（其中 `<builtin>` 97 条） |
 | `node scripts/check-doc-counts.mjs` | `no stale count in ...` |
 | `node scripts/check-doc-links.mjs --default-roots` | `no broken links in ...` |
