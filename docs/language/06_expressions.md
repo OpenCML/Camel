@@ -424,7 +424,7 @@ func duplicate::<T>(t: T) {
 - `fields` 后面也是类型位置：紧跟的 `(` 一律读作类型的开头，所以空元组直接写 `fields ()`，不需要先 `type EmptyTuple = ()`；函数类型要再包一层括号，写成 `fields ((x: int) => int)`。
 - 字段按声明顺序展开，每个字段的块有独立的块作用域。空结构体或空元组展开零次，块一次也不建。
 - `static for` 作为语句时块的值总是被丢弃，整个构造的值是 `void`；需要值的位置写 comprehension 形式（见下）。
-- `t.[n]` 取结构体的字段或元组的元素，`n` 必须是编译期常量：字符串或整数字面量，或外层 `static for` 的 `n`。只有选中的那个字段建进图里（一个 `ACCS`），运行时不选择字段，所以运行期的值不能当键（`SemanticDiag::StaticAccessNotConstant`）。
+- `t.[n]` 取结构体的字段或元组的元素，`n` 必须是编译期常量：字符串或整数字面量、外层 `static for` 的 `n`/`j`，或一个编译期能算出常量的表达式（如 `( static for (n, F) in fields S => n ).[0]`）。只有选中的那个字段建进图里（一个 `ACCS`），运行时不选择字段，所以运行期的值不能当键（`SemanticDiag::StaticAccessNotConstant`）。
 - 结构体没有这个字段报 `SemanticDiag::StaticAccessUnknownField`；元组的下标越界（或键不是下标）报 `SemanticDiag::StaticAccessIndexOutOfRange`；目标不是结构体或普通元组报 `SemanticDiag::StaticAccessNotInternal`。`t.["0"]` 与 `t.[0]` 对元组是同一个元素。
 - 字段的值被丢弃时（`t.[n];` 单独成句），只检查字段，不建 `ACCS`；目标表达式仍然求值，以保留它的副作用。
 
@@ -463,6 +463,7 @@ func positions(t: (int, string)): (int, int) {
 
 - 块的**值就是那一轮的值**：与语句形式不同，这里不丢弃。块里可以用 `let`，最后一句话的值就是字段的值；没有值（空块，或以一条没有值的语句结尾）报 `SemanticDiag::StaticComprehensionVoidElement`。
 - 每个字段/元素的**类型取自那一轮的值**，不强制等于 `F`：`F` 是 `int` 而值是 `float` 时结果字段就是 `float`。字段名与顺序仍来自 `T` 的声明顺序，所以 `tree_map` 这类改变叶子类型、保持形状的展开可以直接写。
+- **同一形状写成 `T { ... }`**：`T { static for (n, F) in fields T => e }` 用一个类型 `T` 同时给出字段名和种类（结构体或元组），所以 `case struct | tuple` 一个分支就够。`T` 必须与生成器遍历的类型是同一个类型，否则报 `SemanticDiag::SameShapeComprehensionMismatch`；`T` 是叶子（没有字段）时报 `SemanticDiag::SameShapeComprehensionNotComposite`。`{ ... }` 与 `( ... )` 仍分别只装结构体和元组。
 - 空结构体、空元组没有轮次，结果是 `{}` / `()`（一个零槽的 `FILL`）。
 - 图上是直线代码：每轮按声明顺序建出它读的 `ACCS`，comprehension 本身没有节点。元组推导式的结果先保持为编译期元组：只被 `indices`、`..` 或 `.[j]` 使用时元素保持独立、不建 `FILL`；作为值用（打印、返回、赋给运行期位置）时，在使用处一个 `FILL` 把各轮的值装回同形状。结构体推导式总是装成一个 `FILL`。`t.[n].[m]` 里对父的访问只建一次，内层各字段共用同一个 `ACCS`，因此与 C++ `tree_map` 对同一棵树建出的图相同。
 - `{ static for ... }` 在需要块的位置（`case struct => { ... }`、`if c then { ... }`）也读作 comprehension，所以语句形式不能再套一层花括号：直接写 `static for (n, F) in fields T => 块`。
@@ -475,8 +476,7 @@ func doubled(t: {a: int, b: int}): {a: int, b: int} {
 
 func rebuild::<T>(t: T) {
     return match type T {
-        case struct => { static for (n, F) in fields T => rebuild(t.[n]) }
-        case tuple => ( static for (n, F) in fields T => rebuild(t.[n]) )
+        case struct | tuple => T { static for (n, F) in fields T => rebuild(t.[n]) }
         case _ => t
     }
 }
