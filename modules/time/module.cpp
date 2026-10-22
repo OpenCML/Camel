@@ -13,52 +13,28 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
+/*
+ * The clock and its text forms. `now` reads the system clock, `strftime` writes a timestamp as
+ * text in UTC, and `strptime` turns text into a timestamp using the process's time zone.
+ *
+ * The signatures are written once, in the declaration module `stdlib/time.cml` (design principles
+ * 6.4; handover H19, step 10). What is left here is what only C++ knows: the kernels in
+ * operators.cpp, the executor that runs them, and the operator traits declared at load.
+ */
+
 #include "module.h"
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
-#include "camel/core/type.h"
-#include "camel/core/type/resolver.h"
 #include "camel/core/operator_traits.h"
 #include "executor.h"
-#include "operators.h"
 
 using namespace camel::core::context;
 using namespace camel::core::module;
-using namespace camel::core::type;
 
-namespace {
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "now",
-            {{"time:now", StaticFuncTypeResolver::create({}, {}, Type::Float64())}}),
-        OperatorGroup::create(
-            "strftime",
-            {{"time:strftime",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::Float64(), false}, {Type::String(), false}},
-                  Type::String())}}),
-        OperatorGroup::create(
-            "strptime",
-            {{"time:strptime",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::String(), false}, {Type::String(), false}},
-                  Type::Float64())}}),
-    };
-    return groups;
-}
-} // namespace
-
-TimeModule::TimeModule(context_ptr_t ctx) : BuiltinModule("time", ctx) {
-    for (const auto &group : getOperatorGroups())
-        exportEntity(group->name(), group);
-}
+TimeModule::TimeModule(context_ptr_t ctx) : BuiltinModule("time", ctx) {}
 
 module_ptr_t TimeModule::create(context_ptr_t ctx) { return std::make_shared<TimeModule>(ctx); }
 

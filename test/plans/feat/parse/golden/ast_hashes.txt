@@ -324,6 +324,7 @@ a8be31ddfa495bf4 ok stdlib/re.cml
 dc425a313698f684 ok stdlib/rules.cml
 1c94db09ee5e88dd ok stdlib/str.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
+f26840bc30a7d5b4 ok stdlib/time.cml
 68408c82f05916d6 ok stdlib/signatures/algo.cml
 985ec586154e41fa ok stdlib/signatures/ckpt.cml
 351e27ad8c07e562 ok stdlib/signatures/env.cml
@@ -338,7 +339,6 @@ c80b5667335e55a8 ok stdlib/signatures/process.cml
 4b1e6e35d1c406b9 ok stdlib/signatures/statistics.cml
 a54b7af54487e60a ok stdlib/signatures/tensor.cml
 9f41932d10f1e591 ok stdlib/signatures/this.cml
-1bf7539617c07ad8 ok stdlib/signatures/time.cml
 c2aadab066717442 ok test/cases/compile/format_string_bad_spec.cml
 482fb68058e35e2e ok test/cases/compile/format_string_checked.cml
 609c32d88d7854ba ok test/cases/compile/generic_explicit_arity_error.cml
@@ -829,6 +829,9 @@ bcac67bf72834a87 ok test/cases/compile/native/retired_str_from_bytes.cml
 17dafaa791a6d02c ok test/cases/compile/native/str_arity.cml
 6b93edd476faf370 ok test/cases/compile/native/str_declaration_import.cml
 18c99cf48eb6a338 ok test/cases/compile/native/str_type.cml
+2389c2385a587f4a ok test/cases/compile/native/time_arity.cml
+a7cf8ccc7e0b6e2a ok test/cases/compile/native/time_declaration_import.cml
+45db82606004ba7c ok test/cases/compile/native/time_type.cml
 4f31f2a95fec2351 ok test/cases/compile/native/unselected_case_declaration.cml
 6ff823b21e5dd2c8 no test/cases/compile/not_supported/is_operator.cml
 3292f35f88354816 ok test/cases/compile/not_supported/list_comprehension.cml
