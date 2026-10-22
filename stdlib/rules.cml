@@ -19,7 +19,7 @@
  */
 module rules
 import { Program, Node, constant } from graph
-import { abs, trunc } from math
+import { abs, exp as math_exp, expm1, log as math_log, log1p, trunc } from math
 import { Rule, Run, rewrite, saturate, extract, run } from rewrite
 import { Tensor, exp, log, log_softmax, sigmoid, softmax, sum } from tensor
 
@@ -764,7 +764,7 @@ func pair(r: Run<Program>, left: Rule[], right: Rule[], strict: bool): Run<Progr
 // the engine yet -- `operator_semantics.h` stops at `nondeterministic`, and no tag registers the
 // name. `check`, for the same reason, compares the two sides bit for bit (a rule with no
 // permission) or inside a rounding bound; it cannot state "the right side is the more accurate
-// one". So the three rules below carry no `#requires`, they are applied only by the opt-in
+// one". So the rules below carry no `#requires`, they are applied only by the opt-in
 // `rules::accuracy` pass, and they must not be added to `simplify` or to any default pipeline.
 // When `refine_accuracy` lands, they take `#requires<refine_accuracy>` and the existing policy
 // makes them drop out under `#strict` and under `std::opt(safe_fp=true)`; that, and the
@@ -815,13 +815,58 @@ export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
     log(softmax(x, axis)) => log_softmax(x, axis)
 }
 
+/// The design's own scalar example, `log(1 + x) => log1p(x)`, in f64 and in f32.
+///
+/// Numeric argument. The naive form rounds `1 + x` first. For |x| below the spacing of 1
+/// (2^-52 in f64, 2^-23 in f32) that addition returns exactly 1, so the naive log is 0 and its
+/// relative error is 100% -- and for |x| up to ~1e-8 the cancellation eats most of the
+/// significant bits. `log1p` computes log(1 + x) without forming 1 + x; its error is its declared
+/// bound (the module's platform bound), and there is no step whose error can grow as x -> 0.
+/// Where the addition is exact the two agree, so the worst case over the domain is not larger.
+/// The special values agree too: x = -1 gives -inf on both sides, x < -1 NaN on both, +inf +inf,
+/// NaN NaN; only the sign of a zero result differs (log1p(-0) is -0, log(1 + -0) is +0), the
+/// same kind of bit change every accuracy rewrite makes.
+export rule float_log1p(x: float) {
+    math_log(1.0 + x) => log1p(x)
+}
+
+export rule f32_log1p(x: f32) {
+    math_log(1.0 + x) => log1p(x)
+}
+
+/// The design's second scalar example, `exp(x) - 1 => expm1(x)`, in f64 and in f32.
+///
+/// Numeric argument. For |x| below the spacing of 1 the naive `exp(x)` rounds to exactly 1 and
+/// the subtraction gives 0: the relative error is 100% (at x = 1e-300 it is total). `expm1`
+/// evaluates exp(x) - 1 directly, without the cancellation; its error is its declared bound and
+/// does not grow as x -> 0. The special values agree: exp(+inf) - 1 = +inf = expm1(+inf),
+/// exp(-inf) - 1 = -1 = expm1(-inf), NaN both, and 0 is 0 (at x = -0, expm1 gives -0 where the
+/// naive subtraction gives +0).
+export rule float_expm1(x: float) {
+    math_exp(x) - 1.0 => expm1(x)
+}
+
+export rule f32_expm1(x: f32) {
+    math_exp(x) - 1.0 => expm1(x)
+}
+
+/// The third scalar example of the design, `sqrt(x*x + y*y) => hypot(x, y)`, is deliberately not
+/// here: `hypot` gives +inf when one operand is +inf and the other is NaN (C's hypot; the math
+/// module's semantics state it), while the naive form squares first and returns NaN for that
+/// input. A rule cannot ask at run time whether an operand is one of those special values, so the
+/// rewrite would turn a NaN into an infinity -- not "no worse" on the whole domain. The other
+/// direction (a squared term overflowing or underflowing where hypot does not) is exactly what
+/// the law is for, so the rule waits for a hypot whose specials match the naive form, or for a
+/// permission that says the exceptional inputs are out of scope.
+
 /// The accuracy library, as the opt-in pass `rules::accuracy`: the direct log-softmax pattern
 /// first, so `log(exp(x)/sum(exp(x)))` is one rewrite (`log_softmax_naive`); then the softmax
-/// pattern and the log-of-softmax one, for a program that computes a softmax first. The two
-/// stages are the schedule: whichever stage is written first decides which rule is the one that
-/// fires on a source both can match (the test `rules.accuracy_schedule_order` pins both counts).
+/// pattern, the log-of-softmax one and the scalar laws, for a program that computes a softmax
+/// first or a scalar log/exp. The two stages are the schedule: whichever stage is written first
+/// decides which rule is the one that fires on a source both can match (the test
+/// `rules.accuracy_schedule_direct` pins both counts).
 export func accuracy(p: Program): Program! {
-    return p->seq<[[tensor_log_softmax_naive], [tensor_softmax_naive, tensor_log_softmax_of_softmax]], false>
+    return p->seq<[[tensor_log_softmax_naive], [tensor_softmax_naive, tensor_log_softmax_of_softmax, float_log1p, f32_log1p, float_expm1, f32_expm1]], false>
         ?-> (r: Run<Program>) => r.result
 }
 

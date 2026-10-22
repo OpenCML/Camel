@@ -14,6 +14,6 @@ func logits(x: Tensor<f32>): Tensor<f32> {
 
 func main(): int sync {
     let clean = reshape([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2], [2, 4])
-    println(logits(clean))
+    println(sum(logits(clean)))
     return 0
 }

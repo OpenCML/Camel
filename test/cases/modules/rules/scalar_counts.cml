@@ -1,0 +1,40 @@
+/**
+ * The cost line of the scalar accuracy rules: the number of operator nodes of a function and the
+ * count of the scalar operators the two f64/f32 rules move (log, add, exp, subtract, and the two
+ * accurate operators they write). Printed before and after a pass it is the cost of the rewrite.
+ */
+module scalar_counts
+
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func countOf(ops: string[], which: string): int {
+    return len(ops->filter<(s: string): bool => s == which>)
+}
+
+func reportGraph(g: Graph) {
+    let ops = nodes(g)->map<(n: Node): string => opText(n)>->filter<(s: string): bool => s != ''>
+    println(
+        'scalar', name(g), len(ops),
+        countOf(ops, 'math:log_d') + countOf(ops, 'math:log_f'),
+        countOf(ops, ':op/add_d') + countOf(ops, ':op/add_f'),
+        countOf(ops, 'math:exp_d') + countOf(ops, 'math:exp_f'),
+        countOf(ops, ':op/sub_d') + countOf(ops, ':op/sub_f'),
+        countOf(ops, 'math:log1p_d') + countOf(ops, 'math:log1p_f'),
+        countOf(ops, 'math:expm1_d') + countOf(ops, 'math:expm1_f'))
+}
+
+export func report(p: Program): Program! sync {
+    let gs = graphs(p)->filter<(g: Graph): bool => name(g) != 'main' && name(g) != '__root__'>
+    let _ = loop n = 0 for g in gs do sync {
+        reportGraph(g)
+        return n + 1
+    }
+    return p
+}

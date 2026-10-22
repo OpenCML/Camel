@@ -2,7 +2,7 @@ id = "modules.rules_libraries"
 order = 393
 tier = "fast"
 tags = ["feat", "modules", "rules", "rewrite", "accuracy", "fusion"]
-desc = "The first two standard rule libraries (rewrite design 2 (second version) 8.9-8.10): `rules::accuracy`, which turns a naive softmax, a naive log-softmax and a log of a softmax into the stable operators, and `rules::fusion`, which turns the sigmoid chain 1/(1+exp(-x)) into the sigmoid kernel. Each rule is shown firing on a real program with its rewrite count and the operator cost before and after, on the programs it must not match, and with the same bits on nvm, fvm and jit."
+desc = "The first two standard rule libraries (rewrite design 2 (second version) 8.9-8.10): `rules::accuracy`, which turns a naive softmax, a naive log-softmax, a log of a softmax and the scalar `log(1+x)`/`exp(x)-1` forms into the stable or accurate operators, and `rules::fusion`, which turns the sigmoid chain 1/(1+exp(-x)) into the sigmoid kernel. Each rule is shown firing on a real program with its rewrite count and the operator cost before and after, on the programs it must not match, and with the same bits on nvm, fvm and jit."
 
 [[tests]]
 name = "rules.accuracy_softmax_rule"
@@ -11,7 +11,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/accuracy_softmax_target.cml"
 args = ["${case}", "library_counts::report", "accuracy_schedule::only_softmax", "library_counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["cost naive 3 1 1 1 0 0 0 0 0 0 0", "only_softmax rewrites 1 rounds 2", "cost naive 1 0 0 0 0 1 0 0 0 0 0"]
+expect_stdout_contains = ["cost naive 4 2 1 1 0 0 0 0 0 0 0", "only_softmax rewrites 1 rounds 2", "cost naive 1 0 0 0 0 1 0 0 0 0 0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -22,7 +22,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/accuracy_log_target.cml"
 args = ["${case}", "library_counts::report", "accuracy_schedule::only_log_softmax", "library_counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["cost naive 4 1 1 1 1 0 0 0 0 0 0", "only_log_softmax rewrites 1 rounds 2", "cost naive 1 0 0 0 0 0 1 0 0 0 0"]
+expect_stdout_contains = ["cost naive 5 2 1 1 1 0 0 0 0 0 0", "only_log_softmax rewrites 1 rounds 2", "cost naive 1 0 0 0 0 0 1 0 0 0 0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -145,7 +145,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/fusion_target.cml"
 args = ["${case}", "library_counts::report", "fusion_schedule::only_sigmoid", "library_counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["cost chain 4 1 0 1 0 0 0 0 0 1 1", "only_sigmoid rewrites 1 rounds 2", "cost chain 1 0 0 0 0 0 0 1 0 0 0", "cost doubled 4 1 0 1 0 0 0 0 0 1 1", "cost positive 3 1 0 1 0 0 0 0 0 0 1", "cost after_matmul 5 1 0 1 0 0 0 0 1 1 1", "cost after_matmul 2 0 0 0 0 0 0 1 1 0 0"]
+expect_stdout_contains = ["cost chain 4 1 0 1 0 0 0 0 0 1 1", "only_sigmoid rewrites 2 rounds 2", "cost chain 1 0 0 0 0 0 0 1 0 0 0", "cost doubled 4 1 0 1 0 0 0 0 0 1 1", "cost positive 3 1 0 1 0 0 0 0 0 0 1", "cost after_matmul 5 1 0 1 0 0 0 0 1 1 1", "cost after_matmul 2 0 0 0 0 0 0 1 1 0 0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -170,5 +170,61 @@ backends = ["nvm", "fvm", "jit"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "chain minus sigmoid 0.0\ndoubled sum         7.31624373793602\npositive sum        2.341878153383732\nafter matmul minus sigmoid 0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+[[tests]]
+name = "rules.accuracy_scalar_log1p_rule"
+desc = "The design's `log(1 + x) => log1p(x)`, in f64 and f32: each naive function goes from two operators (log, add) to one `log1p`; the guarded `log(2 + x)` keeps both its operators."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
+args = ["${case}", "scalar_counts::report", "accuracy_schedule::only_log1p", "scalar_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["scalar naive_log1p 2 1 1 0 0 0 0", "only_log1p rewrites 2 rounds 2", "scalar naive_log1p 1 0 0 0 0 1 0", "scalar naive_log1p32 1 0 0 0 0 1 0", "scalar guarded_log 2 1 1 0 0 0 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_scalar_expm1_rule"
+desc = "The design's `exp(x) - 1 => expm1(x)`, in f64 and f32: each naive function goes from two operators (exp, subtract) to one `expm1`; the guarded `exp(2 + x)` keeps both."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
+args = ["${case}", "scalar_counts::report", "accuracy_schedule::only_expm1", "scalar_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["scalar naive_expm1 2 0 0 1 1 0 0", "only_expm1 rewrites 2 rounds 2", "scalar naive_expm1 1 0 0 0 0 0 1", "scalar naive_expm1_32 1 0 0 0 0 0 1", "scalar guarded_exp 2 0 0 1 1 0 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_scalar_values"
+desc = "After `rules::accuracy` the naive scalar forms print the accurate operators' values: `log(1 + 1e-300)` is 1e-300 and `exp(1e-300) - 1` is 1e-300, where the naive forms printed 0."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
+args = ["${case}", "rules::accuracy", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["log1p tiny  1e-300 1e-300", "log1p tiny32 1e-08 1e-08", "expm1 tiny  1e-300 1e-300", "expm1 tiny32 1e-08 1e-08", "guarded log 0.9162907318741551 guarded exp -0.3512787292998718"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_scalar_every_backend"
+desc = "The rewritten scalar program prints the same text on the interpreter, the byte-code VM and the JIT."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
+args = ["${case}", "rules::accuracy", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["log1p tiny  1e-300 1e-300", "expm1 tiny  1e-300 1e-300"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_scalar_guards"
+desc = "The scalar rules do not match `log(2 + x)` or `exp(x) - 2`: four rewrites (the two f64 and the two f32 forms), the two guarded functions keep their two operators and their values."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
+args = ["${case}", "scalar_counts::report", "accuracy_schedule::all_scalar", "scalar_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["all_scalar rewrites 4 rounds 2", "scalar guarded_log 2 1 1 0 0 0 0", "scalar guarded_exp 2 0 0 1 1 0 0", "guarded log 0.9162907318741551 guarded exp -0.3512787292998718"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
