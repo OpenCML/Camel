@@ -268,8 +268,11 @@ export function plansForChanges(files) {
         if (rule) {
             let added = false
             for (const plan of rule.plans) {
+                // A layered plan is still a plan to run: it stays in `names` (so it becomes a
+                // target) and is listed in `layered` so the runner does not treat it as a named
+                // plan that runs in full. Dropping it from `names` would select nothing.
+                names.add(plan.name)
                 if (plan.layer) layered.add(plan.name)
-                else names.add(plan.name)
                 added = true
             }
             const excluded = rule.except.some((entry) => file === entry || file.startsWith(entry))
@@ -284,9 +287,6 @@ export function plansForChanges(files) {
         }
     }
     if (layered.size > 0) matched = true
-    // A plan named both by a rule and by the directory still follows the tier: layering is the
-    // narrower statement, and `--changed` must not run the cases it just said are out.
-    for (const name of layered) names.delete(name)
     return matched ? { names: [...names], targets: [...targets], layered: [...layered] } : null
 }
 

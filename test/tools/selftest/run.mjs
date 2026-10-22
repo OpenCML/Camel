@@ -441,6 +441,11 @@ if (!hasPlan(tensor, 'feat/modules/index_semantics.plan.toml')) {
 if (!hasLayered(tensor, 'feat/modules/autodiff.plan.toml')) {
     problems.push('--changed: modules/tensor/ did not layer the autodiff plan')
 }
+// A layered plan is a plan to run, just one that follows the tier: it must also be selected, or
+// the runner would never see it at all.
+if (!hasPlan(tensor, 'feat/modules/autodiff.plan.toml')) {
+    problems.push('--changed: the layered autodiff plan is not among the selected plans')
+}
 const nn = plansForChanges(['modules/nn/ops.cpp'])
 if (!hasTarget(nn, 'test/plans/feat/modules/nn.plan.toml')) {
     problems.push(`--changed: modules/nn/ did not select its plan file`)
@@ -458,8 +463,8 @@ for (const plan of [
 // `layer: true` keeps the slow PyTorch comparisons out of an ordinary change while the fast
 // cases of the same plan still run.
 const onnx = plansForChanges(['modules/onnx/exporter.cpp'])
-if (!hasLayered(onnx, 'feat/modules/onnx.plan.toml')) {
-    problems.push('--changed: modules/onnx/ did not layer its plan')
+if (!hasLayered(onnx, 'feat/modules/onnx.plan.toml') || !hasPlan(onnx, 'feat/trans')) {
+    problems.push('--changed: modules/onnx/ did not select its layered plans')
 }
 const autodiff = plansForChanges(['modules/autodiff/pullback.cpp'])
 if (!hasLayered(autodiff, 'feat/modules/autodiff.plan.toml')) {
