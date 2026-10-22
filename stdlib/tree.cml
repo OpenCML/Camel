@@ -83,14 +83,19 @@ export func tree_unzip::<R, S>(r: R, s: S) {
     return ( static for (j, _) in fields typeof(first_leaf(r, s)) => unzip_at(r, s, j) )
 }
 
-/// Any leaf of `r`: its type is the leaf tuple. The first field name is bound once, as a
-/// compile-time constant, and used for both trees.
+/// The name of the first field of `T`: a compile-time constant, so it can be a static access
+/// key. The compiler folds the call to its value where a constant is required (design
+/// principles 5.1, 6.5).
+func first_field::<T>(): string {
+    return ( static for (n, _) in fields T => n ).[0]
+}
+
+/// Any leaf of `r`: its type is the leaf tuple. The first field name is a compile-time constant
+/// (a fold of `first_field`), used as the key of both trees.
 func first_leaf::<R, S>(r: R, s: S) {
     return match type S {
-        case struct | tuple => {
-            let first = ( static for (n, _) in fields S => n ).[0]
-            first_leaf(r.[first], s.[first])
-        }
+        case struct | tuple =>
+            first_leaf(r.[first_field::<S>()], s.[first_field::<S>()])
         case _ => r
     }
 }

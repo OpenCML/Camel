@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/type/composite/func.h"
@@ -16,11 +17,32 @@
 #include "camel/utils/assert.h"
 
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace camel::compile::gir {
 
 using compile_graph_ptr_t = std::shared_ptr<DraftGraphBuilder>;
+
+/// The name a call writes for its callee: the `DREF` under a generic application (`TAPP`) or a
+/// `with` application (`WITH`). Empty when the callee is an expression (a function value).
+inline std::string writtenCalleeName(const GCT::node_ptr_t &callee) {
+    GCT::node_ptr_t node = callee;
+    while (node != nullptr) {
+        if (node->type() == GCT::NodeKind::WITH || node->type() == GCT::NodeKind::TAPP) {
+            node = node->at(0);
+            continue;
+        }
+        return node->type() == GCT::NodeKind::DREF ? node->name() : std::string{};
+    }
+    return {};
+}
+
+/// The name a `LINK` writes for its callee; empty for an expression.
+inline std::string writtenCallName(const GCT::node_ptr_t &call) {
+    return call != nullptr && call->type() == GCT::NodeKind::LINK ? writtenCalleeName(call->at(0))
+                                                                  : std::string{};
+}
 
 inline runtime::DraftEdgeKind toDraftEdgeKind(LinkType type) {
     switch (type) {

@@ -304,6 +304,17 @@ enum class SemanticDiag : uint32_t {
     /// expression, an open type variable, a type written twice in one case, or a type that an
     /// earlier case already selects.
     StaticMatchPatternCannotMatch = 0x0001C2,
+    // Folding a call of a pure function with constant arguments (handover H271). 0x1C5 and up.
+    /// An argument of a call in a place that needs a constant is not one.
+    FoldCallArgumentNotConstant = 0x0001C5,
+    /// The call has effects: it is `sync`, writes a `var`, or uses a resource.
+    FoldCallHasEffects = 0x0001C6,
+    /// The call nests deeper than the evaluator follows: it recurses without a base case here.
+    FoldCallTooDeep = 0x0001C7,
+    /// The call's result is not a kind a constant can have.
+    FoldCallResultNotConstant = 0x0001C8,
+    /// The call's body uses a construct this build-time evaluation does not read.
+    FoldCallNotEvaluable = 0x0001C9,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
