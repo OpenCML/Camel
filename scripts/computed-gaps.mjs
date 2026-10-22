@@ -142,15 +142,6 @@ export const LEDGER = [
         ],
     },
     {
-        module: 'env',
-        file: 'stdlib/signatures/env.cml',
-        evidence: 'modules/env/module.cpp:34-42',
-        entries: [
-            ['get_env', 'env:get_env', 'declarable-today', 'unmigrated-module'],
-            ['get_cwd', 'env:get_cwd', 'declarable-today', 'unmigrated-module'],
-        ],
-    },
-    {
         module: 'globals',
         file: 'stdlib/signatures/globals.cml',
         evidence: 'src/builtin/modules/globals.cpp:2144; docs/stdlib-conventions.cn.md:40',
@@ -264,16 +255,6 @@ export const LEDGER = [
         ],
     },
     {
-        module: 'hash',
-        file: 'stdlib/signatures/hash.cml',
-        evidence: 'modules/hash/module.cpp:32-41',
-        entries: [
-            ['sha256', 'hash:sha256_str', 'declarable-today', 'unmigrated-module'],
-            ['sha256', 'hash:sha256_bytes', 'declarable-today', 'unmigrated-module'],
-            ['sha256_rounds', 'hash:sha256_rounds', 'declarable-today', 'unmigrated-module'],
-        ],
-    },
-    {
         module: 'json',
         file: 'stdlib/signatures/json.cml',
         evidence: 'modules/json/module.cpp:71-90',
@@ -341,16 +322,6 @@ export const LEDGER = [
         entries: [
             ['unordered_foreach', ':mark/unordered_foreach_arr', 'declarable-today', 'misjudged-computed'],
             ['unordered_reduce', ':mark/unordered_reduce_arr', 'declarable-today', 'misjudged-computed'],
-        ],
-    },
-    {
-        module: 'process',
-        file: 'stdlib/signatures/process.cml',
-        evidence: 'modules/process/module.cpp:36-45',
-        entries: [
-            ['sleep', 'process:sleep', 'declarable-today', 'unmigrated-module'],
-            ['whoami', 'process:whoami', 'declarable-today', 'unmigrated-module'],
-            ['cpu_count', 'process:cpu_count', 'declarable-today', 'unmigrated-module'],
         ],
     },
     {
