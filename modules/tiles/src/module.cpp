@@ -22,6 +22,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/core/type/tree.h"
+#include "camel/execute/devices.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/function_call.h"
 #include "camel/profile/profile.h"
@@ -40,6 +41,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 
 namespace camel::tiles {
@@ -64,6 +66,42 @@ template <class F> slot_t checked(F &&body) {
             core::error::RuntimeDiag::RuntimeError,
             std::string("tiles: ") + e.what());
     }
+}
+
+/// The startup check of `--devices` (GPU plan 5.3): every ordinal the run named must be one this
+/// machine has. It runs before any graph executes, whether or not the program reaches a device
+/// operation, so a device that is not there is reported where it was asked for rather than at
+/// the first device call or not at all. The reason names what the machine has (how many devices,
+/// or why none can be asked for) and every other named ordinal that is missing.
+std::optional<execute::DeviceValidationFailure> validateCudaDevices() {
+    const auto &selection = execute::selectedDevices();
+    if (selection.cuda.empty()) {
+        // The core answers `--devices cpu` itself; this is the ordinary guard for a validator
+        // that is asked without a device list.
+        return std::nullopt;
+    }
+    const CudaDeviceAvailability devices = cudaDeviceAvailability(selection.cuda);
+    if (devices.missing.empty()) {
+        return std::nullopt;
+    }
+    std::string reason;
+    if (devices.count == 0) {
+        reason = devices.reason.empty() ? "this machine has no CUDA device" : devices.reason;
+    } else if (devices.count == 1) {
+        reason = "this machine has 1 CUDA device (ordinal 0)";
+    } else {
+        reason = "this machine has " + std::to_string(devices.count) +
+                 " CUDA devices (ordinals 0 to " + std::to_string(devices.count - 1) + ")";
+    }
+    if (devices.missing.size() > 1) {
+        reason += "; missing: ";
+        std::string separator;
+        for (const int ordinal : devices.missing) {
+            reason += separator + std::to_string(ordinal);
+            separator = ", ";
+        }
+    }
+    return execute::DeviceValidationFailure{devices.missing.front(), std::move(reason)};
 }
 
 Program prepare(ArgsView &with, ArgsView &norm, Context &ctx, bool staticRegion = false) {
@@ -725,6 +763,9 @@ class TilesModule final : public BuiltinModule {
                     {"device", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
                 });
         }
+        // The driver asks this before the first graph runs; the selection is the run's, and this
+        // module is the one that owns the CUDA ordinals it names.
+        execute::registerDeviceValidator("tiles", validateCudaDevices);
         loaded_ = true;
         return true;
     }

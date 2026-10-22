@@ -524,13 +524,17 @@ function loadVars() {
 function parseDiagnostics(text) {
     const diagnostics = []
     const clean = applyNormalizers(text || '', ['strip_ansi', 'normalize_newlines', 'trim_trailing_space'])
-    const pattern = /^(?:\([^)]+\))?(.*?):(\d+):(\d+): \[[^\]]+\]: .* \(name=([^,]+), code=(0x[0-9A-Fa-f]+)\)$/gm
+    // A diagnostic that belongs to the run's configuration rather than to a line of the
+    // program (a device named by --devices, for one) has no source position; the short format
+    // writes `?` there. It is still a diagnostic: name and code can be asserted, and line and
+    // column stay absent.
+    const pattern = /^(?:\([^)]+\))?(.*?):(\d+|\?):(\d+|\?): \[[^\]]+\]: .* \(name=([^,]+), code=(0x[0-9A-Fa-f]+)\)$/gm
     let match
     while ((match = pattern.exec(clean)) !== null) {
         diagnostics.push({
             path: match[1],
-            line: Number.parseInt(match[2], 10),
-            column: Number.parseInt(match[3], 10),
+            line: match[2] === '?' ? undefined : Number.parseInt(match[2], 10),
+            column: match[3] === '?' ? undefined : Number.parseInt(match[3], 10),
             name: match[4],
             code: match[5],
         })

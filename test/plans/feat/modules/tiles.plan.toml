@@ -432,16 +432,100 @@ name = "gpu_preference.missing_device"
 kind = "negative"
 case = "../../../cases/modules/tiles/gpu_fallback.cml"
 # A device named by --devices must be there: it is a requirement, not a preference. 63 is
-# outside any machine's list, so this needs no GPU and no driver; the report names the device
-# and the first use that wanted it (the `available()` call here).
+# outside any machine's list, so this needs no GPU. The check is the startup one: the report
+# no longer points at the `available()` call on line 16, because the program never reaches it.
 args = ["--devices", "63", "${case}", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
-expect_diagnostic_line = 16
-expect_diagnostic_column = 13
+expect_diagnostic_code = "0x04000070"
 expect_output_contains = ["CUDA device 63 was named by --devices but is not available"]
+expect_stdout_not_contains = ["false"]
 timeout_ms = 10000
+
+[[tests]]
+name = "device_startup.missing_zero"
+kind = "negative"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# --devices 0 on a machine with no CUDA device fails at startup even though this program never
+# asks for a device: before the check it printed `ran` and exited 0. CUDA_VISIBLE_DEVICES hides
+# the host's devices, so the case needs no GPU and runs the same on every machine.
+args = ["--devices", "0", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
+expect_diagnostic_code = "0x04000070"
+expect_output_contains = ["CUDA device 0 was named by --devices but is not available"]
+expect_stdout_not_contains = ["ran"]
+timeout_ms = 30000
+
+[[tests]]
+name = "device_startup.out_of_range"
+kind = "negative"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# An ordinal past the visible list: startup names 7, and still no program output.
+args = ["--devices", "7", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
+expect_diagnostic_code = "0x04000070"
+expect_output_contains = ["CUDA device 7 was named by --devices but is not available"]
+expect_stdout_not_contains = ["ran"]
+timeout_ms = 30000
+
+[[tests]]
+name = "device_startup.all_named"
+kind = "negative"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# Two ordinals, neither present: the check is not the first use's business, so it runs once at
+# startup. It names the first missing ordinal in the order written and lists every missing one.
+args = ["--devices", "0,1", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
+expect_diagnostic_code = "0x04000070"
+expect_output_contains = ["CUDA device 0 was named by --devices but is not available", "missing: 0, 1"]
+expect_stdout_not_contains = ["ran"]
+timeout_ms = 30000
+
+[[tests]]
+name = "device_startup.one_device_named_missing"
+kind = "negative"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# The user's case: one GPU on the machine, `--devices 1` asks for a second. The report says how
+# many there are, so the number in the message is the answer to "why not 1?".
+args = ["--devices", "1", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=0"]
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
+expect_diagnostic_code = "0x04000070"
+expect_output_contains = ["CUDA device 1 was named by --devices but is not available", "this machine has 1 CUDA device (ordinal 0)"]
+expect_stdout_not_contains = ["ran"]
+timeout_ms = 30000
+
+[[tests]]
+name = "device_startup.available"
+kind = "behavior"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# The in-range case: device 0 is there, so the startup check passes and the program runs.
+args = ["--devices", "0", "${case}", "std::nvm"]
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 0
+expect_stdout_exact = "ran\n"
+timeout_ms = 30000
+
+[[tests]]
+name = "device_startup.cpu_always_passes"
+kind = "behavior"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# --devices cpu asks for no device and is answered before any validator: it passes on every
+# machine, including one where CUDA_VISIBLE_DEVICES hides every device.
+args = ["--devices", "cpu", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "ran\n"
+timeout_ms = 30000
 
 [[tests]]
 name = "gpu_probe.once_per_process"

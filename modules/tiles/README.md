@@ -359,7 +359,9 @@ The device a run uses is given on the command line with `--devices`
 (`docs/cli.md`): without it the back end takes CUDA device 0, and the host runs
 the program when there is none; `--devices 2` requires device 2, and a missing
 one is `DeviceUnavailable` rather than a fallback; `--devices cpu` runs wholly on
-the host. `CAMEL_TILES_DEVICE`, which selected the ordinal before, is no longer
+the host. The named ordinals are checked once at startup, before any graph runs:
+a missing one is reported even when the program never reaches a device
+operation. `CAMEL_TILES_DEVICE`, which selected the ordinal before, is no longer
 read.
 
 - `CAMEL_TILES_NVRTC`: preferred NVRTC library path.
