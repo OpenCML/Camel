@@ -136,7 +136,7 @@ H49 第 5 步要放宽的地方；放宽时 §2.1 的类型判据已经就位。
   `tensor:cast_like` 也是“可导出”。没有改。
 - **CPU 的 `castLikeKernel`（`modules/tensor/ops/gradient_ops.cpp:160-166`）**：正确。同
   dtype 返回 `g`，不同 dtype 调 `k::cast` 转换。没有改。
-- **CPU 的 `cast`（`modules/tensor/ops/elementwise_ops.cpp:188-195` →
+- **CPU 的 `cast`（`modules/tensor/ops/elementwise_ops.cpp:188-195` → 
   `kernels/elementwise.cpp:564-577`）**：同 dtype 也会新建数组并 `memcpy`；语义上是恒等，
   只是多一次分配，不是错值。没有改，记在这里备查。
 - **`scheduler` 的结果投影与循环状态**（`schedule.cpp:191`、`loop_kernel.cpp:74-107`）：形状
