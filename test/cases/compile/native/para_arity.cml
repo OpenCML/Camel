@@ -1,0 +1,12 @@
+/**
+ * The declaration of `para:rendezvous` takes two ordinary arguments: a single one is refused at
+ * the call, and the overload the message lists is the declaration's (handover H19, step 10; H146).
+ */
+module para_arity
+
+import { rendezvous } from para
+
+func main(): int sync {
+    println(rendezvous(1))
+    return 0
+}

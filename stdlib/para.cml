@@ -1,0 +1,23 @@
+/**
+ * The unordered counterparts of the built-in `foreach` and `reduce`: the scheduler may run the
+ * calls of the function in any order and at the same time.
+ */
+
+// The declarations of the operators of the C++ module `modules/para` (design principles 6.4;
+// handover H19, step 10). This file is the one source of the fixed signatures; the C++ side keeps
+// the kernels, the executor, the operator traits and the resources. `rendezvous` names
+// `para:rendezvous` by convention, so no `#op` tag is needed. `unordered_foreach` and
+// `unordered_reduce` take the element type of their array argument as the type of the function
+// they call: that signature is computed by a `DynamicFuncTypeResolver` and stays in C++.
+// `stdlib/signatures/para.cml` keeps their reference entries, as `random` does with its computed
+// signatures (handover H115, H128).
+
+module para
+
+/// Blocks until `parties` calls are waiting at the one meeting point of the process, or until
+/// timeout_ms milliseconds have passed; returns how many calls met (after a timeout, how many
+/// were waiting). A tool for showing that calls really run at the same time.
+/// @effect waits for other calls
+/// @fails fault `RuntimeError` when parties is below 1 or timeout_ms is negative
+/// @example rendezvous(2, 1000)    // 2 when another call arrived in time
+export func rendezvous(parties: int, timeout_ms: int): int

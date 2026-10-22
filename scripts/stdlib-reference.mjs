@@ -167,7 +167,17 @@ const MODULES = [
         source: 're.cml',
         declaration: true,
     },
-    { name: 'para', title: '`para`: unordered iteration', kind: 'cpp' },
+    {
+        name: 'para',
+        title: '`para`: unordered iteration',
+        kind: 'cpp',
+        // The declaration of `rendezvous`, and, in the signature file, the reference entries of
+        // the two names whose signature C++ computes from their array argument (handover H115,
+        // H128, H146).
+        source: 'para.cml',
+        declaration: true,
+        computed: 'signatures/para.cml',
+    },
     { name: 'this', title: '`this`', kind: 'cpp' },
     { name: 'graph', title: '`graph`: a program as a value', kind: 'cpp' },
 ]
