@@ -56,6 +56,7 @@
 | [45_graph_module.md](45_graph_module.md) | The module `graph`: a program as a value. Handles, reads, transactions, function to function, passes written in Camel, and the differential tests against the C++ passes |
 | [46_rules.md](46_rules.md) | Rules (graph store step 8): `rule` as a pair of functions and the function that makes the Rule, the module `rewrite` (`rewrite`, `saturate`, `extract`, `check`), compiling a rule to the engine, the check a rule passes before it enters a library, and what is left open |
 | [47_declaration_syntax.md](47_declaration_syntax.md) | 声明写不出的签名（H168）：哪些签名没有写法、每处是文档已裁定的重载还是只有作者能答的问题（任意函数类型、变参、`PyObject<T>`、类型实参、类型变量谓词），各自的依据、解锁名字数与代价 |
+| [48_declaration_migration.md](48_declaration_migration.md) | 声明迁移的结果与边界（H186）：22 个模块的账本（声明 / 计算 / 阻塞 / 注册重载）、机制与检查器、剩余项与 owner、迁移下一个模块的七步配方；缺口分类见 47 |
 | [nn-autograd.md](nn-autograd.md) | `nn` / `tensor` 自动求导架构：`nn.apply_gradients` 的图合成、helper 调用与参数别名、公共 API、内置 VJP 覆盖范围与已知限制 |
 | [jit/README.md](jit/README.md) | FastVM JIT 实现级注解的目录索引 |
 | [jit/bytecode-to-asm.md](jit/bytecode-to-asm.md) | JIT 字节码到机器码翻译注解：槽模型、调用约定、逐条字节码经 MIR（V* 虚拟寄存器）与寄存器分配生成 x64 汇编 |
