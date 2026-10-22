@@ -28,6 +28,13 @@ import array
 // `tiles` needs no device to load: `inspect --ops` lists its operators, and the stdlib registry
 // tests hold them to the module's purity and signature declarations (handover H156).
 import tiles
+// `pyplot` loads the embedded Python interpreter (part of the build) and needs no display, no
+// external Python installation and no GPU to be listed; its operator's declaration is checked
+// against the registered one (handover H166).
+import pyplot
+// `python` is the same interpreter, now with the declarations of its six fixed operators; the
+// remaining five are computed signatures (handover H166).
+import python
 
 func main(): int {
     return 0

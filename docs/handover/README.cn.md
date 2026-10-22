@@ -323,6 +323,8 @@
 
 | H162 | **发布门禁重跑，并把门禁交回仓库**：在 `origin/develop` `87a5a1455` 的当前树上重跑快层 + slow 层 + 静态检查；slow 层按 H154 §3 的显式计划文件列表跑（不用 `-Tier all`，也不给目录），逐条分诊新红；新增 `npm run release-gate`（`scripts/release-gate.mjs`）：快层 + slow 文件列表 + 八项静态检查，把 19 个禁止计划 / 200 条按名字打印为未知，拒绝按 tier/目录选（exit 2 并点名 `agents/test.md`），校验构建戳，任一阶段失败即非零 | 无 | **已完成**（报告 reports/H162.md；`8439c65a7` 上快层 5067 条 5055 通过 / **0 失败** / 12 跳过、slow 层 **407/407**、静态 **8/8**；唯一新红 `compile_bench.smoke` 分诊为过期期望：H144 修的是用户模块计数，H141 的 `graph` 声明化让 `passes` 流水线按需编译的库模块变成 `rules`/`graph`/`math`，pin 没跟上，在 `788a179b2` 修好（含 `docs/technical/38_compile_pipeline_cost.md` 的 6→7、131→132）并单独复跑 1/1 通过；H147 的七条红（3 条摘要、`lsp.editing`、`compile_bench.smoke`、`dap_pipeline`、`dap_protocol`）现全绿，H147 §7 追加 gate re-run；19 个计划文件 / 200 条策略禁止用例仍未跑，如实记为未知；写作期间 `origin/develop` 前进到 `e82f41c99`（H151–H164 陆续合入），发布候选上要再跑一次 `npm run release-gate`；未打 tag、未 bump、未合 `main`、未改 `changes.log`） |
 
+| H166 | **H19 第 10 步：`pyplot`、`python` 的纯度注册与声明迁移**：H157 判定 7 个名字只差 `OperatorTable::declare`；本任务复现拒绝、定位代码路径、补齐注册并迁移 | 无 | **已完成**（报告 reports/H166.md；拒绝是 `NativeDeclarationNotLoaded` `0x0300017C`，发生在 `Builder::declareNativeOperator` 的纯度检查 `src/compile/gir/builder_modules.cpp:385`（执行器检查在 377 已通过），13 条纯度条目与 H157 的估算完全一致；两个模块各补 `declare`（全部 effectful），无声明时 `std::jgir` SHA-256 前后相同、`inspect --ops` 只有 purity 变化。`pyplot` 8 条声明进 `stdlib/pyplot.cml`（4 种元素类型 × 2 种参数个数，0 计算签名），`python` 6 条进 `stdlib/python.cml`、5 个名字（6 个 URI）留 C++ 记入 `stdlib/signatures/python.cml`（2 个 `PyObject<T>` 为待作者裁定的声明语法缺口，3 个变参按既有约定记计算签名）。树内 18 个声明模块、92 条计算签名、485 条重载、参考页 352 条；`--check`/`--verify-ops`/`--verify-doc` 绿，`smoke` + `native_declarations` + `stdlib_registry` + `cleanup` **118/118**；参考页与 AST 快照在主机重新生成，无新诊断码；提交 `721af86ff`、`cb2eebda7`、`556ca8c70`） |
+
 **按队列顺序连续做下去**（队列顺序以 `docs/roadmap.cn.md` 与依赖为准，不是本表的编号顺序）：一项完成、报告写好、合入 `develop` 后，接着做下一项，不必等检查意见；检查意见到了再回头处理。遇到需要设计判断的地方，按第 4 节写进报告的"待决问题"，跳过被挡住的部分继续做后面的。H2、H7 是语言表面的较大改动，规格已写全，但涉及的判断较多，宁可多问。
 
 前提是否满足，看 `docs/roadmap.cn.md` 第 1 节：地基项标为"已合并"即满足。**正在进行的地基工作**会改动这些区域，H1、H4 期间尽量不要大改它们，必要时小改并在报告里说明：遍与流水线（`src/execute/pass.cpp`）、优化遍与调度器（`src/passes/opt/`、`src/passes/sched/`）、装饰器与标注的解析和建图（`src/parse` 中的 `funcAnno`、`src/compile/gir/builder.cpp` 的装饰器部分）、图存储的许可列、字符串与 `Bytes`、参数树（`src/compile/gir/tree.cpp`）。
@@ -665,7 +667,7 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 | `tensor` | 计算签名（`OpDef`；参考页只收 `from_bytes`/`to_bytes`） | H19-plan §2；H19 计划批复 Q2(a) |
 | `graph` | 计算签名（resolver） | H19-plan §2；H19 计划批复 Q2(a) |
 | `rewrite` | 计算签名（resolver） | H19-plan §2；H19 计划批复 Q2(a) |
-| `nn`、`onnx`、`autodiff`、`pyplot`、`python` | 计算签名（动态/可选，H19 不动） | H19-plan §1.5、§2 |
+| `nn`、`onnx`、`autodiff`、`pyplot`、`python` | 计算签名（动态/可选，H19 不动）；**H166 校正**：`pyplot`、`python` 已拆出并迁移，见下面两行 | H19-plan §1.5、§2；H166 |
 
 - **H156 校正**：声明模块与计算签名的树内数字在主机上实测（`camel inspect --ops` 与 `node scripts/stdlib-declarations.mjs --check`）。H156 改动前是 **14 个声明模块、23 条计算签名**（`graph` 的 45 条声明与 6 条 `// dynamic func`、`math` 的 3 条计算条目都算在内），迁移 `tiles` 后是 **15 个声明模块、33 条计算签名、0 问题**（`--verify-ops` 399 条重载、参考页 275 条）。旧条目里的「13/17」是 H146 §6.1 的数；H153 在 Windows 上只复现了枚举、没跑 `camel inspect --ops`，本机没有构建。（依据 reports/H156.md §7、§8）
 - 同表 `graph` 行仍写「计算签名（resolver）」，与 H141 的 45 条声明不符；H156 只改 `tiles` 行与计数，没有替 H141 改它的行（依据 reports/H156.md §8）。
@@ -676,10 +678,11 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 | `onnx` | **1 可声明 / 0 计算**（`supported_operators`；`export_model` 阻塞：任意函数 + 结构示例类型） | reports/H157.md §4（H157 校正，依据 H157） |
 | `tiles` | **H156 已迁移**：`available`/`device` 进 `stdlib/tiles.cml`，其余 10 条留 C++；H157 开工时 H156 无提交、收尾时已有迁移，未计入 H157 合计 | reports/H156.md（H157 注，依据 H156） |
 | `autodiff` | **1 可声明 / 2 计算**（`stop_gradient`；`grad`/`with_grad` 的梯度函数类型由实参算） | reports/H157.md §5（H157 校正，依据 H157） |
-| `pyplot` | **1 可声明 / 0 计算**（`plot` 是固定签名；需先补 `plot` 的纯度，补后 8 条声明） | reports/H157.md §6.1（H157 校正，依据 H157） |
-| `python` | **6 可声明 / 0 计算**（6 个固定签名，需先补纯度；`py_wrap`/`py_unwrap` 的 `PyObject<T>` 与 3 个变参名字（4 个 URI）阻塞） | reports/H157.md §6.2（H157 校正，依据 H157） |
+| `pyplot` | **已迁移**：`plot` 的 8 条声明进 `stdlib/pyplot.cml`（4 种元素类型 × 2 种参数个数，0 条计算签名）；补上 `plot` 的纯度后装载成功 | reports/H166.md（**H166 校正**，依据 H166） |
+| `python` | **已迁移**：6 条固定签名进 `stdlib/python.cml`；5 个名字（6 个 URI：`py_call` 两条、`py_print`、`py_println`、`py_wrap`、`py_unwrap`）留 C++，记入 `stdlib/signatures/python.cml` | reports/H166.md（**H166 校正**，依据 H166） |
 
 - H157 计数口径：按**名字**计（不是注册条数；`python:py_call` 与 `python:py_call_kw` 只算一个名字）；「可声明」包含“签名可写、只差模块补 `OperatorTable::declare` 纯度”的 7 条（`pyplot` 1、`python` 6），其中**今天就能装载的 11 条**见 reports/H157.md §0。六个模块合计 47 个名字 = 18 可声明 + 20 计算签名 + 9 阻塞；`graph` 已由 H141 迁移，`tensor` 归 H151，`tiles` 归 H156，三者不在 47 里。原六模块合并行按模块拆成五行（`tiles` 归 H156），未删模块或依据（H157）。
+- **H166 校正**：`pyplot`、`python` 迁移后主机实测 **18 个声明模块、92 条计算签名、0 问题**（`--verify-ops` **485** 条重载、参考页 **352** 条）；H157 的「13 条纯度条目」「`plot` 补纯度后 8 条声明」「7 个名字只差纯度」三个数都成立。`pyplot` 与 `python` 的纯度全部按 effectful 注册，注册前后 `std::jgir` 逐字节相同、`inspect --ops` 只有 `purity` 字段变化；`python` 的 `py_wrap`/`py_unwrap`（`PyObject<T>`）作为声明语法缺口留给作者裁定，3 个变参名字继续记计算签名（依据 reports/H166.md §2–§6）。
 - 13 个声明模块、17 条计算签名与 `node scripts/stdlib-declarations.mjs --check` 的树内判定一致（H146 §6.1 记录“13 个声明模块、17 条计算签名、0 问题”；H153 在 Windows 上只复现了枚举，没跑 `camel inspect --ops`，本机没有构建）。
 - `para` 的两条不是阻塞：H146 §2.2 判定它们可以声明，但声明写不出“函数类型取自数组元素类型”，按约定留在计算签名（与 H115/H128 同形）；`ckpt` 才是机制边界上的阻塞（H140 §3）。
 - 第 5 步（`algo`→`array`）与第 6 步（`statistics`→`stats`）未做，所以两者仍是独立模块；`array`、`rules`、`tensor_definitions` 是 Camel 源码/定义库，没有 C++ 签名文件可迁。

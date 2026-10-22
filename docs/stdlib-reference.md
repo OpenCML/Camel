@@ -31,8 +31,8 @@ How to read an entry:
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
-Not in this reference: the tensor stack's own layers (`nn`, `autodiff`, `onnx`, `sim`), the Python
-bridge (`python`, `pyplot`) and the profiler (`perf`).
+Not in this reference: the tensor stack's own layers (`nn`, `autodiff`, `onnx`, `sim`)
+and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
@@ -58,6 +58,8 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [this](#this) | `import { ... } from this` | C++ | 1 |
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
 | [tiles](#tiles) | `import { ... } from tiles` | C++ | 12 |
+| [pyplot](#pyplot) | `import { ... } from pyplot` | C++ | 1 |
+| [python](#python) | `import { ... } from python` | C++ | 11 |
 
 <a id="built-in-functions"></a>
 
@@ -4450,3 +4452,209 @@ memory. Asking is a requirement, not a preference: with no device the call is a 
 - With effects: probes the driver.
 - Failure: fault `RuntimeError` when this build or this machine has no CUDA device; fault `DeviceUnavailable` when `--devices` names a device that is not there.
 - Example: `println(device())`
+
+<a id="pyplot"></a>
+
+## `pyplot`: draw an array
+
+Plots: draw an array of numbers with matplotlib, and fall back to an SVG file when matplotlib
+is not installed. The operator writes an image file and is never folded or dropped by a pass.
+
+The declarations of the operator of the C++ module `modules/pyplot` (design principles 6.4;
+handover H19, step 10; H166). This file is the one source of its fixed signature; the C++ side
+keeps the kernel, the executor, the operator traits and the purity.
+
+`plot` is one operator with one URI, over four element types and two arities: an array of
+`i32`, `int`, `f32` or `float`, with or without the name of the output file. A declaration
+cannot write "an array of one of these four" as one rule, and a `(typeas T)[]` declaration
+would accept a `string[]` that the kernel refuses, so the four types are written out for each
+arity: eight declarations of the one operator. A declaration cannot write the optional
+parameter `filename?: string` either, which is why the two arities are separate.
+
+#### `plot`
+
+```camel
+plot: (data: i32[]) => void
+plot: (data: int[]) => void
+plot: (data: f32[]) => void
+plot: (data: float[]) => void
+plot: (data: i32[], filename: string) => void
+plot: (data: int[], filename: string) => void
+plot: (data: f32[], filename: string) => void
+plot: (data: float[], filename: string) => void
+```
+
+Draws the values of `data` and writes the image to `filename` (`plot.png` when it is omitted).
+`data` may be an `i32`, `int`, `f32` or `float` array; an empty array is drawn as an empty
+plot. matplotlib is used when it is importable, and an SVG file is written otherwise.
+
+- With effects: writes an image file.
+- Example: `plot([1.0, 2.0, 3.0], "myplot.png")`
+
+<a id="python"></a>
+
+## `python`: the embedded interpreter
+
+The Python bridge: run code in the embedded interpreter, import modules, read attributes and
+dispose of the handles the calls return. Every operator observes or advances the interpreter,
+which no argument names, so every one has effects and is never folded, merged or dropped by a
+pass. A result of type `PyObject` is a handle into the interpreter, not a value of the program.
+
+The declarations of the operators of the C++ module `modules/python` (design principles 6.4;
+handover H19, step 10; H166). This file is the one source of the six fixed signatures; the C++
+side keeps the kernels, the executor, the operator traits and the purity.
+
+Five operators stay in C++ and are recorded as computed signatures in
+`stdlib/signatures/python.cml`:
+  - `py_call` (two URIs, `python:py_call` and `python:py_call_kw`) and `py_print`/`py_println`
+    are variadic: a declaration cannot say "any number of `PyObject` arguments";
+  - `py_wrap` and `py_unwrap` move a type through the module type `PyObject<T>`, and a type
+    variable cannot be an argument of a module type in a declaration
+    (`SemanticDiag::InvalidTypeArgument`).
+
+#### `py_call`
+
+```camel
+py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject
+```
+
+Calls the Python callable `fn` -- a `PyObject`, or a dotted name such as `"math.sqrt"` -- with
+the `PyObject` arguments `args`, and returns its result. Any number of arguments is accepted.
+
+- With effects: runs arbitrary Python code.
+- Failure: fault `RuntimeError` when the call raises.
+- Example: `py_call("math.sqrt", py_wrap(2.0))`
+
+#### `py_call`
+
+```camel
+py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject
+```
+
+Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
+arguments. Both collections are optional; every element is a `PyObject`.
+
+- With effects: not pure.
+- Example: `py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})`
+
+#### `py_print`
+
+```camel
+py_print: (...objs: PyObject[]) => PyObject?
+```
+
+Writes the printed form of every `PyObject` argument to Python's standard output, with no
+separator and no newline, and returns the last argument (or `void` when there is none).
+
+- With effects: writes the interpreter's standard output.
+- Example: `py_print(py_wrap(1), py_wrap(2))`
+
+#### `py_println`
+
+```camel
+py_println: (...objs: PyObject[]) => PyObject?
+```
+
+Writes the printed form of every `PyObject` argument and a newline, as `py_print` does, and
+returns the last argument (or `void` when there is none).
+
+- With effects: writes the interpreter's standard output.
+- Example: `py_println(py_eval("1 + 1"))`
+
+#### `py_wrap`
+
+```camel
+py_wrap: (x: T) => PyObject<T>
+```
+
+Wraps the value `x` in a new Python object, keeping its Camel type as the type argument of
+`PyObject<T>`.
+
+- With effects: creates an interpreter object.
+- Example: `py_wrap(2.0)` gives `a PyObject<float>`
+
+#### `py_unwrap`
+
+```camel
+py_unwrap: (obj: PyObject<T>) => T
+```
+
+Unwraps a Python object wrapped from a value of type `T` and returns that value. An object
+that did not come from `py_wrap` has no type argument and is refused when the call is compiled.
+
+- With effects: reads an interpreter object.
+- Example: `py_unwrap(py_wrap(2.0))` gives `2.0`
+
+#### `py_exec`
+
+```camel
+py_exec: (code: string) => PyObject
+```
+
+Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
+assignments stay visible to later calls, as in a Python session.
+
+- With effects: runs arbitrary Python code.
+- Failure: fault `RuntimeError` when the code raises.
+- Example: `py_exec("x = 1")`
+
+#### `py_eval`
+
+```camel
+py_eval: (expr: string) => PyObject
+```
+
+Evaluates the Python expression `expr` and returns its value as a `PyObject`.
+
+- With effects: runs arbitrary Python code.
+- Failure: fault `RuntimeError` when the expression raises.
+- Example: `py_eval("1 + 2 * 3")` gives `7`
+
+#### `py_run`
+
+```camel
+py_run: (file_path: string) => PyObject
+```
+
+Runs the Python script at `file_path` and returns its `None`.
+
+- With effects: runs arbitrary Python code.
+- Failure: fault `RuntimeError` when the file cannot be read or the script raises.
+- Example: `py_run("scripts/hello.py")`
+
+#### `py_attr`
+
+```camel
+py_attr: (obj: PyObject, attr: string) => PyObject
+```
+
+The attribute `attr` of the Python object `obj`; a dotted `attr` walks the chain. Asking may
+run a property or a descriptor, so the read is an effect.
+
+- With effects: reads interpreter state and may run Python code.
+- Failure: fault `RuntimeError` when the attribute does not exist.
+- Example: `py_attr(py_import("math"), "sqrt")`
+
+#### `py_import`
+
+```camel
+py_import: (module_name: string) => PyObject
+```
+
+Imports the Python module `module_name` and returns it. Importing runs the module body and
+records the module in `sys.modules`.
+
+- With effects: imports a module and runs its body.
+- Failure: fault `RuntimeError` when the import raises.
+- Example: `py_import("math")`
+
+#### `py_dispose`
+
+```camel
+py_dispose: (obj: PyObject) => void
+```
+
+Drops this program's reference to the Python object `obj`.
+
+- With effects: advances the interpreter's reference counts.
+- Example: `py_dispose(py_import("math"))`

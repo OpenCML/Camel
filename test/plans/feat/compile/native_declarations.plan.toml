@@ -697,3 +697,69 @@ case = "../../../cases/compile/native/tensor_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:11:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: Tensor) => Bytes"]
+# ---- The declarations of `pyplot` (handover H166) ----
+#
+# `pyplot:plot` has a fixed signature: four element types and two arities. The C++ module never
+# declared its purity, so a body-less declaration was refused by the loader; the module now
+# declares `plot` effectful and the declarations in stdlib/pyplot.cml are its one signature.
+# The calls are compile-only: `plot` writes an image file.
+
+[[tests]]
+name = "native.pyplot_declaration_import"
+desc = "`pyplot:plot` is declared for `i32`, `int`, `f32` and `float` arrays, with and without the output file name; the importer reads all eight declarations from `stdlib/pyplot.cml`, and the calls type-check without running."
+kind = "behavior"
+case = "../../../cases/compile/native/pyplot_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "native.pyplot_wrong_arity"
+desc = "`pyplot:plot` is declared with one or two ordinary arguments: a third is refused at the call, and the overloads the message lists are the declarations' two arities from `stdlib/pyplot.cml`."
+kind = "negative"
+case = "../../../cases/compile/native/pyplot_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_arity.cml:12:5", "argument types: <> (float[], string, int)", "<pyplot:plot>: (data: float[], filename: string) => void"]
+
+[[tests]]
+name = "native.pyplot_wrong_type"
+desc = "The first parameter of `pyplot:plot` is an array of numbers: a `string` is refused at the call, and the message lists the declarations' array forms from `stdlib/pyplot.cml`."
+kind = "negative"
+case = "../../../cases/compile/native/pyplot_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_type.cml:11:5", "argument types: <> (string)", "<pyplot:plot>: (data: float[]) => void"]
+# ---- The declarations of `python` (handover H166) ----
+#
+# Six of the eleven operators have fixed signatures and are declared in stdlib/python.cml; the
+# two variadic pairs (`py_call` with two URIs, `py_print`/`py_println`) and `py_wrap`/`py_unwrap`
+# stay computed in C++ and are recorded in stdlib/signatures/python.cml. The calls are
+# compile-only: they type-check against the declarations and are never run.
+
+[[tests]]
+name = "native.python_declaration_import"
+desc = "`python`'s six fixed operators are declared: `py_exec`, `py_eval`, `py_run`, `py_attr`, `py_import` and `py_dispose` type-check against `stdlib/python.cml`, and the case never runs them."
+kind = "behavior"
+case = "../../../cases/compile/native/python_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "native.python_wrong_arity"
+desc = "`python:py_exec` is declared with one ordinary argument: a second is refused at the call, and the overload the message lists is the declaration's `(code: string) => PyObject`."
+kind = "negative"
+case = "../../../cases/compile/native/python_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_arity.cml:11:5", "argument types: <> (string, string)", "<python:py_exec>: (code: string) => PyObject"]
+
+[[tests]]
+name = "native.python_wrong_type"
+desc = "`python:py_import` is declared with a `string`: an `int` is refused at the call, and the message lists the declaration's `(module_name: string) => PyObject`."
+kind = "negative"
+case = "../../../cases/compile/native/python_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_type.cml:11:5", "argument types: <> (int)", "<python:py_import>: (module_name: string) => PyObject"]

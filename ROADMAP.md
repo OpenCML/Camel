@@ -30,7 +30,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
   - 通用的随机程序生成器加差分测试，覆盖字符串、集合、闭包、高阶函数（现有生成器只覆盖三种程序形状）。（状态：已完成，见 `test/tools/progen`、`test/plans/feat/opt/progen.plan.toml`）
   - 把"保持效应顺序"收进图改写接口，提供不能绕过的保序替换原语。近期修复的静默算错集中在五类根因：效应顺序丢失、把被写的变量当成单一的值、分支臂、宏的操作数被提前内联、无界增长。（状态：部分完成——已有保序的节点替换 `replaceNode`（`src/passes/opt/generic/rewrite.h`）与保序内联 `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）；`GraphDraft` 上不保序的底层编辑仍可直接调用，并非不能绕过）
   - 统一的效应与别名分析，供各遍共用；分析结果的缓存与失效。（状态：未开始）
-  - `[定]` 给标准库各模块的算子补上纯度声明。（状态：部分完成——内建算子与 `algo`、`hash`、`fs`、`json`、`math`、`process`、`para`、`random`、`re`、`sim`、`statistics`、`str`、`env`、`this`、`time`、`tensor`、`nn`、`autodiff`、`onnx` 的每个算子都有声明，由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束（`camel inspect --ops` 可查）；还差 `python`、`pyplot` 两个模块，它们的算子没有声明，按有副作用处理）
+  - `[定]` 给标准库各模块的算子补上纯度声明。（状态：已完成——内建算子与 `algo`、`hash`、`fs`、`json`、`math`、`process`、`para`、`random`、`re`、`sim`、`statistics`、`str`、`env`、`this`、`time`、`tensor`、`nn`、`autodiff`、`onnx`、`pyplot`、`python` 的每个算子都有声明，由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束（`camel inspect --ops` 可查））
 - **图的容量** `[定]`：单张图 65,535 的上限不放宽。查清是哪个遍把子图压平到超限（已知案例：gru 的一步需要 100,533 个边表项），让它在容量内工作。（状态：部分完成——上限没有放宽，超限是带位置的 `RuntimeDiag::GraphTooLarge` 或导出时的拒绝（`test/plans/feat/opt/generic.plan.toml`）；已查明压平到超限的是 ONNX 导出时不设上限的内联与展开（`benchmarks/README.md`），但它还不能在容量内工作）
 - **下游工具链的适配**：导出器覆盖更多构造；与封闭语言近邻（Futhark、Dex、Relay 等）做同一批程序的实测对比。（状态：部分完成——导出能力见 `export_matrix.md`（106 个算子中 66 个前向算子、23 个梯度算子有 ONNX 下降）；与 Futhark、Dex、Relay 等的同批程序实测对比未做）
 - **论文**：稿件与证据在归档仓库中维护，不在本文档展开。（状态：未核实——稿件与证据不在本仓库中）
