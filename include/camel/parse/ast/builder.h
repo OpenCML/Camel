@@ -28,6 +28,16 @@
 
 namespace camel::parse::ast {
 
+/// The arguments of a call or a binding, as they are written: the positional ones, the named
+/// ones, and the first positional one written after a named one (`f(a: 1, 2)`), which the call
+/// refuses where it is built (design principles 4.4, handover H276). The parser keeps the two
+/// lists apart; the third field is the evidence that they were interleaved.
+struct ArgumentValues {
+    node_ptr_t data                   = nullptr;
+    node_ptr_t named                  = nullptr;
+    node_ptr_t positionalAfterNamed   = nullptr;
+};
+
 class Builder {
   public:
     Builder() = default;
@@ -138,6 +148,7 @@ class Builder {
     Value visitIndexValues(syntax::cst::IndexValues context);
     Value visitPairedValues(syntax::cst::PairedValues context);
     Value visitPairedParams(syntax::cst::PairedParams context);
+    Value visitStrayPositional(syntax::cst::StrayPositional context);
     Value visitArgumentList(syntax::cst::ArgumentList context);
     Value visitIndices(syntax::cst::Indices context);
     Value visitParentParams(syntax::cst::ParentParams context);

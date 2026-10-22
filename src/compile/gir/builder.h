@@ -470,9 +470,9 @@ class Builder {
     // one, and a call of it would be reported as a call of an incomplete function.
     std::unordered_set<const void *> failedBodies_;
 
-    // An argument of a call: its value node and the expression it was written as. A `with`
-    // argument may be written by name (`f<rounds: 8>`, design principles 4.4); the name is
-    // resolved against the callee when the call is bound (bindWithArguments).
+    // An argument of a call: its value node and the expression it was written as. An argument
+    // may be written by name (`f(1, by: 2)`, `f<rounds: 8>`, design principles 4.4); the name
+    // is resolved against the callee when the call is bound (bindArguments).
     struct Argument {
         node_handle_t node;
         GCT::node_ptr_t expr               = nullptr;
@@ -561,55 +561,60 @@ class Builder {
     // that may still say which function is meant (`apply(scale<2>, 1.5)`).
     std::unordered_map<node_handle_t, std::vector<camel::core::type::FunctionType *>>
         ambiguousBindings_;
-    // The default of a `with` parameter (design principles 4.4, handover H235): the constant a
-    // call fills in when it leaves the parameter out, and the expression it was written as
-    // (where a diagnostic about it points). Evaluated once, where the declaration is, and the
-    // same value goes into every call: a default is never evaluated at a call site, and it is
-    // not part of the function's type, so a function value made from the declaration does not
-    // carry it. Keyed by the declaration's graph (an instance for a generic declaration) or by
-    // the template of a generic declaration, and aligned with the `with` parameters.
-    struct WithDefaultValue {
+    // The default of a parameter (design principles 4.4, handover H235/H276): the constant a call
+    // fills in when it leaves the parameter out, and the expression it was written as (where a
+    // diagnostic about it points). Evaluated once, where the declaration is, and the same value
+    // goes into every call: a default is never evaluated at a call site, and it is not part of
+    // the function's type, so a function value made from the declaration does not carry it.
+    // Ordinary parameters and `with` parameters follow the same rule, each aligned with its own
+    // parameter list.
+    struct ParameterDefaultValue {
         data_ptr_t data;
         GCT::node_ptr_t expr;
     };
-    std::unordered_map<const void *, std::vector<std::optional<WithDefaultValue>>> withDefaults_;
+    struct DeclarationDefaults {
+        std::vector<std::optional<ParameterDefaultValue>> with;
+        std::vector<std::optional<ParameterDefaultValue>> norm;
+    };
+    // Keyed by the declaration's graph (an instance for a generic declaration) or by the
+    // template of a generic declaration.
+    std::unordered_map<const void *, DeclarationDefaults> defaults_;
     /// A function value made by explicit type arguments (`f::<int>`) is instantiated where it is
     /// written, so the call cannot reach the declaration's graph: the defaults are kept under
     /// the value here. A value that is then bound to a name carries no defaults, as any function
     /// value does (design principles 4.4).
-    std::unordered_map<node_handle_t, std::vector<std::optional<WithDefaultValue>>>
-        withDefaultsOfValue_;
+    std::unordered_map<node_handle_t, DeclarationDefaults> defaultsOfValue_;
     /// The static node that carries a declaration's default into a graph, so that every call in
     /// that graph which leaves the parameter out reads the one node: the value is computed once,
     /// at the declaration, not once per call. Keyed by the graph, then by the default's
-    /// expression (one per `with` parameter of a declaration).
-    std::unordered_map<const void *, std::unordered_map<const void *, node_handle_t>>
-        withDefaultNodes_;
+    /// expression (one per parameter of a declaration).
+    std::unordered_map<const void *, std::unordered_map<const void *, node_handle_t>> defaultNodes_;
     /// Evaluates the defaults `decl` writes and keeps them under `owner` (a graph or a generic
-    /// template). `parametersInScope` is false when the declaration's own `with` parameters are
-    /// not names of the scope (a declaration at a module's top level): a default that reads one
-    /// is then reported as not constant, not as an unknown name.
-    void evaluateWithDefaults(
+    /// template). `parametersInScope` is false when the declaration's own parameters are not
+    /// names of the scope (a declaration at a module's top level): a default that reads one is
+    /// then reported as not constant, not as an unknown name.
+    void evaluateDefaults(
         const GCT::node_ptr_t &decl, FunctionType *funcType, const void *owner,
         bool parametersInScope);
     /// The defaults of a callee, when the callee is one declaration: its graph, or the template
     /// of a generic declaration. Null for a function value, an operator, or an overload set.
-    const std::vector<std::optional<WithDefaultValue>> *withDefaultsOfCallee(
-        node_handle_t callee) const;
-    /// Binds the `with` arguments written at a call to the callee's parameters: a name to the
-    /// parameter it names, an omitted parameter to its default (design principles 4.4). Reports
-    /// an unknown name, a parameter given twice, and a parameter left without a value.
+    const std::vector<std::optional<ParameterDefaultValue>> *defaultsOfCallee(
+        node_handle_t callee, bool isWith) const;
+    /// Binds the arguments written at a call to the callee's parameters: a name to the parameter
+    /// it names, an omitted parameter to its default (design principles 4.4). Reports an unknown
+    /// name, a parameter given twice, and a parameter left without a value. `isWith` selects the
+    /// `with` parameters or the ordinary ones; the rule is one rule.
     ///
-    /// The list comes back in the declaration's order and as long as the declaration has
-    /// `with` parameters, which is the one order the call reads by index: `parameterOf(i)` in
-    /// the deferred typing, the edges, and the types the call builds from them. `signature` is
-    /// the callee's signature where the call knows it (the same one the caller computed): the
-    /// names are resolved against it, and its absence is the unknown-callee report. The types
-    /// are not filled here: they follow the nodes, in that same order, where the call builds
-    /// them once the deferred arguments have their nodes.
-    void bindWithArguments(
+    /// The list comes back in the declaration's order and as long as the declaration's parameter
+    /// list, which is the one order the call reads by index: `parameterOf(i)` in the deferred
+    /// typing, the edges, and the types the call builds from them. `signature` is the callee's
+    /// signature where the call knows it (the same one the caller computed): the names are
+    /// resolved against it, and its absence is the unknown-callee report. The types are not
+    /// filled here: they follow the nodes, in that same order, where the call builds them once
+    /// the deferred arguments have their nodes.
+    void bindArguments(
         std::vector<Argument> &inputs, node_handle_t callee, const GCT::node_ptr_t &call,
-        FunctionType *signature);
+        FunctionType *signature, bool isWith);
     // Variables: the nodes bound by `var` (declarations, `var` parameters, the ports that capture
     // them). Such a node does not hold a value but the variable's cell (TupleType::cell), which
     // is what a `var` parameter or a capture receives; a value is read out of it by `:var/get`

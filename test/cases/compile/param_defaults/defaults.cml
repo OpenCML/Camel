@@ -1,0 +1,54 @@
+/**
+ * The defaults of ordinary parameters, and ordinary arguments given by name (design principles
+ * 4.4, handover H276). The rule is the `with` rule: a default is a compile-time constant
+ * evaluated where the declaration is, and a call gives the parameters by position, or by name
+ * after the positional ones. The declaration's order is the one order: a name selects its
+ * parameter, wherever it was written.
+ */
+module param_defaults
+
+// The default is used when the call leaves the parameter out, and is overridden by a value.
+func add(x: int, y: int = 2): int {
+    return x + y
+}
+
+// Three parameters, two of them defaulted: a name can skip the one before it.
+func three(a: int, b: int = 10, c: int = 100): int {
+    return a + b + c
+}
+
+// The default is a constant expression computed where the declaration is: 2 + 3 = 5, not 5 at
+// each call.
+func scaled(x: int, by: int = 2 + 3): int {
+    return x * by
+}
+
+// A default may be a string or any other compile-time value.
+func greet(name: string, greeting: string = "hello"): string {
+    return greeting + " " + name
+}
+
+func main(): int sync {
+    // Omitted: the declaration's default.
+    println(add(1))
+    // Supplied by position: the argument wins.
+    println(add(1, 5))
+    // Both given by name, in an order the declaration does not have.
+    println(add(y: 7, x: 1))
+    // A name selects a non-adjacent parameter: `c` is the third, and `b` keeps its default.
+    println(three(1, c: 3))
+    // The middle one by name, the third by position is not legal; both by name is.
+    println(three(1, b: 2, c: 3))
+    // The middle one by position (the third falling back to its default).
+    println(three(1, 2))
+    // The default is the declaration's constant.
+    println(scaled(2))
+    // A defaulted string.
+    println(greet("you"))
+    println(greet("you", greeting: "hi"))
+    // The pipeline form is the same call: the receiver is the first argument, and a name
+    // written after it still selects its parameter.
+    println(1->three(c: 3))
+    println(1->add)
+    return 0
+}

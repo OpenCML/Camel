@@ -107,7 +107,26 @@ func hello(name: string) sync {      // no return value; a sync function body
 - The return type can be omitted and is inferred from the function body; a recursive function must write out its return type. When the body has no `return`, the value of the function is the value of the last statement of the body: that value when the statement is an expression with one, `void` otherwise. Note that the value of `println(x)` is `x` (so that `x->println->f` can go on), so `func main() sync { println('a') }` returns the string `'a'`, and the default pipeline writes the result of `main` to the output: the line appears twice. Declare the return type `: void`, or end with `return 0`.
 - A `sync` before the function body makes the function body a sync block; a `sync` before `func` is a function modifier. The two have different meanings ([4.3](04_execution_model.md#43-sync)).
 - A function can be declared at the module top level, in a namespace, or in a block (a local function). Functions can be mutually recursive, and need not be declared before use.
-- Parameter default values `b: int = 5` of ordinary parameters are reserved, not implemented (`SemanticDiag::FeatureNotSupported`); use overloading or `with` parameters. A `with` parameter may have a default ([7.4.2](#742-with-parameters)).
+- An ordinary parameter may write a default, and a call may give its ordinary arguments by position or by name. The rules are the `with` rules ([7.4.2](#742-with-parameters)):
+
+```cml
+func scale(x: int, by: int = 2, rounds: int = 1): int {
+    return x * by * rounds
+}
+
+func main(): int sync {
+    println(scale(3))                    // both defaults: 6
+    println(scale(3, 4))                 // by by position: 12
+    println(scale(3, rounds: 5))         // skip by, give rounds by name: 10
+    println(scale(3, by: 4, rounds: 5))  // both by name: 60
+    return 0
+}
+```
+
+- **A default is a compile-time constant expression**, evaluated once where the declaration is and filled into each call: it is not evaluated again at a call. So it cannot read a parameter of the same declaration (`ParamDefaultNotConstant`), nor be a value computed at run time; a type that does not fit is `ParamDefaultWrongType`.
+- **A parameter after one with a default must have a default too** (`ParamAfterDefault`), so that giving the parameters by position leaves no hole.
+- **A named argument comes after the positional ones**, spelled as in a struct literal: `scale(3, by: 4)`. A name that is not a parameter of the function is `ParamArgumentUnknown`, the same parameter given twice is `ParamArgumentDuplicate`, a parameter with no default left without a value is `ParamArgumentMissing`, and a positional argument after a named one is `ParamArgumentPositionalAfterNamed`. A name is resolved at the call, so the callee must be one known declaration: with several overloads, an ordinary argument given by name is `ParamArgumentCallee`.
+- **A function value carries no defaults**: after `let g = scale`, every parameter of `g` has to be given. A default belongs to the declaration, not to the type.
 
 ### 7.4.2 `with` parameters
 

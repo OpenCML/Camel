@@ -186,8 +186,19 @@ class ReservedExprLoad : public DataLoad {
     ReservedDataOp op() const { return op_; }
     const std::string geneCode() const override;
 
+    /// A positional argument written after a named one (`f(a: 1, 2)`) is refused where the call
+    /// is built (design principles 4.4): its origin is kept here, beside the argument list, so
+    /// the report can point at the argument that is out of place. Invalid for every other call.
+    void setPositionalAfterNamed(camel::source::origin_id_t origin) {
+        positionalAfterNamed_ = origin;
+    }
+    camel::source::origin_id_t positionalAfterNamed() const {
+        return positionalAfterNamed_;
+    }
+
   private:
     ReservedDataOp op_;
+    camel::source::origin_id_t positionalAfterNamed_ = camel::source::kInvalidOriginId;
 };
 
 class IfExprLoad : public DataLoad {
