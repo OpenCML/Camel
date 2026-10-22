@@ -320,6 +320,7 @@ dd4c782619481c22 ok stdlib/fs.cml
 81d50d711442ef6b ok stdlib/io.cml
 6020479adef220b0 ok stdlib/json.cml
 f234da727937674c ok stdlib/math.cml
+ebb8e94036f7abd2 ok stdlib/para.cml
 173076cd43673a6b ok stdlib/perf.cml
 e02c37ac47d43974 ok stdlib/random.cml
 a8be31ddfa495bf4 ok stdlib/re.cml
@@ -327,6 +328,7 @@ dc425a313698f684 ok stdlib/rules.cml
 94e8811447b8d758 ok stdlib/statistics.cml
 1c94db09ee5e88dd ok stdlib/str.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
+baf632062421ca18 ok stdlib/this.cml
 f26840bc30a7d5b4 ok stdlib/time.cml
 6451a1f63fbca717 ok stdlib/signatures/algo.cml
 985ec586154e41fa ok stdlib/signatures/ckpt.cml
@@ -335,11 +337,10 @@ f26840bc30a7d5b4 ok stdlib/time.cml
 7b8935da68ae2c54 ok stdlib/signatures/graph.cml
 b465908c31d8462a ok stdlib/signatures/hash.cml
 df6e9b39c870578c ok stdlib/signatures/json.cml
-288f3bfd8801992a ok stdlib/signatures/para.cml
+a6332d59a0e18fb4 ok stdlib/signatures/para.cml
 c80b5667335e55a8 ok stdlib/signatures/process.cml
 82c91a732389ed7e ok stdlib/signatures/random.cml
 a54b7af54487e60a ok stdlib/signatures/tensor.cml
-9f41932d10f1e591 ok stdlib/signatures/this.cml
 c2aadab066717442 ok test/cases/compile/format_string_bad_spec.cml
 482fb68058e35e2e ok test/cases/compile/format_string_checked.cml
 609c32d88d7854ba ok test/cases/compile/generic_explicit_arity_error.cml
@@ -822,6 +823,9 @@ ed888d8dffa4e54c ok test/cases/compile/native/math_type.cml
 c7fe2aa20c0b534e ok test/cases/compile/native/missing.cml
 627cb2d4cbd33d70 ok test/cases/compile/native/missing_module.cml
 90d9fbed9c717036 ok test/cases/compile/native/overlap.cml
+8274f3141730bc8e ok test/cases/compile/native/para_arity.cml
+d00f123e17d236e0 ok test/cases/compile/native/para_declaration_import.cml
+9af40b4ad54c50f1 ok test/cases/compile/native/para_type.cml
 9609b6bef7b8b772 ok test/cases/compile/native/private.cml
 a82e21d2c35eadf1 ok test/cases/compile/native/private_import.cml
 62b93c05ad87f26e ok test/cases/compile/native/private_module.cml
@@ -839,6 +843,9 @@ da06782ea199dba8 ok test/cases/compile/native/statistics_type.cml
 17dafaa791a6d02c ok test/cases/compile/native/str_arity.cml
 6b93edd476faf370 ok test/cases/compile/native/str_declaration_import.cml
 18c99cf48eb6a338 ok test/cases/compile/native/str_type.cml
+e756c17378ebe35e ok test/cases/compile/native/this_arity.cml
+df65117e41c58e9d ok test/cases/compile/native/this_declaration_import.cml
+8cfd0e8dade2b8ad ok test/cases/compile/native/this_type.cml
 2389c2385a587f4a ok test/cases/compile/native/time_arity.cml
 a7cf8ccc7e0b6e2a ok test/cases/compile/native/time_declaration_import.cml
 45db82606004ba7c ok test/cases/compile/native/time_type.cml

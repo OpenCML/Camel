@@ -1,0 +1,14 @@
+/**
+ * The declaration of `this:zen` is what an importer sees: no parameters and a `string` result,
+ * read from `stdlib/this.cml`, and the call reaches the C++ operator (handover H19, step 10;
+ * H146).
+ */
+module this_declaration_import
+
+import { zen } from this
+
+func main(): int sync {
+    let text: string = zen()
+    println(len(text) > 0)
+    return 0
+}
