@@ -300,6 +300,7 @@ export function plansForChanges(files) {
         const rule = rules.find((candidate) =>
             candidate.paths.some((prefix) => file === prefix || file.startsWith(prefix))
         )
+        let excluded = false
         if (rule) {
             for (const plan of rule.plans) {
                 // A layered plan is still a plan to run: it stays in `names` (so it becomes a
@@ -309,7 +310,7 @@ export function plansForChanges(files) {
                 if (plan.layer) layered.add(plan.name)
                 added = true
             }
-            const excluded = rule.except.some((entry) => file === entry || file.startsWith(entry))
+            excluded = rule.except.some((entry) => file === entry || file.startsWith(entry))
             if (rule.self && !excluded) {
                 if (file.endsWith('.plan.toml')) {
                     const target = path.join(REPO_ROOT, ...file.split('/'))
@@ -330,7 +331,9 @@ export function plansForChanges(files) {
             }
             if (added) matched = true
         }
-        if (!added) unmatched.push(file)
+        // A file the self rule deliberately excludes (a perf/GC/progen plan) is not a hole: the
+    // policy is that an ordinary change does not run it. Everything else is named.
+        if (!added && !excluded) unmatched.push(file)
     }
     if (layered.size > 0) matched = true
     return matched
