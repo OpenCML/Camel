@@ -31,11 +31,7 @@ How to read an entry:
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
-<<<<<<< HEAD
-Not in this reference: the `onnx` exporter and the profiler (`perf`).
-=======
 Not in this reference: the profiler (`perf`).
->>>>>>> handover/H179-onnx-decl
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
@@ -49,7 +45,6 @@ Not in this reference: the profiler (`perf`).
 | [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
 | [algo](#algo) | `import { ... } from algo` | C++ | 8 |
 | [random](#random) | `import { ... } from random` | C++ | 10 |
-| [sim](#sim) | `import { ... } from sim` | C++ | 2 |
 | [time](#time) | `import { ... } from time` | C++ | 3 |
 | [fs](#fs) | `import { ... } from fs` | C++ | 15 |
 | [io](#io) | `import { ... } from io` | C++ | 5 |
@@ -3136,39 +3131,6 @@ and does not change key; n = 0 gives [] and n = 1 gives [0].
 - Pure.
 - Failure: fault `InvalidArgument` when n is negative.
 - Example: `permutation(key(42), 4)` gives `[1, 0, 2, 3]`
-
-<a id="sim"></a>
-
-## `sim`: Monte Carlo kernels
-
-Their randomness is local to the call and seeded by their last argument, so a call depends on
-its arguments only and the module registers them pure (a pass may fold, merge or run them
-concurrently). They are benchmark-sized building blocks, not policy: `pi_hits` estimates pi,
-`asian_call_price` prices an Asian call under the module's fixed model.
-
-#### `pi_hits`
-
-```camel
-pi_hits: (samples: int, seed: int) => int
-```
-
-Draws `samples` points in the unit square and counts the ones inside the unit circle:
-`4 * pi_hits(samples, seed) / samples` estimates pi.
-
-- Pure.
-- Example: `pi_hits(1000000, 7)` gives `the count for that seed`
-
-#### `asian_call_price`
-
-```camel
-asian_call_price: (paths: int, steps: int, seed: int) => float
-```
-
-Prices an Asian call by Monte Carlo: `paths` simulated paths of `steps` steps under the
-module's fixed spot, strike, rate and volatility, averaged and discounted.
-
-- Pure.
-- Example: `asian_call_price(100000, 30, 7)` gives `the discounted mean payoff for that seed`
 
 <a id="time"></a>
 
