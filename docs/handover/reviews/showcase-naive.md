@@ -20,4 +20,4 @@
 通过：环境变量与 `set_num_threads` 去掉了，`sqrt(d_head)` 写出来了，参数个数有了名字，`one_hot` 等离散值的导数自动为零、不再需要 `stop_gradient`（设计原则 9.9）。还有两处：
 
 1. **形状写成了数字**：`type TokenStates = Tensor<f32, [8, 16, 64]>` 把 `batch`、`sequence`、`d_model` 的值抄进了类型——改一个超参数要改十几处类型，读者也看不出 8 是批大小。旗舰示例要的是 `f32[b, t, d]` 这样带维度名的形状。若原生多维数组的写法（H17 第 2、4 项）还没到，就用维度名的 `Tensor<f32, [b, t, d]>`（5.4 维度名在形参里自动绑定）；两者都写不出时，作为语言缺口在报告里写清，不用数字代替。
-2. **`blocks: (Block, Block)` 用元组**：层数是配置，应当是 `Block[]`，前向用 `loop h = x for b in m.blocks do …`。若数组的元素是带张量的结构体时有限制，写清是什么限制并作为缺口处理。`scalar_sqrt` 这个名字也说明 `sqrt` 在标量上的重载缺了，补上后用 `sqrt`。
+2. **`blocks: (Block, Block)` 用元组**：层数是配置，应当是 `Block[]`，前向用 `loop h = x for b in m.blocks do …`。若数组的元素是带张量的结构体时有限制，写清是什么限制并作为缺口处理。`import { sqrt as scalar_sqrt } from math` 说明 `tensor` 与 `math` 各导出一个 `sqrt`、导入时相撞（10.2）。数组与张量统一（H17）之后，逐元素的数学函数只应有一份：`math::sqrt` 对标量与数值数组都成立（数组上配 `#impl` 内核），`tensor` 不再另导出同名函数；`exp`、`log` 等同理。
