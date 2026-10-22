@@ -1,0 +1,3 @@
+This is not a compiled Camel module: it is a file the loader refuses (H130).
+A pass module that exists but cannot be loaded used to be reported as "pass not found",
+throwing away this failure; the pipeline now reports what the loader said.

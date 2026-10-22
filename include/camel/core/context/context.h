@@ -166,7 +166,6 @@ class Context : public std::enable_shared_from_this<Context> {
     std::pair<std::string, bool>
     findModuleUnder(const std::string &baseDir, const std::string &moduleName);
     std::string getModulePath(const std::string &moduleName);
-    bool moduleFileExists(const std::string &moduleName);
     module_ptr_t tryLoadModule(const std::string &moduleName);
     /// Load the module at a path that was resolved for it (a `.cmo` as a dynamic library, any
     /// other file as source). Kept apart from the lookup so a caller can name the directory the
@@ -389,6 +388,10 @@ class Context : public std::enable_shared_from_this<Context> {
 
     module_ptr_t
     importModule(const std::string &rawModuleName, const std::string &currentModuleName = "");
+    /// Whether a file for the module is found on the search paths, whether or not it can be
+    /// loaded: what tells a name with no module behind it from a module that is there and cannot
+    /// be used (H130).
+    bool moduleFileExists(const std::string &moduleName);
 
   private:
     void registerRuntimeGraphDebugInfo(const camel::runtime::Program *program);
