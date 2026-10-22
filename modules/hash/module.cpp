@@ -12,45 +12,26 @@
  * See the the MIT license for more details.
  */
 
+/*
+ * SHA-256 of text and of binary values. `sha256` is two operators (`hash:sha256_str` and
+ * `hash:sha256_bytes`), chosen by the argument type; `sha256_rounds` applies the digest to its own
+ * hexadecimal text a number of times.
+ *
+ * The signatures are written once, in the declaration module `stdlib/hash.cml` (design principles
+ * 6.4; handover H19, step 10; H163). What is left here is what only C++ knows: the kernels in
+ * operators.cpp, the executor that runs them, and the purity declared at load. The three
+ * operators are pure: they read no clock, no file and no generator.
+ */
+
 #include "module.h"
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator_traits.h"
-#include "camel/core/type.h"
-#include "camel/core/type/bytes.h"
-#include "camel/core/type/resolver.h"
 #include "executor.h"
-#include "operators.h"
 
 using namespace camel::core::context;
 using namespace camel::core::module;
-using namespace camel::core::type;
 
-namespace {
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "sha256",
-            {{"hash:sha256_str",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String())},
-             {"hash:sha256_bytes",
-              StaticFuncTypeResolver::create({}, {{BytesType::get(), false}}, Type::String())}}),
-        OperatorGroup::create(
-            "sha256_rounds",
-            {{"hash:sha256_rounds",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::String(), false}, {Type::Int64(), false}},
-                  Type::String())}}),
-    };
-    return groups;
-}
-} // namespace
-
-HashModule::HashModule(context_ptr_t ctx) : BuiltinModule("hash", ctx) {
-    for (const auto &group : getOperatorGroups())
-        exportEntity(group->name(), group);
-}
+HashModule::HashModule(context_ptr_t ctx) : BuiltinModule("hash", ctx) {}
 
 module_ptr_t HashModule::create(context_ptr_t ctx) { return std::make_shared<HashModule>(ctx); }
 

@@ -3,7 +3,7 @@
 本页是 H19「标准库重新规划」第 1 步（原生声明机制）和第 10 步（逐模块声明化）的结账页：迁移
 做成了什么、还剩什么、每一处归谁。逐名字的缺口分类与论证在
 [47 声明写不出的签名](47_declaration_syntax.md)；本页只给每模块的映射，不重复那份目录。步骤
-清单见 handover note ⟨b5ede1f⟩ (H19-plan)，旧的逐模块账本是
+清单见 [H19 计划](../handover/reports/H19-plan.md)，旧的逐模块账本是
 [handover/README.cn.md](../handover/README.cn.md) 的 H19 一节（H153 的快照，数字以本页为准）。
 
 下面所有数字都在 Linux 主机上用本分支的构建重跑过：`scripts/stdlib-declarations.mjs --check`、
@@ -35,15 +35,15 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 
 | 项 | 数字 | 来源 |
 |---|---:|---|
-| 声明模块（`stdlib/<m>.cml` + C++ `BuiltinModule`） | **23** | `--check` |
-| 声明名 / 声明条数（`export func`） | **178 / 293** | 读 22 个声明文件 |
+| 声明模块（`stdlib/<m>.cml` + C++ `BuiltinModule`） | **26** | `--check` |
+| 声明名 / 声明条数（`export func`） | **185 / 301** | 读 26 个声明文件 |
 | 计算名（C++ 算签名） | **112** | `--check` |
 | 其中因语言机制写不出（阻塞） | **14** | 本页 §2.4 的口径，逐条见表 |
-| 注册重载（22 个模块） | **413** | `inspect --ops`，293 条由声明回答、120 条由 C++ 计算 |
+| 注册重载（26 个模块） | **421** | `inspect --ops`，301 条由声明回答、120 条由 C++ 计算 |
 | 注册重载（参考页全部模块，含 `<builtin>`） | **524** | `--verify-ops`；`<builtin>` 占 96 条 |
-| `stdlib/signatures/` 的文件 | **16** | 10 个是已迁移模块的计算签名，6 个属于尚未迁移的模块 |
+| `stdlib/signatures/` 的文件 | **14** | 12 个是已迁移模块的计算签名，2 个（`ckpt`、`globals`）属于尚未迁移的模块 |
 
-这 23 个模块的 290 个公开名 = 178 个声明名 + 112 个计算名。12 个模块有计算签名、10 个没有；
+这 26 个模块的 297 个公开名 = 185 个声明名 + 112 个计算名。12 个模块有计算签名、14 个没有；
 5 个模块有阻塞名（`json`、`onnx`、`python`、`tensor`、`tiles`）。
 
 ### 2.2 逐模块
@@ -54,29 +54,33 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 
 | 模块 | 名字 | 声明（名/条） | 计算 | 阻塞（缺口） | 重载 | 依据 |
 |---|---:|---:|---:|---|---:|---|
-| `algo` | 8 | 1 / 6 | 7 | — | 13 | handover note ⟨8db99af⟩ (H135) |
-| `autodiff` | 3 | 1 / 1 | 2 | — | 3 | handover note ⟨65416a0⟩ (H165) |
-| `bytes` | 6 | 6 / 6 | 0 | — | 6 | handover note ⟨05673a8⟩ (H76) |
-| `fs` | 15 | 15 / 15 | 0 | — | 15 | handover note ⟨f7dfc75⟩ (H131) |
-| `graph` | 41 | 35 / 37 | 6 | — | 43 | handover note ⟨9a5ec0a⟩ (H141) |
-| `io` | 5 | 5 / 5 | 0 | — | 5 | handover note ⟨e6a16f6⟩ (H116) |
-| `json` | 12 | 10 / 35 | 2 | 2：`encode`（参数类型谓词）、`decode_as`（Q1） | 38 | handover note ⟨26cee7d⟩ (H115) §3；[47](47_declaration_syntax.md) §3.4 |
-| `math` | 44 | 41 / 96 | 3 | — | 99 | handover note ⟨fa3cccc⟩ (H113) |
-| `nn` | 19 | 1 / 1 | 18 | — | 21 | handover note ⟨65416a0⟩ (H165) |
-| `onnx` | 2 | 1 / 1 | 1 | 1：`export_model`（Q-F + Q3） | 2 | handover note ⟨a05a542⟩ (H179) §2.2；[47](47_declaration_syntax.md) §3.1、§3.5 |
-| `para` | 3 | 1 / 1 | 2 | — | 3 | handover note ⟨b083ff2⟩ (H146) §2.2 |
-| `pyplot` | 1 | 1 / 8 | 0 | — | 8 | handover note ⟨26e8cc0⟩ (H166) |
-| `python` | 11 | 6 / 6 | 5 | 5：`py_call`、`py_print`、`py_println`（Q-V）；`py_wrap`、`py_unwrap`（Q-M） | 12 | handover note ⟨cdf4d60⟩ (H157) §6.2；[47](47_declaration_syntax.md) §3.2、§3.3 |
-| `random` | 10 | 7 / 7 | 3 | — | 10 | handover note ⟨b3452d6⟩ (H128) |
-| `re` | 1 | 1 / 1 | 0 | — | 1 | handover note ⟨bd54bb4⟩ (H126) |
-| `sim` | 2 | 2 / 2 | 0 | — | 2 | handover note ⟨a05a542⟩ (H179) §3 |
-| `statistics` | 5 | 5 / 20 | 0 | — | 20 | handover note ⟨8db99af⟩ (H135) |
-| `str` | 14 | 14 / 14 | 0 | — | 14 | handover note ⟨73ce85e⟩ (H104) |
-| `tensor` | 64 | 11 / 15 | 53 | 1：`from_bytes`（Q1） | 72 | handover note ⟨8dd93b7⟩ (H151) §3.2；[47](47_declaration_syntax.md) §3.4 |
-| `this` | 1 | 1 / 1 | 0 | — | 1 | handover note ⟨b083ff2⟩ (H146) |
-| `tiles` | 12 | 2 / 2 | 10 | 5：`gpu`、`source`、`inspect`、`benchmark`、`regions`（Q-F；`gpu` 另有 Q3） | 12 | handover note ⟨0ebbbbd⟩ (H156)；handover note ⟨cdf4d60⟩ (H157) §7；[47](47_declaration_syntax.md) §3.1、§3.5 |
-| `time` | 3 | 3 / 3 | 0 | — | 3 | handover note ⟨55e0bf3⟩ (H133) |
-| **合计** | **290** | **178 / 293** | **112** | **14** | **413** | |
+| `algo` | 8 | 1 / 6 | 7 | — | 13 | [H135](../handover/reports/H135.md) |
+| `autodiff` | 3 | 1 / 1 | 2 | — | 3 | [H165](../handover/reports/H165.md) |
+| `bytes` | 6 | 6 / 6 | 0 | — | 6 | [H76](../handover/reports/H76.md) |
+| `env` | 2 | 2 / 2 | 0 | — | 2 | H163 |
+| `fs` | 15 | 15 / 15 | 0 | — | 15 | [H131](../handover/reports/H131.md) |
+| `graph` | 41 | 35 / 37 | 6 | — | 43 | [H141](../handover/reports/H141.md) |
+| `hash` | 2 | 2 / 3 | 0 | — | 3 | H163 |
+| `io` | 5 | 5 / 5 | 0 | — | 5 | [H116](../handover/reports/H116.md) |
+| `json` | 12 | 10 / 35 | 2 | 2：`encode`（参数类型谓词）、`decode_as`（Q1） | 38 | [H115](../handover/reports/H115.md) §3；[47](47_declaration_syntax.md) §3.4 |
+| `math` | 44 | 41 / 96 | 3 | — | 99 | [H113](../handover/reports/H113.md) |
+| `nn` | 19 | 1 / 1 | 18 | — | 21 | [H165](../handover/reports/H165.md) |
+| `onnx` | 2 | 1 / 1 | 1 | 1：`export_model`（Q-F + Q3） | 2 | [H179](../handover/reports/H179.md) §2.2；[47](47_declaration_syntax.md) §3.1、§3.5 |
+| `para` | 3 | 1 / 1 | 2 | — | 3 | [H146](../handover/reports/H146.md) §2.2 |
+| `process` | 3 | 3 / 3 | 0 | — | 3 | H163 |
+| `pyplot` | 1 | 1 / 8 | 0 | — | 8 | [H166](../handover/reports/H166.md) |
+| `python` | 11 | 6 / 6 | 5 | 5：`py_call`、`py_print`、`py_println`（Q-V）；`py_wrap`、`py_unwrap`（Q-M） | 12 | [H157](../handover/reports/H157.md) §6.2；[47](47_declaration_syntax.md) §3.2、§3.3 |
+| `random` | 10 | 7 / 7 | 3 | — | 10 | [H128](../handover/reports/H128.md) |
+| `re` | 1 | 1 / 1 | 0 | — | 1 | [H126](../handover/reports/H126.md) |
+| `rewrite` | 8 | 8 / 10 | 0 | — | 10 | H183 |
+| `sim` | 2 | 2 / 2 | 0 | — | 2 | [H179](../handover/reports/H179.md) §3 |
+| `statistics` | 5 | 5 / 20 | 0 | — | 20 | [H135](../handover/reports/H135.md) |
+| `str` | 14 | 14 / 14 | 0 | — | 14 | [H104](../handover/reports/H104.md) |
+| `tensor` | 64 | 11 / 15 | 53 | 1：`from_bytes`（Q1） | 72 | [H151](../handover/reports/H151.md) §3.2；[47](47_declaration_syntax.md) §3.4 |
+| `this` | 1 | 1 / 1 | 0 | — | 1 | [H146](../handover/reports/H146.md) |
+| `tiles` | 12 | 2 / 2 | 10 | 5：`gpu`、`source`、`inspect`、`benchmark`、`regions`（Q-F；`gpu` 另有 Q3） | 12 | [H156](../handover/reports/H156.md)；[H157](../handover/reports/H157.md) §7；[47](47_declaration_syntax.md) §3.1、§3.5 |
+| `time` | 3 | 3 / 3 | 0 | — | 3 | [H133](../handover/reports/H133.md) |
+| **合计** | **297** | **185 / 301** | **112** | **14** | **421** | |
 
 计算名里没有阻塞的 98 个，按约定是「结果类型或参数类型取自实参」的计算签名：`algo` 的 `sort`
 族、`autodiff` 的 `grad`/`with_grad`、`graph` 的 6 个、`math` 的 `sqrt`/`shl`/`shr`、`nn` 的
@@ -86,15 +90,15 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 
 ### 2.3 旧报告与树不一致时
 
-- handover note ⟨a05a542⟩ (H179) 记的是 **22 / 113 / 513**（声明模块 / 计算名 / 注册重载），
-  那是它自己基点上的数。今天的树是 **23 / 112 / 524**：`show` 已由
-  handover note ⟨ce4a81c⟩ (H175) 从计算签名改成两条声明，所以计算名少 1；重载数以今天
+- [H179](../handover/reports/H179.md) 记的是 **22 / 113 / 513**（声明模块 / 计算名 / 注册重载），
+  那是它自己基点上的数。今天的树是 **26 / 112 / 524**：`show` 已由
+  [H175](../handover/reports/H175.md) 从计算签名改成两条声明，所以计算名少 1；重载数以今天
   `--verify-ops` 打印的 524 为准，旧报告不能相加。
-- handover note ⟨9897519⟩ (H170) 的「16 个模块 / 87 条计算签名」、
-  handover note ⟨19465cf⟩ (H173) 的「18 / 92」、H165 的「18 / 107」、H175 的「20 / 111」
+- [H170](../handover/reports/H170.md) 的「16 个模块 / 87 条计算签名」、
+  [H173](../handover/reports/H173.md) 的「18 / 92」、H165 的「18 / 107」、H175 的「20 / 111」
   都是各自基点的快照。它们不能相加，也不能拿来当今天的总数。
-- handover note ⟨0ebbbbd⟩ (H156) 与 H19 账本把 `tiles` 的 10 个计算名全记作「计算、0 阻塞」；
-  handover note ⟨cdf4d60⟩ (H157) §7 按机制把它们中的 5 个记作阻塞，并写明这是分桶差异。
+- [H156](../handover/reports/H156.md) 与 H19 账本把 `tiles` 的 10 个计算名全记作「计算、0 阻塞」；
+  [H157](../handover/reports/H157.md) §7 按机制把它们中的 5 个记作阻塞，并写明这是分桶差异。
   本页按 §2.4 的口径记阻塞，`tiles` 的「计算」仍是 10。
 - H180 的「112 个计算名 / 124 条条目」是它基点上的数（`tensor` 54 名
   56 条，含 `show`）。今天同样是 112 / 124，但组成不同：`tensor` 是 53 名 55 条，加上 `onnx` 的
@@ -115,8 +119,7 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
   「没有执行器」。由实参算结果、但写法本身合法的名字算**计算**，不算阻塞；这是 H157 §0 与
   47 §4.3 的分法。
 - **重载** = `inspect --ops` 的 `OPERATOR` 行去掉 `::` 别名与 `__` 组后的条数。524 =
-  403（23 个声明模块）+ 15（`ckpt` 7、`env` 2、`hash` 3、`process` 3）+
-  96（`<builtin>`）。
+  421（26 个声明模块）+ 7（`ckpt`）+ 96（`<builtin>`）。
 
 ## 3. 机制
 
@@ -183,27 +186,25 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 
 | 项 | 缺口 | owner | 证据 |
 |---|---|---|---|
-| `ckpt` 的 5 个 intrinsic：`tree_map`、`tree_reduce`、`tree_unzip`、`tree_leaves`、`tree_paths` | 没有执行器：编译器在建图时按树形状展开，声明在加载时被 `NativeDeclarationNotLoaded` 拒绝；4 个的结果类型也写不出 | H51 第 2 项（用 Camel 重写 5 个 `tree_*` 并删掉核心里的硬编码展开，H108 选项 1）；不是声明语法 | handover note ⟨3597306⟩ (H140) §3.1；handover note ⟨2f3c6a8⟩ (H174) §2.1 |
-| `ckpt:save_tree` | Q3：`T` 的每个叶子都可存是一条谓词，不是类型；写成声明会丢掉编译期拒绝，故障退到运行期 | 作者（H148 Q3） | handover note ⟨3597306⟩ (H140) §3.2；handover note ⟨2f3c6a8⟩ (H174) §2.2；[47](47_declaration_syntax.md) §3.5 |
-| `ckpt:load_tree` | Q1：结果类型取自 `::<T>` 或期望类型，声明看不见；还叠加 Q3 的叶子谓词 | 作者（H148 Q1） | handover note ⟨3597306⟩ (H140) §3.3；handover note ⟨2f3c6a8⟩ (H174) §2.3；[47](47_declaration_syntax.md) §3.4 |
-| `onnx:export_model` | Q-F：第一个参数是任意函数类型；Q3：`example` 必须是该函数的参数树。写一个具体实例会拒绝合法调用、又接受形状不对的 `example`，等于伪造签名 | 作者（Q-F） | handover note ⟨a05a542⟩ (H179) §2.2；[47](47_declaration_syntax.md) §3.1、§3.5 |
-| `graph` 的 `__neq__` | `!=` 不能单独声明：它由 `==` 的重载给出，而编译器只否定 Camel 的 `==`，不否定原生组 | 语言设计（设计原则 4.3），无动作；检查器的唯一例外 | handover note ⟨9897519⟩ (H170) §3.4；`modules/graph/module.cpp` |
-| 保留组 `__rule`、`__rule_when`、`__analysis` | 这三个组没有可调用的 Camel 名，却是 `rewrite` 必须导出的；`--check` 目前只豁免 `__neq__`，所以 `rewrite` 的 8 个可声明名字不能迁 | 作者 / 检查器决定（是否为每个保留组写一条带理由的例外），然后才是迁移任务 | `stdlib/signatures/rewrite.cml` 的头注释；`modules/rewrite/module.cpp`；handover note ⟨cdf4d60⟩ (H157) §2 |
+| `ckpt` 的 5 个 intrinsic：`tree_map`、`tree_reduce`、`tree_unzip`、`tree_leaves`、`tree_paths` | 没有执行器：编译器在建图时按树形状展开，声明在加载时被 `NativeDeclarationNotLoaded` 拒绝；4 个的结果类型也写不出 | H51 第 2 项（用 Camel 重写 5 个 `tree_*` 并删掉核心里的硬编码展开，H108 选项 1）；不是声明语法 | [H140](../handover/reports/H140.md) §3.1；[H174](../handover/reports/H174.md) §2.1 |
+| `ckpt:save_tree` | Q3：`T` 的每个叶子都可存是一条谓词，不是类型；写成声明会丢掉编译期拒绝，故障退到运行期 | 作者（H148 Q3） | [H140](../handover/reports/H140.md) §3.2；[H174](../handover/reports/H174.md) §2.2；[47](47_declaration_syntax.md) §3.5 |
+| `ckpt:load_tree` | Q1：结果类型取自 `::<T>` 或期望类型，声明看不见；还叠加 Q3 的叶子谓词 | 作者（H148 Q1） | [H140](../handover/reports/H140.md) §3.3；[H174](../handover/reports/H174.md) §2.3；[47](47_declaration_syntax.md) §3.4 |
+| `onnx:export_model` | Q-F：第一个参数是任意函数类型；Q3：`example` 必须是该函数的参数树。写一个具体实例会拒绝合法调用、又接受形状不对的 `example`，等于伪造签名 | 作者（Q-F） | [H179](../handover/reports/H179.md) §2.2；[47](47_declaration_syntax.md) §3.1、§3.5 |
+| `graph` 的 `__neq__` | `!=` 不能单独声明：它由 `==` 的重载给出，而编译器只否定 Camel 的 `==`，不否定原生组 | 语言设计（设计原则 4.3），无动作；检查器的唯一例外 | [H170](../handover/reports/H170.md) §3.4；`modules/graph/module.cpp` |
+| 保留组 `__rule`、`__rule_when`、`__analysis` | 这三个组没有可调用的 Camel 名，却是 `rewrite` 必须导出的；检查器已把三个保留组连同 `__neq__` 一起带理由豁免，`rewrite` 的 8 个可声明名字已在 H183 迁移，三个保留组仍留在 C++ | 已解决（H183）：保留组不进声明，检查器逐条列明理由 | `scripts/stdlib-declarations.mjs`；`modules/rewrite/module.cpp`；[H157](../handover/reports/H157.md) §2 |
 
 ### 4.2 不是机制边界，但还没迁
 
 | 项 | 状态 | owner | 证据 |
 |---|---|---|---|
-| `env`（2 名 2 条）、`process`（3 名 3 条）、`hash`（2 名 3 条） | 固定签名，参考文件仍在 `stdlib/signatures/`；没有 `stdlib/<m>.cml`。没有机制缺口 | H19 第 10 步的剩余批次 | handover note ⟨b5ede1f⟩ (H19-plan) §0.1；handover note ⟨26cee7d⟩ (H115) §10 |
-| `rewrite`（8 个可声明名字，参考文件里 10 条声明） | 声明已经写在 `stdlib/signatures/rewrite.cml`，但没有编译：3 个保留组没有 Camel 名（见 §4.1） | 先决定保留组的例外，再做迁移 | handover note ⟨cdf4d60⟩ (H157) §2 |
-| `globals`（50 名 96 条） | 语言全局，`BuiltinModule("")`、不可导入；不是模块，没有声明宿主 | 作者（H141 的调查，未裁定） | handover note ⟨9a5ec0a⟩ (H141) |
+| `globals`（50 名 96 条） | 语言全局，`BuiltinModule("")`、不可导入；不是模块，没有声明宿主 | 作者（H141 的调查，未裁定） | [H141](../handover/reports/H141.md) |
 | `math` / `graph` 的内联计算签名 | 记法问题，不是能力问题 | H180 | 本页 §3.4 |
-| `tensor` 的 `range`、`sum`、`mean` | 轴形式与全量形式共用一个名字，拆成两条声明会违反「一个名字一处」；47 §4.2 把它记作策略，不是缺口 | 作者若愿意放宽「一个名字一处」 | handover note ⟨8dd93b7⟩ (H151) §3.4；[47](47_declaration_syntax.md) §4.2 |
+| `tensor` 的 `range`、`sum`、`mean` | 轴形式与全量形式共用一个名字，拆成两条声明会违反「一个名字一处」；47 §4.2 把它记作策略，不是缺口 | 作者若愿意放宽「一个名字一处」 | [H151](../handover/reports/H151.md) §3.4；[47](47_declaration_syntax.md) §4.2 |
 
 ### 4.3 解锁上限
 
 把 Q1 与 Q3 都答完，声明路线只能解锁 `save_tree` 与 `load_tree`，`ckpt` 仍是 2/7；5 个 intrinsic
-缺的不是声明语法，是执行器与展开器（handover note ⟨2f3c6a8⟩ (H174) §0）。所以 `ckpt` 的
+缺的不是声明语法，是执行器与展开器（[H174](../handover/reports/H174.md) §0）。所以 `ckpt` 的
 「阻塞」状态不会因为声明机制的一次扩展而消失，得先做 H51 第 2 项。
 
 ## 5. 迁移下一个模块：七步
@@ -226,16 +227,22 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 6. **过检查器。** `node scripts/stdlib-declarations.mjs --check` 与
    `node scripts/stdlib-reference.mjs --verify-ops` 都必须 0 问题；`--check` 的五条就是完成的
    定义（§3.5）。遇到没有 Camel 名的保留组，先加一条带理由的例外，不要把它硬写进声明。
-7. **补用例与快照。** 在 `test/cases/compile/native/` 加导入、错元数、错类型三条；更新 AST
-   快照与 `registry_all.cml` 的注册行；在 Linux 主机上跑 `feat/modules` 与 `smoke`
-   （`camel-remote.ps1 -Jobs 8`），不在工作站构建。
+7. **补用例与快照。** 在 `test/cases/compile/native/` 加导入、错元数、错类型三条；更新
+   `registry_all.cml` 的注册行；用例只加在 `compile/native` 时 AST 快照不动（H188 把快照限定为
+   `test/cases/parse` 与探针），仍要在主机上跑一次 `snapshot --update` 确认它没变；在 Linux 主机上跑
+   `feat/modules` 与 `smoke`（`camel-remote.ps1 -Jobs 8`），不在工作站构建。
 
 ## 6. 复核
 
 | 命令 | 今天打印 |
 |---|---|
-| `node scripts/stdlib-declarations.mjs --check` | `23 declaration module(s), 112 computed signature(s) ... 0 problem(s)`，并确认 `522 registered operator overloads` |
+| `node scripts/stdlib-declarations.mjs --check` | `26 declaration module(s), 112 computed signature(s) ... 0 problem(s)`，并确认 `524 registered operator overloads` |
 | `node scripts/stdlib-reference.mjs --verify-ops` | `the declarations agree with the 524 registered operator overloads` |
-| `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | 354 个公开名（其中 `<builtin>` 50 个）/ 522 条公开重载（其中 `<builtin>` 96 条），另含 `__` 组与 `::` 别名 |
+| `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | 354 个公开名 / 524 条公开重载（其中 `<builtin>` 96 条），另含 `__` 组与 `::` 别名 |
 | `node scripts/check-doc-counts.mjs` | `no stale count in ...` |
 | `node scripts/check-doc-links.mjs --default-roots` | `no broken links in ...` |
+
+`feat/modules` 里 `pass_module_that_does_not_compile` 与
+`pass_module_error_is_a_secondary_location` 在基点 `0d0a3033d` 上就是红的（干净构建，指纹
+`befde805a916`）：H181 的 `failIfModuleErrors` 在 run 路径先报了 pass 模块的语法错误，没有走到
+`InvalidPassParameter` 的包装。两条红与本页的声明迁移无关，留给 H181 的 owner。

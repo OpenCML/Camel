@@ -13,34 +13,28 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
+ */
+
+/*
+ * The environment of the process: the value of a variable and the current working directory.
+ *
+ * The signatures are written once, in the declaration module `stdlib/env.cml` (design principles
+ * 6.4; handover H19, step 10; H163). What is left here is what only C++ knows: the kernels in
+ * operators.cpp, the executor that runs them, and the operator traits declared at load -- the
+ * purity and the `env` resource both names read.
  */
 
 #include "module.h"
 #include "camel/core/context/context.h"
-#include "camel/core/operator.h"
-#include "camel/core/type/resolver.h"
 #include "camel/core/operator_traits.h"
 #include "executor.h"
 
 using namespace camel::core::context;
 using namespace camel::core::module;
-using namespace camel::core::type;
 
-EnvModule::EnvModule(context_ptr_t ctx) : BuiltinModule("env", ctx) {
-    exportEntity(
-        "get_env",
-        OperatorGroup::create(
-            "get_env",
-            {{"env:get_env",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String())}}));
-    exportEntity(
-        "get_cwd",
-        OperatorGroup::create(
-            "get_cwd",
-            {{"env:get_cwd", StaticFuncTypeResolver::create({}, {}, Type::String())}}));
-}
+EnvModule::EnvModule(context_ptr_t ctx) : BuiltinModule("env", ctx) {}
 
 module_ptr_t EnvModule::create(context_ptr_t ctx) { return std::make_shared<EnvModule>(ctx); }
 

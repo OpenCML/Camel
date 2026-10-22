@@ -1,0 +1,13 @@
+/**
+ * An integer where the declaration of `env:get_env` says `string`: the call is refused at the
+ * declaration's type, and the message prints the declaration's own parameter name (`name`) --
+ * the one source is `stdlib/env.cml`, not the C++ module (handover H163).
+ */
+module env_type
+
+import { get_env } from env
+
+func main(): int sync {
+    println(get_env(42))
+    return 0
+}

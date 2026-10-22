@@ -167,8 +167,24 @@ const MODULES = [
         source: 'io.cml',
         declaration: true,
     },
-    { name: 'process', title: '`process`: the process and the machine', kind: 'cpp' },
-    { name: 'env', title: '`env`: environment', kind: 'cpp' },
+    {
+        name: 'process',
+        title: '`process`: the process and the machine',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles (H19;
+        // H163). `exit` is not a group of this module and is not declared here.
+        source: 'process.cml',
+        declaration: true,
+    },
+    {
+        name: 'env',
+        title: '`env`: environment',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles (H19;
+        // H163).
+        source: 'env.cml',
+        declaration: true,
+    },
     {
         name: 'json',
         title: '`json`',
@@ -182,7 +198,15 @@ const MODULES = [
         declaration: true,
         computed: 'signatures/json.cml',
     },
-    { name: 'hash', title: '`hash`', kind: 'cpp' },
+    {
+        name: 'hash',
+        title: '`hash`',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles (H19;
+        // H163). `sha256` is two declarations with two `#op` URIs.
+        source: 'hash.cml',
+        declaration: true,
+    },
     {
         name: 're',
         title: '`re`: regular expressions',

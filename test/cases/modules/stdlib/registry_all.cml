@@ -6,6 +6,8 @@ module registry_all
 
 import algo
 import bytes
+// `hash` and `env` are declaration modules (`stdlib/hash.cml`, `stdlib/env.cml`): `hash` is pure,
+// and `env` keeps its `env` resource and its effects in C++ (handover H163).
 import hash
 import env
 import fs
@@ -13,6 +15,8 @@ import graph
 import io
 import json
 import math
+// `process` is a declaration module too (`stdlib/process.cml`); it keeps the `clock`/`env`
+// resources and its effects in C++, and `exit` stays the built-in operator (handover H163).
 import process
 import para
 import random

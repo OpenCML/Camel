@@ -1004,3 +1004,92 @@ case = "../../../cases/compile/native/rule_reader_type.cml"
 args = ["check", "${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rule_reader_type.cml:11:24", "argument types: <> (int)", "<rewrite:consts>: (r: Rule) => int"]
+
+# H163: `env`, `process` and `hash` are declaration modules now (`stdlib/env.cml`,
+# `stdlib/process.cml`, `stdlib/hash.cml`). `env` and `process` keep their resources and their
+# effects in C++; `hash` is pure, and `sha256` is two declarations with two `#op` URIs. Each
+# module has the three cases the migration adds: the importer sees the declared types, a wrong
+# arity and a wrong type are refused at the call with the declaration's own signature in the
+# message.
+
+[[tests]]
+name = "native.env_declaration_import"
+desc = "`env`'s declarations are what an importer sees: `get_env` takes the declared `string` name and `get_cwd` takes nothing, both answer the declared `string`, and an unset variable is the declared empty string. Both calls reach the C++ kernels and stay effectful: they run in a `sync` block."
+kind = "behavior"
+case = "../../../cases/compile/native/env_declaration_import.cml"
+envs = ["H163_ENV_VALUE=declared"]
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "declared\n\ntrue\n"
+
+[[tests]]
+name = "native.env_wrong_arity"
+desc = "`env:get_env` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's `(name: string) => string` — `stdlib/env.cml`, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/env_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "env_arity.cml:10:20", "argument types: <> (string, string)", "<env:get_env>: (name: string) => string"]
+
+[[tests]]
+name = "native.env_wrong_type"
+desc = "The parameter of `env:get_env` is the declaration's `string`: an `int` there is refused at the call, and the signature in the message has the parameter name the declaration gave it (`name`) — `stdlib/env.cml`, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/env_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "env_type.cml:11:20", "argument types: <> (int)", "<env:get_env>: (name: string) => string"]
+
+[[tests]]
+name = "native.process_declaration_import"
+desc = "`process`'s declarations are what an importer sees: `sleep` takes the declared `int` and answers nothing, `whoami` and `cpu_count` take nothing and answer the declared `string` and `int`. Every call reaches the C++ kernels, and all three stay effectful (they run in a `sync` block)."
+kind = "behavior"
+case = "../../../cases/compile/native/process_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\n"
+
+[[tests]]
+name = "native.process_wrong_arity"
+desc = "`process:sleep` is declared with one ordinary argument: none is refused at the call. The message lists the built-in's `(int) => void` — `sleep` is also built in — and the declaration's `(milliseconds: int) => void` from `stdlib/process.cml`."
+kind = "negative"
+case = "../../../cases/compile/native/process_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_arity.cml:10:5", "argument types: <> ()", "<process:sleep>: (milliseconds: int) => void"]
+
+[[tests]]
+name = "native.process_wrong_type"
+desc = "The parameter of `process:sleep` is the declaration's `int`: a `string` there is refused at the call. The message lists the built-in's `(int) => void` and the declaration's `(milliseconds: int) => void`, whose parameter name comes from `stdlib/process.cml`."
+kind = "negative"
+case = "../../../cases/compile/native/process_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_type.cml:11:5", "argument types: <> (string)", "<process:sleep>: (milliseconds: int) => void"]
+
+[[tests]]
+name = "native.hash_declaration_import"
+desc = "`hash`'s declarations are what an importer sees: `sha256` accepts a `string` and a `Bytes` value (two declarations with `hash:sha256_str` and `hash:sha256_bytes`), `sha256_rounds` takes the declared `string` and `int`, and every call reaches the C++ kernel and prints the declared `string`."
+kind = "behavior"
+case = "../../../cases/compile/native/hash_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\ntrue\ntrue\n"
+
+[[tests]]
+name = "native.hash_wrong_arity"
+desc = "Both declarations of `hash:sha256` take one ordinary argument: a second one is refused at the call, and the overloads the message lists are the two declarations, under the two operator URIs the `#op` tags name (`hash:sha256_str`, `hash:sha256_bytes`) — `stdlib/hash.cml`, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/hash_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_arity.cml:10:19", "argument types: <> (string, string)", "<hash:sha256_str>: (s: string) => string", "<hash:sha256_bytes>: (s: Bytes) => string"]
+
+[[tests]]
+name = "native.hash_wrong_type"
+desc = "Neither declaration of `hash:sha256` accepts an `int`: the call is refused against both, and the signatures in the message carry the parameter name the declarations gave (`s`) under the two operator URIs — `stdlib/hash.cml`, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/hash_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_type.cml:11:19", "argument types: <> (int)", "<hash:sha256_str>: (s: string) => string", "<hash:sha256_bytes>: (s: Bytes) => string"]

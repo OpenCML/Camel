@@ -1,0 +1,13 @@
+/**
+ * A string where the declaration of `process:sleep` says `int`: the call is refused at the
+ * declaration's type, and the message prints the declaration's own parameter name
+ * (`milliseconds`) -- the one source is `stdlib/process.cml`, not the C++ module (handover H163).
+ */
+module process_type
+
+import { sleep } from process
+
+func main(): int sync {
+    sleep('later')
+    return 0
+}
