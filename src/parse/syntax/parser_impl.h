@@ -246,6 +246,13 @@ class ParserImpl {
     void parseTypeDecl();
     /// typeDecl after the tags and decorators that may precede it; `m` marks where it began.
     void parseTypeDeclRest(size_t m);
+    /// At `resource` naming a resource declaration (offset `n`).
+    bool atResourceDecl(uint32_t n) const;
+    void parseResourceDecl();
+    /// resourceClause : 'uses' identRef (',' identRef)* | 'pure'
+    /// The clause after a function's result type (design effects plan 3.1): the resources a call
+    /// touches. `uses` and `pure` are contextual keywords.
+    void parseResourceClause();
     void parseRetStmt();
 
     void parseModifiers();
@@ -385,6 +392,7 @@ class ParserImpl {
     void parseKeyInterType();
     void parseTypeUnit();
     void parseArrayType();
+    void parseArrayDim();
     void parseSpecType();
     void parsePrimaryType();
     void parseStructType();

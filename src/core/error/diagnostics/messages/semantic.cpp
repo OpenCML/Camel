@@ -372,9 +372,34 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::TypeVariableRedeclared,
             {
                 "TypeVariableRedeclared",
-                "'typeas {0}' cannot bind '{0}': the name already denotes a type here.",
-                "Write 'typeas' only at the first occurrence of a type variable and plain "
-                "'{0}' afterwards, or choose a name that is not a type in scope.",
+                "'typeas {0}' cannot bind '{0}': this signature already binds a type variable "
+                "'{0}'.",
+                "A type variable is bound once: write 'typeas {0}' only at the place where it is "
+                "first bound, and plain '{0}' everywhere after that (a plain '{0}' in a "
+                "parameter type binds it already, so the explicit form is only needed when the "
+                "name also denotes a type).",
+            },
+        },
+        {
+            SemanticDiag::TypeVariableOnlyInReturn,
+            {
+                "TypeVariableOnlyInReturn",
+                "The name '{0}' appears only in the return type and no type answers it.",
+                "A type variable binds where it first appears in a parameter type, including the "
+                "type of a 'with' parameter; a name first written in the return type has no "
+                "argument to take a type from. Write it in a parameter type, or declare it "
+                "explicitly as 'typeas {0}' when only the expected result determines it (design "
+                "principles 5.9).",
+            },
+        },
+        {
+            SemanticDiag::TypeVariableUsedOnce,
+            {
+                "TypeVariableUsedOnce",
+                "The type variable '{0}' is bound here and appears only once in the signature.",
+                "One occurrence is what a misspelt type name looks like, so check the spelling. "
+                "If the name is wanted, use it again in a later parameter type or in the return "
+                "type; an explicit 'typeas {0}' states that the single occurrence is deliberate.",
             },
         },
         {
@@ -385,17 +410,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "A type variable must remain present in a parameter or result type. Its position "
                 "must be reachable through arrays, tuples, "
                 "structs and function types.",
-            },
-        },
-        {
-            SemanticDiag::TypeVariableNotBound,
-            {
-                "TypeVariableNotBound",
-                "The type variable '{0}' is not bound by any parameter of this signature.",
-                "A name in a parameter type is bound where it first appears, as a dimension name "
-                "is. A name that appears only in the return type is an error: the caller has no "
-                "argument that could say what it is. Write the name in a parameter type to bind "
-                "it, or use 'typeas {0}' there when it is also a type in scope.",
             },
         },
         {
@@ -1016,9 +1030,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ConstasNotAllowed",
                 "The dimension name '{0}' is bound here, but only a parameter type can bind one.",
-                "Write 'constas n' where the dimension first appears in a parameter type, "
-                "'x: Tensor<f32, const [constas n, 3]>'. Every later occurrence, including one in "
-                "the return type, writes 'n'.",
+                "A dimension name binds where it first appears in a parameter type, "
+                "'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return "
+                "type, writes 'n'.",
             },
         },
         {
@@ -1026,20 +1040,20 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "DimensionNameNotBound",
                 "The dimension name '{0}' is not bound by any parameter of this signature.",
-                "A name in a type's extents is bound by 'constas name' where it first appears in "
-                "a parameter type. A name that appears only in the return type is an error: the "
-                "caller has no argument that could say what it is.",
+                "A name in a type's extents is bound by its first plain occurrence in a parameter "
+                "type, 'x: f32[n]', and later occurrences write it. A name that appears only in "
+                "the return type is an error: the caller has no argument that could say what it "
+                "is.",
             },
         },
         {
             SemanticDiag::DimensionNameAlreadyBound,
             {
                 "DimensionNameAlreadyBound",
-                "The dimension name '{0}' is already bound; write '{0}' here instead of "
-                "'constas {0}'.",
-                "Only the first occurrence of a dimension name in the parameter types binds it "
-                "('constas n'). Writing 'constas' again would ask for a second binding of the "
-                "same name.",
+                "The dimension name '{0}' is already bound; write '{0}' here.",
+                "Only the first occurrence of a dimension name in the parameter types binds it; "
+                "later occurrences write it. Dimension names and pack names are separate "
+                "namespaces, so one name cannot be both.",
             },
         },
         {
@@ -1059,10 +1073,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "InvalidExtentExpression",
                 "This is not a shape: the extents of a type written with dimension names are "
-                "integers, bound names, or linear expressions over them ('const [n, 3]').",
-                "Each extent is an integer, a dimension name bound by the signature, or a linear "
-                "expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is "
-                "not linear is unknown.",
+                "integers, bound names, or linear expressions over them ('f32[n, 3]').",
+                "Each extent is a non-negative integer, a dimension name bound by the signature, "
+                "or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A "
+                "dimension that is not linear is unknown, and an unknown extent is written '?'.",
             },
         },
         {
@@ -1457,6 +1471,66 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::DimensionAfterAnyRank,
+            {
+                "DimensionAfterAnyRank",
+                "A dimension pack ('..') must be the last item of its '[...]', and only one may "
+                "be written.",
+                "A pack stands for the dimensions the type does not name, so nothing can follow "
+                "it. Write it after the extents: 'f32[3, ..rest]', not 'f32[..rest, 3]'.",
+            },
+        },
+        {
+            SemanticDiag::UnknownResource,
+            {
+                "UnknownResource",
+                "The name '{0}' in the resource clause of '{1}' is neither a parameter nor a "
+                "resource.",
+                "A clause names a parameter of the function (the value a call touches), a "
+                "resource the module declares (`resource {0}`), one of the resources every "
+                "program has (stdout, stderr, stdin, clock, env, fs), or a resource imported "
+                "from another module. Check the spelling, or declare the resource.",
+            },
+        },
+        {
+            SemanticDiag::PureAndUses,
+            {
+                "PureAndUses",
+                "The signature of '{0}' says both 'pure' and 'uses'.",
+                "'pure' says the call touches no resource at all; 'uses' names the resources it "
+                "touches. Write one of the two.",
+            },
+        },
+        {
+            SemanticDiag::ResourceGroupCycle,
+            {
+                "ResourceGroupCycle",
+                "The resource group '{0}' contains itself: {1}.",
+                "A group names resources, or other groups that name resources. Expand them in "
+                "an order: a group cannot be one of its own members.",
+            },
+        },
+        {
+            SemanticDiag::HandleTypeNotNominal,
+            {
+                "HandleTypeNotNominal",
+                "'{0}' is not a nominal type declaration, so '#resource' says nothing about it.",
+                "A handle is a type with an identity of its own, one resource per value. Write "
+                "the tag before a struct or an enum declaration (a `type` that names its fields "
+                "or variants), not before an alias or a type function.",
+            },
+        },
+        {
+            SemanticDiag::NativeResourceMismatch,
+            {
+                "NativeResourceMismatch",
+                "The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'.",
+                "A body-less declaration is the whole signature of a C++ operator, its resources "
+                "included: write the clause the operator declares, or remove the clause and let "
+                "the operator's declaration be the one the module publishes.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationIncomplete,
             {
                 "NativeDeclarationIncomplete",
@@ -1561,12 +1635,12 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::TypeVariableUsedOnce,
+            SemanticDiag::DimensionNameUsedOnce,
             {
-                "TypeVariableUsedOnce",
-                "The type variable '{0}' of '{1}' is written only once.",
-                "A type variable written once is usually a misspelled type name. Check the name; "
-                "if it is deliberate, write it in a second parameter or in the result type.",
+                "DimensionNameUsedOnce",
+                "The dimension name '{0}' is written once in this signature, so it relates nothing.",
+                "A name relates the extents that write it. If the size is not a relation, write "
+                "'?' instead; if it is, write the name in another parameter or in the return type.",
             },
         },
     };

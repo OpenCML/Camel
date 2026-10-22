@@ -341,6 +341,11 @@
             "plans": ["smoke"]
         },
         {
+            "comment": "The resource-surface cases (`resource`/`unordered`, `#resource` on a nominal type, `uses`/`pure` on a declaration or a function type): they are front-end/compile cases, and their plan is a file under feat/compile with no `test/plans/feat/effects` directory to mirror the case directory, so the generic test/cases directory rule resolves them to nothing. Name the one plan that reads them. The runtime plans (feat/modules, feat/tools, feat/trans) do not read these cases, so they are not added.",
+            "paths": ["test/cases/effects/"],
+            "plans": ["feat/compile/effects_syntax.plan.toml"]
+        },
+        {
             "comment": "A case directory with no plan directory of its own: the loop cases are tested by the linear loop plans. loops.plan.toml is not the only one: hof_declared (higher-order declarations), loops_in_arms and loop_collect each name cases in this directory, and a change to those cases has no other rule to select them (H201).",
             "paths": ["test/cases/loops/"],
             "plans": ["feat/linear/loops.plan.toml", "feat/linear/hof_declared.plan.toml", "feat/linear/loops_in_arms.plan.toml", "feat/linear/loop_collect.plan.toml"]

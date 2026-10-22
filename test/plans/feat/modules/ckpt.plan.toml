@@ -13,17 +13,18 @@ expect_stdout_exact = "{ w: 6.0, block: (8.0, 10.0) }\n{ count: 4, weight: 3.0 }
 timeout_ms = 10000
 
 [[tests]]
-name = "shape_mismatch_reports_first_path"
+name = "shape_mismatch_is_a_compile_error"
+desc = "A secondary tree whose leaf is where the first tree has a branch is rejected while `tree_map` expands: the field access on the secondary's leaf has no field. The expansion reports the access itself, not a tree path, because Camel has no compile-time error of its own yet (`static error`)."
 kind = "negative"
 case = "../../../cases/modules/tree_shape_error.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["tree leaf 'block'", "tree structure differs"]
+expect_diagnostic_name = "SemanticDiag::StaticAccessNotInternal"
 timeout_ms = 10000
 
 [[tests]]
 name = "tree_library_and_ckpt_run_together"
-desc = "`tree_paths` is the Camel tree library (`stdlib/tree.cml`); `tree_map` and `tree_leaves` are still the native intrinsics of `ckpt`. A program importing both runs and gets the same values the old single module gave."
+desc = "`tree_paths`, `tree_map`, `tree_reduce` and `tree_unzip` are the Camel tree library (`stdlib/tree.cml`); only `tree_leaves` is still a native intrinsic of `ckpt`. A program importing both runs and gets the same values the old single module gave."
 kind = "behavior"
 case = "../../../cases/modules/tree_library.cml"
 args = ["${case}", "std::nvm"]
@@ -33,7 +34,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "tree_is_a_camel_library_not_a_native_module"
-desc = "The dead-code guard: `inspect --ops` on a program importing both names lists the operators of the native `ckpt` module and no operator of a module `tree`. A surviving native `tree.cmo` would be listed here (and would shadow `stdlib/tree.cml` in the same directory)."
+desc = "The dead-code guard: `inspect --ops` on a program importing both names lists `tree_leaves` among the operators of the native `ckpt` module, no operator of a module `tree`, and none of the three tree operations the library now expands from its Camel bodies. A surviving native `tree.cmo` would be listed here (and would shadow `stdlib/tree.cml` in the same directory)."
 kind = "behavior"
 case = "../../../cases/modules/tree_library.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -43,8 +44,9 @@ verify_script = """
 ({ input, assert }) => {
 const ops = input.normalized.stdout.split('\n').filter((line) => line.startsWith('OPERATOR ')).map((line) => JSON.parse(line.slice('OPERATOR '.length)))
 const names = new Set(ops.map((op) => op.name))
-for (const name of ['tree_map', 'tree_reduce', 'tree_unzip', 'tree_leaves']) {
-  assert(names.has(name), 'ckpt lost the tree intrinsic ' + name)
+assert(names.has('tree_leaves'), 'ckpt lost tree_leaves, the one tree operator that is still native')
+for (const name of ['tree_map', 'tree_reduce', 'tree_unzip']) {
+  assert(!names.has(name), name + ' is still a native operator: it belongs to stdlib/tree.cml')
 }
 assert(!names.has('tree_paths'), 'tree_paths is still a native operator: it belongs to stdlib/tree.cml')
 assert(!ops.some((op) => op.module === 'tree'), 'a native module tree is still registered; stdlib/tree.cml would be dead code')

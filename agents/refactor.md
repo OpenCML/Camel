@@ -15,7 +15,29 @@
 - Keep headers in `include/` and implementations in `src/`.
 - Avoid implementation logic in headers unless strictly necessary.
 - If a single file grows beyond 800 lines, evaluate decomposition.
-- New `.h/.cpp` files must include the standard file header and a short responsibility comment block.
+- Every hand-written source file starts with the two-line header (`// Copyright (c) the OpenCML Organization` / `// SPDX-License-Identifier: MIT`), then a blank line and a short responsibility comment; `node scripts/headers.mjs --fix` writes it and `--check` verifies it. No author, dates or funding lines.
+
+## The Bar a Change Must Meet
+Code is read far more often than it is written, and this repository will be public. A change is
+returned for rework when it misses any of these, however well it tests:
+- **One way to do a thing.** Reuse the existing helper, rule or construct; a second near-copy (a
+  per-type duplicate, a parallel code path, a local re-implementation of a library function) is a
+  defect, not a shortcut.
+- **Names say what a thing is.** No `tmp`, `data2`, `handleStuff`, `doIt`; no abbreviations that
+  are not already used in the surrounding code. A function's name and signature should make its
+  comment short.
+- **Small, single-purpose functions.** A function that needs section comments to be followed is
+  several functions. Deep nesting is a smell: return early, extract, or use the language's own
+  constructs (`loop … while`, `match`, pipelines in Camel).
+- **No dead or speculative code.** No commented-out code, unused parameters, "just in case"
+  branches, flags nothing reads, or abstractions with one user and no second in sight.
+- **Comments state current facts and reasons**, not history ("used to", "after H123") and not a
+  narration of the code. Task numbers appear in reports and notes, never in code or comments.
+- **Errors are values or located diagnostics**, never silent fallbacks, magic sentinels or
+  swallowed exceptions.
+- **Tests assert behaviour that matters** (a property, a graph shape, an exact output), not
+  counters that move with unrelated changes.
+- **Camel code** follows `docs/stdlib-conventions.cn.md` section 6.5 and is formatter output.
 
 ## Architecture Reporting
 - During major refactors, identify the primary structural contradiction early.

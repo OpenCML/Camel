@@ -84,7 +84,7 @@ enumBody  : 'enum' '{' 变体, ... '}'
 
 - `T?`、`T!`：[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)。
 - `typeas T`：[7.5](07_statements.md#75-泛型函数)。
-- `constas n`：两种用法，都是编译期的名字（[设计原则 5.4](../design-principles.cn.md)）：在 `const` 实参里给维度命名——名字在形参类型里第一次出现时用 `constas` 绑定，之后直接写 `n`；或者作为函数声明的一个**值形参**（`func f(constas n: int, ...)`），由调用点的常量绑定（[7.5](07_statements.md#75-泛型函数)）。值形参可以写在形参表的任意位置，个数不限；每个值各自进入实例键。
+- `constas n`：两种用法，都是编译期的名字（[设计原则 5.4](../design-principles.cn.md)）：在 `const` 实参里给维度命名——名字在形参类型里第一次出现时用 `constas` 绑定，之后直接写 `n`；或者作为函数声明的一个**值形参**（`func f(constas n: int, ...)`），由调用点的常量绑定（[7.5](07_statements.md#75-泛型函数)）。值形参可以写在形参表的任意位置，个数不限；每个值各自进入实例键。形状里的维度名不再写 `constas`：名字在形参类型里第一次出现时自动绑定，之后直接写 `n`。
 - `enum`：[3.5](03_data_model.md#35-枚举-enum)。
 - 尖括号：类型函数的实参（[7.7](07_statements.md#77-类型声明)）或模块类型的实参。
 
@@ -97,7 +97,7 @@ enumBody  : 'enum' '{' 变体, ... '}'
 ```
 program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-                     | tagDecl | dataDecl | funcDecl | typeDecl | ruleDecl
+                     | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt | staticForExpr
 blockStmt          : 'wait'? stmtBlock | funcAnno+ stmtBlock
@@ -113,11 +113,12 @@ exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
 usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-                     | typeDecl | dataDecl
+                     | typeDecl | dataDecl | resourceDecl
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
-                     'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock?
+                     'func' (identRef | operatorName) parentParams (':' typeExpr)? resourceClause?
+                     stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
                      | 'export'? 'tag' identDef '=' bracketIdents
 tagPositions       : tagPositionName (',' tagPositionName)* ','?
@@ -132,6 +133,7 @@ carrier            : identList | parentIdents | bracedIdents | bracketIdents
 typeDecl           : frontMatter? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
+resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 retStmt            : ('return' | 'throw') dataList
 modifiers          : 'sync'+
 identDef           : IDENTIFIER
@@ -217,15 +219,18 @@ diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
 keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
 keyInterType       : typeUnit ('^' typeUnit)*
 typeUnit           : (identDef 'of')? arrayType
-arrayType          : specType ('[' ']')*
+arrayType          : specType arrayDim+
+arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+arrayDimItem       : '?' | '..' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
-typeOrData         : typeExpr | 'const' dataExpr
+typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
                      | 'typeof' dataExpr | 'typeas' identDef
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
-funcType           : modifiers? angledParams? parentParams '=>' typeExpr
+funcType           : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
+resourceClause     : ('uses' identRef (',' identRef)* | 'pure')+
 typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?

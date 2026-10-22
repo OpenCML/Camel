@@ -76,3 +76,15 @@ expect_exit = 0
 expect_stdout_contains = ["no stale snippet in"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+
+[[tests]]
+name = "docs.diagnostics_catalog"
+desc = "No two diagnostics share a code: the catalogue is the one place a code is written down, and a second name on a value means one of the two is never emitted."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/diagnostics-catalog.mjs"
+args = ["${case}", "--check"]
+expect_exit = 0
+expect_stdout_contains = ["no value used twice"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000

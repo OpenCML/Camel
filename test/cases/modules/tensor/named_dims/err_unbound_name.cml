@@ -1,8 +1,8 @@
 module named_dims_err_unbound_name
 import { Tensor, ones } from tensor
 // A name that only the return type writes is an error: no parameter binds it.
-func only_return(x: Tensor<f32>): Tensor<f32, const [n]> {
-    return x as Tensor<f32, const [-1]>
+func only_return(x: Tensor<f32>): Tensor<f32, [n]> {
+    return x as Tensor<f32, [?]>
 }
 func main(): int sync {
     println(only_return(ones([3])))

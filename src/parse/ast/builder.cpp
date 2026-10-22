@@ -435,6 +435,8 @@ Value Builder::visitDecl(syn::Node context) {
         return visitFuncDecl(cst::FuncDecl(context));
     case NK::TypeDecl:
         return visitTypeDecl(cst::TypeDecl(context));
+    case NK::ResourceDecl:
+        return visitResourceDecl(cst::ResourceDecl(context));
     case NK::TagDecl:
         return visitTagDecl(cst::TagDecl(context));
     case NK::RuleDecl:
@@ -1664,6 +1666,9 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         *typeOptNode << typeNode;
     }
     *funcTypeNode << typeOptNode;
+    if (context->get<cst::ResourceClause>()) {
+        *funcTypeNode << any2node(visitResourceClause(context->get<cst::ResourceClause>()));
+    }
 
     // The name: an identifier, or the operator of an overload (`func operator +(a, b)`, design
     // principles 4.3). An overload is a function under the reserved name of its operator
@@ -1878,6 +1883,62 @@ typeDecl
       (typeExpr | STRING)
     ;
 */
+/*
+resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+*/
+Value Builder::visitResourceDecl(cst::ResourceDecl context) {
+    ENTER("ResourceDecl");
+    const auto name  = context->get<cst::IdentDef>();
+    node_ptr_t declNode = createNodeAs<ResourceDeclLoad>(
+        qualifyRef(Reference(name ? name->text() : std::string{})));
+    setNodeTokenRangeByContext(declNode, context);
+    auto decl = declNode->loadAs<ResourceDeclLoad>();
+    decl->setDoc(docOf(context));
+    if (const auto group = context->get<cst::BracketIdents>()) {
+        decl->setGroup(true);
+        if (const auto list = group->get<cst::IdentList>()) {
+            for (const auto member : list->all<cst::IdentDef>()) {
+                // A member is a name as written: `stdout` is the resource every program has,
+                // and `m::r` one of another module's. An enclosing namespace is not implied
+                // (a group may name a standard resource from inside a namespace block).
+                decl->addMember(Reference(member->text()));
+            }
+        }
+    } else if (context->lastToken() && context->lastToken()->text() == "unordered") {
+        // `resource net unordered`: the word after the name is the contextual `unordered`.
+        decl->setUnordered(true);
+    }
+    if (context->tok(TK::KwExport)) {
+        // `export resource` is this declaration, not an `ExportDecl` around it (the word
+        // `resource` follows `export`): it is exported like a type or a data declaration.
+        export_->addRef(decl->ref());
+    }
+    LEAVE("ResourceDecl");
+    return declNode;
+}
+
+/*
+resourceClause : 'uses' identRef (',' identRef)* | 'pure'
+*/
+Value Builder::visitResourceClause(cst::ResourceClause context) {
+    ENTER("ResourceClause");
+    node_ptr_t clauseNode = createNodeAs<ResourceClauseLoad>();
+    setNodeTokenRangeByContext(clauseNode, context);
+    auto clause = unwrapNodeAs<ResourceClauseLoad>(clauseNode);
+    // The clause's tokens run together without white space or comments: a leading `pure` is the
+    // word, while `uses pure` (a parameter of that name) starts with `uses`. The parser reads
+    // both words so that `pure uses fs` is reported where it is written (PureAndUses) rather
+    // than as a syntax error.
+    if (context->text().starts_with("pure")) {
+        clause->setPure(true);
+    }
+    for (const auto use : context->all<cst::IdentRef>()) {
+        clause->addUse(value_cast<Reference>(visitIdentRef(use)));
+    }
+    LEAVE("ResourceClause");
+    return clauseNode;
+}
+
 Value Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
     string uri;
@@ -4466,17 +4527,29 @@ Value Builder::visitTypeUnit(cst::TypeUnit context) {
 
 /*
 arrayType
-    : specType ('[' ']')*
+    : specType arrayDim+
     ;
 */
 Value Builder::visitArrayType(cst::ArrayType context) {
     ENTER("ArrayType");
     node_ptr_t res = any2node(visitType(context->type()));
-    if (context->childCount() > 1) {
-        size_t dims              = (context->childCount() - 1) / 2;
-        node_ptr_t arrayTypeNode = createNodeAs<ArrayTypeLoad>(dims);
+    std::vector<DimGroup> groups;
+    for (const auto dim : context->all<cst::ArrayDim>()) {
+        groups.push_back(dimGroupOf(dim));
+    }
+    if (!groups.empty()) {
+        node_ptr_t arrayTypeNode = createNodeAs<ArrayTypeLoad>(std::move(groups));
         setNodeTokenRangeByContext(arrayTypeNode, context);
         *arrayTypeNode << res;
+        // The extent expressions stay children of the node as well: everything written is in
+        // the tree, and a reader that walks it sees `?` as the one item that has no node.
+        for (const DimGroup &group : arrayTypeNode->loadAs<ArrayTypeLoad>()->dims()) {
+            for (const auto &extent : group.extents) {
+                if (extent) {
+                    *arrayTypeNode << extent;
+                }
+            }
+        }
         res = arrayTypeNode;
     }
     LEAVE("ArrayType");
@@ -4484,7 +4557,62 @@ Value Builder::visitArrayType(cst::ArrayType context) {
 }
 
 /*
-typeOrData : typeExpr | CONST dataExpr ;
+arrayDim
+    : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+    ;
+arrayDimItem : '?' | '..' identDef? | dataExpr
+*/
+Value Builder::visitArrayDim(cst::ArrayDim context) {
+    node_ptr_t res = createNodeAs<ArrayDimLoad>(dimGroupOf(context));
+    setNodeTokenRangeByContext(res, context);
+    for (const auto &extent : res->loadAs<ArrayDimLoad>()->dim().extents) {
+        if (extent) {
+            *res << extent;
+        }
+    }
+    return res;
+}
+
+DimGroup Builder::dimGroupOf(cst::ArrayDim context) {
+    DimGroup group;
+    bool packNameNext = false;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        const auto child = context->child(i);
+        if (child.isToken()) {
+            if (child.token().is(TK::Question)) {
+                group.extents.push_back(nullptr);
+                ++group.itemCount;
+                packNameNext = false;
+            } else if (child.token().is(TK::DotDot)) {
+                if (group.pack != DimPack::None) {
+                    group.packRepeated = true;
+                } else {
+                    group.pack     = DimPack::Anonymous;
+                    group.packItem = group.itemCount;
+                }
+                ++group.itemCount;
+                packNameNext = true;
+            }
+            continue;
+        }
+        const auto node = child.node();
+        if (packNameNext && node.is(NK::IdentDef)) {
+            group.pack     = DimPack::Named;
+            group.packName = node.text();
+            packNameNext   = false;
+            continue;
+        }
+        packNameNext = false;
+        if (node.isExpr()) {
+            group.extents.push_back(any2node(visitExpr(node)));
+            ++group.itemCount;
+        }
+    }
+    return group;
+}
+
+/*
+typeOrData : typeExpr | arrayDim | CONST dataExpr ;
 The tree has a node for the second alternative only.
 */
 Value Builder::visitConstData(cst::ConstData context) { return visitExpr(context->expr()); }
@@ -4505,6 +4633,18 @@ Value Builder::visitSpecType(cst::SpecType context) {
         node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("TypeOrData");
         setNodeTokenRangeBetween(repeatNode, types[1], types[count - 1]);
         for (size_t i = 1; i < count; ++i) {
+            if (types[i].is(NK::ConstData) &&
+                types[i].get<cst::ConstData>()->expr().is(NK::ArrayData)) {
+                // A shape is the constant it is made of; `const` was how the shape of a module
+                // type was written before array types took it over (plan P3, 4.1).
+                diags_->of(SemanticDiag::InvalidTypeArgument)
+                    .at(rangeOf(types[i].firstToken(), types[i].lastToken()))
+                    .commit(
+                        types[0].text(),
+                        std::format(
+                            "a shape is written without 'const': '{}<f32, [3]>'",
+                            types[0].text()));
+            }
             *repeatNode << any2node(visitType(types[i]));
         }
         *specTypeNode << res << repeatNode;
@@ -4640,6 +4780,10 @@ Value Builder::visitFuncType(cst::FuncType context) {
         *typeOptNode << typeNode;
     }
     *funcTypeNode << typeOptNode;
+
+    if (context->get<cst::ResourceClause>()) {
+        *funcTypeNode << any2node(visitResourceClause(context->get<cst::ResourceClause>()));
+    }
 
     LEAVE("FuncType");
     return funcTypeNode;
@@ -4793,6 +4937,8 @@ Value Builder::visitType(syn::Node context) {
         return visitTypeUnit(cst::TypeUnit(context));
     case NK::ArrayType:
         return visitArrayType(cst::ArrayType(context));
+    case NK::ArrayDim:
+        return visitArrayDim(cst::ArrayDim(context));
     case NK::SpecType:
         return visitSpecType(cst::SpecType(context));
     case NK::ConstData:

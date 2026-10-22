@@ -316,14 +316,15 @@ func main(): int sync {
 - **`ts` is a compile-time tuple, not a value.** It has three uses only: `indices ts` reads its positions, `ts.[j]` reads one element, and `..ts` spreads the elements as arguments. None of the three builds a `FILL` for `ts` or an `ACCS` for an element. Putting `ts` itself where a runtime value is needed (printing it, returning it, assigning it, passing it as an ordinary argument) reports `SemanticDiag::StaticTupleEscapes`; it is not silently materialized into a runtime tuple. Write a tuple literal `(a, b)` when a runtime tuple is wanted.
 - **A rest argument** is written `..e` and must be the last argument of the call. `e` must be a compile-time tuple: a tuple literal, a tuple comprehension, or the `..ts` of an enclosing rest function. A runtime tuple value has no fixed arity and is `SemanticDiag::RestArgumentNotTuple`; an argument after `..e` is `SemanticDiag::RestArgumentNotLast`.
 - A rest parameter must be last (`SemanticDiag::RestParameterNotLast`), cannot write a type (`SemanticDiag::RestParameterTypeNotSupported`), and can appear only in a function declaration (writing `..` in a lambda, a function type or a rule is a syntax error). Too few arguments for the fixed parameters is `SemanticDiag::RestArgumentsMismatch`.
-- A function with a rest parameter is **not a value**: it cannot be assigned, passed as an argument, or exported and used as a function value (`SemanticDiag::RestFunctionNeedsExpansion`); it can only be called directly. For now the call must also be in the same module as the declaration: expanding a function body into another module is left to the `tree_*` task, and is reported as `SemanticDiag::RestFunctionNeedsExpansion`.
+- A function with a rest parameter is **not a value**: it cannot be assigned, passed as an argument, or exported and used as a function value (`SemanticDiag::RestFunctionNeedsExpansion`); it can only be called directly. A call may be in another module: the body's names are still resolved in the module that declares it (as for a generic instance), while the expansion happens in the caller's graph. A body that names a top-level **value** of its own module has no node for it in the caller's graph and reports `SemanticDiag::RestFunctionNeedsExpansion`; functions and the call's own arguments are unaffected.
+- A `with`-argument that names a generic function or a set of overloads (`tree_map<twice>`, `tree_map<bump>`) is resolved inside the callee for each call's argument types; this needs a callee with a rest parameter (the instance is expanded at the call). An ordinary generic function still takes one function value, chosen by the parameter types.
 
 **Constant value parameters (`constas`)**: among the ordinary parameters a declaration may write `constas n: int`. Its value is known at compile time and is part of the declaration's identity, not a runtime argument.
 
 ```cml
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -342,7 +343,7 @@ func main(): int sync {
 - **The value enters the instance key.** Every distinct constant instantiates a subgraph (`total<3>`, `total<5>`); the same types and value instantiate once. Types and values together are the key: two calls that differ only in a string are two instances (`label<"w">`, `label<"h">`).
 - **Any number, any position.** A declaration may take several `constas` parameters, at any position among the ordinary ones; the call writes each value at its parameter's position (`place(1, 2)` binds `x = 1`, `n = 2`). Each value is its own part of the instance key.
 - **The type is not limited to `int`.** `string`, `int`, `float`, `bool` and any other type with compile-time constants work; the value must be compatible with the parameter's type. The type must be written (`SemanticDiag::ConstasTypeRequired`). An `enum` member cannot be passed as a compile-time value yet (`SemanticDiag::ConstasValueNotConstant`) until `enum` values have a compile-time representation.
-- **The body reads the value.** Inside an instance `n` is a compile-time constant: it can be a named dimension in a type (`Tensor<f32, const [n]>`, `[n]`), a field name (`t.[n]`), or an ordinary value in arithmetic, conditions and printing. No type has to read it: a body that is the only reader is legal.
+- **The body reads the value.** Inside an instance `n` is a compile-time constant: it can be a named dimension in a type (`Tensor<f32, [n]>`, `[n]`), a field name (`t.[n]`), or an ordinary value in arithmetic, conditions and printing. No type has to read it: a body that is the only reader is legal.
 - **It is not a runtime parameter.** The call gives the constant, but it does not enter the call node: the instance's parameter list has no `n`, and the call passes only the other arguments (`total(3, xs)` has one argument, `xs`).
 - **A value can be handed on.** A `constas` value may be passed to another `constas` parameter, and it may come from a compile-time name such as the field name `static for` binds or a position of `indices`. `func columnOf(constas n: string, ..ts) { return column(n, ..ts) }` is legal: this is how `tree_map` hands the field name and the trees to `column`.
 - **It combines with a rest parameter.** `func column(constas n: string, ..ts)` is legal: the value is bound before the expansion and `ts` takes the arguments left over. The `column` of design note 3.1.1 can be written today as
@@ -356,9 +357,9 @@ func main(): int sync {
   Two calls that differ only in the string are two graphs, each reading the field its value names.
 - A declaration with a `constas` parameter **has no function value**: the constant must be written at the call, so it cannot be assigned or passed on (`SemanticDiag::ConstasFunctionNeedsCall`). A body-less declaration (the declaration of a C++ operator) cannot take one (`SemanticDiag::ConstasInNativeDeclaration`).
 - The value must be a compile-time constant (`SemanticDiag::ConstasValueNotConstant`): a runtime value cannot select an instance. Constants today are literals, another `constas` value, and compile-time names such as the `n` of `static for` and the `j` of `indices`.
-- `n` is bound only inside the instance body; a type position in the body (`let z: Tensor<f32, const [n]>`) has no such scope yet. Array dimensions such as `f32[n]` have not landed either (see the restrictions below); what works today is `Tensor<f32, const [n]>`.
+- `n` is bound only inside the instance body; a type position in the body (`let z: Tensor<f32, [n]>`) has no such scope yet. The array spelling `f32[n]` works as well.
 
-**Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value; a function with a `constas` parameter cannot be a value, cannot be combined with a body-less declaration, `f32[n]` array dimensions are not implemented yet, and an `enum` value cannot yet be a `constas` argument. The design note's `column(constas n, ts)` omits the type; today it is written `column(constas n: string, ..ts)`.
+**Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value; a function with a `constas` parameter cannot be a value, cannot be combined with a body-less declaration, and an `enum` value cannot yet be a `constas` argument. The design note's `column(constas n, ts)` omits the type; today it is written `column(constas n: string, ..ts)`.
 
 ## 7.6 Annotations
 
@@ -565,3 +566,5 @@ sync? { statement ... }
 A block is an expression: its value is given by the `return` in the block, and without a `return` it has no value. A block introduces a scope. A block with `sync` executes its statements in the order written ([4.3.1](04_execution_model.md#431-sync-blocks-block-modifier)); a block without `sync` is evaluated by dependency.
 
 A block is used as a function body, a branch arm or a lambda body, and can also stand alone as a statement.
+
+

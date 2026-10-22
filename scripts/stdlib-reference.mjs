@@ -94,9 +94,9 @@ const MODULES = [
         name: 'tree',
         title: '`tree`: parameter trees written in Camel',
         kind: 'camel',
-        // Its one public function has no written result type: the result is the argument's
-        // shape with a string at every leaf, which a type the reference can spell does not
-        // name yet. It is rendered as `?` (an inferred result), not as `void`.
+        // The walks are written with `match type`, `static for` and rest parameters, so a
+        // function whose result shape follows its argument has no result type a declaration can
+        // spell yet: it is rendered as `?` (an inferred result), not as `void`.
     },
     {
         name: 'tensor',

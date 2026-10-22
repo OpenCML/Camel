@@ -140,6 +140,8 @@ class Builder {
     /// `Config::limit`, design principles 10.2); a local declaration does not.
     Value visitDataDecl(syntax::cst::DataDecl context, bool topLevel = false);
     Value visitTypeDecl(syntax::cst::TypeDecl context);
+    Value visitResourceDecl(syntax::cst::ResourceDecl context);
+    Value visitResourceClause(syntax::cst::ResourceClause context);
     Value visitRetStmt(syntax::cst::RetStmt context);
     Value visitSpreadValue(syntax::cst::SpreadValue context);
     Value visitRestValue(syntax::cst::RestValue context);
@@ -207,6 +209,9 @@ class Builder {
     Value visitKeyInterType(syntax::cst::KeyInterType context);
     Value visitTypeUnit(syntax::cst::TypeUnit context);
     Value visitArrayType(syntax::cst::ArrayType context);
+    Value visitArrayDim(syntax::cst::ArrayDim context);
+    /// The extents and the pack one `[...]` was written with.
+    DimGroup dimGroupOf(syntax::cst::ArrayDim context);
     Value visitConstData(syntax::cst::ConstData context);
     Value visitSpecType(syntax::cst::SpecType context);
     Value visitRefType(syntax::cst::RefType context);

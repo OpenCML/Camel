@@ -30,37 +30,25 @@
 
 ## 1. 工作流程
 
-### 1.1 分支
+### 1.1 分支与工作树
 
-- 从最新的 `origin/fsh-dev` 开分支，名字是 `handover/<任务编号>`，如 `handover/H1-enum`。
-- **只推送你自己的 `handover/...` 分支**：`git push origin handover/H1-enum`。不推送、不修改 `fsh-dev`、`develop`、`main` 或别人的分支；不强制推送（`--force`）；不改写已推送的历史。
-- 需要同步时，把 `origin/fsh-dev` **合并**进你的分支（`git merge origin/fsh-dev`，合并提交），不要变基已推送的分支。
+- 工作树是 `D:\Projects\Camel-wt\<任务>`；分支从最新的 `origin/develop` 开，名字是 `handover/<任务编号>`，如 `handover/H1-enum`。
+- **只推送你自己的 `handover/...` 分支**：`git push origin handover/H1-enum`。不推送、不修改 `develop`、`main` 或别人的分支；不强制推送（`--force`）；不改写已推送的历史。`fsh-dev` 是决策者的评审分支，它只被合入 `develop`；我们的工作不经过它。
+- 需要同步时，把 `origin/develop` **合并**进你的分支（`git merge origin/develop`，合并提交），不要变基已推送的分支。
 - 一个任务一个分支。任务很大时可以分几次推送，每次都能编译、相关测试通过。
-- 协调者检查通过后，由协调者把你的分支合并进 `fsh-dev`。你不需要也不应该自己合并。
+- 审查通过后，由施工方协调者把你的分支合并进 `develop`（`--no-ff`）。你不需要也不应该自己合并。
 
 ### 1.2 构建与测试
 
-- 构建：`npm run build`（Windows PowerShell，命令之间用 `;`，不用 `&&`）。产物在 `out/latest/bin/`。
-- 测试：`node scripts/test.js <计划文件或目录>`。测试分两层（H10）：
-  - **日常开发跑 `npm run test`**：只跑 `fast` 层（`smoke` 加 `feat/**` 的快速测试），按处理器核数并行（`--jobs N` 可改，`--jobs 1` 为串行）。改动定下来后可用 `node scripts/test.js --changed`，按 `test/plan-selection.json` 只跑相关计划。
-  - **合入 `develop` 前跑一次 `npm run test:all`**：全部计划、全部层，包括与 PyTorch 的对比、GC 压力与投毒扫描、随机程序检查和性能基准。
-  - 只跑某个目标时：**目录**目标默认只跑 `fast` 层，要看慢测试加 `--tier all`；直接点名**计划文件**则整个计划都跑（点名就是意图）。`--changed` 的基线默认 `origin/develop`，可用 `CAMEL_TEST_BASE` 覆盖。分层规则见 `docs/test-plans.md`。
-- **先手动跑，再写测试**（`AGENTS.md`）：新功能先用 `camel x.cml` 在命令行运行，看清输出与诊断，再把确认过的行为写成测试。
-- 工作中只跑相关的测试计划；**任务结束前跑一次 `npm run test:all`**，把失败的测试名与基线比较。
-- **基线**：2026-10-19 的 `fsh-dev`（5bc29823）全套 5646 项中有 19 项失败，名单如下。这些不是你造成的，不需要你修；但你的分支不能新增失败。
-
-  ```
-  grammar.reference_in_step  frontend.ast_snapshot  frontend.format_keeps_ast
-  frontend.fuzz_lossless_tree  catalog.doc_is_generated  graph.default
-  integrated.graph.false  integrated.graph.true  failed_no_rule.error
-  pass_export_refusal_var_param  pass_export_refusal_located.request_in_arm
-  pass_export_refusal_located.request_in_arm_json  poison:rewrite_opt
-  poison:failed_no_rule.error  registry.signatures_match  rewrite_opt
-  04_staticness  05_effect_order  portability.std_includes
-  ```
-
-  其中几项（AST 快照、诊断目录、签名一致性）会被正在进行的地基工作修掉；合并 `origin/fsh-dev` 后基线可能变短，以合并后的为准。
-- 改了语法、`test/cases/parse` 下的用例或 `test/tools/parsecheck/probes.py`：更新 AST 快照 `python3 test/tools/parsecheck/check.py snapshot --update`。快照只含解析用例与探针（H188），改 `examples/`、`stdlib/`、`benchmarks/` 或别的计划的用例不会再动它。
+- **不在本机构建**：本机跑构建会蓝屏。构建与测试都在 Linux 主机上，经 `D:\Projects\Camel-wt\camel-remote.ps1` 走（它把工作树送过去、排队取一个构建位、把退出码带回来）：
+  `pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\<任务> -Plan <计划文件或目录> -Jobs 8`。
+  产物在主机 `out/latest/bin/`。不要在本机跑 `npm run build`、`cmake` 或 `node scripts/test.js`。
+- 测试分两层（H10）：日常与合入前跑 `fast` 层（`smoke` 加 `feat/**`）；慢层（PyTorch 对照、GC 压力、投毒扫描、性能基准）只在发布前，或改动确实触及 GC、内存管理、数值内核时按需跑。
+- 只跑某个目标时：**目录**目标默认只跑 `fast` 层，要看慢测试加 `--tier all`；直接点名**计划文件**则整个计划都跑（点名就是意图）。`--changed` 的基线默认 `origin/develop`，可用 `CAMEL_TEST_BASE` 覆盖。分层规则见 `docs/test-plans.md`。
+- **先手动跑，再写测试**（`AGENTS.md`）：新功能先在主机上用 `camel x.cml` 看清输出与诊断，再把确认过的行为写成测试。
+- 工作中只跑相关的测试计划；**任务结束前在主机上跑一次快速层**（`smoke` + `feat/**`）与相关计划。
+- **验收**：快速层必须全绿；`skip` 不是失败；基线是零——没有“已知失败名单”，任何一条红都要由变红的分支解释。
+- 改了语法、`test/cases/parse` 下的用例或 `test/tools/parsecheck/probes.py`：在主机上更新 AST 快照 `python3 test/tools/parsecheck/check.py snapshot --update`。快照只含解析用例与探针（H188），改 `examples/`、`stdlib/`、`benchmarks/` 或别的计划的用例不会再动它。
 - 改了诊断：`node scripts/diagnostics-catalog.mjs --write`。
 - 每次提交前：`node scripts/check-doc-links.mjs --all`、`node scripts/check-std-includes.mjs`。
 
@@ -111,7 +99,7 @@
   ## 没做完的
   ```
 
-- **协调者的检查意见**：写在 `fsh-dev` 上的 `docs/handover/reviews/<任务编号>.md`。开始下一步前先 `git fetch` 看有没有新的检查意见；有"退回"条目时先改完再继续。
+- **决策者的检查意见**：写在 `fsh-dev` 上的 `docs/handover/reviews/<任务编号>.md`。开始下一步前先 `git fetch` 看有没有新的检查意见；有"退回"条目时先改完再继续。
 - 任务状态以本文件第 5 节的表为准，由协调者更新。
 
 ---
@@ -157,6 +145,30 @@
 
 **下一步是控制区域**（设计稿第 5 步）：`if`/`match` 的臂与 `LOOP` 的条件、循环体改为同一张图内共用帧的区域，前端的分支与循环建图（`builder_control.cpp`）、`loop_lowering.cpp`、`branch_arms.cpp` 将被重写或删除。**甲车道在 `builder_control.cpp` 与分支、循环相关的建图代码上只做必要的小改动，并频繁合入 develop**；需要较大改动时先在报告中提出。
 
+### 5.000 落地的组织：按代码区域串行、区域之间并行（决策者 2026-10-22）
+
+**目标**：5.00 主线与 5.01–5.14 全部合入 develop。本节不写时间，只写依赖与可并行度；协调者按子代理数量尽量把不同区域同时铺开。瓶颈在**同一处代码的串行**与**等批复**。
+
+**一、取消大部分"先交计划"**：H232、H233、H228、H227、H216 的设计已定，**直接实施**，结构性选择由协调者按下面的默认决定，写进报告，决策者合入后评审。只有 H49 的 S5b 之后、H50、H7 的第 6 步之后仍按原计划交计划。
+
+默认决定（不必再问）：多根模式先匹配候选最少的一项，再按共享变量连接；结合交换匹配的规范形是"同一算子的项展平为按节点身份排序的多重集"；区域模式的替换由图的校验器检查，校验失败即该次改写不发生；`Rule` 值的打印用规则的源码；`explain` 的来源记录按合并为单位，关闭时零开销；`#impl` 的差分测试默认 200 个随机样本；`camel-format` 的折行宽度沿用 80。
+
+**二、区域与顺序**。同一行内按箭头顺序合入（它们改同一处代码）；**不同行之间没有先后，同时进行**；行内箭头之外的项也可并行。
+
+| 区域 | 区域内的顺序 |
+|---|---|
+| 前端与类型检查（串行） | H229 类型变量自动绑定 → H234 `when` 与分支守卫 → H235 形参默认值与按名字传参 → H232 第 1 步（规则类型泛型、值语义、`fact` 语法）→ H51 剩余步骤 → H17 第 2、4 项 → 评审中点出的语言缺口（元组形参解构、负步长切片等） |
+| 规则引擎 | H226 对照测量、`Rule` 值与调度组合子（v2 8.5）可立即开始 → v2 第 2、6 步 → 第 4 步 → 第 3 步 → 第 5、7 步与 8.6、8.7；8.8 贯穿。依赖：需要语法的步骤等前端一行的 H232 第 1 步 |
+| `graph` 模块与遍 | H233 遍就是函数变换 → H227 第一、二层 → 第三层 |
+| 标准库 | H228 `#impl` 机制与审计 → H230 逐模块重写（依赖 H229、H234；`array`、`statistics`、`str`、`math`、`rules` 在前，决策者逐个评审） |
+| 工具 | H225 等价图可视化、`camel-format --check`、格式化器规则修正 |
+| GPU、资源与副作用、`std::cml` | 各自按已批计划推进 |
+| **最后（其他全部合入之后）** | H231 全仓库格式化 → H216 公开仓库重组（两者都会与一切冲突，所以排在最后，且按此顺序） |
+
+**三、合入与评审的节奏**：每完成一项即合入 develop（不攒批）；施工方协调者合并并跑闸门，决策者事后评审。**代码质量是硬要求**（负责人 2026-10-22："代码本身也要写的漂亮优雅，有明显问题的可以让他们返工"）：合入前对照 [`agents/refactor.md`](../../agents/refactor.md) 的"The Bar a Change Must Meet"自查；决策者评审发现明显的质量问题（重复、命名、过长的函数、死代码、绕路的写法、只锁计数的测试）即**返工**，返工任务优先于新任务，在 `reviews/` 中以"返工"标出。违反设计原则的同样返工。快速层测试与相关计划必须绿；慢层只在全部合入之后跑一次。
+
+**四、看板**：每完成一项在任务表上改状态为"已完成（note ⟨…⟩）"，决策者据此跟进；遇到需要负责人裁定的语言问题，写进报告的"待决"，同时继续做不依赖它的部分。
+
 ### 5.00 当前主线（决策者 2026-10-22，按优先级；取代此前的零散排序）
 
 近两天的任务多是账本、计数与守卫。这些已经够用，**暂停新的账本/计数/文档守卫类任务**（除非下列主线需要），力量转到下面七条。每条先交计划的，计划写好即合入 develop，协调者在 `reviews/` 批复；不必等批复的部分照常推进。
@@ -169,6 +181,7 @@
 6. **H50 GPU G4–G5（H49 计划批复后先交计划）**。
 7. **H13 官方示例**：D4（MCTS），以及作为 GPU 性能红线的扩散模型训练步示例（外部报告的程序形状）——在 H49 落地后。
 8. **H227 用 Camel 写编译器自己的遍（见 5.06）**：表达能力的证据，与 GPU、泛型并列推进。
+9. **H232 规则语言第二版（见 5.11）**。
 
 **任务的价值判据（决策者 2026-10-22）**：每个任务必须推进 5.00 的某条主线，或修复一个用户可见的缺陷。只为核对计数、维护账本、给守卫再加守卫、重写看板措辞的任务不再单独立项；必要的账本与守卫随主线任务顺带完成。报告写结论、改动、验证与待决，篇幅与改动量相称，不逐条复述过程。
 
@@ -263,6 +276,51 @@
 3. **诊断位置**：格式化会改变行列，期望输出里的位置随之更新；逐条核对是位置移动，不是诊断改变。
 4. **格式化器的输出不好看时修格式化器，不手改代码**：遇到格式化结果别扭的写法（长链式调用的折行、`rule … when` 的排布、`with <…>` 的位置、推导式等），先改 `tools/format`，再格式化。报告列出改了格式化器的哪些规则。
 5. 文档中的 Camel 代码块（`check-doc-snippets` 已编译它们）同样按格式化器的输出改写。
+
+### 5.11 H232 规则语言第二版（决策者 2026-10-22，负责人同意"都加上"）
+
+设计稿：[规则语言第二版](../design/rewrite/v2.cn.md)（已定）。类型泛型与值语义、算子变量、多根模式、条件与右边调用 Camel 函数、代价函数、结合交换匹配、控制区域上的模式、`check` 覆盖带条件的规则。按设计稿第 9 节的顺序实施；第 1 步与 H230 的 `rules` 评审（reviews/stdlib-rules.md）合并做。实现上有结构性选择的步骤（多根匹配的连接顺序、AC 匹配的规范形、区域模式的替换合法性）先交计划。列入主线。
+
+### 5.12 H233 遍就是函数变换（决策者 2026-10-22，负责人要求；先交计划）
+
+负责人："我希望的就是要做普通的函数变换，这才是最直观最优雅的；作为图原生语言还要包裹来包裹去，那为啥不直接用 Python。" 设计原则 9.3 已改：**遍是 `(f: F) => F!`**，接收一个函数、返回同类型的函数，与 `with_grad` 同一类；整个程序就是根函数；`Program` 只是内部表示。
+
+1. **`graph` 模块的公开接口以函数为中心**：`open(f: F): Txn<F>`、`commit(t: Txn<F>): F!`、`graph_of(f)`、`nodes`、`users` 等照旧；`Program`、`current()`、`root(p)`、`open_function`/`to_function`（及其样本参数）从公开接口删除。程序级的信息（声明、标签、事实、特化表）经函数所在的程序读取，接口上不出现快照。
+2. **流水线**：`camel f.cml mylib::simplify std::fvm` 把遍施加在程序的根函数上；Camel 写的遍签名为 `(f: F) => F!`（泛型，`F` 自动绑定），不再是 `(Program) => Program!`。
+3. **对单个函数就是普通调用**：`loss->simplify`、`loss->rules::simplify->with_grad`；不需要 `optimize<pass>` 一类的包装。捕获了值的函数（闭包）照样可以变换，捕获随新函数带上。
+4. **`rewrite` 模块**同样改为函数变换：`f->saturate<rules>`、`f->extract<cost>`；`stdlib/rules.cml` 的 `simplify` 等随之改签名。
+5. C++ 的遍内部仍按快照工作；只有写遍的公开接口与流水线的约定变化。规则语言第二版（v2.cn.md 8.5）已按此改写。
+
+### 5.13 H234 适用条件 `when`（决策者 2026-10-22，负责人同意）
+
+设计原则 5.5 新增：函数签名后的 `when 条件` 是适用条件（编译期谓词，实例化时求值）；不成立时该重载不适用，重载选择试其他候选；全不适用时在调用处报错并列出每个候选未满足的条件。规则、函数与 `match` 分支的 `when` 同一个意思。不引入 `where`。
+
+1. 语法与类型检查：函数签名后的 `when`；条件里可用 `::<T>` 与类型谓词；重载选择把条件纳入（先精确、后进入的顺序不变，不满足条件的候选在每一步都先剔除）。
+2. 标准库的谓词：`is_numeric`、`is_integer`、`is_float`、`is_ordered`、`is_function`、`is_string` 等，用 `match type` 写在库里。
+3. `match` 分支守卫 `case p when 条件 =>`（负责人 2026-10-22 确认）：条件不成立时试下一个分支；带守卫的分支在穷尽性检查中不算覆盖该形状；图上与嵌套 `if` 同一种分支结构；`fact` 的 `case` 同样可以带守卫。
+4. 用上它：`array::sum`/`min`/`max`（H228/H230）、遍的签名 `(f: F): F! when is_function::<F>()`（H233）。
+5. 诊断：调用处列出"候选 — 未满足的条件"；条件本身编译不过是声明处的错误。
+
+### 5.14 H235 形参默认值、按名字传参与遍参数（决策者 2026-10-22，负责人同意）
+
+设计原则 4.4、9.3 已改。
+
+1. **语言**：普通形参与 `with` 形参的默认值（编译期常量表达式，调用处补入图）；按名字的实参（`by: 2.0`、`<rounds: 16>`，在按位置的之后）；语言参考 7.4 删去"形参默认值保留，尚未实现"。
+2. **遍参数统一为 `with` 参数**：C++ 遍的 `PassDescriptor` 与 Camel 遍的 `with` 形参同一模型，默认值、类型、文档一处声明；Camel 写的遍不再要求每个参数都写。
+3. **命令行**：`key=value` 跟在遍名之后，按声明类型解析；删除 `name(key=value, ...)` 的写法与 `--passes` 中"括号内的逗号不切分"的特例。
+4. **全局选项与遍参数的边界**：`--max-macro-depth`、`--max-macro-rounds` 改为 `std::macro` 的参数；逐项检查其余全局选项，属于单个遍的都改为参数；删除剩下的环境变量回退（`CAMEL_MAX_RECURSION_DEPTH`、`CAMEL_MAX_MACRO_DEPTH`、`CAMEL_MAX_MACRO_ROUNDS` 等，H81 遗漏的）。
+5. **`camel inspect --passes`**：列出每个遍的参数名、类型、默认值与说明，由声明生成。
+6. 文档、测试、计划里的旧写法一次改完。归入 5.000 的"前端与类型检查"区域，排在 H234 之后。
+
+### 5.15 H236 类型参数在函数头声明（返工 H229；决策者 2026-10-22，负责人同意）
+
+负责人："自动推导像是隐式的泛型，一个函数是不是泛型，用户没办法一眼判断。" 设计原则 5.5 改为：**`func first::<T>(xs: T[]): T`**——类型参数写在函数名后的 `::<…>` 里，与调用处显式类型实参同形；`typeas` 删除；维度名仍在形状里自动绑定（可选地写进函数头）。
+
+1. **撤回 H229 的自动绑定**（及其两条诊断），实现函数头的 `::<…>` 声明；`rule`、`fact`、类型函数之外的所有泛型声明同一写法；函数头声明的名字在函数内优先于同名类型。
+2. **删除 `typeas`**（关键字、语法、格式化器、编辑器语法、文档），全仓库 272 处一次机械改写；`any` 回到它原来的位置（H229 为避开自动绑定挪动过的用例还原）。
+3. 未声明的类型名一律是"未知类型"错误；在类型参数之外的地方写 `::<T>` 声明类型参数是错误。
+4. 规则语言第二版、标准库约定与 `reviews/stdlib-*.md` 中的示例已按新写法改写。
+5. 属于"前端与类型检查"一行，排在该行最前（其后的 H234、H235、H232 都会用到它）。
 
 ### 5.0 调度
 
@@ -546,7 +604,7 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 
 ### 先交计划的任务（H17、H18 适用）
 
-这类任务的设计已定，但实现上有结构性的选择。**动手之前先写实施计划**，作为 handover note 提交（`git notes --ref=handover add -F plan.md <提交>`；H17 的计划现为 note ⟨f52f4b9⟩，或记作 H18；H17 的正文在 [arrays-memory/plan.cn.md](../design/arrays-memory/plan.cn.md)），内容：改哪些数据结构与接口（列出文件与类型）、数据怎样流动、旧结构怎样过渡与删除、按什么顺序提交（每次提交都能构建、相关测试通过）、怎样测试（含性能基线的对比）、有哪些拿不准的地方。**协调者在 `reviews/` 中批复计划后再实施**；等待批复期间可以做队列中的其他项。
+这类任务的设计已定，但实现上有结构性的选择。**动手之前先写实施计划**，作为 handover note 提交（`git notes --ref=handover add -F plan.md <提交>`；H17 的计划现为 note ⟨f52f4b9⟩，或记作 H18；H17 的正文在 [arrays-memory/plan.cn.md](../design/arrays-memory/plan.cn.md)），内容：改哪些数据结构与接口（列出文件与类型）、数据怎样流动、旧结构怎样过渡与删除、按什么顺序提交（每次提交都能构建、相关测试通过）、怎样测试（含性能基线的对比）、有哪些拿不准的地方。**决策者在 `reviews/` 中批复计划后再实施**；等待批复期间可以做队列中的其他项。
 
 ### H17：原生多维数组与缓冲区（2026-10-20 指派，先交计划）
 

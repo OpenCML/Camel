@@ -312,7 +312,7 @@ bool ParserImpl::startsDecl(TK kind) const {
     case TK::Hash:
         return true;
     case TK::Identifier:
-        return atTagDecl(0);
+        return atTagDecl(0) || atResourceDecl(0);
     default:
         return false;
     }
@@ -380,7 +380,7 @@ uint32_t ParserImpl::afterModifiers() const {
 }
 
 /// decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-///      | tagDecl | dataDecl | funcDecl | typeDecl | ruleDecl
+///      | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 /// Decided on the first token; after `export` on the next one (`export let`, `export type`, ...).
 /// The word `tag` is not reserved: a declaration starts with it only when a tag name follows
 /// (`atTagDecl`), so a value called `tag` still reads as a value.
@@ -413,6 +413,9 @@ void ParserImpl::parseDecl() {
         if (atTagDecl(1)) {
             return parseTagDecl();
         }
+        if (atResourceDecl(1)) {
+            return parseResourceDecl();
+        }
         if (next == TK::KwLet || next == TK::KwVar || next == TK::KwType || next == TK::LBrace) {
             return parseExportDecl();
         }
@@ -421,6 +424,9 @@ void ParserImpl::parseDecl() {
     default:
         if (atTagDecl(0)) {
             return parseTagDecl();
+        }
+        if (atResourceDecl(0)) {
+            return parseResourceDecl();
         }
         if (atAnalysisDecl(0)) {
             return parseAnalysisDecl();
@@ -671,6 +677,8 @@ void ParserImpl::parseImportItem() {
 }
 
 /// exportDecl : 'export' (dataDecl | typeDecl | bracedIdents)
+/// `export resource` is not this: the word after `export` decides, and `parseDecl` reads it as a
+/// resource declaration that carries its own `export` (see `resourceDecl`).
 void ParserImpl::parseExportDecl() {
     const size_t m = mark();
     bump();
@@ -695,7 +703,7 @@ void ParserImpl::parseUsingNamespaceDecl() {
 
 /// namespaceDecl : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 /// namespaceItem : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-///               | typeDecl | dataDecl
+///               | typeDecl | dataDecl | resourceDecl
 void ParserImpl::parseNamespaceDecl() {
     Depth depth(*this);
     const size_t m = mark();
@@ -789,10 +797,13 @@ void ParserImpl::parseFrontMatter() {
 }
 
 /// funcDecl : frontMatter ('with' angledParams)? 'export'? modifiers?
-///            'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock?
+///            'func' (identRef | operatorName) parentParams (':' typeExpr)? resourceClause?
+///            stmtBlock?
 ///
 /// Without a body the declaration stands for a C++ operator of the module the name is bound in
-/// (design principles 6.4): it has no block, and what it declares is its signature.
+/// (design principles 6.4): it has no block, and what it declares is its signature. The
+/// `uses`/`pure` clause after the result type says which resources a call touches (design
+/// effects plan 3.1).
 void ParserImpl::parseFuncDecl() {
     const size_t m = mark();
     parseFrontMatter();
@@ -950,6 +961,9 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::Colon)) {
         parseType();
     }
+    if (atWord(0, "uses") || atWord(0, "pure")) {
+        parseResourceClause();
+    }
     // A function written without a body is the declaration of an operator of a C++ module: the
     // signature is the whole of it (design principles 6.4, handover H19 step 1). A block is
     // still what follows a signature in every other case, so the next token decides; `sync`
@@ -1092,6 +1106,31 @@ void ParserImpl::parseTypeDeclRest(size_t m) {
         parseType();
     }
     close(m, NK::TypeDecl);
+}
+
+/// resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+///
+/// A resource declaration (design effects plan 3.1, design principles 3.3): `resource fs` names
+/// an ambient resource of the module, `resource io = [stdout, fs]` a group of resources and other
+/// groups, and `resource net unordered` says the accesses of a call may be reordered (step 8
+/// gives that meaning). `resource` and `unordered` are contextual: they are not reserved words,
+/// and a declaration starts with `resource` only when a name follows it.
+void ParserImpl::parseResourceDecl() {
+    const size_t m = mark();
+    eat(TK::KwExport);
+    bump(); // `resource`
+    expectName(NK::IdentDef);
+    if (eat(TK::Assign)) {
+        parseBracketedIdents(TK::RBracket, NK::BracketIdents);
+    } else if (atWord(0, "unordered")) {
+        bump();
+    }
+    close(m, NK::ResourceDecl);
+}
+
+/// Whether a resource declaration starts at offset `n`: `resource` followed by a name.
+bool ParserImpl::atResourceDecl(uint32_t n) const {
+    return atWord(n, "resource") && peek(n + 1) == TK::Identifier;
 }
 
 /// retStmt : ('return' | 'throw') dataList

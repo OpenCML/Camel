@@ -114,6 +114,11 @@ class EnumDecl {
     const std::vector<std::string> &params() const { return params_; }
     bool generic() const { return !params_.empty(); }
 
+    /// The declaration is written `#resource` (design effects plan 3.1): a value of the type is
+    /// a handle, one resource per value, named by this declaration.
+    bool handle() const { return handle_; }
+    void setHandle(bool handle = true) { handle_ = handle; }
+
     /// Sets the variants as written. Called once, when the declaration has been read.
     void define(std::vector<EnumVariant> variants);
     bool defined() const { return defined_.load(std::memory_order_acquire); }
@@ -134,6 +139,7 @@ class EnumDecl {
     std::vector<std::string> params_;
     std::vector<EnumVariant> variants_;
     std::atomic<bool> defined_{false};
+    bool handle_ = false;
 };
 
 class EnumType final : public OtherType {

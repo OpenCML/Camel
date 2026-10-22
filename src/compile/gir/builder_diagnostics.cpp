@@ -1196,11 +1196,6 @@ std::string Builder::sourceLocationOf(uint64_t origin) const {
         span->startOffset - lineStart + 1);
 }
 
-void Builder::registerTreeOrigin(
-    node_handle_t node, const GCT::node_ptr_t &origin, const char *kind) {
-    registerNodeOrigin(context_, node, origin, kind);
-}
-
 void Builder::reportConversionGaps(
     const std::vector<std::pair<std::string, FunctionType *>> &candidates,
     const std::vector<Argument> &withInputs, const std::vector<Argument> &normInputs,

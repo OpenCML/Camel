@@ -1,0 +1,15 @@
+/**
+ * A body-less declaration whose clause is not the signature of the operator it declares:
+ * `fs:exists` reads the file system, so a `pure` declaration promises what the operator does not
+ * keep. Refused where it is written (NativeResourceMismatch).
+ */
+module fs
+
+import { read_text } from fs
+
+export func exists(path: string): bool pure
+
+func main(): int sync {
+    println(exists("no/such/file"))
+    return 0
+}

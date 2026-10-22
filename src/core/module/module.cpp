@@ -653,6 +653,24 @@ type_ns_ptr_t Module::exportedTypeNS() const { return exportedTypeNS_; }
 
 entity_ns_ptr_t Module::nativeEntityNS() const { return nativeEntityNS_; }
 
+// ---- Resources (design effects plan 3.2) --------------------------------------------------
+
+void Module::declareResource(const Reference &name, ResourceDecl decl) {
+    resources_[name.toString()] = std::move(decl);
+}
+
+void Module::setResourceExported(const Reference &name, bool exported) {
+    const auto it = resources_.find(name.toString());
+    if (it != resources_.end()) {
+        it->second.exported = exported;
+    }
+}
+
+const Module::ResourceDecl *Module::resource(const Reference &name) const {
+    const auto it = resources_.find(name.toString());
+    return it == resources_.end() ? nullptr : &it->second;
+}
+
 // ---- Tags (design principles 6.2; camel/core/tags.h) -------------------------------------
 
 std::optional<uint32_t> Module::declaredTag(const std::string &ident) const {

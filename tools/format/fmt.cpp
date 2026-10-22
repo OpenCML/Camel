@@ -529,6 +529,11 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         result += ": " + any_cast<string>(visitType(typeExpr));
     }
 
+    if (const auto clause = context->get<cst::ResourceClause>()) {
+        // `uses s, fs` / `pure` after the result type (design effects plan 3.1).
+        result += " " + any_cast<string>(visitResourceClause(clause));
+    }
+
     if (!stmtBlock) {
         // A body-less declaration of a C++ operator: the signature is the whole of it (design
         // principles 6.4; handover H19, step 1).
@@ -695,6 +700,43 @@ any Formatter::visitDataDecl(cst::DataDecl context) {
     }
     if (dataList) {
         result += " = " + any_cast<string>(visitDataList(dataList));
+    }
+    return result;
+}
+
+/*
+resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+*/
+any Formatter::visitResourceDecl(cst::ResourceDecl context) {
+    string result = context->tok(TK::KwExport) ? "export " : "";
+    result += "resource " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    if (const auto members = context->get<cst::BracketIdents>()) {
+        result += " = " + any_cast<string>(visitBracketIdents(members));
+    } else if (context->lastToken() && context->lastToken()->text() == "unordered") {
+        // The contextual `unordered` (design effects plan 3.1): any order of the accesses is
+        // allowed, so the resource has no order to keep.
+        result += " unordered";
+    }
+    return result;
+}
+
+/*
+resourceClause : ('uses' identRef (',' identRef)* | 'pure')+
+*/
+any Formatter::visitResourceClause(cst::ResourceClause context) {
+    // `pure` has no name to print; `uses` prints the names as written. A clause that says both
+    // is refused by the semantic check (PureAndUses), and formatting keeps what was written.
+    const auto refs = context->all<cst::IdentRef>();
+    const bool pure = context->firstToken() && context->firstToken()->text() == "pure";
+    string result   = pure ? "pure" : "";
+    if (!refs.empty()) {
+        if (!result.empty()) {
+            result += " ";
+        }
+        result += "uses ";
+        for (size_t i = 0; i < refs.size(); ++i) {
+            result += (i > 0 ? ", " : "") + any_cast<string>(visitIdentRef(refs[i]));
+        }
     }
     return result;
 }
@@ -1552,16 +1594,60 @@ any Formatter::visitTypeUnit(cst::TypeUnit context) {
 
 /*
 arrayType
-    : specType ('[' ']')*
+    : specType arrayDim+
     ;
 */
 any Formatter::visitArrayType(cst::ArrayType context) {
-    string result     = any_cast<string>(visitType(context->type()));
-    const size_t size = (context->childCount() - 1) / 2;
-    for (size_t i = 0; i < size; i++) {
-        result += "[]";
+    string result = any_cast<string>(visitType(context->type()));
+    for (const auto dim : context->all<cst::ArrayDim>()) {
+        result += any_cast<string>(visitArrayDim(dim));
     }
     return result;
+}
+
+/*
+arrayDim
+    : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+    ;
+arrayDimItem : '?' | '..' identDef? | dataExpr
+*/
+any Formatter::visitArrayDim(cst::ArrayDim context) {
+    string result;
+    bool first    = true;
+    bool packName = false;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        const auto child = context->child(i);
+        if (child.isToken()) {
+            const TK kind = child.token()->kind();
+            if (kind == TK::Question) {
+                if (!first) {
+                    result += ", ";
+                }
+                first = false;
+                result += "?";
+            } else if (kind == TK::DotDot) {
+                if (!first) {
+                    result += ", ";
+                }
+                first    = false;
+                result += "..";
+                packName = true;
+            }
+            continue;
+        }
+        const auto node = child.node();
+        if (packName && node.is(NK::IdentDef)) {
+            result += node.text();
+            packName = false;
+        } else if (node.isExpr()) {
+            if (!first) {
+                result += ", ";
+            }
+            first = false;
+            result += any_cast<string>(visitExpr(node));
+        }
+    }
+    return "[" + result + "]";
 }
 
 /*
@@ -1744,7 +1830,11 @@ any Formatter::visitFuncType(cst::FuncType context) {
         result += any_cast<string>(visitAngledParams(angledParams));
     }
     result += any_cast<string>(visitParentParams(parentParams));
-    return result + " => " + any_cast<string>(visitType(context->type()));
+    result += " => " + any_cast<string>(visitType(context->type()));
+    if (const auto clause = context->get<cst::ResourceClause>()) {
+        result += " " + any_cast<string>(visitResourceClause(clause));
+    }
+    return result;
 }
 
 /*
@@ -1790,6 +1880,8 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(RuleContext)
         CAMEL_FORMAT(RuleBody)
         CAMEL_FORMAT(DataDecl)
+        CAMEL_FORMAT(ResourceDecl)
+        CAMEL_FORMAT(ResourceClause)
         CAMEL_FORMAT(TypeDecl)
         CAMEL_FORMAT(RetStmt)
         CAMEL_FORMAT(Modifiers)
@@ -1882,6 +1974,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(KeyInterType)
         CAMEL_FORMAT(TypeUnit)
         CAMEL_FORMAT(ArrayType)
+        CAMEL_FORMAT(ArrayDim)
         CAMEL_FORMAT(SpecType)
         CAMEL_FORMAT(ConstData)
         CAMEL_FORMAT(StructType)

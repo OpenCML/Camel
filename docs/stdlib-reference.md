@@ -410,10 +410,10 @@ The strings of xs joined with sep between them.
 
 ```camel
 len: (x: string) => int
-len: (x: T[]) => int
+len: (x: T[..]) => int
 ```
 
-The number of bytes of a string, or of elements of an array.
+The number of bytes of a string, or of the first dimension of an array of any rank.
 
 - Pure.
 - Example: `len('h€')` gives `4`
@@ -557,7 +557,8 @@ A new array: the elements of xs, then those of other. xs is unchanged.
 
 `map` and `filter` apply f to the elements with no order among the calls: the parallel
 scheduler may run them at the same time, and the result is by position. `foreach` and
-`reduce` call f element by element in order. They are declared with effects because what a
+`reduce` call f element by element in order. `T[]` is an array of that element type (rank 1); the rank-n meaning is P5
+work. They are declared with effects because what a
 call does is what f does.
 
 #### `map`
@@ -1079,42 +1080,6 @@ Concatenates two binary values without decoding either one.
 
 ## `ckpt`: parameter trees and checkpoints
 
-#### `tree_map`
-
-```camel
-tree_map: <f: (leaf: A) => B> (tree: T) => U
-```
-
-Applies f to the leaves in the same place of the trees (one tree, or several of the same
-shape: the callback then takes one leaf of each), and gives a tree of the results. The shape
-is that of the first tree.
-
-- With effects: whatever the callback does.
-- Example: `tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })` gives `{ a: 2, b: (3, 4) }`
-
-#### `tree_reduce`
-
-```camel
-tree_reduce: <f: (acc: R, leaf: A) => R> (tree: T, init: R) => R
-```
-
-Folds the leaves from the first to the last with f, starting from init.
-
-- With effects: whatever the callback does.
-- Example: `tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)` gives `6`
-
-#### `tree_unzip`
-
-```camel
-tree_unzip: (tree: T, reference: S) => U
-```
-
-Turns a tree of tuples into a tuple of trees: the shape is that of `reference`, and every
-leaf of `tree` at a leaf of the reference is a tuple of the same length.
-
-- Pure.
-- Example: `tree_unzip({ a: (1, 2.0) }, { a: 0 })` gives `({ a: 1 }, { a: 2.0 })`
-
 #### `tree_leaves`
 
 ```camel
@@ -1180,10 +1145,15 @@ standard error; the next save restores it before replacing it.
 The parameter-tree library written in Camel (design principles 13.5): a tree is a value made
 of nested structs and tuples, and everything else is a leaf.
 
-`tree_paths` is here. `tree_map`, `tree_reduce`, `tree_unzip` and `tree_leaves` still live in
-the native module `ckpt`: they need the compiler's per-leaf expansion of a callback or of a
-value tuple, which arrives with H51 step 13; keeping them in `ckpt` until then is the split
-this library exists for, not a wrapper around them.
+`tree_paths`, `tree_map`, `tree_reduce` and `tree_unzip` are written here, with `match type`,
+`static for`/`static loop`, `fields`, `indices` and rest parameters: the walk is expanded at
+each call into ordinary access and fill nodes, with no function of its own per leaf type.
+
+`tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
+leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being
+built: `( ..ts )` is not written (a rest argument is only a call argument), and a function
+with a rest parameter has no value to return. It stays `ckpt:tree_leaves` until value-tuple
+expansion exists.
 
 The path of a leaf is its field names (tuple indices) from the root, joined by dots; the
 root's own path is the empty string. The path values are ordinary strings, so the result is
@@ -1199,6 +1169,42 @@ The path of every leaf, as a tree of the same shape.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `tree_paths({ a: 1, b: (2, 3) })` gives `{ a: 'a', b: ('b.0', 'b.1') }`
+
+#### `tree_map`
+
+```camel
+tree_map: <f: typeas F> (t: typeas T, ..ts) => ?
+```
+
+Applies f to the leaves in the same place of the trees (one tree, or several of the same
+shape: the callback then takes one leaf of each), and gives a tree of the results. The shape
+is that of the first tree.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })` gives `{ a: 2, b: (3, 4) }`
+
+#### `tree_reduce`
+
+```camel
+tree_reduce: <f: (acc: typeas R, leaf: typeas A) => R> (t: typeas T, init: R) => R
+```
+
+Folds the leaves from the first to the last with f, starting from init.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)` gives `6`
+
+#### `tree_unzip`
+
+```camel
+tree_unzip: (r: typeas R, s: typeas S) => ?
+```
+
+Turns a tree of tuples into a tuple of trees: the shape is that of `reference`, and every
+leaf of `tree` at a leaf of the reference is a tuple of the same length.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `tree_unzip({ a: (1, 2.0) }, { a: 0 })` gives `({ a: 1 }, { a: 2.0 })`
 
 <a id="tensor"></a>
 
@@ -1953,7 +1959,7 @@ the program runs (check them with `as`, or read them with `shape`).
 
 - With effects: reads a file.
 - Failure: fault `RuntimeError` when the file is missing, is not a NumPy file, or holds a storage type the module does not read.
-- Example: `load_npy('x.npy') as Tensor<f32, const [2, 2]>`
+- Example: `load_npy('x.npy') as Tensor<f32, [2, 2]>`
 
 #### `save_npy`
 

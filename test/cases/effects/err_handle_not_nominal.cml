@@ -1,0 +1,7 @@
+// `#resource` says a type is a handle: one resource per value, named by the declaration. An alias
+// has no identity of its own to name (HandleTypeNotNominal).
+#resource type Id = int
+
+func main(): int {
+    return 0
+}

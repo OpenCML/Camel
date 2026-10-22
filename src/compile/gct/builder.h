@@ -20,6 +20,7 @@
 #pragma once
 
 #include <iostream>
+#include <map>
 #include <memory>
 #include <regex>
 #include <set>
@@ -33,6 +34,7 @@
 #include "camel/core/error/abort.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/module/module.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/type/enum.h"
 #include "camel/parse/ast.h"
 
@@ -40,6 +42,8 @@ namespace camel::compile::gct {
 
 using FunctionType = camel::core::type::FunctionType;
 using void_ptr_t   = void *;
+// The resource model a function type publishes (design effects plan 2.2).
+namespace sem = camel::core::sem;
 
 class Builder {
   public:
@@ -144,18 +148,31 @@ class Builder {
     bool openSignature_    = false;
     bool typeasAllowed_    = false;
     bool inDeclReturnType_ = false;
-    // A type variable bound by the result of a function type written inside a signature
-    // (`with <key: (x: T) => K>`): its one occurrence is an output the callback supplies, so
-    // it is not the likely misspelling the once-only warning looks for.
-    bool inNestedFuncReturn_ = false;
-    std::set<std::string> outputTypeVars_;
+    // The declaration the next function type is the signature of has no body (a native
+    // declaration): its type variables are inferred from the call, so the once-only warning
+    // (which looks for a misspelt name) does not apply.
+    bool nativeDeclPending_ = false;
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
-    // The type variables bound by their first occurrence in a parameter type (design
-    // principles 5.5), and how many types of the signature write each. A name used only once
-    // is usually a misspelled type (the warning TypeVariableUsedOnce).
-    std::set<std::string> autoTypeVars_;
-    std::unordered_map<std::string, size_t> typeVarUses_;
+
+    // Type variables also bind automatically (design principles 5.5): a plain name that first
+    // appears in a parameter type of the declaration being visited (a `with` parameter's type
+    // included) and that no type name answers binds a type variable, the way `typeas T` does.
+    // `typeVarBindAllowed_` is true only while those parameter types are visited; a function
+    // type nested in one of them is part of that type, so it binds too. `typeVarOnlyInReturn_`
+    // is true while the declaration's return type is visited: a plain name no parameter bound
+    // is an error there. `typeVarUses_` counts the occurrences of every plain name written in
+    // the signature, and `autoBoundVars_` records the ones this rule bound and where, so one
+    // written only once can be warned about (a misspelt type name usually appears once).
+    bool typeVarBindAllowed_ = false;
+    bool typeVarOnlyInReturn_ = false;
+    // A type variable bound by the result of a function type nested in a parameter type
+    // (`with <key: (x: T) => K>`): its one occurrence is the value the callback supplies, so
+    // it is not the misspelt name the once-only warning looks for.
+    bool inNestedFuncResult_ = false;
+    std::shared_ptr<std::set<std::string>> callbackResultVars_;
+    std::shared_ptr<std::unordered_map<std::string, size_t>> typeVarUses_;
+    std::shared_ptr<std::unordered_map<std::string, camel::source::origin_id_t>> autoBoundVars_;
 
     // The lambda parameters whose type was left out, collected while the signature of the
     // function being defined is visited and given to its FUNC node (Tree::setUnwrittenParams).
@@ -164,16 +181,18 @@ class Builder {
     std::vector<Tree::UnwrittenParam> pendingUnwrittenParams_;
 
     // Named dimensions of type extents (design principles 5.4): a name denotes an extent, not a
-    // type. Like `typeas T`, a name is bound only in the parameter types of the function
-    // declaration being visited (`constas n`), and the rest of its signature writes `n`.
-    // `dimNames_` is the binding of the signature being visited (empty outside a signature);
-    // it is filled from every parameter type before the extents are read, so a parameter may
-    // write a name that another parameter binds. `boundDims_` holds the names whose `constas`
-    // has been visited, so a second `constas` of the same name is reported.
-    // `dimBindAllowed_` is true only while its parameter types are visited, so a `constas` in a
-    // return type, in a body, or inside a nested function type is reported.
+    // type. A name is bound the first time it is written in the parameter types of the function
+    // declaration being visited; later occurrences in the same signature use it, and the return
+    // type may use the names the parameters bound. `dimNames_` holds the names the signature
+    // binds (empty outside a signature); `boundDims_` holds the names already visited, so a
+    // second plain name binds as a reference, not a new dimension. `dimUses_` counts the
+    // occurrences in the parameter types so a name used only once can be suggested as `?`.
+    // `dimBindAllowed_` is true only while the parameter types are visited, so a name in a
+    // return type, in a body, or inside a nested function type is reported as unbound.
     std::shared_ptr<std::set<std::string>> dimNames_;
     std::shared_ptr<std::set<std::string>> boundDims_;
+    std::shared_ptr<std::set<std::string>> dimPacks_;
+    std::shared_ptr<std::map<std::string, size_t>> dimUses_;
     bool dimBindAllowed_ = false;
 
     // Where the value of what is being lowered goes, as far as the warning
@@ -222,6 +241,29 @@ class Builder {
     /// A `tag` declaration (design principles 6.2): the tag is registered here, before the types
     /// are declared, and lowers to no node.
     void visitTagDecl(const AST::node_ptr_t &ast);
+    /// A `resource` declaration (design effects plan 3.2): the resource is registered in the
+    /// module before any declaration is lowered, and lowers to no node.
+    node_ptr_t visitResourceDecl(const AST::node_ptr_t &ast);
+    /// The declaration each registered resource was written at, for the diagnostics of
+    /// checkResourceGroups.
+    std::map<std::string, AST::node_ptr_t> resourceDecls_;
+    /// Checks the members of every group the module declares: a member that is neither a
+    /// parameter nor a resource (UnknownResource) and a group that contains itself
+    /// (ResourceGroupCycle) are reported here, before a clause expands one.
+    void checkResourceGroups();
+    /// The resources a function type's `uses`/`pure` clause publishes (design effects plan 3.1),
+    /// in the numbering of `built`: parameters by class (a handle type a Handle, a `var` a
+    /// Variable, any other an Object), ambient resources (a group expanded), or nothing for
+    /// `pure`. Generic when the type writes no clause.
+    sem::ResourceSignature
+    resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionType *built);
+    /// The ambient resources a name stands for, as written: a standard resource, one the module
+    /// declares, one it imports, or a group of them (expanded). False when the name is none of
+    /// those; `where` locates the diagnostic (UnknownResource, ResourceGroupCycle).
+    bool resolveAmbientResource(
+        const camel::core::module::module_ptr_t &in, const Reference &name,
+        std::vector<std::string> &out, std::vector<std::string> &active,
+        std::string *failed, const AST::node_ptr_t &where);
     /// The tag uses written before `ast`, lowered: the `RepeatedLoad("TagUse")` child of a
     /// function, type or block declaration, and the one of each of its fields.
     std::vector<GCT::TagUse> tagUsesOf(const AST::node_ptr_t &ast);
@@ -347,14 +389,10 @@ class Builder {
     Type *visitDataType(const AST::node_ptr_t &ast);
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
-    /// Whether the expression of a `const` type argument writes a dimension name: `constas n`, or
-    /// a name already bound in `dimNames_`.
-    bool namesDimension(const AST::node_ptr_t &ast) const;
-    /// The extents of `const [e0, e1, ...]` as linear forms (design principles 5.4). Reports a
-    /// `constas` that cannot bind here, a name that is not bound, and an expression that is not
-    /// a shape. nullptr with a diagnostic reported.
+    /// The extents of one `[...]` as linear forms (design principles 5.4). An unknown extent
+    /// (`?`, or the empty `[]`) is `ExtentForm::unknown()`; nullptr with a diagnostic reported.
     std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>
-    visitNamedExtents(const AST::node_ptr_t &ast);
+    visitExtents(const AST::DimGroup &group, const AST::node_ptr_t &ast);
     /// One extent as a linear form: a constant, a name, `+`/`-`, and `*` by a constant. Any
     /// other expression is unknown.
     camel::core::type::ExtentForm visitExtent(const AST::node_ptr_t &ast);

@@ -1,9 +1,9 @@
 module shape_inference_loaded_struct
 import { Tensor, sum, ones, load_npy } from tensor
 // Weights read from a file have no shape in their type; here one field of a struct.
-type P = { w: Tensor<f32, const [3]>, b: Tensor<f32, const [3]> }
+type P = { w: Tensor<f32, [3]>, b: Tensor<f32, [3]> }
 with <m: P>
-func f(x: Tensor<f32, const [3]>): float {
+func f(x: Tensor<f32, [3]>): float {
     return sum(m.w * x + m.b)
 }
 func main(): int sync {

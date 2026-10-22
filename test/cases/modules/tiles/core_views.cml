@@ -8,9 +8,9 @@ import { source, inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
 let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0], [2, 3])
 func chained(x: Tensor<f32>): Tensor<f32> { return slice(permute(x, [2, 0, 1]), 0, 1, 4, 2) }
-func fixed(x: Tensor<f32, const [2, 3, 4]>): Tensor<f32> { return permute(x, [2, 0, 1]) }
+func fixed(x: Tensor<f32, [2, 3, 4]>): Tensor<f32> { return permute(x, [2, 0, 1]) }
 with <axes: int[]>
-func configured(x: Tensor<f32, const [2, 3, 4]>): Tensor<f32> { return permute(x, axes) }
+func configured(x: Tensor<f32, [2, 3, 4]>): Tensor<f32> { return permute(x, axes) }
 func rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [3, 2]) }
 #vjp<rule>
 func mark(x: Tensor<f32>): Tensor<f32> { return x }
@@ -36,16 +36,16 @@ with <x: Tensor<f32>>
 func wide_loss(): float { return sum(wide_mark(sum(x, 1))) }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let x = load_npy(folder + '/x.npy') as Tensor<f32, const [2, 3, 4]>
+    let x = load_npy(folder + '/x.npy') as Tensor<f32, [2, 3, 4]>
     save_npy(chained(x), folder + '/chain_cpu.npy')
     save_npy(download(run_preferred_resident<chained>(x)), folder + '/chain_gpu.npy')
     save_npy(fixed(x), folder + '/fixed_cpu.npy')
     save_npy(download(run_preferred_resident<fixed>(x)), folder + '/fixed_gpu.npy')
     save_npy(configured<[2, 0, 1]>(x), folder + '/config_cpu0.npy')
     save_npy(configured<[1, 2, 0]>(x), folder + '/config_cpu1.npy')
-    save_npy(download(run_preferred_resident<configured<[2, 0, 1]>(x)), folder + '/config_gpu0.npy')
-    save_npy(download(run_preferred_resident<configured<[1, 2, 0]>(x)), folder + '/config_gpu1.npy')
-    save_npy(download(run_preferred_resident<configured<[2, 0, 1]>(x)), folder + '/config_gpu2.npy')
+    save_npy(download(run_preferred_resident<configured<[2, 0, 1]>>(x)), folder + '/config_gpu0.npy')
+    save_npy(download(run_preferred_resident<configured<[1, 2, 0]>>(x)), folder + '/config_gpu1.npy')
+    save_npy(download(run_preferred_resident<configured<[2, 0, 1]>>(x)), folder + '/config_gpu2.npy')
     let a = zeros([2, 4, 3])
     // Bind each transform once, outside the wrapper: tiles::run specializes the wrapper's
     // graph, and a graph that still contains an autodiff operator cannot be lowered there.

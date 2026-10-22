@@ -283,6 +283,46 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
             indent_,
             escape(camel::core::attr::text(graph->region(0)->attrs)));
     }
+    // The compact view prints the fact of each tagged region as a line of its own. A cluster is
+    // a layout (`std::gir_regions` draws it); the fact is graph content and must be visible in
+    // the view used for review and goldens too (H49 review, ruling 4). A region without a fact
+    // prints nothing, so existing output is unchanged.
+    if (!config_.regions) {
+        for (uint32_t region = 1; region < graph->regionCount(); ++region) {
+            const auto &record = *graph->region(region);
+            if (record.attrs == camel::core::attr::kNoAttrs) {
+                continue;
+            }
+            const char *kind = "region";
+            switch (record.kind) {
+            case camel::runtime::GCRegionKind::Arm:
+                kind = "arm";
+                break;
+            case camel::runtime::GCRegionKind::LoopCond:
+                kind = "loop_cond";
+                break;
+            case camel::runtime::GCRegionKind::LoopBody:
+                kind = "loop_body";
+                break;
+            case camel::runtime::GCRegionKind::Inline:
+                kind = "inline";
+                break;
+            case camel::runtime::GCRegionKind::Block:
+                kind = "block";
+                break;
+            default:
+                break;
+            }
+            res += std::format(
+                "{}{}region #{} {} parent={} attrs=\"{}\";\n",
+                baseIndent_,
+                indent_,
+                region,
+                kind,
+                record.parent,
+                escape(camel::core::attr::text(record.attrs)));
+        }
+    }
 
     program_->traceGraphs(*graph, [&](camel::runtime::GCGraph *dep) {
         if (!dep) {

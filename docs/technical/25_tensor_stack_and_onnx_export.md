@@ -148,28 +148,27 @@ An unknown rank is represented by an absent shape.
 
 #### Shapes written in a program
 
-A program writes a tensor type as `Tensor<f32, const [2, 3]>`: the element type
+A program writes a tensor type as `Tensor<f32, [2, 3]>`: the element type
 (`f32`, `f64`, `i32`, `i64`, `bool`), then the shape. Either part may be left
-out (`Tensor<f32>`, `Tensor<const [3]>`), and an extent written `-1` is unknown
-(`Tensor<f32, const [-1, 3]>`; diagnostics print it as `Tensor<float32, [?, 3]>`).
+out (`Tensor<f32>`, `Tensor<[3]>`), and an extent written `?` is unknown
+(`Tensor<f32, [?, 3]>`).
 A declared shape is checked at compile time wherever the value's type is at
 least as exact: at a call, at a `return` against the declared return type, in
 the operators of the body.
 
-A shape may also name its extents (design principles 5.4). The name is bound by
-`constas` where it first appears in a parameter type, and later occurrences write
-it plainly:
+A shape may also name its extents (design principles 5.4). The first appearance in
+a parameter type binds the name, and later occurrences write it plainly:
 
 ```camel
-func dense(x: Tensor<f32, const [constas n, 3]>, w: Tensor<f32, const [3, constas k]>): Tensor<f32, const [n, k]>
+func dense(x: Tensor<f32, [n, 3]>, w: Tensor<f32, [3, k]>): Tensor<f32, [n, k]>
 ```
 
 The extents of a type are linear forms over those names: a name, an integer
 constant, and sums of those, so `n`, `n + 1` and `2 * n` are compared by value.
 Anything else (`n * m`, `n / 2`) is unknown, never an error. A name that only the
-return type writes is an error (`DimensionNameNotBound`), and so is a `constas`
-outside a parameter type (`ConstasNotAllowed`) or a second binding of one name
-(`DimensionNameAlreadyBound`). At a call the names are bound from the arguments
+return type writes is an error (`DimensionNameNotBound`), and so is a second binding
+of one name (`DimensionNameAlreadyBound`). At a call the names are bound from the
+arguments
 whose extents are known; a contradicting extent is `DimensionMismatch`. An
 argument whose extent is unknown at compile time is accepted, and the call passes
 it through the checked conversion to the refined parameter type, so the extent is
@@ -208,14 +207,14 @@ The cases where the shape is knowledge of the run, so that `as` is the answer:
 
 | Case | Example |
 |---|---|
-| A tensor read from outside the program | `load_npy(path) as Tensor<f32, const [3, 3]>` |
-| A result that a function declares as plain `Tensor` (the declaration is what callers see, whatever the body computes); declaring the shape is the alternative | `let t = g(x)` ... `h(t as Tensor<f32, const [3]>)` |
-| A slice or index with computed bounds | `slice(x, 0, i, i + 1) as Tensor<f32, const [1, 3]>` |
-| A reduction with a computed axis, a reshape whose target is computed as a whole or has two computed extents, a computed extent itself | `reshape(x, [n, 3]) as Tensor<f32, const [2, 3]>` when `x` is `[?, 3]` |
-| A shape in which more than one extent is indexed out of a shape or computed by arithmetic, even from constants (such expressions are folded by `std::opt`, after types are checked) | `reshape(x, [shape(x)[1], shape(x)[0]]) as Tensor<f32, const [3, 2]>` |
-| The end of a recursion over a shrinking tensor | `if n <= 1 then x as Tensor<f32, const [1]> else ...` |
-| Branch arms of different extents (they join to `?`) | `(if c then a else b) as Tensor<f32, const [3]>` |
-| The value read from a `var` variable (a variable has the widened type `Tensor` of its first value, so that later assignments may change the shape) | `(s as Tensor<f32, const [3]>) + x` |
+| A tensor read from outside the program | `load_npy(path) as Tensor<f32, [3, 3]>` |
+| A result that a function declares as plain `Tensor` (the declaration is what callers see, whatever the body computes); declaring the shape is the alternative | `let t = g(x)` ... `h(t as Tensor<f32, [3]>)` |
+| A slice or index with computed bounds | `slice(x, 0, i, i + 1) as Tensor<f32, [1, 3]>` |
+| A reduction with a computed axis, a reshape whose target is computed as a whole or has two computed extents, a computed extent itself | `reshape(x, [n, 3]) as Tensor<f32, [2, 3]>` when `x` is `[?, 3]` |
+| A shape in which more than one extent is indexed out of a shape or computed by arithmetic, even from constants (such expressions are folded by `std::opt`, after types are checked) | `reshape(x, [shape(x)[1], shape(x)[0]]) as Tensor<f32, [3, 2]>` |
+| The end of a recursion over a shrinking tensor | `if n <= 1 then x as Tensor<f32, [1]> else ...` |
+| Branch arms of different extents (they join to `?`) | `(if c then a else b) as Tensor<f32, [3]>` |
+| The value read from a `var` variable (a variable has the widened type `Tensor` of its first value, so that later assignments may change the shape) | `(s as Tensor<f32, [3]>) + x` |
 
 A `var` parameter takes the variable itself, so no conversion applies to its
 argument: declare the `var` parameter with the variable's type (`var s:
@@ -537,3 +536,4 @@ rejection reason. That resolver extension is part of step 2.
 Steps 2-4 can proceed in parallel once step 1 has landed. The benchmark
 harness's PyTorch/TensorFlow side has no dependency on Camel and can proceed
 from the start.
+

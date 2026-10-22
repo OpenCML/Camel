@@ -1,0 +1,149 @@
+id = "compile.array_shape"
+order = 342
+tier = "fast"
+tags = ["feat", "compile", "types", "array", "dimensions", "syntax"]
+desc = "The array type's source syntax (docs/design/arrays-memory/plan.cn.md section 4): `f32[4]`, `f32[n]`, `f32[?]`, `f32[..]` and `f32[..rest]`, a shape argument `[n, 4]` of a module type, the binding of dimension names in a signature, and the diagnostics the shape is refused with."
+
+[[tests]]
+name = "syntax"
+desc = "`f32[4]`, `f32[?]` and `f32[]` are written where a type goes; the empty bracket is the same type as `?`, and a four-element array is read at index 0 and measured by len."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/syntax.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(parseFloat(lines[0]) === 1, `first(a) printed ${lines[0]}`)
+assert(lines[1].trim() === '4', `count(a) printed ${lines[1]}`)
+assert(lines[2].trim() === '4', `total(c) printed ${lines[2]}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "nested"
+desc = "`f32[][]` is an array of arrays (one bracket per dimension): two rows, each of two elements, and the last element reached by two indices."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/nested.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["3", "2", "6.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "binding"
+desc = "The name `n` binds in the first parameter and is written by the second, so `dot` takes two arrays of one length."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/binding.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(parseFloat(lines[0]) === 5, `dot printed ${lines[0]}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pack"
+desc = "`float[3, ..rest]` is a rank at least two with the first dimension fixed, `f32[..]` any rank, and `len` reads the first dimension."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/pack.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "linear"
+desc = "`n + 1` keeps the name: the second argument is one longer than the first, and the call binds and checks it."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/linear.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "name_used_once"
+desc = "A dimension name written once in the signature constrains nothing: the compiler warns and suggests `?`, and the program still runs."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/warn_once.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stderr_contains = ["DimensionNameUsedOnce"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_pack_not_last"
+desc = "Nothing may follow the pack: `f32[..rest, 3]` is refused when the type is read."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_pack_not_last.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionAfterAnyRank"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_pack_twice"
+desc = "One array type has one pack: `f32[..a, ..b]` is refused."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_pack_twice.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionAfterAnyRank"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_unbound"
+desc = "A name written only in the return type is not bound by any parameter."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_unbound.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionNameNotBound"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_const_shape"
+desc = "A shape argument is written without `const`; the old spelling reports the new one."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_const_shape.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_negative"
+desc = "A negative extent is not a dimension; the diagnostic points at `?`."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_negative.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidExtentExpression"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_as"
+desc = "The checked conversion to `f32[4]` refuses a six-element array with the array type's message."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_as.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_stdout_contains = ["conversion to 'f32[4]' failed: the array has shape [6]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

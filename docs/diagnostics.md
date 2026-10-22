@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-220 diagnostics: 202 errors, 18 warnings.
+227 diagnostics: 208 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -182,7 +182,13 @@ prints one entry.
 | `0x0300019B` | [SemanticDiag::ConstasArgumentMissing](#constasargumentmissing) | Error |
 | `0x0300019C` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error |
 | `0x0300019D` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error |
-| `0x0300019E` | [SemanticDiag::TypeVariableNotBound](#typevariablenotbound) | Error |
+| `0x0300019E` | [SemanticDiag::DimensionAfterAnyRank](#dimensionafteranyrank) | Error |
+| `0x0300019F` | [SemanticDiag::TypeVariableOnlyInReturn](#typevariableonlyinreturn) | Error |
+| `0x030001A0` | [SemanticDiag::UnknownResource](#unknownresource) | Error |
+| `0x030001A1` | [SemanticDiag::PureAndUses](#pureanduses) | Error |
+| `0x030001A2` | [SemanticDiag::ResourceGroupCycle](#resourcegroupcycle) | Error |
+| `0x030001A3` | [SemanticDiag::HandleTypeNotNominal](#handletypenotnominal) | Error |
+| `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -195,7 +201,8 @@ prints one entry.
 | `0x03100131` | [SemanticDiag::MatchCaseAfterWildcard](#matchcaseafterwildcard) | Warn |
 | `0x03100132` | [SemanticDiag::MatchWildcardRedundant](#matchwildcardredundant) | Warn |
 | `0x03100160` | [SemanticDiag::TagHasNoReader](#taghasnoreader) | Warn |
-| `0x03100161` | [SemanticDiag::TypeVariableUsedOnce](#typevariableusedonce) | Warn |
+| `0x03100161` | [SemanticDiag::DimensionNameUsedOnce](#dimensionnameusedonce) | Warn |
+| `0x03100162` | [SemanticDiag::TypeVariableUsedOnce](#typevariableusedonce) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -1038,12 +1045,17 @@ Ensure the type is defined and visible in the current scope.
 ```camel
 module written_unknown_name
 
-// `any` is not a type: there is no such name in the type scope. A declaration's parameter and
-// result types bind a type variable from a name that is not a type (design principles 5.5), so
-// the test writes it where no type variable can be bound: the type of a `let`.
+// `any` is not a type: there is no such name in the type scope, so writing it is the
+// ordinary unknown-type error (design principles 5.10; H27 deleted AnyNotAllowed). The
+// annotation is in the body because a name first written in a parameter type binds a type
+// variable instead (design principles 5.5).
+func keep(x: int): int {
+    let y: any = x
+    return y
+}
+
 func main(): int sync {
-    let x: any = 1
-    println(x)
+    println(keep(3))
     return 0
 }
 ```
@@ -1664,19 +1676,19 @@ The arguments of the type '{0}<...>' are not accepted: {1}.
 What a type takes between '<' and '>' is defined by the type itself (a type argument, or a constant written 'const <data>'). An argument a type does not accept is an error; it is never ignored.
 ```
 
-**Example** (`test/cases/compile/collections/err_bare_name.cml`, run as `camel test/cases/compile/collections/err_bare_name.cml`)
+**Example** (`test/cases/compile/array_shape/err_const_shape.cml`, run as `camel test/cases/compile/array_shape/err_const_shape.cml`)
 
 ```camel
-module main
+// A shape argument is written without `const`; the old spelling is refused and the message
+// gives the new one.
+module array_shape_err_const
+import { Tensor } from tensor
 
-// `Map` is always written with its key and value types.
-
-func size(m: Map): int {
+func bad(x: Tensor<f32, const [3]>): int {
     return 0
 }
 
 func main(): int sync {
-    println("never printed")
     return 0
 }
 ```
@@ -1703,10 +1715,10 @@ A type that leaves open what a parameter fixes is never accepted implicitly, and
 module shape_inference_computed_extent_stays_open
 import { Tensor, reshape, sum } from tensor
 // The computed extent itself is not known: [?, 3] does not enter a [2, 3] parameter.
-func exact(a: Tensor<f32, const [2, 3]>): float {
+func exact(a: Tensor<f32, [2, 3]>): float {
     return sum(a)
 }
-func f(x: Tensor<f32, const [-1, 3]>, n: int): float {
+func f(x: Tensor<f32, [?, 3]>, n: int): float {
     return exact(reshape(x, [n, 3]))
 }
 func main(): int sync {
@@ -1737,7 +1749,7 @@ A type that leaves open what the declared return type fixes is never accepted im
 module shape_inference_recursion_leaf
 import { Tensor, slice, reshape, sum } from tensor
 // That the vector has one element where the recursion ends is known when the program runs.
-func tree(x: Tensor<f32, const [-1]>, n: int): Tensor<f32, const [1]> {
+func tree(x: Tensor<f32, [?]>, n: int): Tensor<f32, [1]> {
     return if n <= 1 then x else tree(slice(x, 0, 0, n / 2), n / 2) + tree(slice(x, 0, n / 2, n), n - n / 2)
 }
 func main(): int sync {
@@ -1841,13 +1853,13 @@ func main(): int sync {
 **Message**
 
 ```text
-'typeas {0}' cannot bind '{0}': the name already denotes a type here.
+'typeas {0}' cannot bind '{0}': this signature already binds a type variable '{0}'.
 ```
 
 **Help**
 
 ```text
-Write 'typeas' only at the first occurrence of a type variable and plain '{0}' afterwards, or choose a name that is not a type in scope.
+A type variable is bound once: write 'typeas {0}' only at the place where it is first bound, and plain '{0}' everywhere after that (a plain '{0}' in a parameter type binds it already, so the explicit form is only needed when the name also denotes a type).
 ```
 
 **Example** (`test/cases/compile/generics/err_typeas_twice.cml`, run as `camel test/cases/compile/generics/err_typeas_twice.cml`)
@@ -1919,7 +1931,7 @@ A type variable takes the type of the argument found at its 'typeas' position, o
 module constas_argument_shape
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -3439,23 +3451,10 @@ The dimension name '{0}' is bound here, but only a parameter type can bind one.
 **Help**
 
 ```text
-Write 'constas n' where the dimension first appears in a parameter type, 'x: Tensor<f32, const [constas n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.
+A dimension name binds where it first appears in a parameter type, 'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.
 ```
 
-**Example** (`test/cases/modules/tensor/named_dims/err_constas_return.cml`, run as `camel test/cases/modules/tensor/named_dims/err_constas_return.cml`)
-
-```camel
-module named_dims_err_constas_return
-import { Tensor, ones } from tensor
-// A return type uses the names its parameters bound; it binds none.
-func bad(x: Tensor<f32>): Tensor<f32, const [constas n]> {
-    return x as Tensor<f32, const [-1]>
-}
-func main(): int sync {
-    println(bad(ones([3])))
-    return 0
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### DimensionNameNotBound
 
@@ -3470,20 +3469,21 @@ The dimension name '{0}' is not bound by any parameter of this signature.
 **Help**
 
 ```text
-A name in a type's extents is bound by 'constas name' where it first appears in a parameter type. A name that appears only in the return type is an error: the caller has no argument that could say what it is.
+A name in a type's extents is bound by its first plain occurrence in a parameter type, 'x: f32[n]', and later occurrences write it. A name that appears only in the return type is an error: the caller has no argument that could say what it is.
 ```
 
-**Example** (`test/cases/modules/tensor/named_dims/err_unbound_name.cml`, run as `camel test/cases/modules/tensor/named_dims/err_unbound_name.cml`)
+**Example** (`test/cases/compile/array_shape/err_unbound.cml`, run as `camel test/cases/compile/array_shape/err_unbound.cml`)
 
 ```camel
-module named_dims_err_unbound_name
-import { Tensor, ones } from tensor
-// A name that only the return type writes is an error: no parameter binds it.
-func only_return(x: Tensor<f32>): Tensor<f32, const [n]> {
-    return x as Tensor<f32, const [-1]>
+// The return type writes `n`, but no parameter binds it: the caller has no argument that
+// could say what it is.
+module array_shape_err_unbound
+
+func bad(x: f32[]): f32[n] {
+    return x
 }
+
 func main(): int sync {
-    println(only_return(ones([3])))
     return 0
 }
 ```
@@ -3495,25 +3495,16 @@ func main(): int sync {
 **Message**
 
 ```text
-The dimension name '{0}' is already bound; write '{0}' here instead of 'constas {0}'.
+The dimension name '{0}' is already bound; write '{0}' here.
 ```
 
 **Help**
 
 ```text
-Only the first occurrence of a dimension name in the parameter types binds it ('constas n'). Writing 'constas' again would ask for a second binding of the same name.
+Only the first occurrence of a dimension name in the parameter types binds it; later occurrences write it. Dimension names and pack names are separate namespaces, so one name cannot be both.
 ```
 
-**Example** (`test/cases/modules/tensor/named_dims/err_constas_twice.cml`, run as `camel test/cases/modules/tensor/named_dims/err_constas_twice.cml`)
-
-```camel
-module named_dims_err_constas_twice
-import { Tensor } from tensor
-// Only the first occurrence binds; a second `constas` of the same name would bind it again.
-func bad(a: Tensor<f32, const [constas n]>, b: Tensor<f32, const [constas n]>): float {
-    return 0.0
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### DimensionMismatch
 
@@ -3536,7 +3527,7 @@ The dimensions a signature names are one value for the whole call: every argumen
 ```camel
 module named_dims_err_mismatch
 import { Tensor, ones, sum } from tensor
-func pair(a: Tensor<f32, const [constas n]>, b: Tensor<f32, const [n]>): float {
+func pair(a: Tensor<f32, [n]>, b: Tensor<f32, [n]>): float {
     return sum(a) + sum(b)
 }
 func main(): int sync {
@@ -3552,16 +3543,29 @@ func main(): int sync {
 **Message**
 
 ```text
-This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('const [n, 3]').
+This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('f32[n, 3]').
 ```
 
 **Help**
 
 ```text
-Each extent is an integer, a dimension name bound by the signature, or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is not linear is unknown.
+Each extent is a non-negative integer, a dimension name bound by the signature, or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is not linear is unknown, and an unknown extent is written '?'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/array_shape/err_negative.cml`, run as `camel test/cases/compile/array_shape/err_negative.cml`)
+
+```camel
+// A negative extent is not a dimension: `?` is the unknown extent.
+module array_shape_err_negative
+
+func bad(x: f32[-1]): int {
+    return 0
+}
+
+func main(): int sync {
+    return 0
+}
+```
 
 ### NotDifferentiable
 
@@ -4136,7 +4140,16 @@ A field cannot be taken from '{0}' by a compile-time key.
 't.[key]' names a field of a struct or an element of an ordinary tuple. A 'T?' or 'T!' has to be opened first ('??', '!!', 'match'), and a scalar or an array has no fields.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/tree_shape_error.cml`, run as `camel test/cases/modules/tree_shape_error.cml std::nvm`)
+
+```camel
+module tree_shape_error
+import { tree_map } from tree
+func main(): int sync {
+    println(tree_map<(a: int, b: int): int => a + b>({ block: (1, 2) }, { block: 3 }))
+    return 0
+}
+```
 
 ### StaticAccessUnknownField
 
@@ -4678,7 +4691,7 @@ The value selects the instance of the declaration, so it must be known before th
 module constas_value_not_constant
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -4714,7 +4727,7 @@ The value must be known where the call is written. Call the declaration directly
 module constas_as_value
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -4753,7 +4766,7 @@ import { Tensor } from tensor
 
 // A body-less declaration names a C++ operator whose signature does not carry a compile-time
 // value parameter, even when the value writes the result's extent.
-func zeros(constas n: int): Tensor<f32, const [n]>
+func zeros(constas n: int): Tensor<f32, [n]>
 
 func main(): int sync {
     println(zeros(3))
@@ -4783,7 +4796,7 @@ A 'constas' value is bound at the call, like any other argument, but it is not a
 module constas_missing_argument
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -4856,35 +4869,212 @@ func main(): int {
 }
 ```
 
-### TypeVariableNotBound
+### DimensionAfterAnyRank
 
-`0x0300019E` · Error · `SemanticDiag::TypeVariableNotBound`
+`0x0300019E` · Error · `SemanticDiag::DimensionAfterAnyRank`
 
 **Message**
 
 ```text
-The type variable '{0}' is not bound by any parameter of this signature.
+A dimension pack ('..') must be the last item of its '[...]', and only one may be written.
 ```
 
 **Help**
 
 ```text
-A name in a parameter type is bound where it first appears, as a dimension name is. A name that appears only in the return type is an error: the caller has no argument that could say what it is. Write the name in a parameter type to bind it, or use 'typeas {0}' there when it is also a type in scope.
+A pack stands for the dimensions the type does not name, so nothing can follow it. Write it after the extents: 'f32[3, ..rest]', not 'f32[..rest, 3]'.
 ```
 
-**Example** (`test/cases/compile/generics/err_return_only_type_var.cml`, run as `camel test/cases/compile/generics/err_return_only_type_var.cml`)
+**Example** (`test/cases/compile/array_shape/err_pack_not_last.cml`, run as `camel test/cases/compile/array_shape/err_pack_not_last.cml`)
 
 ```camel
-module err_return_only_type_var
+// A pack stands for the trailing dimensions, so nothing may follow it.
+module array_shape_err_pack_not_last
 
-// A type variable that only the result type writes has nothing to bind it: the caller has no
-// argument that could say what it is (design principles 5.5).
-func make(): T {
-    return 1
+func bad(x: f32[..rest, 3]): int {
+    return 0
 }
 
 func main(): int sync {
-    println(make())
+    return 0
+}
+```
+
+### TypeVariableOnlyInReturn
+
+`0x0300019F` · Error · `SemanticDiag::TypeVariableOnlyInReturn`
+
+**Message**
+
+```text
+The name '{0}' appears only in the return type and no type answers it.
+```
+
+**Help**
+
+```text
+A type variable binds where it first appears in a parameter type, including the type of a 'with' parameter; a name first written in the return type has no argument to take a type from. Write it in a parameter type, or declare it explicitly as 'typeas {0}' when only the expected result determines it (design principles 5.9).
+```
+
+**Example** (`test/cases/compile/generic_auto_bind/err_return_only.cml`, run as `camel test/cases/compile/generic_auto_bind/err_return_only.cml`)
+
+```camel
+module err_return_only
+
+func make(x: int): T {
+    return x
+}
+
+func main(): int sync {
+    println(make(1))
+    return 0
+}
+```
+
+### UnknownResource
+
+`0x030001A0` · Error · `SemanticDiag::UnknownResource`
+
+**Message**
+
+```text
+The name '{0}' in the resource clause of '{1}' is neither a parameter nor a resource.
+```
+
+**Help**
+
+```text
+A clause names a parameter of the function (the value a call touches), a resource the module declares (`resource {0}`), one of the resources every program has (stdout, stderr, stdin, clock, env, fs), or a resource imported from another module. Check the spelling, or declare the resource.
+```
+
+**Example** (`test/cases/effects/err_unknown_resource.cml`, run as `camel test/cases/effects/err_unknown_resource.cml`)
+
+```camel
+// A clause names a parameter, a resource the module declares, one of the standard resources, or
+// one imported from another module. `nowhere` is none of those (UnknownResource).
+func f(x: int): int uses nowhere {
+    return x
+}
+
+func main(): int {
+    return f(1)
+}
+```
+
+### PureAndUses
+
+`0x030001A1` · Error · `SemanticDiag::PureAndUses`
+
+**Message**
+
+```text
+The signature of '{0}' says both 'pure' and 'uses'.
+```
+
+**Help**
+
+```text
+'pure' says the call touches no resource at all; 'uses' names the resources it touches. Write one of the two.
+```
+
+**Example** (`test/cases/effects/err_pure_and_uses.cml`, run as `camel test/cases/effects/err_pure_and_uses.cml`)
+
+```camel
+// `pure` says a call touches no resource at all; `uses` names the resources it touches. A
+// signature cannot say both (PureAndUses).
+func f(): int pure uses fs {
+    return 0
+}
+
+func main(): int {
+    return f()
+}
+```
+
+### ResourceGroupCycle
+
+`0x030001A2` · Error · `SemanticDiag::ResourceGroupCycle`
+
+**Message**
+
+```text
+The resource group '{0}' contains itself: {1}.
+```
+
+**Help**
+
+```text
+A group names resources, or other groups that name resources. Expand them in an order: a group cannot be one of its own members.
+```
+
+**Example** (`test/cases/effects/err_group_cycle.cml`, run as `camel test/cases/effects/err_group_cycle.cml`)
+
+```camel
+// A group names resources, or other groups that name resources, in an order: `a` contains itself
+// through `b` (ResourceGroupCycle).
+resource a = [b]
+resource b = [a]
+
+func main(): int {
+    return 0
+}
+```
+
+### HandleTypeNotNominal
+
+`0x030001A3` · Error · `SemanticDiag::HandleTypeNotNominal`
+
+**Message**
+
+```text
+'{0}' is not a nominal type declaration, so '#resource' says nothing about it.
+```
+
+**Help**
+
+```text
+A handle is a type with an identity of its own, one resource per value. Write the tag before a struct or an enum declaration (a `type` that names its fields or variants), not before an alias or a type function.
+```
+
+**Example** (`test/cases/effects/err_handle_not_nominal.cml`, run as `camel test/cases/effects/err_handle_not_nominal.cml`)
+
+```camel
+// `#resource` says a type is a handle: one resource per value, named by the declaration. An alias
+// has no identity of its own to name (HandleTypeNotNominal).
+#resource type Id = int
+
+func main(): int {
+    return 0
+}
+```
+
+### NativeResourceMismatch
+
+`0x030001A4` · Error · `SemanticDiag::NativeResourceMismatch`
+
+**Message**
+
+```text
+The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'.
+```
+
+**Help**
+
+```text
+A body-less declaration is the whole signature of a C++ operator, its resources included: write the clause the operator declares, or remove the clause and let the operator's declaration be the one the module publishes.
+```
+
+**Example** (`test/cases/effects/native_clause_wrong.cml`, run as `camel test/cases/effects/native_clause_wrong.cml`)
+
+```camel
+module fs
+
+import { read_text } from fs
+
+export func exists(path: string): bool pure
+
+func main(): int sync {
+    println(exists("no/such/file"))
     return 0
 }
 ```
@@ -5300,35 +5490,70 @@ func main(): int {
 }
 ```
 
-### TypeVariableUsedOnce
+### DimensionNameUsedOnce
 
-`0x03100161` · Warn · `SemanticDiag::TypeVariableUsedOnce`
+`0x03100161` · Warn · `SemanticDiag::DimensionNameUsedOnce`
 
 **Message**
 
 ```text
-The type variable '{0}' of '{1}' is written only once.
+The dimension name '{0}' is written once in this signature, so it relates nothing.
 ```
 
 **Help**
 
 ```text
-A type variable written once is usually a misspelled type name. Check the name; if it is deliberate, write it in a second parameter or in the result type.
+A name relates the extents that write it. If the size is not a relation, write '?' instead; if it is, write the name in another parameter or in the return type.
 ```
 
-**Example** (`test/cases/compile/generics/warn_type_var_used_once.cml`, run as `camel --output-format json test/cases/compile/generics/warn_type_var_used_once.cml`)
+**Example** (`test/cases/compile/array_shape/warn_once.cml`, run as `camel test/cases/compile/array_shape/warn_once.cml std::nvm`)
 
 ```camel
-module warn_type_var_used_once
+// A name written once in the signature relates nothing, so the compiler suggests `?`.
+module array_shape_warn_once
 
-// A type variable written only once does not relate two positions: it is most likely a
-// misspelled type name (design principles 5.5).
-func ignore(x: T, n: int): int {
-    return n
+func first(x: f32[n]): f32 {
+    return x[0]
 }
 
 func main(): int sync {
-    println(ignore(1, 2))
+    println(first([1.0, 2.0]))
+    return 0
+}
+```
+
+### TypeVariableUsedOnce
+
+`0x03100162` · Warn · `SemanticDiag::TypeVariableUsedOnce`
+
+**Message**
+
+```text
+The type variable '{0}' is bound here and appears only once in the signature.
+```
+
+**Help**
+
+```text
+One occurrence is what a misspelt type name looks like, so check the spelling. If the name is wanted, use it again in a later parameter type or in the return type; an explicit 'typeas {0}' states that the single occurrence is deliberate.
+```
+
+**Example** (`test/cases/compile/generic_auto_bind/warn_used_once.cml`, run as `camel test/cases/compile/generic_auto_bind/warn_used_once.cml std::fvm`)
+
+```camel
+module warn_used_once
+
+func show(x: T): string {
+    return 'x'
+}
+
+func twice(x: U): U {
+    return x
+}
+
+func main(): int sync {
+    println(show(1))
+    println(twice(2))
     return 0
 }
 ```

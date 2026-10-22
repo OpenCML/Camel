@@ -2,7 +2,7 @@ id = "compile.generics"
 order = 323
 tier = "fast"
 tags = ["feat", "compile", "generics", "types"]
-desc = "Generic functions bound with `typeas` (one subgraph per set of argument types) and type functions (`type Pair<T> = ...`), design principles 5.6."
+desc = "Generic functions bound by `typeas` or by a name's first appearance in a parameter type (one subgraph per set of argument types) and type functions (`type Pair<T> = ...`), design principles 5.5 and 5.6."
 
 [[tests]]
 name = "explicit_type_arguments"
@@ -887,22 +887,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
-name = "typeas_existing_type"
-desc = "`typeas int`: the name already denotes a type."
-kind = "negative"
-case = "../../../cases/compile/generics/err_typeas_shadow.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TypeVariableRedeclared"
-expect_diagnostic_line = 3
-expect_diagnostic_column = 19
-expect_output_contains = ["'typeas int' cannot bind 'int'"]
+name = "typeas_collision"
+desc = "`typeas T` where `T` is a declared type: the explicit form binds a type variable of that name for the signature, shadowing the type (design principles 5.5). A plain `T` would refer to the declared type, which is why the explicit form exists."
+kind = "behavior"
+case = "../../../cases/compile/generics/typeas_collision.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]
 name = "use_before_typeas"
-desc = "A name in a parameter type binds a type variable where it is first written (design principles 5.5), so a later `typeas` of the same name cannot bind it again."
+desc = "A plain name in an earlier parameter type now binds the variable (5.5), so the later `typeas` of the same name is the redeclaration."
 kind = "negative"
 case = "../../../cases/compile/generics/err_unbound_use.cml"
 args = ["${case}"]
@@ -910,7 +907,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TypeVariableRedeclared"
 expect_diagnostic_line = 3
 expect_diagnostic_column = 25
-expect_output_contains = ["'typeas T' cannot bind 'T'"]
+expect_output_contains = ["'typeas T' cannot bind 'T'", "already binds a type variable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

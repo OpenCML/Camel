@@ -3,7 +3,7 @@ import { from_array, to_array, encode, decode, size, concat } from bytes
 import { read_bytes, write_bytes, read_chunk, replace, file_size } from fs
 import { sha256 } from hash
 import { get_env } from env
-import { tree_map } from ckpt
+import { tree_map } from tree
 func count(b: Bytes): int { return size(b) }
 func main(): int sync {
     // The runner gives every test its own scratch directory (CAMEL_TEST_TMPDIR) and the OS

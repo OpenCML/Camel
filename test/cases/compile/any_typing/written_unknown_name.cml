@@ -1,10 +1,15 @@
 module written_unknown_name
 
-// `any` is not a type: there is no such name in the type scope. A declaration's parameter and
-// result types bind a type variable from a name that is not a type (design principles 5.5), so
-// the test writes it where no type variable can be bound: the type of a `let`.
+// `any` is not a type: there is no such name in the type scope, so writing it is the
+// ordinary unknown-type error (design principles 5.10; H27 deleted AnyNotAllowed). The
+// annotation is in the body because a name first written in a parameter type binds a type
+// variable instead (design principles 5.5).
+func keep(x: int): int {
+    let y: any = x
+    return y
+}
+
 func main(): int sync {
-    let x: any = 1
-    println(x)
+    println(keep(3))
     return 0
 }

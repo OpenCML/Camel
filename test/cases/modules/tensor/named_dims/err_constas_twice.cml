@@ -1,6 +1,0 @@
-module named_dims_err_constas_twice
-import { Tensor } from tensor
-// Only the first occurrence binds; a second `constas` of the same name would bind it again.
-func bad(a: Tensor<f32, const [constas n]>, b: Tensor<f32, const [constas n]>): float {
-    return 0.0
-}

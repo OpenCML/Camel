@@ -84,7 +84,7 @@ variant   : name | name '(' type, ... ')' | name '{' name: type, ... '}'
 
 - `T?`, `T!`: [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t).
 - `typeas T`: [7.5](07_statements.md#75-generic-functions).
-- `constas n`: two uses, both compile-time names ([design principles 5.4](../../design-principles.en.md)): it names a dimension in a `const` argument -- the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards -- or it is a **value parameter** of a function declaration (`func f(constas n: int, ...)`), bound by the constant at the call ([7.5](07_statements.md#75-generic-functions)). A value parameter may be written at any position in the parameter list, and there may be any number of them; each value is its own part of the instance key.
+- `constas n`: two uses, both compile-time names ([design principles 5.4](../../design-principles.en.md)): it names a dimension in a `const` argument -- the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards -- or it is a **value parameter** of a function declaration (`func f(constas n: int, ...)`), bound by the constant at the call ([7.5](07_statements.md#75-generic-functions)). A value parameter may be written at any position in the parameter list, and there may be any number of them; each value is its own part of the instance key. A dimension name in a shape no longer writes `constas`: the name binds where it first appears in a parameter type and is written as plain `n` afterwards (see the array row of [3.1](03_data_model.md)).
 - `enum`: [3.5](03_data_model.md#35-enums).
 - Angle brackets: the arguments of a type function ([7.7](07_statements.md#77-type-declarations)) or the arguments of a module type.
 
@@ -97,7 +97,7 @@ Every production of the language, one for one with the parser: each production i
 ```
 program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-                     | tagDecl | dataDecl | funcDecl | typeDecl | ruleDecl
+                     | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt | staticForExpr
 blockStmt          : 'wait'? stmtBlock | funcAnno+ stmtBlock
@@ -113,11 +113,12 @@ exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
 usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-                     | typeDecl | dataDecl
+                     | typeDecl | dataDecl | resourceDecl
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
-                     'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock?
+                     'func' (identRef | operatorName) parentParams (':' typeExpr)? resourceClause?
+                     stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
                      | 'export'? 'tag' identDef '=' bracketIdents
 tagPositions       : tagPositionName (',' tagPositionName)* ','?
@@ -132,6 +133,7 @@ carrier            : identList | parentIdents | bracedIdents | bracketIdents
 typeDecl           : frontMatter? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
+resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 retStmt            : ('return' | 'throw') dataList
 modifiers          : 'sync'+
 identDef           : IDENTIFIER
@@ -217,15 +219,18 @@ diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
 keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
 keyInterType       : typeUnit ('^' typeUnit)*
 typeUnit           : (identDef 'of')? arrayType
-arrayType          : specType ('[' ']')*
+arrayType          : specType arrayDim+
+arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+arrayDimItem       : '?' | '..' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
-typeOrData         : typeExpr | 'const' dataExpr
+typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
                      | 'typeof' dataExpr | 'typeas' identDef
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
-funcType           : modifiers? angledParams? parentParams '=>' typeExpr
+funcType           : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
+resourceClause     : ('uses' identRef (',' identRef)* | 'pure')+
 typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?

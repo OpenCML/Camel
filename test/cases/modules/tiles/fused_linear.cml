@@ -9,7 +9,7 @@ module tiles_fused_linear
 import { Tensor, reshape, relu } from tensor
 import { regions } from tiles
 
-func linear(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>, b: Tensor<f32, const [2]>): Tensor<f32, const [2, 2]> {
+func linear(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 2]>, b: Tensor<f32, [2]>): Tensor<f32, [2, 2]> {
     return relu(x @ w + b)
 }
 

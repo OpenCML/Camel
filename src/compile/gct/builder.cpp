@@ -50,6 +50,9 @@ using namespace camel::core::type;
 
 namespace camel::compile::gct {
 
+// The resource model of a function type (design effects plan 2.2, 3.1): short, as `Type` is.
+namespace sem = camel::core::sem;
+
 inline camel::source::origin_id_t nodeOrigin(const node_ptr_t &node) {
     return node ? node->origin() : camel::source::kInvalidOriginId;
 }
@@ -497,6 +500,24 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
         } catch (const BuildAbortException &) {
         }
     }
+    // A resource declaration is registered before anything is lowered (design effects plan
+    // 3.2): a clause written above it reads it, and so does every signature. It lowers to no
+    // node, so it takes no part in the two passes below. The groups are checked once every
+    // member is known, so a group may name a resource declared later in the module.
+    for (const auto &stmt : *stmtNodes) {
+        if (stmt->type() != AST::LoadType::Stmt ||
+            stmt->loadAs<AST::StmtLoad>()->stmtType() != AST::StmtType::Resource) {
+            continue;
+        }
+        try {
+            visitResourceDecl(stmt);
+        } catch (const BuildAbortException &) {
+        }
+    }
+    try {
+        checkResourceGroups();
+    } catch (const BuildAbortException &) {
+    }
     for (size_t i = 0; i < stmtNodes->size(); ++i) {
         const auto &stmt = stmtNodes->at(i);
         if (!isTypeDecl(stmt)) {
@@ -822,6 +843,11 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
         // (visitTagDecl, visitModule), so that a use written before it reads it.
         LEAVE("Stmt");
         return nullptr;
+    case AST::StmtType::Resource:
+        // A resource declaration has no node either: it is registered when the module is
+        // entered (visitResourceDecl, visitModule), before any clause reads it.
+        LEAVE("Stmt");
+        return nullptr;
     default:
         throw std::runtime_error("Unknown statement type");
     }
@@ -1115,6 +1141,235 @@ void Builder::visitTagDecl(const AST::node_ptr_t &ast) {
     LEAVE("TagDecl");
 }
 
+namespace {
+/// The text of a resource name as a diagnostic shows it: a resource of the module it is
+/// declared in is written with that module (`fs::handle`), a standard one as itself.
+std::string resourceCycleText(const std::vector<std::string> &chain, const std::string &closing) {
+    std::string text;
+    for (const std::string &step : chain) {
+        text += (text.empty() ? "" : " -> ") + step;
+    }
+    text += (text.empty() ? "" : " -> ") + closing;
+    return text;
+}
+} // namespace
+
+node_ptr_t Builder::visitResourceDecl(const AST::node_ptr_t &ast) {
+    ENTER("ResourceDecl");
+    const auto decl = ast->loadAs<AST::ResourceDeclLoad>();
+    camel::core::module::Module::ResourceDecl resource;
+    resource.unordered = decl->unordered();
+    for (const Reference &member : decl->members()) {
+        resource.members.push_back(member);
+    }
+    const std::string name = decl->ref().toString();
+    if (module_->resource(decl->ref()) != nullptr) {
+        // One name, one resource (design principles 10.2: a name is declared once in a scope).
+        diags_->of(SemanticDiag::Redeclaration)
+            .at(ast->load()->tokenRange())
+            .commit(name);
+        throw BuildAbortException();
+    }
+    module_->declareResource(decl->ref(), std::move(resource));
+    if (exportedRefs_.contains(name)) {
+        module_->setResourceExported(decl->ref());
+    }
+    resourceDecls_[name] = ast;
+    LEAVE("ResourceDecl");
+    return nullptr;
+}
+
+void Builder::checkResourceGroups() {
+    for (const auto &[name, ast] : resourceDecls_) {
+        const auto *decl = module_->resource(Reference(name));
+        if (decl == nullptr || decl->members.empty()) {
+            continue;
+        }
+        std::vector<std::string> expanded;
+        std::vector<std::string> active;
+        std::string failed;
+        if (!resolveAmbientResource(
+                module_, Reference(name), expanded, active, &failed, ast)) {
+            diags_->of(SemanticDiag::UnknownResource)
+                .at(ast->load()->tokenRange())
+                .commit(failed, name);
+            throw BuildAbortException();
+        }
+    }
+}
+
+bool Builder::resolveAmbientResource(
+    const camel::core::module::module_ptr_t &in, const Reference &name,
+    std::vector<std::string> &out, std::vector<std::string> &active, std::string *failed,
+    const AST::node_ptr_t &where) {
+    const std::string written = name.toString();
+    const std::string key   = (in ? in->name() : std::string()) + "::" + written;
+    if (std::find(active.begin(), active.end(), key) != active.end()) {
+        diags_->of(SemanticDiag::ResourceGroupCycle)
+            .at(where->load()->tokenRange())
+            .commit(written, resourceCycleText(active, key));
+        throw BuildAbortException();
+    }
+    struct ActiveGuard {
+        std::vector<std::string> &active;
+        ~ActiveGuard() { active.pop_back(); }
+    } guard{active};
+    active.push_back(key);
+    if (in) {
+        if (const auto *decl = in->resource(name)) {
+            if (in.get() == module_.get() || decl->exported) {
+                if (decl->members.empty()) {
+                    // A resource of a module is named with the module, as an operator of one is
+                    // (design principles 10.2): `fs::handle` is one thing, wherever it is used.
+                    // A resource of this module keeps the name it was declared with.
+                    out.push_back(
+                        in.get() == module_.get() ? written : in->name() + "::" + written);
+                    return true;
+                }
+                for (const Reference &member : decl->members) {
+                    if (!resolveAmbientResource(in, member, out, active, failed, where)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+    }
+    if (sem::isStandardResource(written)) {
+        out.push_back(written);
+        return true;
+    }
+    if (in) {
+        // A name imported by name (`import { r } from m`), then a module prefix (`m::r`).
+        if (auto source = in->importedSource(name)) {
+            return resolveAmbientResource(source->first, source->second, out, active, failed, where);
+        }
+        for (const auto &[prefix, mod] : in->importedNamespaces()) {
+            if (written.size() > prefix.size() + 2 &&
+                written.compare(0, prefix.size(), prefix) == 0 &&
+                written.compare(prefix.size(), 2, "::") == 0) {
+                return resolveAmbientResource(
+                    mod, Reference(written.substr(prefix.size() + 2)), out, active, failed, where);
+            }
+        }
+    }
+    if (failed != nullptr) {
+        *failed = written;
+    }
+    return false;
+}
+
+sem::ResourceSignature
+Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionType *built) {
+    sem::ResourceSignature signature;
+    const AST::ResourceClauseLoad *clause = nullptr;
+    if (funcTypeAst != nullptr && funcTypeAst->size() > 3) {
+        const AST::node_ptr_t &clauseNode = funcTypeAst->at(3);
+        if (clauseNode != nullptr &&
+            clauseNode->load()->type() == AST::LoadType::ResourceClause) {
+            clause = clauseNode->loadAs<AST::ResourceClauseLoad>().get();
+        }
+    }
+    if (clause == nullptr || built == nullptr) {
+        // No clause: a type that promises nothing about resources (Generic).
+        return signature;
+    }
+    signature.mode = sem::ResourceSignature::Mode::Concrete;
+    if (clause->pure() && !clause->uses().empty()) {
+        diags_->of(SemanticDiag::PureAndUses)
+            .at(clause->tokenRange())
+            .commit(built->toString());
+        throw BuildAbortException();
+    }
+    if (clause->pure()) {
+        return signature;
+    }
+    // The parameters the clause may name, in the numbering a call uses: with parameters first,
+    // ordinary ones after them; the `constas` parameter is not a runtime argument and is
+    // dropped from that numbering (builder_generics.cpp: signatureIndexAt).
+    struct Parameter {
+        std::string name;
+        uint8_t index = 0;
+        Type *type     = nullptr;
+        bool isVar     = false;
+    };
+    std::vector<Parameter> parameters;
+    const size_t withCount = built->withTypesCount();
+    const size_t normCount = built->normTypesCount();
+    size_t runtimeIndex    = 0;
+    for (size_t i = 0; i < withCount + normCount; ++i) {
+        const bool isWith = i < withCount;
+        if (!isWith && built->normIsConstasAt(i - withCount)) {
+            continue;
+        }
+        Parameter param;
+        param.name  = std::string(built->argNameAt(i));
+        param.index = static_cast<uint8_t>(runtimeIndex++);
+        param.type  = isWith ? built->withTypeAt(i) : built->normTypeAt(i - withCount);
+        param.isVar = isWith ? built->withIsVarAt(i) : built->normIsVarAt(i - withCount);
+        parameters.push_back(std::move(param));
+    }
+    std::vector<std::string> ambient;
+    std::vector<std::string> active;
+    std::string failed;
+    for (const Reference &use : clause->uses()) {
+        const std::string written = use.toString();
+        const auto param = std::find_if(
+            parameters.begin(), parameters.end(), [&](const Parameter &candidate) {
+                return use.plain() && candidate.name == use.ident();
+            });
+        if (param != parameters.end()) {
+            sem::ResourceSignature::ParamUse paramUse;
+            paramUse.index = param->index;
+            paramUse.mode  = sem::AccessMode::ReadModifyWrite;
+            if (sem::isHandleType(param->type)) {
+                paramUse.cls  = sem::ResourceClass::Handle;
+                paramUse.name = sem::handleResourceName(param->type);
+            } else if (param->isVar) {
+                paramUse.cls = sem::ResourceClass::Variable;
+            } else {
+                paramUse.cls = sem::ResourceClass::Object;
+            }
+            const bool known = std::any_of(
+                signature.params.begin(), signature.params.end(),
+                [&](const auto &other) { return other.index == paramUse.index; });
+            if (known) {
+                // One parameter is one resource: `uses x, x` says nothing twice.
+                continue;
+            }
+            signature.params.push_back(std::move(paramUse));
+            continue;
+        }
+        if (use.plain() && std::any_of(parameters.begin(), parameters.end(),
+                                       [&](const Parameter &candidate) {
+                                           return candidate.name == use.ident();
+                                       })) {
+            continue;
+        }
+        if (!resolveAmbientResource(module_, use, ambient, active, &failed, funcTypeAst)) {
+            diags_->of(SemanticDiag::UnknownResource)
+                .at(clause->tokenRange())
+                .commit(written, built->toString());
+            throw BuildAbortException();
+        }
+    }
+    std::sort(signature.params.begin(), signature.params.end(), [](const auto &a, const auto &b) {
+        return a.index < b.index;
+    });
+    std::sort(ambient.begin(), ambient.end());
+    ambient.erase(std::unique(ambient.begin(), ambient.end()), ambient.end());
+    for (std::string &name : ambient) {
+        signature.ambient.push_back(
+            sem::ResourceSignature::AmbientUse{
+                .name = std::move(name), .mode = sem::AccessMode::ReadModifyWrite});
+    }
+    if (clause->pure()) {
+        signature.params.clear();
+        signature.ambient.clear();
+    }
+    return signature;
+}
+
 std::vector<GCT::TagUse> Builder::tagUsesOf(const AST::node_ptr_t &ast) {
     std::vector<GCT::TagUse> uses;
     if (ast == nullptr) {
@@ -1370,6 +1625,50 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     if (const auto builtin = typeScope_->get(typeLoad->ref(), false);
         builtin.has_value() && isCollectionPrototype(builtin.value())) {
         typeScope_->erase(typeLoad->ref(), false);
+    }
+    // `#resource` (design effects plan 3.1, 3.2): a value of the type is a handle, one resource
+    // per value, named by the declaration. The tag is the only spelling. The type's own flag is
+    // what a signature reads (isHandleType), and the tag still reaches the declaration facts in
+    // GIR, where the standard tag machinery attaches it (attachTagUses, below).
+    //
+    // The uses are read here, not through tagUsesOf: that lowers their arguments and this pass
+    // must not lower them twice (the facts are attached at the end of the declaration).
+    for (size_t i = 0; i < ast->size(); ++i) {
+        const AST::node_ptr_t &child = ast->at(i);
+        if (child == nullptr || child->type() != AST::LoadType::Repeated ||
+            child->loadAs<AST::RepeatedLoad>()->nodeName() != "TagUse") {
+            continue;
+        }
+        for (const AST::node_ptr_t &useAst : *child) {
+            const auto use = useAst->loadAs<AST::TagUseLoad>();
+            if (use->name().toString() != "resource") {
+                continue;
+            }
+            bool nominal = false;
+            if (type->code() == TypeCode::Struct) {
+                const auto *structType = static_cast<camel::core::type::StructType *>(type);
+                camel::core::type::StructDecl *decl = structType->decl();
+                nominal = decl != nullptr && decl->moduleName() == module_->name() &&
+                          decl->name() == typeLoad->ref().toString();
+                if (nominal) {
+                    decl->setHandle();
+                }
+            } else if (type->code() == camel::core::type::EnumType::typeCode()) {
+                const auto *enumType = static_cast<camel::core::type::EnumType *>(type);
+                camel::core::type::EnumDecl *decl = enumType->decl();
+                nominal = decl != nullptr && decl->moduleName() == module_->name() &&
+                          decl->name() == typeLoad->ref().toString();
+                if (nominal) {
+                    decl->setHandle();
+                }
+            }
+            if (!nominal) {
+                diags_->of(SemanticDiag::HandleTypeNotNominal)
+                    .atOrigin(useAst->load()->origin())
+                    .commit(typeLoad->ref().toString());
+                throw BuildAbortException();
+            }
+        }
     }
     typeScope_->insert(typeLoad->ref(), type);
     if (auto *recorder = context_ ? context_->semanticRecorder() : nullptr) {
@@ -2140,12 +2439,11 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 throw BuildAbortException();
             }
             // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the three parts of the dimension
-            // (an unwritten one a null load) and whether the start and the end were written at
-            // all (`t[a:]` runs to the end; a negative step starts at the last element when the
-            // start is left out). A part that was not written is passed as the value it stands
-            // for, 0 for the start and 1 for the step; the end is read only when written. The
-            // last argument is a two-bit mask (bit 0 end, bit 1 start), so a written start with
-            // an unwritten end is told apart from the reverse.
+            // (an unwritten one a null load) and which of the start and the end were written.
+            // A part that was not written is passed as the value it stands for, 0 for the
+            // start and 1 for the step; the end is read only when written. The last argument
+            // is a two-bit mask (bit 0 end, bit 1 start): `t[a:]` and `t[:b]` differ, and a
+            // negative step needs to know whether the start was given.
             node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
             bool written[3]     = {false, false, false};
             for (size_t i = 0; i < 3; ++i) {
@@ -2161,8 +2459,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
             bound[0]                  = written[0] ? bound[0] : intConstant(0);
             bound[1]                  = written[1] ? bound[1] : intConstant(0);
             bound[2]                  = written[2] ? bound[2] : intConstant(1);
-            node_ptr_t endWrittenNode =
-                intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
+            node_ptr_t endWrittenNode = intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
             for (size_t i = 0; i < 3; ++i) {
                 *res << bound[i];
                 if (written[i]) {
@@ -4107,43 +4404,19 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     const bool isDecl = std::exchange(funcDeclPending_, false);
     struct TypeScopeGuard {
         Builder &self;
-        bool own;
         scope_ptr_t<Reference, Type *> outer;
         std::vector<std::string> outerVars;
-        std::set<std::string> outerAuto;
-        std::set<std::string> outerOutput;
-        std::unordered_map<std::string, size_t> outerUses;
         ~TypeScopeGuard() {
-            if (own) {
-                // A nested signature may use the variables of this one: those uses count
-                // here (a lambda body is part of the declaration it stands in).
-                for (const auto &[name, count] : self.typeVarUses_) {
-                    if (!self.autoTypeVars_.contains(name)) {
-                        outerUses[name] += count;
-                    }
-                }
-                self.autoTypeVars_ = std::move(outerAuto);
-                self.typeVarUses_  = std::move(outerUses);
-                self.outputTypeVars_ = std::move(outerOutput);
-            }
             self.typeScope_        = outer;
             self.declaredTypeVars_ = std::move(outerVars);
         }
-    } typeScopeGuard{
-        *this,
-        isDecl,
-        typeScope_,
-        std::exchange(declaredTypeVars_, {}),
-        isDecl ? std::move(autoTypeVars_) : std::set<std::string>{},
-        isDecl ? std::move(outputTypeVars_) : std::set<std::string>{},
-        isDecl ? std::move(typeVarUses_) : std::unordered_map<std::string, size_t>{}};
-    if (isDecl) {
-        autoTypeVars_.clear();
-        typeVarUses_.clear();
-    }
+    } typeScopeGuard{*this, typeScope_, std::exchange(declaredTypeVars_, {})};
     pushScope();
     declSignature_ = isDecl;
     openSignature_ = true;
+    // A native declaration writes no body: its type variables are inferred from the call, so a
+    // name used once there is the input it names, not the misspelling the warning looks for.
+    nativeDeclPending_ = isDecl && ast->size() < 2;
     FunctionType *funcType =
         tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
     // The parameters of a lambda whose type was left out (design principles 5.9), filled by GIR
@@ -4194,11 +4467,8 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
                     .commit(
                         name,
                         funcData->ref().toString(),
-                        autoTypeVars_.contains(name)
-                            ? "it is inside a union, or is the argument of a type function "
-                              "that does not use it"
-                            : "its 'typeas' is inside a union, or is the argument of a type "
-                              "function that does not use it");
+                        "its 'typeas' is inside a union, or is the argument of a type function "
+                        "that does not use it");
                 throw BuildAbortException();
             }
         }
@@ -4258,18 +4528,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     const ValueUseScope valueUseScope(*this);
     valueUse_            = {};
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
-    if (isDecl) {
-        // A type variable written once is usually a misspelled type name (design principles
-        // 5.5). The count includes the occurrence in a parameter type that bound it.
-        for (const std::string &name : autoTypeVars_) {
-            if (typeVarUses_[name] <= 1 && !outputTypeVars_.contains(name)) {
-                diags_->of(SemanticDiag::TypeVariableUsedOnce)
-                    .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
-                    .commit(name, funcData->ref().toString());
-            }
-        }
-    }
-    node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
+    node_ptr_t funcNode  = tree_->makeFunc(funcData->ref().toString());
     *funcNode << typeNode << stmtsNode;
     if (!unwrittenParams.empty()) {
         tree_->setUnwrittenParams(funcNode, unwrittenParams);
@@ -4342,6 +4601,12 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Array:
         res = visitArrayType(ast);
         break;
+    case AST::TypeType::ArrayDim:
+        // A shape is an argument of a type, never a type of its own.
+        diags_->of(SemanticDiag::InvalidTypeArgument)
+            .at(ast->load()->tokenRange())
+            .commit("a shape", "a shape is written after the element type, as in 'f32[3]'");
+        throw BuildAbortException();
     case AST::TypeType::Struct:
         res = visitStructType(ast);
         break;
@@ -4506,7 +4771,9 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::TypeOp::TypeAs: {
-        // `typeas T`: the type found at this position of an argument type becomes `T`.
+        // `typeas T`: the type found at this position of an argument type becomes `T`, also
+        // when the name already denotes a type (design principles 5.5): that is what the
+        // explicit form is for, since a plain name would be read as that type.
         const Reference &ref = ast->atAs<AST::TypeLoad>(0)->loadAs<AST::RefTypeLoad>()->ref();
         const string name    = ref.toString();
         if (!typeasAllowed_) {
@@ -4518,7 +4785,11 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
                                       : "this is not a parameter of a function declaration");
             throw BuildAbortException();
         }
-        if (typeScope_->get(ref).has_value() || module_->getImportedType(ref).has_value()) {
+        // One variable is bound once per signature; a second `typeas` of the same name binds
+        // nothing new, and one after a plain occurrence has bound the name already is the same
+        // mistake.
+        if (std::find(declaredTypeVars_.begin(), declaredTypeVars_.end(), name) !=
+            declaredTypeVars_.end()) {
             diags_->of(SemanticDiag::TypeVariableRedeclared)
                 .at(ast->load()->tokenRange())
                 .commit(name);
@@ -4538,18 +4809,40 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
 }
 
 /*
-ArrayType(siz dim) : Type type ;
+ArrayType() : Type type, extent* ;
+One `[...]` is one dimension, also when it is empty: `T[][]` is an array of arrays, and `T[3]`
+is one dimension of three. The pack makes the rank open after the extents written before it.
 */
 Type *Builder::visitArrayType(const AST::node_ptr_t &ast) {
     ENTER("ArrayType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ArrayType");
-    // `T[][]` reaches here as one node of two dimensions: an array of arrays of T. One array
-    // type per dimension; a single one made `T[][]` mean `T[]`.
     const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
     Type *type                = visitType(ast->atAs<AST::TypeLoad>(0));
-    type                      = ArrayType::create(type);
-    for (size_t dim = 1; dim < arrayTypeLoad->dims(); ++dim) {
-        type = ArrayType::create(type);
+    for (const AST::DimGroup &group : arrayTypeLoad->dims()) {
+        const bool pack = group.pack != AST::DimPack::None;
+        if (pack && (group.packRepeated || group.packItem + 1 != group.itemCount)) {
+            // A pack is the trailing dimensions the type does not name; it can only be last,
+            // and only once (design principles 5.4).
+            diags_->of(SemanticDiag::DimensionAfterAnyRank).at(ast->load()->tokenRange()).commit();
+            throw BuildAbortException();
+        }
+        const auto extents = visitExtents(group, ast);
+        if (!extents) {
+            throw BuildAbortException();
+        }
+        try {
+            if (!pack) {
+                type = ArrayType::create(type, *extents);
+            } else if (group.pack == AST::DimPack::Anonymous) {
+                type = ArrayType::openRank(type, *extents);
+            } else {
+                type = ArrayType::create(type, *extents, group.packName);
+            }
+        } catch (const std::invalid_argument &) {
+            // A negative extent is not a dimension; `?` is the unknown extent.
+            diags_->of(SemanticDiag::InvalidExtentExpression).at(ast->load()->tokenRange()).commit();
+            throw BuildAbortException();
+        }
     }
     LEAVE("ArrayType");
     return type;
@@ -4616,27 +4909,6 @@ Type *Builder::visitTupleType(const AST::node_ptr_t &ast) {
 FuncType(Modifier[] modifiers, string uri)
     : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
 */
-namespace {
-
-/// The dimension names a parameter type binds with `constas` (design principles 5.4).
-void collectDimensionNames(const AST::node_ptr_t &ast, std::set<std::string> &names) {
-    if (!ast) {
-        return;
-    }
-    if (ast->type() == AST::LoadType::Data) {
-        const auto &data = ast->loadAs<AST::DataLoad>();
-        if (data->dataType() == AST::DataType::ConstAs) {
-            names.insert(ast->loadAs<AST::ConstAsLoad>()->ref().ident());
-            return;
-        }
-    }
-    for (size_t i = 0; i < ast->size(); ++i) {
-        collectDimensionNames(ast->at(i), names);
-    }
-}
-
-} // namespace
-
 Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     ENTER("FuncType");
     // Ensure the AST node is of the expected type (Type)
@@ -4648,6 +4920,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     // A declaration binds variables in its parameters or return type (design principles
     // 5.9). Return-only variables come from the expected type or explicit ::<T> arguments.
     const bool signature = std::exchange(declSignature_, false);
+    const bool nativeDecl = std::exchange(nativeDeclPending_, false);
     const bool open      = std::exchange(openSignature_, false);
     struct FlagGuard {
         bool &allowed, &inReturn;
@@ -4668,41 +4941,70 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         Builder &self;
         std::shared_ptr<std::set<std::string>> names;
         std::shared_ptr<std::set<std::string>> bound;
+        std::shared_ptr<std::set<std::string>> packs;
+        std::shared_ptr<std::map<std::string, size_t>> uses;
         bool bind;
         explicit DimGuard(Builder &builder)
             : self(builder), names(builder.dimNames_), bound(builder.boundDims_),
-              bind(builder.dimBindAllowed_) {}
+              packs(builder.dimPacks_), uses(builder.dimUses_), bind(builder.dimBindAllowed_) {}
         ~DimGuard() {
             self.dimNames_       = names;
             self.boundDims_      = bound;
+            self.dimPacks_       = packs;
+            self.dimUses_        = uses;
             self.dimBindAllowed_ = bind;
         }
     } dimGuard(*this);
     if (signature) {
         dimNames_  = std::make_shared<std::set<std::string>>();
         boundDims_ = std::make_shared<std::set<std::string>>();
+        dimPacks_  = std::make_shared<std::set<std::string>>();
+        dimUses_   = std::make_shared<std::map<std::string, size_t>>();
     }
     dimBindAllowed_ = false;
+    // Automatic type-variable binding (design principles 5.5). A declaration counts the plain
+    // names its signature writes, and its parameter types bind the ones no type answers. A
+    // function type nested in a parameter type is part of that type, so it binds too; one
+    // nested in the return type does not. The flags are therefore set only here, around the
+    // parameter types and the return type, and a nested visit leaves them alone.
+    struct TypeVarGuard {
+        Builder &self;
+        bool bind, onlyReturn, nestedResult;
+        std::shared_ptr<std::unordered_map<std::string, size_t>> uses;
+        std::shared_ptr<std::unordered_map<std::string, camel::source::origin_id_t>> autos;
+        std::shared_ptr<std::set<std::string>> resultVars;
+        explicit TypeVarGuard(Builder &builder)
+            : self(builder), bind(builder.typeVarBindAllowed_),
+              onlyReturn(builder.typeVarOnlyInReturn_),
+              nestedResult(builder.inNestedFuncResult_), uses(builder.typeVarUses_),
+              autos(builder.autoBoundVars_), resultVars(builder.callbackResultVars_) {}
+        ~TypeVarGuard() {
+            self.typeVarBindAllowed_  = bind;
+            self.typeVarOnlyInReturn_ = onlyReturn;
+            self.inNestedFuncResult_  = nestedResult;
+            self.typeVarUses_         = uses;
+            self.autoBoundVars_       = autos;
+            self.callbackResultVars_  = resultVars;
+        }
+    } typeVarGuard(*this);
     if (signature) {
-        // A `constas n: int` parameter binds the name `n` for the signature, like the `constas`
-        // of a `const [constas n]` shape: the parameter types and the result type may use it.
-        // The name is bound before any parameter type is read, so a parameter may write it
-        // before the parameter that declares it (the order is checked below).
+        typeVarUses_   = std::make_shared<std::unordered_map<std::string, size_t>>();
+        autoBoundVars_ = std::make_shared<
+            std::unordered_map<std::string, camel::source::origin_id_t>>();
+        callbackResultVars_ = std::make_shared<std::set<std::string>>();
+        typeVarBindAllowed_  = false;
+        typeVarOnlyInReturn_ = false;
+        inNestedFuncResult_  = false;
+    }
+    if (signature) {
+        // A `constas n: int` parameter is a value the signature uses, not a dimension the
+        // types bind; its name is known to the types from the start. It is counted as used
+        // twice so the one-use suggestion below belongs to dimension names only.
         for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(1)) {
             const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
             if (paramLoad->isConstas()) {
                 dimNames_->insert(paramLoad->getRef().ident());
-            }
-        }
-        // A name is bound by the `constas` occurrence anywhere in the parameters, the way
-        // `typeas T` declares a type variable for the whole signature: an extent may write the
-        // name before the parameter that binds it.
-        for (size_t group = 0; group < 2; ++group) {
-            for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(group)) {
-                // An untyped rest parameter has no type child to scan for `constas`.
-                if (paramPair->size() > 0) {
-                    collectDimensionNames(paramPair->atAs<AST::TypeLoad>(0), *dimNames_);
-                }
+                (*dimUses_)[paramLoad->getRef().ident()] = 2;
             }
         }
     }
@@ -4742,6 +5044,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     };
 
     // Process "with" parameters (context parameters)
+    // Their types bind type variables too (design principles 5.5); so do the ordinary
+    // parameters below. The return type may only use what they bound.
+    if (signature) {
+        typeVarBindAllowed_ = true;
+    }
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         bool isVar            = paramLoad->isVar();
@@ -4904,19 +5211,43 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     }
 
     // The return type may name existing variables or bind return-only ones.
+    if (signature) {
+        // The parameter types end here: a name first written in the return type binds nothing.
+        typeVarBindAllowed_  = false;
+        typeVarOnlyInReturn_ = true;
+    }
     const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
     if (exitTypeNode) {
         if (signature) {
             typeasAllowed_    = true;
             inDeclReturnType_ = true;
         }
-        const bool outerNestedFuncReturn = inNestedFuncReturn_;
+        const bool outerNestedResult = inNestedFuncResult_;
         if (!signature) {
-            inNestedFuncReturn_ = true;
+            inNestedFuncResult_ = true;
         }
         dimBindAllowed_ = false;
         factory.setExitType(visitType(exitTypeNode));
-        inNestedFuncReturn_ = outerNestedFuncReturn;
+        inNestedFuncResult_ = outerNestedResult;
+        if (signature) {
+            typeVarOnlyInReturn_ = false;
+        }
+    }
+    // A type variable bound automatically and written only once is most likely a misspelt type
+    // name: it is reported, and the signature still compiles (design principles 5.5).
+    if (signature && !nativeDecl) {
+        for (const std::string &name : declaredTypeVars_) {
+            if (!autoBoundVars_->contains(name)) {
+                continue;
+            }
+            const auto uses = typeVarUses_->find(name);
+            if (uses != typeVarUses_->end() && uses->second == 1 &&
+                !callbackResultVars_->contains(name)) {
+                diags_->of(SemanticDiag::TypeVariableUsedOnce)
+                    .atOrigin(autoBoundVars_->at(name))
+                    .commit(name);
+            }
+        }
     }
 
     LEAVE("FuncType");
@@ -4925,6 +5256,31 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     }
     FunctionType *built = open ? static_cast<FunctionType *>(factory.buildOpen())
                                : factory.build();
+    // A dimension name written once constrains nothing: another parameter (or the return type)
+    // would have to write it to make it a relation (design principles 5.4).
+    if (signature && dimUses_) {
+        for (const auto &[name, uses] : *dimUses_) {
+            if (uses == 1) {
+                diags_->of(SemanticDiag::DimensionNameUsedOnce)
+                    .at(ast->load()->tokenRange())
+                    .commit(name);
+            }
+        }
+    }
+    // The clause the type writes (design effects plan 3.1): what a call through a value of this
+    // type touches. A type without one stays Generic, which promises nothing, so nothing is set
+    // and a call through it is read conservatively.
+    const sem::ResourceSignature resources = resourceSignatureOf(ast, built);
+    if (resources.mode == sem::ResourceSignature::Mode::Concrete) {
+        if (built->asOpen() != nullptr) {
+            // An open signature is not interned and is resolved by each call site; it is this
+            // object the resolver copies from (step 2: instantiateFunctionType copies the
+            // resources), so the clause is set on it in place.
+            built->asOpen()->setResources(resources);
+        } else {
+            built = built->withResources(resources);
+        }
+    }
     return built;
 }
 
@@ -5015,21 +5371,46 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     std::vector<TypeArgument> arguments;
     const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
     for (const auto &child : *argsNode) {
-        if (child->type() == AST::LoadType::Type) {
-            arguments.push_back(TypeArgument{.type = visitType(child), .data = nullptr});
-            continue;
-        }
-        if (namesDimension(child)) {
-            // A shape written over dimension names: the extents stay compile-time forms over
-            // the names the signature binds, not a runtime array constant.
+        if (child->type() == AST::LoadType::Type &&
+            child->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::ArrayDim) {
+            // A shape argument: the extents stay compile-time forms over the names the
+            // signature binds, not a runtime array constant (plan P3, 4.1).
+            const AST::DimGroup &group = child->loadAs<AST::ArrayDimLoad>()->dim();
+            if (group.pack != AST::DimPack::None) {
+                // `Tensor<f32, [..s]>` would make the element type's rank open; only an array
+                // type takes a pack, and a shape argument is not a type.
+                diags_->of(SemanticDiag::InvalidTypeArgument)
+                    .at(child->load()->tokenRange())
+                    .commit(base->toString(), "a shape argument has no trailing pack (`..`)");
+                throw BuildAbortException();
+            }
             std::shared_ptr<const std::vector<camel::core::type::ExtentForm>> extents =
-                visitNamedExtents(child);
+                visitExtents(group, child);
             if (!extents) {
                 throw BuildAbortException();
             }
             arguments.push_back(
                 TypeArgument{.type = nullptr, .data = nullptr, .extents = std::move(extents)});
             continue;
+        }
+        if (child->type() == AST::LoadType::Type) {
+            arguments.push_back(TypeArgument{.type = visitType(child), .data = nullptr});
+            continue;
+        }
+        if (child->type() == AST::LoadType::Data) {
+            const auto &dataLoad = child->loadAs<AST::DataLoad>();
+            if (dataLoad->dataType() == AST::DataType::Array && base->toString() == "Tensor") {
+                // `const [3]` is the spelling a shape had before the array type took shapes
+                // over; a shape argument is written without `const` (plan P3, 4.1).
+                diags_->of(SemanticDiag::InvalidTypeArgument)
+                    .at(child->load()->tokenRange())
+                    .commit(
+                        base->toString(),
+                        std::format(
+                            "a shape is written without 'const': '{}<f32, [3]>'",
+                            base->toString()));
+                throw BuildAbortException();
+            }
         }
         const data_ptr_t data = extractStaticDataFromNode(visitData(child));
         if (!data) {
@@ -5152,56 +5533,42 @@ ExtentForm addExtents(const ExtentForm &a, const ExtentForm &b, int64_t sign) {
 
 } // namespace
 
-bool Builder::namesDimension(const AST::node_ptr_t &ast) const {
-    if (!ast || ast->type() != AST::LoadType::Data) {
-        return false;
-    }
-    const auto &load = ast->loadAs<AST::DataLoad>();
-    if (load->dataType() == AST::DataType::ConstAs) {
-        return true;
-    }
-    if (load->dataType() != AST::DataType::Array || ast->size() != 1) {
-        return false;
-    }
-    // An array of extents written with a plain name anywhere is read as a shape over dimension
-    // names. That is how a name that no parameter binds (a typo, or one written only in the
-    // return type) is reported as a name rather than as a constant the type cannot read.
-    std::function<bool(const AST::node_ptr_t &)> names = [&](const AST::node_ptr_t &node) {
-        if (!node) {
-            return false;
-        }
-        if (node->type() == AST::LoadType::Data) {
-            const auto &data = node->loadAs<AST::DataLoad>();
-            if (data->dataType() == AST::DataType::ConstAs) {
-                return true;
-            }
-            if (data->dataType() == AST::DataType::Ref) {
-                return node->loadAs<AST::RefDataLoad>()->ref().plain();
-            }
-        }
-        for (size_t i = 0; i < node->size(); ++i) {
-            if (names(node->at(i))) {
-                return true;
-            }
-        }
-        return false;
-    };
-    return names(ast);
-}
-
 std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>
-Builder::visitNamedExtents(const AST::node_ptr_t &ast) {
+Builder::visitExtents(const AST::DimGroup &group, const AST::node_ptr_t &ast) {
     using camel::core::type::ExtentForm;
-    const auto &load = ast->loadAs<AST::DataLoad>();
-    // `[]` is a scalar tensor's shape; a comprehension is not a shape.
-    if (load->dataType() != AST::DataType::Array || ast->size() != 1) {
-        diags_->of(SemanticDiag::InvalidExtentExpression).at(ast->load()->tokenRange()).commit();
-        return nullptr;
+    if (group.pack == AST::DimPack::Named) {
+        // A pack name lives in its own namespace: it may be reused, but it may not name a
+        // dimension too (design principles 5.4).
+        if (dimBindAllowed_) {
+            if (dimNames_ != nullptr && dimNames_->contains(group.packName)) {
+                diags_->of(SemanticDiag::DimensionNameAlreadyBound)
+                    .at(ast->load()->tokenRange())
+                    .commit(group.packName);
+                return nullptr;
+            }
+            if (dimPacks_ != nullptr) {
+                dimPacks_->insert(group.packName);
+            }
+        } else if (dimPacks_ == nullptr || !dimPacks_->contains(group.packName)) {
+            diags_->of(SemanticDiag::DimensionNameNotBound)
+                .at(ast->load()->tokenRange())
+                .commit(".." + group.packName);
+            return nullptr;
+        }
     }
-    auto extents      = std::make_shared<std::vector<ExtentForm>>();
-    const auto &items = ast->atAs<AST::RepeatedLoad>(0);
-    for (const auto &item : *items) {
+    auto extents = std::make_shared<std::vector<ExtentForm>>();
+    extents->reserve(group.extents.size());
+    for (const auto &item : group.extents) {
+        if (!item) {
+            extents->push_back(ExtentForm::unknown());
+            continue;
+        }
         extents->push_back(visitExtent(item));
+    }
+    if (group.extents.empty() && group.pack == AST::DimPack::None) {
+        // `[]` is one unknown dimension (`T[]` = `T[?]`); only the pack makes an empty list
+        // mean an open rank.
+        extents->push_back(ExtentForm::unknown());
     }
     return extents;
 }
@@ -5228,25 +5595,35 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
         }
         return ExtentForm::constant(parsed.value);
     }
-    case AST::DataType::ConstAs: {
-        const Reference &ref   = ast->loadAs<AST::ConstAsLoad>()->ref();
-        const std::string name = ref.plain() ? ref.ident() : ref.toString();
-        if (!dimBindAllowed_ || boundDims_ == nullptr) {
-            diags_->of(SemanticDiag::ConstasNotAllowed).at(ast->load()->tokenRange()).commit(name);
-            throw BuildAbortException();
-        }
-        if (!boundDims_->insert(name).second) {
-            diags_->of(SemanticDiag::DimensionNameAlreadyBound)
-                .at(ast->load()->tokenRange())
-                .commit(name);
-            throw BuildAbortException();
-        }
-        return ExtentForm::linear({{name, 1}});
-    }
+    case AST::DataType::ConstAs:
+        // `constas` is no longer written in a shape; the token is a syntax error there.
+        return report();
     case AST::DataType::Ref: {
         const Reference &ref = ast->loadAs<AST::RefDataLoad>()->ref();
-        if (ref.plain() && dimNames_ != nullptr && dimNames_->contains(ref.ident())) {
-            return ExtentForm::linear({{ref.ident(), 1}});
+        if (!ref.plain()) {
+            diags_->of(SemanticDiag::DimensionNameNotBound)
+                .at(ast->load()->tokenRange())
+                .commit(ref.toString());
+            throw BuildAbortException();
+        }
+        const std::string name = ref.ident();
+        if (dimNames_ != nullptr && dimNames_->contains(name)) {
+            if (dimBindAllowed_ && dimUses_ != nullptr) {
+                ++(*dimUses_)[name];
+            }
+            return ExtentForm::linear({{name, 1}});
+        }
+        if (dimBindAllowed_ && dimNames_ != nullptr) {
+            // The first plain name in a parameter type binds the dimension; the ones after it
+            // in the same signature write the same extent (design principles 5.4).
+            dimNames_->insert(name);
+            if (boundDims_ != nullptr) {
+                boundDims_->insert(name);
+            }
+            if (dimUses_ != nullptr) {
+                ++(*dimUses_)[name];
+            }
+            return ExtentForm::linear({{name, 1}});
         }
         diags_->of(SemanticDiag::DimensionNameNotBound)
             .at(ast->load()->tokenRange())
@@ -5301,6 +5678,11 @@ Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     const Reference &ref = typeLoad->ref();
 
     Type *type = lookupType(ref, ast);
+    // One occurrence of a plain name in the signature being visited (design principles 5.5):
+    // the count decides the warning for a type variable written only once.
+    if (typeVarUses_ && ref.plain()) {
+        ++(*typeVarUses_)[ref.ident()];
+    }
     LEAVE("RefType");
     return type;
 }
@@ -5400,12 +5782,6 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
                 return report(imported.value(), importedOrigin(ref));
             }
         }
-        // A type variable bound automatically (design principles 5.5) that is written again:
-        // the occurrence count decides whether it is reported as a likely misspelling.
-        if (dynamic_cast<TypeVarType *>(found.value()) != nullptr &&
-            autoTypeVars_.contains(written)) {
-            ++typeVarUses_[written];
-        }
         return report(found.value(), module_->typeDeclarationOrigin(*foundRef));
     }
     // The types the module itself exports without a type declaration in this file: a `.cml`
@@ -5490,24 +5866,31 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     if (wholeImportFailed_ || poisonedTypes_.contains(written)) {
         throw BuildAbortException();
     }
-    // A name that is no type in scope binds a type variable where it first appears in a
-    // parameter type (design principles 5.5; the rule of a dimension name in 5.4). The result
-    // type cannot bind one: a caller has no argument that could say what it is.
-    if (typeasAllowed_ && ref.plain()) {
-        if (inDeclReturnType_) {
-            diags_->of(SemanticDiag::TypeVariableNotBound)
+    // Layer 6: a plain name that first appears in a parameter type of the declaration being
+    // visited binds a type variable (design principles 5.5), exactly as `typeas` would bind it.
+    // The rule is the one named dimensions follow (5.4): an existing type name is a reference,
+    // and a name that no type answers is a new binding; the first appearance is the binding.
+    if (ref.plain()) {
+        if (typeVarBindAllowed_) {
+            const std::string name = ref.ident();
+            typeScope_->insert(ref, TypeVarType::create(name, false));
+            declaredTypeVars_.push_back(name);
+            if (autoBoundVars_) {
+                (*autoBoundVars_)[name] = ast->load()->origin();
+            }
+            if (inNestedFuncResult_ && callbackResultVars_) {
+                callbackResultVars_->insert(name);
+            }
+            return report(TypeVarType::create(name, true), camel::source::kInvalidOriginId);
+        }
+        // A name written only in the return type has no argument to take a type from, so it
+        // is an error rather than a variable: the signature binds it nowhere.
+        if (typeVarOnlyInReturn_) {
+            diags_->of(SemanticDiag::TypeVariableOnlyInReturn)
                 .at(ast->load()->tokenRange())
                 .commit(written);
             throw BuildAbortException();
         }
-        typeScope_->insert(ref, TypeVarType::create(written, false));
-        declaredTypeVars_.push_back(written);
-        autoTypeVars_.insert(written);
-        typeVarUses_[written] = 1;
-        if (inNestedFuncReturn_) {
-            outputTypeVars_.insert(written);
-        }
-        return report(TypeVarType::create(written, true), 0);
     }
     diags_->of(SemanticDiag::UnresolvedTypeReference).at(ast->load()->tokenRange()).commit(written);
     throw BuildAbortException();

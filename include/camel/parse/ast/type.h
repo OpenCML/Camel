@@ -21,12 +21,27 @@
 
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "base.h"
 
 namespace camel::parse::ast {
 
-enum class TypeType { Null, Expr, Array, Tuple, Struct, Func, Spec, Unit, Infer, Data, Ref, Enum };
+enum class TypeType {
+    Null,
+    Expr,
+    Array,
+    ArrayDim,
+    Tuple,
+    Struct,
+    Func,
+    Spec,
+    Unit,
+    Infer,
+    Data,
+    Ref,
+    Enum
+};
 
 enum class TypeOp { Inter, Diff, KeyUnion, KeyInter, KeyDiff, Specialize, TypeOf, TypeAs };
 
@@ -75,18 +90,51 @@ class SpecTypeLoad : public TypeLoad {
     const std::string geneCode() const override;
 };
 
+/// How a dimension group ends (design principles 5.4): no pack, `..`, or `..name`.
+enum class DimPack { None, Anonymous, Named };
+
+/// One `[...]` of an array type or a shape argument: the extents written inside it and the pack
+/// that may follow them. An extent is the expression written for it; `nullptr` is `?`, the
+/// unknown extent. `packItem` is the position of the `..` among all the items and `itemCount`
+/// how many items were written, so a reader can tell a pack that is not last (or repeated) from
+/// one that is; the parser keeps such a group rather than dropping the rest of it.
+struct DimGroup {
+    std::vector<node_ptr_t> extents;
+    DimPack pack = DimPack::None;
+    std::string packName;
+    size_t packItem  = 0;
+    size_t itemCount = 0;
+    bool packRepeated = false;
+
+    bool empty() const { return extents.empty() && pack == DimPack::None; }
+};
+
 class ArrayTypeLoad : public TypeLoad {
   public:
-    ArrayTypeLoad(size_t dims) : TypeLoad(TypeType::Array), dims_(dims) {}
+    explicit ArrayTypeLoad(std::vector<DimGroup> dims)
+        : TypeLoad(TypeType::Array), dims_(std::move(dims)) {}
     const std::string toString() const override {
-        return "ArrayType: [" + std::to_string(dims_) + "]";
+        return "ArrayType: [" + std::to_string(dims_.size()) + "]";
     }
 
-    size_t dims() const { return dims_; }
+    const std::vector<DimGroup> &dims() const { return dims_; }
     const std::string geneCode() const override;
 
   private:
-    size_t dims_ = 0;
+    std::vector<DimGroup> dims_;
+};
+
+/// A `[extent, ...]` written as a type argument (`Tensor<f32, [n, 4]>`): a shape, not a type.
+class ArrayDimLoad : public TypeLoad {
+  public:
+    explicit ArrayDimLoad(DimGroup dim) : TypeLoad(TypeType::ArrayDim), dim_(std::move(dim)) {}
+    const std::string toString() const override { return "ArrayDim"; }
+
+    const DimGroup &dim() const { return dim_; }
+    const std::string geneCode() const override;
+
+  private:
+    DimGroup dim_;
 };
 
 class TupleTypeLoad : public TypeLoad {
@@ -118,6 +166,28 @@ class FuncTypeLoad : public TypeLoad {
   private:
     ModifierSet modifiers_;
     std::string uri_;
+};
+
+/// The resources a function type publishes (design effects plan 3.1): `pure` says a call
+/// touches none, `uses x, fs` names the parameters and the resources it touches. Attached to the
+/// function type it is written after; a declaration's clause is attached to the function type of
+/// its signature, so a body-less declaration and a function type carry the same thing.
+class ResourceClauseLoad : public Load {
+  public:
+    ResourceClauseLoad() : Load(LoadType::ResourceClause) {}
+
+    bool pure() const { return pure_; }
+    void setPure(bool pure) { pure_ = pure; }
+
+    void addUse(Reference use) { uses_.push_back(std::move(use)); }
+    const std::vector<Reference> &uses() const { return uses_; }
+
+    const std::string toString() const override;
+    const std::string geneCode() const override;
+
+  private:
+    bool pure_ = false;
+    std::vector<Reference> uses_;
 };
 
 class UnitTypeLoad : public TypeLoad {

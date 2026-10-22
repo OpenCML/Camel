@@ -7,8 +7,8 @@ module parse_constructs_constas
 import { Tensor, ones, sum } from tensor
 
 func affine(
-    a: Tensor<f32, const [constas n]>,
-    b: Tensor<f32, const [n + 1]>
+    a: Tensor<f32, [n]>,
+    b: Tensor<f32, [n + 1]>
 ): float {
     return sum(a) + sum(b)
 }

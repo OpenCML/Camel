@@ -1,18 +1,18 @@
 module tiles_graph_facts
 import { Tensor, reshape, sum, abs, transpose } from tensor
 import { inspect, run_preferred_resident, download } from tiles
-func fixed(x: Tensor<f32, const [2, 3]>): Tensor<f32> {
+func fixed(x: Tensor<f32, [2, 3]>): Tensor<f32> {
     return transpose(x + x)
 }
 func dynamic(x: Tensor<f32>): Tensor<f32> {
     return transpose(x + x)
 }
 with <ax: int>
-func axis(x: Tensor<f32, const [2,3]>): Tensor<f32> {
+func axis(x: Tensor<f32, [2,3]>): Tensor<f32> {
     return x + sum(x, ax, true)
 }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2,3]) as Tensor<f32, const [2,3]>
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2,3]) as Tensor<f32, [2,3]>
     let y = reshape([1.0, 2.0, 3.0, 4.0], [4,1])
     println(inspect<fixed>(x))
     println(inspect<fixed>(x))
@@ -24,7 +24,7 @@ func main(): int sync {
     println(sum(abs(download(run_preferred_resident<fixed>(x))-fixed(x))))
     println(sum(abs(download(run_preferred_resident<dynamic>(x))-dynamic(x))))
     println(sum(abs(download(run_preferred_resident<dynamic>(y))-dynamic(y))))
-    println(sum(abs(download(run_preferred_resident<axis<0>(x))-axis<0>(x))))
-    println(sum(abs(download(run_preferred_resident<axis<1>(x))-axis<1>(x))))
+    println(sum(abs(download(run_preferred_resident<axis<0>>(x))-axis<0>(x))))
+    println(sum(abs(download(run_preferred_resident<axis<1>>(x))-axis<1>(x))))
     return 0
 }

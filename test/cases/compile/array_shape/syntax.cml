@@ -1,0 +1,26 @@
+// The array's source syntax: `f32[4]` is one dimension of four, `?` (or the empty `[]`) is
+// an unknown dimension, and both spellings name the same type.
+module array_shape_syntax
+
+func first(x: f32[4]): f32 {
+    return x[0]
+}
+
+func count(x: f32[?]): int {
+    return len(x)
+}
+
+func total(x: f32[]): int {
+    return len(x)
+}
+
+func main(): int sync {
+    let v: f32[] = [1.0, 2.0, 3.0, 4.0]
+    let a = v as f32[4]
+    let b: f32[?] = a
+    let c: f32[] = b
+    println(first(a))
+    println(count(a))
+    println(total(c))
+    return 0
+}

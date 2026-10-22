@@ -225,8 +225,24 @@ enum class SemanticDiag : uint32_t {
     ConstasArgumentMissing = 0x00019B,
     /// A tag gives a fact one value where the node already has another.
     TagValueConflict = 0x00019D,
-    /// A name appears only in a signature's result type, where no argument can bind it.
-    TypeVariableNotBound = 0x00019E,
+    /// A dimension pack (`..rest`) is not the last item of its `[...]`, or is written twice.
+    DimensionAfterAnyRank = 0x00019E,
+    /// A plain name that no type answers is written only in the return type of a signature:
+    /// it binds no type variable, since there is no argument to take a type from (5.5).
+    TypeVariableOnlyInReturn = 0x00019F,
+
+    // The resource surface of a program (docs/design/effects/plan.cn.md step 3): the `resource`
+    // declaration, `uses`/`pure` and the `#resource` tag. 0x1A0 and up.
+    /// A name in a `uses` clause is neither a parameter nor a declared resource.
+    UnknownResource = 0x0001A0,
+    /// A signature says both `pure` and `uses`.
+    PureAndUses = 0x0001A1,
+    /// A resource group names itself, directly or through other groups.
+    ResourceGroupCycle = 0x0001A2,
+    /// `#resource` is written before a type declaration that is not nominal.
+    HandleTypeNotNominal = 0x0001A3,
+    /// A body-less declaration's clause differs from the operator's declared resources.
+    NativeResourceMismatch = 0x0001A4,
 
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
@@ -263,9 +279,13 @@ enum class SemanticDiag : uint32_t {
     // Tags (design principles 6.2): the tag is declared for no pass in the pipeline, so nothing
     // reads what was written.
     TagHasNoReader = 0x100160,
-    // A type variable bound by its first occurrence in a parameter type (design principles 5.5)
-    // is written once, which is usually a misspelled type name.
-    TypeVariableUsedOnce = 0x100161,
+    // A dimension name is written once in a signature, so it relates nothing (design principles
+    // 5.4): write `?` if the size is not meant as a relation.
+    DimensionNameUsedOnce = 0x100161,
+    // Type variables (design principles 5.5), 0x161 and up.
+    /// A type variable is bound automatically and written only once: its name is most likely a
+    /// misspelt type name.
+    TypeVariableUsedOnce = 0x100162,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }
@@ -273,3 +293,4 @@ constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }
 const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap();
 
 } // namespace camel::core::error
+

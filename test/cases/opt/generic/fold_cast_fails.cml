@@ -11,7 +11,7 @@ func weights(): Tensor { return reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) 
 
 func main(): int sync {
     println('before')
-    let c = weights() as Tensor<f32, const [3, 2]>
+    let c = weights() as Tensor<f32, [3, 2]>
     println(sum(c))
     return 0
 }
