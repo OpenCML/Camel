@@ -16,10 +16,10 @@ dc0c2c36c6fe5c9d no test/cases/parse/numbers/leading_zero.cml
 a58a7cd293a77647 no test/cases/parse/numbers/member_index_exponent.cml
 7d7964a39be8391b ok test/cases/parse/numbers/tokens.cml
 c940d1b8974b7fdc no test/cases/parse/rules/declared.cml
-023cf14d154ed674 ok test/cases/parse/rules/generic_head.cml
+3d30fcfbecc0b91b ok test/cases/parse/rules/generic_head.cml
 ae1fab0de676960a ok test/cases/parse/rules/names.cml
 714c780c7d9e2c1b no test/cases/parse/rules/no_arrow.cml
-da060d7645856ad4 ok test/cases/parse/rules/values.cml
+a4714d28f417c4ea ok test/cases/parse/rules/values.cml
 c005562ecb6383e6 ok test/cases/parse/rulings/doc_comment.cml
 668696be7a97daf5 ok test/cases/parse/rulings/eager_logic.cml
 0da538f5e8f17348 ok test/cases/parse/rulings/exponent.cml

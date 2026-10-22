@@ -1,8 +1,8 @@
 /**
  * The declaration of `rewrite:rewrite` takes two ordinary arguments at least: one is refused at
  * the call, and the overloads the message lists are the declaration's
- * `(p: Program, rules: (() => Rule)[]) => Program!` and
- * `(p: Program, rules: (() => Rule)[], strict: bool) => Program!` — `stdlib/rewrite.cml`, not
+ * `(p: Program, rules: Rule[]) => Program!` and
+ * `(p: Program, rules: Rule[], strict: bool) => Program!` — `stdlib/rewrite.cml`, not
  * the C++ module (handover H183).
  */
 module rewrite_arity

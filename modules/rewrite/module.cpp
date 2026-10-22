@@ -6,11 +6,13 @@
  *
  * `rule name(params) { left => right }` is read as two functions of the same parameters and
  * `let name = __rule('name', ...)` (graph store 5.2: a rule is the shorthand of a pair of
- * functions); the front end writes the import of this module itself. The engines, `rewrite`,
- * `saturate` and `extract`, take the rules as an array.
+ * functions; rewrite design 2 (second version) 8.5: the rule is a value); the front end writes
+ * the import of this module itself. The engines, `rewrite`, `run`, `saturate` and `extract`, take
+ * the rules as an array.
  *
- * The eight callable operators are declared in `stdlib/rewrite.cml` (handover H183); this file
- * keeps their kernels, the executor and their purity. The three reserved groups the language's
+ * The callable operators are declared in `stdlib/rewrite.cml` (handover H183; `run` and its
+ * readers, H226); this file keeps their kernels, the executor and their purity. The three
+ * reserved groups the language's
  * `rule` and `analysis` declarations compile to (`__rule`, `__rule_when`, `__analysis`) have no
  * callable Camel name, so they stay exported from here.
  */
@@ -18,6 +20,7 @@
 #include "rule.h"
 
 #include "analysis.h"
+#include "run.h"
 
 #include "../graph/handle.h"
 
@@ -42,6 +45,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -112,14 +116,6 @@ slot_t constsKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot<rtdata::Int64>(static_cast<int64_t>(norm.get<RuleObject *>(0)->constParams()));
 }
 
-/// The rule a rule function makes: the function is called (a rule is the function of a
-/// declaration, with no parameter).
-RuleObject *callRule(Context &ctx, ::Function *maker) {
-    NodeVMSchedPass vm(ctx.shared_from_this());
-    const slot_t made = vm.callGraph(maker->program(), maker->graph(), {});
-    return static_cast<RuleObject *>(fromSlot<Object *>(made));
-}
-
 /// The state a condition closure needs: the rule object, rooted so that the closure can read the
 /// condition function from it after every safepoint, and the node VM the conditions of one engine
 /// call share.
@@ -185,17 +181,17 @@ sourceOf(const RuleObject &rule, uint16_t id, const std::shared_ptr<WhenCall> &c
     return source;
 }
 
-/// The engine's rules for the rule functions of an array.
+/// The engine's rules for the rule values of an array.
 ///
-/// A function is called for each rule, which can move the objects (a safepoint): the array is read
-/// again from the argument, which the collector keeps up to date, each time.
+/// Compiling a rule makes constants and can collect: the array is read again from the argument,
+/// which the collector keeps up to date, each time.
 std::vector<camel::runtime::Rule> engineRules(Context &ctx, ArgsView &norm, size_t argument) {
     std::vector<camel::runtime::Rule> out;
     auto vm            = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
     uint16_t next      = 1;
     const size_t count = norm.get<Array *>(argument)->size();
     for (size_t i = 0; i < count; ++i) {
-        RuleObject *rule = callRule(ctx, norm.get<Array *>(argument)->get<::Function *>(i));
+        RuleObject *rule = norm.get<Array *>(argument)->get<RuleObject *>(i);
         std::shared_ptr<WhenCall> call;
         if (rule->when() != nullptr) {
             call       = std::make_shared<WhenCall>();
@@ -221,6 +217,42 @@ bool isRuleSide(const camel::runtime::GCGraph &graph) {
     return name.ends_with("__lhs") || name.ends_with("__rhs") || name.ends_with("__when");
 }
 
+/// One application of rules: the program it produced and what the engine counted while applying
+/// them (the rewrites and the nodes are summed over the graphs; the rounds are the rounds the
+/// whole application made, each graph advancing in the same round).
+struct Application {
+    const camel::runtime::Program *program = nullptr;
+    camel::runtime::RewriteStats stats;
+};
+
+/// Applies `compiled` one way, in place, to a fixpoint over at most `maxRounds` rounds, to every
+/// graph of `base` that is not a side of a rule. A condition is Camel code, and so is a safepoint:
+/// every draft the session has opened must keep its static values relocatable until the commit
+/// reads them again, not only the one being rewritten now.
+Application applyRewrite(
+    Context &ctx, const camel::runtime::Program *base,
+    std::span<const camel::runtime::Rule> compiled, camel::core::sem::NumericPolicy policy,
+    size_t maxRounds) {
+    camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
+    camel::runtime::RuntimeGraphDraftSession::RootScope draftRoots(session);
+    camel::runtime::RewriteStats total;
+    total.fixpoint = true;
+    for (camel::runtime::GCGraph *graph : base->graphs()) {
+        if (isRuleSide(*graph)) {
+            continue;
+        }
+        camel::runtime::GraphDraft &draft = session.edit(graph);
+        camel::runtime::DraftWritings writings(draft, policy);
+        const camel::runtime::RewriteStats stats = writings.rewrite(compiled, maxRounds);
+        total.rounds = std::max(total.rounds, stats.rounds);
+        total.visited += stats.visited;
+        total.applied += stats.applied;
+        total.erased += stats.erased;
+        total.fixpoint = total.fixpoint && stats.fixpoint;
+    }
+    return {session.commitChecked(), total};
+}
+
 /// `rewrite(p, rules)` and `rewrite(p, rules, strict)`: the program with the rules applied one way,
 /// in place, to a fixpoint (rewrite design 3). The third parameter chooses the numeric policy of
 /// the pass itself (design principles 7.4, 7.5): `strict` grants no permission, as
@@ -232,24 +264,13 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const bool strict           = norm.size() > 2 && norm.get<Bool>(2);
     try {
         const auto compiled = engineRules(ctx, norm, 1);
-        camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
-        // A condition is Camel code, and so is a safepoint: every draft this session has opened
-        // must keep its static values relocatable until the commit reads them again, not only the
-        // one the engine is rewriting now.
-        camel::runtime::RuntimeGraphDraftSession::RootScope draftRoots(session);
-        for (camel::runtime::GCGraph *graph : base->graphs()) {
-            if (isRuleSide(*graph)) {
-                continue;
-            }
-            camel::runtime::GraphDraft &draft = session.edit(graph);
-            camel::runtime::DraftWritings writings(
-                draft,
-                strict ? camel::core::sem::NumericPolicy::strict()
-                       : camel::core::sem::NumericPolicy::relaxed());
-            writings.rewrite(compiled);
-        }
-        const camel::runtime::Program *committed = session.commitChecked();
-        return makeOk(toSlot(const_cast<camel::runtime::Program *>(committed)), resultType);
+        const Application application = applyRewrite(
+            ctx, base, compiled,
+            strict ? camel::core::sem::NumericPolicy::strict()
+                   : camel::core::sem::NumericPolicy::relaxed(),
+            16);
+        return makeOk(
+            toSlot(const_cast<camel::runtime::Program *>(application.program)), resultType);
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::rewrite>");
     } catch (const std::invalid_argument &e) {
@@ -259,6 +280,76 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     } catch (const std::exception &e) {
         return makeError("RewriteInvalid", e.what(), "<rewrite::rewrite>");
     }
+}
+
+/// `run(p, rules, rounds, strict)`: one application of the rules, with what it cost. This is
+/// `rewrite` with the round budget explicit and the counters kept: `run_rewrites`, `run_rounds`,
+/// `run_visited`, `run_erased`, `run_fixpoint` and `run_seconds` read them (H226). The program it
+/// produced is `run_program`.
+slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+    const auto *base     = norm.get<const camel::runtime::Program *>(0);
+    const int64_t rounds = norm.get<Int64>(2);
+    const bool strict    = norm.size() > 3 && norm.get<Bool>(3);
+    const TupleType *resultType = TupleType::fallible(camel::rewritemod::RunType::get());
+    try {
+        const auto start    = std::chrono::steady_clock::now();
+        const auto compiled = engineRules(ctx, norm, 1);
+        const Application application = applyRewrite(
+            ctx, base, compiled,
+            strict ? camel::core::sem::NumericPolicy::strict()
+                   : camel::core::sem::NumericPolicy::relaxed(),
+            rounds < 0 ? 0 : static_cast<size_t>(rounds));
+        const double seconds =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        // The run object is rooted while the fallible box is made: that allocation can collect.
+        auto *run = camel::rewritemod::RunObject::create(
+            application.program, application.stats, seconds, mm::autoSpace());
+        mm::RootHandle root(
+            mm::autoSpace(), run, camel::rewritemod::RunType::get(), "rewrite.run");
+        const slot_t value = toSlot(root.getAs<camel::rewritemod::RunObject>());
+        return makeOk(value, resultType);
+    } catch (const camel::runtime::RuleCompileError &e) {
+        return makeError("RuleInvalid", e.what(), "<rewrite::run>");
+    } catch (const std::invalid_argument &e) {
+        return makeError("RuleTwoWay", e.what(), "<rewrite::run>");
+    } catch (const mm::MemoryExhausted &) {
+        throw;
+    } catch (const std::exception &e) {
+        return makeError("RewriteInvalid", e.what(), "<rewrite::run>");
+    }
+}
+
+slot_t runProgramKernel(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot(const_cast<camel::runtime::Program *>(
+        norm.get<camel::rewritemod::RunObject *>(0)->program()));
+}
+
+slot_t runRewritesKernel(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot<Int64>(
+        static_cast<int64_t>(norm.get<camel::rewritemod::RunObject *>(0)->rewrites()));
+}
+
+slot_t runRoundsKernel(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot<Int64>(
+        static_cast<int64_t>(norm.get<camel::rewritemod::RunObject *>(0)->rounds()));
+}
+
+slot_t runVisitedKernel(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot<Int64>(
+        static_cast<int64_t>(norm.get<camel::rewritemod::RunObject *>(0)->visited()));
+}
+
+slot_t runErasedKernel(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot<Int64>(
+        static_cast<int64_t>(norm.get<camel::rewritemod::RunObject *>(0)->erased()));
+}
+
+slot_t runFixpointKernel(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot<Bool>(norm.get<camel::rewritemod::RunObject *>(0)->fixpoint());
+}
+
+slot_t runSecondsKernel(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot<Float64>(norm.get<camel::rewritemod::RunObject *>(0)->seconds());
 }
 
 /// `saturate(p, rules, rounds)` and `saturate(p, rules, rounds, strict)`: the program with the
@@ -762,7 +853,7 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const size_t count = norm.get<Array *>(0)->size();
     for (size_t index = 0; index < count; ++index) {
         // The array moves when a function runs: it is read again each time.
-        RuleObject *made = callRule(ctx, norm.get<Array *>(0)->get<::Function *>(index));
+        RuleObject *made = norm.get<Array *>(0)->get<RuleObject *>(index);
         // A condition is read again from the rule object after every call, so the object is
         // rooted while the check runs.
         std::shared_ptr<mm::RootHandle> ruleRoot;
@@ -962,6 +1053,14 @@ class RewriteExecutor final : public Executor {
             {"needs", needsKernel},
             {"consts", constsKernel},
             {"rewrite", rewriteKernel},
+            {"run", runKernel},
+            {"run_program", runProgramKernel},
+            {"run_rewrites", runRewritesKernel},
+            {"run_rounds", runRoundsKernel},
+            {"run_visited", runVisitedKernel},
+            {"run_erased", runErasedKernel},
+            {"run_fixpoint", runFixpointKernel},
+            {"run_seconds", runSecondsKernel},
             {"saturate", saturateKernel},
             {"extract", extractKernel},
             {"check", checkKernel},
@@ -974,6 +1073,7 @@ class RewriteModule final : public BuiltinModule {
   public:
     explicit RewriteModule(context_ptr_t ctx) : BuiltinModule("rewrite", std::move(ctx)) {
         exportType(Reference("Rule"), RuleType::get());
+        exportType(Reference("Run"), camel::rewritemod::RunType::get());
         exportEntity(
             "__rule",
             OperatorGroup::create(
@@ -1090,6 +1190,14 @@ class RewriteModule final : public BuiltinModule {
              {"needs", true},
              {"consts", true},
              {"rewrite", false},
+             {"run", false},
+             {"run_program", true},
+             {"run_rewrites", true},
+             {"run_rounds", true},
+             {"run_visited", true},
+             {"run_erased", true},
+             {"run_fixpoint", true},
+             {"run_seconds", true},
              {"saturate", false},
              {"extract", false},
              {"check", false},

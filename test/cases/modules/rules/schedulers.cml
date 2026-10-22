@@ -1,0 +1,118 @@
+/**
+ * Rule values and the scheduling combinators of `stdlib/rules.cml` (rewrite design 2 (second
+ * version) 8.5), applied to `schedule_target.cml`. Every pass prints what the application cost,
+ * so a count that differs from the design (a rule applied twice where a schedule applies it once,
+ * a stage reordered) is visible, not only the final program.
+ *
+ * A combinator answers `(program, rewrites, rounds, visited)!`. A pass opens it with `!!` and a
+ * fallback whose cost is impossible (-1): if a schedule ever failed, the printed line would not
+ * match the plan's expected line, so the test fails rather than hiding the error.
+ */
+module schedulers
+
+import { Program } from graph
+import { Rule, rule_name, rewrite } from rewrite
+import {
+    int_add_zero, int_mul_zero, seq, first, repeat, until, alternate,
+} from rules
+
+rule bump_one(x: int) { x + 0 => x + 1 }
+rule bump_ten(x: int) { x + 1 => x + 11 }
+rule step(x: int, const c: int) { x + c => x + (c + 1) }
+rule step_ten(x: int, const c: int) { x + c => x + (c + 10) }
+
+func helper(x: int): int {
+    return x
+}
+rule bad(x: int) { helper(x) => x }
+
+func always(q: Program): bool {
+    return true
+}
+
+func never(q: Program): bool {
+    return false
+}
+
+/// A rule chosen at run time: this is the value form, so `pick` returns a `Rule`, not a function.
+func pick(which: int): Rule {
+    return if which == 0 then int_add_zero else bump_one
+}
+
+/// A rule set built at run time from the chosen rule.
+func choose(which: int): Rule[] {
+    let chosen: Rule = pick(which)
+    return if which == 0 then [chosen] else [chosen, int_add_zero]
+}
+
+export func values(p: Program): Program! sync {
+    let firstSet: Rule[] = choose(0)
+    let secondSet: Rule[] = choose(1)
+    let all: Rule[] = [secondSet[0], secondSet[1], firstSet[0]]
+    println('values', rule_name(all[0]), rule_name(all[1]), rule_name(all[2]), len(all))
+    return rewrite(p, all)
+}
+
+export func seq_order(p: Program): Program! sync {
+    let stage: (Program, int, int, int) = seq(p, [[bump_one], [bump_ten]], false) !! (p, -1, -1, -1)
+    println('seq_order', stage.1, stage.2, stage.3)
+    return stage.0
+}
+
+export func seq_reverse(p: Program): Program! sync {
+    let stage: (Program, int, int, int) = seq(p, [[bump_ten], [bump_one]], false) !! (p, -1, -1, -1)
+    println('seq_reverse', stage.1, stage.2, stage.3)
+    return stage.0
+}
+
+export func first_zero(p: Program): Program! sync {
+    let stage: (Program, int, int, int) = first(p, [[int_add_zero], [bump_one]], false) !! (p, -1, -1, -1)
+    println('first_zero', stage.1, stage.2, stage.3)
+    return stage.0
+}
+
+export func first_bump(p: Program): Program! sync {
+    let stage: (Program, int, int, int) = first(p, [[bump_one], [int_add_zero]], false) !! (p, -1, -1, -1)
+    println('first_bump', stage.1, stage.2, stage.3)
+    return stage.0
+}
+
+export func repeat_five(p: Program): Program! sync {
+    let stage: (Program, int, int, int) = repeat(p, [step], 5, false) !! (p, -1, -1, -1)
+    println('repeat_five', stage.1, stage.2, stage.3)
+    return stage.0
+}
+
+export func repeat_two(p: Program): Program! sync {
+    let stage: (Program, int, int, int) = repeat(p, [step], 2, false) !! (p, -1, -1, -1)
+    println('repeat_two', stage.1, stage.2, stage.3)
+    return stage.0
+}
+
+export func alternate_three(p: Program): Program! sync {
+    let stage: (Program, int, int, int) = alternate(p, [step], [step_ten], 3, false) !! (p, -1, -1, -1)
+    println('alternate_three', stage.1, stage.2, stage.3)
+    return stage.0
+}
+
+export func until_now(p: Program): Program! sync {
+    let stage: (Program, int, int, int) = until(p, [step], always, 10, false) !! (p, -1, -1, -1)
+    println('until_now', stage.1, stage.2, stage.3)
+    return stage.0
+}
+
+export func until_budget(p: Program): Program! sync {
+    let stage: (Program, int, int, int) = until(p, [step], never, 2, false) !! (p, -1, -1, -1)
+    println('until_budget', stage.1, stage.2, stage.3)
+    return stage.0
+}
+
+export func nothing(p: Program): Program! sync {
+    let stage: (Program, int, int, int) = seq(p, [[int_mul_zero]], false) !! (p, -1, -1, -1)
+    println('nothing', stage.1, stage.2, stage.3)
+    return stage.0
+}
+
+export func refuse(p: Program): Program! {
+    return rewrite(p, [bad])
+}
