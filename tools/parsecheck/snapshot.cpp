@@ -82,6 +82,12 @@ std::string withSortedImports(const std::string &structure) {
 } // namespace
 
 int runHashes(const std::vector<std::string> &files) {
+    // A list that names nothing would hash nothing and report success; that is not a pass
+    // (agents/test.md, H185/H199).
+    if (files.empty()) {
+        std::cerr << "hashes: expected at least 1 file in the list, got 0; refusing to hash nothing\n";
+        return 2;
+    }
     int failures = 0;
     for (const std::string &path : files) {
         // The diagnostics name the file; the hash must not depend on where the file lies.
@@ -100,6 +106,13 @@ int runHashes(const std::vector<std::string> &files) {
 }
 
 int runFormatCheck(const std::vector<std::string> &files) {
+    // Every file below counts as checked or skipped, so an empty list would print a clean summary
+    // of nothing (H199). The floor that compares against the tree's parse corpus is in check.py,
+    // which is the only caller that can count it; this refuses the empty list itself.
+    if (files.empty()) {
+        std::cerr << "fmtcheck: expected at least 1 file in the list, got 0; refusing to check nothing\n";
+        return 2;
+    }
     size_t checked = 0, skipped = 0, changed = 0, unstable = 0, broken = 0;
     for (const std::string &path : files) {
         try {
