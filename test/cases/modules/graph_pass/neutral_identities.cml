@@ -1,0 +1,41 @@
+module neutral_identities
+
+// The five integer neutral elements of std::opt::algebra(neutral_only=true): x + 0, 0 + x,
+// x - 0, x * 1, 1 * x, on both integer types and both operand orders. No expression here is the
+// graph's named node (the mode keeps that node; see neutral_target.cml), and none of the other
+// laws of the rules library applies to these forms, so both implementations must leave the same
+// surviving graph (H160).
+
+func keep(v: int): int {
+    return v
+}
+
+func keep32(v: i32): i32 {
+    return v
+}
+
+func five64(a: int, b: int): int {
+    let p = a + 0
+    let q = 0 + b
+    let r = p - 0
+    let s = r * 1
+    let t = 1 * s
+    return keep(t + q)
+}
+
+func five32(a: i32, b: i32): i32 {
+    let p = a + 0
+    let q = 0 + b
+    let r = p - 0
+    let s = r * 1
+    let t = 1 * s
+    return keep32(t + q)
+}
+
+func main(): int sync {
+    println(five64(3, 4))
+    println(five32(3, 4))
+    println(five64(9223372036854775807, -1))
+    println(five32(2147483647, -1))
+    return 0
+}
