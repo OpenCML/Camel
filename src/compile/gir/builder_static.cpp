@@ -285,8 +285,15 @@ node_handle_t Builder::visitStaticForNode(
     const bool byIndices = gct->staticForIndices();
     Type *subject        = nullptr;
     if (byIndices) {
-        node_handle_t operand = valueNodeOf(visit(gct->staticForOperand()));
-        subject = operand != nullptr ? boundType(valueTypeOf(nodeTypeOf(operand))) : nullptr;
+        // `indices e` reads only the type of `e`. A build-time tuple gives it without a FILL
+        // (H51 step 6): `ts`, or a tuple comprehension whose elements stay separate nodes.
+        const std::any operandRes = visit(gct->staticForOperand());
+        if (operandRes.type() == typeid(StaticTuple)) {
+            subject = boundType(any_cast<const StaticTuple &>(operandRes).type);
+        } else {
+            node_handle_t operand = valueNodeOf(operandRes);
+            subject = operand != nullptr ? boundType(valueTypeOf(nodeTypeOf(operand))) : nullptr;
+        }
         if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
             containsTypeVar(subject)) {
             diags_->of(SemanticDiag::StaticTypeNotConcrete)
@@ -410,8 +417,14 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     const bool byIndices = gct->staticLoopIndices();
     Type *subject        = nullptr;
     if (byIndices) {
-        node_handle_t operand = valueNodeOf(visit(gct->staticLoopOperand()));
-        subject = operand != nullptr ? boundType(valueTypeOf(nodeTypeOf(operand))) : nullptr;
+        // As in visitStaticForNode: the operand only gives the tuple's type.
+        const std::any operandRes = visit(gct->staticLoopOperand());
+        if (operandRes.type() == typeid(StaticTuple)) {
+            subject = boundType(any_cast<const StaticTuple &>(operandRes).type);
+        } else {
+            node_handle_t operand = valueNodeOf(operandRes);
+            subject = operand != nullptr ? boundType(valueTypeOf(nodeTypeOf(operand))) : nullptr;
+        }
         if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
             containsTypeVar(subject)) {
             diags_->of(SemanticDiag::StaticTypeNotConcrete)
@@ -604,7 +617,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     return packStaticValues(false, nullptr, current, gct, "gir.static.loop.states");
 }
 
-node_handle_t Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
+std::any Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
     ENTER("SCOMP");
     // The comprehension is its generator plus the pack: the rounds' values are the fields of a
     // struct (or the elements of a tuple) of the same shape. Nothing of it is left in the graph
@@ -624,8 +637,24 @@ node_handle_t Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) 
         throw BuildAbortException();
     }
     (void)visitStaticForNode(generator, &values, &shape);
+    if (!gct->comprehensionIsStruct()) {
+        // A tuple comprehension is a build-time tuple: its rounds are separate element nodes,
+        // and the FILL is built only if the value is used at runtime (valueNodeOf).
+        type_vec_t types;
+        types.reserve(values.size());
+        for (const node_handle_t &value : values) {
+            types.push_back(valueTypeOf(nodeTypeOf(value)));
+        }
+        StaticTuple tuple;
+        tuple.type           = TupleType::create(std::move(types));
+        tuple.elements       = std::move(values);
+        tuple.materializable = true;
+        tuple.origin         = gct;
+        LEAVE("SCOMP");
+        return tuple;
+    }
     node_handle_t packed = packStaticValues(
-        gct->comprehensionIsStruct(), shape, values, gct, "gir.static.comprehension.fill");
+        true, shape, values, gct, "gir.static.comprehension.fill");
     LEAVE("SCOMP");
     return packed;
 }
@@ -646,8 +675,23 @@ node_handle_t Builder::packStaticValues(
         }
         type = fields.build();
     } else {
-        type = TupleType::create(types);
+        type = TupleType::create(std::move(types));
     }
+    return fillStaticValues(type, values, origin, originKind);
+}
+
+node_handle_t Builder::materializeStaticTuple(
+    const StaticTuple &tuple, const GCT::node_ptr_t &at) {
+    return fillStaticValues(
+        tuple.type,
+        tuple.elements,
+        at != nullptr ? at : tuple.origin,
+        "gir.static.tuple.fill");
+}
+
+node_handle_t Builder::fillStaticValues(
+    Type *type, const std::vector<node_handle_t> &values, const GCT::node_ptr_t &origin,
+    const char *originKind) {
     // The same construction as the C++ expansion of `tree_map` (src/compile/gir/tree.cpp): a
     // static value of the shape's size, and a FILL that reads one slot per value.
     core::mm::NoCollectionScope guard;
@@ -700,9 +744,31 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
     }
 
     const bool dropped = gct == unusedStatement_;
+    // A build-time tuple has no container node to project from: `ts.[j]` is the element node
+    // itself, chosen here (H51 step 6). No FILL and no ACCS are built.
+    const std::any targetRes = visit(gct->staticAccessTarget());
+    if (targetRes.type() == typeid(StaticTuple)) {
+        const StaticTuple &tuple = any_cast<const StaticTuple &>(targetRes);
+        uint32_t index           = 0;
+        const char *begin        = key->data();
+        const char *end          = begin + key->size();
+        const auto parsed        = std::from_chars(begin, end, index);
+        if (parsed.ec != std::errc() || parsed.ptr != end || index >= tuple.elements.size()) {
+            diags_->of(SemanticDiag::StaticAccessIndexOutOfRange)
+                .atOrigin(gct->origin())
+                .commit(*key, tuple.type->toString(), std::to_string(tuple.elements.size()));
+            throw BuildAbortException();
+        }
+        if (dropped) {
+            LEAVE("SACC");
+            return nullptr;
+        }
+        LEAVE("SACC");
+        return tuple.elements[index];
+    }
     // The target is still built when the access is dropped, so that a call in it keeps its
     // effects; only the ACCS node is left out.
-    node_handle_t target = valueNodeOf(visit(gct->staticAccessTarget()));
+    node_handle_t target = valueNodeOf(targetRes);
     if (target == nullptr) {
         diags_->of(SemanticDiag::StaticAccessNotInternal)
             .atOrigin(gct->origin())

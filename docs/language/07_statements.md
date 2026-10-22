@@ -313,6 +313,7 @@ func main(): int sync {
 ```
 
 - **调用在编译期展开。** 带剩余参数的函数没有运行时的参数个数，因此不为它建实例图，也不生成调用结点；每个直接调用都把函数体展开在调用者的图里，固定形参绑定到实参结点，`ts` 绑定到剩下的结点。`ts` 可以是 0 个元素。
+- **`ts` 是编译期元组，不是值。** 它只有三种用法：`indices ts` 取位置表、`ts.[j]` 取一个元素、`..ts` 把元素展开成实参。三种用法都不为 `ts` 建 `FILL`，也不为元素建 `ACCS`。把 `ts` 本身放到需要运行期值的位置（打印、返回、赋给变量、作为普通实参）报 `SemanticDiag::StaticTupleEscapes`，不会悄悄物化成一个运行期元组；需要运行期元组时写元组字面量 `(a, b)`。
 - **剩余实参**写作 `..e`，且必须是调用实参表的最后一项。`e` 必须是编译期元组：元组字面量、元组推导式，或外层剩余函数的 `..ts`。运行时的元组值没有固定个数，是 `SemanticDiag::RestArgumentNotTuple`；`..e` 后面还有实参是 `SemanticDiag::RestArgumentNotLast`。
 - 剩余形参必须在最后（`SemanticDiag::RestParameterNotLast`），不能写类型（`SemanticDiag::RestParameterTypeNotSupported`），只能出现在函数声明里（lambda、函数类型和规则里写 `..` 是语法错误）。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。
 - 带剩余参数的函数**不是值**：不能赋给变量、作为实参或导出后当函数值用（`SemanticDiag::RestFunctionNeedsExpansion`），只能直接调用。目前调用还必须和声明在同一个模块里：跨模块展开要等 `tree_*` 任务把函数体按调用点带过去，现在会报 `SemanticDiag::RestFunctionNeedsExpansion`。

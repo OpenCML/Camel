@@ -73,6 +73,19 @@ node_handle_t Builder::valueNodeOf(const std::any &res) {
     if (res.type() == typeid(graph_ptr_t)) {
         return createFuncDataNode(any_cast<graph_ptr_t>(res), true, false);
     }
+    if (res.type() == typeid(StaticTuple)) {
+        // A build-time tuple used where a runtime value is needed. A comprehension becomes one
+        // FILL here, at its first such use; a rest parameter's `ts` is not a value at all.
+        const StaticTuple &tuple = any_cast<const StaticTuple &>(res);
+        if (!tuple.materializable) {
+            const GCT::node_ptr_t at = tuple.origin;
+            diags_->of(SemanticDiag::StaticTupleEscapes)
+                .atOrigin(at != nullptr ? at->origin() : 0)
+                .commit(tuple.name.empty() ? std::string("a build-time tuple") : tuple.name);
+            throw BuildAbortException();
+        }
+        return materializeStaticTuple(tuple, tuple.origin);
+    }
     ASSERT(res.type() == typeid(node_handle_t), "Expression did not produce a value node.");
     return any_cast<node_handle_t>(res);
 }
@@ -87,7 +100,7 @@ node_handle_t Builder::elementNodeOf(const std::string &name, const GCT::node_pt
         // the name is anywhere else. An unknown name is reported at the literal.
         const GCT::node_ptr_t dref = tree_->makeDRef(name);
         dref->setOrigin(literal->origin());
-        node = visitDRefNode(dref);
+        node = valueNodeOf(visitDRefNode(dref));
     }
     return namedValueOf(node, name, literal);
 }
@@ -616,8 +629,7 @@ node_handle_t Builder::argumentNodeOf(const std::any &res, const GCT::node_ptr_t
     if (res.type() == typeid(graph_ptr_t)) {
         return createFuncDataNode(any_cast<graph_ptr_t>(res), true, false);
     }
-    ASSERT(res.type() == typeid(node_handle_t), "Argument did not produce a value node.");
-    return functionValueOf(any_cast<node_handle_t>(res), origin);
+    return functionValueOf(valueNodeOf(res), origin);
 }
 
 StaticArg Builder::staticArgOf(node_handle_t node) const {

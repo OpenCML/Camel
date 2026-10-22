@@ -209,6 +209,8 @@ enum class SemanticDiag : uint32_t {
     RestFunctionNeedsExpansion = 0x00018F,
     /// A call passes fewer arguments than the fixed parameters of a rest function.
     RestArgumentsMismatch = 0x000190,
+    /// A rest parameter's build-time tuple was used where a runtime value is needed.
+    StaticTupleEscapes = 0x000191,
 
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.

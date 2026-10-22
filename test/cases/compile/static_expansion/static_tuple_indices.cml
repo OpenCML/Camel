@@ -1,0 +1,40 @@
+/**
+ * `indices` and `static for` over a rest parameter's build-time tuple (H51 step 6): the trip
+ * count is the number of arguments left over, `j` is an ordinary int and a compile-time key,
+ * `ts.[j]` reads the argument node itself, and an `indices` operand that is a tuple
+ * comprehension keeps its elements separate (no FILL) as well.
+ */
+module static_tuple_indices
+
+func total(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+}
+
+func weighted(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j] * (j + 1)
+}
+
+func positions(..ts): (int, int) {
+    return ( static for (j) in indices ts => j )
+}
+
+func firstTwo(..ts): (int, int) {
+    return (ts.[0], ts.[1])
+}
+
+func nested(t: (int, int)): int {
+    return static loop acc = 0
+        for (j) in indices ( static for (k) in indices t => t.[k] ) do acc + 1
+}
+
+func main(): int sync {
+    println(total(1, 2, 3))
+    println(total())
+    println(weighted(5, 6))
+    let (p, q) = positions(4, 5)
+    println(p, q)
+    let (x, y) = firstTwo(9, 10)
+    println(x, y)
+    println(nested((7, 8)))
+    return 0
+}

@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-211 diagnostics: 194 errors, 17 warnings.
+212 diagnostics: 195 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -175,6 +175,7 @@ prints one entry.
 | `0x0300018E` | [SemanticDiag::RestArgumentNotTuple](#restargumentnottuple) | Error |
 | `0x0300018F` | [SemanticDiag::RestFunctionNeedsExpansion](#restfunctionneedsexpansion) | Error |
 | `0x03000190` | [SemanticDiag::RestArgumentsMismatch](#restargumentsmismatch) | Error |
+| `0x03000191` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -4589,6 +4590,36 @@ func first(a: int, ..ts): int {
 
 func main(): int sync {
     return first()
+}
+```
+
+### StaticTupleEscapes
+
+`0x03000191` · Error · `SemanticDiag::StaticTupleEscapes`
+
+**Message**
+
+```text
+The build-time tuple '{0}' is not a value.
+```
+
+**Help**
+
+```text
+A rest parameter's tuple stands for the arguments a call left over: read it with 'indices {0}', '{0}.[j]' or '..{0}', or write a tuple literal '(a, b)' when a runtime tuple value is wanted.
+```
+
+**Example** (`test/cases/compile/static_expansion/static_tuple_escape.cml`, run as `camel test/cases/compile/static_expansion/static_tuple_escape.cml`)
+
+```camel
+module static_tuple_escape
+
+func first(..ts): int {
+    return ts
+}
+
+func main(): int sync {
+    return first(1, 2)
 }
 ```
 

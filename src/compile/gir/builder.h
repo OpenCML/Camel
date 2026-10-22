@@ -890,6 +890,23 @@ class Builder {
         const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    // ---- Build-time tuples (H51 step 6) ----
+    // A tuple that is known while the graph is built: its type and its element nodes, without a
+    // FILL node. A rest parameter's `ts` and a tuple comprehension are the two producers.
+    // `indices` reads only the type, `ts.[j]` selects an element, and `..ts` splices the
+    // elements; none of those builds a node for the tuple. A runtime use either materializes one
+    // FILL (a comprehension is a value expression) or is refused (`ts` is not a value).
+    struct StaticTuple {
+        Type *type = nullptr; // TupleType of `elements`
+        std::vector<node_handle_t> elements;
+        /// A comprehension is a value and materializes when one is needed; a rest parameter's
+        /// tuple is not a value and its escape is StaticTupleEscapes.
+        bool materializable = true;
+        /// The name the tuple was written with (`ts`), for the escape diagnostic.
+        std::string name;
+        /// Where the tuple was written, for the escape diagnostic and the materialized FILL.
+        GCT::node_ptr_t origin;
+    };
     // ---- Rest parameters (design principles 5.5, H51 step 6) ----
     // A rest function has no runtime arity, so it is never an instance: each direct call
     // expands its body into the caller's graph, with the fixed parameters bound to the argument
@@ -897,8 +914,7 @@ class Builder {
     // expansion is built here, once per call; there is no call node and no tuple fill.
     struct RestBinding {
         std::string name;
-        std::vector<node_handle_t> values;
-        Type *type = nullptr; // the tuple of `values`
+        StaticTuple tuple; // the build-time tuple `ts`; not a value
     };
     struct RestBody {
         Type *exitType            = nullptr;
@@ -911,9 +927,9 @@ class Builder {
     RestBody *activeRestBody_ = nullptr;
     /// The rest binding of `name` that no local of the same name shadows.
     const RestBinding *restBindingNamed(const std::string &name) const;
-    /// The tuple value of a rest binding, made from its elements (a FILL that no expansion
-    /// needs stays dead and is removed by the ordinary passes).
-    node_handle_t materializeRestBinding(const RestBinding &binding, const GCT::node_ptr_t &at);
+    /// The FILL of a build-time tuple, built only when the tuple is used as a runtime value.
+    node_handle_t materializeStaticTuple(
+        const StaticTuple &tuple, const GCT::node_ptr_t &at);
     /// The nodes `..operand` stands for: the elements of a compile-time tuple, or the
     /// elements of the rest parameter it names.
     std::vector<node_handle_t> expandRestArgument(
@@ -1239,7 +1255,8 @@ class Builder {
     node_handle_t visitDataNode(const GCT::node_ptr_t &gct);
     Type *visitTypeNode(const GCT::node_ptr_t &gct);
     node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
-    node_handle_t visitDRefNode(const GCT::node_ptr_t &gct);
+    /// A name: its value node, or the build-time tuple a rest parameter names (no node).
+    std::any visitDRefNode(const GCT::node_ptr_t &gct);
     node_handle_t visitCastNode(const GCT::node_ptr_t &gct);
     node_handle_t visitVariNode(const GCT::node_ptr_t &gct);
     node_handle_t visitWaitNode(const GCT::node_ptr_t &gct);
@@ -1260,7 +1277,8 @@ class Builder {
         Type **shape = nullptr);
     /// `{ static for ... }` / `( static for ... )`: the rounds' values are packed into a struct or
     /// tuple of the same fields with one FILL; the comprehension leaves no node of its own.
-    node_handle_t visitStaticComprehensionNode(const GCT::node_ptr_t &gct);
+    /// The packed struct, or the build-time tuple of a tuple comprehension (no node).
+    std::any visitStaticComprehensionNode(const GCT::node_ptr_t &gct);
     /// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body`: the body is built
     /// once per field, in the current graph, with the state names bound to the previous round's
     /// values; the value is the last state (a tuple FILL when there are several).
@@ -1271,6 +1289,11 @@ class Builder {
     node_handle_t packStaticValues(
         bool isStruct, Type *shape, const std::vector<node_handle_t> &values,
         const GCT::node_ptr_t &origin, const char *originKind);
+    /// The FILL of `type` over `values`: what materializeStaticTuple and the tuple half of
+    /// packStaticValues build.
+    node_handle_t fillStaticValues(
+        Type *type, const std::vector<node_handle_t> &values, const GCT::node_ptr_t &origin,
+        const char *originKind);
     /// `t.[key]`: the field or tuple element is chosen at compile time.
     node_handle_t visitStaticAccessNode(const GCT::node_ptr_t &gct);
     bool typeCaseMatches(Type *subject, uint16_t patterns) const;
