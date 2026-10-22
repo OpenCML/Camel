@@ -1,0 +1,29 @@
+# H187 cleanup: reports as notes, residue gone
+
+**Deleted from the tree (not from history)**
+- `docs/handover/reports/`: 204 files — 202 `*.md` reports, one H80 failure list (`H80-gpu-tiles-failures.txt`), one `.gitkeep`; 36,479 lines, 3,572,407 bytes.
+- `docs/handover/plans/H51.md`: a 96 KB task plan.
+- `docs/handover/assets/enum.h.draft.txt`: a 9 KB draft header that was never compiled or wired in.
+
+**Preserved and reachable**
+- 203 report/list artifacts → 201 git notes on the commits that introduced them. `H147`/`H147-release` and `H80`/`H80-gpu-tiles-failures` share a commit each; those notes carry both files with headers.
+- Notes were written with `--no-stripspace`; every artifact's content is contained in its note.
+- Read one with `git notes --ref=handover show <sha>`; board tokens are `note ⟨sha7⟩`.
+- Notes live in `refs/notes/handover` locally. Nothing was pushed, per instructions; the coordinator must push `refs/notes/handover` together with the branch.
+- The deleted plan and draft are not in notes; they stay reachable in earlier commits (e.g. `13a8f48^:docs/handover/plans/H51.md`).
+
+**Board**
+- 164 existing task rows kept one-for-one; their text outside report references is unchanged (checked by normalizing the references).
+- Added row H187, now 165 rows; every report reference is `note ⟨sha7⟩` (284 tokens) and every sha resolves.
+- The top states that `docs/handover/` is the task index plus the author's `reviews/`; the report and dispatch instructions no longer tell anyone to write report files.
+- `docs/handover/` now has 16 files: `README.cn.md` plus `reviews/` (14 Markdown notes and `.gitkeep`).
+
+**References**
+- 72 report paths in 35 files (design/technical/performance/showcase docs, test plans, source comments) now read `handover note ⟨sha7⟩ (Hxxx)`; the board is the 36th file.
+- `git grep` for `docs/handover/reports`, `reports/H`, and bare `Hxxx.md` returns nothing.
+- 182 distinct note shas are referenced; all resolve.
+- Guard counts unchanged: `check-doc-links` 31 documents (212 with `--all`), `check-doc-counts` 146 documents / 14 claims / 8 allowlisted, `check-retired-names` 410 files; snippets compile. No expectation was relaxed or disabled — neither guard scans `docs/handover`, and the deleted files were never in their scope.
+
+**Tests (Linux host, `-Jobs 8`)**
+- Final tree `13a8f48`: `feat/docs_links` + `smoke` = 14/14 pass, 0 fail, clean build (20 s build, 1.1 s plan).
+- Commits: `963624c09` (cleanup), `13a8f485e` (board row). Branch `handover/H187-cleanup`; no push, no history rewrite.
