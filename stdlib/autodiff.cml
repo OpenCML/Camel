@@ -25,4 +25,4 @@ module autodiff
 /// argument's own type.
 /// @pure
 /// @example stop_gradient(3.0)    // 3.0
-export func stop_gradient(x: typeas T): T
+export func stop_gradient::<T>(x: T): T

@@ -797,8 +797,8 @@ void ParserImpl::parseFrontMatter() {
 }
 
 /// funcDecl : frontMatter ('with' angledParams)? 'export'? modifiers?
-///            'func' (identRef | operatorName) parentParams (':' typeExpr)? resourceClause?
-///            stmtBlock?
+///            'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
+///            resourceClause? stmtBlock?
 ///
 /// Without a body the declaration stands for a C++ operator of the module the name is bound in
 /// (design principles 6.4): it has no block, and what it declares is its signature. The
@@ -957,6 +957,9 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     } else {
         parseIdentRef(NK::IdentRef);
     }
+    if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
+        parseTypeParams();
+    }
     parseParentParams(true, true);
     if (eat(TK::Colon)) {
         parseType();
@@ -974,6 +977,35 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
         parseStmtBlock();
     }
     close(m, NK::FuncDecl);
+}
+
+/// typeParams : '::' '<' identDef (',' identDef)* ','? '>'
+///
+/// The type parameters of a generic declaration, written at its head right after the name
+/// (design principles 5.5): `func first::<T>(xs: T[]): T`. The spelling is the one a call site
+/// uses for explicit type arguments (`first::<int>(xs)`), so whether a declaration is generic is
+/// visible in its head; without `::<...>` it is not generic. `rule` and `fact` declare theirs the
+/// same way. A dimension name still binds where a shape first writes it (5.4) and may be listed
+/// here too, which is why the list can name one.
+void ParserImpl::parseTypeParams() {
+    const size_t m = mark();
+    bump(); // `::`
+    if (!panic_ && cur_ != TK::Lt && cur_ != TK::LAngle) {
+        unexpected({e(TK::Lt)});
+        return close(m, NK::TypeParams);
+    }
+    bump(); // `<`
+    {
+        Scope scope(*this, false);
+        parseIdentDef();
+        while (!panic_ && eat(TK::Comma) && cur_ == TK::Identifier) {
+            parseIdentDef();
+        }
+    }
+    if (!panic_ && !eat(TK::Gt)) {
+        unexpected({e(TK::Comma), e(TK::Gt)});
+    }
+    close(m, NK::TypeParams);
 }
 
 /// operatorName : IDENTIFIER (OPERATOR | '[' ']')

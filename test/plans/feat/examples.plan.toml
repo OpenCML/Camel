@@ -108,7 +108,7 @@ golden = "golden/examples/functions_closures.txt"
 
 [[tests]]
 name = "examples.functions.generic_helpers"
-desc = "Generic functions with `typeas`, built on the generic functions of array."
+desc = "Generic functions with head type parameters, built on the generic functions of array."
 case = "../../../examples/functions/generic_helpers.cml"
 golden = "golden/examples/functions_generic_helpers.txt"
 

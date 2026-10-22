@@ -667,7 +667,7 @@ std::string SemanticModel::declLabel(uint32_t file, uint32_t decl) const {
         return withShownName(d, "func ");
     case DeclKind::Parameter:
     case DeclKind::WithParameter: {
-        // As written (`x: typeas T`), which says more than one instance's type.
+        // As written (`x: T`), which says more than one instance's type.
         std::string label = d.header.empty() ? typed("") : d.header;
         return label;
     }
@@ -682,7 +682,7 @@ std::string SemanticModel::declLabel(uint32_t file, uint32_t decl) const {
     case DeclKind::TypeParameter:
         return "type parameter " + d.name;
     case DeclKind::TypeVariable:
-        return "typeas " + d.name;
+        return "type parameter " + d.name;
     case DeclKind::Import: {
         std::string label = "import { " + d.name + " } from " + d.importedFrom;
         for (const std::string &signature : facts.importedSignatures) {

@@ -60,7 +60,7 @@ def unit(i):
 def program(units):
     parts = [
         f"module scale_{units}\n",
-        "func pick(a: typeas T, b: T, c: bool): T {\n    return if c then a else b\n}\n",
+        "func pick::<T>(a: T, b: T, c: bool): T {\n    return if c then a else b\n}\n",
     ]
     parts.extend(unit(i) for i in range(units))
     helpers = []

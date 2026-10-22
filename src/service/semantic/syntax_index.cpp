@@ -145,7 +145,8 @@ class Walker {
     int32_t container_ = -1;
     bool inFuncType_   = false;
     bool exportNext_   = false;
-    // The declaration whose signature is being walked: a `typeas` in it makes it generic.
+    // The declaration whose signature is being walked: the type parameters declared at its head
+    // make it generic.
     int32_t signatureOf_ = -1;
 
     // ---- ranges and text ----
@@ -375,16 +376,6 @@ class Walker {
             return walkInterpolations(node);
         case NK::RefType:
             return addRef(node, RefKind::Type);
-        case NK::TypeAsType:
-            // `typeas T` declares the type variable T for the rest of the signature.
-            if (auto ident = node.get<cst::IdentDef>(); ident && nameOf(ident)) {
-                const Range whole = rangeOf(node);
-                declare(DeclKind::TypeVariable, nameOf(ident), whole, whole);
-                if (signatureOf_ >= 0) {
-                    index_.decls[signatureOf_].generic = true;
-                }
-            }
-            return;
         case NK::FuncType: {
             const bool saved = std::exchange(inFuncType_, true);
             walkChildren(node);
@@ -550,6 +541,20 @@ class Walker {
         const uint32_t scopeId = pushScope(ScopeKind::Function, whole, self);
         if (self >= 0) {
             index_.decls[self].bodyScope = static_cast<int32_t>(scopeId);
+        }
+        // The type parameters declared at the head (`func first::<T>(...)`, design principles
+        // 5.5) are names of the signature and of the body, and make the declaration generic.
+        if (const auto typeParams = ctx.get<cst::TypeParams>()) {
+            for (const auto ident : typeParams->all<cst::IdentDef>()) {
+                if (!nameOf(ident)) {
+                    continue;
+                }
+                const Range typeVarRange = rangeOf(ident);
+                declare(DeclKind::TypeVariable, nameOf(ident), typeVarRange, typeVarRange);
+                if (self >= 0) {
+                    index_.decls[self].generic = true;
+                }
+            }
         }
         declareParams(
             ctx.get<cst::AngledParams>().get<cst::PairedParams>(),

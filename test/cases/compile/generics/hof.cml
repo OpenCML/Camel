@@ -5,30 +5,30 @@
  */
 module hof
 
-func id(x: typeas T): T {
+func id::<T>(x: T): T {
     return x
 }
 
-func twice(f: (x: typeas T) => T, x: T): T {
+func twice::<T>(f: (x: T) => T, x: T): T {
     return f(f(x))
 }
 
-with <f: (x: typeas T) => typeas U>
-func my_map(xs: T[]): U[] {
+with <f: (x: T) => U>
+func my_map::<T, U>(xs: T[]): U[] {
     return xs->map<f>
 }
 
-with <keep: (x: typeas T) => bool>
-func my_filter(xs: T[]): T[] {
+with <keep: (x: T) => bool>
+func my_filter::<T>(xs: T[]): T[] {
     return xs->filter<keep>
 }
 
-with <f: (acc: typeas U, x: typeas T) => U, init: U>
-func my_fold(xs: T[]): U {
+with <f: (acc: U, x: T) => U, init: U>
+func my_fold::<U, T>(xs: T[]): U {
     return xs->reduce<f, init>
 }
 
-func adder(n: typeas T): (x: T) => T {
+func adder::<T>(n: T): (x: T) => T {
     return (x: T) => x + n
 }
 

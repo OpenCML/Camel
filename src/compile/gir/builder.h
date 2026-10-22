@@ -779,7 +779,7 @@ class Builder {
 
     // ---- Generic functions (design principles 5.5) ----
     //
-    // A function whose signature binds type variables (`typeas T`) is a subgraph template:
+    // A function whose signature declares its type parameters at its head is a subgraph template:
     // no graph is built for its declaration. Each direct call binds the variables from the
     // argument types and asks for the instance of those types, which is built once from the
     // function's GCT with the variables replaced (typeBindings_) wherever the body names a
@@ -1543,7 +1543,7 @@ class Builder {
     struct OperatorOverloads {
         /// The program's own, from every enclosing scope and every module that exports some.
         std::vector<compile_graph_ptr_t> graphs;
-        /// The generic ones (`typeas` in a parameter), in this module and imported.
+        /// The generic ones (a head that declares type parameters), in this module and imported.
         std::vector<template_ptr_t> templates;
         /// Those of the built-in module and of the C++ modules imported, one group.
         oper_group_ptr_t ops;

@@ -15,7 +15,7 @@
 //   - the computed signatures (`program_of`, `graph_of`, `open_function`, `to_function`) have the
 //     type of a function value, which C++ computes from the argument. Their reference entries are
 //     in `stdlib/signatures/graph.cml`, named by the module's `computed:` field (handover H180).
-//     A `(typeas F)` declaration would accept every type, and a call the operator must refuse
+//     A declaration generic over `F` would accept every type, and a call the operator must refuse
 //     would pass the check (standard library conventions 2). `constant` and `add_constant` take a
 //     sample's type and are written out per sample type instead (handover H202).
 //   - `operator ==` is declared as the reserved group `__eq__`. `operator !=` cannot be declared

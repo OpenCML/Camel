@@ -21,11 +21,11 @@ module tree
 /// The path of every leaf, as a tree of the same shape.
 /// @pure
 /// @example tree_paths({ a: 1, b: (2, 3) })    // { a: 'a', b: ('b.0', 'b.1') }
-export func tree_paths(t: typeas T) {
+export func tree_paths::<T>(t: T) {
     return paths_at(t, '')
 }
 
-func paths_at(t: typeas T, here: string) {
+func paths_at::<T>(t: T, here: string) {
     return match type T {
         case struct => { static for (n, F) in fields T => paths_at(t.[n], join(here, n)) }
         case tuple => ( static for (n, F) in fields T => paths_at(t.[n], join(here, n)) )
@@ -42,13 +42,13 @@ func join(a: string, b: string): string {
 /// is that of the first tree.
 /// @effect whatever the callback does
 /// @example tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })    // { a: 2, b: (3, 4) }
-with <f: typeas F>
-export func tree_map(t: typeas T, ..ts) {
+with <f: F>
+export func tree_map::<T, F>(t: T, ..ts) {
     return map_at<f>(t, ..ts)
 }
 
-with <f: typeas F>
-func map_at(t: typeas T, ..ts) {
+with <f: F>
+func map_at::<T, F>(t: T, ..ts) {
     return match type T {
         case struct => { static for (n, G) in fields T =>
             map_at<f>(t.[n], ..( static for (j) in indices ts => ts.[j].[n] )) }
@@ -61,13 +61,13 @@ func map_at(t: typeas T, ..ts) {
 /// Folds the leaves from the first to the last with f, starting from init.
 /// @effect whatever the callback does
 /// @example tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)    // 6
-with <f: (acc: typeas R, leaf: typeas A) => R>
-export func tree_reduce(t: typeas T, init: R): R {
+with <f: (acc: R, leaf: A) => R>
+export func tree_reduce::<T, R, A>(t: T, init: R): R {
     return reduce_at<f>(t, init)
 }
 
-with <f: (acc: typeas R, leaf: typeas A) => R>
-func reduce_at(t: typeas T, acc: R): R {
+with <f: (acc: R, leaf: A) => R>
+func reduce_at::<T, R, A>(t: T, acc: R): R {
     return match type T {
         case struct | tuple =>
             static loop a = acc for (n, G) in fields T do reduce_at<f>(t.[n], a)
@@ -79,13 +79,13 @@ func reduce_at(t: typeas T, acc: R): R {
 /// leaf of `tree` at a leaf of the reference is a tuple of the same length.
 /// @pure
 /// @example tree_unzip({ a: (1, 2.0) }, { a: 0 })    // ({ a: 1 }, { a: 2.0 })
-export func tree_unzip(r: typeas R, s: typeas S) {
+export func tree_unzip::<R, S>(r: R, s: S) {
     return unzip_trees(r, s, first_leaf(r, s))
 }
 
 /// Any leaf tuple of `r`: its number of fields is the number of trees to build. Every leaf of
 /// a well-formed unzip has the same number of fields, so which leaf it is does not matter.
-func first_leaf(r: typeas R, s: typeas S) {
+func first_leaf::<R, S>(r: R, s: S) {
     return match type S {
         case struct => { static for (n, G) in fields S => { return first_leaf(r.[n], s.[n]) } }
         case tuple => { static for (n, G) in fields S => { return first_leaf(r.[n], s.[n]) } }
@@ -93,12 +93,12 @@ func first_leaf(r: typeas R, s: typeas S) {
     }
 }
 
-func unzip_trees(r: typeas R, s: typeas S, sample: typeas L) {
+func unzip_trees::<R, S, L>(r: R, s: S, sample: L) {
     return ( static for (j, C) in fields L => unzip_at(r, s, j) )
 }
 
 /// The tree of one component of the leaf tuples: `j` names the component everywhere.
-func unzip_at(r: typeas R, s: typeas S, constas j: string) {
+func unzip_at::<R, S>(r: R, s: S, constas j: string) {
     return match type S {
         case struct => { static for (n, G) in fields S => unzip_at(r.[n], s.[n], j) }
         case tuple => ( static for (n, G) in fields S => unzip_at(r.[n], s.[n], j) )

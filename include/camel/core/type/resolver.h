@@ -250,7 +250,7 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
  *
  *  - a signature without type variables is a fixed rule: an argument list of the declared
  *    shape whose argument types are assignable to the declared parameter types;
- *  - a signature with `typeas` variables is a family: the variables are bound from the argument
+ *  - a signature with type parameters declared at its head is a family: the variables are bound from the argument
  *    types, every variable must be bound, and the resulting concrete signature is checked
  *    against the arguments. Each call therefore resolves to its own concrete signature while
  *    the operator URI stays one.

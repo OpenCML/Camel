@@ -25,7 +25,7 @@ func which(x: int): string { return 'int' }
 func which(x: int?): string { return 'int?' }
 
 // generic: an argument that is not of the form binds the payload
-func first_or(x: (typeas T)?, d: T): T { return x ?? d }
+func first_or::<T>(x: T?, d: T): T { return x ?? d }
 
 // branch arms: one arm enters the form of the other
 func pick(c: bool, x: int): int? { return if c then x else null }

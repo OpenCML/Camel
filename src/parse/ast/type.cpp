@@ -98,8 +98,6 @@ std::string to_string(TypeOp op) {
         return "SPEC";
     case TypeOp::TypeOf:
         return "typeof";
-    case TypeOp::TypeAs:
-        return "typeas";
     default:
         ASSERT(false, "Unknown TypeOp");
         return "Unknown";
@@ -174,6 +172,13 @@ const std::string FuncTypeLoad::geneCode() const {
     std::string result = "";
     if (!modifiers_.empty()) {
         result += std::string(modifiers_) + " ";
+    }
+    if (!typeParams_.empty()) {
+        result += "::<";
+        for (size_t i = 0; i < typeParams_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + typeParams_[i];
+        }
+        result += "> ";
     }
     return result;
 }

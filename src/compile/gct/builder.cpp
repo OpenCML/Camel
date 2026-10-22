@@ -1086,8 +1086,8 @@ void Builder::checkOperatorDeclaration(
             .commit(
                 symbol,
                 "an operator has no with-parameters: its operands are all it is given (a "
-                "type variable is written 'typeas T' in a parameter's type, not in angle "
-                "brackets)");
+                "type parameter is declared after the operator's name, 'func operator "
+                "+::<T>(...)')");
         throw BuildAbortException();
     }
     for (const auto &param : *normParams) {
@@ -4404,16 +4404,33 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         Builder &self;
         scope_ptr_t<Reference, Type *> outer;
         std::vector<std::string> outerVars;
+        std::shared_ptr<std::unordered_map<std::string, Type *>> outerHead;
+        std::unordered_set<std::string> outerWritten;
+        bool outerSignatureVisit;
         ~TypeScopeGuard() {
             self.typeScope_        = outer;
             self.declaredTypeVars_ = std::move(outerVars);
+            self.headTypeVarTypes_ = std::move(outerHead);
+            self.writtenHeadVars_  = std::move(outerWritten);
+            self.signatureVisit_   = outerSignatureVisit;
         }
-    } typeScopeGuard{*this, typeScope_, std::exchange(declaredTypeVars_, {})};
+    } typeScopeGuard{*this,
+                     typeScope_,
+                     std::exchange(declaredTypeVars_, {}),
+                     std::move(headTypeVarTypes_),
+                     std::move(writtenHeadVars_),
+                     signatureVisit_};
     pushScope();
-    declSignature_ = isDecl;
-    openSignature_ = true;
+    // The declaration's head names (`func first::<T>(...)`) are the occurrence of each type
+    // variable in this signature; visitFuncType puts them into the scope it just pushed.
+    headTypeVarTypes_ = std::make_shared<std::unordered_map<std::string, Type *>>();
+    writtenHeadVars_.clear();
+    signatureVisit_ = true;
+    declSignature_  = isDecl;
+    openSignature_  = true;
     FunctionType *funcType =
         tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    signatureVisit_ = false;
     // The parameters of a lambda whose type was left out (design principles 5.9), filled by GIR
     // from the function type the lambda stands in.
     const std::vector<Tree::UnwrittenParam> unwrittenParams =
@@ -4428,6 +4445,22 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         }
     }
     if (!declaredTypeVars_.empty()) {
+        // A head name written in the signature but dropped by type construction (the argument of
+        // a type function that does not use its parameter) is written and still cannot be bound.
+        std::vector<std::string> surviving;
+        collectTypeVars(funcType, surviving);
+        for (const std::string &name : declaredTypeVars_) {
+            if (writtenHeadVars_.contains(name) &&
+                std::find(surviving.begin(), surviving.end(), name) == surviving.end()) {
+                diags_->of(SemanticDiag::TypeVariableNotBindable)
+                    .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+                    .commit(name,
+                            funcData->ref().toString(),
+                            "it is written only where type construction drops it, as the argument "
+                            "of a type function that does not use it");
+                throw BuildAbortException();
+            }
+        }
         // A variable must survive type construction in an argument or result position.
         std::vector<std::string> bindable;
         for (Type *param : funcType->withTypesSpan()) {
@@ -4440,13 +4473,14 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
             collectBindableTypeVars(funcType->exitType(), bindable);
         }
         for (const std::string &name : declaredTypeVars_) {
-            if (std::find(bindable.begin(), bindable.end(), name) == bindable.end()) {
+            if (std::find(bindable.begin(), bindable.end(), name) == bindable.end() &&
+                writtenHeadVars_.contains(name)) {
                 diags_->of(SemanticDiag::TypeVariableNotBindable)
                     .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
                     .commit(
                         name,
                         funcData->ref().toString(),
-                        "its 'typeas' is inside a union, or is the argument of a type function "
+                        "it occurs only inside a union, or as the argument of a type function "
                         "that does not use it");
                 throw BuildAbortException();
             }
@@ -4682,8 +4716,7 @@ enum TypeOp {
     KeyInter,
     KeyDiff,
     Specialize, // Type type, (Type | Data)* args
-    TypeOf,
-    TypeAs
+    TypeOf
 }
 */
 Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
@@ -4744,36 +4777,6 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
             .at(ast->load()->tokenRange())
             .commit("TypeOp::TypeOf");
         throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::TypeAs: {
-        // `typeas T`: the type found at this position of an argument type becomes `T`, also
-        // when the name already denotes a type (design principles 5.5): that is what the
-        // explicit form is for, since a plain name would be read as that type.
-        const Reference &ref = ast->atAs<AST::TypeLoad>(0)->loadAs<AST::RefTypeLoad>()->ref();
-        const string name    = ref.toString();
-        if (!typeasAllowed_) {
-            diags_->of(SemanticDiag::TypeVariableNotAllowed)
-                .at(ast->load()->tokenRange())
-                .commit(
-                    name,
-                    inDeclReturnType_ ? "a return type has no argument to take the type from"
-                                      : "this is not a parameter of a function declaration");
-            throw BuildAbortException();
-        }
-        // One variable is bound once per signature; a second `typeas` of the same name binds
-        // nothing new, and one after a plain occurrence has bound the name already is the same
-        // mistake.
-        if (std::find(declaredTypeVars_.begin(), declaredTypeVars_.end(), name) !=
-            declaredTypeVars_.end()) {
-            diags_->of(SemanticDiag::TypeVariableRedeclared)
-                .at(ast->load()->tokenRange())
-                .commit(name);
-            throw BuildAbortException();
-        }
-        typeScope_->insert(ref, TypeVarType::create(name, false));
-        declaredTypeVars_.push_back(name);
-        res = TypeVarType::create(name, true);
     } break;
 
     default:
@@ -4893,22 +4896,12 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     // Extract the function type load from the AST node
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
 
-    // A declaration binds variables in its parameters or return type (design principles
-    // 5.9). Return-only variables come from the expected type or explicit ::<T> arguments.
+    // A declaration declares its type variables at its head (design principles 5.5): the names in
+    // `::<T, ...>` are the type variables of the signature and of the body, and a use of one in
+    // a type is an occurrence an argument can bind. A plain name that no head declares is an
+    // ordinary type name; if no type answers it, it is an unknown type (UnresolvedTypeReference).
     const bool signature = std::exchange(declSignature_, false);
     const bool open      = std::exchange(openSignature_, false);
-    struct FlagGuard {
-        bool &allowed, &inReturn;
-        bool outerAllowed, outerInReturn;
-        ~FlagGuard() {
-            allowed  = outerAllowed;
-            inReturn = outerInReturn;
-        }
-    } flagGuard{typeasAllowed_, inDeclReturnType_, typeasAllowed_, inDeclReturnType_};
-    if (signature) {
-        typeasAllowed_    = true;
-        inDeclReturnType_ = false;
-    }
     // Named dimensions (design principles 5.4). A declaration gets a scope of its own, and only
     // its parameter types bind into it; the return type may use the names the parameters bound.
     // A function type nested in another signature sees those names but binds none of its own.
@@ -4937,33 +4930,26 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         dimUses_   = std::make_shared<std::map<std::string, size_t>>();
     }
     dimBindAllowed_ = false;
-    // Automatic type-variable binding (design principles 5.5). A declaration counts the plain
-    // names its signature writes, and its parameter types bind the ones no type answers. A
-    // function type nested in a parameter type is part of that type, so it binds too; one
-    // nested in the return type does not. The flags are therefore set only here, around the
-    // parameter types and the return type, and a nested visit leaves them alone.
-    struct TypeVarGuard {
-        Builder &self;
-        bool bind, onlyReturn;
-        std::shared_ptr<std::unordered_map<std::string, size_t>> uses;
-        std::shared_ptr<std::unordered_map<std::string, camel::source::origin_id_t>> autos;
-        explicit TypeVarGuard(Builder &builder)
-            : self(builder), bind(builder.typeVarBindAllowed_),
-              onlyReturn(builder.typeVarOnlyInReturn_), uses(builder.typeVarUses_),
-              autos(builder.autoBoundVars_) {}
-        ~TypeVarGuard() {
-            self.typeVarBindAllowed_  = bind;
-            self.typeVarOnlyInReturn_ = onlyReturn;
-            self.typeVarUses_         = uses;
-            self.autoBoundVars_       = autos;
-        }
-    } typeVarGuard(*this);
     if (signature) {
-        typeVarUses_   = std::make_shared<std::unordered_map<std::string, size_t>>();
-        autoBoundVars_ = std::make_shared<
-            std::unordered_map<std::string, camel::source::origin_id_t>>();
-        typeVarBindAllowed_  = false;
-        typeVarOnlyInReturn_ = false;
+        // The head names are in scope from here on: a parameter type, a return type, a function
+        // type nested in either, and the body all resolve them before any type of the module. A
+        // name declared here therefore wins over a type of the same name, which is the point of
+        // declaring it (design principles 5.5).
+        for (const std::string &name : typeLoad->typeParams()) {
+            if (std::find(declaredTypeVars_.begin(), declaredTypeVars_.end(), name) !=
+                declaredTypeVars_.end()) {
+                diags_->of(SemanticDiag::TypeVariableRedeclared)
+                    .at(ast->load()->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            Type *occurrence = TypeVarType::create(name, false);
+            typeScope_->insert(Reference(name), occurrence);
+            declaredTypeVars_.push_back(name);
+            if (headTypeVarTypes_) {
+                (*headTypeVarTypes_)[name] = occurrence;
+            }
+        }
     }
     if (signature) {
         // A `constas n: int` parameter is a value the signature uses, not a dimension the
@@ -5013,11 +4999,8 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     };
 
     // Process "with" parameters (context parameters)
-    // Their types bind type variables too (design principles 5.5); so do the ordinary
-    // parameters below. The return type may only use what they bound.
-    if (signature) {
-        typeVarBindAllowed_ = true;
-    }
+    // Their types use the type variables the head declares (design principles 5.5), like the
+    // ordinary parameters below.
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         bool isVar            = paramLoad->isVar();
@@ -5179,38 +5162,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         factory.addNormArg(name, type, isVar);
     }
 
-    // The return type may name existing variables or bind return-only ones.
-    if (signature) {
-        // The parameter types end here: a name first written in the return type binds nothing.
-        typeVarBindAllowed_  = false;
-        typeVarOnlyInReturn_ = true;
-    }
+    // The return type may use the head's type variables like any other type.
     const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
     if (exitTypeNode) {
-        if (signature) {
-            typeasAllowed_    = true;
-            inDeclReturnType_ = true;
-        }
         dimBindAllowed_ = false;
         factory.setExitType(visitType(exitTypeNode));
-        if (signature) {
-            typeVarOnlyInReturn_ = false;
-        }
-    }
-    // A type variable bound automatically and written only once is most likely a misspelt type
-    // name: it is reported, and the signature still compiles (design principles 5.5).
-    if (signature) {
-        for (const std::string &name : declaredTypeVars_) {
-            if (!autoBoundVars_->contains(name)) {
-                continue;
-            }
-            const auto uses = typeVarUses_->find(name);
-            if (uses != typeVarUses_->end() && uses->second == 1) {
-                diags_->of(SemanticDiag::TypeVariableUsedOnce)
-                    .atOrigin(autoBoundVars_->at(name))
-                    .commit(name);
-            }
-        }
     }
 
     LEAVE("FuncType");
@@ -5219,6 +5175,21 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     }
     FunctionType *built = open ? static_cast<FunctionType *>(factory.buildOpen())
                                : factory.build();
+    // A type parameter declared at the head and written nowhere in the signature is a name the
+    // declaration never uses: no argument could give it a type, and the function could never be
+    // instantiated (design principles 5.5).
+    if (signature) {
+        std::vector<std::string> used;
+        collectTypeVars(built, used);
+        for (const std::string &name : declaredTypeVars_) {
+            if (std::find(used.begin(), used.end(), name) == used.end() &&
+                !writtenHeadVars_.contains(name)) {
+                diags_->of(SemanticDiag::TypeVariableUnused)
+                    .at(ast->load()->tokenRange())
+                    .commit(name, "the declaration declares it at its head and its signature never writes it");
+            }
+        }
+    }
     // A dimension name written once constrains nothing: another parameter (or the return type)
     // would have to write it to make it a relation (design principles 5.4).
     if (signature && dimUses_) {
@@ -5640,12 +5611,12 @@ Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     auto const &typeLoad = ast->loadAs<AST::RefTypeLoad>();
     const Reference &ref = typeLoad->ref();
 
-    Type *type = lookupType(ref, ast);
-    // One occurrence of a plain name in the signature being visited (design principles 5.5):
-    // the count decides the warning for a type variable written only once.
-    if (typeVarUses_ && ref.plain()) {
-        ++(*typeVarUses_)[ref.ident()];
+    if (signatureVisit_ && !declaredTypeVars_.empty() &&
+        std::find(declaredTypeVars_.begin(), declaredTypeVars_.end(), ref.ident()) !=
+            declaredTypeVars_.end()) {
+        writtenHeadVars_.insert(ref.ident());
     }
+    Type *type = lookupType(ref, ast);
     LEAVE("RefType");
     return type;
 }
@@ -5739,6 +5710,17 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
         return 0;
     };
     if (found) {
+        // A use of a name the declaration declares at its head is a binding occurrence: an
+        // argument at that position can give the variable its type (design principles 5.5). The
+        // scope entry is the declaration's own occurrence, so a name of an enclosing declaration
+        // (or a static-for's dimension) is still a plain use.
+        if (found.value()->code() == TypeCode::TypeVar && headTypeVarTypes_) {
+            const auto &name = tt::as_ptr<TypeVarType>(found.value())->name();
+            const auto head  = headTypeVarTypes_->find(name);
+            if (head != headTypeVarTypes_->end() && head->second == found.value()) {
+                return report(TypeVarType::create(name, true), camel::source::kInvalidOriginId);
+            }
+        }
         // An imported type named `Map` or `Set` comes before the built-in of that name.
         if (isCollectionPrototype(found.value())) {
             if (const auto imported = module_->getImportedType(ref); imported.has_value()) {
@@ -5829,29 +5811,9 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     if (wholeImportFailed_ || poisonedTypes_.contains(written)) {
         throw BuildAbortException();
     }
-    // Layer 6: a plain name that first appears in a parameter type of the declaration being
-    // visited binds a type variable (design principles 5.5), exactly as `typeas` would bind it.
-    // The rule is the one named dimensions follow (5.4): an existing type name is a reference,
-    // and a name that no type answers is a new binding; the first appearance is the binding.
-    if (ref.plain()) {
-        if (typeVarBindAllowed_) {
-            const std::string name = ref.ident();
-            typeScope_->insert(ref, TypeVarType::create(name, false));
-            declaredTypeVars_.push_back(name);
-            if (autoBoundVars_) {
-                (*autoBoundVars_)[name] = ast->load()->origin();
-            }
-            return report(TypeVarType::create(name, true), camel::source::kInvalidOriginId);
-        }
-        // A name written only in the return type has no argument to take a type from, so it
-        // is an error rather than a variable: the signature binds it nowhere.
-        if (typeVarOnlyInReturn_) {
-            diags_->of(SemanticDiag::TypeVariableOnlyInReturn)
-                .at(ast->load()->tokenRange())
-                .commit(written);
-            throw BuildAbortException();
-        }
-    }
+    // A plain name that answers no type is an unknown type. A declaration's type variables are
+    // declared at its head, never inferred from a parameter type (design principles 5.5); a
+    // dimension name still binds where a shape first writes it (5.4), which is a separate pass.
     diags_->of(SemanticDiag::UnresolvedTypeReference).at(ast->load()->tokenRange()).commit(written);
     throw BuildAbortException();
 }

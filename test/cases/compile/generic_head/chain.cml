@@ -1,23 +1,23 @@
 /**
  * A generic function calls generic functions: the instance of each is fixed by the types the
- * chain gives it, so `chained` instantiates `first` and `pair` for its own variable
- * (design principles 5.5). No `typeas` is written anywhere.
+ * chain gives it, so `chained` instantiates `first` and `pair` for its own type parameter
+ * (design principles 5.5). Every declaration says `::<...>` at its head.
  */
 module chain
 
-func id(x: T): T {
+func id::<T>(x: T): T {
     return x
 }
 
-func pair(x: U): (U, U) {
+func pair::<U>(x: U): (U, U) {
     return (id(x), x)
 }
 
-func first(p: (V, V)): V {
+func first::<V>(p: (V, V)): V {
     return p.0
 }
 
-func chained(x: W): W {
+func chained::<W>(x: W): W {
     return first(pair(x))
 }
 

@@ -6,7 +6,7 @@ module main
 
 type Boxed = enum { Empty, Weight(float) }
 
-func to_set(x: typeas T): Set<T> {
+func to_set::<T>(x: T): Set<T> {
     return [x] as Set<T>
 }
 

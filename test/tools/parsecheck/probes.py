@@ -59,7 +59,7 @@ STATEMENTS = [
     "let v = a as int[]", "let v = a as int[][]", "let v = a as Map<K, V>",
     "let v = a as (int)", "let v = a as (int, string)", "let v = a as (x: int) => int",
     "let v = a as { x: int }", "let v = a as int < 3", "let v = a as int<3>",
-    "let v = a as T<const 1, U>", "let v = a as k of T", "let v = a as typeas T",
+    "let v = a as T<const 1, U>", "let v = a as k of T",
     # types in declarations
     "let v: int = 1", "let a, b = 1, 2", "let (a, b) = t", "let { a, b } = s",
     "let [a, b] = xs", "let (a,) = t", "let v: int? = null", "let v: int! = e",

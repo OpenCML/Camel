@@ -12,8 +12,8 @@
 // one source of their signatures (design principles 6.4; handover H19, step 10): the C++ side
 // keeps the kernels, the executor, the operator traits and the in-place forms. Every name of the
 // module is declared here and no computed signature is left: the seven names whose result type is
-// the element type of their array argument are generic declarations (`(typeas T)[]`), which
-// reproduce the resolver's accept set exactly (handover H202, after H194).
+// the element type of their array argument are generic declarations (`func sort::<T>(xs: T[])`),
+// which reproduce the resolver's accept set exactly (handover H202, after H194).
 
 module algo
 
@@ -33,41 +33,41 @@ export func argsort(keys: string[]): int[]
 /// @pure
 /// @fails fault `OperandTypeUnsupported` when the elements are not numbers
 /// @example sort([3, 1, 2])    // [1, 2, 3]
-export func sort(xs: (typeas T)[]): T[]
+export func sort::<T>(xs: T[]): T[]
 
 /// A sorted copy of xs, by insertion sort.
 /// @pure
 /// @fails fault `OperandTypeUnsupported` when the elements are not numbers
 /// @example insert_sort([3, 1, 2])    // [1, 2, 3]
-export func insert_sort(xs: (typeas T)[]): T[]
+export func insert_sort::<T>(xs: T[]): T[]
 
 /// A sorted copy of xs, by quicksort.
 /// @pure
 /// @fails fault `OperandTypeUnsupported` when the elements are not numbers
 /// @example quick_sort([3, 1, 2])    // [1, 2, 3]
-export func quick_sort(xs: (typeas T)[]): T[]
+export func quick_sort::<T>(xs: T[]): T[]
 
 /// A sorted copy of xs, by merge sort.
 /// @pure
 /// @fails fault `OperandTypeUnsupported` when the elements are not numbers
 /// @example merge_sort([3, 1, 2])    // [1, 2, 3]
-export func merge_sort(xs: (typeas T)[]): T[]
+export func merge_sort::<T>(xs: T[]): T[]
 
 /// The sorted array made of the elements of two sorted arrays of numbers.
 /// @pure
 /// @fails fault `OperandTypeUnsupported` when the elements are not numbers
 /// @example merge_sorted_arrays([1, 4], [2, 3])    // [1, 2, 3, 4]
-export func merge_sorted_arrays(left: (typeas T)[], right: T[]): T[]
+export func merge_sorted_arrays::<T>(left: T[], right: T[]): T[]
 
 /// The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
 /// of the `array` module.
 /// @pure
 /// @example flatten([[1, 2], [3]])    // [1, 2, 3]
-export func flatten(xss: (typeas T)[][]): T[]
+export func flatten::<T>(xss: T[][]): T[]
 
 /// The first occurrence of every value, in order; values are compared as `==` compares them
 /// (a NaN equals nothing, so every NaN is kept). The primitive behind `unique` of the `array`
 /// module.
 /// @pure
 /// @example unique([3, 1, 3, 2, 1])    // [3, 1, 2]
-export func unique(xs: (typeas T)[]): T[]
+export func unique::<T>(xs: T[]): T[]

@@ -1,0 +1,17 @@
+/**
+ * A type declared with that name does not shadow a head parameter: a name declared at the
+ * head wins inside its declaration (design principles 5.5), so `T` in `id` is the type
+ * parameter, and the call instantiates it with `int`.
+ */
+module type_param_collision
+
+type T = int
+
+func id::<T>(a: T): T {
+    return a
+}
+
+func main(): int sync {
+    println(id(1))
+    return 0
+}

@@ -36,7 +36,7 @@ using namespace camel::core::type;
 /*
  * Unordered iteration. Every signature is a declaration of `stdlib/para.cml`: the fixed one of
  * `rendezvous` and the two that take the element type of their array argument
- * (`unordered_foreach`, `unordered_reduce`), which a `(typeas T)` declaration states exactly
+ * (`unordered_foreach`, `unordered_reduce`), which a head declaration `::<T>` states exactly
  * (design principles 6.4; handover H19, step 10, H202). What is left here is what only C++ knows:
  * the kernels in operators.cpp, the executor that runs them, and the operator traits and
  * resources declared at load.

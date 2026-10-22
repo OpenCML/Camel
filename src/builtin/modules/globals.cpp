@@ -460,7 +460,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/assn",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
+                        "(var self: T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             // The target keeps its declared type; the value only has to fit it.
@@ -1706,7 +1706,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":struct/zip",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {-1, {}}},
-                        "(...args: (typeas T)[]) => (T, T, ...)[]",
+                        "(...args: T[]) => (T, T, ...)[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (norm.size() < 2)

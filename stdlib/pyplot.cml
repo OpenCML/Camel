@@ -8,7 +8,7 @@
  *
  * `plot` is one operator with one URI, over four element types and two arities: an array of
  * `i32`, `int`, `f32` or `float`, with or without the name of the output file. A declaration
- * cannot write "an array of one of these four" as one rule, and a `(typeas T)[]` declaration
+ * cannot write "an array of one of these four" as one rule, and a declaration generic over `T`
  * would accept a `string[]` that the kernel refuses, so the four types are written out for each
  * arity: eight declarations of the one operator. A declaration cannot write the optional
  * parameter `filename?: string` either, which is why the two arities are separate.

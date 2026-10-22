@@ -268,7 +268,7 @@ Tensor<f32>               // f32[..]
 - 一个数组类型里 `..` 最多一次，且必须最后（`DimensionAfterAnyRank`）；`T[.., 3]` 是错误。
 - 裸 `..` 匿名（打印 `T[3, ..]`）；`..s` 命名，名字只活在类型里。
 - `?` 是未知维度，`T[?]` 就是 `T[]`；`2 * n - 1` 这类线性形式保留名字。
-- 元素类型可以是类型变量：`(typeas T)[n, m]`（`typeUnit` 已有 `identDef 'of'` 前缀）。
+- 元素类型可以是类型变量：函数头声明 `T` 后写 `T[n, m]`（`typeUnit` 已有 `identDef 'of'` 前缀）。
 - 形状参数里写 `const`（`Tensor<f32, const [3]>`）报 `InvalidTypeArgument`，消息给出"去掉 `const`"的写法；不新增诊断码（批复 Q2 的同类处理）。
 
 ### 4.2 AST、CST 与格式化

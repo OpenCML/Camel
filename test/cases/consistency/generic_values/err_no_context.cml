@@ -1,4 +1,4 @@
-func id(x: typeas A): A { return x }
+func id::<A>(x: A): A { return x }
 func main(): int sync {
     let g = id
     println(g(1))

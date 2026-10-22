@@ -4,31 +4,31 @@
  */
 module nested
 
-func flat_first(xss: (typeas T)[][]): T {
+func flat_first::<T>(xss: T[][]): T {
     return xss[0][0]
 }
 
-func fst(p: (typeas A, typeas B)): A {
+func fst::<A, B>(p: (A, B)): A {
     return p.0
 }
 
-func get_x(s: { x: typeas T, y: int }): T {
+func get_x::<T>(s: { x: T, y: int }): T {
     return s.x
 }
 
-func apply(f: (x: typeas T) => typeas U, x: T): U {
+func apply::<T, U>(f: (x: T) => U, x: T): U {
     return f(x)
 }
 
-func twice(f: (x: typeas T) => T, x: T): T {
+func twice::<T>(f: (x: T) => T, x: T): T {
     return f(f(x))
 }
 
-func my_map(xs: (typeas T)[], f: (x: T) => typeas U): U[] {
+func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
     return xs->map<f>
 }
 
-func compose(f: (x: typeas A) => typeas B, g: (y: B) => typeas C, x: A): C {
+func compose::<A, B, C>(f: (x: A) => B, g: (y: B) => C, x: A): C {
     return g(f(x))
 }
 

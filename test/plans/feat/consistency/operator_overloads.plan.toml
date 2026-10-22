@@ -42,7 +42,7 @@ expect_stdout = "0 1 1\n4.0 7.0 2.0 -2.0 4.0 2.0 true false\n3 ab 2 -4 false 5.0
 
 [[tests]]
 name = "operator_overloads.generic"
-desc = "Generic overloads (`typeas` in a parameter's type) next to a plain one: each call takes the one overload that accepts its operands, and two generic overloads of one operator have instances of their own."
+desc = "Generic overloads (head type parameters) next to a plain one: each call takes the one overload that accepts its operands, and two generic overloads of one operator have instances of their own."
 kind = "behavior"
 case = "../../../cases/consistency/operator_overloads/generic.cml"
 args = ["${case}", "${backend}"]
@@ -188,7 +188,7 @@ expect_output_contains = ["it takes one parameter, and this declaration has 2"]
 
 [[tests]]
 name = "operator_overloads.with_param"
-desc = "An operator has no with-parameters (a type variable is written with typeas)."
+desc = "An operator has no with-parameters (a type parameter is declared at the head)."
 kind = "negative"
 case = "../../../cases/consistency/operator_overloads/with_param.cml"
 args = ["${case}"]
@@ -220,7 +220,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 19
-expect_output_contains = ["(a: typeas T[], b: T[]) => T[] (this module)", "(a: typeas T[], b: typeas U[]) => T[] (this module)"]
+expect_output_contains = ["::<T> (a: T[], b: T[]) => T[] (this module)", "::<T, U> (a: T[], b: U[]) => T[] (this module)"]
 
 [[tests]]
 name = "operator_overloads.ambiguous_modules"

@@ -5,7 +5,7 @@ func deco(f: (x: int) => int): (x: int) => int {
 }
 
 @deco
-func id(x: typeas T): T {
+func id::<T>(x: T): T {
     return x
 }
 
