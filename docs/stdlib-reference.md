@@ -31,13 +31,8 @@ How to read an entry:
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
-<<<<<<< HEAD
-Not in this reference: the tensor stack's own layers (`nn`, `autodiff`, `onnx`, `sim`)
-and the profiler (`perf`).
-=======
-Not in this reference: the `onnx` exporter and `sim`'s simulation types, the Python
-bridge (`python`, `pyplot`) and the profiler (`perf`).
->>>>>>> handover/H165-nn-autodiff
+Not in this reference: the `onnx` exporter, the simulation types of `sim` and the
+profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
@@ -63,13 +58,10 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [this](#this) | `import { ... } from this` | C++ | 1 |
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
 | [tiles](#tiles) | `import { ... } from tiles` | C++ | 12 |
-<<<<<<< HEAD
 | [pyplot](#pyplot) | `import { ... } from pyplot` | C++ | 1 |
 | [python](#python) | `import { ... } from python` | C++ | 11 |
-=======
 | [nn](#nn) | `import { ... } from nn` | C++ | 19 |
 | [autodiff](#autodiff) | `import { ... } from autodiff` | C++ | 3 |
->>>>>>> handover/H165-nn-autodiff
 
 <a id="built-in-functions"></a>
 
@@ -4463,7 +4455,6 @@ memory. Asking is a requirement, not a preference: with no device the call is a 
 - Failure: fault `RuntimeError` when this build or this machine has no CUDA device; fault `DeviceUnavailable` when `--devices` names a device that is not there.
 - Example: `println(device())`
 
-<<<<<<< HEAD
 <a id="pyplot"></a>
 
 ## `pyplot`: draw an array
@@ -4669,7 +4660,7 @@ Drops this program's reference to the Python object `obj`.
 
 - With effects: advances the interpreter's reference counts.
 - Example: `py_dispose(py_import("math"))`
-=======
+
 <a id="nn"></a>
 
 ## `nn`: neural-network primitives
@@ -4984,4 +4975,3 @@ argument's own type.
 
 - Pure.
 - Example: `stop_gradient(3.0)` gives `3.0`
->>>>>>> handover/H165-nn-autodiff
