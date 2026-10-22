@@ -44,7 +44,10 @@ the table.  The Camel program reads no environment variable: `bench`, `init_dir`
 - `p = exp(scores) / sum(exp(scores), -1, true)`, with no maximum subtracted;
 - `p = exp(logits) / sum(exp(logits), -1, true)` then `log(p)` for the cross-entropy, with no
   `log_softmax`;
-- RMSNorm, GELU (the tanh approximation), Adam, and a `with_grad` backward pass.
+- RMSNorm, GELU (the tanh approximation), Adam, and a `with_grad` backward pass;
+- the two blocks are one `Block[]` value walked by `loop h = x for b in m.blocks`: an array's
+  tangent is the array of its elements' tangents, so the loop differentiates, and the optimizer
+  and `save_params` walk the array element by element.
 
 The scale is `1 / sqrt(d_head)`, not a literal `4.0`: `attention_scale` is computed once from the
 width the model actually uses.  The parameter count is a named function over the model's shapes
@@ -95,17 +98,6 @@ that rounds a `1` away.  `accuracy.cml` repeats the f32 measurements in Camel.
   `handover/h260-tensor-storage`, which deletes the normalisation table), delete it and add an
   f64 column to the table if f64 then works.  Until then bf16 overflow and the fp64 error of the
   step cannot be measured in Camel; its f32 thresholds match PyTorch's f32 thresholds exactly.
-- **The blocks are a tuple, not `Block[]`.**  H17's native array syntax exists
-  (`f32[b, t, d]`, and shaped `Tensor<f32, [8, 16, 64]>`), but a loop over an array of tensors
-  that depends on a differentiated parameter is refused: the reverse pass would have to scatter
-  each round's gradient into the array, and an array element currently has no zero tangent.  The
-  refusal is explicit: `autodiff: a 'loop' iterates over an array that depends on a
-  differentiated parameter ... Capture the array and read its elements by index`.  The model
-  therefore stores `blocks: (Block, Block)` and the forward pass walks it with
-  `static loop ... for (i, B) in fields (Block, Block)`.  There is no `block0`/`block1` field and
-  no copy of the block body; adding a third block is a type and data change, not a new forward
-  branch.  When H17 can differentiate `Block[]`, the tuple becomes an array and the loop
-  becomes the plain `loop h = x for b in m.blocks`.
 - **`f32[b, t, d]` does not reach the tensor operators.**  `exp`, `@`, `sum` and the rest take
   `Tensor`, not the core array type; `let x: f32[2, 3] = randn(...)` is a `DeclaredTypeMismatch`.
   The example writes shaped `Tensor<f32, [8, 16, 64]>` (and named aliases `TokenStates`,
