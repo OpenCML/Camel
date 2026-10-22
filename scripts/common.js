@@ -1,4 +1,5 @@
 import { execSync, spawnSync } from 'child_process'
+import { createHash } from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -430,4 +431,213 @@ export function copyBuildArtifacts(config) {
     }
     removeStaleModuleArtifacts(config, moduleFiles)
     logDone(`Copied all build artifacts`)
+}
+
+// --- the build stamp (H149) ---------------------------------------------------
+//
+// `out/<tag>/build-info.json` records the sources an install was produced from. Reusing an install
+// without rebuilding (`camel-remote.ps1 -NoBuild`, or a test run against `out/latest` by hand) is
+// only honest while the install still matches the tree: H129 lost 9 tests to a stale binary, H132
+// lost one (`test::saturate_props` was not registered in the old one), and H139 recorded the other
+// direction -- a green that could not have moved, because `-NoBuild` reads `out/latest/stdlib` and
+// that copy is made by the build.
+//
+// The stamp is written here, by the build itself (collect-out at the end of `npm run build`), so a
+// local build stamps too. `scripts/build-info.js check` compares it against the tree a run is about
+// to verify and refuses when they differ; that is the guard, and collect-out knows nothing about
+// the remote helper.
+//
+// What is compared is the **content** of the paths a build reads or copies into the install, not the
+// commit: a commit that only touches `docs/`, `test/` or `scripts/` leaves the compiled bytes and the
+// installed stdlib unchanged, and refusing there would train people to pass the override. A commit
+// that moves one byte of `src/` changes the fingerprint. `git rev-parse HEAD` and the dirty flag are
+// recorded beside the fingerprint so the refusal can name both revisions; they are not the test.
+//
+// The roots below are exactly what the build consumes: the C++ sources and headers, every module,
+// the tools, `third_party` (globbed into libcamel), `stdlib` (copied verbatim into
+// `out/<tag>/stdlib`, so a comment there *can* move a test -- H139), the CMake glue and the Conan
+// recipe. Generated files (`*.cmo`, objects, libraries, DLLs) are excluded: they are products, not
+// inputs, and `stdlib/*.cmo` is written by every build. `docs/`, `test/`, `scripts/`, `agents/`,
+// `editors/`, `pypi/`, `assets/`, `examples/`, `benchmarks/` and the markdown files are not read by
+// the build and are not fingerprinted.
+export const BUILD_INFO_FILE = 'build-info.json'
+
+/** Bumped when the recorded shape changes so an old stamp is refused instead of misread. */
+export const BUILD_INFO_SCHEMA = 1
+
+/** Bumped when the fingerprint algorithm or `BUILD_INFO_ROOTS` changes. */
+export const FINGERPRINT_VERSION = 1
+
+/** Stamped file by tag (`latest`, `debug`, or a release mirror tag). */
+export const BUILD_INFO_ROOTS = ['src', 'include', 'modules', 'tools', 'stdlib', 'third_party', 'cmake']
+
+/** Single files at the repository root that the build reads. */
+export const BUILD_INFO_ROOT_FILES = ['CMakeLists.txt', 'conanfile.txt']
+
+const FINGERPRINT_SKIP_DIRS = new Set(['.git', 'node_modules', '__pycache__', 'build', 'out'])
+const FINGERPRINT_SKIP_FILE = /\.(o|obj|a|lib|so|dll|dylib|pdb|ilk|cmo|pyc|pyo|pyd|exe)$/i
+
+/** Longest list of paths recorded in the stamp; the count is kept in full. */
+const BUILD_INFO_MAX_DIRTY_PATHS = 40
+
+function fingerprintFileList(root) {
+    const files = []
+    const walk = (dir) => {
+        let entries
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true })
+        } catch {
+            return
+        }
+        for (const ent of entries) {
+            const full = path.join(dir, ent.name)
+            if (ent.isDirectory()) {
+                if (!FINGERPRINT_SKIP_DIRS.has(ent.name)) {
+                    walk(full)
+                }
+                continue
+            }
+            // Symlinks are not followed: a link's target is hashed where it lives, if it is source.
+            if (!ent.isFile() || FINGERPRINT_SKIP_FILE.test(ent.name)) {
+                continue
+            }
+            files.push(full)
+        }
+    }
+    for (const rel of BUILD_INFO_ROOTS) {
+        const dir = path.join(root, rel)
+        if (fs.existsSync(dir)) {
+            walk(dir)
+        }
+    }
+    for (const rel of BUILD_INFO_ROOT_FILES) {
+        const file = path.join(root, rel)
+        if (fs.existsSync(file)) {
+            files.push(file)
+        }
+    }
+    return files
+}
+
+/**
+ * SHA-256 over `path\0content-hash\n` of every file the build reads, sorted by path. Paths are
+ * relative and `/`-separated, so the same content gives the same fingerprint regardless of how the
+ * checkout is rooted.
+ *
+ * @param {string} [root] - repository root; defaults to this checkout
+ * @returns {{version: number, roots: string[], files: number, hash: string, fileHashes: Record<string, string>}}
+ */
+export function sourceFingerprint(root = BASEDIR) {
+    const entries = fingerprintFileList(root)
+        .map((full) => ({
+            full,
+            rel: path.relative(root, full).split(path.sep).join('/')
+        }))
+        .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0))
+
+    const aggregate = createHash('sha256')
+    const fileHashes = {}
+    for (const { full, rel } of entries) {
+        const content = fs.readFileSync(full)
+        const hex = createHash('sha256').update(content).digest('hex')
+        aggregate.update(rel).update('\0').update(hex).update('\n')
+        // The per-file map is for the refusal message ("these files changed"); 64 bits is plenty to
+        // point at a file, and the aggregate above is the authority.
+        fileHashes[rel] = hex.slice(0, 16)
+    }
+    return {
+        version: FINGERPRINT_VERSION,
+        roots: [...BUILD_INFO_ROOTS, ...BUILD_INFO_ROOT_FILES],
+        files: entries.length,
+        hash: aggregate.digest('hex'),
+        fileHashes
+    }
+}
+
+/**
+ * HEAD and "is the working tree dirty" for the stamp and for the refusal message. `git` being
+ * unavailable is not fatal: the fingerprint is filesystem content and still guards the run, so this
+ * warns once and records `available: false` (the message then says the revision is unknown).
+ *
+ * @param {string} [root]
+ * @returns {{available: boolean, revision: string|null, dirty: boolean|null, dirtyCount: number, dirtyPaths: string[]}}
+ */
+export function gitState(root = BASEDIR) {
+    const run = (args) => spawnSync('git', ['-C', root, ...args], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] })
+    const head = run(['rev-parse', 'HEAD'])
+    if (head.error || head.status !== 0 || !head.stdout || !head.stdout.trim()) {
+        return { available: false, revision: null, dirty: null, dirtyCount: 0, dirtyPaths: [] }
+    }
+    const revision = head.stdout.trim()
+    const status = run(['status', '--porcelain'])
+    if (status.error || status.status !== 0) {
+        return { available: true, revision, dirty: null, dirtyCount: 0, dirtyPaths: [] }
+    }
+    const paths = (status.stdout || '')
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => line.slice(3).replace(/^.* -> /, ''))
+    return {
+        available: true,
+        revision,
+        dirty: paths.length > 0,
+        dirtyCount: paths.length,
+        dirtyPaths: paths.slice(0, BUILD_INFO_MAX_DIRTY_PATHS)
+    }
+}
+
+/** `out/<tag>/build-info.json` */
+export function buildInfoPath(tag = 'latest', root = BASEDIR) {
+    return path.join(root, 'out', tag, BUILD_INFO_FILE)
+}
+
+/** The stamp of `out/<tag>/`, or null when it does not exist / is not JSON. */
+export function readBuildInfo(tag = 'latest', root = BASEDIR) {
+    try {
+        return JSON.parse(fs.readFileSync(buildInfoPath(tag, root), 'utf-8'))
+    } catch {
+        return null
+    }
+}
+
+function shortRevision(info) {
+    return info.revision ? info.revision.slice(0, 10) : 'unknown'
+}
+
+/**
+ * Write `out/<tag>/build-info.json` for the tree as it is now. Called by collect-out at the end of
+ * every build (before the tag mirrors are made, and again for each mirror so its `tag` is its own).
+ *
+ * @param {'Release'|'Debug'|'RelWithDebInfo'} config
+ * @param {string} tag - `latest`, `debug`, or a release mirror tag
+ * @param {string} [root] - repository root; defaults to this checkout
+ */
+export function writeBuildInfo(config, tag = 'latest', root = BASEDIR) {
+    const git = gitState(root)
+    if (!git.available) {
+        logWarn('git is unavailable: out/' + tag + '/' + BUILD_INFO_FILE + ' records no revision. ' +
+            'The source fingerprint is still recorded, so -NoBuild can still tell whether the install matches this tree.')
+    }
+    const fingerprint = sourceFingerprint(root)
+    const info = {
+        schema: BUILD_INFO_SCHEMA,
+        config,
+        tag,
+        builtAt: new Date().toISOString(),
+        revision: git.revision,
+        dirty: git.dirty,
+        dirtyCount: git.dirtyCount,
+        dirtyPaths: git.dirtyPaths,
+        git: git.available,
+        fingerprint
+    }
+    // collect-out has already created out/<tag>/; `node scripts/build-info.js stamp` may not have.
+    fs.mkdirSync(path.dirname(buildInfoPath(tag, root)), { recursive: true })
+    fs.writeFileSync(buildInfoPath(tag, root), JSON.stringify(info, null, 2) + '\n')
+    const dirty = git.dirty === null ? 'no git' : git.dirty ? `dirty: ${git.dirtyCount} file(s)` : 'clean'
+    logStep(
+        `Stamped out/${tag}/${BUILD_INFO_FILE}: ${shortRevision(info)} (${dirty}), ` +
+            `${fingerprint.files} source files, fingerprint ${fingerprint.hash.slice(0, 12)}`
+    )
+    return info
 }
