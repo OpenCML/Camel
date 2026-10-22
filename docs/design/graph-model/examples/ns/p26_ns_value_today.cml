@@ -1,9 +1,0 @@
-// A module-level value used from inside a namespace function (same module).
-let limit = 10
-namespace Config {
-    func twice(): int { return limit * 2 }
-}
-func main(): int sync {
-    println(Config::twice())
-    return 0
-}

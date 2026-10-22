@@ -1,7 +1,7 @@
 /**
  * A Json held across collections: its strings, arrays and objects are traced through the
  * types its kinds fix (modules/json/value.h), with both collectors and under forced collection
- * (docs/design/any-typing, defect D0: a decoded value used to sit in a slot typed `any` that no
+ * ( a decoded value used to sit in a slot typed `any` that no
  * collector traced). `n` strings are allocated between decoding and reading.
  */
 module json_gc

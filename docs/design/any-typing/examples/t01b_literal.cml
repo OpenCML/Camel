@@ -1,8 +1,0 @@
-module t01b_literal
-
-// A literal cannot be given the type `any`; a computed value can (t01_declare.cml).
-func main(): int sync {
-    let a: any = 42
-    println(a)
-    return 0
-}

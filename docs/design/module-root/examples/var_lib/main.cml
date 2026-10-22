@@ -1,8 +1,0 @@
-import { bump, get } from counter
-
-sync func main(): int sync {
-    bump()
-    bump()
-    println(get())
-    return 0
-}

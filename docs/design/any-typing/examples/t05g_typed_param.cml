@@ -1,9 +1,0 @@
-module t05g_typed_param
-// An `any` value given where an int is expected, without `as`.
-func inc(x: int): int { return x + 1 }
-func main(): int sync {
-    let n = 1
-    let a = n as any
-    println(inc(a))
-    return 0
-}

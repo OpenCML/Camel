@@ -1,7 +1,0 @@
-module t15_empty_array
-// The element type of `[]` when nothing gives it one.
-func main(): int sync {
-    let e = []
-    println(len(e), e)
-    return 0
-}

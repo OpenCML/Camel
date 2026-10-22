@@ -1,4 +1,0 @@
-// The smallest program: what the compiler allocates before it has compiled anything of the user.
-func main(): int {
-    return 0
-}

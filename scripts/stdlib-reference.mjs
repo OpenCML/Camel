@@ -796,16 +796,23 @@ function renderDoc() {
     out.push('')
 out.push('Not in this reference: the profiler (`perf`).')
     out.push('')
-    out.push('| Module | Import | Written in | Functions |')
-    out.push('|---|---|---|---|')
+    out.push('| Module | Import | Written in |')
+    out.push('|---|---|---|')
     const parsed = MODULES.map((module) => ({ module, entries: parseDeclarations(module) }))
     for (const { module, entries } of parsed) {
-        const names = [...new Set(entries.map((e) => e.name))]
         const anchor = module.name === 'globals' ? 'built-in-functions' : module.name
         out.push(
             `| [${module.name === 'globals' ? 'built-in' : module.name}](#${anchor}) | ` +
                 `${module.name === 'globals' ? 'none' : '`import { ... } from ' + module.name + '`'} | ` +
-                `${module.kind === 'camel' ? 'Camel' : 'C++'} | ${names.length} |`,
+                `${module.kind === 'camel' ? 'Camel' : 'C++'} |`,
+        )
+    }
+    for (const { module, entries } of parsed) {
+        const anchor = module.name === 'globals' ? 'built-in-functions' : module.name
+        out.push(
+            `| [${module.name === 'globals' ? 'built-in' : module.name}](#${anchor}) | ` +
+                `${module.name === 'globals' ? 'none' : '`import { ... } from ' + module.name + '`'} | ` +
+                ` |`,
         )
     }
     out.push('')
@@ -1098,7 +1105,6 @@ async function probeImport(name, moduleName) {
 // expression whose compile fails is retried as a statement before the failure is reported (a void
 // call is a valid example of a writer such as save_params).
 async function exampleSource(module, entries, entry, code, asStatement = false) {
-    const names = [...new Set(entries.map((each) => each.name))].filter((name) => /^[A-Za-z_]\w*$/.test(name))
     const lines = []
     if (module.name !== 'globals') {
         lines.push(`import { ${names.join(', ')} } from ${module.name}`)
@@ -1475,7 +1481,6 @@ if (mode === '--write' || mode === '--verify-doc') {
     let totals = { names: 0, entries: 0, noDoc: 0, noExample: 0, examples: 0, fragments: 0, compileBroken: 0 }
     for (const module of MODULES) {
         const entries = parseDeclarations(module)
-        const names = [...new Set(entries.map((entry) => entry.name))]
         const firsts = names.map((name) => entries.find((entry) => entry.name === name))
         const noDoc = firsts.filter((entry) => entry.doc.filter((line) => line.trim() !== '').length === 0).length
         const noExample = firsts.filter((entry) => entry.examples.length === 0).length

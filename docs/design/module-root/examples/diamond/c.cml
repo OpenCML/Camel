@@ -1,5 +1,0 @@
-module c
-import { base } from d
-export func fc(x: int): int {
-    return base(x) * 3
-}

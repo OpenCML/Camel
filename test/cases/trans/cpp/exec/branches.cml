@@ -1,5 +1,5 @@
 /// Branches are statements: the value of a branch used twice runs its arm once (it ran twice,
-/// docs/design/cpp-memory appendix B D4), and the effects of a sync block keep their order
+/// design principles 10.6), and the effects of a sync block keep their order
 /// around a branch (D5). Nested branches, `match` on numbers.
 module branches
 

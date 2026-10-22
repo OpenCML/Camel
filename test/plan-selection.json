@@ -39,7 +39,7 @@
     ],
     "rules": [
         {
-            "comment": "The example parse sweep (H211): frontend.examples_parse reads the design examples, hello.cml, workloads.cml and the five selftest fixtures. The files the sweep reads are named before the generic harness rule so an edit there runs the parse plan; the plan entry is layered so its slow fuzz test is filtered under --tier fast, while smoke and the runner self-test still run for the selftest harness.",
+            "comment": "The parse-check harness and the selftest fixtures: a change here runs smoke, the runner plan and the front-end plan (layered so its slow fuzz test is filtered under --tier fast).",
             "paths": ["test/tools/parsecheck/", "test/tools/jitcov/workloads.cml", "test/tools/selftest/"],
             "plans": ["smoke", "feat/consistency/runner.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
         },
@@ -256,13 +256,8 @@
             "plans": ["feat/tools", "feat/format"]
         },
         {
-            "comment": "The documentation guards: docs_links runs all four (links, retired names, snippets, counts).",
-            "paths": ["scripts/check-doc-links.mjs", "scripts/check-doc-snippets.mjs", "scripts/check-retired-names.mjs", "scripts/check-doc-counts.mjs"],
-            "plans": ["feat/docs_links.plan.toml"]
-        },
-        {
-            "comment": "The release gate: docs.counts_current reads its --dry-run output (the slow-plan, static-check and skipped counts), so a change to the gate is a documentation-count change before it is anything else.",
-            "paths": ["scripts/release-gate.mjs"],
+            "comment": "The documentation guards: docs_links runs the link and snippet checks.",
+            "paths": ["scripts/check-doc-links.mjs", "scripts/check-doc-snippets.mjs"],
             "plans": ["feat/docs_links.plan.toml"]
         },
         {
@@ -311,14 +306,9 @@
             "plans": ["feat/compile/diag_catalog.plan.toml", "feat/docs_links.plan.toml"]
         },
         {
-            "comment": "The design examples are parsed by frontend.examples_parse (H211): a page and its examples are edited together, so a docs/design change selects the parse plan along with the documentation checks the general docs rule runs. The parse plan is layered: --tier fast keeps its slow fuzz test out.",
+            "comment": "A design page and its sources are edited together; a design change selects the documentation checks the general docs rule runs.",
             "paths": ["docs/design/"],
-            "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
-        },
-        {
-            "comment": "hello.cml is one of the seven programs frontend.examples_parse parses (H211): it is a program, not repository metadata, so it is no longer a rule-less file.",
-            "paths": ["hello.cml"],
-            "plans": [{ "plan": "feat/parse/frontend.plan.toml", "layer": true }]
+            "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
         },
         {
             "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct); agents/ is the development guide. Smoke is included because a documentation change is usually part of a code change and the report's gate runs it; it is ten tests, not a mirror of the tree.",

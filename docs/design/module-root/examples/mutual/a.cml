@@ -1,5 +1,0 @@
-module a
-import { odd } from b
-export func even(n: int): bool {
-    return if n == 0 then true else odd(n - 1)
-}

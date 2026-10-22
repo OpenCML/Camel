@@ -1,9 +1,0 @@
-module t01c_let
-
-// An annotated `let` of type `any` with a computed value.
-func main(): int sync {
-    let n = 40 + 2
-    let a: any = n
-    println(a)
-    return 0
-}

@@ -1,8 +1,0 @@
-// @refused-example `use` is retired (graph-model README section 8.2 N6); the word is an ordinary name now, so this file is a syntax error (plan ns.p12_use_retired)
-// use name = qualified name
-import lib
-use inc = lib::Tools::inc
-func main(): int sync {
-    println(inc(1))
-    return 0
-}

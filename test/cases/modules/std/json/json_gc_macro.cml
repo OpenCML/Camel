@@ -1,6 +1,6 @@
 /**
  * A Json computed by `std::macro` becomes a constant in the static area of `main`; the
- * collector traces it there like any other object (docs/design/any-typing, t16: as an `any`
+ * collector traces it there like any other object (as an `any`
  * constant it was skipped, and forced collection printed wrong values or crashed). decode
  * gives a `Json!` (design principles 11.2): the constant is that value.
  */

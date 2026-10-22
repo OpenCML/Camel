@@ -1,6 +1,0 @@
-import math as m
-
-func main(): int sync {
-    println(m::pi())
-    return 0
-}

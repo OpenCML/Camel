@@ -1,6 +1,0 @@
-import { one } from lib
-
-func main(): int sync {
-    println(one())
-    return 0
-}
