@@ -116,13 +116,21 @@ H202 之前仍是 13 / 210 / 160 的中间态），四桶各是：
   限制它，`test/cases/para/core/map_chunks.cml` 也传 `(x: int) => x`；H194 §4 的试写文本把这一
   处写窄了。`math` 的签名文件只记了 `shl`/`shr` 各 2 条同型拼写，写出 C++ 接受的全部调用要
   4 条——8 条变 12 条是条数问题，不是缺口。
-- 两处 resolver 比声明松：`random:sample` 从不检查计数参数的类型，`unordered_reduce` 接受多于
-  两个 `with` 参数。声明按正确的那一半收窄；树里没有调用方受影响（H202 报告）。
+- 两处 resolver 比声明松（H202 报告）：`random:sample` 从不检查计数参数的类型；
+  `unordered_reduce` 只看回调至少有 2 个普通参数，既不看回调的 with 参数，也接受第 3 个及以后
+  的普通参数。声明按正确的那一半收窄；树里没有调用方受影响。
 - 反例也成立：`unordered_foreach<(x: string) => println(x)>(int[])`、`constant(n, [1.0, 2.0])`、
   `sort(1)` 都被拒绝，诊断里打印的就是声明本身——声明没有放宽接受集合。
 - 结果与 H194 的预测相同：全部装载成功、调用落到声明上（`algo:sort` 是 `int[]`、`sqrt(9)` 是
   `float`、`sqrt(i32(9))` 是 `f32`、`shl(1, i32(2))` 是 `int`、`graph:constant` 是 `int?`、
   `graph:add_constant` 是 `Node`、`rand:choice` 是 `int`）。
+- **H215 复核（2026-10-22）**：迁移后没有声明名再被 `StaticFuncTypeResolver` 或
+  `DynamicFuncTypeResolver` 接住。还可达的 C++ resolver 只有声明写不出的内部名：
+  `graph:__neq__`（8 个 handle 类型的静态规则，`!=` 由它回答）和 `rewrite:__rule`、
+  `__rule_when`、`__analysis`（`rule`/`analysis` 编译出的调用）。`--check` 只证明声明名没有静态
+  resolver、C++ 导出组只含计算名；`--verify-ops` 只比 URI、参数个数与纯度，不拿实参调用
+  resolver，所以这两处收紧由测试钉住边界：`native.random_sample_count_type`、
+  `native.para_unordered_reduce_callback_arity`。
 
 ## 5. 桶 2：104 条，各差一条机制
 

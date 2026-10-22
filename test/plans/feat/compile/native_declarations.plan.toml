@@ -277,6 +277,15 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_choice_type.cml:11:19", "argument types: <> (int)", "<rand:choice>: (xs: typeas T[]) => T"]
 
+[[tests]]
+name = "native.random_sample_count_type"
+desc = "`rand:sample` declares its count as `int`: a `float` count is refused at the call, and the message lists the declaration's signature. The old C++ resolver checked only the array argument, so H202's count narrowing is pinned here (handover H202, H215)."
+kind = "negative"
+case = "../../../cases/compile/native/random_sample_count_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_sample_count_type.cml:11:27", "argument types: <> (int[], float)", "<rand:sample>: (xs: typeas T[], n: int) => T[]"]
+
 # ---- The declarations of `algo`: `argsort` and the seven generic ones (handover H135, H202) ----
 
 [[tests]]
@@ -664,6 +673,15 @@ case = "../../../cases/compile/native/para_unordered_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_type.cml:11:5", "argument types: <(item: int) => int> (int)", "<:mark/unordered_foreach_arr>: <f: (item: typeas T) => typeas R> (xs: T[]) => void"]
+
+[[tests]]
+name = "native.para_unordered_reduce_callback_arity"
+desc = "`para:unordered_reduce` declares its callback with exactly two ordinary parameters: a third one is refused at the call. The old C++ resolver checked only that the callback had at least two, so H202's callback-arity narrowing is pinned here (handover H202, H215)."
+kind = "negative"
+case = "../../../cases/compile/native/para_unordered_reduce_callback_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_reduce_callback_arity.cml:13:103", "argument types: <(acc: int, item: int, extra: int) => int, int> (int[])", "<:mark/unordered_reduce_arr>: <f: (acc: typeas T, item: T) => T, initial: T> (xs: T[]) => T"]
 
 # ---- The declaration of `this` (handover H146) ----
 
