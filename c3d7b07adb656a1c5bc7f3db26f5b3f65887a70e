@@ -1,0 +1,207 @@
+# H88 报告
+
+分支：`handover/H82-frontend-items`（目录名沿用改号前的名字），起点 `origin/develop` `1455ac8e`，
+最后提交：本文件所在的提交。
+
+任务：H6 第 1 项的前端四条——移除 `TypeCode::Byte`、期望类型合并为一条通道（审查 frontend 第 6 条）、
+`append` 的就地改写改走通用的 `setInPlaceForm`（第 7 条）、语言服务器的类型与命名空间解析取自编译器
+（第 15 条）。`from_bytes::<T>` 按类型分 URI、`load_tree` 运行时读类型等泛型（设计稿
+`docs/design/generic-structure`）实现后再改，不在本任务（原文即如此）。
+
+四个提交，一件一个，顺序即下面四节；本文件与看板行由最后的报告提交收尾：
+
+- `c198e48f` Remove the unreachable `TypeCode::Byte` and renumber the type codes
+- `a87b57d4` Apply a position's expected type in one place
+- `91d09ede` Write `append`'s in-place rewrite through the generic in-place form
+- `d12bf44c` Answer a type name's declaration from the compiler's record
+
+## 1 `TypeCode::Byte` 的移除与类型码重编号
+
+`Byte` 是 `TypeCode` 里的一个原始类型码（旧 `0x005`），有 `Type::Byte()`、转换矩阵的一行一列、
+`typeCodeToString`、`mangle`、`castSlotFrom`、打印/相等/数组/dlpack、`modules/json` 与
+`modules/python` 的槽处理。但**没有任何程序能造出它**：类型作用域里没有 `byte` 这个名字（内建类型名
+表没有它），没有字面量给出它，内建运算符的签名也不用它。删掉它不改变任何程序的行为，也不存在
+“原来产出 `Byte` 的程序现在变成什么”这回事——它只在编码、转换表和少数槽转换里存在。提交把这条路径
+整体删除（18 个文件，−149/+28），并把它后面的类型码全部前移一位：
+
+| 类型 | 旧码 | 新码 |
+| --- | --- | --- |
+| Int32 | `0x000` | `0x000` |
+| Int64 | `0x001` | `0x001` |
+| Float32 | `0x002` | `0x002` |
+| Float64 | `0x003` | `0x003` |
+| Bool | `0x004` | `0x004` |
+| ~~Byte~~ | ~~`0x005`~~ | 删除 |
+| Void | `0x006` | `0x005` |
+| String | `0x007` | `0x006` |
+| Array | `0x008` | `0x007` |
+| Tuple | `0x009` | `0x008` |
+| Struct | `0x00A` | `0x009` |
+| Function | `0x00B` | `0x00A` |
+| Ref | `0x00C` | `0x00B` |
+| （`any`，已删） | `0x00D` | 空位 `0x00C` |
+| （`A \| B`，已退） | `0x00E` | 空位 `0x00D` |
+| TypeVar | `0x00F` | `0x00E` |
+| TypeFunc | `0x010` | `0x00F` |
+| EnumHole | `0x011` | `0x010` |
+| Complex64 | `0x012` | `0x011` |
+| Complex128 | `0x013` | `0x012` |
+| Other | `makeTypeCode(OtherType, 0)` | 不变 |
+
+原始类型转换矩阵从 8×8 收成 6×6（Int、Long、Float、Double、Bool、Void）；`Byte` 与 `any` 的两行两列
+本来就不参与任何可写的转换。位布局（`TypeFlag` 32 位 + 28 位 id；`Primitive`、`OtherType`、
+`Composite`、`GC_Traced`、`Auxiliary`）不变。
+
+## 2 期望类型合并为一条通道（frontend 第 6 条）
+
+改之前，一个位置的期望类型由三条互不相干的通道送进建图器：
+
+- `expectedValueType_` + `ExpectedValueScope`：进表达式之前设置，`coerceTo` 在表达式建完之后套用
+  （字面量定型、空数组、结构体拷贝、`T?` / `T!` 入口）；
+- `coerceTo(node, target, origin)`：调用点自己再调一次；
+- `genericValueFor`：泛型函数值在“被调用者位置”上的延迟实例化。
+
+另外，块尾语句（`return` / 块的最后一个值）另有一条 `tailExpectedFor_` / `tailExpectedType_` /
+`tailStatement_` 通道，`visitDataNode` 在字面量处读它；而管道、调用实参、`match` 分支等位置各自
+记着“这个位置期望什么”，新规则要写在每一处。
+
+现在只有一条：**位置期望的类型**（`Type *`，可为 `nullptr`）随表达式一起传下去，值建好后在
+`Builder::checkValue` 一处套用。
+
+- `visitInPosition(gct, expected)`：在“期望 `expected`”的位置建一个表达式。建的过程中
+  `expectedValueType_` 在作用域内（泛型函数值要读它），建完后 `checkValue` 把类型套到结果上
+  （`coerceTo`：可赋值/结构体转换、字面量定型、复合字面量、无名→有名结构体拷贝、`T?`/`T!` 入口、
+  空 `[]`）。失败返回 `nullptr`，能报错的位置由调用者报。
+- `checkValue(node, expected, origin)`：唯一套用点；先按 `expected` 实例化泛型函数值，再 `coerceTo`。
+- `literalDataInType(gct, expected)`：字面量在**建造时**就按位置类型建，避免图里留下一个随后被
+  转换掉的自身类型字面量；`visitInPosition` 用它。
+- `visitExecNode(gct, tailExpected)`：块的最后一条语句把位置类型作为参数传进来（`visitBodyNode`
+  传 `tailPositionType()`）；`tailExpectedFor_`/`tailExpectedType_`/`tailStatement_` 三个成员删除。
+- 调用实参、管道、`match`/`if` 分支、`return`、`:=` 等位置都改走 `visitInPosition` /
+  `checkValue`，于是“字面量按位置定型”“管道结果进入参数类型”“实参转换”这些规则只写一次。
+
+行为不变：这套合并只是把三条通道和块尾通道收成一条，规则本身没有改；`a87b57d4` 的验收
+（`feat/parse`、`feat/compile`、`feat/trans`、`feat/modules`、`smoke`）全绿，AST 快照未变。
+
+## 3 `append` 的就地改写走通用的 `setInPlaceForm`（frontend 第 7 条）
+
+改之前，`xs = xs->append<v>` 是建图器里的特例：`rebindingAppendOf` 把它改写成
+`:op/assn_append(:var/get(xs), v)`，解释器里 `__builtin__assn_append__` 自己增长数组，`std::cpp`
+和 ONNX 导出器各自认识这一个运算符。它和 `sort`、`set_index` 的“就地形式”机制平行，规则写了两遍。
+
+现在 `append` 像其它运算符一样声明就地形式（`registry.setInPlaceForm(":struct/append_arr",
+":struct/append_arr_in_place")`、`declareReusesOperand`），建图器的通用改写
+`Builder::inPlaceRebindingOf` 处理它，写出
+
+```text
+:op/assn_owned(xs, :struct/append_arr_in_place(v, :var/take(xs)))
+```
+
+也就是“把变量自己的数组交给就地形式（`:var/take`），就地形式返回增长后的数组，普通赋值把它存回”。
+`inPlaceRebindingOf` 本来就有的条件（`sync` 块、被赋值的是变量、调用的是它自己的数组、解析到的
+就是就地形式）原样适用，`append` 因此和 `sort` 走同一条路。
+
+删除的东西：`:op/assn_append`（连同 `OperatorTable` 的 `AssnAppend` 与 URI 表项，后面的 well-known
+项依次前移）、`__builtin__assn_append__`、`globals.cpp` 里的 `__assn_append__` 解析器、
+`rebindingAppendOf`（约 100 行）及其调用。新增：`:struct/append_arr_in_place` 的实现
+（`__append_in_place_arr__`，包住原有的 `__append_owned_arr__`）、它的资源声明（对象 norm 0
+ReadModifyWrite，结果 Same 0）、`:op/assn_owned` 的变量写与结果别名。`assn_owned` 的语义是
+“写变量 norm 0 整体，结果可能别名 1”，所以解释器仍然在循环里保持线性增长（`Array::append` 的摊还
+增长 + `holdsUnsharedArray`）。
+
+**`std::cpp`**：新增 `lowerAppendInPlace`，把这对运算符译成
+
+```cpp
+xs = rt::append(std::move(xs), v);          // 局部变量
+xs.set(rt::append(xs.take(), v));           // 逃逸的 rt::Cell
+```
+
+元素先算（先于把数组交出去），这跟解释器的“唯一引用”标记一致；`:var/take` 本身译成变量的值
+（`std::move` 在就地形式里发生），不再是“无法翻译的运算符”。其它就地形式被赋回变量时给定位的
+`TranslationRefused`（“binds a variable to an in-place form that std::cpp does not translate yet”），
+不再落到 `:var/take` 的泛化消息上。`agree_with_fvm` 与 `named_structs` 覆盖了具名结构体元素、
+捕获变量里的 append 与循环内的就地增长。
+
+**ONNX 导出器**：导出的函数里用变量增长数组仍然被拒，消息与以前相同——“an array variable is
+appended to (`acc = acc->append<v>`); an ONNX model holds no growing arrays: …”。实现上：
+
+- `refuseEffects` 现在把 `:var/take` 当作变量访问（`readsOrAssignsVariable`），因此
+  `:var/take` 与它的就地形式（声明了 `reusesOperand`、norm 0 是局部变量的 take）不算模型的效应，
+  由 `evalVariableRead`/`variableValueAt` 负责；
+- 真正求值到就地 `append` 时（`applyOper`）给出上面这条具体消息，而不是“impure operator”，
+  位置仍是调用点（`export_var_append.cml:16:12`）。
+
+**测试与文档**：`new_values.peek_loop.graph` 期望 `:var/peek`、`:struct/append_arr_in_place`、
+`:op/assn_owned`；`resources.plan.toml` 只断言 `:op/assn_owned`（新运算符只声明了资源，没有
+`OperatorSemantics` 记录，`inspect --ops` 不给它 `semantics` 字段）；`stdlib_registry` 的
+notPure 列表换成 `:op/assn_owned`；`cppexec/expect.txt`、`var_reference`、`onnx`、
+`var_array_append` 的说明文字改为新运算符；`docs/cli*.md`、`docs/design/{arrays-memory,cpp-standalone,loops}`、
+`docs/technical/{09,18,41}` 里提到 `:op/assn_append` 的地方同步改名。
+
+## 4 语言服务器的类型与命名空间解析取自编译器（frontend 第 15 条）
+
+改之前，`camel-ls` 在自己的 `FileModel` 上重新解析类型名：本文件的能找到声明，别的模块的只能找到
+`import` 声明，`::` 命名空间成员也没有声明可指。引用（references）能工作是因为值的事实里有目标，
+类型名没有这样的事实。
+
+**编译器先记录类型名的声明来源**（只做这一件，不改服务器结构）：
+
+- `Module::noteTypeDeclarationOrigin(const Reference &, origin_id_t)` /
+  `typeDeclarationOrigin(const Reference &)`：按 `Reference::toString()` 记下每个类型声明的
+  名字 token 来源（`Type*` 会被驻留复用，不能当键）。
+- `src/compile/gct/builder.cpp` 的 `visitTypeDecl` 在声明时记录；`lookupType` 在每一条成功返回的
+  路径上（本文件作用域、`import` 进来的具名类型、`using`、外来的 `namespace::Type`）找到声明来源，
+  通过 `SemanticRecorder::typeReferenced(名字来源, 短名, 声明来源, 类型)` 上报。新钩子在
+  `include/camel/compile/semantic_recorder.h` 里是可选虚函数，默认空实现；仓库里只有一个
+  `Recorder` 子类，不需要改别处。
+
+**服务器**（`src/service/semantic/analyze.cpp`）：
+
+- 新事实 `RawFact::Kind::TypeReferenced`，`Recorder::typeReferenced` 覆写，`join` 与
+  `ValueReferenced` 同形：记下 `types`、`resolved`，用 `locate(fact.other)` + `findDecl(短名)`
+  得到目标位置。
+- `typeDeclarationOf(module, ref)`：本模块没有该类型的来源时沿 `importedSource` 找过去，用于
+  `catalog` 给“导入的具名类型”和“命名空间成员”填 `definitions`（所以即使某个类型写法的来源没有
+  对应的 `Ref`，走 `import` 声明的语法兜底也能指到声明）。
+
+**测试**：`test/cases/tools/lsp/fixtures/type_lib.cml`（`export type Point`）与 `type_main.cml`
+（另一个模块里 `let p: Point` / `let q: Point`），`types.test.mjs` 断言无诊断、两个 `Point`
+的定义都落在 `type_lib.cml` 的 `2:12-2:17`、补全里 `Point` 的 kind 是 22（Type）。
+`lsp.types_across_modules` 在改之前会失败：定义只指到当前文件的 `import` 声明（具名导入的类型在
+`FileModel` 里没有声明来源），补全也没有跨模块的类型成员。`typeas T` 的类型变量仍走语法兜底——编译器
+不为它记录声明来源，这是有意保留的。
+
+## 5 没做、留给谁
+
+- `from_bytes::<T>` 按类型分 URI、`load_tree` 运行时读类型：等泛型（设计稿），不在本任务。
+- 作者关于 `fields`/`match type` 后跟 `(` 一律读作类型的裁定（`fields ()` 可写）是 H79 的后续，
+  没有实现；本任务的期望类型通道不改变这条读法（`literalDataInType` 只在已知位置类型时用于字面量，
+  不碰 `fields (` 的判定）。
+- `editors/vscode/syntaxes/camel.tmLanguage.json` 的 `grammar.tables` 在**本分支起点**
+  `1455ac8e` 就是红的：`token_kinds.def` 已有 `CAMEL_KEYWORD(KwStatic, "static", Control)`，
+  而语法文件的关键字模式没有 `static`。这是 H51b（`static for`）的语法表收尾，不是本任务；
+  本任务没有动该文件（`feat/tools` 的 LSP 计划全绿，`grammar.tables` 仍红）。
+- 与 H76（无体声明）、H77（`#strict`/`#vjp`）、H78（插值整理）、H51b（静态 for、`t.[n]`）没有
+  同文件冲突；`append` 的改写只经过建图器、运算符表、`std::cpp` 与 ONNX 导出器。
+
+## 6 测试
+
+在 Linux 主机上（`camel-remote.ps1`，`-Jobs 8`），Release 构建。最后一次全量验收：
+
+```text
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\h82-frontend `
+  -NoBuild -Plan test/plans/feat/parse,test/plans/feat/compile,test/plans/feat/trans,`
+  test/plans/feat/modules,test/plans/feat/consistency,test/plans/feat/linear,`
+  test/plans/feat/tools/lsp.plan.toml,test/plans/smoke -Jobs 8
+```
+
+结果：
+
+- 合计 **3753** 项：**3752 pass / 0 fail / 1 skip**。skip 是 `smoke` 的 `unicode.paths`（只在 Windows 断言的进程宽字符边界，Linux 上按前提跳过）。
+- 分计划：`feat/parse`、`feat/compile`、`feat/trans`、`feat/modules`、`feat/consistency`、`feat/linear`、`smoke` 全绿；`feat/tools/lsp.plan.toml` 的 9 项（含新加的 `lsp.types_across_modules`）全绿。
+- 单件验收时另外跑过：`feat/modules/onnx.plan.toml`（125 项，含改写后的 `export_var_append`）、`feat/trans/cpp.plan.toml`（含 `agree_with_fvm` 与 `named_structs`）、`feat/modules/{resources,stdlib_registry}.plan.toml`、`feat/parse/frontend.plan.toml`（AST 快照，`var_array_append.cml` 的注释改动按 `snapshot --update` 的等价做法更新了 `golden/ast_hashes.txt` 里的内容哈希）。
+- `feat/tools` 的 `grammar.tables` 不在上面的验收里，起点即红（见第 5 节，H51b 的 `static` 关键字），与本任务无关。
+
+`feat/trans` 的 `agree_with_fvm`（C++ 生成的程序与 FVM 结果一致）与 `named_structs` 覆盖
+`append` 的就地形式；`feat/consistency` 的 `new_values.rebinding_loop.cpp` 覆盖 `std::cpp` 的
+生成；`feat/tools` 的 `lsp.types_across_modules` 是第 4 节的跨模块用例。
