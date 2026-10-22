@@ -124,10 +124,10 @@ await withServer(async (ls) => {
         })
         return r ? r.contents.value : null
     }
-    let h = await hoverMember('import math', 'math::sqrt(4.0)', 'math::sqrt', 7)
-    check(h !== null && h.includes('sqrt: (val: float | double) => float | double'),
+    let h = await hoverMember('import graph', 'graph::program_of((x: float): float => x + 1.0)', 'graph::program_of', 7)
+    check(h !== null && h.includes('program_of: (f: F) => Program'),
         'hover on a computed member of a migrated module', h)
-    check(h.includes('Function of module `math`'), 'naming the module it comes from', h)
+    check(h.includes('Function of module `graph`'), 'naming the module it comes from', h)
     h = await hoverMember('import re', 're::test("a", "b")', 're::test', 5)
     check(h !== null && h.includes('test: (pattern: string, text: string) => bool'),
         'hover on a declared member of a migrated module', h)
@@ -203,10 +203,10 @@ ${body}
     m = edit(MAIN.replace('    return 0\n}', '    let z = (1, /*t*/2)\n    return 0\n}'))
     checkEq(await help(m, 't'), null, 'no signature help inside a tuple')
     // A member of a migrated module: a computed signature and a declared one.
-    m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport math')
-        .replace('    return 0\n}', '    let r = math::sqrt(/*m*/4.0)\n    return 0\n}'))
+    m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport graph')
+        .replace('    return 0\n}', '    let r = graph::program_of(/*m*/(x: float): float => x + 1.0)\n    return 0\n}'))
     sh = await help(m, 'm')
-    check(sh !== null && sh.signatures[0].label.includes('sqrt: (val: float | double)'),
+    check(sh !== null && sh.signatures[0].label.includes('program_of: (f: F)'),
         'signature help on a computed member of a migrated module', sh)
     checkEq(sh.activeParameter, 0, 'its first argument is active')
     m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport math')

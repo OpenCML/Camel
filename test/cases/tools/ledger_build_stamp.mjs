@@ -76,10 +76,16 @@ function stamp(installDir, revision, dirty) {
 const BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-ledger-build-'))
 try {
     // 1. A tree with no build of this commit: the tree half is still checked, the binary half is
-    //    announced as skipped, and the run is not a problem.
+    //    announced as skipped, and the run is not refused for a build it does not have. The exit
+    //    code is the tree half's own answer, so a stale *page* in the repo under test is still a
+    //    failure here; what must never appear is a refusal about the build.
     const none = path.join(BASE, 'none')
     const noBuild = run(none)
-    check('no build exits 0', noBuild.status === 0, `exit ${noBuild.status}\n${noBuild.stdout}${noBuild.stderr}`)
+    check(
+        'no build is not refused for a build it does not have',
+        !noBuild.stdout.includes('refusing the build-dependent numbers') && !noBuild.stdout.includes('using a stale build'),
+        `exit ${noBuild.status}` + "\n" + noBuild.stdout + noBuild.stderr,
+    )
     check(
         'no build announces the skipped build-dependent claims',
         noBuild.stdout.includes('the build-dependent claims are skipped'),
