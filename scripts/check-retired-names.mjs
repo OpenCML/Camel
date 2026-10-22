@@ -7,6 +7,7 @@
 //   the body-carrying signature form: `func ... { return '<module:operator>' }` (H127)
 //
 //   node scripts/check-retired-names.mjs            check the reader-facing pages
+//   node scripts/check-retired-names.mjs --default-roots  the same, ignoring a script path argument
 //   node scripts/check-retired-names.mjs a.md b/    check the given files and directories
 //
 // A retired spelling is a use, not a mention. A line that says the spelling was retired
@@ -156,7 +157,7 @@ function checkFile(abs) {
 }
 
 const args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'))
-const entries = args.length > 0 ? args : ROOTS
+const entries = process.argv.includes('--default-roots') || args.length === 0 ? ROOTS : args
 const files = []
 for (const entry of entries) collect(entry, files)
 const unique = [...new Set(files)].sort()
