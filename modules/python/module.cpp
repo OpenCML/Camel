@@ -365,6 +365,10 @@ struct PythonInitEnvGuard {
 
 namespace {
 
+// The operators whose signature C++ computes stay here (design principles 6.4; handover H19,
+// step 10; H166). `py_call` (two URIs), `py_print` and `py_println` are variadic, and
+// `py_wrap`/`py_unwrap` move a type through the module type `PyObject<T>`; neither can be
+// written as a body-less declaration. The other six are declared in stdlib/python.cml.
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
@@ -426,90 +430,6 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                                         st->typeAt(i)->code() != PyObjectType::typeCode())
                                         return std::nullopt;
                             }
-                            return getPyObjectType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_exec",
-            {
-                {
-                    "python:py_exec",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(code: string) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 1 || norm[0]->code() != TypeCode::String)
-                                return std::nullopt;
-                            return getPyObjectType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_eval",
-            {
-                {
-                    "python:py_eval",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(expr: string) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 1 || norm[0]->code() != TypeCode::String)
-                                return std::nullopt;
-                            return getPyObjectType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_run",
-            {
-                {
-                    "python:py_run",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(file_path: string) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 1 || norm[0]->code() != TypeCode::String)
-                                return std::nullopt;
-                            return getPyObjectType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_attr",
-            {
-                {
-                    "python:py_attr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(obj: PyObject, attr: string) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 2)
-                                return std::nullopt;
-                            if (norm[0]->code() != PyObjectType::typeCode())
-                                return std::nullopt;
-                            if (norm[1]->code() != TypeCode::String)
-                                return std::nullopt;
-                            return getPyObjectType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_import",
-            {
-                {
-                    "python:py_import",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(module_name: string) => PyObject",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::String)
-                                return std::nullopt;
                             return getPyObjectType();
                         }),
                 },
@@ -580,25 +500,6 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             if (o->paramCount() == 0)
                                 return std::nullopt;
                             return o->params()[0];
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_dispose",
-            {
-                {
-                    "python:py_dispose",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(obj: PyObject) => void",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 1)
-                                return std::nullopt;
-                            Type *t = norm[0];
-                            if (!t->isOtherType() || t->code() != PyObjectType::typeCode())
-                                return std::nullopt;
-                            return Type::Void();
                         }),
                 },
             }),

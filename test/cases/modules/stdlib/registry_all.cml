@@ -32,6 +32,9 @@ import tiles
 // external Python installation and no GPU to be listed; its operator's declaration is checked
 // against the registered one (handover H166).
 import pyplot
+// `python` is the same interpreter, now with the declarations of its six fixed operators; the
+// remaining five are computed signatures (handover H166).
+import python
 
 func main(): int {
     return 0

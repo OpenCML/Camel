@@ -228,6 +228,18 @@ const MODULES = [
         source: 'pyplot.cml',
         declaration: true,
     },
+    {
+        name: 'python',
+        title: '`python`: the embedded interpreter',
+        kind: 'cpp',
+        // Six fixed signatures are declared in stdlib/python.cml; `py_call` (two URIs),
+        // `py_print`/`py_println` are variadic and `py_wrap`/`py_unwrap` move a type through the
+        // module type `PyObject<T>`, so their reference entries live in the signature file named
+        // by `computed:` (handover H166).
+        source: 'python.cml',
+        declaration: true,
+        computed: 'signatures/python.cml',
+    },
 ]
 
 function sourceOf(module) {
@@ -266,9 +278,12 @@ function splitParams(text) {
     return parts
 }
 
-// -1 for a list with a variadic parameter, as `camel inspect --ops` reports it.
+// -1 for a list with a variadic parameter, as `camel inspect --ops` reports it. A parameter can
+// be variadic without being spelled `...name`: an optional parameter collected into a variadic
+// tuple, `args?: (...PyObject) | PyObject[]` (`py_call`'s keyword URI), accepts any number of
+// arguments too, and the C++ resolver reports its count as -1 (handover H166).
 function countParams(params) {
-    return params.some((p) => p.startsWith('...')) ? -1 : params.length
+    return params.some((p) => p.startsWith('...') || /\(\s*\.\.\./.test(p)) ? -1 : params.length
 }
 
 // The text between the bracket at `open` and its partner.
@@ -673,8 +688,8 @@ function renderDoc() {
     out.push('- Write one call that has with-arguments per statement when several appear in one argument')
     out.push('  list: `f<a>(x), g<b>(y)` is read as comparisons.')
     out.push('')
-    out.push('Not in this reference: the tensor stack\'s own layers (`nn`, `autodiff`, `onnx`, `sim`), the')
-    out.push('Python bridge\'s `python` module and the profiler (`perf`).')
+    out.push('Not in this reference: the tensor stack\'s own layers (`nn`, `autodiff`, `onnx`, `sim`)')
+    out.push('and the profiler (`perf`).')
     out.push('')
     out.push('| Module | Import | Written in | Functions |')
     out.push('|---|---|---|---|')
