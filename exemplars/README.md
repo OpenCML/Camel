@@ -7,8 +7,10 @@ graph-based ML stack end to end. Every directory holds:
 - `exemplar.toml` - the runs to make (passes, environment) and what each must
   produce: exit status, output, diagnostic name and source position, the
   operators and inputs/outputs of an exported ONNX model;
-- `expected/` - expected outputs compared exactly (program output, annotated
-  compact annotated graph dumps from `std::agir`);
+- `expected/` - expected outputs compared exactly after the plan runner's normalizers
+  (`test/tools/normalizers.mjs`: ANSI, trailing space, paths, origin ids), so a golden
+  asserts the graph's nodes and edges rather than the checkout it was recorded in;
+  `origin=<ORIGIN>` still asserts that a node has an origin;
 - `run.log` - the full record of the last recorded run.
 
 `node exemplars/check.mjs` re-runs every exemplar and checks it (the test plan
