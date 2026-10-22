@@ -13,6 +13,14 @@
 # library is now loaded before the program runs", not a percentage budget: this host is shared, and
 # a few milliseconds of spread is normal. The test prints one `startup.cost` line per command
 # (median, p10, p90, min, max, n) and fails only when a median crosses its ceiling.
+#
+# `declaration.cost` is the same idea one level down (handover H152): the compiler's own
+# `--time-phases` report of the declaration modules, added up and divided by their declarations.
+# The process wall clock cannot see that work (the ceilings above are tens of milliseconds), so
+# this is the measurement that moves when the declaration path changes; it reads ~20 us per
+# declaration and is gated at three times that. The line also prints the declarations' share of
+# the compile work of the whole run (18-19%), which is the half of the pair that does not read as
+# load: a re-added 4.6 ms would read about 45%, over the 30% ceiling this plan gates on.
 id = "perf.startup"
 order = 401
 tier = "slow"
@@ -26,7 +34,7 @@ tool = "node"
 case = "../../tools/startup-cost.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all"]
+expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=182"]
 # Four commands, 21 timed runs each after three warm-ups, are a few seconds on a quiet host and
 # well under half a minute under load. 120 s catches a hang, not a slow run.
 timeout_ms = 120000
