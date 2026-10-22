@@ -1,0 +1,12 @@
+/**
+ * A `when` whose value is not a bool is a declaration-site error, never taken for `true`.
+ */
+module when_non_bool
+
+func bad(x: int): int when 1 {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}

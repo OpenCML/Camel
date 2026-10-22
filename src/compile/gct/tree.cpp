@@ -156,6 +156,20 @@ const std::vector<Tree::TupleParamBinding> *Tree::tupleParamsOf(const Node *func
     return it == tupleParams_.end() ? nullptr : &it->second;
 }
 
+void Tree::setWhen(const Node *func, WhenClause clause) {
+    if (func != nullptr && clause.condition != nullptr) {
+        whenClauses_[func] = std::move(clause);
+    }
+}
+
+const Tree::WhenClause *Tree::whenOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = whenClauses_.find(func);
+    return it == whenClauses_.end() ? nullptr : &it->second;
+}
+
 Tree *Tree::of(const Node *node) {
     const auto address = reinterpret_cast<uintptr_t>(node);
     return reinterpret_cast<const Chunk *>(address & ~(static_cast<uintptr_t>(kChunkBytes) - 1))
@@ -537,6 +551,11 @@ node_ptr_t Tree::clone(const Node *node) {
         }
         if (const auto *tuples = Tree::of(node)->tupleParamsOf(node)) {
             tupleParams_[copy] = *tuples;
+        }
+        // A declaration's `when` condition is part of the copy too: the copy is instantiated
+        // with the same rules.
+        if (const auto *when = Tree::of(node)->whenOf(node)) {
+            whenClauses_[copy] = WhenClause{clone(when->condition), when->text, when->origin};
         }
     }
     return copy;
