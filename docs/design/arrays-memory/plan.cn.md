@@ -592,7 +592,7 @@ println(after - before);             // 期望 0
 
 ### 8.3 顺序与方法
 
-1. **A 的构建**：在动手写 P1 之前，于当前工作树构建基线提交（`6a1c40c0`，或实施开始时的 `develop` 头），把 `out/latest` 整个复制到 `D:\Temp\h17-plan-perf\out-a`，记录 `git rev-parse HEAD`。A 的二进制之后不再重建。
+1. **A 的构建**：在动手写 P1 之前，于当前工作树构建基线提交（`6a1c40c0`，或实施开始时的 `develop` 头），把 `out/latest` 整个复制到工作树外的 `out-a` 目录，记录 `git rev-parse HEAD`。A 的二进制之后不再重建。
 2. **B 的构建**：P6 完成后（P7 之前），构建同一工作树，复制到 `out-b`，记录 HEAD。
 3. **噪声底/交错 A/B**：用 `test/tools/perfbaseline/ab.py`，它对每个程序跑 `A1 B A2` 成对、取中位数、打印 `|A1−A2|/A` 的噪声底与峰值 MB：
 

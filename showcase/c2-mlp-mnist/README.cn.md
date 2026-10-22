@@ -61,7 +61,7 @@ python showcase\c2-mlp-mnist\compare.py --profile small
 
 # 报告里的标准配置：仓库缓存有 MNIST 时用它，否则合成替身
 python showcase\c2-mlp-mnist\compare.py --profile standard `
-    --mnist D:\Projects\Camel\.cache\mnist\mnist.npz
+    --mnist .cache\mnist\mnist.npz
 ```
 
 `--profile`：`small`（1000/200，200 步，batch 50）、`standard`（10000/2000，1000 步，

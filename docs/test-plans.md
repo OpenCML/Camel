@@ -650,10 +650,10 @@ The case must emit the expected JSON benchmark payload format used by the runner
 The ten plans under `test/plans/perf/` are measured on purpose, never by a gate. They are not in
 `npm run test` (which runs `--tier fast`), editing one of them does not select it from `--changed`
 (see "Selecting Plans From A Change"), and no CI job runs them. That is the policy, not an
-oversight: `agents/test.md` calls the perf/timeit plans heavy -- "they saturate every core for
-minutes and are worth running only at a milestone, by the coordinator, on a quiet machine" -- and
-[H154](handover/reports/H154.md) section 2 records what running the whole layer on the shared host
-would cost. The price of the exclusion is that nothing notices a performance regression, so the
+oversight: `agents/test.md` treats the perf/timeit plans as heavy -- they saturate every core for
+minutes and are worth running only at a milestone, by a maintainer, on a quiet machine -- and the
+performance notes record what running the whole layer on a shared host would cost. The price of
+the exclusion is that nothing notices a performance regression, so the
 measurement has one manual entry point:
 
 ```bash

@@ -185,7 +185,7 @@ scale-4000 只编译，重构前，10 次运行（12.1 s 用户态、3.4 s 内�
 
 ### 5.1 库模块的逐模块开销（H169）
 
-`std::opt` 的代数阶段按需编译一个 Camel 库（`rules`），并编译它导入的每个**有 Camel 声明文件**的模块；只在 C++ 里注册、没有 `stdlib/<name>.cml` 的模块（例如 `rewrite`）只有 `cmo_load`，不进入 `counters.modules`，也不该出现在库模块表里。主机 `88zjwei` 上，十行、无 import 的程序跑 `std::opt`；下表是一次 `check` 运行（Release，单轮，负载 15–25）的逐阶段自身时间，下面一段是 61 轮交错（负载 21–28）的中位数：
+`std::opt` 的代数阶段按需编译一个 Camel 库（`rules`），并编译它导入的每个**有 Camel 声明文件**的模块；只在 C++ 里注册、没有 `stdlib/<name>.cml` 的模块（例如 `rewrite`）只有 `cmo_load`，不进入 `counters.modules`，也不该出现在库模块表里。一台 Linux x86-64 主机上，十行、无 import 的程序跑 `std::opt`；下表是一次 `check` 运行（Release，单轮，负载 15–25）的逐阶段自身时间，下面一段是 61 轮交错（负载 21–28）的中位数：
 
 | 库模块 | parse | gct | declare | 该库的体（`library`） | 合计（中位数） |
 |---|---:|---:|---:|---:|---:|
