@@ -1,0 +1,22 @@
+/**
+ * The declarations of `python`, read from `stdlib/python.cml`: `py_exec`, `py_eval`, `py_run`,
+ * `py_attr`, `py_import` and `py_dispose` have fixed signatures and are declared; `py_call`,
+ * `py_print`, `py_println`, `py_wrap` and `py_unwrap` stay computed in C++ (handover H166).
+ * The calls are type-checked and never run: this case stays compile-only.
+ */
+module python_declaration_import
+
+import { py_exec, py_eval, py_run, py_attr, py_import, py_dispose } from python
+
+func fixed_signatures(): void sync {
+    py_exec("x = 1")
+    py_eval("1 + 2")
+    py_run("script.py")
+    let math = py_import("math")
+    let sqrt = py_attr(math, "sqrt")
+    py_dispose(sqrt)
+}
+
+func main(): int {
+    return 0
+}

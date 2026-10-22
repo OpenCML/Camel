@@ -284,3 +284,36 @@ pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
   -Plan "test/plans/feat/modules/rename_identity.plan.toml,test/plans/feat/tools/lsp.plan.toml,test/plans/feat/tools/debugger.plan.toml,test/plans/feat/tools/compile_bench.plan.toml" `
   -Jobs 4 -NoBuild
 ```
+
+## 7. gate re-run at `8439c65a7`（H162，2026-10-22）
+
+> 本节由 H162 追加；§0–§6 是 H147 当时的事实，不改。版本 `v0.2.24`、§2 的 `changes.log` 文本、以及 §0 的“现在不建议直接发”，都保持原样——判定是作者的。
+
+**仓库现在有自己的门禁**：`npm run release-gate`（`scripts/release-gate.mjs`，契约与跳过清单见 `H162.md`）。它按顺序跑快层（`smoke` + `feat/**` + 以前没有任何闸门目标的 `gpu/profile`）、slow 层（H154 §3 的 11 个计划文件，逐个点名，**不用** §3.5 的 `-Plan test/plans -Tier all`）、八项静态检查；任何阶段失败即非零退出；不构建，并用构建戳拒绝与本树来源不符的安装。`agents/test.md` 禁止在共享主机上跑的 19 个计划文件 / 200 条，它按名字打印为“未跑”。
+
+**数字**（`8439c65a7` = `origin/develop` `87a5a1455` + 门禁脚本 + 一条基准期望修正；四次门禁运行的 1 分钟负载在 9–57，H147 当时是 150–210）：
+
+| 层 | 总数 | 通过 | 失败 | 跳过 |
+|---|---|---|---|---|
+| 快层（`--tier fast`） | 5067 | 5055 | 0 | 12（环境：10 条 vscode 语法快照缺依赖、1 条 MNIST 夹具、1 条 Windows-only） |
+| slow 层（11 个计划文件，整计划） | 407 | 407 | 0 | 0 |
+| 静态检查 | 8 项 | 8 | 0 | — |
+| 策略禁止、未跑 | — | — | — | 19 个计划文件 / 200 条（未知，不是绿） |
+
+5067 与 §4.2 的 5046 不是同一组目标：多出的 6 条是本门禁新增的 `gpu/profile`，其余 15 条是 H147 之后进入计划树的用例。
+
+**§3.4 的七条红现在怎样**（本轮的实测）：
+
+| 用例 | H147 时 | 现在 | 依据 |
+|---|---|---|---|
+| `rename.env_graph_identity` | 红（旧摘要 `a210…`） | **绿** | H143 重录摘要，摘要与检出位置无关；本轮快层通过 |
+| `rename.process_graph_identity` | 红（`aa79…`） | **绿** | 同上 |
+| `rename.hash_graph_identity` | 红（`5d54…`） | **绿** | 同上 |
+| `lsp.editing` | 红（`math::` 成员补全为空） | **绿** | H145；快层与 slow 层各跑一次都通过 |
+| `compile_bench.smoke` | 红（用户模块 4 → 6） | **绿**（原红由 H144 修；另有一条新红已修） | H144 修好用户模块计数；H141 的 `graph` 声明化让库模块集变成 `rules`/`graph`/`math`，H162 在 `788a179b2` 修好并复跑通过（`H162.md` §5） |
+| `debugger.dap_pipeline` | 红（负载间歇） | **绿** | 本轮四次快层都通过，未复发 |
+| `debugger.dap_protocol` | 红（slow，80 条检查里 4 条） | **绿** | H150；slow 层点名该文件跑，通过 |
+
+**§3.5 的错**：`-Plan test/plans -Tier all` 不能用于发布前。它会把 §2 的 200 条（GC 压力/投毒、progen、PyTorch 对照、benchmark）在共享主机上跑一遍（H154 §2/§6）。正确做法是 H154 §3 的显式计划文件列表，也就是 `npm run release-gate` 的 slow 层；本轮那 200 条**没有跑**，它们是未知，不是绿。
+
+**结论**：H147 的五个阻断红（3 条摘要、`lsp.editing`、`compile_bench.smoke`）现在都是绿的；另外两条（`dap_pipeline`、`dap_protocol`）也绿。§0 的判定本身不由本轮改写——它现在缺的不再是证据，而是作者的决定。
