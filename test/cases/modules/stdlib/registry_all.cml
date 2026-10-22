@@ -40,6 +40,9 @@ import pyplot
 // `python` is the same interpreter, now with the declarations of its six fixed operators; the
 // remaining five are computed signatures (handover H166).
 import python
+// `onnx` loads without the ONNX runtime: `inspect --ops` lists its two operators, and the
+// stdlib registry tests hold them to the declaration and the computed signature (handover H179).
+import onnx
 
 func main(): int {
     return 0

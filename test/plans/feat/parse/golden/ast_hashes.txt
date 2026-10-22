@@ -323,6 +323,7 @@ dd4c782619481c22 ok stdlib/fs.cml
 6020479adef220b0 ok stdlib/json.cml
 f234da727937674c ok stdlib/math.cml
 c21ebaf80603b717 ok stdlib/nn.cml
+52a7b10558db471d ok stdlib/onnx.cml
 ebb8e94036f7abd2 ok stdlib/para.cml
 173076cd43673a6b ok stdlib/perf.cml
 e16b29b55ac8a7b2 ok stdlib/pyplot.cml
@@ -330,6 +331,7 @@ b4c0afe128dff2fb ok stdlib/python.cml
 e02c37ac47d43974 ok stdlib/random.cml
 a8be31ddfa495bf4 ok stdlib/re.cml
 dc425a313698f684 ok stdlib/rules.cml
+3c5b84f39dfa2591 ok stdlib/sim.cml
 94e8811447b8d758 ok stdlib/statistics.cml
 1c94db09ee5e88dd ok stdlib/str.cml
 de5ef2f025a8450f ok stdlib/tensor.cml
@@ -345,6 +347,7 @@ f26840bc30a7d5b4 ok stdlib/time.cml
 b465908c31d8462a ok stdlib/signatures/hash.cml
 df6e9b39c870578c ok stdlib/signatures/json.cml
 5c8c32730b1852f0 no stdlib/signatures/nn.cml
+d4049fbe5d74713b ok stdlib/signatures/onnx.cml
 a6332d59a0e18fb4 ok stdlib/signatures/para.cml
 c80b5667335e55a8 ok stdlib/signatures/process.cml
 71655c7c19844d68 no stdlib/signatures/python.cml
@@ -841,6 +844,9 @@ c7fe2aa20c0b534e ok test/cases/compile/native/missing.cml
 3b9f20c601a43032 ok test/cases/compile/native/nn_arity.cml
 723a09466e178b62 ok test/cases/compile/native/nn_declaration_import.cml
 b11882de059b8833 ok test/cases/compile/native/nn_type.cml
+aa53d311c30c5cf7 ok test/cases/compile/native/onnx_arity.cml
+faf54723006c6dd3 ok test/cases/compile/native/onnx_declaration_import.cml
+66fb1cdb20c3ff0a ok test/cases/compile/native/onnx_result_type.cml
 90d9fbed9c717036 ok test/cases/compile/native/overlap.cml
 8274f3141730bc8e ok test/cases/compile/native/para_arity.cml
 d00f123e17d236e0 ok test/cases/compile/native/para_declaration_import.cml
@@ -862,6 +868,9 @@ f6fd74743a748615 ok test/cases/compile/native/re_declaration_import.cml
 25dc1f76b4a5c95e ok test/cases/compile/native/re_type.cml
 cbd832547e7cdf8d ok test/cases/compile/native/retired_str_bytes.cml
 bcac67bf72834a87 ok test/cases/compile/native/retired_str_from_bytes.cml
+54aa08abcf99901d ok test/cases/compile/native/sim_arity.cml
+1cd7e9ad4fb98e83 ok test/cases/compile/native/sim_declaration_import.cml
+fd495edb5c35f561 ok test/cases/compile/native/sim_type.cml
 e07fef78ecc9b9ab ok test/cases/compile/native/statistics_arity.cml
 1b5127468a081d7b ok test/cases/compile/native/statistics_declaration_import.cml
 da06782ea199dba8 ok test/cases/compile/native/statistics_type.cml
@@ -1865,7 +1874,7 @@ f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 4137dad18f1c4711 ok test/cases/modules/stdlib/math_bits.cml
 9f305a00d4e93445 ok test/cases/modules/stdlib/math_functions.cml
 040bb7f614cb1861 ok test/cases/modules/stdlib/math_numbers.cml
-25ea5511b8d74b97 ok test/cases/modules/stdlib/registry_all.cml
+4c285d1d49ccaa48 ok test/cases/modules/stdlib/registry_all.cml
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
 bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 f38819c872dbb5e4 ok test/cases/modules/stdlib/str_chars.cml

@@ -1,0 +1,13 @@
+/**
+ * The declaration of `onnx:supported_operators` takes no ordinary argument: an extra one is
+ * refused at the call, and the overload the message lists is the declaration's `() => string[]`
+ * — `stdlib/onnx.cml`, not the C++ module (handover H179).
+ */
+module onnx_arity
+
+import { supported_operators } from onnx
+
+func main(): int {
+    println(supported_operators(1))
+    return 0
+}

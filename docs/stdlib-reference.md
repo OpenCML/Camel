@@ -31,8 +31,7 @@ How to read an entry:
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
-Not in this reference: the `onnx` exporter, the simulation types of `sim` and the
-profiler (`perf`).
+Not in this reference: the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
@@ -62,6 +61,8 @@ profiler (`perf`).
 | [python](#python) | `import { ... } from python` | C++ | 11 |
 | [nn](#nn) | `import { ... } from nn` | C++ | 19 |
 | [autodiff](#autodiff) | `import { ... } from autodiff` | C++ | 3 |
+| [sim](#sim) | `import { ... } from sim` | C++ | 2 |
+| [onnx](#onnx) | `import { ... } from onnx` | C++ | 2 |
 
 <a id="built-in-functions"></a>
 
@@ -4975,3 +4976,81 @@ argument's own type.
 
 - Pure.
 - Example: `stop_gradient(3.0)` gives `3.0`
+
+<a id="sim"></a>
+
+## `sim`: Monte Carlo simulation
+
+Monte Carlo simulation: two kernels that estimate a number from random samples. `pi_hits`
+estimates pi from the fraction of points that fall inside the unit circle and
+`asian_call_price` prices a one-year Asian call by simulating the underlying's paths. Both
+take the sample count and the seed, so a seed reproduces the result exactly and the operators
+are pure.
+
+#### `pi_hits`
+
+```camel
+pi_hits: (samples: int, seed: int) => int
+```
+
+Draws `samples` points uniformly from the square [-1, 1]^2 with a generator seeded by `seed`
+and returns how many fall inside the unit circle. The estimate of pi is `4 * hits / samples`;
+a negative sample count is a fault.
+
+- Pure.
+- Failure: fault `RuntimeError` when `samples` is negative.
+- Example: `pi_hits(10000, 42)` gives `7863`
+
+#### `asian_call_price`
+
+```camel
+asian_call_price: (paths: int, steps: int, seed: int) => float
+```
+
+Prices a one-year Asian call on a geometric random walk with `paths` simulated paths of
+`steps` steps each, using the fixed parameters S0 = 100, K = 100, r = 0.05 and sigma = 0.2,
+and a generator seeded by `seed`; the result is the discounted average payoff. A negative
+path count or a non-positive step count is a fault.
+
+- Pure.
+- Failure: fault `RuntimeError` when `paths` is negative or `steps` is not positive.
+- Example: `asian_call_price(2000, 128, 42)` gives `5.894325529519635`
+
+<a id="onnx"></a>
+
+## `onnx`: export a program as an ONNX model
+
+Exporting Camel programs as ONNX models: `export_model` writes the model of a function applied
+to an example argument, and `supported_operators` lists the operator URIs the backend can
+lower. The module is the ONNX exporter, not a runtime: loading it and asking what it can lower
+needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a file.
+
+#### `export_model`
+
+```camel
+export_model: (fn: (x: Tensor<f32>) => void, example: Tensor<f32>, path: string) => void
+```
+
+Writes the ONNX model of `fn` applied to arguments like `example` to the file `path`, at the
+backend's default opset. `example` is one argument of a one-parameter `fn`, or a tuple with
+one example per parameter; the function's graph is translated after the generic passes, and a
+node the backend cannot lower is refused. The optional `dynamic_axes` leaves those axes of the
+tensor inputs unknown, and `target` names the runtime whose capability data the model is
+checked against.
+
+- With effects: writes a file and reads the function's graph.
+- Failure: fault `RuntimeError` when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node.
+- Example: `export_model(f, new([1.0, 2.0]), "/tmp/model.onnx")`
+
+#### `supported_operators`
+
+```camel
+supported_operators: () => string[]
+```
+
+Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
+lowering table reports them. A capability report only: it reads the table compiled into the
+module and never touches the file system or the ONNX runtime.
+
+- With effects: reports the lowering table of the backend.
+- Example: `let uris = supported_operators()`

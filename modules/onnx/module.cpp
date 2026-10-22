@@ -18,7 +18,9 @@
  */
 
 /*
- * onnx module wiring: the `export_model` operator group and its executor.
+ * onnx module wiring: the `export_model` operator group and its executor. `supported_operators`
+ * has a fixed signature and is declared in stdlib/onnx.cml (handover H179); the module keeps its
+ * kernel in the executor below.
  */
 
 #include "module.h"
@@ -159,13 +161,6 @@ OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
                       }
                       return Type::Void();
                   })}}));
-    // supported_operators(): the operator URIs the ONNX backend can lower (capability report).
-    exportEntity(
-        "supported_operators",
-        OperatorGroup::create(
-            "supported_operators",
-            {{"onnx:supported_operators",
-              StaticFuncTypeResolver::create({}, {}, ArrayType::create(Type::String()))}}));
 }
 
 module_ptr_t OnnxModule::create(context_ptr_t ctx) { return std::make_shared<OnnxModule>(ctx); }

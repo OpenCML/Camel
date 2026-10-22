@@ -834,3 +834,74 @@ expect_diagnostic_code = "0x03000110"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'float', which is not the declared type 'int'"]
+
+# ---- The declarations of `sim` and `onnx` (handover H179) ----
+#
+# `sim` exports two names and both have fixed signatures — two `int`s to an `int`, three to a
+# `float` — so both are declared in `stdlib/sim.cml` and the module needs no signature file.
+# `onnx` exports two names: `supported_operators` (`() => string[]`) is declared in
+# `stdlib/onnx.cml`; `export_model` takes a function of any parameter list and an example that
+# must be its parameter tree, so it stays in C++ and is recorded in
+# `stdlib/signatures/onnx.cml`.
+#
+# The onnx cases are compile-only (`camel check`): the module loads without the ONNX runtime and
+# `supported_operators` only reads the lowering table compiled into it, but the task keeps every
+# onnx case away from a run so a machine without the runtime cannot turn them red. The sim cases
+# run: both kernels are pure and seeded, and the import case reaches the C++ kernels.
+
+[[tests]]
+name = "native.sim_declaration_import"
+desc = "`sim`'s declarations are what an importer sees: `pi_hits` takes two `int`s and answers an `int`, `asian_call_price` takes three and answers a `float`, and both calls reach the C++ kernels with the fixed seeds of `modules/std/sim/basic.cml`."
+kind = "behavior"
+case = "../../../cases/compile/native/sim_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "7863\n5.894325529519635\n"
+
+[[tests]]
+name = "native.sim_wrong_arity"
+desc = "`sim:pi_hits` is declared with two ordinary arguments: one is refused at the call, and the overload the message lists is the declaration's `(samples: int, seed: int) => int` — `stdlib/sim.cml`, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/sim_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "sim_arity.cml:11:20", "argument types: <> (int)", "<sim:pi_hits>: (samples: int, seed: int) => int"]
+
+[[tests]]
+name = "native.sim_wrong_type"
+desc = "The first parameter of `sim:pi_hits` is the declaration's `int`: a `float` there is refused at the call, and the overload the message lists is the declaration's `(samples: int, seed: int) => int` — `stdlib/sim.cml`, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/sim_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "sim_type.cml:11:20", "argument types: <> (float, int)", "<sim:pi_hits>: (samples: int, seed: int) => int"]
+
+[[tests]]
+name = "native.onnx_declaration_import"
+desc = "`onnx`'s declaration is what an importer sees: `supported_operators` takes no ordinary argument and answers `string[]`, read from `stdlib/onnx.cml`, and the call reaches the C++ operator. Checked, not run: the onnx declaration cases are compile-only."
+kind = "behavior"
+case = "../../../cases/compile/native/onnx_declaration_import.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+
+[[tests]]
+name = "native.onnx_wrong_arity"
+desc = "`onnx:supported_operators` is declared with no ordinary arguments: one is refused at the call, and the overload the message lists is the declaration's `() => string[]` — `stdlib/onnx.cml`, not the C++ module. Checked, not run."
+kind = "negative"
+case = "../../../cases/compile/native/onnx_arity.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "onnx_arity.cml:11:32", "argument types: <> (int)", "<onnx:supported_operators>: () => string[]"]
+
+[[tests]]
+name = "native.onnx_result_type"
+desc = "The result type of `onnx:supported_operators` is the declaration's `string[]`: binding it to an `int` is refused with the value's type taken from the declaration. With no ordinary parameter this is the type case a zero-argument declaration can have. Checked, not run."
+kind = "negative"
+case = "../../../cases/compile/native/onnx_result_type.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_code = "0x03000110"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'string[]', which is not the declared type 'int'"]

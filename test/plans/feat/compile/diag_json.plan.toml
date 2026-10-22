@@ -356,15 +356,15 @@ timeout_ms = 6000
 
 [[tests]]
 name = "unknown_pass_of_known_module"
-desc = "A module that exists but contributes no pass of that name: still an unknown pass (the module is loaded, the name stays unknown), and the program does not run."
+desc = "A C++ module that exists but contributes no pass of that name: still an unknown pass (the module is loaded, the name stays unknown), and the program does not run. (`onnx` was the example until H179; it is a declaration module now, so its missing pass gets the H130 module-specific diagnostic, tested in feat/modules/pass_not_found.)"
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_direct_user.cml"
-args = ["--output-format", "json", "${case}", "std::nvm", "onnx::nosuchpass"]
+args = ["--output-format", "json", "${case}", "std::nvm", "hash::nosuchpass"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
 assert(diags.length === 1 && diags[0].data.name === 'RuntimeDiag::UnrecognizedGraphPass', 'diagnostic: ' + input.stdout)
-assert(diags[0].data.stage === 'pass:onnx::nosuchpass', 'stage ' + diags[0].data.stage)
+assert(diags[0].data.stage === 'pass:hash::nosuchpass', 'stage ' + diags[0].data.stage)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000

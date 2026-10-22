@@ -1,0 +1,30 @@
+/**
+ * Exporting Camel programs as ONNX models: `export_model` writes the model of a function applied
+ * to an example argument, and `supported_operators` lists the operator URIs the backend can
+ * lower. The module is the ONNX exporter, not a runtime: loading it and asking what it can lower
+ * needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a file.
+ */
+
+// The declaration of the one fixed signature of the C++ module `modules/onnx` (design
+// principles 6.4; handover H19, step 10; H179). This file is the one source of
+// `supported_operators`'s signature; the C++ side keeps the kernel, the executor and the purity.
+//
+// `export_model` stays in C++ and is recorded as a computed signature in
+// `stdlib/signatures/onnx.cml`: its first parameter is a function of any parameter list and
+// result (`(...) => R`), its `example` parameter is a tensor, a tuple or a struct whose leaves
+// have to be the function's parameter tree (a predicate on the type variable), and its last two
+// parameters are optional, so its arity is three to five. None of that is expressible in a
+// declaration, and a declaration that wrote one instance of it would accept calls the resolver
+// refuses.
+//
+// `supported_operators` is registered with effects until someone has checked that it is not
+// effectful; the declaration keeps that purity (a declaration carries types, not effects).
+
+module onnx
+
+/// Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
+/// lowering table reports them. A capability report only: it reads the table compiled into the
+/// module and never touches the file system or the ONNX runtime.
+/// @effect reports the lowering table of the backend
+/// @example let uris = supported_operators()
+export func supported_operators(): string[]
