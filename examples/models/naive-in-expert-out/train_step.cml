@@ -187,7 +187,8 @@ func main(bench: bool, init_dir: string, final_dir: string): int sync {
     }
 
     let before = loss<model>(x, labels)
-    `naive config batch=${batch} sequence=${sequence} d_model=${d_model} heads=${n_heads} d_ff=${d_ff} vocab=${vocab} blocks=2 params=${param_count(model)}`
+    let params = param_count(model)
+    `naive config batch=${batch} sequence=${sequence} d_model=${d_model} heads=${n_heads} d_ff=${d_ff} vocab=${vocab} blocks=2 params=${params}`
         ->println
     `naive init loss=${before:.9f}`->println
 
