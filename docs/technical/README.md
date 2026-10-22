@@ -59,7 +59,7 @@
 | [48_declaration_migration.md](48_declaration_migration.md) | 声明迁移的结果与边界（H186）：26 个声明模块的账本（声明 / 计算 / 阻塞 / 注册重载）、机制与检查器、剩余项与 owner、迁移下一个模块的七步配方；缺口分类见 47 |
 | [49_computed_signatures.md](49_computed_signatures.md) | `stdlib/signatures/` 的逐条账本（H194）：14 个文件 224 条条目按四桶分类（今天可声明 22 / 差一条机制 104 / 永久只读 98 / 不是签名 0）、每条的证据与迁移任务、该先问作者的一件事、目录的下界与检查器第 7 条 |
 | [50_pyplot_cpython_init.md](50_pyplot_cpython_init.md) | `pyplot` 的 CPython 初始化能否推迟到首次 `plot`（H203）：H191 的 `cmo_load` 数字、边际导入测量、为什么导入期错误码与“第一个初始化者”设置使推迟可见，以及需要作者裁定的 P1/P2 |
-| [51_unchecked_examples.md](51_unchecked_examples.md) | 设计稿示例的解析现状（H206）：203 个 `examples/` 程序加 7 个其它文件在 `e543f8198` 的解析结果（206 干净 / 3 故意拒绝 / 1 已坏；基点 `880ee74b1` 是 205 / 3 / 2）、每个失败文件的依据与损坏起点、它们各自被文档围栏或计划引用的情况，以及一次 15 行扫描会抓到什么、会误报什么 |
+| [51_unchecked_examples.md](51_unchecked_examples.md) | 设计稿示例的解析现状与扫描（H206 / H211）：203 个 `examples/` 程序加 7 个其它文件在 `e543f8198` 的解析结果（206 干净 / 3 故意拒绝 / 1 已坏；基点 `880ee74b1` 是 205 / 3 / 2）、每个失败文件的依据与损坏起点、它们各自被文档围栏或计划引用的情况；H211 建成的 `check.py examples`（选择取自树上的 glob 加 7 个具名文件）、文件首行的 `// @refused-example <原因>` 标记规则（标记过必须仍不解析、未标记必须解析、两个方向都红）与计划接线 |
 | [ddpm-primitives.md](ddpm-primitives.md) | DDPM 实验暴露的运行时与 GPU 原语：`math:sqrt` 的 VJP、`fs.write_text` 的字节长度、Tiles 的 `numel` / `shape` / `permute_inverse` / 矩阵乘 lowering、BF16 cuBLAS 的选择，以及检查它们的计划 |
 | [gir-interchange.md](gir-interchange.md) | GIR 导出：`std::gir` / `rgir` / `jgir` / `agir` / `argir` 的格式与分工，以及供编辑器消费的 JSON 版本 1 |
 | [nn-autograd.md](nn-autograd.md) | `nn` 没有自己的自动求导：求导是 `modules/autodiff` 的图重写（`grad` / `with_grad`），见 26 与设计原则 9.9 |

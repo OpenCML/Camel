@@ -20,6 +20,10 @@ The documents and progen groups belong to the differential harness this tool was
 they are still built on request, but nothing in the tree consumes them any more: check.py builds
 the snapshot list from the .cml groups alone.
 
+`example_files()` is the selection of `check.py examples` (H211): the design examples and the
+seven named programs that no plan owns. It is not part of list.txt; that mode asks for the two
+groups itself.
+
 Run from the repository root.
 """
 import argparse
@@ -32,6 +36,21 @@ SKIP_DIRS = {".git", "node_modules", "build", "out", "tmp", "third_party", "dist
              ".cache", "__pycache__", "tmp_q", "results"}
 
 PARSE_ROOT = Path("test/cases/parse")
+
+# The example sweep (check.py examples): every .cml of the design examples and seven files that
+# have no plan of their own but are programs a reader or a tool reads. The design examples are a
+# glob over the tree, never a list: a page that adds an examples/ directory only has to put a
+# .cml in it to be checked. The seven are named because no glob owns them.
+EXAMPLE_GLOB = "*/examples/**/*.cml"
+EXAMPLE_NAMED = (
+    "hello.cml",
+    "test/tools/jitcov/workloads.cml",
+    "test/tools/selftest/benchmark_failure.cml",
+    "test/tools/selftest/sweep/probe.cml",
+    "test/tools/selftest/sweep_names/reuse_sources/reuse.cml",
+    "test/tools/selftest/sweep_names/sources/alpha.cml",
+    "test/tools/selftest/sweep_names/sources/beta.cml",
+)
 
 
 def walk(root: Path, suffix: str):
@@ -46,6 +65,20 @@ def parse_cases():
     """The parse corpus: every .cml case under test/cases/parse/. The AST snapshot hashes these
     and the probes: the snapshot is a snapshot of the tests that own the parser (H188)."""
     return walk(PARSE_ROOT, ".cml")
+
+
+def example_files():
+    """The example sweep's selection: (design examples, the named files).
+
+    The design part is `docs/design/*/examples/**/*.cml`, counted from the tree on every run; the
+    named part is EXAMPLE_NAMED. A named file that is gone is reported by the caller, not skipped:
+    the list cannot shrink without a failure."""
+    design = sorted(
+        str(path).replace("\\", "/")
+        for path in Path("docs/design").glob(EXAMPLE_GLOB)
+        if path.is_file()
+    )
+    return design, list(EXAMPLE_NAMED)
 
 
 def doc_blocks(out: Path):

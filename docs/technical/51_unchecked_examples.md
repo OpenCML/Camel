@@ -1,9 +1,10 @@
 # 51. The design examples that no guard parses
 
-**Dated snapshot.** Measured on 2026-10-22 at `e543f8198` (the merge this change
-sits on; the commits after it only edit docs) with the Linux build of that commit.
-Every count below belongs to that commit and will age; it is not a live claim about
-the tree.
+**The table is a dated snapshot; the sweep below it is live.** Measured on 2026-10-22 at
+`e543f8198` (the merge this change sits on; the commits after it only edit docs) with the Linux
+build of that commit. The counts in the table belong to that commit and will age; they are not a
+live claim about the tree. H211 then built the sweep this page recommended, so the number that
+guard checks is the tree's, never this page's.
 
 H188 narrowed the AST snapshot to `test/cases/parse/**` and the probes. The `.cml`
 programs under `docs/design/*/examples/` lost the parser check they had only
@@ -56,20 +57,56 @@ plan named above. `hello.cml` is run by
 `README.md`; the five selftest fixtures are cases of the selftest plans, run through
 [runner.plan.toml](../../test/plans/feat/consistency/runner.plan.toml);
 `workloads.cml` is named by no fence and no plan (only by
-`docs/technical/07_jit_architecture.md` prose). So 204 of the 210 files — the 203
-examples and `workloads.cml` — have no check that parses the file, and 199 of the
-examples are named by neither a fence nor a plan.
+`docs/technical/07_jit_architecture.md` prose). So at `e543f8198` 204 of the 210 files — the 203
+examples and `workloads.cml` — had no check that parses the file, and 199 of the examples were
+named by neither a fence nor a plan. H211 closed that gap: the sweep below parses all 210, and
+the plan selection now runs it when an example, the checker or one of the seven changes.
 
-## Recommendation
+## The sweep (H211)
 
-A 15-line sweep (one corpus list, `camel-parsecheck hashes`, fail on `no`) would have
-caught both rotten files and would catch the next language change that breaks an
-example; it would falsely flag the three deliberate negatives (`p12`, `top_stmt`,
-`top_sync`) unless they are allowlisted, and `t14` too if the author keeps it as a
-retired-feature probe. It would not catch semantic rot: the 38 any-typing examples
-parse and do not compile by design (the page's opening paragraph says `any` is an
-unknown type name today). 200 examples are meant to parse (203 minus the three
-refused); two were broken at the base commit, one (d10) is fixed in this change, so
-the tree this page rides on has 206 clean / 3 refused / 1 rotten. The files actually
-at risk are those 200 plus `workloads.cml`: the sweep's value is preventing the next
-silent break, not repairing today's one.
+`python3 test/tools/parsecheck/check.py examples` — the test `frontend.examples_parse` in the
+fast layer of [frontend.plan.toml](../../test/plans/feat/parse/frontend.plan.toml) — parses every
+`.cml` the tree puts under `docs/design/*/examples/`, plus the root `hello.cml`,
+`test/tools/jitcov/workloads.cml` and the five fixtures under `test/tools/selftest/`. The
+selection is the glob plus those seven named paths, counted from the tree on every run; a named
+file that disappears, or a glob that matches nothing, fails the check instead of passing over
+less. The parser is the existing [camel-parsecheck](../../tools/parsecheck/main.cpp): its
+`hashes` mode decides, and its `dump` mode supplies the diagnostic for a file that fails. No
+second parser was added.
+
+The files that are meant not to parse carry the marker on their first line:
+
+```
+// @refused-example <reason>
+```
+
+The marker is the whole exception list. The checker requires the reason, requires a marked file
+to still fail to parse (a marked file that starts parsing is a lie), and requires an unmarked
+file to parse; both directions are failures. A marker anywhere but line 1 is reported, not
+ignored, so an edit cannot separate the exception from the file it describes. Every marked file
+is printed with its reason and the summary counts it, so nothing is skipped silently.
+
+The four marked files are the three deliberate negatives and one open question:
+
+| file | marker's reason |
+|---|---|
+| `graph-model/examples/ns/p12_use.cml` | `use` is retired; the word is an ordinary name now, so the file is a syntax error |
+| `module-root/examples/misc/top_stmt.cml` | a top-level statement is a syntax error (the page names this file) |
+| `module-root/examples/misc/top_sync.cml` | a top-level `sync { ... }` initializer is a syntax error (the page names this file) |
+| `any-typing/examples/t14_union.cml` | retired-feature probe: the page says `int \| string` is accepted, the file has not parsed since `A \| B` was retired; the page and the file disagree, awaiting the author |
+
+The table above is unchanged — 210 files, 206 clean, 3 refused, 1 rotten at `e543f8198`: the
+markers reclassify `t14` from "rotten" to "deliberately refused pending the author", they do not
+change what parses. If the author rules that `A | B` is back, the file starts parsing and the
+check turns red until the marker is removed, which is the direction that makes the decision
+visible in the tree rather than in a list.
+
+What makes the check red: drop a marker from a refused file (reported unmarked, with its
+diagnostic), delete a `}` from a clean example (same), add the marker to a file that parses
+(reported as a lie), or leave a marker without a reason.
+
+[test/plan-selection.json](../../test/plan-selection.json) names
+`feat/parse/frontend.plan.toml` (layered, so `--tier fast` keeps its slow fuzz test out) for
+`docs/design/`, `hello.cml`, `test/tools/parsecheck/`, `test/tools/jitcov/workloads.cml` and
+`test/tools/selftest/`: editing an example, the checker or a fixture runs the sweep, and the
+design pages keep the documentation checks they already selected.

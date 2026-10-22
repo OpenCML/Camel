@@ -1,3 +1,4 @@
+// @refused-example retired-feature probe: the any-typing page section 2.1 says `int | string` is accepted, but `A | B` was retired and this file has not parsed since; the page and the file disagree, awaiting the author
 module t14_union
 // A union type as the type of a parameter of a user function.
 func show(x: int | string): string { return string(x) }

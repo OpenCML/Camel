@@ -5,6 +5,7 @@
     python3 test/tools/parsecheck/check.py format   [--only GLOB ...] [--allow-empty REASON]
     python3 test/tools/parsecheck/check.py fuzz     [ITERATIONS [SEED]] [--only GLOB ...]
                                                     [--allow-empty REASON]
+    python3 test/tools/parsecheck/check.py examples
 
 snapshot  Every .cml case of the parse corpus (test/cases/parse) and every probe (probes.py) is
           parsed; a hash of the normalized AST of each (or of its diagnostics, when it is
@@ -26,6 +27,20 @@ snapshot  Every .cml case of the parse corpus (test/cases/parse) and every probe
 format    Formatting every accepted file of the repository gives a text with the same AST.
 fuzz      Mutated programs of the repository: the parser returns a lossless tree for each
           (camel-parsecheck fuzz).
+examples  Every .cml under docs/design/*/examples/, plus hello.cml, test/tools/jitcov/workloads.cml
+          and the five .cml fixtures under test/tools/selftest/, must parse. A file that is
+          deliberately refused says so on its first line:
+
+              // @refused-example <reason>
+
+          The reason is required, a marked file must still fail to parse, and an unmarked file
+          must parse; both directions are failures, so a marker that has become a lie is reported
+          as loudly as a missing one. There is no allowlist and no count: the selection is the
+          glob plus the seven named files, and every marked file is printed with its reason, so
+          nothing is skipped silently. What makes it red: drop the marker from a refused example
+          (reported unmarked, with its diagnostic), delete a `}` from a clean example (same), add
+          the marker to a file that parses (reported as a lie), or leave the marker without a
+          reason.
 
 A check that examines nothing is not a pass (agents/test.md). `format` and `fuzz` count the files
 corpus.parse_cases() selects -- the parser's own corpus, counted from the tree on every run, never
@@ -145,6 +160,128 @@ def write_probes(folder):
         sys.argv = saved
     actual = sorted(str(p).replace("\\", "/") for p in Path(folder).glob("probe_*.cml"))
     return actual, [f"probes/{Path(path).name}" for path in actual]
+
+
+REFUSED_MARKER = re.compile(r"^[ \t]*//+[ \t]*@refused-example(?:[ \t]+(?P<reason>.*?))?[ \t]*$")
+
+
+def refused_marker(path):
+    """(reason, misplaced line) of one file, from its first line.
+
+    reason is the marker's text when line 1 is `// @refused-example <reason>` (an empty string
+    when it carries no reason). misplaced is the line number of a `@refused-example` that is not
+    on line 1: it is not read there, and it is reported rather than silently ignored. Both are
+    None when the file has no marker at all.
+    """
+    text = (ROOT / path).read_text(encoding="utf-8-sig", errors="replace")
+    lines = text.split("\n")
+    match = REFUSED_MARKER.match(lines[0].rstrip("\r"))
+    if match:
+        return (match.group("reason") or "").strip(), None
+    for number, line in enumerate(lines, 1):
+        if "@refused-example" in line:
+            return None, number
+    return None, None
+
+
+def diagnostic_line(path):
+    """The first rendered diagnostic of a file camel-parsecheck rejected."""
+    code, out, err = run(["dump", path])
+    for line in (out + err).splitlines():
+        text = line.strip()
+        if text.startswith("DIAGNOSTICS "):
+            text = text[len("DIAGNOSTICS "):]
+        if "name=SyntaxDiag::" in text or "name=LexicalDiag::" in text:
+            return text
+    for line in (out + err).splitlines():
+        text = line.strip()
+        if text and text not in ("REJECT", "ACCEPT") and not text.startswith("DIAGNOSTICS"):
+            return text
+    return "(the tool printed no diagnostic)"
+
+
+def examples():
+    """Every design example and the seven named programs parses.
+
+    The selection is corpus.example_files(): a glob over docs/design/*/examples and seven files
+    no glob owns. The exception is an in-file marker, never a list here: a file that is meant
+    not to parse says so on its first line, and both directions are failures (a marked file that
+    parses, an unmarked file that does not). Every marked file is printed with its reason; a
+    selection that lost a named file or found no design example is refused, so the check cannot
+    pass over nothing.
+    """
+    os.chdir(ROOT)
+    design, named = corpus.example_files()
+    if not design:
+        print("examples: docs/design/*/examples/**/*.cml selected no file; refusing to check nothing")
+        return 1
+    missing = [path for path in named if not (ROOT / path).is_file()]
+    if missing:
+        print(f"examples: {len(missing)} named file(s) are gone: {', '.join(missing)}; "
+              f"refusing a selection that shrank")
+        return 1
+    files = design + named
+    with tempfile.TemporaryDirectory() as tmp:
+        code, out, err = run(["hashes", write_list(tmp, files)])
+
+    verdicts = {}
+    problems = []
+    for line in out.splitlines():
+        line = line.rstrip()
+        if not line:
+            continue
+        match = re.match(r"^[0-9a-f]{16} (ok|no) (.+)$", line)
+        if match:
+            verdicts[match.group(2)] = match.group(1)
+        elif line.startswith("error "):
+            problems.append(f"the front end could not read a file: {line}")
+        else:
+            problems.append(f"the tool printed an unexpected line: {line!r}")
+    if code != 0 and not problems:
+        problems.append(f"the tool exited {code} without naming a failure: {(err or out).strip()[:500]}")
+
+    parsed = 0
+    refused = []
+    for path in files:
+        reason, misplaced = refused_marker(path)
+        verdict = verdicts.get(path)
+        if verdict is None:
+            problems.append(f"{path}: the tool printed no verdict for it")
+            continue
+        if reason is not None:
+            if not reason:
+                problems.append(
+                    f"{path}: `@refused-example` has no reason; write "
+                    f"`// @refused-example <reason>` on its first line")
+            elif verdict == "ok":
+                problems.append(
+                    f"{path}: marked `@refused-example` but it parses; a marked file must fail to "
+                    f"parse, or the marker is a lie (its reason: {reason})")
+            else:
+                refused.append((path, reason))
+            continue
+        if misplaced is not None:
+            problems.append(
+                f"{path}: the `@refused-example` marker is on line {misplaced}, not on the first "
+                f"line, so it is not read; move it to line 1")
+            continue
+        if verdict == "no":
+            problems.append(
+                f"{path}: does not parse and has no `// @refused-example <reason>` marker: "
+                f"{diagnostic_line(path)}\n"
+                f"    if it is deliberately refused, say so on its first line; if not, the page "
+                f"that shows it is wrong")
+            continue
+        parsed += 1
+
+    print(f"examples: {len(files)} file(s) selected from the tree: {len(design)} under "
+          f"docs/design/*/examples/, {len(named)} named")
+    for path, reason in refused:
+        print(f"  refused {path}: {reason}")
+    for problem in problems:
+        print(f"examples: FAIL {problem}")
+    print(f"examples: {parsed} parse, {len(refused)} marked refused, {len(problems)} failure(s)")
+    return 1 if problems else 0
 
 
 def read_golden():
@@ -335,11 +472,17 @@ def main(argv):
     fz.add_argument("--allow-empty", metavar="REASON", default=None,
                     help="allow an empty selection, and print REASON")
 
+    sub.add_parser("examples",
+                   help="every design example and the seven named programs parses, and a refused "
+                        "one carries `// @refused-example <reason>` on its first line")
+
     args = ap.parse_args(argv[1:])
     if args.mode == "snapshot":
         return snapshot(args.update, args.only)
     if args.mode == "format":
         return format_check(args.only, args.allow_empty)
+    if args.mode == "examples":
+        return examples()
     return fuzz(args.iterations, args.seed, args.only, args.allow_empty)
 
 

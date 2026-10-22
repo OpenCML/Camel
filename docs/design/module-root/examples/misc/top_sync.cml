@@ -1,3 +1,4 @@
+// @refused-example a top-level `sync { ... }` initializer is a syntax error (module-root README line 544 names examples/misc/top_sync.cml)
 let greeting = sync {
     println('top-level sync block: first')
     println('top-level sync block: second')
