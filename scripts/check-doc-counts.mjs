@@ -73,6 +73,11 @@ const ALLOWED = [
         rules: ['cml-files'],
         why: 'the census at commit e4652d81 (v0.2.9); 1,099 .cml files is that tree',
     },
+    {
+        file: 'docs/technical/51_unchecked_examples.md',
+        rules: ['cml-files', 'snapshot-files'],
+        why: 'the H206 dated snapshot at e543f8198; its 210 files are the subset it measured, not the repository totals',
+    },
 ]
 
 const WORDS = new Map(
