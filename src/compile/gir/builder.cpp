@@ -391,7 +391,7 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
     case GCT::NodeKind::DECL:
         return visitDeclNode(node);
     case GCT::NodeKind::FUNC:
-        if (node->name().empty() && isGenericHere(node->at(0)->dataType())) {
+        if (node->name().empty() && isGenericHere(node->at(0)->dataType(), node)) {
             return anonymousTemplateOf(node);
         }
         return visitFuncNode(node);
@@ -479,7 +479,7 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
         return nullptr;
     }
 
-    if (isGenericHere(type)) {
+    if (isGenericHere(type, gct)) {
         // A generic function is a template: its graphs are its instances.
         LEAVE("DECL");
         return nullptr;
@@ -528,7 +528,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         camel::core::tag::attachPermissionsToDeclaration(
             *module_, Reference(name), signature, tags.permissions);
     }
-    if (isGenericHere(type)) {
+    if (isGenericHere(type, gct)) {
         // A generic function: registered as a template when its block was entered
         // (registerGenericTemplates), built when a call asks for an instance.
         LEAVE("FUNC");

@@ -1143,21 +1143,22 @@ void ParserImpl::parseStaticFor() {
     close(m, NK::StaticForExpr);
 }
 
-/// staticForHeader : 'for' '(' identDef (',' identDef)? ')' 'in' ('fields' typeExpr
-///                                                       | 'indices' dataExpr)
+/// staticForHeader : 'for' '(' (identDef | '_') (',' (identDef | '_'))? ')' 'in'
+///                                          ('fields' typeExpr | 'indices' dataExpr)
 /// `fields` walks the fields of a type and binds two names (`n`, `F`); `indices` walks the
 /// elements of an ordinary tuple and binds one name (`j`, the position as an integer). The
 /// names and the walked shape become children of the node being built (no node of their own, as
-/// the parser of `loop` reads its `loopState` nodes directly).
+/// the parser of `loop` reads its `loopState` nodes directly). `_` is the wildcard of `match`:
+/// that position binds nothing.
 void ParserImpl::parseStaticForHeader() {
     if (!panic_ && expect(TK::KwFor)) {
         uint32_t secondNameAt = kNone;
         if (!panic_ && expect(TK::LParen)) {
-            parseIdentDef();
+            parseStaticForName();
             if (cur_ == TK::Comma && !panic_) {
                 secondNameAt = pos_;
                 bump();
-                parseIdentDef();
+                parseStaticForName();
             }
             if (!panic_) {
                 expect(TK::RParen);
@@ -1186,6 +1187,19 @@ void ParserImpl::parseStaticForHeader() {
             }
         }
     }
+}
+
+/// One name of a `for (...)` head: a name, or `_`, a place that binds nothing (the wildcard of
+/// `match`). It is closed as an `identDef` whose text is `_`, so `(n, _)` keeps both positions
+/// and the walked entry still has a type name (`F`) where one is written.
+void ParserImpl::parseStaticForName() {
+    if (cur_ == TK::Underscore && !panic_) {
+        const size_t m = mark();
+        bump();
+        close(m, NK::IdentDef);
+        return;
+    }
+    parseIdentDef();
 }
 
 /// staticLoopExpr : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr

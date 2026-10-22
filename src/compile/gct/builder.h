@@ -150,6 +150,9 @@ class Builder {
     // Only the signature of a FuncData (openSignature_) may leave one out; the flag is taken
     // by visitFuncData right after the signature.
     std::vector<Tree::UnwrittenParam> pendingUnwrittenParams_;
+    // Head type parameters the signature never wrote, held until the body is built: a body that
+    // uses the name (`match type T`) makes it a used parameter, not an unused one.
+    std::vector<std::string> pendingUnusedHeadVars_;
 
     // Named dimensions of type extents (design principles 5.4): a name denotes an extent, not a
     // type. A name is bound the first time it is written in the parameter types of the function

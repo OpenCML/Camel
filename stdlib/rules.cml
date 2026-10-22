@@ -20,7 +20,7 @@
 module rules
 import { Program, Node, constant } from graph
 import { abs, exp as math_exp, expm1, log as math_log, log1p, trunc } from math
-import { Rule, Run, rewrite, saturate, extract, run } from rewrite
+import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
 import { Tensor, exp, log, log_softmax, sigmoid, softmax, sum } from tensor
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
@@ -625,7 +625,8 @@ export func saturate_all_strict(p: Program): Program! {
 // principles 4.4): `f->seq<[[algebra], [fusion]], false>`, `f->repeat<algebra, 8, false>`. A
 // pass that only wants the program reads `.result`.
 
-/// The schedule before its first stage: `f` unchanged, nothing applied, no fixpoint reached.
+/// The schedule before its first stage: `f` unchanged, nothing applied, no fixpoint reached. A
+/// schedule does not open the attribution record, so its proof is null.
 func start(f: Program): Run<Program> {
     return {
         result: f,
@@ -635,6 +636,7 @@ func start(f: Program): Run<Program> {
         erased: 0,
         fixpoint: false,
         seconds: 0.0,
+        proof: null as Proof?,
     }
 }
 
@@ -655,6 +657,7 @@ func plus(r: Run<Program>, next: Run<Program>): Run<Program> {
         erased: r.erased + next.erased,
         fixpoint: next.fixpoint,
         seconds: r.seconds + next.seconds,
+        proof: null as Proof?,
     }
 }
 
@@ -750,6 +753,7 @@ func pair(r: Run<Program>, left: Rule[], right: Rule[], strict: bool): Run<Progr
                 erased: b.erased,
                 fixpoint: b.rewrites == r.rewrites,
                 seconds: b.seconds,
+                proof: null as Proof?,
             }
             return out
         }

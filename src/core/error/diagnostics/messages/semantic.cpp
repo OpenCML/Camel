@@ -1277,9 +1277,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StaticAccessNotConstant",
                 "The key '{0}' of a 't.[...]' access is not known when the function is "
                 "compiled.",
-                "The key is a string or integer literal, or the 'n' of an enclosing "
-                "'static for'. A runtime value cannot choose a field, because only the "
-                "selected field is built into the graph.",
+                "The key is a string or integer literal, the 'n' of an enclosing "
+                "'static for', or an expression whose value is known at compile time, such "
+                "as a 'let' bound once to such a value. A run-time value (a 'var', a "
+                "parameter) cannot choose a field, because only the selected field is built "
+                "into the graph.",
             },
         },
         {
@@ -1678,9 +1680,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "WhenConditionNotBool",
                 "The 'when' condition of '{0}' is not a bool (it is '{1}').",
                 "A 'when' is a compile-time predicate over the declaration's type parameters "
-                "and 'with' parameters: write one of the compiler's type queries "
-                "('is_numeric::<T>()', 'is_function::<F>()'), possibly combined with '!', "
-                "'&&' and '||'. It is not a runtime value.",
+                "and 'with' parameters: write one of the standard type queries "
+                "('is_numeric::<T>()', 'is_function::<F>()') or call a pure function of the "
+                "library ('has_field::<T>('w')'), possibly combined with '!', '&&' and '||'. "
+                "It is not a runtime value.",
             },
         },
         {

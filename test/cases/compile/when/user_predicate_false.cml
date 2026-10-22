@@ -1,0 +1,22 @@
+/**
+ * The same user-written predicate where it does not hold: the call is reported with the
+ * condition the candidate wrote, and the declaration is not applied.
+ */
+module when_user_predicate_false
+
+func is_compound::<T>(): bool {
+    return match type T {
+        case struct => true
+        case tuple => true
+        case _ => false
+    }
+}
+
+func describe::<T>(x: T): string when is_compound::<T>() {
+    return 'compound'
+}
+
+func main(): int sync {
+    println(describe(7))
+    return 0
+}

@@ -24,6 +24,7 @@
 #include "../graph/handle.h"
 
 #include "camel/core/context/context.h"
+#include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/operator_table.h"
@@ -41,6 +42,7 @@
 #include "camel/runtime/program.h"
 #include "camel/runtime/rules.h"
 #include "camel/runtime/writings.h"
+#include "camel/utils/assert.h"
 #include "src/passes/sched/nodevm/nodevm.h"
 
 #include <algorithm>
@@ -53,7 +55,9 @@
 #include <format>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <ostream>
 #include <random>
 
 using namespace camel::core::context;
@@ -217,6 +221,153 @@ bool isRuleSide(const camel::runtime::GCGraph &graph) {
     return name.ends_with("__lhs") || name.ends_with("__rhs") || name.ends_with("__when");
 }
 
+// ---------------------------------------------------------------------- the proof
+
+std::string countedText(size_t n, const char *one, const char *many) {
+    return std::to_string(n) + " " + (n == 1 ? one : many);
+}
+
+/// `Proof`: what `explain` answers (rewrite design 8.7). It owns the steps of one recorded
+/// application, so it stays readable after the `Run` it came from is gone, and it prints as the
+/// derivation: a header, then one step per rewrite naming the rule, the round and the graph, the
+/// nodes that matched, the node that was produced and the nodes that were erased.
+class ProofType final : public OtherType {
+  public:
+    static ProofType *get();
+    static bool is(const Type *type);
+
+    std::string toString() const override { return "Proof"; }
+    std::string mangle() const override { return "rewrite.Proof"; }
+    Type *clone(bool deep = false) const override;
+    bool equals(Type *other) const override;
+    CastSafety castSafetyFrom(Type *source) const override;
+    bool assignableFrom(Type *source) const override;
+    OtherType *cloneWithParams(std::span<Type *const> params) const override;
+
+  private:
+    explicit ProofType(TypeCode code) : OtherType(code) {}
+};
+
+class ProofObject final : public rtdata::Object {
+  public:
+    ProofObject(const ProofObject &)            = delete;
+    ProofObject &operator=(const ProofObject &) = delete;
+
+    static ProofObject *create(
+        const camel::runtime::RewriteLog &log, const camel::runtime::RewriteStats &stats,
+        mm::IAllocator &allocator);
+
+    const camel::runtime::RewriteLog &steps() const { return *log_; }
+    const camel::runtime::RewriteStats &stats() const { return stats_; }
+
+    bool equals(const rtdata::Object *other, const Type *type, bool deep = false) const override;
+    rtdata::Object *
+    clone(mm::IAllocator &allocator, const Type *type, bool deep = false) const override;
+    void print(std::ostream &os, const Type *type) const override;
+    void onMoved() override {}
+    void updateRefs(const rtdata::Object::RefRelocator &relocate, const Type *type) override;
+    void finalize() noexcept override;
+
+  private:
+    ProofObject(camel::runtime::RewriteLog *log, const camel::runtime::RewriteStats &stats)
+        : log_(log), stats_(stats) {}
+
+    camel::runtime::RewriteLog *log_;
+    camel::runtime::RewriteStats stats_;
+};
+
+ProofType *ProofType::get() {
+    static ProofType *instance = nullptr;
+    static std::once_flag once;
+    std::call_once(once, [] {
+        const TypeCode code = registerOtherType("rewrite::Proof", TypeFlag::GC_Traced);
+        void *mem = mm::permSpace().alloc(sizeof(ProofType), alignof(ProofType));
+        ASSERT(mem != nullptr, "Failed to allocate ProofType from permSpace");
+        instance = new (mem) ProofType(code);
+    });
+    return instance;
+}
+
+bool ProofType::is(const Type *type) {
+    return type != nullptr && type->code() == get()->code();
+}
+
+Type *ProofType::clone(bool) const { return get(); }
+
+bool ProofType::equals(Type *other) const { return is(other); }
+
+CastSafety ProofType::castSafetyFrom(Type *source) const {
+    return is(source) ? CastSafety::Safe : CastSafety::Forbidden;
+}
+
+bool ProofType::assignableFrom(Type *source) const { return is(source); }
+
+OtherType *ProofType::cloneWithParams(std::span<Type *const>) const { return get(); }
+
+ProofObject *ProofObject::create(
+    const camel::runtime::RewriteLog &log, const camel::runtime::RewriteStats &stats,
+    mm::IAllocator &allocator) {
+    auto *copy = new camel::runtime::RewriteLog(log);
+    void *mem  = allocator.alloc(sizeof(ProofObject), alignof(ProofObject));
+    if (mem == nullptr) {
+        delete copy;
+        throw std::bad_alloc();
+    }
+    auto *proof = new (mem) ProofObject(copy, stats);
+    // The collector does not look at dead young objects one by one; it must be told which ones
+    // own memory it has to release (the same contract as `Foreign` and `Array`).
+    allocator.noteFinalizable(proof);
+    return proof;
+}
+
+bool ProofObject::equals(const rtdata::Object *other, const Type *, bool) const {
+    return this == other;
+}
+
+rtdata::Object *
+ProofObject::clone(mm::IAllocator &allocator, const Type *, bool) const {
+    return create(*log_, stats_, allocator);
+}
+
+void ProofObject::print(std::ostream &os, const Type *) const {
+    const auto &log = *log_;
+    if (log.empty()) {
+        os << "no rewrite matched in " << countedText(stats_.rounds, "round", "rounds")
+           << ": the program is unchanged";
+        return;
+    }
+    os << countedText(log.size(), "rewrite", "rewrites") << " in "
+       << countedText(stats_.rounds, "round", "rounds") << ", " << stats_.visited
+       << " nodes visited\n";
+    for (const camel::runtime::RewriteStep &step : log) {
+        const std::string before =
+            step.matchedText.empty() ? std::string("%?") : step.matchedText.front();
+        os << "  " << step.graph << " round " << step.round << ": " << before << "\n";
+        os << "  = " << step.producedText << "  by " << step.rule << "\n";
+        os << "    matched";
+        for (const std::string &text : step.matchedText) {
+            os << " " << text << ";";
+        }
+        os << "\n";
+        if (!step.erasedText.empty()) {
+            os << "    erased";
+            for (const std::string &text : step.erasedText) {
+                os << " " << text << ";";
+            }
+            os << "\n";
+        }
+    }
+}
+
+void ProofObject::finalize() noexcept {
+    delete log_;
+    log_ = nullptr;
+}
+
+void ProofObject::updateRefs(const rtdata::Object::RefRelocator &, const Type *) {
+    // A proof holds no reference into the graph: its steps are text and node ids, not GC values.
+}
+
 /// One application of rules: the program it produced and what the engine counted while applying
 /// them (the rewrites and the nodes are summed over the graphs; the rounds are the rounds the
 /// whole application made, each graph advancing in the same round).
@@ -229,10 +380,15 @@ struct Application {
 /// graph of `base` that is not a side of a rule. A condition is Camel code, and so is a safepoint:
 /// every draft the session has opened must keep its static values relocatable until the commit
 /// reads them again, not only the one being rewritten now.
+///
+/// `log`, when given, is the attribution of the application (rewrite design 8.7): the engine
+/// records one step per rewrite, and this function names the graph each step was made in. It is
+/// passed in from `run` and is null for every other caller, so a plain `rewrite` records nothing
+/// and allocates nothing for the record.
 Application applyRewrite(
     Context &ctx, const camel::runtime::Program *base,
     std::span<const camel::runtime::Rule> compiled, camel::core::sem::NumericPolicy policy,
-    size_t maxRounds) {
+    size_t maxRounds, camel::runtime::RewriteLog *log = nullptr) {
     camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
     camel::runtime::RuntimeGraphDraftSession::RootScope draftRoots(session);
     camel::runtime::RewriteStats total;
@@ -243,7 +399,14 @@ Application applyRewrite(
         }
         camel::runtime::GraphDraft &draft = session.edit(graph);
         camel::runtime::DraftWritings writings(draft, policy);
-        const camel::runtime::RewriteStats stats = writings.rewrite(compiled, maxRounds);
+        const size_t from = log != nullptr ? log->size() : 0;
+        const camel::runtime::RewriteStats stats = writings.rewrite(compiled, maxRounds, log);
+        if (log != nullptr) {
+            for (size_t i = from; i < log->size(); ++i) {
+                (*log)[i].graph   = graph->name();
+                (*log)[i].graphId = graph->id();
+            }
+        }
         total.rounds = std::max(total.rounds, stats.rounds);
         total.visited += stats.visited;
         total.applied += stats.applied;
@@ -282,15 +445,23 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     }
 }
 
-/// `run(p, rules, rounds, strict)`: one application of the rules, with what it cost (H226). It
-/// answers the `Run<Program>` that `stdlib/rewrite.cml` declares: a struct with the program, the
-/// rewrites applied, the rounds, the nodes visited, the nodes erased, whether the last round
-/// reached a fixpoint, and the wall time in seconds. The fields are built in the declaration's
-/// order, which is the only place their names and positions are decided together with `Run`.
+/// `run(p, rules, rounds, strict)` and `run(p, rules, rounds, strict, explain)`: one application
+/// of the rules, with what it cost (H226). It answers the `Run<Program>` that
+/// `stdlib/rewrite.cml` declares: a struct with the program, the rewrites applied, the rounds, the
+/// nodes visited, the nodes erased, whether the last round reached a fixpoint, the wall time in
+/// seconds, and the proof when the attribution was recorded. The fields are built in the
+/// declaration's order, which is the only place their names and positions are decided together
+/// with `Run`.
+///
+/// The fifth parameter opens the attribution record (rewrite design 8.7). Only then is a `Proof`
+/// made and put in the struct; without it the field is null and no step was recorded, so a plain
+/// run pays nothing for a reader that never comes.
 slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const auto *base     = norm.get<const camel::runtime::Program *>(0);
     const int64_t rounds = norm.get<Int64>(2);
     const bool strict    = norm.size() > 3 && norm.get<Bool>(3);
+    const bool explain   = norm.size() > 4 && norm.get<Bool>(4);
+    TupleType *proofType = TupleType::nullable(ProofType::get());
     StructTypeFactory factory;
     factory.add("result", norm.type(0));
     factory.add("rewrites", Type::Int());
@@ -299,20 +470,22 @@ slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     factory.add("erased", Type::Int());
     factory.add("fixpoint", Type::Bool());
     factory.add("seconds", Type::Float64());
+    factory.add("proof", proofType);
     StructType *runType         = factory.build();
     const TupleType *resultType = TupleType::fallible(runType);
     try {
         const auto start    = std::chrono::steady_clock::now();
         const auto compiled = engineRules(ctx, norm, 1);
+        camel::runtime::RewriteLog evidence;
         const Application application = applyRewrite(
             ctx, base, compiled,
             strict ? camel::core::sem::NumericPolicy::strict()
                    : camel::core::sem::NumericPolicy::relaxed(),
-            rounds < 0 ? 0 : static_cast<size_t>(rounds));
+            rounds < 0 ? 0 : static_cast<size_t>(rounds), explain ? &evidence : nullptr);
         const double seconds =
             std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         // The struct is rooted while the fallible box is made: that allocation can collect.
-        Struct *run = Struct::create(7, mm::autoSpace());
+        Struct *run = Struct::create(8, mm::autoSpace());
         run->set(0, toSlot(const_cast<camel::runtime::Program *>(application.program)));
         run->set(1, toSlot<Int64>(static_cast<int64_t>(application.stats.applied)));
         run->set(2, toSlot<Int64>(static_cast<int64_t>(application.stats.rounds)));
@@ -320,7 +493,17 @@ slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         run->set(4, toSlot<Int64>(static_cast<int64_t>(application.stats.erased)));
         run->set(5, toSlot<Bool>(application.stats.fixpoint));
         run->set(6, toSlot<Float64>(seconds));
+        run->set(7, NullSlot);
         mm::RootHandle root(mm::autoSpace(), run, runType, "rewrite.run");
+        if (explain) {
+            // The proof allocation can collect; the run is rooted, and the program it produced is
+            // already in its first slot, so both survive while the proof is made.
+            ProofObject *proof =
+                ProofObject::create(evidence, application.stats, mm::autoSpace());
+            mm::RootHandle proofRoot(
+                mm::autoSpace(), proof, ProofType::get(), "rewrite.proof");
+            run->set(7, makeSome(toSlot(proof), proofType));
+        }
         return makeOk(toSlot(root.getAs<Struct>()), resultType);
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::run>");
@@ -331,6 +514,22 @@ slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     } catch (const std::exception &e) {
         return makeError("RewriteInvalid", e.what(), "<rewrite::run>");
     }
+}
+
+/// `explain(r)`: the proof of the run `r`, a printable chain of the rewrites that were made
+/// (rewrite design 8.7). A run made without attribution carries a null proof, and asking is
+/// refused rather than answered with an empty chain.
+slot_t explainKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *run    = norm.get<Struct *>(0);
+    const slot_t field = run->slotAt(7);
+    if (isNullValue(field)) {
+        return makeError(
+            "NoAttribution",
+            "the run was made without attribution: call run(..., explain: true) to record it",
+            "<rewrite::explain>");
+    }
+    const TupleType *resultType = TupleType::fallible(ProofType::get());
+    return makeOk(nullablePayload(field), resultType);
 }
 
 /// `saturate(p, rules, rounds)` and `saturate(p, rules, rounds, strict)`: the program with the
@@ -1035,6 +1234,7 @@ class RewriteExecutor final : public Executor {
             {"consts", constsKernel},
             {"rewrite", rewriteKernel},
             {"run", runKernel},
+            {"explain", explainKernel},
             {"saturate", saturateKernel},
             {"extract", extractKernel},
             {"check", checkKernel},
@@ -1047,6 +1247,7 @@ class RewriteModule final : public BuiltinModule {
   public:
     explicit RewriteModule(context_ptr_t ctx) : BuiltinModule("rewrite", std::move(ctx)) {
         exportType(Reference("Rule"), RuleType::get());
+        exportType(Reference("Proof"), ProofType::get());
         exportEntity(
             "__rule",
             OperatorGroup::create(
@@ -1164,6 +1365,7 @@ class RewriteModule final : public BuiltinModule {
              {"consts", true},
              {"rewrite", false},
              {"run", false},
+             {"explain", true},
              {"saturate", false},
              {"extract", false},
              {"check", false},
