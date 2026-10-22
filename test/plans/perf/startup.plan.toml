@@ -6,11 +6,12 @@
 # imports, and `inspect --ops` on a program that imports every standard library module. It also
 # runs that program, so the same import work is timed on the run path.
 #
-# The ceilings are about four times the median measured on the Linux host at H142, so that the
-# plan still passes when another task has the host at load average 200; the numbers and their
-# spread are in docs/handover/reports/H142.md. They are a smoke alarm for "the standard library is
-# now loaded before the program runs", not a percentage budget: this host is shared, and a few
-# milliseconds of spread is normal. The test prints one `startup.cost` line per command
+# The ceilings are about four times the quiet median for `inspect_ops` and `imports_all`, and five
+# to eight times for `--version` and `imports_nothing`, whose 5-8 ms medians are below this host's
+# scheduling noise; all four are above the medians seen at load average 150 and 215. The numbers and
+# their spread are in docs/handover/reports/H142.md. They are a smoke alarm for "the standard
+# library is now loaded before the program runs", not a percentage budget: this host is shared, and
+# a few milliseconds of spread is normal. The test prints one `startup.cost` line per command
 # (median, p10, p90, min, max, n) and fails only when a median crosses its ceiling.
 id = "perf.startup"
 order = 401
