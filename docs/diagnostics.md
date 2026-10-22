@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-204 diagnostics: 187 errors, 17 warnings.
+210 diagnostics: 193 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -169,6 +169,12 @@ prints one entry.
 | `0x03000180` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
 | `0x03000181` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
 | `0x03000182` | [SemanticDiag::StaticIndicesNotTuple](#staticindicesnottuple) | Error |
+| `0x0300018A` | [SemanticDiag::RestParameterNotLast](#restparameternotlast) | Error |
+| `0x0300018B` | [SemanticDiag::RestParameterTypeNotSupported](#restparametertypenotsupported) | Error |
+| `0x0300018D` | [SemanticDiag::RestArgumentNotLast](#restargumentnotlast) | Error |
+| `0x0300018E` | [SemanticDiag::RestArgumentNotTuple](#restargumentnottuple) | Error |
+| `0x0300018F` | [SemanticDiag::RestFunctionNeedsExpansion](#restfunctionneedsexpansion) | Error |
+| `0x03000190` | [SemanticDiag::RestArgumentsMismatch](#restargumentsmismatch) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -1386,7 +1392,19 @@ Failed to parse module file: {0}.
 Check the file for syntax errors.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/graph_pass/imports_unparsable.cml`, run as `camel test/cases/modules/graph_pass/imports_unparsable.cml std::nvm`)
+
+```camel
+// A program whose import is a module that does not parse. The import is a dependency of the
+// program, so the program fails at the compile step with that module's parse diagnostic (H198) —
+// not later, and not with a pass diagnostic: nothing asked for a pass of it.
+module imports_unparsable
+import unparsable_pass
+
+func main(): int sync {
+    return 0
+}
+```
 
 ### InvalidOperatorURI
 
@@ -4374,6 +4392,187 @@ func main(): int {
 }
 ```
 
+### RestParameterNotLast
+
+`0x0300018A` · Error · `SemanticDiag::RestParameterNotLast`
+
+**Message**
+
+```text
+The rest parameter '..{0}' must be the last parameter.
+```
+
+**Help**
+
+```text
+A rest parameter stands for every argument left over, so no parameter can follow it. Move '..{0}' after the other parameters.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_param_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_param_not_last.cml`)
+
+```camel
+module rest_param_not_last
+
+func bad(..ts, x: int): int {
+    return x
+}
+
+func main(): int sync {
+    return bad(1, 2)
+}
+```
+
+### RestParameterTypeNotSupported
+
+`0x0300018B` · Error · `SemanticDiag::RestParameterTypeNotSupported`
+
+**Message**
+
+```text
+The rest parameter '..{0}' cannot write a type.
+```
+
+**Help**
+
+```text
+A rest parameter is untyped: the tuple of the arguments left over is made at the call, so its element types are decided there. Write '..{0}'.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_param_typed.cml`, run as `camel test/cases/compile/rest_params/rest_param_typed.cml`)
+
+```camel
+module rest_param_typed
+
+func bad(..ts: int): int {
+    return 0
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### RestArgumentNotLast
+
+`0x0300018D` · Error · `SemanticDiag::RestArgumentNotLast`
+
+**Message**
+
+```text
+The rest argument '..{0}' must be the last positional argument.
+```
+
+**Help**
+
+```text
+'..e' expands to every element of 'e', so no positional argument can follow it. Named arguments cannot follow it either: write '..e' last.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_arg_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_last.cml`)
+
+```camel
+module rest_arg_not_last
+
+func sum(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+}
+
+func main(): int sync {
+    return sum(..(1, 2), 3)
+}
+```
+
+### RestArgumentNotTuple
+
+`0x0300018E` · Error · `SemanticDiag::RestArgumentNotTuple`
+
+**Message**
+
+```text
+The rest argument '..{0}' is not a compile-time tuple.
+```
+
+**Help**
+
+```text
+'..e' needs a tuple whose elements are known when the call is instantiated: a tuple literal, a tuple comprehension, or the rest parameter of the enclosing rest function. A runtime tuple value has no fixed arity here.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_arg_not_tuple.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_tuple.cml`)
+
+```camel
+module rest_arg_not_tuple
+
+func sum(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+}
+
+func main(): int sync {
+    return sum(..5)
+}
+```
+
+### RestFunctionNeedsExpansion
+
+`0x0300018F` · Error · `SemanticDiag::RestFunctionNeedsExpansion`
+
+**Message**
+
+```text
+The rest function '{0}' cannot be used here: {1}.
+```
+
+**Help**
+
+```text
+A function with a rest parameter has no runtime arity, so it has no function value and no instance: call it directly, with the arguments it takes.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_as_value.cml`, run as `camel test/cases/compile/rest_params/rest_as_value.cml`)
+
+```camel
+module rest_as_value
+
+func sum(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+}
+
+func main(): int sync {
+    let f = sum
+    return f(1, 2)
+}
+```
+
+### RestArgumentsMismatch
+
+`0x03000190` · Error · `SemanticDiag::RestArgumentsMismatch`
+
+**Message**
+
+```text
+The call to '{0}' gives {1} argument(s), but its fixed parameters need {2}.
+```
+
+**Help**
+
+```text
+A rest parameter only stands for the arguments after the fixed ones. Give at least as many arguments as the declaration has fixed parameters.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_too_few.cml`, run as `camel test/cases/compile/rest_params/rest_too_few.cml`)
+
+```camel
+module rest_too_few
+
+func first(a: int, ..ts): int {
+    return a
+}
+
+func main(): int sync {
+    return first()
+}
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -5774,12 +5973,30 @@ Module '{0}' provides no pass '{1}'; it provides {2}.
 A pass of a module is one of its exported functions of type `(p: Program) => Program!`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
 ```
 
-**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::nosuch std::nvm`)
+**Example** (`test/cases/linear/byref/wait_direct_user.cml`, run as `camel --output-format json test/cases/linear/byref/wait_direct_user.cml std::nvm hash::nosuchpass`)
 
 ```camel
-module tiny
+module wait_direct_user
+
+func before(x: int): int {
+    return x
+}
+
+sync func modify(var x: int): int sync {
+    wait x += 10
+    return 0
+}
+
+func run(): int {
+    var i = 1
+    let a = before(i + 1)
+    wait modify(i)
+    let b = i
+    return a * 1000 + b
+}
+
 func main(): int sync {
-    println(21 * 2)
+    println(run())
     return 0
 }
 ```
