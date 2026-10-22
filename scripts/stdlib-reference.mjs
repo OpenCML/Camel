@@ -1105,6 +1105,7 @@ async function probeImport(name, moduleName) {
 // expression whose compile fails is retried as a statement before the failure is reported (a void
 // call is a valid example of a writer such as save_params).
 async function exampleSource(module, entries, entry, code, asStatement = false) {
+    const names = [...new Set(entries.map((e) => e.name))]
     const lines = []
     if (module.name !== 'globals') {
         lines.push(`import { ${names.join(', ')} } from ${module.name}`)
