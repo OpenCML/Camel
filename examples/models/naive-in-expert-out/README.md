@@ -5,10 +5,11 @@ measurement harness, and the accuracy framework.  The rules pipeline that turns 
 into the expert form (`rules::accuracy`, `rules::fusion`, `explain`) is the other half and is not
 here.
 
-The model is small and fixed: batch 8, sequence 16, d_model 64, 4 heads of width 16, FFN 128,
-vocabulary 32, two pre-LN blocks, 68,288 parameters.  The loss is a per-position softmax
-cross-entropy; the labels are the largest of the first 32 features of each position.  Seeds are
-fixed and no wall clock enters the model.
+The program is written once, for one shape: batch 8, sequence 16, d_model 64, 4 heads of width
+16, FFN 128, vocabulary 32, two pre-LN blocks, 68,288 parameters.  The sweep measures the same
+program at d_model 64, 256 and 1024, with batch and sequence scaled as described under [the
+sweep](#the-sweep).  The loss is a per-position softmax cross-entropy; the labels are the largest
+of the first 32 features of each position.  Seeds are fixed and no wall clock enters the model.
 
 ## Run
 
@@ -22,8 +23,17 @@ camel -t 1 examples/models/naive-in-expert-out/train_step.cml std::fvm \
 camel -t 1 examples/models/naive-in-expert-out/train_step.cml std::jit \
     --arg bench=false --arg init_dir= --arg final_dir=
 
-# The three PyTorch counterparts and the float64 reference, plus the table.
+# The single-size table: the three PyTorch counterparts and the float64 reference.
 python examples/models/naive-in-expert-out/measure.py
+
+# The sweep the claim rests on: three widths, one thread and one per physical core.
+python examples/models/naive-in-expert-out/measure.py \
+    --d-model 64,256,1024 --threads 1,16 --repeats 3 \
+    --output results/2026-10-23-sweep-linux.json
+
+# Why "all cores" is 16 threads on this host and not its 32 hardware threads.
+python examples/models/naive-in-expert-out/thread_scale.py \
+    --output results/2026-10-23-thread-scaling-linux.json
 
 # The accuracy measurements (bf16/fp32/fp64; Camel's f32 side when --camel is given).
 python examples/models/naive-in-expert-out/accuracy.py \
@@ -31,88 +41,163 @@ python examples/models/naive-in-expert-out/accuracy.py \
 ```
 
 `measure.py` needs a built Camel install and a Python with torch; it finds both from the checkout
-and `sys.executable`.  It writes `results.json` next to the script (ignored by git) and prints
-the table.  The Camel program reads no environment variable: `bench`, `init_dir` and
-`final_dir` are `main` parameters, and the first run above passes all three explicitly.
-`measure.py` passes them itself (`--arg bench=true --arg init_dir=... --arg final_dir=...`).
+and `sys.executable`.  A single cell writes `results.json` next to the script (ignored by git) and
+prints the table; `--output` names a committed file instead.  The Camel program reads no
+environment variable: `bench`, `init_dir` and `final_dir` are `main` parameters, and the first
+run above passes all three explicitly.  `measure.py` passes them itself (`--arg bench=true --arg
+init_dir=... --arg final_dir=...`).
 
 The thread budget is the command line's `-t`: every pool of a run takes its size from that one
 number (the graph scheduler and each module's worker pool, the tensor kernels' included), and
-`CAMEL_NUM_THREADS` is no longer read.  `measure.py` passes `-t 1` to Camel and
-`torch.set_num_threads(1)` plus the OMP/MKL variables to PyTorch, so each framework runs one
-thread by its own documented mechanism.
+`CAMEL_NUM_THREADS` is no longer read.  `measure.py` passes `-t N` to Camel and
+`torch.set_num_threads(N)` plus the OMP/MKL variables to PyTorch, so each framework runs N
+threads by its own documented mechanism.  `--threads all` is `os.cpu_count()`, which is 32 on
+the host below.
 
-## Results
+## The sweep
 
-Measured 2026-10-22 19:27 UTC (2026-10-23 03:27 Asia/Shanghai).  The table is exactly what
-`measure.py` printed; the raw file, with every per-step time and the load it saw, is
-[`results/2026-10-23-linux.json`](results/2026-10-23-linux.json).
+The table this directory used to print measured one point: d_model 64, 128 tokens per step, one
+thread, 2.09 ms/step for Camel against 4.76 for eager PyTorch.  A point cannot support the claim
+it was attached to, because it cannot say whether the win is the tensor runtime or the fixed cost
+every operator pays when a step is a few milliseconds long.  The sweep is the table the claim
+needs: the same program and the same four implementations at three widths (`d_model` 64, 256,
+1024), each at one thread and at one thread per physical core.
 
-| implementation | ms/step | spread (3 rounds) | peak RSS MiB | final loss | \|dloss\| vs fp64 | max \|dparam\| vs fp64 |
-|---|---|---|---|---|---|---|
-| Camel (`std::jit`) | **2.091** | 2.029–2.195 | 40.5 | 1.568042986 | 1.8e-08 | 7.0e-06 |
-| PyTorch naive | 4.762 | 4.595–4.849 | 643.7 | 1.568042994 | 1.1e-08 | 7.5e-06 |
-| PyTorch expert | 3.919 | 3.750–4.013 | 643.7 | 1.568043113 | 1.1e-07 | 1.0e-05 |
-| `torch.compile(naive)` | 3.005 | 2.985–3.287 | 924.1 | 1.568042994 | 1.1e-08 | 1.4e-05 |
-| float64 reference | 5.802 | — | 648.4 | 1.568043004 | 0 | 0 |
+**What the widths do.**  Starting from the program's own shapes, a cell with `d_model = d` has
+`s = sqrt(d / 64)` and takes `batch = 8 * s`, `sequence = 16 * s`, `d_ff = 2 * d`, `d_head = 16`,
+`vocabulary = 32` and two blocks:
 
-**Conditions.** Host `tangshan88`: AMD EPYC 7343 16-Core, 32 hardware threads, 503 GiB RAM,
-Ubuntu 22.04 (kernel 6.8.0-138).  Python 3.10.12, NumPy 2.2.6, PyTorch 2.14.1+cu130 (a CUDA build; every variant ran on the
-CPU), Camel v0.2.24 built from commit `ab9cb4579` (clean build: no dirty paths, fingerprint
-`0dc0fec4c9b1` over 1,152 source files).  The host is **shared**: other builds and tests ran
-throughout, and the 1-minute load average was 31.7 when the run started and 34.1 when it
-ended, on 32 hardware threads.  The harness that produced the file is `38fbcbacc`'s
-`measure.py` (at measurement time it was the same content, not yet committed); it is Python,
-and nothing in the measured binary changed.
+| d_model | batch × sequence | tokens/step | heads | d_ff | parameters |
+|---|---|---|---|---|---|
+| 64 | 8 × 16 | 128 | 4 | 128 | 68,288 |
+| 256 | 16 × 32 | 512 | 16 | 512 | 1,059,584 |
+| 1024 | 32 × 64 | 2,048 | 64 | 2,048 | 16,821,248 |
 
-**Command.**  The whole table is one command:
+`batch` and `sequence` grow by the same factor as each other, and the token count grows with the
+width, so the step's arithmetic grows as the cube of the width (×64 per 4×).  That is the honest
+choice for this question, and it is stated rather than assumed: the number of operators in a step
+is fixed by the program, so the fixed per-operator cost stays roughly constant per step while
+the arithmetic grows.  To watch that cost stop dominating, the arithmetic has to grow with the
+width *and* with the data; growing only the width would have measured a narrower claim, and
+growing both axes by the full width ratio (×4 each, ×64 tokens per step) would make the largest
+step 65,536× the smallest and spend hours per cell to answer the same question — the crossover,
+if it is in this range, is reached long before that.  `measure.py`'s `shape_for` is this rule;
+`scaled_source` generates the Camel program from `train_step.cml` by substituting exactly the
+extents the cell names, counts every substitution, records the generated file's SHA-256, and the
+program's own `naive config` line is checked against the cell before a timing is accepted.
 
-```sh
-python examples/models/naive-in-expert-out/measure.py \
-    --camel out/latest/bin/camel --backend jit --repeats 3 \
-    --output results/2026-10-23-linux.json
-```
+**How a cell is measured.**  Each implementation runs 16 steps; the first 3 are warm-up and the
+step time is the median of the other 13, measured inside the process around one forward,
+backward and Adam update.  The four are measured in three interleaved rounds with a rotating
+order (round *r* starts with implementation *r*); ms/step is the median of the three round
+medians, and the spread is their minimum–maximum.  The float64 reference runs once per cell, for
+the accuracy comparison, so its row carries whatever load that one run saw: the 3233 ms at d=256
+with 16 threads is one such run, against 116 ms for the same program in the one-thread cell.
+Two entries are only ordered when the gap between them is wider than both spreads; where their
+round ranges overlap, the table's numbers do not order them and the verdict says so.
 
-It runs, with the thread budget passed explicitly to each framework:
+<!-- sweep-table:begin -->
+**ms/step, one thread** (median of 3 interleaved rounds; parentheses: the round range)
 
-```sh
-out/latest/bin/camel -t 1 .../train_step.cml std::jit \
-    --arg bench=true --arg init_dir=<scratch>/init --arg final_dir=<scratch>/final/camel
-python .../torch_impl.py --variant naive|expert|compiled|reference \
-    --init <scratch>/init --steps 16 --warmup 3 --threads 1 \
-    --save-final <scratch>/final/<variant>.npz
-```
+| implementation | d=64 | d=256 | d=1024 |
+|---|---|---|---|
+| Camel (`std::jit`) | 2.085 (2.072–2.089) | 60.980 (60.167–67.704) | 3186.178 (3066.772–3268.403) |
+| PyTorch naive | 4.569 (4.474–4.570) | 57.113 (56.472–62.645) | 2947.278 (2918.314–4617.991) |
+| PyTorch expert | 3.803 (3.777–3.830) | 58.879 (54.927–59.230) | 2397.578 (2328.843–2415.207) |
+| `torch.compile(naive)` | 2.938 (2.929–2.955) | 49.779 (49.350–50.593) | 2393.691 (2383.373–3522.431) |
+| float64 reference | 5.561 (one run) | 116.069 (one run) | 6780.466 (one run) |
 
-Each implementation runs 16 steps; the first 3 are warm-up and the step time is the median of
-the other 13, measured inside the process around one forward, backward and Adam update.  The
-four are measured in three interleaved rounds with a rotating order; ms/step is the median of
-the three round medians and the spread is their minimum–maximum.  Peak RSS is the maximum
-over the rounds of `/usr/bin/time -v`'s maximum resident set for the whole process,
-interpreter and allocator included, so it compares footprints, not model sizes.
+**ms/step, 16 threads** (median of 3 interleaved rounds; parentheses: the round range)
 
-**What the spreads say.** Camel 2.029–2.195 (spread 0.166 ms), PyTorch naive 4.595–4.849
-(0.255), expert 3.750–4.013 (0.262), compiled 2.985–3.287 (0.301).  The adjacent gaps are
-0.914 ms (Camel → compiled), 0.914 (compiled → expert) and 0.843 (expert → naive), each larger
-than the largest spread (0.301), so the order is real in this window.  A difference below
-~0.3 ms is not, and the absolute values are not portable: the same Camel row measured in a run
-that began at load 42 and ended at 68 was 3.081 ms (spread 2.165–4.555), and an early
-single-round probe without a recorded load gave 2.552 ms.  This is why the table has a spread
-column instead of a ranking alone.
+| implementation | d=64 | d=256 | d=1024 |
+|---|---|---|---|
+| Camel (`std::jit`) | 4.466 (3.714–4.616) | 42.194 (41.467–48.164) | 1897.177 (708.758–2134.288) |
+| PyTorch naive | 8.087 (6.582–8.138) | 35.831 (33.301–72.997) | 473.269 (453.214–10953.000) |
+| PyTorch expert | 7.669 (5.150–7.740) | 32.433 (29.952–34.261) | 398.472 (362.432–2628.657) |
+| `torch.compile(naive)` | 4.943 (4.827–5.270) | 25.840 (24.102–3289.390) | 693.676 (446.420–15543.034) |
+| float64 reference | 11.166 (one run) | 3232.954 (one run) | 1209.214 (one run) |
 
-**What it does and does not show.** The 2.091 ms row is the *naive* source: separate Q/K/V, no
-maximum subtraction, `log(softmax)`, no kernel written for this model.  It is faster than the
-same naive algorithm in eager PyTorch (4.762), than PyTorch's hand-written expert form (3.919)
-and than Inductor's compiled naive (3.005).  The win is the tensor runtime and the scheduler,
-not a hand-tuned kernel, and not the rules: `rules::accuracy`/`rules::fusion` do not exist yet,
-so the naive source was not rewritten into the expert form.  The comparison also cuts the
-other way: Inductor's compiled naive beats the hand-written expert form here, so "expert" is
-not synonymous with fastest.
+<!-- sweep-table:end -->
+
+**The crossover.** With one thread Camel is the sole fastest implementation at d=64 (2.085 ms,
+with `torch.compile(naive)` at 2.938) and it is not at d=256: `torch.compile(naive)` takes 49.8
+against Camel's 61.0, a gap of 11 ms wider than both round ranges, while Camel, PyTorch naive and
+the expert form sit inside each other's ranges. At d=1024 the medians keep that order
+(`torch.compile` 2394, expert 2398, naive 2947, Camel 3186), but one `torch.compile` round reached
+3522 and its range swallows Camel's, so by range the table orders only the expert form ahead of
+Camel. With 16 threads the crossover is at the same width: Camel is the sole fastest at d=64
+(4.47, `torch.compile` 4.94), and at d=256 its 42.2 ms is the highest of the four medians (25.8,
+32.4, 35.8), though one round of that cell fell into a load spike and all four ranges overlap. So
+the crossover is **d_model 256** at both thread counts: resolvably behind `torch.compile(naive)` at
+one thread, behind by median but not separable by range at 16. There is no width in 64–1024, at
+either thread count, where Camel is the sole fastest entry beyond d=64.
+
+**The ties, and what printing them costs.** Four of the six cells print a tie group, and three tie
+everything (d=256 at 16 threads, d=1024 at both). The reason is visible in the ranges: one round of
+the d=256 16-thread cell took 3289 ms in `torch.compile` against 24–26 ms in the other two — the
+host's load doubled mid-round — and a single spiked round widens a range until it overlaps every
+other one. Printing ties as ties costs the headline twice. It refuses the sentence a median-only
+table would allow ("PyTorch is 1.6× faster at 16 threads"), and it also refuses the opposite one
+("Camel is still ahead at 256"): at d=256 and above Camel is not resolvably the fastest, and this
+run does not bound how far behind it is. The factor between Camel and PyTorch naive at d=1024 with
+16 threads is 4× by median and 1.6× by fastest round, with the load moving from 12 to 109 during
+the cell; neither number measures the frameworks. What the run does support is the shape: Camel's
+2.2× advantage over PyTorch naive at d=64 does not survive the first widening.
+
+**Conditions.** Host `tangshan88`: AMD EPYC 7343, 16 physical cores and 32 hardware threads, 503
+GiB RAM, Ubuntu 22.04 (kernel 6.8.0-138), Python 3.10.12, NumPy 2.2.6, PyTorch 2.14.1+cu130 (a
+CUDA build; every variant ran on the CPU), Camel v0.2.24. The binary is the committed source:
+fingerprint `808a7e445efc`, built 21:07:38 UTC. The build that produced the numbers was stamped
+`2adf18c04` with seven dirty paths, because the compiler change it contains was committed as
+`539ad3808` while the sweep ran; rebuilding that commit here gives the same fingerprint, so the
+measured and the committed sources are one build. The
+harness is the `measure.py` committed with this table; it is Python, and nothing in the measured
+binary changed while the numbers were taken. The host is **shared**: other builds and tests ran
+throughout, and the 1-minute load average over the run ranged from 12 to 109 on 32 hardware
+threads; each cell's start, end and per-round samples are in the JSON, and the two d=1024 cells
+saw the worst of it.
+
+`16 threads` is one thread per physical core, not all 32 hardware threads. Asking for 32 on a
+16-core SMT part measures the host rather than the frameworks: in
+[`results/2026-10-23-thread-scaling-linux.json`](results/2026-10-23-thread-scaling-linux.json) a
+2048×1024 matmul takes 49.4 ms at 16 threads and 47.4 ms at 32 (no gain at all), while a 64×64
+matmul takes 0.0145 ms at one thread, 32.3 ms at 16 and 48.8 ms at 32 — the small operators this
+model is made of pay the whole wake-up bill for every thread they are given. That run saw load 72;
+its absolute values are as shared-host as the sweep's, and what reproduces is the absence of a
+gain from the 32nd thread. So "all cores" is 16 here. Absolute values are not portable in any case:
+the same d=64 single-thread Camel row measured 2.09 here and 2.55 in an earlier probe of this
+host, and every row here is a shared-host number.
+
+**d=1024 is a timing cell, not a convergence cell.** Every fp32 implementation leaves the finite
+numbers at step 8 there: Camel and PyTorch print the same loss to five digits up to step 7
+(3.531943823 and 3.531949043), and the float64 reference — same init, same learning rate —
+converges to 0.25. The naive source's header says large logits overflow `exp`; that is not what
+happens here (the logits stay O(1)), the fp32 trajectory itself diverges. Three of the four
+implementations are therefore timed partly on non-finite values (steps 8–15 of 16). The operator
+sequence does not change at the boundary and the per-step time does not either (round 2 of the
+d=1024 single-thread Camel cell: 3050–3086 ms, flat across it), so the ms/step values stand; the
+loss and parameter comparison against float64 does not exist for those rows, the JSON records
+`diverged_at_step: 8` instead of a number, and nothing here measures how fast a *stable* fp32 step
+at that size would be. The performance claim is about the arithmetic, and the arithmetic is the
+same whether its values are numbers or not.
+
+**What the sweep does not cover.**  Memory at d_model 1024 is not covered as a subject: with the
+runtime's default 2 GiB block space the 2,048-token cell does not run at all (the allocation of a
+33.5 MB tensor is refused with 1,911 MB in use), so `measure.py` passes `--block-limit 8192` to
+every cell to keep them comparable. Peak RSS is recorded per cell — at d=1024 it is 2.8 GiB for
+Camel and PyTorch naive, 2.5 for the expert form, 2.8 for `torch.compile` and 4.3 for the float64
+reference — but nothing charts the allocator, finds where a cell stops fitting, or measures the
+cost of the 2 GiB limit as a limit. The effect of the rules pipeline is not covered because it is
+not usable end to end yet: `rules::accuracy` and `rules::fusion` exist as libraries with their own
+tests, but the naive source is not rewritten into the expert form, so the "Camel + rules" row the
+ruling asks for cannot be measured. The GPU is not covered; that is H49.
 
 **The earlier numbers.** 2.062 ms/step was reported for an earlier revision and 2.314 ms/step
 on a busy host.  Neither report left its machine, command or revision in the tree—this
 repository contains neither number in a file or a commit message—so they are context, not a
-baseline.  This table's 2.091 (2.029–2.195) is consistent with both, and 2.062 vs 2.091 is
-below this measurement's spread: it is not evidence of a regression.
+baseline.  The single-size table's 2.091 (2.029–2.195), in
+[`results/2026-10-23-linux.json`](results/2026-10-23-linux.json), is consistent with both, and
+2.062 vs 2.091 is below that measurement's spread: it is not evidence of a regression.
 
 ## What the naive program does
 
