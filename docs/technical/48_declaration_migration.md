@@ -114,8 +114,9 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
   Q-M（模块类型不接受类型变量）、Q1（声明看不见类型实参）、Q3（类型变量谓词），加上 H140 的
   「没有执行器」。由实参算结果、但写法本身合法的名字算**计算**，不算阻塞；这是 H157 §0 与
   47 §4.3 的分法。
-- **重载** = `inspect --ops` 的 `OPERATOR` 行去掉 `::` 别名与 `__` 组后的条数；`--verify-ops`
-  的 522 是这个口径加上 `<builtin>`。
+- **重载** = `inspect --ops` 的 `OPERATOR` 行去掉 `::` 别名与 `__` 组后的条数。522 =
+  403（22 个声明模块）+ 23（`ckpt` 7、`env` 2、`hash` 3、`process` 3、`rewrite` 8）+
+  96（`<builtin>`）。
 
 ## 3. 机制
 
@@ -194,7 +195,7 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 | 项 | 状态 | owner | 证据 |
 |---|---|---|---|
 | `env`（2 名 2 条）、`process`（3 名 3 条）、`hash`（2 名 3 条） | 固定签名，参考文件仍在 `stdlib/signatures/`；没有 `stdlib/<m>.cml`。没有机制缺口 | H19 第 10 步的剩余批次 | [H19 计划](../handover/reports/H19-plan.md) §0.1；[H115](../handover/reports/H115.md) §10 |
-| `rewrite`（8 名 10 条） | 声明已经写在 `stdlib/signatures/rewrite.cml`，但没有编译：3 个保留组没有 Camel 名（见 §4.1） | 先决定保留组的例外，再做迁移 | [H157](../handover/reports/H157.md) §2 |
+| `rewrite`（8 个可声明名字，参考文件里 10 条声明） | 声明已经写在 `stdlib/signatures/rewrite.cml`，但没有编译：3 个保留组没有 Camel 名（见 §4.1） | 先决定保留组的例外，再做迁移 | [H157](../handover/reports/H157.md) §2 |
 | `globals`（50 名 96 条） | 语言全局，`BuiltinModule("")`、不可导入；不是模块，没有声明宿主 | 作者（H141 的调查，未裁定） | [H141](../handover/reports/H141.md) |
 | `math` / `graph` 的内联计算签名 | 记法问题，不是能力问题 | H180 | 本页 §3.4 |
 | `tensor` 的 `range`、`sum`、`mean` | 轴形式与全量形式共用一个名字，拆成两条声明会违反「一个名字一处」；47 §4.2 把它记作策略，不是缺口 | 作者若愿意放宽「一个名字一处」 | [H151](../handover/reports/H151.md) §3.4；[47](47_declaration_syntax.md) §4.2 |
