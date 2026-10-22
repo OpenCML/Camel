@@ -462,6 +462,17 @@ void Builder::takeConstasValues(
                 data = dataOfStaticValue(valueType, *constant.value);
             }
         }
+        if (data == nullptr && expr != nullptr && expr->type() == GCT::NodeKind::LINK) {
+            // A call of a pure function with constant arguments is a constant, and this place
+            // needs one: a call that does not reduce to one is refused by its own name
+            // (design principles 5.1, 6.5), not as a value without a constant.
+            const FoldedCall folded = foldConstantCall(expr);
+            if (folded.data != nullptr) {
+                data = folded.data;
+            } else if (folded.refusal != FoldRefusal::NotAProgramCall) {
+                reportFoldRefusal(folded, expr);
+            }
+        }
         if (data == nullptr || valueType == nullptr) {
             diags_->of(SemanticDiag::ConstasValueNotConstant)
                 .atOrigin(expr != nullptr && expr->origin() != 0 ? expr->origin() : call->origin())

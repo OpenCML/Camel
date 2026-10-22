@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-238 diagnostics: 219 errors, 19 warnings.
+243 diagnostics: 224 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -199,6 +199,11 @@ prints one entry.
 | `0x030001B4` | [SemanticDiag::TypeOfNotWholeType](#typeofnotwholetype) | Error |
 | `0x030001B5` | [SemanticDiag::SameShapeComprehensionNotComposite](#sameshapecomprehensionnotcomposite) | Error |
 | `0x030001B6` | [SemanticDiag::SameShapeComprehensionMismatch](#sameshapecomprehensionmismatch) | Error |
+| `0x030001C5` | [SemanticDiag::FoldCallArgumentNotConstant](#foldcallargumentnotconstant) | Error |
+| `0x030001C6` | [SemanticDiag::FoldCallHasEffects](#foldcallhaseffects) | Error |
+| `0x030001C7` | [SemanticDiag::FoldCallTooDeep](#foldcalltoodeep) | Error |
+| `0x030001C8` | [SemanticDiag::FoldCallResultNotConstant](#foldcallresultnotconstant) | Error |
+| `0x030001C9` | [SemanticDiag::FoldCallNotEvaluable](#foldcallnotevaluable) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5375,6 +5380,166 @@ func build(u: B) {
 func main(): int sync {
     println(build({b: 1, c: 2}))
     return 0
+}
+```
+
+### FoldCallArgumentNotConstant
+
+`0x030001C5` · Error · `SemanticDiag::FoldCallArgumentNotConstant`
+
+**Message**
+
+```text
+The call of '{0}' cannot be evaluated at build time: {1}.
+```
+
+**Help**
+
+```text
+A call in a place that needs a compile-time constant is evaluated only when every argument is a constant itself: a literal, the 'n' of a 'static for', a 'constas' value, or an expression the compiler can evaluate. Make the argument a constant, or move the call to a place where a runtime value is accepted.
+```
+
+**Example** (`test/cases/compile/fold_calls/argument.cml`, run as `camel test/cases/compile/fold_calls/argument.cml`)
+
+```camel
+module fold_call_argument
+
+func half(n: int): int {
+    return n / 2
+}
+
+func at(t: (int, int, int), n: int): int {
+    return t.[half(n)]
+}
+
+func main(): int {
+    return at((10, 20, 30), 4)
+}
+```
+
+### FoldCallHasEffects
+
+`0x030001C6` · Error · `SemanticDiag::FoldCallHasEffects`
+
+**Message**
+
+```text
+The call of '{0}' cannot be evaluated at build time: {1}.
+```
+
+**Help**
+
+```text
+Only a pure call is evaluated: a function with no effects and no reads of mutable state. Remove the effect from the declaration, or call it where a runtime value is accepted.
+```
+
+**Example** (`test/cases/compile/fold_calls/effect.cml`, run as `camel test/cases/compile/fold_calls/effect.cml`)
+
+```camel
+module fold_call_effect
+
+func reveal(s: string): string uses stdout {
+    println(s)
+    return s
+}
+
+func main(): int {
+    let t = { x: 1 }
+    return t.[reveal('x')]
+}
+```
+
+### FoldCallTooDeep
+
+`0x030001C7` · Error · `SemanticDiag::FoldCallTooDeep`
+
+**Message**
+
+```text
+The call of '{0}' cannot be evaluated at build time: {1}.
+```
+
+**Help**
+
+```text
+A call that recurses without reaching a value for the constants it is given is not a compile-time constant. Give the recursion a base case that the constants reach, or move the call to a place where a runtime value is accepted.
+```
+
+**Example** (`test/cases/compile/fold_calls/depth_limit.cml`, run as `camel test/cases/compile/fold_calls/depth_limit.cml`)
+
+```camel
+module fold_call_depth_limit
+
+func spin(n: int): int {
+    return spin(n + 1)
+}
+
+func main(): int {
+    let xs = (1, 2)
+    return xs.[spin(0)]
+}
+```
+
+### FoldCallResultNotConstant
+
+`0x030001C8` · Error · `SemanticDiag::FoldCallResultNotConstant`
+
+**Message**
+
+```text
+The call of '{0}' cannot be used as a compile-time constant: {1}.
+```
+
+**Help**
+
+```text
+A compile-time value is a number, a bool, a string or a character. Return one of those from the function, or move the call to a place where a runtime value is accepted.
+```
+
+**Example** (`test/cases/compile/fold_calls/result_kind.cml`, run as `camel test/cases/compile/fold_calls/result_kind.cml`)
+
+```camel
+module fold_call_result
+
+func pair(): (int, int) {
+    return (1, 2)
+}
+
+func main(): int {
+    let t = { x: 1 }
+    return t.[pair()]
+}
+```
+
+### FoldCallNotEvaluable
+
+`0x030001C9` · Error · `SemanticDiag::FoldCallNotEvaluable`
+
+**Message**
+
+```text
+The call of '{0}' cannot be evaluated at build time: {1}.
+```
+
+**Help**
+
+```text
+The body of a folded call is read from the same constructs a 'when' condition reads: data, names, blocks, 'match type', 'static for'/'static loop', branches, fields, arithmetic and comparisons, and calls of other pure functions. Rewrite the body with those, or move the call to a place where a runtime value is accepted.
+```
+
+**Example** (`test/cases/compile/fold_calls/not_evaluable.cml`, run as `camel test/cases/compile/fold_calls/not_evaluable.cml`)
+
+```camel
+module fold_call_not_evaluable
+
+func first_of_list(): int {
+    let xs = [1, 2, 3]
+    return xs.[0]
+}
+
+func main(): int {
+    let t = (10, 20, 30)
+    return t.[first_of_list()]
 }
 ```
 
