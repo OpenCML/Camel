@@ -1,0 +1,754 @@
+# H4 报告
+
+分支：`handover/H4a-constas`、`handover/H4b-for-iterate`、`handover/H4cf-onnx`、`handover/H4d-loop-design`、`handover/H4d-impl`、`handover/H4e-math-numeric`（工作树 `D:\Projects\Camel-wt\h4*`）。
+本文件按项分节；各项由各自的分支交付，协调者复核、提交与合并。
+
+## H4d 自动微分支持 `LOOP`（设计）
+
+设计已获语言作者确认（四个问题的答复见 H4d 报告末尾的「决定」），实现分两步：先给循环节点加收集输出，
+再由自动微分使用它。本报告这一节记的是设计，不是实现。
+
+依据：设计原则 3.10（循环）、3.5（梯度不经 `var`）、9.9（自动微分是库，不是语言核心）、第 14 节；`docs/design/loops/README.cn.md` §5.6 与 Q12；`docs/technical/39_loops.md`；`include/camel/runtime/loop.h` 的 `LoopView`。
+
+### 1. `LOOP` 是什么、今天怎样执行、拒绝发生在哪里
+
+**节点。** 一个循环是外层图里的一个 `LOOP` 节点（`include/camel/runtime/graph.h:116-123`，节点体 `GCLoopBody`，`:239`）：Norm 入边是「可遍历数组（`For`/`ForWhile`）+ k 个状态初值」，With 入边是条件图与循环体图**共用**的捕获表，Ctrl 入边是顺序；节点体是形式（`While`/`For`/`ForWhile`）与两张子图。节点的值是最后一个状态：k = 1 时是那个值，k > 1 时是 k 元组。`LoopView`（`include/camel/runtime/loop.h:64-130`）是消费者的只读视图：形式、`stateCount`、`stateType(j)`、`iterable()`、`initialState(j)`、`captures()`、`condGraph()`/`bodyGraph()`、两张图的端口（`condStateParam`、`bodyElementParam`、`bodyStateParam`、`cond/bodyCapturePort`）、`nextState()`/`nextStateComponent(j)`、效应摘要。
+
+**执行。** 每一轮的顺序与端口布局只有一份，在 `include/camel/execute/loop_driver.h`：`driveLoopRounds`（`:85-103`）先调条件图（`While`/`ForWhile`），再取下一个元素（`For`/`ForWhile`），再调循环体图，体图的结果就是下一轮的状态；`bindLoopRound`（`:56-71`）把元素、k 个状态、m 个捕获绑进这一轮的帧。解释器只提供帧与调用：`std::nvm` 原生（`NodeVMSchedPass::evalLoop`）、`std::fvm`/`std::jit` 默认在入口用 `lowerLoopsToTailRecursion`（`include/camel/runtime/loop_lowering.h`）降级、`std::macro` 原生意并按 `--max-macro-rounds` 限轮数、`std::prl` 在入口降级（`docs/technical/39_loops.md:90-101`）。
+
+**拒绝。** 在 `modules/autodiff/pullback.cpp:1933-1943`，`Backward::visit` 的 `case GCNodeKind::Loop`：
+
+```
+failAt(forward_.nodeOrigin(node),
+       "cannot differentiate through a 'loop' expression yet{}; write the loop as a "
+       "tail-recursive function, which is differentiated")
+```
+
+到达路径：`Engine::gradient`/`Engine::build`（`:2225-2286`、`:2288-2367`）→ `Backward::run` 逆序扫描（`:1624-1629`，只有 `gradients_` 里有梯度的节点才 `visit`）→ `visit`。前向改写 `ForwardRewrite::run`（`:930-970`）不碰 `LOOP`，所以前向图原地保留循环，只有反向扫到它时抛错。它是 `failAt`，**立即抛**，不像函数值的那些拒绝先进 `refused_` 再由 `Engine::refuse` 挑源码序最前的一条。测试：`test/cases/loops/grad_refused.cml`，计划 `loops.grad_refused`、`loops.grad_refused_lowered`（`test/plans/feat/linear/loops.plan.toml:302-324`）。
+
+### 2. 反向：每轮要存什么、存在哪、怎么释放
+
+**存什么。** 不存整份状态，存**每一轮循环体的回传闭包**：`body.fwd` 返回 `(s', pb)`，`pb` 按现有机制捕获这一轮规则要读的残差（`Backward::finishCaptures`，`pullback.cpp:2084-2115`；`addClosure`，`:304-311`）。这就是今天递归版每步在栈上的那一层闭包（`pullback.h:30-34`：「捕获的残差与回传闭包就是磁带」），只是从调用栈搬到堆上、串成一个序列。状态本身不必另存：规则要用的状态值已经是某个残差，会被闭包捕获。
+
+**前向：`LOOP` 多携带一个状态（磁带）。** 在 `ForwardRewrite` 里加一个 `rewriteLoop(node)`（与 `rewriteCall` 同级），用 `Engine::planFor(bodyGraph)`（`:2116-2130`，按图记忆、递归安全）拿到体图的 `(s', pb)` 计划，然后：
+
+1. 体图包装图：端口 `(元素?, s1…sk, tape)` + 同样的 With 捕获；调用 `body.fwd`，`ACCS` 取出 `(s', pb)`，把 `pb` 追加进磁带，`FILL` 出新的 `(k+1)` 元组状态。
+2. 条件图包装图（只有 `While`/`ForWhile`）：端口 `(s1…sk, tape)` + 同样的捕获；调用原条件图，丢掉 tape 端口，返回 `bool`。
+3. 原地改造这个 `LOOP` 节点：节点体换成两张包装图，Norm 入边末尾补一条**空磁带的常量**（元素/初值/次序不变），节点类型改成 `(状态, 磁带)`；With 入边不动（捕获表本来就只有一份）。
+4. 记账成一次「调用点」：`state = ACCS 0(loop)`、`tape = ACCS 1(loop)`、`pb = addClosure(forward, 反向循环图, pb 类型, {tape})`，把 `loop` 的所有值使用者换成 `state`，并把 `sites_[state] = CallSite{pb, inputs = 捕获… + 初值…, plan}`。这一步的簿记与 `ForwardRewrite::split`（`:979-1019`）逐行相同（`replaceAllValueUses`、`sites_` 里输入的重定向、Ctrl 使用者与 output/exit/return 的重定向），只差 `split` 现在假定**节点自己的值**已经是 `(value, pullback)`，而 `LOOP` 的值是 `(状态, 磁带)`。建议把 `split` 抽成 `split(valueNode, pullbackNode, plan, inputs)` 两个节点都传入的形式，一处实现两种节点共用；不要复制一份 `splitLoop`。**`Backward` 一行都不用改**：`Backward::visit` 先查 `sites_`（`:1892-1895`），命中就走 `visitCallSite`，用 `plan.tangentIndex` 把返回的切向量分别累加回 `initialState(j)` 与 `captures()[c]`（`:1952-1968`）。`plan` 用 `makePlanTypes` 造，端口序按现有约定「With 在前、Norm 在后」（`portTypesOf`，`:446-454`；`pullback.h:66-72`）。
+
+**反向：一个倒着走的 `While` 型 `LOOP`。** 状态 `(i, ds…, dc…)`：`i = len(tape) - 1`，条件 `i >= 0`；每轮 `pb = tape[i]`、`(ds, dc_i) = pb(ds)`、`dc += dc_i`、`i -= 1`；循环的值是最终的 `(ds_0, dc)`。循环体图是新造的：`:op/idx_arr`（`src/builtin/modules/globals.cpp:1143-1157`）取元素、`addCall`（`pullback.cpp:264-270`，动态 `CALL`，被调值是磁带元素）调用、`ACCS` 拆元组、`:op/add` 累加、`:struct/len_arr`（`:1338`）算长度、常数 1 与减法走下界。一轮也不执行时（空磁带）反向循环不跑，`ds_0 = dy`、`dc = 0`，与「循环的值就是初值」一致。
+
+**与图存储 / GC 的关系。** 新造的四张图（两张包装图、反向循环的条件图与体图）是 `Engine::group_` 里普通的 `GraphDraft`（`reserve`/`define`，`pullback.cpp:2344-2366`），随整个导数一起由 `GraphDraftGroup::encode` 编码（`src/runtime/draft_session.cpp:1041-1076`）——它对 `GCLoopBody` 的两个图指针本来就走同一套前向引用重映射（`visitDraftGraphs` `:355-403`、`encodeDraftGraph` `:475-542`），与 `addFuncNode` 的被调图一样。`GraphDraft` 有 `addCallNode`/`addLoopNode`（`include/camel/runtime/draft.h:324,332`）。**不动图存储、不动 GC**：唯一新增的是「多一个数组值」。峰值内存 = 轮数 × 每轮残差（与递归版每一帧同量级，只是不在栈上），在整个反向期间都必须活着。
+
+一个实现细节：`LoopView` 只接受冻结的 `GCGraph`，而变换手里是 `GraphDraft`。建议在 `camel/runtime/loop.h` 增加一个 draft 版访问器（或 `LoopShapeOf(const GraphDraft&, node)`），让端口布局的知识仍然只有一处，而不是在 autodiff 里再抄一遍 `element? + k` 的约定。
+
+### 3. 轮数未知时怎么办
+
+**设计不需要提前知道轮数。** 磁带是运行期长出来的数组，长度就是实际轮数，反向循环从 `len(tape)-1` 开始；`While` 的轮数由条件决定、`For` 的由数组长度决定，两者都不进入变换期的判断。代价只有一项：**存下每一轮**，`O(轮数)` 的堆内存。
+
+三种取磁带的方式，代价差别很大：
+
+| 方式 | 每轮代价 | 总计 | 备注 |
+|---|---|---|---|
+| (a) 节点增加「收集输出」（scan output，ONNX `Loop` 的 scan） | O(1) | O(n) 内存、O(n) 拷贝 | 执行器每轮把一个值收进数组；要改节点定义（op-semantics 11） |
+| (b) 体图里 `:struct/append_arr`（`src/builtin/operators/struct.cpp:215-223` 每轮复制整个数组） | O(i) | **O(n²) 拷贝** | 不改任何东西，今天就能写出来 |
+| (c) 不存，反向时重算 | 内层重算 i 轮 | O(n²) 时间、O(1) 内存 | 导出器对尾递归的梯度就是这么做的（`modules/onnx/exporter.cpp:1621-1640`：「no tape: the cost is quadratic in n」） |
+
+设计取 (b) 做第一步的实现（正确、零新机制），目标形态是 (a)（线性、且正好对应 ONNX 的 scan output，见 `docs/design/loops/README.cn.md` §5.6 与 Q12）；(c) 作为对照保留。**是否允许磁带无上限地长、要不要一个上限或检查点（checkpointing）策略，不在本设计里定**（见 Q2）。
+
+### 4. 嵌套与并行
+
+**循环套循环。** 内层循环就是外层循环体图里的一个节点。外层体图被 `Engine::planFor` 登记成一个待建计划；外层的反向扫到内层 `LOOP` 时，同一条 `rewriteLoop` 再走一遍，得到内层的「前向循环 + 反向循环」，它们活在外层体图的 `.fwd` / `.pb` 里。内层磁带在外层每一轮里新建，被内层的 pullback 捕获，再被外层追加进外层磁带——内存是各轮内层磁带之和，这是反向模式本身的代价，不是这套设计的额外开销。计划的递归安全由现有的 `plans_` 记忆与 `pending_` 队列保证（`:2116-2130`、`:2349-2361`）。条件图不需要导数（`bool` 没有切向量），所以条件图里的循环不会被改写；条件图本身也不进计划。
+
+**对并行调度器的要求。** 循环按定义严格顺序（原则 3.10、`docs/design/loops` 4.6；`std::prl` 在入口降级，`39_loops.md:97`），梯度不要求调度器新增任何并行能力，但要求四件事：
+
+1. 轮与轮之间不得拆成任务、不得重排；反向循环是顺序折叠，不能被当成 `unordered_reduce`。
+2. **每一轮必须是 GC 安全点**：梯度的前向循环每轮分配一个闭包。今天 `driveLoopRounds` 的 `beforeRound` 提供了它（nvm 与 macro 原生执行、降级形态走调用边界）；将来 `std::fvm` 的原生字节码循环（`39_loops.md:170-173`）必须在回边补一个，否则不断分配的循环永远不回收。
+3. 即时编译不得编译会分配的循环体：`std::jit` 的资格判定只收纯标量图（`src/passes/sched/jit/x64_backend.cpp:102-151`），梯度循环含 `CALL`/`FILL`，自然不入选；这条限制要写进判定而不是靠运气。
+4. `std::prl` 每次运行对「执行期拿到的函数图」的降级缓存（`39_loops.md:111-119`）同样适用：合成出来的循环要么被降级、要么被原生执行，不能出现「源码图有 `LOOP`、字节码按降级帧布局执行」的错配——这一点现有实现已经排除，梯度图只是多几个循环，不需要新规则。
+
+另一个附带后果：`std::macro` 的轮数上限对两个循环都计数，`grad` 下的循环实际上限减半（前向 n 轮、反向 n 轮）。
+
+### 5. 待决问题
+
+#### Q1：磁带放在哪里——给 `LOOP` 增加「收集输出」，还是先用复制式 `append`，还是重算？
+
+例子：`let dp = grad(loss)(p0)`，`loss` 里是 `loop p = p0 for d in ds do step(p, d)`；轮数 n 未知。
+建议：**第一步用 (b)（`:struct/append_arr`，O(n²) 拷贝），目标形态 (a)（节点的 scan output，O(n)）**；(c) 只在需要「零额外内存」时用。选 (a) 要改节点定义与 op-semantics 11，并影响 ONNX 的 `Loop` 映射（§5.6、§5.7、Q12），是语言表面的契约，所以由语言作者定；它不确定下来不挡第 1–2 步的实现。
+影响：不定 (a) 就只能交付二次代价的梯度（今天导出器的梯度就是二次的）；定了 (a) 才能同时把「梯度的 ONNX 导出」做成线性。
+
+#### Q2：长循环的磁带允许无上限吗？要不要上限或「拒绝」
+
+例子：`loop acc = 0 for x in xs do acc + f(acc, x)`，`xs` 有一千万个元素，求梯度要留一千万份残差。
+候选：不设上限（今天递归版的栈也不设，深浅由用户控制）；给 `grad` 一个可配置的轮数上限，超过按资源耗尽处理并带位置报告；用检查点技术把内存降到 `O(√n)` 但多算一遍。
+建议：**先不设上限**，与现有递归梯度一致；如果要设，必须同时写进 `docs/cli.md` 的资源上限表，并且是「故障」还是「编译期拒绝」要定清楚（编译期无法知道轮数，所以只能是运行期故障，或者按「循环最多可能跑多少轮」在静态可判时拒绝）。
+影响：不定它，第 1 步按无上限实现；定了才谈检查点。
+
+#### Q3：循环遍历的数组本身依赖被求导的参数时，拒绝还是支持？
+
+例子：`func f(w: float): float { return loop acc = 0 for x in scale(xs, w) do acc + x }`。
+现状：数组今天没有切向量（`op/idx_arr`、`map` 都没有规则），把它的梯度丢掉不会有任何提示。
+建议：**拒绝**，诊断带位置，措辞沿用「数组不是可微值」这一类；与 `map` 的拒绝一致。以后要支持，得先有数组的切向量，那是另一个任务。
+影响：不拒绝就会静默返回错误梯度；拒绝则这部分循环暂时不可求导。
+
+#### Q4：循环体（或条件）里有副作用时，`grad` 允许吗？
+
+例子：`loop acc = 0 for x in xs do sync { println(x); acc + x * w }`。
+现状规则：`grad` 允许被求导的函数有副作用，前向照常执行（`docs/technical/26` 4.4 末），反向是纯的。按同一规则，循环体的效应在前向每轮执行一次，反向不再执行。
+建议：**沿用现有规则**（允许，效应只在正向发生），只把「可微类型的 `var` 在循环体/条件里被读」按 3.5 拒绝（循环体是子图，等价于「在被调函数里读」，`checkVariableReads` 的现有判据扩展到两张子图）。
+影响：若作者认为循环体内的效应应当拒绝，诊断与测试要另写；`var` 那一条属于库的既有约束，不是新语义。
+
+#### Q5：梯度的 ONNX 导出是否与本设计的磁带方案同批做？
+
+例子：`onnx::export` 一个含 `loop` 的梯度函数（今天 `loops.onnx_refused*` 直接拒绝）。
+建议：**不在 H4d 内做**；但第 1 步选磁带形态时要照顾它（(a) 的 scan output 正好对应 ONNX `Loop` 的 scan output，闭包要按捕获的叶子展开）。
+影响：只影响顺序，不影响本设计能否落地。
+
+### 6. 第一版做什么（最小的可用增量）
+
+每步都能单独合入、且**只放开一种形状，其余形状继续按 §1 的 `failAt` 拒绝**（宁可拒绝，不可静默丢梯度——这是库里现有的取舍，`pullback.cpp:1919-1932` 的注释是同一理由）。
+
+1. **`For`、k = 1、无捕获、`tape` 用 `append` 数组。** 加 `rewriteLoop`：两张包装图 + 原地改造 `LOOP` + 把 `split` 抽成共用形式后记 site + 反向 `While` 循环；`Backward` 不改。验收用例就是最小的那个循环，例如
+   `func f(x: float): float { return loop y = x for k in [1.0, 2.0, 3.0] do y * k }` → `grad(f)(x)` 应得 6（1·2·3）。
+   与有限差分对比，跑 `std::nvm`、`std::fvm`、`std::macro`（`grad` 需要 `std::macro`）。其余形状（`While`、有捕获、k > 1）仍走旧拒绝，把 `case GCNodeKind::Loop` 的消息改成具体缺哪种形状。
+2. **捕获（权重）**：累加 `dc`，把 `plan` 的端口序与 `sites_` 的 `inputs` 对齐。这是训练的实际形状（`loop p = p0 for d in ds do step(p, d)` 的 `p0` 与捕获的权重都要求导），用例对权重与初值都做差分对比。
+3. **`While`/`ForWhile`（条件包装图）与 k > 1 的元组状态**：`nextStateComponent` 展开、切向量按 `ACCS` 拆。
+4. **嵌套**、以及 Q3/Q4 的拒绝规则：活跃的可遍历数组、循环体/条件里的 `var` 读、效应策略；`checkVariableReads` 扩展到两张子图，诊断文本点名 `loop`。
+5. **按 Q1 换磁带形态**（`scan output`），把第 1 步的二次代价改成线性；之后再做 Q5 的梯度导出，并退役 `loops.grad_refused*` 两个拒绝测试（改成有限差分正例，理由写进提交信息，不是为通过而改期望）。
+
+顺带要改的既有测试：`test/cases/loops/grad_refused.cml` 与 `test/plans/feat/linear/loops.plan.toml:302-332` 的两条拒绝在对应步骤完成后变成正例；`loops.grad_refused_lowered` 的「降级之后仍拒绝」这条语义随之消失（`39_loops.md:121-130` 有关 `:graph/original` 的那段行为不变）。
+
+## H4c ONNX 导出 `ArgMax`
+
+分支：`handover/H4cf-onnx`（worktree `D:\Projects\Camel-wt\h4cf-onnx`），2026-10-20。
+
+### 做了什么
+
+`modules/onnx/lowering.cpp` 的 `lowerArgMax` 之前发一个 ONNX `ArgMax`（`axis`、`keepdims`）就返回。ONNX `ArgMax` 的 `select_last_index=0` 只保证并列取第一个；NaN 的排序未定义，`-0` 与 `+0` 比较相等，所以它不实现设计原则 7.7。现在按元素类型分三路：
+
+- `int64`：直接 `ArgMax`（整数没有 NaN 和 `-0`，「首个最大」就是 7.7）。
+- `bool`：`Cast` 到 `int64` 再 `ArgMax`（false < true，没有 NaN）。
+- `float32`/`float64`：组合子图，见下。其它元素类型抛 `ExportError`；`exporter.cpp` 的 `applyOper` 会把源码位置加到最内层节点，诊断因此带位置。
+
+注册的最低 opset 改为 12（`add("tensor:argmax_axis", lowerArgMax, 12)`）：`select_last_index` 是 opset 12 引入的，组合里靠它保证并列取第一个。
+
+### 组合出的子图（float32/float64）
+
+记输入 `x`，归约轴 `a`；所有 mask 都与 `ArgMax` 的结果同形（`keepdims` 与调用一致），因此不需要 `Squeeze`：
+
+1. `nanMask = Not(Equal(x, x))` —— IEEE 754 的 NaN 判据（`x != x`）。
+2. `hasNaN = Cast(ReduceMax(Cast(nanMask, int64), a, keepdims), bool)` —— 该轴有没有 NaN。
+3. `nanFirst = ArgMax(Cast(nanMask, int64), a, keepdims, select_last_index=0)` —— 第一个 NaN 的位置。
+4. `y = Where(nanMask, -inf, x)` —— NaN 不再参与数值比较；用 -inf 而不是 0，保证它不会赢过任何有限值或 +inf。
+5. `valueFirst = ArgMax(y, a, keepdims, select_last_index=0)` —— 数值最大者中第一个的位置；`y` 里已经没有 NaN。
+6. 有符号零：`plusZero = And(Equal(y, 0), Greater(Reciprocal(y), 0))`，`anyPlus = Cast(ReduceMax(Cast(plusZero, int64), a, keepdims), bool)`，`plusFirst = ArgMax(Cast(plusZero, int64), a, keepdims, select_last_index=0)`，`maxValue = ReduceMax(y, a, keepdims)`，`usePlus = And(Equal(maxValue, 0), anyPlus)`。
+7. `value = Where(usePlus, plusFirst, valueFirst)`：最大值是 0 且轴上有 +0 时取第一个 +0（7.7 的 +0 > -0），否则取第一个零（此时只有 -0）。
+8. `result = Where(hasNaN, nanFirst, value)`：有 NaN 时第一个 NaN 胜出。
+
+`Reciprocal(+0) = +inf`、`Reciprocal(-0) = -inf` 是 ONNX Runtime 的 IEEE 行为，也是这里不经过位级访问就能区分两种零的写法。标准 ONNX 没有 `Bitcast`（我在 opset 17 上试过：`No Op registered for Bitcast`），所以没有位级方案。
+
+### 用到的 ONNX 算子
+
+`Equal`、`Not`、`Cast`、`ReduceMax`、`ArgMax`（`select_last_index=0`）、`Where`、`Reciprocal`、`Greater`、`And`；`bool` 输入多一个 `Cast` 到 `int64`。能力表 `modules/onnx/capabilities/onnxruntime-cpu.json` 里这些算子对 `float32`/`float64`/`int64`/`bool` 都支持，不需要改能力表。
+
+### 测试与结果
+
+新用例 `test/cases/modules/onnx/ort_argmax.cml`：从 `float32 [2,8]` 和 `int64 [2,8]` 各导出一个三元组 `(argmax(x,1), argmax(x,1,true), argmax(x,0))`，所以也覆盖了「轴不是最后一维」。`test/cases/modules/onnx/ort_argmax.py` 用 NumPy 按 7.7 独立算期望（整数按首个最大），在 ONNX Runtime 上跑固定用例：并列、有 NaN（第一个 NaN 胜出）、`-0`/`+0` 混排、全 NaN、负数、`+0` 在 `-0` 之后、`±inf`、全相等；`float32` 另加 40 组随机数组（含 NaN 与两种零），`int64` 加 20 组随机数组。计划项 `ort_argmax` 在 `test/plans/feat/modules/onnx.plan.toml`，`skip_unless` 检查 numpy/onnx/onnxruntime。
+
+结果：`ort argmax: 0 failing`、`PASS`；整个 ONNX 计划 125/125 通过（含本条与下面的切片用例）。没有跳过的用例。
+
+### 待决问题
+
+1. **`argmin` 仍不导出。** `tensor:argmin_axis` 没有 ONNX lowering，所以 7.7 的 argmin 规则（第一个最小值；有 NaN 时第一个 NaN；`-0 < +0`）在导出器里仍是拒绝。H4c 只要求 `ArgMax`；补 `argmin` 需要对称的组合（`ArgMin`、`+inf` 替换、`-0` 优先）或共享同一个子图生成器。要不要现在补？
+2. **`Reciprocal` 的零行为是后端契约。** 这里依赖 `1/+0 = +inf`、`1/-0 = -inf`；ONNX 规范没有把除零写成强制语义，ONNX Runtime 的 CPU 后端按 IEEE 实现，测试也覆盖了。对另一个后端，+0 修正可能不成立；如果要更稳，需要 ONNX 增加 `Bitcast`（目前没有）。是否把这一条写进能力表/后端契约？
+3. **opset < 12 的导出被拒。** 组合依赖 `select_last_index`，最低 opset 因此是 12；更早的 opset 上旧版 `ArgMax` 规范本身也是取第一个，但组合里的 `ArgMax` 没有 `select_last_index` 可用，NaN/-0 仍要靠组合。当前导出器默认 opset 是 17，实际不受影响；如果以后要支持 11，需要确认旧版 `ArgMax` 的「第一个」保证并去掉属性（未验证）。
+
+## H4f ONNX 导出器的切片规则
+
+### 问题
+
+审查 `modules.cn.md` 第 14 条：导出器不能自己重述「切片越界是故障」这类规则。改之前 `lowerSlice` 重述了三件事：轴的归一化、`step > 0`、以及「边界必须在 `[-n, n]`」。最后一条甚至没有写出来：它用 `Gather` 一个长度 `n+1` 的零向量、下标 `b - (b < 0)` 来制造越界故障，正确性依赖 ONNX `Gather` 允许最小 `-(n+1)` 的负下标，这个证明只存在于注释里。核心的 `sliceIndexing` 遇到依赖模型的边界直接返回 `nullopt`，导出器读不到规则，只能自己写。
+
+### 改了什么
+
+**核心声明（一份规则）。**
+
+- `include/camel/core/index_semantics.h`：新增 `OperandCheck { operand, param, lower, upper, onInvalid }` 和 `IndexedInstance::checks`。它说的不是访问映射，而是「这个操作数在进入时必须落在 `[lower, upper]`，否则按 `onInvalid` 处理」；切片的越界故障第一次进入声明，而不是导出器的注释。
+- `src/core/index_semantics.cpp`：`validate()` 检查 `operand` 是合法操作数、`param` 是同一操作数的 `Static`/`Runtime` 参数、上下界是只含参数与常量的表达式（`Exprs::mentionsDim` 为假，因为 check 约束的是参数）；`toString()` 加一行 `check operand i in [lo, hi] else fault`，`tensor::test_index_eval` 的 `show_*` 查询因此能看到它。
+- `modules/tensor/ops/indexing.h` / `indexing.cpp`：`IndexBuilder::runtime(name, operand)`（Runtime 参数）与 `IndexBuilder::check(operand, param, lower, upper)`。`sliceIndexing` 重写：
+  - `axis` 是 `Static` 参数（归一化后的轴），`step` 是 `Static`（缺省 1）；
+  - `n = extent(0, axis)`；
+  - `start`/`stop` 是 `Derived` 参数：常量边界且 extent 已知时带值（值由 `kernels::normalizeSliceBound` 算），否则没有值（归一化要按符号分支，不是准仿射表达式，参数只声明它的范围）；
+  - 原始边界：常量是 `Static`，依赖模型的是 `Runtime`；只要归一化值未知，就加 `check(operand, raw, -n, n)`；
+  - `len` 是 `Derived`，只在两个边界都已知时带值；`where` 仍是 `0 <= start <= n`、`0 <= stop <= n`、`0 <= len`、`1 <= step`。
+  - 常量边界 + 未知 extent 以前返回 `nullopt`（「等 extent 知道再说」），现在也给出实例：边界照样进 check，归一化值未知。这保留了旧导出器在这个形状上的能力，也是 `tensor::test_index_eval` 里 `slice_unknown_extent` 从 `none` 变成 `instance` 的原因（计划里的期望已改，理由写在这里）。
+- `modules/tensor/kernels/layout.h`/`layout.cpp`：把「一个边界怎么归一化」抽成 `normalizeSliceBound(extent, bound)`，`normalizeSliceBounds` 调它两次；声明与 kernel 从此读同一个函数，边界规则只有一份。
+
+**导出器读声明。**
+
+- `modules/onnx/lowering.h`：`LowerContext` 带一个可选的 `core::sem::IndexedInstance`，`instance()` 只读访问；`modules/onnx/exporter.cpp` 的 `applyOper` 在调用 `def->infer` 之后，对声明了 `index` 的算子调 `tensor::ops::instantiate(*def, inferContext)`，把实例传下去。导出器不再自己调 `instantiate` 或猜参数位置。
+- `modules/onnx/lowering.cpp` 的 `lowerSlice`：
+  - 从实例读 `axis`（`Static` 参数 1）、`step`（`Static` 参数 4，缺省 1）、以及操作数 2/3 的 `check`；
+  - 两个边界都是常量且声明没有 check（即声明已证明在范围内）时，发普通 `Slice`，直接用原始常量（ONNX `Slice` 自己会归一化负边界）；
+  - 否则逐个边界发 guard：常量也 guard（未知 extent 的常量边界现在有 check）；`check` 的区间必须正好是以轴 extent 参数为中心的 `[-n, n]`（用 `Extent` 参数 + `isNegationOf` 验证 `lower = -upper`），否则拒绝并说明「ONNX 的 guard 表达不了这个区间」；
+  - guard 仍是 `Gather(zeros[n+1], b - (b < 0))`，但现在它的合法性来自声明的 `[-n, n]`，不是导出器自己记得的规则；`zeros` 的长度 `n+1` 来自 `Shape`，所以 extent 可以在运行时才知道；
+  - 没有实例、没有 check、check 不是 fault、区间不是 `[-n, n]`、或 `speculative()` 分支臂上的边界无法证明时，抛带位置的 `ExportError`，消息点名 `tensor:slice`、轴和原因，不再 clamp 或猜。
+- 结果形状：走 guard 的路径把该轴的长度标成未知（`kUnknownDim`），因为 guard 只保证不越界，不保证长度；常量且已证明的路径用 `sliceInfer` 的结果形状。
+
+### 用到的 ONNX 算子
+
+普通路径：`Slice`。guard 路径：`Shape`、`Gather`、`ConstantOfShape`、`Cast`、`Less`、`Sub`、`Add`、`Unsqueeze`（`n+1` 个零、负下标修正、把标量边界升成 1 维）。没有新增能力表条目。
+
+### 测试与结果
+
+- 新用例 `test/cases/modules/onnx/ort_slice_start.cml` / `ort_slice_start.py`，计划项 `ort_slice_start`：
+  - `MODE=start`：`slice(x, 0, int(sum(x)), 3)`，在 ONNX Runtime 上跑 start = 3、1、0、-2、-3（有效，含 `-n` 与 0）和 -4、4、-5（Camel 故障、ORT 也必须失败）。这组值把「区间是 `[-n, n]` 而不是 `[0, n]`」「负值从尾部数」「end 在 start 之前是空区间」分开；如果把规则重述成 clamp 或把下界写成 0，`-2`/`-3` 或 `-4` 会不同。
+  - `MODE=constant`：`slice(x, 0, -2, 3)`，常量边界 + 已知 extent 走普通 `Slice`，期望 `x[-2:3]`。
+  - `MODE=dynamic`：常量边界 `[1:3]` 落在 `reshape(x, [int(12/sum(x)), int(sum(x))])` 的轴上，extent 只有运行时才知道；sum 为 12/6/4/3 时有效，为 2/1 时 Camel 故障、ORT 也必须失败。这覆盖「未知 extent 的常量边界也要 guard」，以及旧导出器有、重构中一度丢掉的能力。
+  - 结果：`ort slice start: 0 failing`、`PASS`。
+- 原有用例保持：`ort_slice_bounds`（依赖模型的 end）`0 failing`；`ort_time_axis` `14 models, 0 failing`；`bounds.plan.toml` 8/8（含 `slice_runtime`、`slice_untaken_branch`）；`index_semantics.plan.toml` 5/5；整个 ONNX 计划 125/125（含 `export_slice_loop`、`pass_export_slice_loop`、`ort_slice_bounds`、`ort_time_axis`、`ort_argmax`、`ort_slice_start`）。
+- 跳过的：没有。ORT 用例的 `skip_unless` 只在没有 numpy/onnx/onnxruntime 时跳过；本次环境有（onnx 1.23、onnxruntime 1.30），实际执行。
+
+### 待决问题
+
+1. **未知 extent 下的声明不自足。** `len` 与 `start`/`stop` 之间没有约束（准仿射表达式不能写 `len = max(0, ceil((stop - start)/step))`，也不能写「非空时 `start + step*(len-1) < stop`」这种带条件的式子），所以「访问在 `[0, n)` 内」只对算子的实际参数值成立，不能从 `where` 推出来。`tensor::test_index_eval` 对未知参数不做符号检查，导出器只用 `check`，因此不影响本次；但一个想从声明做静态证明的消费者会缺这一条。要不要给表达式语言加 `max`/`ceil` 或析取？
+2. **常量边界的归一化要 extent。** 现在未知 extent 的常量边界给出实例、带 check，但 `start` 的归一化值仍是未知；如果以后有消费者需要「常量边界的归一化值」，它必须先专门化 extent。这是有意的（负常量的归一化确实依赖 extent），不是遗漏。
+3. **`speculative()` 的拒绝仍然存在。** 分支条件依赖模型时，导出器无法证明该臂上的切片边界在范围内，仍拒绝；旧导出器也拒绝。`slice_untaken_branch` 覆盖的是「分支没被走到」的另一类情形（它通过）。如果以后要给分支臂做按条件的 guard，需要 ONNX `If` 里也能表达故障，这超出 H4f。
+4. **`lowering.cpp` 变长了。** 现在 1160 行，超过 `agents/refactor.md` 对新文件建议的 800 行；它是既有文件，本次没有拆。如果要拆，`lowerArgMax` 与 `lowerSlice` 可以进单独的文件，但会牵动匿名命名空间里的 `reduceAxes`/`findParam` 等共享 helper，建议单独一次改动。
+### 决定（语言作者，2026-10-20）
+
+1. **磁带存残差值，循环节点加「收集每轮输出」**：每轮 O(1)、总体 O(n)；残差是普通值，ONNX、`std::cpp` 都能表示，将来导出只加一张映射。不先做"每轮复制整个数组"的版本。这是图层面的能力，不新增源码语法；改节点定义，同步改算子语义第 11 节与共用的循环驱动。
+2. **磁带不设上限**：轮数无法在编译期知道，人为上限只会让正常的长训练失败；内存耗尽按资源耗尽带位置报告，不在命令行另加轮数上限。将来用 `#recompute` 检查点降到 O(√n)，本次不做，但磁带设计不排斥它。
+3. **遍历或捕获的数组本身依赖被求导的参数时拒绝**，带位置诊断，与 `map` 的拒绝一致；判据是"该数组在活动集里"，诊断点名 `loop` 与哪个数组。给数组补切向量是另一个独立任务。
+4. **循环体有副作用时沿用现有规则**：允许，效应只在正向执行一次，反向是纯的；"读可微类型的 `var` 要拒绝"这条检查扩展到条件图与循环体，诊断点名 `loop`。
+5. **ONNX 导出不同批做（A）**：先把语言里的循环梯度做对；磁带按"残差值 + 槽位清单"设计，导出时只加映射、不改表示。`While` 的导出成立（`trip_count` 可选，只靠条件停止；反向轮数就是收集到的个数），嵌套循环的参差数组留到导出时处理（ONNX 序列类型）。
+
+## H4e 数学模块的数值声明
+
+### 做了什么
+
+- 新增 `modules/math/semantics.cpp` 与 `modules/math/semantics.h`：`math` 模块 89 个算子的数值语义声明集中写在一张表里（照 `modules/tensor/ops/semantics.cpp` 的写法），每条记录用 `OperatorTable::declareSemantics` 在模块加载时登记，版本 1.0。
+- `modules/math/module.cpp`：在登记完全部算子的 traits 之后调用 `declareMathOperatorSemantics()`（登记检查第 2 条要读 traits）。
+- `modules/math/CMakeLists.txt`：把 `semantics.cpp` 加进模块源文件。
+- `test/plans/feat/modules/operator_semantics.plan.toml`：新增 `declared_math_numeric_semantics`，用 `camel inspect --ops` 观察声明，并对每个 math 算子核对类别、计算类型、许可敏感性、ulp 与特殊值。
+
+### 哪些算子得到什么声明
+
+`math` 模块导出的全部 89 个算子都有记录；没有遗漏，也没有第二个声明机制。
+
+| 类 | 算子（URI 后缀） | 声明 | 许可敏感性 |
+|---|---|---|---|
+| `Exact` | `abs_f/d`、`round_f/d`、`ceil_f/d`、`floor_f/d`、`trunc_f/d`、`min_f/d`、`max_f/d`、`clamp_f/d`、`sign_f/d`、`is_nan_f/d`、`is_inf_f/d` | 无舍入；`compute` 为 f32/f64 | `finite_math`（NaN、±0、次正规数的假设可以改变结果） |
+| `Exact` | `abs_i/l`、`min_i/l`、`max_i/l`、`clamp_i/l`、`sign_i/l`、`gcd_i/l`、`lcm_i/l`、`bit_and_i/l`、`bit_or_i/l`、`bit_xor_i/l`、`bit_not_i/l`、`shl`、`shr`、`bin_i/l`、`oct_i/l`、`hex_i/l` | 无舍入、无算术舍入；`compute = Void` | 无（`reassociate`/`contract`/`approx_math`/`change_precision`/`finite_math` 都改不了） |
+| `CorrectlyRounded` | `sqrt` | 一次正确舍入的开方；`compute = Float32` | `approx_math`、`change_precision`、`finite_math` |
+| `Bounded` | `exp_f/d`、`log_f/d` | **2 ulp**；`compute` 为 f32/f64 | `approx_math`、`change_precision`、`finite_math` |
+| `Bounded` | `sin_f/d`、`cos_f/d`、`tan_f/d`、`asin_f/d`、`acos_f/d`、`atan_f/d`、`sinh_f/d`、`cosh_f/d`、`tanh_f/d`、`log2_f/d`、`log10_f/d`、`log1p_f/d`、`expm1_f/d`、`atan2_f/d`、`pow_f/d`、`hypot_f/d` | **4 ulp**；`compute` 为 f32/f64 | 同上 |
+
+补充说明：
+
+- `math:sqrt` 是四个数值类型共用一条 URI（i32/f32 → f32，i64/f64 → f64），所以记录写的是窄的浮点情形（f32），算法说明里写明宽的那一路；这与张量声明“描述 f32 情形”的约定一致。
+- `pow` 与 `hypot` 的 `specials.nans = false`：C 标准规定 `pow(x, ±0)`、`pow(1, y)` 即使另一个操作数是 NaN 也得 1，`hypot(±inf, NaN)` 得 `+inf`，不是 NaN 传播。其余算子保持 IEEE 特殊值（NaN、±inf、±0、次正规数都精确）。
+- 故障（`clamp` 的 NaN 边界/lo>hi、`gcd`/`lcm` 溢出、`shl`/`shr` 越界计数）这次没有声明 `FaultSpec`：第 15 条要的是数值语义；traits 仍是 `mayFault = true`，消费者按“可能故障”保守读。见“没做完的”。
+- `math.abs` 的最小整数：`docs/stdlib-reference.md` 已写明“没有正对应值，绝对值未定义”，实现的 `std::abs(INT_MIN)` 因而落在定义域外；声明的算法串里如实写了这一点，没有把它当成声明与实现不一致，也不把它算作未声明的故障。
+
+### 每个上界的来源
+
+- `exp`、`log`：**2 ulp**。设计原则 7.1 直接写了“标准库的目标是 `exp`、`log` 不超过 2 ulp”；语言参考（`docs/language/03_data_model.md`）也这样写；张量模块的 `tensor:exp`/`tensor:log` 已经声明 2 ulp（`modules/tensor/ops/semantics.cpp`），这里保持一致。
+- 其余 `Bounded`：**4 ulp**。C++ 标准不规定 C 数学函数的 ulp 精度。Windows 上的实现是 UCRT，微软文档说的是“多数情况在 ±1 ULP 内，但也可能有更大的误差”，并且结果可能随 CPU 和 Windows 版本变化（[Math and floating-point support](https://learn.microsoft.com/en-us/cpp/c-runtime-library/floating-point-support?view=msvc-170)），所以 1 ulp 不是可以承诺的上界。4 ulp 与 `docs/design/op-semantics` Q4 的候选 A 给 `tanh`、`sigmoid`、`gelu`、`erf` 举的库目标一致，也给跨 CPU/系统版本留了余量。
+- `sqrt`：设计原则 7.1 要求开方按 IEEE 正确舍入；IEEE 754 也要求 `sqrt` 正确舍入。声明为 `CorrectlyRounded`，不给 ulp 上界。
+- 这些上界是**承诺**，不是对某台机器实测结果的复述；实测只是确认当前平台没有超出承诺。
+
+在 Windows 10.0.26100、项目同款 clang 22.1 + UCRT 上，对每个函数抽样测到的最大 ulp（f32 用 Python double 作参考，误差远小于 f32 的 1 ulp；f64 用 mpmath 60 位十进制作参考；f32 取了 397,842 个一元输入和 20,000 对二元输入，f64 取了 20,000 个一元输入和 10,000 对二元输入）：
+
+| 函数 | f32 最大 ulp | f64 最大 ulp | 声明 |
+|---|---:|---:|---:|
+| sin | 0.528 | 0.701 | 4 |
+| cos | 0.527 | 0.755 | 4 |
+| tan | 0.501 | 0.842 | 4 |
+| asin | 0.799 | 0.750 | 4 |
+| acos | 0.632 | 0.804 | 4 |
+| atan | 0.500 | 0.714 | 4 |
+| sinh | 0.500 | 0.912 | 4 |
+| cosh | 0.500 | 1.120 | 4 |
+| tanh | 1.095 | 1.050 | 4 |
+| log | 0.543 | 0.519 | 2 |
+| log2 | 0.751 | 0.565 | 4 |
+| log10 | 0.561 | 0.515 | 4 |
+| log1p | 1.436 | 1.176 | 4 |
+| expm1 | 2.446 | 2.203 | 4 |
+| exp | 0.500 | 1.390 | 2 |
+| sqrt | 0.500 | 0.500 | 正确舍入 |
+| atan2 | 0.500 | 0.516 | 4 |
+| pow | 0.992 | 0.501 | 4 |
+| hypot | 0.500 | 1.079 | 4 |
+
+抽样覆盖：全类型的随机位型（含 NaN/±inf）、其模长在 10^-40 到 10^40 之间按对数均匀取的正负值、[-2, 2] 的均匀值、零附近 10^-300..10^-1、1 附近 10^-16..10^-1。抽样不是穷举证明；`expm1` 的 2.45 ulp 是这里选择 4 而不是 2 的原因之一。
+
+### 声明怎样被消费
+
+- **登记与查询**：`MathModule::load()` 里登记后，记录进入进程级的 `OperatorTable`；`OperatorTable::semantics(OperId)`、`lookup`、`bind`、`key` 都能读到，`declarationEpoch` 随登记更新。`camel inspect --ops` 通过 `src/core/module/introspect.cpp` 的 `semanticsJson` 打印出来。
+- **导出器**：ONNX 导出器只按 URI 把 `math:sqrt` 下降为 ONNX `Sqrt`（`modules/onnx/lowering.cpp`）。这是“哪个 ONNX 算子实现它”的下降规则，不是数值特殊值，和数值声明是两件事；核心和导出器里都没有按名字判断数值类。
+- **自动微分**：`math:sqrt` 的 VJP 在 `modules/math/module.cpp` 按 URI 登记，不读数值声明，也不需要读：反向规则是算子自己的事，数值声明描述前向算子的误差。没有新增按名字的特例。
+- **常量折叠**：`std::opt` 对纯算子要么调用它的 type folder，要么直接调用内核（`src/passes/opt/generic/generic.cpp` 的 `foldDraft`）。常量折叠按规范算法进行、不使用许可，所以不需要用数值声明来放行或阻止折叠；折叠出来的值与运行时调用同一个库函数。
+- **Tiles**：区域资格要求算子有下标实例（`modules/tiles/src/graph_regions.cpp`）；math 算子没有声明下标语义，因此和以前一样不会进区域。`serial_kernel` 的 `contract()` 只对区域成员生效，也走不到 math 算子。声明没有引入行为变化。
+- 结论：没有消费者需要新增按名字的特例。唯一按 URI 建表的地方仍是 `math` 模块自己的算子/traits/内核表，与张量模块的做法相同。
+
+### 测试
+
+- 新增 `declared_math_numeric_semantics`（`test/plans/feat/modules/operator_semantics.plan.toml`）：对 `test/cases/modules/stdlib/math_functions.cml` 运行 `camel inspect --ops`，要求
+  - `math` 模块列出的 89 个算子**每一个**都有语义记录（缺一个就失败）；
+  - 每个记录的 key 是 `<uri>@1.0`，类别、`compute`、`sensitive_to`、`ulp`、`not_ieee` 与期望一致，`algorithm` 非空；
+  - `pow`/`hypot` 的 `not_ieee` 含 `nans`，其余不声明 `not_ieee`；
+  - 没有 math 算子声明下标语义。
+- 失败路径已实测：临时注释掉 `declareMathOperatorSemantics()` 的调用并增量构建后，该用例失败，信息是 `math:abs_d has no numeric declaration`；恢复后通过。
+- `node scripts/test.js test\plans\feat\modules\operator_semantics.plan.toml`：**4 / 4 通过，0 失败**。
+- `node scripts/test.js test\plans\feat\modules\stdlib_values.plan.toml`（math 的 `functions`/`numbers`/`bits` 在 nvm、fvm、jit、prl 与 inline/macro 优化管线上）：**59 / 59 通过，0 失败**。
+- `node scripts/test.js test\plans\feat\modules\autodiff.plan.toml`：**116 通过，0 失败，5 跳过**（跳过的 5 个是缺 `torch`/`psutil` 的对照基准），其中含 `math:sqrt` 的前向/反向用例；数值声明没有改变 VJP 的行为。
+- `pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h4e-math-numeric`：Release 构建成功（按本机的新约束走串行构建器，不再直接 `npm run build`）。
+- `npm run test`：启动后跑到最后一个 plan 之前被会话中断，没有拿到最终 `SUMMARY`；已看到并已逐项单独复现的失败共三处，都与本次改动无关，协调者可在干净基线上复核：
+  1. `feat.parse.frontend / frontend.ast_snapshot`：91 个文件的 AST 哈希与 `test/plans/feat/parse/golden/ast_hashes.txt` 不一致（`node scripts/test.js test\plans\feat\parse\frontend.plan.toml` → 4 个用例，3 通过，1 失败）。本次没有改语法、解析器或 AST 生成代码；`ea869b85..983b32a1` 之间只有 H4d 的设计文档提交；主仓库构建出的 `camel-parsecheck` 对这些文件也给出相同的新哈希。
+  2. `feat.modules.std / sys.basic`：本机 `PATH` 里有一个字节不是合法 UTF-8，`sys.get_env("PATH")` 按文档拒绝（`node scripts/test.js test\plans\feat\modules\std.plan.toml` → 23 个用例，22 通过，1 失败；`poison` 一遍也复现）。
+  3. `feat.modules.onnx / export_tree_recursion`：期望导出器给出诊断（exit 1），进程却以 `0xC0000005`（access violation）结束，属于 ONNX 导出器的既有问题；该 plan 的其余用例通过。
+
+### 设计上的选择
+
+- **集中一张表**：新开 `modules/math/semantics.cpp`，而不是把声明散到 `module.cpp`/`numeric.cpp`/`operators.cpp`。这与张量模块一致，也让“哪些算子声明了什么”可以一屏读完；模块加载时只调用一次。
+- **在 traits 之后登记**：`declareSemantics` 的第 2 条检查要读 traits（故障声明与 `mayFault` 不能矛盾），所以调用点放在 `load()` 里 traits 循环之后。
+- **逐重载声明**：`_f`/`_d` 有各自的 URI，也各有自己的 `compute`；`sqrt` 只有一条 URI，按张量“描述 f32 情形”的约定写 `Float32`，算法串里写明 f64/i64 那一路。
+- **整数与谓词也声明**：不只声明超越函数。这样测试可以要求“math 模块的每个算子都有记录”，以后新增算子漏声明会直接失败；整数算子的 `Exact` + 无许可也把“许可改不了它”这一事实写下来。
+- **`Bounded` 的敏感性照张量**：`approx_math | change_precision | finite_math`。`contract`/`reassociate` 与这些一元、二元函数无关，不声明。
+- **故障这次不声明**：见“没做完的”。声明数值语义不会让消费者误以为算子不故障：`faults` 仍是 `nullopt`，按 traits 的 `mayFault = true` 保守读。
+
+### 用户可见的变化
+
+只有 `camel inspect --ops` 的输出多了语义。对同一个导入 math 的程序：
+
+```text
+// 之前（没有声明：dumpOperators 不输出 semantics 字段）
+OPERATOR {"module":"math","name":"exp","uri":"math:exp_f","with":0,"norm":1,"purity":"pure",
+          "signature":"(f32) => f32"}
+// 现在
+OPERATOR {"module":"math","name":"exp","uri":"math:exp_f","with":0,"norm":1,"purity":"pure",
+          "signature":"(f32) => f32","semantics":{"key":"math:exp_f@1.0","numeric":"bounded",
+          "compute":"f32","ulp":2,"sensitive_to":["approx_math","change_precision","finite_math"],
+          "algorithm":"e^x per element, within 2 ulp; NaN, +-inf and +-0 exact (e^-inf is +0, e^+inf is +inf)"}}
+```
+
+程序的运行输出没有变化（`stdlib_values` 的 59 个数学用例逐字比对 golden 通过）。没有改 `docs/` 的用户文档：设计原则 7.1 与语言参考已经写明了“逐个声明上界、exp/log 2 ulp、inspect --ops 可查”，这次只是把 math 模块补上。
+
+### 自查（任务书第 2 节）
+
+1. **核心按名字认具体的东西**：没有。核心只按 `OperId` 查语义记录；按 URI 建表的是 math 模块自己的表。
+2. **另造一套相似的机制**：没有。用的就是 `OperatorTable::declareSemantics`，与 builtin、tensor 相同。
+3. **同一事实写在多处**：类别、上界、敏感性与算法串只在 `modules/math/semantics.cpp` 一处；测试读的是登记后的记录，不复制一份到文档里。
+4. **写死的上限/封闭枚举**：没有新增位掩码或固定上限；89 个 URI 是模块今天导出的算子本身。
+5. **临时裁定语义**：上界要么有设计原则的明文目标（exp/log 2 ulp、sqrt 正确舍入），要么写明“标准不规定，取 Q4 的库目标 4 ulp，并说明实测依据”。没有替调用者扩大许可。
+6. **为了让测试通过而改**：没有改任何期望输出；新增测试只读声明。
+7. **兼容层**：没有。
+8. **只做一个后端**：没有改运行时路径；math 的行为测试在 nvm/fvm/jit/prl 与两条优化管线上都通过。
+
+### 待决问题
+
+没有需要语言作者裁定的语义问题。任务书第 4 节格式的问题为零。
+
+### 没做完的
+
+- **故障声明**：`clamp` 的 NaN 边界/lo>hi、`gcd`/`lcm` 的溢出、`shl`/`shr` 的越界计数都还没有 `FaultSpec`；`abs` 的最小整数是否要改成故障（而不是现在的定义域外行为）也应在补故障声明时一并裁定。第 15 条只要求数值声明，且这些故障的种类与操作数编号要先逐条核对，留作后续小项。目前 traits 的 `mayFault = true` 让消费者保持保守，不会误优化。
+- **上界不是穷举证明**：4 ulp 是承诺；上面的是抽样实测，样本外的输入（尤其 `expm1`、`log1p` 的极端抵消区）没有逐位证明。若将来在某个平台上测出超过 4 ulp，应换用模块自己的内核或重新裁定上界，而不是悄悄放宽。
+- **`math:sqrt` 的一条记录覆盖两种浮点宽度**：这是现有 URI 形状决定的。若将来消费者需要按宽度区分的 `compute`，应先把 sqrt 的重载拆成不同 URI，而不是让核心按节点类型猜。
+## H4d 第一步：循环的收集输出
+
+分支/工作区：`handover/H4d-impl`（`D:\Projects\Camel-wt\h4d-impl`），2026-10-20。本步只做「循环节点 + 执行器收集输出」；自动微分本身的重写（前向/反向循环）与 ONNX 导出**不在本步**，`pullback.cpp` 与 `modules/onnx` 未改。
+
+### 1. 前提（负责人 2026-10-20 的裁定，照录，不再讨论）
+
+- 磁带存**残差的值，不是闭包**；循环节点获得「收集它每轮产生的值」的能力。
+- 选「节点上的收集输出」，并直接实现原地追加；**不做** `:struct/append_arr` 的 O(n²) 版本。每轮 O(1) 摊还、总计 O(n)；残差是普通值，ONNX 与 `std::cpp` 能表示；与图存储 v2 的「控制区域每轮收一个值」同形。
+- 不设轮数上限；内存耗尽按资源耗尽（`RuntimeDiag::MemoryExhausted`）带源位置报出。
+- 不排除将来的 `#recompute` 检查点标签（O(√n)）；磁带的表示不因它改变。
+- 导出与 Q3/Q4 的拒绝规则是后续步骤；**磁带的表示不因导出而改变**。
+
+### 2. 节点形状
+
+`LOOP` 的载荷（`GCLoopRef` 与 `GCLoopBody`）里原 `reserved2` 改名为 `collectionCount: uint32_t`（`include/camel/runtime/graph.h`；大小不变，`GCLoopRef` 仍是 16 字节），`loopCollectionCountOf`/`setLoopCollectionCount` 读写它，编解码、克隆、会话的图枚举都照旧经过它。有 `s` 个收集槽时，**节点的值类型**是 `(T_0 … T_{k-1}, U_0[] … U_{s-1}[])`：前 k 个分量仍是状态（忽略磁带的消费者读到的位置不变），后 s 个是每轮收集的数组；**循环体图的返回类型**是 `(T_0 … T_{k-1}, U_0 … U_{s-1})`，第 c 个收集槽每轮交出一个 `U_c`。`s = 0` 时与今天完全相同（k = 1 给那个值，k > 1 给 k 元组）。计数必须放在节点里：k = 2 时值 `(状态, 数组)` 与「两个状态、第二个恰是数组」在类型上无法区分。数组由这次循环独占（循环体看不到它们），随工作元组被 GC 追踪。
+
+**设计上的选择。** 备选是「载荷里显式列出每个槽的类型」。否掉的理由：节点的值类型与循环体图的返回类型已经逐位给出了这些类型，再存一份会多一处可不同步的真相；真正缺的信息只是「有几个槽」，所以只加计数。另一个备选是「值类型加一个隐藏包装类型」来消除 k = 2 的歧义；否掉是因为它改变节点值的可见形状，而计数不改变。
+
+### 3. 执行器与降级
+
+- **共享驱动** `include/camel/execute/loop_driver.h`：`LoopShape` 增加 `collectionCount`、`valueType`、`origin` 与 `collecting()`；`s > 0` 时建一个 `(状态…, 新数组…)` 工作元组，放在节点的槽位（NodeVM 的帧、FastVM 的 `self`）或宏求值器 `RootHandle` 里；每轮把状态的各分量写回，把循环体结果的后 s 个分量用 `Array::append(value, ArrayType)` 原地追加。`MemoryExhausted` 被捕获后 `during("collecting the values a loop produces each round", shape.origin)`，在循环处报出。宿主接口改为 `callRound(shape, target, element)`，由驱动经 `loopStateComponent` 统一读状态，三个解释器不再各自推导布局。
+- **NodeVM**（`nodevm.cpp`）、**FastVM 原生循环**（`fastvm.cpp`，`BytecodeExtra` 的 `loop` 子结构带 `mark` 与 `collectionCount`，`compile.cpp` 写入）、**宏求值器**（`eval.cpp`）都走这个驱动；FastVM 原生循环的源位置由执行器的 pc 补上。
+- **降级**（`loop_lowering.cpp`，fvm/jit/prl）：新增两个隐藏算子——`:loop/collector`（循环前建一个空数组）与 `:loop/collect`（原地追加，返回磁带），登记在 `src/builtin/executors/builtin.cpp`，不在 `OperatorTraits` 的纯算子集合里（默认有副作用，遍不得重排或删除）；`next` 的下一状态 `FILL` 是 `(状态…, 磁带…)`，循环体调用的返回类型用体图的 `(状态…, 值…)`。`s = 0` 的降级一行未变。
+- **`LoopView`** 增加 `collectionCount`、`valueIsTuple`、`valueComponentCount`、`stateValueIndex`、`collectionValueIndex`、`collectionArrayType`、`collectionElemType`、`nextStateIsTuple`、`bodyResultType`、`bodyStateResultIndex`、`bodyCollectionResultIndex`、`nextCollectionComponent`，以及自由函数 `loopValueComponent`/`loopStateValue`/`loopCollectedValue`：自动微分将来直接读，不必重推布局。提交校验（I18）在 `s > 0` 时要求值元组是「状态类型 + 数组类型」、体图返回「状态类型 + 元素类型」，严格相等。
+- 内存耗尽的源位置：nvm/宏/降级（fvm/jit/prl）以及 FastVM 原生循环都在循环处报出（`pass.cpp` 在 `e.origin()` 无效时回落到 `currentRuntimeOrigin()`；FastVM 的两个执行环与 JIT 的 operator helper 在捕获 `MemoryExhausted` 时补当前 pc 的来源）。
+
+### 4. GC
+
+工作元组要么是循环节点帧槽里的值（NodeVM/FastVM），要么被宏求值器 `mm::RootHandle` 根住；槽位/根的类型就是 `(状态…, 数组…)`，`ArrayType` 的元素类型被追踪，因此磁带里的元素在回收器看来是活的。每轮之间的安全点由 `beforeRound` 提供；分配不移动对象，所以追加期间持有的裸指针在下一个安全点之前有效。没有运行期磁带对象，也没有手动释放：循环结束后磁带随循环的值一起成为普通 GC 值；反向闭包若将来捕获它，寿命与现有闭包链相同。
+
+### 5. 测试与结果
+
+新增 `test/plans/feat/linear/loop_collect.plan.toml`（19 条，全部通过）。由于源码语法还没有收集槽，测试用一个只读遍制造它们：`test::loop_collect` 给每个 `LOOP` 加两个槽（收集下一状态的第 0 个分量，以及它 +1；非 int 状态则重复同一个值），改体图返回与节点值类型；`test::loop_collect_summary` 在此基础上把循环的值换成 `(状态, len(磁带0), len(磁带1))`，大循环只打印三个数。两个遍都在 `CAMEL_ENABLE_TEST_PASSES=1` 下注册（`src/passes/test/loop_collect.cpp`）。
+
+- `loops.collect.shapes`：For / While / ForWhile / 三种零轮，`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::fvm(native_loop=true)`、`std::jit(native_loop=true)` 输出逐字节一致；`(6, [1, 3, 6], [2, 4, 7])` 等。
+- `loops.collect.macro`：`std::macro` 对两状态循环求值，结果仍是 500500。
+- `loops.collect.large`：十万轮的 While 与 For，汇总打印 `(100000, 100000, 100000)`，六个后端一致（nvm 约 0.1 s，证明线性而非二次）。
+- `loops.collect.oom`：`CAMEL_GC_HEAP_LIMIT_MB=16`、二百万轮，六个执行器都报 `RuntimeDiag::MemoryExhausted`，源位置指向 `collection_oom.cml:4:13`。
+
+回归：`test/plans/feat/linear/loops.plan.toml` 59/59；`test/plans/feat/linear` 全量 624/624。构建一律经 `pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h4d-impl`（串行、8 个编译进程），未直接跑 `npm run build`。
+
+### 6. 本步改动的文件
+
+`include/camel/runtime/graph.h`、`src/runtime/graph.cpp`（载荷计数）；`include/camel/runtime/loop.h`、`src/runtime/loop.cpp`（访问器与校验）；`include/camel/execute/loop_driver.h`；`src/passes/sched/nodevm/nodevm.cpp`、`src/passes/sched/fastvm/{fastvm.cpp,bytecode.h,compile.cpp,casevm.cpp,gotovm.cpp,jit/runtime/trampoline.cpp}`、`src/execute/macro/eval.cpp`、`src/execute/pass.cpp`（源位置回落）；`src/runtime/loop_lowering.cpp`（收集路径）；`src/builtin/operators/loop.{h,cpp}`、`src/builtin/executors/builtin.cpp`（两个隐藏算子）；`include/camel/passes/test/loop_collect.h`、`src/passes/test/loop_collect.cpp`、`src/execute/pass.cpp`（测试遍）；`test/cases/loops/collection*.cml`、`test/plans/feat/linear/loop_collect.plan.toml`；`docs/design/loops/README.cn.md` §2.2/§5.6/Q12、`docs/design/op-semantics/README.cn.md` §11、`docs/design/graph-store/README.cn.md` §3.3、`docs/technical/39_loops.md`。`include/camel/runtime/draft.h`、`src/runtime/draft_construct.cpp`（`setLoopCollectionCount`）。
+
+### 7. 待决问题（留给负责人，本步没有替您决定）
+
+1. **源语法**：收集槽怎样写？是循环头上的声明、还是 `[e for …]` 一类推导的底层机制，或先只作为编译器/库产生的形状？本步只实现了图形状与执行，没有动语法。
+2. **收集值的范围**：是否限制为 ONNX 可表示的值（张量/标量/元组）？本步按「任何非空类型」实现（闭包也能进数组，因为它是 GC 值）。若导出要求更窄，应在校验里加限制。
+3. **`#recompute` 检查点的位置**：标在循环节点上、还是状态声明上？它与「不设轮数上限」的默认如何共存？
+4. **公开形状**：循环的值把状态与磁带放进同一个元组（状态的消费者位置不变）。确认这是否就是将来对用户可见的语义，还是收集的数组应当隐藏、只由自动微分读取。
+5. **条数与类型上限**：每个循环的收集槽数量是否要上限（载荷是 32 位）？本步未设。
+
+## H4d 第二步：反向
+
+分支 `handover/H4d-reverse`（worktree `D:\Projects\Camel-wt\h4d-reverse`），2026-10-20。改动都在工作区，没有提交；由协调者提交、合并。第一步（节点上的收集槽、四个执行器的原地追加、私有降级）见上面的「H4d 第一步」；本步只做自动微分那一半：**前向保留 `LOOP`，用收集槽当磁带；反向是一个合成的 `LOOP`**。`modules/onnx` 一行未动。
+
+### 1. 节点与磁带的形状
+
+一个 `k` 个状态、`s` 个收集槽的循环，节点值是一个 `k + s` 元组：
+
+```
+值          (T_0 … T_{k-1}, U_0[] … U_{s-1}[])
+循环体返回  (T_0' … T_{k-1}', U_0 … U_{s-1})
+```
+
+前向改写把循环体的图换成「循环体 + 追加残差」的图，把 `collectionCount` 设成残差个数 `r`（没有残差时是 1，见下），并在节点上挂 `r` 个 `ACCS` 把数组读回来。**磁带就是这些收集数组本身**：不是拷贝、不是闭包链、也不是运行期的第二个对象。残差由循环体的回传函数**真正读到**的东西决定，不是"所有中间值"：每条导数规则的入运算里前向值中没有的那些，以及循环体里一次调用自己的回传闭包（它捕获了这次调用的中间值，拆不开，所以整个作为一个 `Function` 值收进磁带——数组元素可以是函数，GC 会追踪）。因此第 i 轮的残差与第 i 轮的回传一一对应，反向第 i 轮拿到的正是第 i 轮的值。
+
+一个残差都不读的循环体（回传是常值）仍然收一个常量 `1`（`roundCounter`），反向循环靠 `len(磁带)` 知道轮数；这一槽不是反向循环的输入。
+
+### 2. 前向改写（`ForwardRewrite::rewriteLoop`）
+
+- 循环节点用 `LoopDraftView` 读（`include/camel/runtime/loop.h` / `src/runtime/loop.cpp`，与消费侧的 `LoopView` 同一组访问器的改写侧版本）。
+- 体图先求一份「循环体计划」（`Engine::loopBodyPlanFor`，按（体图，状态数，是否迭代）记忆化）：解出体图的 `With` 形参（捕获）与 `Norm` 形参（状态），用 `makePlanTypes(portTypes, stateValueType, carriesGradient)` 得到回传的形参、返回类型与每个端口的梯度位；反传用「残差形参」模式建回传图（`Backward(..., residualPorts = true)`，回传的每个形参就是磁带上的一列）；回传的结果是 `(捕获梯度…, 状态梯度…)`，与端口顺序一致。
+- 体图函数类型改成 `(捕获…, 状态…) => (下一状态…, 残差…)`，两份图登记为 `body->name() + ".tape"` 的成员；若 `r = 0`，结果里加一个常量 `1`。
+- 循环节点原地改写：值类型换成 `(状态类型…, 数组类型…)`（`setNodeDataType` + `allocateRuntimeSlot`），`setLoopCollectionCount`，`bodyGraph` 换成带残差的那张前向图；原来读循环值的节点改成读 `ACCS` 抽出的状态（`k = 1` 一个 `ACCS`，`k > 1` 一个 `FILL`），磁带是 `ACCS(loop, k + c)`。状态的顺序、捕获的顺序都不变，所以 `LoopView` 的布局与第一步的实现一致。
+- 给循环记一个 `LoopSite`：节点（定位用）、迭代数组与捕获的数组（拒绝用）、回传闭包（它捕获磁带，作为一次"调用"参与通用反向的捕获梯度累加）。
+- 反向闭包的类型是 `(dy, 磁带…) => (捕获梯度…, 状态梯度…)`，与 `site.pullbackType` 严格一致，所以通用的 `visitCallSite` 累加逻辑一行未改：前向循环只是"一次调用了自己回传的调用"。
+- **一个坑，记下来**：`GraphDraftGroup::reserve` 返回的是 member key（长得像 `GCGraph *` 的句柄），在 `encode()` 之前不能读 `stableId()` / `name()`。用 `stableId()` 去拼反向图的名字是未定义行为，在这台机器上表现为 `std::fvm` / `std::jit` 下 3–20% 的运行崩溃（`-1073741819`，输出里看不到）。计划里另存 `LoopBodyPlan::name` 后，60 次 fvm、40 次 jit 无崩溃；收尾时最终二进制又各 25 次 fvm/jit/prl/macro 全绿（100 次 0 失败）。
+
+### 3. 反向：一个合成的 `LOOP`
+
+反向不是第二个循环驱动器，而是一个 `While` 型 `LOOP` 节点（`collectionCount = 0`），三段图都由改写生成：
+
+- **条件**：`i >= 0`；`With` 是磁带，`Norm` 是反向循环的状态。
+- **循环体**：状态是 `(i, 各状态梯度…, 各捕获梯度…)`（只给能承载梯度的类型留位置，见 §4）；用 `:op/idx_arr(磁带_c, i)` 取第 i 轮每列残差；调用循环体回传 `(dy, 残差…) => (捕获梯度…, 状态梯度…)`；状态梯度用 `ACCS` 接到上一轮（链式），每个捕获的梯度是旧的加这一轮的，`i - 1`，然后打包成下一轮状态。
+- **闭包**：`i = len(磁带_0) - 1`（`sub_l`），状态梯度 = 传进来的 `dy`（`k > 1` 时按状态分量拆开，只给有梯度的分量），捕获梯度 = 各自类型的零；跑完把 `(捕获梯度…, 状态梯度…)` 按回传的结果顺序打包，就是这次"调用"的梯度。
+- **零轮**：`len = 0` ⇒ `i = -1` ⇒ 条件假 ⇒ 一次都不跑 ⇒ 状态梯度就是种子、捕获梯度为零（`loop_grad_zero_rounds`）。
+- **纯的**：反向循环体只有导数算术、`idx_arr`、`sub_l` 与 `accs`，没有效应；效应都留在前向循环体里（每轮一次，与改写前相同）。`std::macro` 下反向循环同样受 `--max-macro-rounds`（默认 1,000,000，可配）限制，与前向循环一致；除此之外没有轮数上限，内存耗尽仍是循环处的运行期诊断（第一步的测试已锁住这一点，本步没有新增机制）。
+- **每轮贡献与逐轮回传严格相等**：加法循环 3 轮 ⇒ 3（`loop_grad_sum`）；乘法循环 ⇒ 乘积法则，3·w² = 12（`loop_grad_product`，不是轮数 3）；仿射状态 `acc*0.5 + w` ⇒ 等比级数 1 + 0.5 + 0.25 = 1.75（`loop_grad_affine`；逐轮独立求和会得到 3，所以这条测的正是状态链）；两状态 `(i, acc)` 里 `i` 是 int、没有梯度，反向只带 `acc` 的（`loop_grad_tuple_state`）；外层套内层的两个循环是两个不同的图，内层回传闭包作为外层磁带的一列（`loop_grad_nested`：2×3 轮，2·3·w = 12、梯度 6）。
+- 同一张循环体图在自己的构建过程中被再次要求（只可能经函数值/递归绕回来）时，`loopBodiesBeingBuilt_` 的重入保护报 "a 'loop' whose body needs its own tape (a loop nested in the body of the same loop) cannot be differentiated"。两个不同的循环（含外层套内层）不受影响。
+
+### 4. 拒绝规则
+
+- **规则**：循环**迭代的数组**或**捕获的数组**若在活跃集里（依赖被微分的参数），在循环处拒绝。文本（`autodiff:` 前缀，属于"微分不能穿过结构"一族）：
+
+  > a 'loop' iterates over / captures an array that depends on a differentiated parameter: … of type float[]. Gradients do not flow through an array: the loop's rounds would each have to carry the array's gradient, and an array has no cotangent, so the loop cannot be differentiated. Iterate over, or capture, an array that does not depend on a differentiated parameter
+
+  位置是循环（诊断指到循环表达式），数组自己被点名：字面量没有名字时只说类型（"an array of type float[]"），有位置时带上 `(at 文件:行:列)`（`loop_grad_refuse_capture` 里是 `ys` 的 11:14，诊断指向 12:12 的循环）。
+- **怎么判**：`rewriteLoop` 把迭代数组与 `With` 入边里的数组组成 `LoopSite::arrays`；`Backward::visitCallSite` 先查活跃集，命中就 `failAt(循环位置)`。迭代数组不活跃就不拒（常量数组照常求导）。
+- **为什么不给数组余切**：类型层 `tangentTypeOf(float[])` 返回 `float[]`（`src/core/derivative.cpp` 的 `Array` 分支），但没有任何 `TangentSpace`、也没有算子吃数组的余切。所以循环按「能不能承载梯度」（`carriesGradient`：聚合里至少一个元素能，或登记了切空间）决定给不给某个状态/捕获留梯度通道，而不是按 `tangentTypeOf`。这是本步发现的一处**既有不一致**：通用调用点计划仍按 `tangentTypeOf`，数组会拿到一个永远算不出来的梯度位（`addZeroTangent` 报 `no zero gradient for type 'float[]'`）；循环这边绕开了它（body 计划与 site 计划都传 `carriesGradient`），通用路径没有改，登记为待决问题。
+- **循环体里读一个捕获的数组元素**（`ys[0]`）：数组在体图里是 `With` 形参，`:op/idx_arr` 没有 vjp 规则。回传构建时如果这个数组不活跃（常量），梯度在读到的地方停住，不算错；如果活跃，循环层面的拒绝兜住。为此在 `Backward::visitOper` 对 `LoopBody` 作用域下的 `:op/idx_arr` 加了一条：数组是体图的 `With` 形参时跳过该节点（梯度停住），别的缺规则仍报错。这条不会掩盖贡献：活跃的捕获数组一定在循环处被拒；不活跃的数组本来就没有梯度可传。测试 `loop_grad_capture_table`（常量表，梯度正确）与 `loop_grad_refuse_capture`（活跃，拒绝）分别锁住两侧。
+
+### 5. 源码形态与 append 识别（负责人的裁定）
+
+裁定（设计原则 3.10）：循环收集输出的源码形态是「状态数组每轮追加一个值」（`losses + [l]`），不加新语法；编译器应当把"每轮往状态数组追加一个值"认成图上的收集输出（11.5 的原地保证使它不是拷贝）。本步的磁带设计与这条裁定一致（磁带就是收集数组、反向按下标倒着读），但**识别这一步还不存在**，本步没有建它。今天的实际情况：
+
+- `losses + [l]` **今天写不出来**：`+` 没有数组重载，只有 `:op/add_f/_d/_i/_l/_s`（实测报 `NoMatchingFunction`）。
+- 最接近的写法是 `losses = losses->append<l>`（或 `append<l>(losses)`）：前端在 `rebindingAppendOf`（`src/compile/gir/builder_operators.cpp:660`）把这种再绑定认成 `:struct/append_arr`，按设计原则 5.2 / 11.3 在数组只有一个持有者时原地追加——所以它不是 O(n²)，但它仍是**普通的状态更新**：循环的值是每轮结束时的整个数组，没有收集槽。
+- 这样的循环被求导时：数组状态没有梯度通道，`rewriteLoop` 直接跳过（`dyType` 为空），循环的贡献被**静默丢掉**；等到用户读 `xs[0]` 才在 `grad` 处报 `no derivative rule for operator ':op/idx_arr'`（实测，没有位置信息）。也就是说：今天既不拒绝，也不正确。
+- 要按裁定认成收集输出，改的是 `rebindingAppendOf` 那一层（把它标成收集槽而不是状态更新，让循环体返回 `(状态…, 追加值)`、节点多一个槽），不是自动微分——这是后续一步，建议单独做；做完之后本步的反向循环不需要改（它只读 `collectionCount` 与磁带）。
+
+### 6. 测试与结果
+
+新增 8 个用例（`test/cases/modules/autodiff/loop_grad_*.cml`）与 12 条计划项（`test/plans/feat/modules/autodiff.plan.toml`；求和与嵌套在 `nvm`/`fvm`/`jit`/`prl` 上跑并比较输出，求和另加宏，两条拒绝各在 nvm 与 fvm/宏上跑）：
+
+| 用例 | 形状 | 结果 |
+|---|---|---|
+| `loop_grad_sum` | `loop acc = 0.0 for k in [1,2,3] do acc + w` | `vg=(6.0, 3.0)`，四个后端一致，宏同 |
+| `loop_grad_product` | `acc * w` | `(8.0, 12.0)`（乘积法则，不是轮数） |
+| `loop_grad_affine` | `acc * 0.5 + w` | `(3.5, 1.75)`（等比级数，状态链） |
+| `loop_grad_tuple_state` | `(i, acc)` 两状态，int 无梯度 | `(12.0, 6.0)`，`rounds=406` |
+| `loop_grad_zero_rounds` | 空数组 | `(0.0, 0.0)` |
+| `loop_grad_nested` | 体内再套一个循环 | `(12.0, 6.0)`，四个后端一致 |
+| `loop_grad_capture_table` | 捕获常量数组并读元素 | `(6.0, 3.0)`，梯度在读处停住 |
+| `loop_grad_refuse_iterable` | 迭代的数组依赖参数 | exit 1，位置 12:12，`iterates over` |
+| `loop_grad_refuse_capture` | 捕获的数组依赖参数 | exit 1，位置 12:12，`captures`，数组在 11:14 |
+
+回归：`test/plans/feat/modules/autodiff.plan.toml` 139 条（**134 通过、0 失败、5 跳过**；跳过的仍是原来那 5 条缺 `psutil` 的 PyTorch 对比，基线 121 条/116 通过/5 跳过，本步净增 18 条）；`test/plans/feat/linear/loops.plan.toml` **85/85**（原来的 `loops.grad_refused` 与 `loops.grad_refused_lowered` 两条拒绝改成 `loops.grad_through_loop` 与 `loops.grad_through_loop_lowered` 两条正例：`f(x) = x⁴` 在 2 给 16.0 与 32.0，宏与 fvm 各一条；旧用例 `test/cases/loops/grad_refused.cml` 换成 `grad_through_loop.cml`）；`test/plans/smoke` **10/10**。构建一律经 `pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h4d-reverse`，未直接跑 `npm run build`。
+
+### 7. ONNX 导出需要什么（本步未做，记录）
+
+- 前向 `LOOP` 的收集槽 → ONNX `Loop` 的 scan output：循环体返回值末尾的 `r` 个值就是 scan 输出，反向循环体把它当输入读；`collectionCount` 已经是节点的一部分，导出器不需要再推导。
+- **嵌套的坑**：循环体里一次调用的回传闭包现在作为一个 `Function` 值收在磁带里，而 ONNX 的值域里没有函数。导出时要按闭包捕获的叶子展开（导出器已有"闭包 = 函数 + 捕获的值"的处理，`ClosureKind`），或者改为把这次调用的残差直接摊平进磁带。这一点决定了导出的磁带元素类型，建议在导出那一步再定。
+- `roundCounter` 那一个常量 `1` 的槽在导出时没有用（ONNX `Loop` 自带 trip count/序号），可以省掉或让导出器无视。
+- 反向循环是 `While`（条件 `i >= 0`），导出与普通 `While` 一样：条件子图放在体外算一次初值、循环体内更新；没有新的导出原语。
+- 其余不变：状态按类型展开成叶子，捕获的值是子图对外层名字的引用；数组的 dtype 与形状在轮与轮之间不变。
+
+### 8. 本步改动的文件
+
+`include/camel/runtime/loop.h`、`src/runtime/loop.cpp`（`LoopDraftView`）；`modules/autodiff/pullback.cpp`（`LoopBodyPlan`/`Engine::loopBodyPlanFor`/`buildLoopBody`/`ForwardRewrite::rewriteLoop`/`ReverseLoop` 的三段图/`LoopSite`/`carriesGradient`/`visitCallSite` 的拒绝/`visitOper` 的 `idx_arr` 容忍）；`test/cases/modules/autodiff/loop_grad_*.cml`（8 个）、`test/cases/loops/grad_through_loop.cml`（换掉 `grad_refused.cml`）、`test/plans/feat/modules/autodiff.plan.toml`、`test/plans/feat/linear/loops.plan.toml`；`docs/design/loops/README.cn.md` §5.6、`docs/design/op-semantics/README.cn.md` §11.6、`docs/technical/39_loops.md` §3.2/§4/§6。`docs/design-principles.cn.md` 未改（3.10/9.9 已经覆盖本步）。
+
+### 9. 待决问题（留给负责人）
+
+1. **`tangentTypeOf(Array)` 与"数组没有余切"不一致**：类型层给出 `float[]`，运行期既没有 `TangentSpace` 也没有算子能吃它。通用调用点计划因此会给数组一个算不出来的梯度位（`addZeroTangent` 报 `no zero gradient for type 'float[]'`）。本步只在循环这条路径上绕开（`carriesGradient`），通用路径没有改。要么让 `tangentTypeOf` 对数组返回空，要么给数组补切空间与 vjp 规则——这是语义决定，请负责人定。
+2. **append → 收集输出的识别**（§5）：改 `rebindingAppendOf` 还是改别处？识别成收集槽后，循环的值里"状态数组"那一项就不再是状态，`LoopView` 的布局与用户可见的值都会变——这属于 3.10 的裁定范围，本步没有替您决定实现位置。
+3. **磁带元素的类型限制**：现在允许函数值进磁带（循环体里的调用）。若导出要求磁带元素是张量/标量/元组，应在体图计划处校验并拒绝，或者按 §7 摊平。请负责人定哪一侧。
+4. **`#recompute`**：本步的磁带是"全部残差"，没有检查点策略；节点表示不变，将来只需在执行器一侧换策略（这一步没有动）。
+5. **一个循环体里再有一个需要自己磁带的循环**（同一张体图的重入）现在被拒绝；如果这种形状在实际程序里出现（经函数值/递归绕回），要不要支持、怎么支持，留待后续。
+
+## H4a 张量命名维度 `constas`
+
+分支：`handover/H4a-constas`（worktree `D:\Projects\Camel-wt\h4a-constas`），2026-10-20。改动都在工作区，没有提交；由协调者提交、合并。
+
+### 1. 影响分析：今天「形状常量」怎么表示
+
+**张量类型。** `modules/tensor/type.h` 用 `StaticShape = std::vector<int64_t>` 表示形状，`kUnknownDim = -1` 表示未知维度；`TensorType` 由 `dtype_` 与 `shape_` 组成，按 `internKey(dtype, shape)` 驻留（`modules/tensor/type.cpp`）。诊断里打印为 `Tensor<float32, [2, ?]>`（`toString`），源码形式是 `Tensor<f32, const [2, -1]>`（`spelling`）。改动前 `equals` 直接比指针（驻留使其成立），`unify` 取两边都同意的事实。
+
+**类型实参。** `include/camel/core/type/other.h` 的 `TypeArgument` 只有 `Type *type` 与 `shared_ptr<data::Data> data` 两个成员，由 `OtherType::cloneWithArguments` 解释。GCT 的 `visitSpecType`（`src/compile/gct/builder.cpp`）对 `const` 实参调用 `extractStaticDataFromNode`，拿不到静态数据就报 `InvalidTypeArgument`。因此今天 `Tensor<f32, const [N]>`（`N` 是顶层 `let` 常量）已经是一个错误：实测报 `InvalidTypeArgument`「every extent of a Tensor shape must be an integer constant」。这保证了「形状里的普通名字改按维度名解释」不会让任何今天能跑的程序失效。
+
+**调用点的类型。** GIR 的 `visitLinkNode`（`src/compile/gir/builder.cpp`）在 `targetOperator == nullptr` 时调用 `enterParameters`，它只处理隐式入口转换（可空、错误值等），不改写实参类型；`castNodeTo` 正是 `as` 用的带检查转换。`FunctionType` 的驻留键包含形参名，但 `equals`/`assignableFrom` 忽略形参名（`include/camel/core/type/composite/func.h`）——这是「只属于签名、不影响类型相等」的既有先例，本次的命名维度与之同构。
+
+**影响面。** 核心类型（新增 `extent.h`，`other.h` 两个虚函数）、张量模块、词法/语法/AST、GCT、GIR、语义诊断、格式化器（新语法节点需要规则）、语言参考与张量技术文档、测试。没有动遍、后端、调度器，也没有新增图节点种类（运行时检查复用 `CAST`）。
+
+### 2. 实现与设计选择
+
+**2.1 编译期维度：`ExtentForm`。** 新增 `include/camel/core/type/extent.h`：
+
+- `ExtentForm` 三态：`Unknown`、`Constant`、`Linear`（常数项 + 若干个「名字 × 整数系数」）。
+- `linear()` 合并同名项、丢掉零系数、按名字排序，使相等可判定（`n + n` 就是 `2 * n`）。
+- `evaluate(values)`：所有名字都绑定时给值，否则 `nullopt`。
+- `bind(value, values)`：把这个等式告诉它的名字；常数必须相等，只有一个未绑名字时解出它（并检查整除），多于一个就**不猜**、留作未定；与已绑值矛盾返回 `false`。
+- `toString()`：`?`、`3`、`n`、`2 * n - 1`。
+
+**2.2 与具体类型解耦。** 核心不认识 `Tensor`：
+
+- `TypeArgument` 增加 `shared_ptr<const std::vector<ExtentForm>> extents`（三选一，与 `type`/`data` 并列）。
+- `OtherType` 增加两个虚函数：`extentForms(out)`（按该类型声明的顺序给出维度；默认 `false`）与 `withExtentValues(values)`（把已绑名字换成具体值；默认 `nullptr`，无名字可换时返回 `this`）。
+- 张量模块实现它们：只要有一个维度写了名字就保留 `forms_`；驻留键包含 forms（`[n, 3]` 与 `[?, 3]` 是两个对象，签名才能记住名字），但 `equals`/`assignableFrom`/`castSafetyFrom`/`mangle` 只看 dtype 与形状——与形参名同样的取舍。`cloneWithArguments` 遇到 `argument.extents` 时：常数项进形状，非常数项在形状里记 `?`，forms 原样收下。
+
+**2.3 语法。** `constas` 是关键字（`token_kinds.def`，`Type` 类），只在 `const` 类型实参内部被接受（`parser_type.cpp` 的 `ConstDataScope`），产生 `ConstasData` 节点 → AST `ConstAsLoad`；别处写它是普通语法错误。格式化器补了 `ConstasData` 规则（`tools/format/fmt.cpp`）——否则 `camel-format` 对任何用了新写法的程序直接抛 `no rule for ConstasData`，`frontend.format_keeps_ast` 与 `frontend.fuzz_lossless_tree` 会因此失败。
+
+**2.4 GCT：把维度读成线性式。** `visitFuncType` 给每个函数声明开一个维度作用域；与 `typeas T` 一样，先扫一遍**所有形参类型**里的 `constas` 名字（`collectDimensionNames`），再逐个读类型，因此名字可以出现在绑定它的形参之前。`dimBindAllowed_` 只在形参类型期间为真：返回类型、嵌套函数类型里的 `constas` 报 `ConstasNotAllowed`；同一名字第二次 `constas` 报 `DimensionNameAlreadyBound`；从未绑定就写名字报 `DimensionNameNotBound`。`namesDimension` 把「带普通名字的 `const` 数组」都交给维度读取器，因此只在返回类型里出现的 `n` 得到的是名字错误，而不是「形状必须是整数常量」。
+
+`visitExtent` 的语法就是设计原则 5.4 的线性式：整数字面量、已绑名字、`constas`、一元 `-`、`+`/`-`、乘以常数（任一侧是常数）；除法、两个命名维度的乘积、调用等一律**记为未知**，不是错误；非整数常量（小数、字符串、布尔）报 `InvalidExtentExpression`。
+
+**2.5 GIR：调用点绑定、检查、转换。** 直接调用时（`targetOperator == nullptr`）：
+
+1. 对每个带命名维度的形参，从实参类型取 `extentForms`，只把**静态已知（常数）**的维度用 `bind` 绑进本次调用的 `ExtentValues`；矛盾在**那个实参**上以 `DimensionMismatch` 报出（位置取实参表达式的 origin）。
+2. 全部绑完后，再用 `withExtentValues` 把每个命名形参细化；实参维度静态未知时，把实参经 `castNodeTo` 转成细化后的类型——就是 `as` 的带检查转换，未知维度因此**在调用处运行时检查**，编译期放过。
+3. 同一组绑定也用来细化声明的返回类型；返回值经同样的带检查转换。于是 `: Tensor<[n]>` 这种关系也在调用处成立（函数体没兑现就在运行时失败），而函数仍然只有一张图。
+
+`var` 形参（单元而非值）与算子调用（它们自己的形状推断负责）不参与。绑定时只读直接 `OtherType` 形参：元组/结构体/数组里的张量、函数类型形参这次不在范围内。
+
+**2.6 不产生新实例。** 名字只活在签名与调用点的静态类型里：实例化从来看不到它们，图里保存的仍是签名类型（`value_type="Tensor<float32, [n, k]>"`），每次调用的具体类型只出现在调用者的 `CAST` 上。测试 `single_instance` 用 `std::rgir` 断言：恰好一个 `dense` 子图、两个 `FUNC` 节点、没有 `dense<...>` 这样的实例名。
+
+### 3. 测试与结果
+
+**新增计划** `test/plans/feat/modules/tensor/named_dims.plan.toml`，用例在 `test/cases/modules/tensor/named_dims/`，共 28 项：
+
+| 测试 | 覆盖 |
+|---|---|
+| `bind_and_reuse`（nvm/fvm/jit/prl） | 第一个形参 `constas n` 绑定，第二个写 `n`；两次调用不同维度 |
+| `linear_forms`（nvm/fvm/jit/prl） | `n`、`n + 1`、`2 * n`、`n + m`；名字可以出现在绑定它的形参之前；两次调用各自成立 |
+| `nonlinear_unknown`（nvm/fvm/jit/prl） | `n * m` 不是线性式 → 未知 → 实参被接受 |
+| `unknown_extent_checked`（nvm/fvm/jit/prl） | 实参静态 `?`、另一实参绑 `n = 3`：编译通过、运行时通过 |
+| `with_param`（nvm/fvm） | `with` 形参绑定名字，普通形参写它 |
+| `unknown_extent_mismatch`（nvm/fvm/jit/prl） | 同上但文件是 4 个元素：运行时 `conversion to 'Tensor<float32, [3]>' failed: the tensor has shape [4]`，位置指向实参 |
+| `return_extent_checked` | 返回类型写 `[n]`、体返回 `[4]`、实参 `[3]`：运行时在调用处失败并给出两个形状 |
+| `err_unbound_name` | 只在返回类型出现的名字：`DimensionNameNotBound`，行/列指向 `n` |
+| `err_mismatch` | 两个形参写同一名字、实参 3 与 4：`DimensionMismatch`，位置指向第二个实参 |
+| `err_constas_return` | 返回类型里写 `constas`：`ConstasNotAllowed` |
+| `err_constas_twice` | 同一名字第二次 `constas`：`DimensionNameAlreadyBound` |
+| `single_instance` | `std::rgir`：一个 `dense` 图、两个 `FUNC`、无 `dense<...>`，签名保留名字 |
+
+**命令与结果**（全部在本 worktree 实测）：
+
+- 构建：`pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h4a-constas` → exit 0（本机要求，构建统一走串行助手，不直接 `npm run build`）。
+- `node scripts/test.js test\plans\feat\modules\tensor` → **99/99 通过**（原有 71 项 + 新增 28 项）。
+- `node scripts/test.js test\plans\feat\modules\tensor test\plans\feat\parse test\plans\feat\compile test\plans\feat\consistency test\plans\smoke` → **1829 项，1828 通过，1 失败**：`frontend.ast_snapshot`。
+- `node scripts/check-grammar.mjs --check` → `103 productions, in step with the parser, the token table and the language reference`。
+- `node scripts/check-doc-links.mjs --all` → `no broken links in 171 document(s)`。
+- `node scripts/check-std-includes.mjs` → `904 files, every standard header used is reached through its includes`。
+- `node scripts/diagnostics-catalog.mjs` → `170 codes, every one with a name and a message, no value used twice`。
+
+**关于唯一失败 `frontend.ast_snapshot`。** 它是 2026-10-19 基线的 19 项之一（`README.cn.md` §1.2）。本次运行报 91 个文件「read differently」，逐个核对了最后改动：85 个由 `c431e1bc`（引用编号重排）改过、6 个由合并提交 `2aeb8928`（同一批引用重排）改过，都在快照 `3364bfb3` 之后，**与本次改动无关**；本次新增的 12 个用例在快照里显示为「not in the snapshot yet」，不是差异。没有为通过而更新快照：那 91 条与 H4a 无关，改它们是噪声。基线里的 `frontend.format_keeps_ast` 与 `frontend.fuzz_lossless_tree` 这次**通过**（格式化器规则是本次新语法必需的）。
+
+另外手工确认过：`std::opt::inline std::fvm` 下调用点的 `CAST` 仍然生效（错误的 4 元素文件仍在运行时被拒），说明检查不依赖调用是否被内联。
+
+### 4. 未完成 / 这次不做
+
+- **嵌套位置**：元组、结构体、数组元素、函数类型形参里的 `Tensor<[n]>` 不绑定、不检查；只有直接的 `OtherType` 形参参与。
+- **算子调用**：`targetOperator != nullptr` 的调用不做命名维度检查（张量算子自己的形状推断负责）。
+- **`var` 形参**：变量是单元不是值，跳过；`var` 的写入值与命名维度的关系未定义。
+- **一个等式里多个未绑名字**（如 `[n + m]` 且两者都还没有值）：不猜，留作未知；调用处也不为它插检查。
+- **跨签名**：实参类型若带着**别的**签名的名字，一律当作未知，只从常数绑定。
+- **ONNX/autodiff**：导出与求导看到的是形状里的 `?`，命名关系不进入导出。
+- **重载选择**：名字不参与特异性，两个只在名字上不同的签名是同一类型。
+- **文档**：除语言参考（关键字表、类型文法、两处说明）与 `docs/technical/25_tensor_stack_and_onnx_export.md` 的一节外，没有单独的模块文档。
+
+### 5. 待决问题
+
+1. **名字能否先用后绑？** 现在允许（与 `typeas T` 一致：先扫签名再读类型），`linear_forms` 依赖这一点（`d: [n + m]` 出现在 `e: [constas m]` 之前）。若作者要求「必须先 `constas` 后才能写」，`DimensionNameNotBound` 的判据要改成按顺序，测试跟着改。
+2. **返回类型的关系在调用处检查（已实现）是否就是意图？** 另一种可能是只把返回类型当提示、或在函数体的 `return` 处检查（需要把绑定带进体里，等于按签名产生实例或做全程序分析）。我选调用处：与实参检查同一机制，且不产生实例。
+3. **重载**：`f(x: Tensor<[constas n]>)` 与 `f(x: Tensor<[3]>)` 对 `[3]` 都接受，现在取先声明者（名字被 `equals` 忽略）。是否应当让写死形状的更特异、或根本不允许仅名字不同的重载？
+4. **形状里的名字与顶层常量同名**：改动前 `const [N]`（`N` 是常量）是 `InvalidTypeArgument`，现在 `N` 被当作维度名（未绑定则 `DimensionNameNotBound`）。没有任何能跑的程序受影响，但「常量能否作为维度」需要一条规则（若可以，`constas` 与常量的优先级也要定）。
+5. **非常式算术**（`n / 2`、`n % 2`、两个名字相乘）现在静默为未知。是否应当给出提示（例如「这不是线性式，结果未知」），还是保持 5.4 的「其余结果为未知」？
+6. **是否要把关系推进到嵌套类型与算子**：`(Tensor<[n]>, Tensor<[n]>)`、`matmul([n, 3], [3, k]) -> [n, k]`。后者需要算子把形状关系作为形式暴露出来，属于张量模块与算子的后续工作。
+7. **维度名与类型名/形参名同名**：现在维度名在单独的作用域里，允许同名（`func f(n: int, x: Tensor<[constas n]>)` 合法）。是否要禁掉以免误读？
+---
+
+## H4b `for` 遍历字符串、映射、张量
+
+分支：`handover/H4b-for-iterate`（worktree `D:\Projects\Camel-wt\h4b-for-iterate`），2026-10-20。实现、文档、测试都在工作区里，没有提交。
+
+一句话：`for x in xs` 的 `xs` 现在可以是数组、字符串、映射或张量。字符串给码点（每个元素是只含该字符的字符串，与 `s[i]` 相同，11.1），映射给 `(键, 值)` 对并**按键升序**（11.3；实现里没有插入序可给），张量沿第一维给子张量。实现只有一条：`Builder::visitLoopNode` 在循环所在处把非数组序列按类型经内部算子组 `__iter__` 转成元素数组，`LOOP` 节点、`driveLoopRounds`、下降、`std::macro` 与所有后端仍然只见到数组——没有按后端写的迭代代码，也没有按名字分派。
+
+### 1. 每种序列给什么
+
+| 序列 | 元素 | 顺序 | 空的情形 |
+|---|---|---|---|
+| `T[]` | 元素本身 | 下标 | 0 轮 |
+| `string` | 只含一个码点的 `string` | 码点，从左到右 | 空串 0 轮 |
+| `Map<K, V>` | `(K, V)` 元组 | **键升序**（11.3），不是插入序 | 空映射 0 轮 |
+| `Tensor` | 去掉第一维的子张量（同一份数据的视图，不复制） | 第一维 | 第一维为 0 时 0 轮 |
+
+- **字符串按码点**：`for c in '中文'` 两轮，元素是 `'中'`、`'文'`；`'中文🙂'` 三轮（10 字节，3 个码点）。元素与 `'中文'[i]` 是同一个值（同一套解码：`camel::utf8::decodeOne`），所以 `c == s[i]` 成立。
+- **映射按键序**：见第 3 节。
+- **张量的元素类型**：rank 2 给 rank 1，rank 1 给 **rank 0** 子张量（`sum(x)` 就是那个数）；形状未知的 `Tensor` 给元素类型 `Tensor`。rank 0 的张量没有第一维：形状已知（`Tensor<f32, []>`）时编译期 `LoopSequenceNotIterable`，否则运行期故障（`iter` 的 infer/内核各自拒绝）。
+- **元素类型就是循环体看到的类型**：I18 不变——元素端口类型 = 元素数组的元素类型。
+- `for … while` 的次序不变（先条件、再取元素），四种序列都能配；`while` 形态不涉及序列。
+- 空的情形一律 0 轮、值是初始状态（`iterate_empty.cml`：字符串、映射、张量第一维 0、空数组、条件一开始就假，五个都是初值）。
+- 其余类型（`int`、元组、集合……）仍是 `SemanticDiag::LoopSequenceNotIterable`。
+
+### 2. 实现：一次转换，一条驱动
+
+**builder。** `src/compile/gir/builder.cpp:8211-8255` 的 `visitLoopNode`：序列已经是 `Array` 就照旧；否则 `module_->getImportedEntity("__iter__")` 取算子组，用序列的类型 `resolve` 一个重载（`statics` 空、`Modifier::None`），成功就 `addOperNode` 一个 OPER、`stampPermissions`、用 `registerNodeOrigin(..., "gir.loop.iter")` 记住循环里的位置、`linkNodes(LinkType::Norm, sequence, array)`；失败或没有这个组则 `SemanticDiag::LoopSequenceNotIterable`。之后 `ASSERT` 结果是数组，`elementType = ArrayType(type)->elemType()`。**每个后端、下降、macro 看到的都还是「数组 + 元素类型」**，它们一行没改。
+
+**三个 `__iter__` 重载，各归各的模块**（同名算子组由 `Module::getImportedEntity` 合并，`src/core/module/module.cpp:414-438`；同一 URI 的 resolver 后写覆盖前写，这是 `OperatorGroup::publishResolvers` 本来的行为）：
+
+| 重载 | 在哪 | 做什么 |
+|---|---|---|
+| `:struct/iter_str` | 内建 `globals` 的 `__iter__` 组（`src/builtin/modules/globals.cpp:1352-1360`），内核 `__iter_str__`（`src/builtin/operators/struct.cpp:43`） | `ArrayType::create(Type::String())`，按 `utf8::decodeOne` 每码点一个 `String::from(text.substr(...), mm::autoSpace())` |
+| `:coll/map_items` | 内建集合的 `__iter__` 组（`src/builtin/operators/collection.cpp:411-413`） | 与 `items(m)` 同一个 `typed(...)` 定义（`:232`），所以 `for` 与 `items` 的次序永远一致 |
+| `tensor:iter` | 张量模块 `utilityOps()` 的 `OpDef`（`modules/tensor/ops/utility_ops.cpp:219-226`，`.exports={"__iter__"}`） | `iterInfer`（`:107`）与 `iterKernel`（`:119`）：每行 `TensorObject::createView(t, rowShape, allocator, i * inner)` |
+
+张量模块的 `__iter__` 以 `__` 开头，所以 `exportDefaultImportRef` 让它随 `import tensor` 自动可见（`modules/tensor/module.cpp:63-70`）；程序写不到这个名字。`exports` 只有 `__iter__`，因此不会多出一个公开的 `iter(t)` 函数。
+
+**张量视图。** `TensorObject::createView` 多了一个 `uint64_t elementOffset = 0`（`modules/tensor/tensor.cpp:82`，声明在 `tensor.h`）：范围检查 `elementOffset + numelOf(shape) <= source->numel_`；拷贝路径从 `data_ + elementOffset * elementSize` 起；视图路径把偏移算进 `ownerDataOffset_`。元素是只读共享的视图（张量值不可变，算子都返回新张量），所以 `for row in m` 既不复制数据也不会改到 `m`。
+
+**std::cpp。** `:struct/iter_str` 有一条独立译法：`r[":struct/iter_str"] = runtimeFunction("chars")`（`src/passes/trans/cpp/operator_rules.cpp`），运行时新增 `rt::chars`（`include/camel/standalone/array.h`，码点拆成单字符 `Str`）。所以字符串循环能被 `std::cpp` 独立译出并跑（`test/tools/cppexec/expect.txt` 新增 `test/cases/loops/iterate_string.cml`）；映射与张量本来就不是 `std::cpp` 携带的类型，报 `RuntimeDiag::TranslationRefused`（映射在值类型上就拒绝，张量在下降后 `rec` 的 `Tensor[]` 形参上拒绝）。
+
+**诊断。** `SemanticDiag::LoopSequenceNotArray` 改名 `LoopSequenceNotIterable`（码仍是 `0x000120`，目录 id `0x03000120`），文案列出四种序列，hint 里说明码点、键序、第一维（`include/camel/core/error/diagnostics/messages/semantic.h`、`src/core/error/diagnostics/messages/semantic.cpp`）。
+
+### 3. 映射的遍历顺序：按键序，有证据
+
+任务的原话是「插入顺序，如果映射实现保持插入顺序；否则提问」。查证结果：**实现不保持插入序，无法给插入序，也不该给**。
+
+1. **实现**：映射是持久化 B+ 树（`rtdata::Table`），`include/camel/core/rtdata/collection.h:23-44` 写得很清楚——叶子按 `data[0..size) = keys, ascending`，整棵树「Keys are strictly ascending across the whole tree under compareKeys」。插入序没有被记录在任何地方，给不出。
+2. **规范**：设计原则 11.3（`docs/design-principles.cn.md:605`）「映射的遍历与打印按键排序」。按插入序遍历会与这条规范的打印次序不一致，同一份映射两个次序。
+3. **既有行为**：`items(m)` 就是键序（本次让它与 `__iter__` 共用同一个定义），`keys(m)`/`values(m)` 也是；`for` 与它们一致才不会有第四种次序。
+
+所以**键序**是这次的语义规则，写进了语言参考第 6 章（中英）与 `docs/technical/39_loops.md` 2a 节。证据测试是 `iterate_map.cml`：字面量写成 `[(3,'c'), (1,'a'), (2,'b')]`（插入序 3,1,2），遍历得到 `a`、`b`、`c`，最后一个键是 3，且每轮的键都大于上一轮（`ordered` 为 1）。
+
+如果语言作者要的是插入序，那是映射表示的改变（现在没有这个信息），列在下面 Q1。
+
+### 4. 测试与结果
+
+| 测试 | 覆盖 | 结果 |
+|---|---|---|
+| `loops.iterate_string`（nvm/fvm/jit/prl，`backends_agree`） | ASCII 与多字节各一轮一码点、字符与 `s[i]` 相同、空串、体内再套一个字符串循环、`for … while` 停在三轮 | 全过，输出 `3 3 中文 2 7 2 3` |
+| `loops.iterate_map`（同上） | 乱序字面量按键序、严格递增、字符串键、空映射、计数、`for … while` 两对 | 全过，输出 `abc 3 1 6 ab 9 3 ab` |
+| `loops.iterate_tensor`（同上） | rank 2 的行（rank 1）、rank 1 的元素（rank 0）、第一维 0、体内再套一个行循环、未知 rank 的 `Tensor` 形参 | 全过，输出 `21 3 3 6 7 21 3` |
+| `loops.iterate_empty`（同上） | 空串、空映射、第一维 0 的张量、空数组、条件一开始就假的 `for … while` | 全过，输出 `1 2 3 4 5` |
+| `loops.iterate_string.macro` | `std::macro` 把 `'中a'`、`'abc'` 两个调用的循环折成常量 2、3（rgir 里是两个静态 DATA） | 过 |
+| `loops.iterate_string.native_loop`、`.iterate_map.native_loop`、`.iterate_tensor.native_loop` | `fvm_native_loop`、`jit_native_loop`（原生 LOOP 指令，不走下降） | 全过 |
+| `loops.err_not_iterable` | `for x in 42`，第 3 行，`LoopSequenceNotIterable` | 过 |
+| `loops.err_tensor_rank0` | `reshape(zeros([1]), [])` 的 `Tensor<f32, []>`，第 10 行，同一诊断 | 过 |
+| `loops.fault_tensor_rank0`（nvm/fvm） | 形状经函数参数进来、rank 只在运行期是 0：在循环的序列处报 `RuntimeDiag::RuntimeError`（`iter: a rank-0 tensor has no first dimension`），第 16 行，两个后端一致 | 过 |
+| `trans.cpp` 的 `agree_with_fvm` | `iterate_string.cml` 经 `std::cpp` 独立编译（无运行时）后与 fvm 输出相同 | 过 |
+
+跑过的计划与通过数：`linear.loops` 85/85；`modules.tensor` 36/36；`modules.tensor` 目录 71/71；`compile.collections` 136/136；`compile.utf8_strings` 4/4；`linear.collections_and_structs` 13/13；`trans.cpp` 6/6；`modules.stdlib_registry` 4/4；`compile.diag_catalog` 3/3。全量套件见第 7 节。
+
+**改动的既有期望，逐条理由**：
+
+- `test/cases/loops/err_not_array.cml` → `err_not_iterable.cml`：原用例遍历 `'abc'`，现在合法，不能再当负例。改成 `for x in 42`（仍是「这个类型不是序列」，不是为通过而换形状），名字随诊断改。行号 2 → 3 是因为加了一行注释。
+- `SemanticDiag::LoopSequenceNotArray` → `LoopSequenceNotIterable`：名字要说的是「不是可遍历的序列」，而不是「不是数组」。**码值不变**（`0x000120` / `0x03000120`），所以既有诊断 JSON 的 id 不变；`docs/diagnostics.md` 由 `node scripts/diagnostics-catalog.mjs --write` 重新生成（示例自动换成新用例）。
+- `test/plans/feat/parse/golden/ast_hashes.txt`：只加了 7 个新用例的行、把 `err_not_array.cml` 那行换成 `err_not_iterable.cml`。**没有**顺手 `--update` 那 91 处已存在的差异（`legacy/` 目录已不在仓库里、若干文件的 AST 早在这次之前就漂移），那些属于基线里已知失败的 `frontend.ast_snapshot`，不是本任务的范围。
+- 没有别的期望改动。
+
+### 5. 文档
+
+- `docs/language/06_expressions.md` 与 `docs/language/en/06_expressions.md` 第 6 章循环一节：四种序列各自的元素、空的情形、诊断名、图上「一次转换」的那段。
+- `docs/technical/39_loops.md`：第 2 节第 1 步改写，新增「2a. 字符串、映射与张量的元素」一节（表格 + 三种重载 + 为什么只有数组进入驱动），后端表、驱动那段的「以后扩展到数组以外」改成「转换在循环之前完成」，测试一节列出新用例。
+- `docs/design/loops/README.cn.md` Q6「`for` 遍历什么」补「已定（H4b）」。
+- `docs/design/graph-model/README.cn.md` LOOP 节点的输入一行、`docs/design/op-semantics/README.cn.md` 的 I18 与 `LoopView::iterable()` 注释：说明 Norm 0 是元素数组（非数组序列时是转换它的算子节点）。
+- `docs/diagnostics.md`：重新生成。
+- `docs/roadmap.cn.md` 与 `docs/design-principles.cn.md` **没有改**（见 Q6）。
+
+### 6. 待决问题
+
+**Q1 映射的遍历顺序：键序（已实现）还是插入序？**
+现状：按键序，依据 11.3 与 B+ 树表示（第 3 节）。要插入序就得在映射里记插入序（或换表示），并同时改 `items`/`keys`/`values`/打印，是语义变更，不是循环一处的事。建议维持键序。
+
+**Q2 rank 1 张量的元素：rank 0 子张量（已实现）还是数值？**
+现在 `for x in v`（`v` 是 `Tensor<f32,[n]>`）给 `Tensor<f32,[]>`，`sum(x)` 拿到数；而 `v[i]` 给的是 `f32` 数。两种都自洽，但同一份数据两种取法元素类型不同。选 rank 0 的理由：形状未知的 `Tensor` 的元素类型才定义得出来（`Tensor`），rank 1 → 数值会让「未知秩」那条规则变成「秩 1 时又特例成数值」，I18 的元素类型要按秩分支。若作者要统一成数值，改 `iterInfer`/`iterKernel` 一处即可，影响 `iterate_tensor.cml` 的期望。
+
+**Q3 `Set` 要不要可遍历？**
+没有实现。`items(es)` 已有（升序），差一个 `__iter__`/`tensor` 式重载；语义上「集合无重复、升序」是确定的。没做是因为任务只点了字符串、映射、张量，而且集合的遍历顺序虽由 11.3 的打印次序暗示，却没有明文。建议下一项任务加。
+
+**Q4 非数组序列在循环处物化成数组：O(n) 内存。**
+字符串、映射、张量各生成一个元素数组（张量是视图数组，开销是 n 个对象头，不是 n 份数据；字符串是 n 个单字符字符串；映射是 n 个元组）。这是「一个 LOOP 只有一种形态」的代价，换来所有后端与下降零改动。惰性游标（让驱动直接从序列取第 i 个元素）是以后的优化，和循环设计稿 6.4「`range` 不物化」是同一类工作；那时 `__iter__` 可以变成一个「取第 i 个元素 + 长度」的协议，节点与驱动仍只有一处改。
+
+**Q5 `std::macro` 只覆盖到字符串。**
+`std::macro` 折一个 macro 函数调用要求每个实参是静态 DATA 节点；字符串字面量是，映射/张量值要经 `as Map<...>`（CAST）或 `new`（OPER），所以折不了，`iterate_macro.cml` 只覆盖字符串（折成 2、3）。这不是循环的问题：macro 求值器的循环走的就是同一个 `driveLoopRounds`，序列在帧里是 `__iter__` 算子的结果，真跑到了也能取元素。要不要让 macro 认这些常量是 macro 折叠本身的范围，不是 H4b 的。
+
+**Q6 设计原则 3.10 的这句话要协调者更新。**
+`docs/design-principles.cn.md:209`（英文 `docs/design-principles.en.md:212` 同）仍写「`for` 目前只遍历数组，字符串、映射、张量以后再加」。按任务要求没有改设计原则；现在「以后」到了，§1 的语义应当并进 3.10（以及 11.1/11.3 若要写元素形态）。这是规范文字的唯一缺口，实现与其它文档都已按 §1 对齐。
+
+### 7. 验证
+
+构建只走串行助手（全核直接 `npm run build` 会蓝屏）：
+
+```powershell
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h4b-for-iterate
+```
+
+测试：
+
+```powershell
+$env:CAMEL_HOME = "D:\Projects\Camel-wt\h4b-for-iterate\out\latest"
+node scripts/test.js test\plans\feat\linear\loops.plan.toml          # 85/85
+node scripts/test.js test\plans\feat\modules\tensor.plan.toml        # 36/36
+node scripts/test.js test\plans\feat\modules\tensor                  # 71/71
+node scripts/test.js test\plans\feat\compile\collections.plan.toml   # 136/136
+node scripts/test.js test\plans\feat\compile\utf8_strings.plan.toml  # 4/4
+node scripts/test.js test\plans\feat\linear\collections_and_structs.plan.toml  # 13/13
+node scripts/test.js test\plans\feat\trans\cpp.plan.toml             # 6/6（含新加的 iterate_string.cml）
+node scripts/test.js test\plans\feat\modules\stdlib_registry.plan.toml         # 4/4
+node scripts/test.js test\plans\feat\compile\diag_catalog.plan.toml  # 3/3
+node scripts/test.js test\plans                                      # 全量，见下
+```
+
+`docs/diagnostics.md` 用 `node scripts/diagnostics-catalog.mjs --write` 生成（再跑一次不带 `--write` 只做检查）。
+
+**全量套件**：`node scripts/test.js test\plans` → **6004 项，5961 过，8 失败，35 跳过**。8 条失败逐条查过：
+
+| 失败 | 原因 |
+|---|---|
+| `frontend.ast_snapshot` | 基线已有：91 处 AST 黄金差异（`legacy/` 目录已不在仓库里等）。这次只加了 7 个新用例的行、换掉改名的那一行，没有动那 91 处（第 4 节） |
+| `04_staticness` | 基线已有（exemplars 的 04 号） |
+| `sys.basic`、`poison:sys.basic` | 环境：这个会话的 `PATH` 里有一项含非 ASCII 字符（中文用户名目录），`sys.get_env("PATH")` 报 `a string must be valid UTF-8`。把 `PATH` 换成纯 ASCII 后同一个二进制跑 `test/cases/modules/std/sys/basic.cml` 通过（exit 0） |
+| `nvm_timeit`、`inline_nvm_timeit`、`jit_timeit`、`inline_jit_timeit` | 机器负载：`perf.fib` 的预算 200 ms / 80 ms，实测 226 ms / 90 ms（同时有六个工作区在编译、测试）；同一次运行里 `fvm_timeit`、`inline_fvm_timeit` 是过的 |
+
+与协调者给的基线 19 条相比：其中 17 条现在**过**（`catalog.doc_is_generated`、`registry.signatures_match`、`graph.default`、`integrated.graph.false/true`、`rewrite_opt`、`poison:rewrite_opt`、`poison:failed_no_rule.error`、`05_effect_order`、`grammar.reference_in_step`、`frontend.format_keeps_ast`、`frontend.fuzz_lossless_tree`、`failed_no_rule.error`、`pass_export_refusal_*`、`portability.std_includes`），仍失败的只有 `frontend.ast_snapshot` 与 `04_staticness` 两条基线项；这 6 条新增失败全是环境与负载（上表），与本改动无关。重建之前的那次全量跑也是 6004/5961/8/35、同几族失败。
