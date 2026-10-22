@@ -23,6 +23,13 @@ desc = "The relative links of the reader-facing documents point at files and hea
 # with a reason. Cost: 211 snippets in about 2 s on the Linux build host, with 8 workers; each
 # snippet runs in its own process because every fence can declare its own module and entry.
 # Task reports and dated reviews are records and are not scanned.
+#
+# scripts/check-doc-counts.mjs checks the numbers the other three guards cannot see: a page's
+# "119 operators" or "11 signature files" against the one file that defines it (the generated
+# matrix, the signature directory, the release gate's lists, the plan selection, CMakeLists.txt,
+# the AST snapshot, syntax.h, the RuntimeError references). A dated snapshot that states an old
+# number is allowlisted in the script with a reason; the script names the page, line, claim and
+# truth when it fails. Cost: 145 documents in about 0.7 s, no build.
 
 [[tests]]
 name = "docs.links.reader_facing"
@@ -56,3 +63,14 @@ expect_exit = 0
 expect_stdout_contains = ["no stale snippet in"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+
+[[tests]]
+name = "docs.counts_current"
+desc = "Every counted claim in a reader-facing page (CMake minimum, exported operators, signature files, diagnostic codes, release-gate plans/checks, the tiles selection, the .cml and snapshot sizes) agrees with the file or command that defines it. Dated snapshots are allowlisted with a reason."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-counts.mjs"
+expect_exit = 0
+expect_stdout_contains = ["no stale count in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
