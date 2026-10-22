@@ -1,0 +1,391 @@
+# H161：从变更到计划——把 gpu、onnx、nn、opt 接进 `--changed`
+
+> 状态：**已完成**。构建与计划都在主机 `88zjwei` 上跑，数字见 §5 与 §8。
+> 分支 `handover/H161-plan-selection`，基点 `origin/develop` `66fb3114d`（H154 合并之后）。
+> 本报告写清：根因、模块/pass 到计划的映射、36 条文件规则、三条演示、slow 层行为、故意不接的计划。
+
+## 0. 一句话结论
+
+`test/plan-selection.json` 从 25 条文件规则变成 **36 条**（68 个路径前缀、102 条计划项；原来 64 条计划项），
+3 条目录规则不变。`modules/` 下 **27/27** 个模块、`src/passes/` 下 **4/4** 个 pass 目录都有映射。
+
+- `modules/tiles/**`：选 **6 个计划、182 条用例**（CPU tiles 67 + ddpm 21 + `gpu/tiles` 83 +
+  `gpu/tiles_rows` 2 + `gpu/tiles_transfer` 3 + `gpu/profile` 6）。主机上 **182/182 绿、84.5 s**；
+  `-Tier fast` 下其中 **94 条 GPU 用例真的执行**，不是被 tier 滤掉。
+- `stdlib/rules.cml`、`src/passes/opt/**`：选 **4 个计划、788 条用例**（smoke 10 + `feat/opt` 710 +
+  `pass_dump` 1 + `rules` 67）。主机上 **788/788 绿、6.4 s**。`feat/opt` 是目录目标，slow 的
+  progen 计划按 policy 被过滤，**710 条**这个数字是 opt 计划本身的诚实代价。
+- 不匹配任何规则的变更仍回退到整个快层：`--changed --list` 打印
+  `(the whole fast layer: smoke + feat)`。
+- `perf/**` 10 个计划、GC 压力 5 个、progen 1 个、autodiff/onnx 的 9 条 PyTorch/ORT slow：
+  **没有任何规则会选中它们**；编辑这些计划文件本身也走回退，不跑它们（§7）。
+
+## 1. 根因：为什么“加规则”不够
+
+H154 §2/§6 的事实是这次任务的起点：
+
+1. 快层闸门的目标是 `smoke` + `test/plans/feat`，`test/plans/gpu/**` 与 `test/plans/perf/**`
+   不在其中；`test/plan-selection.json` 里也没有 gpu 规则（只有 `perf` 的两条），所以改
+   `modules/tiles/**` 永远不会选 `gpu/tiles`。H154 手工第一次跑它们：83/83、2/2、3/3。
+2. tier 过滤只作用于**目录**目标；命名计划文件整计划跑。因此 `gpu` 目录即使被选中，
+   `--tier fast` 也会把 94 条 slow 用例全滤掉——“选中了”不等于“跑了”。
+3. 还有一层 H154 没有点破、但这次必须修的结构问题：**目录规则先短路**。
+   `modules/tiles/src/x.cpp` 先命中 `modules/` 目录规则，解析到
+   `test/plans/feat/modules/tiles.plan.toml` 就返回，后面的文件规则**根本不执行**。
+   同理，旧的 `modules/onnx/`、`modules/nn/`、`modules/autodiff/`、`modules/tensor/`
+   文件规则在这条路径上全是死代码；当时的 self-test 甚至断言 `modules/tensor/`
+   “只能选中 1 个目标、不能落到文件规则”。所以 H154 说的“没有 plan-selection rule”
+   只是表象，**只加规则并不会生效**。
+
+结论：要让“改到 A 能选到真正能抓到它的计划”，需要两件事同时成立：
+
+- 文件规则与目录规则**取并集**（目录给镜像计划，文件规则补镜像树之外的计划）；
+- 选中的计划文件可以声明“只跑 `--tier` 这一层”，用来排除不允许从普通变更里跑的 slow 用例，
+  同时保留同一计划里的 fast 用例。
+
+这两条都做了，且都没改任何计划的 tier、没有挪用例、没有删计划。
+
+## 2. 机制
+
+### 2.1 选择：目录规则 + 第一条匹配的文件规则
+
+`test/runner.mjs` 的 `plansForChanges()` 对每个变更文件：
+
+1. 先跑目录规则，得到镜像路径的计划（目录或 `.plan.toml` 文件）；
+2. 再找**第一条**匹配该文件路径前缀的文件规则，把它的计划加到同一组；同一文件只取第一条，
+   所以规则顺序仍是“具体在前、一般在后”；
+3. 最终 targets 按绝对路径去重；计划在 runner 里再按 `__planPath` 去重。
+
+这使旧的模块文件规则第一次真正生效（例如 `modules/tensor/` 现在会加
+`index_semantics`、`operator_semantics` 和 layered 的 autodiff），也使
+`modules/tiles/` 能加 `gpu/**`。
+
+### 2.2 一条规则项可以“跟随 tier”
+
+规则项是路径字符串，或 `{ "plan": "...", "layer": true }`；规则上的 `"layer": true` 是该项的默认值。
+`layer` 计划仍然是**命名目标**，但在 runner 里不进入 `namedPlans`，因此像目录目标一样被
+`--tier` 过滤。runner 用内部参数 `--selection-layer <逗号分隔的绝对路径>` 传递这个集合
+（`test/runner.mjs` 生成，`test/tools/run-tests.mjs` 消费；不是给用户手动敲的开关）。
+
+- 不写 `layer`：命名文件整计划跑。GPU 计划需要这个：它们整体是 `tier = "slow"`，
+  写成目录目标就一条也不跑。
+- 写 `layer`：`--tier fast` 只跑 fast 用例。autodiff/onnx 需要这个：它们的 slow 用例是
+  PyTorch/ONNX Runtime 对照，普通变更不许在共享主机上跑，但同一计划的 fast 用例必须跑。
+
+一个容易写错的地方：layered 计划**仍然是 targets 的一员**，只是不进入 `namedPlans`；
+runner 可以“把一个命名文件从整计划跑改成按层跑”，但不能凭空补出一个计划。第一版实现把 layered
+计划从 names 里删掉了，结果 onnx 只跑目录给的那一个计划、漏掉 `feat/trans` 和
+`feat/compile/enum`；self-test 现在明确断言 layered 计划也在选中列表里（提交 `c92bfef1b`）。
+
+`--tier all` 时 `layer` 失去过滤作用（`all` 本来就要全部），所以显式 `--tier all` 仍能跑到
+autodiff/onnx 的 slow 用例；这是“用户明确要”，不是 `--changed` 的默认行为。
+
+### 2.3 其它小改动
+
+- `--changed --list`：只打印解析出的计划目标，不启动计划；回退时打印
+  `(the whole fast layer: smoke + feat)`。本报告的三条演示就是用它做的，不必为一个“假设的变更”
+  真跑计划。
+- `self` 规则加了 `except`：`test/plans/` 下编辑**被排除**的计划文件（perf、GC 压力、progen）
+  不选中该文件，因而走回退；要跑它们只能显式命名文件。
+- self-test（`test/tools/selftest/run.mjs`）新增：目录+文件并集、gpu 计划、layered 计划、
+  `--selection-layer` 的实际过滤行为、perf/GC/progen 不可选中，以及**枚举 `plan-selection.json`
+  的每一条计划项**检查“计划存在”且“不是禁止计划”。原有的 runner 测试保持绿。
+
+## 3. 映射：每个模块、每个 pass 到实际存在的计划
+
+依据是计划树里实际存在的文件与 `case =` 指向的用例目录，不是“应该有个计划”。下表是
+`plansForChanges(['modules/<m>/probe.cpp'])` 的实际输出（已去掉 `.plan.toml` 后缀，目录保留）。
+
+| 模块 | 选中的计划 | 直接用例位置 |
+|---|---|---|
+| `algo` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/algo` |
+| `autodiff` | `feat/modules/autodiff`（layered）, `feat/modules/autodiff_inspection`（layered） | `test/cases/modules/autodiff` |
+| `bytes` | `feat/modules/bytes`, `feat/modules/std` | `test/cases/modules/bytes` |
+| `env` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/env` |
+| `fs` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/fs` |
+| `graph` | `feat/modules/graph`, `feat/modules/graph_facts`, `feat/modules/rules` | `test/cases/modules/graph_pass` |
+| `hash` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/hash` |
+| `io` | `feat/modules/io`, `feat/modules/std` | `test/cases/modules/io`、`test/cases/modules/std/io` |
+| `json` | `feat/modules/json_typed`、`json_value`、`json_accessor_error`, `feat/modules/std` | `test/cases/modules/std/json` |
+| `math` | `feat/modules/std`, `feat/modules/operator_semantics` | `test/cases/modules/std/math` |
+| `nn` | `feat/modules/nn`, `checkpoints`, `ddpm_primitives` | `test/cases/modules/nn` |
+| `onnx` | `feat/modules/onnx`（layered）, `feat/trans`, `feat/compile/enum`（layered） | `test/cases/modules/onnx` |
+| `para` | `feat/para`（目录）, `feat/modules/stdlib_registry` | `test/cases/para/core` |
+| `process` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/process` |
+| `pyplot` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/pyplot` |
+| `python` | `feat/modules/std`, `feat/consistency/attempt`, `feat/consistency/cleanup` | `test/cases/modules/std/python` |
+| `random` | `feat/modules/random`（整文件，含 slow）, `feat/modules/stdlib_registry` | `test/cases/modules/random` |
+| `re` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/re` |
+| `rewrite` | `smoke`, `feat/opt`（目录）, `feat/trans/pass_dump`, `feat/modules/rules` | `test/cases/modules/rules` |
+| `sim` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/sim` |
+| `statistics` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/statistics` |
+| `str` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/str` |
+| `tensor` | `feat/modules/tensor`（目录 + `tensor.plan.toml`）, `index_semantics`, `operator_semantics`, `feat/modules/autodiff`（layered） | `test/cases/modules/tensor` |
+| `this` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/this` |
+| `tiles` | `feat/modules/tiles`, `gpu/tiles`, `gpu/tiles_rows`, `gpu/tiles_transfer`, `gpu/profile`, `feat/modules/ddpm_primitives` | `test/cases/modules/tiles`、`test/cases/gpu` |
+| `time` | `feat/modules/std`, `feat/modules/stdlib_registry` | `test/cases/modules/std/time` |
+| `tree` | `feat/modules/checkpoints` | `test/cases/modules/nn`（checkpoint） |
+
+`modules/` 下没有专属计划的模块（`env`/`fs`/`hash`/`math`/…）由 `feat/modules/std` 覆盖，
+`modules/python` 另有 `consistency/attempt`、`cleanup` 两个驱动 Python 的计划。
+`modules/rewrite` 没有自己的计划，它是 opt 的规则引擎，所以选 opt 组。
+
+Pass 目录：
+
+| pass 目录 | 选中的计划 |
+|---|---|
+| `src/passes/opt/` | `smoke`, `feat/opt`（目录，710 条；progen 被 tier 过滤）, `feat/trans/pass_dump`, `feat/modules/rules` |
+| `src/passes/sched/` | `smoke`, `feat/linear`, `feat/para`, `feat/trans` |
+| `src/passes/trans/profile/` | `smoke`, `gpu/profile` |
+| `src/passes/trans/` | `smoke`, `feat/trans`, `feat/compile/gir`, `feat/consistency/print_formats` |
+| `src/passes/test/` | `smoke`, `feat/compile`, `feat/linear`, `feat/mm`, `feat/modules`, `feat/opt` |
+| 其它 `src/passes/` | `smoke`, `feat/trans`, `feat/opt`, `feat/linear` |
+
+`stdlib/rules.cml` 与 `modules/rewrite/` 走 opt 组；`test/cases/modules/tiles/`、`test/cases/gpu/`
+也走 tiles 组（GPU 计划的用例目录不在 `test/cases/gpu` 之外的目录里，改这些用例同样要跑 GPU 计划）。
+
+## 4. 规则的数字
+
+| 项 | 之前 | 现在 |
+|---|---|---|
+| 文件规则（`rules`） | 25 | **36** |
+| 文件规则的路径前缀 | — | 68 |
+| 文件规则里的计划项 | 64 | **102** |
+| 目录规则（`directoryRules`） | 3 | 3（不变） |
+
+净增 11 条：新增 17 个路径集合（tiles + cases/gpu、trans/profile、trans、test passes、graph、tree、
+io、json、bytes、para、python、math、12 个声明模块合一条、CMake 拆分），移除 6 个旧路径集合
+（`benchmarks/`、`test/cases/perf/`，以及被扩展/替换的 opt、autodiff、onnx、CMake+python）；
+其中 4 个是“替换后扩展”（opt 加 `stdlib/rules.cml` 和 `modules/rewrite`；autodiff/onnx 加用例目录
+和 `layer`；CMake 去掉 `modules/python/` 让 python 走自己的规则）。
+
+被移除的两个旧规则正是 policy 问题：
+
+- `benchmarks/` 原来选 `perf/` 与 `feat/modules/autodiff.plan.toml`（后者的 5 条是 PyTorch）；
+- `test/cases/perf/` 原来选 `perf/fib.plan.toml`。
+
+现在这两类变更不接任何计划，回退快层（§7）。
+
+## 5. 三条演示 + 回退
+
+演示都在干净的树上做，`CAMEL_TEST_BASE=HEAD` 把“基线”定在 HEAD，这样只有临时探针文件算变更；
+默认基线仍是 `origin/develop`。三个探针都是未跟踪文件或改后立刻还原的 `stdlib/rules.cml`，
+命令跑完 `git status` 为空。
+
+### 5.1 `modules/tiles/src/foo.cpp`
+
+```powershell
+$env:CAMEL_TEST_BASE='HEAD'
+"// probe" | Set-Content modules\tiles\src\foo.cpp
+node scripts/test.js --changed --list
+```
+
+```
+[INFO] --changed: 1 changed file(s) select 6 plan(s)
+test/plans/feat/modules/tiles.plan.toml
+test/plans/gpu/tiles.plan.toml
+test/plans/gpu/tiles_rows.plan.toml
+test/plans/gpu/tiles_transfer.plan.toml
+test/plans/gpu/profile.plan.toml
+test/plans/feat/modules/ddpm_primitives.plan.toml
+```
+
+### 5.2 `stdlib/rules.cml`
+
+```powershell
+Add-Content stdlib\rules.cml "`n// probe"
+node scripts/test.js --changed --list
+```
+
+```
+[INFO] --changed: 1 changed file(s) select 4 plan(s)
+test/plans/smoke
+test/plans/feat/opt
+test/plans/feat/trans/pass_dump.plan.toml
+test/plans/feat/modules/rules.plan.toml
+```
+
+### 5.3 `src/passes/opt/generic/h161_probe.cpp`
+
+```powershell
+"// probe" | Set-Content src\passes\opt\generic\h161_probe.cpp
+node scripts/test.js --changed --list
+```
+
+```
+[INFO] --changed: 1 changed file(s) select 4 plan(s)
+test/plans/smoke
+test/plans/feat/opt
+test/plans/feat/trans/pass_dump.plan.toml
+test/plans/feat/modules/rules.plan.toml
+```
+
+### 5.4 回退：没有规则匹配
+
+```powershell
+"probe" | Set-Content zz-h161-no-rule-probe.txt
+node scripts/test.js --changed --list
+```
+
+```
+[INFO] --changed: no rule matches 1 changed file(s); running the whole fast layer
+(the whole fast layer: smoke + feat)
+```
+
+### 5.5 选中的计划在主机上真的跑
+
+| 选择 | 计划 | 用例 | pass | fail | wall |
+|---|---|---|---|---|---|
+| §5.1 tiles 组 | 6 | 182 | **182** | 0 | 84.5 s |
+| §5.2 / §5.3 opt 组 | 4 | 788 | **788** | 0 | 6.4 s |
+| 验收：smoke + consistency + docs_links | 24（目录展开） | 1001 | **1001** | 0 | 19.6 s / 10.1 s（两次） |
+
+tiles 组的 182 = CPU tiles 67 + ddpm 21 + `gpu/tiles` 83 + rows 2 + transfer 3 + profile 6；
+opt 组的 788 = smoke 10 + `feat/opt` 710 + `pass_dump` 1 + `rules` 67。
+
+## 6. slow 层的行为：哪些跑、哪些被过滤、为什么
+
+`--changed` 默认是 `--tier fast`。逐项说清楚：
+
+| 选中项 | tier / slow 条目 | `--tier fast` 的实际行为 |
+|---|---|---|
+| `gpu/tiles`（83）、`gpu/tiles_rows`（2）、`gpu/tiles_transfer`（3） | 计划头 `tier = "slow"` | **命名文件，整计划跑**：94 条 GPU 用例中这 88 条执行（§6.1） |
+| `gpu/profile`（6） | fast | 全跑；第一次进选择就跑绿（主机有 CUDA；无设备时的行为本轮没有验证） |
+| `feat/modules/autodiff`（5 条 slow）、`feat/modules/onnx`（4 条 slow） | 计划是 fast，slow 在条目上 | **`layer: true`**：只跑 fast 用例，9 条 PyTorch/ORT 对照被过滤；`--tier all` 才跑它们 |
+| `feat/modules/random`（1 条 slow `std_cpp_agrees`） | fast 计划 + slow 条目 | **命名文件，整计划跑**：slow 的 C++ 对照执行（不是禁止类别；H154 量到 3.17 s） |
+| `feat/opt`（目录） | fast 计划 + 整个 slow 的 `progen` | 目录目标：跑 14 个 fast 计划 710 条，`progen` 的 2 条被过滤——progen 是 policy 禁止项，这是**故意**的 |
+| `feat/trans`（目录） | 1 条 slow `agree_with_fvm` | 目录目标：其余跑，`agree_with_fvm` 被过滤；`pass_dump` 是命名文件，1 条全跑 |
+| `feat/tools/lsp`、`feat/linear`（目录） | `lsp.robustness`、`var_pipelines`、`jit_framed` 的 2 条 GC stress | 逐条过滤；`jit_framed` 的 2 条是 GC 压力，过滤是 policy；`var_pipelines` 不是禁止项，要跑请命名计划文件 |
+| `feat/modules`（通用回退/未列模块） | autodiff/onnx/random 的 slow 条目 | 目录目标：fast 用例跑，slow 过滤 |
+
+### 6.1 证明：`-Tier fast` 下 GPU slow 真的执行
+
+最小复现：
+
+```powershell
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h161-plan-selection -NoBuild -Tier fast `
+  -Plan "test/plans/gpu/tiles_transfer.plan.toml" -Jobs 8
+```
+
+```
+[INFO] tier: fast, tests: 3, jobs: 8
+[INFO] named plan target(s) run in full: 1 (the tier filter leaves a named plan alone)
+[PLAN] gpu.tiles_transfer: gpu.tiles_transfer
+[PASS] tree_expansion_autodiff_and_device_update               4.53 s
+[PASS] device_parameter_tree_training                          4.67 s
+[PASS] large_upload_completion                                 5.31 s
+[SUMMARY] total: 3, pass: 3, fail: 0
+```
+
+`gpu/tiles_transfer` 整计划是 slow；`-Tier fast` + 命名文件仍跑 3 条。tiles 组那次 182 条的运行里，
+`gpu/tiles` 83 条全过，`gpu/tiles_rows` 的 `strict_sum_bits` 19.19 s、
+`gpu.profile.device_region.nvm` 3.05 s 也都执行了。pipeline 里 “94 条 GPU 用例” = 83+2+3+6。
+
+### 6.2 证明：layered 计划只跑该层
+
+`test/tools/selftest/run.mjs` 的 tier fixture 现在多跑一次：
+
+```
+node test/tools/run-tests.mjs --tier fast --selection-layer <tier.plan.toml> <tier.plan.toml>
+```
+
+期望 `[SUMMARY] total: 2, pass: 2`、`PASS tier.fast, PASS tier.default`，并打印
+`selected plan target(s) follow --tier fast: 1`。这条在验收的 `feat/consistency`（1001 条）里通过；
+同一 fixture 不带 `--selection-layer` 时仍是 4 条全跑，证明“命名文件整计划跑”这个旧契约没有丢。
+
+## 7. 故意不接的计划，以及为什么
+
+| 类别 | 计划 | 数量 | 为什么 |
+|---|---|---|---|
+| perf | `perf/collections_fuzz`、`fib`、`gc`、`para`、`startup`、`training_steps`、`showcase_c1/c2/c6/d5` | 10 个计划 | `agents/test.md`：benchmark/PyTorch 对照只在 milestone、由协调者、在安静机器上跑 |
+| GC 压力 | `feat/mm/gc`、`gc_collections`、`gc_elder_exhaustion`、`gpu/tiles_regions`、`gpu/tiles_decorator` | 5 个计划 | 压力/投毒用例会占满机器；`gpu/` 两个内部就是 GC 压力 |
+| progen | `feat/opt/progen` | 1 个计划 | 随机程序 × 25 格 |
+| PyTorch / ORT slow | autodiff 5 条 + onnx 4 条（`layer` 过滤） | 9 条 | 普通变更不跑对照；显式 `--tier all` 或命名文件才跑 |
+
+对应到 H154 的账：H154 排除的 200 条就是这些计划/条目；本任务没有把其中任何一条接进普通选择，
+也没有改它们的 tier 或挪用例。
+
+不接的后果也如实写：
+
+- `benchmarks/`、`test/cases/perf/` 的变更**没有可利用的定向计划**（能验证它们的只有 perf/对照），
+  所以不接规则、走快层回退；这是“没有安全的定向答案”，不是遗漏。
+- 编辑 `test/plans/perf/**`、`feat/mm/gc*`、`feat/opt/progen`、`gpu/tiles_regions|decorator`
+  时，self 规则的 `except` 让它们**不被选中**，同样回退快层；要跑就显式命名计划文件。
+- `modules/tiles/**` 现在要求执行环境有 CUDA（`gpu/tiles` 等没有 `skip_unless` 设备）；在没有
+  CUDA 的机器上 `--changed` 会失败而不是静默跳过。这是把“从来没人跑”变成“普通变更会跑”的代价；
+  主机有 CUDA 12.3 与 8×RTX 3090（H154 已核对）。
+
+## 8. 验证
+
+主机 `88zjwei`，Release，分支 `handover/H161-plan-selection`，`-Jobs 8`。
+
+- 首次构建（不是 `-NoBuild`）：`625` 个目标，**139.2 s**，`out/latest/build-info.json`
+  指纹 `030c2943be8c`，HEAD `66fb3114d`（clean）。之后只改 `test/`、`docs/`，`-NoBuild` 的
+  源指纹不变，正常通过。
+- 验收：`smoke` + `feat/consistency` + `feat/docs_links` → **1001/1001，0 fail**；
+  第一次 19.6 s，最终提交复跑 10.1 s。
+  `feat/consistency/runner` 里包含本轮扩展的 self-test（并集、layered、perf 边界、计划存在性枚举）。
+- tiles 组：**182/182，0 fail，84.5 s**。
+- opt 组：**788/788，0 fail，6.4 s**。
+- `feat/docs_links`：3/3（`docs.links.reader_facing`、`docs.retired_names_absent`、
+  `docs.snippets_compile`），在 1001 条里。
+- 未改任何计划的 `tier`，未移动/删除任何用例或计划，未改期望值。
+
+## 9. 已知限制与待决
+
+1. **基线 ref 前进了**：这棵工作树里的 `origin/develop` 已是 `1312213ef`（H151/H156 等合并之后），
+   不是任务书写的 `66fb3114d`。`git diff origin/develop` 因此会看到“上游比本分支多出来的改动”，
+   方向是反的。本报告的演示用 `CAMEL_TEST_BASE=HEAD`，真实行为对比也用过 `66fb3114d`。这不是
+   `--changed` 的代码缺陷（它的契约就是“与 base 的差异”），但在一个落后于 `origin/develop` 的
+   分支上要显式给 `CAMEL_TEST_BASE`，否则会多选。是否把默认 base 改成 merge-base 是流程决定，未做。
+2. **tiles 选择需要 CUDA**（§7）。没有 CUDA 的开发机要么用 `--changed --list` 看列表，要么跳过
+   gpu 计划、显式命名 CPU tiles 计划。
+3. **选择会变宽**：例如 `modules/tensor/**` 现在会跑 tensor 目录 + tensor.plan + index/operator
+   semantics + autodiff（fast 层）；这是“宁可多选、不可漏选”的取舍。`feat/opt` 的 710 条、
+   `src/passes/test/` 的六个目录也是同一取舍，数字已写在 §3/§5。
+4. `--selection-layer` 是 `--changed` 的内部传递参数，不是公开开关；直接调用
+   `run-tests.mjs --selection-layer` 只用于 self-test。`--tier all` 会让 layered 计划跑 slow，
+   这是显式行为。
+5. `gpu/profile` 第一次进入普通选择（H154 的 102 条只算 tiles 五个计划）；本轮 6/6 绿，但它以前
+   也从未被闸门跑过，后续仍应留意。
+
+## 10. 复现
+
+```powershell
+# 构建一次（之后 test/docs 改动可用 -NoBuild）
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h161-plan-selection -Jobs 8
+
+# 验收
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h161-plan-selection -NoBuild -Tier fast `
+  -Plan "test/plans/smoke,test/plans/feat/consistency,test/plans/feat/docs_links.plan.toml" -Jobs 8
+
+# tiles 组（182）
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h161-plan-selection -NoBuild -Tier fast `
+  -Plan "test/plans/feat/modules/tiles.plan.toml,test/plans/gpu/tiles.plan.toml,test/plans/gpu/tiles_rows.plan.toml,test/plans/gpu/tiles_transfer.plan.toml,test/plans/gpu/profile.plan.toml,test/plans/feat/modules/ddpm_primitives.plan.toml" -Jobs 8
+
+# opt 组（788）
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h161-plan-selection -NoBuild -Tier fast `
+  -Plan "test/plans/smoke,test/plans/feat/opt,test/plans/feat/trans/pass_dump.plan.toml,test/plans/feat/modules/rules.plan.toml" -Jobs 8
+
+# slow 证明（3/3）
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h161-plan-selection -NoBuild -Tier fast `
+  -Plan "test/plans/gpu/tiles_transfer.plan.toml" -Jobs 8
+
+# 选择（不跑）
+$env:CAMEL_TEST_BASE = 'HEAD'
+node scripts/test.js --changed --list
+```
+
+## 11. 提交
+
+- `f936bdbca` `test(runner): select the plans outside the mirrored tree for --changed`
+- `bdb74714d` `docs(test-plans): document the additive selection rules`
+- `7879acb45` `docs(handover): report H161 and update the board`
+- `5e6a2dbc2` `docs(handover): correct the H161 timing claims`
+- `c92bfef1b` `fix(runner): keep layered plans in the selected targets`
