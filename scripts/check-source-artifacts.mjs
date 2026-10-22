@@ -7,7 +7,12 @@
 //
 //   node scripts/check-source-artifacts.mjs              exit 1 and one line per artifact
 //   node scripts/check-source-artifacts.mjs --clean      delete what would be reported
+//   node scripts/check-source-artifacts.mjs --clean --dry-run
+//                                                        list the delete, remove nothing
 //   node scripts/check-source-artifacts.mjs --root <dir> check that checkout (default: this one)
+//
+// `--clean` delegates to `node scripts/clean.js --source` (H195): the guard and `npm run clean`
+// share one implementation of the delete, and one is the place a new safety rule goes.
 //
 // What is checked: the directories the build reads (BUILD_INFO_ROOTS in scripts/common.js) for a
 // C++ module binary under `stdlib/` or `modules/`, and for a linker output (`.so`, `.dll`, `.pdb`,
@@ -23,9 +28,12 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
+const THIS_FILE = path.join(SCRIPT_DIR, 'check-source-artifacts.mjs')
+const HERE = path.resolve(SCRIPT_DIR, '..')
 
 // The directories a build reads (BUILD_INFO_ROOTS in scripts/common.js). `test/` is not one of
 // them: a test case is read at plan time, and its fixtures may be whatever they test.
@@ -39,10 +47,11 @@ const LINKER_OUTPUT = new Set(['.so', '.dll', '.pdb', '.o', '.obj', '.a', '.lib'
 
 /**
  * Everything a build must not leave next to the sources, relative to `root`.
+ * Exported for `scripts/clean.js`, which owns the delete (H195).
  * @param {string} root
  * @returns {{ artifacts: string[], scanned: number }}
  */
-function scan(root) {
+export function scanSourceArtifacts(root) {
     const artifacts = []
     let scanned = 0
 
@@ -82,37 +91,30 @@ function scan(root) {
 
 function usage(message) {
     console.error(`camel: ${message}`)
-    console.error('usage: node scripts/check-source-artifacts.mjs [--clean] [--root <dir>]')
+    console.error('usage: node scripts/check-source-artifacts.mjs [--clean [--dry-run]] [--root <dir>]')
     process.exit(2)
 }
 
 function main() {
     const args = process.argv.slice(2)
     const clean = args.includes('--clean')
+    const dryRun = args.includes('--dry-run')
+    if (dryRun && !clean) usage('--dry-run is only meaningful with --clean')
     const rootAt = args.indexOf('--root')
     const root = rootAt >= 0 ? args[rootAt + 1] : HERE
     if (rootAt >= 0 && (!root || root.startsWith('--'))) usage('--root needs a directory')
     const rootPath = path.resolve(root)
     if (!fs.existsSync(rootPath)) usage(`no such directory: ${root}`)
 
-    const { artifacts, scanned } = scan(rootPath)
     if (clean) {
-        let removed = 0
-        for (const rel of artifacts) {
-            fs.rmSync(path.join(rootPath, rel))
-            console.log(`removed ${rel}`)
-            removed++
-        }
-        const after = scan(rootPath)
-        if (after.artifacts.length > 0) {
-            for (const rel of after.artifacts) console.log(`${rel}: build output in the source tree`)
-            console.error(`source tree artifacts: ${after.artifacts.length} file(s) could not be removed`)
-            process.exit(1)
-        }
-        console.log(`source tree artifacts: removed ${removed} file(s)`)
-        process.exit(0)
+        // One implementation of the delete: scripts/clean.js owns it, this guard only reports.
+        const cleanArgs = [path.join(SCRIPT_DIR, 'clean.js'), '--source', '--root', rootPath]
+        if (dryRun) cleanArgs.push('--dry-run')
+        const result = spawnSync(process.execPath, cleanArgs, { cwd: process.cwd(), stdio: 'inherit' })
+        process.exit(result.status === null ? 1 : result.status)
     }
 
+    const { artifacts, scanned } = scanSourceArtifacts(rootPath)
     if (artifacts.length > 0) {
         for (const rel of artifacts) {
             console.log(`${rel}: build output in the source tree`)
@@ -129,4 +131,8 @@ function main() {
     )
 }
 
-main()
+// Imported by scripts/clean.js for `scanSourceArtifacts`; only a direct run is a check.
+const entry = process.argv[1] ? path.resolve(process.argv[1]) : ''
+if (process.platform === 'win32' ? entry.toLowerCase() === THIS_FILE.toLowerCase() : entry === THIS_FILE) {
+    main()
+}
