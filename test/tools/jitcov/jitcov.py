@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """How much of a set of programs std::jit compiles, and why it leaves the rest.
 
     jitcov.py [--corpus NAME=GLOB ...] [--progen 1-300] [--progen-size 1] [--jobs 4]

@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E9 PyTorch LoRA reference: one training step of the LoRA-MLP (backbone frozen,
 adapters trainable, loss mean(y*y), SGD lr 0.01) from artifacts/lora/weights,
 dumping the updated parameters to --out. Mirrors lora_mlp.cml's `step` exactly;

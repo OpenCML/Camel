@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Shrinks a failing (program, pipeline) pair while the failure stays the same.
 
 A candidate is kept only when all of these hold:

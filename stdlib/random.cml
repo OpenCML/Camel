@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * One generator for the whole process, and keyed functions that read none. The functions that
  * draw from the generator are declared with effects and are never folded or merged by a pass;

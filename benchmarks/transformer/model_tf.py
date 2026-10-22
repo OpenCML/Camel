@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """TensorFlow implementation of the ``transformer`` benchmark model (see README.md).
 
 Pre-LN encoder block with explicit LayerNorm (biased variance, eps=1e-5),

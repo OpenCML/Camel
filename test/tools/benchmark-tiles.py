@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Capture repeated Tiles GPU benchmark records with source/hardware provenance.
 
 Usage: python test/tools/benchmark-tiles.py --runs 3 --output results.jsonl

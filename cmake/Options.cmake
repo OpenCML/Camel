@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 # Camel project build options
 # Option definitions live in cmake/options.json and can be configured interactively with `npm run config`.
 # User overrides are stored in .camel-opts.json and are read automatically by build/debug/profile.

@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Pin down PyTorch's training-mode BatchNorm semantics empirically (T4).
 
 Answers, with numbers (torch 2.14.0+cpu):

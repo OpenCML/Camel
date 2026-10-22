@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 import { execFileSync, execSync } from 'child_process'
 import { explicitFilesArg, splitLineList, uniqueFiles } from './file-list.js'
 

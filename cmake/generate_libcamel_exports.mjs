@@ -1,7 +1,7 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- *
  * Generates the .def lld-link is given for one configuration of libcamel (H36).
  *
  * The list is a build product, not a checked-in snapshot: it is the intersection between

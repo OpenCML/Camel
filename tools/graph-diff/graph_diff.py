@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """graph-diff: compare two per-pass graph snapshots.
 
 The snapshots are the readable DOT files written by `camel --dump-after-each-pass <dir>`

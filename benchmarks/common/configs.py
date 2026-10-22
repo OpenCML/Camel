@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Benchmark configuration registry and runner factories.
 
 A configuration names one way of executing a model (framework + mode). This

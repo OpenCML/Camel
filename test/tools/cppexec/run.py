@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Translate Camel programs with std::cpp, build and run what it writes, and compare with std::fvm.
 
     python3 test/tools/cppexec/run.py [options] <program.cml | directory>...

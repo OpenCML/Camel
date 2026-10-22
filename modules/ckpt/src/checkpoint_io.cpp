@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Oct. 19, 2026
- * Updated: Oct. 20, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // A checkpoint is replaced as a whole: write a complete private sibling, then swap it in.
 //
@@ -52,6 +36,7 @@
 // moved; if the OS still reports a cross-volume rename (EXDEV / ERROR_NOT_SAME_DEVICE), the
 // save fails with that reason and the old checkpoint stays. A crash can leave an unused
 // `.pending-*` directory; it is never read and can be deleted.
+
 #include "include/ckpt/checkpoint_io.h"
 #include "camel/utils/path.h"
 #include <algorithm>

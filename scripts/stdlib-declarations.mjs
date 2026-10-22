@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // A module that has moved to a declaration module stays migrated (handover H137), and the
 // computed signatures a declaration cannot express have one recorded place (handover H180).
 //

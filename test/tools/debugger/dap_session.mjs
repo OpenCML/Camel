@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // A scripted debug session over the Debug Adapter Protocol, for looking at behaviour by hand
 // and for trying the adapter without an editor:
 //

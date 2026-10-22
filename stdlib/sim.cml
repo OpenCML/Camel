@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Monte Carlo simulation: two kernels that estimate a number from random samples. `pi_hits`
  * estimates pi from the fraction of points that fall inside the unit circle and

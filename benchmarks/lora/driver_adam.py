@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T3 three-way on-device LoRA fine-tuning driver, in-graph Adam (MLSys 2027 eval).
 
 Same protocol as driver.py (E9, SGD): rank-8 LoRA on the MLP backbone, backbone

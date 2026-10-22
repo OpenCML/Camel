@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Automatic differentiation: `grad` turns a function into its gradient function, `with_grad`
  * returns the value together with that gradient, and `stop_gradient` marks a value as a

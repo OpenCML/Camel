@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Checks that the files of the extension agree with each other, without loading any package:
 // package.json, language-configuration.json and syntaxes/camel.tmLanguage.json are valid JSON;
 // the paths the manifest contributes exist; the grammar's scope name and the language id are the

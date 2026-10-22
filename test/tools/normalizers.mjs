@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 import path from 'path'
 import { fileURLToPath } from 'url'
 

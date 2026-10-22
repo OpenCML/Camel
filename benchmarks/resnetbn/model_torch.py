@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """PyTorch implementation of the ``resnetbn`` benchmark model (T4, see common.models).
 
 The literal ResNet-18: RESNET (E6) with training-mode batch_norm after every conv,

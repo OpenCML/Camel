@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T13 account 4: per-shape kernel boundary numbers, Camel nvm vs PyTorch eager.
 
 For every GEMM shape of mlp_big / lenet_big's fc layers and every conv shape of

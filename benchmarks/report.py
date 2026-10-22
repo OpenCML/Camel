@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Paper report generator: tables and figures from benchmark summary CSVs.
 
 Inputs are one or more ``*_summary.csv`` files written by ``run.py --trials N``

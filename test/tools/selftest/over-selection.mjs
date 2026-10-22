@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The mirror image of H201's reachability check: a plan may be selected by a change, but that
 // must not cost more than the change can invalidate. A slow-cost plan selected for a fast case
 // path runs in full (a named plan file ignores `--tier`), so a one-line edit to a common case

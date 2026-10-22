@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E1: multi-step fine-tuning driven by a pure ONNX Runtime InferenceSession.
 
 Camel exports a training step as a pure ONNX inference graph: the inputs are

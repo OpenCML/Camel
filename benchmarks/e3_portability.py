@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E3 GPU portability check (MLSys 2027 eval, §A.4 framing).
 
 One exported training-step graph, byte-identical, executed by ONNX Runtime's

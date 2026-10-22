@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Interleaved wall-clock and CPU-time measurement of Camel programs across back ends, thread
 counts and builds, for machines that are not idle.
 

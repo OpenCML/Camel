@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The grammar of Camel is written once, as the production above each function of the parser
 // (src/parse/syntax/parser*.cpp, the `/// name : ...` comments). This script keeps the copies
 // in step with it:

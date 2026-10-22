@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 # A tool that links libcamel is compiled in two steps so that its imports can be read before
 # libcamel links (H36): the sources become an OBJECT library, and the executable is linked from
 # those objects. Compiling a translation unit needs only the headers, so the object library has

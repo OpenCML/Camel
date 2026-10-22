@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E7 route C: TF1-graph-mode training step -> tf2onnx.
 
 The premise is honored first: a TF1 training step IS a graph (tf.gradients +

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Precondition of the tests that need CUDA device N to be there
 // (`skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]`).
 //

@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The terminal: what it has waiting to be read, the keys themselves, and raw mode. The standard
  * streams and `print`/`println`/`input`/`eprintln` are the prelude's; `Stream` and a `stdin` value

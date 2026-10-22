@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Generated programs of a given size for the size-scaling rows of the graph-store baseline.
 
 The six programs of baseline.py are tiny (the largest has 495 nodes), so they cannot show a cost

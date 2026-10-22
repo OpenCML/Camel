@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of the
  * functions that make a rule to a `Program`, `check` tests rules on random programs, and the four

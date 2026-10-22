@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T12b batch-scaling training-step throughput curves (MLSys 2027 eval; context only).
 
 For resnetbn (literal ResNet-18 + BN, T4 graph family) and transformer_big

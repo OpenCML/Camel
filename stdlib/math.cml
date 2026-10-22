@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Numeric types are not converted implicitly. A function over floats takes `f32` or `float`
  * and returns the type it was given; a function of several numbers takes numbers of one type.
