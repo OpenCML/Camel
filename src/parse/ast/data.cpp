@@ -74,6 +74,10 @@ std::string to_string(TypeCaseKind kind) {
         return "#leaf";
     case TypeCaseKind::Wildcard:
         return "_";
+    case TypeCaseKind::Func:
+        return "func";
+    case TypeCaseKind::Identity:
+        return "type";
     default:
         ASSERT(false, "Unknown TypeCaseKind");
         return "unknown";
@@ -208,7 +212,10 @@ const std::string TypeCaseLoad::geneCode() const {
         if (i > 0) {
             result += " | ";
         }
-        result += to_string(patterns_[i]);
+        const TypeCasePattern &pattern = patterns_[i];
+        result += pattern.kind == TypeCaseKind::Identity && pattern.type != nullptr
+                      ? pattern.type->load()->geneCode()
+                      : to_string(pattern.kind);
     }
     return result + " =>";
 }

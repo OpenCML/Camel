@@ -1,0 +1,83 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The properties of types that an applicability condition asks about. These are ordinary Camel
+ * functions: each one matches the type it is given with `match type` and returns a constant, so
+ * `func f::<T>(x: T) when is_numeric::<T>()` is applicable exactly where `T` is a number.
+ *
+ * `match type` compares a type's identity as well as its shape (design principles 5.5): the
+ * cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `c64`, `c128`,
+ * `string`, `bool`), and `case func` is the shape of every function type.
+ */
+
+module types
+
+/// True when `T` is a number: an integer, a float or a complex number.
+/// @example is_numeric::<int>()    // true
+/// @example is_numeric::<string>()    // false
+export func is_numeric::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 | c64 | c128 => true
+        case _ => false
+    }
+}
+
+/// True when `T` is an integer type (`int` is 64-bit, `i32` is 32-bit).
+/// @example is_integer::<int>()    // true
+/// @example is_integer::<float>()    // false
+export func is_integer::<T>(): bool {
+    return match type T {
+        case int | i32 => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit).
+/// @example is_float::<float>()    // true
+/// @example is_float::<int>()    // false
+export func is_float::<T>(): bool {
+    return match type T {
+        case float | f32 => true
+        case _ => false
+    }
+}
+
+/// True when `T` has a total order: the number types, `string` and `bool`.
+/// @example is_ordered::<string>()    // true
+/// @example is_ordered::<bool>()    // true
+export func is_ordered::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 | string | bool => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a function type, whatever its parameters and result.
+/// @example is_function::<(x: int) => int>()    // true
+export func is_function::<T>(): bool {
+    return match type T {
+        case func => true
+        case _ => false
+    }
+}
+
+/// True when `T` is `string`.
+/// @example is_string::<string>()    // true
+/// @example is_string::<int>()    // false
+export func is_string::<T>(): bool {
+    return match type T {
+        case string => true
+        case _ => false
+    }
+}
+
+/// True when `T` is `bool`.
+/// @example is_bool::<bool>()    // true
+/// @example is_bool::<int>()    // false
+export func is_bool::<T>(): bool {
+    return match type T {
+        case bool => true
+        case _ => false
+    }
+}

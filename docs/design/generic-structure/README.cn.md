@@ -51,7 +51,7 @@
 
 新增的构造，共四样：
 
-1. `match type T { case struct => …; case tuple => …; case _ => … }`：按类型的**形状**在实例化时选一条分支，**没被选中的分支不建图、不做类型检查**（相当于 C++ 的 `if constexpr`）。`struct`、`tuple` 只匹配 R3 定义的内部节点，所以 `T?`、`T!`、单元格落在 `case _`。
+1. `match type T { case struct => …; case tuple => …; case _ => … }`：按类型的**形状**在实例化时选一条分支，**没被选中的分支不建图、不做类型检查**（相当于 C++ 的 `if constexpr`）。`struct`、`tuple` 只匹配 R3 定义的内部节点，所以 `T?`、`T!`、单元格落在 `case _`。一个 case 也可以写类型名（`case int`、`case MyStruct`、`case T`），按类型的**身份**精确选一条分支（语言文档 6.8.3）。
 2. `static for (n, F) in fields T`：把字段表展开，每个字段一份函数体。`n` 是编译期常量（结构体是字段名，元组是下标的十进制字面，两者都能直接当路径的一段），`F` 是字段类型。`n`、`F` 的绑定写法就是位置本身（5.4、5.5），不引入新的绑定机制。
 3. 编译期字段访问 `x.[n]`，以及"推导式"构造 `{ static for … => n: e }`（结构体）与 `( static for … => e )`（元组）：生成同形的新值，字段类型由 `e` 的类型得到。
 4. 变长参数 `..ts` 与展开调用 `f(t, ..ts)`：`ts` 是元数在编译期已知的元组，`static for (j) in indices ts` 遍历它。解决 R6。

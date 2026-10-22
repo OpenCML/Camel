@@ -29,6 +29,7 @@ module array
 // module).
 import algo
 import math
+import { is_numeric } from types
 
 // The primitives are declared here, as body-less declarations of this module: each stands for
 // the operator of its own name, implemented by the C++ module the import above loads (H19
