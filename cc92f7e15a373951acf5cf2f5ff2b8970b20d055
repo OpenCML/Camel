@@ -1,0 +1,194 @@
+# H59：复合循环状态的梯度，与 `saturate_all` 的最小写法
+
+H52 把运行器改严以后，`feat/modules/autodiff`、`feat/linear/loops` 与 `feat/modules/rules`
+暴露了 9 条一直没被真正比较过的失败：8 条是循环状态（元组/数组）的梯度变成 0，1 条是
+`rules::saturate_all` 没有选出最小写法。本报告记录复现、二分、原因与修复。
+
+## 0. 结论
+
+- **梯度：第一个坏的提交是 `914c0eda refactor(autodiff): read loop and branch regions directly`**
+  （H43b 的第一个提交，合入提交为 `a91fe4d3 Merge H43b`）。
+- 不是 H43-perf 的 `ExecPlan` 省略（`067bb574` 不在本分支；它的父提交 `043c5154` 已经复现失败，
+  见第 2 节），也不是 H17c 的原地写（`adb7f914` 全绿；`914c0eda` 的父提交 `1e41b4ad` 甚至还不含
+  H17c 的合并，单独这个提交就足以让 8 条全部变红）。
+- 原因有两层，都在 H43b 把循环改成“只以区域存在”之后：
+  1. 反向分析的活跃性只看节点的图输入，没有把 **循环区域从外面读到的值** 算作循环的依赖；
+     复合状态的值又是经投影（`Fill`/`Accs`）读出的，投影在 `visitAccs` 里以“源不活跃”为由
+     静默丢弃梯度（`Backward::visitAccs` 的 `active_.contains(source)` 早退），所以没有诊断。
+  2. 即使给循环加了活跃性规则，**只被循环体读到的外部值在值图上排在循环之后**（它们不是循环的
+     图输入），规则看到它们时还没活跃；嵌套循环体里同理。
+- 修复分两处：`valueOrder` 把循环的区域读入当作循环的依赖边；活跃性分析为 `Loop` 增加与已有
+  `Join` 规则对应的“区域读入”规则（并复用同一套递归，覆盖别的控制节点的读入）。
+- **第 9 条不是 H43b 的问题**：`saturate_all` 用 6 轮、含交换/结合/分配的双向规则把 `chain`
+  饱和到 11826 条写法；`DraftWritings::extract` 的“只保留唯一写法”预选把饱和造出来、程序并不
+  读的**死写法**也全部保留，于是 `chain` 带着 2075 次加法、1944 次乘法。提取只需保留图命名的
+  值（端口、入口/出口/结果、区域结果）以及它们递归读到的选择写法；改掉预选后 `chain 0 1`，
+  程序输出仍是 `56 42`。同一份写法代数在 `test::saturate`（C++ 编好的规则）下本来就期望并得到
+  `add=0 mul=1`，所以这是提取的真实缺陷，不是“改期望”。
+
+## 1. 复现
+
+严格运行器（`d1e3859e` 的 `test/tools/run-tests.mjs`）下，9 条失败：
+
+| 计划 | 测试 | 期望 | 实际 |
+|---|---|---|---|
+| `feat/linear/loops` | `loops.grad_array_loop` | `...12.0 / 6.0 / 6.0 / 3.0` | `...12.0 / 0.0 / 6.0 / 0.0` |
+| `feat/linear/loops` | `loops.grad_array_loop_fvm` | 同上 | 同上 |
+| `feat/linear/loops` | `loops.grad_loop_collect` | `6.0\n3.0\n1998.0\n3\n` | `6.0\n0.0\n1998.0\n3\n` |
+| `feat/modules/autodiff` | `loop_grad_tuple_state` | `vg=(12.0, 6.0)` | `vg=(12.0, 0.0)` |
+| `feat/modules/autodiff` | `loop_grad_in_place.{nvm,fvm,jit,prl}` | `a=2.0 b=2.0 va=(4.0, 2.0)` | `a=0.0 b=0.0 va=(4.0, 0.0)` |
+| `feat/modules/rules` | `rules.library_saturate_all` | `chain 0 1` | `chain 2075 1944`（值仍是 `56 42`） |
+
+命令（本机 Windows 只发任务，构建与运行都在 Linux 主机）：
+
+```powershell
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h54-gradfix `
+  -Plan 'test/plans/feat/linear/loops.plan.toml','test/plans/feat/modules/autodiff.plan.toml' -Jobs 8
+```
+
+`autodiff.plan.toml` 里有 PyTorch 对照（`*torch*`），按任务约束不运行；复现与回归都用去掉
+这些条目的过滤副本（末次运行用 6 个目标，见第 6 节）。
+
+## 2. 二分
+
+主机上每次都构建同一分支，运行器换成 `d1e3859e` 的版本（`git checkout d1e3859e --
+test/tools/run-tests.mjs`；`72b40912`…`043c5154` 之间运行器只有这一次差异），用两个临时计划
+（各 8 条梯度用例，逐字符比较）只跑相关用例：
+
+| 提交 | 含义 | 8 条梯度 |
+|---|---|---|
+| `72b40912` | H17c 合并前（H52 分支的基线附近） | **8/8 通过** |
+| `adb7f914` | Merge H17c（每状态原地写） | **8/8 通过** |
+| `a91fe4d3` | Merge H43b（区域化 autodiff） | **0/8，全部失败** |
+| `043c5154` | `067bb574^`，H43-perf 之前 | **0/8，全部失败** |
+| `914c0eda` | H43b 的第一个提交（父 `1e41b4ad`） | **0/8，全部失败** |
+
+结论：**`a91fe4d3` 是第一个坏的合并，`914c0eda` 是第一个坏的提交**。H43-perf 的
+`ExecPlan::elidedAt`/`stateComponents` 不在本分支，也无法解释 `043c5154` 已失败；
+`914c0eda` 的父提交还不含 H17c，所以 H17c 的原地写不是原因。H43b 的这个提交正是
+`modules/autodiff/pullback.cpp` 890 行的重写（以及 `LoopView` 区域化、删除 `loop_outline` 等）。
+
+## 3. 原因
+
+### 3.1 循环的值与状态在 H43b 之后的位置
+
+H43b 之后（`builder_control.cpp` 的 `addRegionLoopNode` 一段）：循环节点的 Norm 输入是初始
+状态分量，With 输入是 **body 区域结果、cond 区域结果、轮次端口**；捕获不再作为 With 输入，
+而是由区域里的节点直接读外面的值（`LoopDraftView::externalInputs`）。
+
+自动微分在 `ForwardRewrite::rewriteLoop` 里为 k>1 的状态造一个投影 `Fill`（k=1 且无收集槽
+时是 `Accs`），把循环值的用户重定向到投影，并把 `CallSite` 挂在投影上。反向时：
+
+- 函数结果经投影的 `Accs` 进入 `visitAccs`；
+- `visitAccs` 只在 `active_.contains(source)` 时把梯度合并到源（`state`/`loop`）；
+- 否则直接返回，不报诊断。
+
+H43b 之前的图形式循环里，循环节点的 With 输入就是捕获（含 `w`），`w` 活跃 → 循环活跃 →
+投影活跃，梯度能落到 site。区域化之后，循环节点的图输入只剩初始状态（常量）与区域结果
+（控制区域，值图不再跟踪），**活跃性再也不会从“区域读了什么”传到循环节点**。标量状态的
+用例之所以一直绿，是因为函数结果就是循环节点本身，`seed` 直接写在循环上，不经过投影；数组/
+元组状态必须先经过投影，梯度就断在 `visitAccs` 的早退上。
+
+### 3.2 第二层：值图的顺序
+
+只加“循环区域读入也算活跃”还不够：`valueOrder` 的注释写明只跟随同一区域的图边，而“只被
+循环体读到的 `s`（如 `let s = w * 2.0`）”不是循环的图输入。`siteEdges` 会把捕获作为
+`state` 的附加边，但那是 site 值（投影）的边，`s` 在 `order` 里排在循环之后；活跃性扫描到
+循环时 `s` 还未活跃，循环仍被判为不活跃。嵌套在循环体里的循环同理，因为 body 的
+`valueOrder` 根本不带附加边。
+
+## 4. 修复
+
+`modules/autodiff/pullback.cpp`：
+
+1. `valueOrder`：遇到 `GCNodeKind::Loop` 时，把它两个区域的 `externalInputs(false)` 作为它的
+   依赖压栈（仍受 `regionMember` 过滤）。这样“只被区域读到的值”一定在循环之前被访问、在
+   反向时排在 site 之后；嵌套循环体里也一样。
+2. `Backward::run` 的活跃性：把原先只给 `Join` 用的“区域读入”规则抽成递归的
+   `readsActive`（值本身活跃/受污染即真；`Join` 递归其臂；`Loop` 递归其两个区域），
+   `Join` 与 `Loop` 共用。循环因此和分支一样：它的值依赖它区域读到的值。
+
+为什么是这个层次：循环状态“住在区域里”，导数也是从同一批区域编译出来的；活跃性/依赖顺序
+必须看到同一批区域读入，二者才对同一个“状态在哪里”达成一致。没有改任何期望值、没有
+`known_fail`，也没有把复合状态的梯度改成近似或跳过——修的是“谁依赖谁”的判定，不是结果。
+
+新增回归用例 `test/cases/modules/autodiff/loop_grad_composite_read.cml`（计划条目
+`loop_grad_composite_read`，nvm/fvm 逐字符比较）：
+
+- `pair`：二元状态，`s = w * 2.0` 在循环外算、只在循环体里读，值 12、梯度 6；
+- `table`：数组状态 `append<a>`，`a = w + 1.0` 在循环外算，`xs[1] + xs[2]` 的梯度 2。
+
+修复前在主机上：`loop_grad_composite_read vg=(12.0, 0.0) d=0.0`；修复后：
+`loop_grad_composite_read vg=(12.0, 6.0) d=2.0`。这个用例同时覆盖第 3.1 与 3.2 两层：只加
+活跃性规则时它仍然红（`vg=(12.0, 0.0)`），加上 `valueOrder` 的依赖边才绿。
+
+## 5. 第 9 条：`saturate_all` / `extract`
+
+- `saturate_all` 用 6 轮、把交换/结合/分配规则双向应用。在 `target.cml` 的 `chain` 上实测：
+  6 轮、36277 次匹配、**11826 条新写法**、6148 次合并，`saturated=0`（预算用完），节点槽
+  11833；`coefficients` 只有 3 轮、10 条写法。爆炸来自“常量可拆可合 + 分配 + 结合”的写法
+  组合，本身是饱和的固有代价。
+- 真正让结果计数错的不是饱和，而是 `DraftWritings::extract`：它先把**每个“唯一写法”的节点**
+  无条件选中，再补上端口/入口/出口/结果。饱和造出的中间值（例如把 `x*6` 拆成
+  `x*3 + x*3`、再拆……）各自是某个值的唯一写法，但程序不读它们；它们被当成“必须保留的写法”
+  留了下来。实测该图 extract 后仍有 2075 个加法、1944 个乘法节点，而根值的选择写法是
+  `x*6`，其余都是死代码。
+- 修复：删掉“所有唯一写法都留下”的预选，只从图命名的值（Norm/With/闭包端口、entry、exit、
+  output/return、各区域结果）出发，沿“每个输入取该类被选中的写法”递归闭包；未被任何保留
+  节点读到的写法一律删除。`chain` 变回 `0 1`，`coefficients` 仍是 `0 1`，`main` 仍打印
+  `56 42`。
+- 为什么算“小而明确的缺陷”而不是设计决定：`test::saturate` 用 C++ 编好的同一套规则（含
+  交换/结合/分配）在同类表达式上本来就期望 `SATURATE integer_chain add=0 mul=1`，并且通过；
+  提取的契约“每个值一条写法”说的显然是**被使用的值**，保留死写法与契约矛盾。`writings`
+  计划里的饱和/提取用例、`rules` 计划都通过。
+- 仍然存在、留给规则重写负责人：饱和本身在 6 轮内不收敛（11826 条写法、预算用完）。提取
+  不再把它泄漏到程序里，但如果要让 `saturate_all` 在大表达式上也可用，需要代价引导的饱和
+  或别的收敛策略；这不是本次能靠一行改动决定的事。
+
+## 6. 数字
+
+| 范围 | 修复前 | 修复后 |
+|---|---|---|
+| `feat/linear/loops` | 3 失败 | 全绿 |
+| `feat/modules/autodiff`（去 PyTorch 过滤副本） | 5 失败 | 全绿 |
+| `feat/modules/rules` | 1 失败（第 9 条） | 全绿 |
+| `feat/mm/writings` | — | 全绿 |
+| 上述 4 个真实计划合计 | 316 条，9 失败 | **316/316 通过** |
+| 再加两个临时二分计划（8 条梯度 + 新用例） | 8/8 失败 | **325/325 通过** |
+
+末次运行（单个命令，`-Jobs 8`，主机 Release）：
+
+```powershell
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h54-gradfix `
+  -Plan 'test/plans/feat/modules/rules.plan.toml',
+        'test/plans/feat/mm/writings.plan.toml',
+        'test/plans/feat/modules/autodiff.h54tmp.plan.toml',
+        'test/plans/feat/linear/loops.plan.toml',
+        'test/plans/feat/linear/h54-grad-bisect.plan.toml',
+        'test/plans/feat/modules/h54-grad-bisect.plan.toml' -Jobs 8
+# [SUMMARY] total: 325, pass: 325, fail: 0
+```
+
+两个 `*h54*` 计划只是本次二分/验证用的临时文件，提交前删除；过滤副本
+`autodiff.h54tmp.plan.toml` 同样不提交。
+
+## 7. 未做 / 留给作者
+
+- `067bb574`（H43-perf）不在本分支，它的 `ExecPlan` 省略逻辑无法在本次复现；如果将来把它
+  合进来，反向循环必须看到与正向相同的省略计划，否则会出现同类的“状态位置不一致”。本报告
+  的修复不依赖它。
+- 饱和本身的爆炸（第 5 节）没有改；只保证提取不再把死写法带进程序。
+- `extract` 仍把**所有区域的结果**当作根（区域里的死分支会被保守保留），这是既有行为；
+  彻底按可达性剪区域属于规则/图存储的设计问题，未在本次扩大范围。
+
+## 8. 改动文件
+
+- `modules/autodiff/pullback.cpp`：`valueOrder` 增加循环区域读入的依赖；活跃性分析抽出
+  `readsActive` 并给 `Loop` 增加对应规则。
+- `src/runtime/writings.cpp`：`DraftWritings::extract` 只保留可达的写法。
+- `test/cases/modules/autodiff/loop_grad_composite_read.cml`：新增回归用例。
+- `test/plans/feat/modules/autodiff.plan.toml`：新增 `loop_grad_composite_read` 条目。
+- `docs/handover/README.cn.md`：H59 行。
+- 本报告。
