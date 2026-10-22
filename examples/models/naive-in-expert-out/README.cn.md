@@ -13,10 +13,14 @@ fixed and no wall clock enters the model.
 ## Run
 
 ```sh
-# The naive Camel step, on any of the three CPU back ends.
-camel examples/models/naive-in-expert-out/train_step.cml
-camel examples/models/naive-in-expert-out/train_step.cml std::fvm
-camel examples/models/naive-in-expert-out/train_step.cml std::jit
+# The naive Camel step, on any of the three CPU back ends.  The program takes its inputs on
+# the command line; an empty directory means "write nothing".
+camel -t 1 examples/models/naive-in-expert-out/train_step.cml \
+    --arg bench=false --arg init_dir= --arg final_dir=
+camel -t 1 examples/models/naive-in-expert-out/train_step.cml std::fvm \
+    --arg bench=false --arg init_dir= --arg final_dir=
+camel -t 1 examples/models/naive-in-expert-out/train_step.cml std::jit \
+    --arg bench=false --arg init_dir= --arg final_dir=
 
 # The three PyTorch counterparts and the float64 reference, plus the table.
 python examples/models/naive-in-expert-out/measure.py
@@ -28,8 +32,9 @@ python examples/models/naive-in-expert-out/accuracy.py \
 
 `measure.py` needs a built Camel install and a Python with torch; it finds both from the checkout
 and `sys.executable`.  It writes `results.json` next to the script (ignored by git) and prints
-the table.  The Camel program uses only the environment variables the harness sets:
-`NAIVE_INIT_DIR`, `NAIVE_FINAL_DIR`, and `NAIVE_BENCH=1`.
+the table.  The Camel program reads no environment variable: `bench`, `init_dir` and
+`final_dir` are `main` parameters, and the first run above passes all three explicitly.
+`measure.py` passes them itself (`--arg bench=true --arg init_dir=... --arg final_dir=...`).
 
 ## What the naive program does
 
@@ -41,8 +46,12 @@ the table.  The Camel program uses only the environment variables the harness se
   `log_softmax`;
 - RMSNorm, GELU (the tanh approximation), Adam, and a `with_grad` backward pass.
 
+The scale is `1 / sqrt(d_head)`, not a literal `4.0`: `attention_scale` is computed once from the
+width the model actually uses.  The parameter count is a named function over the model's shapes
+(`param_count`), not an expression written inside the `println` interpolation.
+
 The labels are a one-hot product; a label is discrete, so its derivative is zero by definition
-(design principles 9.9). `one_hot` takes no gradient and the labels need no `stop_gradient`.
+(design principles 9.9). `one_hot` registers the empty rule and the labels need no `stop_gradient`.
 
 ## The PyTorch counterparts
 
@@ -79,11 +88,39 @@ that rounds a `1` away.  `accuracy.cml` repeats the f32 measurements in Camel.
 
 ## Gaps found (Camel side)
 
-- The public `Tensor` element types are effectively f32, i64 and bool: no bf16/f16, and f64 is
-  normalised to f32 by `normalizeTensorDType` on creation and cast.  bf16 overflow and the fp64
-  error of the step cannot be measured in Camel today; its f32 thresholds match PyTorch's f32
-  thresholds exactly.
-- No fused QKV/attention operator and no `rules::accuracy`/`rules::fusion` pipeline, so the
+- **H238 (priority): tensors still keep one storage type.** The public tensor element types are
+  effectively f32, i64 and bool; f64 is normalised to f32 by `normalizeTensorDType` on creation
+  and cast, and i32 to i64.  This paragraph is provisional: when **H238** lands (branches
+  `handover/h259-dtype`, which refuses `Tensor<f64>`/`Tensor<i32>` instead of substituting, and
+  `handover/h260-tensor-storage`, which deletes the normalisation table), delete it and add an
+  f64 column to the table if f64 then works.  Until then bf16 overflow and the fp64 error of the
+  step cannot be measured in Camel; its f32 thresholds match PyTorch's f32 thresholds exactly.
+- **The blocks are a tuple, not `Block[]`.**  H17's native array syntax exists
+  (`f32[b, t, d]`, and shaped `Tensor<f32, [8, 16, 64]>`), but a loop over an array of tensors
+  that depends on a differentiated parameter is refused: the reverse pass would have to scatter
+  each round's gradient into the array, and an array element currently has no zero tangent.  The
+  refusal is explicit: `autodiff: a 'loop' iterates over an array that depends on a
+  differentiated parameter ... Capture the array and read its elements by index`.  The model
+  therefore stores `blocks: (Block, Block)` and the forward pass walks it with
+  `static loop ... for (i, B) in fields (Block, Block)`.  There is no `block0`/`block1` field and
+  no copy of the block body; adding a third block is a type and data change, not a new forward
+  branch.  When H17 can differentiate `Block[]`, the tuple becomes an array and the loop
+  becomes the plain `loop h = x for b in m.blocks`.
+- **`f32[b, t, d]` does not reach the tensor operators.**  `exp`, `@`, `sum` and the rest take
+  `Tensor`, not the core array type; `let x: f32[2, 3] = randn(...)` is a `DeclaredTypeMismatch`.
+  The example writes shaped `Tensor<f32, [8, 16, 64]>` (and named aliases `TokenStates`,
+  `HeadStates`, ...), so every signature and every field shows its extents.  Dimension names
+  inside `Tensor<f32, [b, t, d]>` do not bind (the checker warns `DimensionNameUsedOnce`), so the
+  extents are written as literals and named by the aliases and the comment at the top.
+- **No dtype conversion written as a type.**  `f32(oh)` has no tensor overload, and
+  `oh as f32[...]` is a `DynamicCastForbidden`; the one-hot product uses numeric promotion
+  (f32 * int64 gives f32) instead of the old `cast(oh, 'float32')` string.  A typed tensor cast
+  is still a gap.
+- **No fused QKV/attention operator and no `rules::accuracy`/`rules::fusion` pipeline**, so the
   expert form is not produced from the naive source.  `softmax`, `log_softmax` and the fused
   cross-entropy exist as operators and are used by the PyTorch expert and the accuracy probes.
-- `explain` (the rule-rewrite chain) is not available yet, so this directory cannot show it.
+- **`-t` does not reach the tensor worker pool.**  The option caps the graph scheduler; the
+  tensor kernels still read `CAMEL_NUM_THREADS`.  `measure.py` sets that for all four
+  implementations (as it sets OMP/MKL for PyTorch) so the timing is one thread; the program
+  itself reads no environment variable.  Wiring `-t` through to the kernels is a runtime gap.
+- **`explain` (the rule-rewrite chain) is not available yet**, so this directory cannot show it.
