@@ -1,0 +1,205 @@
+# H52：运行器不再忽略计划字段，`expect_stdout_exact` 真正比较输出
+
+- 分支：`handover/H52-runner-fields`，从 `origin/develop` `ea3a196c` 切出。
+- 实现提交：`d1e3859e`。本报告单独提交。
+- 结论：计划 schema 现在在计划、`[defaults]`、`[[tests]]`、`[[sweeps]]` 四层都是封闭的，未知字段让**这个计划**失败并指名文件、测试和键，其余计划继续跑；`expect_stdout_exact` 和旧名 `expect_stdout` 逐字符比较完整归一化 stdout。复跑 36 个受影响计划，**9 条真实失败**暴露出来（自动微分 8 条、规则饱和 1 条），都保留为失败；另有 2 处计划期望本身是错的，已带理由修正。
+
+## 1. 被静默忽略的字段
+
+`loadPlanTests` 之前只把 `doc.defaults` 展开进每条测试，`validateTest` 只读取它认识的字段；计划里任何多出来的键既不报错也不生效。扫描 `test/plans` 下全部 177 个计划、3492 条测试：
+
+| 字段 | 测试数 | 计划数 | 之前的行为 |
+|---|---:|---:|---|
+| `expect_stdout_exact` | 210 | 31 | 完全忽略：测试通过，但没有比较过 stdout |
+| `expect_stdout` | 39 | 6 | 完全忽略：旧计划以为它在比较完整输出 |
+| `perf_budget_platform` | 6 | 1（`perf/fib`） | 忽略：预算来源元数据，没有进入 `meta.json` |
+| `desc` | 3101 | 161 | 忽略：本来就是给人读的文档字段，**不是断言**，继续允许 |
+
+- 有断言的计划共 36 个（31 + 6，`var_reference` 两个键都用），249 条断言：210 条 `expect_stdout_exact` + 39 条 `expect_stdout`。
+- 除此之外没有未知的计划级、`[defaults]` 或 `[[sweeps]]` 键；`[defaults]` 里出现的键也都在测试字段集合内。
+- 旧 `expect_stdout` 的值全部是完整输出（含结尾换行），没有发现“前缀”用法；把它实现成同一个逐字符比较。
+
+## 2. 运行器现在怎么做
+
+### 2.1 封闭 schema，按计划失败
+
+`test/tools/run-tests.mjs` 增加了三张字段表和 `validatePlanSchema`：
+
+- 计划级未知键、`[defaults]` 未知键、`[[tests]]` 未知键、`[[sweeps]]` 未知键都抛 `PlanSchemaError`；
+- 错误信息形如 `test/tools/selftest/strict/unknown_key.plan.toml: test 'unknown': unknown key 'expect_stdout_exactt'; did you mean 'expect_stdout_exact'?`，编辑距离小于 3 时给出建议；
+- 本次实现的三个字段有类型检查：`expect_stdout_exact`、`expect_stdout`、`perf_budget_platform` 必须是字符串（例如 `expect_stdout_exact = 42` 报 `must be a string, got 42`）。
+
+被拒绝的计划不会静默消失，也不会终止整次运行：它变成该计划下唯一一条 `<invalid plan>` 失败，日志头仍打印计划路径，失败详情是 `runner error: <文件>: test '<名字>': unknown key '<键>'`，退出码为 1；其他计划照常运行。按名字指定的计划和 `--tier debug` 也会包含这个失败，避免“没跑所以看起来是绿的”。
+
+### 2.2 没有逃生口
+
+没有增加关闭严格校验的开关，计划文件和环境变量都设不了。理由：一个运行器只理解一半的计划不是证据，而“临时放宽一下”的开关最终会长期留在 CI 里。如果将来确实需要排查旧计划，应在运行器之外显式改写计划，而不是让计划自己声明“别检查我”。
+
+### 2.3 精确比较
+
+`expect_stdout_exact` 与旧名 `expect_stdout` 都按归一化后的完整 stdout 比较（`strip_ansi`、`normalize_newlines`、`trim_trailing_space` 等 normalizers 先生效），换行和行尾空格都算差异。失败信息给出第一个不同字符的偏移和双方文本；两段合计不超过 400 字符时直接显示全文，超过时显示差异附近窗口：
+
+```
+expect_stdout_exact differs: first difference at offset 2 (expected 4 chars, got 3 chars):
+expected "42 \n", got "42\n"
+```
+
+`perf_budget_platform` 不参与比较，但会被接受并复制到该测试的 `meta.json`，作为预算是在哪台机器上录的 provenance；文档写明了它“不是断言”。
+
+### 2.4 自测
+
+`feat/consistency/runner.plan.toml` 调用的 `test/tools/selftest/run.mjs` 增加了：
+
+- `matrix.plan.toml` 三条：`exact` 通过、`exact_fails` 因行尾空格失败、`exact_legacy` 通过；matrix 汇总从 31/25/5/1 变为 **34/27/6/1**；
+- 新目录 `test/tools/selftest/strict/`：一个拼错键的计划、一个类型错误的计划、一个合法计划。断言运行器退出 1、汇总 `total: 3, pass: 1, fail: 2`、合法计划仍 `[PASS]`、两条错误信息逐字匹配、失败运行的 scratch 根被保留后被清理。
+
+本次主机运行中 `runner.backend_matrix` 通过（5.88 s）。`node --check` 通过。
+
+## 3. 复跑范围与数字
+
+- 断言范围：36 个计划 / 249 条；其中 12 条 `expect_stdout_exact` 在 GPU 计划（`gpu/tiles_decorator` 3 条、`gpu/tiles_regions` 7 条、`gpu/tiles_transfer` 2 条），这三个计划是慢层，按任务约束没有运行，因此**实际验证 237 条**（198 条 exact + 39 条 legacy）。
+- 运行目标 34 个：28 个原始计划文件 + 5 个过滤副本（`var_reference`、`capacity`、`autodiff`、`random`、`tiles`，去掉的是慢层/PyTorch/Python 条目，这些条目本身不含本次的断言）+ 1 个运行器自测计划。
+- 展开后 1219 条测试。最终结果：**total: 1219, pass: 1210, fail: 9**，wall 45.5 s，`-Jobs 8`。
+- 过滤副本的断言数与原始计划一致：`var_reference` 1+5、`capacity` 3、`autodiff` 12、`random` 1、`tiles` 15；没有漏掉任何一条要验证的断言。
+
+逐计划断言数：
+
+| 计划 | exact | legacy |
+|---|---:|---:|
+| `feat/compile/decorators.plan.toml` | 3 | |
+| `feat/compile/generics.plan.toml` | 2 | |
+| `feat/compile/literal_context.plan.toml` | | 1 |
+| `feat/compile/literals.plan.toml` | | 1 |
+| `feat/compile/module_imports.plan.toml` | 14 | |
+| `feat/compile/module_load.plan.toml` | 7 | |
+| `feat/compile/module_operators.plan.toml` | 7 | |
+| `feat/compile/module_root.plan.toml` | 16 | |
+| `feat/compile/modules_213.plan.toml` | | 4 |
+| `feat/compile/namespace_rules.plan.toml` | 24 | |
+| `feat/compile/numeric_permissions.plan.toml` | 4 | |
+| `feat/compile/overloads.plan.toml` | 2 | |
+| `feat/compile/tag_permissions.plan.toml` | 1 | |
+| `feat/compile/tags.plan.toml` | 2 | |
+| `feat/compile/utf8_strings.plan.toml` | 1 | |
+| `feat/consistency/new_values.plan.toml` | | 14 |
+| `feat/consistency/operator_overloads.plan.toml` | | 14 |
+| `feat/consistency/print_formats.plan.toml` | 1 | |
+| `feat/linear/closures_and_state.plan.toml` | 2 | |
+| `feat/linear/loop_collect.plan.toml` | 3 | |
+| `feat/linear/loops.plan.toml` | 20 | |
+| `feat/linear/var_reference.plan.toml` | 1 | 5 |
+| `feat/mm/capacity.plan.toml` | 3 | |
+| `feat/mm/mem_blocks.plan.toml` | 2 | |
+| `feat/modules/autodiff.plan.toml` | 12 | |
+| `feat/modules/bytes.plan.toml` | 1 | |
+| `feat/modules/definitions.plan.toml` | 1 | |
+| `feat/modules/graph.plan.toml` | 32 | |
+| `feat/modules/random.plan.toml` | 1 | |
+| `feat/modules/rules.plan.toml` | 14 | |
+| `feat/modules/tensor.plan.toml` | 6 | |
+| `feat/modules/tiles.plan.toml` | 15 | |
+| `feat/modules/tree.plan.toml` | 1 | |
+| `gpu/tiles_decorator.plan.toml` | 3 | |
+| `gpu/tiles_regions.plan.toml` | 7 | |
+| `gpu/tiles_transfer.plan.toml` | 2 | |
+
+## 4. 新暴露的真实失败（9 条，保留为失败）
+
+### 4.1 循环状态的梯度丢失（8 条）
+
+| 计划 | 测试 | 期望 | 实际 |
+|---|---|---|---|
+| `feat/linear/loops` | `loops.grad_array_loop` | `6.0\n[1.0, 1.0, 1.0]\n12.0\n6.0\n6.0\n3.0\n` | `6.0\n[1.0, 1.0, 1.0]\n12.0\n0.0\n6.0\n0.0\n` |
+| 同上 | `loops.grad_array_loop_fvm` | 同上 | 同上 |
+| 同上 | `loops.grad_loop_collect` | `6.0\n3.0\n1998.0\n3\n` | `6.0\n0.0\n1998.0\n3\n` |
+| `feat/modules/autodiff` | `loop_grad_tuple_state` | `loop_grad_tuple_state vg=(12.0, 6.0) rounds=406\n` | `loop_grad_tuple_state vg=(12.0, 0.0) rounds=406\n` |
+| 同上 | `loop_grad_in_place.nvm/_fvm/_jit/_prl` | `loop_grad_in_place a=2.0 b=2.0 va=(4.0, 2.0)\n` | `loop_grad_in_place a=0.0 b=0.0 va=(4.0, 0.0)\n` |
+
+共同点：**循环状态是数组或元组时，反向循环丢掉了状态的切线**；单标量状态是正常的（`loop_grad_affine` 的几何级数 1.75 通过），从捕获数组按下标读取的梯度也是正常的（`[1.0, 1.0, 1.0]`）。`loop_grad_tuple_state` 的前一维（值 12.0）正确，只有梯度维变成 0；`loop_grad_in_place` 的 `with_grad` 值 4.0 正确，梯度 0。说明前向值和反向通道本身在跑，问题在复合状态的反向切线传播/回填。
+
+这些计划从一开始就写着 `expect_stdout_exact`，所以它们从来没有真正断言过；不是 H52 改坏的。设计原则 9.9 与计划描述（数组的切线是元素切线的数组、循环状态是值/梯度通道）支持“期望值是对的，运行时是错的”。按任务要求没有改期望值、没有加 `known_fail`，保留红色并在此列出。
+
+### 4.2 `saturate_all` 没有选出最小写法（1 条）
+
+`feat/modules/rules` 的 `rules.library_saturate_all`：
+
+- 期望：`coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n`
+- 实际：`coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 2075 1944\n56 42\n`
+
+`rules::simplify` 用同一份期望输出并通过（`chain` 被折成 `x*6`，0 次加法、1 次乘法），所以计数 pass、规则集和打印都没有问题。`rules::saturate_all` 在加入交换/结合/分配这些可重排规则后，`extract(q, 'nodes')` 选出的 `chain` 有 **2075 次加法、1944 次乘法**，而程序求值仍是 56 42，说明语义等价但“最小写法”的承诺没有兑现。这是规则重写/提取的真实缺陷，未改期望。
+
+## 5. 两处计划期望本身是错的（已修正）
+
+这是本次唯一改期望值的地方；两处都保留逐字符比较，没有放宽断言。
+
+### 5.1 `numeric_contract`（4 个 backend）
+
+`tensor.plan.toml` 的多行字符串写成：
+
+```toml
+expect_stdout_exact = """
+tensor(...)
+...
+softmax nan_count=3
+"""
+```
+
+TOML 的多行字符串从 `"""` 后的换行开始，所以期望值多了一个**开头的空行**；实际输出 18 行，除了这一行位移，其余内容逐行相同。另外最后一行实际是 `nan_count=3.0`（`sum` 是 float 张量的和），不是 `3`。
+
+处理：把第一行放到 `"""` 同一行，删掉多余前导换行；把 `3` 改成 `3.0`。修正后解析值与主机日志的 stdout **逐字符相等（665 字符）**。`docs/test-plans.md` 增加了这条 TOML 陷阱的说明，防止下一个作者再写错。
+
+### 5.2 `node_kinds_match_the_graph`
+
+`graph.plan.toml` 的期望还是旧编译器的图清单：11 个图（`__g_6__`…`__g_11__`），`pick` 的末尾两个节点是 `Func, Func`。实际输出是 9 个图（到 `__g_9__`），`pick` 末尾是 `Oper, Oper`。
+
+用主机上的 `std::jgir` 复核同一程序：9 个图，节点数与 kind 序列和实际输出完全一致（`__root__` 2、`main` 13、`pick` 7、`total` 6、`kinds` 4、四个子图 2/3/3/2）。所以是期望清单随 lowering 变化而过期，不是图 API 的缺陷。按 jgir 更新了期望，并在 desc 里写明“图清单和 kinds 与 `std::jgir` 一致”。
+
+## 6. 一次假红（不计入失败）
+
+中间一次全量复跑里，`feat/modules/tiles` 的 `gpu_preference.no_device.fvm/jit_hot_threshold0/prl` 在 10 s 超时（缺尾部输出）。第一次全量跑时它们分别在 9.18/9.05/9.03 s 通过；单独重跑 `tiles.plan.toml` 是 **59/59 通过**（这三个 9.03/8.94/9.53 s）；最终全量跑也通过（4.85–7.03 s）。这是主机负载下 10 s 阈值的已知假红（`camel-dev-ops` 也记录了 `-Jobs 12` 会触发），不是本次改动，也没有改超时。
+
+## 7. 文档
+
+- `docs/test-plans.md`
+  - 顶层字段补上 `[defaults]`、`[[sweeps]]`；
+  - 明确 schema 封闭、未知键按计划失败、错误指名文件/测试/键及建议、没有逃生口；
+  - `env` 改为 `envs`，并写明 `env` 会被拒绝；
+  - 行为断言清单加入 `expect_stdout_exact`/`expect_stdout`，新增专门小节解释完整比较、旧名、失败信息、`"""` 前导换行陷阱；
+  - normalizers 列表、benchmark 的 `perf_budget_platform` provenance、`kind` 的 `negative` 说明；
+  - “Field Constraints” 增加“新字段必须同时进运行器和文档”。
+- `agents/test.md`：未来写计划的人先看到“只许用文档字段、未知键报错、不要给运行器不认识的断言改名、加/删字段要同时改运行器和文档”。
+
+## 8. 没有做 / 留给作者
+
+- **9 条真实失败没有修语言代码。** H52 是测试基础设施任务，按设计原则“不能用改语义来让测试变绿”；循环复合状态梯度和 `saturate_all` 的提取分别属于自动微分和规则重写，需对应负责人判断。它们现在会持续红色，不再被静默放过。
+- **12 条 GPU 计划的 `expect_stdout_exact` 没有验证**：`gpu/tiles_decorator` 3、`gpu/tiles_regions` 7、`gpu/tiles_transfer` 2。三个计划是慢层，任务禁止运行慢层/GPU 计划。它们的字段已经被 schema 接受，但断言尚未真正执行过。
+- **旧名 `expect_stdout` 按完整输出实现。** 39 条全部通过，没有证据表明哪条本意是“前缀”；如果作者记得某条不是完整输出，应改计划而不是放宽比较。
+- **`perf/fib` 的 6 条 `perf_budget_platform` 没有跑**（慢层/性能计划）；运行器已接受并记录该字段。
+- **没有加逃生口**；如果审查者希望保留一个仅用于本地排查的开关，它必须来自运行器之外（例如显式改计划），不能由计划文件或环境变量自行关闭。
+
+## 9. 验证
+
+```powershell
+# 最终全量（34 个目标，-NoBuild 复用构建）
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h52-runner -Plan <34 个计划路径> -Jobs 8 -NoBuild
+
+# 结果
+[SUMMARY] total: 1219, pass: 1210, fail: 9
+RUN_EXIT=1
+```
+
+- 第一次全量（修正两处期望前）为 `1205/14`：9 条真实失败 + 5 条过期期望（`numeric_contract` ×4、`node_kinds_match_the_graph` ×1）。
+- 中间一次（修正两处期望后）为 `1207/12`，其中 3 条是第 6 节的假红；单独 `tiles` 为 `59/59`。
+- 最终一次为 `1210/9`，9 条正好是第 4 节列出的测试。
+- `node --check test/tools/run-tests.mjs`、`node --check test/tools/selftest/run.mjs` 通过；`runner.backend_matrix` 在最终运行中 `[PASS]`。
+- 静态复核：177 个计划、3492 条测试，按运行器字段表扫描未知键为 0。
+
+## 10. 改动文件
+
+- `test/tools/run-tests.mjs`：字段表、`validatePlanSchema`、`PlanSchemaError`、无效计划表示、精确比较与差异信息、`perf_budget_platform` 记录。
+- `test/tools/selftest/run.mjs`、`matrix.plan.toml`、`strict/{unknown_key,wrong_type,valid}.plan.toml`：严格 schema 与精确比较的自测。
+- `test/plans/feat/modules/graph.plan.toml`、`tensor.plan.toml`：两处过期期望。
+- `docs/test-plans.md`、`agents/test.md`：作者文档。
+- 本报告。
+- 没有改 C++、stdlib 或任何语义。
