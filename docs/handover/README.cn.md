@@ -250,6 +250,10 @@
 3. 顺带：`stdlib/array.cml` 等处可由 lambda 推断省掉的参数注解删去；`algo::argsort` 随 H19 第 5 步并入 `array`。
 4. 用例：自动绑定、返回类型独有的名字报错、单次出现警告、与已有类型同名时 `typeas` 生效。
 
+### 5.09 H230 标准库按"写法"重写（决策者 2026-10-22，负责人要求）
+
+负责人："stdlib 是最常用的标准、最规范的推荐写法，代码要好好斟酌，体现 Camel 的特性。" 准则：[`docs/stdlib-conventions.cn.md`](../stdlib-conventions.cn.md) 6.5。逐模块进行，每个模块一次提交，**决策者逐个评审**（`reviews/stdlib-<模块>.md`）；第一份是 [reviews/stdlib-array.md](reviews/stdlib-array.md)。依赖 H228（字面量取型、`#impl`）与 H229（类型变量自动绑定）的部分随它们落地；评审里点出的语言缺口（负步长切片、元组形参解构等）作为本项的一部分补进语言。顺序：`array` → `statistics`（6b 改写为 Camel）→ `str` → `math` 的 Camel 部分 → `json` → 其余。
+
 ### 5.0 调度
 
 任务之间的并行与先后由施工负责人自行安排（可同时调度多个子代理）；任务书只写依赖的硬前提。下文各任务中"某车道"的字样只是历史标记，不约束调度。
