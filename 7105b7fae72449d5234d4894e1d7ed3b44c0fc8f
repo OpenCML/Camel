@@ -1,0 +1,253 @@
+# H55：把循环的一轮降为原生代码（测试是比较加分支、回边是直接跳转）
+
+- 分支：`handover/H55-jit-native-loop`，工作树 `D:\Projects\Camel-wt\h55-jitloop`。
+- 基点：`origin/develop` `21cdf9d5`（H43 第 2 项、H45 都已在里面）。
+- 代码提交：`d66e3238`（`jit: lower the rounds of a loop to native code, and say which rounds still take the helper`）。
+- 本报告提交：见 `git log -- docs/handover/reports/H55.md`。
+- 测量主机：`88zjwei`（Linux x86-64，32 核 EPYC 7343，共享；构建与运行都走 `camel-remote.ps1`）。
+
+## 0. 结论
+
+1. **一轮 7.0 ns**（1000 万轮 0.070 s）。同一份工作的编译尾递归 7.2 ns，`std::fvm` 44 ns。H43 记的 `std::jit` 0.342 s
+   （34.2 ns/轮）与本机同提交实测 35.6 ns/轮 是同一件事；**差的那 4.8 倍全部是三个循环事件调用**
+   （`jitHelperLoopBegin`/`Test`/`End`），实测 29.0 ns/轮。
+2. 任务书的目标"一轮不快于同一份工作的编译尾递归，约 8.7 ns/轮、1000 万轮约 0.09 s"：**达到**，7.0 ns / 0.070 s，
+   且比尾递归略快（7.0 对 7.2 ns，见 3.2 的同一批交替采样）。
+3. 原生的那一轮：测试是"取条件结果 → 测试 → 条件跳转"，回边是直接跳转，状态是 2k 次槽拷贝，**不保留轮计数**；
+   形状不允许的循环仍走 helper，而且**在 `-vv` 与 `std::jit` 的统计里逐条说明为什么**（第 2 节列出全部原因字符串）。
+4. 剩余一轮的成本**实测拆开**：2.0 ns 是这一轮自己的机器（含 4 次端口拷贝，尾递归的对应部分是 1.4 ns，差 0.6 ns），
+   5.0 ns 是 `%`——helper 里的一条 64 位 `idiv`，在状态的串行依赖链上约 19 个周期；尾递归付同样的 5.8 ns。
+   **该形状已经到地板**，第 5 节说明剩下唯一能动的两处以及为什么现在不动。
+5. 正确性：`std::nvm`/`std::fvm`/`std::jit`/`inline+std::jit` 在新用例的每个形状上值、诊断、退出码全等；
+   `loops`、`loops_in_arms`、`jit_framed`、`modules/graph` 四个计划全过（第 4 节）。
+
+## 1. 机制
+
+### 1.1 判定只有一处：`LoopRound` 与 `loopRoundsOf`
+
+`src/passes/sched/fastvm/jit/backend/x64/x64_backend.cpp`：
+
+- `LoopRound` 记一个循环的三个事件 pc（`beginPc`/`testPc`/`endPc`）、一轮的头（`roundPc`，`LEND` 的跳转目标）、
+  条件体之后的第一条（`bodyPc`）、停机的本地标签（`stopPc`，见 1.4），以及 `helperReason`——为空表示这一轮原生。
+- `loopRoundsOf(unit)` 扫一遍本图的字节码（`[entryPc, entryPc + graphLength)`），按 `bc.extra()->loop` 归组，
+  校验三个事件互相链接（`LTST` 的目标是 `LEND`，`LEND` 的目标是 `LBEG` 之后），再逐条判定。
+- **统计与生成代码读同一个函数**：`collectRuntimeConstructs` 的 `LOOP` 条目用它的结果填 `JitBlocker::detail`
+  （`"native"` 或 `"helper: <原因>"`），`compileBytecodeWith` 用它的结果决定生成什么。所以"统计说这一轮是 native"
+  与"代码真的原生"不可能不一致。
+
+### 1.2 原生的一轮
+
+`bench_loop.cml` 的 `main`（`std::mir` 的实际输出，省去 `debug_trace`）：
+
+```
+[16] call_helper loopBegin            ; LBEG，仍是 helper：它把首状态写进 stateSlots、建值元组、绑一次条件端口
+[18] vload v9, [rdi+96]  ; slot12     ; 条件端口 = 状态分量（bindLoopState，k 次）
+     vstore [rdi+48], v9 ; slot6
+     vload v10, [rdi+104]; slot13
+     vstore [rdi+56], v10; slot7
+[18] vload v11, [rdi+56] ; slot7      ; 条件体：LLT i < n
+     vload v12, [rdi+40] ; slot5
+     vcmp.lt v13, v11, v12
+     vstore [rdi+64], v13; slot8
+[19] vcopy v14, v13                   ; LTST：取条件结果、测试、停机跳转
+     vtest v14
+     je stop                            ; stopPc
+     vload v15, [rdi+96]  ; slot12     ; 继续时才绑体端口（loopTest 的语义）
+     vstore [rdi+72], v15 ; slot9
+     vload v16, [rdi+104]; slot13
+     vstore [rdi+80], v16; slot10
+[21] call_helper bytecode              ; LMOD（`%`）仍是 helper：它会因除零故障，且自己写结果
+[22] vload v17, [rdi+72] ; slot9       ; LADD s + ...
+     vload v18, [rdi+88] ; slot11
+     vadd v19, v17, v18
+     vstore [rdi+96], v19; slot12      ; 分量在体自己的槽里，不再造元组
+[23] vload v20, [rdi+80] ; slot10      ; LADD i + 1
+     vadd v21, v20, 1
+     vstore [rdi+104], v21; slot13
+[24] jmp 18                            ; LEND 的回边：直接跳到轮头
+[stop] vloadimm64 v22, -1              ; 停机路径：轮计数 = -1（loopTest 留下的值）
+     vstore [rdi+128], v22; slot16
+     call_helper loopEnd pc=24         ; 每循环一次：把分量写回值元组
+     jmp 26                            ; 循环之后
+```
+
+一轮 **24 条 MIR**（含 1 次 helper 调用），没有事件调用，没有轮计数的读写，没有轮内轮询。
+
+### 1.3 轮计数不保留
+
+`loopTest` 把轮号存进 `roundSlot`，`loopEnd` 用它判停机（`round < 0`）、加一、以及给 `takeLoopRound`/`roundDone`。
+原生形状里**没有任何指令读它**：条件里用轮号的形状就是"序列上的 `for`"（`iterates`），它拿轮号取元素，留在 helper。
+所以原生的一轮干脆不计数，只在停机路径写 `-1`——那是 `loopTest` 在停机时留下的值，也是解释器在这一轮离开时
+`roundSlot` 的内容，因此可观测的值（以及 `loopEnd` 读到的 `round < 0`）与原来完全一致。
+
+不"放进寄存器"是因为没有读者：寄存器里的计数器省的是它的读写，而这里连读写都没有。
+
+### 1.4 停机路径仍走 `helperLoopEnd`
+
+`stateComponents` 的循环，值元组在 `loopBegin` 时造好，之后体的分量在体自己的槽里；离开时要把分量写回元组
+（`loopEnd` 的 `round < 0` 分支）。这一段**每个循环只跑一次**，不是每轮，所以留在 helper 里最省事也最不容易错：
+停机块只做"`roundSlot = -1` → `helperLoopEnd` → 跳到循环之后"。继续的那条路径上 `loopEnd` 会做的事
+（`bindLoopState(k)`）已经由轮头的拷贝和回边代替了。
+
+`LTST` 的停机跳转、`LEND` 的回边都要跳到"某条字节码中间"的位置（停机块没有自己的字节码）。做法是给停机块一个
+**合成 pc**：`kLocalLabelPcBase + index`（`0x7F000000` 以上，每个循环一个），`setNextPc` 用它，MIR 的 pc 跳转、
+`pcToMirIndex`、`optimizePeephole` 的合流点、`eliminateDeadFrameStores` 的活跃性都不用改。轮头不需要合成 pc：
+`LEND` 的回边正好指向条件体第一条字节码，而"轮头拷贝"的第一条 MIR 就带着这个 pc，`pcToMirIndex` 取第一条，
+所以回边落在拷贝上（第一次从 `LBEG` 顺序下来时也经过同一段拷贝）。
+
+### 1.5 为什么一轮不轮询安全点
+
+`loopEnd` 的 `roundDone` 是解释器每轮的安全点。原生的一轮**不可能分配**（1.2 的清单里没有会分配/会进其他图的指令），
+因此轮内不会有收集请求；它用的帧就是 driver 的帧，栈图与原来同一份，轮与轮之间的槽由 driver 的栈图追踪。
+所以"不轮询"不会让 GC 看到寄存器里的引用，也不会漏掉收集——只是把"每轮问一次"变成"这一轮不会有事"。
+
+对照：编译后的尾递归本来就不轮询（`bench_tail` 的 `spin` 跑 1000 万轮没有一次安全点）；H43 裁定"免 safepoint 轮询"
+不做时，缺的正是"这一轮能不能安全地不问"的判据，而这个判据就是 1.1 的形状判定。
+`CAMEL_GC_STRESS_SAFEPOINT=1`（每个安全点都收集）时所有循环都走 helper（2 的 6.5），所以压力模式仍然覆盖轮级安全点。
+调试器装上观察者时 `std::jit` 按 `std::fvm` 跑（`observer.h`、`gotovm.cpp` 的注释），编译出的一轮不会在调试器下执行。
+
+## 2. 哪些形状仍然走 helper（代码里的原文）
+
+`-vv` 每个图一行，`std::jit(stats=...)` 的 `runtime` 数组同一份 detail：
+
+| 形状 | 原因字符串 |
+| --- | --- |
+| 序列上的循环（`for x in xs`，含 `for ... while`） | `the round takes the next element of a sequence` |
+| 会收集的循环（`loop xs = [] as int[] ...`） | `the round collects the values it produces` |
+| 状态只有一个值 | `the state is a single value, not a slot the body writes every round` |
+| 状态是每轮重造的元组（`sync` 体、体不是 FILL 元组等） | `the round makes the state tuple anew every round` |
+| 轮里有嵌套循环 | `the round contains a nested loop at pc=N` |
+| 轮里有会分配/会进其他图的指令 | `the round contains <OP> at pc=N`（OPER、CAST、COPY、FILL、ACCS、CALL、SCHD、match…） |
+| 端口/分量/轮号不在帧槽里（静态区、槽 0） | `the loop's state or round count is not in a frame slot of its own` |
+| `std::profile` | `std::profile counts the rounds` |
+| 安全点压力模式 | `the safepoint stress mode asks for a safepoint every N safepoints` |
+| 事件缺失或链接不上 | `the loop's events are not all in the graph's bytecode` / `... do not link start, test and end ...` |
+| 循环是图的最后一条指令 | `the loop is the last instruction of the graph` |
+| 无条件的循环 | `the loop has no condition to test` |
+
+`compiled.cml` 的实际输出（`-vv`，`std::jit(hot_threshold=0)`）：
+
+```
+countdown   as framed code; loop rounds: native rounds
+sum_to      as framed code; loop rounds: native rounds
+sum_squares as framed code; loop rounds: helper: the round takes the next element of a sequence
+until_above as framed code; loop rounds: helper: the round takes the next element of a sequence
+nested      as framed code; loop rounds: helper: the round takes the next element of a sequence (2 loops)
+collects    as framed code; loop rounds: helper: the round collects the values it produces
+ticks       as framed code; loop rounds: helper: the round makes the state tuple anew every round
+```
+
+`std::opt::inline` 后所有循环都在 `main` 里，一行汇总：
+
+```
+'main' as framed code; loop rounds: helper: the round takes the next element of a sequence (8 loops),
+native rounds (2 loops), helper: the round collects the values it produces,
+helper: the round makes the state tuple anew every round
+```
+
+统计（`std::jit(hot_threshold=0, stats="stats.jsonl")`，每条一个图）：
+
+```json
+{"name": "countdown", "mode": "framed", "runtime": [{"kind": "LOOP", "detail": "native", "count": 1}]}
+{"name": "collects",  "mode": "framed", "runtime": [{"kind": "LOOP", "detail": "helper: the round collects the values it produces", "count": 1}]}
+```
+
+## 3. 数字
+
+### 3.1 方法（照 H43-perf）
+
+`taskset -c 3`，整进程 CPU 时间（`/usr/bin/time` 的 user+sys），5 次**交替**采样取中位数，N=5000 万（1000 万时
+`/usr/bin/time` 只有 10 ms 分辨率，等于 1 ns/轮），同一台共享主机、同一批脚本，前后两次构建各跑一遍，
+并记录 loadavg。前后两次的**对照项**（编译尾递归、`std::fvm`）必须一致，才算可比（3.4）。
+
+- 前：`21cdf9d5`，loadavg 64–80。
+- 后：`d66e3238`，loadavg 45–71。
+
+### 3.2 前后对比（N=5000 万，中位数；括注为折算的每轮）
+
+| 跑的东西 | 前 `21cdf9d5` | 后 `d66e3238` |
+| --- | --- | --- |
+| `loop s = 0, i = 0 while i < n do (s + i % 7, i + 1)`，`std::jit` | 1.780 s（35.6 ns） | **0.350 s（7.0 ns）** |
+| 同上但去掉 `%`（`s + i`） | 1.550 s（31.0 ns） | 0.100 s（2.0 ns） |
+| 同一份工作的编译尾递归 `spin`（`i + 1, s + i % 7`） | 0.370 s（7.4 ns） | 0.360 s（7.2 ns） |
+| `std::fvm` 跑同一循环 | 2.210 s（44.2 ns） | 2.200 s（44.0 ns） |
+
+1000 万轮（任务书的单位，直接测）：**前 0.356 s，后 0.070 s**（5 次采样 0.070/0.070/0.070/0.070/0.070）。
+
+结论：
+
+- 一轮 **35.6 → 7.0 ns（5.1×）**，从尾递归的 4.8 倍变成 **0.97 倍**；相对解释器从 0.80 倍变成 0.16 倍。
+- 三个事件调用值 **31.0 − 2.0 = 29.0 ns/轮**（约 9.7 ns 一次），这就是 H43 一直差的那一块。
+
+### 3.3 剩余的一轮由什么组成（实测，不是估）
+
+| 组成 | 每轮 | 怎么量的 |
+| --- | --- | --- |
+| 这一轮自己的机器：4 次端口拷贝 + `LLT` + 测试/跳转 + 两次加法 + 回边（24 条 MIR） | **2.0 ns** | 同一循环去掉 `%`（`s + i`）后重新测 |
+| `%`：`LMOD` helper 里的一条 64 位 `idiv`，在 `s` 的串行依赖链上 | **5.0 ns** | 7.0 − 2.0；另一个独立证据：一轮里两个 `%` 是 13.8 ns（+6.6），尾递归同样的 `%` 是 7.2 − 1.4 = 5.8（1.4 ns 是尾递归去掉 `%` 的实测，只在后一次构建上测过；尾递归的代码本次未改动） |
+
+前一项里，与尾递归的差（2.0 对 1.4 ns，0.6 ns）就是 4 次端口拷贝：尾递归把状态放在参数里，没有这一手。
+后一项**不是循环特有的**：`s + i % 7` 在哪个后端都要做一次 64 位除法。按 3.7 GHz 算 5.0 ns ≈ 19 个周期，
+正是 Zen 3/4 上 `idiv r64` 的延迟——也就是说 helper 调用本身的开销在这一项里已经测不出来（它被除法的延迟遮住）。
+
+### 3.4 可比性
+
+前后两次的对照项：尾递归 7.4 → 7.2 ns（−2.7%）、`fvm` 44.2 → 44.0 ns（−0.5%），都在噪声内。
+对照项没变而循环变了 5 倍，说明差异来自这次改动，不是主机负载。
+
+## 4. 正确性与证据
+
+### 4.1 新用例（`test/cases/loops/compiled_native.cml`）
+
+每个函数一个原生形状，四个后端（`nvm`、`fvm`、`jit_hot_threshold0`、`inline_jit_hot_threshold0`）值与诊断全等：
+
+- `three`：三个分量、条件只读其中一个、体写全三个（`3-状态` 的端口绑定）；
+- `no_round`：条件一开始就为假（**一轮都不跑**：停机路径、`-1`、值元组由首状态写回）；
+- `split`：条件读一个分量、体写两个；
+- `twice`：同一个循环被调用两次（每次调用自己的帧）；
+- `fault`：体里的除法在**第三轮**除零——原生一轮里的故障路径（`markDivision` 的陷阱检查），
+  诊断位置与 `nvm`/`fvm` 完全相同（`27:65`），退出码 1。
+
+### 4.2 新增的断言
+
+- `test/plans/feat/linear/loops.plan.toml`：`loops.compiled.native`（上面这个用例，`backends_agree = exit_code + diagnostics`）。
+- `test/plans/feat/linear/jit_framed.plan.toml`：`framed.loops.regions.lowered`——从 `-vv` 的每个图一行断言
+  "哪一轮是 native、哪一轮走 helper 以及原因"，并且**反断言**（`expect_output_not_contains`）：
+  走 helper 的循环不得被报成 native（`'collects' ... loop rounds: native` 等 7 条）；
+  `framed.loops.regions.compiled.inline` 另加 `native rounds (2 loops)` 的汇总断言。
+
+### 4.3 跑过的计划
+
+`loops.plan.toml`、`loops_in_arms.plan.toml`、`jit_framed.plan.toml`、`modules/graph.plan.toml`：
+**249 项全过**（含新增的 4 项后端用例与 `framed.loops.regions.lowered`）。另外 `test/plans/feat/linear`
+整个目录加 `test/plans/smoke`：**717 项全过**（`feat.linear.loop_collect` 的收集槽矩阵也在里面）。
+其中 `framed.loops.gc_stress.*`、`framed.loops.moving.*`（`CAMEL_GC_STRESS_SAFEPOINT=1`、投毒、世代收集）
+覆盖的正是"分配型循环仍走 helper、每轮仍轮询"的那一半。
+
+**臂里的循环**也走同一条路：`arm_loops.cml` 的 `two_states`（`if` 臂里两状态 `while`）是原生轮，
+三个后端值相同（`two (5, 10)`）；`arm_loops_edges.cml` 里的循环都是序列上的 `for`，留在 helper 并逐条报告原因。
+
+## 5. 没做的事（以及为什么现在不做）
+
+1. **把轮计数放进寄存器**：没有形状读它（1.3）。`for` 序列拿轮号取元素，留在 helper。
+2. **原生 `LMOD`/`IMOD`**：收益只是省一次 helper 调用，而这一项的主体是 5.0 ns 的 `idiv`（3.3）。
+   真要做，语义有两处不能丢：除数为 0 是 `DivisionByZero` 故障、`x % -1 == 0`（`camel/utils/int_div.h`），
+   而 `IMOD` 现在正是靠 helper 才拿到这两条。按实测，收益在噪声以下，不做。
+3. **常量除数的强度削减**（把 `% 7` 变成乘加移位）：这是那 5.0 ns 唯一的出路，但它对尾递归同样有效、
+   与循环无关，H43 第 4 项已裁定"同意不做"。如果以后要做，`bench_loop` 会同时变快，比较时要一起重测。
+4. **省掉 4 次端口拷贝（≈0.6 ns/轮）**：要让端口就是分量，得改 `planStateComponents`/`buildLoopTables`
+   （而"分量在体自己的槽里、FILL 省略"的前提正好相反），是执行计划层的改动，收益 0.6 ns 量级。现在不做。
+5. **轮内合并安全点/减少轮询**：见 1.5。原生的一轮不分配，所以不问；分配的一轮仍走 helper 且每轮轮询。
+
+## 6. 文件
+
+- `src/passes/sched/fastvm/jit/backend/x64/x64_backend.cpp`：`LoopRound`、`instructionRunsInRound`、`isLoopEvent`、
+  `loopRoundsOf`、`collectRuntimeConstructs` 的 `LOOP` 条目、`compileBytecodeWith` 里 `LBEG`/`LTST`/`LEND` 的两条路径
+  （`nativeRound`、`bindLoopPorts`）。
+- `src/passes/sched/fastvm/jit/backend/backend.h`：`JitBlocker::detail`。
+- `src/passes/sched/fastvm/fastvm_stats.cpp`：统计的 `detail` 直接用构造给的说明。
+- `src/passes/sched/fastvm/fastvm.cpp`：编译日志追加 `; loop rounds: ...` 汇总。
+- `src/passes/sched/fastvm/jit/backend/fallback.h`：`JitBlocker` 新字段的初始化。
+- `test/cases/loops/compiled_native.cml`、`test/plans/feat/linear/loops.plan.toml`、
+  `test/plans/feat/linear/jit_framed.plan.toml`：用例与断言。
+- `docs/handover/README.cn.md`：H43 行与 H43 第 7 项、新增 H55 行。
