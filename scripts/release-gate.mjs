@@ -135,7 +135,7 @@ const POLICY =
 const STATIC_CHECKS = [
     { name: 'stdlib reference: declarations agree with the registered operators', args: ['scripts/stdlib-reference.mjs', '--verify-ops'] },
     { name: 'stdlib reference: docs/stdlib-reference.md is up to date', args: ['scripts/stdlib-reference.mjs', '--verify-doc'] },
-    { name: 'diagnostics catalog: the code tables are consistent', args: ['scripts/diagnostics-catalog.mjs', '--check'] },
+    { name: 'diagnostics registry: the declarations and the generated code tables agree', args: ['scripts/diagnostics-catalog.mjs', '--check'] },
     { name: 'document links: no broken relative link', args: ['scripts/check-doc-links.mjs', '--all'] },
     { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'] },
     { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'] },
