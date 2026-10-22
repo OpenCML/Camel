@@ -29,7 +29,7 @@
 
 ## 开发环境配置
 
-请参阅 [开发环境配置指南](setup.cn.md)（[English](setup.en.md)），完成以下组件的安装：
+请参阅 [开发环境配置指南](setup.cn.md)（[English](setup.en.md)），组件与最低版本：
 
 | 组件 | 最低版本 |
 |------|----------|
@@ -39,6 +39,8 @@
 | CMake | 3.25 |
 | Conan | 2.10 |
 | Ninja | 1.11 |
+
+Clang、CMake、Conan、Ninja 是构建本身需要的。Python 只用于 `python`/`pyplot` 模块与 wheel：没有带开发头文件的 CPython 时构建会跳过这些模块，`CAMEL_SKIP_PYTHON=1` 可显式跳过。
 
 ## 开发流程
 
@@ -52,10 +54,10 @@
 2. **安装依赖**
 
    ```bash
-   pip install camel-lang
-   npm install
-   npm run init
+   npm install          # 安装 npm 包；prepare 钩子会执行 conan install
    ```
+
+   `npm install` 通过 `prepare` 钩子运行 `scripts/install.js`（Conan）。只有当 `conanfile.txt` 或 CMake 选项变化时才需要运行 `npm run init`：它会删除 `build/` 并重新执行 `conan install`。
 
 3. **构建项目**
 
@@ -66,21 +68,25 @@
 4. **运行测试**
 
    ```bash
-   npm run test
+   npm run test        # fast 层，运行 out/latest 中的构建
    ```
+
+   `npm run test:all` 会加上 slow 计划；见 [docs/test-plans.md](test-plans.md)。
 
 5. **提交前检查**
 
    ```bash
-   npm run format    # 格式化 C++ 代码
-   npm run check     # 代码检查
+   npm run format    # 格式化 src/、include/、modules/ 与 tools/ 下的 C++
+   npm run test      # fast 测试层
    ```
+
+   预提交钩子会自动格式化并更新已暂存的文件（它拒绝部分暂存的文件，请整文件暂存）。`npm run check` 不是检查器：它运行日常维护流程（格式化、刷新 `Updated:` 头日期、打印代码统计）并改写文件，运行后请检查 diff。
 
 ## 代码规范
 
 ### Style Guide
 
-- **C++ 代码**：使用 `clang-format` 格式化，对 `src/` 和 `include/` 下的 `.cpp`、`.h` 文件执行 `npm run format`
+- **C++ 代码**：使用 `clang-format` 格式化，对 `src/`、`include/`、`modules/` 与 `tools/` 下的 `.cpp`、`.h` 文件执行 `npm run format`
 - **Camel 源码**：遵循项目既有的语法和风格
 - **文档**：Markdown 格式，保持与现有文档风格一致
 
@@ -88,20 +94,22 @@
 
 - `src/`：C++ 实现
 - `include/`：C++ 头文件
-- `libs/`：库模块（如 `python`）
+- `modules/`：库模块（如 `python`）
+- `stdlib/`：用 Camel 写的标准库
 - `test/`：测试用例
 - `docs/`：文档
 
 ## 提交规范
 
-- 提交信息清晰、简洁，说明改动内容
-- 关联 Issue 时使用 `Fix #123` 或 `Closes #123`
-- 遵循 [Conventional Commits](https://www.conventionalcommits.org/) 风格（可选）：
+- 使用 [Conventional Commits](https://www.conventionalcommits.org/) 前缀：
   - `feat:` 新功能
   - `fix:` Bug 修复
   - `docs:` 文档
-  - `refactor:` 重构
+  - `refactor:` 不改行为的结构调整
   - `test:` 测试
+  - `chore:` 维护
+- 关联 Issue 时使用 `Fix #123` 或 `Closes #123`。
+- 提交标题描述整个暂存改动，而不是最后一次编辑；合并提交描述它整合的工作。
 
 ## Issue 与 PR 指南
 
@@ -113,10 +121,10 @@
 
 ### 提交 Pull Request
 
-1. 基于最新的 `main` 分支创建分支
+1. 基于最新的 `develop` 创建分支。`main` 只用于发布：不要直接向 `main` 或 `develop` 提交
 2. 保持 PR 范围聚焦，便于审查
-3. 确保 CI 通过
-4. 请求至少一位维护者 Review
+3. 提交 PR 前在本地运行 `npm run test`。拉取请求不会自动运行 CI：`.github/workflows/ci.yml` 在发布标签（`v*`）与手动触发时构建并测试，PR 不会被自动门禁
+4. 请求维护者 Review。通过审查的 PR 以合并提交（`git merge --no-ff`）合入 `develop`，不 squash、不 rebase；合并提交概括整合的工作
 
 ---
 
