@@ -1,0 +1,228 @@
+# H116 — `io` 模块：终端从 `os` 拆出并声明化
+
+分支 `handover/H116-io-module`，起点 `origin/develop` `5d71b1fe5`。两个实现提交（报告与看板另有一个文档提交）：
+
+- `66e5af552` `refactor(stdlib): give the terminal its own io module`
+- `0dffa931e` `refactor(modules): declare io's operators in Camel`
+
+工单把本项写成“H19 第 8 步中属于 `io` 的部分”。核对后，计划第 8 步与 `io` 相关的只有
+`str::bytes`/`from_bytes` 的**删除**（见第 3 节），没有“迁入 `io`”这一步；`io` 自己等的是第 4
+步的终端拆分。本任务做的是计划真正为 `io` 写的两件事：第 4 步里终端算子的拆分（第 1 个提交）
+与第 10 步最后一项 `io` 的声明化（第 2 个提交）。`str::bytes`/`from_bytes` 原样保留，见第 3 节
+的问题。
+
+## 1. `io` 是做什么的
+
+### 1.1 计划里的 `io` 表面
+
+H19 计划把 `io` 定为终端/控制台模块，而不是通用的流模块：
+
+- 第 4 步“改名与拆分”把 `os` 的终端算子交给 `io`，`os` 只留 `exit`/`sleep`/`whoami`/
+  `cpu_count`（`H19-plan.md` §0.1 第 4 步，第 71、117、242、264 行；第 523 行把 `io:` 列为
+  终端的 URI）。
+- 第 5 节的问题 5 明确 `Stream` 是以后的工作；`print`/`println`/`input` 已经是前奏（prelude）
+  的内置算子（`:io/*`），不从模块导入；`eprintln` 留到第 9 步。
+- 计划没有给 `io` 一个值层面的 `read`/`write` 对、`read_line`、通用 reader，也没有给它
+  `stdin` 值；这些都要等 `Stream`。
+
+所以本任务实现的表面就是计划点名的五个终端算子：
+
+| 声明 | 方向 |
+|---|---|
+| `has_input(): bool` | 读：stdin 上有没有待读的键 |
+| `get_char(): string` | 读：一个字符（一个码点，完整读入） |
+| `get_chars(max: int): string` | 读：至多 max 个字符 |
+| `clear_input_buffer(): void` | 读-改-写：丢掉 stdin 上待读的输入 |
+| `set_terminal_raw_mode(enabled: bool): void` | 写：终端的 raw 模式 |
+
+`get_chars` 的 `max` 按字符（码点）计数；`max` 为负时内核沿用原来的“不限”行为，声明没有
+另立约定。五个算子全部是 effectful，没有纯算子。
+
+### 1.2 资源与效果
+
+`io` 在 `load()` 里登记（`modules/io/module.cpp`）：
+
+- `io:stdin`：`has_input` 是 `Read`，`get_char`/`get_chars`/`clear_input_buffer` 是
+  `ReadModifyWrite`；
+- `io:terminal`：`set_terminal_raw_mode` 是 `Write`；
+- 全部是 `externalAmbient`，即“进程外部的环境资源”，不是程序的局部值。
+
+资源名仍是 `io:stdin`/`io:terminal`，**没有**改成设计原则 3.3 的 `stdin`/`stdout`/`stderr`：
+第 9 步会一次性改资源名，而内置 `:io/input` 现在也写 `io:stdin`；提前改会让 `io:get_char` 与
+`:io/input` 失去同一个资源上的顺序。这是有意的暂留，不是遗漏。
+
+效果上，五个算子都在 `OperatorTable::declare("io", ...)` 里声明为非纯；`std::jgir` 的节点
+`roles` 因此带 `"effect"`（第 4 节的用例直接断言这一点）。按设计原则 3.3，非纯算子的效果在
+同步函数外不会被优化掉，也会参与资源顺序。
+
+### 1.3 它不能做什么
+
+- 不能把前奏的 `print`/`println`/`input` 再实现一遍，也不能导出它们；`test/cases/modules/std/io/
+  basic.cml` 测的是前奏，不 `import io`，本任务没有动它。
+- 不能发明 `Stream`、`stdin` 值、`read`/`write`、`read_line`；计划把它们列为以后的工作。
+- 不能把 `eprintln`（第 9 步）、`exit`（内置 `:io/exit`，第 4a 步）算成 `io` 模块的算子。
+- 不能在内核里读静态类型（设计原则 5.5）；这五个内核都不需要类型信息。
+- 不能提前改资源名；见 1.2。
+- 不能借“声明化”新增诊断码。本任务没有新增诊断，`node scripts/diagnostics-catalog.mjs --check`
+  仍是 202 条，`0x185` 及以上未占用。
+
+## 2. 做了什么
+
+### 2.1 第 1 个提交：终端从 `os` 移到 `io`
+
+`modules/os` 的五个终端内核、`Terminal` 命名空间、`getOSOpsMap()` 里的五条绑定、
+`OSModule` 的五个签名组、五条纯度、五条资源，以及 `stdlib/signatures/os.cml` 的五段文档，
+一起移到 `modules/io` 与 `stdlib/signatures/io.cml`。URI 从 `os:` 改为 `io:`（模块:函数名的
+默认绑定，不需要 `#op`），内核名改为 `__io_*__`，错误里的来源改为 `io.get_char`/`io.get_chars`。
+`os` 现在只剩 `exit`、`sleep`、`whoami`、`cpu_count` 四个算子，资源只有
+`process`/`time:clock`/`process:environment`。
+
+`examples/tty/snake.cml` 改为 `from io`；`docs/technical/00_language_reference.md` 的导入例子、
+`docs/technical/41_resources_and_definitions.md` 的资源表随之改。语法 golden
+`test/plans/feat/tools/golden/grammar/real_snake.scopes` 只改导入行的模块名（`os`→`io`）。
+`scripts/stdlib-reference.mjs` 增加 `io` 条目，`os` 的标题改为“the process and the machine”；
+`docs/stdlib-reference.md` 重新生成。
+
+新增 `test/plans/feat/modules/io.plan.toml`（4 条）：
+
+| 用例 | 证明什么 |
+|---|---|
+| `terminal_read_write_roundtrip` | `roundtrip.mjs` 用 `spawnSync(..., { input: 'ab' })` 给子进程一个管道作 stdin；程序用 `has_input` 看到两个待读字符，用 `get_char` 读 `'a'`、`get_chars(4)` 读 `'b'`，再用前奏 `print`/`println` 写回；`set_terminal_raw_mode(false)` 成功。断言输出 `true\nab\n`。这就是“通过声明类型完成一次读/写往返”，没有终端也能确定地跑。 |
+| `raw_mode_needs_a_terminal` | stdin 不是终端时，`set_terminal_raw_mode(true)` 是 `RuntimeError` 故障值（`attempt` 捕获），`false` 是成功的 no-op。防止把“raw mode”测成只有交互终端才能验证的东西。 |
+| `effect_on_the_graph` | `std::jgir` 的 `io:get_chars` 节点 `roles` 包含 `"effect"`。 |
+| `declared_resources` | `inspect --ops` 报告五个 URI 的 `semantics.resources`：`write ambient io:terminal; external`、`read ambient io:stdin; external`、`rmw ambient io:stdin; external`。 |
+
+`stdlib_registry.plan.toml` 的模块列表加入 `io`，非纯表加入五个 `io:` URI；这样 `io` 的纯度和
+资源不是只在新计划里被断言。
+
+### 2.2 第 2 个提交：`stdlib/io.cml` 成为声明的唯一来源
+
+`stdlib/signatures/io.cml` 移到 `stdlib/io.cml`，写成无函数体的声明：
+
+```camel
+module io
+
+/// Switches the terminal to raw mode (keys arrive one by one, unechoed) or back.
+/// @effect changes the terminal
+/// @fails fault `RuntimeError` when the terminal refuses
+/// @example set_terminal_raw_mode(true)
+export func set_terminal_raw_mode(enabled: bool): void
+
+/// Whether a key press is waiting to be read.
+/// @effect reads the terminal
+/// @example has_input()    // true or false
+export func has_input(): bool
+
+/// One character of pending terminal input.
+/// @effect reads the terminal
+/// @example get_char()    // 'w'
+export func get_char(): string
+
+/// Up to max characters of pending terminal input.
+/// @effect reads the terminal
+/// @example get_chars(3)    // at most three characters
+export func get_chars(max: int): string
+
+/// Discards the terminal input that is waiting.
+/// @effect reads the terminal
+/// @example clear_input_buffer()
+export func clear_input_buffer(): void
+```
+
+C++ 侧删掉 `getOperatorGroups()`、`StaticFuncTypeResolver` 的五条签名、构造函数里的
+`exportEntity`，以及只服务于签名的 include；留下 `operators.cpp` 的内核、`getIOOpsMap()` 的
+绑定、执行器工厂，以及 `declare`/`declareResources` 的纯度与资源。这与 H104 对 `str` 的做法
+一致：签名、参数名、文档在 `.cml`，内核、执行器、纯度和资源在 C++。
+
+`scripts/stdlib-reference.mjs` 的 `io` 条目改为 `source: 'io.cml'`、`declaration: true`；
+参考页内容不变（同样五段文档），但 `--verify-ops`/`--verify-doc` 现在读声明模块。
+
+新增两条编译负例，挂在 `feat.compile.native_declarations`：
+
+| 用例 | 断言 |
+|---|---|
+| `native.io_wrong_arity` | `get_chars(3, 3)` 在调用处拒绝；`SemanticDiag::NoMatchingFunction` `0x0300000F`，位置 `io_arity.cml:10:22`，参数类型 `(int, int)`，消息列出 `<io:get_chars>: (max: int) => string`。 |
+| `native.io_wrong_type` | `get_chars('3')` 在声明类型处拒绝；位置 `io_type.cml:11:22`，`argument types: <> (string)`，签名同样带声明给的参数名 `max`。 |
+
+这两条证明“导入方看到的是声明”：参数名 `max` 只存在于 `stdlib/io.cml`，C++ 侧没有签名文本。
+
+## 3. `str::bytes`/`from_bytes`：没有迁入 `io`
+
+工单的前提是“H104 记录 `str`/`bytes` 迁移的最后一步（`str::bytes`、`str::from_bytes`）等 `io`”。
+仓库里的记录不是这样：
+
+- `H19-plan.md` 第 25 行（第 8 步去重）把 `str::bytes` 列在去重项里；第 81 行的表写“字符串转字节”
+  的两处实现 `str::bytes`/`from_bytes` 与 `bytes::encode`/`decode`，“只留 `bytes`”；第 354 行
+  直接写“`str::bytes`/`from_bytes`：删除”，并要删 `test/cases/modules/stdlib/str_bytes.cml` 的
+  字节部分。
+- `H104.md` 第 28–30 行说第 8 步会删掉这两个名字，改为 `bytes` 模块的名字；第 131 行把它列为
+  留下的第一项。H104 第 23 行说 `io` 是第 4 步要重建的空壳，被计划自己的前置步骤挡住——不是
+  `str` 被 `io` 挡住。
+
+从实现看，`str::bytes(s)` 返回 UTF-8 字节值的 `int[]`（每个字节 0–255），`str::from_bytes(xs)`
+反过来；`bytes::encode(s)` 返回 `Bytes`，`bytes::decode(b)` 返回 `string!`。两对都在做 UTF-8
+转换，计划要去重的是“转换只留一处”，不是把 `int[]` 版本搬到另一个模块。`io` 是终端模块，
+不是字符串/字节模块；把这两个名字放进去会同时违反第 8 步的删除和设计原则 11.1 对
+`string`/`Bytes` 的分工。
+
+所以本任务**没有**动 `stdlib/str.cml`、`modules/str`、任何导入方，也没有改 `test/cases/modules/
+stdlib/str_bytes.cml`。如果作者的裁定其实是“把这两个名字搬到 `io`，命名按‘字符串的字节视图
+及其逆’”，那需要先改 H19 第 8 步，并定三件事：返回值继续是 `int[]` 还是 `Bytes`；与
+`bytes::encode`/`decode` 是否重复；`io` 是否因此从终端模块变成字符串/字节模块。在这些决定
+之前实现会是发明表面，所以留给出题人/作者裁定。
+
+## 4. 数字与验收
+
+在提交后的树上，主机 Release，`--jobs 8`：
+
+| 计划 | 结果 |
+|---|---|
+| `feat/modules/io.plan.toml` | **4/4** |
+| `feat/compile/native_declarations.plan.toml` | **22/22**（原 20 + 2 条 `io`） |
+| `feat/modules/stdlib_registry.plan.toml` | **4/4**；`stdlib-reference.mjs --verify-ops`：343 条注册算子一致；`--verify-doc` 通过 |
+| `feat/modules/resources.plan.toml` | **3/3** |
+| `feat/modules/std.plan.toml` | **25/25**（含 `io.basic`、`os.basic`） |
+| `feat/modules` 全目录 | **958 通过 / 1058，99 失败，1 跳过** |
+| `feat/compile` 全目录 | **997 通过 / 999，2 失败** |
+| `feat/linear` 全目录 | **723/723** |
+| `smoke` | **10/10** |
+
+全目录的 101 条失败都不是 `io`/`os` 的用例，按来源分组：
+
+- **97 条 `feat/modules/onnx`**：基线 `onnx::export`/ORT 路径的红（H111/H112，任务书已说明
+  `RewriteInvalid` 的 ONNX 失败不是本任务）。包括 `export_*`、`pass_export_*`、`ort_*`、
+  `as_refusal.*` 等。
+- **2 条 `feat/modules/graph_facts`**：`rewrite_opt`、`rewrite_macro_simplify`，期望
+  `FACTS graph layer valid=6`/`total valid=4`/`count valid=2`，实际 `3`/`1`/`1`。这正是
+  `origin/develop` 上 H121 记录的事实失效范围回归（H113 发现），与 `io` 无关；本分支没有改
+  facts。
+- **2 条 `feat/compile`**：`read_by.present`（带 `std::opt` 时退出 1，而不是 7）与
+  `permissions.strict_algebra`（`loose` 没有把两个乘积折成一个）。两者都在基线 `5d71b1fe5`
+  上；本分支没有改 `rules`/`rewrite`/tag 权限，也没有改这两个用例的输入，所以它们不是本分支
+  引入的，按基线红记录。
+
+`node scripts/diagnostics-catalog.mjs --check`：202 条；`--verify-doc` 通过（没有新诊断）。
+`node scripts/check-grammar.mjs --check`：120 个产生式一致。`node scripts/check-std-includes.mjs`：
+1032 个文件。`docs/stdlib-reference.md` 由 `--write` 生成，`--verify-doc` 通过。
+
+## 5. 留下的问题
+
+1. **`str::bytes`/`from_bytes` 的去留**（第 3 节）：按计划应删除；若要按“字节视图”迁入 `io`，
+   需要作者先改第 8 步并定返回值/去重/模块职责。
+2. **资源名**：仍是 `io:stdin`/`io:terminal`；第 9 步统一改成 `stdin`/`stdout`/`stderr` 时，
+   要同时处理内置 `:io/input`/`:io/print` 和 `io` 的四个读算子。
+3. **`clear_input_buffer` 在 EOF 上会空转**（基线代码，随终端一起搬过来，未改）：POSIX 的
+   `hasInput()` 在管道 EOF 时仍返回 true，`read()` 返回 0，`while (hasInput()) read(...)` 不退出；
+   所以本任务的用例不调用它。Windows 的 `_kbhit()` 不受影响。修它要同时定义 `has_input()` 在
+   EOF 上的含义（或让 `clear` 在 `read <= 0` 时 break），是独立的小修。
+4. **`exit`/`sleep`/`eprintln`**：`exit` 是内置 `:io/exit`（第 4a 步），`eprintln` 在第 9 步；
+   它们不是 `io` 模块的算子，本任务没有动。
+5. **H114 的 `os`→`process`**：本分支仍叫 `os`，只把终端拆走；合并时 `modules/os` 会有冲突，
+   以 H114 的改名为准，`io` 的五个算子和资源不应再回到 `process`。
+
+## 6. 没做什么
+
+- 没有实现 `Stream`、`stdin` 值、`read`/`write`、`read_line`、`eprintln`、`:io/exit`；
+- 没有改资源名，没有新增诊断；
+- 没有删除或移动 `str::bytes`/`from_bytes`，没有改 `str` 的声明、内核、纯度或测试；
+- 没有动 `src/` 的编译器/运行时/调度器，没有动 `feat/modules` 的 onnx、facts、rules 路径。
