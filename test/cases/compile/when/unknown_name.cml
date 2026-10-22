@@ -1,0 +1,14 @@
+/**
+ * A `when` that names an ordinary parameter: the condition is evaluated at instantiation,
+ * where ordinary parameters do not exist yet (design principles 5.13). It is reported, not
+ * treated as false.
+ */
+module when_unknown_name
+
+func bad(x: int): int when x {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}

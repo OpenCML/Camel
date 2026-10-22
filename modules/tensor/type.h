@@ -96,6 +96,12 @@ class TensorType : public type::OtherType {
     /// unknown; `const []` is a scalar tensor.
     type::OtherType *cloneWithArguments(
         std::span<const type::TypeArgument> arguments, std::string &error) const override;
+    /// `Tensor<f64>` would hold f32 here and `Tensor<i32>` would hold i64 (dtype.h,
+    /// `storedTensorDType`): the declaration is refused at the type expression rather than built
+    /// as the element type it would have been replaced with.
+    bool argumentStoredAs(
+        std::span<const type::TypeArgument> arguments, std::string &written,
+        std::string &stored) const override;
     bool extentForms(std::vector<type::ExtentForm> &out) const override;
     /// Tensor shapes have no pack (`T[..rest]`), so the packs are not consulted.
     const type::Type *withExtentValues(

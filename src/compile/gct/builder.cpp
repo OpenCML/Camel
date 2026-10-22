@@ -4489,6 +4489,14 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         }
     }
     node_ptr_t typeNode = tree_->makeType(funcType);
+    // The applicability condition is built in the scope of the signature: it sees the type
+    // parameters declared at the head and the `with` parameters (design principles 5.13). It is
+    // not evaluated here -- instantiation is where its type parameters have types -- so it is
+    // kept on the FUNC, beside the type, for the graph builder.
+    node_ptr_t whenNode = nullptr;
+    if (funcData->when() != nullptr) {
+        whenNode = visitData(funcData->when());
+    }
     // A declaration without a body declares an operator of a C++ module (design principles 6.4):
     // it has a signature and nothing to build, so the FUNC carries its type alone and is marked
     // as a declaration. The graph builder turns it into an operator group instead of a graph
@@ -4515,6 +4523,11 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         }
         node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
         funcNode->setNativeDeclaration();
+        if (whenNode != nullptr) {
+            tree_->setWhen(
+                funcNode,
+                {whenNode, funcData->whenText(), whenNode->origin()});
+        }
         *funcNode << typeNode;
         setOriginFromAst(
             context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
@@ -4545,6 +4558,9 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     node_ptr_t funcNode  = tree_->makeFunc(funcData->ref().toString());
     *funcNode << typeNode << stmtsNode;
+    if (whenNode != nullptr) {
+        tree_->setWhen(funcNode, {whenNode, funcData->whenText(), whenNode->origin()});
+    }
     if (!unwrittenParams.empty()) {
         tree_->setUnwrittenParams(funcNode, unwrittenParams);
     }
@@ -5426,6 +5442,17 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
                 throw BuildAbortException();
             }
         }
+    }
+    // A type whose argument this build would store as another type (`Tensor<f64>` holds f32) is
+    // refused here, at the type expression: the alternative is a value that silently runs at the
+    // type it was replaced with (design/arrays-memory, P4 "element type exact").
+    std::string writtenArgument;
+    std::string storedArgument;
+    if (base->argumentStoredAs(arguments, writtenArgument, storedArgument)) {
+        diags_->of(SemanticDiag::TensorElementTypeNotStored)
+            .at(ast->load()->tokenRange())
+            .commit(writtenArgument, storedArgument);
+        throw BuildAbortException();
     }
     std::string error;
     // What the arguments denote is the type's answer (`Type::applyArguments`): the core array

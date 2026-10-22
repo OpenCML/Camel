@@ -1,0 +1,15 @@
+/// (a) A `#gpu` scope whose operator has a device program for its static shapes: the pass
+/// accepts it, the region runs on the device, and the value comes back unchanged.
+module gpu_nofallback_supported
+
+import { Tensor, reshape, sum } from tensor
+
+#gpu
+func scale(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    return x * x
+}
+
+func main() {
+    let x = reshape([1.0, 2.0, 3.0], [3])
+    println(sum(scale(x)))
+}

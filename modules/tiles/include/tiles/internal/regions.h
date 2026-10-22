@@ -68,6 +68,15 @@ std::string loopEligibility(
 /// Whether the device back end has an implementation of `oper`: the declared capability list,
 /// the same one the region compiler lowers. A `#gpu` scope refuses an operator outside it.
 bool deviceCapable(core::OperId oper);
+/// The reason a `#gpu` scope must refuse `id`, as the diagnostic prints it, or an empty string
+/// when it must not. `id`'s eligibility answer (`analysis.exclusions[id]`) decides: a shape or
+/// element type the back end refuses is `"no device program for this shape"`; an operator with
+/// no lowering at any shape is `"no device program for this operator"`; an operator no module
+/// offers a device program for is `"the module provides none"`. Unresolved types and index
+/// instances are not refusals (a run with the actual arguments may still produce a program), and
+/// neither are host effects nor the structural host code (branches, calls, loop bodies).
+const char *gpuRefusal(
+    const runtime::GCGraph &graph, const RegionAnalysis &analysis, runtime::gc_node_ref_t id);
 struct RegionDeviceOps {
     operator_t upload, execute, download;
     std::string uploadUri = "tiles:upload", executeUri, downloadUri = "tiles:download";

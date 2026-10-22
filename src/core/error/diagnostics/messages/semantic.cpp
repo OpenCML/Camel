@@ -1496,9 +1496,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "CmlUnsupportedConstruct",
                 "std::cml cannot print {0}: {1}.",
-                "This version prints straight-line code only: arithmetic, comparisons, "
-                "conversions, direct calls, `let` and `var` (handover H240, step S1). Control "
-                "flow, regions, tags, named types and generic instances come in later steps.",
+                "This version prints expressions, `let` and `var`, branches, loops, closures, "
+                "`with` and `var` parameters, and `sync` blocks (handover H240). Tags, named "
+                "types, generic instances and the other region kinds are refused.",
             },
         },
         {
@@ -1622,6 +1622,74 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "The dimension name '{0}' is written once in this signature, so it relates nothing.",
                 "A name relates the extents that write it. If the size is not a relation, write "
                 "'?' instead; if it is, write the name in another parameter or in the return type.",
+            },
+        },
+        {
+            SemanticDiag::TensorElementTypeNotStored,
+            {
+                "TensorElementTypeNotStored",
+                "'{0}' is not stored as written: a tensor of '{0}' holds '{1}' here, so this "
+                "declaration would silently run with '{1}'. Tensors that keep the element type "
+                "they are written with are not implemented yet.",
+                "Write '{1}' and convert the values explicitly where they enter the tensor; "
+                "element-type-exact tensor storage (design/arrays-memory, P4) removes this "
+                "restriction. 'zeros' and 'ones' already build f32 tensors.",
+            },
+        },
+        {
+            SemanticDiag::WhenConditionNotBool,
+            {
+                "WhenConditionNotBool",
+                "The 'when' condition of '{0}' is not a bool (it is '{1}').",
+                "A 'when' is a compile-time predicate over the declaration's type parameters "
+                "and 'with' parameters: write one of the compiler's type queries "
+                "('is_numeric::<T>()', 'is_function::<F>()'), possibly combined with '!', "
+                "'&&' and '||'. It is not a runtime value.",
+            },
+        },
+        {
+            SemanticDiag::WhenConditionNotConstant,
+            {
+                "WhenConditionNotConstant",
+                "The 'when' condition of '{0}' cannot be evaluated when the declaration is "
+                "instantiated: {1}.",
+                "The condition is checked at instantiation, before the body is built, so it "
+                "can only read what is known there: the types bound to the declaration's type "
+                "parameters, and the 'with' arguments the call writes as compile-time "
+                "constants. Move a runtime test into the body, or make the value a constant.",
+            },
+        },
+        {
+            SemanticDiag::WhenUnknownName,
+            {
+                "WhenUnknownName",
+                "'{0}' is not visible to the 'when' condition of '{1}'.",
+                "A condition sees the declaration's type parameters and its 'with' "
+                "parameters. Ordinary parameters and the names of the body do not exist yet "
+                "when the condition is evaluated: test those in the body, or move the value "
+                "to a 'with' parameter.",
+            },
+        },
+        {
+            SemanticDiag::WhenTypeQueryNotConcrete,
+            {
+                "WhenTypeQueryNotConcrete",
+                "The type query '{0}' cannot be answered for '{1}' in the 'when' condition of "
+                "'{2}': the type still has a type variable.",
+                "A query is answered when the declaration is instantiated, where every type "
+                "parameter has a type. Write the query on a type parameter the call binds, or "
+                "guard the declaration so that it is only instantiated for a concrete type.",
+            },
+        },
+        {
+            SemanticDiag::WhenConditionUnmet,
+            {
+                "WhenConditionUnmet",
+                "No candidate of '{0}' applies to ({1}): every candidate's 'when' condition is "
+                "false. Candidates: {2}",
+                "A 'when' that is false makes its declaration inapplicable, not erroneous, and "
+                "the call goes on to the other candidates. Pass an argument or a type that "
+                "satisfies a condition, or write another overload for this call.",
             },
         },
     };

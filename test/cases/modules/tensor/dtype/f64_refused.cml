@@ -1,0 +1,15 @@
+// `Tensor<f64>` asks for f64 elements. This build stores every tensor as f32, int64 or bool, so
+// the declaration is refused at the type expression (SemanticDiag::TensorElementTypeNotStored)
+// instead of the program silently running in f32.
+//
+// Before the diagnostic this program compiled: the cast target was normalized to `Tensor<f32>`,
+// and `sum` answered 10.0 from f32 storage.
+module tensor_dtype_f64_refused
+
+import { Tensor, new, sum } from tensor
+
+func main(): int sync {
+    let x = new([[1.0, 2.0], [3.0, 4.0]]) as Tensor<f64>
+    println(sum(x))
+    return 0
+}

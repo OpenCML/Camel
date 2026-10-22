@@ -56,6 +56,11 @@ const char *placementScopeName(PlacementScope scope);
 /// The placement of `node` in `graph` (docs/design/gpu/plan.cn.md 2.2).
 PlacementDecision placementOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t node);
 
+/// The placement the graph's body (region 0) carries: what a tag written on the function says.
+/// Host with an empty fact when the body carries none. This is the graph's placement as a unit,
+/// which the runtime of a call needs to know without looking at one of its nodes.
+PlacementDecision bodyPlacementOf(const runtime::GCGraph &graph);
+
 /// Whether any node, block or body region of `graph` carries the placement fact.
 bool hasPlacementFact(const runtime::GCGraph &graph);
 

@@ -149,26 +149,7 @@ std::string TensorType::spelling() const {
     }
     std::string arguments;
     if (dtype_) {
-        switch (*dtype_) {
-        case TypeCode::Float32:
-            arguments = "f32";
-            break;
-        case TypeCode::Float64:
-            arguments = "f64";
-            break;
-        case TypeCode::Int32:
-            arguments = "i32";
-            break;
-        case TypeCode::Int64:
-            arguments = "i64";
-            break;
-        case TypeCode::Bool:
-            arguments = "bool";
-            break;
-        default:
-            arguments = std::string(dtypeName(*dtype_));
-            break;
-        }
+        arguments = elementTypeSpelling(*dtype_);
     }
     if (shape_) {
         arguments += arguments.empty() ? "const [" : ", const [";
@@ -312,6 +293,24 @@ OtherType *TensorType::cloneWithParams(std::span<Type *const> params) const {
     return get(params[0]->code(), std::nullopt);
 }
 
+bool TensorType::argumentStoredAs(
+    std::span<const type::TypeArgument> arguments, std::string &written,
+    std::string &stored) const {
+    for (const type::TypeArgument &argument : arguments) {
+        if (argument.type == nullptr) {
+            continue;
+        }
+        const std::optional<TypeCode> replacement = storedTensorDType(argument.type->code());
+        if (!replacement) {
+            continue;
+        }
+        written = elementTypeSpelling(argument.type->code());
+        stored  = elementTypeSpelling(*replacement);
+        return true;
+    }
+    return false;
+}
+
 OtherType *TensorType::cloneWithArguments(
     std::span<const type::TypeArgument> arguments, std::string &error) const {
     std::optional<TypeCode> dtype;
@@ -324,9 +323,19 @@ OtherType *TensorType::cloneWithArguments(
                         "Tensor<dtype, const [d0, d1, ...]>";
                 return nullptr;
             }
-            // As cloneWithParams: the type's code names the element type.
+            // The element type is a storage dtype of this module (dtype.h): anything else would
+            // reach the kernels, which dispatch on the three storage dtypes.
             const TypeCode code = argument.type->code();
-            dtype               = code;
+            if (!isSupportedTensorScalar(code)) {
+                error = "the element type is f32, f64, i32, i64 or bool, not '" +
+                        type::typeCodeToString(code) + "'";
+                return nullptr;
+            }
+            // As cloneWithParams: the type's code names the element type. A dtype this build
+            // stores as another one is refused earlier, at the type expression
+            // (argumentStoredAs); reaching this line means the type was built by C++ code, which
+            // keeps the storage dtype as its invariant.
+            dtype = code;
             continue;
         }
         if (shape) {

@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-227 diagnostics: 208 errors, 19 warnings.
+234 diagnostics: 215 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -189,6 +189,12 @@ prints one entry.
 | `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
 | `0x030001A5` | [SemanticDiag::CmlUnsupportedConstruct](#cmlunsupportedconstruct) | Error |
 | `0x030001A6` | [SemanticDiag::CmlBigConstant](#cmlbigconstant) | Error |
+| `0x030001A7` | [SemanticDiag::TensorElementTypeNotStored](#tensorelementtypenotstored) | Error |
+| `0x030001A8` | [SemanticDiag::WhenConditionNotBool](#whenconditionnotbool) | Error |
+| `0x030001A9` | [SemanticDiag::WhenConditionNotConstant](#whenconditionnotconstant) | Error |
+| `0x030001AA` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error |
+| `0x030001AB` | [SemanticDiag::WhenTypeQueryNotConcrete](#whentypequerynotconcrete) | Error |
+| `0x030001AC` | [SemanticDiag::WhenConditionUnmet](#whenconditionunmet) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -242,6 +248,7 @@ prints one entry.
 | `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error |
 | `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error |
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error |
+| `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -5029,7 +5036,7 @@ std::cml cannot print {0}: {1}.
 **Help**
 
 ```text
-This version prints straight-line code only: arithmetic, comparisons, conversions, direct calls, `let` and `var` (handover H240, step S1). Control flow, regions, tags, named types and generic instances come in later steps.
+This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks (handover H240). Tags, named types, generic instances and the other region kinds are refused.
 ```
 
 *No example: no test small enough to show raises it.*
@@ -5051,6 +5058,197 @@ Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a m
 ```
 
 *No example: no test small enough to show raises it.*
+
+### TensorElementTypeNotStored
+
+`0x030001A7` · Error · `SemanticDiag::TensorElementTypeNotStored`
+
+**Message**
+
+```text
+'{0}' is not stored as written: a tensor of '{0}' holds '{1}' here, so this declaration would silently run with '{1}'. Tensors that keep the element type they are written with are not implemented yet.
+```
+
+**Help**
+
+```text
+Write '{1}' and convert the values explicitly where they enter the tensor; element-type-exact tensor storage (design/arrays-memory, P4) removes this restriction. 'zeros' and 'ones' already build f32 tensors.
+```
+
+**Example** (`test/cases/modules/tensor/dtype/f64_refused.cml`, run as `camel test/cases/modules/tensor/dtype/f64_refused.cml`)
+
+```camel
+// `Tensor<f64>` asks for f64 elements. This build stores every tensor as f32, int64 or bool, so
+// the declaration is refused at the type expression (SemanticDiag::TensorElementTypeNotStored)
+// instead of the program silently running in f32.
+//
+// Before the diagnostic this program compiled: the cast target was normalized to `Tensor<f32>`,
+// and `sum` answered 10.0 from f32 storage.
+module tensor_dtype_f64_refused
+
+import { Tensor, new, sum } from tensor
+
+func main(): int sync {
+    let x = new([[1.0, 2.0], [3.0, 4.0]]) as Tensor<f64>
+    println(sum(x))
+    return 0
+}
+```
+
+### WhenConditionNotBool
+
+`0x030001A8` · Error · `SemanticDiag::WhenConditionNotBool`
+
+**Message**
+
+```text
+The 'when' condition of '{0}' is not a bool (it is '{1}').
+```
+
+**Help**
+
+```text
+A 'when' is a compile-time predicate over the declaration's type parameters and 'with' parameters: write one of the compiler's type queries ('is_numeric::<T>()', 'is_function::<F>()'), possibly combined with '!', '&&' and '||'. It is not a runtime value.
+```
+
+**Example** (`test/cases/compile/when/non_bool.cml`, run as `camel test/cases/compile/when/non_bool.cml`)
+
+```camel
+module when_non_bool
+
+func bad(x: int): int when 1 {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenConditionNotConstant
+
+`0x030001A9` · Error · `SemanticDiag::WhenConditionNotConstant`
+
+**Message**
+
+```text
+The 'when' condition of '{0}' cannot be evaluated when the declaration is instantiated: {1}.
+```
+
+**Help**
+
+```text
+The condition is checked at instantiation, before the body is built, so it can only read what is known there: the types bound to the declaration's type parameters, and the 'with' arguments the call writes as compile-time constants. Move a runtime test into the body, or make the value a constant.
+```
+
+**Example** (`test/cases/compile/when/not_constant.cml`, run as `camel test/cases/compile/when/not_constant.cml`)
+
+```camel
+module when_not_constant
+
+func is_positive(x: int): bool {
+    return x > 0
+}
+
+func bad(x: int): int when is_positive(1) {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenUnknownName
+
+`0x030001AA` · Error · `SemanticDiag::WhenUnknownName`
+
+**Message**
+
+```text
+'{0}' is not visible to the 'when' condition of '{1}'.
+```
+
+**Help**
+
+```text
+A condition sees the declaration's type parameters and its 'with' parameters. Ordinary parameters and the names of the body do not exist yet when the condition is evaluated: test those in the body, or move the value to a 'with' parameter.
+```
+
+**Example** (`test/cases/compile/when/unknown_name.cml`, run as `camel test/cases/compile/when/unknown_name.cml`)
+
+```camel
+module when_unknown_name
+
+func bad(x: int): int when x {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenTypeQueryNotConcrete
+
+`0x030001AB` · Error · `SemanticDiag::WhenTypeQueryNotConcrete`
+
+**Message**
+
+```text
+The type query '{0}' cannot be answered for '{1}' in the 'when' condition of '{2}': the type still has a type variable.
+```
+
+**Help**
+
+```text
+A query is answered when the declaration is instantiated, where every type parameter has a type. Write the query on a type parameter the call binds, or guard the declaration so that it is only instantiated for a concrete type.
+```
+
+**Example** (`test/cases/compile/when/open_type.cml`, run as `camel test/cases/compile/when/open_type.cml`)
+
+```camel
+module when_open_type
+
+func bad::<T>(x: int): int when is_numeric::<T>() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenConditionUnmet
+
+`0x030001AC` · Error · `SemanticDiag::WhenConditionUnmet`
+
+**Message**
+
+```text
+No candidate of '{0}' applies to ({1}): every candidate's 'when' condition is false. Candidates: {2}
+```
+
+**Help**
+
+```text
+A 'when' that is false makes its declaration inapplicable, not erroneous, and the call goes on to the other candidates. Pass an argument or a type that satisfies a condition, or write another overload for this call.
+```
+
+**Example** (`test/cases/compile/when/not_applicable.cml`, run as `camel test/cases/compile/when/not_applicable.cml`)
+
+```camel
+module when_not_applicable
+
+/// The condition asks about int, so this overload never applies here.
+func needs_float(x: float): float when is_float::<int>() {
+    return x
+}
+
+func main(): int sync {
+    return int(needs_float(1.0))
+}
+```
 
 ### VarParamInAsyncFunction
 
@@ -6583,6 +6781,48 @@ module main
 func main(): int sync {
     println(42)
     return 0
+}
+```
+
+### GpuScopeNoDeviceProgram
+
+`0x040001A7` · Error · `RuntimeDiag::GpuScopeNoDeviceProgram`
+
+**Message**
+
+```text
+`#gpu` scope '{0}': operator '{1}' has no device program ({2}).
+```
+
+**Help**
+
+```text
+The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is a compile-time error there, never a host execution. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.
+```
+
+**Example** (`test/cases/gpu/nofallback/refused_operator.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/gpu/nofallback/refused_operator.cml tiles::compile std::nvm`)
+
+```camel
+/// (b) An operator without a device program, written in a function a `#gpu` scope calls. The
+/// scope covers the functions it calls (GPU design 2.3), so `tanh` here is inside it; `tanh` has
+/// no device implementation, and the compiler refuses the program instead of running it on the
+/// host. `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
+module gpu_nofallback_refused_operator
+
+import { Tensor, tanh, reshape } from tensor
+
+func activate(x: Tensor<f32>): Tensor<f32> {
+    return tanh(x)
+}
+
+#gpu
+func step(x: Tensor<f32>): Tensor<f32> {
+    return activate(x)
+}
+
+func main() {
+    let x = reshape([1.0, 2.0], [2])
+    println(step(x))
 }
 ```
 

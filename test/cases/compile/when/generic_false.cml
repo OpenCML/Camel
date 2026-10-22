@@ -1,0 +1,15 @@
+/**
+ * A generic declaration whose `when` uses its own type parameter, with a type the condition
+ * rejects: the candidate is not instantiated into a body that does not typecheck, and the call
+ * site names the condition it could not meet.
+ */
+module when_generic_false
+
+func add::<T>(x: T, y: T): T when is_numeric::<T>() {
+    return x + y
+}
+
+func main(): int sync {
+    println(add("a", "b"))
+    return 0
+}

@@ -1,0 +1,26 @@
+// A lambda as a value, one with a block body, one that captures a source name, one returned
+// from a function, and a closure over a mutable cell.
+func make_adder(base: int): (x: int) => int {
+    return (x: int) => x + base
+}
+
+func counter(start: int): () => int sync {
+    var n = start
+    return sync (): int => sync {
+        n = n + 1
+        return n
+    }
+}
+
+func main(): int sync {
+    let offset = 10
+    let add = (x: int) => x + offset
+    let twice = (x: int) => {
+        let y = x * 2
+        y
+    }
+    let plus3 = make_adder(3)
+    let next = counter(0)
+    println(add(5), twice(4), plus3(7), next(), next())
+    return 0
+}
