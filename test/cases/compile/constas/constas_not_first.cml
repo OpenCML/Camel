@@ -1,11 +1,14 @@
+/**
+ * A `constas` parameter may stand in any position among the ordinary parameters (H51 ruling,
+ * 2026-10-22): the call writes its value at that position, and it takes no runtime slot.
+ */
 module constas_not_first
 
-// The `constas` value is bound before the runtime arguments, so it comes first.
-func bad(x: int, constas n: int): int {
-    return x + n
+func place(x: int, constas n: int): int {
+    return x * 10 + n
 }
 
 func main(): int sync {
-    println(bad(1, 2))
+    println(place(1, 2))
     return 0
 }

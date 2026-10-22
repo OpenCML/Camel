@@ -213,22 +213,10 @@ enum class SemanticDiag : uint32_t {
     StaticTupleEscapes = 0x00019C,
 
     // `constas` value parameters (design principles 5.4): 0x191 and up. 0x18C stays free.
-    /// A `constas` parameter is not the first ordinary parameter.
-    ConstasParameterNotFirst = 0x000191,
-    /// A declaration has more than one `constas` parameter.
-    ConstasParameterOnlyOne = 0x000192,
     /// A `constas` parameter writes no type.
     ConstasTypeRequired = 0x000193,
-    /// A `constas` parameter has a type other than `int`.
-    ConstasTypeNotInt = 0x000194,
     /// The argument bound to a `constas` parameter is not a compile-time constant.
     ConstasValueNotConstant = 0x000195,
-    /// The constant bound to a `constas` parameter is not an `int`.
-    ConstasValueNotInt = 0x000196,
-    /// The value of a `constas` parameter is not used by any type of the declaration.
-    ConstasNotUsedInType = 0x000197,
-    /// A `constas` parameter is combined with a rest parameter.
-    ConstasWithRest = 0x000198,
     /// A `constas` declaration was used where a function value is needed.
     ConstasFunctionNeedsCall = 0x000199,
     /// A `constas` declaration is a body-less declaration of a C++ operator.

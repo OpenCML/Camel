@@ -1328,14 +1328,26 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                                                        generic->second->funcType->hasRest()) {
         restTemplate = generic->second;
     }
-    const size_t restFixedCount =
-        restTemplate != nullptr ? restTemplate->funcType->normTypesCount() - 1 : 0;
+    const size_t restFixedCount        = restTemplate != nullptr
+                                            ? restTemplate->funcType->normTypesCount() - 1 -
+                                                  restTemplate->funcType->constasCount()
+                                            : 0;
+    const size_t restDeclaredCount     = restTemplate != nullptr
+                                            ? restTemplate->funcType->normTypesCount()
+                                            : 0;
     for (size_t i = 1; i < gct->size(); i++) {
         Type *wanted = argumentSignature && i <= argumentSignature->normTypesCount()
                            ? argumentSignature->normTypeAt(i - 1)
                            : nullptr;
-        if (restTemplate != nullptr && i - 1 >= restFixedCount) {
-            wanted = nullptr; // the rest parameter takes every remaining argument
+        if (restTemplate != nullptr) {
+            // The declaration's own parameter, `constas` values included: a `constas` value is
+            // written at its parameter's position like any other argument. The rest parameter
+            // takes every argument after the fixed ones and gives them no expected type.
+            const size_t at = i - 1;
+            wanted          = at < restDeclaredCount &&
+                             (restTemplate->funcType->normIsConstasAt(at) || at < restFixedCount)
+                                  ? restTemplate->funcType->normTypeAt(at)
+                                  : nullptr;
         }
         if (isAssignment && i == 2 && assignedType != nullptr) {
             wanted = assignedType;

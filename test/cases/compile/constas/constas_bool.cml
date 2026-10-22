@@ -1,0 +1,14 @@
+/**
+ * A `constas` value may be a `bool` (H51 ruling, 2026-10-22), read by the body in a condition.
+ * `signed(true, 3)` and `signed(false, 3)` are two instances.
+ */
+module constas_bool
+
+func signed(constas negate: bool, x: int): int {
+    return if negate then 0 - x else x
+}
+
+func main(): int sync {
+    println(signed(true, 3), signed(false, 3))
+    return 0
+}

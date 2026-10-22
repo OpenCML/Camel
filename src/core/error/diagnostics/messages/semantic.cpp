@@ -1374,43 +1374,13 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ConstasParameterNotFirst,
-            {
-                "ConstasParameterNotFirst",
-                "The 'constas' parameter '{0}' must be the first ordinary parameter.",
-                "A 'constas' value is part of the declaration's identity: it is bound at the "
-                "call, before any runtime argument. Write it first, as in 'func f(constas n: "
-                "int, x: f32)'.",
-            },
-        },
-        {
-            SemanticDiag::ConstasParameterOnlyOne,
-            {
-                "ConstasParameterOnlyOne",
-                "The declaration already has the 'constas' parameter '{1}'; '{0}' is a second "
-                "one.",
-                "A declaration takes at most one 'constas' parameter: two compile-time values "
-                "would make the instance key ambiguous. Combine them into one value, or use a "
-                "type parameter for the other.",
-            },
-        },
-        {
             SemanticDiag::ConstasTypeRequired,
             {
                 "ConstasTypeRequired",
                 "The 'constas' parameter '{0}' writes no type.",
                 "A 'constas' parameter is a compile-time value and its type is part of the "
-                "declaration's identity. Only 'int' is supported for now: write 'constas {0}: "
-                "int'.",
-            },
-        },
-        {
-            SemanticDiag::ConstasTypeNotInt,
-            {
-                "ConstasTypeNotInt",
-                "The 'constas' parameter '{0}' has type '{1}'; only 'int' is supported.",
-                "The value of a 'constas' parameter becomes an extent of a type, and extents "
-                "are integers. Write 'constas {0}: int'.",
+                "declaration's identity: write 'constas {0}: string', 'constas {0}: int', "
+                "'constas {0}: bool', or the type of whatever constant the call binds.",
             },
         },
         {
@@ -1418,39 +1388,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ConstasValueNotConstant",
                 "The value given for the 'constas' parameter '{0}' is not a compile-time "
-                "constant.",
+                "constant of its parameter's type ('{1}').",
                 "The value selects the instance of the declaration, so it must be known before "
-                "the program runs: a literal or a constant expression. A runtime value would "
-                "need one instance per possible value.",
-            },
-        },
-        {
-            SemanticDiag::ConstasValueNotInt,
-            {
-                "ConstasValueNotInt",
-                "The value given for the 'constas' parameter '{0}' has type '{1}'; it must be "
-                "an 'int' constant.",
-                "A 'constas' value is an extent of a type, so the call must give an integer.",
-            },
-        },
-        {
-            SemanticDiag::ConstasNotUsedInType,
-            {
-                "ConstasNotUsedInType",
-                "The 'constas' parameter '{0}' is not used by a type of '{1}'.",
-                "A value that no type reads is a decoration: nothing would differ between two "
-                "instances. Use '{0}' as an extent in a parameter or result type ('Tensor<f32, "
-                "const [{0}]>'), or write an ordinary parameter.",
-            },
-        },
-        {
-            SemanticDiag::ConstasWithRest,
-            {
-                "ConstasWithRest",
-                "The 'constas' parameter '{0}' cannot be combined with a rest parameter.",
-                "A rest parameter's element types are decided at the call, while a 'constas' "
-                "value is part of the declaration's identity; the two need the type-level tuple "
-                "of the declaration ('StaticTuple') first.",
+                "the program runs: a literal or a constant of a type that has compile-time "
+                "constants. A runtime value would need one instance per possible value.",
             },
         },
         {
@@ -1481,7 +1422,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ConstasArgumentMissing",
                 "The call gives no value for the 'constas' parameter '{0}'.",
                 "A 'constas' value is bound at the call, like any other argument, but it is not "
-                "a runtime argument: give the constant first, as in 'f(4, x)'.",
+                "a runtime argument: give the constant at the parameter's position, as in "
+                "'f(4, x)'.",
             },
         },
         {

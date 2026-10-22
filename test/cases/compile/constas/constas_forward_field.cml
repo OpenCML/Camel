@@ -1,0 +1,20 @@
+/**
+ * The field name a `static for` binds is a compile-time string, and a `constas` parameter takes
+ * it as its value (H51 ruling, 2026-10-22: "passing it to another `constas` parameter" is
+ * legal). This is the chain the design's `tree_map` needs to reach `column(n, ts)`: the field
+ * name chosen by `fields` picks the field `pick` reads.
+ */
+module constas_forward_field
+
+func pick(constas n: string, t: {w: int, h: int}): int {
+    return t.[n]
+}
+
+func both(t: {w: int, h: int}): (int, int) {
+    return ( static for (n, F) in fields {w: int, h: int} => pick(n, t) )
+}
+
+func main(): int sync {
+    println(both({w: 1, h: 2}))
+    return 0
+}

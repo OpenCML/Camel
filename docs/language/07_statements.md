@@ -318,7 +318,7 @@ func main(): int sync {
 - 剩余形参必须在最后（`SemanticDiag::RestParameterNotLast`），不能写类型（`SemanticDiag::RestParameterTypeNotSupported`），只能出现在函数声明里（lambda、函数类型和规则里写 `..` 是语法错误）。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。
 - 带剩余参数的函数**不是值**：不能赋给变量、作为实参或导出后当函数值用（`SemanticDiag::RestFunctionNeedsExpansion`），只能直接调用。目前调用还必须和声明在同一个模块里：跨模块展开要等 `tree_*` 任务把函数体按调用点带过去，现在会报 `SemanticDiag::RestFunctionNeedsExpansion`。
 
-**常量值参数（`constas`）**：普通形参之前可以写一个 `constas n: int`，它的值在编译期已知，是声明身份的一部分，而不是运行时的实参。
+**常量值参数（`constas`）**：普通形参里可以写 `constas n: int`，它的值在编译期已知，是声明身份的一部分，而不是运行时的实参。
 
 ```cml
 import { Tensor, ones, sum } from tensor
@@ -339,14 +339,26 @@ func main(): int sync {
 5.0
 ```
 
-- **值进入实例键。** 每个不同的常量值实例化出一张子图（`total<3>`、`total<5>`），同一组类型和值只实例化一次。`n` 用在该声明的类型里：形参类型、返回类型，写法与类型里的具名维度相同（`Tensor<f32, const [n]>`；`[n]` 也行）。
-- **不是运行时参数。** 调用点要给出常量，但它不进入调用结点：实例的形参表里没有 `n`，调用只传其余的实参（`total(3, xs)` 的调用只有一个实参 `xs`）。`n` 因此也不能当函数体里的运行时值使用。
-- 值必须是编译期常量（`SemanticDiag::ConstasValueNotConstant`），且是 `int`（`SemanticDiag::ConstasValueNotInt`）。目前只支持一个 `constas` 参数（`SemanticDiag::ConstasParameterOnlyOne`），且必须在普通形参的最前面（`SemanticDiag::ConstasParameterNotFirst`），类型只支持 `int`（`SemanticDiag::ConstasTypeNotInt`），类型不能省（`SemanticDiag::ConstasTypeRequired`）。
-- **值必须真的决定一个类型。** 没有任何类型用到 `n` 的声明会被拒绝（`SemanticDiag::ConstasNotUsedInType`）：两个只有值不同的实例若类型完全相同，这个值就只是装饰。
-- 带 `constas` 参数的声明**没有函数值**：常量必须在写调用时给出，不能赋给变量或作为实参传走（`SemanticDiag::ConstasFunctionNeedsCall`）。无体声明（C++ 算子的声明）也不能带 `constas`（`SemanticDiag::ConstasInNativeDeclaration`）；和剩余参数组合暂不支持（`SemanticDiag::ConstasWithRest`），要等类型级元组（`StaticTuple`）。
-- 目前 `n` 只绑定在声明的形参类型和返回类型里；函数体里的类型位置（`let z: Tensor<f32, const [n]>`）还没有这个作用域。`f32[n]` 这种数组维度也还没落地（见 [7.5 的限制](#75-泛型函数)）；今天能用的是 `Tensor<f32, const [n]>`。
+- **值进入实例键。** 每个不同的常量值实例化出一张子图（`total<3>`、`total<5>`），同一组类型和值只实例化一次；值与类型合起来才是键，只差一个字符串也是两个实例（`label<"w">`、`label<"h">`）。
+- **任意个、任意位置。** 一个声明可以有多个 `constas` 形参，位置在普通形参之间任意；调用把值写在它所在的位置（`place(1, 2)` 给 `x = 1`、`n = 2`）。每个值各自进入实例键。
+- **类型不止 `int`。** `string`、`int`、`float`、`bool` 等有编译期常量的类型都可以；值必须与形参类型相容。类型要写出来（`SemanticDiag::ConstasTypeRequired`）。`enum` 成员目前还不能作为编译期值传递（`SemanticDiag::ConstasValueNotConstant`），要等 `enum` 值有了编译期表示。
+- **值由函数体读取。** `n` 在实例体里是一个编译期常量：可以当类型里的具名维度（`Tensor<f32, const [n]>`、`[n]`），可以当字段名（`t.[n]`），也可以当普通值用于算术、条件、打印。它不需要被任何类型读到：只有函数体读它也是合法的。
+- **不是运行时参数。** 调用点要给出常量，但它不进入调用结点：实例的形参表里没有 `n`，调用只传其余的实参（`total(3, xs)` 的调用只有一个实参 `xs`）。
+- **值可以转手。** 一个 `constas` 值可以传给另一个 `constas` 参数，也可以来自 `static for` 绑定的字段名、`indices` 的位置这类编译期名字。`func columnOf(constas n: string, ..ts) { return column(n, ..ts) }` 合法：`tree_map` 正是这样把字段名和树一起交给 `column`。
+- **和剩余参数一起用。** `func column(constas n: string, ..ts)` 合法：值在展开前绑定，`ts` 得到剩下的实参。设计稿 3.1.1 的 `column` 今天可以写成
 
-**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；带 `constas` 参数的函数不能作值，也不能和无体声明、剩余参数组合，`f32[n]` 数组维度尚未实现。
+  ```cml
+  func column(constas n: string, ..ts): (int, int) {
+      return ( static for (j) in indices ts => ts.[j].[n] )
+  }
+  ```
+
+  两个只差字符串的调用是两张图，各自取 `n` 命名的字段。
+- 带 `constas` 参数的声明**没有函数值**：常量必须在写调用时给出，不能赋给变量或作为实参传走（`SemanticDiag::ConstasFunctionNeedsCall`）。无体声明（C++ 算子的声明）也不能带 `constas`（`SemanticDiag::ConstasInNativeDeclaration`）。
+- 值必须是编译期常量（`SemanticDiag::ConstasValueNotConstant`）：运行期的值不行，因为它要选实例。目前常量可以是字面量、另一个 `constas` 值、`static for` 的 `n` 和 `indices` 的 `j` 这类编译期名字。
+- `n` 只在实例体里绑定；函数体里的类型位置（`let z: Tensor<f32, const [n]>`）还没有这个作用域。`f32[n]` 这种数组维度也还没落地（见 [7.5 的限制](#75-泛型函数)）；今天能用的是 `Tensor<f32, const [n]>`。
+
+**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；带 `constas` 参数的函数不能作值，也不能和无体声明组合，`f32[n]` 数组维度尚未实现，`enum` 值还不能作为 `constas` 实参。设计稿 3.1.1 的 `column(constas n, ts)` 省写了类型，今天要写成 `column(constas n: string, ..ts)`。
 
 ## 7.6 标注
 

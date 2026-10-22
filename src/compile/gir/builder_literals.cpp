@@ -219,6 +219,7 @@ node_handle_t Builder::literalInType(
         rejectLiteralValue(value, type, origin);
     }
     node_handle_t node = currGraph_->addStaticDataNode(*data);
+    rememberConstant(node, *data);
     registerNodeOrigin(context_, node, origin, "gir.data.literal");
     return node;
 }

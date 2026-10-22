@@ -95,6 +95,7 @@ node_handle_t Builder::literalDataInType(const GCT::node_ptr_t &gct, Type *expec
             return nullptr;
         }
         node_handle_t result = currGraph_->addStaticDataNode(typed);
+        rememberConstant(result, typed);
         if (varied_ && currGraph_->outerGraph().get() != nullptr) {
             node_handle_t copyNode = currGraph_->addCopyNode(typed->type());
             linkNodes(LinkType::Norm, result, copyNode);
@@ -256,6 +257,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     }
 
     node = currGraph_->addStaticDataNode(data);
+    rememberConstant(node, data);
     if (varied_ && currGraph_->outerGraph().get() != nullptr) {
         node_handle_t copyNode = currGraph_->addCopyNode(data->type());
         linkNodes(LinkType::Norm, node, copyNode);
@@ -497,8 +499,9 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             LEAVE("DREF");
             return valueNode;
         }
-        node_handle_t node = currGraph_->addStaticDataNode(
-            tt::as_shared<Data>(std::make_shared<StringData>(*staticValue)));
+        const data_ptr_t text = tt::as_shared<Data>(std::make_shared<StringData>(*staticValue));
+        node_handle_t node    = currGraph_->addStaticDataNode(text);
+        rememberConstant(node, text);
         registerNodeOrigin(context_, node, gct, "gir.data.static.for");
         LEAVE("DREF");
         return node;
@@ -863,6 +866,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
                 rejectLiteralData(data, targetType, gct->origin(), gct->at(0));
             }
             node_handle_t node = currGraph_->addStaticDataNode(converted);
+            rememberConstant(node, converted);
             if (varied_ && currGraph_->outerGraph().get() != nullptr) {
                 node_handle_t copyNode = currGraph_->addCopyNode(converted->type());
                 linkNodes(LinkType::Norm, node, copyNode);
@@ -920,6 +924,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             (gct->annotation() || payload->castSafetyFrom(data->type()) == CastSafety::Safe)) {
             if (data_ptr_t converted = data->convertTo(payload)) {
                 valueNode = currGraph_->addStaticDataNode(converted);
+                rememberConstant(valueNode, converted);
                 registerNodeOrigin(context_, valueNode, gct->at(0), "gir.data");
             } else if (
                 const std::string notFit = literalNotFitReason(data, payload); !notFit.empty()) {
