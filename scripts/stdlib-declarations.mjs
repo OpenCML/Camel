@@ -3,6 +3,14 @@
 // computed signatures a declaration cannot express have one recorded place (handover H180).
 //
 //   node scripts/stdlib-declarations.mjs --check
+//   node scripts/stdlib-declarations.mjs --check-ledger
+//
+// `--check-ledger` reads the numbers of `docs/technical/48_declaration_migration.md` (the
+// migration's account page) and compares each with the tree: the declaration modules, their
+// declared names and declarations, their computed names, the overloads and public names from
+// `camel inspect --ops`, the signature files, the per-module rows, and the output quotes of the
+// re-check table. A number a human retypes drifts; this mode makes the page fail with
+// "page says X, tree has Y" instead (H200).
 //
 // H19 moves a fixed-signature C++ module from `stdlib/signatures/<module>.cml` to
 // `stdlib/<module>.cml` and deletes the C++ `OperatorGroup` (H94, H104, H113, H115, H126,
@@ -1010,10 +1018,380 @@ function verifyOps() {
     return { ok: true, summary: (run.stdout || '').trim().split('\n').filter(Boolean).pop() || '' }
 }
 
+// ---- the ledger page ------------------------------------------------------------------------
+//
+// `docs/technical/48_declaration_migration.md` is the account of the migration: how many modules
+// are declaration modules, how many names they declare, how many signatures C++ computes, how
+// many overloads are registered, how many names are public, and the same per module. Every one of
+// those is a claim about the tree, and a hand edit is how such a claim goes stale: H200 found the
+// page still listing `rewrite` as pending, although H183 had migrated it, and a total patched by
+// hand that no longer matched its own rows. This mode reads each number from the page and compares
+// it with the tree; the registered counts come from `camel inspect --ops` on the same probe
+// `--verify-ops` reads. A page that stops stating a fact is a problem too, because a check that
+// falls silent over a missing row would pass over a hole. The page stays a page: the mechanism,
+// the seven-step recipe and the history it records are not generated.
+
+const LEDGER = path.join(REPO_ROOT, 'docs', 'technical', '48_declaration_migration.md')
+const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
+
+function camelExe() {
+    if (process.env.CAMEL_EXE) return process.env.CAMEL_EXE
+    return path.join(REPO_ROOT, 'out', 'latest', 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
+}
+
+// The registered operators, split the way the page counts them: a name and an overload of the
+// ledger are public, so a type-qualified alias (`Tensor.shape`) and a reserved group (`__rule`)
+// are out (the same filter `--verify-ops` applies to a name).
+function ledgerOperators() {
+    const run = spawnSync(camelExe(), ['inspect', '--ops', PROBE], { encoding: 'utf8', maxBuffer: 1 << 27 })
+    if (run.error) throw new Error(`could not run ${camelExe()} inspect --ops: ${run.error.message}`)
+    if (run.status !== 0) {
+        const first = `${run.stderr || ''}${run.stdout || ''}`.trim().split('\n')[0]
+        throw new Error(`camel inspect --ops failed (exit ${run.status}): ${first}`)
+    }
+    const operators = (run.stdout || '')
+        .split('\n')
+        .filter((line) => line.startsWith('OPERATOR '))
+        .map((line) => JSON.parse(line.slice('OPERATOR '.length)))
+    if (operators.length === 0) {
+        throw new Error('camel inspect --ops listed no operator, so the ledger would be compared with nothing')
+    }
+    return {
+        lines: operators.length,
+        public: operators.filter((op) => !op.name.startsWith('__') && !op.name.includes('::')),
+    }
+}
+
+// What the tree says: the declaration modules and their declared names, their computed names (from
+// the signature file the reference generator names, never from the page), and the public
+// operators per module.
+function ledgerTruth() {
+    const modules = declarationModules()
+    const reference = readReferenceModules()
+    const operators = ledgerOperators()
+    const signatureFiles = fs.readdirSync(SIGNATURE_DIR).filter((file) => file.endsWith('.cml'))
+    const computedFiles = new Set()
+    const rows = new Map()
+    let moduleNames = 0
+    let declaredNames = 0
+    let declarations = 0
+    let computedNames = 0
+    let computedEntries = 0
+    let overloads = 0
+    let declaredOverloads = 0
+    let computedOverloads = 0
+    let withComputed = 0
+
+    for (const module of modules) {
+        const declared = readDeclarations(module.source, module.name).declarations
+        const declaredSet = new Set(declared.map((each) => each.name))
+        const entry = reference.find((each) => each.name === module.name)
+        const computedSet = new Set()
+        if (entry && entry.computed) {
+            withComputed += 1
+            computedFiles.add(entry.computed)
+            const computed = readDeclarations(path.join(STDLIB_DIR, entry.computed), module.name).declarations
+            computedEntries += computed.length
+            for (const each of computed) computedSet.add(each.name)
+        }
+        const own = operators.public.filter((op) => op.module === module.name)
+        rows.set(module.name, {
+            names: new Set(own.map((op) => op.name)).size,
+            declaredNames: declaredSet.size,
+            declarations: declared.length,
+            computed: computedSet.size,
+            overloads: own.length,
+        })
+        moduleNames += new Set(own.map((op) => op.name)).size
+        declaredNames += declaredSet.size
+        declarations += declared.length
+        computedNames += computedSet.size
+        overloads += own.length
+        declaredOverloads += own.filter((op) => declaredSet.has(op.name)).length
+        computedOverloads += own.filter((op) => computedSet.has(op.name)).length
+    }
+
+    const publicNames = new Set(operators.public.map((op) => `${op.module}::${op.name}`)).size
+    const builtin = operators.public.filter((op) => op.module === '<builtin>')
+    const migratedFiles = signatureFiles.filter((file) => computedFiles.has(`signatures/${file}`))
+    return {
+        modules: rows,
+        declarationModuleNames: modules.map((module) => module.name),
+        moduleCount: modules.length,
+        moduleNames,
+        declaredNames,
+        declarations,
+        computedNames,
+        computedEntries,
+        withComputed,
+        withoutComputed: modules.length - withComputed,
+        overloads,
+        declaredOverloads,
+        computedOverloads,
+        publicNames,
+        publicOverloads: operators.public.length,
+        builtinNames: new Set(builtin.map((op) => op.name)).size,
+        builtinOverloads: builtin.length,
+        // The modules that are not declaration modules: `ckpt`, `env`, `hash`, `process` and
+        // `<builtin>` (the page's overload split needs the two parts separately).
+        otherModuleOverloads: operators.public.length - overloads - builtin.length,
+        operatorLines: operators.lines,
+        signatureFiles: signatureFiles.length,
+        migratedSignatureFiles: migratedFiles.length,
+        pendingSignatureFiles: signatureFiles.length - migratedFiles.length,
+    }
+}
+
+// The page's table rows as cells. A line that is not a table row is not scrutinized: the page
+// carries prose the check does not read.
+function ledgerRows(text) {
+    return text.split('\n').map((line, index) => {
+        const trimmed = line.trim()
+        const cells =
+            trimmed.startsWith('|') && trimmed.endsWith('|')
+                ? trimmed
+                      .slice(1, -1)
+                      .split('|')
+                      .map((cell) => cell.trim())
+                : null
+        return { line: index + 1, cells, text: line }
+    })
+}
+
+function numbersIn(cell) {
+    return [...String(cell).matchAll(/\d+/g)].map((match) => Number(match[0]))
+}
+
+function lineNumberOf(text, index) {
+    return text.slice(0, index).split('\n').length
+}
+
+function compareLedger() {
+    const text = read(LEDGER).replace(/\r\n/g, '\n')
+    const rows = ledgerRows(text)
+    const truth = ledgerTruth()
+    const problems = []
+    const page = relative(LEDGER)
+
+    const missing = (what) =>
+        problems.push(`${page}: the page no longer states ${what}, so --check-ledger cannot confirm it`)
+    const mismatch = (where, what, says, has) =>
+        problems.push(`${page}:${where.line}: ${what}: page says ${says}, tree has ${has}`)
+    const find = (predicate, what) => {
+        const found = rows.find((row) => row.cells && predicate(row.cells))
+        if (!found) missing(what)
+        return found
+    }
+    const statedNumber = (found, cell, what, has) => {
+        if (!found) return
+        const values = numbersIn(found.cells[cell])
+        if (values.length === 0) missing(`${what} (the row states no number)`)
+        else if (values[0] !== has) mismatch(found, what, values[0], has)
+    }
+    const statedPair = (found, cell, what, has) => {
+        if (!found) return
+        const values = numbersIn(found.cells[cell])
+        if (values.length < 2) missing(`${what} (expected "<first> / <second>")`)
+        else {
+            if (values[0] !== has[0]) mismatch(found, `${what} (first)`, values[0], has[0])
+            if (values[1] !== has[1]) mismatch(found, `${what} (second)`, values[1], has[1])
+        }
+    }
+    const proseNumber = (match, what, has) => {
+        if (!match) missing(what)
+        else if (Number(match[1]) !== has) mismatch({ line: lineNumberOf(text, match.index) }, what, Number(match[1]), has)
+    }
+
+    // §2.1, the one-line account. Every row is required: a renamed or dropped row is a fact the
+    // page no longer states, not a fact that changed.
+    statedNumber(find((cells) => cells[0].startsWith('声明模块'), 'the declaration-module count'), 1, 'declaration modules', truth.moduleCount)
+    statedPair(find((cells) => cells[0].startsWith('声明名'), 'the declared-name and declaration counts'), 1, 'declared names / declarations', [truth.declaredNames, truth.declarations])
+    statedNumber(find((cells) => cells[0].startsWith('计算名'), 'the computed-name count'), 1, 'computed names', truth.computedNames)
+    statedNumber(find((cells) => cells[0].startsWith('公开名'), 'the public-name count'), 1, 'public names in the declaration modules', truth.moduleNames)
+    statedNumber(
+        find((cells) => cells[0].startsWith('注册重载') && cells[0].includes('声明模块'), 'the overload count of the declaration modules'),
+        1,
+        'overloads in the declaration modules',
+        truth.overloads,
+    )
+    statedNumber(
+        find((cells) => cells[0].startsWith('注册重载') && cells[0].includes('参考页'), 'the registered-overload total'),
+        1,
+        'registered overloads',
+        truth.publicOverloads,
+    )
+
+    const signatureRow = find((cells) => cells[0].includes('stdlib/signatures/'), 'the signature-file count')
+    statedNumber(signatureRow, 1, 'signature files', truth.signatureFiles)
+    if (signatureRow) {
+        const migrated = (signatureRow.cells[2] || '').match(/(\d+)\s*个是已迁移/)
+        const pending = (signatureRow.cells[2] || '').match(/(\d+)\s*个属于尚未迁移/)
+        if (!migrated || !pending) missing('the split of the signature files into computed files of migrated modules and files of modules still to migrate')
+        else {
+            if (Number(migrated[1]) !== truth.migratedSignatureFiles) {
+                mismatch(signatureRow, 'signature files of migrated modules', Number(migrated[1]), truth.migratedSignatureFiles)
+            }
+            if (Number(pending[1]) !== truth.pendingSignatureFiles) {
+                mismatch(signatureRow, 'signature files of modules still to migrate', Number(pending[1]), truth.pendingSignatureFiles)
+            }
+        }
+    }
+
+    // The prose that splits the modules by "has a computed signature": two numbers a hand edit can
+    // leave behind.
+    const computedSplit = text.match(/(\d+)\s*个模块有计算签名、(\d+)\s*个没有/)
+    if (!computedSplit) missing('the split of modules with and without a computed signature')
+    else {
+        const where = { line: lineNumberOf(text, computedSplit.index) }
+        if (Number(computedSplit[1]) !== truth.withComputed) mismatch(where, 'modules with a computed signature', Number(computedSplit[1]), truth.withComputed)
+        if (Number(computedSplit[2]) !== truth.withoutComputed) mismatch(where, 'modules without a computed signature', Number(computedSplit[2]), truth.withoutComputed)
+    }
+
+    // §2.4, the overload split: the total, the declaration modules, the rest, `<builtin>`, and the
+    // arithmetic between them.
+    const overloadSplit = text.match(
+        /(\d+)\s*=\s*(\d+)\s*（(\d+)\s*个声明模块）\s*\+\s*(\d+)\s*（[^）]*）\s*\+\s*(\d+)\s*（`<builtin>`）/,
+    )
+    if (!overloadSplit) missing('the split of the registered overloads (§2.4)')
+    else {
+        const where = { line: lineNumberOf(text, overloadSplit.index) }
+        const [total, declared, moduleCount, other, builtin] = overloadSplit.slice(1).map(Number)
+        if (total !== truth.publicOverloads) mismatch(where, 'registered overloads', total, truth.publicOverloads)
+        if (declared !== truth.overloads) mismatch(where, 'overloads in the declaration modules', declared, truth.overloads)
+        if (moduleCount !== truth.moduleCount) mismatch(where, 'declaration modules in the overload split', moduleCount, truth.moduleCount)
+        if (other !== truth.otherModuleOverloads) mismatch(where, 'overloads of the modules that are not declaration modules', other, truth.otherModuleOverloads)
+        if (builtin !== truth.builtinOverloads) mismatch(where, 'overloads of <builtin>', builtin, truth.builtinOverloads)
+        if (declared + other + builtin !== total) {
+            problems.push(`${page}:${where.line}: the overload split does not add up: ${declared} + ${other} + ${builtin} != ${total}`)
+        }
+    }
+
+    // §2.2, the per-module ledger: one row per declaration module, none for a module that is not
+    // one, and the total row agrees with both the tree and the rows. The "blocked" column is not
+    // derived here (it is the mechanism judgement of 47 §3); only its arithmetic is checked.
+    const sectionStart = text.indexOf('### 2.2')
+    const sectionEnd = text.indexOf('### 2.3')
+    if (sectionStart < 0 || sectionEnd <= sectionStart) missing('the per-module table (§2.2)')
+    else {
+        const from = lineNumberOf(text, sectionStart)
+        const to = lineNumberOf(text, sectionEnd)
+        const seen = new Set()
+        let blocked = 0
+        let total = null
+        for (const row of rows.filter((each) => each.cells && each.line > from && each.line < to)) {
+            if (row.cells[0] === '**合计**') {
+                total = row
+                continue
+            }
+            const moduleName = row.cells[0].match(/^`([a-z_][a-z0-9_]*)`$/)
+            if (!moduleName) continue
+            const name = moduleName[1]
+            seen.add(name)
+            const expected = truth.modules.get(name)
+            if (!expected) {
+                problems.push(`${page}:${row.line}: the per-module table has a row for '${name}', but no declaration module has that name`)
+                continue
+            }
+            statedNumber(row, 1, `the name count of '${name}'`, expected.names)
+            statedPair(row, 2, `the declared-name / declaration count of '${name}'`, [expected.declaredNames, expected.declarations])
+            statedNumber(row, 3, `the computed-name count of '${name}'`, expected.computed)
+            statedNumber(row, 5, `the overload count of '${name}'`, expected.overloads)
+            const blockedCell = row.cells[4].match(/\d+/)
+            blocked += blockedCell ? Number(blockedCell[0]) : 0
+        }
+        for (const name of truth.declarationModuleNames) {
+            if (!seen.has(name)) {
+                problems.push(`${page}: the per-module table has no row for '${name}', which is a declaration module`)
+            }
+        }
+        if (!total) missing('the total row of the per-module table')
+        else {
+            statedNumber(total, 1, 'the total of public names', truth.moduleNames)
+            statedPair(total, 2, 'the total of declared names / declarations', [truth.declaredNames, truth.declarations])
+            statedNumber(total, 3, 'the total of computed names', truth.computedNames)
+            statedNumber(total, 5, 'the total of overloads', truth.overloads)
+            const totalBlocked = numbersIn(total.cells[4])
+            if (totalBlocked[0] !== blocked) {
+                mismatch(total, 'the total of blocked names', totalBlocked[0], blocked)
+            }
+        }
+        const headlineBlocked = find((cells) => cells[0].startsWith('其中因语言机制'), 'the blocked-name count')
+        if (headlineBlocked) {
+            const values = numbersIn(headlineBlocked.cells[1])
+            if (values[0] !== blocked) {
+                mismatch(headlineBlocked, 'the total of the blocked column', values[0], blocked)
+            }
+        }
+    }
+
+    // §6, what each command prints today. These are copies of a command's output, so they are
+    // checked against the command's output rather than against a count stated twice.
+    const checkRow = find((cells) => cells[0].includes('stdlib-declarations.mjs --check`'), 'the `--check` line of the re-check table (§6)')
+    if (checkRow) {
+        const counts = checkRow.text.match(/(\d+) declaration module\(s\), (\d+) computed signature/)
+        const overloads = checkRow.text.match(/(\d+) registered operator overloads/)
+        if (!counts || !overloads) missing('the `--check` output quote (module / computed / overload counts)')
+        else {
+            const where = { line: checkRow.line }
+            if (Number(counts[1]) !== truth.moduleCount) mismatch(where, 'the declaration-module count of --check', Number(counts[1]), truth.moduleCount)
+            if (Number(counts[2]) !== truth.computedNames) mismatch(where, 'the computed-signature count of --check', Number(counts[2]), truth.computedNames)
+            if (Number(overloads[1]) !== truth.publicOverloads) mismatch(where, 'the overload count of --check', Number(overloads[1]), truth.publicOverloads)
+        }
+    }
+    const verifyRow = find((cells) => cells[0].includes('stdlib-reference.mjs --verify-ops`'), 'the `--verify-ops` line of the re-check table (§6)')
+    if (verifyRow) {
+        const match = verifyRow.text.match(/the declarations agree with the (\d+) registered operator overloads/)
+        if (!match) missing('the `--verify-ops` output quote')
+        else if (Number(match[1]) !== truth.publicOverloads) mismatch(verifyRow, 'the overload count of --verify-ops', Number(match[1]), truth.publicOverloads)
+    }
+    const inspectRow = find((cells) => cells[0].includes('camel inspect --ops test/cases/modules/stdlib/registry_all.cml'), 'the `inspect --ops` line of the re-check table (§6)')
+    if (inspectRow) {
+        const lines = inspectRow.text.match(/`OPERATOR`\s*行\s*(\d+)\s*条/)
+        const publicNames = inspectRow.text.match(/(\d+)\s*个公开名（其中 `<builtin>`\s*(\d+)\s*个）/)
+        const publicOverloads = inspectRow.text.match(/(\d+)\s*条公开重载（其中 `<builtin>`\s*(\d+)\s*条）/)
+        if (!lines || !publicNames || !publicOverloads) missing('the `inspect --ops` output quote (operator lines, public names, public overloads)')
+        else {
+            const where = { line: inspectRow.line }
+            if (Number(lines[1]) !== truth.operatorLines) mismatch(where, 'the OPERATOR lines of inspect --ops', Number(lines[1]), truth.operatorLines)
+            if (Number(publicNames[1]) !== truth.publicNames) mismatch(where, 'the public names of inspect --ops', Number(publicNames[1]), truth.publicNames)
+            if (Number(publicNames[2]) !== truth.builtinNames) mismatch(where, 'the <builtin> names of inspect --ops', Number(publicNames[2]), truth.builtinNames)
+            if (Number(publicOverloads[1]) !== truth.publicOverloads) mismatch(where, 'the public overloads of inspect --ops', Number(publicOverloads[1]), truth.publicOverloads)
+            if (Number(publicOverloads[2]) !== truth.builtinOverloads) mismatch(where, 'the <builtin> overloads of inspect --ops', Number(publicOverloads[2]), truth.builtinOverloads)
+        }
+    }
+
+    return { problems, truth }
+}
+
 function main() {
     const mode = process.argv[2] || '--check'
+    if (mode === '--check-ledger') {
+        let result
+        try {
+            result = compareLedger()
+        } catch (error) {
+            console.log(`--check-ledger: ${error.message}`)
+            process.exit(1)
+        }
+        for (const problem of result.problems) console.log(problem)
+        if (result.problems.length > 0) {
+            console.log(`the ledger is stale: ${result.problems.length} problem(s) in ${relative(LEDGER)}`)
+            process.exit(1)
+        }
+        const truth = result.truth
+        console.log(
+            `the ledger agrees with the tree: ${truth.moduleCount} declaration module(s), ` +
+                `${truth.declaredNames} declared name(s) in ${truth.declarations} declaration(s), ` +
+                `${truth.computedNames} computed name(s) recorded in ${truth.computedEntries} signature declaration(s), ` +
+                `${truth.overloads} overload(s) in the declaration modules ` +
+                `(${truth.declaredOverloads} declared + ${truth.computedOverloads} computed), ` +
+                `${truth.publicOverloads} registered public overload(s) under ${truth.publicNames} name(s), ` +
+                `${truth.signatureFiles} signature file(s)`,
+        )
+        return
+    }
     if (mode !== '--check') {
-        console.log('usage: node scripts/stdlib-declarations.mjs --check')
+        console.log('usage: node scripts/stdlib-declarations.mjs --check | --check-ledger')
         process.exit(2)
     }
 
