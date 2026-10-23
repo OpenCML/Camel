@@ -566,6 +566,23 @@ class GraphDraft {
     gc_node_ref_t addDrefNode(camel::core::type::Type *type = nullptr, gc_slot_idx_t dataIndex = 0);
 
     void eraseNode(gc_node_ref_t id);
+    /// The statements written directly after `id` follow what `id` followed: the block's chain
+    /// closes over a node the graph loses (docs/design/effects/edges.cn.md 4, removing a node
+    /// splices the orderings that pass through it). While the control kind still exists the control
+    /// edge naming the same pair is written beside the sync edge, because the graph has to carry
+    /// the ordering in both kinds until the control edges go (src/runtime/graph_edges.cpp,
+    /// checkControlAndSyncAgree reads that back). A successor whose predecessor belongs to another
+    /// block heads its own block's chain instead: a sync edge never leaves the block it joins
+    /// (docs/design/effects/edges.cn.md 4.6). eraseNode calls this itself, so no erasure leaves a
+    /// hole; a rewrite that erases the node through its own path calls it before the edges go.
+    void closeChainOver(gc_node_ref_t id);
+    /// The node `newId` takes the place `oldId` had in its block's chain: the statements written
+    /// after `oldId` are written after `newId`, and `newId` is written after what `oldId` followed
+    /// (docs/design/effects/edges.cn.md 4: a replacement transfers the replaced node's orderings to
+    /// its replacer). `newId` is marked as a statement of that block. A rewrite that puts a node it
+    /// built where a statement stood calls this before erasing the statement; a node already
+    /// written somewhere in a chain keeps that place.
+    void takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId);
     void setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
     void setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
     void setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);

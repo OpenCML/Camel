@@ -178,10 +178,11 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
         }
     }
     const auto ctrlUsers = copy(draft.ctrlUsersOf(id));
-    // The statements written directly after the removed one take its place in the chain: the chain
-    // is an ordering of its own (docs/design/effects/edges.cn.md 1.5 and 4.6), so a successor
-    // follows what the removed node followed rather than only being ordered by it.
-    const auto syncPreds = copy(draft.syncInputsOf(id));
+    // The statements written directly after the removed one keep their place in the chain: the
+    // chain is an ordering of its own (docs/design/effects/edges.cn.md 1.5 and 4.6), so a successor
+    // follows what the removed node followed rather than only being ordered by it. eraseNode closes
+    // the chain over the removed node, with the control edge naming the same pair beside the sync
+    // edge; this only has to know which users are already this node's successors in the chain.
     const auto syncUsers = copy(draft.syncUsersOf(id));
 
     if (replacement != kInvalidNodeRef) {
@@ -195,12 +196,9 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
     for (gc_node_ref_t user : ctrlUsers) {
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, id);
     }
-    for (gc_node_ref_t user : syncUsers) {
-        draft.setSyncInputs(user, syncPreds);
-    }
     for (gc_node_ref_t user : users) {
-        if (!syncPreds.empty() && std::ranges::find(syncUsers, user) != syncUsers.end()) {
-            // Its place in the chain already orders it.
+        if (std::ranges::find(syncUsers, user) != syncUsers.end()) {
+            // Its place in the chain orders it, and eraseNode writes the edge that says so.
             continue;
         }
         for (gc_node_ref_t pred : preds) {

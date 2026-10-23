@@ -27,31 +27,26 @@ gc_node_ref_t bridgeMacroRewriteControl(
     const std::vector<gc_node_ref_t> ctrlPreds(
         draft.ctrlInputsOf(replacedNodeId).begin(),
         draft.ctrlInputsOf(replacedNodeId).end());
-    // The node a macro rewrote may be a statement of a `sync` block: what ordered it is then the
-    // sync edge from the statement written before it, and the replacement has to keep that order
-    // (docs/design/effects/edges.cn.md 1.5). The users' own sync edges are re-pointed by
-    // replaceAllCtrlUses, so only the predecessor side is bridged here.
-    const std::vector<gc_node_ref_t> syncPreds(
-        draft.syncInputsOf(replacedNodeId).begin(),
-        draft.syncInputsOf(replacedNodeId).end());
-    if (ctrlPreds.empty() && syncPreds.empty()) {
+    // The node a macro rewrote may be a statement of a `sync` block: the gate then takes its place
+    // in the chain (takeStatementPlace, called by the caller), so a gate is needed even when
+    // nothing ordered the node (docs/design/effects/edges.cn.md 1.5).
+    const auto *replacedHeader = draft.header(replacedNodeId);
+    const bool wasStatement =
+        replacedHeader != nullptr &&
+        (replacedHeader->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) != 0;
+    if (ctrlPreds.empty() && !wasStatement) {
         return valueNodeId;
     }
 
     const auto *valueHeader = draft.header(valueNodeId);
     ASSERT(valueHeader != nullptr, "Macro rewrite bridge requires a materialized value node.");
     camel::runtime::DraftNodeInit gateInit{
-        .dataIndex    = valueHeader->dataIndex,
-        .dataType     = valueHeader->dataType,
-        .kind         = GCNodeKind::Gate,
-        // The gate stands where a statement of the block stood, so the sync edge may still join it
-        // to the statement written before.
-        .runtimeFlags = static_cast<uint8_t>(
-            syncPreds.empty() ? 0 : camel::runtime::kGCNodeFlagSyncStatement),
-        .region       = draft.nodeRegion(replacedNodeId),
-        .normInputs   = std::span<const gc_node_ref_t>(&valueNodeId, 1),
-        .ctrlInputs   = ctrlPreds,
-        .syncInputs   = syncPreds,
+        .dataIndex  = valueHeader->dataIndex,
+        .dataType   = valueHeader->dataType,
+        .kind       = GCNodeKind::Gate,
+        .region     = draft.nodeRegion(replacedNodeId),
+        .normInputs = std::span<const gc_node_ref_t>(&valueNodeId, 1),
+        .ctrlInputs = ctrlPreds,
     };
     return draft.addNode(gateInit);
 }
@@ -82,6 +77,7 @@ bool applyMacroRewrite(
     const gc_node_ref_t replacementNodeId =
         bridgeMacroRewriteControl(draft, draftNodeId, valueNodeId);
 
+    draft.takeStatementPlace(draftNodeId, replacementNodeId);
     draft.replaceAllValueUses(draftNodeId, replacementNodeId);
     draft.replaceAllCtrlUses(draftNodeId, replacementNodeId);
     if (draft.outputNode() == draftNodeId) {
