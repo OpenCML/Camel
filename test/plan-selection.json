@@ -39,9 +39,9 @@
     ],
     "rules": [
         {
-            "comment": "The parse-check harness and the selftest fixtures: a change here runs smoke, the runner plan and the front-end plan (layered so its slow fuzz test is filtered under --tier fast).",
-            "paths": ["test/tools/parsecheck/", "test/tools/jitcov/workloads.cml", "test/tools/selftest/"],
-            "plans": ["smoke", "feat/consistency/runner.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
+            "comment": "The parse-check harness, the selftest fixtures and the load-class guard: a change here runs smoke, the runner plan, the load-class plan (its cases are the selftest fixtures) and the front-end plan (layered so its slow fuzz test is filtered under --tier fast).",
+            "paths": ["test/tools/parsecheck/", "test/tools/jitcov/workloads.cml", "test/tools/selftest/", "test/tools/check-load-class.mjs"],
+            "plans": ["smoke", "feat/consistency/runner.plan.toml", "feat/tools/load_class.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
         },
         {
             "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set.",
