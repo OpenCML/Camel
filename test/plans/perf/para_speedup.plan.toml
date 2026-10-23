@@ -78,6 +78,14 @@ skip_unless_timeout_ms = 30000
 # wall of this test tracks the host's load rather than its own work, and 900 s is a hang detector,
 # not a busy-host detector: four times the worst measurement is 451 s, so the timeout is that bound
 # with room to spare, and the tool kills a child of its own at 600 s with a reason.
+# This plan is the wall-bound exception of the 2026-10-24 sweep of the slow tier, and the ruling of
+# 2026-10-23 covers the case (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate"
+# (a)): what this entry measures is a ratio of two wall windows of one run -- the seconds a user waits
+# -- so its own CPU time cannot stand in for it, and no cpu_budget_ms is declared here. It was
+# measured on 2026-10-24 on the loaded host (32 threads, 1-minute load 85.69/91.25/84.56) anyway:
+# 63.33 s of CPU / 62.79 s of wall, the CPU being the serial side's 31.7 s plus the parallel side's
+# 32.0 s, which is what the tool prints as its two ungated child CPU numbers. The timeout below stays
+# as the bound it already describes.
 timeout_ms = 900000
 
 [[tests]]
@@ -90,4 +98,7 @@ args = ["${case}", "--min-cores", "9999"]
 expect_exit = 2
 expect_stdout_contains = ["REFUSED", "examined nothing"]
 # The refusal is decided before any child starts: 122 ms measured on the reference host.
+# Same exception as monte_carlo_pi.speedup above, for a different reason: this entry has no
+# computation to bound. The refusal happens before any child of the tool starts -- 30 ms of CPU
+# measured on 2026-10-24 -- so it keeps the wall bound.
 timeout_ms = 30000

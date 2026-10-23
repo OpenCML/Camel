@@ -12,6 +12,46 @@ args = ["--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_n
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
+# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)):
+#
+#   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
+#    不随负载变"
+#
+#
+# The six timeit entries of this plan print a wall figure each and assert nothing about it (no
+# `perf_budget_mean_ms`), so what the runner bounds is their cost: one timed iteration of a
+# fixed workload. Measured on the Linux host (32 threads, shared; the 1-minute load read
+# read 76.41/76.92/80.97 before the first window and 85.69/91.25/84.56 before the second), the same
+# six entries at two run lengths (nine perf plans in one run at -Jobs 8, then those plans
+# beside feat/mm/gc and two gpu plans):
+#
+#   asian_option_mc.nvm_timeit   69.96 s CPU /121.40 s wall   (first window)
+#   asian_option_mc.nvm_timeit   70.19 s CPU /162.77 s wall   (second window)
+#   asian_option_mc.prl_timeit   70.12 s CPU /  7.46 s wall   (first window)
+#   asian_option_mc.prl_timeit   70.24 s CPU / 10.62 s wall   (second window)
+#   merge_sort.nvm_timeit        51.12 s CPU / 83.24 s wall   (first window)
+#   merge_sort.nvm_timeit        53.07 s CPU /102.10 s wall   (second window)
+#   merge_sort.prl_timeit        69.90 s CPU / 50.37 s wall   (first window)
+#   merge_sort.prl_timeit        61.85 s CPU / 70.03 s wall   (second window)
+#   monte_carlo_pi.nvm_timeit    31.37 s CPU / 52.99 s wall   (first window)
+#   monte_carlo_pi.nvm_timeit    31.51 s CPU / 64.35 s wall   (second window)
+#   monte_carlo_pi.prl_timeit    31.63 s CPU /  3.45 s wall   (first window)
+#   monte_carlo_pi.prl_timeit    31.69 s CPU /  3.86 s wall   (second window)
+#
+# The CPU figures spread 0.1-3.7 % between the first two windows and move by at most 1.5 % to the
+# plan's own gate run (109 tests: 70.03, 70.25, 50.26, 59.65, 31.50 and 32.16 s of CPU for the six
+# entries in the order of the table above). Each budget is 1.63x that entry's highest of the three
+# readings rounded up to the next 1000 ms -- the headroom the four resnet referees of
+# feat/modules/autodiff.plan.toml took -- and 1.64-1.65x the busiest reading seen. Four of the six
+# entries were red on this host under the wall bound:
+# 121.40 s and 162.77 s of wall for the asian option on std::nvm against the 75 s the 300 s
+# timeout's 4x margin allows, 83.24 s and 102.10 s for the mergesort on std::nvm and 50.37 s and
+# 70.03 s for it on std::prl against 45 s of their 180 s timeouts, and 52.99 s and 64.35 s for
+# the Monte Carlo estimator on std::nvm against the 30 s of its 120 s timeout -- while the CPU
+# figure of each of those entries moved by at most 3.7 % between the same two runs.
+cpu_budget_ms = 115000
 # One timed iteration. The nvm run measured 140.78 s on the host at load 108 (H101), against the
 # 120 s guard it had; H80's run at load 26-54 passed, so the quiet run is under 120 s. 300 s is
 # twice the busiest measurement and still catches a hang.
@@ -26,6 +66,10 @@ args = ["--timeit", "std::prl/1", "--output-format", "json", "${case}", "${run_p
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# 1.63x the 70.24 s CPU read above (the higher of 70.12 s and 70.24 s) rounded up: 1.64x the
+# busiest. The timeout below stays as the liveness bound (the ruling quoted on
+# asian_option_mc.nvm_timeit above).
+cpu_budget_ms = 115000
 timeout_ms = 120000
 
 # The 100M-element mergesort of test/cases/para/core/merge_sort.cml holds several 400 MB arrays
@@ -44,6 +88,10 @@ args = ["--block-limit", "8192", "--timeit", "std::nvm/1", "--output-format", "j
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# 1.63x the 53.07 s CPU read above (the higher of 51.12 s and 53.07 s) rounded up: 1.64x the
+# busiest. The timeout below stays as the liveness bound (the ruling quoted on
+# asian_option_mc.nvm_timeit above); this entry was one of the four the wall bound reddened.
+cpu_budget_ms = 87000
 timeout_ms = 180000
 
 [[tests]]
@@ -55,6 +103,10 @@ args = ["--block-limit", "16384", "--timeit", "std::prl/1", "--output-format", "
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# 1.63x the 69.90 s CPU read above (the higher of 69.90 s and 61.85 s) rounded up: 1.65x the
+# busiest. The timeout below stays as the liveness bound (the ruling quoted on
+# asian_option_mc.nvm_timeit above); this entry was one of the four the wall bound reddened.
+cpu_budget_ms = 115000
 timeout_ms = 180000
 
 [[tests]]
@@ -66,6 +118,10 @@ args = ["--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_n
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# 1.63x the 31.51 s CPU read above (the higher of 31.37 s and 31.51 s) rounded up: 1.65x the
+# busiest. The timeout below stays as the liveness bound (the ruling quoted on
+# asian_option_mc.nvm_timeit above); this entry was one of the four the wall bound reddened.
+cpu_budget_ms = 52000
 timeout_ms = 120000
 
 [[tests]]
@@ -77,5 +133,9 @@ args = ["--timeit", "std::prl/1", "--output-format", "json", "${case}", "${run_p
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# 1.63x the 32.16 s CPU read above (the highest of 31.63 s, 31.69 s and 32.16 s) rounded up: 1.65x
+# the busiest. The timeout below stays as the liveness bound (the ruling quoted on
+# asian_option_mc.nvm_timeit above).
+cpu_budget_ms = 53000
 timeout_ms = 120000
 

@@ -22,6 +22,39 @@ name = "collfuzz.many_small"
 desc = "200 programs of 60 operations on collections of up to about 70 entries, on the four back ends under four representations: 3200 runs."
 args = ["${case}", "check", "--seeds", "1000:1200", "--ops", "60", "--size", "24", "--matrix", "quick"]
 expect_stdout_contains = ["3200 of 3200 runs agree with the reference", "PASS"]
+# The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
+# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)):
+#
+#   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
+#    不随负载变"
+#
+# Each entry runs a fixed number of generated programs (3200, 960, 720 and 108 runs) and
+# compares their output with the answer the generator computed on Python dicts and sets, so the
+# cost of each is computation over a fixed amount of work. Measured on the Linux host
+# (32 threads, shared; the 1-minute load read 76.41/76.92/80.97 in the first window and
+# 85.69/91.25/84.56 in the second), the four entries at three run lengths:
+#
+#   collfuzz.many_small   90.76 s CPU / 62.68 s wall   (eleven slow plans in one run, 186 tests)
+#   collfuzz.many_small   90.72 s CPU / 55.29 s wall   (the four entries beside the showcase plans)
+#   collfuzz.many_small   92.62 s CPU / 58.63 s wall   (the gate run of this sweep, 109 tests)
+#   collfuzz.large        60.24 s CPU / 42.78 s wall   (first window)
+#   collfuzz.large        59.35 s CPU / 42.67 s wall   (second window)
+#   collfuzz.large        61.33 s CPU / 37.51 s wall   (the gate run of this sweep, 109 tests)
+#   collfuzz.gc           68.46 s CPU / 54.27 s wall   (first window)
+#   collfuzz.gc           67.55 s CPU / 45.44 s wall   (second window)
+#   collfuzz.gc           68.01 s CPU / 42.43 s wall   (the gate run of this sweep, 109 tests)
+#   collfuzz.gc_large     78.52 s CPU / 64.47 s wall   (first window)
+#   collfuzz.gc_large     77.94 s CPU / 53.39 s wall   (second window)
+#   collfuzz.gc_large     78.25 s CPU / 57.40 s wall   (the gate run of this sweep, 109 tests)
+#
+# The CPU figures spread 0.1-1.6 % across the first two windows and move by at most 2.0 % to the
+# third. Each budget is 1.63x that entry's highest reading rounded up to the next 1000 ms -- the
+# headroom the four resnet referees of feat/modules/autodiff.plan.toml took -- and 1.63-1.64x the
+# busiest reading seen. The timeouts below stay; by the ruling above they are now only the liveness
+# bounds, and the longest wall seen (64.47 s) is well inside the smallest of their margins,
+# 450 s.
+cpu_budget_ms = 151000
 timeout_ms = 1800000
 
 [[tests]]
@@ -29,6 +62,10 @@ name = "collfuzz.large"
 desc = "60 programs of 150 operations on collections of up to several hundred entries (trees under the default widths too), on the four back ends under four representations: 960 runs."
 args = ["${case}", "check", "--seeds", "2000:2060", "--ops", "150", "--size", "120", "--matrix", "quick"]
 expect_stdout_contains = ["960 of 960 runs agree with the reference", "PASS"]
+# 1.63x the 61.33 s CPU read above (the highest of 60.24 s, 59.35 s and 61.33 s) rounded up: 1.63x
+# the busiest. The timeout below stays as the liveness bound (the ruling quoted on
+# collfuzz.many_small above).
+cpu_budget_ms = 100000
 timeout_ms = 1800000
 
 [[tests]]
@@ -36,6 +73,10 @@ name = "collfuzz.gc"
 desc = "40 programs of 40 operations under collection stress (a collection every third allocation and at every safepoint, heap verification before and after each), on std::nvm, std::fvm and std::prl under three representations, with the non-moving and with the moving collector: 720 runs."
 args = ["${case}", "check", "--seeds", "3000:3040", "--ops", "40", "--size", "16", "--matrix", "gc"]
 expect_stdout_contains = ["720 of 720 runs agree with the reference", "PASS"]
+# 1.63x the 68.46 s CPU read above (the higher of 68.46 s and 67.55 s) rounded up: 1.64x the
+# busiest. The timeout below stays as the liveness bound (the ruling quoted on
+# collfuzz.many_small above).
+cpu_budget_ms = 112000
 timeout_ms = 3600000
 
 [[tests]]
@@ -43,4 +84,8 @@ name = "collfuzz.gc_large"
 desc = "6 programs of 60 operations on collections of up to about 150 entries under the same collection stress: 108 runs."
 args = ["${case}", "check", "--seeds", "4000:4006", "--ops", "60", "--size", "50", "--matrix", "gc", "--timeout", "1800"]
 expect_stdout_contains = ["108 of 108 runs agree with the reference", "PASS"]
+# 1.63x the 78.52 s CPU read above (the higher of 78.52 s and 77.94 s) rounded up: 1.63x the
+# busiest. The timeout below stays as the liveness bound (the ruling quoted on
+# collfuzz.many_small above).
+cpu_budget_ms = 128000
 timeout_ms = 3600000
