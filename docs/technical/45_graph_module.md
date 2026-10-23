@@ -52,6 +52,31 @@
 5. `NodeVMSchedPass::callGraph` 在 NodeVM 上以被处理的程序为实参、以遍参数为 with 实参运行它；返回的 `Program` 与输入不同就 `installRuntimeProgram`；
 6. 返回错误值是诊断 `GraphPassFailed`；模块编译不过、函数不是遍，是 `InvalidPassParameter`，消息只说哪条遍规格、哪个库编译不过；模块自己的第一条诊断作为**从属位置**附上（文件、行、列与原行），文本格式里就是该位置下的源码片段。诊断没有位置时（例如导入的库编译不过），原因才留在消息里。模块不存在或没有这个函数，遍保持未知。模块自己解析不过（还在编辑的文件）也走这里：`compileAsProgram` 把 `compile()` 抛出的诊断留在模块的诊断表里并返回失败，调用方把它作为遍规格的问题报告，异常不会穿出流水线。诊断表停在错误上限（`--timeit` 的上下文上限是第一条错误）时得到的是上限异常而不是 `Diagnostic`：`DefinitionStore::libraryFunction` 把它同样当作"这个库没编过"，否则它会在遍解析之前穿出去，用户看到的是裸的解析诊断而不是 `InvalidPassParameter`（H210）。
 
+## 标准库里的 Camel 遍
+
+`stdlib/opt.cml`（模块 `opt`）是标准库里用 Camel 写的优化遍：`opt::cse` 与 `opt::dce` 分别与 C++ 的 `std::opt::cse`、`std::opt::dce values_only=true` 做同一件事，流水线里按模块名写作 `opt::cse`（H227 的第一层；遍名与遍参数的写法见 `docs/cli.md`）。`opt::cse` 合并同类型同值的常量（`int`、`i32`、`bool`）与算子、类型、输入、区域、权限都相同的纯运算，每一组留下第一个节点；`opt::dce` 删除没人读取的常量、转换、拷贝、访问、填充与纯运算。两个遍都跳过值可能被原地写的节点与读取这种值的节点，并按轮次重复到没有可改的为止：合并两个常量会让它们上面的运算相等，删掉一个值会让读它的值变成没人读，所以一轮不够。
+
+每轮一次事务。同一轮里每个待改的节点都被换成"输入完全相同且更早的那个节点"，而这样的两个节点不可能互为祖先——若 `b` 是 `a` 的传递使用者，`b` 的某个输入必在 `a` 的使用者闭包里，于是 `b` 的输入列不可能与 `a` 的相同——所以一轮一次 `commit` 就够，不需要 C++ 的 `reaches` 守卫（`replace` 自带的成环检查是第二道防线）。
+
+对照在 `test/plans/feat/opt/camel_passes.plan.toml`：C++ 一侧的图记成 golden，Camel 一侧交给快照测试已有的同构比较（`gir_dot_isomorphic`，`test/tools/gir-dot.mjs`）——节点是种类、类型、形状与出入度，边是两端种类、连接类型与标签，也就是"同样的值、同样的类型、同样的区域结构、同样的接线"。两侧的转储不按文本比：编译遍自己的库会重排每个节点的源码 origin 号。每个语料另有一条"遍之前"的条目，断言要合并的重复与要删的死值确实在（没看任何东西的守卫不会通过），一组 `std::jgir` 属性条目（合并的不动点、写过一次的 cell 两侧不合并、程序用到的值还在）与四条后端上的结果条目。
+
+**缺口即任务**（H227 第 3 项）。第一层里还有两个遍写不出来，原因是缺一个操作，而不是缺想法：
+
+| C++ 遍做什么 | 模块没有提供什么 | 今天的结果 |
+| --- | --- | --- |
+| `opt::fold`：把输入全是常量的纯算子求值 | 在值上求值一个算子（`constant` 只读常量，`add_constant` 只把遍已经有的值造成节点） | 写不出来 |
+| `opt::ctrl`：删掉已被必然的数据或控制路径蕴涵的一条控制边 | 删一条边、加一条边：事务只有整节点的 `replace` 与 `erase`，对应 C++ 的 `unlinkInput(Ctrl, …)` 与 `appendControlDependency` | 写不出来 |
+| `std::opt::dce` 的 `values_only=false` 那一半：绕过只转发值的 GATE，把它的等待移到消费者 | 同上，这是边手术 | 只落了 `values_only=true` 那一半 |
+| 合并任何非 GC 追踪类型的常量 | 读一个标量的位（`bytes` 编解码的是数组与张量，`math` 没有 `signbit`） | 只合并 `int`、`i32`、`bool`：`0.0` 与 `-0.0` 用 `==` 相等却是图里两个值，按 `==` 合并会改程序 |
+| 合并节点时把属性一起合并 | 写属性（`tags(n)` 只把属性读成文本；`add_constant` 造的是新节点，`replace` 不搬运属性） | 属性文本不同的两个节点不合并 |
+| 按类型问"是不是 GC 追踪"（`type::isGCTraced`） | 节点类型上没有这个查询 | 按类型名排除 |
+| 以区域为键的 Map | `id(Region)` 没有导出，只有 `region_of`、`region_kind`、`region_parent` 与 `==` | 区域只能用 `==` 比较 |
+| 遍参数带默认值（`std::opt safe_fp=false`） | Camel 遍的源码没有默认值，每个 `with` 参数都必填（上一节第 4 条） | 每个参数都要写在流水线里 |
+
+H227 第 5 项说的"`opt::cse` 与 `std::opt::cse` 互换"今天只在结果上成立（同构，四个后端一致）：两个名字仍是两条实现。把 `opt::cse` 的 Camel 定义用 `#impl<cse_native>` 接到 C++ 实现（H233 第 7 条，H227 第 5 项末句）落不下来——`#impl` 的内核需要一个既声明算子又持有函数体的模块，而 `tensor:log_softmax`、`nn:adam` 这类算子没有这样的位置；这已记为 `docs/handover/questions/impl-kernel-site.md` 的问题，作者未定。
+
+**一页结论**（H227 第 4 项）。行数按各自的语言量：`opt::cse` 的定义与它用到的比较（`stdlib/opt.cml` 的 `bitEqualType` 到 `cse`）126 行，对 C++ 的 `cseDraft`（`src/passes/opt/generic/generic.cpp`）130 行；`opt::dce`（同一文件的 `valueOnly` 到 `dce`）26 行，对 `dceDraft` 38 行。这是"同一件工作在同一抽象层上的长度"，不是等价的工作量：草稿、使用者索引与提交在 C++ 侧要自己维护，在 Camel 侧交给了 `graph` 模块。同构率：三个语料（`cse_subject`、`written_variable` 的 cse、`dce_subject` 的 dce）全部同构，四个后端上的结果逐字一致。速度不在本项作门槛，这里也没有计时——计时会把 NodeVM 跑一个 Camel 遍的固定成本与遍本身混在一起，而本项回答的是"写得出来吗"。
+
 ## 一次编译问的是哪些模块
 
 一次编译的"有没有错"只在命令所问的模块上回答，报告也只打印那些模块的诊断：`run`、`check` 与 `--timeit` 的一轮问的是程序的依赖闭包（入口模块加逐层 import），`inspect --ops` 问的是上下文里的全部用户模块，因为清单少任何一个模块的算子都不完整（H172）。pass 列表在编译前装载的 pass 库不在程序里，它的失败由遍解析报成 `InvalidPassParameter`；它不能因为"上下文里恰好有个坏模块"而出现在程序的诊断里，这正是 H198 的范围与 H210 的报告要一致的地方（文本与 JSON 是同一份答案）。`Context::dumpModuleDiagnostics` 接收要打印的模块集合，命令不再自行遍历上下文拼装渲染。语言服务器的按需分析不解析遍列表，因此不会装载 pass 库；依赖模块的错误仍作为程序自己的错误报在 import 处，不需要另一套作用域。
@@ -61,5 +86,7 @@
 `test/cases/modules/graph_pass/` 里有两个用 Camel 写的遍，各与一个 C++ 遍做差分比较（`test/plans/feat/modules/graph.plan.toml`）：`neutral::integers`（`x + 0`、`0 + x`、`x - 0`、`x * 1`、`1 * x`）对 `std::opt::algebra neutral_only=true`，`unused::values`（无人读取的常量与纯运算）对 `std::opt::dce values_only=true`。两侧的 `std::jgir` 转储逐图相等（`normalize_origins` 去掉源码 origin 号，它们因编译过遍的库而不同）。两个参数是为这个对照加的、文档化的遍参数（`docs/cli.md`）。`is_written_slot(n)` 读出节点的值是否可能被原地写（传给 `var` 形参或改自身操作数的算子，经 GATE 传递），两个遍都跳过这样的节点，差分程序里有 `var`。
 
 `node_kinds_match_the_graph` 把一个带分支、闭包与折叠的程序的每张图的节点种类序列与 `std::jgir` 的转储逐一对过。
+
+标准库的 `opt::cse` 与 `opt::dce` 是同一套对照的库里版本，语料、性质断言与缺口清单见上一节"标准库里的 Camel 遍"。
 
 其余覆盖面：`imports::count`（导入 Camel 库的泛型函数 `array::flat_map`）与 `monomorphic::show`（直接调用单态导入函数 `libvals::nine` / `addOne`，返回真值）；`sharedvals::run`（同一个模块既是被运行的遍，又是被处理的程序导入的库，两边各用各的建图器，泛型 `twice` 在两边各有一个实例）与 `chain::show`（导入闭包传递：`chainlib` 再导入 `innerlib`）；`unparsable_pass::run`（遍模块解析不过，报 `InvalidPassParameter`，解析诊断作为从属位置给出文件、行、列与原行，不是异常结束）；同样的 `unparsable_pass_lib::run` 与各条命令路径（H210）：`run` 的解析失败与编译失败报告只打印程序自己的模块、`--timeit` 的文本与 JSON 都报 `InvalidPassParameter`、`camel: N errors` 只数程序自己的模块；`params::report` 的 `with` 参数，缺参、未知参数（带列号并列出声明）与类型不符的 `with` 参数诊断；`fold_constants::fold` 与 `typed_constants::make` 用 `add_constant` 造常量并提交（后者造 int、f64、bool、字符串四种，提交后逐一数回），两者的加强版都在 `CAMEL_GC_STRESS_SAFEPOINT` 下跑 safepoint；`regionprobe` 读出没有区域表的图的体（`region_of` 为区域 0，`region_kind` 为 `Root`）与内联后的 `Inline` 区域及父区域。

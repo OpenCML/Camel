@@ -1,0 +1,29 @@
+module dce_subject
+
+// The corpus of the dead-value comparison (H227). A value the compiler builds because it is a
+// call's argument, and that inlining takes the only user of away: the product and then the
+// constant it reads are dead one after the other, so a sweep that removes one round of them and
+// stops leaves the constant behind. `kept` is the other side of the corpus: its product is read,
+// and stays.
+//
+// The dead values are not in the compiled graph by themselves: a `let` of the source that no
+// expression reads is never built, so the pass needs a pass before it — `std::opt::inline` here —
+// to leave values nobody reads.
+
+func ignore(a: int): int {
+    return 5
+}
+
+func chain(x: int): int {
+    return ignore(x * 2)
+}
+
+func kept(x: int): int {
+    return (x * 2) + 1
+}
+
+func main(): int sync {
+    println(chain(3))
+    println(kept(5))
+    return 0
+}
