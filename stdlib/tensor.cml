@@ -87,6 +87,14 @@ export func set_num_threads(n: i32): void
 /// @example gemm_backend()
 export func gemm_backend(): string
 
+/// The thread count the matrix multiplication had for its most recent call: the run's thread
+/// count for a product that was the whole work, 1 for one call inside a batch region, where the
+/// worker pool already spends that budget. The count is one budget, not a second pool beside the
+/// workers: `num_threads()` is what the run was given, and this is what one product got.
+/// @effect reads the size of the worker pool
+/// @example gemm_threads()
+export func gemm_threads(): int
+
 /// Reseeds the module's random generator, which `random` and `randn` draw from.
 /// @effect writes the random generator
 /// @example seed(42)

@@ -1,0 +1,56 @@
+id = "perf.gemm_threads"
+order = 421
+tier = "slow"
+tags = ["perf", "tensor", "threads"]
+
+# The library GEMM's thread curve (design principles 7.6: one configuration, one result; and the
+# budget is a recorded decision, not a constant in the kernel).
+#
+# `-t` names one number of threads for the run. That number is spent in one place at a time: a
+# product that is the whole work gives the library all of it, and a product inside a batch region
+# gives each call one thread, because the pool already spreads the budget over the chunks. Before
+# this case existed the library's pool was capped at `min(-t, 4)`, which put the d=1024 training
+# step at 1146 ms/step while the same step compiled by torch took 369 ms/step: with sixteen
+# threads the library part of the step ran on four.
+#
+# The case prints one line per point (six thread counts, seven shapes of the naive-in-expert-out
+# sweep, both implementations), so the curve can be read out of a log and recorded next to the
+# sweep; `examples/models/naive-in-expert-out/results/2026-10-23-gemm-thread-budget-linux.json`
+# holds the run this decision was made from. There is no timing assertion here on purpose: the
+# reference host is shared, and a wall-clock budget would measure the neighbours. The plan checks
+# that every point of the curve is measured and finite — a missing or zeroed point is a defect in
+# the harness, and that is what a plan can hold.
+
+[[tests]]
+name = "curve"
+desc = "One process measures the library GEMM and the canonical GEMM at six thread counts over the shapes of the sweep: every point prints, none of them is zero or non-finite."
+kind = "behavior"
+case = "../../cases/perf/gemm_threads_curve.cml"
+args = ["${case}", "--arg", "rounds=1", "--arg", "reps=1", "tensor::fuse", "std::jit"]
+expect_exit = 0
+timeout_ms = 300000
+verify_script = """
+({ input, assert }) => {
+  // One line per point: "gemm_threads_curve round=0 t=8 shape=1024x1024x1024 path=library ms=5.1 checksum=1".
+  // Fields are read with plain string operations: no regular expression needs escaping through TOML.
+  const field = (line, key) => {
+    const at = line.indexOf(' ' + key + '=')
+    if (at < 0) return null
+    const rest = line.slice(at + key.length + 2)
+    const end = rest.indexOf(' ')
+    return end < 0 ? rest : rest.slice(0, end)
+  }
+  const lines = input.normalized.stdout.split('\n').filter((l) => l.includes(' path='))
+  assert(lines.length === 84, `expected 84 points (6 thread counts x 7 shapes x 2 paths), got ${lines.length}`)
+  const counts = new Set(lines.map((l) => field(l, 't')))
+  for (const t of ['1', '2', '4', '8', '16', '32']) assert(counts.has(t), `no point at ${t} threads`)
+  const shapes = new Set(lines.map((l) => field(l, 'shape')))
+  assert(shapes.size === 7, `expected 7 shapes, got ${[...shapes].join(' ')}`)
+  for (const line of lines) {
+    const ms = Number(field(line, 'ms'))
+    assert(Number.isFinite(ms) && ms > 0, `a point without a time: ${line}`)
+  }
+  const paths = new Set(lines.map((l) => field(l, 'path')))
+  assert(paths.has('library') && paths.has('canonical'), `missing an implementation: ${[...paths]}`)
+}
+"""

@@ -2,7 +2,7 @@ id = "modules.threads"
 order = 363
 tier = "fast"
 tags = ["feat", "modules", "tensor", "threads"]
-desc = "`-t` sets the tensor pool as it sets the scheduler, `CAMEL_NUM_THREADS` is gone, and the thread count changes no value: the pool reports the number the run was given, the default is the hardware concurrency, and a reduction and a GEMM produce the same bits at one thread and at four"
+desc = "`-t` sets the tensor pool as it sets the scheduler, `CAMEL_NUM_THREADS` is gone, and the thread count changes no value: the pool reports the number the run was given, the default is the hardware concurrency, the GEMM spends the run's number (all of it for a product that is the whole work, one thread per call inside a batch region), and a reduction and a GEMM produce the same bits at one thread, at four and at eight"
 
 # The value of record is the run's `-t` (EntryConfig::maxThreads); the tensor module installs it
 # into its kernel pool when it loads, and without `-t` every pool uses the machine's core count.
@@ -112,3 +112,60 @@ envs = ["CAMEL_NUM_THREADS=1"]
 expect_exit = 0
 compare_to = "values.cli_one"
 compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "values.cli_eight"
+desc = "The same reduction and GEMM at `-t 8` are bit-identical to the run at `-t 1`. The product stays on the canonical algorithm (33M multiply-adds, below the library's 2^30 shape threshold), which splits its output tiles over the pool and keeps every accumulator's order, so the relation is exact equality at every thread count, not a tolerance."
+kind = "differential"
+case = "../../../cases/modules/tensor/thread_values.cml"
+args = ["-t", "8", "--arg", "expected=8", "${case}", "std::fvm"]
+expect_exit = 0
+compare_to = "values.cli_one"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+# The library GEMM's share of the run's budget (gemm.cpp): `-t` is one number of threads for the
+# run, and the GEMM spends that number — all of it for a product that is the whole work, one thread
+# per call inside a batch region, where the pool already spends it. The program prints the count
+# each product actually had (`gemm_threads`) and exits non-zero when it is not the budget's; a wall
+# clock takes no part in it. Before the budget, `-t 16` gave a product four threads, so
+# `gemm_budget.cli_sixteen` was the red case.
+#
+# What makes these cases red: a cap on the library's own pool (`plain` then reports the cap, not the
+# budget), and a batch region that leaves the library its full share (`batched` then reports the
+# budget instead of 1, which is the oversubscription the cap used to prevent).
+
+[[tests]]
+name = "gemm_budget.cli_one"
+desc = "At `-t 1` one product is the budget and a batch of four takes one thread per call: `gemm_threads` reports 1 for both."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gemm_threads.cml"
+args = ["-t", "1", "--arg", "expected=1", "${case}", "tensor::fuse", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "gemm_threads pool=1 plain=1 batched=1 expected=1\n"
+
+[[tests]]
+name = "gemm_budget.cli_four"
+desc = "At `-t 4` the product takes four threads and the batched product's calls take one each: the batch loop already spends the budget over four chunks."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gemm_threads.cml"
+args = ["-t", "4", "--arg", "expected=4", "${case}", "tensor::fuse", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "gemm_threads pool=4 plain=4 batched=1 expected=4\n"
+
+[[tests]]
+name = "gemm_budget.cli_eight"
+desc = "At `-t 8` the product takes eight threads, not four: the number comes from the run's budget, not from a cap."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gemm_threads.cml"
+args = ["-t", "8", "--arg", "expected=8", "${case}", "tensor::fuse", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "gemm_threads pool=8 plain=8 batched=1 expected=8\n"
+
+[[tests]]
+name = "gemm_budget.cli_sixteen"
+desc = "At `-t 16` the product takes sixteen threads and the batched product's calls still take one: one budget, spent in one place at a time."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gemm_threads.cml"
+args = ["-t", "16", "--arg", "expected=16", "${case}", "tensor::fuse", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "gemm_threads pool=16 plain=16 batched=1 expected=16\n"

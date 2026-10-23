@@ -1,0 +1,758 @@
+{
+  "what": "The library GEMM's thread budget: the in-process curve that the budget is read from, and the training-step cells before and after the cap was removed",
+  "when": "2026-10-23T00:18:32",
+  "host": {
+    "name": "tangshan88",
+    "cpu": "AMD EPYC 7343, 16 cores / 32 logical threads",
+    "note": "A shared host: the load average moved between 11 and 148 during the session (other agents' builds and tests), and every absolute number here carries the load it was measured at. Compare numbers inside one window, never across windows."
+  },
+  "how": {
+    "curve": "test/cases/perf/gemm_threads_curve.cml, one process, `set_num_threads(t)` per point, twelve interleaved rounds, one product per visit, `sum` inside the timed region. `perf.gemm_threads` runs the same program.",
+    "cells": "examples/models/naive-in-expert-out train_step generated from the recorded sweep provenance (the substitution list and sha256 in 2026-10-23-sweep-linux-library.json), `camel -t T --block-limit 8192 train_step.cml <passes> --arg bench=true`, median of the thirteen timed steps, two rounds with the variants rotated.",
+    "torch": "torch_impl.py --variant compiled against the same init directory, same shape, median of thirteen timed steps, in a window after the cells."
+  },
+  "curve": {
+    "load_1m": 55.59,
+    "rounds": 12,
+    "points": [
+      {
+        "shape": "1024x1024x1024",
+        "1": {
+          "library": {
+            "median": 36.121,
+            "min": 20.775
+          },
+          "canonical": {
+            "median": 31.161,
+            "min": 22.754
+          }
+        },
+        "2": {
+          "library": {
+            "median": 24.452,
+            "min": 12.947
+          },
+          "canonical": {
+            "median": 25.015,
+            "min": 20.669
+          }
+        },
+        "4": {
+          "library": {
+            "median": 30.029,
+            "min": 6.808
+          },
+          "canonical": {
+            "median": 15.258,
+            "min": 6.805
+          }
+        },
+        "8": {
+          "library": {
+            "median": 36.146,
+            "min": 5.051
+          },
+          "canonical": {
+            "median": 14.083,
+            "min": 4.565
+          }
+        },
+        "16": {
+          "library": {
+            "median": 35.384,
+            "min": 4.746
+          },
+          "canonical": {
+            "median": 10.155,
+            "min": 5.25
+          }
+        },
+        "32": {
+          "library": {
+            "median": 50.333,
+            "min": 7.842
+          },
+          "canonical": {
+            "median": 10.391,
+            "min": 4.329
+          }
+        }
+      },
+      {
+        "shape": "2048x1024x1024",
+        "1": {
+          "library": {
+            "median": 46.085,
+            "min": 40.842
+          },
+          "canonical": {
+            "median": 52.081,
+            "min": 46.009
+          }
+        },
+        "2": {
+          "library": {
+            "median": 44.157,
+            "min": 25.186
+          },
+          "canonical": {
+            "median": 50.632,
+            "min": 24.589
+          }
+        },
+        "4": {
+          "library": {
+            "median": 39.403,
+            "min": 14.263
+          },
+          "canonical": {
+            "median": 31.342,
+            "min": 14.755
+          }
+        },
+        "8": {
+          "library": {
+            "median": 34.109,
+            "min": 9.76
+          },
+          "canonical": {
+            "median": 22.136,
+            "min": 9.726
+          }
+        },
+        "16": {
+          "library": {
+            "median": 38.807,
+            "min": 7.153
+          },
+          "canonical": {
+            "median": 21.0,
+            "min": 8.535
+          }
+        },
+        "32": {
+          "library": {
+            "median": 50.841,
+            "min": 14.118
+          },
+          "canonical": {
+            "median": 16.034,
+            "min": 10.772
+          }
+        }
+      },
+      {
+        "shape": "2048x1024x2048",
+        "1": {
+          "library": {
+            "median": 96.292,
+            "min": 85.586
+          },
+          "canonical": {
+            "median": 110.763,
+            "min": 99.398
+          }
+        },
+        "2": {
+          "library": {
+            "median": 97.064,
+            "min": 45.31
+          },
+          "canonical": {
+            "median": 95.997,
+            "min": 47.614
+          }
+        },
+        "4": {
+          "library": {
+            "median": 61.628,
+            "min": 28.784
+          },
+          "canonical": {
+            "median": 61.661,
+            "min": 27.785
+          }
+        },
+        "8": {
+          "library": {
+            "median": 44.95,
+            "min": 16.854
+          },
+          "canonical": {
+            "median": 42.814,
+            "min": 21.194
+          }
+        },
+        "16": {
+          "library": {
+            "median": 49.133,
+            "min": 15.65
+          },
+          "canonical": {
+            "median": 42.454,
+            "min": 19.853
+          }
+        },
+        "32": {
+          "library": {
+            "median": 50.843,
+            "min": 28.801
+          },
+          "canonical": {
+            "median": 35.812,
+            "min": 17.283
+          }
+        }
+      },
+      {
+        "shape": "1024x2048x1024",
+        "1": {
+          "library": {
+            "median": 46.831,
+            "min": 38.836
+          },
+          "canonical": {
+            "median": 48.892,
+            "min": 44.206
+          }
+        },
+        "2": {
+          "library": {
+            "median": 47.614,
+            "min": 26.524
+          },
+          "canonical": {
+            "median": 49.547,
+            "min": 25.018
+          }
+        },
+        "4": {
+          "library": {
+            "median": 42.45,
+            "min": 14.404
+          },
+          "canonical": {
+            "median": 29.896,
+            "min": 13.173
+          }
+        },
+        "8": {
+          "library": {
+            "median": 51.81,
+            "min": 9.475
+          },
+          "canonical": {
+            "median": 22.378,
+            "min": 9.709
+          }
+        },
+        "16": {
+          "library": {
+            "median": 13.57,
+            "min": 6.282
+          },
+          "canonical": {
+            "median": 15.377,
+            "min": 10.198
+          }
+        },
+        "32": {
+          "library": {
+            "median": 71.694,
+            "min": 16.973
+          },
+          "canonical": {
+            "median": 16.58,
+            "min": 8.742
+          }
+        }
+      },
+      {
+        "shape": "4x1024x1024x1024",
+        "1": {
+          "library": {
+            "median": 92.485,
+            "min": 80.4
+          },
+          "canonical": {
+            "median": 107.035,
+            "min": 101.962
+          }
+        },
+        "2": {
+          "library": {
+            "median": 96.659,
+            "min": 44.672
+          },
+          "canonical": {
+            "median": 103.933,
+            "min": 58.967
+          }
+        },
+        "4": {
+          "library": {
+            "median": 56.403,
+            "min": 26.954
+          },
+          "canonical": {
+            "median": 66.562,
+            "min": 28.894
+          }
+        },
+        "8": {
+          "library": {
+            "median": 57.811,
+            "min": 25.335
+          },
+          "canonical": {
+            "median": 60.591,
+            "min": 27.493
+          }
+        },
+        "16": {
+          "library": {
+            "median": 61.403,
+            "min": 29.518
+          },
+          "canonical": {
+            "median": 77.053,
+            "min": 27.128
+          }
+        },
+        "32": {
+          "library": {
+            "median": 66.923,
+            "min": 25.674
+          },
+          "canonical": {
+            "median": 62.741,
+            "min": 30.556
+          }
+        }
+      },
+      {
+        "shape": "32x64x64x16x64",
+        "1": {
+          "library": {
+            "median": 16.987,
+            "min": 12.041
+          },
+          "canonical": {
+            "median": 16.951,
+            "min": 11.962
+          }
+        },
+        "2": {
+          "library": {
+            "median": 18.407,
+            "min": 9.254
+          },
+          "canonical": {
+            "median": 17.907,
+            "min": 9.215
+          }
+        },
+        "4": {
+          "library": {
+            "median": 15.072,
+            "min": 8.895
+          },
+          "canonical": {
+            "median": 16.358,
+            "min": 10.757
+          }
+        },
+        "8": {
+          "library": {
+            "median": 19.64,
+            "min": 7.829
+          },
+          "canonical": {
+            "median": 16.753,
+            "min": 8.906
+          }
+        },
+        "16": {
+          "library": {
+            "median": 18.338,
+            "min": 8.302
+          },
+          "canonical": {
+            "median": 13.609,
+            "min": 8.91
+          }
+        },
+        "32": {
+          "library": {
+            "median": 17.656,
+            "min": 7.841
+          },
+          "canonical": {
+            "median": 16.735,
+            "min": 7.933
+          }
+        }
+      },
+      {
+        "shape": "512x256x512",
+        "1": {
+          "library": {
+            "median": 1.834,
+            "min": 1.602
+          },
+          "canonical": {
+            "median": 1.623,
+            "min": 1.567
+          }
+        },
+        "2": {
+          "library": {
+            "median": 1.63,
+            "min": 0.989
+          },
+          "canonical": {
+            "median": 1.638,
+            "min": 0.968
+          }
+        },
+        "4": {
+          "library": {
+            "median": 1.808,
+            "min": 0.664
+          },
+          "canonical": {
+            "median": 2.358,
+            "min": 0.624
+          }
+        },
+        "8": {
+          "library": {
+            "median": 1.613,
+            "min": 0.583
+          },
+          "canonical": {
+            "median": 0.941,
+            "min": 0.468
+          }
+        },
+        "16": {
+          "library": {
+            "median": 1.721,
+            "min": 0.495
+          },
+          "canonical": {
+            "median": 1.889,
+            "min": 0.585
+          }
+        },
+        "32": {
+          "library": {
+            "median": 2.879,
+            "min": 0.481
+          },
+          "canonical": {
+            "median": 2.224,
+            "min": 0.384
+          }
+        }
+      }
+    ]
+  },
+  "cells": {
+    "points": [
+      {
+        "window": "before (cap min(-t,4))",
+        "d": 1024,
+        "threads": 1,
+        "variant": "library",
+        "round": 0,
+        "median_ms": 6282.3,
+        "load_1m": 49.85
+      },
+      {
+        "window": "before (cap min(-t,4))",
+        "d": 1024,
+        "threads": 1,
+        "variant": "library",
+        "round": 1,
+        "median_ms": 3935.5,
+        "load_1m": 47.86
+      },
+      {
+        "window": "before (cap min(-t,4))",
+        "d": 1024,
+        "threads": 16,
+        "variant": "library",
+        "round": 0,
+        "median_ms": 2650.9,
+        "load_1m": 44.97
+      },
+      {
+        "window": "before (cap min(-t,4))",
+        "d": 1024,
+        "threads": 16,
+        "variant": "library",
+        "round": 1,
+        "median_ms": 2751.1,
+        "load_1m": 49.71
+      },
+      {
+        "window": "before (cap min(-t,4))",
+        "d": 1024,
+        "threads": 1,
+        "variant": "canonical",
+        "round": 0,
+        "median_ms": 7733.4,
+        "load_1m": 48.7
+      },
+      {
+        "window": "before (cap min(-t,4))",
+        "d": 1024,
+        "threads": 16,
+        "variant": "canonical",
+        "round": 0,
+        "median_ms": 2552.2,
+        "load_1m": 53.19
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 1,
+        "variant": "library",
+        "round": 0,
+        "median_ms": 5635.5,
+        "load_1m": 55.59
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 1,
+        "variant": "canonical",
+        "round": 0,
+        "median_ms": 7814.4,
+        "load_1m": 68.63
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 1,
+        "variant": "canonical",
+        "round": 1,
+        "median_ms": 7260.5,
+        "load_1m": 72.62
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 1,
+        "variant": "library",
+        "round": 1,
+        "median_ms": 3921.0,
+        "load_1m": 62.7
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 8,
+        "variant": "library",
+        "round": 0,
+        "median_ms": 2407.0,
+        "load_1m": 48.85
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 8,
+        "variant": "canonical",
+        "round": 0,
+        "median_ms": 2733.1,
+        "load_1m": 47.61
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 8,
+        "variant": "canonical",
+        "round": 1,
+        "median_ms": 2706.8,
+        "load_1m": 48.81
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 8,
+        "variant": "library",
+        "round": 1,
+        "median_ms": 3084.9,
+        "load_1m": 76.7
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 16,
+        "variant": "library",
+        "round": 0,
+        "median_ms": 3947.0,
+        "load_1m": 72.73
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 16,
+        "variant": "canonical",
+        "round": 0,
+        "median_ms": 2618.9,
+        "load_1m": 72.39
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 16,
+        "variant": "canonical",
+        "round": 1,
+        "median_ms": 2518.3,
+        "load_1m": 81.56
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 1024,
+        "threads": 16,
+        "variant": "library",
+        "round": 1,
+        "median_ms": 4299.0,
+        "load_1m": 79.31
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 1,
+        "variant": "library",
+        "round": 0,
+        "median_ms": 138.3,
+        "load_1m": 88.56
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 1,
+        "variant": "canonical",
+        "round": 0,
+        "median_ms": 139.8,
+        "load_1m": 90.52
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 1,
+        "variant": "canonical",
+        "round": 1,
+        "median_ms": 155.6,
+        "load_1m": 90.52
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 1,
+        "variant": "library",
+        "round": 1,
+        "median_ms": 149.9,
+        "load_1m": 89.28
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 8,
+        "variant": "library",
+        "round": 0,
+        "median_ms": 206.3,
+        "load_1m": 94.54
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 8,
+        "variant": "canonical",
+        "round": 0,
+        "median_ms": 159.9,
+        "load_1m": 99.94
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 8,
+        "variant": "canonical",
+        "round": 1,
+        "median_ms": 149.5,
+        "load_1m": 99.94
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 8,
+        "variant": "library",
+        "round": 1,
+        "median_ms": 139.4,
+        "load_1m": 96.98
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 16,
+        "variant": "library",
+        "round": 0,
+        "median_ms": 147.9,
+        "load_1m": 96.98
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 16,
+        "variant": "canonical",
+        "round": 0,
+        "median_ms": 145.5,
+        "load_1m": 99.79
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 16,
+        "variant": "canonical",
+        "round": 1,
+        "median_ms": 134.7,
+        "load_1m": 99.79
+      },
+      {
+        "window": "after (budget = -t)",
+        "d": 256,
+        "threads": 16,
+        "variant": "library",
+        "round": 1,
+        "median_ms": 83.6,
+        "load_1m": 104.37
+      }
+    ]
+  },
+  "torch": {
+    "load_1m": 147.81,
+    "points": [
+      {
+        "d": 1024,
+        "threads": 1,
+        "median_ms": null,
+        "load_1m": 110.42
+      },
+      {
+        "d": 1024,
+        "threads": 16,
+        "median_ms": null,
+        "load_1m": 102.73
+      }
+    ]
+  },
+  "reading": {
+    "cap_was": "commit e11a4e64c introduced `min(-t, 4)` from three points measured in one process (1024^3: 404 ms at 1 thread, 142 ms at 4, 693 ms at 32). Two of the three are on the quiet side of the curve; the 32-thread point was taken on this shared host under other agents' load, where an SMT-wide pool is the worst case, and 32 is also the logical-thread count of sixteen physical cores. There was no correctness reason: the licence bound in gemm.cpp holds for every summation order, so the cap was only ever a performance guess, and 2, 8 and 16 threads were never measured.",
+    "curve_says": "The library's best case keeps improving to sixteen threads (1024^3: 20.8 ms at 1, 6.8 at 4, 4.75 at 16) and gets worse again at 32, the logical-thread count. Its typical case is worse than the canonical kernel's from four threads up on a loaded host (1024^3 at 16, median: 35.4 vs 10.2 ms), which is the second pool -- OpenBLAS's workers -- competing with the tensor pool and the neighbours, and not the arithmetic: the minimum over twelve interleaved rounds is 4.75 ms for the same point.",
+    "cells_say": "Same window, interleaved, loads 45-81: with the cap the d=1024 step was 2650 and 2751 ms at 16 threads against 2552 for the canonical path measured in the same window, so the cap was at parity. With the run's budget instead of the cap it is 3947 and 4299 against 2518 and 2619, so uncapping made this step slower on this host, not faster. The recorded 1146 ms (2026-10-23-sweep-linux-shape.json, load 34-76) and 369 ms for torch.compile cannot be reproduced today: the host measured 2518-4299 ms for the same program, and torch compiled measured 5999 ms at one thread and 14448 ms at sixteen in the window after the cells. The 3.1x gap of that sweep is therefore not explained by the cap, and it is not re-measurable until the host is quiet again.",
+    "budget": "The budget is structural, not a number: one thread count for the run, spent in one place at a time. A library product that is the whole work takes all of `-t`; a library call inside a parallel region, or inside a batch loop that splits over the pool, takes one thread. `gemm_threads()` reports what a product got, and test/plans/feat/modules/threads.plan.toml pins it: the same number at 1, 4, 8 and 16 threads for a whole-work product, one for a batched product."
+  }
+}
