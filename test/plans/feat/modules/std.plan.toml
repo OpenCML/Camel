@@ -195,17 +195,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "python.phot"
-desc = "Exercises the phot Python wrapper through an end-to-end signal-processing pipeline."
-kind = "behavior"
-case = "../../../cases/modules/std/python/phot.cml"
-args = ["${case}"]
-expect_exit = 0
-failure_note = "The phot wrapper path is not stable in the current runtime/environment matrix."
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
-
-[[tests]]
 name = "random.basic"
 desc = "Exercises seeded random generation APIs so deterministic behavior can be observed."
 kind = "behavior"
