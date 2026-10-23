@@ -1,0 +1,9 @@
+h353 — 优化器保留张量叶写明的元素类型（分支 handover/h353-f64-leaf，1 提交 4c172da67，基线 102dbc5d1；合入 6a99194d5）
+
+**根因**：modules/nn/optim.cpp 的 `floatTensor` 把任何运行时 dtype 不是 Float32 的张量转成 Float32，`newLike`/`zerosLeaf` 也按 Float32 分配，循环用 `const float*`/`float*` 读写。于是一个写成 `Tensor<f64, [?]>` 的叶以 f32 数组回来，而类型说 f64。
+**修法**：**叶写明的元素类型决定算术与缓冲**——`leafElementType` 从张量类型读（类型没写元素类型的仍按 f32，与 stdlib/optim.cml 对同一拼法的规则一致）；`leafTensor` 原样送出（f32/f64 不再转换）；`sgdLeaf` 的 f32 用 float 学习率、f64 用 double；`adamLeaf` 对新 f64 路径调用 `k::adaptiveUpdate64`（modules/tensor/kernels/update.h/.cpp 新增 f64 入口，逐元素 `adaptiveUpdateOne`）；累加宽度不变（double，一次舍入），没有 float 局部量碰字节；f32 叶逐位不变。
+**守卫是性质而非文本**：test/cases/modules/optim/native_dtype_exact.cml + optim.plan.toml 的 `optim.native_tensor_leaf_keeps_its_element_type`（nvm/fvm/jit/prl、backends_agree、verify 脚本解码字节），并断言检查了多少（sgd 4 叶/8 元素、adam 2/4——空走查不可能通过）。
+**红前**（把修复 stash 掉、同一套 harness 上，四个后端）：total 16 / pass 12 / fail 4；`wide_bytes=[0,0,128,75,0,0,0,63]`（两个 f32：16777216.0、0.5），`wide_agrees=0`，`failures=3`；抓住它的行 plan:133（`wide_bytes=16`）、:146、:159、:171、:175。
+**绿后**：total 16 / pass 16；`wide_bytes` 16 字节 = 16777216.5 与 0.5 的 f64，`narrow_bytes` 8 字节 f32，`wide_agrees=1 narrow_agrees=1 failures=0`。
+闸门：分支上 5834/5820/0/14，另加 optim+tensor+nn+dtype 整份 179/179；**合入后协调者重跑整层：5834/5820/0/14**。
+它提出的另一半（**类型里没写元素类型**的叶两侧都窄化成 f32，`full([3,2], 0.1)` 48 字节→24）当场被裁定为 **A：现在就做、两侧一起**（"没写就是 f32"不是规则而是两侧共用的缺陷），见 reviews 的 f64-tensor-leaf 节；已另派 h362 执行。
