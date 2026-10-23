@@ -16,7 +16,9 @@
 //     bound is CPU (cpu-budget/room.plan.toml), CPU work over the budget is failed and named
 //     (cpu-budget/over.plan.toml), and a test that stops working is still killed by its
 //     liveness bound (cpu-budget/liveness.plan.toml). A CPU budget with nothing on the other
-//     side of it would be a bound that examined nothing.
+//     side of it would be a bound that examined nothing: cpu-budget/no-report.plan.toml is
+//     green in its exit code and its stdout and fails anyway, because the wrapper's reading
+//     never arrives.
 //
 //   node test/tools/selftest/load-class/run.mjs
 import path from 'node:path'
@@ -140,6 +142,32 @@ function expect(name, condition, detail) {
     )
 }
 
+{
+    const missing = run(process.execPath, [
+        runner,
+        path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'no-report.plan.toml'),
+        '--jobs',
+        '1',
+    ])
+    expect('cpu-budget no-report exits 1', missing.status === 1, `exit ${missing.status}: ${missing.output}`)
+    expect(
+        'cpu-budget no-report fails for the missing reading alone',
+        missing.output.includes('[FAIL] cpu_budget_no_report') &&
+            missing.output.includes('[SUMMARY] total: 1, pass: 0, fail: 1') &&
+            missing.output.includes('has no CPU reading') &&
+            // The fixture makes the wrapper's one read of /proc/self/stat fail, so the runner must
+            // name that reading and not a missing report: a report it never opened would be a
+            // different case.
+            missing.output.includes('no /proc/self/stat') &&
+            // The command exited 0 and printed exactly what the plan expects: if either of those
+            // had failed, the run would say so, and this fixture would be proving something else.
+            !missing.output.includes('expected exit 0, got') &&
+            !missing.output.includes('stdout does not contain') &&
+            !missing.output.includes('expect_stdout'),
+        missing.output
+    )
+}
+
 // The fixture run writes a log directory under test/results like any other run; the outer
 // runner keeps its own. Nothing here deletes a path the caller owns.
 if (problems.length > 0) {
@@ -148,6 +176,7 @@ if (problems.length > 0) {
 }
 console.log(
     'load-class self-test ok: 3 shared-place rules fire on a bad plan, none on a good one, ' +
-        'the runner refuses a timeout with no margin, and a CPU budget passes what the wall ' +
-        'clock fails, fails work over it, and leaves the liveness bound to catch a test that waits'
+        'the runner refuses a timeout with no margin, a CPU budget passes what the wall clock ' +
+        'fails, fails work over it, leaves the liveness bound to catch a test that waits, and ' +
+        'fails a test whose CPU reading never arrives even when its exit code and stdout are green'
 )
