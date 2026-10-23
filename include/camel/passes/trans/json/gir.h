@@ -28,8 +28,9 @@ std::string dumpJsonRuntimeGraph(
 /// declarations as atoms. `docs/technical/gir-interchange.md`, "Canonical documents".
 std::string
 dumpCanonicalRuntimeGraph(const camel::runtime::Program &program, camel::runtime::GCGraph *root);
-/// The parameters of `std::jgir`; the default options produce the version 1 document.
-PassDescriptor jgirDescriptor();
+/// The implementation of `std::jgir`; its name, documentation and parameters are the
+/// declaration in stdlib/std.cml.
+PassMaker jgirPass();
 
 class JsonGirDumpPass : public RuntimeGraphTranslatePass {
   public:
@@ -41,3 +42,4 @@ class JsonGirDumpPass : public RuntimeGraphTranslatePass {
   private:
     JsonGirOptions options_;
 };
+

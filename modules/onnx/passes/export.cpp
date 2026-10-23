@@ -46,7 +46,7 @@ using camel::runtime::GCNodeKind;
 
 namespace {
 
-constexpr const char *kPassName   = "onnx::export";
+constexpr const char *kPassName = "onnx::export_model";
 constexpr const char *kRequestUri = "onnx:export_model";
 
 /// Why the pass does not translate, and the node it is about. A refusal that is about no
@@ -494,7 +494,7 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
                   "inlines (std::opt or std::opt::inline)")
             : std::format(
                   "raise the budget by writing a larger growth_budget on {} (for example "
-                  "{}(growth_budget=8192))",
+                  "{} growth_budget=8192)",
                   report->passName,
                   report->passName);
     const std::string budget = std::format("{} nodes, {}", report->growthBudget, source);
@@ -757,17 +757,22 @@ OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) 
 
 void registerOnnxPasses() {
     PassDescriptor descriptor;
-    descriptor.doc    = "translate the program to an ONNX model";
+    // The pass's documentation and its name are its module declaration's; the parameters are
+    // `out` alone, and the exporter's own signature carries the rest.
     descriptor.params = {PassParam{
         "out",
         PassParamType::String,
         std::string(),
         "the model file; overrides the path argument of onnx.export_model (then exactly one "
         "call is allowed) and names the file when the program makes no request"}};
-    descriptor.make   = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
+    descriptor.make = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<OnnxExportPass>(ctx, args.getString("out"));
     };
     registerModulePass(kPassName, std::move(descriptor));
+    // The pass is named for the function it wraps (`onnx.export_model`); the old spelling stays
+    // an alias.
+    registerPassAlias("onnx::export", kPassName);
 }
 
 } // namespace camel::onnx::passes
+

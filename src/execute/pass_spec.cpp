@@ -10,6 +10,7 @@
 #include "camel/utils/token.h"
 
 #include <algorithm>
+#include <cctype>
 #include <atomic>
 #include <cmath>
 #include <format>
@@ -84,7 +85,6 @@ PassDescriptor passWithoutParameters(PassFactory factory) {
 std::vector<std::string> splitPassList(std::string_view text) {
     std::vector<std::string> out;
     std::string current;
-    int depth      = 0;
     char quote     = 0;
     const auto add = [&] {
         size_t first = current.find_first_not_of(" \t\r\n");
@@ -107,17 +107,35 @@ std::vector<std::string> splitPassList(std::string_view text) {
         }
         if (c == '"' || c == '\'') {
             quote = c;
-        } else if (c == '(' || c == '[' || c == '{') {
-            ++depth;
-        } else if (c == ')' || c == ']' || c == '}') {
-            depth = std::max(0, depth - 1);
-        } else if (c == ',' && depth == 0) {
+        } else if (c == ',') {
             add();
             continue;
         }
         current += c;
     }
     add();
+    return out;
+}
+
+std::vector<std::string> groupPassWords(const std::vector<std::string> &words, size_t first) {
+    std::vector<std::string> out;
+    for (size_t i = first; i < words.size(); ++i) {
+        const std::string &word = words[i];
+        const size_t equals     = word.find('=');
+        // A parameter is a word whose text before `=` is a bare name (`safe_fp=true`); a word
+        // that is a whole pass (`std::fvm stats=""`) starts a specification of its own.
+        const bool parameter =
+            equals != std::string::npos && equals > 0 &&
+            std::all_of(
+                word.begin(), word.begin() + static_cast<std::ptrdiff_t>(equals), [](char c) {
+                    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+                });
+        if (parameter && !out.empty()) {
+            out.back() += " " + word;
+        } else {
+            out.push_back(word);
+        }
+    }
     return out;
 }
 
@@ -367,14 +385,6 @@ std::string withArticle(const char *type) {
 
 bool isIdentifierChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
 
-std::string trimmed(const std::string &s) {
-    const size_t first = s.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos)
-        return std::string();
-    const size_t last = s.find_last_not_of(" \t\r\n");
-    return s.substr(first, last - first + 1);
-}
-
 } // namespace
 
 // -----------------------------------------------------------------------------
@@ -382,8 +392,6 @@ std::string trimmed(const std::string &s) {
 // -----------------------------------------------------------------------------
 
 namespace {
-
-std::atomic<size_t> g_defaultEvaluations{0};
 
 PassParamType declarationType(const std::string &written, const std::string &parameter) {
     if (written == "bool") {
@@ -461,30 +469,12 @@ std::string firstParseError(
 
 } // namespace
 
-std::vector<PassParam> declarePassParams(
-    std::string_view declaration,
-    std::initializer_list<std::pair<std::string_view, std::string_view>> docs) {
-    const std::string source =
-        "func __pass(" + std::string(declaration) + "): int { return 0 }\n";
-    auto sources = std::make_shared<camel::source::SourceContext>();
-    auto diags   = std::make_shared<camel::core::error::Diagnostics>(
-        "pass", "<pass declaration>", sources);
-    camel::parse::CamelParser parser(diags);
-    parser.setSourceContext(sources);
-    std::istringstream is(source);
-    if (!parser.parse(is) || diags->hasErrors() || !parser.ast()) {
-        throw std::runtime_error(std::format(
-            "'{}': {}",
-            declaration,
-            firstParseError(diags, "the declaration is not valid Camel syntax")));
-    }
-
+std::vector<PassParam> camel::execute::detail::readPassParams(
+    const ast::node_ptr_t &withParams, std::string_view passName) {
     std::vector<PassParam> declared;
     try {
-        // Module -> Stmts -> FuncDecl -> FuncData -> FuncType -> NamedPair*
-        auto funcType = parser.ast()->at(2)->at(0)->at(0)->at(0);
         std::vector<ast::node_ptr_t> pairs;
-        collectParamPairs(funcType, pairs);
+        collectParamPairs(withParams, pairs);
         bool sawDefault = false;
         std::string defaulted;
         for (const auto &pair : pairs) {
@@ -492,20 +482,22 @@ std::vector<PassParam> declarePassParams(
             if (named->isRest() || named->isVar() || named->isConst() || named->isConstas() ||
                 named->isTupleParam()) {
                 throw std::runtime_error(std::format(
-                    "pass declaration: the parameter '{}' is not an ordinary parameter",
+                    "pass declaration '{}': the parameter '{}' is not an ordinary parameter",
+                    passName,
                     named->getRef().toString()));
             }
             const std::string name = named->getRef().toString();
             if (pair->size() == 0 || pair->at(0)->type() != ast::LoadType::Type) {
                 throw std::runtime_error(std::format(
-                    "pass declaration: the parameter '{}' has no type", name));
+                    "pass declaration '{}': the parameter '{}' has no type", passName, name));
             }
             const auto typeLoad =
                 std::dynamic_pointer_cast<ast::TypeLoad>(pair->at(0)->load());
             if (!typeLoad || typeLoad->typeType() != ast::TypeType::Ref) {
                 throw std::runtime_error(std::format(
-                    "pass declaration: the parameter '{}' has a type that is not a pass "
+                    "pass declaration '{}': the parameter '{}' has a type that is not a pass "
                     "parameter type",
+                    passName,
                     name));
             }
             PassParam param;
@@ -519,7 +511,8 @@ std::vector<PassParam> declarePassParams(
                     value = evalNode(expr);
                 } catch (const EvalError &e) {
                     throw std::runtime_error(std::format(
-                        "pass declaration: the default of '{}' is not a constant: {}",
+                        "pass declaration '{}': the default of '{}' is not a constant: {}",
+                        passName,
                         name,
                         e.message));
                 }
@@ -529,21 +522,22 @@ std::vector<PassParam> declarePassParams(
                 }
                 if (!fits(param.type, value)) {
                     throw std::runtime_error(std::format(
-                        "pass declaration: the default of '{}' is {}, not {}",
+                        "pass declaration '{}': the default of '{}' is {}, not {}",
+                        passName,
                         name,
                         withArticle(kindOf(value)),
                         withArticle(passParamTypeName(param.type))));
                 }
                 param.defaultValue = std::move(value);
                 param.required     = false;
-                ++g_defaultEvaluations;
                 sawDefault = true;
                 defaulted  = name;
             } else {
                 if (sawDefault) {
                     throw std::runtime_error(std::format(
-                        "pass declaration: the parameter '{}' has no default and follows '{}', "
-                        "which has one",
+                        "pass declaration '{}': the parameter '{}' has no default and follows "
+                        "'{}', which has one",
+                        passName,
                         name,
                         defaulted));
                 }
@@ -554,23 +548,10 @@ std::vector<PassParam> declarePassParams(
         }
     } catch (const std::out_of_range &) {
         throw std::runtime_error(
-            std::format("'{}': the declaration could not be read", declaration));
-    }
-
-    for (const auto &[name, doc] : docs) {
-        const auto it = std::find_if(declared.begin(), declared.end(), [&](const PassParam &p) {
-            return p.name == name;
-        });
-        if (it == declared.end()) {
-            throw std::runtime_error(std::format(
-                "pass declaration: there is no parameter '{}' to document", name));
-        }
-        it->doc = doc;
+            std::format("pass declaration '{}': the parameters could not be read", passName));
     }
     return declared;
 }
-
-size_t passParamDefaultEvaluations() { return g_defaultEvaluations.load(); }
 
 // -----------------------------------------------------------------------------
 // parseSpec
@@ -578,127 +559,157 @@ size_t passParamDefaultEvaluations() { return g_defaultEvaluations.load(); }
 
 std::optional<ParamProblem>
 camel::execute::detail::parseSpec(const std::string &spec, ParsedSpec &out) {
-    out               = {};
-    const size_t open = spec.find('(');
-    if (open == std::string::npos) {
-        out.name = trimmed(spec);
-        return std::nullopt;
+    out                       = {};
+    const size_t firstContent = spec.find_first_not_of(" \t\r\n");
+    if (firstContent == std::string::npos) {
+        ParamProblem problem;
+        problem.kind   = ParamProblemKind::Syntax;
+        problem.text   = "the pass specification is empty";
+        problem.column = 0;
+        problem.length = 1;
+        return problem;
     }
-    out.name           = trimmed(spec.substr(0, open));
-    const size_t close = spec.find_last_not_of(" \t\r\n");
-    if (close == std::string::npos || spec[close] != ')') {
-        return ParamProblem{ParamProblemKind::Syntax, "missing ')' after the parameters"};
+    size_t nameEnd = firstContent;
+    while (nameEnd < spec.size() && !std::isspace(static_cast<unsigned char>(spec[nameEnd]))) {
+        ++nameEnd;
     }
-    const std::string argText = spec.substr(open + 1, close - open - 1);
-    if (trimmed(argText).empty()) {
-        return std::nullopt;
+    out.name = spec.substr(firstContent, nameEnd - firstContent);
+
+    // A parameter is a word of its own after the name. The parentheses form is gone.
+    if (const size_t open = out.name.find('('); open != std::string::npos) {
+        ParamProblem problem;
+        problem.kind   = ParamProblemKind::Syntax;
+        problem.text   = "a pass parameter is written key=value after the pass name, not in "
+                         "parentheses";
+        problem.column = firstContent + open;
+        problem.length = 1;
+        return problem;
     }
 
-    // The parameters are read by the language's parser, as the arguments of a call.
-    const std::string source = "let v = f(" + argText + ");\n";
-    auto sources             = std::make_shared<camel::source::SourceContext>();
-    auto diags =
-        std::make_shared<camel::core::error::Diagnostics>("pass", "<pass specification>", sources);
-    camel::parse::CamelParser parser(diags);
-    parser.setSourceContext(sources);
-    std::istringstream is(source);
-    if (!parser.parse(is) || diags->hasErrors() || !parser.ast()) {
-        ParamProblem problem;
-        problem.kind   = ParamProblemKind::Syntax;
-        problem.text   = firstParseError(diags, "the parameters are not valid Camel syntax");
-        problem.column = open + 1;
-        problem.length = close - open - 1;
-        return problem;
-    }
-    // Module -> Stmts -> DataDecl -> Data -> call; the call holds its positional arguments and,
-    // separately, the named ones (`x: 1`). A written `x=1` is a positional argument whose value
-    // is an assignment, the spelling the pipeline has always accepted.
-    try {
-        auto decl              = parser.ast()->at(2)->at(0); // DataDecl
-        const auto &call       = decl->at(1)->at(0);         // the call
-        const auto &positional = call->at(1);
-        size_t cursor          = open + 1;
-        const auto add         = [&](const ast::node_ptr_t &arg,
-                             bool named) -> std::optional<ParamProblem> {
-            std::string key;
-            ast::node_ptr_t value;
-            if (named) {
-                key   = arg->loadAs<ast::NamedDataLoad>()->ref().toString();
-                value = arg->at(0);
+    size_t cursor = nameEnd;
+    while (true) {
+        while (cursor < spec.size() && std::isspace(static_cast<unsigned char>(spec[cursor]))) {
+            ++cursor;
+        }
+        if (cursor >= spec.size()) {
+            break;
+        }
+        const size_t wordStart = cursor;
+        std::string word;
+        char quote = 0;
+        while (cursor < spec.size()) {
+            const char c = spec[cursor];
+            if (quote != 0) {
+                word += c;
+                ++cursor;
+                if (c == '\\' && cursor < spec.size()) {
+                    word += spec[cursor++];
+                } else if (c == quote) {
+                    quote = 0;
+                }
+                continue;
+            }
+            if (c == '"' || c == '\'') {
+                quote = c;
+                word += c;
+                ++cursor;
+                continue;
+            }
+            if (std::isspace(static_cast<unsigned char>(c))) {
+                break;
+            }
+            word += c;
+            ++cursor;
+        }
+        if (quote != 0) {
+            ParamProblem problem;
+            problem.kind   = ParamProblemKind::Syntax;
+            problem.text   = std::format("'{}': the string is not closed", word);
+            problem.column = wordStart;
+            problem.length = word.size();
+            return problem;
+        }
+        const size_t equals = word.find('=');
+        if (equals == std::string::npos) {
+            ParamProblem problem;
+            problem.kind = ParamProblemKind::Syntax;
+            if (const size_t colon = word.find(':'); colon != std::string::npos &&
+                                                     word.find("::") == std::string::npos) {
+                problem.text = std::format(
+                    "'{}': a pass parameter is written key=value on the command line; "
+                    "key: value is the spelling of a named argument in Camel source",
+                    word);
             } else {
-                const bool assign =
-                    arg->type() == ast::LoadType::Data &&
-                    std::dynamic_pointer_cast<ast::BinaryExprLoad>(arg->load()) &&
-                    arg->loadAs<ast::BinaryExprLoad>()->op() == ast::BinaryDataOp::Assign &&
-                    std::dynamic_pointer_cast<ast::RefDataLoad>(arg->at(0)->load());
-                if (!assign) {
-                    ParamProblem problem;
-                    problem.kind   = ParamProblemKind::Syntax;
-                    problem.text   = std::format(
-                        "parameter {} is not written name=value (a pass takes named parameters "
-                        "only)",
-                        out.params.size() + 1);
-                    problem.column = open + 1;
-                    problem.length = close - open - 1;
-                    return problem;
-                }
-                key   = arg->at(0)->loadAs<ast::RefDataLoad>()->ref().toString();
-                value = arg->at(1);
+                problem.text = std::format(
+                    "'{}' is not a parameter: a parameter is written key=value", word);
             }
-            WrittenParam param;
-            param.key = key;
-            // The column of the key: the next occurrence as a whole word whose next
-            // non-blank character is `=` or `:`.
-            size_t at = cursor;
-            while ((at = spec.find(param.key, at)) != std::string::npos) {
-                const bool left  = at == 0 || !isIdentifierChar(spec[at - 1]);
-                size_t next      = at + param.key.size();
-                while (next < spec.size() && (spec[next] == ' ' || spec[next] == '\t')) {
-                    ++next;
-                }
-                const bool right =
-                    left && next < spec.size() && (spec[next] == '=' || spec[next] == ':');
-                if (right)
-                    break;
-                ++at;
-            }
-            param.column = at == std::string::npos ? open + 1 : at;
-            if (at != std::string::npos)
-                cursor = at + param.key.size();
-            try {
-                param.value = evalNode(value);
-            } catch (const EvalError &e) {
-                ParamProblem problem;
-                problem.kind   = ParamProblemKind::Syntax;
-                problem.text   = std::format("parameter '{}': {}", param.key, e.message);
-                problem.name   = param.key;
-                problem.column = param.column;
-                problem.length = param.key.size();
-                return problem;
-            }
-            out.params.push_back(std::move(param));
-            return std::nullopt;
-        };
-        for (size_t i = 0; i < positional->size(); ++i) {
-            if (auto problem = add(positional->at(i), false)) {
-                return problem;
-            }
+            problem.column = wordStart;
+            problem.length = word.size();
+            return problem;
         }
-        if (call->size() > 2) {
-            const auto &named = call->at(2);
-            for (size_t i = 0; i < named->size(); ++i) {
-                if (auto problem = add(named->at(i), true)) {
-                    return problem;
-                }
-            }
+        const std::string key   = word.substr(0, equals);
+        const std::string value = word.substr(equals + 1);
+        if (key.empty() || !std::all_of(key.begin(), key.end(), isIdentifierChar)) {
+            ParamProblem problem;
+            problem.kind   = ParamProblemKind::Syntax;
+            problem.text   = std::format("'{}' is not a parameter name", key);
+            problem.column = wordStart;
+            problem.length = word.size();
+            return problem;
         }
-    } catch (const std::out_of_range &) {
-        ParamProblem problem;
-        problem.kind   = ParamProblemKind::Syntax;
-        problem.text   = "the parameters could not be read";
-        problem.column = open + 1;
-        problem.length = close - open - 1;
-        return problem;
+        if (value.empty()) {
+            ParamProblem problem;
+            problem.kind   = ParamProblemKind::Syntax;
+            problem.text   = std::format("the parameter '{}' has no value", key);
+            problem.column = wordStart;
+            problem.length = word.size();
+            return problem;
+        }
+
+        // The value is a Camel constant expression, read by the language's parser as the value
+        // of one named argument.
+        const std::string source = "let v = f(" + key + ": " + value + ");\n";
+        auto sources             = std::make_shared<camel::source::SourceContext>();
+        auto diags               = std::make_shared<camel::core::error::Diagnostics>(
+            "pass", "<pass specification>", sources);
+        camel::parse::CamelParser parser(diags);
+        parser.setSourceContext(sources);
+        std::istringstream is(source);
+        if (!parser.parse(is) || diags->hasErrors() || !parser.ast()) {
+            ParamProblem problem;
+            problem.kind   = ParamProblemKind::Syntax;
+            problem.text   = firstParseError(
+                diags, std::format("the value of '{}' is not a constant", key));
+            problem.name   = key;
+            problem.column = wordStart;
+            problem.length = word.size();
+            return problem;
+        }
+        WrittenParam param;
+        param.key   = key;
+        param.column = wordStart;
+        try {
+            const auto &call   = parser.ast()->at(2)->at(0)->at(1)->at(0);
+            const auto &named  = call->at(2)->at(0);
+            param.value        = evalNode(named->at(0));
+        } catch (const std::out_of_range &) {
+            ParamProblem problem;
+            problem.kind   = ParamProblemKind::Syntax;
+            problem.text   = std::format("the value of '{}' could not be read", key);
+            problem.name   = key;
+            problem.column = wordStart;
+            problem.length = word.size();
+            return problem;
+        } catch (const EvalError &e) {
+            ParamProblem problem;
+            problem.kind   = ParamProblemKind::Syntax;
+            problem.text   = std::format("the value of '{}' is not a constant: {}", key, e.message);
+            problem.name   = key;
+            problem.column = wordStart;
+            problem.length = word.size();
+            return problem;
+        }
+        out.params.push_back(std::move(param));
     }
     return std::nullopt;
 }
@@ -783,3 +794,5 @@ std::optional<ParamProblem> camel::execute::detail::bindArgs(
     }
     return std::nullopt;
 }
+
+

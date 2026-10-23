@@ -242,7 +242,7 @@ class ParamEchoTestPass : public GraphIRPass {
 
 void registerParamEchoTestPass() {
     PassDescriptor descriptor;
-    descriptor.doc = "prints the parameters it received (a test pass)";
+    // Documentation and parameters are the declaration in stdlib/tensor.cml.
     descriptor.params = {
         PassParam{"n", PassParamType::Int, int64_t{1}, "an int"},
         PassParam{"ratio", PassParamType::Float, 0.5, "a float"},
@@ -260,9 +260,7 @@ void registerParamEchoTestPass() {
 
 void registerTensorPasses() {
     PassDescriptor descriptor;
-    descriptor.doc =
-        "records how the tensor operators run as node attributes (tensor.kernel, tensor.fusion) "
-        "without changing an operator";
+    // The pass declares `safe_fp` in its module declaration (stdlib/tensor.cml).
     descriptor.params = {PassParam{
         "safe_fp",
         PassParamType::Bool,

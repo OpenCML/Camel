@@ -10,7 +10,7 @@
  *                  node's effective numeric permissions, read through
  *                  tag::effectivePermissions, which applies the stage's policy
  *                  (relaxed by default: reassociate allowed) and withholds everything from a
- *                  `#strict` node. `tensor::fuse(safe_fp=true)` uses the strict policy, so the
+ *                  `#strict` node. `tensor::fuse safe_fp=true` uses the strict policy, so the
  *                  safe mode's matmul runs the canonical algorithm (7.4).
  *   tensor.fusion  on the nodes of `x @ w + b` and `relu(x @ w + b)` when nothing outside the
  *                  pattern observes the product: "linear" or "linear_relu" on the matmul, the
@@ -37,7 +37,7 @@ class TensorFusePass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
   private:
-    /// tensor::fuse(safe_fp=true): the canonical algorithm for every matmul (design principles
+    /// tensor::fuse safe_fp=true: the canonical algorithm for every matmul (design principles
     /// 7.4); the default uses the stage's relaxed policy (7.3).
     bool safeFp_ = false;
 };

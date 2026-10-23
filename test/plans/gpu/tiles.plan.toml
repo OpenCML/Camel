@@ -1215,7 +1215,7 @@ kind = "behavior"
 case = "../../cases/gpu/nofallback/supported.cml"
 # Every operator in the scope has a device program for its static shapes: the pass accepts it and
 # the region runs on the device (one kernel), not on the host.
-args = ["${case}", 'std::profile(json="${test_tmp}/profile.json")', "tiles::compile", "std::nvm"]
+args = ["${case}", 'std::profile json="${test_tmp}/profile.json"', "tiles::compile", "std::nvm"]
 skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
 expect_exit = 0
 verify_script = """
@@ -1260,7 +1260,7 @@ kind = "behavior"
 case = "../../cases/gpu/nofallback/host.cml"
 # The same program without the tag: no placement fact, and the matmul runs on the host. Pinned
 # as it is today; the host side of the preference path is scheduled for deletion.
-args = ["${case}", 'std::profile(json="${test_tmp}/profile.json")', "tiles::compile", "std::nvm"]
+args = ["${case}", 'std::profile json="${test_tmp}/profile.json"', "tiles::compile", "std::nvm"]
 expect_exit = 0
 verify_script = """
 async ({ input, assert }) => {
@@ -1280,7 +1280,7 @@ kind = "behavior"
 case = "../../cases/gpu/nofallback/shape_generic.cml"
 # h251: the type-only template cannot fix the shapes, so the run retries with the actual arguments
 # and still gets a device program. A refusal here would break a call the device can serve.
-args = ["${case}", 'std::profile(json="${test_tmp}/profile.json")', "tiles::compile", "std::nvm"]
+args = ["${case}", 'std::profile json="${test_tmp}/profile.json"', "tiles::compile", "std::nvm"]
 skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
 expect_exit = 0
 verify_script = """

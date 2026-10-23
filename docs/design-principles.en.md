@@ -460,7 +460,7 @@ Keywords are kept only for modifiers that change semantics (such as `sync`, `exp
 ### 7.4 Tightening
 
 - The tag `#strict` makes the marked function or code block compute bit by bit by the canonical algorithm, using no permission (the default permissions included).
-- For the whole program, use the safe mode of the pipeline parameter: `std::opt(safe_fp=true)` and the parameter of the same name of each back end (a back end turns off the default relaxation and computes bit by bit by the canonical algorithm).
+- For the whole program, use the safe mode of the pipeline parameter: `std::opt safe_fp=true` and the parameter of the same name of each back end (a back end turns off the default relaxation and computes bit by bit by the canonical algorithm).
 - **`std::opt::algebra` is an independent general algebraic optimization pass, integrated by default in `std::opt`.** `safe_fp=true` restricts the algebra stage to strictly equivalent floating-point transformations, including provably equivalent coefficient doubling; even if a node has wider permissions, this stage does not use them to change the rounding path. Constant folding still follows the canonical algorithm, and integers still wrap by their bit width. This is a policy choice of algebraic optimization, not the algorithm of the run-time operators or a global floating-point switch of the whole pipeline; rewrites already made by earlier passes are not rolled back.
 
 ### 7.5 Scope

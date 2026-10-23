@@ -85,7 +85,7 @@ struct FastVMConfig {
     size_t jitHotThreshold = 1;
     bool enableJitTraceMir = false;
     /// File that receives per-graph bytecode and execution counts at the end of the run
-    /// (`std::fvm(stats="file")`); empty: none.
+    /// (`std::fvm stats="file"`); empty: none.
     std::string statsPath;
 };
 

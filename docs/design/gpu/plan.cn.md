@@ -449,7 +449,7 @@ Draft §1 记下的缺口是"设备 64 MiB / 32 项"：训练规模下每步的�
 
 ### 6.4 放置断言（"每个算子都在 GPU 上"怎么测）
 
-`std::profile(json=…)` 已经记录每个设备内核、每次传输、每次同步与每次 NVRTC 编译（`include/camel/profile/profile.h`），`hints` 列出留在主机上的逐元素循环及原因。验收断言：
+`std::profile json=…` 已经记录每个设备内核、每次传输、每次同步与每次 NVRTC 编译（`include/camel/profile/profile.h`），`hints` 列出留在主机上的逐元素循环及原因。验收断言：
 
 - 训练步的循环里 `kernels > 0`，且 `toDevice`/`toHost` 每步是**常数**（不随层数增长）；
 - 每步 `syncs` 是常数（段数 + 出口的 1 次），不随算子数增长；

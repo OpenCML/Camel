@@ -69,7 +69,7 @@ camel prog.cml std::jit                 # 带即时编译运行
 camel prog.cml std::prl                 # 并行调度
 camel prog.cml std::opt std::fvm        # 先优化，再运行
 camel prog.cml std::rgir                # 不运行，打印图（Graphviz DOT）
-camel prog.cml std::macro std::opt 'onnx::export(out="model.onnx")'   # 把 `main` 导出为 ONNX 模型
+camel prog.cml std::macro std::opt 'onnx::export out="model.onnx"'   # 把 `main` 导出为 ONNX 模型
 ```
 
 自动微分（`autodiff` 模块的 `grad`）与 ONNX 导出是建立在同一套遍机制之上的库。[入门教程](tutorial/tutorial.cn.md)会带你看图、换流水线、导出一个小模型、求一次梯度。

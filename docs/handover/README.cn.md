@@ -577,7 +577,7 @@ H237 发现：张量的公开元素类型实际只有 f32、i64、bool，**f64 �
 
 **H3a 已完成**（分支 `handover/H102-fusion-keeps-operator`，报告 note ⟨ebfc812⟩）：图上的算子保持
 `matmul`/`add`/`relu`，`tensor::fuse` 只写 `tensor.kernel`（"library"/"canonical"，按 7.3 的有效许可
-判定，`#strict` 与 `tensor::fuse(safe_fp=true)` 得到 canonical）与 `tensor.fusion`（"linear"/
+判定，`#strict` 与 `tensor::fuse safe_fp=true` 得到 canonical）与 `tensor.fusion`（"linear"/
 "linear_relu"，组内每个节点都写）；`matmul_blas`、`matmul_add`、`matmul_add_relu` 的注册、内核、
 VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到的就是程序写的算子。逐位证据在
 `fuse_bits`（四种运行逐字节相同）与 `gemm_canonical.fused`；安全模式下融合与不融合相同是构造性的，

@@ -325,7 +325,7 @@ whole-process CPU time, load average 60 to 75):
 | merged tree (loop compiled) | 1.611 s | 0.457 s | **0.363 s** | 0.309 s | 0.084 s |
 
 `std::jit` is 20% faster than the interpreter in the same batch (0.363 against 0.457 s) and 16%
-faster than its own H43-perf number; `std::jit(hot_threshold=0)` gives the same 0.363 s, and
+faster than its own H43-perf number; `std::jit hot_threshold=0` gives the same 0.363 s, and
 `std::jit` without a parameter now compiles the loop too — the entry function `main` is called once,
 which the call-count threshold used to leave interpreted. The compiled round is 36.3 ns against
 8.4 ns for the same work as a compiled tail recursion; the difference is the two helper calls and

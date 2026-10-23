@@ -5,7 +5,7 @@
  * Default mode grants `reassociate` (7.3), so a plain matmul may use the library GEMM; `#strict`
  * withholds the defaults (7.4), so the matmul inside its block runs the canonical algorithm.
  * Both `matmul`+`add` patterns are still recorded as groups: identity is preserved, so the nodes
- * of one group need not agree on permissions. Safe mode (`tensor::fuse(safe_fp=true)`) makes
+ * of one group need not agree on permissions. Safe mode (`tensor::fuse safe_fp=true`) makes
  * every matmul canonical.
  */
 module fuse

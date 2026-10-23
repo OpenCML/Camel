@@ -4,7 +4,7 @@
 /*
  * Effect trace: an ordered log of the effectful operators a process executed.
  *
- * When a file is named with `std::profile(effect_trace="<file>")`, every operator that is not
+ * When a file is named with `std::profile effect_trace="<file>"`, every operator that is not
  * registered as pure in OperatorTable appends one JSON line when it is called:
  *
  *   {"seq":0,"uri":":io/println","stage":"run",
@@ -38,7 +38,7 @@
 
 namespace camel::core::effect_trace {
 
-/// Names the file the trace is appended to (`std::profile(effect_trace="<file>")`), before the
+/// Names the file the trace is appended to (`std::profile effect_trace="<file>"`), before the
 /// program runs. An empty path turns tracing off.
 void setTraceFile(std::string path);
 

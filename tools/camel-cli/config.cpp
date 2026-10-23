@@ -667,10 +667,9 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-E", "--error-format", "--output-format") & value("error format", errorFormat)) %
              "diagnostics format: text (source excerpts), short (one line each) or json",
          diagOps,
-         (option("--passes") & value("pass1,pass2,...", passesOpt)) %
-             "pass list as comma-separated (e.g. --passes std::gir,other); a pass may take "
-             "parameters, "
-             "`std::opt(safe_fp=true)`",
+         (option("--passes") & value("pass1 key=value,pass2", passesOpt)) %
+             "pass list as comma-separated, each pass followed by its parameters as key=value "
+             "words (e.g. --passes std::opt safe_fp=true,std::fvm)",
          (option("--timeit") & value("pass/iterations", timeitSpec)) %
              "measure one pass N times from a fresh graph (e.g. --timeit std::jit/10)",
          (option("--input") & value("input file", inputFile)) %
@@ -846,8 +845,8 @@ bool parseArgs(int argc, char *argv[]) {
     }
     if (selectedCommand == Command::Run) {
         if (!Run::passesOpt.empty()) {
-            // Commas inside a pass's parameters (`std::opt(a=1,b=2)`) do not separate passes.
-            Run::passes = splitPassList(Run::passesOpt);
+            // Commas separate passes; inside one, `key=value` words follow the pass name.
+            Run::passes = groupPassWords(splitPassList(Run::passesOpt));
         }
         if (!Run::timeitSpec.empty()) {
             if (!parseTimeitSpecValue(Run::timeitSpec, Run::timeitPass, Run::timeitIterations)) {
@@ -860,13 +859,11 @@ bool parseArgs(int argc, char *argv[]) {
         if (!Run::passes.empty()) {
             Run::resolvedPassList = Run::passes;
         } else if (!Run::inputFile.empty()) {
-            Run::resolvedPassList = Run::targetFiles;
-        } else {
-            // No positional argument at all (the program comes from standard input):
-            // there are no passes either.
-            if (!Run::targetFiles.empty()) {
-                Run::resolvedPassList.assign(Run::targetFiles.begin() + 1, Run::targetFiles.end());
-            }
+            // `--input file a b`: every positional word is a pass or one of its parameters.
+            Run::resolvedPassList = groupPassWords(Run::targetFiles);
+        } else if (!Run::targetFiles.empty()) {
+            // The first positional word is the program; the rest are passes and parameters.
+            Run::resolvedPassList = groupPassWords(Run::targetFiles, 1);
         }
         if (Run::timeitEnabled && Run::resolvedPassList.empty()) {
             Run::resolvedPassList.push_back(Run::timeitPass);

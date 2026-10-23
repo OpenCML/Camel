@@ -1,22 +1,25 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The pass specification of the pipeline, `name(key=value, ...)`: parsing and binding to the
-// parameters a pass declares. Internal to src/execute; the public API is pass/params.h.
+// The pass specification of the pipeline, `name key=value ...`: parsing and binding to the
+// parameters the pass declares in the standard library. Internal to src/execute; the public API
+// is pass/params.h.
 
 #pragma once
 
 #include "camel/execute/pass/params.h"
+#include "camel/parse/ast/base.h"
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace camel::execute::detail {
 
 /// Why a specification was refused. The first four are what a call of an ordinary function is
-/// refused for; `Syntax` covers a specification that is not a call at all (a positional value, a
-/// missing `)`, an argument that is not a constant).
+/// refused for; `Syntax` covers a specification that is not `name key=value ...` at all (the
+/// removed parentheses form, a bare word, an argument that is not a constant).
 enum class ParamProblemKind { Syntax, Unknown, Duplicate, WrongType, Missing };
 
 struct ParamProblem {
@@ -41,8 +44,15 @@ struct ParsedSpec {
     std::vector<WrittenParam> params;
 };
 
-/// Splits the specification into the pass name and the written parameters, reading each value
-/// as a Camel constant expression with the language's own parser.
+/// Reads the parameters a pass declaration writes in its `with <...>` list: their names, the
+/// types the declaration gives them, and the constants their defaults evaluate to. The
+/// declaration is an ordinary Camel function declaration, so this reads the same nodes the
+/// language's own signature does.
+std::vector<PassParam> readPassParams(
+    const camel::parse::ast::node_ptr_t &withParams, std::string_view passName);
+
+/// Splits the specification into the pass name and the `key=value` words after it, reading each
+/// value as a Camel constant expression with the language's own parser.
 std::optional<ParamProblem> parseSpec(const std::string &spec, ParsedSpec &out);
 
 /// Checks the written parameters against the declaration and fills `args` (defaults for the

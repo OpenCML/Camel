@@ -31,7 +31,7 @@ name = "gc_timeit_cycles.generational"
 desc = "Ten --timeit cycles of alloc_small on the generational collector: every cycle runs and the moving collector collects and moves."
 kind = "behavior"
 case = "../../cases/perf/gc/alloc_small.cml"
-args = ["--passes", "std::profile(gc_stats=1,report=false,hints=false),std::nvm", "--gc", "generational", "--timeit", "std::nvm/10", "${case}", "--arg", "reps=200000", "--output-format", "json"]
+args = ["--passes", "std::profile gc_stats=1 report=false hints=false,std::nvm", "--gc", "generational", "--timeit", "std::nvm/10", "${case}", "--arg", "reps=200000", "--output-format", "json"]
 
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -57,7 +57,7 @@ name = "gc_timeit_cycles.mark_sweep"
 desc = "Ten --timeit cycles of alloc_small on mark-sweep: every cycle runs and the collector sweeps."
 kind = "behavior"
 case = "../../cases/perf/gc/alloc_small.cml"
-args = ["--passes", "std::profile(gc_stats=1,report=false,hints=false),std::nvm", "--gc", "mark-sweep", "--timeit", "std::nvm/10", "${case}", "--arg", "reps=200000", "--output-format", "json"]
+args = ["--passes", "std::profile gc_stats=1 report=false hints=false,std::nvm", "--gc", "mark-sweep", "--timeit", "std::nvm/10", "${case}", "--arg", "reps=200000", "--output-format", "json"]
 
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -82,7 +82,7 @@ name = "gc_soak_long.generational"
 desc = "2,000,000 steps, generational collector: the old spaces and the number of promoted objects are those of a run of 3,000 steps."
 kind = "behavior"
 case = "../../cases/feat/mm/gc/gc_soak.cml"
-args = ["--gc", "generational", "${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "rows=20000", "--arg", "reps=2000000", "${run_fvm}"]
+args = ["--gc", "generational", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "rows=20000", "--arg", "reps=2000000", "${run_fvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_soak total=9576131"]
@@ -109,7 +109,7 @@ name = "gc_soak_long.mark_sweep"
 desc = "2,000,000 steps, default collector: the elder space stays at two segments."
 kind = "behavior"
 case = "../../cases/feat/mm/gc/gc_soak.cml"
-args = ["--gc", "mark-sweep", "${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "rows=20000", "--arg", "reps=2000000", "${run_fvm}"]
+args = ["--gc", "mark-sweep", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "rows=20000", "--arg", "reps=2000000", "${run_fvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_soak total=9576131"]
@@ -134,7 +134,7 @@ name = "gc_live_gb.generational"
 desc = "1.5 GB of small objects alive (generational): the elder space grows to ten segments and is marked and swept."
 kind = "behavior"
 case = "../../cases/feat/mm/gc/gc_live_large.cml"
-args = ["--gc", "generational", "${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "mb=1024", "--arg", "reps=20", "${run_fvm}"]
+args = ["--gc", "generational", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "mb=1024", "--arg", "reps=20", "${run_fvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_live_large blocks=1707 total=8454636"]
@@ -163,7 +163,7 @@ name = "gc_live_gb.mark_sweep"
 desc = "1.5 GB of small objects alive (mark-sweep): the elder space grows to ten segments and is marked and swept."
 kind = "behavior"
 case = "../../cases/feat/mm/gc/gc_live_large.cml"
-args = ["--gc", "mark-sweep", "${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "mb=1024", "--arg", "reps=20", "${run_fvm}"]
+args = ["--gc", "mark-sweep", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "mb=1024", "--arg", "reps=20", "${run_fvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_live_large blocks=1707 total=8454636"]

@@ -216,7 +216,7 @@ name = "neutral_elements_by_std_opt_algebra"
 desc = "The reference: std::opt::algebra restricted to the neutral elements."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_target.cml"
-args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+args = ["${case}", "std::opt::algebra neutral_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 timeout_ms = 20000
@@ -254,10 +254,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "neutral_identities_by_std_opt_algebra"
-desc = "The reference: std::opt::algebra(neutral_only=true) removes all five identities of both integer types."
+desc = "The reference: std::opt::algebra neutral_only=true removes all five identities of both integer types."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_identities.cml"
-args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::opt::dce(values_only=true)", "std::jgir"]
+args = ["${case}", "std::opt::algebra neutral_only=true", "std::opt::dce values_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 verify_script = '''
@@ -279,7 +279,7 @@ name = "neutral_identities_by_the_rule_library"
 desc = "rules::simplify removes the same five identities and leaves the same graph: the library has these laws."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_identities.cml"
-args = ["${case}", "rules::simplify", "std::opt::dce(values_only=true)", "std::jgir"]
+args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 verify_script = '''
@@ -301,7 +301,7 @@ name = "neutral_identities_execution"
 desc = "The five identities keep the value, including at the type's upper bound, on every back end."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_identities.cml"
-args = ["${case}", "std::opt::algebra(neutral_only=true)", "${backend}"]
+args = ["${case}", "std::opt::algebra neutral_only=true", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
@@ -316,7 +316,7 @@ name = "neutral_mode_keeps_the_other_laws"
 desc = "neutral_only=true leaves x*0, x-x, x/1 and -(-x): the mode's set is only the five neutral elements."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_kept.cml"
-args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+args = ["${case}", "std::opt::algebra neutral_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 verify_script = '''
@@ -338,7 +338,7 @@ name = "the_library_simplifies_the_other_laws"
 desc = "rules::simplify removes those same four forms: the difference is the mode, not a law the library lacks."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_kept.cml"
-args = ["${case}", "rules::simplify", "std::opt::dce(values_only=true)", "std::jgir"]
+args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 verify_script = '''
@@ -364,7 +364,7 @@ name = "neutral_mode_keeps_the_named_node"
 desc = "neutral_only=true leaves x+0 when that add is the graph's return node."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_target.cml"
-args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+args = ["${case}", "std::opt::algebra neutral_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 verify_script = '''
@@ -405,7 +405,7 @@ name = "unused_values_by_std_opt_dce"
 desc = "The reference: std::opt::dce restricted to values, after folding and inlining."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/unused_target.cml"
-args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "std::opt::dce(values_only=true)", "std::jgir"]
+args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "std::opt::dce values_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 timeout_ms = 20000
@@ -479,7 +479,7 @@ name = "neutral_elements_with_var_by_std_opt_algebra"
 desc = "The reference on a program with var slots."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_var_target.cml"
-args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+args = ["${case}", "std::opt::algebra neutral_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 timeout_ms = 20000
@@ -745,7 +745,7 @@ name = "camel_pass_parameters"
 desc = "params::report reads string, int, f64, f32 and bool parameters, at a call site and in a closure."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/tiny.cml"
-args = ["${case}", "params::report(label='ok', n=21, scale=2.5, small=1.5, flag=true)", "std::nvm"]
+args = ["${case}", "params::report label='ok' n=21 scale=2.5 small=1.5 flag=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "ok\n21\n42\n[21, 42, 63]\n2.5\n1.5\ntrue\n42\n"
 timeout_ms = 10000
@@ -755,7 +755,7 @@ name = "camel_pass_parameter_missing"
 desc = "A parameter without a source default is required; a missing one is a resolution error that names it."
 kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
-args = ["${case}", "params::report(n=1)", "std::nvm"]
+args = ["${case}", "params::report n=1", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentMissing"
 expect_output_contains = ["The call gives no value for the parameter 'label' of 'params::report', and it has no default."]
@@ -767,11 +767,11 @@ name = "camel_pass_parameter_unknown"
 desc = "A parameter the pass does not declare is a located diagnostic that lists the ones it takes."
 kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
-args = ["${case}", "params::report(label='x', n=1, bogus=2)", "std::nvm"]
+args = ["${case}", "params::report label='x' n=1 bogus=2", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
 expect_diagnostic_line = 1
-expect_diagnostic_column = 32
+expect_diagnostic_column = 30
 expect_output_contains = ["'bogus' is not a parameter of 'params::report'."]
 expect_output_not_contains = ["42"]
 timeout_ms = 10000
@@ -781,11 +781,11 @@ name = "camel_pass_parameter_wrong_type"
 desc = "A value of the wrong type names both types and the column in the specification."
 kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
-args = ["${case}", "params::report(label='x', n=1.5)", "std::nvm"]
+args = ["${case}", "params::report label='x' n=1.5", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
 expect_diagnostic_line = 1
-expect_diagnostic_column = 27
+expect_diagnostic_column = 26
 expect_output_contains = ["The argument 'n' of 'params::report' has type 'float', not 'int'."]
 expect_output_not_contains = ["42"]
 timeout_ms = 10000
@@ -861,3 +861,4 @@ args = ["${case}", "std::opt::inline", "regionprobe::report", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "2\n2\n0\n2\n7\n6\n0\n7\n10\n4\n5\n10\n3\n"
 timeout_ms = 20000
+

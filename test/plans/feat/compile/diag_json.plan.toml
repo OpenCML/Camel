@@ -81,7 +81,7 @@ name = "pass_parameter_stage"
 desc = "A bad pass parameter is the language's semantic diagnostic for a call, in the typecheck stage, at the call's line in the pipeline (one pass per line); it is not a runtime-stage command-line error."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/div_zero.cml"
-args = ["--output-format", "json", "${case}", "std::nvm", "std::opt(safe_fpp=true)"]
+args = ["--output-format", "json", "${case}", "std::nvm", "std::opt safe_fpp=true"]
 expect_exit = 1
 verify_script = """
 const text = input.normalized.stdout

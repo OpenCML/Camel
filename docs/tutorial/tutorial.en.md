@@ -1054,7 +1054,7 @@ tensor([[      2.],
 **Exporting it**: the same source, with a different set of passes. Nothing in the program was written for the export; not even `import onnx` is needed:
 
 ```bash
-camel docs/tutorial/examples/15_model.cml std::macro std::opt 'onnx::export(out="model.onnx")'
+camel docs/tutorial/examples/15_model.cml std::macro std::opt 'onnx::export out="model.onnx"'
 ```
 
 ```text

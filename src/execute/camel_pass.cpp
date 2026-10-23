@@ -267,7 +267,8 @@ void registerCamelPass(
         return;
     }
     PassDescriptor descriptor;
-    descriptor.doc = "A pass written in Camel: " + module + "::" + function + ".";
+    // The declaration in the module's `.cml` file is the pass's documentation and its
+    // parameters; the signature is read here only as the fallback when it has none.
     for (const CamelParam &param : params) {
         descriptor.params.push_back(PassParam{
             param.name,

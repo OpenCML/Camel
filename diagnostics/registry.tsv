@@ -244,7 +244,7 @@ semantic	NativeResourceMismatch	0x0001A4	error	The declaration '{0}' says '{1}',
 #/ A graph holds a construct the printer does not turn into source (yet).
 semantic	CmlUnsupportedConstruct	0x0001A5	error	std::cml cannot print {0}: {1}.	This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks (handover H240). Tags, named types, generic instances and the other region kinds are refused.
 #/ A constant is larger than the printer's max_literal_bytes.
-semantic	CmlBigConstant	0x0001A6	error	std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_literal_bytes ({4}).	Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a module the printed program imports.
+semantic	CmlBigConstant	0x0001A6	error	std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_literal_bytes ({4}).	Raise the limit with `std::cml max_literal_bytes=...`, or keep the value in a module the printed program imports.
 #
 # Tensor element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
 # tensor keeps the element type it is written with, so nothing rewrites it and there is no
@@ -453,3 +453,4 @@ runtime	PassesNeverRun	0x10000F	warn	Pass '{0}' consumes the graph, so {1} writt
 runtime	ConstantExpressionFaults	0x100015	warn	This constant expression faults whenever it is evaluated ({0}); it is not folded.	All its operands are known and computing it fails, so there is no value to put in its place. It is left as written: the program behaves the same with and without the pass, and the fault is reported with its position if the run reaches the expression. If it is never reached (an arm that is not taken), nothing happens.
 runtime	TranslationLinksRuntime	0x100016	warn	std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel.	Every other operator is translated into C++ that needs only the standard library (docs/cpp_export_build.md). The comment at the top of the C++ file gives the command that builds it with the runtime.
 semantic	PrecisionChangeNotPermitted	0x0001D5	error	Converting '{0}' to '{1}' needs the numeric permission 'change_precision'.	Write #[change_precision] on the function or the block that does the conversion, or convert from a type that already holds the values the reduced element type can hold exactly. Reading a bf16 or f16 value into a wider type never needs the permission.
+

@@ -78,7 +78,7 @@ def invoke(*args):
 
 
 def canonical(source):
-    done = invoke(EXE, source, "std::jgir(canonical=true)")
+    done = invoke(EXE, source, "std::jgir canonical=true")
     assert done.returncode == 0, (source, done.stdout, done.stderr)
     body = "\n".join(
         line for line in done.stdout.splitlines() if not line.startswith("GRAPH_STATS")
@@ -212,9 +212,9 @@ def main():
         encoding="utf-8",
     )
     check_refusal(
-        big, "CmlBigConstant", ("std::cml(max_literal_bytes=64)",), ("over max_literal_bytes",)
+        big, "CmlBigConstant", ("std::cml max_literal_bytes=64",), ("over max_literal_bytes",)
     )
-    done = invoke(EXE, big, "std::cml(max_literal_bytes=64)")
+    done = invoke(EXE, big, "std::cml max_literal_bytes=64")
     message = done.stdout + done.stderr
     assert "max_literal_bytes (64)" in message, message
 

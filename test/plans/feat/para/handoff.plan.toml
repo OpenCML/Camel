@@ -9,7 +9,7 @@ desc = "The parallel scheduler runs serial graphs on the bytecode interpreter (d
 # boundary between the two: output, the fault of the smallest index from serial code in map
 # elements, the recursion limit counted across the boundary, and the collector with several
 # threads inside interpreters. Every behaviour test also runs with the hand-off switched off
-# (std::prl(bytecode=false)): the two must agree.
+# (std::prl bytecode=false): the two must agree.
 
 [defaults]
 kind = "behavior"
@@ -31,7 +31,7 @@ expect_stdout_starts_with = "6765\n21\n111\n5.0\n[2, 5, 1, 7, 0, 9]\n"
 
 [[tests]]
 name = "shapes.prl_counts"
-desc = "Under std::prl the serial graphs of the program did run as bytecode, on more than one thread: the statistics line of the hand-off (std::prl(gc_stats=1)) shows compiled graphs, hosted calls and interpreters."
+desc = "Under std::prl the serial graphs of the program did run as bytecode, on more than one thread: the statistics line of the hand-off (std::prl gc_stats=1) shows compiled graphs, hosted calls and interpreters."
 case = "../../../cases/para/handoff/shapes.cml"
 args = ["-t", "4", "${case}", "${run_prl_gc_stats1}"]
 expect_exit = 0
@@ -46,7 +46,7 @@ assert(Number(m[3]) > 0, 'no hosted call was made')
 
 [[tests]]
 name = "shapes.prl_off"
-desc = "std::prl(bytecode=false) switches the hand-off off: the statistics line says so, and the output is the same."
+desc = "std::prl bytecode=false switches the hand-off off: the statistics line says so, and the output is the same."
 case = "../../../cases/para/handoff/shapes.cml"
 args = ["-t", "4", "${case}", "${run_prl_gc_stats1_no_bytecode}"]
 expect_exit = 0

@@ -39,7 +39,7 @@
 以指定的 `.cml` 文件或目录作为入口执行。**输入文件** 必须通过位置参数或 `--input <file>` 给出（至少一个）。
 
 - `--input <file>`：输入文件路径（位置参数的替代写法；与 `--passes` 一起使用可避免歧义）  
-- `--passes <list>`：逗号分隔的遍列表（例如 `--passes std::gir,other`；遍的参数里的逗号不分隔）。省略时，第一个位置参数是文件，其余是遍。遍可以带参数：`std::opt(safe_fp=true)`（见“遍的参数”）  
+- `--passes <list>`：逗号分隔的遍列表（例如 `--passes std::gir,other`）；每个遍后面跟它自己的 `key=value` 参数词，逗号只分隔遍。省略时，第一个位置参数是文件，其余是遍。遍可以带参数：`std::opt safe_fp=true`（见“遍的参数”）  
 - `--timeit <pass>/<N>`：从全新的图出发把一个遍测量 `N` 次；文本模式打印各次样本和一张简表，`--output-format json` 则输出结构化的基准数据。失败的那一轮会点出它是第几轮（从 1 起）：文本模式打印 `[timeit] i/N ... failed` 一行，JSON 模式输出一个 timeit 对象，带 `"iteration"`、诊断（没有诊断时是 `"failure"` 一句话）以及失败前已完成的样本  
 - `--dump-after-each-pass <dir>`：把第一个遍之前的图（`00_input`）和每个返回图的遍之后的图（`NN_<pass>`，`::` 写作 `.`）写入 `<dir>`：一份可读的 DOT（`.rgir.dot`，即 `std::rgir` 格式，每个节点带 `origin`/`span`/`srcfile`）和 `std::stats` 的计数（`.stats.json`）。调度遍和翻译遍消耗图，不留下快照。比较两份快照用 `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
 - `--arg <name>=<value>`：`main` 的一个参数的值（可重复；见“`main` 带参数或有返回值的程序”）  
@@ -143,7 +143,7 @@
 
 ### 遍的参数
 
-每个遍、调度器和模块遍都写作 `name` 或 `name(key=value, ...)`。值是 Camel 的常量表达式：布尔、整数、浮点、字符串字面量，以及作用在它们上的运算符（`n=2*8`、`safe_fp=!false`、`out="a" + ".onnx"`）；声明为浮点的参数也可以写整数。它们由语言自己的解析器读取。遍声明自己的参数（名字、类型、默认值、一行说明）；流水线在任何东西运行之前，把写出的参数与声明对照检查，错误报告为 `RuntimeDiag::InvalidPassParameter`（`0x04000060`，阶段 `pass:<规格>`），并给出规格中的列号：未知的参数（消息列出该遍接受的参数）、类型不符、同一参数写了两次、值不是常量、缺少值。在 shell 里要给带参数的遍加引号（`'std::opt(safe_fp=true)'`），并注意逗号：`--passes 'a,b(x=1,y=2)'` 只在括号和字符串之外的逗号处分开。stderr 上的未知遍列表会显示每个遍的参数及默认值。
+遍是标准库里的函数（设计原则 9.3）：它的名字、说明和参数是 `stdlib/std.cml` 里的一条声明，流水线从那里读取。参数写作遍名之后的 `key=value` **词，不带括号**：`camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm`。值是 Camel 的常量表达式：布尔、整数、浮点、字符串字面量，以及作用在它们上的运算符（`n=2*8`、`growth_budget=2*8+1`）；值必须是一个词，带空格的表达式省掉空格写，带空格的字符串由 shell 加引号。声明就是函数自己的 `with` 列表，所以遵守函数的规则（设计原则 4.4）：名字、`:`、类型（`bool`、`int`、`float`、`string`）、默认值写 `= 值`；没有默认值的参数是必需参数，必需参数不能跟在有默认值的参数后面。**默认值是在声明处求值一次的常量表达式**，不在每次调用时重算：帮助列表显示值本身（`top: int = 24`，不是 `top=8*3`）。`when` 子句是遍的适用条件：流水线认的是 `is_function::<F>()`，别的条件会被拒绝而不是假定成立。括号形式（`std::opt(safe_fp=true)`）、命令行上的冒号写法（`safe_fp: true`）和位置参数都已删除，均报告 `RuntimeDiag::InvalidPassParameter`（`0x04000060`），消息说明应该怎么写。
 
 遍的设置是参数，不再是环境变量：
 
@@ -169,14 +169,14 @@
 ### 常用遍
 
 - `std::opt::inline`：只做内联的重写遍；默认目标策略是 `std::opt::inline::hybrid`
-- `std::opt::inline::small` / `std::opt::inline::arm` / `std::opt::inline::hybrid`：显式的内联目标策略
-- `std::opt::devirtualize`：运行时原生的去虚化遍
+- `std::opt::inline`：只做内联的重写遍；默认目标策略是 `std::opt::hybrid`
+- `std::opt::small` / `std::opt::arm` / `std::opt::hybrid`：显式的内联目标策略（原 `std::opt::inline::small`、`::arm`、`::hybrid` 是它们的别名）
 - `std::opt::specialize`：运行时原生的特化遍
 - `std::opt`：集成优化总入口；循环执行去虚化、特化、内联、fold、cse、algebra 和 dce，直到稳定或达到共享的增长及轮数预算
 - `std::opt::algebra`：就是规则库的化简遍 `rules::simplify`，定律即 `stdlib/rules.cml` 里的规则，一条定律只写一次；`safe_fp=true` 时运行 `rules::simplify_strict`（设计原则 7.4：严格等价的浮点算式）。默认 `safe_fp=false`，不自动允许降精度、近似函数或任意特殊值假设。它不要求前面先有 `std::opt::fold`；`std::opt` 会先跑 fold，以得到语料对照所用的系数形式。`neutral_only=true` 保留 C++ 对照模式（只做整数单位元）。PowerShell 中带参数的遍须加引号（这是普通的遍参数）；所有参数在运行第一个遍之前校验。
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`：分别运行常量折叠、公共子表达式消除、死代码消除
 - `std::opt::ctrl`：在预算内消除被必需的数据/控制路径覆盖的 CTRL 边；`std::opt` 的其他阶段结束后默认执行一次。保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖
-- `std::inline`（含 `small` / `arm` / `hybrid`）：`std::opt::inline` 的别名
+- `std::inline`（含 `small` / `arm` / `hybrid`）：`std::opt::inline` 及其策略的别名
 
 - `std::fvm`：高性能字节码虚拟机调度器
 - `std::jit`：启用即时编译的字节码虚拟机调度器。即时编译器只为 x86-64 生成代码；在其他处理器的构建中（arm64 macOS；`ENABLE_FASTVM_JIT` 关闭）`std::jit` 仍被接受，程序在字节码解释器上运行，与 `std::fvm` 相同，结果一致；该构建在日志里说明一次（`-v`：`std::jit: this build has no native code generator ...`）。这是一条日志而不是警告，所以同一条命令在所有平台上都能运行，`-Werror` 下也一样
@@ -206,7 +206,7 @@
 
 ### 以遍的形式导出 ONNX（`onnx::export`）
 
-    camel m.cml std::macro std::opt 'onnx::export(out="model.onnx")'
+    camel m.cml std::macro std::opt 'onnx::export out="model.onnx"'
 
 `onnx::export` 是 `onnx` 模块贡献的翻译遍。作为流水线的最后一个遍，它写出一个 ONNX 模型并消耗图：程序不执行。
 
@@ -217,8 +217,8 @@
 
 **没有 `export_model` 调用的程序：`main` 就是模型。** 只做计算的程序用同样的遍组合导出，程序里不必为导出写任何东西（连 `import onnx` 也不必：写出遍的名字就会加载模块）：
 
-    camel model.cml std::macro std::opt 'onnx::export(out="model.onnx")'
-    camel model.cml --arg p=weights std::macro std::opt 'onnx::export(out="model.onnx")'
+    camel model.cml std::macro std::opt 'onnx::export out="model.onnx"'
+    camel model.cml --arg p=weights std::macro std::opt 'onnx::export out="model.onnx"'
 
 当程序里任何地方都没有 `export_model` 调用时，这个遍翻译入口图本身，也就是 `main` 的计算：
 
@@ -269,11 +269,11 @@
 - 从某个遍逃逸出来而又不是诊断的异常（提交重写时的图校验、调度器构建执行顺序时遇到环）报告为 `RuntimeDiag::PassInternalError`（`0x0400000C`），阶段为 `pass:<name>`，消息里是异常的文本，没有源码位置，退出码为 1。它标志的是编译器的缺陷，不是对程序的拒绝。即使那是调度遍，阶段给出的也是遍的名字，所以它不能说明程序是否已经运行了一部分。任何遍之外的异常报告为 `InternalDiag::UnknownInternalError`，阶段为 `internal`。
 - `data.stage` 说明诊断在流水线的哪里产生：`parse`、`typecheck`、`compile`（见“资源上限”）、重写遍或翻译遍的 `pass:<name>`（包括未知的遍名）、调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）的 `run`，或 `internal`。
 
-### 效应追踪（`std::profile(effect_trace="...")`）
+### 效应追踪（`std::profile effect_trace="..."`）
 
-在流水线里给出 `std::profile(effect_trace="<file>")` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`py_*`、赋值 `:op/assn*`，包括写成语句的 `acc = acc->append<v>` 所用的 `:op/assn_append`……）。`report=false` 使 `std::profile` 的文本报告不进入程序的输出：
+在流水线里给出 `std::profile effect_trace="<file>"` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`py_*`、赋值 `:op/assn*`，包括写成语句的 `acc = acc->append<v>` 所用的 `:op/assn_append`……）。`report=false` 使 `std::profile` 的文本报告不进入程序的输出：
 
-    camel m.cml 'std::profile(effect_trace="trace.jsonl",report=false)' std::nvm
+    camel m.cml 'std::profile effect_trace="trace.jsonl" report=false' std::nvm
 
 创建和读取 `var` 变量（`:var/new`、`:var/get`）是仅状态的，不产生事件；向变量存入值（`:op/assn*`）则产生事件：
 
@@ -295,7 +295,7 @@
 
 | 上限 | 值 | 可调 | 到达时 |
 |---|---|---|---|
-| `std::opt::inline`、`std::opt::specialize`、`std::opt::devirtualize`、`std::opt` 的增长（特化和内联复制的节点；`std::opt` 的所有轮次共用一个预算） | 4096 个节点 | 遍的参数 `growth_budget=<nodes>`，如 `std::opt(growth_budget=8192)`、`std::opt::inline(growth_budget=0)` | 不再特化或内联；剩下的调用仍是调用。带 `-v` 时有日志 |
+| `std::opt::inline`、`std::opt::specialize`、`std::opt::devirtualize`、`std::opt` 的增长（特化和内联复制的节点；`std::opt` 的所有轮次共用一个预算） | 4096 个节点 | 遍的参数 `growth_budget=<nodes>`，如 `std::opt growth_budget=8192`、`std::opt::inline growth_budget=0` | 不再特化或内联；剩下的调用仍是调用。带 `-v` 时有日志 |
 | `std::opt::inline` 向其中内联的图的大小 | 4096 个节点 | 否 | 这次调用不内联 |
 | `std::opt` 的轮数 | 16 | 否 | 程序按现状传下去。带 `-v` 时有日志 |
 | 同一个递归函数的仅类型特化（张量实参的形状在递归的每一层都变化） | 8 | 否 | 这次调用保留它的被调用者 |
@@ -326,11 +326,11 @@
 
 `std::nvm` 和 `std::fvm` 的帧池按上限确定大小：每个可能打开的调用 4 KiB（默认值下约 4 MiB），最多 256 MiB；它一次性保留，只有用到的部分才被触及。帧非常大的函数的递归可能在计数到达之前就把它填满；那是同一条带位置的诊断，说明帧池已满。运行时间不受上限影响。`--native-stack-guard off` 关闭原生栈检查；它用于测量栈实际在哪里结束（上面的崩溃点），不供正常使用。
 
-三个空间上限限制的是编译后程序的大小，不是单张图的大小：它们是总量，只用来防范不停分配的编译器（展开或内联永不结束的遍，会因图空间或永久空间被填满而停下；这所需的时间增长得比上限更快，这就是默认值没有定得更大的原因）。`std::profile(gc_stats=1)` 在退出时打印三个空间的占用情况，连同分配器自己的一行（`[camel] spaces: ...`：使用中的字节数、最高水位、保留的字节数、段数、分配次数、上限）。
+三个空间上限限制的是编译后程序的大小，不是单张图的大小：它们是总量，只用来防范不停分配的编译器（展开或内联永不结束的遍，会因图空间或永久空间被填满而停下；这所需的时间增长得比上限更快，这就是默认值没有定得更大的原因）。`std::profile gc_stats=1` 在退出时打印三个空间的占用情况，连同分配器自己的一行（`[camel] spaces: ...`：使用中的字节数、最高水位、保留的字节数、段数、分配次数、上限）。
 
 其他标为“否”的上限是编译期常量（`generic.h`、内联器的配置）；它们没有命令行选项，也没有 `.opencmlrc` 键（`.opencmlrc` 只配置遍列表）。
 
-`std::opt` 对实参是常量的递归每轮展开一层（`fib(15)` 会变成它的整棵调用树）；让它停下的是增长预算。`onnx.export_model` 化简它所导出的函数时不受增长预算和内联大小上限约束，因为导出必须得到直线代码；通过 `std::opt onnx::export` 导出的流水线则受它们约束，对大模型可能需要在做内联的那个遍上调高 `growth_budget`，例如 `std::opt(growth_budget=8192)`（此时导出遍以 `TranslationRefused` 拒绝，而不是写出不完整的模型，拒绝消息给出预算、它的值、设置它的遍和参数）。
+`std::opt` 对实参是常量的递归每轮展开一层（`fib(15)` 会变成它的整棵调用树）；让它停下的是增长预算。`onnx.export_model` 化简它所导出的函数时不受增长预算和内联大小上限约束，因为导出必须得到直线代码；通过 `std::opt onnx::export` 导出的流水线则受它们约束，对大模型可能需要在做内联的那个遍上调高 `growth_budget`，例如 `std::opt growth_budget=8192`（此时导出遍以 `TranslationRefused` 拒绝，而不是写出不完整的模型，拒绝消息给出预算、它的值、设置它的遍和参数）。
 
 ---
 
@@ -434,3 +434,4 @@ camel inspect --gir main.cml
 # 查看 Camel 之禅
 camel --zen
 ```
+

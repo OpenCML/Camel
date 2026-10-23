@@ -190,12 +190,12 @@ expect_output_contains = ["compiled & cached graph 'churn' as framed code", "com
 
 [[tests]]
 name = "framed.loops.regions.compiled"
-desc = "A loop of regions (LBEG/LTST/LEND) runs as framed code now instead of leaving the graph to the interpreter: the functions of this program (one state over an array, two states under a condition, `for ... while`, an empty array, a nested loop, a collecting loop, a loop in a called function, a body that calls a function, a `sync` body whose effects run every round, a block whose `return` ends it) are compiled, and each of them executes no bytecode in the interpreter; `std::jit(stats=...)` reports them `compiled`/`framed` with `executed` 0 and the LOOP runtime construct."
+desc = "A loop of regions (LBEG/LTST/LEND) runs as framed code now instead of leaving the graph to the interpreter: the functions of this program (one state over an array, two states under a condition, `for ... while`, an empty array, a nested loop, a collecting loop, a loop in a called function, a body that calls a function, a `sync` body whose effects run every round, a block whose `return` ends it) are compiled, and each of them executes no bytecode in the interpreter; `std::jit stats=...` reports them `compiled`/`framed` with `executed` 0 and the LOOP runtime construct."
 case = "../../../cases/loops/compiled.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["-vv", "${case}", "std::jit(hot_threshold=0)"]
+args = ["-vv", "${case}", "std::jit hot_threshold=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'main' as framed code", "compiled & cached graph 'sum_squares' as framed code", "compiled & cached graph 'countdown' as framed code", "compiled & cached graph 'until_above' as framed code", "compiled & cached graph 'over_empty' as framed code", "compiled & cached graph 'nested' as framed code", "compiled & cached graph 'collects' as framed code", "compiled & cached graph 'rows_total' as framed code", "compiled & cached graph 'row_sum' as framed code", "compiled & cached graph 'through_call' as framed code", "compiled & cached graph 'square' as framed code", "compiled & cached graph 'ticks' as framed code", "compiled & cached graph 'sum_to' as framed code", "30", "21", "29"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
@@ -207,7 +207,7 @@ case = "../../../cases/loops/compiled.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc", "mark-sweep", "-vv", "${case}", "std::jit(hot_threshold=0)"]
+args = ["--gc", "mark-sweep", "-vv", "${case}", "std::jit hot_threshold=0"]
 envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'countdown' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_to' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_squares' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'until_above' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'nested' as framed code; loop rounds: helper: the round takes the next element of a sequence (2 loops)", "compiled & cached graph 'collects' as framed code; loop rounds: helper: the round collects the values it produces", "compiled & cached graph 'ticks' as framed code; loop rounds: helper: the round makes the state tuple anew every round"]
@@ -220,7 +220,7 @@ case = "../../../cases/loops/compiled.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["-vv", "${case}", "std::opt::inline", "std::jit(hot_threshold=0)"]
+args = ["-vv", "${case}", "std::opt::inline", "std::jit hot_threshold=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'main' as framed code", "'main' as framed code; loop rounds:", "native rounds (2 loops)", "30", "21", "29"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]

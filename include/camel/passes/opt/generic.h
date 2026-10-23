@@ -52,7 +52,7 @@ class CommonSubexpressionPass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
-/// The integer neutral-element reference mode of `std::opt::algebra(neutral_only=true)`. The
+/// The integer neutral-element reference mode of `std::opt::algebra neutral_only=true`. The
 /// algebraic simplification itself is the rules library's pass (`rules::simplify`, registered
 /// under the core name); this class keeps the documented reference the Camel-pass tests compare
 /// against, and has no algebraic laws beyond `x + 0`, `0 + x`, `x - 0`, `x * 1`, `1 * x`.

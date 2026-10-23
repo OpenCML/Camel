@@ -293,10 +293,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "fuse_linear_graph_safe"
-desc = "tensor::fuse(safe_fp=true) keeps the groups but records the canonical algorithm on every matmul (design principles 7.4)."
+desc = "tensor::fuse safe_fp=true keeps the groups but records the canonical algorithm on every matmul (design principles 7.4)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/fuse_linear.cml"
-args = ["${case}", "tensor::fuse(safe_fp=true)", "std::gir"]
+args = ["${case}", "tensor::fuse safe_fp=true", "std::gir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -451,10 +451,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "fuse_bits.safe"
-desc = "In safe mode tensor::fuse(safe_fp=true) records the canonical algorithm on the matmul and the group; the bytes of the marked group are exactly the bytes of the unfused expression, bit for bit (7.4)."
+desc = "In safe mode tensor::fuse safe_fp=true records the canonical algorithm on the matmul and the group; the bytes of the marked group are exactly the bytes of the unfused expression, bit for bit (7.4)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/fuse_bits.cml"
-args = ["${case}", "tensor::fuse(safe_fp=true)"]
+args = ["${case}", "tensor::fuse safe_fp=true"]
 expect_exit = 0
 expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
 timeout_ms = 4000

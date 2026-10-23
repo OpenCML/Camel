@@ -128,7 +128,7 @@ name = "writings.extract_pass"
 desc = "std::opt::extract chooses one writing for every value, so the rewrite pass after it gets a program it knows; its cost parameter names the model, and an unknown model is an error."
 kind = "behavior"
 case = "../../../cases/feat/mm/writings/congruence.cml"
-args = ["${case}", "test::tabled", "std::opt::extract(cost=\"nodes\")", "std::opt::fold", "std::nvm"]
+args = ["${case}", "test::tabled", "std::opt::extract cost=\"nodes\"", "std::opt::fold", "std::nvm"]
 
 expect_exit = 0
 expect_stdout_contains = ["15"]
@@ -150,7 +150,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "saturate.safe"
-desc = "The same rules under the strict policy (safe_fp): only the exact ones apply, as in std::opt::algebra(safe_fp=true): `underflow_sensitive` (0.1 is not a whole number), the float coefficient functions and `mixed_permissions` keep their sums; `strict`, the integer functions and the f32 one fold; `shared_product` also folds (x*c + x*c with a whole c is exact; std::opt::algebra(safe_fp=true) leaves it because its product is shared)."
+desc = "The same rules under the strict policy (safe_fp): only the exact ones apply, as in std::opt::algebra safe_fp=true: `underflow_sensitive` (0.1 is not a whole number), the float coefficient functions and `mixed_permissions` keep their sums; `strict`, the integer functions and the f32 one fold; `shared_product` also folds (x*c + x*c with a whole c is exact; std::opt::algebra safe_fp=true leaves it because its product is shared)."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
 args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate_safe", "${backend}"]

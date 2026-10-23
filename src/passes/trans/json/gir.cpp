@@ -279,21 +279,9 @@ JsonGirDumpPass::apply(const camel::runtime::Program *program, std::ostream &out
     return nullptr;
 }
 
-PassDescriptor jgirDescriptor() {
-    PassDescriptor d;
-    d.doc    = "versioned JSON GIR (camel.gir); canonical=true writes the version 2 canonical "
-               "document that a graph-isomorphism checker compares, with names, origins, node ids "
-               "and annotation regions erased and a structural type table";
-    d.params = declarePassParams(
-        "canonical: bool = false",
-        {{"canonical",
-          "write the canonical document (version 2) instead of the display document (version "
-          "1): only what graph equivalence is defined on, deterministic, for "
-          "test/tools/cml_roundtrip.py"}});
-    d.make   = [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+PassMaker jgirPass() {
+    return [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<JsonGirDumpPass>(
-            ctx,
-            JsonGirOptions{.canonical = args.getBool("canonical")});
+            ctx, JsonGirOptions{.canonical = args.getBool("canonical")});
     };
-    return d;
 }

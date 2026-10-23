@@ -263,7 +263,7 @@ class TaskflowGcRegion {
 
 class TaskflowBytecodeHandoff;
 
-/// Settings of a run of std::taskflow, the parameters of the pass (`std::tf(linear=true)`).
+/// Settings of a run of std::taskflow, the parameters of the pass (`std::tf linear=true`).
 struct TaskflowOptions {
     /// Evaluate every graph node by node (the behaviour between commit 1559559a and the restore
     /// of graph-level tasks). For comparison and diagnosis.

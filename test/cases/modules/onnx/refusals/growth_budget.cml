@@ -1,6 +1,6 @@
 /**
  * The export request is written in `main`. With a growth budget too small to inline `main`
- * into the entry graph (the test writes std::opt(growth_budget=0)), std::opt leaves
+ * into the entry graph (the test writes std::opt growth_budget=0), std::opt leaves
  * the call of `main`, and onnx::export sees no request. The refusal, at `main` (line 14),
  * says that the budget was exhausted, what it is and which pass parameter raises it.
  */
