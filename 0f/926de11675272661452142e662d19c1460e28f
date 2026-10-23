@@ -1,0 +1,14 @@
+h330 — bf16/f16 成为一等的标量类型，且对它们的归约在 f64 中累加（分支 handover/h330-bf16-scalar，13 提交，基于 16989e21f）
+
+(a) 字面量与转换：声明类型、字面量类型或张量元素上的两种类型都是"写成数字的最近成员"，从精确有理数**舍入一次**、平局取偶，并带该类型自己的范围诊断；bf16(x)/f16(x) 是书写的转换、不需许可；与 f32/f64/i32/int 及文本双向；打印按 11.5。
+(b) 标量算术与比较：两种类型的 + - * / pow、== != < <= > >=、+= -= *= /=、一元 -；在 f32 中算、向元素类型**舍入一次**；% 与 f32 一样被拒（有意对齐）；不需要后端工作（泛型算子回退），用例在 nvm/fvm/jit/prl 上跑并有 backends_agree。
+第三部分：array::sum 在 bf16[]/f16[] 上能算——stdlib/array.cml 只加了 case bf16 => bf16(sumF64(xs)) / case f16 => f16(sumF64(xs))（bd0b421d5），reduced_sum_refused 从"拒绝"翻成"计算"（四个后端）。(a) 确实是解锁它的原因：match type 的每条臂即使不被选中也会被解析，而之前 bf16(...) 解析不了。
+
+字节级守卫找出的**五个真缺陷**（各自一个提交）：1) bf16_v + 0.0 被拒——字面量操作数没有进入同族类型（d9bcbbc0a）；2) 算术与比较组被注册成 :op/addbf/:op/ltf6 而不是 :op/add_bf/:op/lt_f6，于是两种类型一个标量算子都没有（1363189a9）；3) 每个 bf16/f16 常量都读成 0.0——makeSlotFromPrimitiveData 没有这两种类型的分支，Release 取了默认值（00b1ddcab）；4) new(bf16_array) 被拒——张量标量读取器只认 f32/f64（bfb74e303）；5) 声明类型对任何写下的值都报 LiteralNotRepresentable，#tag/精确值路径不认识这两种类型（a933fc51d）。
+
+验证：整层 fast → total 5703, pass 5689, fail 0, skip 14（14 个 skip 是环境相关的：device/gpu、语法作用域、unicode.paths）。本地 diagnostics-catalog（256 码）、headers（1331 文件）、check-std-includes（1065）、stdlib-reference --verify-doc 全绿；--verify-ops 与 stdlib-declarations --check 作为 registry.signatures_match / registry.migrations_stay_migrated 在该闸门内通过。新守卫是值与字节级的（reduced_scalar 19 行、reduced_sum_refused 6 行），**任何别的读法都会改动其中某一行**：双重舍入、平局远离零、饱和、f32 累加器、每次加法都舍入。
+两处必要的期望改动，各自一个提交并抄了裁定句：裁定的 sum 臂删掉了 zip_with 上方六行过时散文，于是 zip 的故障位置从 stdlib/array.cml:260 变成 :254（两行计划 + attempt.library golden，2b14ca20d）；两个新的 + 重载出现在泛型实例报告 golden 里（2e3cb9161）。没有弱化或删除任何东西。
+
+留给作者、未自行决定：7.7 要求"能读回同一个数字的最短文本"。bf16 打印成它拓宽后那个值的**最短 f32 文本**，于是 bf16(0.1) 打印 0.100097656（f32(x) 打印同样），而能读回同一个 bf16 的最短文本是 0.1。两种读法都符合那句话；已在 docs/handover/questions/reduced-precision-text.md 里写了实测文本与代价，用例钉住当前这一种，翻转只需改一行期望。
+
+未做及原因：math::min/max（modules/math/numeric.cpp:153-181）与 math::abs 还没有 bf16/f16 重载，所以 array::min/array::max 对这类数组不算。需要新的组条目（min_bf、abs_f6…）+ 执行器 + stdlib/math.cml 的 export func 声明——声明机制当时被另一个 agent 持有，所以停手没有越界（该 agent 现已合入，这可以成为下一个任务）。数组元素打印路径不需要工作：它按元素类型压入每个元素槽（src/core/rtdata/print.cpp:219），走到同样两条分支，且槽形式等于紧凑数组字节（reduced_reduction_bytes 钉住）。
