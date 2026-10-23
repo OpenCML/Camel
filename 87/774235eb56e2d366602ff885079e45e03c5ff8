@@ -1,0 +1,11 @@
+h341 — 空叶子结构体状态本就被允许；带数组字段的携带状态仍然拒绝，但点明了缺什么（分支 handover/h341-loop-state，8 提交，基线 8058cce8b；5 文件）
+
+第 1 部分：**树本来就不拒绝零叶子结构体状态，没有改任何源文件**。问题里点名的那道检查 isSplittableAggregate（src/compile/gir/builder_control.cpp 的 size() > 0）不是拒绝——它决定 H71 能不能把状态按叶子拆成多个分量；零叶子结构体没有分量，拆分为空就把状态整体留下，而未拆分的状态就是普通的整值状态（struct_state.cml 的 arm_mixed 早就在整值读它）。裁定 (a) 的「不加规则、不加诊断」正是今天的实情；没有放宽任何东西，也没有新增规则或诊断。
+把"允许"钉成行为而不是"没有消息"：test/cases/loops/zero_leaf_state.cml（loops.plan.toml 里 6 个新实例，共 130/130）——循环按元素一轮一轮地跑（round 7 / round 8，这只有体的效应能显示出来）、它的值仍是零叶子结构体（{} {}、a == fresh 为真）、四个后端一致、std::gir 把它留作循环唯一的状态（LOOP 的 value_type="{  }" 经 CAST 进入 Nothing）。
+**没有红可给，A/B 说明了为什么**：把「允许空结构体状态」照字面实现在那个谓词上（去掉 size() > 0，单独一个提交 d3ddc29fc），同一个计划 130/130，钉子读到同样的值与同样的形状；再把谓词还原（93f88c46d），仍绿。旧规则从来不是一道拒绝。
+仍然拒绝、按观察报告而不是改掉：问题里写的字面 do {} 仍报 LoopBodyTypeMismatch——do/then/else 后面的 {} 按设计就是空块（parser.cpp），那个意图要写成 do s 或 sync { … {} }。这是裁定没有点名的解析器规则。
+
+第 2 部分：ONNX 的数组字段拒绝保留，且现在说明缺什么。尾递归消息的两个生产者都把出错的叶子按它在携带值里的位置写出来并附上裁定的理由：`… which is the leaf 'xs', a value of type 'int[]'; a loop carries tensors and scalars and tuples and structs of them, and a carried state with an array field is refused until native multi-dimensional arrays settle the shapes of fixed-size arrays (H17 items 2 and 4)`。字符串或函数叶子保持原措辞；没有分配新的诊断码（仍是 RuntimeDiag::RuntimeError）。childPath 修了一处：根下拼接子项不带分隔符（ONNX 的状态名传的是提示，不变），否则位置会读成 ".xs"。
+钉子：export_loop_carried_array_field.cml（尾递归，状态 { xs: int[], k: int }）+ 计划条目，两处都抄了裁定；守卫读拒绝文本、被点名的字段、缺的东西，以及没有写出模型文件。同一守卫上红/绿：把旧措辞还原到单独一个提交时它失败（which is a value of type 'int[]'）；用裁定措辞时通过。既有的 export_loop_carried_array（裸数组）期望不变；onnx 计划 136/136。
+
+运行（主机 88zjwei，共享且负载约 91，只做增量构建）：闸门 total 5746, pass 5732, fail 0, skip 14。踩到的坑：对已经推给 helper 暂存裸库的提交做 amend 会让它的 push 变成非快进（exit 2）；撤掉 amend，跟随修复放进自己的提交。
