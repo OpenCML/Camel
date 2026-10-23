@@ -34,12 +34,12 @@
           "source": {
             "end": {
               "character": 1,
-              "line": 36
+              "line": 40
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 0,
-              "line": 31
+              "line": 35
             }
           }
         },
@@ -141,12 +141,12 @@
           "source": {
             "end": {
               "character": 24,
-              "line": 32
+              "line": 36
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 23,
-              "line": 32
+              "line": 36
             }
           }
         },
@@ -161,12 +161,12 @@
           "source": {
             "end": {
               "character": 25,
-              "line": 32
+              "line": 36
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 12,
-              "line": 32
+              "line": 36
             }
           }
         },
@@ -182,12 +182,12 @@
           "source": {
             "end": {
               "character": 11,
-              "line": 32
+              "line": 36
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 4,
-              "line": 32
+              "line": 36
             }
           }
         },
@@ -202,12 +202,12 @@
           "source": {
             "end": {
               "character": 27,
-              "line": 33
+              "line": 37
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 12,
-              "line": 33
+              "line": 37
             }
           }
         },
@@ -221,12 +221,12 @@
           "source": {
             "end": {
               "character": 26,
-              "line": 33
+              "line": 37
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 25,
-              "line": 33
+              "line": 37
             }
           }
         },
@@ -242,12 +242,12 @@
           "source": {
             "end": {
               "character": 11,
-              "line": 33
+              "line": 37
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 4,
-              "line": 33
+              "line": 37
             }
           }
         },
@@ -262,12 +262,12 @@
           "source": {
             "end": {
               "character": 29,
-              "line": 34
+              "line": 38
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 12,
-              "line": 34
+              "line": 38
             }
           }
         },
@@ -283,12 +283,12 @@
           "source": {
             "end": {
               "character": 11,
-              "line": 34
+              "line": 38
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 4,
-              "line": 34
+              "line": 38
             }
           }
         },
@@ -302,12 +302,12 @@
           "source": {
             "end": {
               "character": 12,
-              "line": 35
+              "line": 39
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 11,
-              "line": 35
+              "line": 39
             }
           }
         },
@@ -368,12 +368,12 @@
           "source": {
             "end": {
               "character": 16,
-              "line": 18
+              "line": 22
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 15,
-              "line": 18
+              "line": 22
             }
           }
         },
@@ -387,12 +387,12 @@
           "source": {
             "end": {
               "character": 14,
-              "line": 18
+              "line": 22
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 13,
-              "line": 18
+              "line": 22
             }
           }
         }
@@ -448,12 +448,12 @@
           "source": {
             "end": {
               "character": 16,
-              "line": 22
+              "line": 26
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 15,
-              "line": 22
+              "line": 26
             }
           }
         },
@@ -467,12 +467,12 @@
           "source": {
             "end": {
               "character": 14,
-              "line": 22
+              "line": 26
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 13,
-              "line": 22
+              "line": 26
             }
           }
         }
@@ -544,12 +544,12 @@
           "source": {
             "end": {
               "character": 21,
-              "line": 26
+              "line": 30
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 20,
-              "line": 26
+              "line": 30
             }
           }
         },
@@ -565,12 +565,12 @@
           "source": {
             "end": {
               "character": 19,
-              "line": 26
+              "line": 30
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 12,
-              "line": 26
+              "line": 30
             }
           }
         },
@@ -584,12 +584,12 @@
           "source": {
             "end": {
               "character": 26,
-              "line": 26
+              "line": 30
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 25,
-              "line": 26
+              "line": 30
             }
           }
         },
@@ -604,12 +604,12 @@
           "source": {
             "end": {
               "character": 24,
-              "line": 26
+              "line": 30
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 23,
-              "line": 26
+              "line": 30
             }
           }
         },
@@ -625,12 +625,12 @@
           "source": {
             "end": {
               "character": 11,
-              "line": 27
+              "line": 31
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 4,
-              "line": 27
+              "line": 31
             }
           }
         },
@@ -644,12 +644,12 @@
           "source": {
             "end": {
               "character": 12,
-              "line": 28
+              "line": 32
             },
             "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
             "start": {
               "character": 11,
-              "line": 28
+              "line": 32
             }
           }
         },

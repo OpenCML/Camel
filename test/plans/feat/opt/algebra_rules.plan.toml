@@ -29,6 +29,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 # Every entry runs the same corpus through both sides with the same pass list, and the measurement is
 # the difference between the two results.
 #
+# The ruling of 2026-10-23 (`docs/handover/reviews/questions-2026-10-23.md`) settled what a difference
+# means, and this file is read under it: `std::opt::algebra` and `rules::simplify` are the same thing
+# (the reference mode is the `neutral_only` subset of the C++ side that remains), the library's
+# default numeric grant is design principles 7.3's default -- which allows `reassociate` and
+# `contract` -- so where the library rewrites and the deleted table refused, the library is the
+# baseline and the old table's `relaxed()` policy is its own deviation, and the conditions the old
+# table applied (its `exclusive()` user rule) have no rule-language counterpart. Where the library
+# still differs from the reference mode, the difference is the engine's job and not a rule condition
+# (`rule-conditions-and-policy` item 3). The effect refusal below is decreed the same way, as a
+# local subgraph check before a rule is applied (`rule-drops-effect`).
+#
 #   `by_cpp`     the reference side of this tree, recorded as a golden: its graph (`std::gir` /
 #                `std::jgir`) and its table.
 #   `by_library` the rule library's graph, held to the golden by `compareGirDotIsomorphic`
@@ -127,6 +138,15 @@ compare_to = "algebra_rules.agreement.without_the_pass"
 compare_fields = ["exit_code", "stdout_normalized"]
 
 # ---- the graphs the two sides do not answer the same way ----
+#
+# Two of them, not three: `effect_mul_zero` was the third, and the engine check the ruling of
+# 2026-10-23 decrees (`docs/handover/reviews/questions-2026-10-23.md`, `rule-drops-effect`: before a
+# rule is applied, the subgraph the pattern variables its right side does not use bound is examined,
+# and an effect node, or a node carrying a sync or order edge, there refuses the application) refuses
+# the match that used to drop the print. `library_runs` and `differs` below now pin that agreement,
+# and a rule or an engine change that drops a live effect again turns them red. The check is in this
+# tree -- `dropsOrdered`/`pureComputation` in src/runtime/writings.cpp -- so the correct five-line
+# expectation below passes rather than being marked a known failure.
 
 [[tests]]
 name = "algebra_rules.divergence.by_cpp"
@@ -139,7 +159,7 @@ golden = "./golden/algebra_rules.divergence.cpp.jgir"
 
 [[tests]]
 name = "algebra_rules.divergence.differs"
-desc = "The rule library's graph against it, every graph examined: `anchor_add` and `anchor_mul32` lose the operation, the constant and both edges, and the graph exits at its port where the C++ pass keeps the operation as the named node; `effect_mul_zero` loses the product and leaves the print it read without a user; main is the same graph. Three reported differences, named node by node."
+desc = "The rule library's graph against it, every graph examined: `anchor_add` and `anchor_mul32` lose the operation, the constant and both edges, and the graph exits at its port where the C++ pass keeps the operation as the named node, and main is the same graph; the ruling of 2026-10-23 makes that difference the engine's job and not a rule condition (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy` item 3). `effect_mul_zero` is not a difference any more: the engine refuses the match whose right side would drop the print (design principles 9.7, the same ruling's `rule-drops-effect`), so the library's graph is the C++ graph there and `pairs.mjs` compares it with the rest. Two reported differences, named node by node."
 case = "../../../cases/opt/algebra_rules/divergence.cml"
 args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "std::jgir"]
 verify_script_path = "../../../cases/opt/algebra_rules/pairs.mjs"
@@ -160,10 +180,10 @@ expect_stdout_exact = "7\n9\n5\n0\n0\n"
 
 [[tests]]
 name = "algebra_rules.divergence.library_runs"
-desc = "MEASURED VIOLATION OF DESIGN PRINCIPLES 9.7, recorded rather than normalized away: the library's `int_mul_zero` applies `x * 0 => 0` to `println(5) * 0`, the print is left without a user and no longer runs, and the run prints four lines where the source prints five. The ruling (9.7, rule language section 8, H243 item 2) requires the engine to refuse a match whose right-hand side drops an effect; the check is not in this tree, and the fix is the engine's, not the rule's. When it lands, this entry and `divergence.cxx_runs` agree and this expectation is removed."
+desc = "The library keeps the effect, so it agrees with the source and with the C++ side on this corpus. `int_mul_zero` is still in the library and still applies `x * 0 => 0` to `println(5) * 0`, and the engine refuses that match because the part the right side drops is a call, not a pure computation: 设计原则 9.7, 改写不改变哪些效应执行 -- 一条规则的右边如果丢掉了左边匹配到的一部分，只有当丢掉的部分是纯计算时这条规则才适用；这由规则引擎统一检查 ... 例：`x * 0 => 0` 不作用于 `println(5) * 0`. The refusal is `dropsOrdered`/`pureComputation` in src/runtime/writings.cpp, so the rewrite that used to print four lines prints five, and a future rule or engine change that drops the print again turns this red. This entry used to pin the opposite (a measured violation, `7\n9\n0\n0\n`); the ruling of 2026-10-23 calls that writing a defect into the spec and says the entry should have carried the correct five lines and been marked a known failure until the engine refuses (`docs/handover/reviews/questions-2026-10-23.md`, `rule-drops-effect`). With the refusal in this tree the five lines pass, so the entry is green and carries no mark."
 case = "../../../cases/opt/algebra_rules/divergence.cml"
 args = ["${case}", "rules::simplify", "std::nvm"]
-expect_stdout_exact = "7\n9\n0\n0\n"
+expect_stdout_exact = "7\n9\n5\n0\n0\n"
 
 # ---- the rewrites only the rule library performs ----
 
@@ -178,7 +198,7 @@ golden = "./golden/algebra_rules.library_only.cpp.txt"
 
 [[tests]]
 name = "algebra_rules.library_only.table"
-desc = "The library's table against the deleted C++ law table's, graph by graph, out of 19: three forms both sides rewrite to the same shape (`fold` and `double` to `x * 6` and `x * 2`, `double_d` to `x * 2.0`), one neither rewrites (`fold_d`, the float coefficient fold, which needs the `no_infs` grant no node carries on either side), and fourteen the library rewrites alone — the integer zero, self-subtraction, division-by-one and double-negation laws and the five float neutrals, which the deleted table never had at all, and the two like-term combines, which it refuses for a condition: `combine` reads `x * 3` and `x * 5` in a `sync` body where the second product is control-dependent on the first, and its `exclusive()` refuses any product with another user, control users included, while `combine_d` is refused by the `reassociate` grant its float path demands and the default policy withholds. The values the program prints are the values the C++ side printed, line for line."
+desc = "The library's table against the deleted C++ law table's, graph by graph, out of 19: three forms both sides rewrite to the same shape (`fold` and `double` to `x * 6` and `x * 2`, `double_d` to `x * 2.0`), one neither rewrites (`fold_d`, the float coefficient fold, which needs the `no_infs` grant no node carries on either side), and fourteen the library rewrites alone — the integer zero, self-subtraction, division-by-one and double-negation laws and the five float neutrals, which the deleted table never had at all, and the two like-term combines, which the old table refuses for reasons of its own: `combine` reads `x * 3` and `x * 5` in a `sync` body where the second product is control-dependent on the first and the old table's `exclusive()` refuses any product with another user, control users included, and `combine_d` is refused by its `relaxed()` policy, which withholds the `reassociate` grant the library has by design principles 7.3's default. The ruling of 2026-10-23 (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy`) reads both as the old table's deviations, not as conditions the rule language lacks: the control edge between two products of one statement is the old builder's always-emit artifact (H242 removes it), and a surviving user of an eliminated product is a cost-function question (rule language v2 section 5), not a `when`. The values the program prints are the values the C++ side printed, line for line."
 case = "../../../cases/opt/algebra_rules/library_only.cml"
 args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
 verify_script_path = "../../../cases/opt/algebra_rules/tables.mjs"
@@ -211,7 +231,7 @@ golden = "./golden/algebra_rules.tensor.cpp.txt"
 
 [[tests]]
 name = "algebra_rules.tensor.table"
-desc = "The library's table against the deleted C++ law table's, out of 5 graphs: `tensor_double` is the one form both rewrite (`t + t` becomes `t * 2.0`), `tensor_combine` is refused by the deleted table for the `reassociate` grant its float path demands while the library's `#requires<reassociate>` is granted, and two forms are left by both — `tensor_fold`, which needs the `no_infs` grant no node carries, and `tensor_zero`, where the replacement would be a zero tensor of the matched shape: a rule writes what its right-hand side writes, and the language cannot write that constant, so the missing piece there is a language feature and not a rule. The values the program prints are the values the C++ side printed, line for line."
+desc = "The library's table against the deleted C++ law table's, out of 5 graphs: `tensor_double` is the one form both rewrite (`t + t` becomes `t * 2.0`), `tensor_combine` is refused by the deleted table for the `reassociate` grant its float path demands while the library's `#requires<reassociate>` is granted (design principles 7.3's default allows it; the old table's `relaxed()` policy is its own deviation), and two forms are left by both — `tensor_fold`, which needs the `no_infs` grant no node carries, and `tensor_zero`, whose replacement is a zero tensor of the matched shape: the rule language does write it, as a right side that calls a Camel function (rule language v2 section 4, `t * 0.0 => zeros_like(t)`), which is H232 step 3, so what is missing here is a law and not a language feature. The values the program prints are the values the C++ side printed, line for line."
 case = "../../../cases/opt/algebra_rules/tensor_forms.cml"
 args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
 verify_script_path = "../../../cases/opt/algebra_rules/tables.mjs"

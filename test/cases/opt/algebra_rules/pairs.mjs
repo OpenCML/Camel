@@ -2,13 +2,13 @@
 // node and edge by edge. The golden is the C++ pass's `std::jgir`: the deleted full law table
 // (`e8c290554:src/passes/opt/generic/algebra.cpp`), whose dump on this corpus is identical to the
 // dump of the reference mode that remains (`std::opt::algebra neutral_only=true`, the `by_cpp`
-// snapshot beside this entry), so the three differences below are the ones the full table had as
+// snapshot beside this entry), so the two differences below are the ones the full table had as
 // well. The run being verified is the library's. Every graph of the corpus is examined, and each one
 // is either the same graph on the two sides (compared by the terms `compareGirDotIsomorphic` uses: a
 // node is its kind, its label, its type and its in/out degree, an edge is its endpoints, its kind
-// and its index) or one of the three recorded differences below.
+// and its index) or one of the two recorded differences below.
 //
-// The three differences are the findings, and they are not normalized away:
+// The two differences are the findings, and they are not normalized away:
 //
 //   `anchor_add`, `anchor_mul32`  the graph's named node. The C++ pass's `isReplaceable` refuses to
 //       rewrite the node the graph returns, so the add (the product at i32) is still the graph's
@@ -19,16 +19,20 @@
 //       the graph returns, the engine moves the anchor onto the replacement, as the C++ pass's
 //       `replaceFoldResult` does. It lands with the effect refusal below.
 //
-//   `effect_mul_zero`  the effect. The C++ law table has no `x * 0` law, so the product over the
-//       print stands; the library's `int_mul_zero` replaces it by the constant 0 and the print the
-//       product read is left with no user. Design principles 9.7 and the rule language's second
-//       version section 8 forbid exactly that: the part a rule's right-hand side drops must be
-//       pure. The same ruling (docs/handover/reviews/questions-2026-10-23.md, `rule-drops-effect`)
-//       decrees the check rather than withdrawing the rule: before a rule is applied, the subgraph
-//       the pattern variables that its right-hand side does not use bound is examined, and an
-//       effect node -- or a node carrying a sync or order edge -- there refuses the application.
-//       This entry is the measurement of the violation, and it carries the correct five-line
-//       expectation as a known-fail entry until the engine refuses instead.
+//   `effect_mul_zero`  was the third difference and is an agreement now. The C++ law table has no
+//       `x * 0` law, so the product over the print stands there; the library's `int_mul_zero` is
+//       still there too, and the engine refuses its match, because the part the right side drops is
+//       the print and not a pure computation. The same ruling
+//       (docs/handover/reviews/questions-2026-10-23.md, `rule-drops-effect`) decrees the check
+//       rather than withdrawing the rule: before a rule is applied, the subgraph the pattern
+//       variables that its right-hand side does not use bound is examined, and an effect node -- or
+//       a node carrying a sync or order edge -- there refuses the application. Design principles 9.7
+//       forbids the rewrite the same way ("例：`x * 0 => 0` 不作用于 `println(5) * 0`"), the refusal
+//       is `dropsOrdered`/`pureComputation` in src/runtime/writings.cpp, and the graph the library
+//       used to lose is the graph both sides draw now, so this corpus compares it with the rest
+//       instead of recording it: a rule or an engine change that drops a live effect again fails
+//       that comparison. The value side of the same change is
+//       `algebra_rules.divergence.library_runs`.
 
 import fs from 'node:fs'
 import { applyNormalizers } from '../../../tools/normalizers.mjs'
@@ -87,22 +91,12 @@ for (const name of GRAPHS) {
         assert(libExit.kind === 'PORT' && libExit.label === 'x', `'${name}' on the library side does not exit at the port: ${libExit.kind} ${libExit.label}`)
         continue
     }
-    if (name === 'effect_mul_zero') {
-        assert(cpp.nodes.length === 7 && cpp.edges.length === 6, `'effect_mul_zero' on the C++ side is ${cpp.nodes.length} nodes and ${cpp.edges.length} edges, not the recorded 7 and 6`)
-        const products = cpp.nodes.filter((n) => n.label === ':op/mul_l')
-        assert(products.length === 1, `'effect_mul_zero' on the C++ side has ${products.length} products, not the one the source wrote`)
-        const read = cpp.edges.filter((e) => e.target === products[0].id).map((e) => cpp.nodes.find((n) => n.id === e.source).label).sort()
-        assert(read.join(',') === '0,:io/println', `the product of the C++ side does not read the print and the zero: ${read.join(',')}`)
-        assert(lib.nodes.length === 6 && lib.edges.length === 4, `'effect_mul_zero' on the library side is ${lib.nodes.length} nodes and ${lib.edges.length} edges, not the recorded 6 and 4`)
-        const arithmetic = lib.nodes.filter((n) => (n.label || '').startsWith(':op/'))
-        assert(arithmetic.length === 0, `'effect_mul_zero' on the library side still holds arithmetic: ${arithmetic.map((n) => n.label).join(',')}`)
-        const prints = lib.nodes.filter((n) => n.label === ':io/println')
-        assert(prints.length === 2, `'effect_mul_zero' on the library side holds ${prints.length} prints, not the two the source wrote`)
-        const orphan = prints.find((n) => lib.edges.every((e) => e.source !== n.id))
-        assert(orphan, `'effect_mul_zero' on the library side keeps both prints read by something: no print was left without a user`)
-        const feeds = lib.edges.filter((e) => e.target === orphan.id).map((e) => lib.nodes.find((n) => n.id === e.source).label).sort()
-        assert(feeds.join(',') === '5', `the orphaned print of the library side does not read the constant 5: ${feeds.join(',')}`)
-        continue
-    }
+    // Every graph that is not one of the two recorded differences must be the same graph on the
+    // two sides, `effect_mul_zero` included: it was the third difference until the engine refused
+    // the match that dropped the print (design principles 9.7, the `rule-drops-effect` ruling), so
+    // this comparison is what keeps it an agreement, and a rule or an engine change that drops a
+    // live effect again fails here. The assertions this corpus used to make about the library side
+    // -- its sole arithmetic gone, two prints with one of them left without a user -- described the
+    // violation and are gone with it.
     assert(signature(cpp) === signature(lib), `'${name}' is not a recorded difference and the two sides differ`)
 }

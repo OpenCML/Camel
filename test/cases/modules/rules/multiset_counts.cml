@@ -1,0 +1,115 @@
+/**
+ * What the laws of the multiset read applied to `multiset_target.cml`, counted: the additions and
+ * products of every shape before and after a pass, and the rewrites and rounds of the run.
+ *
+ * The rules are local to this case on purpose: the guard is about what the matcher reads, not
+ * about what the standard library happens to hold today.
+ */
+module multiset_counts
+
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Rule, Run, rewrite, run, saturate, extract } from rewrite
+
+rule add_zero(x: int) { x + 0 => x }
+rule fold_add(x: int, const c1: int, const c2: int) { (x + c1) + c2 => x + (c1 + c2) }
+rule combine(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
+rule combine_rest(x: int, const c1: int, const c2: int, r: int) {
+    x * c1 + x * c2 + r => x * (c1 + c2) + r
+}
+rule combine_rest_f(x: float, const c1: float, const c2: float, r: float) {
+    x * c1 + x * c2 + r => x * (c1 + c2) + r
+}
+rule mul_zero(x: int) { x * 0 => 0 }
+rule add_minus_zero(x: float) { x + -0.0 => x }
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func countOf(p: Program, function: string, operator: string): int {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return len(nodes(found[0])->filter<(n: Node): bool => opText(n) == operator>)
+}
+
+/// The zero law's two shapes: the written sum and the one whose `0` sits under a second sum.
+export func report_zero(p: Program): Program! sync {
+    println('left_zero', countOf(p, 'zero_left', ':op/add_l'))
+    println('right_zero', countOf(p, 'zero_right', ':op/add_l'))
+    return p
+}
+
+/// The folded constant pair, in the written order, with the constants together, and with the
+/// variable between the two constants.
+export func report_fold(p: Program): Program! sync {
+    println('left_fold', countOf(p, 'fold_left', ':op/add_l'))
+    println('right_fold', countOf(p, 'fold_right', ':op/add_l'))
+    println('three_fold', countOf(p, 'fold_three', ':op/add_l'))
+    return p
+}
+
+/// Two products of one variable with a term between them: the additions and the products.
+export func report_products(p: Program): Program! sync {
+    println('split', countOf(p, 'split_products', ':op/add_l'), countOf(p, 'split_products', ':op/mul_l'))
+    println(
+        'split_nested', countOf(p, 'split_products_nested', ':op/add_l'),
+        countOf(p, 'split_products_nested', ':op/mul_l'))
+    return p
+}
+
+/// The float neutral law, which reads the written order only, and the float chain the coefficient
+/// law with a rest parameter must leave alone: a float sum is not exactly associative.
+export func report_float(p: Program): Program! sync {
+    println('float_left', countOf(p, 'float_left', ':op/add_d'), 'float_right', countOf(p, 'float_right', ':op/add_d'))
+    println('split_float', countOf(p, 'split_float', ':op/add_d'), countOf(p, 'split_float', ':op/mul_d'))
+    return p
+}
+
+/// What the store itself calls one value, with no rule at all: the canonical form of a chain.
+export func report_classes(p: Program): Program! sync {
+    println('merged', countOf(p, 'merged_sum', ':op/add_l'))
+    println('grouped', countOf(p, 'grouped_sum', ':op/add_l'), 'grouped_float', countOf(p, 'grouped_float', ':op/add_d'))
+    return p
+}
+
+/// The product whose other factor runs a call, and the same product over a variable.
+export func report_effects(p: Program): Program! sync {
+    println('dropped', countOf(p, 'dropped', ':op/mul_l'), 'zero', countOf(p, 'zero', ':op/mul_l'))
+    return p
+}
+
+func reported(label: string, r: Run<Program>): Program sync {
+    println(label, 'rewrites', r.rewrites, 'rounds', r.rounds)
+    return r.result
+}
+
+func one(label: string, p: Program, rules: Rule[]): Program! sync {
+    return p->run<rules, rounds: 16, strict: false> ?-> sync (r: Run<Program>) => reported(label, r)
+}
+
+/// The laws without a parameter for the rest of a sum, and the zero law.
+export func multiset(p: Program): Program! sync {
+    return one('multiset', p, [add_zero, fold_add, combine, mul_zero])
+}
+
+/// The coefficient law that carries the terms no pattern names.
+export func carried(p: Program): Program! sync {
+    return one('carried', p, [combine_rest])
+}
+
+/// The same law over floats, where the sum of the products is not exactly associative.
+export func floats(p: Program): Program! sync {
+    return one('floats', p, [combine_rest_f, add_minus_zero])
+}
+
+/// No law at all: the values the store itself calls one value, merged and extracted.
+export func classes(p: Program): Program! {
+    let none: Rule[] = []
+    let tabled = saturate(p, none, 4)
+    return match tabled {
+        case error e => tabled
+        case q => extract(q, 'nodes')
+    }
+}

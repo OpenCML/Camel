@@ -2,16 +2,16 @@
 module typed_pass
 import { Program } from graph
 import { rewrite } from rewrite
-import { int32_add_zero, int32_zero_add, int32_sub_zero, int32_mul_one, int32_one_mul, int32_mul_zero, int32_zero_mul, int32_div_one, int32_neg_neg, int32_sub_self, int32_combine, int32_fold, int32_fold_add, float32_mul_one, float32_one_mul, float32_add_minus_zero, float32_sub_zero, float32_div_one, float32_neg_neg, float32_combine, float32_combine_mixed, float32_fold, float32_double } from rules
+import { int32_add_zero, int32_sub_zero, int32_mul_one, int32_mul_zero, int32_div_one, int32_neg_neg, int32_sub_self, int32_combine, int32_fold, int32_fold_add, float32_mul_one, float32_add_minus_zero, float32_sub_zero, float32_div_one, float32_neg_neg, float32_combine, float32_combine_mixed, float32_fold, float32_double } from rules
 
 /// Every i32 law but nothing else: a float or an `int` expression is untouched.
 export func apply_i32(p: Program): Program! {
-    return rewrite(p, [int32_add_zero, int32_zero_add, int32_sub_zero, int32_mul_one, int32_one_mul, int32_mul_zero, int32_zero_mul, int32_div_one, int32_neg_neg, int32_sub_self, int32_combine, int32_fold, int32_fold_add])
+    return rewrite(p, [int32_add_zero, int32_sub_zero, int32_mul_one, int32_mul_zero, int32_div_one, int32_neg_neg, int32_sub_self, int32_combine, int32_fold, int32_fold_add])
 }
 
 /// Every f32 law but nothing else.
 export func apply_f32(p: Program): Program! {
-    return rewrite(p, [float32_mul_one, float32_one_mul, float32_add_minus_zero, float32_sub_zero, float32_div_one, float32_neg_neg, float32_combine, float32_combine_mixed, float32_fold, float32_double])
+    return rewrite(p, [float32_mul_one, float32_add_minus_zero, float32_sub_zero, float32_div_one, float32_neg_neg, float32_combine, float32_combine_mixed, float32_fold, float32_double])
 }
 
 /// Only the exact doubling law, so its condition is observable: the combine rule would otherwise

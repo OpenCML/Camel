@@ -243,9 +243,11 @@ expect_exit = 0
 expect_stdout_exact = "7\n11\n7\n10\n"
 timeout_ms = 20000
 
-# The five identities the C++ reference mode applies are the rules library's five integer rules
-# (stdlib/rules.cml: int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul and the
-# int32 versions). The case contains only those forms: the two tests below pin each implementation
+# The five identities the C++ reference mode applies are the rules library's five integer
+# identities (stdlib/rules.cml: int_add_zero, int_sub_zero, int_mul_one, and the int32 versions;
+# each law is written once for both operand orders, since the matcher reads the order the operator
+# declares commutative -- the deleted int_zero_add and int_one_mul said it a second time). The case
+# contains only those forms: the two tests below pin each implementation
 # to the same surviving graph (the operand add, and no other operator), so a change to either side
 # turns its test red. They are not a byte-for-byte differential: the C++ draft rewrite leaves the
 # neutral operand constant dead and attaches the parameter's source span to the port it keeps,
