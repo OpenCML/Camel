@@ -154,7 +154,12 @@ Array *reduceAxis(
             switch (op) {
             case ReduceOp::Sum:
             case ReduceOp::Mean: {
-                // f64 accumulation for floats; integers and bools exactly in int64, wrapping on
+                // Accumulation type: `double` for every floating element type (f32, f64, bf16,
+                // f16), from +0 in ascending order, with one rounding when the element is stored
+                // into the result — never an f32 accumulator and never a rounding per step
+                // (design principles 7.3, ruling reduced-precision.md (d); stdlib/array.cml
+                // `sum` follows the same rule, so the two paths agree bit for bit). Integers and
+                // bools have no float accumulator: they accumulate exactly in int64, wrapping on
                 // overflow as integer arithmetic does (design principles 5.1, 7.7): the
                 // addition is done on uint64_t, where it is defined to wrap.
                 using Acc = std::conditional_t<
@@ -191,9 +196,11 @@ Array *reduceAxis(
             }
             case ReduceOp::Max:
             case ReduceOp::Min: {
-                // IEEE 754-2019 maximum / minimum folded from the identity (minmax.h). The
-                // operation is exactly associative and commutative, so this order is one of
-                // many that give the same bits; a NaN anywhere gives the canonical NaN.
+                // No accumulator and no accumulation type: the fold carries an element of T
+                // (from the identity, minmax.h) and IEEE 754-2019 maximum/minimum are exactly
+                // associative and commutative (design principles 7.7), so this order is one of
+                // many that give the same bits; a NaN anywhere gives the canonical NaN. Nothing
+                // here rounds, so the one-rounding rule of Sum/Mean does not apply.
                 T best = op == ReduceOp::Max ? maximumIdentity<T>() : minimumIdentity<T>();
                 for (int64_t k = 0; k < split.extent; ++k) {
                     const T v = src[base + k * stride];
@@ -204,9 +211,10 @@ Array *reduceAxis(
             }
             case ReduceOp::ArgMax:
             case ReduceOp::ArgMin: {
-                // The position of the first maximum (minimum) by IEEE 754-2019 maximum
-                // (minimum): the first NaN if there is one, +0 above -0, the first on a tie
-                // (design principles 7.7; beyondExtreme in minmax.h).
+                // As Max and Min: no accumulator and no rounding, so no accumulation type is
+                // chosen here. The position of the first maximum (minimum) is taken by IEEE
+                // 754-2019 maximum (minimum): the first NaN if there is one, +0 above -0, the
+                // first on a tie (design principles 7.7; beyondExtreme in minmax.h).
                 const bool max  = op == ReduceOp::ArgMax;
                 T best          = src[base];
                 int64_t bestIdx = 0;
@@ -227,6 +235,10 @@ Array *reduceAxis(
 }
 
 double sumAll(const Array *input) {
+    // Accumulation type: f64 for every floating element type, in row-major order from +0. The
+    // result is the f64 answer itself, so there is no rounding back into a narrow element type
+    // here (the whole-tensor `sum` answers f64, reduction_ops.cpp); the axis `sum` above is the
+    // one that rounds once into the input's element type.
     return dispatchDType(input->dtype(), [&]<typename T>() {
         const T *src = input->dataAs<T>();
         if constexpr (camel::core::rtdata::is_ieee_float_v<T>) {

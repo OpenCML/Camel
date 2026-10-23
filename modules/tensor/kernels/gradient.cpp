@@ -89,6 +89,17 @@ void forEachBroadcast(std::span<const int64_t> big, const std::vector<int64_t> &
 
 } // namespace
 
+/// Sum of `g` over the axes that `shape` broadcasts away: the backward of a broadcast.
+///
+/// Accumulation type: f32. The input is converted to f32 (`asFloat` above) whatever its element
+/// type, the accumulator is f32 and the answer is f32, so the additions happen at the width of
+/// the values being added: nothing is accumulated below the type it is given, and no permission
+/// enters. The rule that a floating-point reduction accumulates in f64 and rounds once at the end
+/// (design principles 7.3, ruling reduced-precision.md (d)) is stated for the reductions that
+/// return their input's element type — `array::sum` and the tensor axis `sum` — and this helper
+/// is neither: it is the module's broadcast backward and answers f32 by construction. Raising
+/// this accumulator to f64 would move the bits of every f32 gradient computed through it, which
+/// is a decision of its own rather than a consequence of (d), so it is left as it is.
 Array *
 sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator) {
     if (g->shapeSpan().size() == shape.size() &&

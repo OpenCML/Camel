@@ -8,6 +8,21 @@
  * (`sum(t, axis)`, `sum(t, axis, keepdims)`, ...) share the export name with
  * the full forms and are selected by arity. Softmax-family operators take an
  * optional axis that defaults to the last one.
+ *
+ * Where the accumulation happens, per form (reduction and rounding are one rule,
+ * design principles 7.3 and ruling reduced-precision.md (d)):
+ *
+ *   - `sum(t)`, `mean(t)`: accumulate in f64 (kernels/reduce.h `sumAll`) and answer
+ *     f64 — the accumulator's own width, so no rounding into a narrow element type.
+ *   - `sum(t, axis, ...)`, `mean(t, axis, ...)`: keep the element type (bf16, f16 and
+ *     f64 keep theirs; a mean of integers or bools is f32) and accumulate in f64,
+ *     rounding once when the element is stored (kernels/reduce.cpp).
+ *   - `max` / `min` / `argmax` / `argmin` over an axis: no accumulator at all; they
+ *     carry element values and IEEE 754-2019 maximum/minimum are exactly
+ *     associative and commutative (7.7).
+ *
+ * `array::sum` in stdlib/array.cml accumulates in f64 and rounds once for the same
+ * reason, so the array path and the axis form agree bit for bit.
  */
 
 #include "../kernels/reduce.h"

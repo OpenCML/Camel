@@ -8,10 +8,24 @@
  * reduces the middle dimension. Negative axes count from the end. With
  * `keepDims` the reduced axis stays as extent 1; otherwise it is removed.
  *
- * Float sums accumulate in double from +0 in ascending order; int64 and bool
- * sums accumulate exactly in int64, wrapping on overflow (design principles
- * 5.1, 7.7). The thread split never changes a result: each lane is summed
- * by one thread.
+ * The accumulation type of each reduction, so a reader does not have to re-derive it:
+ *
+ *   - Sum and Mean of a floating element type (f32, f64, bf16, f16) accumulate in
+ *     `double` from +0 in ascending order and round once, when the element is
+ *     stored back into the result's element type. This is the rule of design
+ *     principles 7.3 ("浮点数组的归约在 f64 中累加、舍入一次，返回元素类型") and the ruling
+ *     docs/handover/reviews/reduced-precision.md (d); `array::sum` in stdlib/array.cml
+ *     follows it too, so the array path and this one agree bit for bit.
+ *   - Sum and Mean of an integer or bool element type have no float accumulator at
+ *     all: they accumulate exactly in int64 (on uint64_t, where wrapping is
+ *     defined) and convert once, as design principles 7.7 requires.
+ *   - Max, Min, ArgMax and ArgMin have no accumulator: they carry an element
+ *     value, and IEEE 754-2019 maximum/minimum are exactly associative and
+ *     commutative (7.7), so no order and no width can change a result.
+ *   - `sumAll` (the whole-tensor `sum`) answers f64: f64 accumulation, no
+ *     rounding back into a narrow element type.
+ *
+ * The thread split never changes a result: each lane is summed by one thread.
  */
 
 #pragma once
