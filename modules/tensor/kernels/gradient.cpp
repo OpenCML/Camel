@@ -14,6 +14,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -87,6 +89,88 @@ void forEachBroadcast(std::span<const int64_t> big, const std::vector<int64_t> &
     }
 }
 
+/// The axes of a broadcast as three contiguous runs in memory: the kept axes before the reduced
+/// block, the reduced block itself, and the kept axes after it (`outer`, `reduced`, `inner`, in
+/// the order the input is laid out).  The input is then a sequence of `outer * reduced`
+/// contiguous runs of `inner` elements, and every output element owns `reduced` of those -- one
+/// run when `inner > 1`, one contiguous block when `inner == 1` -- so `sum_to` and
+/// `broadcast_to` touch whole runs instead of walking every element through an odometer of rank
+/// counters.  A decomposition that would not describe the memory layout is refused, and the
+/// caller keeps the general index walk.
+struct BroadcastRuns {
+    int64_t outer   = 1;
+    int64_t reduced = 1;
+    int64_t inner   = 1;
+};
+
+std::optional<BroadcastRuns>
+broadcastRuns(std::span<const int64_t> big, const std::vector<int64_t> &strides, int64_t numel) {
+    // An empty tensor has no element to read, so there is no run to describe and the divisions
+    // below have no operand: an axis of extent 0 enters the inner run through its stride and makes
+    // `inner` zero, and `numel` is zero with it, so the ratio that closes this function would be
+    // 0/0.  The general walk visits no element and produces the empty result the operator already
+    // answers with.
+    if (numel == 0) {
+        return std::nullopt;
+    }
+    BroadcastRuns runs;
+    size_t d = big.size();
+    // The kept axes after the reduced block, innermost first. `strides[d - 1] != 0` says the axis
+    // is kept, and it is the number of elements `big` still has after that axis, which is exactly
+    // `inner` once the axes below it are in the run -- that equality is what makes the axes one
+    // contiguous region.
+    bool contiguousInner = true;
+    while (d > 0 && (big[d - 1] == 1 || strides[d - 1] == runs.inner)) {
+        // A size-1 axis adds nothing to `inner`, but only a broadcast one (stride 0) is free of
+        // the run: any other size-1 axis observes the extent of the input axis below it, so its
+        // stride is the run's.  Taking one at another stride sums a block of the wrong length from
+        // the wrong offset -- `[3, 1, 256]` summed to `[1, 1, 256]` is exactly that axis.
+        contiguousInner &= big[d - 1] == 1 || strides[d - 1] == runs.inner;
+        if (big[d - 1] == 1 && strides[d - 1] != 0 && strides[d - 1] != runs.inner) {
+            contiguousInner = false;
+        }
+        runs.inner *= big[d - 1];
+        --d;
+    }
+    // A kept axis *below* a reduced one is not part of the inner run however its stride lines up:
+    // the reduced axis above it has stride 0, which is a hole. Without this the walk reads that 0
+    // as "not the next inner axis", stops the inner run one axis early, and then sums a block of
+    // the wrong length from the wrong offset -- the `[4, 2, 3, 4]` to `[4, 2, 1, 4]` case of the
+    // declaration evaluator is that shape (a kept axis between two broadcast ones).
+    if (d > 0 && !(big[d - 1] == 1 || strides[d - 1] == 0)) {
+        contiguousInner = false;
+    }
+    // The reduced block: wide in `big`, broadcast in `small`.
+    while (d > 0 && (big[d - 1] == 1 || strides[d - 1] == 0)) {
+        runs.reduced *= big[d - 1];
+        --d;
+    }
+    if (!contiguousInner) {
+        return std::nullopt;
+    }
+    // The kept axes before it: every one of them is a lane the index walk visits, and the walk is
+    // built from `big` and these strides.  An outer axis the operand really has (extent > 1, with
+    // a stride of its own) sits between the runs of the lanes below it, so those lanes' reads are
+    // not the runs the walk computes: refused, and the index walk runs instead.
+    while (d > 0) {
+        if (big[d - 1] != 1 && strides[d - 1] != 0) {
+            return std::nullopt;
+        }
+        runs.outer *= big[d - 1];
+        --d;
+    }
+    // Every element of the input is read exactly once, one read per (lane, reduced index).  A
+    // broadcast axis observes the extent of the input axis it came from, so the reduced axes must
+    // account for `numel / (outer * inner)` elements and no more.  Without this the walk below
+    // reads past the input: a `[512, 1]` summed to `[512, 256]` -- a reversed broadcast, which
+    // the operator allows -- has both axes at stride 0, and this decomposition would read that as
+    // 512 reduced elements over 256 lanes of one element each.
+    if (runs.reduced != numel / (runs.outer * runs.inner)) {
+        return std::nullopt;
+    }
+    return runs;
+}
+
 } // namespace
 
 /// Sum of `g` over the axes that `shape` broadcasts away: the backward of a broadcast.
@@ -112,37 +196,58 @@ sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator)
     const float *in         = src->dataAs<float>();
     float *acc              = out->dataAs<float>();
     const auto big          = src->shapeSpan();
-    // Common case (bias gradients): only leading axes are reduced, so the result is the sum of
-    // the contiguous rows of `g`.
-    size_t lead = big.size();
-    while (lead > 0 && strides[lead - 1] != 0) {
-        --lead;
-    }
-    bool leadingOnly = true;
-    // Every axis in the reduced prefix must actually be broadcast. A preserved
-    // axis before a broadcast middle/trailing axis needs the general index walk.
-    for (size_t d = 0; d < lead; ++d) {
-        leadingOnly &= big[d] == 1 || strides[d] == 0;
-    }
-    for (size_t d = lead; d < big.size(); ++d) {
-        leadingOnly &= big[d] == 1 || strides[d] != 0;
-    }
-    if (leadingOnly) {
-        const int64_t cols = static_cast<int64_t>(numelOf(big.subspan(lead)));
-        const int64_t rows = static_cast<int64_t>(numelOf(big.subspan(0, lead)));
-        parallelFor(
-            cols,
-            std::max<int64_t>(64, grainForWork(kNsPerFloat * 2.0) / std::max<int64_t>(rows, 1)),
-            [&](int64_t begin, int64_t end) {
-                for (int64_t r = 0; r < rows; ++r) {
-                    const float *row = in + r * cols;
-                    for (int64_t c = begin; c < end; ++c) {
-                        acc[c] += row[c];
+    // Both shapes the step issues are three runs: the bias and gain gradients reduce leading axes
+    // ([512, 256] to [256], 512 inputs per output element) and the RMSNorm denominator's gradient
+    // reduces the trailing one ([512, 256] to [512, 1], 256 contiguous inputs per output).  Each
+    // output's contributions are added in the order the index walk visits them, into the same f32
+    // accumulator, so this is the reduction the declaration folds and the walk below computes --
+    // the licence and the accumulation type do not move.  What it does not do is walk 131072
+    // elements through a rank-2 odometer.
+    if (const auto runs = broadcastRuns(big, strides, static_cast<int64_t>(src->numel()))) {
+        const int64_t lanes = runs->outer * runs->inner;
+        // One unit is one element of the input, whichever branch runs: a lane's `reduced`
+        // contributions plus, when the run is a gather, the span of outputs it feeds.
+        const int64_t grain = std::max<int64_t>(
+            1, grainForWork(kNsPerFloat * 2.0) / std::max<int64_t>(runs->reduced * runs->inner, 1));
+        if (runs->inner == 1) {
+            // One output element owns one contiguous run of the input, and its additions are a
+            // dependent chain -- one accumulator, in index order, is the declared reduction.
+            parallelFor(lanes, grain, [&](int64_t begin, int64_t end) {
+                for (int64_t lane = begin; lane < end; ++lane) {
+                    const float *row = in + lane * runs->reduced;
+                    float sum        = 0.0f;
+                    for (int64_t r = 0; r < runs->reduced; ++r) {
+                        sum += row[r];
                     }
+                    acc[lane] = sum;
                 }
             });
+            return out;
+        }
+        // The reduced axes are the outermost of the input, so this is a gather: a run of `inner`
+        // consecutive inputs belongs to `inner` consecutive outputs.  The run is the vector loop
+        // and each output still adds its contributions in ascending order of the reduced index,
+        // which is the order the index walk visits them.
+        parallelFor(lanes, grain, [&](int64_t begin, int64_t end) {
+            for (int64_t lane = begin; lane < end;) {
+                const int64_t block = lane / runs->inner;
+                const int64_t first = lane % runs->inner;
+                const int64_t stop  = std::min(end, (block + 1) * runs->inner);
+                float *held         = acc + block * runs->inner + first;
+                const float *plane  = in + (block * runs->reduced) * runs->inner + first;
+                for (int64_t r = 0; r < runs->reduced; ++r) {
+                    const float *row = plane + r * runs->inner;
+                    for (int64_t k = 0; k < stop - first; ++k) {
+                        held[k] += row[k];
+                    }
+                }
+                lane = stop;
+            }
+        });
         return out;
     }
+    // Interleaved: a kept axis between two reduced ones, so no run is contiguous. Kept for the
+    // shapes no run describes.
     forEachBroadcast(big, strides, [&](uint64_t i, int64_t j) { acc[j] += in[i]; });
     return out;
 }
@@ -156,6 +261,43 @@ broadcastTo(const Array *t, std::span<const int64_t> shape, mm::IAllocator &allo
     dispatchDType(t->dtype(), [&]<typename T>() {
         const T *in = t->dataAs<T>();
         T *dst      = out->dataAs<T>();
+        // The same three runs as `sum_to` (see BroadcastRuns), read the other way: the reduction
+        // that shaped the gradient wrote one contiguous run per output element, and this writes
+        // that run back.  `inner == 1` is the reduction axis and becomes a fill of `reduced`
+        // contiguous elements; otherwise each run of `inner` elements is copied `reduced` times.
+        // An expand of a reduction along the trailing axis -- the mean and sum VJPs of the step --
+        // is the first case: 256 floats written per source element, in one vectorizable loop,
+        // instead of 256 odometer steps of the rank-2 counter.
+        if (const auto runs = broadcastRuns(shape, strides, static_cast<int64_t>(t->numel()))) {
+            if (runs->inner == 1) {
+                const int64_t grain =
+                    std::max<int64_t>(1, grainForWork(kNsPerFloat * runs->reduced));
+                parallelFor(runs->outer, grain, [&](int64_t begin, int64_t end) {
+                    for (int64_t lane = begin; lane < end; ++lane) {
+                        T *run       = dst + lane * runs->reduced;
+                        const T held = in[lane];
+                        for (int64_t r = 0; r < runs->reduced; ++r) {
+                            run[r] = held;
+                        }
+                    }
+                });
+            } else {
+                // One contiguous run of `inner` elements per outer position, `reduced` times.
+                const int64_t grain = std::max<int64_t>(
+                    1, grainForWork(kNsPerFloat * runs->inner * runs->reduced));
+                parallelFor(runs->outer, grain, [&](int64_t begin, int64_t end) {
+                    for (int64_t o = begin; o < end; ++o) {
+                        const T *source = in + o * runs->inner;
+                        T *run          = dst + o * runs->reduced * runs->inner;
+                        for (int64_t r = 0; r < runs->reduced; ++r) {
+                            std::memcpy(run + r * runs->inner, source,
+                                        sizeof(T) * static_cast<size_t>(runs->inner));
+                        }
+                    }
+                });
+            }
+            return;
+        }
         forEachBroadcast(shape, strides, [&](uint64_t i, int64_t j) { dst[i] = in[j]; });
     });
     return out;
