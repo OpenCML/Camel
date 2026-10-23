@@ -170,3 +170,24 @@ backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
 expect_output_contains = ["name=SemanticDiag::FunctionNameAsValue", "2 functions of that name [(x: int) => int; (x: float) => float]"]
+
+[[tests]]
+name = "generic_values.candidate_body_fails"
+desc = "Two generic overloads of one name and a position that fixes the types of both: the first one's body does not compile for them and the second one's does, so the name is the second (it returns its `y`: 2 + 4). The same name at the same types is bound twice: the instance that failed is remembered as failed and is not built again."
+kind = "behavior"
+case = "../../../cases/consistency/generic_values/candidate_body_fails.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "6\n"
+
+[[tests]]
+name = "generic_values.err_no_candidate_compiles"
+desc = "Not one of the two generic overloads compiles for the types the position fixes: the name cannot be given its types, and the errors the attempts made are reported with it, because there is no candidate left to try."
+kind = "negative"
+case = "../../../cases/consistency/generic_values/err_no_candidate_compiles.cml"
+args = ["-E", "short", "${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
+expect_output_contains = ["name=SemanticDiag::GenericFunctionAsValue", "its body does not compile for these types", "name=SemanticDiag::NoMatchingFunction"]
