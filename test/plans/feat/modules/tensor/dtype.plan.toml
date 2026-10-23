@@ -2,7 +2,7 @@ id = "modules.tensor.dtype"
 order = 367
 tier = "fast"
 tags = ["feat", "modules", "tensor", "types"]
-desc = "A tensor's element type is the one the program writes (design/arrays-memory, P4 \"element type exact\"): Tensor<f64> holds f64, Tensor<i32> holds i32 and Tensor<bf16>/Tensor<f16> hold two bytes of their own reduced type end to end — creation, arithmetic, reduction, to_bytes/from_bytes — with no storage dtype a written type is replaced with. A conversion into bf16 or f16 rounds and needs the numeric permission change_precision where it is written; reading it back into a wider type is exact. A kernel that computes in f32 only refuses the other element types at the call, naming the operator, the argument type and the set it takes, instead of narrowing. f32 programs keep their bytes."
+desc = "A tensor's element type is the one the program writes (design/arrays-memory, P4 \"element type exact\"): Tensor<f64> holds f64, Tensor<i32> holds i32 and Tensor<bf16>/Tensor<f16> hold two bytes of their own reduced type end to end — creation, arithmetic, reduction, to_bytes/from_bytes — with no storage dtype a written type is replaced with. A conversion into bf16 or f16 rounds to nearest, ties to even, once; one the program writes needs no numeric permission, because `change_precision` governs a computation the compiler moves to lower precision (design principles 7.2-7.3), and reading it back into a wider type is exact. A kernel that computes in f32 only refuses the other element types at the call, naming the operator, the argument type and the set it takes, instead of narrowing. f32 programs keep their bytes."
 
 # The element type is the one written, through every step of the value's life.
 
@@ -48,8 +48,10 @@ expect_stdout = "total=1.0 grad_sum=6.0\ngather=1.0 grad_sum=6.0 row0=3.0 row1=3
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
-# bf16 and f16 are stored element types of their own (H238): two bytes, a conversion into them
-# rounds and needs change_precision, and every kernel computes in f32 and rounds once.
+# bf16 and f16 are stored element types of their own (H238): two bytes, and every kernel computes
+# in f32 and rounds once. A conversion into them is written by the program, so it needs no numeric
+# permission: `change_precision` governs a computation the compiler moves to lower precision
+# (design principles 7.2-7.3).
 
 [[tests]]
 name = "bf16_storage"
@@ -64,31 +66,33 @@ expect_stdout = "2\n[205, 61]\n[0, 0, 205, 61]\n[205, 204, 204, 61]\n2\n[102, 46
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
+# The conversion the previous revision refused for want of the permission: the program writes it,
+# so it is accepted, and it rounds once into the element type.
 [[tests]]
-name = "bf16_no_licence"
-desc = "A conversion from f32 into bf16 without `change_precision` is refused at the line that writes it, with PrecisionChangeNotPermitted naming both element types; it is not done silently."
-kind = "negative"
-case = "../../../../cases/modules/tensor/dtype/bf16_no_licence.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::PrecisionChangeNotPermitted"
-expect_diagnostic_line = 12
-expect_output_contains = ["Converting 'Tensor<f32>' to 'Tensor<bf16>' needs the numeric permission 'change_precision'."]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
+name = "bf16_cast_no_permission"
+desc = "A conversion into bf16 written by the program carries no tag and is accepted: it is the precision the program asked for, not a precision the compiler introduces, so no numeric permission is involved. 0.1 stores the nearest bf16 0x3DCD ([205, 61]) and reads back into f32 as 0x3DCD0000 ([0, 0, 205, 61]), not as the f32 0.1. The previous revision refused this line with SemanticDiag::PrecisionChangeNotPermitted."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/bf16_cast_no_permission.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[205, 61]\n[0, 0, 205, 61]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
 
 [[tests]]
-name = "bf16_strict_no_licence"
-desc = "`#strict` revokes `change_precision` even where the function also carries the tag (design principles 7.4), so the bf16 conversion is refused exactly as it is without the tag."
-kind = "negative"
-case = "../../../../cases/modules/tensor/dtype/bf16_strict_no_licence.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::PrecisionChangeNotPermitted"
-expect_diagnostic_line = 12
-expect_output_contains = ["Converting 'Tensor<f32>' to 'Tensor<bf16>' needs the numeric permission 'change_precision'."]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
+name = "bf16_cast_under_strict"
+desc = "`#strict` revokes every numeric permission (design principles 7.4) and the written bf16 conversion needs none (7.2-7.3), so a function marked `#[strict, change_precision]` that casts into bf16 is accepted and stores the same nearest bf16 0x3DCD ([205, 61]). The previous revision refused it, reading the conversion as a compiler-introduced precision change that `#strict` revokes."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/bf16_cast_under_strict.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[205, 61]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
 
 # A kernel whose declaration is f32 only says so where it is called: it never converts.
 
