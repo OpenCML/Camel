@@ -1,7 +1,13 @@
-# P4's acceptance suite, not yet selected by any run: P4 (`Tensor` as an array alias) has not
-# landed, and a plan under test/plans/ that fails before it lands is a red gate. Move this file
-# to test/plans/feat/compile/array_alias.plan.toml in the P4 commit, where the `known_fail` marks
-# below (one per test) fail the run the moment P4 makes them pass, which is how they come off.
+# P4's acceptance suite (docs/design/arrays-memory/plan.cn.md section 5): Tensor is an alias of the
+# native array type. It was moved here from test/cases/compile/array_alias/ and its per-test
+# `known_fail` marks came off in the same commit that made these cases pass.
+#
+# `alias.bare_tensor` (below) and the bare-`Tensor` signature in test/cases/loops/iterate_tensor.cml
+# lock the *transitional* spelling only: the author's ruling on the undetermined-element array
+# (docs/handover/reviews/questions-2026-10-23.md, the section on the `Tensor` alias's transition)
+# makes a bare `Tensor` in a signature a compile error in P4's end state, with genericity declared
+# in the head (`Tensor<T>`) and the element type always in the type. That case is rewritten by the
+# deletion step the plan must name; see docs/handover/questions/tensor-alias-transition.md.
 id = "compile.array_alias"
 order = 343
 tier = "fast"
@@ -15,8 +21,6 @@ kind = "behavior"
 case = "../../../cases/compile/array_alias/eq_two_spellings.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-known_fail = ["nvm"]
-known_fail_note = "P4 (`Tensor` as an array alias, docs/design/arrays-memory/plan.cn.md section 5) has not landed: this locks the behaviour P4 must produce. Remove the mark in the P4 commit."
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -37,8 +41,6 @@ kind = "behavior"
 case = "../../../cases/compile/array_alias/bare_tensor.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-known_fail = ["nvm"]
-known_fail_note = "P4 (`Tensor` as an array alias, docs/design/arrays-memory/plan.cn.md section 5) has not landed: this locks the behaviour P4 must produce. Remove the mark in the P4 commit."
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -58,8 +60,6 @@ kind = "negative"
 case = "../../../cases/compile/array_alias/type_text.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-known_fail = ["nvm"]
-known_fail_note = "P4 (`Tensor` as an array alias, docs/design/arrays-memory/plan.cn.md section 5) has not landed: this locks the behaviour P4 must produce. Remove the mark in the P4 commit."
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 expect_output_contains = ["takes: (a: f32[..], b: Tensor<[3]>, c: f32[2, 3]) => int"]
@@ -73,8 +73,6 @@ kind = "behavior"
 case = "../../../cases/compile/array_alias/as_shape_check.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-known_fail = ["nvm"]
-known_fail_note = "P4 (`Tensor` as an array alias, docs/design/arrays-memory/plan.cn.md section 5) has not landed: this locks the behaviour P4 must produce. Remove the mark in the P4 commit."
 expect_exit = 0
 expect_stdout_contains = ["2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -87,8 +85,6 @@ kind = "negative"
 case = "../../../cases/compile/array_alias/err_as_shape.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-known_fail = ["nvm"]
-known_fail_note = "P4 (`Tensor` as an array alias, docs/design/arrays-memory/plan.cn.md section 5) has not landed: this locks the behaviour P4 must produce. Remove the mark in the P4 commit."
 expect_exit = 1
 expect_stdout_contains = ["conversion to 'f32[3, 2]' failed: the array has shape [2, 3]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -101,8 +97,6 @@ kind = "negative"
 case = "../../../cases/compile/array_alias/err_element_type.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-known_fail = ["nvm"]
-known_fail_note = "P4 (`Tensor` as an array alias, docs/design/arrays-memory/plan.cn.md section 5) has not landed: this locks the behaviour P4 must produce. Remove the mark in the P4 commit."
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
 expect_output_contains = ["the element type of a Tensor is a numeric scalar (i32, i64, f32, f64, bf16, f16, bool, c64 or c128), not 'string'"]
@@ -116,8 +110,6 @@ kind = "behavior"
 case = "../../../cases/compile/array_alias/var_widening.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-known_fail = ["nvm"]
-known_fail_note = "P4 (`Tensor` as an array alias, docs/design/arrays-memory/plan.cn.md section 5) has not landed: this locks the behaviour P4 must produce. Remove the mark in the P4 commit."
 expect_exit = 0
 expect_stdout_contains = ["4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -130,8 +122,6 @@ kind = "negative"
 case = "../../../cases/compile/array_alias/err_var_rank.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-known_fail = ["nvm"]
-known_fail_note = "P4 (`Tensor` as an array alias, docs/design/arrays-memory/plan.cn.md section 5) has not landed: this locks the behaviour P4 must produce. Remove the mark in the P4 commit."
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

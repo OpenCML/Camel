@@ -1,0 +1,138 @@
+# `Tensor` 别名的过渡类型：删除步与依赖它的新代码
+
+裁定原文见 `docs/handover/reviews/questions-2026-10-23.md` 第 217 行一节（"抽查：未定元素类型的数组
+（`Tensor` 别名的过渡）"）。结论是：**元素类型未定的数值数组（裸 `Tensor` 的别名结果）只是迁移中的过渡，
+不是目标类型**；过渡期内可以存在，但 P4 的计划里要写明删除它的那一步，并且不让新代码依赖它。
+
+这份记录做两件事：把**计划里该补的那一段**写出来（`docs/design/**` 是本次任务不许改的路径，所以交给
+计划的所有者落进去），以及把**本次改动里依赖它的位置**逐个列出，供删除步处理。所有测量取自
+`handover/h366-tensor-flip`（`origin/develop` `221cfe18b` + 本分支改动）。
+
+## 一、建议加进计划的文字（P4 一节、5.1 之后）
+
+> **5.1a 过渡状态与删除步。** `Tensor` 作为 `ArrayType::numericUnknown()` 的导出、以及由此产生的"数值、
+> 元素类型未定的数组"是**迁移中的过渡**，不是语言保留的类型（设计原则 5.5：图上只有具体类型，运行时
+> 不需要类型信息；泛型要在头部用 `::<T>` 声明，裸 `Tensor` 形参等于隐式泛型，已否决）。
+>
+> P4 的终点：
+> - 签名里的裸 `Tensor` 是**编译错误**，诊断提示写 `Tensor<T>` 并在头部声明 `T`，或写具体元素类型
+>   （`f32` 等）；
+> - 标准库的张量运算改为 `func op::<T>(x: Tensor<T>, …) when is_float::<T>()` 一类写法（按
+>   `log_softmax` 的裁定）；
+> - **值的元素类型总在类型里**；形状可以是 `?`（大小运行时才知道是值的事，不是类型的事）。
+>
+> 删除步（作为 P4 之后的一次独立提交，或 P4 提交内最后一步，由计划的所有者定）：
+> 1. `ArrayType::numericUnknown*` 与其标记 `numericUnknown_` 删除；`Tensor` 的 `Reference` 改为
+>    `Tensor<T>` 形式（元素类型参数必填，`Tensor<..>` 的 `applyArguments` 只接受类型参数 + 形状参数）；
+> 2. 签名里出现裸 `Tensor` 的诊断（`InvalidTypeArgument` 或新的语法诊断）；
+> 3. 本页第二节列出的每一处过渡依赖同时删除；
+> 4. `test/cases/compile/array_alias/bare_tensor.cml` 与
+>    `test/plans/feat/compile/array_alias.plan.toml` 的 `alias.bare_tensor` 一条改写成"裸 `Tensor` 形参
+>    是编译错误"的负例；`test/cases/loops/iterate_tensor.cml` 的 `countRows(t: Tensor)` 同理改写成
+>    `countRows::<T>(t: Tensor<T>)` 或删掉。
+
+## 二、本次改动里依赖过渡类型的位置（删除步要一并处理）
+
+| 位置 | 依赖什么 | 删除步怎么做 |
+|---|---|---|
+| `modules/tensor/type.cpp#tensorFactsOf` 的 `isNumericUnknown()` 分支 | 读过渡类型的事实（无元素类型） | 该分支随标记一起删；事实只剩"数值数组"一种 |
+| `modules/tensor/ops/support.cpp#tensorOf(facts)` 的 `!facts.dtype` 两支 | 造过渡类型（`numericUnknown` / `numericUnknownFromForms`） | 元素类型必有时删掉，改成断言 |
+| `modules/tensor/ops/vjp.cpp#vjpTensorType()` | VJP 结果类型是过渡类型（`ArrayType::numericUnknown()`） | 改为由被微分值的切线类型给出具体元素类型 |
+| `src/core/derivative.h/.cpp#setTangentType`/`statedTangentType` | 过渡类型的元素是 `Void`，结构上取不到切线，所以新加一个注册钩子 | 随过渡类型删除；`computeTangentType` 的 `Array` 分支恢复只走元素类型 |
+| `modules/autodiff/pullback.cpp#carriesGradient` 的 `Array` 分支 | 同上（`tangentTypeOf` 判据） | 可恢复为 `carriesGradient(elemType)` |
+| `modules/tensor/module.cpp` 的 `.npy` 加载器/保存器 | 检查值对着 `ArrayType::numericUnknown()` 做形状/元素检查 | 改为对着声明的具体数组类型检查 |
+| `modules/tensor/ops/gradient_ops.cpp#tensorTangentType` | 判断过渡类型有没有切线 | 随钩子删除 |
+| `modules/onnx/emitter.cpp` 的 `Value::constant(..., numericUnknown())` | 数组常量当张量时的声明类型 | 改为值自己的数组类型 |
+
+**没有让新的消费者依赖它**：所有从 `TensorType` 迁过来的构造点走 `tensor::ops::tensorOf(...)`，元素类型
+来自事实（`facts.dtype`）；过渡类型只在"事实里没有元素类型"时出现，即 `Tensor` 的两种拼写本身。
+
+## 三、一处过渡期的已知不精确（记录，不改）
+
+`iterKernel` 在运行期看到秩 1 时给出**元素槽**（裁定：秩 1 迭代给 `T`），`iterInfer` 在静态形状已知时也
+给 `T`；但静态类型是**裸 `Tensor`（秩未知）**时 `iterInfer` 给 `Tensor`，而运行期该值若恰好是秩 1，
+元素槽与静态的 `Tensor` 不符。今天的用例只在这种形参上传秩 ≥ 2 的值（`iterate_tensor.cml` 的
+`countRows(m)`），所以没有可观测的错；秩未知的形参正是删除步要删掉的写法，故不改 `iterKernel`。
+若删除步之前要写这种程序（秩未知形参 + 秩 1 实参 + 把轮次当张量用），它会读到错的值。
+
+## 实测：整翻之后还红在哪（fast 层 5899 例，500 红）
+
+翻的动作本身（`Tensor` = 数值数组、`isTensorType`、`tensorFactsOf`、模块导出与各消费方）已经
+全部走通：`stdlib/optim.cml`、`nn.*`、`onnx.*`、`tiles`、`to_bytes`、`show`、入口参数、golden 之外的
+单元都在编译期正确解析到数组类型上。剩下的红有三类，**都指向同一件事：秩 0 的表示**。
+
+- **246 例 `Expected Tensor argument`**（`tensorArg` 对非张量实参的那句话）：全部发生在
+  `grad(...)` 里或标量损失上。现在秩 0 的**类型**是元素类型（`f32`，裁定：秩 0 就是元素类型本身），
+  于是 `sum(loss)` 之类的结果值是**标量槽**，而 `tensor:sum_to`、广播、`divide` 这些算子的
+  kernel 仍按「张量 = `Array*`」读参数，`tensorArg` 就拒绝了。翻之前这些值顶着
+  `Tensor<f32, []>`（`TensorType`），槽里是秩 0 的 `Array`，所以从不报这句话。
+  两个方向都缺一块：入参要能把标量**装箱**成秩 0 数组（`tensorArg`，本 lane 可改），
+  出参要能把秩 0 结果**拆箱**成标量槽（kernel 返回处，`modules/tensor/kernels/**` 属别的 lane）。
+  只做前者会把响亮的报错变成悄悄读错值（类型说 `f32`，槽里是 `Array*`），所以不能只做一半。
+- **11 例 `matmul inner dimensions differ: 2 vs 3` + 6 例 `cannot broadcast [3, 4] with [3]`
+  + 6 例 `conversion to 'f32[2, 3]' failed: the array has shape [2]`：多维埃的值只剩第一维。
+  **已定位到行**：`src/runtime/draft_session.cpp:248`（`cloneStaticSlot` 的 `Array` 分支）
+
+  ```cpp
+  auto *clonedArray = ::Array::create(mm::autoSpace(), arrayType, array->size());
+  ...
+  for (size_t i = 0; i < array->size(); ++i) { ... }
+  ```
+
+  `include/camel/core/rtdata/array.h:272` 把这个重载写成「The rank-1 convenience」：它按 `size`
+  造一个**秩 1** 数组，`numel`/`size` 的差别由此而来。多维埃的值经静态槽克隆后就成了秩 1、
+  只有 `extents[0]` 个元素。证据（临时探针，`--arg` 传 `x.npy` 与 `w.npy`）：
+
+  ```
+  x value: [-0.5, -0.25]          w value: [-0.625, -0.5, -0.375]
+  x shape/numel: [2] 2            (同一个进程里) load_npy('x.npy') → [2, 3]
+  new([[1,2,3],[4,5,6]]) → [2, 3] literal [2, 3] → 值正确；ones([2, 3]) → [2, 3] 只说明它的
+                                  shape 是折叠出来的，值同样被截断
+  ```
+
+  `.npy` 文件与 `loadNpy` 正确（`load_npy` 直接调用打 `[2, 3]`），声明的形参类型也不影响
+  （写成裸 `Tensor` 一样只剩 `[2]`）。这是 **`src/runtime/**`（别的 lane，本 lane 只读）**里
+  翻之前没被走到的一行：以前张量值的类型是 `TensorType`，静态值重编码不走这条；现在它是数组，
+  于是所有经过静态槽克隆的多维埃常量/入口参数都被截断。修法在那一行：按 `shapeSpan()` 造，
+  并拷 `numel()` 个元素（不是 `size()`）。本 lane 不改，只报。
+
+  **补丁（一行函数，已实测）**：
+
+  ```cpp
+  case TypeCode::Array: {
+      auto *array     = fromSlot<::Array *>(slot);
+      auto *arrayType = static_cast<ArrayType *>(type);
+      auto *clonedArray = ::Array::create(mm::autoSpace(), arrayType, array->shapeSpan());
+      objectCache.emplace(object, clonedArray);
+      for (uint64_t i = 0; i < array->numel(); ++i) { /* 原样保留元素递归 */ }
+  ```
+
+  **实测**：在翻的分支上打这个补丁跑 fast 层，5899 例里 500 红 → 483 红（20 例转绿，3 例
+  是并行跑的 `poison:` 抖动），主导错误类没变（253 例 `Expected Tensor argument`，即下面的秩 0）。
+  也就是说它值 4%，不是「一半的红」。
+
+  **这个缺陷在 `origin/develop` 上不可复现**（三条实测，都在 h374 的基线上）：
+  `--arg` 传 `.npy` 给 `Tensor<f32, [2, 3]>` 形参，nvm 与 jit 下都打 `[2, 3] 6`（值正确）；
+  `let floats: f32[2, 3] = ones([2, 3])` 在基线上是编译错误
+  （`This value has type 'Tensor<float32, [2, 3]>', which is not the declared type 'f32[2, 3]'`）；
+  多维埃的普通数组字面量也是编译错误。原因：基线里多维埃的值顶着 `TensorType`，而
+  `shouldTraverseStaticSlotType` 对不被 GC 追踪的类型返回 false，静态槽根本不会被克隆；
+  `ArrayType` 会被追踪，这条克隆路径是翻之后才第一次走到的。所以「红—绿」这一对只在翻的分支上
+  成立（上面的 `[2] numel 2` 对 `[2, 3] 6`），在 h374 的基线上不能作为独立缺陷的守卫。
+- **2 处文档**：`docs.links.citations` 说 `docs/design/arrays-memory/plan.cn.md:357` 引用的
+  `modules/tensor/type.cpp#TensorType::get` 已经不存在（该文件本 lane 只读，属计划作者）；
+  `docs.snippets_compile` 说 `docs/tutorial/tutorial.{cn,en}.md:1033/1061` 还写着旧的
+  `tensor([[ 3.], …], dtype=float32)` 打印（打印统一是本次任务的一部分，属于本 lane，但
+  正确文本要从实测取，取到时一并改）。
+
+## 实测：本 lane 里已经改掉的坑
+
+- `__iter__`：`for x in xs`（`xs: int[]`）在 `Tensor` 别名之前走的是「数组按元素迭代」的内建路径；
+  `Tensor` 变成数值数组之后，数值数组会**先问 `__iter__`**，而 `stdlib/array.cml`、`optim.cml`
+  这些不 import tensor 的库里没有 `__iter__`，于是全库报
+  `LoopSequenceNotIterable … 'xs' has type 'int[]'`（684 红里的大头）。`builder_control.cpp`
+  现在在「数值数组问 `__iter__` 但没有候选可解析」时回落到按元素迭代，非数组类型仍然报错。
+- 微分结果的类型：VJP 规则过去直接声明 `Tensor`（现在等于元素类型未定的数组），
+  于是 `tangentElementType` 从「元素是 `Void` 的数组」取元素类型，报
+  `GradientElementTypeMismatch`（200 例）。现在规则用**原值的类型**声明梯度（`addTensorOperFor`），
+  `tangentElementType` 对 `Void` 元素返回 `nullptr`，这一类已经清零。

@@ -208,7 +208,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.iterate_tensor"
-desc = "`for` over a tensor takes its elements along the first dimension: the rank-1 rows of a rank-2 tensor (views of the same data), the rank-0 sub-tensors of a rank-1 tensor, a tensor whose first extent is 0, a loop over a row inside the body, and a function whose parameter is a `Tensor` of unknown rank (its elements have type `Tensor`)."
+desc = "`for` over a tensor takes its elements along the first dimension: the rank-1 rows of a rank-2 tensor (views of the same data), the elements of a rank-1 tensor (values of the element type, not rank-0 arrays), a tensor whose first extent is 0, a loop over a row inside the body, and a function whose parameter is a `Tensor` of unknown rank (its elements have type `Tensor`)."
 kind = "behavior"
 case = "../../../cases/loops/iterate_tensor.cml"
 args = ["${case}", "${backend}"]
@@ -395,7 +395,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loops.err_tensor_rank0"
-desc = "`for` over a rank-0 tensor: it has no first dimension. The shape is a constant, so the refusal is at compile time (`Tensor<f32, []>`)."
+desc = "`for` over a scalar: a value with no dimension is the element it holds, so `reshape(x, [])` gives the element type rather than a rank-0 array, and a scalar is not iterable. The refusal is at compile time."
 kind = "negative"
 case = "../../../cases/loops/err_tensor_rank0.cml"
 args = ["-E", "short", "${case}"]
