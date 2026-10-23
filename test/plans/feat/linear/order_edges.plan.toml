@@ -13,8 +13,9 @@ tags = ["feat", "linear", "runtime", "effects"]
 # value `main` prints for it. Every scheduler must print the same thing.
 #
 # The other half of F3 (`var x = println(1); x = println(2); return x` prints nothing for the
-# initializer) is not asserted here: it does not hold yet, for a reason of the `var` representation
-# and not of the edges. See docs/handover/questions/h242a-var-initializer-write.md.
+# initializer) is not asserted here yet: the `var` representation still makes the initializer's
+# value a data input of the cell. The ruling takes that input away, which is what makes the half
+# assertable -- docs/handover/reviews/questions-2026-10-23.md, "h242a-var-initializer-write".
 
 [[tests]]
 name = "order_edges.nvm"

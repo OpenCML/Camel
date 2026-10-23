@@ -16,10 +16,12 @@ func first_dropped(): int {
 // so that write executes. Here the nearest write is the second one, and it prints 2.
 //
 // The other half -- `var x = println(1); x = println(2); return x`, where the initializer's
-// write is read by nothing and must not run -- does not hold yet: the cell (`:var/new`) takes
-// the initializer's value as a data input, so the initializer's effect is reachable from the
-// read whatever the writes do. That is a defect of the `var` representation, not of the edges;
-// it is recorded with both repros in docs/handover/questions/h242a-var-initializer-write.md.
+// write is read by nothing and must not run -- is not asserted here yet: the cell (`:var/new`)
+// still takes the initializer's value as a data input, so the initializer's effect is reachable
+// from the read whatever the writes do. The ruling gives the cell no value input and gives the
+// read a data edge from the nearest write --
+// docs/handover/reviews/questions-2026-10-23.md, "h242a-var-initializer-write" and
+// "h242a-capture-order-edge".
 func write_used(): int {
     var x = 1
     x = println(2)
