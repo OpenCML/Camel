@@ -1,0 +1,13 @@
+h340 — 用 Camel 写的优化器库，与原生实现按值一致（分支 handover/h340-optim-module，1 提交 6f84d97f6，基线 73683a58e；合入 0d1942656）
+
+落地（1192 行、9 文件）：stdlib/optim.cml（init/update 两个纯函数、sgd/adam/adamw 作为值、constant/linear_decay/cosine_decay，全部用 Camel 写在 tree 之上；叶子算术是原生算术，double，存回时舍入一次）、test/plans/feat/modules/optim.plan.toml（agreement.cml、training.cml、dtype_exact.cml，12 行，nvm/fvm/jit/prl 全绿）、docs/technical/optim.md、docs/stdlib-reference.md 的 optim 条目与参考脚本的模块表。
+
+一致性的性质（任务的成功判据）：同树同梯度走 6 步——sgd（线性衰减）、adam（非默认常数、余弦衰减）、adam 两侧都用默认值、AdamW 两个性质；两侧各自打印参数，计划断言两份文本**逐叶相等**且每一步的每一叶都被比较过（每个优化器 compared=24 mismatches=0，衰减那次 12）。c2 的循环：20 步 with_grad + nn:adam 用同一梯度 → bad_steps=0 final_drift=0.0，最终树相等、一个 loss。
+
+守卫（红前绿后，点名抓住它的行）：把 adam_wide 的一阶矩按 1-beta2 偏置 → optim.trajectory_matches_native 在四个后端 FAIL；把 adam_number 同样偏置 → 只有 dtype_exact 失败（number_adam.0.w != wide_adam.0.w[0]），此前该扰动**不可见**，说明数值路径原本没有守卫。撤回后 12/12。
+
+**发现（改变后续计划，数字在 docs/technical/optim.md）**：1) nn 的优化器要的是**切向量**，仅同类型的梯度树会被拒（No matching function … (T, T, float)）；2) 模块不能按优化器分别声明 init（SemanticDiag::Redeclaration；有函数体的函数不能重载），所以状态是一种类型、sgd 带着两棵它从不读的零树，Optax 那种每优化器状态需要重载或和类型；3) 泛型走查不能问"某字段是否存在"，梯度必须与参数字段一一对应，所以带不可训练叶子的树在这里不可训练——这正是 C++ 删除的硬阻塞（residual_mlp.cml 的 depth: int；train_step.cml 的 blocks: Block[]）；4) **一个写下来的 f64 张量叶在 optim 里保持 f64，而原生路径把每个张量叶窄化成 f32，这违反设计原则 7.4**——原生缺陷，不是移植该照抄的东西（dtype_exact.cml 守住这一侧）；5) `case Tensor<f32, [..]>` 是 docs/language/06_expressions.md:406 点名的写法而编译器拒绝它，能匹配的是 `Tensor<f32, [?]>`——文档与编译器不一致的缺陷。
+
+C++ 删除：报告而不执行。70 个文件导入 nn 的优化器（benchmarks 27、test 35、showcase 4、exemplars 2、examples 2）；硬阻塞是发现 3；另有 ONNX 导出用例与 export_matrix.csv/.md、nn.plan.toml 的 std::rgir 计数、module_import_builtins.cml、gc_training_peak.cml、test/cases/perf/**、benchmarks/lora/lora_mlp.cml、showcase/**。
+
+闸门：分支上 total 5752, pass 5738, fail 0, skip 14。**合入后协调者重跑：total 5799, pass 5785, fail 0, skip 14。**
