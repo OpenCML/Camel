@@ -1,0 +1,10 @@
+h355 — std::cml 往返：S3 之后的第二份计划（分支 handover/h355-cml-roundtrip-plan，1 提交 57b2bc111；合入 bc8a253f2）
+
+第一份计划与打印机**早已存在**（`docs/design/graph-store/plan.cn.md`，作者移动并批复于 `docs/handover/reviews/std-cml-plan.md`；S0 `77bb8b124` canonical GIR + `cml_roundtrip.py` + `gir_canonical.cpp`、S1 `5815e6802`/`684ecc6ca`、S2 `14b43005b`）——任务书 §5.03 表里「S0 在跑」因此过期。所以交付物是**剩余工作的计划**：`docs/design/graph-store/plan-roundtrip.cn.md`（186 行，约定位置，新建文件，作者的 `plan.cn.md` 未动）。
+
+**实测基线**（`102dbc5d1`，主机构建，`camel <file> std::cml`）：`test/cases/**/*.cml` 2387 个 → **打印 348、带诊断拒绝 1338、本来就编不过 701**；348 个里 **309 等价、35 不等价、4 个打印出的源码连 canonical dump 都失败**。拒绝归并 131 类：算子无源码形式 463、参数类型打不出 273、`with` 参数是命名类型 66、图名非标识符 58、宏图 38、命名类型参数 35、返回类型带标签/可空 31、间接调用 26。
+**两个判定器盲区**（计划要抢在打印器前面的理由）：canonical v2 只带 normal/context/control 输入、**没有顺序边**（实测整份文档里 `order` 出现 0 次），且把 `Inline` 与 `Block` 一起抹掉，而 `Block` 带标签、是程序内容且前端确在建。另外 `std::opt std::cml` 今天被 Inline 区域直接拒绝——"打印优化过的图"这条路是断的。
+**真缺陷样本**：`constas_column.cml` 打印成 `return 0 + 1 + 2 + 3` 而原图多 3 个 DATA 与 3 个二元 OPER 节点（打印器丢节点）；`return_type/accepted.cml` 丢 1 个 DATA；`warnings_visible.cml` 接线不同；同族另有 4 条。
+**H242 独立性路线**：加只读视图 `PrintedGraph`（带角色端口 + `syncPreds` + `orderPreds` + 区域表），替换今天直接读旧表示的 8 处；顺序边不打印但必须进 canonical 与检查器，否则"打印机把顺序边丢了"永远是绿的。第一刀是 S3a 竖切片，带一条可证伪实验（从图里删一条顺序边，检查器必须报不等价）。
+**引用的形式返工**：它第一版 84 处引用写成 `路径:行号`，被引用守卫拒绝（守卫要求 `路径#符号`）；全部改成符号（`cml.cpp#validateGraph`、`graph.h#GCGraph::orderPredsOf` 等），本地 `--citations` **306/306 符号**验证通过——正文与全部数字未动。
+**留给决策者的 5 个问题**（计划 §8）：canonical 直接加 `syncPreds`/`orderPreds` 还是升 v3；`Block` 留下、`Inline` 抹掉是否照此裁定；大常量数据文件的形状；哪些 URI 判为内部算子而永久拒绝；H242 改变同一段源码执行结果这件事要不要在语言侧说明。
