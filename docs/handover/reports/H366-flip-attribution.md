@@ -95,3 +95,13 @@ Every failing test bucketed by its first diagnostic, with the internal errors an
 
 
 Generated mechanically from D:\Temp\h366-flip7.log; the per-hole verdict (defect in the flip or declaration to move) follows from whether the missing name is touched by the flip's diff.
+
+## The 47 holes: the mechanical half of the verdict
+
+For each hole, whether the missing name appears anywhere in this branch's diff against 221cfe18b. A name the flip touches is a defect in the flip (the flip renamed or removed a declaration a consumer still uses); a name the flip never touches is a declaration that has not caught up, to move in its own lane. The sentence per hole still has to be written; this is the split it starts from.
+
+### The flip touches the name (0)
+
+
+### The flip never touches the name (0)
+
