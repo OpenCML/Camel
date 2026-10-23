@@ -183,7 +183,20 @@
 
 近两天的任务多是账本、计数与守卫。这些已经够用，**暂停新的账本/计数/文档守卫类任务**（除非下列主线需要），力量转到下面七条。每条先交计划的，计划写好即合入 develop，协调者在 `reviews/` 批复；不必等批复的部分照常推进。
 
-0. **H242 图的边重构（见 5.21）**：最优先。
+**并行的第一梯队（负责人 2026-10-23 要求督促落地）**——四条改的代码区域互不重叠，同时推进：
+
+0. **H242 图的边重构（见 5.21）**：编译、运行时、遍。
+0a. **H232 规则语言第二版的核心三步（见 5.11 与设计稿第 9 节第 1、2 步）**：改的是 `rewrite` 模块、规则的解析与匹配器、`stdlib/rules.cml`，与 H242 不重叠。
+   - **类型泛型规则与值语义**（设计稿第 1 节）：`rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }`，一条覆盖所有满足条件的类型；`const` 参数是常量的值。
+   - **`fact` 语法取代 `analysis`**（设计稿 7.5）：`fact range::<T>(v: T): Interval match v { case … } join f meet g widen h narrow k`；`analysis` 关键字删除（不计兼容），测试用例改写。
+   - **算子性质与结合交换匹配**（设计稿第 2、6 节）：`+`、`*` 等的交换、结合性质来自算子声明；`x + 0` 一条同时匹配 `0 + x`；库里的交换、结合规则与按操作数顺序重复的规则删除。
+   - **验收**：`stdlib/rules.cml` 按新写法重写——同一条代数律只写一次（不再有 `int_add_zero`/`int_zero_add`/`float_add_zero` 这样的重复）；`check` 全过；H226 的对照负载上不变慢；写法按 `stdlib-conventions`，作为规则写法的范本。结构性选择（AC 匹配的规范形）先交一页计划，写好即合入、不等批复。
+0b. **H49 GPU G1–G3（见下第 1 条）**：今天没有进展，必须开始——先交计划（`modules/` 与 Tiles、CUDA 路径，与上两条不重叠）。
+0c. **H240 CBLAS 之后的 CPU 重新测量**：测量与报告，不改语言。
+
+其余按下面的顺序。
+
+
 1. **H49 GPU G1–G3（先交计划，最优先）**：按 [GPU 设计稿](../design/gpu/README.cn.md) 与 reviews/H24-H25-H26.md 对 H47/H48 的三条硬要求——`#gpu`/`#cpu` 标签与范围、删除 `@gpu`/`run`/`run_device`（reviews/H141-H213.md Q5）、设备上的数据块即数组值、驻留由图推出、异步提交、整段编译按形状签名缓存（**支持运行时形状**）、回传图带类型与形状、设备不可用时启动即报错。验收：C2 与 `transformer_step` 的全部算子（含反向与优化器）在 GPU 上，与 PyTorch 同精度对照。
 2. **H51 剩余步骤 6–15**：rest 参数与 `..ts`、`constas`、`StaticTuple`、可调用绑定、自动内联、`static error`、路径折叠；然后用 Camel 重写五个 `tree_*`、`ckpt` 的 `save`/`load` 与 `type_spec`（reviews/H141-H213.md Q1–Q3 的写法），以及 `from_bytes`、`json::decode_as` 等按类型选内核的算子——这同时收掉 H19 第 10 步、H36 第 5 项的剩余；最后 `optim`（性能以 H64 为基准）。
 3. **H17 第 2、4 项：原生多维数组 `T[维度]`**（设计原则 10.5、H17 第二份计划已批）：类型语法、形状规则、`Tensor` 成为别名、下标与切片落到它上面。
@@ -707,7 +720,7 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 3. **原地更新的保证**：计数为 1 时，"返回新值"的数组操作原地进行；以分配计数断言的测试覆盖每种操作。
 4. 性能基线前后对比（小型逻辑计算不变慢；张量程序的时间与峰值内存不升）。
 
-**剩下什么**：第 2 项先落的两步已经在树上——P2「数组类型带维度与关系」（`ecaa31f58`）与 P3「`T[维度...]` 语法与维度绑定」（`fee698bb9`，用例 `test/cases/compile/array_shape/*`）；未做的是 P4（`Tensor` 作为 `ArrayType` 别名、删除 `TensorType`、打印统一、入口参数）与 P5（`map`/`filter`/`sort` 按第一维，依赖 P4）。P4 是一个原子提交，波及 27 个文件的 63 处 `asTensorType`、15 个文件的 115 处 `TensorType`、`test/cases` 下 198 个 `.cml` 用例（1096 处 `Tensor<`）。本轮另修两处：字面量长度不与位置写下的常量 extent 比较（`468880f60`）、生成页 `docs/diagnostics.md` 里遗留的合并冲突标记（`e7611d704`）；声明写下的 extent 到不了调用点、`constas` 值管不住数组参数的 extent、`[]` 站在固定长度位置上这三条待作者裁决，见 [questions/declared-extent-reaches-the-call.md](questions/declared-extent-reaches-the-call.md)。第 1 项还差三个证明缺口、第 3 项只覆盖排序/追加/下标/循环状态，第 4 项按计划的 P7 未做。
+**剩下什么**：第 2 项先落的两步已经在树上——P2「数组类型带维度与关系」（`ecaa31f58`）与 P3「`T[维度...]` 语法与维度绑定」（`fee698bb9`，用例 `test/cases/compile/array_shape/*`）；未做的是 P4（`Tensor` 作为 `ArrayType` 别名、删除 `TensorType`、打印统一、入口参数）与 P5（`map`/`filter`/`sort` 按第一维，依赖 P4）。P4 是一个原子提交，波及 27 个文件的 63 处 `asTensorType`、15 个文件的 115 处 `TensorType`、`test/cases` 下 198 个 `.cml` 用例（1096 处 `Tensor<`）。本轮另修两处：字面量长度不与位置写下的常量 extent 比较（`468880f60`）、生成页 `docs/diagnostics.md` 里遗留的合并冲突标记（`e7611d704`）；声明写下的 extent 到不了调用点、`constas` 值管不住数组参数的 extent、`[]` 站在固定长度位置上这三条已裁定，见 [reviews/questions-2026-10-23.md](reviews/questions-2026-10-23.md) 的 declared-extent-reaches-the-call。第 1 项还差三个证明缺口、第 3 项只覆盖排序/追加/下标/循环状态，第 4 项按计划的 P7 未做。
 
 ### H19：标准库重新规划的落地（2026-10-20 指派，先交计划）
 
