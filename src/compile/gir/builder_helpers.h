@@ -433,6 +433,20 @@ inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
     return linkCheek(from, to) && !hasDirectDataDependency(from, to);
 }
 
+/// A statement one `sync` block writes directly: the edge that joins it to the statement written
+/// before it is a sync edge (docs/design/effects/edges.cn.md 1.5), and the builder records that fact
+/// on both ends so the seal check can read the graph back (src/runtime/graph_edges.cpp,
+/// `checkSyncEdges`).
+inline void markSyncStatement(node_handle_t node) {
+    if (node == nullptr) {
+        return;
+    }
+    auto *draft               = nodeDraftOf(node);
+    const draft_node_ref_t id = nodeIdOf(node);
+    draft->setNodeRuntimeFlags(
+        id, static_cast<uint8_t>(draft->header(id)->runtimeFlags | runtime::kGCNodeFlagSyncStatement));
+}
+
 inline camel::source::SemanticPart semanticPart(
     camel::source::SemanticRole role, camel::source::origin_id_t origin, int32_t slot = -1,
     const std::string &label = "") {
