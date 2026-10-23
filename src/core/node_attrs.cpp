@@ -642,6 +642,19 @@ const std::vector<FateRow> &fateTable() {
             notNode,
             "a declaration fact (the graph of a derivative rule): no node "
             "carries it.");
+        // `#impl<kernel>` (design principles 10.4) names the body-less declaration that
+        // implements a function, so the key is interned in the attribute namespace but is a
+        // declaration fact: the builder resolves it while the module is declared, and no node
+        // ever carries it.
+        add("impl",
+            "*",
+            "#impl<kernel> (a function declaration)",
+            notNode,
+            notNode,
+            notNode,
+            notNode,
+            "a declaration fact (the kernel that implements a function): no node "
+            "carries it.");
         return t;
     }();
     return rows;
