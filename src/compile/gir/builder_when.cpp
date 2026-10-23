@@ -1254,9 +1254,12 @@ const std::string written = callee->at(0)->name();
                 // says why, and the declaration stays inapplicable rather than becoming false.
                 //
                 // The body is read where it is written, not where the declaration was selected:
-                // a predicate that asks another one (`is_numeric` asks `is_integer`) resolves
-                // that name among the names of its own module, exactly as the condition itself
-                // did before this fold started.
+                // `is_numeric` is declared in `types` and asks `is_integer`, which `types` also
+                // declares, while the consumer that selected it (a program's `classify`) need not
+                // have imported `is_integer` at all. Folding the body with the consumer's
+                // `templateScope_` looks the callee up among the names the consumer can see and
+                // refuses it as "not a generic declaration" -- a scope, not a missing capability.
+                // `ConditionContext` is exactly that scope switch, and it is all this needs.
                 try {
                     ConditionContext body(*this, tmpl, nullptr);
                     data_ptr_t folded = GctConstantEvaluator::runFunction(
