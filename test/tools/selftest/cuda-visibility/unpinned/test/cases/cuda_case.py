@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """A CPU-only PyTorch program, as the fixture case of the unpinned plan.
 
 test/tools/selftest/cuda-visibility/unpinned/test/plans/unpinned.plan.toml is the plan the guard

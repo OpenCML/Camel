@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """What this process may see, printed so the plan can assert it.
 
 Fixture of test/tools/selftest/cuda-visibility/visibility.plan.toml: the plan runner hides the
