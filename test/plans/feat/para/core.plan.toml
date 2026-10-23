@@ -11,7 +11,11 @@ case = "../../../cases/para/core/bootstrap_medians.cml"
 args = ["${case}", "${run_prl}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+# 15 s: the work is PRL thread-pool startup plus a small fixed sample set. Measured 0.85-1.01 s
+# alone on the shared host at load 70-150 and 1.20 s with three copies at once; 4.8 s would be
+# the bare four times the worst measurement, and this leaves that 4x over a host three times
+# busier while still catching a hang in seconds.
+timeout_ms = 15000
 
 [[tests]]
 name = "file_chunk_hash"
