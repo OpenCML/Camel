@@ -489,7 +489,34 @@ export func simplify_strict(p: Program): Program! {
 /// Every rule, both ways where it holds both ways; the smallest writing of each value, under the
 /// numeric policy of the pass.
 func saturateWith(p: Program, strict: bool): Program! {
-    let tabled = saturate(p, [
+    let tabled = saturateList(p, 6, strict)
+    return match tabled {
+        case error e => tabled
+        case q => extract(q, 'nodes')
+    }
+}
+
+/// Every rule of the library applied both ways to the writings of every value, for at most
+/// `rounds` rounds, with no extraction: the program keeps every writing the saturation found.
+/// `std::opt::saturate` is this pass under the core's name (H225); `saturate_all` adds the
+/// extraction, so a caller that wants the classes as they are uses this one.
+/// @effect runs the rules' functions
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @example saturate_only(p)    // the program with several writings per value
+with <
+    /// Rounds of saturation; 0 applies no rule at all, so the program keeps its writings.
+    rounds: int = 6,
+    /// Keep the rules to the ones that hold bit for bit (design principles 7.4).
+    strict: bool = false
+>
+export func saturate_only(p: Program): Program! {
+    return saturateList(p, rounds, strict)
+}
+
+// The one list of rules the saturation applies, so `saturate_only` and `saturate_all` cannot
+// drift apart: the same rules, in the same order.
+func saturateList(p: Program, rounds: int, strict: bool): Program! {
+    return saturate(p, [
         int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero,
         int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold,
         int_fold_add, int_add_self, int_combine_one, int_one_combine, int_add_comm,
@@ -513,11 +540,7 @@ func saturateWith(p: Program, strict: bool): Program! {
         tensor_f32_combine_mixed, tensor_f32_fold, tensor_f32_double, tensor_f32_combine_one,
         tensor_f32_combine_one_mixed, tensor_f32_one_combine, tensor_f32_one_combine_mixed,
         tensor_i64_distribute,
-    ], 6, strict)
-    return match tabled {
-        case error e => tabled
-        case q => extract(q, 'nodes')
-    }
+    ], rounds, strict)
 }
 
 export func saturate_all(p: Program): Program! {

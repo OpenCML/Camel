@@ -91,7 +91,8 @@ node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
 | `std::gir` | Translation pass: prints compact GIR DOT with semantic metadata and returns an empty graph |
 | `std::rgir` | Translation pass: prints rich GIR DOT with Graphviz styling and returns an empty graph |
 | `std::agir` / `std::argir` | Translation passes: `std::gir` / `std::rgir` with boundary roles (scalar boundary, branch contract, effect, export capability) from the node-role registry: a `role` attribute and legend, with fill colors in the rich variant |
-| `std::jgir` | Translation pass: prints versioned JSON GIR with explicit graph references for tooling |
+| `std::jgir` | Translation pass: prints versioned JSON GIR with explicit graph references for tooling (`egraph=true` writes the document `egraph-serialize` reads) |
+| `std::opt::saturate` | Optimization pass: saturates the standard rules library and leaves the state where a value has several writings, extracting nothing; `std::gir` / `std::rgir` / `std::jgir` draw that state as one dashed cluster per class, and mark the writing extraction would take |
 | `std::stats` | Prints `GRAPH_STATS {json}` (graphs, nodes, edges, operators, calls, closures, branches) and passes the graph on unchanged |
 | `std::nvm` | Scheduling pass: executes on the node VM linearly, then returns an empty graph |
 | `std::fvm` | Scheduling pass: high-performance bytecode VM, returns an empty graph |
