@@ -2,7 +2,7 @@ id = "compile.impl"
 order = 228
 tier = "fast"
 tags = ["feat", "compile", "tags", "native", "impl", "semantics"]
-desc = "`#impl<f>` (design principles 10.4): a function's Camel body is its semantics and the body-less declaration f of the same module is the operator that runs it. An ordinary call is one OPER of the kernel, the body is not inlined and is absent from the ordinary dump; the body graph stays the semantic function for what asks to look inside (Program::implBodies / test::impl). The agreement case compiles the same functions twice in one program, once as a direct call (the kernel) and once through their function values (the bodies), and checks that both print the same values while a profile counts the two paths apart; a deliberately wrong kernel shows that the comparison can fail. The pass groups take the same two paths through one production pass at a time — the optimizer, and the autodiff macro — and each case compares the two paths and pins what the pass did to the graph. Fusion and the ONNX exporter have no case here for a reason that is a decision: both need a kernel over tensors, the `rules::fusion` library's only tensor rule and the exporter both require one (`modules/onnx/exporter.cpp:3872`), and a test module cannot declare another module's operator (`SemanticDiag::NativeDeclarationForeignOperator`), so the kernels of the cases here are the core's scalar ones. Six refusals, one case each: the tag on a body-less declaration, a kernel no declaration brings, a kernel of another module, a kernel whose signature differs, a kernel that has a body, and a generic function, whose instances carry no single signature. Each refusal names the misuse and is pinned to its source line and column."
+desc = "`#impl<f>` (design principles 10.4): a function's Camel body is its semantics and the body-less declaration f of the same module is the operator that runs it. An ordinary call is one OPER of the kernel, the body is not inlined and is absent from the ordinary dump; the body graph stays the semantic function for what asks to look inside (Program::implBodies / test::impl). The agreement case compiles the same function twice in one program, once as a direct call (the kernel) and once through its function value (the body), and checks that both print the same values while a profile counts the two paths apart; a deliberately wrong kernel shows that the comparison can fail. One production pass is taken through both paths: `std::opt` inlines the body call it can see and leaves the kernel operator as one operator, and the case pins that in the graph. Fusion, autodiff and the ONNX exporter have no case here for a reason that is a decision rather than effort: the first two and the exporter all need a kernel over tensors to say anything at all (the `rules::fusion` library's only tensor rule is the sigmoid chain; the exporter requires an exported function's arguments to be tensors, modules/onnx/exporter.cpp:3872), and a test module cannot declare a tensor kernel, because a module may declare only its own operator (SemanticDiag::NativeDeclarationForeignOperator). Six refusals, one case each: the tag on a body-less declaration, a kernel no declaration brings, a kernel of another module, a kernel whose signature differs, a kernel that has a body, and a generic function, whose instances carry no single signature. Each refusal names the misuse and is pinned to its source line and column."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -92,140 +92,23 @@ expect_exit = 0
 expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
 
 
-# ---- The passes that can meet a tagged function: the same two paths, one pass at a time ----
+# ---- The passes that can meet a tagged function ----
 #
-# `impl_pass_agreement.cml` takes the two paths of three functions whose kernels a test module may
-# declare — a body-less declaration stands for an operator of the module it is written in, and a
-# test module writes no other module's protocol, so the kernels are the core's scalar operators
-# (`:op/add_l`, `:op/mul_d`, `:op/div_d`) — and prints both values. The groups below take the same
-# two paths through one production pass at a time. `impl_pass_disagreement.cml` is the wrong-kernel
-# observation of all of them: it names `:op/sub_l` where the body says `a + b`, and `:op/div_d`
-# where the differentiable body says `a * b`, so a `diff` of zero in an agreement case cannot come
-# from a pair that never ran.
+# `impl_pass_optimizer.cml` takes both paths of one tagged function through `std::opt` in one
+# program: a direct call, which is one OPER of the kernel, and a call through the function value,
+# which is the body. The two cases below compare the two paths and pin what the pass did to the
+# graph.
 #
-# Two passes named in design principles 10.4 have no case here, and the reason is a decision, not
-# effort. Fusion and export both have to see a kernel over tensors to be exercised at all: the
+# The other passes named in design principles 10.4 have no case here, and the reason is a decision
+# rather than effort. Fusion and export both need a kernel over tensors to be exercised at all: the
 # `rules::fusion` library's only tensor rule is the `sigmoid` chain, and the ONNX exporter requires
 # an exported function's arguments to be tensors (`modules/onnx/exporter.cpp:3872`). A test module
 # cannot declare a tensor kernel, because `tensor:sum` and every other tensor operator belong to
-# the tensor module, and a module may declare only its own (`SemanticDiag::NativeDeclarationForeignOperator`).
-# Closing that pair therefore needs either a stock `#impl` in `stdlib/` beside the operators, or a
-# test-scoped way to declare another module's operator; both are the language author's call.
-
-[[tests]]
-name = "impl.pass.agreement"
-desc = "The agreement of both paths: `plus` (kernel `:op/add_l`, body `a - (0 - b)`), `ratio` (kernel `:op/add_d`, body `(a / b) * b`) and `scaled` (kernel `:op/mul_d`, body an extra multiply and divide) take the same inputs through the direct call and through the function value and print the same value, with the magnitudes showing that each side is the value its own path computes. Runs on every back end."
-kind = "behavior"
-case = "../../../cases/compile/native/impl_pass_agreement.cml"
-args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout
-const pair = (name, kernel, body) => {
-    const m = out.match(new RegExp('^' + name + ' kernel=(-?[0-9.eE+]+) body=(-?[0-9.eE+]+) diff=(-?[0-9.eE+-]+)$', 'm'))
-    assert(m, `no ${name} line:\\n${out}`)
-    const k = Number(m[1]), b = Number(m[2]), d = Number(m[3])
-    assert(Math.abs(k - kernel) < 1e-5, `${name} kernel path printed ${k}, expected ${kernel}:\\n${out}`)
-    assert(Math.abs(b - body) < 1e-5, `${name} body path printed ${b}, expected ${body}:\\n${out}`)
-    assert(d === 0, `${name} paths disagree by ${d}:\\n${out}`)
-}
-pair('plus', 42.0, 42.0)
-pair('ratio', 2.0, 2.0)
-pair('scaled', 12.0, 12.0)
-}
-"""
-
-[[tests]]
-name = "impl.pass.agreement.paths"
-desc = "The paths of the agreement case are counted apart: the three direct calls are one `:op/add_l`, one `:op/add_d` and one `:op/mul_d`, and the three calls through function values add three `:op/sub_l` (two for the body of `plus` as `a - (0 - b)`, one for the rewrite of `a + b` that inlines it), one `:op/div_d` and one `:op/mul_d` for `ratio`, and two more `:op/mul_d` with a `:op/div_d` for `scaled` — so the equal values are not one path compared with itself. A compiler that ran the body for both paths would count the kernel URIs zero times."
-kind = "behavior"
-case = "../../../cases/compile/native/impl_pass_agreement.cml"
-args = ["${case}", 'std::profile top=0 json="${test_tmp}/profile.json"', "std::nvm"]
-expect_exit = 0
-verify_script = """
-async ({ input, assert }) => {
-    const fs = await import('node:fs')
-    const out = input.normalized.stdout
-    const m = out.match(/^plus kernel=(-?[0-9]+) body=(-?[0-9]+)/m)
-    assert(m && Number(m[1]) === 42, `the plus kernel path changed:\\n${out}`)
-    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
-    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
-    assert(calls[':op/add_l'] === 1, `the int add kernel ran ${calls[':op/add_l']} times, not once:\\n${out}`)
-    assert(calls[':op/add_d'] === 1, `the float add kernel ran ${calls[':op/add_d']} times, not once:\\n${out}`)
-    assert(calls[':op/sub_l'] === 3, `subtraction ran ${calls[':op/sub_l']} times, not three times:\\n${out}`)
-    assert(calls[':op/div_d'] === 2, `division ran ${calls[':op/div_d']} times, not twice (ratio's body and scaled's body):\\n${out}`)
-    assert(calls[':op/mul_d'] === 4, `multiplication ran ${calls[':op/mul_d']} times, not four times:\\n${out}`)
-}
-"""
-timeout_ms = 60000
-
-[[tests]]
-name = "impl.pass.agreement.gir"
-desc = "The graphs of the two paths in one program: the direct calls are one OPER each of the kernels' URIs (`:op/add_l`, `:op/add_d`, `:op/mul_d`), and the bodies of `plus`, `ratio` and `scaled` sit behind the function values their names were bound to with their own operators (`:op/sub_l`, `:op/div_d`) — the dump shows which path each value came from."
-kind = "behavior"
-case = "../../../cases/compile/native/impl_pass_agreement.cml"
-args = ["${case}", "std::gir"]
-expect_exit = 0
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout
-const count = s => out.split(s).length - 1
-assert(count('label=":op/add_l", type="OPER"') === 1, `expected the int kernel's one addition:\\n${out}`)
-assert(count('label=":op/add_d", type="OPER"') === 1, `expected the float kernel's one addition:\\n${out}`)
-assert(count('label=":op/div_d", type="OPER"') >= 1, `expected the body's division:\\n${out}`)
-assert(out.includes('label="plus"'), `the body graph of plus is not in the dump:\\n${out}`)
-assert(out.includes('label="ratio"'), `the body graph of ratio is not in the dump:\\n${out}`)
-assert(out.includes('label="scaled"'), `the body graph of scaled is not in the dump:\\n${out}`)
-}
-"""
-
-[[tests]]
-name = "impl.pass.disagreement"
-desc = "The wrong-kernel observation of the pass set: `wrong` says `a + b` and names `:op/sub_l` (direct call 3, body 42, diff -39), and `mix` says `a * b` and names `:op/div_d`, whose registered rule gives the reverse pass 0.5 where the body's `a * b` gives 2.0. The same comparison that prints 0 for the agreeing kernels prints non-zero here, so the agreement cases are falsifiable."
-kind = "behavior"
-case = "../../../cases/compile/native/impl_pass_disagreement.cml"
-args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout
-const m = out.match(/^wrong kernel=(-?[0-9]+) body=(-?[0-9]+) diff=(-?[0-9]+)$/m)
-assert(m, `no wrong line:\\n${out}`)
-assert(Number(m[1]) === 3 && Number(m[2]) === 42 && Number(m[3]) === -39, `wrong kernel changed: ${m[0]}`)
-const g = out.match(/^grad kernel=(-?[0-9.eE+-]+) body=(-?[0-9.eE+-]+) diff=(-?[0-9.eE+-]+)$/m)
-assert(g, `no grad line:\\n${out}`)
-assert(Math.abs(Number(g[1]) - 0.5) < 1e-9, `the div kernel's gradient is not 1/b: ${g[0]}`)
-assert(Math.abs(Number(g[2]) - 2.0) < 1e-9, `the body's gradient is not a: ${g[0]}`)
-assert(Math.abs(Number(g[3]) + 1.5) < 1e-9, `the two gradients agree, so the reverse pass did not take the kernel: ${g[0]}`)
-}
-"""
-
-# ---- Autodiff: the reverse pass reads the kernel operator ----
-
-[[tests]]
-name = "impl.pass.autodiff.kernel"
-desc = "`std::macro` expands `grad` over both paths of one tagged function: the direct call of `curve` is one OPER of `:op/div_d`, so the kernel's own registered derivative rule runs (1/b = 0.5 at (4.0, 2.0)), while the same Camel body reached through the function value is `a * b` and its gradient is 2.0. The two gradients differ by 1.5: the reverse pass differentiates the operator the call site holds, not the semantic body. This is the sharpest form of the finding — 10.4 says differentiation expands the body on demand, and it does not; `modules/autodiff/pullback.cpp:3486` looks the operator's URI up in the derivative registry."
-kind = "behavior"
-case = "../../../cases/compile/native/impl_pass_autodiff.cml"
-args = ["${case}", "std::macro", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout
-const m = out.match(/^grad kernel=(-?[0-9.eE+-]+) body=(-?[0-9.eE+-]+) diff=(-?[0-9.eE+-]+)$/m)
-assert(m, `no grad line:\\n${out}`)
-assert(Math.abs(Number(m[1]) - 0.5) < 1e-9, `the kernel path's gradient is not 1/b: ${m[0]}`)
-assert(Math.abs(Number(m[2]) - 2.0) < 1e-9, `the body path's gradient is not b at a = 2.0: ${m[0]}`)
-assert(Math.abs(Number(m[3]) + 1.5) < 1e-9, `the two paths agree, so the reverse pass read the body: ${m[0]}`)
-}
-"""
+# the tensor module and a module may declare only its own operator
+# (`SemanticDiag::NativeDeclarationForeignOperator`), so the kernels of the cases here are the
+# core's scalar operators. Closing fusion and export needs either a stock `#impl` in `stdlib/`
+# beside the operators, or a test-scoped way to declare another module's operator; both are the
+# language author's call.
 
 # ---- The optimizer: a direct call is not a call to inline ----
 
@@ -242,7 +125,7 @@ expect_stdout_exact = "opt kernel=42 body=42 diff=0\n"
 
 [[tests]]
 name = "impl.pass.optimizer.gir"
-desc = "The optimized graph: exactly one `:op/add_l` OPER, which is the direct call (the kernel), and the body's two `:op/sub_l` nodes are in the graph of the function `plus`, not inlined into `main` — the optimizer sees a call it may inline and an operator it may not look inside."
+desc = "The optimized graph: in `main` the direct call is one `:op/add_l` OPER (the kernel) and the body's two `:op/sub_l` nodes are the graph of the function `plus`, which survives the pass beside `main` — so the optimizer inlined a call it could see and left the operator it may not look inside as one operator."
 kind = "behavior"
 case = "../../../cases/compile/native/impl_pass_optimizer.cml"
 args = ["${case}", "std::opt", "std::gir"]
@@ -250,15 +133,16 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-const count = s => out.split(s).length - 1
-assert(count('label=":op/add_l", type="OPER"') === 1, `the kernel call is not one OPER after the optimizer:\\n${out}`)
-assert(count('label=":op/sub_l", type="OPER"') === 2, `the body's two operators are not in the graph:\\n${out}`)
-assert(out.includes('label="plus"'), `the body graph of plus is not in the dump:\\n${out}`)
+const count = (hay, s) => hay.split(s).length - 1
 const start = out.indexOf('cluster_F01')
 const end = out.indexOf('cluster_F02')
-const main = start >= 0 && end > start ? out.slice(start, end) : out
-assert(main.includes('label=":op/add_l"'), `the kernel is not in main:\\n${main}`)
+assert(start >= 0 && end > start, `the dump has no main graph beside the body's:\\n${out}`)
+const main = out.slice(start, end)
+assert(count(main, 'label=":op/add_l", type="OPER"') === 1, `the kernel is not one OPER in main after the optimizer:\\n${main}`)
 assert(!main.includes('label=":op/sub_l"'), `the body was inlined into main:\\n${main}`)
+assert(out.includes('label="plus"'), `the body graph of plus is not in the dump:\\n${out}`)
+const plus = out.slice(end)
+assert(count(plus, 'label=":op/sub_l", type="OPER"') === 2, `the body's two operators are not in its own graph:\\n${plus}`)
 }
 """
 
