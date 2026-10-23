@@ -342,7 +342,7 @@ enum class SemanticDiag : uint32_t {
     ImplKernelForeign         = 0x0001DA,
     ImplSignatureMismatch     = 0x0001DB,
     ImplKernelNotBodyless     = 0x0001DC,
-// The node of a `const` parameter inside a rule's condition (rewrite design 2 (second version)
+    // The node of a `const` parameter inside a rule's condition (rewrite design 2 (second version)
     // 1; the ruling of 2026-10-23 on `rule_when_const_node`): the surface name is `node_of(c)`,
     // it takes the name of one of the rule's own `const` parameters, and it is written in the
     // condition. Nothing else reaches a node there.

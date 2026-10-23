@@ -1,7 +1,7 @@
 id = "opt.camel_passes"
 order = 332
 tier = "fast"
-tags = ["feat", "opt", "camel", "differential", "dce", "cse"]
+tags = ["feat", "opt", "camel", "differential", "dce", "cse", "fold"]
 
 [defaults]
 kind = "behavior"
@@ -20,6 +20,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 #
 #   `by_cpp`      the reference: the C++ pass, recorded as a golden.
 #   `by_camel`    the Camel pass, compared with that golden by `graph_equal.mjs`.
+#   `same_text`   the same two runs compared as text after the origin ids are normalized: the
+#                 stronger form for a pass the C++ one agrees with node for node.
 #   `is_a_fixpoint` the Camel pass run on its own output: a sweep that stopped early shows here.
 #   `property`    what the Camel pass leaves, read from the JSON `std::jgir` prints: a node count
 #                 cannot say that the right pair was merged and the right node kept.
@@ -156,3 +158,142 @@ args = ["${case}", "std::opt::inline", "opt::dce", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_stdout_exact = "5\n11\n"
+
+# ---- constant folding ----
+
+# A pure operation whose operands are constants is the value they compute. The corpus holds
+# operations the compiler leaves in the graph — `chain` reaches one through a `let` chain, so the
+# pass needs two rounds, and `compare` folds a comparison — beside an operation over a parameter
+# that must not fold. Two literals of one expression are folded by the front end before any pass
+# runs (`2 * 3` is one constant here), and a branch over constants (`&&`) is reduced by the C++
+# pass as well and left by this one; both are recorded in `docs/technical/45_graph_module.md`.
+
+[[tests]]
+name = "camel_passes.fold.subject"
+desc = "The corpus before any pass: `chain` holds an addition over a constant and a product over that addition (two rounds of folding), `compare` a comparison over two let-bound constants, and `live` an operation over a parameter that must stay — the guard refuses a corpus with nothing to fold."
+case = "../../../cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "std::jgir"]
+verify_script_path = "../../../cases/opt/camel_passes/fold_subject.mjs"
+
+[[tests]]
+name = "camel_passes.fold.by_cpp"
+desc = "The reference: std::opt::fold on the corpus whose operations are over constants."
+kind = "snapshot"
+case = "../../../cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "std::opt::fold", "std::gir"]
+snapshot_stream = "stdout"
+golden = "./golden/camel_passes.fold.dot"
+
+[[tests]]
+name = "camel_passes.fold.by_camel"
+desc = "opt::fold, written in Camel with the graph module's `eval`, gives the graph the C++ pass gives: the golden of the entry above, compared node by node and edge by edge."
+case = "../../../cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "opt::fold", "std::gir"]
+verify_script_path = "../../../cases/opt/camel_passes/graph_equal.mjs"
+
+[[tests]]
+name = "camel_passes.fold.same_text"
+desc = "The two runs of `by_cpp` and `by_camel` as text: with the origin ids normalized the dumps are identical character for character, which is stronger than the isomorphic comparison and holds the two passes to the same node ids in the same order."
+kind = "differential"
+case = "../../../cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "opt::fold", "std::gir"]
+compare_to = "camel_passes.fold.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "camel_passes.fold.is_a_fixpoint"
+desc = "opt::fold run on its own output gives the same graph: `chain` needs two rounds, so a version that folded one round and stopped is refused here."
+kind = "differential"
+case = "../../../cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "opt::fold", "opt::fold", "std::gir"]
+compare_to = "camel_passes.fold.by_camel"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "camel_passes.fold.property"
+desc = "What opt::fold leaves: no operation over constants anywhere, the value `chain` and `compare` print is the constant the folding computed, and `live`'s operation over a parameter still reads its port."
+case = "../../../cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "opt::fold", "std::jgir"]
+verify_script_path = "../../../cases/opt/camel_passes/fold_property.mjs"
+
+[[tests]]
+name = "camel_passes.fold.program_still_runs"
+desc = "The program after opt::fold prints what it printed before — `chain`'s 20 before `main`'s print of its 0, `compare`'s true, `live(4)`'s 13 — on NVM, FastVM, JIT and the parallel scheduler: folding a value into the constant it computes changed no result."
+case = "../../../cases/opt/camel_passes/fold_subject.cml"
+args = ["${case}", "opt::fold", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_stdout_exact = "20\n0\ntrue\n0\n13\n0\n"
+
+# ---- a constant expression that can only fault ----
+
+# `1 / 0` over two constants, in the value the function returns: the pass evaluates it — that is
+# what warns where it is written — and may not replace it, because the returned value anchors its
+# graph. Beside it sits an operation over two constants the same round does replace, so one round
+# both evaluates a node it leaves and replaces one it keeps, and a pass that gave up on the round
+# when it met the expression it could not replace is refused here. The expression is left as
+# written, so the program faults where it is written exactly as it does without the pass.
+
+[[tests]]
+name = "camel_passes.fold_fault.subject"
+desc = "The corpus before any pass: `main` returns the division `1 / 0` over two constants — a constant expression that can only fault, and the value the function returns — with `x * y` over two let-bound constants beside it ordered after the division, so one round holds a node the pass may not replace and one it does."
+case = "../../../cases/opt/camel_passes/fold_fault.cml"
+args = ["${case}", "std::jgir"]
+verify_script_path = "../../../cases/opt/camel_passes/fold_fault_subject.mjs"
+
+[[tests]]
+name = "camel_passes.fold_fault.by_cpp"
+desc = "The reference: std::opt::fold on a corpus whose returned value is a constant expression that can only fault — it warns where the expression is written, leaves it there, and folds the product beside it."
+kind = "snapshot"
+case = "../../../cases/opt/camel_passes/fold_fault.cml"
+args = ["${case}", "std::opt::fold", "std::jgir"]
+snapshot_stream = "stdout"
+golden = "./golden/camel_passes.fold_fault.jgir"
+
+[[tests]]
+name = "camel_passes.fold_fault.same_text"
+desc = "The two folds as text: with the origin ids and the paths normalized the dumps and the warnings are both identical character for character, so the Camel pass evaluates the same node, leaves it there and warns at the same position with the same words as the C++ pass."
+kind = "differential"
+case = "../../../cases/opt/camel_passes/fold_fault.cml"
+args = ["${case}", "opt::fold", "std::jgir"]
+compare_to = "camel_passes.fold_fault.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized", "stderr_normalized"]
+
+[[tests]]
+name = "camel_passes.fold_fault.property"
+desc = "What opt::fold leaves: the division over constants is still the value the function returns, the product beside it is gone and its constant 6 reaches the print, no other operation over constants is left, and the order the source wrote is untouched."
+case = "../../../cases/opt/camel_passes/fold_fault.cml"
+args = ["${case}", "opt::fold", "std::jgir"]
+verify_script_path = "../../../cases/opt/camel_passes/fold_fault_property.mjs"
+
+[[tests]]
+name = "camel_passes.fold_fault.without_the_pass"
+desc = "The corpus with no pass at all: `main` returns `1 / 0`, so the run reports the division by zero where the expression is written and exits 1 — the run the entry below holds the folded program to."
+case = "../../../cases/opt/camel_passes/fold_fault.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+
+[[tests]]
+name = "camel_passes.fold_fault.same_run"
+desc = "The program with the fold runs to the same fault as without it, on the same exit code and the same stdout: an expression that can only fault is left as written, so the run reaches it exactly as it did before (design principles 3.9). The warning the fold adds is on stderr and is compared by `same_text`."
+kind = "differential"
+case = "../../../cases/opt/camel_passes/fold_fault.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_exit = 1
+compare_to = "camel_passes.fold_fault.without_the_pass"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "camel_passes.fold_fault.fault_is_reported"
+desc = "Both reports are there when the folded program runs: the run-time DivisionByZero of the expression the fold left in place, and the fold's own ConstantExpressionFaults warning, both pointing at the position the expression is written at."
+case = "../../../cases/opt/camel_passes/fold_fault.cml"
+args = ["${case}", "opt::fold", "std::nvm"]
+expect_exit = 1
+verify_script = """
+assert(input.exit_code === 1, 'the run faults: ' + input.exit_code)
+assert(input.stdout.includes('RuntimeDiag::DivisionByZero'), 'the run reports the fault: ' + input.stdout)
+assert(input.stderr.includes('RuntimeDiag::ConstantExpressionFaults'), 'the fold warns: ' + input.stderr)
+assert(input.stdout.includes('9:15'), 'the run points at the expression: ' + input.stdout)
+assert(input.stderr.includes('9:15'), 'the warning points at the expression: ' + input.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]

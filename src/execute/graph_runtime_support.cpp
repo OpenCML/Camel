@@ -372,6 +372,15 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         for (gc_node_ref_t input : graph->withInputsOf(index)) {
             visit(input);
         }
+        // An order edge orders two nodes that both run; it does not make either of them run
+        // (docs/design/effects/edges.cn.md 1.5 and 2). A predecessor that the layout does not
+        // hold anyway is a node nothing reaches, so its order says nothing and is not visited:
+        // no other edge is followed from it.
+        for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(index)) {
+            if (live[edge.pred]) {
+                visit(edge.pred);
+            }
+        }
 
         state[index] = 2;
         stack.pop_back();

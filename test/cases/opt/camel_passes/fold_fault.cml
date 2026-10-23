@@ -1,0 +1,15 @@
+// A constant expression that can only fault, in a program that also holds an operation the fold
+// does replace. The round finds both, `eval` refuses the division by zero and warns
+// (ConstantExpressionFaults), and the division is left as written: design principles 3.9, the
+// program behaves the same with and without the pass. The front end folds the two literals of one
+// expression, so the product reaches the graph as an operation over `let`s.
+module fold_fault
+
+func main(): int sync {
+    let a = 1 / 0
+    let x = 2
+    let y = 3
+    let b = x * y
+    println(b)
+    return a
+}

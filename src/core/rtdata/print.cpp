@@ -103,20 +103,14 @@ void printScalar(std::ostream &os, slot_t data, const Type *type) {
     case TypeCode::Float64:
         os << camel::utils::floatText(fromSlot<Float64>(data));
         break;
-        // A bf16 or f16 prints by the float text rules of design principles 11.5, from the value
-        // its bits
-        // name (camel/core/rtdata/half.h): the element widens to f32 exactly, and the text is that
-        // f32's shortest `floatText`. So `f32(x)` and `x` print the same text for the same element,
-        // and reading the text back as bf16 gives the element again. Whether 7.7's "shortest" asks
-        // instead for the shortest text that reads back as the element type (`0.1` for bf16 0x3DCD,
-        // where this writes `0.100097656`) is ruled: the text is the shortest that reads back as the
-        // element type, so this is a defect, not a question. See
-        // docs/handover/reviews/questions-2026-10-23.md, "reduced-precision-text".
     case TypeCode::BFloat16:
-        os << camel::utils::floatText(halfToFloat<BFloat16>(data));
-        break;
+        // A bf16 or an f16 prints by the one float text rule of design principles 7.7, measured
+        // against its own type's rounding: `0.1 as bf16` is `0.1`, not the text of the f32 it
+        // widens to (`0.100097656`; ruling 2026-10-23, "reduced-precision-text"). The slot holds
+        // the type's own pattern, which names the value (camel/core/rtdata/half.h), and reading
+        // the text back as the type gives the same element.
     case TypeCode::Float16:
-        os << camel::utils::floatText(halfToFloat<Float16>(data));
+        os << halfValueText(data, type->code());
         break;
     case TypeCode::Bool:
         os << (fromSlot<Bool>(data) ? "true" : "false");

@@ -1,0 +1,122 @@
+id = "modules.optim"
+order = 379
+tier = "fast"
+tags = ["feat", "modules", "optim", "optimizer", "tree"]
+
+[[tests]]
+name = "optim.trajectory_matches_native"
+desc = "The Camel optimizers against `nn` over a whole trajectory: sgd with a linear decay, adam with non-default constants and a cosine decay, adam with both sides' defaults, and the two AdamW properties (a zero decay is `adam`, and a decay is `adam` on a parameter tree decayed before every step). Every leaf of every step agrees bit for bit, the step count is the number of updates, and the schedules are the ones the loops read."
+kind = "behavior"
+case = "../../../cases/modules/optim/agreement.cml"
+args = ["${case}", "--arg", "steps=6", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["optim sgd steps=6 made=6 compared=24 mismatches=0", "optim adam steps=6 made=6 compared=24 mismatches=0", "optim adam_default steps=6 made=6 compared=24 mismatches=0", "optim adamw_zero_decay steps=6 made=6 compared=24 mismatches=0", "optim adamw_decay steps=6 made=6 compared=12 mismatches=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${input.normalized.stdout}`)
+const out = input.normalized.stdout
+const steps = 6
+const leaves = { sgd: 4, adam: 4, adam_default: 4, adamw_zero_decay: 4, adamw_decay: 2 }
+for (const name of Object.keys(leaves)) {
+  const found = match(new RegExp(`optim ${name} steps=(\\d+) made=(\\d+) compared=(\\d+) mismatches=(\\d+)`), out)
+  const [ran, made, seen, bad] = found.slice(1, 5).map(Number)
+  assert(ran === steps, `${name}: the loop ran ${ran} steps of ${steps}`)
+  assert(made === steps, `${name}: the optimizer state counted ${made} updates of ${steps}`)
+  assert(seen === steps * leaves[name], `${name}: the walk compared ${seen} leaves, expected ${steps * leaves[name]}`)
+  assert(bad === 0, `${name}: ${bad} of ${seen} leaves differ`)
+}
+// Both sides print the same text for the same leaves, and the shortest float text names one float
+// exactly (design principles 7.7), so the same text is the same bits.
+const values = (name, label) => match(new RegExp(`^optim ${name} ${label} (.*)$`, 'm'), out)[1].trim()
+const pairs = [['sgd', 'camel', 'nn'], ['adam', 'camel', 'nn'], ['adam_default', 'camel', 'nn'], ['adamw_zero_decay', 'camel', 'adam'], ['adamw_decay', 'camel', 'decayed_adam']]
+for (const [name, left, right] of pairs) {
+  const a = values(name, left)
+  const b = values(name, right)
+  assert(a.length > 0, `${name}: ${left} printed no values`)
+  assert(a === b, `${name}: ${left} printed [${a}] and ${right} printed [${b}]`)
+}
+// The schedules: the ramp falls and then stays exactly at the floor, and so does the cosine.
+const linear = match(/optim schedule linear step1=(\S+) step3=(\S+) step4=(\S+) step9=(\S+)/, out).slice(1).map(Number)
+assert(approx(linear[0], 0.0375, 1e-15), `linear step 1 = ${linear[0]}`)
+assert(approx(linear[1], 0.0125, 1e-15), `linear step 3 = ${linear[1]}`)
+assert(linear[0] > linear[1] && linear[1] > linear[2], `the ramp does not fall: ${linear}`)
+assert(linear[2] === 0.01 && linear[3] === 0.01, `the floor is not exact: ${linear[2]} and ${linear[3]}`)
+const cosine = match(/optim schedule cosine step1=(\S+) step4=(\S+) step5=(\S+)/, out).slice(1).map(Number)
+assert(approx(cosine[0], 0.008681980515339464, 1e-12), `cosine step 1 = ${cosine[0]}`)
+assert(cosine[1] === 0.001 && cosine[2] === 0.001, `the cosine floor is not exact: ${cosine[1]} and ${cosine[2]}`)
+assert(cosine[0] > cosine[1], `the cosine does not fall: ${cosine}`)
+const flat = match(/optim schedule constant step1=(\S+) step7=(\S+)/, out).slice(1).map(Number)
+assert(flat[0] === 0.02 && flat[1] === 0.02, `constant is not constant: ${flat}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "optim.training_loop_matches_native"
+desc = "A training loop on c2's parameter tree: `with_grad` gives the gradient, the Camel optimizer advances the model with a cosine schedule, and `nn:adam` advances a second copy on the same gradient. The two hold the same parameters before every step, land on the same parameters and reach the same loss, while the loss curve the loop collected falls."
+kind = "behavior"
+case = "../../../cases/modules/optim/training.cml"
+args = ["${case}", "--arg", "steps=20", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["optim training steps=20 made=20 bad_steps=0 final_drift=0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${input.normalized.stdout}`)
+const out = input.normalized.stdout
+const steps = 20
+const summary = match(/optim training steps=(\d+) made=(\d+) bad_steps=(\d+) final_drift=(\S+)/, out).slice(1, 5)
+assert(Number(summary[0]) === steps, `the loop ran ${summary[0]} steps of ${steps}`)
+assert(Number(summary[1]) === steps, `the optimizer state counted ${summary[1]} updates of ${steps}`)
+assert(Number(summary[2]) === 0, `${summary[2]} steps held different parameters before the update`)
+assert(Number(summary[3]) === 0, `the final parameters differ by ${summary[3]}`)
+const losses = match(/optim training first_loss=(\S+) last_loss=(\S+) camel_loss=(\S+) nn_loss=(\S+)/, out).slice(1, 5).map(Number)
+assert(losses.every(Number.isFinite), `a loss is not finite: ${losses}`)
+assert(losses[2] === losses[3], `the final losses differ: ${losses[2]} and ${losses[3]}`)
+assert(losses[1] < losses[0], `the loop did not train: first ${losses[0]}, last ${losses[1]}`)
+const camel = match(/^optim training camel (.*)$/m, out)[1].trim()
+const nn = match(/^optim training nn (.*)$/m, out)[1].trim()
+assert(camel.length > 0, 'the Camel path printed no parameters')
+assert(camel === nn, `the final parameters differ: [${camel}] and [${nn}]`)
+const curve = match(/optim training curve=(.*)$/m, out)[1]
+const numbers = curve.match(/-?[0-9]+(\.[0-9]+)?(e[-+]?[0-9]+)?/g) || []
+assert(numbers.length === steps, `the curve printed ${numbers.length} losses of ${steps}`)
+assert(Number(numbers[0]) === losses[0], `the curve starts at ${numbers[0]}, not at the first loss ${losses[0]}`)
+assert(Number(numbers[steps - 1]) === losses[1], `the curve ends at ${numbers[steps - 1]}, not at the last loss ${losses[1]}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "optim.f64_leaf_keeps_its_element_type"
+desc = "A tensor leaf whose element type is written as f64 keeps f64: one `sgd` step of 16777217.0 with a rate of 0.5 is 16777216.5, a value no f32 can hold, in a leaf of 16 bytes, and one `adam` step of the same leaf stays f64 too. The native path turns every tensor leaf into f32 (`floatTensor`/`newLike`, modules/nn/optim.cpp), which design principles 7.4 forbids, so the two cannot agree on this leaf; the case guards this side of the divergence."
+kind = "behavior"
+case = "../../../cases/modules/optim/dtype_exact.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["optim dtype_exact steps=1 value=16777216.5", "optim dtype_exact scalar sgd=16777216.5 wide_sgd=16777216.5 adam=16777216.500049993 wide_adam=16777216.500049993"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${input.normalized.stdout}`)
+const out = input.normalized.stdout
+const sgd = match(/optim dtype_exact steps=(\d+) value=(\S+) f32_value=(\S+) bytes=(\d+)/, out).slice(1, 5).map(Number)
+assert(sgd[0] === 1, `the state counted ${sgd[0]} steps`)
+assert(sgd[1] === 16777216.5, `the f64 step gave ${sgd[1]}`)
+assert(sgd[2] === 16777216, `f32(16777216.5) is ${sgd[2]}`)
+assert(sgd[3] === 16, `the leaf is ${sgd[3]} bytes, not 16`)
+assert(sgd[1] !== sgd[2], 'the stored value is representable in f32, so the leaf was narrowed')
+const adam = match(/optim dtype_exact adam steps=(\d+) value=(\S+) bytes=(\d+)/, out).slice(1, 4).map(Number)
+assert(adam[0] === 1, `the adam state counted ${adam[0]} steps`)
+assert(Math.abs(adam[1] - 16777216.50005) < 0.000001, `the f64 adam step gave ${adam[1]}`)
+assert(adam[2] === 16, `the adam leaf is ${adam[2]} bytes, not 16`)
+}
+"""
+timeout_ms = 30000

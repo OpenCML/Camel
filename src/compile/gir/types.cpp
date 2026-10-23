@@ -20,6 +20,8 @@ std::string to_string(LinkType type) {
         return "With";
     case LinkType::Ctrl:
         return "Ctrl";
+    case LinkType::Order:
+        return "Order";
     }
     ASSERT(false, "Unknown LinkType");
     return "Unknown";

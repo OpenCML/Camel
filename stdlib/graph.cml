@@ -225,6 +225,15 @@ export func replace(t: Txn, old: Node, new: Node): void
 /// @example erase(t, n)
 export func erase(t: Txn, n: Node): void
 
+/// Evaluates the pure operator of the node over its constant operands and gives the node holding
+/// the result, null when there is no value to compute (an operand is no constant of the graph, the
+/// node is no pure operation, or evaluating it faults). The node the answer names is the
+/// transaction's to put in place of `n` with `replace`. A constant expression that can only fault
+/// is left as written and warned about, as the C++ fold does.
+/// @effect changes the transaction
+/// @example eval(t, n)
+export func eval(t: Txn, n: Node): Node?
+
 /// Checks the edits and makes the new Program, which shares every graph nothing changed; the transaction is over. The error value has the kind `GraphConflict` (a graph the transaction touched changed since it was opened), `GraphInvalid` (an edit broke an invariant; the message names the graph, the node and the edge) or `TxnUsed` (the transaction was over already).
 /// @effect changes the transaction
 /// @fails error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant; error value `TxnUsed` when the transaction was over already

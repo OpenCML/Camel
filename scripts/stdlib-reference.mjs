@@ -312,6 +312,14 @@ const MODULES = [
         computed: 'signatures/nn.cml',
     },
     {
+        name: 'optim',
+        title: '`optim`: optimizers written in Camel over `tree`',
+        kind: 'camel',
+        // The schedules, the optimizations and `init`/`update` are Camel; the state a step gives
+        // back is built from the parameter tree, so `init`'s result type is a shape a declaration
+        // cannot spell yet and is rendered as `?` (an inferred result).
+    },
+    {
         name: 'autodiff',
         title: '`autodiff`: gradients of functions',
         kind: 'cpp',

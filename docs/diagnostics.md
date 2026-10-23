@@ -15,11 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-<<<<<<< HEAD
-254 diagnostics: 235 errors, 19 warnings.
-=======
-257 diagnostics: 238 errors, 19 warnings.
->>>>>>> handover/h337-node-of
+255 diagnostics: 236 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -225,11 +221,7 @@ prints one entry.
 | `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error |
 | `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error |
 | `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error |
-<<<<<<< HEAD
-=======
-| `0x030001DD` | [SemanticDiag::ImplOnGenericFunction](#implongenericfunction) | Error |
 | `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error |
->>>>>>> handover/h337-node-of
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -6378,42 +6370,6 @@ func main(): int sync {
 }
 ```
 
-<<<<<<< HEAD
-=======
-### ImplOnGenericFunction
-
-`0x030001DD` · Error · `SemanticDiag::ImplOnGenericFunction`
-
-**Message**
-
-```text
-The '#impl' tag of '{0}' is on a generic function.
-```
-
-**Help**
-
-```text
-A generic function's instances have signatures of their own, so one kernel cannot be the implementation of all of them. Write each instance as an ordinary function and give it its own '#impl', or remove the tag.
-```
-
-**Example** (`test/cases/compile/native/impl_generic.cml`, run as `camel test/cases/compile/native/impl_generic.cml`)
-
-```camel
-module impl_generic
-
-#op<':op/idx_arr'>
-func idx_kernel::<T>(xs: T[], i: int): T
-
-#impl<idx_kernel>
-func at::<T>(xs: T[], i: int): T {
-    return xs[i]
-}
-
-func main(): int sync {
-    return at([1, 2, 3], 0)
-}
-```
-
 ### NodeOfNotAParameter
 
 `0x030001DE` · Error · `SemanticDiag::NodeOfNotAParameter`
@@ -6452,7 +6408,6 @@ func main(): int sync {
 }
 ```
 
->>>>>>> handover/h337-node-of
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -7894,7 +7849,7 @@ Module '{0}' provides no pass '{1}'; it provides {2}.
 **Help**
 
 ```text
-A pass of a module is one of its exported functions of type `(p: Program) => Program!`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
+A pass of a module is one of the passes its `.cml` file declares — `export func {1}::<F>(f: F): F! when is_function::<F>()`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
 ```
 
 **Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::nosuch std::nvm`)
@@ -7920,7 +7875,7 @@ Module '{0}' declares '{1}' but does not export it, so it cannot be named as a p
 **Help**
 
 ```text
-Write `export func {1}(...)` in module {0}, or name a pass it exports. A pass is an exported function `(p: Program) => Program!`.
+Write `export func {1}::<F>(f: F): F! when is_function::<F>()` in module {0}, or name a pass it declares and exports. A pass of a module is a declaration of that module's `.cml` file.
 ```
 
 **Example** (`test/cases/modules/pass_not_found/main.cml`, run as `camel test/cases/modules/pass_not_found/main.cml declares_not_exported::run std::nvm`)

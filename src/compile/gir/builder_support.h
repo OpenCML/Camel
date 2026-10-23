@@ -52,6 +52,8 @@ inline runtime::DraftEdgeKind toDraftEdgeKind(LinkType type) {
         return runtime::DraftEdgeKind::With;
     case LinkType::Ctrl:
         return runtime::DraftEdgeKind::Ctrl;
+    case LinkType::Order:
+        return runtime::DraftEdgeKind::Order;
     }
     ASSERT(false, "Unknown link type.");
     return runtime::DraftEdgeKind::Norm;
