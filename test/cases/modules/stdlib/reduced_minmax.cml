@@ -1,0 +1,159 @@
+/**
+ * `math::min`, `math::max` and `math::abs` over `bf16` and `f16` (ruling
+ * docs/handover/reviews/reduced-precision.md item 2: "`math::min`/`max`/`abs` 等补 bf16/f16"), and
+ * `array::min` / `array::max` over an array of either, which could not compute before: the fold
+ * `xs->reduce<math::min, xs[0]>` had no overload to take, so the call site reported
+ * `'math::min' is used as a value here, but it names an operator with 6 signatures`, a message
+ * about arity where the real reason was a missing element type. Both halves of this case were red
+ * before the overloads existed, with that diagnostic at the two `reduce` lines of `stdlib/array.cml`
+ * and at every `math::min`/`max`/`abs` call written here.
+ *
+ * **The reading this case pins.** `min`, `max` and `abs` are exact per-element operations on the
+ * value each operand widens to, and they are *not* accumulations:
+ *
+ *   * every bf16 and every f16 is an f32 value exactly, so the widening loses nothing and every
+ *     comparison is made between two f32 values, never between two 16-bit patterns;
+ *   * IEEE 754-2019 minimum and maximum return one of their two operands (or the canonical quiet
+ *     NaN) and every operand is a value the element type holds exactly, so the operation never
+ *     rounds and the result is that operand bit for bit;
+ *   * `abs` clears the sign bit: the one operation of the three whose result differs from an
+ *     operand's own pattern (-0 becomes +0).
+ *
+ * So no accumulator and no accumulation width take part, and the f64 accumulation rule of design
+ * principles 7.3 — which the same ruling states and which `array::sum` follows — is about a
+ * reduction (an addition), not about combining two elements with an operation that never rounds.
+ * The `sum` lines are the other half of that rule on the reduced-precision element types.
+ *
+ * **What each line would be under a wrong reading.**
+ *
+ *   `[1.0, 2.0]`            min → 1.0 and max → 2.0, with the bytes 128 63 and 0 64. A fold that
+ *                           returned the last element, one that started from an identity instead of
+ *                           an element, or one that narrowed by reinterpreting the 16-bit pattern
+ *                           moves a byte here.
+ *   `[0.0, 0.0 - 0.0]`      min → -0.0 (0x8000) and max → +0.0 (0x0000). Comparing the two 16-bit
+ *                           patterns as integers picks 0x0000 for both; comparing in f32 without
+ *                           the sign of zero rule picks the first element for both; and a fold that
+ *                           re-computed 0 has the bytes of +0.
+ *   `[5.0, 65504.0, -1.0]`  f16: max → 65504.0 exactly, the largest finite f16 (0x7BFF), and
+ *                           min → -1.0. A saturating or re-rounding f16 operation moves this.
+ *   the `abs` lines         `abs(-3.5)` is 3.5 and `abs(2.0)` is 2.0 in both types, and
+ *                           `abs(-0.0)` is the two bytes 0 0: the sign cleared. An `abs` written
+ *                           as `max(x, -x)`, or one that read the sign as a value, gives 0x8000
+ *                           for the last one.
+ *   the `sum` lines         `[16777216.0, 1.0, -16777216.0]`: an f32 accumulator rounds 2^24 + 1
+ *                           back to 2^24 and answers 0, so this pair separates the accumulator
+ *                           width; `[1.0, 2^-8, 2^-8]` separates one rounding of the total from a
+ *                           rounding per addition.
+ *
+ * The bytes of a value come out of the tensor path (`bitsOfBf16`), which is how reduced_scalar.cml
+ * reads them too. A bare `bf16` value is stored in the low half of its slot, so a reading that
+ * compared slots as integers would compare the 16-bit patterns; nothing here does.
+ *
+ * What is not here, and why: the NaN arm of both comparisons. A NaN cannot be written as a literal
+ * of either type (`math::nan` is a float constant, and a tensor constructor refuses a NaN element),
+ * so the canonical quiet NaN the two operations return has no spelling to pin its bytes with. The
+ * f32 overloads of the same comparison are pinned elsewhere, and the two reduced-precision
+ * overloads are the same `minOf`/`maxOf` (modules/math/minmax.h), which is where the NaN rule is
+ * written once for every float type.
+ */
+module stdlib_reduced_minmax
+
+import { abs, max as math_max, min as math_min } from math
+import { max, min, sum } from array
+import { Tensor, new, to_bytes } from tensor
+import { to_array } from bytes
+
+/// The little-endian bytes of one element of a one-element tensor of T.
+func bitsOfBf16(value: bf16): int[] {
+    let one: bf16[] = [value]
+    return to_array(to_bytes(new(one)))
+}
+
+func bitsOfF16(value: f16): int[] {
+    let one: f16[] = [value]
+    return to_array(to_bytes(new(one)))
+}
+
+func main(): int sync {
+    // ---- math::min and math::max over the two types: the answer is an operand, not a computed 0
+    let smalls: bf16[] = [1.0, 2.0]
+    let halves: f16[] = [1.0, 2.0]
+    let bfMin = math_min(smalls[0], smalls[1])
+    let bfMax = math_max(smalls[0], smalls[1])
+    let f16Min = math_min(halves[0], halves[1])
+    let f16Max = math_max(halves[0], halves[1])
+    println(bfMin, bfMax, f16Min, f16Max)
+    println(bitsOfBf16(bfMin)[0], bitsOfBf16(bfMin)[1], bitsOfBf16(bfMax)[0], bitsOfBf16(bfMax)[1])
+    println(bitsOfF16(f16Min)[0], bitsOfF16(f16Min)[1], bitsOfF16(f16Max)[0], bitsOfF16(f16Max)[1])
+
+    // ---- the sign of zero: -0 is below +0, and the two compare equal ----
+    // The array holds the two patterns 0x0000 and 0x8000, so this is the pair that separates a
+    // comparison by value from a comparison of the stored bits.
+    let zeros: bf16[] = [0.0, -bf16(0.0)]
+    let bfNegZero = -bf16(0.0)
+    let bfPosZero = bf16(0.0)
+    let bfSmallest = math_min(zeros[1], zeros[0])
+    let bfLargest = math_max(zeros[1], zeros[0])
+    println(bfSmallest == bfLargest, bfSmallest == bfNegZero, bfSmallest == bfPosZero)
+    println(bitsOfBf16(bfSmallest)[0], bitsOfBf16(bfSmallest)[1], bitsOfBf16(bfLargest)[0], bitsOfBf16(bfLargest)[1])
+
+    let halfZeros: f16[] = [0.0, -f16(0.0)]
+    let halfNegZero = -f16(0.0)
+    let halfSmallest = math_min(halfZeros[1], halfZeros[0])
+    let halfLargest = math_max(halfZeros[1], halfZeros[0])
+    println(halfSmallest == halfLargest, halfSmallest == halfNegZero)
+    println(bitsOfF16(halfSmallest)[0], bitsOfF16(halfSmallest)[1], bitsOfF16(halfLargest)[0], bitsOfF16(halfLargest)[1])
+
+    // ---- math::abs: the sign cleared, on the one value whose pattern it changes ----
+    let bfAbsZero = abs(bfNegZero)
+    let f16AbsZero = abs(halfNegZero)
+    println(bitsOfBf16(bfAbsZero)[0], bitsOfBf16(bfAbsZero)[1], bitsOfF16(f16AbsZero)[0], bitsOfF16(f16AbsZero)[1])
+    println(abs(bf16(-3.5)), abs(f16(-3.5)), abs(bf16(2.0)), abs(f16(2.0)))
+
+    // ---- array::min and array::max over bf16[] and f16[] ----
+    println(min(smalls) ?? bf16(0.0), max(smalls) ?? bf16(0.0))
+
+    // The two zeros: the order of the elements decides between them, and only the f32 comparison
+    // of widened values with the sign of zero rule gives -0 for the minimum and +0 for the
+    // maximum, wherever in the array they sit.
+    let arraySmallest = min(zeros) ?? bf16(0.0)
+    let arrayLargest = max(zeros) ?? bf16(0.0)
+    println(bitsOfBf16(arraySmallest)[0], bitsOfBf16(arraySmallest)[1])
+    println(bitsOfBf16(arrayLargest)[0], bitsOfBf16(arrayLargest)[1])
+    println(arraySmallest == arrayLargest, arraySmallest == bfNegZero, arrayLargest == bfPosZero)
+
+    // The same over f16, with the largest finite value of the type in the array: the answer is
+    // that operand itself, so a rounding or a saturation of it moves these bytes.
+    let f16s: f16[] = [5.0, 65504.0, -1.0]
+    let f16ArraySmallest = min(f16s) ?? f16(0.0)
+    let f16ArrayLargest = max(f16s) ?? f16(0.0)
+    println(f16ArraySmallest, f16ArrayLargest)
+    println(bitsOfF16(f16ArrayLargest)[0], bitsOfF16(f16ArrayLargest)[1])
+
+    // A one-element array is that element; an empty one is null and the result stays `T?`.
+    let single: bf16[] = [0.1]
+    let only = min(single) ?? bf16(0.0)
+    println(only, bitsOfBf16(only)[0])
+    let empty: bf16[] = []
+    println(min(empty) == null, max(empty) == null, len(empty))
+
+    // ---- the other half of the same ruling: a floating reduction accumulates in f64 ----
+    // An f32 accumulator answers 0 for this one (2^24 + 1 rounds back to 2^24); the f64 one that
+    // rounds once answers the bf16 1.0, whose bytes are 128 63.
+    let cancelling: bf16[] = [16777216.0, 1.0, -16777216.0]
+    let total = sum(cancelling)
+    println(total, total == bf16(1.0), bitsOfBf16(total)[0], bitsOfBf16(total)[1])
+
+    // One rounding of the total, not one per addition: 1 + 2^-8 + 2^-8 is exactly 1 + 2^-7, which
+    // bf16 holds, so the answer is 1.0078125; rounding each addition into the element type would
+    // give 1.0 at the first step and keep it.
+    let carried: bf16[] = [1.0, 0.00390625, 0.00390625]
+    let carriedTotal = sum(carried)
+    println(carriedTotal, carriedTotal == bf16(1.0078125), bitsOfBf16(carriedTotal)[0], bitsOfBf16(carriedTotal)[1])
+
+    // f32 is the type the rule was re-pointed at (the ruling's item (d)): this array is one the
+    // f32 accumulator answers 0 for, and the exact f64 sum rounds once to the f32 1.0.
+    let wide: f32[] = [16777216.0, 1.0, -16777216.0]
+    println(sum(wide))
+    return 0
+}
