@@ -1,0 +1,32 @@
+/**
+ * Two `#impl` functions of one program naming one kernel. A call of a tagged function is one
+ * OPER of its kernel and nothing at the call site says which of the bodies it means, so autodiff
+ * cannot differentiate it (design principles 10.4): a kernel implements one function.
+ */
+module impl_grad_ambiguous_kernel
+
+import { grad } from autodiff
+
+#op<':op/div_d'>
+func div_kernel(a: float, b: float): float
+
+#impl<div_kernel>
+func t(a: float, b: float): float {
+    return a * b
+}
+
+#impl<div_kernel>
+func u(a: float, b: float): float {
+    return a + b
+}
+
+with <a: float>
+func outer(b: float): float {
+    return t(a, b)
+}
+
+func main(): int sync {
+    let d = grad(outer)<4.0>(2.0)
+    'diff={}'->format<d>->println
+    return 0
+}

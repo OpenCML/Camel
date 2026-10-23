@@ -390,6 +390,11 @@ class EncodeSession {
         // Graph properties fixed before encoding: the macro flag of a `#macro` function is the
         // one that matters here; a runtime graph keeps it for std::macro (design principles 8).
         prepared.draft->setFlags(graph->draft().flags());
+        // The kernel an `#impl` body implements (design principles 10.4): cold metadata of the
+        // source graph, carried onto the runtime graph like the macro flag above, because it is
+        // the only link from a direct call of the function (one OPER of that kernel) back to
+        // its Camel body.
+        prepared.draft->setImplKernelUri(graph->draft().implKernelUri());
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
         prepared.draft->setId(freshIds_ ? freshIds_->allocate() : graph->graphId());
         prepared.draft->setFuncType(graph->funcType());
