@@ -1199,6 +1199,42 @@ Diagnostic parameterDiagnostic(
     return diag;
 }
 
+/// The `help` of a pass specification whose module did not load, in place of the paragraph about how
+/// a pass specification is written (ruling of 2026-10-23, "pass-unavailable-diagnostics" 1). The
+/// user did not write the name wrongly: the module the name needs is not there to be loaded, and
+/// the diagnostic's message already carries the loader's own first reason. What the help owes the
+/// reader is that fact, said plainly, so that the paragraph about `key=value` words — the answer to
+/// a different problem — is not what they act on.
+///
+/// `module` is the module the pass name resolved to; `reason` is the same text the message carries.
+std::string moduleLoadFailureHelp(const std::string &module, const std::string &reason) {
+    return std::format(
+        "The module '{}' itself did not load, so none of its passes can be named: {}. Nothing on "
+        "this command line is a parameter problem. Fix what the loader reported about the module "
+        "first — its file, its build, or the runtime libraries it needs — and run the pipeline "
+        "again.",
+        module, reason);
+}
+
+/// Whether a pass specification's problem is that the module it names did not load, as opposed to
+/// the pass name or its parameters being wrong. `problem` is the text `DefinitionStore` builds for
+/// a name whose module cannot be used: the module is not there (an unknown pass, not this), it is
+/// found and the loader refuses it, or it is found and does not compile.
+bool isModuleLoadFailure(const std::string &problem) {
+    return problem.find("cannot be loaded") != std::string::npos ||
+           problem.find("does not compile") != std::string::npos;
+}
+
+/// The module a `<module>::<pass>` specification names, or empty when it names none.
+std::string moduleOf(const std::string &spec) {
+    const std::string name = specName(spec);
+    const size_t separator = name.find("::");
+    if (separator == std::string::npos) {
+        return "";
+    }
+    return name.substr(0, separator);
+}
+
 Diagnostic invalidParameterDiagnostic(
     const std::string &spec, const std::string &problem,
     const std::optional<DiagLabel> &errorLocation = std::nullopt) {
@@ -1206,6 +1242,14 @@ Diagnostic invalidParameterDiagnostic(
     auto diag = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem);
     if (errorLocation) {
         diag.related.push_back(*errorLocation);
+    }
+    // A module that did not load gets its own help: the paragraph about how to write parameters is
+    // the answer to a problem this run does not have.
+    if (isModuleLoadFailure(problem)) {
+        const std::string module = moduleOf(spec);
+        if (!module.empty()) {
+            diag.suggestion = moduleLoadFailureHelp(module, problem);
+        }
     }
     diag.stage = "pass:" + specName(spec);
     setPipelineStage("");

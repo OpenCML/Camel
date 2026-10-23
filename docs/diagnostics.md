@@ -7810,7 +7810,7 @@ Module '{0}' provides no pass '{1}'; it provides {2}.
 **Help**
 
 ```text
-A pass of a module is one of its exported functions of type `(p: Program) => Program!`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
+A pass of a module is one of the passes its `.cml` file declares — `export func {1}::<F>(f: F): F! when is_function::<F>()`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
 ```
 
 **Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::nosuch std::nvm`)
@@ -7836,7 +7836,7 @@ Module '{0}' declares '{1}' but does not export it, so it cannot be named as a p
 **Help**
 
 ```text
-Write `export func {1}(...)` in module {0}, or name a pass it exports. A pass is an exported function `(p: Program) => Program!`.
+Write `export func {1}::<F>(f: F): F! when is_function::<F>()` in module {0}, or name a pass it declares and exports. A pass of a module is a declaration of that module's `.cml` file.
 ```
 
 **Example** (`test/cases/modules/pass_not_found/main.cml`, run as `camel test/cases/modules/pass_not_found/main.cml declares_not_exported::run std::nvm`)
