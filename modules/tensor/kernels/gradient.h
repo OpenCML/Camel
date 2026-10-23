@@ -54,12 +54,14 @@ Array *sliceGrad(
     const Array *dy, std::span<const int64_t> shape, int64_t axis, int64_t start,
     int64_t end, int64_t step, mm::IAllocator &allocator);
 
-/// Gradients of matmul(lhs, rhs) given dy, reduced over broadcast batch dimensions.
+/// Gradients of matmul(lhs, rhs) given dy, reduced over broadcast batch dimensions. `useLibrary`
+/// is the forward node's `tensor.kernel` choice carried to the gradient; the library GEMM itself
+/// falls back to the canonical kernel below the measured shape threshold (gemm.cpp).
 Array *matmulGradLhs(
-    const Array *dy, const Array *lhs, const Array *rhs,
+    const Array *dy, const Array *lhs, const Array *rhs, bool useLibrary,
     mm::IAllocator &allocator);
 Array *matmulGradRhs(
-    const Array *dy, const Array *lhs, const Array *rhs,
+    const Array *dy, const Array *lhs, const Array *rhs, bool useLibrary,
     mm::IAllocator &allocator);
 
 } // namespace camel::tensor::kernels

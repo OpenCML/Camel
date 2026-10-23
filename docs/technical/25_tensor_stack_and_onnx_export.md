@@ -90,7 +90,13 @@ one definition.
     an f32 matmul; the graph keeps `tensor:matmul` and `tensor::fuse` records
     the choice as the node's `tensor.kernel` attribute (`"library"` or
     `"canonical"`; safe mode and `#strict` nodes are canonical). The operator
-    never changes (design principles 9.6).
+    never changes (design principles 9.6). The library path keeps the canonical
+    kernel below 2^30 multiply-adds per call: paired measurements put its
+    advantage only on the large 2-D products, while a batched attention product
+    is faster canonical (the threshold and its numbers are in `gemm.cpp`). The
+    same choice reaches `matmul_grad_lhs` / `matmul_grad_rhs`: the VJP carries
+    the forward node's `tensor.kernel` to the gradient nodes, so a `linear`
+    records it too and its backward matmuls use the library above the threshold.
 - Convolution is im2col + GEMM. Pooling, normalization, and reductions are
   typed loops over contiguous NCHW buffers.
 
@@ -449,9 +455,11 @@ Decisions recorded here because they change semantics outside the module:
   rule (default mode; safe mode withholds it). The operator is still `matmul`.
   The library's own pool is capped at the run's `-t` and at four threads, so it
   does not multiply the tensor pool of a batch loop. The pass marks
-  `tensor:matmul`; the `matmul_grad_lhs` / `matmul_grad_rhs` nodes are created
-  by autodiff after it, so backward matmuls stay on the canonical kernel until
-  a later change gives them the same choice.
+  `tensor:matmul` and `tensor:linear`; the VJP carries that choice to
+  `matmul_grad_lhs` / `matmul_grad_rhs` when autodiff creates them, so backward
+  matmuls take the same path. Below 2^30 multiply-adds per call the library path
+  runs the canonical kernel, so the small batched attention products stay
+  canonical while the large projection gradients use the library.
 - **Operator semantics generalized** (all within the previous behavior for the
   old supported cases): arithmetic and comparison broadcast fully; matmul
   supports batched and vector operands; reductions take any axis and optional

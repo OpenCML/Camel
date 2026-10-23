@@ -110,7 +110,7 @@ std::optional<Type *> linearInfer(const InferContext &ctx) {
 void matmulVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 2);
     if (auto dy = b.gradientOf(call.output)) {
-        accumulateMatmulGradients(b, call.inputs[0], call.inputs[1], *dy);
+        accumulateMatmulGradients(b, call.inputs[0], call.inputs[1], *dy, call.attrs);
     }
 }
 
@@ -118,7 +118,7 @@ void matmulVjp(VjpBuilder &b, const VjpCall &call) {
 void linearVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 3);
     if (auto dy = b.gradientOf(call.output)) {
-        accumulateMatmulGradients(b, call.inputs[0], call.inputs[1], *dy);
+        accumulateMatmulGradients(b, call.inputs[0], call.inputs[1], *dy, call.attrs);
         if (call.inputs.size() > 2) {
             accumulateOperand(b, call.inputs[2], *dy);
         }

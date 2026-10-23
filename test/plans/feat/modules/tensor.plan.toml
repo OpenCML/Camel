@@ -523,7 +523,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "gemm_canonical.library"
-desc = "With a BLAS the default policy's library GEMM may reorder this K=600 accumulation (7.3). The three sums and the linear/canonical difference stay inside the licence's bound; without a BLAS the library path is the canonical kernel and every difference is zero."
+desc = "K=600 is below the library's measured size threshold, so even with a BLAS the default policy's product runs the canonical kernel (diff 0). The test keeps the below-threshold side of the shape decision: the three sums are the canonical ones and the linear/canonical difference stays inside the licence's bound. The above-threshold equivalence is library_gemm.tolerance."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical.cml"
 args = ["${case}", "tensor::fuse"]

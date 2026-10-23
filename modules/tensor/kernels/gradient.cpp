@@ -394,7 +394,7 @@ enum class MatmulOperand { Lhs, Rhs };
 ///   rhs a matrix:        lhs viewed as [M, K] with M the product of its leading axes; one GEMM.
 ///   equal batch shapes:  one GEMM per batch matrix.
 Array *matmulGradGemm(
-    MatmulOperand which, const Array *dy, const Array *lhs, const Array *rhs,
+    MatmulOperand which, const Array *dy, const Array *lhs, const Array *rhs, bool useLibrary,
     mm::IAllocator &allocator) {
     if (lhs->dtype() != TypeCode::Float32 || rhs->dtype() != TypeCode::Float32 ||
         dy->dtype() != TypeCode::Float32 || lhs->rank() < 2 || rhs->rank() < 2) {
@@ -423,10 +423,14 @@ Array *matmulGradGemm(
         createTensor(TypeCode::Float32, (forLhs ? lhs : rhs)->shapeSpan(), allocator);
     float *o            = out->dataAs<float>();
     const int64_t aSize = M * K, bSize = K * N, gSize = M * N;
+    using GemmFn = void (*)(
+        bool, bool, int64_t, int64_t, int64_t, float, const float *, int64_t, const float *,
+        int64_t, float, float *, int64_t);
+    const GemmFn gemm = useLibrary ? &sgemmLibrary : &sgemm;
     parallelFor(batches, 1, [&](int64_t begin, int64_t end) {
         for (int64_t i = begin; i < end; ++i) {
             if (forLhs) { // dA = dY @ B^T : [M, K]
-                sgemm(
+                gemm(
                     false,
                     true,
                     M,
@@ -441,7 +445,7 @@ Array *matmulGradGemm(
                     o + i * aSize,
                     K);
             } else { // dB = A^T @ dY : [K, N]
-                sgemm(
+                gemm(
                     true,
                     false,
                     K,
@@ -464,9 +468,9 @@ Array *matmulGradGemm(
 } // namespace
 
 Array *matmulGradLhs(
-    const Array *dy, const Array *lhs, const Array *rhs,
+    const Array *dy, const Array *lhs, const Array *rhs, bool useLibrary,
     mm::IAllocator &allocator) {
-    if (Array *g = matmulGradGemm(MatmulOperand::Lhs, dy, lhs, rhs, allocator)) {
+    if (Array *g = matmulGradGemm(MatmulOperand::Lhs, dy, lhs, rhs, useLibrary, allocator)) {
         return g;
     }
     const MatmulView v = matrixView(dy, lhs, rhs, allocator);
@@ -476,9 +480,9 @@ Array *matmulGradLhs(
 }
 
 Array *matmulGradRhs(
-    const Array *dy, const Array *lhs, const Array *rhs,
+    const Array *dy, const Array *lhs, const Array *rhs, bool useLibrary,
     mm::IAllocator &allocator) {
-    if (Array *g = matmulGradGemm(MatmulOperand::Rhs, dy, lhs, rhs, allocator)) {
+    if (Array *g = matmulGradGemm(MatmulOperand::Rhs, dy, lhs, rhs, useLibrary, allocator)) {
         return g;
     }
     const MatmulView v = matrixView(dy, lhs, rhs, allocator);

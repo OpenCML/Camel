@@ -16,11 +16,14 @@
  * option CAMEL_TENSOR_BLAS, on by default; without one it forwards to `sgemm`).
  * A BLAS library chooses its own order and grouping of the accumulation (and
  * may not fuse the multiply-adds), so it does not follow the canonical
- * algorithm: it runs behind `tensor:matmul` when the node's `tensor.kernel`
- * attribute says "library", which `tensor::fuse` writes for a matmul the 7.3
- * rule lets use it (default mode; safe mode withholds it). The operator stays
- * `matmul` (design principles 9.6). `libraryGemmName()` reports what
- * sgemmLibrary calls.
+ * algorithm: it runs behind `tensor:matmul` and `matmul_grad_lhs/rhs` when the
+ * node's `tensor.kernel` attribute says "library", which `tensor::fuse` writes
+ * for a product the 7.3 rule lets use it (default mode; safe mode withholds it).
+ * Below 2^30 multiply-adds per call, sgemmLibrary uses the canonical kernel:
+ * paired measurements put the library's advantage only above that size, and a
+ * batched attention product must not pay a per-call overhead it cannot repay.
+ * The operator stays `matmul` (design principles 9.6). `libraryGemmName()`
+ * reports what sgemmLibrary calls.
  *
  * `matmul` follows NumPy semantics: rank-1 operands are promoted to a row or
  * column vector and the promoted dimension is removed from the result; leading

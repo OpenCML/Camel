@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/graph.h"
@@ -56,6 +57,17 @@ class VjpBuilder {
     /// graph runs.
     virtual vjp_node_t
     addOper(type::Type *type, std::string_view uri, std::span<const vjp_node_t> normInputs) = 0;
+    /// The same, carrying `attrs` (for example the forward node's `tensor.kernel` choice) to the
+    /// emitted node. The default keeps the attributes away, so a rule that has none behaves as
+    /// before; an engine that stores attributes overrides it.
+    virtual vjp_node_t addOper(
+        type::Type *type,
+        std::string_view uri,
+        std::span<const vjp_node_t> normInputs,
+        camel::core::attr::AttrSetId attrs) {
+        (void)attrs;
+        return addOper(type, uri, normInputs);
+    }
     /// Element `index` of an aggregate (tuple or struct) node. Rules for operators returning
     /// several values use it to read the gradient of one result and to hand one gradient of a
     /// multi-result gradient operator to each input.
@@ -86,6 +98,10 @@ struct VjpCall {
     /// gradient can refuse at the operator instead of at the `grad` call that ran the
     /// transformation (`kInvalidOriginId` when unknown). See `tensor::ops::refuseVjp`.
     uint64_t origin = 0;
+    /// The forward node's attributes (camel/core/node_attrs.h), so a rule can carry an
+    /// implementation choice (tensor.kernel) to the gradient operators it emits. Zero means the
+    /// node had none.
+    camel::core::attr::AttrSetId attrs = camel::core::attr::kNoAttrs;
 };
 
 /// Emits the backward computation of `call`: reads the gradient of its output and accumulates

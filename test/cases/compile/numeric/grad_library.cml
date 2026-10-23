@@ -1,0 +1,44 @@
+/**
+ * The matmul gradient runs the same implementation choice as the forward node (design
+ * principles 9.6): `tensor::fuse` writes `tensor.kernel` on `linear`, and the VJP carries that
+ * one key to the `matmul_grad_lhs` / `matmul_grad_rhs` it emits. The default policy therefore
+ * lets the gradient of `sum(linear(x, w, b))` use the library GEMM; `#strict` withholds it. The
+ * shape is 1024 x 1024 with K = 1024, above the library's measured threshold, so a CBLAS build
+ * runs two implementations and a build without one runs the canonical kernel twice.
+ *
+ * The program prints the largest absolute difference between the two gradients and the licence
+ * bound for the K-product accumulation: K^2 * eps * max|x| * max|ones|. Safe mode
+ * (`tensor::fuse(safe_fp=true)`) makes both gradients canonical, so the same program prints 0.
+ */
+module grad_library
+
+import { grad } from autodiff
+import { Tensor, abs, linear, max, randn, seed, sum } from tensor
+
+#strict
+with <w: Tensor>
+func exact_loss(x: Tensor, b: Tensor): float {
+    return sum(linear(x, w, b))
+}
+
+with <w: Tensor>
+func fast_loss(x: Tensor, b: Tensor): float {
+    return sum(linear(x, w, b))
+}
+
+func max_abs(t: Tensor): float {
+    return sum(max(max(abs(t), 0), 0))
+}
+
+func main(): int sync {
+    seed(11)
+    let x = randn([1024, 1024])
+    let b = randn([1024])
+    let w = randn([1024, 1024])
+    let exact = grad(exact_loss)<w>(x, b)
+    let fast = grad(fast_loss)<w>(x, b)
+    let bound = 1024.0 * 1024.0 * 5.9604645e-8 * max_abs(x)
+    'grad_library diff={} bound={} sums={} {}'->format<
+        max_abs(exact - fast), bound, sum(exact), sum(fast)>->println
+    return 0
+}

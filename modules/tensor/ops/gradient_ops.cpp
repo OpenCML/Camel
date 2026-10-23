@@ -11,6 +11,7 @@
  * URI.
  */
 
+#include "../attrs.h"
 #include "../kernels/elementwise.h"
 #include "../kernels/gradient.h"
 #include "../kernels/layout.h"
@@ -135,13 +136,14 @@ slot_t sliceGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 template <bool Lhs> slot_t matmulGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    const bool useLibrary = usesLibraryGemm(norm.attrs());
     return runKernel(Lhs ? "matmul_grad_lhs" : "matmul_grad_rhs", [&] {
         const Array *dy  = tensorArg(norm, 0);
         const Array *lhs = tensorArg(norm, 1);
         const Array *rhs = tensorArg(norm, 2);
         return wrap(
-            Lhs ? k::matmulGradLhs(dy, lhs, rhs, resultAllocator())
-                : k::matmulGradRhs(dy, lhs, rhs, resultAllocator()));
+            Lhs ? k::matmulGradLhs(dy, lhs, rhs, useLibrary, resultAllocator())
+                : k::matmulGradRhs(dy, lhs, rhs, useLibrary, resultAllocator()));
     });
 }
 

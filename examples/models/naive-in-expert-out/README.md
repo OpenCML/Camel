@@ -119,29 +119,44 @@ round ranges overlap, the table's numbers do not order them and the verdict says
 
 <!-- sweep-table:end -->
 
-**After the library-GEMM step (fingerprint `b2e4abd0e50d`; a docs-only rebuild is `97346a9d8921`).** Camel now runs
-`tensor::fuse std::jit`, so the default policy records `tensor.kernel="library"` on every
-matmul and a build that found a CBLAS runs it there; safe mode and `#strict` stay on the
-canonical kernel. The re-run at one thread, same host and same harness:
+**After the shape-dependent library step (measured at `9aa8075dc87b`; final build after the
+gradient-code cleanup is `7e57f010a6b3`).** Camel now runs
+`tensor::fuse std::jit`. The pass records `tensor.kernel` on `matmul` and `linear`; the VJP
+carries that choice to `matmul_grad_lhs`/`matmul_grad_rhs`, and the library path itself keeps the
+canonical kernel below 2^30 multiply-adds per call. So the large projection gradients use the
+library while the small batched attention products stay canonical. The re-run at one thread, same
+host and same harness:
 
 | ms/step, one thread | d=64 | d=256 | d=1024 |
 |---|---|---|---|
 | Camel before (canonical) | 2.085 | 60.980 | 3186.178 |
-| Camel after (library) | 2.614 | 66.263 | 3599.913 |
+| Camel after the library-only step | 2.614 | 66.263 | 3599.913 |
+| Camel after the shape step | 2.100 | 66.133 | 2570.427 |
 | `torch.compile(naive)` before | 2.938 | 49.779 | 2393.691 |
-| `torch.compile(naive)` after | 3.107 | 49.472 | 2427.143 |
+| `torch.compile(naive)` after | 2.931 | 50.030 | 2772.492 |
 
-The d=1024 Camel median is 13% above the old one while `torch.compile` moved 1.4%; the paired
-profile's timed median is 3145 ms canonical against 3337 ms with the library (+6%), so most of
-that difference is the shared host (the cell's load went from 12 to 31 and one Camel round took
-4309 ms). d=256 and d=1024
-remain behind: 66.3 against 49.5 (34%) and 3600 against 2427 (48%) by these medians, against
-61.0/49.8 (22%) and 3186/2394 (33%) before. The profile in
-[`results/2026-10-23-d1024-profile.json`](results/2026-10-23-d1024-profile.json) still puts the
-excess in matmul, not in the other categories. The 16-thread cell ran at a much lower load than
-the old one and every row is faster; its numbers are in
-[`results/2026-10-23-sweep-linux-library.json`](results/2026-10-23-sweep-linux-library.json), but
-they are not an A/B against the table above.
+The interleaved canonical/library pair for the same three cells (three rounds each, one thread,
+same process runner alternating the two programs; medians):
+
+| ms/step, one thread | canonical | library | delta |
+|---|---|---|---|
+| d=64 | 2.121 | 2.133 | +0.6% (noise) |
+| d=256 | 63.37 | 63.45 | +0.1% (noise) |
+| d=1024 | 3236 | 2544 | -21% |
+
+The library pays only at d=1024, where the projection gradients are large enough; at d=64 and
+d=256 every product falls below the threshold and the two rows are the same kernel. The paired
+profile and the per-category rows are in
+[`results/2026-10-23-d1024-profile-shape.json`](results/2026-10-23-d1024-profile-shape.json).
+d=256 remains
+behind: 66.1 against 50.0 (32%), with non-overlapping round ranges. At d=1024 the medians put
+Camel ahead of `torch.compile` this run (2570 against 2772), but the compiled range is
+2424–5466, so the numbers do not order the two. The d=1024 library-only cell was 3600 ms at load
+31; the shape step is 2570 ms at load 14–35, and the paired row shows the difference is the path,
+not only the host. The 16-thread cells are in
+[`results/2026-10-23-sweep-linux-shape.json`](results/2026-10-23-sweep-linux-shape.json); there
+Camel is 1146.6 against compiled 369.4 at d=1024, because the library pool is capped at four
+threads and the canonical kernels take the rest of the run.
 
 **The crossover.** In the before table above, with one thread Camel is the sole fastest implementation at d=64 (2.085 ms,
 with `torch.compile(naive)` at 2.938) and it is not at d=256: `torch.compile(naive)` takes 49.8

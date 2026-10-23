@@ -20,6 +20,7 @@
 namespace camel::tensor::ops {
 
 namespace type   = camel::core::type;
+namespace attr   = camel::core::attr;
 using vjp_node_t = camel::core::vjp_node_t;
 using camel::core::VjpBuilder;
 using camel::core::VjpCall;
@@ -36,9 +37,13 @@ bool isFloatNode(const VjpBuilder &builder, vjp_node_t node);
 /// Throws when the call does not have between `minimum` and `maximum` inputs.
 void requireVjpInputs(const VjpCall &call, size_t minimum, size_t maximum);
 
-/// Adds a tensor-typed operator node (shorthand for rules).
-vjp_node_t
-addTensorOper(VjpBuilder &builder, std::string_view uri, std::initializer_list<vjp_node_t> inputs);
+/// Adds a tensor-typed operator node (shorthand for rules). `attrs` records an implementation
+/// choice the rule carries from the forward node (tensor.kernel on a matmul gradient).
+vjp_node_t addTensorOper(
+    VjpBuilder &builder,
+    std::string_view uri,
+    std::initializer_list<vjp_node_t> inputs,
+    attr::AttrSetId attrs = attr::kNoAttrs);
 /// Adds a float64-typed operator node.
 vjp_node_t
 addFloatOper(VjpBuilder &builder, std::string_view uri, std::initializer_list<vjp_node_t> inputs);
@@ -59,7 +64,12 @@ void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradi
 vjp_node_t floatGradientAtWidth(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient);
 
 /// Gradients of lhs @ rhs given the output gradient dy (batch dims and vectors included).
-void accumulateMatmulGradients(VjpBuilder &builder, vjp_node_t lhs, vjp_node_t rhs, vjp_node_t dy);
+void accumulateMatmulGradients(
+    VjpBuilder &builder,
+    vjp_node_t lhs,
+    vjp_node_t rhs,
+    vjp_node_t dy,
+    attr::AttrSetId forwardAttrs);
 /// dy masked by a relu output: dy * (y > 0).
 vjp_node_t reluGradient(VjpBuilder &builder, vjp_node_t output, vjp_node_t dy);
 

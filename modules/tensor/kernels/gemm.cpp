@@ -12,7 +12,9 @@
  * CAMEL_TENSOR_USE_CBLAS, sgemmLibrary forwards to cblas_sgemm; the
  * tensor:matmul kernel takes it when the node's `tensor.kernel` attribute says
  * "library", which tensor::fuse writes for a matmul the 7.3 rule permits (the
- * operator stays `matmul`, design principles 9.6).
+ * operator stays `matmul`, design principles 9.6). The library path keeps the
+ * canonical kernel below a measured size (libraryPays), so a batched attention
+ * product does not pay a per-call library overhead it cannot repay.
  */
 
 #include "gemm.h"
@@ -167,10 +169,45 @@ void sgemm(
     builtinBackend().fn(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
 }
 
+namespace {
+
+/// Whether one GEMM call has enough work for the library to repay its call and
+/// packing overhead. Paired macrobenchmarks, one thread, same process, OpenBLAS 0.3.20 against
+/// the canonical kernel (median of 10, `sum` forcing the result; raw library before this guard),
+/// library vs canonical:
+///   1024^3                    20.2 vs 24.0 ms  -> library
+///   2048x1024x1024            39.8 vs 46.7 ms  -> library
+///   2048x1024x2048            79.3 vs 93.1 ms  -> library
+///   2048x2048x1024            76.8 vs 89.2 ms  -> library
+///   1024x2048x1024            38.8 vs 44.5 ms  -> library
+///   32x64x64x16 (134M)        15.7 vs 12.1 ms  -> canonical
+///   256x64x128 (2.1M)          0.081 vs 0.075 ms -> canonical
+/// The crossover lies between 1.3e8 and 1.1e9 multiply-adds per call; 2^30 is the measured
+/// large side and the natural "one large GEMM" boundary. A batched matmul is decided per call,
+/// so many small attention products stay on the canonical kernel. After the guard the small
+/// cells run the same kernel both ways and their difference is measurement noise.
+constexpr int64_t kLibraryMinProducts = int64_t(1) << 30;
+
+bool libraryPays(int64_t M, int64_t N, int64_t K) {
+    if (M <= 0 || N <= 0 || K <= 0) {
+        return false;
+    }
+    // Long double keeps the product from wrapping on a shape no real tensor has, and the
+    // comparison is exact for the integers in range.
+    return static_cast<long double>(M) * N * K >=
+           static_cast<long double>(kLibraryMinProducts);
+}
+
+} // namespace
+
 void sgemmLibrary(
     bool transA, bool transB, int64_t M, int64_t N, int64_t K, float alpha, const float *A,
     int64_t lda, const float *B, int64_t ldb, float beta, float *C, int64_t ldc) {
 #if defined(CAMEL_TENSOR_USE_CBLAS)
+    if (!libraryPays(M, N, K)) {
+        builtinBackend().fn(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
+        return;
+    }
     cblas_sgemm(
         CblasRowMajor,
         transA ? CblasTrans : CblasNoTrans,

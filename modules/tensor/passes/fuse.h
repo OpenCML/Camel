@@ -5,13 +5,15 @@
  * tensor::fuse records implementation choices on the nodes of the program's graphs; it never
  * changes an operator (design principles 9.6).
  *
- *   tensor.kernel  on every tensor:matmul: "library" when the node may run on the CPU library
- *                  GEMM, "canonical" otherwise. The rule is the core's one decision (7.3): the
- *                  node's effective numeric permissions, read through
+ *   tensor.kernel  on every tensor:matmul and tensor:linear: "library" when the node may run on
+ *                  the CPU library GEMM, "canonical" otherwise. The rule is the core's one
+ *                  decision (7.3): the node's effective numeric permissions, read through
  *                  tag::effectivePermissions, which applies the stage's policy
  *                  (relaxed by default: reassociate allowed) and withholds everything from a
  *                  `#strict` node. `tensor::fuse(safe_fp=true)` uses the strict policy, so the
- *                  safe mode's matmul runs the canonical algorithm (7.4).
+ *                  safe mode's products run the canonical algorithm (7.4). For `linear` the
+ *                  attribute is the choice its VJP carries to the matmul gradients; the forward
+ *                  kernel is the canonical x @ w + b.
  *   tensor.fusion  on the nodes of `x @ w + b` and `relu(x @ w + b)` when nothing outside the
  *                  pattern observes the product: "linear" or "linear_relu" on the matmul, the
  *                  add and the relu, so a backend can run the group as one kernel while the

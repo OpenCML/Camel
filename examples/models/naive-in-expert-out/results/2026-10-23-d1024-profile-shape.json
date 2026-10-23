@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "what": "The d=1024 step after the shape-dependent library choice: per-category profile, paired canonical/library step, the kernel shape table that sets the threshold, and the gradient equivalence case.",
+  "generated_at": "2026-10-23T10:30:00+08:00",
+  "machine": {
+    "host": "tangshan88",
+    "cpu": "AMD EPYC 7343 16-Core",
+    "threads": 32,
+    "torch": "2.14.1+cu130",
+    "python": "3.10.12",
+    "openblas": "0.3.20 at /usr/lib/x86_64-linux-gnu/libopenblas.so"
+  },
+  "build": {
+    "revision": "a592f7d3efb4",
+    "fingerprint": "9aa8075dc87b",
+    "final_build_fingerprint": "7e57f010a6b3",
+    "dirty": true,
+    "cmake": "-DCAMEL_TENSOR_BLAS=ON",
+    "library": "OpenBLAS 0.3.20 (cblas_sgemm)"
+  },
+  "step": {
+    "batch": 32,
+    "sequence": 64,
+    "d_model": 1024,
+    "blocks": 2,
+    "threads": 1,
+    "steps": 16,
+    "warmup": 3,
+    "profile_pass": "std::profile(top=0, report=true)",
+    "row_rule": "operator ns divided by 16 rounds; the step's own wall_per_round_ns is the median of the 13 timed steps",
+    "library": {
+      "wall_ms": 2714.6,
+      "operator_sum_ms": 2981.0,
+      "categories_ms": {
+        "matmul": 2308.9,
+        "elementwise": 369.8,
+        "reductions": 108.3,
+        "layout_copy_creation": 83.4,
+        "adam": 29.8,
+        "other_autodiff": 80.8
+      },
+      "matmul_detail_ms": {
+        "forward_matmul": 941.2,
+        "grad_lhs": 672.6,
+        "grad_rhs": 695.1
+      }
+    },
+    "canonical": {
+      "wall_ms": 3190.2,
+      "operator_sum_ms": 3395.1,
+      "categories_ms": {
+        "matmul": 2760.4,
+        "elementwise": 352.5,
+        "reductions": 103.4,
+        "layout_copy_creation": 75.8,
+        "adam": 27.8,
+        "other_autodiff": 75.3
+      },
+      "matmul_detail_ms": {
+        "forward_matmul": 859.7,
+        "grad_lhs": 1119.3,
+        "grad_rhs": 781.3
+      }
+    },
+    "paired_rounds": [
+      {"round": 1, "library_ms": 2523.0, "canonical_ms": 3430.1},
+      {"round": 2, "library_ms": 2828.1, "canonical_ms": 3072.9}
+    ],
+    "note": "The library changes the gradients, not the forward attention: forward matmul is 941.2 against 859.7 ms, inside the run-to-run spread. grad_lhs falls 1119.3 -> 672.6 ms and grad_rhs 781.3 -> 695.1 ms. The pair is two programs alternating on one host, not one process: tensor::fuse is a whole-program pass."
+  },
+  "kernel_shape_pairs": {
+    "method": "one process, #strict canonical and default library functions interleaved per iteration, median of 10 after 2 warmup, one thread, sum forcing the product",
+    "rows_ms": [
+      {"shape": "1024x1024x1024", "products": 1073741824, "canonical": 25.5, "library": 22.6, "path": "library"},
+      {"shape": "2048x1024x1024", "products": 2147483648, "canonical": 51.9, "library": 46.8, "path": "library"},
+      {"shape": "2048x1024x2048", "products": 4294967296, "canonical": 103.6, "library": 88.0, "path": "library"},
+      {"shape": "2048x2048x1024", "products": 4294967296, "canonical": 101.9, "library": 88.7, "path": "library"},
+      {"shape": "1024x2048x1024", "products": 2147483648, "canonical": 50.8, "library": 43.6, "path": "library"},
+      {"shape": "32x64x64x16 batched", "products": 134217728, "canonical": 13.0, "library": 14.1, "path": "canonical (both sides run the canonical kernel after the guard)"},
+      {"shape": "256x64x128", "products": 2097152, "canonical": 0.083, "library": 0.077, "path": "canonical (both sides run the canonical kernel after the guard)"}
+    ],
+    "pre_guard_small": {
+      "32x64x64x16 batched": {"canonical": 12.1, "library": 15.7},
+      "256x64x128": {"canonical": 0.0746, "library": 0.0814},
+      "note": "These two rows are the raw library before the guard; they are why the threshold exists."
+    },
+    "threshold": {
+      "products_per_call": 1073741824,
+      "rule": "M*N*K >= 2^30 uses the library; below it sgemmLibrary calls the canonical kernel",
+      "why": "the measured crossover is between 1.3e8 (batched attention) and 1.1e9 (1024^3); 2^30 is the measured large side and the batched attention product is decided per call"
+    }
+  },
+  "gradient_equivalence": {
+    "case": "test/cases/compile/numeric/grad_library.cml",
+    "shape": "1024x1024 with K=1024",
+    "default": {"diff": 9.918212890625e-05, "bound": 0.33423811323232505, "sums": [-244254.35079956055, -244254.4750213623]},
+    "safe": {"diff": 0.0, "sums": [-244254.35079956055, -244254.35079956055]},
+    "note": "The default gradient really runs the library (diff is not zero); safe mode is bit-identical. This is the backward counterpart of gemm_library.cml."
+  },
+  "forward_equivalence": {
+    "case": "test/cases/compile/numeric/gemm_library.cml",
+    "shape": "1024x1024x1024",
+    "default": {"diff": 0.000244140625, "bound": 1.519072187165866, "sums": [-11232.044069435447, -11232.049074259794]},
+    "safe": {"diff": 0.0, "sums": [-11232.049074259794, -11232.049074259794]}
+  },
+  "commands": {
+    "profile_library": "camel -t 1 --block-limit 8192 train_step_1024.cml tensor::fuse 'std::profile(top=0,json=\"prof-1024-lib-a.json\",report=true)' std::jit --arg bench=true --arg init_dir= --arg final_dir=",
+    "profile_canonical": "the same without tensor::fuse",
+    "shape_pairs": "camel -t 1 gemm_shapes.cml tensor::fuse",
+    "paired_sweep": "python /tmp/h281-prof/pair_sweep.py (alternates canonical and library per round)"
+  }
+}
