@@ -1066,10 +1066,11 @@ void reportText(std::ostream &os, const ReportOptions &options) {
         for (const FusionRow &group : groupRows) {
             const uint64_t executions = group.runs * group.members.size();
             os << std::format(
-                "  {}=\"{}\"  {} members ({})\n",
+                "  {}=\"{}\"  {} member{} ({})\n",
                 group.key,
                 group.name,
                 group.members.size(),
+                group.members.size() == 1 ? "" : "s",
                 joinedMembers(group.members));
             os << std::format(
                 "    {} ({} operator executions), {} ({} of the run, first {})\n",

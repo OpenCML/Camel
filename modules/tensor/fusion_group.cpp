@@ -351,7 +351,8 @@ FusionGroupAction multiplyNegKernel(
     const FusionGroupView &view,
     gc_node_ref_t node,
     std::span<const gc_node_ref_t> deferred,
-    std::vector<gc_node_ref_t> &members) {
+    std::vector<gc_node_ref_t> &members,
+    camel::execute::FusionGroupRef &group) {
     const ChainOperators &ops = chainOperators();
     if (view.operOf(node) == ops.multiply && view.memberOf(node)) {
         gc_node_ref_t tail = camel::runtime::kInvalidNodeRef;
@@ -360,6 +361,7 @@ FusionGroupAction multiplyNegKernel(
         }
         // The multiply is deferred to the neg, which runs both from the divide's stored value.
         members.push_back(node);
+        group.tail = tail;
         return FusionGroupAction::Deferred;
     }
     if (view.operOf(node) != ops.neg || !view.memberOf(node)) {
