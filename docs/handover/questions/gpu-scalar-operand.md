@@ -25,9 +25,9 @@ func choose(flag: bool, x: Tensor<f32, [2, 3]>): Tensor<f32, [2, 3]> {
 - `std::gir` 里那个常量是 `N02 "2.0" value_type="float"`，即 f64；区域分析给该 `multiply` 的理由是
   `scalar_tensor_operand`（`modules/tiles/src/graph_regions.cpp`：输入的元素类型是 `Float64` 就拒绝，
   注释写着 "f64 scalar arithmetic has its own lowering and is not selected by this table yet"）。
-- 设备侧并非完全没有 f64 标量：`modules/tiles/src/compiler.cpp:223` 有 `runtimeInput && Float64` 的
-  `input` 节点（`shape={}`、`dtype=F64`、`scalarBits`），`:op/*_d` 的 `scalar_*` 算子也在
-  （`compiler.cpp:747-779`），循环的 f64 标量状态走的就是它。
+- 设备侧并非完全没有 f64 标量：`modules/tiles/src/compiler.cpp` 的 `host()` 有 `runtimeInput && Float64` 的
+  `input` 节点（`shape={}`、`dtype=F64`、`scalarBits`），`modules/tiles/src/compiler.cpp` 的 `scalarOps` 表里
+  `:op/*_d` 的 `scalar_*` 算子也在，循环的 f64 标量状态走的就是它。
 
 ## 选项与代价
 

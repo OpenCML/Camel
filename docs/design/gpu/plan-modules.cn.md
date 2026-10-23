@@ -49,8 +49,9 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
 
 ### M0 设备上的标量操作数（常量一类）：`x * 2.0`
 - **改什么**：静态形状的 `#gpu` 作用域里，张量算子的 f64 标量操作数（今天只出现在字面量）不再以
-  `scalar_tensor_operand` 拒绝，而是建构成标量输入（`shape={}`、`dtype=F64`、`scalarBits`，`compiler.cpp:223`
-  已有的形式），由点式/归约核当广播标量用；运行期才知道的 f64 标量（`let a = 2.0; x * a`）先保持拒绝，
+  `scalar_tensor_operand` 拒绝，而是建构成标量输入（`shape={}`、`dtype=F64`、`scalarBits`，见
+  `modules/tiles/src/compiler.cpp` 里 `host()` 对 `runtimeInput && Float64` 的构造），由点式/归约核当广播标量用；
+  运行期才知道的 f64 标量（`let a = 2.0; x * a`）先保持拒绝，
   并在诊断里说清是"运行期标量"而不是"形状"。
 - **文件**：`modules/tiles/src/graph_regions.cpp`（`eligibility` 的算子表），`modules/tiles/src/kernel_ir.cpp` /
   `index_expr.cpp`（标量一侧的索引与广播），`modules/tiles/src/compiler.cpp`（f64 标量输入的构造）。
