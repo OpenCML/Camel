@@ -58,8 +58,11 @@ export const RUNNER_OUTPUT_DIRS = [RESULTS_DIR, SCRATCH_DIR]
  * starts at once in the worst case (the runner's own self-test starts one nested run at a time;
  * four host gates run side by side at most). One full `smoke` + `feat` fast layer run writes a
  * directory per selected plan and one per test -- about 5,700 status directories in the runs measured
- * below -- so the bound holds the tree at twenty gates instead of growing by a gate per run;
- * `docs/test-plans.md`, "Runner Output", has the measured figures.
+ * below -- so twenty run directories is one gate's worth of plan and test output rather than a tree
+ * that grows by a gate per run. In practice the twenty are mostly smaller than that: a gate starts
+ * the runner's self-test, which starts dozens of nested runs of its own, and a nested run is a run
+ * with a directory like any other. Measured right after a gate on this host: 22 directories, 114 MB,
+ * 26,992 files, one of them the gate's own. `docs/test-plans.md`, "Runner Output", has the figures.
  */
 export const RUN_DIRS_KEPT = 20
 

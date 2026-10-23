@@ -276,7 +276,13 @@ checkout), the copy of the plan and of the case was 11,382 files and 214.2 MB --
 26% of the entries. What a test's record actually holds is its captured output and its `meta.json`:
 the same gate run on this branch wrote 32,461 entries and 31.0 MB (112 MB of disk blocks, at 4 KB a
 file), and every one of the 26,578 files in it is one the runner wrote. Twenty of those is the whole
-bound, about 0.6 GB of content, and the `run.json` that replaced the plan copies is 11 KB.
+bound, at most about 0.6 GB of content, and the `run.json` that replaced the plan copies is 11 KB.
+What the tree actually settles at is smaller still, because a nested run is a run: a gate starts the
+runner's self-test, which starts dozens of nested runs of its own, and their directories take places
+in the window like any other. Measured right after a gate on this host: 22 run directories, 114 MB,
+26,992 files, one of them the gate's own -- the newest twenty runs, which is about one gate's worth of
+directories rather than twenty gates of history. The window is measured in runs, and the runs a gate
+starts are most of them.
 
 `isRunnerOutput(path)` in the same module is also the answer to *which* trees a run writes, for
 everything that walks the checkout (`test/tools/check-no-algo.mjs`, `scripts/check-doc-links.mjs`,
