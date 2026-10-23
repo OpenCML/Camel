@@ -612,30 +612,97 @@ if (problems.length) fail(problems)
 
 if (mode === '--coverage' || mode === '--coverage-check') {
     const entries = catalogEntries(records)
-    const corpus = [
+    const files = [
         ...walk(path.join(root, 'test', 'plans'), () => true),
         ...walk(path.join(root, 'test', 'cases'), (f) => /\.(mjs|js|py)$/.test(f)),
         ...walk(path.join(root, 'exemplars'), (f) => /\.(mjs|json|toml|md)$/.test(f)),
     ]
-        .map((f) => fs.readFileSync(f, 'utf8'))
-        .join('\n')
-    const mentions = (entry) =>
-        new RegExp(`\\b${entry.name}\\b`).test(corpus) || corpus.includes(hex8(entry.code))
-    const missing = entries.filter((e) => !mentions(e))
-    if (mode === '--coverage-check') {
-        // A completeness check over the set of declared codes: the count is pinned so that a
-        // declaration added without a test is noticed, and so is one deleted without the guard
-        // being updated. It is not a target or a performance number.
-        if (missing.length) {
-            console.log(`diagnostic codes mentioned by no test: ${missing.length} of ${entries.length}`)
-            for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
-            process.exit(1)
-        }
-        console.log(`every one of ${entries.length} diagnostic codes is mentioned by a test`)
+    const corpus = files.map((f) => fs.readFileSync(f, 'utf8')).join('\n')
+    // A test mentions a code by its name (`SemanticDiag::UnresolvedReference`, the `name=` field of
+    // a report, the `expect_diagnostic_name` of a plan) or by the number it prints
+    // (`code=0x0300000B`, `expect_diagnostic_code`). Both are read as whole words, so a longer
+    // identifier or number that happens to contain them is not read as a mention.
+    const wholeWord = (text, word) => new RegExp(`\\b${word}\\b`).test(text)
+    const mentioned = (entry) =>
+        wholeWord(corpus, entry.name) || wholeWord(corpus, hex8(entry.code))
+    const missing = entries.filter((e) => !mentioned(e))
+    if (mode === '--coverage') {
+        console.log(`diagnostic codes mentioned by no test: ${missing.length} of ${entries.length}`)
+        for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
         process.exit(0)
     }
-    console.log(`diagnostic codes mentioned by no test: ${missing.length} of ${entries.length}`)
-    for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+
+    // The property is the bijection between the two sets -- every code the registry declares is
+    // mentioned by a test, and every code a test mentions is one the registry declares -- and not a
+    // count. A count of the declared codes moves with every diagnostic the language gains or loses
+    // while the relation it was meant to guard does not, and it narrates the edits that moved it
+    // instead of saying what is checked; with the relation asserted, adding or deleting a code
+    // touches no plan. Each side must be non-empty, so a run that read no declaration or no
+    // mention fails here instead of passing over nothing.
+    //
+    // The registry-to-test direction reads the whole test corpus: a plan's prose names a diagnostic
+    // as much as its `expect_diagnostic_name` does. The test-to-registry direction reads the
+    // citations a test acts on -- a section-qualified name, the `name=` field of a report, the
+    // number a `code=` reports -- with comments and a plan's `desc` left out. An assertion that a
+    // deleted diagnostic is absent stays a mention of it; a comment that says which diagnostic a
+    // past revision produced does not, because it is a statement about history and not a test of
+    // the code that exists.
+    const assertedText = (file) => {
+        const text = fs.readFileSync(file, 'utf8')
+        if (file.endsWith('.toml')) return text.replace(/^\s*(#|desc\s*=).*$/gm, '')
+        if (/\.(mjs|js)$/.test(file)) return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+        if (file.endsWith('.py')) return text.replace(/"""[\s\S]*?"""/g, '').replace(/^\s*#.*$/gm, '')
+        return text
+    }
+    const asserted = files.map(assertedText).join('\n')
+    const citedNames = new Set(
+        [...asserted.matchAll(/\b(?:Internal|Lexical|Syntax|Semantic|Runtime)Diag::([A-Za-z_]\w*)/g)].map(
+            (m) => m[1]
+        )
+    )
+    for (const match of asserted.matchAll(/\bname=([A-Za-z_]\w*), code=/g)) {
+        citedNames.add(match[1])
+    }
+    const citedCodes = new Set()
+    for (const match of asserted.matchAll(/\bcode=(0[xX][0-9A-Fa-f]{1,8})/g)) {
+        citedCodes.add(hex8(Number(match[1])))
+    }
+    const inRegistryByName = new Set(entries.map((e) => e.name))
+    const inRegistryByCode = new Set(entries.map((e) => hex8(e.code)))
+    const inTestsOnly = [
+        ...[...citedNames].filter((name) => !inRegistryByName.has(name)).map((n) => `'${n}'`),
+        ...[...citedCodes].filter((code) => !inRegistryByCode.has(code)).map((c) => `'${c}'`),
+    ].sort()
+    const problems = []
+    if (entries.length === 0) problems.push('the registry declares no code; nothing was compared')
+    if (missing.length === entries.length) {
+        problems.push('no test mentions a declared code; nothing was compared')
+    }
+    if (citedNames.size === 0 && citedCodes.size === 0) {
+        problems.push('no test cites a code; nothing was compared')
+    }
+    for (const e of missing) {
+        problems.push(
+            `${hex8(e.code)} ${e.fullName} is declared and no test mentions it; name it in a test ` +
+                `(\`name=${e.fullName}\`)`
+        )
+    }
+    for (const member of inTestsOnly) {
+        problems.push(`${member} is cited by a test and ${REGISTRY_REL} declares no such code`)
+    }
+    if (problems.length) {
+        console.log(
+            `diagnostics coverage: ${problems.length} problem(s); the registry declares ` +
+                `${entries.length} code(s), the tests cite ${citedNames.size} name(s) and ` +
+                `${citedCodes.size} number(s)`
+        )
+        for (const problem of problems) console.log(`  - ${problem}`)
+        process.exit(1)
+    }
+    console.log(
+        'every diagnostic code the registry declares is mentioned by a test, and every code a ' +
+            'test cites is one the registry declares'
+    )
     process.exit(0)
 }
 
