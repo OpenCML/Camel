@@ -13,18 +13,22 @@
 //   `anchor_add`, `anchor_mul32`  the graph's named node. The C++ pass's `isReplaceable` refuses to
 //       rewrite the node the graph returns, so the add (the product at i32) is still the graph's
 //       exit and its two operands are still its inputs; the rule engine retargets the anchor onto
-//       the port, and the operation, its constant and its two edges are gone. The missing piece is a
-//       language feature: no rule can ask whether the node it is about to replace is the graph's
-//       named node. A rule's `when` receives the nodes its pattern variables bound, and the matched
-//       root is not one of them.
+//       the port, and the operation, its constant and its two edges are gone. The ruling of
+//       2026-10-23 (docs/handover/reviews/questions-2026-10-23.md, `rule-conditions-and-policy`
+//       item 3) makes this the engine's job and not a rule condition: when a rule replaces the node
+//       the graph returns, the engine moves the anchor onto the replacement, as the C++ pass's
+//       `replaceFoldResult` does. It lands with the effect refusal below.
 //
 //   `effect_mul_zero`  the effect. The C++ law table has no `x * 0` law, so the product over the
 //       print stands; the library's `int_mul_zero` replaces it by the constant 0 and the print the
 //       product read is left with no user. Design principles 9.7 and the rule language's second
 //       version section 8 forbid exactly that: the part a rule's right-hand side drops must be
-//       pure, and the engine does not check it in this tree -- the measured violation is
-//       `algebra_rules.divergence.library_runs` and the question is in
-//       docs/handover/questions/rule-drops-effect.md.
+//       pure. The same ruling (docs/handover/reviews/questions-2026-10-23.md, `rule-drops-effect`)
+//       decrees the check rather than withdrawing the rule: before a rule is applied, the subgraph
+//       the pattern variables that its right-hand side does not use bound is examined, and an
+//       effect node -- or a node carrying a sync or order edge -- there refuses the application.
+//       This entry is the measurement of the violation, and it carries the correct five-line
+//       expectation as a known-fail entry until the engine refuses instead.
 
 import fs from 'node:fs'
 import { applyNormalizers } from '../../../tools/normalizers.mjs'
