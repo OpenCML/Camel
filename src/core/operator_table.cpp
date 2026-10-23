@@ -313,22 +313,6 @@ const TypeFolder *OperatorTable::typeFolder(std::string_view uri) const {
     return id ? typeFolder(*id) : nullptr;
 }
 
-void OperatorTable::declarePrecisionGate(PrecisionGate gate) {
-    auto declared = std::make_shared<const PrecisionGate>(std::move(gate));
-    std::unique_lock lock(mutex_);
-    if (precisionGate_) {
-        throw std::logic_error(
-            "a reduced-precision conversion gate is already declared; one module owns the "
-            "bf16/f16 element types");
-    }
-    precisionGate_ = std::move(declared);
-}
-
-std::shared_ptr<const OperatorTable::PrecisionGate> OperatorTable::precisionGate() const {
-    std::shared_lock lock(mutex_);
-    return precisionGate_;
-}
-
 // ---- Semantics -----------------------------------------------------------------------------
 
 namespace {

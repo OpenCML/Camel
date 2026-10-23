@@ -403,37 +403,6 @@ class OperatorTable {
     const TypeFolder *typeFolder(OperId id) const;
     const TypeFolder *typeFolder(std::string_view uri) const;
 
-    // ---- Reduced-precision conversion gate (design principles 7.3, H238) -------------------
-
-    /**
-     * One call that would write a value of another element type into a reduced-precision one
-     * (`bf16`, `f16`): the type it reads the value from and the type it writes it into, spelled
-     * as a program writes them ("Tensor<f32>", "Tensor<bf16>"). nullopt when the call does no
-     * such thing.
-     */
-    using ReducedPrecisionNarrowing = std::optional<std::pair<std::string, std::string>>;
-
-    /**
-     * The function a module that owns reduced-precision element types declares so that the
-     * compiler can check a conversion written at a call against the numeric permissions in force
-     * there. It recognises a narrowing from the operator `uri`, the argument types and the result
-     * type (a call to a function is not a conversion: the conversion is written in that
-     * function's body); the graph builder asks it after it stamped the node's permissions and
-     * refuses the call with a located diagnostic unless the node carries `change_precision`
-     * (`#strict` revokes it). Only the owning module knows what a `Tensor<dtype>` is, which is
-     * why the table does not implement this itself.
-     */
-    using PrecisionGate = std::function<ReducedPrecisionNarrowing(
-        std::string_view uri, std::span<type::Type *const> normArguments,
-        std::span<type::Type *const> withArguments, const type::Type *result)>;
-
-    /// Declares (module load time) the gate. Replacing it is a load-time mistake and throws
-    /// std::logic_error, so two modules cannot silently overwrite one another's rule.
-    void declarePrecisionGate(PrecisionGate gate);
-
-    /// The gate, or nullptr when no module declared one. The shared pointer keeps it alive.
-    std::shared_ptr<const PrecisionGate> precisionGate() const;
-
     // ---- Semantics (docs/design/op-semantics, section 4) ------------------------------------
 
     /**
@@ -578,9 +547,6 @@ class OperatorTable {
     /// Every facts record ever published, replaced ones included (a reader may still hold one).
     /// Guarded by mutex_.
     std::vector<std::unique_ptr<const sem::OperatorSemantics>> declarations_;
-    /// The reduced-precision conversion gate (declarePrecisionGate), or nullptr. Guarded by
-    /// mutex_; a reader copies the shared pointer.
-    std::shared_ptr<const PrecisionGate> precisionGate_;
     std::atomic<uint64_t> epoch_{0};
 };
 

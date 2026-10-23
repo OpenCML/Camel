@@ -1908,10 +1908,10 @@ t converted to the element type the name gives: "float32", "float", "double" or 
 for `f32`; "bfloat16" or "bf16" for `bf16`; "float16", "half" or "f16" for `f16`; "int64",
 "int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do not change.
 
-A conversion into `bf16` or `f16` rounds (to nearest, ties to even) and needs the numeric
-permission `change_precision` where the call is written; `#strict` revokes it. Reading a
-`bf16` or `f16` tensor into a wider type is exact for every stored value and needs no
-permission.
+A conversion into `bf16` or `f16` rounds (to nearest, ties to even). Writing the conversion
+asks for that precision, so it needs no numeric permission: `change_precision` governs a
+computation the compiler moves to lower precision (design principles 7.2-7.3). Reading a
+`bf16` or `f16` tensor into a wider type is exact for every stored value.
 
 - Pure.
 - Failure: fault `RuntimeError` when the name is not one of those.
@@ -2432,7 +2432,16 @@ The number of elements for which pred is true.
 sum: (xs: T[]) => T when is_numeric::<T>()
 ```
 
-The sum of the elements, 0 for an empty array. Integers wrap around on overflow, as `+` does.
+The sum of the elements, 0 for an empty array.
+
+A floating-point element type accumulates in f64 and rounds once into the element type at the
+end: the additions are f64 additions and the result is one conversion of their sum, not a
+rounding after every addition (an f32 accumulator rounds at every step and answers
+differently). This is the same rule the tensor axis `sum` follows (modules/tensor/kernels/
+reduce.cpp: a double accumulator, one rounding when the element is stored), so the two paths
+agree bit for bit on the same elements. An integer element type accumulates in itself and
+wraps around on overflow, as `+` does on it; a complex element type accumulates in itself as
+well, the f64 rule being stated for the floating-point element types.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `sum([1, 2, 3])` gives `6`
@@ -2446,6 +2455,11 @@ min: (xs: T[]) => T? when is_ordered::<T>()
 The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
 +0), or null for an empty array.
 
+No accumulator and no accumulation width take part in this fold: it carries an element of T
+and combines it with `math::min`, which is IEEE 754 minimum — exactly associative and
+commutative (design principles 7.7) — so the order does not change the bits and there is
+nothing to round.
+
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `min([3, 9, 2]) ?? 0` gives `2`
 
@@ -2457,6 +2471,9 @@ max: (xs: T[]) => T? when is_ordered::<T>()
 
 The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
 -0), or null for an empty array.
+
+As `min`: the fold carries an element of T, and `math::max` is IEEE 754 maximum, exactly
+associative and commutative (design principles 7.7), so no accumulator type enters.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `max([3, 9, 2]) ?? 0` gives `9`

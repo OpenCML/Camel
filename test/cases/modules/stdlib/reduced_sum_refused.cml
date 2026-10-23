@@ -1,13 +1,16 @@
 /**
- * A reduction over an array of bf16 has no way to compute: `sum` combines two elements with
- * `+` and returns their type, and the language defines no bf16 or f16 scalar operation, literal
- * or conversion (design principles 7.3, H238). The call now passes `sum`'s
- * `when is_numeric::<T>()` — bf16 is a float — and is then refused where the addition is
- * written, naming the instance `sum<bf16>` and the element type, instead of being excluded
- * quietly with WhenConditionUnmet.
+ * A reduction over an array of bf16 has no way to compute yet, and says which piece is missing:
+ * `sum` accumulates in f64 and converts the sum into the element type once (design principles
+ * 7.3; ruling docs/handover/reviews/reduced-precision.md item (d)), and the language still
+ * declares no conversion into the two reduced-precision element types (the ruling's item (c),
+ * which another change owns). The call passes `sum`'s `when is_numeric::<T>()` — bf16 is a
+ * float — and is then refused where the `match type` in `sum` looks for its case:
+ * SemanticDiag::StaticMatchNotExhaustive names the type bf16 and the instance `sum<bf16>`. The
+ * two arms `bf16(sumF64(xs))` and `f16(sumF64(xs))` are what that `match type` is missing.
  *
  * Tensor reductions over bf16 do compute (modules/stdlib/reduced_reduction_bytes.cml), because
- * the tensor kernel widens each element to f32 and rounds once.
+ * the tensor kernel accumulates in f64 and rounds once when it stores the element
+ * (modules/tensor/kernels/reduce.cpp).
  */
 module stdlib_reduced_sum_refused
 

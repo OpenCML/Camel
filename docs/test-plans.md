@@ -167,6 +167,74 @@ The output is the serial run's output: results are printed in plan and test orde
 test finished first, and the exit code and failure text are the same. The run's log directory
 and `summary.json` land under `test/results/log/` as before.
 
+### What Holds a Slot, And Where The Rest Of The Time Goes
+
+A slot is held for the test program. Everything the runner does around it is its own work on its
+own thread, and none of it needs a slot: it happens with the slot already back, next to the tests
+that are still running. Two of those steps are processes of their own, and each gets a width of
+its own instead of a test slot:
+
+- **A `skip_unless` precondition** is the runner asking the host a question, not the test running.
+  It runs before the slot is taken, under a width of `--jobs` like the verification scripts: a
+  probe that hangs for its whole `skip_unless_timeout_ms` cannot take a slot away from a test, and
+  it costs one lane rather than every probe behind it. A one-wide lane was measured and rejected:
+  two 120 s MNIST preconditions left 42 probe tests queued and the run's last 150 s with no slot
+  held at all, because a test waits for its probe before it takes a slot.
+- **A verification script** starts after the slot went back, under a width of `--jobs`: the test's
+  own process is gone and its output is already checked, so the verification's node starts next to
+  the next test instead of in its place.
+
+A test marked `parallel = false` (and a benchmark, `isSerial`) is the exception: it keeps its slot
+through its probe, its verification and its cleanup, because it was marked precisely because it
+shares something outside its own scratch directory.
+
+`summary.json` records where every slot went, so the next person does not have to guess.
+`slot_timing` is the whole run: `child_ms_total` (children running), `slot_ms_total` (slots held),
+`no_child_ms_total` (slots held with no child in them) with its distribution, and the same for
+`pre_spawn_ms` (slot taken -> child created) and `post_exit_ms` (child gone -> slot released).
+Each step is reported twice, because moving a step out of the slot changes the first number and
+not the second: `verify_ms_total` / `verify_in_slot_ms_total` and the same pair for `probe_ms`,
+`settle_ms` (resuming from the child's `close` and normalizing), `validate_ms`, `cleanup_ms`
+(removing the test's scratch directory) and `verify_wait_ms_total` (the queue in front of the
+verification width). `components_ms` is the partition of `no_child_ms_total` into `scratch`,
+`probe`, `prep`, `spawn`, `settle`, `validate`, `verify`, `cleanup` and `tail`, so it always sums
+to it. There is a one-second `timeline` of slots held and children running, a `loop_lag` block (a
+timer that reports how late it fired: the runner's own thread being unavailable is what makes a
+chatty child wait on a full stdout pipe), and the top contributors by name for each field — a
+total without names is how the wrong thing gets optimized. `test_timings` is one record per test
+with all of those intervals and its `at` marks relative to the start of the run. The run prints
+one `[SLOT]` line with the ratio and the totals.
+
+Measured on the `smoke` + `feat` fast layer at `-Jobs 8` (5,667 tests, a 32-core host shared with
+other gates), eight runs before and eight after:
+
+| per run | before | after |
+|---|---|---|
+| slots held with no child in them | 255-532 s, 28% of all held slot time | 51-78 s, 6.9% |
+| of it: verification scripts booting node | 168-265 s (1,920 scripts, 88-145 ms each) | 0 s in the slot, 209-277 s beside it |
+| of it: `skip_unless` probes | 44-304 s (75-83 tests) | 0 s in the slot, 35-46 s beside it |
+| of it: everything else | 2.9-4.4 s (scratch, prep, settle, validate, cleanup, tail) | `prep` 13-17 s, `scratch` 0.7 s |
+| children / plan wall | 5.64 of 8 (median) | 6.70 of 8 (median) |
+| plan wall | 124.2 s (median, 114-197 s) | 124.4 s (median, 97-272 s) |
+
+The plan wall is the one number that does not move, and the reason is in the same table: the host
+runs several gates at once, and the summed child time alone varied from 648 s to 995 s between runs
+of the same tests, more than the change is worth. Where the load happened to match, the wall moved:
+the final gate run summed 713 s of child time against 674-721 s in three of the before runs, and took
+100.0 s against their 118-128 s.
+
+The two mechanisms the numbers rule out are worth naming: writing the log files blocks the runner's
+thread for 4-6 s over the run and is charged to the slots it blocks (`log_block_ms`), not to the
+hundreds of seconds above; and `validateTest`'s own JavaScript (resuming, normalizing, comparing)
+is 0.7 s over 5,667 tests. The irreducible part of what is left is `spawn` itself: 6.6-11 ms per
+test, 37-62 s of synchronous work in the runner's thread for the run.
+
+Removing those 213-346 s from the slots does not remove them from the plan: the same work now runs
+beside the tests, so the wall is bounded by the machine rather than by the eight slots. On a host
+loaded by other work the plan wall moves by more than the change does — the children alone varied
+from 648 s to 995 s between runs — which is why the ratio and the slot accounting, not the wall, are
+the numbers this section reports.
+
 ## Selecting Plans From A Change
 
 `node scripts/test.js --changed` takes the files that differ from the base branch (committed,
@@ -372,6 +440,12 @@ Every `[[tests]]` entry may use these common fields:
   `skip_unless = ["${python}", "-c", "import onnxruntime"]`.
 - `skip_unless_timeout_ms`
   Optional timeout for the precondition command. Default is `120000`.
+- `cuda_devices`
+  Optional boolean, default `false`: `true` declares that this test's Python child wants the
+  machine's CUDA devices, and the runner then leaves `CUDA_VISIBLE_DEVICES` exactly as it found it.
+  A test that does not declare it sees no device at all, so a CPU-only PyTorch program cannot die
+  on a card another tenant holds. See "CUDA visibility"; every plan tagged `gpu` declares it in
+  `[defaults]`.
 - `tier`
   `fast`, `slow` or `debug`, overriding the plan's layer for this test only.
 - `parallel`
@@ -684,11 +758,63 @@ end compiles) says `sweep = false` with a comment.
 - `CAMEL_TEST_TIMEOUT_SCALE=<n>` multiplies every test and verification timeout: for running
   whole plans under a mode that slows every program down, e.g.
   `CAMEL_GC_POISON=1 CAMEL_TEST_TIMEOUT_SCALE=20 node scripts/test.js feat`.
-- Variables in the environment of the runner reach every test; a test's own `envs` win.
+- Variables in the environment of the runner reach every test; a test's own `envs` win. The one
+  exception is `CUDA_VISIBLE_DEVICES`, which the runner writes for a Python child that did not ask
+  for the devices: see "CUDA visibility".
 - `--jobs N` limits the parallel tests; it is an option of the runner process, not an
   environment variable, so a test cannot change how many of its neighbours run.
 - The timeouts above apply to one test; a parallel run does not relax them, and a test whose
   time depends on the machine's load belongs alone (`parallel = false`) or in the slow layer.
+
+## CUDA visibility
+
+A Python test that imports a CUDA-aware library can reach a card without naming one, and then it
+answers to whoever else is on the host. `torch.optim.Adam(...).step()` calls torch's
+`_accelerator_graph_capture_health_check()`, which asks for the current accelerator and its current
+stream and so retains the primary context of every card; `cuDevicePrimaryCtxRetain` returns
+`CUDA_ERROR_UNKNOWN` (999) while another tenant holds one, and the process dies before its first
+assertion. `SGD` makes no such call, so a CPU-only program's `Adam` step is green on an idle host
+and red on a busy one: one test of `feat/modules/onnx` failed for a reason that had nothing to do
+with the code it tested, and the same program with `SGD` in its place passed.
+
+The runner hides the machine's devices from every Python child of a test that did not ask for them:
+it writes `CUDA_VISIBLE_DEVICES=` (empty, CUDA's spelling for "names no device") into the
+environment of a `tool = "python"` test process and of a `skip_unless = ["${python}", ...]`
+precondition. The value is written before the test's own `envs`, so a test that names the variable
+itself keeps its value; `CUDA_VISIBLE_DEVICES=-1` is the other spelling that names no device.
+
+A test that really wants a device says so:
+
+```toml
+[[tests]]
+name = "compiles_and_runs_on_a_card"
+cuda_devices = true
+case = "../../cases/..."
+```
+
+`cuda_devices = true` means "do not touch my Python child's devices": the runner then leaves the
+machine's `CUDA_VISIBLE_DEVICES` exactly as it found it, so a test that uses several cards keeps
+them, and a missing or busy card stays that test's own failure instead of something the runner
+hides. Every plan tagged `gpu` declares it in `[defaults]`, because its tests exist to run against
+the cards.
+
+The default lives in the runner rather than in a pin per plan, deliberately. The protection has to
+reach a plan nobody has written yet; a test's `envs` never reach its `skip_unless` process (a
+precondition that stops holding is a silent skip, so a lost pin would cost coverage rather than
+fail a run); a pinned value has to name an ordinal, and `CUDA_VISIBLE_DEVICES=0` cannot express
+"the cards" for a test that uses several; and a `[defaults]` line or a generated copy can be
+dropped without the plan noticing. The price of the default is that a device test which forgets
+its declaration measures the CPU and still passes, so
+`test/tools/check-cuda-visibility.mjs` refuses a Python test in a plan tagged `gpu` that does not
+declare, and a test that names a card in its own `envs` without declaring.
+
+The guard reads every plan under `test/plans/` -- the perf layer excepted, because those plans are
+manual and pin inside `showcase/` -- and refuses a test that reaches Python with a CUDA-aware import
+and is neither hidden (by the runner's default, by its plan, or by the case script) nor declared.
+It prints how many tests it examined and fails when that number moves, so it cannot stop examining
+anything unnoticed. `test/tools/selftest/cuda-visibility/` is its fixture and the runner's:
+`visibility.plan.toml` runs the default, its precondition, the opt-in and a test's own value against
+an untouched `node` reference, and `unpinned/` is the plan the guard must refuse, test by test.
 
 ## Snapshot Tests
 

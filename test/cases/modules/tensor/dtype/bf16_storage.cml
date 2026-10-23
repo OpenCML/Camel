@@ -11,7 +11,9 @@
  * sum of [1, 2^-8] accumulates in double and rounds the exact halfway value 1 + 2^-8 with ties to
  * even, giving 1 (0x3F80), and 3 * 1.0078125 rounds the exact halfway product 3.0234375 to
  * 3.03125 (0x4042, ties to even). Both would differ under another rounding mode or a second
- * rounding. Writing a value of another element type into one of these needs `change_precision`.
+ * rounding. Writing a value of another element type into one is a conversion the program wrote,
+ * so it needs no numeric permission (design principles 7.2-7.3); the tags below are kept to show
+ * that carrying `change_precision` changes nothing here.
  */
 module tensor_dtype_bf16_storage
 

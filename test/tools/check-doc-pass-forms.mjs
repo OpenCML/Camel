@@ -36,7 +36,8 @@
  *     (`RuntimeDiag::UnrecognizedGraphPass`) or a parameter the declaration does not accept
  *     (`SemanticDiag::ParamArgument*`). An invocation the real parser accepts is one a reader
  *     can copy. This stage reads the value's text as the parser reads it, so it catches what no
- *     rule here mirrors: a value that is not a constant expression.
+ *     rule here mirrors: a value a constant parameter refuses (a `bool`, `int` or `float`
+ *     parameter takes a constant expression; a `string` parameter takes the word as written).
  *
  * What it cannot catch, and why:
  *
@@ -64,9 +65,12 @@
  *     happened. They are not scanned.
  *
  * A line the guard would report is excused when it says why it is not a defect: the removed form
- * is written there in order to be called removed, or a decision and the parser disagree and the
- * conflict is recorded rather than patched. The exceptions are listed in EXCUSED with their
+ * is written there in order to be called removed. The exceptions are listed in EXCUSED with their
  * words, and each is checked to still match a line, so none can outlive what it was written for.
+ * An exception for a decision and the parser disagreeing is only needed while they disagree: the
+ * two that excused design principles 9.3 (`out=model.onnx` as a string value written as it is)
+ * were deleted when the parser took a `string` parameter as written, and that was found by the
+ * check that every exception still matches a line, not by reading the pages.
  * `args` in a test plan are pins, not pages: a refusal test must contain the spelling it pins
  * (`error.positional` in `test/plans/feat/opt/pass_params.plan.toml`), so test plans contribute
  * their `desc` strings to the pass-name rule and nothing to the invocation rule.
@@ -76,8 +80,51 @@
  * `test/plans/feat/opt/pass_params.plan.toml`, so a rule that stops matching is red rather than
  * silent.
  *
- *   CAMEL_EXE, CAMEL_HOME   the binary to run the specifications through
- *   CAMEL_DOC_FORM_JOBS     parallel camel processes (default 8)
+ * What it costs, and what it does not read:
+ *
+ *   * The walk skips the trees a run writes into. `test/results` holds a copy of every plan and
+ *     case the runner has run and `tmp/test` the per-test scratch, so a page found there is a
+ *     copy a run made, not a page of the tree. Walking them was also the whole cost of this guard
+ *     on a checkout that has run the gate many times: the integration checkout held 6.77 M
+ *     entries and 51 GB under those two trees, and walking them measured 70 s against 0.4 s for
+ *     the same walk in a checkout that has run the gate once, while the parser work is 0.7 s.
+ *     That put the guard at the runner's margin — a passing test is red above a quarter of its
+ *     `timeout_ms` (`TIMEOUT_MARGIN` in `test/tools/run-tests.mjs`) — so it went red on a busy
+ *     host while every check of it passed, which is a red that says nothing about the pages.
+ *     (That checkout has since been pruned to 6.65 GB and 0.86 M entries, where the guard as it
+ *     was costs 10.4 s and passes: the pruning hides the cost, the skip removes it.)
+ *     No page can be lost by the skip, and that is measured rather than argued: under those two
+ *     trees in that checkout there is no `.md` file at all, a `.cml` there is a case copy (a page
+ *     is only `stdlib/*.cml`) and a `.toml` there is a plan copy (a page is only `test/plans/**`),
+ *     and the guard reports the same 453 pages and 246 invocations there after the skip as before
+ *     it.
+ *   * One parser invocation decides several specifications: `requireKnownPasses`
+ *     (`src/execute/pass.cpp`) resolves every name of a pipeline, and refuses the pipeline,
+ *     before the first pass runs, so a pipeline of specifications followed by the probe reads
+ *     all of them and runs nothing. The pipeline is refused at the first name it cannot resolve,
+ *     so a batch is taken as proof of all its members only when the complaint names the probe;
+ *     anything else — an earlier member this build does not register, a parameter a declaration
+ *     does not accept — decides none of them, and that batch is then decided specification by
+ *     specification, exactly as every specification was decided before. Narrowing an aggregate is
+ *     not retrying a check: a refusal is reported with its own words, and the number of
+ *     specifications the parser read is unchanged. (Measured: one invocation carrying all 38
+ *     specifications of that checkout is refused at `mod::pass`, and the specification the parser
+ *     refuses is reported by its own run exactly as it is with one specification per invocation.)
+ *   * The first line of a red is the reason: the page, the line, the invocation, and what the
+ *     parser said (or that the invocation did not come back within the documented limit). The
+ *     runner echoes only the last 12 lines of a failed test and clips each at 240 characters, so
+ *     the report is a few short lines, and `CAMEL_DOC_FORM_REPORT_ALL=1` prints every problem
+ *     rather than the first three. Those lines are echoed when `CAMEL_TEST_SHOW_OUTPUT` or `CI`
+ *     is set, which `tools/camel-remote.ps1` always does; without it the runner names the
+ *     scratch directory it kept, whose `stdout.txt` holds the same lines.
+ *
+ *   CAMEL_EXE, CAMEL_HOME      the binary to run the specifications through
+ *   CAMEL_DOC_FORM_JOBS        parser invocations in parallel (default 8)
+ *   CAMEL_DOC_FORM_BATCH       specifications decided by one invocation (default 8)
+ *   CAMEL_DOC_FORM_TIMEOUT_MS  the documented limit for one invocation (default 30000); a
+ *                              specification is decided in tens of milliseconds, so only a wedged
+ *                              parser or a broken install reaches it
+ *   CAMEL_DOC_FORM_REPORT_ALL  1 prints every problem instead of the first three
  */
 
 import fs from 'node:fs'
@@ -89,8 +136,11 @@ import { fileURLToPath } from 'node:url'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(HERE, '..', '..')
 const JOBS = Math.max(1, Number(process.env.CAMEL_DOC_FORM_JOBS || 8))
-const TIMEOUT_MS = Number(process.env.CAMEL_DOC_FORM_TIMEOUT_MS || 20000)
+const BATCH = Math.max(1, Number(process.env.CAMEL_DOC_FORM_BATCH || 8))
+const TIMEOUT_MS = Number(process.env.CAMEL_DOC_FORM_TIMEOUT_MS || 30000)
+const REPORT_ALL = Boolean(process.env.CAMEL_DOC_FORM_REPORT_ALL)
 const LIST = process.argv.includes('--list')
+const STARTED_AT = Date.now()
 
 const CAMEL =
     process.env.CAMEL_EXE ||
@@ -103,6 +153,9 @@ const CAMEL =
 // A name no build registers: the pipeline is refused on it before any pass runs, so the
 // specifications before it are parsed and never executed.
 const PROBE = 'std::doc_form_probe'
+// The one text that proves an invocation was refused *on the probe*, and therefore that every
+// specification written before it resolved: the pass listing an unknown name prints.
+const PROBE_REFUSED = new RegExp(`Pass <${PROBE}> not found`)
 
 // Not pages: a release log states the release it belongs to, and the record directories quote
 // the old spelling to say what happened.
@@ -112,17 +165,21 @@ const NOT_A_PAGE = ['changes.log', 'docs/handover/', 'docs/reviews/']
 const GENERATED = ['docs/diagnostics.md', 'docs/stdlib-reference.md']
 const SKIP_DIRS = new Set(['.git', 'out', 'build', 'node_modules', 'third_party', 'sdks'])
 const VCS_DIR = '.git'
+// Trees a run writes into, relative to the repository root. `test/results` holds the runner's
+// record of every test it ran — a copy of the plan, a copy of the case, the captured output — and
+// `tmp` its scratch, which holds the plan copies too. A `.md` or a `.toml` found there was
+// written by a run, so it is not a page and must not decide the next run's verdict; walking them
+// is also what made this guard slow on a checkout with a long gate history (see the header).
+const NOT_WALKED = ['test/results', 'tmp']
 
 // A line the guard does not report, with the words that make it an exception. Every entry is
 // checked to still match a line, so an exception cannot outlive what it was written for.
 //
-// The first three show a removed form while saying it was removed. The last two are a decision
-// the implementation does not keep: design principles 9.3 writes `out=model.onnx` and says a
-// string value is taken as written, while the parser reads a value as a Camel constant
-// expression and refuses that one ("the value of 'out' is not a constant"). The design
-// principles are normative (AGENTS.md), so the conflict is recorded here and reported rather
-// than patched in passing: either the example becomes the `'onnx::export out="model.onnx"'`
-// spelling `docs/cli.md` and `AGENTS.md` already teach, or the parser takes a string as written.
+// Each shows a removed form while saying it was removed. A decision and the parser no longer
+// disagree about anything this guard reads: design principles 9.3 writes `out=model.onnx` and
+// says a string value is taken as written, and the parser now takes a `string` parameter as
+// written (`onnx::export out=model.onnx` really writes that file), so the two entries that used
+// to excuse that sentence are gone and the sentence needs no exception.
 const EXCUSED = [
     {
         file: 'docs/cli.md',
@@ -138,19 +195,6 @@ const EXCUSED = [
         file: 'docs/design/gpu/plan.cn.md',
         pattern: /没有 `tiles::compile\(device=\)`/,
         reason: 'quotes the review question and answers it in the negative: only `--devices` stays',
-    },
-    {
-        file: 'docs/design-principles.cn.md',
-        pattern: /（字符串取原文），不需要引号/,
-        reason:
-            'design principles 9.3 says a string value is written as it is and needs no quotes; ' +
-            'the parser refuses `out=model.onnx` as a value that is not a constant — a recorded ' +
-            'conflict between the norm and the implementation, for the author to settle',
-    },
-    {
-        file: 'docs/design-principles.en.md',
-        pattern: /\(a string takes the text as written\), and no quoting is needed/,
-        reason: 'the English page of the same recorded conflict',
     },
 ]
 
@@ -180,7 +224,7 @@ function relative(abs) {
     return path.relative(REPO_ROOT, abs).replace(/\\/g, '/')
 }
 
-function* walk(dir) {
+function* walk(dir, rel) {
     let entries
     try {
         entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -189,8 +233,10 @@ function* walk(dir) {
     }
     for (const entry of entries) {
         if (entry.name === VCS_DIR || SKIP_DIRS.has(entry.name)) continue
+        const child = rel === '' ? entry.name : `${rel}/${entry.name}`
+        if (NOT_WALKED.some((skip) => child === skip || child.startsWith(`${skip}/`))) continue
         const full = path.join(dir, entry.name)
-        if (entry.isDirectory()) yield* walk(full)
+        if (entry.isDirectory()) yield* walk(full, child)
         else yield full
     }
 }
@@ -239,7 +285,7 @@ const PASS_NAMES = new Set()
             PASS_NAMES.add(`${module}::${match[1]}`)
         }
     }
-    for (const file of walk(path.join(REPO_ROOT, 'modules'))) {
+    for (const file of walk(path.join(REPO_ROOT, 'modules'), 'modules')) {
         if (!file.endsWith('.cpp')) continue
         const text = fs.readFileSync(file, 'utf8')
         const constants = new Map()
@@ -510,7 +556,7 @@ function specsOfCommand(text) {
 // ---- Scanning the pages --------------------------------------------------------------------
 
 const files = []
-for (const abs of walk(REPO_ROOT)) {
+for (const abs of walk(REPO_ROOT, '')) {
     const rel = relative(abs)
     if (NOT_A_PAGE.some((entry) => rel === entry.replace(/\/$/, '') || rel.startsWith(entry))) continue
     if (GENERATED.includes(rel)) continue
@@ -560,7 +606,7 @@ for (const rel of files) {
         report(
             rel,
             index + 1,
-            `a pass name followed by '(' is the removed form: ${line.trim().slice(0, 160)}`
+            `a pass name followed by '(' is the removed form: ${line.trim().slice(0, 120)}`
         )
     })
 
@@ -624,11 +670,14 @@ function runCamel(args, cwd) {
         child.stderr.on('data', (chunk) => (output += chunk))
         child.on('error', (error) => {
             clearTimeout(timer)
-            resolve({ failed: true, output: output + error.message, timedOut })
+            // A spawn that never started — a missing executable, or a library the loader refuses —
+            // is not a page defect: it is reported with the error, and when no invocation started
+            // at all the guard refuses to report a pass rather than blame every page.
+            resolve({ unstarted: true, output: error.message, timedOut })
         })
         child.on('close', () => {
             clearTimeout(timer)
-            resolve({ failed: false, output, timedOut })
+            resolve({ unstarted: false, output, timedOut })
         })
     })
 }
@@ -653,48 +702,150 @@ fs.writeFileSync(program, 'module doc_form_probe\n\nfunc main(): int sync {\n   
 const RESOLVED =
     /UnrecognizedGraphPass|PassNotProvidedByModule|PassNotExportedByModule|ParamArgumentUnknown|ParamArgumentDuplicate|ParamArgumentWrongType|ParamArgumentMissing|ParamArgumentValue/
 
-// Every page that shows the specification is named, so one defect is not reported once and
-// hidden on the other pages.
+// The parser's own words for a refused specification: the one line that names the diagnostic,
+// short enough for the first line of a red (the runner clips an echoed line at 240 characters).
+function complaintOf(output) {
+    const line = output
+        .split(/\r?\n/)
+        .map((text) => text.trim())
+        .find((text) => text.includes('InvalidPassParameter'))
+    return (line || output.trim().split(/\r?\n/)[0] || 'no diagnostic').slice(0, 110)
+}
+
+function timeoutReport(spec, together) {
+    return (
+        `'${spec}' did not come back in the documented ${TIMEOUT_MS} ms limit` +
+        (together > 0 ? ` (it shared the invocation with ${together} other specification(s))` : '') +
+        `; tens of milliseconds is normal, so the host is loaded or the parser is wedged`
+    )
+}
+
+// Every page that shows a specification is named, so one defect is not reported once and hidden
+// on the other pages.
 let parsed = 0
-let cursor = 0
-async function worker() {
-    while (cursor < distinct.length) {
-        const { spec, occurrences } = distinct[cursor++]
-        const result = await runCamel([program, spec, PROBE], tempDir)
-        if (result.timedOut) {
-            for (const { rel, line } of occurrences) {
-                report(rel, line, `'${spec}' did not come back in ${TIMEOUT_MS} ms`)
-            }
-            continue
+let unstarted = 0
+let unstartedMessage = ''
+let invocationsRun = 0
+
+// One specification, one invocation: the whole cost this guard used to pay, and the path a batch
+// the parser refuses falls back to. The verdict of a specification is its own run's, never a
+// batch's, so a refusal is reported with its own words.
+async function decideOne(spec, occurrences) {
+    const result = await runCamel([program, spec, PROBE], tempDir)
+    invocationsRun++
+    if (result.unstarted) {
+        unstarted += 1
+        unstartedMessage = unstartedMessage || result.output.trim()
+        for (const { rel, line } of occurrences) {
+            report(
+                rel,
+                line,
+                `the parser could not be started for '${spec}': ${result.output.trim().slice(0, 110)}`
+            )
         }
-        const complaint = result.output
-            .split(/\r?\n/)
-            .map((text) => text.trim())
-            .find((text) => text.includes('InvalidPassParameter') || text.includes('not a constant'))
-        if (/InvalidPassParameter/.test(result.output)) {
-            for (const { rel, line } of occurrences) {
-                report(rel, line, `the parser refuses '${spec}': ${(complaint || '').slice(0, 200)}`)
-            }
-            continue
+        return
+    }
+    if (result.timedOut) {
+        for (const { rel, line } of occurrences) report(rel, line, timeoutReport(spec, 0))
+        return
+    }
+    if (/InvalidPassParameter/.test(result.output)) {
+        for (const { rel, line } of occurrences) {
+            report(rel, line, `the parser refuses '${spec}': ${complaintOf(result.output)}`)
         }
-        // The specification was read and the pipeline went on to the probe: either the probe's
-        // unknown name, or the pass name itself when this build does not register it.
-        if (!RESOLVED.test(result.output)) {
-            const seenOutput = result.output.trim().split(/\r?\n/).slice(0, 2).join(' / ')
+        return
+    }
+    // The specification was read and the pipeline went on to the probe: either the probe's
+    // unknown name, or the pass name itself when this build does not register it.
+    if (!RESOLVED.test(result.output)) {
+        const seenOutput = result.output.trim().split(/\r?\n/).slice(0, 2).join(' / ')
+        for (const { rel, line } of occurrences) {
+            report(
+                rel,
+                line,
+                `'${spec}' neither parsed nor reached the probe: ${seenOutput.slice(0, 130)}`
+            )
+        }
+        return
+    }
+    parsed++
+}
+
+// One invocation decides several specifications. `requireKnownPasses` resolves every name of a
+// pipeline, and refuses the pipeline, before the first pass runs, so a pipeline of
+// specifications followed by the probe reads each of them with the real parser and runs nothing.
+//
+// The pipeline is refused at the **first** name it cannot resolve, so only an invocation whose
+// complaint names the probe proves that every specification in it resolved: a complaint about an
+// earlier member — a name this build does not register, a parameter a declaration does not accept
+// — may leave a specification after it unread, and a spelling the parser would refuse there would
+// be hidden. Anything else than the probe's own name therefore decides none of the members, and
+// they are decided one by one above, which is the evidence this guard collected for every
+// specification before the batch existed. (Measured: a single invocation carrying all 37
+// specifications of the tree is refused at `mod::pass` — and it does mention the probe, in the
+// `PassesNeverRun` warning that quotes every pass written after the first graph-consuming one,
+// which is why the check is for the probe's own complaint and not for its name. The batches that
+// hold `std::no_such_pass`, `mymod::fn` and `std::opt safe_fpp=true` are refused at those members
+// and are decided one specification at a time; a page that adds a spelling the parser refuses,
+// `camel train.cml std::opt(safe_fp=true)`, is reported by its own run with the same problem list
+// whether the specifications are batched, one per invocation, or all in one.)
+async function decideBatch(batch) {
+    // A batch of one is the old path exactly: one specification, one invocation, its own verdict
+    // (a specification whose own name is unknown is read by `decideOne` as reaching the probe,
+    // which is the verdict this guard has always given it).
+    if (batch.length === 1) return decideOne(batch[0].spec, batch[0].occurrences)
+    const result = await runCamel([program, ...batch.map((item) => item.spec), PROBE], tempDir)
+    invocationsRun++
+    const together = batch.length - 1
+    if (result.unstarted) {
+        unstarted += batch.length
+        unstartedMessage = unstartedMessage || result.output.trim()
+        for (const { spec, occurrences } of batch) {
             for (const { rel, line } of occurrences) {
                 report(
                     rel,
                     line,
-                    `'${spec}' neither parsed nor reached the probe: ${seenOutput.slice(0, 200)}`
+                    `the parser could not be started for '${spec}': ` +
+                        `${result.output.trim().slice(0, 110)}`
                 )
             }
-            continue
         }
-        parsed++
+        return
+    }
+    if (result.timedOut) {
+        // A batch that never answered is reported against every specification it held, and is not
+        // re-run: a silent retry would hide the one thing the red has to say.
+        for (const { spec, occurrences } of batch) {
+            for (const { rel, line } of occurrences) report(rel, line, timeoutReport(spec, together))
+        }
+        return
+    }
+    // The probe's own complaint, not any mention of its name. The pipeline issues a warning that
+    // quotes every pass written after the first graph-consuming one (`PassesNeverRun`), and the
+    // probe is one of them, so a bare `includes(PROBE)` would accept a batch the parser never
+    // resolved that far — measured: one invocation carrying all 38 specifications mentions the
+    // probe in that warning while it is in fact refused at `mod::pass`, and the specification the
+    // parser refuses was then not reported at all.
+    if (PROBE_REFUSED.test(result.output) && !/InvalidPassParameter/.test(result.output)) {
+        parsed += batch.length
+        return
+    }
+    for (const { spec, occurrences } of batch) await decideOne(spec, occurrences)
+}
+
+const batches = []
+for (let i = 0; i < distinct.length; i += BATCH) {
+    batches.push(distinct.slice(i, i + BATCH))
+}
+
+let cursor = 0
+async function worker() {
+    while (cursor < batches.length) {
+        await decideBatch(batches[cursor++])
     }
 }
 try {
-    await Promise.all(Array.from({ length: Math.min(JOBS, distinct.length || 1) }, worker))
+    await Promise.all(Array.from({ length: Math.min(JOBS, batches.length || 1) }, worker))
 } finally {
     fs.rmSync(tempDir, { recursive: true, force: true })
 }
@@ -721,11 +872,34 @@ if (invocations.length === 0) {
     process.exit(2)
 }
 
-for (const problem of problems) console.log(`FAIL ${problem}`)
+// An install that cannot run the parser at all is not a page: every specification was refused by
+// the same broken invocation, so no page is blamed and the pass is not reported.
+if (distinct.length > 0 && unstarted === distinct.length) {
+    console.log(`FAIL no specification could be run through the parser: ${CAMEL}`)
+    console.log(`FAIL ${unstartedMessage.slice(0, 200)}`)
+    console.log(
+        `FAIL the ${distinct.length} specification(s) in ${files.length} page(s) were not read; ` +
+            `refusing to report a pass`
+    )
+    process.exit(2)
+}
+
+// The first line of a red is the reason. The runner echoes only the last 12 lines of a failed
+// test's output, so the report is kept to a few short lines and the first one carries the page,
+// the line, the invocation and what the parser said; every problem is still counted, and
+// CAMEL_DOC_FORM_REPORT_ALL=1 prints them all.
+const shown = REPORT_ALL ? problems.length : Math.min(problems.length, 3)
+for (let i = 0; i < shown; i++) console.log(`FAIL ${problems[i]}`)
+if (problems.length > shown) {
+    console.log(
+        `FAIL ... and ${problems.length - shown} more problem(s): CAMEL_DOC_FORM_REPORT_ALL=1 ` +
+            `prints every one`
+    )
+}
 if (problems.length > 0) {
     console.log(
         `FAIL the pages teach a pass spelling the command line refuses: ${problems.length} ` +
-            `problem(s) in ${files.length} page(s)`
+            `problem(s) in ${files.length} page(s); the first is the line above`
     )
     process.exit(1)
 }
@@ -733,5 +907,7 @@ console.log(
     `PASS doc pass forms: ${invocations.length} pass invocation(s) in ${files.length} page(s), ` +
         `${distinct.length} distinct, each read by the parser's own rule; ${distinct.length} run ` +
         `through the real parser, ${parsed} of them reached the probe, and ${excused} page line(s) ` +
-        `are excused (the form is said to be removed, or a decision and the parser disagree)`
+        `are excused (the form is said to be removed, or a decision and the parser disagree); ` +
+        `${invocationsRun} parser invocation(s) for ${distinct.length} specification(s), ` +
+        `${((Date.now() - STARTED_AT) / 1000).toFixed(1)} s`
 )

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-257 diagnostics: 238 errors, 19 warnings.
+256 diagnostics: 237 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -215,7 +215,6 @@ prints one entry.
 | `0x030001D2` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error |
 | `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error |
 | `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error |
-| `0x030001D5` | [SemanticDiag::PrecisionChangeNotPermitted](#precisionchangenotpermitted) | Error |
 | `0x030001D6` | [SemanticDiag::ParamArgumentWrongType](#paramargumentwrongtype) | Error |
 | `0x030001D7` | [SemanticDiag::ReducedPrecisionUnsupported](#reducedprecisionunsupported) | Error |
 | `0x030001D8` | [SemanticDiag::ImplOnBodylessDeclaration](#implonbodylessdeclaration) | Error |
@@ -6173,41 +6172,6 @@ func main(): int sync {
 }
 ```
 
-### PrecisionChangeNotPermitted
-
-`0x030001D5` · Error · `SemanticDiag::PrecisionChangeNotPermitted`
-
-**Message**
-
-```text
-Converting '{0}' to '{1}' needs the numeric permission 'change_precision'.
-```
-
-**Help**
-
-```text
-Write #[change_precision] on the function or the block that does the conversion, or convert from a type that already holds the values the reduced element type can hold exactly. Reading a bf16 or f16 value into a wider type never needs the permission.
-```
-
-**Example** (`test/cases/modules/tensor/dtype/bf16_no_licence.cml`, run as `camel test/cases/modules/tensor/dtype/bf16_no_licence.cml`)
-
-```camel
-module tensor_dtype_bf16_no_licence
-
-import { Tensor, new, cast } from tensor
-
-func shrink(x: Tensor<f32>): Tensor<bf16> {
-    return cast(x, 'bf16')
-}
-
-func main(): int sync {
-    let values: f32[] = [0.1]
-    let t = shrink(new(values))
-    println('unreachable')
-    return 0
-}
-```
-
 ### ParamArgumentWrongType
 
 `0x030001D6` · Error · `SemanticDiag::ParamArgumentWrongType`
@@ -6250,16 +6214,14 @@ The call of '{0}' cannot take a value of the reduced-precision element type '{1}
 bf16 and f16 are stored element types: the language has no bf16 or f16 literal, scalar operator or conversion, so a function that would add, compare or otherwise use one cannot compute with it. A bf16 or f16 tensor is computed by the tensor module, which widens every element to f32 and rounds once when it stores the result (design principles 7.3, H238); cast reads it back into f32 or f64 exactly. Write the reduction, comparison or arithmetic on the tensor, or on a value of a type that has the operation.
 ```
 
-**Example** (`test/cases/modules/stdlib/reduced_sum_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sum_refused.cml`)
+**Example** (`test/cases/modules/stdlib/reduced_arithmetic_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_arithmetic_refused.cml`)
 
 ```camel
-module stdlib_reduced_sum_refused
-
-import { sum } from array
+module stdlib_reduced_arithmetic_refused
 
 func main(): int sync {
     let xs: bf16[] = []
-    println(sum(xs))
+    println(xs[0] + xs[0])
     return 0
 }
 ```

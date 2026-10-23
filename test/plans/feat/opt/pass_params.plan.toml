@@ -49,6 +49,43 @@ expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 
 [[tests]]
+name = "string.word_as_written"
+desc = "The declared type decides how a value is read, not its text (design principles 9.3): `onnx::export` declares `out: string`, so the word is taken as written even though it is no constant expression, and the model is written to the path the word names."
+case = "../../../cases/modules/onnx/entry/forward.cml"
+args = ["${case}", "std::macro", "std::opt", "onnx::export out=${test_tmp}/word_as_written.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/word_as_written.onnx"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const written = path.join(input.test_tmp, 'word_as_written.onnx')
+assert(fs.existsSync(written), `no model at the path the word names: ${written}`)
+assert(fs.statSync(written).size > 0, 'the model file is empty')
+const models = fs.readdirSync(input.test_tmp).filter((name) => name.endsWith('.onnx'))
+assert(models.length === 1, `one model expected, got ${models}`)
+assert(models[0] === 'word_as_written.onnx', `the name is not the word as written: ${models[0]}`)
+}
+"""
+
+[[tests]]
+name = "string.quoted_value_with_a_space"
+desc = "A value with a space is quoted, and a string parameter takes the quoted value whole: the file is named with the space in it, so neither the quotes nor the space split the word."
+case = "../../../cases/modules/onnx/entry/forward.cml"
+args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/a b.onnx"']
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/a b.onnx"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const written = path.join(input.test_tmp, 'a b.onnx')
+assert(fs.existsSync(written), `no model at the quoted value: ${written}`)
+assert(fs.statSync(written).size > 0, 'the model file is empty')
+}
+"""
+
+[[tests]]
 name = "error.unknown_parameter"
 desc = "An unknown parameter is a semantic diagnostic at the call, on the pass's own line; nothing runs."
 args = ["${case}", "std::fvm", "std::opt safe_fpp=true"]
@@ -82,6 +119,14 @@ desc = "A name is not a constant."
 args = ["${case}", "std::opt safe_fp=x", "std::fvm"]
 expect_exit = 1
 expect_output_contains = ["InvalidPassParameter", "'x' is not a constant"]
+
+[[tests]]
+name = "error.bare_word_where_an_int_is_declared"
+desc = "The declared type decides, not the text: the word that is a file name where `out: string` is declared is refused here, because `growth_budget: int` takes a constant expression (design principles 9.3), and nothing runs."
+args = ["${case}", "std::opt growth_budget=model.onnx", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "the value of 'growth_budget' is not a constant"]
+expect_output_not_contains = ["camel-ran-marker"]
 
 [[tests]]
 name = "error.written_twice"
@@ -317,11 +362,11 @@ timeout_ms = 60000
 
 [[tests]]
 name = "docs.word_form_only"
-desc = "A page cannot teach a spelling the command line refuses. The guard reads every pass invocation the pages show the way the command line reads it (`splitPassList`, `groupPassWords` and `parseSpec`), and runs each distinct specification through the real parser followed by a pass name no build registers, so a spelling the parser rejects is refused before anything runs. It prints the number of invocations it checked: that number is pinned here, so a rule that stops matching pages is red rather than silent. A page that adds or removes an invocation updates the pin."
+desc = "A page cannot teach a spelling the command line refuses. The guard reads every pass invocation the pages show the way the command line reads it (`splitPassList`, `groupPassWords` and `parseSpec`), and runs each distinct specification through the real parser followed by a pass name no build registers, so a spelling the parser rejects is refused before anything runs. Several specifications may share one invocation: the pipeline is resolved, and refused, before the first pass runs, so a batch whose refusal names the probe proves every specification in it, and any other batch is then decided one specification at a time. It prints the number of invocations it checked: that number is pinned here, so a rule that stops matching pages is red rather than silent. A page that adds or removes an invocation updates the pin. Two changes moved these counts in opposite directions, and both are in the numbers below: the route page dropped the deleted `std::tiles` (38 distinct to 37, and 36 of them reached the probe), and a `string` pass parameter now takes the word as written, which took `onnx::export out=model.onnx` back to the probe (36 to 37) and retired the two design-principles exemptions that excused that sentence (5 excused lines to 3). The guard walks the repository, so it must not walk the runner's own output: it did, and spent 76 s against a 75 s bound there, which the runner's 4x margin reads as a wall of 75 s — the bound was measuring the walk (51 GB of run records), not the test. Skipping those trees takes it to 0.96 s here, so the bound is 30 s: an order of magnitude of room for a larger tree or a slower host, and a wall of 7.5 s after the margin."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-doc-pass-forms.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["doc pass forms: 246 pass invocation(s)", "38 distinct", "38 run through the real parser", "37 of them reached the probe"]
-timeout_ms = 300000
+expect_stdout_contains = ["doc pass forms: 246 pass invocation(s)", "37 distinct", "37 run through the real parser", "37 of them reached the probe"]
+timeout_ms = 30000

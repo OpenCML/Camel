@@ -10,7 +10,6 @@
 #include "module.h"
 
 #include <algorithm>
-#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -74,45 +73,6 @@ bool isDeclaredOperator(std::string_view name) {
            std::end(kDeclaredOperators);
 }
 
-/// The narrowing the compiler must check against `change_precision` (design principles 7.3,
-/// H238): a conversion operator writes a value of another element type into a `bf16` or `f16`
-/// one. `cast` is the operator that does that; its result is a `Tensor<bf16>` or `Tensor<f16>`
-/// while its tensor argument holds another element type. An operator that keeps an element type
-/// it already has (`reshape`, `sum`, `add` of two bf16 operands) converts nothing, and a call to
-/// a function whose declared result is bf16 converts nothing at the call either: the conversion
-/// is written in that function's body, where it is checked. `from_bytes::<bf16>` reads the stored
-/// bits, rounds nothing and needs no permission.
-camel::core::OperatorTable::ReducedPrecisionNarrowing narrowingIntoReducedType(
-    std::string_view uri, std::span<camel::core::type::Type *const> normArguments,
-    std::span<camel::core::type::Type *const> withArguments,
-    const camel::core::type::Type *result) {
-    namespace tensor = camel::tensor;
-    if (uri != "tensor:cast") {
-        return std::nullopt;
-    }
-    const auto *narrowed = tensor::asTensorType(result);
-    if (narrowed == nullptr || !narrowed->dtype() ||
-        !tensor::isReducedFloatTensorType(*narrowed->dtype())) {
-        return std::nullopt;
-    }
-    const auto target = *narrowed->dtype();
-    for (const auto arguments : {normArguments, withArguments}) {
-        for (const auto *argument : arguments) {
-            const auto *held = tensor::asTensorType(argument);
-            if (held == nullptr || !held->dtype()) {
-                continue; // no element type known here: the runtime keeps them equal
-            }
-            if (*held->dtype() == target) {
-                return std::nullopt; // the value already has the element type: no rounding
-            }
-            return std::pair<std::string, std::string>{
-                "Tensor<" + tensor::elementTypeSpelling(*held->dtype()) + ">",
-                "Tensor<" + tensor::elementTypeSpelling(target) + ">"};
-        }
-    }
-    return std::nullopt;
-}
-
 } // namespace
 
 TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
@@ -147,14 +107,6 @@ bool TensorModule::load() {
     // does (design principles 9.3: a setting is not an environment variable). Without `-t` this
     // is the hardware concurrency.
     camel::tensor::kernels::setNumThreads(static_cast<int>(context_->threadLimit()));
-    // The compiler asks this module, which owns the bf16/f16 element types, whether a call
-    // writes a value of another element type into one of them (see above). Declared once for
-    // the process; a second module declaring one is a load-time error.
-    static const bool precisionGateDeclared = [] {
-        camel::core::OperatorTable::instance().declarePrecisionGate(&narrowingIntoReducedType);
-        return true;
-    }();
-    (void)precisionGateDeclared;
     context_->registerExecutorFactory("tensor", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<TensorExecutor>(ctx, OpRegistry::instance().kernelMap("tensor"));
     });

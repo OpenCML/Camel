@@ -1,6 +1,13 @@
 id = "gpu.tiles_rows"
 tier = "slow"
 tags = ["gpu", "tiles"]
+
+# This layer runs against the cards: the Python tests here drive camel on a device, and the
+# runner's Python default (docs/test-plans.md, "CUDA visibility") would otherwise hide the devices
+# from them and let them measure the CPU.
+[defaults]
+cuda_devices = true
+
 [[tests]]
 name = "shared_row_regions"
 kind = "behavior"
