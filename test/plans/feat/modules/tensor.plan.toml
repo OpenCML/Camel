@@ -512,12 +512,40 @@ timeout_ms = 8000
 
 [[tests]]
 name = "gemm_canonical.fused"
-desc = "tensor::fuse records the group as an attribute and changes no operator: the same expression computes the same bits as without the pass (the case's K exceeds one cache block, which is where an accumulation order could show)."
+desc = "In safe mode (tensor::fuse(safe_fp=true)) every matmul is withheld from the library GEMM (7.4), so the fused expression is bit-identical to the unfused one: K exceeds one cache block, which is where an accumulation order could show."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gemm_canonical.cml"
+args = ["${case}", "tensor::fuse(safe_fp=true)"]
+expect_exit = 0
+expect_stdout_exact = "gemm product_sum=425.47250219917623\ngemm affine_sum=424.9194541722536 relu_sum=3375.5932369083166\ngemm linear_diff=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "gemm_canonical.library"
+desc = "K=600 is below the library's measured size threshold, so even with a BLAS the default policy's product runs the canonical kernel (diff 0). The test keeps the below-threshold side of the shape decision: the three sums are the canonical ones and the linear/canonical difference stays inside the licence's bound. The above-threshold equivalence is library_gemm.tolerance."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical.cml"
 args = ["${case}", "tensor::fuse"]
 expect_exit = 0
-expect_stdout_exact = "gemm product_sum=425.47250219917623\ngemm affine_sum=424.9194541722536 relu_sum=3375.5932369083166\ngemm linear_diff=0.0\n"
+verify_script = """
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const one = (key) => {
+    const m = out.match(new RegExp(key + '=([-+0-9.eE]+)'))
+    assert(m, `missing ${key} in ${out}`)
+    return Number(m[1])
+  }
+  const product = one('product_sum')
+  const affine = one('affine_sum')
+  const relu = one('relu_sum')
+  const linearDiff = one('linear_diff')
+  assert(Math.abs(product - 425.47250219917623) <= 1e-3, `product_sum ${product} leaves the licence bound`)
+  assert(Math.abs(affine - 424.9194541722536) <= 1e-3, `affine_sum ${affine} leaves the licence bound`)
+  assert(Math.abs(relu - 3375.5932369083166) <= 1e-2, `relu_sum ${relu} leaves the licence bound`)
+  assert(linearDiff <= 1e-2, `linear_diff ${linearDiff} leaves the licence bound`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -526,7 +554,7 @@ name = "gemm_canonical.generic_unit"
 desc = "The portable GEMM unit (CAMEL_TENSOR_ISA=generic hides AVX2/AVX-512) gives the same bits as the vector units: it writes each fused multiply-add explicitly (on an x86-64 processor without FMA it used to round twice)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical.cml"
-args = ["${case}", "tensor::fuse"]
+args = ["${case}", "tensor::fuse(safe_fp=true)"]
 envs = ["CAMEL_TENSOR_ISA=generic"]
 expect_exit = 0
 expect_stdout_exact = "gemm product_sum=425.47250219917623\ngemm affine_sum=424.9194541722536 relu_sum=3375.5932369083166\ngemm linear_diff=0.0\n"

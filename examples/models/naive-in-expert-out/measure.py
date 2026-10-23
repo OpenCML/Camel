@@ -37,6 +37,12 @@ The thread budget is the command line's ``-t``, for every pool of the run.  The 
 reads ``CAMEL_NUM_THREADS``; this harness passes ``-t N`` to Camel and ``torch.set_num_threads(N)``
 plus the usual OMP/MKL variables to PyTorch, so both sides run N threads by their own documented
 mechanism.
+
+Camel runs ``tensor::fuse`` before its scheduler.  That pass changes no operator (design principles
+9.6): it records ``tensor.kernel`` on each matmul, and with the default ``CAMEL_TENSOR_BLAS=ON`` a
+build that found a CBLAS says ``library`` there while safe mode and ``#strict`` say ``canonical``
+(7.3/7.4).  ``--no-tensor-fuse`` omits it for a run that must use the canonical kernel everywhere,
+which is the path of the results measured before the library became the default.
 """
 
 from __future__ import annotations
@@ -87,7 +93,7 @@ ROWS = {
     "en": {
         "unit": "ms/step",
         "impl": "implementation",
-        "headers": {"camel": "Camel (`std::jit`)", "naive": "PyTorch naive",
+        "headers": {"camel": "Camel (`tensor::fuse`, `std::jit`)", "naive": "PyTorch naive",
                     "expert": "PyTorch expert", "compiled": "`torch.compile(naive)`",
                     "reference": "float64 reference"},
         "single": "one thread",
@@ -100,7 +106,7 @@ ROWS = {
     "cn": {
         "unit": "ms/步",
         "impl": "实现",
-        "headers": {"camel": "Camel（`std::jit`）", "naive": "PyTorch 朴素",
+        "headers": {"camel": "Camel（`tensor::fuse`、`std::jit`）", "naive": "PyTorch 朴素",
                     "expert": "PyTorch 专家", "compiled": "`torch.compile(朴素)`",
                     "reference": "float64 参考"},
         "single": "单线程",
@@ -435,7 +441,7 @@ def load_average() -> dict:
 
 def run_cell(shape: dict, threads: int, backend: str, repeats: int, steps: int, warmup: int,
              work: Path, camel: Path, environment: dict[str, str],
-             block_limit_mb: int) -> dict:
+             block_limit_mb: int, tensor_fuse: bool) -> dict:
     d_model = shape["d_model"]
     cell_dir = work / f"d{d_model}-t{threads}"
     init, finals = cell_dir / "init", cell_dir / "final"
@@ -451,9 +457,15 @@ def run_cell(shape: dict, threads: int, backend: str, repeats: int, steps: int, 
 
     camel_base = [
         str(camel), "-t", str(threads), "--block-limit", str(block_limit_mb),
-        str(source_path), f"std::{backend}",
-        "--arg", "bench=true", "--arg", f"init_dir={init}",
+        str(source_path),
     ]
+    # tensor::fuse records the implementation choice on the graph without changing an operator
+    # (design principles 9.6): with a BLAS build the plain matmul says "library", and safe mode
+    # or #strict says "canonical". Without the pass every matmul stays on the canonical kernel,
+    # which is what a comparison against an older result needs.
+    if tensor_fuse:
+        camel_base.append("tensor::fuse")
+    camel_base += [f"std::{backend}", "--arg", "bench=true", "--arg", f"init_dir={init}"]
     camel_command = camel_base + ["--arg", f"final_dir={finals / 'camel'}"]
     torch_commands = {
         variant: [
@@ -829,6 +841,9 @@ def main() -> int:
     parser.add_argument("--block-limit", type=int, default=8192,
                         help="Camel's block space in MiB; the 2048 default is too small at "
                              "d_model 1024 with 2048 tokens (default: 8192)")
+    parser.add_argument("--no-tensor-fuse", action="store_true",
+                        help="run Camel without tensor::fuse: every matmul stays on the canonical "
+                             "kernel (the path of results before the library default)")
     parser.add_argument("--from-json", default=None,
                         help="skip measuring; render or check a committed result file instead")
     parser.add_argument("--check-readme", action="store_true",
@@ -872,7 +887,7 @@ def main() -> int:
         for thread_count in threads:
             cells.append(run_cell(shape, thread_count, args.backend, args.repeats,
                                   args.steps, args.warmup, work, camel, environment,
-                                  args.block_limit))
+                                  args.block_limit, not args.no_tensor_fuse))
 
     result = {
         "schema": 3,

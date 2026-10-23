@@ -915,6 +915,17 @@ class Backward final : public VjpBuilder {
     addOper(Type *type, std::string_view uri, std::span<const vjp_node_t> normInputs) override {
         return autodiff::addOper(target_, type, uri, normInputs);
     }
+    vjp_node_t addOper(
+        Type *type,
+        std::string_view uri,
+        std::span<const vjp_node_t> normInputs,
+        camel::core::attr::AttrSetId attrs) override {
+        const vjp_node_t node = autodiff::addOper(target_, type, uri, normInputs);
+        if (attrs != camel::core::attr::kNoAttrs) {
+            target_.setNodeAttrs(node, attrs);
+        }
+        return node;
+    }
     vjp_node_t addAccess(vjp_node_t aggregate, size_t index) override {
         return autodiff::addField(target_, typeOf(target_, aggregate), aggregate, index);
     }
@@ -3504,7 +3515,8 @@ void Backward::visitOper(gc_node_ref_t node) {
             .inputs     = inputs,
             .withInputs = withInputs,
             .output     = ref(node),
-            .origin     = forward_.nodeOrigin(node)});
+            .origin     = forward_.nodeOrigin(node),
+            .attrs      = forward_.nodeAttrs(node)});
     producing_ = kInvalidNodeRef;
     for (size_t i = 0; i < valueWith.size(); ++i) {
         const auto found = contributions_.find(valueWith[i].input);

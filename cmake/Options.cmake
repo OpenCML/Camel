@@ -78,8 +78,8 @@ message(STATUS "CAMEL_ENABLE_PYTHON=${CAMEL_ENABLE_PYTHON}")
 # Consumed by modules/tensor/CMakeLists.txt; OFF uses the builtin GEMM kernels.
 option(
     CAMEL_TENSOR_BLAS
-    "Link a system CBLAS (find_package(BLAS)) for a matmul whose node the 7.3 rule lets run on the library GEMM (tensor.kernel=\"library\", written by tensor::fuse); safe mode and every withheld node stay on the canonical builtin kernels"
-    OFF
+    "Use a system CBLAS (find_package(BLAS)) for a matmul whose node the 7.3 rule lets run on the library GEMM (tensor.kernel=\"library\", written by tensor::fuse); safe mode and every withheld node stay on the canonical builtin kernels. On by default; when no CBLAS is found the builtin GEMM is the library path"
+    ON
 )
 message(STATUS "CAMEL_TENSOR_BLAS=${CAMEL_TENSOR_BLAS}")
 

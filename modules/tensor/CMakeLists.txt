@@ -75,11 +75,40 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|X86_64")
   target_compile_definitions(tensor_cmo_objects PRIVATE CAMEL_TENSOR_HAS_AVX2_UNIT=1)
 endif()
 
-# Optional system BLAS for GEMM (cmake/options.json: CAMEL_TENSOR_BLAS).
+# System CBLAS for GEMM (cmake/options.json: CAMEL_TENSOR_BLAS, on by default). A build that
+# cannot find one keeps the builtin kernels: sgemmLibrary then forwards to sgemm, so the program
+# is unchanged and nothing fails. What the build chose is printed at configure time.
+#
+# find_package(BLAS) is tried first; the explicit search below covers the distributions whose
+# headers live under an architecture suffix (Debian/Ubuntu install cblas.h in
+# /usr/include/x86_64-linux-gnu) and configurations where FindBLAS is restricted by a package
+# manager's toolchain. Only a CBLAS (cblas_sgemm), not a Fortran-only BLAS, can back the kernel.
 if(CAMEL_TENSOR_BLAS)
-  find_package(BLAS REQUIRED)
-  find_path(CAMEL_CBLAS_INCLUDE_DIR cblas.h PATH_SUFFIXES openblas REQUIRED)
-  target_include_directories(tensor_cmo_objects PRIVATE ${CAMEL_CBLAS_INCLUDE_DIR})
-  target_link_libraries(tensor_cmo PRIVATE ${BLAS_LIBRARIES})
-  target_compile_definitions(tensor_cmo_objects PRIVATE CAMEL_TENSOR_USE_CBLAS=1)
+  find_package(BLAS)
+  find_library(
+    CAMEL_CBLAS_LIBRARY
+    NAMES openblas cblas mkl_rt
+    PATH_SUFFIXES x86_64-linux-gnu aarch64-linux-gnu openblas-pthread)
+  find_path(
+    CAMEL_CBLAS_INCLUDE_DIR
+    NAMES cblas.h
+    PATH_SUFFIXES x86_64-linux-gnu aarch64-linux-gnu openblas openblas-pthread)
+  if(CAMEL_CBLAS_LIBRARY AND CAMEL_CBLAS_INCLUDE_DIR)
+    set(CAMEL_BLAS_LIBRARIES ${CAMEL_CBLAS_LIBRARY})
+    if(BLAS_FOUND)
+      list(APPEND CAMEL_BLAS_LIBRARIES ${BLAS_LIBRARIES})
+    endif()
+    target_include_directories(tensor_cmo_objects PRIVATE ${CAMEL_CBLAS_INCLUDE_DIR})
+    target_link_libraries(tensor_cmo PRIVATE ${CAMEL_BLAS_LIBRARIES})
+    target_compile_definitions(tensor_cmo_objects PRIVATE CAMEL_TENSOR_USE_CBLAS=1)
+    string(TOLOWER "${CAMEL_CBLAS_LIBRARY}" _camel_cblas_lower)
+    if(_camel_cblas_lower MATCHES "openblas")
+      target_compile_definitions(tensor_cmo_objects PRIVATE CAMEL_TENSOR_HAS_OPENBLAS=1)
+    elseif(_camel_cblas_lower MATCHES "mkl")
+      target_compile_definitions(tensor_cmo_objects PRIVATE CAMEL_TENSOR_HAS_MKL=1)
+    endif()
+    message(STATUS "CAMEL_TENSOR_BLAS: library GEMM is ${CAMEL_BLAS_LIBRARIES}")
+  else()
+    message(STATUS "CAMEL_TENSOR_BLAS: no CBLAS found (library=${CAMEL_CBLAS_LIBRARY}, cblas.h=${CAMEL_CBLAS_INCLUDE_DIR}); the builtin GEMM is the library path")
+  endif()
 endif()

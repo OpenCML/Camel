@@ -10,7 +10,9 @@
  *
  *   tensor.kernel   "library" | "canonical": the matmul runs on the library GEMM or on the
  *                   canonical algorithm. Absent means canonical; tensor::fuse writes the value
- *                   it chose, so a dump says how the node runs instead of saying nothing.
+ *                   it chose, so a dump says how the node runs instead of saying nothing. On
+ *                   tensor:linear the key is the choice its VJP carries to matmul_grad_lhs/rhs;
+ *                   the forward linear kernel stays canonical.
  *   tensor.fusion   "linear" | "linear_relu": this node is one of the nodes a backend may run as
  *                   one group (matmul + add, optionally relu). Every node of the group carries
  *                   the same value; the group's shape is the graph's, so a backend that runs the

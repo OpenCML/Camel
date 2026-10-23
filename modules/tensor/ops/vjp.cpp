@@ -10,6 +10,7 @@
 #include "camel/core/error/runtime.h"
 
 #include "../type.h"
+#include "../attrs.h"
 #include "op_def.h"
 
 #include <array>
@@ -35,12 +36,16 @@ void requireVjpInputs(const VjpCall &call, size_t minimum, size_t maximum) {
     }
 }
 
-vjp_node_t
-addTensorOper(VjpBuilder &builder, std::string_view uri, std::initializer_list<vjp_node_t> inputs) {
+vjp_node_t addTensorOper(
+    VjpBuilder &builder,
+    std::string_view uri,
+    std::initializer_list<vjp_node_t> inputs,
+    attr::AttrSetId attrs) {
     return builder.addOper(
         vjpTensorType(),
         uri,
-        std::span<const vjp_node_t>(inputs.begin(), inputs.size()));
+        std::span<const vjp_node_t>(inputs.begin(), inputs.size()),
+        attrs);
 }
 
 vjp_node_t
@@ -96,13 +101,24 @@ void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradi
     }
 }
 
-void accumulateMatmulGradients(VjpBuilder &builder, vjp_node_t lhs, vjp_node_t rhs, vjp_node_t dy) {
+void accumulateMatmulGradients(
+    VjpBuilder &builder,
+    vjp_node_t lhs,
+    vjp_node_t rhs,
+    vjp_node_t dy,
+    attr::AttrSetId forwardAttrs) {
+    // The gradient operators run the same licence decision as the forward matmul: tensor::fuse
+    // writes tensor.kernel on the forward node, and the rule carries that one key to the nodes it
+    // emits. Copying the whole set would also copy tensor.fusion, which describes a forward group.
+    const attr::AttrValueId kernel = attr::valueOf(forwardAttrs, kernelAttrKey());
+    const attr::AttrSetId attrs =
+        kernel == attr::kNoValue ? attr::kNoAttrs : attr::single(kernelAttrKey(), kernel);
     builder.accumulateGradient(
         lhs,
-        addTensorOper(builder, "tensor:matmul_grad_lhs", {dy, lhs, rhs}));
+        addTensorOper(builder, "tensor:matmul_grad_lhs", {dy, lhs, rhs}, attrs));
     builder.accumulateGradient(
         rhs,
-        addTensorOper(builder, "tensor:matmul_grad_rhs", {dy, lhs, rhs}));
+        addTensorOper(builder, "tensor:matmul_grad_rhs", {dy, lhs, rhs}, attrs));
 }
 
 vjp_node_t reluGradient(VjpBuilder &builder, vjp_node_t output, vjp_node_t dy) {
