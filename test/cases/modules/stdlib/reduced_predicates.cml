@@ -1,0 +1,36 @@
+/**
+ * bf16 and f16 are floating-point types (handover H238, design principles 7.3): `is_float`
+ * names them once, and `is_numeric` and `is_ordered` inherit them from it. A generic function
+ * guarded by `is_numeric::<T>()` / `is_ordered::<T>()` is therefore applicable where `T` is
+ * bf16 or f16 — it used to be refused with WhenConditionUnmet, which quietly excluded the two
+ * element types from every numeric declaration.
+ *
+ * The calls below only count the elements, so no operation on a bf16 or f16 value is written:
+ * the declaration itself must become applicable. If either type were not in `is_float`, the
+ * predicates would print false and the guarded calls would fail to compile.
+ */
+module stdlib_reduced_predicates
+
+import { is_float, is_numeric, is_ordered } from types
+
+func numbers::<T>(xs: T[]): int when is_numeric::<T>() {
+    return len(xs)
+}
+
+func ordered::<T>(xs: T[]): int when is_ordered::<T>() {
+    return len(xs)
+}
+
+func main(): int sync {
+    let bf: bf16[] = []
+    let half: f16[] = []
+    println(if is_float::<bf16>() then "float" else "not float")
+    println(if is_float::<f16>() then "float" else "not float")
+    println(if is_numeric::<bf16>() then "numeric" else "not numeric")
+    println(if is_numeric::<f16>() then "numeric" else "not numeric")
+    println(if is_ordered::<bf16>() then "ordered" else "not ordered")
+    println(if is_ordered::<f16>() then "ordered" else "not ordered")
+    println(numbers(bf))
+    println(ordered(half))
+    return 0
+}
