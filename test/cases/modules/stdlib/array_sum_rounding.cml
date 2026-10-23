@@ -1,0 +1,104 @@
+/**
+ * A floating-point reduction returns the element type and accumulates in f64, rounding once at
+ * the end (design principles 7.3: "浮点数组的归约在 f64 中累加、舍入一次，返回元素类型（与张量归约
+ * 一致）"; ruling docs/handover/reviews/reduced-precision.md item (d)). For an f32 array the
+ * additions happen in f64 and the result is rounded into f32 exactly once — not after every step,
+ * and not in f32. The tensor sum over an axis follows the same rule (modules/tensor/kernels/
+ * reduce.cpp: double accumulator, one rounding when the element is stored), so the array path and
+ * the tensor path answer the same bits for the same elements.
+ *
+ * Two vectors make the difference visible, and neither is a friendly handful of numbers:
+ *
+ *   A: 2^24 followed by 1025 ones. The exact sum is 16778241. A fold with an f32 accumulator
+ *      stops at 16777216 (2^24 + 1 rounds back to 2^24 at every step), while one rounding of the
+ *      f64 sum gives the halfway value 16778241 its even neighbour 16778240 (ties to even).
+ *   B: 4096 elements, 2^24 then 1.0 and 0.5 alternating: exact 16780287, f32 fold 16777216,
+ *      one rounding 16780288.
+ *
+ * The per-step f32 fold is written out below (`foldF32`), so the case also proves *which* of the
+ * two rules the library follows rather than only that some number was produced: a value that is
+ * equal under both rules would prove nothing.
+ */
+module array_sum_rounding
+
+import { sum as array_sum } from array
+import { Tensor, new, reshape, sum as tensor_sum, to_bytes } from tensor
+import { to_array } from bytes
+
+/// The same elements widened to f64. `array_sum` over an f64 array accumulates in f64 (an f64
+/// accumulator is the f64 rule already), so this is the independent f64 reference for the vector.
+func widened(xs: f32[]): f64[] {
+    return xs->map<(x: f32) => float(x)>
+}
+
+/// The fold written with an f32 accumulator: the accumulator's type is f32, so every addition
+/// rounds — this is what "round after every step" means, and what `array_sum` did for an f32
+/// array before the ruling's item (d).
+func foldF32(xs: f32[]): f32 {
+    return xs->reduce<(acc: f32, item: f32): f32 => acc + item, f32(0.0)>
+}
+
+/// The four bytes of one f32 value, read back through a one-element f32 tensor.
+func bitsOf(value: f32): int[] {
+    let one: f32[] = [value]
+    return to_array(to_bytes(new(one)))
+}
+
+func sameBits(a: int[], b: int[]): bool {
+    return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3]
+}
+
+func main(): int sync {
+    let a = range(0, 1026)->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
+    let b = range(0, 4096)
+                ->map<(i: int) => if i == 0 then f32(16777216.0)
+                                  else if i % 2 == 0 then f32(1.0) else f32(0.5)>
+
+    let sumA = array_sum(a)
+    let refA = array_sum(widened(a))
+    let foldA = foldF32(a)
+    // The ruling's rule, as a property of the value: the answer is the f64 sum rounded once.
+    let onceA = sumA == f32(refA)
+    // And it is not the per-step f32 fold: without this the case would also pass under the old
+    // rule for a vector where the two agree.
+    let differsA = sumA != foldA
+
+    let sumB = array_sum(b)
+    let refB = array_sum(widened(b))
+    let foldB = foldF32(b)
+    let onceB = sumB == f32(refB)
+    let differsB = sumB != foldB
+
+    // The tensor path over the same elements: sum(t, axis 1) keeps the element type f32 and
+    // rounds once when it stores (reduce.cpp), so its bytes are the array path's bytes.
+    let tensorA = to_array(to_bytes(tensor_sum(reshape(new(a), [1, 1026]), 1, true)))
+    let tensorB = to_array(to_bytes(tensor_sum(reshape(new(b), [1, 4096]), 1, true)))
+    let agreesA = sameBits(bitsOf(sumA), tensorA)
+    let agreesB = sameBits(bitsOf(sumB), tensorB)
+
+    println("A array sum")
+    println(sumA)
+    println("A f64 reference")
+    println(refA)
+    println("A per-step f32 fold")
+    println(foldA)
+    println("A array bytes")
+    println(bitsOf(sumA))
+    println("A tensor bytes")
+    println(tensorA)
+    println("B array sum")
+    println(sumB)
+    println("B f64 reference")
+    println(refB)
+    println("B per-step f32 fold")
+    println(foldB)
+    println("B array bytes")
+    println(bitsOf(sumB))
+    println("B tensor bytes")
+    println(tensorB)
+    'round once: {} {}'->format<onceA, onceB>->println
+    'differs from the per-step fold: {} {}'->format<differsA, differsB>->println
+    'tensor agrees: {} {}'->format<agreesA, agreesB>->println
+
+    return if onceA && onceB && differsA && differsB && agreesA && agreesB then 0 else 1
+}

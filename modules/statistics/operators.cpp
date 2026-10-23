@@ -1,6 +1,18 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
+/*
+ * The statistics operators (`mean`, `stdev`, `variance`, `median`, `quantile`), which answer a
+ * Camel float whatever the array's element type is (stdlib/statistics.cml).
+ *
+ * The accumulation type is f64 (`double sum`, `double sum_sq`, `double m` below) for every
+ * element type, and the answer is that accumulator divided once: no element is accumulated at a
+ * width narrower than f64 and no result is rounded back into a narrow type, so the rule of
+ * design principles 7.3 and ruling reduced-precision.md (d) — a floating reduction accumulates in
+ * f64 and rounds once into the element type it returns — holds here with nothing to change (the
+ * element type these return is f64 itself).
+ */
+
 #include "operators.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
