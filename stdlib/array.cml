@@ -160,9 +160,9 @@ export func count::<T>(xs: T[]): int {
 
 // A reduction of floating-point elements follows a rule of the language, not a choice of this
 // module: it returns the element type and accumulates in f64, rounding once at the end (design
-// principles 7.3: "浮点数组的归约在 f64 中累加、舍入一次，返回元素类型（与张量归约一致）"; ruling
-// docs/handover/reviews/reduced-precision.md item (d), which states the same rule for an f32
-// array). Writing the f64 accumulator and the single conversion back into the element type is
+// principles 7.3: "浮点数组的归约在 f64 中累加、舍入一次，返回元素类型（与张量归约一致）"),
+// and the rule is the same for an f32 array. Writing the f64 accumulator and the single
+// conversion back into the element type is
 // what makes it a definition rather than a precision the compiler chose: the additions the
 // source asks for are f64 additions, so nothing here is an f32 accumulation that the compiler
 // raised, and `change_precision` (7.2, which governs what the compiler changes) is neither

@@ -11,16 +11,16 @@
 // module-level values are computed before the pass runs. It may import modules written in C++ and
 // libraries written in Camel (for example `array`); the imports are declared and built with it.
 //
-// The declarations of the operators of the C++ module `modules/graph` (design principles 6.4;
-// handover H19, step 10). This file is the one source of the fixed signatures a declaration can
+// The declarations of the operators of the C++ module `modules/graph` (design principles 6.4).
+// This file is the one source of the fixed signatures a declaration can
 // carry: the C++ side keeps the kernels, the executor, the handles and the purity of every
 // operator. Two shapes are not declarations:
 //   - the computed signatures (`program_of`, `graph_of`, `open_function`, `to_function`) have the
 //     type of a function value, which C++ computes from the argument. Their reference entries are
-//     in `stdlib/signatures/graph.cml`, named by the module's `computed:` field (handover H180).
+//     in `stdlib/signatures/graph.cml`, named by the module's `computed:` field.
 //     A declaration generic over `F` would accept every type, and a call the operator must refuse
 //     would pass the check (standard library conventions 2). `constant` and `add_constant` take a
-//     sample's type and are written out per sample type instead (handover H202).
+//     sample's type and are written out per sample type instead.
 //   - `operator ==` is declared as the reserved group `__eq__`. `operator !=` cannot be declared
 //     (design principles 4.3: an overload of `==` gives it, and `operator !=` is
 //     OperatorNotOverloadable), and the compiler negates a Camel overload of `==`, not a native

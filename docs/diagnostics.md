@@ -1202,19 +1202,31 @@ No matching function found for argument types: {0}.
 Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads: {1}
 ```
 
-**Example** (`test/cases/compile/array_shape/err_literal_length.cml`, run as `camel test/cases/compile/array_shape/err_literal_length.cml std::nvm`)
+**Example** (`test/cases/modules/optim/unknown_optimizer.cml`, run as `camel test/cases/modules/optim/unknown_optimizer.cml`)
 
 ```camel
-// Three elements written where the parameter states four: the literal's elements are known here,
-// so the length is decided here rather than at the call.
-module array_shape_err_literal_length
+module optim_unknown_optimizer
 
-func count(x: f32[4]): int {
-    return len(x)
+import { Tensor, full } from tensor
+import { init } from optim
+
+type Unknown = { rate: float }
+
+type Model = { w: Tensor }
+
+func model_at(): Model {
+    return { w: full([4], f32(0.5)) }
+}
+
+func init_unknown(): int {
+    let opt: Unknown = { rate: 0.1 }
+    let state = init(opt, model_at())
+    return state.step
 }
 
 func main(): int sync {
-    println(count([1.0, 2.0, 3.0]))
+    let steps = init_unknown()
+    'optim unknown optimizer init steps={}' ->format<steps> ->println
     return 0
 }
 ```

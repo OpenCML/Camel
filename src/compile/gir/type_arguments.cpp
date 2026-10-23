@@ -8,6 +8,7 @@
 #include "camel/core/data/primary.h"
 #include "camel/utils/str.h"
 #include <algorithm>
+#include <unordered_set>
 #include <utility>
 
 namespace camel::compile::gir {
@@ -16,7 +17,31 @@ using namespace core::error;
 
 FunctionType *Builder::signatureForArgumentContext(node_handle_t target) const {
     if (const auto generic = genericDrefs_.find(target); generic != genericDrefs_.end()) {
-        return generic->second->funcType;
+        // A name with several generic functions gives the arguments a type only when every
+        // overload declares the same parameters; a set whose entries differ says nothing about
+        // which one a call means, exactly as an operator set whose entries differ does.
+        const std::vector<generic_template_ptr_t> candidates = genericOverloadsOf(target);
+        if (candidates.size() > 1) {
+            const FunctionType *first = candidates.front()->funcType;
+            for (const auto &candidate : candidates) {
+                const FunctionType *other = candidate->funcType;
+                if (other->withTypesCount() != first->withTypesCount() ||
+                    other->normTypesCount() != first->normTypesCount()) {
+                    return nullptr;
+                }
+                for (size_t i = 0; i < first->withTypesCount(); ++i) {
+                    if (!other->withTypeAt(i)->equals(first->withTypeAt(i))) {
+                        return nullptr;
+                    }
+                }
+                for (size_t i = 0; i < first->normTypesCount(); ++i) {
+                    if (!other->normTypeAt(i)->equals(first->normTypeAt(i))) {
+                        return nullptr;
+                    }
+                }
+            }
+        }
+        return candidates.empty() ? nullptr : candidates.front()->funcType;
     }
     if (nodeTypeOf(target)->code() == TypeCode::Function) {
         return static_cast<FunctionType *>(nodeTypeOf(target));
@@ -98,7 +123,54 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
         types.push_back(resolveTypeNode(gct->at(i)->dataType(), gct->at(i)));
     }
     if (const auto found = genericDrefs_.find(target); found != genericDrefs_.end()) {
-        const auto tmpl = found->second;
+        // The explicit types go to one function, so they choose among the overloads of the
+        // name when it has several: the ones whose type parameters are exactly the names given
+        // (design principles 4.4). A name with one generic function is that function.
+        generic_template_ptr_t tmpl = found->second.one();
+        if (const std::vector<generic_template_ptr_t> candidates = genericOverloadsOf(target);
+            candidates.size() > 1) {
+            std::vector<generic_template_ptr_t> fits;
+            for (const auto &candidate : candidates) {
+                const std::vector<std::string> names = typeParameterNames(candidate);
+                if (names.size() != types.size()) {
+                    continue;
+                }
+                if (given.empty()) {
+                    fits.push_back(candidate); // positional: the count is what can be checked
+                    continue;
+                }
+                std::unordered_set<std::string> declared(names.begin(), names.end());
+                const bool allNamed = std::ranges::all_of(
+                    given, [&](const std::string &name) { return declared.contains(name); });
+                if (allNamed) {
+                    fits.push_back(candidate);
+                }
+            }
+            if (fits.size() != 1) {
+                std::string listed;
+                for (const auto &candidate : candidates) {
+                    listed += (listed.empty() ? "" : ", ") + candidate->name +
+                              candidate->funcType->toString();
+                }
+                diags_->of(SemanticDiag::GenericArgumentsMismatch)
+                    .atOrigin(gct->origin())
+                    .commit(
+                        found->second.one()->name,
+                        "explicit type arguments",
+                        fits.empty() ? std::format(
+                                           "no overload of the name takes these {} type "
+                                           "argument(s); the candidates are {}",
+                                           types.size(),
+                                           listed)
+                                     : std::format(
+                                           "more than one overload takes these type arguments: "
+                                           "{}",
+                                           listed),
+                        found->second.one()->funcType->toString());
+                throw BuildAbortException();
+            }
+            tmpl = fits.front();
+        }
         std::vector<std::string> names = typeParameterNames(tmpl);
         if (!given.empty()) {
             // By name: each type variable of the signature once, in any order.

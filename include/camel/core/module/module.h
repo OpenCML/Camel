@@ -67,11 +67,14 @@ class Entity {
     using graph_payload_t     = std::shared_ptr<camel::compile::gir::DraftGraphBuilder>;
     using graph_set_payload_t = std::vector<graph_payload_t>;
     using graph_set_ptr_t     = std::shared_ptr<graph_set_payload_t>;
-    /// A generic function exported by a module written in Camel: the template its instances
-    /// are built from, opaque outside the GIR builder. The importing module builds the
-    /// instances (DESIGN-QUESTION(generic-export)).
+    /// The generic functions exported by a module written in Camel under one name: the list of the
+    /// templates their instances are built from, opaque outside the GIR builder. A name declared
+    /// once has a list of one template, a name with several generic functions (`func id::<T>` and
+    /// `func id::<T, U>` are overloads, design principles 4.4) has all of them in declaration
+    /// order, and the importing module builds the instances of the one a call selects
+    /// (DESIGN-QUESTION(generic-export)).
     struct generic_payload_t {
-        std::shared_ptr<void> tmpl;
+        std::shared_ptr<void> tmpls;
     };
     using storage_t = std::variant<
         node_payload_t, graph_set_ptr_t, oper_group_ptr_t, graph_payload_t, generic_payload_t,

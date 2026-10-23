@@ -769,12 +769,13 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(e)) {
             // A generic function of another module: like a local one it is a marker until a
             // call or the position it stands in chooses the instance, which is built in this
-            // module (instantiateGeneric).
+            // module (instantiateGeneric). A name the other module declares as several generic
+            // functions brings all of them, and a call takes the one its arguments fit.
             node_handle_t drefNode = graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
                     std::make_shared<graph_set_t>()});
-            genericDrefs_[drefNode] = std::static_pointer_cast<GenericTemplate>(
-                camel::core::module::detail::EntityAccess::genericTemplate(e));
+            genericDrefs_[drefNode] = generic_ref_t(std::make_shared<GenericGroup>(
+                genericTemplatesOfEntity(e)));
             registerNodeOrigin(context_, drefNode, gct, "gir.dref.generic");
             LEAVE("DREF");
             return drefNode;
@@ -1198,7 +1199,8 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     // have yet, and a set of overloads has no single value at all.
     const auto restInfo = genericDrefs_.find(targetNode);
     const bool restCall = restInfo != genericDrefs_.end() &&
-                          restInfo->second->funcType->hasRest();
+                          restInfo->second.one() != nullptr &&
+                          restInfo->second.one()->funcType->hasRest();
     const auto isCallableName = [&](node_handle_t node) {
         if (genericDrefs_.contains(node)) {
             return true;

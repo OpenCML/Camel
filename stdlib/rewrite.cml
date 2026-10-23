@@ -6,7 +6,7 @@
  * values to a `Program`, `check` tests rules on random programs, and the four readers report a
  * `Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
  * round budget explicit and the cost kept: it answers a `Run`, the program and what the
- * application cost (H226). Its `explain` with parameter opens the attribution record; `explain`
+ * application cost. Its `explain` with parameter opens the attribution record; `explain`
  * prints the shortest chain between two values and `explain_all` every rewrite that was made,
  * each with the rule, round, graph and nodes (rewrite design 8.7); `why_not` says why a rule did
  * not fire at a value. A rule that stops a rewrite without changing the program is a fault,
@@ -19,7 +19,7 @@
  */
 
 // The declarations of the callable operators of the C++ module `modules/rewrite` (design
-// principles 6.4; handover H19, step 10; H183; H226). This file is the one source of their
+// principles 6.4). This file is the one source of their
 // signatures; the C++ side keeps the kernels, the executor and the purity.
 //
 // `Program` is the graph module's type, so the declarations import it; `Rule` and `Proof` are
@@ -69,7 +69,7 @@ export func check(rules: Rule[], samples: int, seed: int): string
 /// What one application of a rule set produced and cost: the program it produced, the rewrites it
 /// applied, the rounds it made (the last one applied nothing at a fixpoint), the nodes the matcher
 /// visited, the nodes it erased as no longer read, whether the last round reached a fixpoint, and
-/// the wall time in seconds (H226). `proof` is the attribution of the application when `run` was
+/// the wall time in seconds. `proof` is the attribution of the application when `run` was
 /// asked to record it, and null otherwise (rewrite design 8.7).
 export type Run<F> = {
     result: F,
@@ -84,8 +84,8 @@ export type Run<F> = {
 
 /// Applies `rules` to `p` one way, for at most `rounds` rounds, and gives the program it produced
 /// and what the application cost. This is `rewrite` with the round budget explicit and the cost
-/// kept (H226). The rule set, the budget and the choices are configuration, so they are `with`
-/// parameters, written at the call (design principles 4.4; handover H235): `p->run<rules>`,
+/// kept. The rule set, the budget and the choices are configuration, so they are `with`
+/// parameters, written at the call (design principles 4.4): `p->run<rules>`,
 /// `p->run<rules, explain: true>`, `p->run<rules, rounds: 8, strict: true>`. The first one has no
 /// default and must be written; `rounds` defaults to 16 and `strict` and `explain` to false.
 /// `explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back

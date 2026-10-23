@@ -1,0 +1,30 @@
+/**
+ * An optimization that is neither `Sgd` nor `Adam` is not one this module knows: `init` has no
+ * overload for it, so the call is refused when the program is compiled. The type used to be
+ * accepted whatever it was and answered with the `adam` state's shape, which is the fallback this
+ * rewrite deleted; there is no other optimizer to fall back to.
+ */
+module optim_unknown_optimizer
+
+import { Tensor, full } from tensor
+import { init } from optim
+
+type Unknown = { rate: float }
+
+type Model = { w: Tensor }
+
+func model_at(): Model {
+    return { w: full([4], f32(0.5)) }
+}
+
+func init_unknown(): int {
+    let opt: Unknown = { rate: 0.1 }
+    let state = init(opt, model_at())
+    return state.step
+}
+
+func main(): int sync {
+    let steps = init_unknown()
+    'optim unknown optimizer init steps={}' ->format<steps> ->println
+    return 0
+}

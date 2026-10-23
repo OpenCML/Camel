@@ -1,0 +1,32 @@
+/**
+ * Two generic overloads of one name that use the same parameter name each, both called in one
+ * module. Each call answers from its own declaration (`sgd=1` from `init<Sgd>`'s state, `adam=2`
+ * and `m=0.9` from `init<Adam>`'s), so the two instances keep their own parameters: an instance's
+ * scope is qualified by its template, because `Scope::enter(name)` reuses a child of that name and
+ * a shared scope resolved `opt` of the second instance to the first instance's node of the other
+ * type.
+ */
+module generic_overloads_shared_param_name
+
+type Sgd = { rate: float }
+type Adam = { beta1: float, beta2: float }
+
+type SgdState = { steps: int, m: float }
+type AdamState = { steps: int, m: float }
+
+func init::<P>(opt: Sgd, params: P): SgdState {
+    return { steps: 1, m: 0.0 }
+}
+
+func init::<P>(opt: Adam, params: P): AdamState {
+    return { steps: 2, m: opt.beta1 }
+}
+
+func main(): int sync {
+    let sgd: Sgd = { rate: 0.1 }
+    let adam: Adam = { beta1: 0.9, beta2: 0.999 }
+    let a = init(sgd, (1.0, 2.0))
+    let b = init(adam, (1.0, 2.0))
+    'generic_overloads sgd={} adam={} m={}'->format<a.steps, b.steps, b.m>->println
+    return 0
+}

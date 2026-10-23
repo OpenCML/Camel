@@ -851,7 +851,7 @@ const std::vector<std::optional<Builder::ParameterDefaultValue>> *Builder::defau
     // A generic function: its declaration is the template, and every instance takes the same
     // defaults.
     if (const auto generic = genericDrefs_.find(callee); generic != genericDrefs_.end()) {
-        return defaultsOf(generic->second.get());
+        return defaultsOf(generic->second.one().get());
     }
     if (!nodeIsKind(callee, runtime::GCNodeKind::Dref)) {
         return nullptr;
