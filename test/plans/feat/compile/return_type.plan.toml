@@ -89,4 +89,7 @@ const out = input.normalized.stdout.trim()
 assert(out === '19 0', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 20000
+# 40 s: a compile-time case (a return nested 20 deep, which used to be lowered 2^20 times).
+# Measured 3.5 s in a gate run at -Jobs 8 and 5.4 s in a slower one; four times the slower
+# measurement is 21.6 s, so the old 20 s was at the margin, and 40 s is 7.4x the slow one.
+timeout_ms = 40000
