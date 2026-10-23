@@ -514,12 +514,22 @@ void validatePlan(const Program &p, InputBindings bindings) {
                 launch.implementation == "row_region" || launch.implementation == "cublas_bf16",
             "unknown implementation");
         if (launch.implementation == "cublas_bf16") {
+            // The mixed GEMM is the one computation the compiler moves to a lower precision on its
+            // own, so its refusal names the permission the node is missing instead of saying "mixed
+            // GEMM permissions" -- the author's ruling of 2026-10-23
+            // (docs/handover/reviews/questions-2026-10-23.md, "precision-diagnostic-removal"):
+            // "`tiles` 拒绝"编译器引入的低精度"时，消息点名缺的是哪个许可（`change_precision` 等），
+            // 而不是笼统的 "mixed GEMM permissions"。"
             constexpr auto mixed =
                 core::sem::kReassociate | core::sem::kChangePrecision | core::sem::kFiniteMath;
+            require(p.nodes[launch.node].op == "matmul", "cublas_bf16 stage is not a matmul");
+            const auto permissions = core::sem::PermissionMask(p.nodes[launch.node].permissions);
+            const auto missing =
+                core::sem::PermissionMask(mixed & ~uint32_t(permissions));
             require(
-                p.nodes[launch.node].op == "matmul" &&
-                    (p.nodes[launch.node].permissions & mixed) == mixed,
-                "mixed GEMM permissions");
+                missing == core::sem::kNoPermissions,
+                "cublas_bf16 needs " + core::sem::permissionsText(mixed) +
+                    " on the matmul node and is missing " + core::sem::permissionsText(missing));
         }
         if (launch.implementation == "row_region") {
             const auto region = kernel::rowKernel(p);
