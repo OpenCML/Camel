@@ -1202,17 +1202,19 @@ No matching function found for argument types: {0}.
 Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads: {1}
 ```
 
-**Example** (`test/cases/compile/collections/err_subscript_key.cml`, run as `camel test/cases/compile/collections/err_subscript_key.cml`)
+**Example** (`test/cases/compile/array_shape/err_literal_length.cml`, run as `camel test/cases/compile/array_shape/err_literal_length.cml std::nvm`)
 
 ```camel
-module main
+// Three elements written where the parameter states four: the literal's elements are known here,
+// so the length is decided here rather than at the call.
+module array_shape_err_literal_length
 
-// The subscript of a map takes a key of the key type.
+func count(x: f32[4]): int {
+    return len(x)
+}
 
 func main(): int sync {
-    let m = [("a", 1)] as Map<string, int>
-    println(m[1] ?? 0)
-    println("never printed")
+    println(count([1.0, 2.0, 3.0]))
     return 0
 }
 ```
@@ -1269,16 +1271,21 @@ Return type '{0}' does not match the function's declared return type '{1}'.
 Ensure that the value returned from the function matches the type specified in the function signature: {2}. No implicit conversion is applied: convert explicitly, for example float(x) for a number or 'x as T' for a module type.
 ```
 
-**Example** (`test/cases/compile/return_type/string_as_int.cml`, run as `camel test/cases/compile/return_type/string_as_int.cml`)
+**Example** (`test/cases/compile/array_shape/err_return_shape.cml`, run as `camel test/cases/compile/array_shape/err_return_shape.cml std::nvm`)
 
 ```camel
-module return_string_as_int
-func f(): int {
-    return 'abc'
+// A return type that states a shape promises it: the body must give a value of that shape. The
+// body here returns its parameter, whose extent is the name `n` and not the constant 2 the return
+// type declares, so the two shapes do not agree.
+module array_shape_err_return_shape
+
+func firstTwo(x: f32[n]): f32[2] {
+    return x
 }
+
 func main(): int sync {
-    println('ran')
-    println(f())
+    let v: f32[3] = [1.0, 2.0, 3.0]
+    println(len(firstTwo(v)))
     return 0
 }
 ```
@@ -3524,16 +3531,24 @@ Argument {0} has extent {1}, but the dimensions the earlier arguments bound do n
 The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to.
 ```
 
-**Example** (`test/cases/modules/tensor/named_dims/err_mismatch.cml`, run as `camel test/cases/modules/tensor/named_dims/err_mismatch.cml`)
+**Example** (`test/cases/compile/array_shape/err_call_mismatch.cml`, run as `camel test/cases/compile/array_shape/err_call_mismatch.cml std::nvm`)
 
 ```camel
-module named_dims_err_mismatch
-import { Tensor, ones, sum } from tensor
-func pair(a: Tensor<f32, [n]>, b: Tensor<f32, [n]>): float {
-    return sum(a) + sum(b)
+// A dimension name is one value for the whole signature: the first argument's extent is what `n`
+// is, and the second argument must be that same extent. Each argument states its extent where it
+// is made, which is the form the call's binding reads.
+module array_shape_err_call_mismatch
+
+func dot(x: f32[n], y: f32[n]): f32 {
+    return x[0] + y[0]
 }
+
 func main(): int sync {
-    println(pair(ones([3]), ones([4])))
+    let v: f32[] = [1.0, 2.0, 3.0]
+    let w: f32[] = [4.0, 5.0]
+    let a = v as f32[3]
+    let b = w as f32[2]
+    println(dot(a, b))
     return 0
 }
 ```
