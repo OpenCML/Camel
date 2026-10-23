@@ -145,8 +145,10 @@ cannot drift apart.
 
 ## 6.1 What a dump draws
 
-`std::gir`, `std::rgir` and `std::jgir` declare `acceptsWritings()`, so the driver hands them the
-whole state and they read it without editing it: `graphWritings(program, graph, model, ctx)`
+`std::gir`, `std::rgir` and `std::jgir` declare `acceptsWritings()` — and so do the dumps that
+share their pass, `std::gir_regions`, `std::rgir_regions`, `std::agir` and `std::argir` — so the
+driver hands them the whole state and they read it without editing it:
+`graphWritings(program, graph, model, ctx)`
 decodes a copy of the graph and asks `DraftWritings::choiceByCost`, the cost fixed point
 extraction itself applies. One implementation reads what extraction would do, so the picture and
 the pipeline cannot disagree about it. A graph with one writing per value prints none of this, so
