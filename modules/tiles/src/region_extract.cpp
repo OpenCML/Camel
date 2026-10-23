@@ -4,6 +4,7 @@
 // Reify a validated operator region as an ordinary Camel function draft.
 
 #include "camel/core/mm/gen.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/core/tags.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/func.h"
@@ -75,13 +76,17 @@ std::vector<rt::gc_node_ref_t> copyLoopNodes(
         if (node->kind == rt::GCNodeKind::Port) {
             sourceToNode[ref] = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
         } else {
+            const auto permissions = camel::core::tag::effectivePermissions(
+                source,
+                ref,
+                core::sem::NumericPolicy::explicitOnly());
             sourceToNode[ref] = draft.addNode(
                 {.dataIndex    = draft.allocateRuntimeSlot(type),
                  .dataType     = type,
                  .kind         = node->kind,
                  .runtimeFlags = node->flags,
                  .origin       = source.nodeOrigin(ref),
-                 .permissions  = camel::core::tag::factsOf(source, ref).permissions,
+                 .permissions  = permissions,
                  .payload      = source.nodePayloadBytes(ref)});
         }
         draft.setNodeOrigin(sourceToNode[ref], source.nodeOrigin(ref));
@@ -201,14 +206,18 @@ RegionDraft extractRegion(const rt::GCGraph &source, const Region &region) {
             for (auto input : source.withInputsOf(ref))
                 captures.push_back(mapped(input));
         }
-        auto *type              = typeOf(source, id);
+        auto *type             = typeOf(source, id);
+        const auto permissions = camel::core::tag::effectivePermissions(
+            source,
+            ref,
+            core::sem::NumericPolicy::explicitOnly());
         result.sourceToNode[id] = draft.addNode(
             {.dataIndex    = draft.allocateRuntimeSlot(type),
              .dataType     = type,
              .kind         = node->kind,
              .runtimeFlags = node->flags,
              .origin       = source.nodeOrigin(ref),
-             .permissions  = camel::core::tag::factsOf(source, ref).permissions,
+             .permissions  = permissions,
              .payload      = source.nodePayloadBytes(ref),
              .normInputs   = inputs,
              .withInputs   = captures});

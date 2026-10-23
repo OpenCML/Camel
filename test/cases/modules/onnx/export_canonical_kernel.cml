@@ -1,0 +1,23 @@
+/**
+ * Refused: `tensor::fuse safe_fp=true` records `tensor.kernel=canonical` on the product (design
+ * principles 7.4: the canonical algorithm, bit for bit). An ONNX MatMul leaves the accumulation
+ * order to the target's kernel, so the model could not keep that promise. The export refuses at
+ * the recorded attribute and writes no model, instead of dropping the choice.
+ */
+module export_canonical_kernel
+import { Tensor, reshape, sum } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+func net(x: Tensor): Tensor {
+    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[], [3, 2])
+    return x @ w
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[], [2, 3])
+    println(sum(net(x)))
+    export_model((x: Tensor): Tensor => net(x), x, get_env('ONNX_OUT'))
+    println('model written')
+    return 0
+}

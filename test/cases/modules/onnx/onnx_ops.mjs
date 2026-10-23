@@ -69,12 +69,17 @@ const dimsOf = (buf, info) => {
     return dims
 }
 
-// ModelProto.graph = 7; GraphProto: node = 1, initializer = 5, input = 11, output = 12;
+// ModelProto.graph = 7; ModelProto.metadata_props = 14 (key = 1, value = 2);
+// GraphProto: node = 1, initializer = 5, input = 11, output = 12;
 // NodeProto.op_type = 4; TensorProto.name = 8; ValueInfoProto.name = 1.
 export function readOnnxModel(path) {
     const buf = fs.readFileSync(path)
-    const model = { ops: [], initializers: [], inputs: [], inputDims: [], outputs: [] }
+    const model = { ops: [], initializers: [], inputs: [], inputDims: [], outputs: [], metadata: {} }
     for (const f of fields(buf)) {
+        if (f.field === 14 && f.wire === 2) {
+            model.metadata[firstString(buf, f, 1)] = firstString(buf, f, 2)
+            continue
+        }
         if (f.field !== 7 || f.wire !== 2) continue
         for (const g of fields(buf, f.start, f.end)) {
             if (g.wire !== 2) continue

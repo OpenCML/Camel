@@ -3,6 +3,7 @@
 
 // Classify static core-indexed operations, then partition the complete dependency DAG.
 
+#include "camel/core/operator_semantics.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/composite/tuple.h"
@@ -104,12 +105,14 @@ std::string eligibility(
     Program program;
     program.contracts = {
         {.uri = std::string(table.uri(oper)), .key = decl->key, .declaration = decl}};
+    const auto permissions =
+        camel::core::tag::effectivePermissions(graph, id, core::sem::NumericPolicy::explicitOnly());
     Node candidate{
         .op          = found->second,
         .shape       = *output,
         .inputs      = {},
         .dtype       = node->dataType()->code() == ty::TypeCode::Float64 ? DType::F64 : DType::F32,
-        .permissions = camel::core::tag::factsOf(graph, id).permissions,
+        .permissions = permissions,
         .semantic    = 0,
         .indexing    = inst};
     const auto inputs = graph.normInputsOf(id);
@@ -307,9 +310,12 @@ inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::Fa
         out << ",\"result_arity\":" << region.outputs.size();
         out << ",\"extracted_nodes\":" << extracted.graph->nodeCount();
         for (auto id : region.members) {
-            const auto *copy = extracted.graph->header(extracted.sourceToNode[id]);
-            if (copy->origin != graph.nodeOrigin(id) ||
-                copy->permissions != camel::core::tag::factsOf(graph, id).permissions ||
+            const auto *copy       = extracted.graph->header(extracted.sourceToNode[id]);
+            const auto permissions = camel::core::tag::effectivePermissions(
+                graph,
+                id,
+                core::sem::NumericPolicy::explicitOnly());
+            if (copy->origin != graph.nodeOrigin(id) || copy->permissions != permissions ||
                 copy->dataType != graph.node(id)->dataType())
                 throw std::runtime_error("region extraction lost source metadata");
         }

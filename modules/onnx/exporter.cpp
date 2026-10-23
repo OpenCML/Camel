@@ -19,7 +19,9 @@
 
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm/root_handle.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
@@ -237,6 +239,9 @@ class Evaluator {
 
     Value eval(Activation &act, gc_node_ref_t ref);
     Value evalNode(Activation &act, gc_node_ref_t ref);
+    /// Records what `ref` carries in the model's metadata, or refuses an attribute or numeric
+    /// permission ONNX cannot honour (the fate table, camel/core/node_attrs.h).
+    void recordFates(GCGraph *g, gc_node_ref_t ref);
     /// The value of the CAST node `ref` applied to `src` (its evaluated source): performed now
     /// for a constant, a no-op for a struct conversion of one layout, an ONNX Cast for a
     /// model-dependent number, refused otherwise.
@@ -658,6 +663,109 @@ void Evaluator::unsupported(Activation &act, std::string_view what, ExportError:
         kind);
 }
 
+void Evaluator::recordFates(GCGraph *g, gc_node_ref_t ref) {
+    namespace attr                        = camel::core::attr;
+    namespace sem                         = camel::core::sem;
+    const attr::AttrSetId set             = g->nodeAttrs(ref);
+    const sem::PermissionMask permissions = g->nodePermissions(ref);
+    if (set == attr::kNoAttrs && permissions == sem::kNoPermissions) {
+        return;
+    }
+    const uint64_t origin      = g->nodeOrigin(ref);
+    const std::string location = locationOf(origin);
+    const std::string_view uri = operUriOf(g, ref);
+    const std::string where =
+        uri.empty()
+            ? std::format("node {} of '{}'", static_cast<uint64_t>(ref), g->name())
+            : std::format("'{}' (node {} of '{}')", uri, static_cast<uint64_t>(ref), g->name());
+    const auto fail = [&](const std::string &what) { throw ExportError(what, location, origin); };
+
+    std::string attrsText;
+    for (const attr::Attr &a : attr::entries(set)) {
+        const std::string name(attr::keyName(a.key));
+        const std::string value   = attr::fateValueText(a.value);
+        const std::string spelled = value.empty() ? name : std::format("{}={}", name, value);
+        const attr::FateRow *row  = attr::fateOf(name, value);
+        if (row == nullptr) {
+            fail(
+                std::format(
+                    "attribute '{}' on {} is not classified: no consumer's fate is recorded for "
+                    "it, "
+                    "and an attribute a consumer does not name would be dropped silently; add it "
+                    "to "
+                    "the fate table (camel/core/node_attrs.h) for the interpreter, the dumps, ONNX "
+                    "and Tiles",
+                    spelled,
+                    where));
+        }
+        if (row->onnx == attr::Fate::Refused) {
+            fail(
+                std::format(
+                    "attribute '{}' on {} cannot be exported: {}",
+                    spelled,
+                    where,
+                    row->note));
+        }
+        if (row->onnx == attr::Fate::NotOnANode) {
+            fail(
+                std::format(
+                    "attribute '{}' on {} is a declaration fact, not a node attribute; the export "
+                    "cannot record it and will not drop it",
+                    spelled,
+                    where));
+        }
+        if (!attrsText.empty()) {
+            attrsText += ", ";
+        }
+        attrsText += spelled;
+    }
+
+    std::string numericText;
+    for (unsigned bit = 0; bit < 16; ++bit) {
+        const auto permission = static_cast<sem::Permission>(1u << bit);
+        if ((permissions & permission) == 0) {
+            continue;
+        }
+        const std::string_view name = sem::permissionName(permission);
+        if (name.empty()) {
+            fail(
+                std::format(
+                    "numeric permission bit {} on {} has no name, so the export cannot record "
+                    "which "
+                    "relaxation the model was computed under",
+                    bit,
+                    where));
+        }
+        const attr::FateRow *row = attr::fateOf(name, "");
+        if (row == nullptr || row->onnx == attr::Fate::Refused) {
+            fail(
+                std::format(
+                    "numeric permission '{}' on {} cannot be exported: {}",
+                    name,
+                    where,
+                    row ? row->note : "it is not in the fate table"));
+        }
+        if (!numericText.empty()) {
+            numericText += ", ";
+        }
+        numericText += name;
+    }
+
+    std::string recorded = std::format(
+        "graph={} node={} operator={} attrs=\"{}\" numeric=\"{}\"",
+        g->name(),
+        static_cast<uint64_t>(ref),
+        uri.empty() ? "?" : std::string(uri),
+        attrsText,
+        numericText);
+    if (!location.empty()) {
+        recorded += std::format(" location={}", location);
+    }
+    emitter_.addMetadata(
+        std::format("camel.node.{}", emitter_.metadata().size() + 1),
+        std::move(recorded));
+}
+
 Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
     GCGraph *g    = act.graph;
     const auto *n = g->node(ref);
@@ -665,6 +773,7 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
     if (auto bound = act.ports.find(ref); bound != act.ports.end()) {
         return bound->second;
     }
+    recordFates(g, ref);
     switch (n->kind) {
     case GCNodeKind::Data: {
         const auto index = n->dataIndex;
@@ -3974,8 +4083,9 @@ bindInputs(Emitter &emitter, const ExportOptions &options, std::span<const Examp
 
 Model finishModel(Emitter &emitter, const ExportOptions &options) {
     Model model;
-    model.graph = std::move(emitter.graph());
-    model.opset = options.opset;
+    model.graph    = std::move(emitter.graph());
+    model.opset    = options.opset;
+    model.metadata = emitter.metadata();
     return model;
 }
 
