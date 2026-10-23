@@ -84,7 +84,21 @@ ParseOutcome parseText(const std::string &path, const std::string &text) {
         outcome.structure = structure.str();
     }
     if (parser.parsed()) {
-        outcome.formatted = Formatter(*parser.tree(), Formatter::Options{}).format();
+        Formatter formatter(*parser.tree(), Formatter::Options{});
+        outcome.formatted = formatter.format();
+        // A comment the formatter could not place: it is written at the end of the file rather than
+        // dropped, and this counts them so that a run which had to do that is not read as a pass.
+        outcome.unplaced = formatter.unplacedCommentCount();
+        // The comment tokens as the formatter has to write them back. The text is the source
+        // spelling, which is what insertComment copies; a comment the formatter drops is a
+        // comment this list holds and `formatted` does not (snapshot.cpp).
+        const syn::TokenBuffer &buffer = parser.tree()->tokens();
+        for (const syn::Token &token : buffer.tokens()) {
+            if (token.kind == TK::LineComment || token.kind == TK::DocComment ||
+                token.kind == TK::BlockComment) {
+                outcome.comments.emplace_back(buffer.text(token));
+            }
+        }
     }
     return outcome;
 }
