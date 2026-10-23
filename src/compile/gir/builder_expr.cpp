@@ -296,8 +296,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // it without one has no element type; say so here, where the type can be written. (A
     // name the compiler made for an element of a literal starts with a digit.)
     if (Type *type = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
-        type != nullptr && type->code() == TypeCode::Array &&
-        tt::as_ptr<ArrayType>(type)->elemType()->code() == TypeCode::Void && !ident.empty() &&
+        type != nullptr && isUntypedArrayType(type) && !ident.empty() &&
         !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
         diags_->of(SemanticDiag::EmptyArrayWithoutType)
             .atOrigin(gct->at(0)->origin())

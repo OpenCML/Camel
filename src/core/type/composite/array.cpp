@@ -705,4 +705,15 @@ bool isNumericArrayType(const Type *type) {
     return array->isNumericUnknown() || isNumericScalarTypeCode(array->elemTypeCode());
 }
 
+bool isUntypedArrayType(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr || array->elemType() == nullptr) {
+        return false;
+    }
+    // The numeric-unknown array's element type is `Void` too — it means "numeric, not fixed yet"
+    // rather than "nobody wrote one" — and it is a complete type of its own, not the `[]` whose
+    // element type every position it stands in fixes.
+    return array->elemType()->code() == TypeCode::Void && !array->isNumericUnknown();
+}
+
 } // namespace camel::core::type

@@ -106,7 +106,7 @@ bool isEmptyArrayLiteral(node_handle_t node) {
     if (type == nullptr || type->code() != TypeCode::Array) {
         return false;
     }
-    if (tt::as_ptr<const ArrayType>(type)->elemType()->code() == TypeCode::Void) {
+    if (isUntypedArrayType(type)) {
         return true; // the untyped `[]`: it has no elements by construction
     }
     if (nodeIsKind(node, runtime::GCNodeKind::Data)) {
@@ -125,14 +125,8 @@ bool isEmptyArrayLiteral(node_handle_t node) {
 
 /// The type of the untyped empty array literal `[]`: an array whose element type nobody wrote.
 /// Its element type is the only thing it leaves open, so every position it stands in fixes it.
-bool isEmptyArrayLiteralType(const Type *type) {
-    if (type == nullptr || type->code() != TypeCode::Array) {
-        return false;
-    }
-    const auto *array = tt::as_ptr<const ArrayType>(type);
-    return array != nullptr && array->elemType() != nullptr &&
-           array->elemType()->code() == TypeCode::Void;
-}
+/// (The numeric-unknown array is not one of these; isUntypedArrayType tells them apart.)
+bool isEmptyArrayLiteralType(const Type *type) { return isUntypedArrayType(type); }
 
 /// Whether a value of this type is a struct or tuple whose parts can be the components of a
 /// loop state (H71). A cell and the tagged forms are representations, not collections of values:
@@ -2110,8 +2104,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
         Type *type         = valueTypeOf(nodeTypeOf(node));
         const bool untyped = type == nullptr || type->code() == TypeCode::Void ||
-                             (type->code() == TypeCode::Array &&
-                              tt::as_ptr<ArrayType>(type)->elemType()->code() == TypeCode::Void);
+                             isUntypedArrayType(type);
         if (untyped) {
             // `loop losses = [] for ... do losses->append<l>`: the element type is the value
             // the body appends, and it is known once the body is built (design principles 5.1,
