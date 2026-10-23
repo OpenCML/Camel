@@ -94,6 +94,98 @@ expect_stdout = "[205, 61]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
+# The rounding itself, on values that separate the rules: an exact halfway value, the largest
+# finite value, and a value above the overflow threshold. The expectations are the properties of
+# correct rounding, decoded from the bytes the case prints, not the kernel's word for it.
+[[tests]]
+name = "bf16_cast_boundaries"
+desc = "A written conversion into bf16 or f16 rounds once to nearest, ties to even, and overflows to infinity instead of flushing: 0.1 stores the nearest value (bf16 0x3DCD, f16 0x2E66); the exact halfway values 1 + 2^-8 and 1 + 2^-11 store 1.0, the even neighbour; 3.3895314e38 stores the largest finite bf16 0x7F7F while 3.4e38 and 65520.0 store +infinity (bf16 0x7F80, f16 0x7C00) rather than the largest finite value; 65504.0 stores the largest finite f16 0x7BFF; and reading any stored element back into f32 is exact. No tag is written anywhere in the case."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/bf16_cast_boundaries.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[205, 61]\n[128, 63]\n[0, 0, 128, 63]\n[127, 127]\n[128, 127]\n[0, 0, 128, 127]\n[102, 46]\n[0, 60]\n[0, 0, 128, 63]\n[255, 123]\n[0, 124]\n[0, 0, 128, 127]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+verify_script = '''
+({ input, assert }) => {
+  // The case prints twelve lines of little-endian bytes: the two bytes of one stored element per
+  // probe, and after the interesting ones, the four bytes of the f32 that element widens to.
+  const lines = input.normalized.stdout.trim().split('\n').map((line) => JSON.parse(line))
+  assert(lines.length === 12, `twelve probes expected, got ${lines.length}`)
+  const [tenthBf, tieBf, tieBfWide, maxBf, overBf, overBfWide,
+         tenthF16, tieF16, tieF16Wide, maxF16, overF16, overF16Wide] = lines
+
+  // A stored element is two bytes in every probe; four would be f32 storage.
+  for (const [label, bytes] of [['bf16 0.1', tenthBf], ['bf16 tie', tieBf], ['bf16 max', maxBf],
+                                ['f16 0.1', tenthF16], ['f16 tie', tieF16], ['f16 max', maxF16]]) {
+    assert(bytes.length === 2, `${label} stores ${bytes.length} bytes, not 2`)
+  }
+
+  const f32 = (bytes) => new DataView(new Uint8Array([...bytes].reverse()).buffer).getFloat32(0, false)
+  const bf16 = (bytes) => new DataView(new Uint8Array([0, 0, bytes[1], bytes[0]]).buffer).getFloat32(0, false)
+  const f16 = (bytes) => {
+    const bits = bytes[0] | (bytes[1] << 8)
+    const sign = (bits & 0x8000) ? -1 : 1
+    const exponent = (bits >> 10) & 0x1f
+    const fraction = bits & 0x3ff
+    if (exponent === 0x1f) return fraction === 0 ? sign * Infinity : NaN
+    if (exponent === 0) return sign * fraction * Math.pow(2, -24)
+    return sign * (1 + fraction / 1024) * Math.pow(2, exponent - 15)
+  }
+  const decode = (kind, bytes) => (kind === 'bf16' ? bf16(bytes) : f16(bytes))
+  const pattern = (bytes) => bytes[0] | (bytes[1] << 8)
+
+  // Correctly rounded: the stored value is at least as close to the input as either neighbour of
+  // the element type, and an exact tie (the halfway value) goes to the neighbour whose
+  // significand is even. A rounding that broke ties away from zero, or that kept f32 precision,
+  // fails here even if the bytes in expect_stdout were changed to match it. The inputs are the
+  // same literals the case writes, as the f32 the element type is asked to hold.
+  const nearest = (label, kind, bytes, input) => {
+    const stored = decode(kind, bytes)
+    assert(Number.isFinite(stored), `${label}: stored ${stored}, which is not finite`)
+    for (const neighbour of [pattern(bytes) - 1, pattern(bytes) + 1]) {
+      const value = decode(kind, [neighbour & 0xff, (neighbour >> 8) & 0xff])
+      if (!Number.isFinite(value)) continue
+      const mine = Math.abs(stored - input)
+      const theirs = Math.abs(value - input)
+      assert(mine <= theirs, `${label}: ${stored} is farther from ${input} than the neighbour ${value}`)
+      if (mine === theirs) {
+        assert((neighbour & 1) !== 0 && (pattern(bytes) & 1) === 0,
+               `${label}: the halfway ${input} must round to the even neighbour, not ${stored}`)
+      }
+    }
+  }
+  nearest('bf16 0.1', 'bf16', tenthBf, Math.fround(0.1))
+  nearest('bf16 tie 1+2^-8', 'bf16', tieBf, Math.fround(1.00390625))
+  nearest('bf16 largest finite', 'bf16', maxBf, Math.fround(3.3895314e38))
+  nearest('f16 0.1', 'f16', tenthF16, Math.fround(0.1))
+  nearest('f16 tie 1+2^-11', 'f16', tieF16, Math.fround(1.00048828125))
+  nearest('f16 largest finite', 'f16', maxF16, Math.fround(65504.0))
+
+  // The two halfway probes stored 1.0 exactly, the lower and even neighbour: 0x3F80 and 0x3C00.
+  assert(pattern(tieBf) === 0x3f80, `the bf16 halfway stored 0x${pattern(tieBf).toString(16)}, not 1.0`)
+  assert(pattern(tieF16) === 0x3c00, `the f16 halfway stored 0x${pattern(tieF16).toString(16)}, not 1.0`)
+
+  // Above the threshold the element stores an infinity (exponent all ones, significand zero),
+  // not the largest finite value and not a wrapped value; the largest finite values stay finite.
+  assert(bf16(overBf) === Infinity, `bf16 3.4e38 stored ${bf16(overBf)}, not +infinity`)
+  assert(f16(overF16) === Infinity, `f16 65520.0 stored ${f16(overF16)}, not +infinity`)
+  assert(Number.isFinite(bf16(maxBf)) && Number.isFinite(f16(maxF16)), 'the largest finite values must not overflow')
+
+  // Widening a stored element is exact: the f32 prints the same value, and the four bytes of a
+  // bf16 element are its two bytes with two zero bytes under them.
+  assert(f32(tieBfWide) === bf16(tieBf), `bf16 [${tieBf}] widened to ${f32(tieBfWide)}, not to ${bf16(tieBf)}`)
+  assert(f32(tieF16Wide) === f16(tieF16), `f16 [${tieF16}] widened to ${f32(tieF16Wide)}, not to ${f16(tieF16)}`)
+  assert(f32(overBfWide) === bf16(overBf) && f32(overF16Wide) === f16(overF16),
+         `an overflowing element widened to ${f32(overBfWide)} / ${f32(overF16Wide)}`)
+  assert(tieBfWide[0] === 0 && tieBfWide[1] === 0 && tieBfWide[2] === tieBf[0] && tieBfWide[3] === tieBf[1],
+         `bf16 [${tieBf}] widened to [${tieBfWide}], which is not the same bits`)
+}
+'''
+
 # A kernel whose declaration is f32 only says so where it is called: it never converts.
 
 [[tests]]
