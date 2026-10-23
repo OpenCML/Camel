@@ -201,6 +201,36 @@ Type *TensorType::unify(Type *other) const {
 
 Type *TensorType::widened() const { return Default(); }
 
+Type *TensorType::literalOperandType() const {
+    // A literal operand beside a tensor is an element of it (`x * 2.0` with `x: Tensor<f32>` is
+    // the f32 product, so no f64 operand stays on the graph): it takes the tensor's element type
+    // (design principles 5.1, H371). A tensor whose element type is open gives none, and the
+    // literal keeps its own type.
+    if (!dtype_) {
+        return nullptr;
+    }
+    switch (*dtype_) {
+    case TypeCode::Int32:
+        return Type::Int32();
+    case TypeCode::Int64:
+        return Type::Int64();
+    case TypeCode::Float32:
+        return Type::Float32();
+    case TypeCode::Float64:
+        return Type::Float64();
+    case TypeCode::BFloat16:
+        return Type::BFloat16();
+    case TypeCode::Float16:
+        return Type::Float16();
+    case TypeCode::Bool:
+        // A bool tensor has no arithmetic of its own: its operators compute in f32 (`mask * 1.0`
+        // reads the mask as numbers), so that is the type a literal beside one takes.
+        return Type::Float32();
+    default:
+        return nullptr;
+    }
+}
+
 CastSafety TensorType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr) {
         return CastSafety::Forbidden;

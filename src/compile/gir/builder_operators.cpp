@@ -2254,13 +2254,44 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 explicitTypes = std::move(typed->second);
                 explicitOperatorTypes_.erase(typed);
             }
-            const auto &res = ops->resolveForCall(
+            auto res = ops->resolveForCall(
                 explicitTypes,
                 expectedResult,
                 withInputTypes,
                 normInputTypes,
                 normStatics,
                 Modifier::None);
+            if (!res.has_value()) {
+                // A literal operand takes the other operand's type in a named operator call too:
+                // `add(x, 2.0)` with an f32 tensor is the f32 sum, as `x * 2.0` already is
+                // (design principles 5.1). Tried only where the first resolution failed, so an
+                // operand of another meaning in the same position - an index, a shape - keeps its
+                // type, and a predicate that still does not fit reports as it always did. The
+                // adapted call is resolved again; when that fails too, the original report stands.
+                std::vector<Argument> retriedInputs = normInputs;
+                type_vec_t retriedTypes            = normInputTypes;
+                adaptLiteralOperands(ops->name(), retriedInputs, retriedTypes, gct, true);
+                if (retriedTypes != normInputTypes) {
+                    std::vector<StaticArg> retriedStatics;
+                    retriedStatics.reserve(retriedInputs.size());
+                    for (const Argument &input : retriedInputs) {
+                        retriedStatics.push_back(staticArgOf(input.node));
+                    }
+                    auto retried = ops->resolveForCall(
+                        explicitTypes,
+                        expectedResult,
+                        withInputTypes,
+                        retriedTypes,
+                        retriedStatics,
+                        Modifier::None);
+                    if (retried.has_value()) {
+                        normInputs     = std::move(retriedInputs);
+                        normInputTypes = std::move(retriedTypes);
+                        normStatics    = std::move(retriedStatics);
+                        res            = retried;
+                    }
+                }
+            }
             if (!res.has_value() && withInputs.empty()) {
                 // `x == null` / `x != null` over a `T?`: the tag of `x`, not a comparison of
                 // two values (design principles 3.8).

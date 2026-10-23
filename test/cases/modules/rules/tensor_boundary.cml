@@ -27,15 +27,15 @@ func mixed_zero(x: Vec): Vec { return x * 3.0 + x * -3.0 }
 
 // ---- The unguarded laws: the same patterns without the conditions ----
 
-rule combine_unguarded(x: Vec, const c1: float, const c2: float) {
+rule combine_unguarded(x: Vec, const c1: f32, const c2: f32) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 
-rule fold_unguarded(x: Vec, const c1: float, const c2: float) {
+rule fold_unguarded(x: Vec, const c1: f32, const c2: f32) {
     (x * c1) * c2 => x * (c1 * c2)
 }
 
-rule mixed_unguarded(x: Vec, const c1: float, const c2: float) {
+rule mixed_unguarded(x: Vec, const c1: f32, const c2: f32) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 

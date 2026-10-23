@@ -145,7 +145,9 @@ class OpDefResolver final : public FuncTypeResolver {
   private:
     std::optional<Type *> infer(const type_vec_t &norm, static_args_t normStatics) const {
         const StaticFacts facts(norm, normStatics);
-        return def_->infer(InferContext(norm, facts.constants, facts.partials));
+        // A call the program wrote: design principles 5.1's literal rule has run, so a scalar of
+        // another type than the element type is a value to report.
+        return def_->infer(InferContext(norm, facts.constants, facts.partials, true));
     }
 
     std::shared_ptr<const OpDef> def_;

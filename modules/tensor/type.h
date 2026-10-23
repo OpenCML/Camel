@@ -85,6 +85,10 @@ class TensorType : public type::OtherType {
     type::Type *unify(type::Type *other) const override;
     /// Mutable bindings hold any tensor: widening drops dtype and shape facts.
     type::Type *widened() const override;
+    /// A literal operand beside a tensor takes the tensor's element type (`x * 2.0` with
+    /// `x: Tensor<f32>` is the f32 product, design principles 5.1, H371); a tensor whose element
+    /// type is open gives none.
+    type::Type *literalOperandType() const override;
     type::CastSafety castSafetyFrom(type::Type *sourceType) const override;
     /// `t as Tensor<...>`: the tensor itself, after checking its element type and shape against
     /// this type (what the static types left open is checked here, when the conversion runs).
