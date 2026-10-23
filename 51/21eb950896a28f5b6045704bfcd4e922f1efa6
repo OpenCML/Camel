@@ -1,0 +1,12 @@
+h336 — 声明模块可以有函数体；泛型函数可以带内核（分支 handover/h336-decl-module-body，79acdc56b，19 文件 +357/−227）
+
+裁定的宽形式落地：`DeclarationModuleHasBody` 与 `ImplOnGenericFunction` 从生产者、semantic.h/.cpp、registry.tsv 与再生成的 docs/diagnostics.md 中删除（256 → 254 码）。泛型 `#impl`：内核是**同一模块**的无体声明，整体记在模板上（builder.h 的 implTemplateKernels_）；每个实例采用接受它自己类型的那条规则（builder_generics.cpp 的 adoptImplKernel，在实例生成处调用）；没有规则接受的实例保留 kGraphFlagImplBody 并执行函数体；对一个有内核的实例的直接调用变成该内核的一次 OPER（builder_operators.cpp 的 visitLinkNode 泛型分支，经 implKernelOfGraph）。
+
+被移动的期望，各自点明它现在表达什么：impl.on_generic_function → impl.generic_executor + .paths；native.declaration_module_has_no_body → native.declaration_module_may_have_body；catalog.coverage_zero 256 → 254；语言参考（中英）、docs/technical/09_operator_registration.md、H141-H213 的缺口记录。
+
+证据：在基线编译器（1ddcfb204）上红——impl_generic.cml exit 1，两处 SemanticDiag::ImplOnGenericFunction 0x030001DD 在第 20/28 行，由旧的 builder_modules.cpp:725 报出；bytes 定义给 DeclarationModuleHasBody 0x0300017D 于 bytes.cml:42，由旧的 gct/builder.cpp:4720 报出。修后整层 fast：total 5718, pass 5704, fail 0, skip 14，含 impl.generic_executor 在 nvm/fvm/jit/prl 上、impl.generic_executor.paths、impl.kernel_site、native.declaration_module_may_have_body。.paths 守卫先红过一次（计划 verify_script 里一个 \n 转义 bug），它打印了读到的 profile 行数，所以它确实在检查一份有内容的报告。
+
+**第 2 项（把 tensor 的 log_softmax 定义搬进 stdlib/tensor.cml）没做，且是语义问题不是实现选择**：那个位置需要的无体内核声明在 tensor.cml 里写不忠实——该文件头部写着"元素类型跟随参数的签名不能作为声明"（H151），softmaxInfer 在 Float64 时保留、否则返回 Float32，而规范定义（stdlib/tensor_definitions.cml，目录里的 tensor:log_softmax）是 Tensor<f32>。三种写法：(a) (Tensor<f32>, int?) => Tensor<f32> 收窄公开名字、丢掉今天的 f64 结果；(b) 对元素类型泛型——对 C++ 内核接受的整数张量是假的；(c) 给语言加"声明可以命名算子自己的类型规则"。判别用例 `let t: Tensor<f64> = …; log_softmax(t)`：(a) 拒绝、(b) 返回 Tensor<f64>、今天是 Tensor<f64>。已按渠道提问（docs/handover/questions/tensor-impl-kernel-type-rule.md）。性质本身（内核与函数体一致）已有钉子：test::expand_definitions + test/cases/definitions/kernels.cml 覆盖 tensor_definitions::log_softmax；另外把定义搬进去还需要 src/compile/gir/builder_modules.cpp:927 的导出守卫允许同名 Camel 定义遮蔽 C++ 组（已定位、未改）。
+
+未做（有意）：array::sum/min/max 未碰（另一位持有 stdlib/array.cml）；Adam 仍等 optim（H51 第 14 步）。
+给下一个跑任务的人：-Clean 只清理（删掉主机检出后 exit 0，不跑计划）；amend 过的提交在 push 过之后需要删掉 helper 的暂存引用（ssh 88zjwei "git -C camel-work/Camel.git branch -D <分支>"），否则 push 被当作非快进拒绝。主机耗时：首次全量构建 220.9 s（共享主机），绿色那次 138.1 s 墙钟。
