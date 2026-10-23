@@ -15,8 +15,9 @@
  *                 0.0999755859375 bf16 0x3DCD is 1.6015625 x 2^-4 and f16 0x2E66 is
  *                                 1.599609375 x 2^-4; the two types round the same f32 in
  *                                 opposite directions, which is what makes this pair worth
- *                                 pinning. Printed, the bf16 one is `0.100097656`
- *                                 (docs/handover/questions/reduced-precision-text.md)
+ *                                 pinning. Printed, the bf16 one is `0.100097656`, which the
+ *                                 author ruled must become the shortest text reading back as
+ *                                 the element type (`0.1`) — docs/handover/reviews/questions-2026-10-23.md
  *   1 + 2^-11      -       1.0     the same tie to even, ten significand bits
  *   -0.0           -0.0    -       a negative literal keeps its sign bit, and the two zeros
  *                                 compare equal although their slots differ

@@ -109,8 +109,9 @@ void printScalar(std::ostream &os, slot_t data, const Type *type) {
         // f32's shortest `floatText`. So `f32(x)` and `x` print the same text for the same element,
         // and reading the text back as bf16 gives the element again. Whether 7.7's "shortest" asks
         // instead for the shortest text that reads back as the element type (`0.1` for bf16 0x3DCD,
-        // where this writes `0.100097656`) is with the language author:
-        // docs/handover/questions/reduced-precision-text.md.
+        // where this writes `0.100097656`) is ruled: the text is the shortest that reads back as the
+        // element type, so this is a defect, not a question. See
+        // docs/handover/reviews/questions-2026-10-23.md, "reduced-precision-text".
     case TypeCode::BFloat16:
         os << camel::utils::floatText(halfToFloat<BFloat16>(data));
         break;
