@@ -235,6 +235,73 @@ loaded by other work the plan wall moves by more than the change does — the ch
 from 648 s to 995 s between runs — which is why the ratio and the slot accounting, not the wall, are
 the numbers this section reports.
 
+## Runner Output
+
+A run writes two trees inside the checkout, and neither is part of it. `test/results/log/<timestamp>_<pid>/`
+is the run's record: `run.json` (what the run was), `summary.json`, and one directory per test holding
+the captured `stdout.txt`, `stderr.txt`, `output.txt`, `meta.json` and any verification output.
+`tmp/test/run-<pid>` is the run's scratch root. Both are gitignored, so `git clean` does not remove
+them, and both grow per run rather than per test.
+
+The runner bounds the record itself, at the start of every run: **`test/results/log` keeps the newest
+20 run directories** (`RUN_DIRS_KEPT`, next to the policy it belongs to, in
+`test/tools/runner-output.mjs`). A failing run's log is read while the run is happening and just after
+it -- nothing in the repository reads an older run back, and no tool reads a run directory at all -- so
+what ages out is the record of a run nobody is looking at. Three directories are never removed,
+whatever their age or their place in the order:
+
+- the directory of the run doing the pruning;
+- a directory whose `<pid>` is a process that is still alive: the runner's own self-test starts nested
+  runs beside an outer one, and they write into the same tree;
+- a directory the runner did not write, whose name is not `<timestamp>_<pid>`: it is counted and
+  reported, not deleted.
+
+A scratch root `tmp/test/run-<pid>` goes when its run is gone and the root has not been touched for an
+hour. The runner keeps its root when a test failed precisely so that the files can be read, and that
+read happens seconds after the run; an hour retires a root whose run was killed.
+
+The run prints one `[RETAIN]` line with what the bound cost: how many run directories it examined, how
+many it removed, and the entries and bytes of what went. The numbers are counted while the directories
+are removed, so the receipt is the tree's own measurement. A directory that ages out is removed
+recursively at the start of the next run, and the next run's line says so.
+
+Nothing is lost with it. A run's `run.json` carries the revision it ran at, the build, the tier and
+every plan it selected, and each test's `meta.json` carries `plan_path` and `case_path`; neither the
+plan nor the case is copied into the record. The copy was written once per test and nothing ever read
+it back -- the guards that name `test/results` skip it, and the one reader is a person looking at the
+run they just made -- so a `smoke` + `feat` gate rewrote the same plan file once for every test in it.
+That copy, not the output, was most of what a run directory weighed: of the 43,898 entries and
+245.0 MB of a full `smoke` + `feat` fast layer run directory (5,691 tests, measured on the integration
+checkout), the copy of the plan and of the case was 11,382 files and 214.2 MB -- 87% of the bytes and
+26% of the entries. What a test's record actually holds is its captured output and its `meta.json`:
+the same gate run on this branch wrote 32,461 entries and 31.0 MB (112 MB of disk blocks, at 4 KB a
+file), and every one of the 26,578 files in it is one the runner wrote. Twenty of those is the whole
+bound, at most about 0.6 GB of content, and the `run.json` that replaced the plan copies is 11 KB.
+What the tree actually settles at is smaller still, because a nested run is a run: a gate starts the
+runner's self-test, which starts dozens of nested runs of its own, and their directories take places
+in the window like any other. Measured right after a gate on this host: 22 run directories, 114 MB,
+26,992 files, one of them the gate's own -- the newest twenty runs, which is about one gate's worth of
+directories rather than twenty gates of history. The window is measured in runs, and the runs a gate
+starts are most of them.
+
+`isRunnerOutput(path)` in the same module is also the answer to *which* trees a run writes, for
+everything that walks the checkout (`test/tools/check-no-algo.mjs`, `scripts/check-doc-links.mjs`,
+`scripts/headers.mjs --root`, `scripts/clean.js`). A guard that hard-codes `test/results` is one more
+place a new tree has to be remembered, and the cost of remembering late is measured: the doc-form
+guard spent 41.4 s in a bare walk of a 6.8 M-entry log tree against 0.42 s in a checkout that had run
+the gate once -- 99.4% of its 70 s budget, which pushed a passing check past the runner's margin and
+turned it red on a busy host. That tree reached 52,442 MB and 6,809,438 entries in 3,963 run
+directories, and within four hours of being pruned to 20 by hand it was back to about 660 run
+directories and 8.8 GB, every one of them written that morning: a bound a person applies by hand is
+a bound for one afternoon.
+
+The bound is a property, not a count of what happens to be there: `retention.policy` and
+`retention.runner` (`test/plans/feat/tools/retention.plan.toml`) prune the same planted tree under two
+bounds -- one that must remove and one that must not -- and then run the real runner twice into a
+scratch tree, with `CAMEL_TEST_RESULTS_ROOT` and `CAMEL_TEST_RUN_DIRS_KEEP=1`, and check what survived.
+
+`npm run clean -- --tmp` removes both trees whole, for a checkout that wants them gone now.
+
 ## Selecting Plans From A Change
 
 `node scripts/test.js --changed` takes the files that differ from the base branch (committed,
@@ -782,6 +849,12 @@ end compiles) says `sweep = false` with a comment.
   for the devices: see "CUDA visibility".
 - `--jobs N` limits the parallel tests; it is an option of the runner process, not an
   environment variable, so a test cannot change how many of its neighbours run.
+- `CAMEL_TEST_RESULTS_ROOT=<dir>` writes the run's record into `<dir>` instead of `test/results`, and
+  `CAMEL_TEST_RUN_DIRS_KEEP=<n>` lowers the retention bound for that run ("Runner Output"). Both are
+  knobs a check uses: the retention check runs two real runs into a scratch tree with a bound of one,
+  so the pruning is watched over runs that really happened rather than over a fixture alone. The bound
+  follows the record: a run whose record was moved prunes the tree it is writing to, not the checkout's
+  `test/results`, which nothing in that run is adding to.
 - The timeouts above apply to one test; a parallel run does not relax them, and a test whose
   time depends on the machine's load belongs alone (`parallel = false`) or in the slow layer.
 

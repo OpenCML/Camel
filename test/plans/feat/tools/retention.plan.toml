@@ -1,0 +1,46 @@
+id = "tools.retention"
+order = 917
+tier = "fast"
+tags = ["feat", "tools", "retention"]
+desc = "The runner prunes its own run directories to a stated bound: the newest N stay, a directory a live run owns and one the runner never wrote are never removed, and a run's record keeps no copy of the checkout"
+
+# The runner's output tree (`test/results/log/<timestamp>_<pid>/`) grows per run and is not part of
+# the checkout. It reached 52,442 MB and 6,809,438 entries in 3,963 run directories in the
+# integration checkout, and a bare walk of it cost the doc-form guard 41.4 s of its 70 s budget --
+# enough to push a passing check past the runner's TIMEOUT_MARGIN and turn it red. The policy and
+# its reasons are in test/tools/runner-output.mjs; docs/test-plans.md documents them for a plan
+# author (section "Runner output").
+#
+# `retention.policy` drives the policy over a planted tree: the same fixture pruned with a bound of
+# two and with a bound that covers everything, so a policy that never pruned and one that pruned
+# everything both fail. `retention.runner` runs the real runner twice into a scratch results root
+# (`CAMEL_TEST_RESULTS_ROOT`, `CAMEL_TEST_RUN_DIRS_KEEP=1`) and asserts what survived, that the
+# nested runs printed their own [RETAIN] line, and that the record holds the runner's own files and
+# the two paths that replaced the copy of the plan and of the case it used to write per test.
+
+[[tests]]
+name = "retention.policy"
+desc = "A bound of two removes the run directories older than the newest two, keeps the newest two, a directory whose pid is a live process and one whose name the runner never writes, retires a stale scratch root and keeps a live, a young, a foreign and this run's own; the same tree under an unbounded bound loses nothing; a second prune removes nothing."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/retention/retention.mjs"
+args = ["${case}", "--policy"]
+expect_exit = 0
+expect_stdout_contains = ["PASS retention.policy"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+# Pure file work over a fixture of a few dozen files: the whole check is milliseconds.
+timeout_ms = 60000
+
+[[tests]]
+name = "retention.runner"
+desc = "Two real runs with a bound of one keep their own two run directories beside the live run's, remove every planted directory whose run is gone, leave a directory the runner never wrote, and record the plan and the case by name (`run.json`, `meta.json`) instead of by a copy."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/retention/retention.mjs"
+args = ["${case}", "--runner"]
+expect_exit = 0
+expect_stdout_contains = ["PASS retention.runner"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+# Two nested runs of a three-test plan, which the self-test measures at ~1 s each; 120 s is the
+# 4x margin over a host busy enough to make a nested run an order of magnitude slower.
+timeout_ms = 120000

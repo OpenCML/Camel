@@ -30,7 +30,10 @@ builds and never needs an install to exist.
 The default selects all four tiers: `npm run clean` is the same set as `npm run clean -- --all`.
 A build tree, an install, a test scratch directory and a polluted source file are all ignored by
 git and reproduced by the next build or test run, so the default deletes instead of defaulting to
-`--dry-run`; the safety rules below are enforced, not advisory.
+`--dry-run`; the safety rules below are enforced, not advisory. The test scratch tier is a full
+reset, not the ordinary way to keep the tree small: the runner keeps the newest 20 run directories
+of `test/results/log` by itself and prints what that cost in its `[RETAIN]` line (docs/test-plans.md,
+"Runner Output").
 
 | Option | Effect |
 |---|---|
