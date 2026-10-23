@@ -154,7 +154,31 @@ The passes given on the command line run in the order written. Each pass transfo
 
 ### Pass parameters
 
-Every pass, scheduler and module pass is written `name` or `name(key=value, ...)`. The values are Camel constant expressions: bool, int, float and string literals, and the operators on them (`n=2*8`, `safe_fp=!false`, `out="a" + ".onnx"`); an int may be given where a float is declared. They are read by the language's own parser. A pass declares its parameters (name, type, default, a line of documentation); the pipeline checks what is written against the declaration before anything runs, and a mistake is reported as `RuntimeDiag::InvalidPassParameter` (`0x04000060`, stage `pass:<spec>`) with the column in the specification: an unknown parameter (the message lists the ones the pass takes), a value of the wrong type, a parameter written twice, a value that is not a constant, a missing value. Quote a parameterized pass in a shell (`'std::opt(safe_fp=true)'`), and mind the commas: `--passes 'a,b(x=1,y=2)'` splits only at the commas outside the parentheses and string literals. The unknown-pass listing on stderr shows the parameters of every pass with their defaults.
+Every pass, scheduler and module pass is written `name` or `name(key=value, ...)`; a named value may also be written with the colon an ordinary call uses (`name(key: value, ...)`). The values are Camel constant expressions: bool, int, float and string literals, and the operators on them (`n=2*8`, `safe_fp=!false`, `out="a" + ".onnx"`); an int may be given where a float is declared. They are read by the language's own parser.
+
+A pass declares its parameters the way a function declares its own (design principles 4.4): a name, `:`, a type, and a default written `= value`, in the pass's descriptor (`declarePassParams` in `include/camel/execute/pass/params.h`):
+
+```cpp
+declarePassParams(
+    "safe_fp: bool = false, growth_budget: int = 4096, check_screens: bool = false",
+    {{"safe_fp", "keep the algebraic stage to strictly equivalent floating-point transformations"},
+     ...});
+```
+
+The declaration is parsed by the same parser a `func` declaration goes through, so it has a function's rules: the type is `bool`, `int`, `float` or `string`; a parameter written without a default is required; a parameter with no default may not follow one that has a default. **A default is a constant expression evaluated once, where the declaration is** (design principles 6.5: the early evaluation `std::macro` exists for), not at each call: the help listing shows the value (`n: int = 16`, not `n=2*8`), and every call that leaves the parameter out copies that one value. This is the same mechanism as `f(x: 1)` at an ordinary call: `std::opt(safe_fp=true)` and `f(x: 1)` are a declaration and a named argument, not two languages.
+
+The call is checked when the pipeline is resolved, before any pass runs, and the refusal is the language's own for a call, located at the call and in the semantic stage (`typecheck`), not in a `pass:<spec>` stage without a position:
+
+| What is wrong | Diagnostic | Message |
+| --- | --- | --- |
+| a name the pass does not declare | `SemanticDiag::ParamArgumentUnknown` | `'safe_fpp' is not a parameter of 'std::opt'.` |
+| the same name twice | `SemanticDiag::ParamArgumentDuplicate` | `The parameter 'safe_fp' of 'std::opt' is given twice.` |
+| a value of the wrong type | `SemanticDiag::ParamArgumentWrongType` | `The argument 'safe_fp' of 'std::opt' has type 'int', not 'bool'.` |
+| a required parameter left out | `SemanticDiag::ParamArgumentMissing` | `The call gives no value for the parameter 'flag' of 'test::params', and it has no default.` |
+
+The position is the call in the pipeline: one pass is one line, so the second pass of `camel f.cml std::fvm 'std::opt(safe_fpp=true)'` is reported at `<pipeline>:2:10` (line 2, the column of `safe_fpp`). A specification that is not a call at all — a positional value, a missing `)`, an argument that is not a constant — is still `RuntimeDiag::InvalidPassParameter` (`0x04000060`), now with the same `<pipeline>:<line>:<column>` position instead of a column in its own message. Nothing has run when the diagnostic is reported.
+
+Quote a parameterized pass in a shell (`'std::opt(safe_fp=true)'`), and mind the commas: `--passes 'a,b(x=1,y=2)'` splits only at the commas outside the parentheses and string literals. The unknown-pass listing on stderr shows the parameters of every pass with their defaults.
 
 Settings of a pass are parameters, no longer environment variables:
 
@@ -178,7 +202,7 @@ The `std::` prefix belongs to the passes of the core. A pass of a module is name
 
 A module may register passes of its own (`registerModulePass`, plus short aliases with `registerPassAlias`). They run only where the pipeline writes them: the pipeline is composed explicitly, so importing a module never adds a pass. A library whose pass is needed (autodiff needs `std::macro` before it) diagnoses the missing pass and says which one to add, and a tag whose reading pass is absent draws a warning.
 
-A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) declares its parameters as the `with` parameters of that function: `with <label: string, n: int> export func report(p: Program): Program!` is run as `mymod::report(label='x', n=21)`. The names, order and types of the `with` parameters are the pass's parameters (design principles 4.4 and 9.3); bool, int, float and string are the types a pass parameter may have. A `with` parameter has no default in source, so each one is required: leaving one out is `RuntimeDiag::InvalidPassParameter`, and the message lists every parameter with its type.
+A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) declares its parameters as the `with` parameters of that function: `with <label: string, n: int> export func report(p: Program): Program!` is run as `mymod::report(label='x', n=21)`. The names, order and types of the `with` parameters are the pass's parameters (design principles 4.4 and 9.3); bool, int, float and string are the types a pass parameter may have. A `with` parameter has no default in source, so each one is required: leaving one out is `SemanticDiag::ParamArgumentMissing` at the call in the pipeline, and the message names the parameter.
 
 ### Common Passes
 

@@ -407,25 +407,15 @@ void buildPassScope(PassScopePtr s, const PassDef &def) {
     }
 }
 
-PassParam safeFpParameter() {
-    return PassParam{
-        "safe_fp",
-        PassParamType::Bool,
-        false,
-        "keep the algebraic stage to strictly equivalent floating-point transformations "
-        "(design principles 7.4)"};
-}
-
 /// The `growth_budget` parameter of every pass built on the rewrite engine (design principles
 /// 9.3): the nodes specialization and inlining may copy. A pipeline no longer sets it through an
 /// environment variable.
-PassParam growthBudgetParameter() {
-    return PassParam{
-        "growth_budget",
-        PassParamType::Int,
-        static_cast<int64_t>(kDefaultGrowthBudgetNodes),
-        "nodes specialization and inlining may copy before the remaining calls are left as "
-        "calls; 0 stops them (design principles 9.6)"};
+std::vector<PassParam> growthBudgetParameter() {
+    return declarePassParams(
+        std::format("growth_budget: int = {}", kDefaultGrowthBudgetNodes),
+        {{"growth_budget",
+          "nodes specialization and inlining may copy before the remaining calls are left as "
+          "calls; 0 stops them (design principles 9.6)"}});
 }
 
 GrowthBudget growthBudgetOf(const PassArgs &args, std::string passName) {
@@ -440,15 +430,19 @@ GrowthBudget growthBudgetOf(const PassArgs &args, std::string passName) {
 PassDescriptor optimizeDescriptor() {
     PassDescriptor d;
     d.doc    = "the standard optimization pipeline";
-    d.params = {
-        safeFpParameter(),
-        growthBudgetParameter(),
-        PassParam{
-            "check_screens",
-            PassParamType::Bool,
-            false,
-            "test of the generic passes' screens: give the graphs they skip to the pass anyway "
-            "and fail if it rewrites one"}};
+    d.params = declarePassParams(
+        std::format(
+            "safe_fp: bool = false, growth_budget: int = {}, check_screens: bool = false",
+            kDefaultGrowthBudgetNodes),
+        {{"safe_fp",
+          "keep the algebraic stage to strictly equivalent floating-point transformations "
+          "(design principles 7.4)"},
+         {"growth_budget",
+          "nodes specialization and inlining may copy before the remaining calls are left as "
+          "calls; 0 stops them (design principles 9.6)"},
+         {"check_screens",
+          "test of the generic passes' screens: give the graphs they skip to the pass anyway "
+          "and fail if it rewrites one"}});
     d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
         OptimizeRewriteConfig config;
         config.safeFloatingPoint = args.getBool("safe_fp");
@@ -469,7 +463,7 @@ PassDescriptor inlineDescriptor(
     } else {
         d.doc = "inline-only rewrite pass (hybrid target strategy)";
     }
-    d.params = {growthBudgetParameter()};
+    d.params = growthBudgetParameter();
     d.make   = [strategy, passName = std::move(passName)](
                    const context_ptr_t &ctx, const PassArgs &args) {
         InlineRewriteConfig config{};
@@ -485,7 +479,7 @@ PassDescriptor inlineDescriptor(
 PassDescriptor specializeDescriptor() {
     PassDescriptor d;
     d.doc    = "specialization only";
-    d.params = {growthBudgetParameter()};
+    d.params = growthBudgetParameter();
     d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<SpecializeRewritePass>(
             ctx, growthBudgetOf(args, "std::opt::specialize"));
@@ -496,7 +490,7 @@ PassDescriptor specializeDescriptor() {
 PassDescriptor devirtualizeDescriptor() {
     PassDescriptor d;
     d.doc    = "devirtualization only";
-    d.params = {growthBudgetParameter()};
+    d.params = growthBudgetParameter();
     d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<DevirtualizeRewritePass>(
             ctx, growthBudgetOf(args, "std::opt::devirtualize"));
@@ -507,12 +501,11 @@ PassDescriptor devirtualizeDescriptor() {
 PassDescriptor extractDescriptor() {
     PassDescriptor d;
     d.doc    = "one writing for every value that has several, chosen by a cost model";
-    d.params = {PassParam{
-        "cost",
-        PassParamType::String,
-        std::string("weighted"),
-        "the cost model: 'nodes' (every node costs one), 'weighted' (a division costs more than a "
-        "product, a product more than a sum), or one a module registered"}};
+    d.params = declarePassParams(
+        "cost: string = \"weighted\"",
+        {{"cost",
+          "the cost model: 'nodes' (every node costs one), 'weighted' (a division costs more "
+          "than a product, a product more than a sum), or one a module registered"}});
     d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<ExtractPass>(ctx, args.getString("cost"));
     };
@@ -522,12 +515,11 @@ PassDescriptor extractDescriptor() {
 PassDescriptor dceDescriptor() {
     PassDescriptor d;
     d.doc    = "dead code elimination";
-    d.params = {PassParam{
-        "values_only",
-        PassParamType::Bool,
-        false,
-        "remove only the constants and pure operations that no node reads, not gates and syncs "
-        "(the reference for passes that do the same, such as one written in Camel)"}};
+    d.params = declarePassParams(
+        "values_only: bool = false",
+        {{"values_only",
+          "remove only the constants and pure operations that no node reads, not gates and "
+          "syncs (the reference for passes that do the same, such as one written in Camel)"}});
     d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<DeadCodePass>(ctx, args.getBool("values_only"));
     };
@@ -559,16 +551,15 @@ PassDescriptor algebraDescriptor() {
     PassDescriptor d;
     d.doc    = "algebraic simplification (the rules library's simplified form: the laws of "
                "stdlib/rules.cml, under the strict numeric policy when safe_fp is true)";
-    d.params = {
-        safeFpParameter(),
-        PassParam{
-            "neutral_only",
-            PassParamType::Bool,
-            false,
-            "apply only the integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), not the "
-            "merging of like terms and constant factors (the C++ reference for passes that do the "
-            "same; the rules library has no neutral-only mode)"},
-    };
+    d.params = declarePassParams(
+        "safe_fp: bool = false, neutral_only: bool = false",
+        {{"safe_fp",
+          "keep the algebraic stage to strictly equivalent floating-point transformations "
+          "(design principles 7.4)"},
+         {"neutral_only",
+          "apply only the integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), not the "
+          "merging of like terms and constant factors (the C++ reference for passes that do the "
+          "same; the rules library has no neutral-only mode)"}});
     d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
         if (args.getBool("neutral_only")) {
             return std::unique_ptr<GraphIRPass>(std::make_unique<AlgebraPass>(ctx, true));
@@ -579,14 +570,6 @@ PassDescriptor algebraDescriptor() {
     return d;
 }
 
-PassParam statsParameter() {
-    return PassParam{
-        "stats",
-        PassParamType::String,
-        std::string(),
-        "append per-graph bytecode and execution counts of the run to this file"};
-}
-
 PassDescriptor profileDescriptor() {
     PassDescriptor d;
     d.doc =
@@ -594,45 +577,22 @@ PassDescriptor profileDescriptor() {
         "every operator, the operators and kernels of one step, the host/device transfers, the "
         "synchronisations, the phase split of the compilation, and the element-wise loops that "
         "run on the host; the report is written when the run ends";
-    d.params = {
-        PassParam{
-            "top",
-            PassParamType::Int,
-            int64_t{24},
-            "rows of the operator table; 0 writes every operator that ran"},
-        PassParam{
-            "hints",
-            PassParamType::Bool,
-            true,
-            "report the element-wise loops that run on the host, and why they did not go to a "
-            "device"},
-        PassParam{
-            "json",
-            PassParamType::String,
-            std::string(),
-            "also write the report as one JSON object to this file"},
-        PassParam{
-            "report",
-            PassParamType::Bool,
-            true,
-            "print the text report when the run ends; false turns on only the diagnostics the "
-            "other parameters ask for"},
-        PassParam{
-            "gc_stats",
-            PassParamType::Int,
-            int64_t{0},
-            "the allocator's statistics at exit: 1 one line, 2 also one line per collection"},
-        PassParam{
-            "type_stats",
-            PassParamType::Bool,
-            false,
-            "the type storage's statistics at exit (one line per kind, and the type table)"},
-        PassParam{
-            "effect_trace",
-            PassParamType::String,
-            std::string(),
-            "append one JSON line per executed effectful operator to this file"},
-    };
+    d.params = declarePassParams(
+        "top: int = 24, hints: bool = true, json: string = \"\", report: bool = true, "
+        "gc_stats: int = 0, type_stats: bool = false, effect_trace: string = \"\"",
+        {{"top", "rows of the operator table; 0 writes every operator that ran"},
+         {"hints",
+          "report the element-wise loops that run on the host, and why they did not go to a "
+          "device"},
+         {"json", "also write the report as one JSON object to this file"},
+         {"report",
+          "print the text report when the run ends; false turns on only the diagnostics the "
+          "other parameters ask for"},
+         {"gc_stats",
+          "the allocator's statistics at exit: 1 one line, 2 also one line per collection"},
+         {"type_stats",
+          "the type storage's statistics at exit (one line per kind, and the type table)"},
+         {"effect_trace", "append one JSON line per executed effectful operator to this file"}});
     d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
         camel::profile::ReportOptions options;
         const int64_t top = args.getInt("top");
@@ -655,16 +615,19 @@ PassDescriptor fastVmDescriptor(bool jit) {
     PassDescriptor d;
     d.doc =
         jit ? "the bytecode interpreter with on-demand native code" : "the bytecode interpreter";
-    d.params = {statsParameter()};
-    if (jit) {
-        d.params.push_back(
-            PassParam{
-                "hot_threshold",
-                PassParamType::Int,
-                int64_t{1},
-                "calls from one call site before a graph is compiled; 0 compiles at the first call "
-                "(short test programs then run as compiled code too)"});
-    }
+    d.params = jit ? declarePassParams(
+                       "stats: string = \"\", hot_threshold: int = 1",
+                       {{"stats",
+                         "append per-graph bytecode and execution counts of the run to this "
+                         "file"},
+                        {"hot_threshold",
+                         "calls from one call site before a graph is compiled; 0 compiles at the "
+                         "first call (short test programs then run as compiled code too)"}})
+                 : declarePassParams(
+                       "stats: string = \"\"",
+                       {{"stats",
+                         "append per-graph bytecode and execution counts of the run to this "
+                         "file"}});
     d.make = [jit](const context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config = jit ? makeDefaultFastVmJitConfig() : FastVMConfig{};
         config.statsPath    = args.getString("stats");
@@ -680,35 +643,19 @@ PassDescriptor fastVmDescriptor(bool jit) {
 PassDescriptor taskflowDescriptor() {
     PassDescriptor d;
     d.doc    = "the parallel scheduler";
-    d.params = {
-        PassParam{
-            "linear",
-            PassParamType::Bool,
-            false,
-            "evaluate every graph node by node (for comparison and diagnosis)"},
-        PassParam{
-            "fanout_all",
-            PassParamType::Bool,
-            false,
-            "fan every unordered higher-order call out, not only those worth it by measurement"},
-        PassParam{
-            "diag",
-            PassParamType::Bool,
-            false,
-            "print the decision for every graph and why a graph stays node by node"},
-        PassParam{
-            "bytecode",
-            PassParamType::Bool,
-            true,
-            "hand graphs that need no parallelism to the bytecode interpreter; false: the "
-            "scheduler evaluates every graph itself"},
-        PassParam{
-            "gc_stats",
-            PassParamType::Int,
-            int64_t{0},
-            "1: print the task graphs and collections of the run when it ends; 2: also one "
-            "line per collection"},
-    };
+    d.params = declarePassParams(
+        "linear: bool = false, fanout_all: bool = false, diag: bool = false, "
+        "bytecode: bool = true, gc_stats: int = 0",
+        {{"linear", "evaluate every graph node by node (for comparison and diagnosis)"},
+         {"fanout_all",
+          "fan every unordered higher-order call out, not only those worth it by measurement"},
+         {"diag", "print the decision for every graph and why a graph stays node by node"},
+         {"bytecode",
+          "hand graphs that need no parallelism to the bytecode interpreter; false: the "
+          "scheduler evaluates every graph itself"},
+         {"gc_stats",
+          "1: print the task graphs and collections of the run when it ends; 2: also one line "
+          "per collection"}});
     d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
         TaskflowOptions options;
         options.linear    = args.getBool("linear");
@@ -848,7 +795,13 @@ PassScopePtr initPassScope() {
 #undef PASS
 #undef PASS1
 
-const PassScopePtr passScope = initPassScope();
+/// The core's passes, built on first use rather than at static-initialization time: a descriptor
+/// now reads its parameter declaration with the language's parser, which needs the process's
+/// other tables (the source manager, the diagnostics catalog) to exist first.
+const PassScopePtr &passScope() {
+    static const PassScopePtr scope = initPassScope();
+    return scope;
+}
 
 std::unordered_map<std::string, std::string> passAliases = {
     // Frequently used spelling of the standalone inline stage and its strategies.
@@ -1091,7 +1044,7 @@ void registerPassAlias(const std::string &alias, const std::string &target) {
     const bool bare = alias.find("::") == std::string::npos;
     if (alias.starts_with("std::") || passAliases.contains(alias) ||
         (bare && (passAliases.contains("std::" + alias) ||
-                  lookupInScope(passScope, splitPath("std::" + alias))))) {
+                  lookupInScope(passScope(), splitPath("std::" + alias))))) {
         CAMEL_LOG_WARN_S(
             "Pass",
             "alias '{}' -> '{}' ignored: the name belongs to the core's std:: namespace",
@@ -1179,6 +1132,69 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
     return table;
 }
 
+/// A test-only pass whose call can be read back: it prints every parameter the declaration
+/// names, the value it was given, whether that value was written, and how many default
+/// expressions have been evaluated in the process. A plan pins the declaration's count with
+/// `declared=`, writes each name in one call, and compares the count of two calls that use the
+/// defaults (equal: a default is evaluated at the declaration, not at each call).
+class PassParamsTestPass final : public GraphIRPass {
+  public:
+    PassParamsTestPass(
+        const context_ptr_t &ctx, const PassArgs &args, std::vector<PassParam> declared)
+        : GraphIRPass(ctx), args_(args), declared_(std::move(declared)) {}
+
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        os << "test::params";
+        for (const auto &p : declared_) {
+            os << ' ' << p.name << '=';
+            switch (p.type) {
+            case PassParamType::Bool:
+                os << (args_.getBool(p.name) ? "true" : "false");
+                break;
+            case PassParamType::Int:
+                os << args_.getInt(p.name);
+                break;
+            case PassParamType::Float:
+                os << std::format("{}", args_.getFloat(p.name));
+                break;
+            case PassParamType::String:
+                os << args_.getString(p.name);
+                break;
+            }
+            os << (args_.given(p.name) ? " (given)" : " (default)");
+        }
+        os << std::format(
+            " declared={} evaluations={}\n",
+            declared_.size(),
+            passParamDefaultEvaluations());
+        return program;
+    }
+
+  private:
+    PassArgs args_;
+    std::vector<PassParam> declared_;
+};
+
+const PassDescriptor &passParamsTestDescriptor() {
+    static const PassDescriptor descriptor = [] {
+        PassDescriptor d;
+        d.doc    = "a test pass whose parameters exercise every type and a required one";
+        d.params = declarePassParams(
+            "flag: bool, n: int = 2 + 3, ratio: float = 1.5, label: string = \"x\", count: int = 7",
+            {{"flag", "a parameter that must be given"},
+             {"n", "an int whose default is a constant expression"},
+             {"ratio", "a float"},
+             {"label", "a string"},
+             {"count", "another int"}});
+        d.make = [declared = d.params](const context_ptr_t &ctx, const PassArgs &args) {
+            return std::make_unique<PassParamsTestPass>(ctx, args, declared);
+        };
+        return d;
+    }();
+    return descriptor;
+}
+
 /// The descriptor of a pass name (no parameters written), or nothing.
 std::optional<PassDescriptor> findDescriptor(const std::string &name) {
     // 1. Resolve aliases
@@ -1188,14 +1204,14 @@ std::optional<PassDescriptor> findDescriptor(const std::string &name) {
     if (resolved.find("::") != std::string::npos) {
         auto path = splitPath(resolved);
         if (!path.empty()) {
-            if (auto found = lookupInScope(passScope, path))
+            if (auto found = lookupInScope(passScope(), path))
                 return found;
         }
     } else {
         // 3. No :: try std::name first, then the global name
-        if (auto found = lookupInScope(passScope, splitPath("std::" + resolved)))
+        if (auto found = lookupInScope(passScope(), splitPath("std::" + resolved)))
             return found;
-        if (auto found = lookupInScope(passScope, std::vector<std::string>{resolved}))
+        if (auto found = lookupInScope(passScope(), std::vector<std::string>{resolved}))
             return found;
     }
 
@@ -1205,6 +1221,9 @@ std::optional<PassDescriptor> findDescriptor(const std::string &name) {
     }
 
     // 5. Test-only passes. They are reachable by name and by nothing else; no pipeline adds them.
+    if (resolved == "test::params") {
+        return passParamsTestDescriptor();
+    }
     for (const auto &[testName, factory] : testPasses()) {
         if (resolved == testName) {
             return passWithoutParameters(factory);
@@ -1214,11 +1233,13 @@ std::optional<PassDescriptor> findDescriptor(const std::string &name) {
 }
 
 struct ResolvedPass {
-    PassFactory factory;                // the pass with its parameters bound; null if not usable
-    bool known = false;                 // the name is a pass
-    std::optional<std::string> problem; // the parameters are wrong
-    /// When the problem is a pass module that does not compile: its first error, as a secondary
-    /// location (H36c).
+    PassFactory factory; // the pass with its parameters bound; null if not usable
+    bool known = false;  // the name is a pass
+    /// A parameter the call wrote wrongly: unknown, written twice, of the wrong type, or a
+    /// required one left out.
+    std::optional<camel::execute::detail::ParamProblem> paramProblem;
+    /// A pass module that does not compile: its first error, as a secondary location (H36c).
+    std::optional<std::string> problem;
     std::optional<DiagLabel> errorLocation;
     /// A `<module>::<pass>` whose module is there and compiles but provides no such pass: the
     /// module, the name, what the module does provide, and whether it declares the name without
@@ -1242,19 +1263,59 @@ ResolvedPass resolvePass(const std::string &spec) {
     result.known = true;
     camel::execute::detail::ParsedSpec parsed;
     if (auto problem = camel::execute::detail::parseSpec(spec, parsed)) {
-        result.problem = std::move(problem);
+        result.paramProblem = std::move(problem);
         return result;
     }
     PassArgs args;
     if (auto problem =
             camel::execute::detail::bindArgs(parsed.name, descriptor->params, parsed, args)) {
-        result.problem = std::move(problem);
+        result.paramProblem = std::move(problem);
         return result;
     }
     result.factory = [make = descriptor->make, args = std::move(args)](const context_ptr_t &ctx) {
         return make(ctx, args);
     };
     return result;
+}
+
+/// A parameter written wrongly at a pass call: the language's own diagnostics for a call, at the
+/// place in the pipeline the pass is written (`<pipeline>:<line>:<column>`), in the semantic
+/// stage. A specification that is not a call at all (a positional value, a missing `)`, an
+/// argument that is not a constant) is still `InvalidPassParameter`, now with the same position.
+Diagnostic parameterDiagnostic(
+    const std::string &spec, const camel::execute::detail::ParamProblem &problem, size_t line) {
+    using Kind = camel::execute::detail::ParamProblemKind;
+    Diagnostic diag;
+    switch (problem.kind) {
+    case Kind::Syntax:
+        diag = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem.text);
+        diag.stage = "typecheck";
+        break;
+    case Kind::Unknown:
+        diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentUnknown)
+                   .commit(problem.name, specName(spec));
+        break;
+    case Kind::Duplicate:
+        diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentDuplicate)
+                   .commit(problem.name, specName(spec));
+        break;
+    case Kind::WrongType:
+        diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentWrongType)
+                   .commit(problem.name, specName(spec), problem.found, problem.expected);
+        break;
+    case Kind::Missing:
+        diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentMissing)
+                   .commit(problem.name, specName(spec));
+        break;
+    }
+    // The whole specification for a problem that has no narrower place (a required parameter
+    // left out, a specification that is not a call).
+    const size_t length =
+        problem.length > 0 ? problem.length : std::max<size_t>(spec.size(), 1);
+    diag.range      = CharRange{{line, problem.column}, {line, problem.column + length}};
+    diag.modulePath = "<pipeline>";
+    diag.moduleName = "pipeline";
+    return diag;
 }
 
 Diagnostic invalidParameterDiagnostic(
@@ -1292,7 +1353,7 @@ void listAvailablePasses(const std::string &name) {
     std::ostream &help = std::cerr;
     help << std::format("Pass <{}> not found, available passes are:\n", name);
     std::vector<std::pair<std::string, PassDescriptor>> allPaths;
-    collectPassPaths(passScope, "", allPaths);
+    collectPassPaths(passScope(), "", allPaths);
     for (const auto &[path, descriptor] : allPaths) {
         printPass(help, path, descriptor);
     }
@@ -1346,7 +1407,11 @@ std::string providedPassesText(const std::vector<std::string> &passes) {
 ///     the passes it does provide, so that a name that is simply wrong does not read like a
 ///     compiler that lost the module;
 ///   - a name with no module behind it: unknown, followed by the list of passes that exist.
-[[noreturn]] void throwUnresolvedPass(const std::string &spec, const ResolvedPass &resolved) {
+[[noreturn]] void
+throwUnresolvedPass(const std::string &spec, const ResolvedPass &resolved, size_t line) {
+    if (resolved.paramProblem) {
+        throw parameterDiagnostic(spec, *resolved.paramProblem, line);
+    }
     if (resolved.problem) {
         throw invalidParameterDiagnostic(spec, *resolved.problem, resolved.errorLocation);
     }
@@ -1375,6 +1440,9 @@ std::string providedPassesText(const std::vector<std::string> &passes) {
 PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     (void)os;
     auto resolved = resolvePass(name);
+    if (resolved.paramProblem) {
+        throw parameterDiagnostic(name, *resolved.paramProblem, 0);
+    }
     if (resolved.problem) {
         throw invalidParameterDiagnostic(name, *resolved.problem);
     }
@@ -1390,7 +1458,7 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
 /// to no factory, and a bad parameter list keeps its problem.
 ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t &ctx) {
     ResolvedPass resolved = resolvePass(spec);
-    if (resolved.problem || resolved.factory || !ctx) {
+    if (resolved.paramProblem || resolved.problem || resolved.factory || !ctx) {
         return resolved;
     }
     const std::string name = resolveAlias(specName(spec));
@@ -1405,7 +1473,7 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
     } catch (const std::exception &) {
     }
     resolved = resolvePass(spec);
-    if (resolved.problem || resolved.factory) {
+    if (resolved.paramProblem || resolved.problem || resolved.factory) {
         return resolved;
     }
     // A function written in Camel: the module is a library of its own, compiled now.
@@ -1466,7 +1534,8 @@ PassRunResult applyRegisteredPass(
     std::ostream &os) {
     ResolvedPass resolved = resolvePassWithModule(spec, ctx);
     if (!resolved.factory) {
-        throwUnresolvedPass(spec, resolved);
+        // No pipeline source here (a pass run by name from a tool): the first line is the call.
+        throwUnresolvedPass(spec, resolved, 0);
     }
     const bool publishes = ctx && ctx->currentRuntimeProgram() == program;
     auto pass            = resolved.factory(ctx);
@@ -1507,10 +1576,13 @@ const camel::runtime::Program *runRulesAlgebra(
 } // namespace
 
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
-    for (const auto &name : passes) {
-        auto resolved = resolvePassWithModule(name, ctx);
+    for (size_t i = 0; i < passes.size(); ++i) {
+        const auto &name = passes[i];
+        auto resolved    = resolvePassWithModule(name, ctx);
         if (!resolved.factory) {
-            throwUnresolvedPass(name, resolved);
+            // One pass per line of the pipeline (`--passes a,b` or the passes after the file),
+            // so a parameter diagnostic points at the line the call is written on.
+            throwUnresolvedPass(name, resolved, i);
         }
     }
 }
@@ -1653,6 +1725,10 @@ std::vector<Diagnostic> tagsNeverReadWarnings(
     if (ctx->tagUses().empty()) {
         return warnings;
     }
+    // The registry says which of the core's passes read tag facts, and it is built on first
+    // use (a descriptor reads its declaration through the parser). A run whose pipeline never
+    // looks a pass up would otherwise find no core reader at all.
+    (void)passScope();
     // The names in the pipeline, as written and as they resolve (an alias strips to the pass's
     // own name): a tag's `read_by` may name either.
     std::vector<std::string> inPipeline;

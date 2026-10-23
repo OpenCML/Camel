@@ -77,6 +77,31 @@ normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
 
 [[tests]]
+name = "pass_parameter_stage"
+desc = "A bad pass parameter is the language's semantic diagnostic for a call, in the typecheck stage, at the call's line in the pipeline (one pass per line); it is not a runtime-stage command-line error."
+kind = "behavior"
+case = "../../../cases/compile/diag_json/div_zero.cml"
+args = ["--output-format", "json", "${case}", "std::nvm", "std::opt(safe_fpp=true)"]
+expect_exit = 1
+verify_script = """
+const text = input.normalized.stdout
+const start = text.lastIndexOf('[\n{')
+assert(start >= 0, 'stdout ends with a JSON diagnostics array')
+const diags = JSON.parse(text.slice(start))
+assert(diags.length === 1, 'one diagnostic')
+const d = diags[0]
+assert(d.severity === 'Error', 'severity is a JSON string')
+assert(d.data.stage === 'typecheck', 'stage is typecheck, got ' + d.data.stage)
+assert(d.data.name === 'SemanticDiag::ParamArgumentUnknown', 'name is ParamArgumentUnknown, got ' + d.data.name)
+assert(d.range.start.line === 1, 'the second pass is on line 2 (0-based 1), got ' + d.range.start.line)
+assert(d.range.start.character === 9, 'the column of the argument is 10 (0-based 9), got ' + d.range.start.character)
+assert(d.data.modulePath === '<pipeline>', 'the file is the pipeline, got ' + d.data.modulePath)
+assert(d.data.moduleName === 'pipeline', 'the module is the pipeline, got ' + d.data.moduleName)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000
+
+[[tests]]
 name = "run_stage_nvm"
 desc = "A run-time fault under NodeVM is reported with stage run and the source range of the failing expression."
 kind = "behavior"

@@ -335,11 +335,11 @@ semantic	FoldCallNotEvaluable	0x0001C9	error	The call of '{0}' cannot be evaluat
 # Defaults of ordinary parameters and ordinary arguments given by name (design principles
 # 4.4, handover H276). 0x1CD and up, after the constant-folding codes of h271. The `with`
 # parameter's forms are 0x1B7-0x1BE.
-#/ A name in a call's argument list names no ordinary parameter of the callee.
-semantic	ParamArgumentUnknown	0x0001CD	error	'{0}' is not a parameter of '{1}'.	A named argument is written as in a struct literal, 'name: value', and must be one of the callee's ordinary parameters.
-#/ An ordinary parameter is given twice, once by position and once by name.
+#/ A name in a call's argument list names no parameter of the callee.
+semantic	ParamArgumentUnknown	0x0001CD	error	'{0}' is not a parameter of '{1}'.	A named argument is written as in a struct literal, 'name: value', and must be one of the parameters the callee declares.
+#/ A parameter is given twice, once by position and once by name.
 semantic	ParamArgumentDuplicate	0x0001CE	error	The parameter '{0}' of '{1}' is given twice.	Give each parameter once: positionally, or by name after the positional arguments.
-#/ A call gives no value for an ordinary parameter that has no default.
+#/ A call gives no value for a parameter that has no default.
 semantic	ParamArgumentMissing	0x0001CF	error	The call gives no value for the parameter '{0}' of '{1}', and it has no default.	Give the parameter, or write a default where the parameter is declared ('name: type = value').
 #/ An ordinary argument is given by name where the callee's signature is not known.
 semantic	ParamArgumentCallee	0x0001D0	error	The argument '{0}' is given by name, and the signature of '{1}' is not known where the call is written.	Name one function, or give the arguments positionally.
@@ -351,6 +351,8 @@ semantic	ParamDefaultNotConstant	0x0001D2	error	The default of the parameter '{0
 semantic	ParamDefaultWrongType	0x0001D3	error	The default of the parameter '{0}' has type '{1}', not '{2}'.	The default is a value of the parameter's type, as an argument at the call would be.
 #/ An ordinary parameter without a default follows one that has a default.
 semantic	ParamAfterDefault	0x0001D4	error	The parameter '{0}' has no default and follows '{1}', which has one.	Write a default here too, so that a call that leaves '{1}' out can still give '{0}' by name.
+#/ An argument at a call has a type the parameter it fills does not take.
+semantic	ParamArgumentWrongType	0x0001D6	error	The argument '{0}' of '{1}' has type '{2}', not '{3}'.	Write a value of the parameter's type; an integer may be given where a float is declared.
 #
 # Warnings
 semantic	VarParamInAsyncFunction	0x100001	warn	Variable parameters are only allowed in sync functions.	Remove the variable parameter or make the function synchronous.

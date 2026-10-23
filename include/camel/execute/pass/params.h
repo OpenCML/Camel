@@ -17,9 +17,11 @@
 #include "base.h"
 
 #include <cstdint>
+#include <initializer_list>
 #include <map>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -38,6 +40,29 @@ struct PassParam {
     /// this for each of the function's `with` parameters (they have no default in source).
     bool required = false;
 };
+
+/// Declares a pass's parameters the way a function declares its own (design principles 4.4):
+///
+///     declarePassParams(
+///         "safe_fp: bool = false, growth_budget: int = 4096",
+///         {{"safe_fp", "keep ..."}, {"growth_budget", "nodes ..."}})
+///
+/// The list is read by the language's own parser and uses a function's parameter grammar: a
+/// name, `:`, a type (`bool`, `int`, `float`, `string`), and a default written `= value`. A
+/// default is a constant expression evaluated here, once, where the declaration is (design
+/// principles 6.5); a call that leaves the parameter out copies that one value. A parameter
+/// written without a default is required, and no required parameter may follow a defaulted one.
+///
+/// `docs` gives a parameter's help line by name; it is documentation, not part of the
+/// declaration. A malformed declaration is a defect of the pass and throws std::runtime_error.
+std::vector<PassParam> declarePassParams(
+    std::string_view declaration,
+    std::initializer_list<std::pair<std::string_view, std::string_view>> docs = {});
+
+/// How many parameter defaults have been evaluated since the process started. A declaration
+/// evaluates each of its defaults once; a test reads this to prove that binding a call does
+/// not evaluate them again.
+size_t passParamDefaultEvaluations();
 
 /// The parameters of one pass invocation, defaults filled in. Asking for a name the pass did
 /// not declare, or with the wrong type, is a defect of the pass and throws std::logic_error.
