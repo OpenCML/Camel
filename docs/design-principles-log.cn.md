@@ -801,3 +801,5 @@ H15 的待决问题：分支臂里的 `return` 取臂位置的期望类型；数
 - （2026-10-22，负责人）遍的输入与输出都是图，打印/导出/执行类遍在副作用之后输出空图，不另设"消费遍"（改第 9 节）。`explain`/`why_not` 的用户界面放在调试器 camel-db，核心命令行不加源码位置参数。转译即降低（目标算子 + 规则 + 按目标抽取），执行即改写到范式（`semantics` 规则库，作可执行语义与差分测试参照）。
 - （2026-10-22，负责人）"camel 本身就是主打 pass as func，funcs are graphs，多阶段图重写，直到产生空图就是执行结束"——写入第 1 节。
 - （2026-10-23，评审裁定，合并时记录）`typeof` 在泛型里的用法已经裁定并实现：`typeof e` 是编译期占位，在 `fields` 的操作数、`match type` 的主语、`static for`/`static loop` 的操作数与类型实参的位置解析成 `e` 的静态类型；`e` 没有值报 `TypeOfNotAValue`，`typeof` 写在更大的类型里报 `TypeOfNotWholeType`。配套的同形推导式 `T { static for (n, F) in fields T => e }` 从 `T` 取字段名与种类（结构体或元组）：生成器走别的类型报 `SameShapeComprehensionMismatch`，`T` 不是结构体或元组报 `SameShapeComprehensionNotComposite`。设计原则第 15 节仍把“`typeof` 在泛型里的用法”列为未定，那一行需要作者改写；本条只记录裁定已经生效，不改规范正文。
+- （2026-10-23，决策者，可推翻）bf16/f16 与 f32 同等：字面量、标量运算（f32 中算、舍入一次）、转换不需许可；许可只管编译器做的改变；浮点数组归约在 f64 中累加、舍入一次（f32 数组同批改正）。更正 H238 任务书把用户写下的 bf16 转换算作 `change_precision` 的误读。详见 handover/reviews/reduced-precision.md。
+- （2026-10-23，负责人确认）bf16/f16 作为核心原生数值类型，与 f32 同等（"这种基础性的可以吸纳进入语言原生核心"）：上一条的可推翻标记撤去。

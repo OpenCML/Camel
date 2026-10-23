@@ -452,6 +452,8 @@ Keywords are kept only for modifiers that change semantics (such as `sync`, `exp
 | `finite_math` | not allowed; granted by a tag | Assuming there is no NaN, infinity, negative zero or subnormal |
 | `nondeterministic` | not allowed; granted by a tag | Allowing practices whose result varies with scheduling |
 
+- **Permissions govern what the compiler changes, not what the user wrote.** A type or conversion the user writes (`bf16(x)`, `f32(y)`, a tensor `cast`) is the precision asked for and needs no permission; `change_precision` governs the compiler computing below the written precision (a f32 matrix product done in BF16, a narrower accumulator). `bf16`/`f16` are floating types on a par with `f32`: they have literals, scalar arithmetic, comparisons and conversions, and arithmetic runs in f32 and rounds once. A reduction over a floating array accumulates in f64 and rounds once, returning the element type (as tensor reductions do).
+
 - The default relaxation applies to element-wise tensor operations, the same as to scalars.
 - Algebraic optimization does not automatically assume there is no NaN, infinity, negative zero or subnormal; a rule must still preserve the behaviour of these special values, or check the relevant explicit permission.
 - An f32 matrix multiplication implemented by a library on the CPU is available by default just as on the GPU, on the condition that the result is reproducible (7.6; in safe mode the canonical algorithm is used); rounding the multiply and the add separately counts as a change of the accumulation manner and falls under what is allowed by default; BF16 computation needs only `change_precision`.
