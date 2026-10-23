@@ -2097,6 +2097,7 @@ RewriteStats DraftWritings::rewrite(
                     step->producedText = nodeText(draft_, made);
                     recorded           = &*step;
                 }
+                draft_.takeStatementPlace(node, made);
                 draft_.replaceAllValueUses(node, made);
                 draft_.replaceAllCtrlUses(node, made);
                 for (gc_node_ref_t wait : waits) {
