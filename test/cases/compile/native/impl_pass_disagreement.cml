@@ -1,6 +1,7 @@
 /**
  * The same shape as `impl_pass_agreement.cml`, with each tag naming a deliberately wrong kernel:
- * `wrong` says `a + b` and names `:op/sub_l`, `mix` says `a * b` and names `:op/div_d`.
+ * `wrong` says `a + b` and names `:op/sub_l`, and the differentiable `mix` says `a * b` and names
+ * `:op/div_d`.
  *
  * A direct call takes the kernel and a call through the function value takes the body, so the two
  * integer paths disagree by 39 (3 against 42), and the reverse pass disagrees by 1.5 for the

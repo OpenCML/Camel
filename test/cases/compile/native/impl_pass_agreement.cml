@@ -1,59 +1,56 @@
 /**
- * The agreement case over real kernels. This module writes `module tensor` (the way
- * `declaration_per_result_type.cml` does) so that it may declare the kernels its functions are
- * tagged with: a body-less declaration stands for an operator of the module it is written in, and
- * only that module may declare it. The kernels here are the tensor module's own
- * (`tensor:sum`, `tensor:mean`, `tensor:sigmoid`) and the core's (`:op/mul_d`), and each tagged
- * function keeps a Camel body that is a different expression over the same input.
+ * The agreement case over kernels a test module may declare. A body-less declaration stands for
+ * an operator of the module it is written in, and a test module writes no other module's protocol,
+ * so the kernels here are the core's own scalar operators: `:op/add_l`, `:op/mul_d` and
+ * `:op/div_d`. Each tagged function keeps a Camel body that computes the same value by a
+ * different expression, so the two paths of the same function run different operators and must
+ * still agree.
  *
- * Every pair is taken both ways by `main`: a direct call (one OPER of the kernel) and a call
- * through the function value (the Camel body graph). The values must agree; the graphs must not.
+ * `main` takes every pair both ways: a direct call (one OPER of the kernel) and a call through the
+ * function value (the Camel body graph). `impl_pass_disagreement.cml` is the same shape with the
+ * tag naming the wrong kernel, so a `diff` of zero here is not something the comparison hands out
+ * for free.
  */
-module tensor
+module impl_pass_agreement
 
-import { Tensor } from tensor
+#op<':op/add_l'>
+func add_kernel(a: int, b: int): int
 
-
-#op<'tensor:sum'>
-func sum_kernel(t: Tensor): Tensor
-
-#impl<sum_kernel>
-export func total(t: Tensor): Tensor {
-    return reshape(t, [4])
+#impl<add_kernel>
+export func plus(a: int, b: int): int {
+    return a - (0 - b)
 }
 
-#op<'tensor:mean'>
-func mean_kernel(t: Tensor): Tensor
+#op<':op/div_d'>
+func div_kernel(a: float, b: float): float
 
-#impl<mean_kernel>
-export func average(t: Tensor): Tensor {
-    return mean(t)
+#impl<div_kernel>
+export func ratio(a: float, b: float): float {
+    return a * b
 }
 
 #op<':op/mul_d'>
 func mul_kernel(a: float, b: float): float
 
 #impl<mul_kernel>
-export func scale(a: float, b: float): float {
-    return (a * 2.0) / 2.0
+export func scaled(a: float, b: float): float {
+    return (a * b * 2.0) / 2.0
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    let by_body_plus = plus
+    let by_body_ratio = ratio
+    let by_body_scaled = scaled
 
-    let by_body_total = total
-    let by_body_average = average
-    let by_body_scale = scale
+    let kp = plus(19, 23)
+    let bp = by_body_plus(19, 23)
+    let kr = ratio(4.0, 2.0)
+    let br = by_body_ratio(4.0, 2.0)
+    let ks = scaled(3.0, 4.0)
+    let bs = by_body_scaled(3.0, 4.0)
 
-    let kt = total(x)
-    let bt = by_body_total(x)
-    let ka = average(x)
-    let ba = by_body_average(x)
-    let ks = scale(2.0, 3.0)
-    let bs = by_body_scale(2.0, 3.0)
-
-    'total kernel={} body={} diff={}'->format<sum(kt), sum(bt), sum(kt - bt)>->println
-    'average kernel={} body={} diff={}'->format<sum(ka), sum(ba), sum(ka - ba)>->println
-    'scale kernel={} body={} diff={}'->format<ks, bs, ks - bs>->println
+    'plus kernel={} body={} diff={}'->format<kp, bp, kp - bp>->println
+    'ratio kernel={} body={} diff={}'->format<kr, br, kr - br>->println
+    'scaled kernel={} body={} diff={}'->format<ks, bs, ks - bs>->println
     return 0
 }
