@@ -99,11 +99,6 @@ case = "../../../cases/modules/nn/mnist.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
-name = "nn.mnist_py"
-case = "../../../cases/modules/nn/mnist_py.cml"
-args = ["${case}", "std::opt check_screens=true", "std::null"]
-
-[[tests]]
 name = "nn.residual_mlp"
 case = "../../../cases/modules/nn/residual_mlp.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]

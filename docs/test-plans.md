@@ -366,9 +366,10 @@ Every `[[tests]]` entry may use these common fields:
 - `skip_unless`
   Optional precondition command (same variable expansion as `args`, run from the repository root).
   A non-zero exit skips the test and prints the command's output as the reason; skipped tests
-  count as neither passed nor failed. Use it only for conditions outside the code under test, such
-  as network access for a dataset download:
-  `skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]`.
+  count as neither passed nor failed. Use it only for conditions outside the code under test,
+  such as a device or an optional Python package:
+  `skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]`,
+  `skip_unless = ["${python}", "-c", "import onnxruntime"]`.
 - `skip_unless_timeout_ms`
   Optional timeout for the precondition command. Default is `120000`.
 - `tier`
