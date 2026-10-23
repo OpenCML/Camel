@@ -227,6 +227,12 @@ const TIMEOUT_SCALE = (() => {
 // own timeout by this, so a plan's budget still means "this is slow", not "this is Debug".
 const DEBUG_BUILD_TIMEOUT_SCALE = 4
 
+// How much room a test must leave under its `timeout_ms` to count as a real bound: the run fails
+// when a passing test used more than a quarter of it. A timeout is a pass condition on wall time,
+// and four machines' worth of headroom is what keeps it one when the host is busy with other
+// tests. A test that needs more time states it in a comment next to the number (docs/test-plans.md).
+const TIMEOUT_MARGIN = 4
+
 /**
  * A counting semaphore with FIFO order. A normal test holds one slot; a test marked
  * `parallel = false` asks for every slot, so it starts only when no other test is running and
@@ -1239,6 +1245,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         ...raw,
         normalized,
         wallMs: raw.wallMs,
+        timeoutMs,
         benchmark: null,
         diagnostics: parseDiagnostics(raw.output),
         testTmp: scratch,
@@ -1255,6 +1262,16 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // The verification reads this test's output: executePlans removes the scratch directory
     // only after this returns.
     const failures = await validateTest(test, result, { ...logContext, scope })
+    // A timeout is a pass condition on wall time, so it is only a real bound when the test
+    // finishes with room to spare. Below the margin the number decides on a busy host, and this
+    // says so here instead of in a red run weeks later.
+    if (failures.length === 0 && result.wallMs * TIMEOUT_MARGIN > timeoutMs) {
+        failures.push(
+            `finished in ${result.wallMs.toFixed(0)} ms against a ${timeoutMs.toFixed(0)} ms timeout, ` +
+                `below the ${TIMEOUT_MARGIN}x margin: the bound is today's wall time, not a bound ` +
+                `(raise it with a stated reason, or make the test do less)`
+        )
+    }
     const status = failures.length === 0 ? 'pass' : 'fail'
     return { ...result, failures, status }
 }
@@ -1310,6 +1327,7 @@ function writeLogFiles(plan, test, result, status, logDir) {
                     }
                     : null,
                 wall_ms: result.wallMs,
+                timeout_ms: result.timeoutMs ?? null,
                 plan_path: test.__planPath,
                 test_tmp: result.testTmpRelative || null,
             },

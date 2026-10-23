@@ -2298,7 +2298,11 @@ skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnet seed=benchmark activation=relu: PASS", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 600000
+# 60 min: the referee is CPU-bound (3:12 and 1.8 GB peak measured alone on the shared 32-core
+# host at load 100; about 8.5 min for the same work at -Jobs 8). The old 10 min bound sat at
+# the loaded wall time, so the next slower run made it red; that is not a bound. Each Camel run
+# inside the referee is itself capped at 1800 s, so this fires only on a hang.
+timeout_ms = 3600000
 
 [[tests]]
 name = "resnetbn_gradient_relu_kinks_vs_torch64"
@@ -2313,7 +2317,9 @@ skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=relu: PASS", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 900000
+# 60 min, by the measurement of resnet_gradient_relu_kinks_vs_torch64 above: this model does
+# more work (batch_norm), and the same referee phases are capped at 1800 s each.
+timeout_ms = 3600000
 
 [[tests]]
 name = "grad_first_with_parameter.macro.nvm"

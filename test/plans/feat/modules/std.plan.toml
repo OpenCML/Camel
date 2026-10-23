@@ -150,7 +150,9 @@ args = ["${case}"]
 expect_exit = 0
 failure_note = "Pyplot depends on matplotlib inside Camel's embedded Python runtime, which is not stable across local environments yet."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+# 20 s: 1.4-2.1 s alone; the work is interpreter startup plus matplotlib rendering, so a busy
+# host stretches it (python.phot, the same class, went from 2.1 s to 4.2 s at -Jobs 8).
+timeout_ms = 20000
 
 [[tests]]
 name = "pyplot.simple"
@@ -161,7 +163,9 @@ args = ["${case}"]
 expect_exit = 0
 failure_note = "Pyplot depends on matplotlib inside Camel's embedded Python runtime, which is not stable across local environments yet."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+# 20 s: the same shape as pyplot.main, a Python interpreter plus matplotlib startup; 1.4 s
+# alone, and the embedded interpreter slows down with the host, not with the input.
+timeout_ms = 20000
 
 [[tests]]
 name = "python.basic"
@@ -203,7 +207,9 @@ args = ["${case}"]
 expect_exit = 0
 failure_note = "The phot wrapper path is not stable in the current runtime/environment matrix."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+# 20 s: 2.1 s alone, 4.2 s at -Jobs 8 (where this test was red at 4 s), and the pipeline is a
+# fixed 65,536 symbols, so the variation is the embedded interpreter on a busy host, not input.
+timeout_ms = 20000
 
 [[tests]]
 name = "random.basic"

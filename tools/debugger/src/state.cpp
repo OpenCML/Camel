@@ -15,11 +15,14 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
+#include <cstdlib>
 #include <deque>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -52,6 +55,7 @@ static PassGraphStore g_passGraphStore;
 /// 父进程按任务端口缓冲子进程管道输出，与父进程自身 Logger 分离，供 GET /api/log?target= 使用。
 static constexpr size_t kTaskLogMaxLines = 2000;
 static std::unordered_map<int, std::deque<std::string>> g_taskLogBuffers;
+static std::unordered_map<int, uint64_t> g_taskLogMarks;
 static std::mutex g_taskLogMutex;
 
 StartupOptions &getStartupOptions() { return g_startupOptions; }
@@ -268,6 +272,42 @@ void getTaskLogLines(int port, size_t offset, std::vector<std::string> &lines, s
     for (size_t i = offset; i < q.size(); ++i)
         lines.push_back(q[i]);
     nextOffset = offset + lines.size();
+}
+
+std::string taskLogMark(uint64_t seq) {
+    return std::string(kTaskLogMarkPrefix) + std::to_string(seq) + kTaskLogMarkEnd;
+}
+
+bool parseTaskLogMark(const std::string &line, uint64_t &seq) {
+    const size_t prefix = std::string(kTaskLogMarkPrefix).size();
+    if (line.size() <= prefix + 1 || line.compare(0, prefix, kTaskLogMarkPrefix) != 0)
+        return false;
+    if (line.back() != kTaskLogMarkEnd)
+        return false;
+    const std::string digits = line.substr(prefix, line.size() - prefix - 1);
+    if (digits.empty() ||
+        !std::all_of(digits.begin(), digits.end(), [](unsigned char c) { return std::isdigit(c); }))
+        return false;
+    seq = std::strtoull(digits.c_str(), nullptr, 10);
+    return true;
+}
+
+void noteTaskLogMark(int port, uint64_t seq) {
+    std::lock_guard<std::mutex> lock(g_taskLogMutex);
+    uint64_t &mark = g_taskLogMarks[port];
+    if (seq > mark)
+        mark = seq;
+}
+
+uint64_t getTaskLogMark(int port) {
+    std::lock_guard<std::mutex> lock(g_taskLogMutex);
+    auto it = g_taskLogMarks.find(port);
+    return it == g_taskLogMarks.end() ? 0 : it->second;
+}
+
+void resetTaskLogMark(int port) {
+    std::lock_guard<std::mutex> lock(g_taskLogMutex);
+    g_taskLogMarks[port] = 0;
 }
 
 } // namespace debugger

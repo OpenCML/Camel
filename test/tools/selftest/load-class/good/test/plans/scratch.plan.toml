@@ -1,0 +1,13 @@
+# Fixture of test/tools/selftest/load-class/run.mjs: the same shape, every place under the
+# test's own scratch directory. It must pass.
+id = "selftest.load_class.good"
+order = 1
+tier = "fast"
+
+[[tests]]
+name = "writer.scratch"
+kind = "behavior"
+tool = "node"
+case = "../cases/case.mjs"
+args = ["${case}", "out=${test_tmp}/result.out"]
+expect_exit = 0

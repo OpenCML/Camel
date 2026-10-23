@@ -14,6 +14,7 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -38,7 +39,13 @@ struct LineSplitter {
                 continue;
             if (c == '\n') {
                 if (!line.empty()) {
-                    appendTaskLogLine(port, line);
+                    // 事件标记不是程序输出：记下编号，等父进程处理到该事件时再用（见
+                    // state.h）。它排在对应事件之前，正好说明该事件之前的输出已到齐。
+                    uint64_t seq = 0;
+                    if (parseTaskLogMark(line, seq))
+                        noteTaskLogMark(port, seq);
+                    else
+                        appendTaskLogLine(port, line);
                     line.clear();
                 }
             } else {
@@ -110,6 +117,9 @@ std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun, int desi
     };
 
     std::string error;
+    // Before the new process exists: a restarted worker numbers its events from 1 again, and
+    // the previous worker's marks must not answer for them.
+    resetTaskLogMark(workerPort);
     {
         // The table entry exists before the exit callback can look for it.
         std::lock_guard<std::mutex> lock(g_workerMutex);
@@ -149,7 +159,23 @@ std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun, int desi
     return {true, workerPort};
 }
 
-void terminateAllWorkers() { ChildProcess::terminateAll(); }
+void terminateAllWorkers() {
+    std::vector<std::shared_ptr<ChildProcess>> procs;
+    {
+        std::lock_guard<std::mutex> lock(g_workerMutex);
+        procs.reserve(g_workers.size());
+        for (const auto &[port, proc] : g_workers)
+            procs.push_back(proc);
+    }
+    for (const auto &proc : procs)
+        proc->kill();
+    // An exit is reported only after the reader threads have returned (see ChildProcess), and
+    // those threads append to the task log. Returning from main while one is still running
+    // would touch a static that is already being destroyed: kill and wait, every time, before
+    // the process goes away.
+    for (const auto &proc : procs)
+        proc->waitExit(5000);
+}
 
 bool terminateWorker(int port) {
     std::shared_ptr<ChildProcess> proc;

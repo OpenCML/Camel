@@ -142,6 +142,13 @@ is no longer a reason: it belongs in `${test_tmp}`. The examples and mnist tests
 marked because they wrote `tmp/examples` or shared `tmp/mnist`; both now run in parallel,
 against their own `${test_tmp}`, and the marks are gone.
 
+Two declarations are checked before the run rather than left to the scheduler:
+`node test/tools/check-load-class.mjs` reports a path in `args` or `envs` that the plan does not
+already hold as a file and that a second test also names, a literal port (`--port 8765`,
+`port=8765`), and a fixed OS temporary path in a case. The runner's margin rule (above) covers
+the wall-clock half of the same class. The guard says in its header what it cannot see: a path
+computed from a variable, a port a test's own client picks at run time.
+
 The output is the serial run's output: results are printed in plan and test order, whichever
 test finished first, and the exit code and failure text are the same. The run's log directory
 and `summary.json` land under `test/results/log/` as before.
@@ -327,7 +334,12 @@ Every `[[tests]]` entry may use these common fields:
 - `expect_exit`
   Optional integer expected process exit code.
 - `timeout_ms`
-  Optional process timeout in milliseconds. Default is `10000`.
+  Optional process timeout in milliseconds. Default is `10000`. A timeout is a pass condition on
+  wall time, so it is a bound only with room under it: the runner fails a test that used more
+  than a quarter of its timeout (`TIMEOUT_MARGIN` in `test/tools/run-tests.mjs`), and prints the
+  measured number. A test that legitimately needs a large bound states the measurement in a
+  comment next to the value ("20 s: 2.1 s alone, 4.2 s at `-Jobs 8`"); a test that sits at its
+  bound on a quiet machine has no margin for a busy one and is fixed, not raised.
 - `normalizers`
   Optional string array applied to captured output before assertions.
 - `envs`

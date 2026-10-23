@@ -1,0 +1,15 @@
+# Fixture of test/tools/selftest/load-class/run.mjs. It is not under test/plans: its shape is a
+# wall-clock bound with no margin, and the runner must report exactly that.
+id = "selftest.load_class.tight"
+order = 1
+tier = "fast"
+
+[[tests]]
+name = "tight_bound"
+desc = "400 ms of work against a 1000 ms timeout: less than the 4x margin."
+kind = "behavior"
+tool = "node"
+case = "../load-class/sleep.mjs"
+args = ["${case}", "400"]
+expect_exit = 0
+timeout_ms = 1000
