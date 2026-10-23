@@ -333,6 +333,11 @@ semantic	ParamArgumentDuplicate	0x0001CE	error	The parameter '{0}' of '{1}' is g
 semantic	ParamArgumentMissing	0x0001CF	error	The call gives no value for the parameter '{0}' of '{1}', and it has no default.	Give the parameter, or write a default where the parameter is declared ('name: type = value').
 #/ An ordinary argument is given by name where the callee's signature is not known.
 semantic	ParamArgumentCallee	0x0001D0	error	The argument '{0}' is given by name, and the signature of '{1}' is not known where the call is written.	Name one function, or give the arguments positionally.
+#/ A name is given at a call of several declarations, and the parameter at the position the name
+#/ means is not named the same way in every one of them (design principles 4.4): one named argument
+#/ then means one parameter in one declaration and another in another, so no one parameter answers
+#/ to the name. The rule is one rule for the two lists: a `with` argument is an argument here.
+semantic	OverloadParameterNames	0x0001DF	error	The argument '{0}' is given by name, and the overloads of '{1}' do not name the parameter at that position the same way.	Give every overload the same parameter names at the same positions, or give the arguments positionally.
 #/ A positional argument is written after a named one.
 semantic	ParamArgumentPositionalAfterNamed	0x0001D1	error	A positional argument follows a named one in the call of '{0}'.	Write the positional arguments first, then the named ones ('f(1, by: 2)').
 #/ The default of an ordinary parameter is not a compile-time constant.

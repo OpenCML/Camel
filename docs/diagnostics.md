@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-255 diagnostics: 236 errors, 19 warnings.
+256 diagnostics: 237 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -222,6 +222,7 @@ prints one entry.
 | `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error |
 | `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error |
 | `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error |
+| `0x030001DF` | [SemanticDiag::OverloadParameterNames](#overloadparameternames) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5594,23 +5595,23 @@ The 'with' argument '{0}' is given by name, and the signature of '{1}' is not kn
 Name the one function the binding is for, or give the 'with' arguments positionally.
 ```
 
-**Example** (`test/cases/compile/with_defaults/callee_unknown.cml`, run as `camel test/cases/compile/with_defaults/callee_unknown.cml`)
+**Example** (`test/cases/compile/with_defaults/overload_default_hole.cml`, run as `camel test/cases/compile/with_defaults/overload_default_hole.cml`)
 
 ```camel
-module with_argument_callee
+module with_overload_default_hole
 
-with <rounds: int = 8>
-func f(x: int): int {
-    return x + rounds
+with <rounds: int = 8, label: string = 'x'>
+func show(a: int): int {
+    return a * rounds
 }
 
-with <rounds: int = 8>
-func f(x: string): string {
-    return x
+with <rounds: int = 8, label: string = 'x'>
+func show(a: string): int {
+    return rounds
 }
 
 func main(): int sync {
-    return f<rounds: 2>(1)
+    return show<label: 'p'>(3)
 }
 ```
 
@@ -6042,21 +6043,21 @@ The argument '{0}' is given by name, and the signature of '{1}' is not known whe
 Name one function, or give the arguments positionally.
 ```
 
-**Example** (`test/cases/compile/param_defaults/callee_unknown.cml`, run as `camel test/cases/compile/param_defaults/callee_unknown.cml`)
+**Example** (`test/cases/compile/param_defaults/overload_default_hole.cml`, run as `camel test/cases/compile/param_defaults/overload_default_hole.cml`)
 
 ```camel
-module param_argument_callee
+module param_overload_default_hole
 
-func f(x: int): int {
-    return x
+func f(a: int, b: int = 0): int {
+    return a * 10 + b
 }
 
-func f(x: int, y: int): int {
-    return x + y
+func f(a: int, b: int, c: int = 0): int {
+    return a * 100 + b * 10 + c
 }
 
 func main(): int sync {
-    return f(1, y: 2)
+    return f(a: 1, c: 3)
 }
 ```
 
@@ -6432,6 +6433,40 @@ func scaled(x: int): int { return x * 2 }
 func main(): int sync {
     println(scaled(21))
     return 0
+}
+```
+
+### OverloadParameterNames
+
+`0x030001DF` · Error · `SemanticDiag::OverloadParameterNames`
+
+**Message**
+
+```text
+The argument '{0}' is given by name, and the overloads of '{1}' do not name the parameter at that position the same way.
+```
+
+**Help**
+
+```text
+Give every overload the same parameter names at the same positions, or give the arguments positionally.
+```
+
+**Example** (`test/cases/compile/param_defaults/overload_names.cml`, run as `camel test/cases/compile/param_defaults/overload_names.cml`)
+
+```camel
+module param_overload_names
+
+func f(a: int, b: int): int {
+    return a * 10 + b
+}
+
+func f(a: int, c: string): int {
+    return a * 10
+}
+
+func main(): int sync {
+    return f(a: 1, b: 2)
 }
 ```
 

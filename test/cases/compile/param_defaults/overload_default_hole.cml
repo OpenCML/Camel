@@ -1,0 +1,18 @@
+/**
+ * A call of several declarations fills no default: `b` has a default in both declarations of `f`,
+ * but a default is written by one declaration, and the call `f(a: 1, c: 3)` does not say which one
+ * it means, so it gives `b` a value or none of them does (design principles 4.4, handover H376).
+ */
+module param_overload_default_hole
+
+func f(a: int, b: int = 0): int {
+    return a * 10 + b
+}
+
+func f(a: int, b: int, c: int = 0): int {
+    return a * 100 + b * 10 + c
+}
+
+func main(): int sync {
+    return f(a: 1, c: 3)
+}
