@@ -8,14 +8,20 @@
  * the pipeline resolves it by module and name. This guard is what keeps the second declaration
  * from coming back:
  *
- *   * no `declarePassParams`, `initPassScope`, `PassScope` or `registerPass(` in the sources:
- *     those are the C++ pass registry and its parameter strings;
+ *   * no `declarePassParams`, `initPassScope`, `PassScope`, `registerPass(`, `corePasses(`,
+ *     `findCorePass` or `modulePasses(` in the sources: those are the C++ pass registry and its
+ *     parameter strings;
  *   * no parameter declaration written as a string literal
  *     (`"safe_fp: bool = false, ..."`) outside `stdlib/`, where the declaration belongs;
- *   * every pass declared in `stdlib/std.cml` has exactly one implementation in
- *     `src/execute/pass.cpp`, and every implementation is declared; the count is pinned so a
- *     pass that exists only in C++ fails here;
- *   * no declaration writes its parameters in the removed parentheses form.
+ *   * every pass declared in `stdlib/std.cml` has exactly one kernel registered with
+ *     `registerCoreKernel`, and every kernel is declared; the count is pinned so a pass that
+ *     exists only in C++ fails here;
+ *   * every pass a module contributes is a pass-shaped declaration in `stdlib/<module>.cml`
+ *     (`when is_function::<F>()`), and every declaration has a registration;
+ *   * every alias resolves: a core alias names a declared pass, and a module alias names a pass
+ *     the same module registered;
+ *   * every C++ parameter list left is a test-only pass or the Camel pass whose declaration is
+ *     its own `with` list; the list is pinned, so a new one cannot appear quietly.
  *
  *   node test/tools/check-pass-declarations.mjs
  */
@@ -62,6 +68,9 @@ const FORBIDDEN = [
     { name: 'the pass scope initializer', pattern: /\binitPassScope\b/ },
     { name: 'the pass scope type', pattern: /\bPassScope\b/ },
     { name: 'the old registration entry point', pattern: /\bregisterPass\s*\(/ },
+    { name: 'the core pass table', pattern: /\bcorePasses\s*\(/ },
+    { name: 'the core pass lookup', pattern: /\bfindCorePass\b/ },
+    { name: 'the module pass table', pattern: /\bmodulePasses\s*\(/ },
 ]
 // (2) A parameter declaration is written in stdlib, never in a C++ string literal.
 const PARAMETER_STRING = /"[A-Za-z_][A-Za-z0-9_]*\s*:\s*(bool|int|float|string)\s*=/
@@ -89,7 +98,7 @@ for (const root of ROOTS) {
     }
 }
 
-// (3) Every declaration has an implementation and every implementation a declaration.
+// (3) Every declaration has exactly one kernel and every kernel a declaration.
 const declarations = []
 {
     const file = path.join(REPO_ROOT, 'stdlib', 'std.cml')
@@ -114,14 +123,8 @@ const implementations = []
 {
     const file = path.join(REPO_ROOT, 'src', 'execute', 'pass.cpp')
     const text = fs.readFileSync(file, 'utf8')
-    const start = text.indexOf('const std::map<std::string, PassMaker> &corePasses()')
-    const end = text.indexOf('\n        };', start)
-    if (start < 0 || end < 0) {
-        problems.push('src/execute/pass.cpp: the core pass table is not where the guard reads it')
-    } else {
-        for (const match of text.slice(start, end).matchAll(/\{"([a-z_][a-z0-9_:]*)",/g)) {
-            implementations.push(match[1])
-        }
+    for (const match of text.matchAll(/registerCoreKernel\(\s*"([a-z_][a-z0-9_:]*)"/g)) {
+        implementations.push(match[1])
     }
 }
 const DECLARED_COUNT = 53
@@ -143,6 +146,160 @@ for (const name of implementations) {
     }
 }
 
+// (4) A module's pass is a declaration in the module's `.cml` file, and every registration has
+// one. A declaration is pass-shaped when its condition is the pipeline's (`is_function::<T>()`).
+const moduleDeclarations = new Set()
+for (const entry of fs.readdirSync(path.join(REPO_ROOT, 'stdlib'))) {
+    if (!entry.endsWith('.cml') || entry === 'std.cml') {
+        continue
+    }
+    const module = entry.slice(0, -4)
+    const text = fs.readFileSync(path.join(REPO_ROOT, 'stdlib', entry), 'utf8')
+    for (const match of text.matchAll(
+        /^\s*export\s+func\s+([A-Za-z_][A-Za-z0-9_]*)\s*::\s*<[^>]+>\s*\(/gm
+    )) {
+        const lineEnd = text.indexOf('\n', match.index)
+        const line = text.slice(match.index, lineEnd < 0 ? undefined : lineEnd)
+        if (!line.replace(/\s+/g, '').includes('whenis_function::<')) {
+            continue
+        }
+        moduleDeclarations.add(`${module}::${match[1]}`)
+    }
+}
+
+// Every alias resolves, and every registration is declared.
+let aliasCount = 0
+const registrations = new Set()
+const aliases = []
+for (const root of ['modules', 'src']) {
+    for (const file of files(path.join(REPO_ROOT, root))) {
+        if (!file.endsWith('.cpp')) {
+            continue
+        }
+        const relative = path.relative(REPO_ROOT, file).replaceAll(path.sep, '/')
+        const text = fs.readFileSync(file, 'utf8')
+        const constants = new Map()
+        for (const match of text.matchAll(
+            /constexpr\s+const\s+char\s+\*\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"([^"]+)"/g
+        )) {
+            constants.set(match[1], match[2])
+        }
+        for (const match of text.matchAll(
+            /registerModulePass\(\s*([A-Za-z_][A-Za-z0-9_]*|"[^"]+")/g
+        )) {
+            let value = match[1]
+            if (value.startsWith('"')) {
+                value = value.slice(1, -1)
+            } else if (constants.has(value)) {
+                value = constants.get(value)
+            } else {
+                continue // `module + "::" + function`: a Camel pass, resolved at run time
+            }
+            registrations.add(value)
+        }
+        for (const match of text.matchAll(
+            /registerPassAlias\(\s*"([^"]+)"\s*,\s*([A-Za-z_][A-Za-z0-9_]*|"[^"]+")\s*\)/g
+        )) {
+            let target = match[2]
+            if (target.startsWith('"')) {
+                target = target.slice(1, -1)
+            } else if (constants.has(target)) {
+                target = constants.get(target)
+            }
+            aliases.push({ relative, alias: match[1], target })
+        }
+    }
+}
+const corePaths = new Set(implementations.map((name) => `std::${name}`))
+// The core's aliases are a table of names, not a registry of kernels: each names a declared
+// pass, and resolution tries the written name first (so an alias never shadows a declaration).
+{
+    const file = path.join(REPO_ROOT, 'src', 'execute', 'pass.cpp')
+    const text = fs.readFileSync(file, 'utf8')
+    const start = text.indexOf('const std::map<std::string, std::string> passAliases = {')
+    const end = text.indexOf('\n};', start)
+    if (start < 0 || end < 0) {
+        problems.push('src/execute/pass.cpp: the core alias table is not where the guard reads it')
+    } else {
+        for (const match of text.slice(start, end).matchAll(/\{"(std::[^"]+)", "(std::[^"]+)"\}/g)) {
+            aliasCount += 1
+            if (!corePaths.has(match[2])) {
+                problems.push(`the core alias '${match[1]}' names '${match[2]}', not a pass kernel`)
+            }
+        }
+    }
+}
+const knownPasses = new Set([...corePaths, ...registrations])
+for (const { relative, alias, target } of aliases) {
+    aliasCount += 1
+    if (!knownPasses.has(target)) {
+        problems.push(`${relative}: the alias '${alias}' names '${target}', which is no pass`)
+    }
+}
+// Test-only passes are registered by the module but declared nowhere: they exist to be named by
+// a test's pipeline and are not part of a module's language surface.
+const isTestOnly = (path) => {
+    const separator = path.indexOf('::')
+    const funcName = path.slice(separator + 2)
+    return path.slice(0, separator) === 'test' || funcName.startsWith('test_')
+}
+for (const path of registrations) {
+    if (path.startsWith('std::') || isTestOnly(path)) {
+        continue
+    }
+    if (!moduleDeclarations.has(path)) {
+        problems.push(
+            `a pass is registered and its module's .cml declares no function for it: ${path}`
+        )
+    }
+}
+for (const path of moduleDeclarations) {
+    if (!registrations.has(path)) {
+        problems.push(`a module declares the pass '${path}' and no registration implements it`)
+    }
+}
+
+// (5) What is left in C++ is the known gap, pinned so it cannot grow quietly: the test-only
+// passes, and the Camel pass whose declaration is its own `with` list. A built-in pass's
+// parameters are its module's `.cml` declaration.
+const CPP_PARAMETERS = new Map([
+    ['modules/tensor/passes/fuse.cpp', 4], // tensor::test_echo, test-only
+    ['src/execute/pass.cpp', 5], // test::params, test-only
+    // Not a second declaration: built from the Camel function's `with` list, which is the
+    // pass's declaration.
+    ['src/execute/camel_pass.cpp', 1],
+])
+for (const root of ['src', 'modules']) {
+    for (const file of files(path.join(REPO_ROOT, root))) {
+        if (!/\.(cpp|h)$/.test(file)) {
+            continue
+        }
+        const relative = path.relative(REPO_ROOT, file).replaceAll(path.sep, '/')
+        const text = fs.readFileSync(file, 'utf8')
+        const named = (text.match(/PassParam\{/g) || []).length
+        const aggregate =
+            relative === 'src/execute/pass.cpp'
+                ? (text.match(/^\s*\{"[a-z_]+", PassParamType::/gm) || []).length
+                : 0
+        const count = named + aggregate
+        if (count === 0) {
+            continue
+        }
+        if (!CPP_PARAMETERS.has(relative)) {
+            problems.push(
+                `${relative}: a pass parameter list in C++; a built-in pass declares its ` +
+                    `parameters in the standard library`
+            )
+        } else if (CPP_PARAMETERS.get(relative) !== count) {
+            problems.push(
+                `${relative}: ${count} pass parameter entries, the guard knows ` +
+                    `${CPP_PARAMETERS.get(relative)}; a module pass's parameters must not grow ` +
+                    `in C++`
+            )
+        }
+    }
+}
+
 if (problems.length > 0) {
     for (const problem of problems) {
         console.log(`FAIL ${problem}`)
@@ -151,6 +308,7 @@ if (problems.length > 0) {
     process.exit(1)
 }
 console.log(
-    `PASS passes are declarations: ${declarations.length} declared, each with one kernel, ` +
-        `no C++ registry and no parameter string`
+    `PASS passes are declarations: ${declarations.length} in the core, ` +
+        `${moduleDeclarations.size} contributed by modules, each with one kernel, ` +
+        `${aliasCount} aliases resolved, no C++ pass registry and no parameter string`
 )

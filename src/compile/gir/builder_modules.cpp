@@ -868,6 +868,11 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
     for (size_t i = 0; i < gct->exportCount(); ++i) {
         const Reference ref(gct->exportName(i));
         const std::string name = ref.toString();
+        if (unit_->passDeclarations.contains(name)) {
+            // A pass (design principles 9.3): its declaration is read by the pipeline, which
+            // resolves the kernel by module and name. It is not an entity the module exports.
+            continue;
+        }
         if (isDecorated(name) != decorated) {
             continue;
         }

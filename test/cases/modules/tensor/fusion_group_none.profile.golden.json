@@ -26,7 +26,7 @@
    "elementwise": false,
    "graph": "main",
    "operators": "tensor:multiply, tensor:subtract, :op/add_l",
-   "origin": 626,
+   "origin": "L0",
    "reason": "no device region covers this loop, and its body could not be one kernel even then: the body calls a function. It runs in the host interpreter.",
    "tensor": false
   }
@@ -34,7 +34,7 @@
  "loops": [
   {
    "operators_per_round": 15.0,
-   "origin": 626,
+   "origin": "L0",
    "rounds": 3,
    "samples": 2
   }
@@ -178,7 +178,7 @@
   },
   "kernels_per_round": 0.0,
   "operators_per_round": 15.0,
-  "origin": 626,
+  "origin": "L0",
   "rounds": 3,
   "samples": 2,
   "syncs_per_round": 0.0,

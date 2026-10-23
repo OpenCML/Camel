@@ -129,7 +129,7 @@ std::string jsonEscape(std::string_view s) {
 // ---------------------------------------------------------------------------------------------
 // Process state
 // ---------------------------------------------------------------------------------------------
-// The file the trace is appended to, set by std::profile(effect_trace="..."). Replaced before
+// The file the trace is appended to, set by std::profile effect_trace="...". Replaced before
 // the run starts, so every reader sees one immutable string; the previous one is kept alive.
 std::atomic<const std::string *> traceFile{nullptr};
 
@@ -253,7 +253,7 @@ slot_t invoke(size_t index, ArgsView &with, ArgsView &norm, context::Context &ct
             if (s.failed) {
                 std::fprintf(
                     stderr,
-                    "[camel] std::profile(effect_trace): cannot open '%s' for writing\n",
+                    "[camel] std::profile effect_trace: cannot open '%s' for writing\n",
                     path != nullptr ? path->c_str() : "(no file)");
             }
         }
@@ -313,7 +313,7 @@ operator_t wrap(std::string_view uri, operator_t op) {
             warned = true;
             std::fprintf(
                 stderr,
-                "[camel] std::profile(effect_trace): more than %zu effectful operators; '%s' and later "
+                "[camel] std::profile effect_trace: more than %zu effectful operators; '%s' and later "
                 "ones are not traced\n",
                 kMaxWrapped,
                 key.c_str());

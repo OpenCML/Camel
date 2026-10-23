@@ -20,6 +20,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <fstream>
+#include <format>
 #include <functional>
 #include <iostream>
 #include <mutex>

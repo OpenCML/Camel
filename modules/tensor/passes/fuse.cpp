@@ -265,15 +265,10 @@ void registerParamEchoTestPass() {
 
 void registerTensorPasses() {
     PassDescriptor descriptor;
-    // The pass declares `safe_fp` in its module declaration (stdlib/tensor.cml).
-    descriptor.params = {PassParam{
-        "safe_fp",
-        PassParamType::Bool,
-        false,
-        "keep the matmul on the canonical algorithm (design principles 7.4); the default lets a "
-        "matmul the 7.3 rule permits use the library GEMM"}};
+    // The pass, its documentation and its parameters are the declaration in stdlib/tensor.cml;
+    // this is only its kernel.
     descriptor.readsTags = true;
-    descriptor.make       = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
+    descriptor.make = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<TensorFusePass>(ctx, args.getBool("safe_fp"));
     };
     registerModulePass("tensor::fuse", std::move(descriptor));

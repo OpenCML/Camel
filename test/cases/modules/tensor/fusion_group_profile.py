@@ -36,6 +36,11 @@ STEP = HERE / "fusion_group_step.cml"
 NONE = HERE / "fusion_group_none.cml"
 GOLDEN_TEXT = HERE / "fusion_group_none.profile.golden.txt"
 GOLDEN_JSON = HERE / "fusion_group_none.profile.golden.json"
+# The goldens were captured from the base commit (b43dd5c68). `origin` in the JSON is the
+# internal node-origin id, not a source position: it moved when stdlib/tensor.cml gained its
+# pass declaration (design principles 9.3), which adds nodes to the module's declaration, and
+# the golden records the id this tree produces. The source positions the text report prints are
+# unchanged and are checked there.
 
 # The measured numbers a report prints: durations, shares and byte counts. Everything else in the
 # report is a count or a name, and must not change.
@@ -153,6 +158,28 @@ def normalize_doc(doc: dict) -> dict:
     out = normalize_json(doc)
     if isinstance(out.get("operator_rows"), list):
         out["operator_rows"].sort(key=lambda row: row["uri"])
+    # `origin` is the internal node-origin id, not a source position. Its absolute value is not a
+    # property of this program: it moved 615 -> 626 -> 637 -> 659 across three unrelated merges in
+    # one day, each time because a stdlib declaration added nodes, while the report said the same
+    # thing about the same graph, and each time this golden was the only red. What is a property is
+    # the *identity*: the hint and the loop must carry the same id, i.e. the hint is about that
+    # loop. Renumber every distinct id by first appearance (`L0`, `L1`, ...), so the relationship is
+    # still compared and an unrelated declaration no longer turns this case red. The absolute id
+    # stays in the golden file as a record of what the tree emitted when it was regenerated.
+    ids: dict[object, str] = {}
+
+    def renumber(node) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "origin":
+                    node[key] = ids.setdefault(value, f"L{len(ids)}")
+                else:
+                    renumber(value)
+        elif isinstance(node, list):
+            for value in node:
+                renumber(value)
+
+    renumber(out)
     return out
 
 

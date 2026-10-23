@@ -6,13 +6,13 @@
 #include "camel/core/source/manager.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/debug.h"
+#include "diagnostics/arguments.h"
 #include "diagnostics/builder.h"
 #include "diagnostics/messages/index.h"
 #include "diagnostics/range.h"
 #include "diagnostics/render.h"
 
 #include <deque>
-#include <format>
 #include <iosfwd>
 #include <memory>
 #include <mutex>
@@ -293,17 +293,10 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
     d.stage    = stageForDiagnostic(type_);
     d.related  = std::move(related_);
     d.notes    = std::move(notes_);
-    try {
-        auto arg_storage = std::make_tuple(std::forward<Args>(args)...);
-        auto make_args   = [&] {
-            return std::apply([](auto &...a) { return std::make_format_args(a...); }, arg_storage);
-        };
-        d.message    = std::vformat(rawMessage_, make_args());
-        d.suggestion = std::vformat(rawSuggestion_, make_args());
-    } catch (const std::format_error &e) {
-        throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
-            .commit("Error formatting diagnostic message: " + std::string(e.what()));
-    }
+    DiagnosticArguments arguments;
+    (arguments.add(std::forward<Args>(args)), ...);
+    d.message    = formatDiagnosticMessage(rawMessage_, arguments);
+    d.suggestion = formatDiagnosticMessage(rawSuggestion_, arguments);
     d.moduleName = moduleName_;
     d.modulePath = modulePath_;
     if (diagnostics_ && diagnostics_->sourceContext()) {

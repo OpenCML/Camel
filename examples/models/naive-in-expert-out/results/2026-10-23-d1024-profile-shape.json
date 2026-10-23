@@ -26,7 +26,7 @@
     "threads": 1,
     "steps": 16,
     "warmup": 3,
-    "profile_pass": "std::profile(top=0, report=true)",
+    "profile_pass": "std::profile top=0 report=true",
     "row_rule": "operator ns divided by 16 rounds; the step's own wall_per_round_ns is the median of the 13 timed steps",
     "library": {
       "wall_ms": 2714.6,
@@ -104,7 +104,7 @@
     "safe": {"diff": 0.0, "sums": [-11232.049074259794, -11232.049074259794]}
   },
   "commands": {
-    "profile_library": "camel -t 1 --block-limit 8192 train_step_1024.cml tensor::fuse 'std::profile(top=0,json=\"prof-1024-lib-a.json\",report=true)' std::jit --arg bench=true --arg init_dir= --arg final_dir=",
+    "profile_library": "camel -t 1 --block-limit 8192 train_step_1024.cml tensor::fuse 'std::profile top=0 json=\"prof-1024-lib-a.json\" report=true' std::jit --arg bench=true --arg init_dir= --arg final_dir=",
     "profile_canonical": "the same without tensor::fuse",
     "shape_pairs": "camel -t 1 gemm_shapes.cml tensor::fuse",
     "paired_sweep": "python /tmp/h281-prof/pair_sweep.py (alternates canonical and library per round)"

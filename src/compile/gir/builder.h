@@ -209,6 +209,12 @@ class Builder {
         // private ones, which only its own bodies call (handover H94, ruling 3). A module's
         // private operator is not an entity of the module.
         std::unordered_map<std::string, oper_group_ptr_t> nativeOperatorGroups;
+        // The names of the body-less declarations of the module that declare a pass, not an
+        // operator (design principles 9.3): `when is_function::<F>()` is the pass's
+        // applicability. The pipeline reads the declaration from the module's `.cml` file and
+        // resolves the kernel by module and name; no graph, no operator group and no export is
+        // built for it.
+        std::set<std::string> passDeclarations;
         // What the link step reports per module, collected while its bodies are built.
         std::vector<BuiltFunction> builtFunctions;
         std::vector<compile_graph_ptr_t> builtBodies;
@@ -331,8 +337,14 @@ class Builder {
     void exportDeclarations(const GCT::node_ptr_t &expt, bool decorated);
     // A body-less declaration of the current module (design principles 6.4; handover H19, step
     // 1): checked against the operator table and the loaded executors, then kept as a rule of
-    // the operator group of its name.
+    // the operator group of its name. A body-less declaration with the pass applicability is
+    // not an operator; see `isPassDeclaration`.
     void declareNativeOperator(const GCT::node_ptr_t &gct);
+    // Whether a body-less declaration declares a pass (design principles 9.3): its applicability
+    // condition is `is_function::<T>()`, the same condition the pipeline reads from the module's
+    // `.cml` file. A pass is a function the pipeline applies to the program, not an operator of
+    // the module; nothing of it is compiled or exported.
+    static bool isPassDeclaration(const GCT::node_ptr_t &gct);
     // Exports the operator groups of the body-less declarations of the current module, one group
     // per declared name, after its declarations were read. A name the module's export list
     // `exportList` does not have stays private to the module (handover H94, ruling 3).
