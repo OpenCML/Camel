@@ -41,6 +41,7 @@ for (const [check, reason] of [
 }
 for (const l of [
   'RESOURCES valid accepted', 'RESOURCES refines_external accepted', 'RESOURCES pure_touches_none accepted',
+  'RESOURCES unnamed_effect_declared accepted',
   'RESOURCES var_param_written accepted', 'RESOURCES late_declared accepted',
   'RESOURCES writes var_op 1 plain_op 1 late_op 0',
   'RESOURCES version semtest:pure@1.5 semtest:cell_write@1.0',
@@ -67,10 +68,31 @@ for (const l of [
   'RESOURCES order main 9 10 resource ordered by control',
   'RESOURCES order main 12 34 resource ordered by control',
   'RESOURCES order main 19 21 resource ordered by data',
-  'RESOURCES order main 23 24 external ordered by control',
   'RESOURCES order countdown 4 12 resource ordered by control',
   'true', 'false', '4', '16', '[1, 2, 3]',
 ]) line(l)
+// This test used to write `RESOURCES order main 23 24 external ordered by control`: a pair of
+// effects outside the program was a pair whatever they touched. A conflict is judged by resource
+// alone now (design principles 3.3, F9; the ruling: "冲突只按资源判断；不同资源上的效应之间没有
+// 顺序，要有顺序就写同步块"), so the pair is the accesses' and its kind is `resource`: the
+// generator and the console are different resources and are not a pair at all, while two writes of
+// one resource keep the order the `sync` body gives them.
+const nodes = out.split('\n').filter((l) => l.startsWith('RESOURCES node main '))
+const pairs = out.split('\n').filter((l) => l.startsWith('RESOURCES order main '))
+const nodeIds = (uri) => nodes.filter((l) => l.includes(` ${uri}: `)).map((l) => Number(l.split(' ')[3]))
+const pairOf = (a, b) => pairs.find((l) => {
+  const p = l.split(' ').slice(3, 5).map(Number)
+  return p.includes(a) && p.includes(b)
+})
+const seeds = nodeIds('rand:seed')
+const prints = nodeIds(':io/println')
+assert(seeds.length === 1 && prints.length >= 2, `nodes: ${nodes.join(' | ')}`)
+assert(!out.includes(' external ordered') && !out.includes(' external unordered'), 'a conflict is judged by resource alone: every pair says `resource`')
+for (const s of seeds) for (const p of prints) assert(!pairOf(s, p), `the generator and the console are different resources: ${s} ${p}`)
+for (let i = 0; i < prints.length; i++) for (let j = i + 1; j < prints.length; j++) {
+  const pair = pairOf(prints[i], prints[j])
+  assert(pair && / resource ordered by (data|control)$/.test(pair), `two writes of the console are one resource: ${prints[i]} ${prints[j]}: ${pair}`)
+}
 assert(!out.includes('RESOURCES order countdown 9 12'), 'the two arms of a branch are not a pair')
 assert(!/RESOURCES order main (2|5|18) /.test(out), 'making a cell conflicts with nothing')
 assert(!/RESOURCES order main 12 (8|9|10|15|32) /.test(out), 'the cells of c and d are different resources')
@@ -108,6 +130,11 @@ assert(typedSame.length === 1 && typedSame[0].endsWith('resource ordered by cont
 // A `var` argument the signature says is unused produces no access.
 const unused = out.split('\n').find((l) => l.includes('FUNC synth:typed-unused:'))
 assert(unused && unused.endsWith(': none'), `unused var argument: ${unused}`)
+// An effect that names no resource at all: the conservative global, which meets every effect
+// (design principles 3.3). It is an access of unknown class the node gets from the resolver, so
+// the pair with the cell write is there and says `resource`.
+const unnamed = order('unnamed-global')
+assert(unnamed.length === 1 && unnamed[0].endsWith('resource ordered by control'), `unnamed-global: ${unnamed}`)
 }
 """
 
@@ -119,6 +146,42 @@ case = "../../../cases/resources/effects.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_output_not_contains = ["RESOURCES "]
+
+[[tests]]
+name = "conflict_per_resource"
+desc = "F9 (design principles 3.3): a conflict is judged by resource alone. Three effects that name three different resources — `seed` writes the random generator, `exists` reads the file system, `println` writes the console — are no pair at all, and the two `println`s, one resource (`stdout`), are a pair that keeps the order the `sync` body gives them. The pair set is what a plan and its edges are written from (F1-F3); the parallel scheduler's own evidence cannot be observed while the plan generator consults no resource query (handover 5.20 item 4), so the query's answer is the witness."
+kind = "behavior"
+case = "../../../cases/resources/conflict_per_resource.cml"
+args = ["${case}", "test::resources"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const nodes = out.split('\n').filter((l) => l.startsWith('RESOURCES node main '))
+const pairs = out.split('\n').filter((l) => l.startsWith('RESOURCES order main '))
+const nodeIds = (uri) => nodes.filter((l) => l.includes(` ${uri}: `)).map((l) => Number(l.split(' ')[3]))
+const ids = (l) => l.split(' ').slice(3, 5).map(Number)
+const seeds = nodeIds('rand:seed')
+const exists = nodeIds('fs:exists')
+const prints = nodeIds(':io/println')
+assert(seeds.length === 1 && exists.length === 2 && prints.length === 2, `nodes: ${nodes.join(' | ')}`)
+const joined = (a, b) => pairs.filter((l) => { const p = ids(l); return p.includes(a) && p.includes(b) })
+const meets = (set, x) => set.includes(x)
+// Different resources: the effects are not a pair at all, however the graph orders them.
+for (const l of pairs) {
+  const [x, y] = ids(l)
+  const consoleAndOther = (meets(prints, x) && (y === seeds[0] || meets(exists, y))) ||
+    (meets(prints, y) && (x === seeds[0] || meets(exists, x)))
+  assert(!consoleAndOther, `the console and another resource are a pair: ${l}`)
+  assert(!(meets(exists, x) && meets(exists, y)), `two reads of one resource are a pair: ${l}`)
+  assert(!((x === seeds[0] && meets(exists, y)) || (y === seeds[0] && meets(exists, x))), `the generator and the file system are a pair: ${l}`)
+}
+// One resource: one pair, in the order the `sync` body gives it.
+const same = joined(prints[0], prints[1])
+assert(same.length === 1 && / resource ordered by (data|control)$/.test(same[0]), `the two writes of the console: ${pairs.join(' | ')}`)
+assert(pairs.length === 1, `every other pair: ${pairs.join(' | ')}`)
+}
+"""
 
 [[tests]]
 name = "declared_resources"
