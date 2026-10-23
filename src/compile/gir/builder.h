@@ -552,6 +552,12 @@ class Builder {
     camel::core::context::context_ptr_t context_;
     camel::core::module::module_ptr_t module_;
     camel::core::error::diagnostics_ptr_t diags_;
+    /// The speculative scope in force, if any: the only thing it changes is what a *body build*
+    /// reports (`BodyDiagnostics`) and how a body that does not compile is answered
+    /// (`instantiateGeneric` returns nullptr instead of aborting). Every other diagnostic goes to
+    /// `diags_` wherever it is made, scope or no scope.
+    class SpeculativeInstantiation;
+    SpeculativeInstantiation *speculative_ = nullptr;
     /// The program's export table (see the constructors): `exports_` points at `ownExports_`
     /// for a builder of a program of its own, or at the context's table for the context's
     /// program. Never at a module's table: that is the module's own (native) declarations.
@@ -1170,6 +1176,62 @@ class Builder {
     compile_graph_ptr_t instantiateGenericAs(
         const generic_template_ptr_t &tmpl, FunctionType *expected, const GCT::node_ptr_t &origin,
         std::string &why);
+    /// A body build inside a speculative scope: while this lives, what the body reports goes to the
+    /// scope's sink. The body of a candidate is the only thing a search may hold back, and this is
+    /// the only door into that sink.
+    class BodyDiagnostics {
+      public:
+        explicit BodyDiagnostics(Builder &builder);
+        ~BodyDiagnostics();
+
+      private:
+        Builder &self_;
+        SpeculativeInstantiation *scope_;
+        camel::core::error::diagnostics_ptr_t outer_;
+    };
+    /// The diagnostics of a body that does not compile for the types it was tried with, and the
+    /// answer to them. A position that fixes the type variables of a generic name tries the
+    /// candidates its name offers one after another, and a candidate whose *body* does not compile
+    /// for those types is not the one the position wants: what its body said is about a function the
+    /// program does not use, so it is held here instead of reported, and the attempt is answered
+    /// with "no instance" (`instantiateGeneric` returns nullptr) rather than with an abort. The
+    /// attempt that failed remembers the failure in its template (`GenericInstance::failed`,
+    /// :77-78), so a second attempt at the same types makes no diagnostic and does not build the
+    /// body again.
+    ///
+    /// Nothing else is held. The argument form of a call, a `constas` value that is not constant, a
+    /// condition that cannot be answered, an incomplete return type and every other verdict of the
+    /// program reach the sink in place the moment they are made, whether a scope is open or not: a
+    /// search may skip a candidate, never a verdict. What is held is only ever the body of a
+    /// candidate that may still turn out not to be the one wanted.
+    ///
+    /// A caller with no candidate left calls `attach()`, which adds those errors to the sink in
+    /// place -- so the refusal that follows carries them, at the positions and with the labels the
+    /// body gave them -- and ends the scope; a caller that found its instance lets the scope end,
+    /// which drops them. The search that has no fallback does not use this at all: one candidate and
+    /// no alternative is not speculative, and its diagnostics are the program's.
+    class SpeculativeInstantiation {
+      public:
+        friend class BodyDiagnostics;
+        explicit SpeculativeInstantiation(Builder &builder);
+        ~SpeculativeInstantiation();
+        /// Adds the errors of the bodies that did not compile to the sink in place, and ends the
+        /// scope: from here the builder reports where it always did, so the diagnostic the caller
+        /// is about to make is the program's, and it is preceded by what the bodies said.
+        void attach();
+        /// Ends the scope and reports nothing more: what the bodies said is dropped, for a caller
+        /// that knows a candidate nobody chose is not the program's business (a rule's search for an
+        /// instance for one type: the reason is remembered and reported only when the user asks).
+        void close();
+
+      private:
+        Builder &self_;
+        /// The scope this one replaced, so that scopes nest.
+        SpeculativeInstantiation *previous_ = nullptr;
+        camel::core::error::diagnostics_ptr_t outer_;
+        camel::core::error::diagnostics_ptr_t inner_;
+        bool settled_ = false;
+    };
     /// The function value of the generic function `node` names, instantiated for the type
     /// the position expects; an error (GenericFunctionAsValue) that says which variables
     /// cannot be determined when `expected` is not a function type that fixes them.
