@@ -38,7 +38,7 @@
  */
 module opt
 
-import { flatten } from array
+import { flatten, all, any } from array
 import { Program, Node, Graph, Txn, NodeKind, graphs, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, is_anchor, is_written_slot, is_constant, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, commit } from graph
 
 // ---- reading a node as the key of a comparison ----
