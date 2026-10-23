@@ -176,7 +176,7 @@ func main(): int sync {
 
 ### 7.4.3 Overloading
 
-Functions in the same block with the same name and different parameter types are overloads, each with its own subgraph. A call takes the first one, in the order written, whose parameters accept the arguments.
+Functions in the same block with the same name and different parameter types are overloads, each with its own subgraph. A call takes the one whose parameters accept the arguments and whose `when` condition holds; when more than one candidate is left it is `SemanticDiag::AmbiguousCall`, and declaration order never decides (design principles 4.4, 5.1).
 
 ```cml
 func show(x: int): string { return 'int ' + string(x) }
@@ -192,7 +192,7 @@ func main(): int sync {
 int 1 string a
 ```
 
-- A second function of the same name with exactly the same parameter types is `SemanticDiag::Redeclaration` (the return type and the parameter names do not take part in the distinction).
+- A second function of the same name with exactly the same parameter types is `SemanticDiag::Redeclaration` (the return type and the parameter names do not take part in the distinction), unless **both declarations write `when` and the two conditions exclude each other**: then they are overloads, one family of types each (design principle 4.4; the language author's ruling of 2026-10-24, `docs/handover/reviews/questions-2026-10-23.md`, 「## impl-declaration-arms」： 「同名声明按 `when` 互斥分臂就是重载，`signaturesCanAgree` 忽略 `when` 是缺陷」). Mutual exclusion is decided type by type: for every type the compiler registers (the scalar types, and one sample of each of the shapes a value has -- an array, a tuple, a function and a struct) the type variables of each condition are bound to that type and both conditions are answered; **a type that satisfies both** is the overlap, reported as `SemanticDiag::WhenDeclarationOverlap`, whose message names that type and both declarations (each with its condition). When a condition has a part that cannot be evaluated at compile time (it cannot be answered), the pair is refused by the older rule rather than taken for disjoint. The check is the same for every same-named overload that writes `when`; it is not a special case of `#impl`.
 - A generic function cannot share its name with other functions.
 - A name that stands for a group of overloads cannot be used as a value ([6.9](06_expressions.md#69-lambdas-and-function-types)).
 
@@ -244,7 +244,7 @@ func main(): int sync {
 - An operator with the wrong number of parameters, with with-parameters or with a `var` parameter is `SemanticDiag::OperatorOverloadInvalid`. A generic overload declares its type parameters after the operator's name (`func operator +::<T>(a: T[], b: T[]): T[]`), not in a parameter's type.
 - **The overloads of every layer form one set.** Every other name takes the nearest layer only (local > this module > imported > built-in); operators are the exception (design principles 10.2): the overloads of this module, those exported by imported modules, and the built-in and C++ module ones are one set, and a call takes the one that accepts its operands.
 - **The more specific overload wins** (design principles 4.3). "More specific" means: an overload of the program whose parameter types are exactly the operands' types (without a value entering `T?` or `T!`), while every other one that accepts the operands takes them only as members of a family of types: a built-in or C++ module operator whose type rule accepts several types (comparing arrays, tuples and structs by content, arithmetic over tensors), or a generic overload. The call then takes the program's overload. So a struct can have an equality of its own: `func operator ==(a: V, b: V): bool` makes `p == q` (both `V`) call it instead of comparing by content; other struct types are still compared by content. A built-in operator declared for exactly those types (`int + int`, `float == float`) is as specific: declaring such an overload is `SemanticDiag::OperatorOverloadConflict`.
-- Otherwise two that accept the operands are `SemanticDiag::AmbiguousCall`, which lists them (two generic overloads, or two modules each giving one for the same parameter types); two overloads with the same parameter types in one module are `SemanticDiag::Redeclaration`. An ordinary call, and a partial application (`f<w>` used as a value), report the same diagnostic when several candidates fit in the pass being used.
+- Otherwise two that accept the operands are `SemanticDiag::AmbiguousCall`, which lists them (two generic overloads, or two modules each giving one for the same parameter types); two overloads with the same parameter types in one module are `SemanticDiag::Redeclaration` (when both write `when` and the conditions exclude each other they are arms of one overload, see [7.4.3](#743-overloading)). An ordinary call, and a partial application (`f<w>` used as a value), report the same diagnostic when several candidates fit in the pass being used.
 - **Export**: `export func operator +(...)`. Importing a module (`import { V } from m`, or `import m`) brings all the operator overloads it exports, as for the operators of a C++ module; they are not, and cannot be, imported by name.
 - **An operator declared in a namespace block belongs to the module** (design principles 4.3): its name carries no namespace (an operator has no name to qualify), it is exported and joins the overloads as one declared at the top level does, and its signature and body look names up in the block, so they may use the block's types without a prefix.
 - On the graph an operator overload is an ordinary function call. Names of the form `__x__` remain reserved; programs do not write them.
@@ -579,7 +579,38 @@ export func add(a: int, b: int): int {
   func add::<T>(a: T, b: T): T { return a - (0 - b) }        // an int instance has no executor: it runs the body
   ```
 
-  The reader of this condition is the `#impl` path that chooses the executor (`Builder::declaredRuleApplies`); elsewhere a body-less declaration is still matched by signature alone (ordinary call resolution, function values).
+  The reader of this condition is the `#impl` path that chooses the executor (`Builder::declaredRuleApplies`); elsewhere a body-less declaration is still matched by signature alone (ordinary call resolution, function values), so a kernel split into arms is chosen by arm only through its `#impl` function: a call written with the kernel's own name, or a function value taken from it, has no condition to choose between same-named kernels.
+- **Same-named kernel declarations are split into arms by `when`**: one kernel name may be declared several times, and when the conditions exclude each other the declarations are overloads, one family of types each (the language author's ruling of 2026-10-24, 「## impl-declaration-arms」, same file: 「同名声明按 `when` 互斥分臂就是重载……`array_reduce.cpp` 里的运行期 `switch (codeOf(norm))` 删除」). One declaration per family's executor is all it takes, with no union condition and no dispatch on the type inside the body:
+
+  ```cml
+  func is_armed::<T>(): bool {
+      return match type T {
+          case i32 => true
+          case _ => false
+      }
+  }
+
+  func is_f32::<T>(): bool {
+      return match type T {
+          case f32 => true
+          case _ => false
+      }
+  }
+
+  #op<':op/add_i'>
+  func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // an i32 instance takes :op/add_i
+
+  #op<':op/add_f'>
+  func add_kernel::<T>(a: T, b: T): T when is_f32::<T>()     // an f32 instance takes :op/add_f
+
+  #impl<add_kernel>
+  export func add::<T>(a: T, b: T): T {
+      return a + b                                           // an instance outside both families runs this
+  }
+  ```
+
+  An array reduction split by element type is written the same way: `sum_kernel::<T>(xs: T[])` once with `when is_integer::<T>()` and once with `when is_float::<T>()`, each naming its own family's operator of the module, and the run-time switch on the element type in the executor goes away.
+  The exclusion is checked where the declarations are, by the rule [7.4.3](#743-overloading) states: a type that satisfies both conditions is `SemanticDiag::WhenDeclarationOverlap`, naming that type and the two declarations, and a condition that cannot be answered leaves the pair refused by the older rule (`SemanticDiag::NativeDeclarationOverlap`).
 - **Not inlined by default**: an ordinary call calls the kernel operator (one `OPER` node, labelled with the kernel's URI). Ordinary passes and executors do not reach the body, and the body is not inlined into callers; compiling and running it costs what calling an atomic operator costs. The semantic graph is still built and kept, out of the ordinary program's reachable graphs.
 - **Expanded on demand**: a consumer that must look inside takes the semantic graph the tag kept. A function value (`let g = add`, `grad(add)`) is that graph, and at run time `Program::implBodies` returns the graphs that carry `kGraphFlagImplBody`. No production pass expands `#impl` bodies yet; the tag leaves that to autodiff, fusion, export and rules as they need it. The test-only `test::impl` pass is the demonstration: it reads `Program::implBodies`, expands the body of the tagged function, and compares it node for node with the same Camel body written without the tag. A differential test keeps the kernel path and the body path in agreement (a test that cannot be exact states its tolerance).
 

@@ -1237,6 +1237,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::WhenDeclarationOverlap,
+            {
+                "WhenDeclarationOverlap",
+                "Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'.",
+                "A 'when' condition is what makes two declarations of one signature different overloads (design principles 4.4): each must cover the types the other does not. Narrow the conditions so that no type satisfies both, or give the declarations parameter types that cannot both accept one call.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationForeignOperator,
             {
                 "NativeDeclarationForeignOperator",
