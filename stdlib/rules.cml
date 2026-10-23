@@ -322,11 +322,13 @@ export rule float32_combine_one_mixed(x: f32, const c: f32) {
 //
 // The guards mirror algebra.cpp's constant reading and the element f32 guards one for one; the
 // permission sets are the element families' (reassociate for a regrouping, plus the assumptions a
-// cancellation needs). What a tensor law cannot do is the `x*0`/`x-x` family: an f32 zero
-// *tensor* cannot be written in a rule (the program has no tensor constant of the right shape),
-// and a rule's replacement is what it writes. Those laws stay in `algebra.cpp` only because a
-// zero tensor of the matched shape cannot be written -- a rule reports it as a question, it does
-// not weaken `x*0 => 0` into a shape-dependent claim.
+// cancellation needs). The `x*0`/`x-x` family is where the float laws part company with the integer
+// ones: an integer `x * 0` and an integer `x - x` are exactly zero, while a float's are not (`NaN *
+// 0` and `inf * 0` are NaN, a negative times zero is `-0`, and `inf - inf` is NaN), so a float zero
+// law needs `finite_math` and an integer law does not. A float zero law is not in this file yet; rule
+// language, second version, section 4 shows the spelling, and the tensor form writes itself as a
+// right side that calls a Camel function -- `t * 0.0 => zeros_like(t)` -- where `zeros_like` reads
+// `t` for its shape, so the matched value is not dropped and the effect check is satisfied too.
 
 /// `x*c1 + x*c2 => x*(c1+c2)` for f32 elements: both coefficients exactly f32, finite, nonzero,
 /// the same sign, and the f32 sum finite. The sum is computed in f64 and rounded to f32 by the
