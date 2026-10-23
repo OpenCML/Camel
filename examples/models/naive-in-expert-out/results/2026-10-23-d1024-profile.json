@@ -1,0 +1,176 @@
+{
+  "schema": 1,
+  "generated_at": "2026-10-23T09:15:00+08:00",
+  "machine": {
+    "host": "tangshan88",
+    "cpu": "AMD EPYC 7343 16-Core Processor",
+    "hardware_threads": 32,
+    "memory_bytes": 540891693056,
+    "python": "3.10.12",
+    "torch": "2.14.1+cu130",
+    "openblas": "/usr/lib/x86_64-linux-gnu/libopenblas.so"
+  },
+  "shape": {
+    "batch": 32,
+    "sequence": 64,
+    "d_model": 1024,
+    "tokens": 2048,
+    "heads": 64,
+    "d_head": 16,
+    "d_ff": 2048,
+    "vocab": 32,
+    "blocks": 2,
+    "threads": 1,
+    "steps": 16,
+    "warmup": 3
+  },
+  "method": "Camel: std::profile(report=true,json=...,top=0) on the generated train_step.cml; operator rows of the 16-step run minus the same run's steps=0 pre/post; mean per step. The layout/copy row is only operators whose whole job is a layout change or an allocation; copies and allocations inside a matmul or elementwise kernel are inside that operator's row and are not separable with today's operator-boundary timer. PyTorch: torch.profiler FunctionEvent self time over 3 steps, grouped by the same categories; the Adam section is kept whole under optimizer because eager Adam is a chain of elementwise kernels. The two profilers add different overhead (Camel step wall 3484 ms vs timed 3145 ms, +11%; naive +22%, compiled +11%), so compare shares and the excess, not absolute totals across tools.",
+  "build": {
+    "revision": "04416a77b8",
+    "canonical_fingerprint": "8d3a616b7faa",
+    "library_fingerprint": "ca6187ec263b",
+    "note": "The canonical column was measured before the BLAS change; the library column after CAMEL_TENSOR_BLAS became the default. The sweep's build is b2e4abd0e50d; the final tree (one comment and a JSON newline later) rebuilds to 97346a9d8921 and runs the same code path."
+  },
+  "commands": {
+    "generate": "python examples/models/naive-in-expert-out/measure.py --d-model 1024 --threads 1 --steps 16 --warmup 3",
+    "camel_canonical": "camel -t 1 --block-limit 8192 train_step.cml 'std::profile(report=true,json=\"/tmp/prof.json\",top=0)' std::jit --arg bench=true --arg init_dir=<init> --arg final_dir=",
+    "camel_library": "camel -t 1 --block-limit 8192 train_step.cml tensor::fuse 'std::profile(report=true,json=\"/tmp/prof.json\",top=0)' std::jit --arg bench=true --arg init_dir=<init> --arg final_dir=",
+    "torch": "python examples/models/naive-in-expert-out/torch_impl.py --variant naive|compiled --init <init> --steps 3 --warmup 1 --threads 1 --batch 32 --sequence 64 --d-model 1024 --n-heads 64 --d-ff 2048 --vocab 32"
+  },
+  "camel": {
+    "backend": "std::jit",
+    "operator_total_ms": 3511.4,
+    "timed_step_median_ms": 3145.2,
+    "profiled_step_wall_ms": 3483.6,
+    "categories": {
+      "matmul": {
+        "ms": 2823.1,
+        "share": 0.804,
+        "forward_ms": 806.4,
+        "backward_ms": 2016.7,
+        "detail": "tensor:matmul 806.4 ms (17 calls/step); tensor:matmul_grad_lhs 1167.9 ms + tensor:matmul_grad_rhs 848.8 ms (17 each)"
+      },
+      "elementwise": {
+        "ms": 375.0,
+        "share": 0.107,
+        "forward_ms": 101.5,
+        "backward_ms": 273.5
+      },
+      "reductions": {
+        "ms": 124.9,
+        "share": 0.036,
+        "forward_ms": 17.6,
+        "backward_ms": 107.3
+      },
+      "layout/copy/creation": {
+        "ms": 85.2,
+        "share": 0.024,
+        "forward_ms": 20.7,
+        "backward_ms": 64.5
+      },
+      "optimizer (Adam)": {
+        "ms": 57.3,
+        "share": 0.016,
+        "forward_ms": 0.0,
+        "backward_ms": 0.0
+      },
+      "other autodiff": {
+        "ms": 45.9,
+        "share": 0.013,
+        "forward_ms": 0.0,
+        "backward_ms": 45.9
+      }
+    },
+    "top_operators_ms_per_step": {
+      "tensor:matmul_grad_lhs": 1167.9,
+      "tensor:matmul": 806.4,
+      "tensor:matmul_grad_rhs": 848.8,
+      "tensor:multiply": 123.3,
+      "tensor:divide": 112.2,
+      "tensor:sum_to": 93.5,
+      "tensor:add": 63.5,
+      "nn:adam": 57.1,
+      "tensor:neg": 38.6,
+      "tensor:expand_axis": 37.4
+    }
+  },
+  "torch": {
+    "naive": {
+      "sections_ms_per_step": {
+        "forward": 995.2,
+        "backward": 2032.9,
+        "adam": 564.5
+      },
+      "categories_ms_per_step": {
+        "matmul": 2045.7,
+        "elementwise": 780.6,
+        "reductions": 28.7,
+        "layout/copy/allocation": 147.1,
+        "optimizer (Adam)": 564.5,
+        "other": 17.7
+      },
+      "category_total_ms": 3584.1,
+      "shares": {
+        "matmul": 0.571,
+        "elementwise": 0.218,
+        "reductions": 0.008,
+        "layout/copy/allocation": 0.041,
+        "optimizer (Adam)": 0.157,
+        "other": 0.005
+      }
+    },
+    "compiled": {
+      "sections_ms_per_step": {
+        "forward": 755.0,
+        "backward": 1447.0,
+        "adam": 463.5
+      },
+      "categories_ms_per_step": {
+        "matmul": 1982.6,
+        "elementwise": 0.0,
+        "reductions": 0.0,
+        "layout/copy/allocation": 0.0,
+        "optimizer (Adam)": 463.5,
+        "other (Inductor fused)": 218.4
+      },
+      "category_total_ms": 2664.5,
+      "shares": {
+        "matmul": 0.744,
+        "elementwise": 0.0,
+        "reductions": 0.0,
+        "layout/copy/allocation": 0.0,
+        "optimizer (Adam)": 0.174,
+        "other (Inductor fused)": 0.082
+      }
+    }
+  },
+  "library_path": {
+    "matmul_ms_per_step": 2873.9,
+    "canonical_matmul_ms_per_step": 2823.1,
+    "delta_ms": 50.8,
+    "timed_step_median_ms": 3337.2,
+    "canonical_timed_step_median_ms": 3145.2,
+    "step_delta_ms": 192.0,
+    "detail": "forward tensor:matmul 929.8 ms vs 806.4 canonical (+123.4 ms, 15%); the grad rows are unchanged in code and their -72 ms here is run-to-run load, not the library. The pass marks tensor:matmul only; autodiff creates matmul_grad_lhs/rhs after the pass, so those 2016.7 ms stay on the canonical kernel.",
+    "note": "The library GEMM is not a step-level win at this shape: the timed median is 3337 ms against 3145 ms canonical (+6%), and OpenBLAS is slower on the model's many batched forward products. It never sees the backward matmuls."
+  },
+  "gap": {
+    "old_sweep_camel_ms": 3186.2,
+    "old_sweep_compiled_ms": 2393.7,
+    "profiled_camel_ms": 3511.4,
+    "profiled_compiled_ms": 2664.5,
+    "profiled_gap_ms": 846.9,
+    "matmul_excess_ms": 840.5,
+    "matmul_share_of_gap": 0.992,
+    "explanation": "Matmul owns the profiled gap almost exactly: 2823.1 - 1982.6 = 840.5 ms of the 846.9 ms total. Camel's Adam is 407 ms cheaper and its elementwise/reduction/layout excess is partly offset by that, so the other categories nearly cancel."
+  },
+  "re_measured_sweep_one_thread": {
+    "source": "results/2026-10-23-sweep-linux-library.json",
+    "build_fingerprint": "b2e4abd0e50d",
+    "camel_before_ms": 3186.2,
+    "camel_after_ms": 3599.9,
+    "compiled_before_ms": 2393.7,
+    "compiled_after_ms": 2427.1,
+    "note": "The before/after medians are not a controlled A/B: the cell's load went from 12 to 31 and one Camel round took 4309 ms. The paired profile's timed median is 3145 ms canonical against 3337 ms with the library (+6%); torch.compile moved 1.4%. The gap remains and is wider by median (48% vs 33%) because of the host, not because the library is 13% slower."
+  }
+}

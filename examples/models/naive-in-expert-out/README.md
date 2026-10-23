@@ -97,7 +97,7 @@ Two entries are only ordered when the gap between them is wider than both spread
 round ranges overlap, the table's numbers do not order them and the verdict says so.
 
 <!-- sweep-table:begin -->
-**ms/step, one thread** (median of 3 interleaved rounds; parentheses: the round range)
+**ms/step, one thread, before the library step** (median of 3 interleaved rounds; parentheses: the round range)
 
 | implementation | d=64 | d=256 | d=1024 |
 |---|---|---|---|
@@ -107,7 +107,7 @@ round ranges overlap, the table's numbers do not order them and the verdict says
 | `torch.compile(naive)` | 2.938 (2.929–2.955) | 49.779 (49.350–50.593) | 2393.691 (2383.373–3522.431) |
 | float64 reference | 5.561 (one run) | 116.069 (one run) | 6780.466 (one run) |
 
-**ms/step, 16 threads** (median of 3 interleaved rounds; parentheses: the round range)
+**ms/step, 16 threads, before the library step** (median of 3 interleaved rounds; parentheses: the round range)
 
 | implementation | d=64 | d=256 | d=1024 |
 |---|---|---|---|
@@ -119,7 +119,31 @@ round ranges overlap, the table's numbers do not order them and the verdict says
 
 <!-- sweep-table:end -->
 
-**The crossover.** With one thread Camel is the sole fastest implementation at d=64 (2.085 ms,
+**After the library-GEMM step (fingerprint `b2e4abd0e50d`; a docs-only rebuild is `97346a9d8921`).** Camel now runs
+`tensor::fuse std::jit`, so the default policy records `tensor.kernel="library"` on every
+matmul and a build that found a CBLAS runs it there; safe mode and `#strict` stay on the
+canonical kernel. The re-run at one thread, same host and same harness:
+
+| ms/step, one thread | d=64 | d=256 | d=1024 |
+|---|---|---|---|
+| Camel before (canonical) | 2.085 | 60.980 | 3186.178 |
+| Camel after (library) | 2.614 | 66.263 | 3599.913 |
+| `torch.compile(naive)` before | 2.938 | 49.779 | 2393.691 |
+| `torch.compile(naive)` after | 3.107 | 49.472 | 2427.143 |
+
+The d=1024 Camel median is 13% above the old one while `torch.compile` moved 1.4%; the paired
+profile's timed median is 3145 ms canonical against 3337 ms with the library (+6%), so most of
+that difference is the shared host (the cell's load went from 12 to 31 and one Camel round took
+4309 ms). d=256 and d=1024
+remain behind: 66.3 against 49.5 (34%) and 3600 against 2427 (48%) by these medians, against
+61.0/49.8 (22%) and 3186/2394 (33%) before. The profile in
+[`results/2026-10-23-d1024-profile.json`](results/2026-10-23-d1024-profile.json) still puts the
+excess in matmul, not in the other categories. The 16-thread cell ran at a much lower load than
+the old one and every row is faster; its numbers are in
+[`results/2026-10-23-sweep-linux-library.json`](results/2026-10-23-sweep-linux-library.json), but
+they are not an A/B against the table above.
+
+**The crossover.** In the before table above, with one thread Camel is the sole fastest implementation at d=64 (2.085 ms,
 with `torch.compile(naive)` at 2.938) and it is not at d=256: `torch.compile(naive)` takes 49.8
 against Camel's 61.0, a gap of 11 ms wider than both round ranges, while Camel, PyTorch naive and
 the expert form sit inside each other's ranges. At d=1024 the medians keep that order
@@ -151,7 +175,8 @@ with fingerprint `808a7e445efc`, built 21:07:38 UTC from `2adf18c04` plus this d
 `is_numeric` change (that change was committed as `539ad3808` while the sweep ran, and rebuilding
 that tree gave the same fingerprint). The tree has since merged develop (`bf6fe3a54`), and the
 tree as committed here rebuilds to fingerprint `8d3a616b7faa`: these are measurements of the
-earlier build, and no row was re-measured after the merge. The
+earlier build, and no row was re-measured after the merge. The after table above is the later
+build `b2e4abd0e50d` (the library step); it is not a re-measurement of this table. The
 harness is the `measure.py` committed with this table; it is Python, and nothing in the measured
 binary changed while the numbers were taken. The host is **shared**: other builds and tests ran
 throughout, and the 1-minute load average over the run ranged from 12 to 109 on 32 hardware
