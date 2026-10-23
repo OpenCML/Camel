@@ -50,18 +50,24 @@ expect_stdout_starts_with = "camel-ran-marker\n"
 
 [[tests]]
 name = "error.unknown_parameter"
-desc = "An unknown parameter is a located diagnostic that lists the parameters the pass takes; nothing runs."
+desc = "An unknown parameter is a semantic diagnostic at the call, on the pass's own line; nothing runs."
 args = ["${case}", "std::fvm", "std::opt(safe_fpp=true)"]
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "'std::opt' has no parameter 'safe_fpp'", "safe_fp: bool = false", "column 10"]
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 10
+expect_output_contains = ["'safe_fpp' is not a parameter of 'std::opt'", "<pipeline>:2:10"]
 expect_output_not_contains = ["camel-ran-marker"]
 
 [[tests]]
 name = "error.wrong_type"
-desc = "A value of the wrong type names both types."
+desc = "A value of the wrong type names both types, at the argument."
 args = ["${case}", "std::opt(safe_fp=3)", "std::fvm"]
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "parameter 'safe_fp' is an int, not a bool"]
+expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
+expect_diagnostic_line = 1
+expect_diagnostic_column = 10
+expect_output_contains = ["The argument 'safe_fp' of 'std::opt' has type 'int', not 'bool'."]
 
 [[tests]]
 name = "error.missing_value"
@@ -82,29 +88,32 @@ name = "error.written_twice"
 desc = "The same parameter twice."
 args = ["${case}", "std::opt(safe_fp=true, safe_fp=false)", "std::fvm"]
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "'safe_fp' is written twice"]
+expect_diagnostic_name = "SemanticDiag::ParamArgumentDuplicate"
+expect_output_contains = ["The parameter 'safe_fp' of 'std::opt' is given twice."]
 
 [[tests]]
 name = "error.positional"
 desc = "Parameters are named."
 args = ["${case}", "std::opt(true)", "std::fvm"]
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "key=value"]
+expect_output_contains = ["InvalidPassParameter", "name=value"]
 
 [[tests]]
 name = "error.pass_without_parameters"
-desc = "A pass that declares none refuses any."
+desc = "A pass that declares none refuses any, and says what it declares (nothing)."
 args = ["${case}", "std::nvm(x=1)"]
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "no parameters"]
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
+expect_output_contains = ["'x' is not a parameter of 'std::nvm'"]
 
 [[tests]]
 name = "error.checked_before_running"
 desc = "A bad parameter after a scheduler is found before the program runs."
 args = ["${case}", "std::fvm", "std::opt(safe_fp=3)"]
 expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
+expect_diagnostic_line = 2
 expect_output_not_contains = ["camel-ran-marker"]
-expect_output_contains = ["InvalidPassParameter"]
 
 [[tests]]
 name = "module.parameters"
@@ -120,7 +129,8 @@ desc = "A module pass checks its parameters like any other."
 args = ["${case}", "tensor::test_echo(n=1.5)", "std::fvm"]
 
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "parameter 'n' is a float, not an int"]
+expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
+expect_output_contains = ["The argument 'n' of 'tensor::test_echo' has type 'float', not 'int'."]
 
 [[tests]]
 name = "module_pass.written_explicitly"
@@ -151,8 +161,45 @@ name = "growth_budget.wrong_type"
 desc = "growth_budget is an int of the pass declaration, checked before anything runs."
 args = ["${case}", "std::opt(growth_budget=true)", "std::fvm"]
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "parameter 'growth_budget' is a bool, not an int"]
+expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
+expect_output_contains = ["The argument 'growth_budget' of 'std::opt' has type 'bool', not 'int'."]
 expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "declaration.every_parameter_by_name"
+desc = "The guard that a declaration and a call agree: the test pass declares five parameters and this call writes every one of them by name in the call's own spelling (`key: value`), so a parameter the call cannot accept shows up as a refusal rather than at pass execution. `declared=5` pins the count of the declaration."
+args = ["${case}", "test::params(flag: true, n: 1, ratio: 2.5, label: \"all\", count: 9)", "std::nvm"]
+expect_exit = 0
+expect_output_contains = ["test::params flag=true (given) n=1 (given) ratio=2.5 (given) label=all (given) count=9 (given) declared=5", "camel-ran-marker"]
+expect_output_not_contains = ["(default)"]
+
+[[tests]]
+name = "default.evaluated_once"
+desc = "A default is a constant expression evaluated at the declaration, not at each call: two calls that leave every default in place print the same evaluation count and the same values (the second line would count one more per default if binding re-evaluated them). It also shows the default expression `2 + 3` folded to 5."
+args = ["${case}", "test::params(flag=true)", "test::params(flag=true)", "std::nvm"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('test::params'))
+assert(lines.length === 2, 'two calls print two lines, got ' + lines.length)
+for (const line of lines) {
+    assert(line.includes('n=5 (default)'), 'the default expression is evaluated: ' + line)
+    assert(line.includes('ratio=1.5 (default)'), 'the float default: ' + line)
+    assert(line.includes('label=x (default)'), 'the string default: ' + line)
+    assert(line.includes('declared=5'), 'the declaration keeps its five parameters: ' + line)
+}
+const counts = lines.map((l) => l.match(/evaluations=(\d+)/)[1])
+assert(counts[0] === counts[1], 'the defaults are evaluated once, not per call: ' + counts.join(' vs '))
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "error.missing_required"
+desc = "A parameter the declaration gives no default to is required, at the call."
+args = ["${case}", "test::params(n=1)", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentMissing"
+expect_diagnostic_line = 1
+expect_output_contains = ["The call gives no value for the parameter 'flag' of 'test::params', and it has no default."]
 
 [[tests]]
 name = "timeit.adds_no_module_pass"

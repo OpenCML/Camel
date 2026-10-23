@@ -757,7 +757,8 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "params::report(n=1)", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["parameter 'label' is not written and has no default", "label: string (required)"]
+expect_diagnostic_name = "SemanticDiag::ParamArgumentMissing"
+expect_output_contains = ["The call gives no value for the parameter 'label' of 'params::report', and it has no default."]
 expect_output_not_contains = ["42"]
 timeout_ms = 10000
 
@@ -768,7 +769,10 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "params::report(label='x', n=1, bogus=2)", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "column 32", "has no parameter 'bogus'", "label: string (required)"]
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
+expect_diagnostic_line = 1
+expect_diagnostic_column = 32
+expect_output_contains = ["'bogus' is not a parameter of 'params::report'."]
 expect_output_not_contains = ["42"]
 timeout_ms = 10000
 
@@ -779,7 +783,10 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "params::report(label='x', n=1.5)", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "column 27", "parameter 'n' is a float, not an int"]
+expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
+expect_diagnostic_line = 1
+expect_diagnostic_column = 27
+expect_output_contains = ["The argument 'n' of 'params::report' has type 'float', not 'int'."]
 expect_output_not_contains = ["42"]
 timeout_ms = 10000
 

@@ -1409,7 +1409,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ParamArgumentUnknown",
                 "'{0}' is not a parameter of '{1}'.",
-                "A named argument is written as in a struct literal, 'name: value', and must be one of the callee's ordinary parameters.",
+                "A named argument is written as in a struct literal, 'name: value', and must be one of the parameters the callee declares.",
             },
         },
         {
@@ -1466,6 +1466,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ParamAfterDefault",
                 "The parameter '{0}' has no default and follows '{1}', which has one.",
                 "Write a default here too, so that a call that leaves '{1}' out can still give '{0}' by name.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentWrongType,
+            {
+                "ParamArgumentWrongType",
+                "The argument '{0}' of '{1}' has type '{2}', not '{3}'.",
+                "Write a value of the parameter's type; an integer may be given where a float is declared.",
             },
         },
         {

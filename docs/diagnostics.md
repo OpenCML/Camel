@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-264 diagnostics: 245 errors, 19 warnings.
+265 diagnostics: 246 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -225,6 +225,7 @@ prints one entry.
 | `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error |
 | `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error |
 | `0x030001D5` | [SemanticDiag::PrecisionChangeNotPermitted](#precisionchangenotpermitted) | Error |
+| `0x030001D6` | [SemanticDiag::ParamArgumentWrongType](#paramargumentwrongtype) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5940,7 +5941,7 @@ func main(): int {
 **Help**
 
 ```text
-A named argument is written as in a struct literal, 'name: value', and must be one of the callee's ordinary parameters.
+A named argument is written as in a struct literal, 'name: value', and must be one of the parameters the callee declares.
 ```
 
 **Example** (`test/cases/compile/param_defaults/unknown_name.cml`, run as `camel test/cases/compile/param_defaults/unknown_name.cml`)
@@ -6202,6 +6203,32 @@ func main(): int sync {
     let values: f32[] = [0.1]
     let t = shrink(new(values))
     println('unreachable')
+    return 0
+}
+```
+
+### ParamArgumentWrongType
+
+`0x030001D6` · Error · `SemanticDiag::ParamArgumentWrongType`
+
+**Message**
+
+```text
+The argument '{0}' of '{1}' has type '{2}', not '{3}'.
+```
+
+**Help**
+
+```text
+Write a value of the parameter's type; an integer may be given where a float is declared.
+```
+
+**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml params::report(label='x', n=1.5) std::nvm`)
+
+```camel
+module tiny
+func main(): int sync {
+    println(21 * 2)
     return 0
 }
 ```

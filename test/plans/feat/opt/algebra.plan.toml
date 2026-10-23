@@ -702,7 +702,8 @@ expect_exit = 1
 verify_script = '''
 ({input,assert})=>{
  assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
- assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('ParamArgumentUnknown'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes("'unknown' is not a parameter of 'std::opt::algebra'"),'missing the parameter name');
 }
 '''
 
@@ -714,7 +715,8 @@ expect_exit = 1
 verify_script = '''
 ({input,assert})=>{
  assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
- assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('ParamArgumentDuplicate'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes("The parameter 'safe_fp' of 'std::opt' is given twice."),'missing the parameter name');
 }
 '''
 
