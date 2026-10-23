@@ -16,8 +16,11 @@
  * state. originOf / mayAlias          where a resource value comes from within one activation of
  * its graph (a fresh allocation of a node, a port, or unknown), and whether two values may be one
  * resource. resourceConflict(a, b)       whether two nodes touch overlapping parts of one resource
- * with at least one write, or both have external effects: they must then run in the order the
- * program gives them. dependsOn(later, earlier)    computation dependence: the data edges (Norm,
+ * with at least one write: they must then run in the order the program gives them. A conflict is
+ * judged by resource alone (design principles 3.3): two effects on different resources are not a
+ * pair, and the order between effects on one resource is the program's to write (a `sync` block);
+ * an effect outside the program that names no resource is the "global" resource and meets every
+ * effect. dependsOn(later, earlier)    computation dependence: the data edges (Norm,
  * With) only. orderedBefore(a, b)          any path, control edges included (the order the front
  * end gave conflicting effects, design principles 3.3). requiredOrderings(graph)     every pair of
  * nodes of a graph that conflict, with whether and how the graph orders them.
@@ -148,7 +151,6 @@ bool regionsMayOverlap(const std::optional<RegionBounds> &a, const std::optional
 enum class ConflictKind : uint8_t {
     None,
     Resource, // they touch overlapping parts of one resource and at least one writes
-    External, // both have effects visible outside the program
 };
 
 std::string_view conflictKindName(ConflictKind kind);

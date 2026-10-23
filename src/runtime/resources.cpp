@@ -208,6 +208,9 @@ class Resolver {
     sem::ResultAlias resultOf(const GCGraph &graph, gc_node_ref_t returnValue) const;
 
   private:
+    /// The accesses of the node, as the graph and the declarations give them: an external effect
+    /// that names no resource is added by `node` itself.
+    NodeResources accessesOf(const GCGraph &graph, gc_node_ref_t ref) const;
     NodeResources oper(const GCGraph &graph, gc_node_ref_t ref) const;
     NodeResources call(const GCGraph &graph, gc_node_ref_t ref) const;
     NodeResources loop(const GCGraph &graph, gc_node_ref_t ref) const;
@@ -332,6 +335,27 @@ Resolver::fromFootprint(const GraphFootprint &fp, size_t normCount, Bind &&bind)
 }
 
 NodeResources Resolver::node(const GCGraph &graph, gc_node_ref_t ref) const {
+    NodeResources r = accessesOf(graph, ref);
+    // An effect outside the program that names no resource at all -- an operator whose declaration
+    // gives it an external effect and no access, or the conservative reading of an undeclared one
+    // with nothing to bind to -- is the "global" resource: it may be any resource, so it keeps its
+    // order with every effect (design principles 3.3). The model carries that as one access of
+    // unknown class with `anyValue`: compatible() meets the access of any resource, and the other
+    // side of the pair is asked for nothing. Two effects that name *different* resources stay
+    // unrelated, which is the whole point of judging a conflict by resource (F9).
+    if (r.external && r.accesses.empty()) {
+        r.accesses.push_back(
+            NodeAccess{
+                .resource = {},
+                .mode     = AccessMode::ReadModifyWrite,
+                .region   = sem::ResourceRegion{.kind = sem::ResourceRegion::Kind::Unknown},
+                .anyValue = true,
+            });
+    }
+    return r;
+}
+
+NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) const {
     switch (graph.node(ref)->kind) {
     case GCNodeKind::Oper:
         return oper(graph, ref);
@@ -776,15 +800,17 @@ std::string_view conflictKindName(ConflictKind kind) {
         return "none";
     case ConflictKind::Resource:
         return "resource";
-    case ConflictKind::External:
-        return "external";
     }
     return "none";
 }
 
 namespace {
 
-/// The conflict of two nodes, resolved with one resolver (the public query makes one).
+/// The conflict of two nodes, resolved with one resolver (the public query makes one). A conflict
+/// is decided by resource: the pair is the accesses', and the two nodes must then run in the order
+/// the program gives them. Two effects outside the program that name different resources are not a
+/// pair at all (design principles 3.3, F9); an effect that names none is the global resource and is
+/// an access of unknown class (Resolver::node), so it meets every effect through the same loop.
 ResourceConflict conflictWith(
     const Resolver &resolver, const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
     ResourceConflict conflict;
@@ -793,11 +819,6 @@ ResourceConflict conflictWith(
     }
     const NodeResources ra = resolver.node(graph, a);
     const NodeResources rb = resolver.node(graph, b);
-    if (ra.external && rb.external) {
-        conflict.kind = ConflictKind::External;
-        conflict.why  = "both have effects outside the program";
-        return conflict;
-    }
     for (size_t i = 0; i < ra.accesses.size(); ++i) {
         for (size_t j = 0; j < rb.accesses.size(); ++j) {
             const NodeAccess &x = ra.accesses[i];

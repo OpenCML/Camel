@@ -10,7 +10,7 @@ A Camel program is a graph. This chapter explains how this graph is evaluated: e
 |---|---|
 | Expression, operator call | A node with data edges; only nodes reachable along edges from the function's exit are executed |
 | Function | A subgraph of its own; a call site is a node in the enclosing graph that points to that subgraph |
-| `sync { ... }` block | Control edges between adjacent expressions in the block |
+| `sync { ... }` block | Control edges between the adjacent statements it writes directly |
 | `sync func` (function modifier) | A mark on the function type; it produces no edge inside the function body |
 | `var` parameter | The callee subgraph and the caller point to the same object |
 | `wait e` | Control edges between `e` and the operations before and after it that use its value or the variables it modifies |
@@ -84,11 +84,19 @@ The warning goes to standard error and the program runs as usual. Turn it off wi
 
 ### 4.3.1 Sync blocks (block modifier)
 
-A `sync` written before a block marks a sync block: the expressions in the block **execute in the order written**, as if the compiler inserted control edges between adjacent expressions. In a sync block it does not matter what is called or whether it has side effects, because there is already an order.
+A `sync` written before a block marks a sync block: **the statements it writes directly** execute in the order written, as if the compiler inserted control edges between adjacent statements. In a sync block it does not matter what is called or whether it has side effects, because there is already an order.
 
 - As a function body: `func f(...): T sync { ... }` (`sync` comes after the return type).
 - As a branch arm or lambda body: `if c then sync { ... }`, `(x: int) => sync { ... }`.
 - As a standalone block statement `sync { ... }`. Note that it is itself an expression too: when it is written in a function body that is not a sync block and its value is not used, the whole block does not execute.
+- **A sync block does not inherit inward** ([design principles 3.4](../../design-principles.en.md#34-sync-blocks)): a sync block orders only the statements it writes directly; the branch arms, loop bodies and nested blocks written inside it follow their own spelling, and to synchronise one of them, write `sync` there — what a block means does not change with where it is written. In the `if` below the `if` itself is on the sync chain but its arm is not: the arm is evaluated by dependency, the `println(1)` whose value nothing uses does not execute, and `println(2)` is the arm's value, which is the `if`'s value, so only it executes. To print both, write `if c then sync { ... }`:
+
+```cml
+func f(c: bool): int sync {
+    if c then { println(1); println(2) }   // the arm is not a sync block: only println(2) executes
+    return 0
+}
+```
 
 ```cml
 func greet(): int sync {

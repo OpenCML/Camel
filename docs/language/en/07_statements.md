@@ -622,7 +622,7 @@ The parts of type expressions that are reserved and not implemented: the type op
 sync? { statement ... }
 ```
 
-A block is an expression: its value is given by the `return` in the block, and without a `return` it has no value. A block introduces a scope. A block with `sync` executes its statements in the order written ([4.3.1](04_execution_model.md#431-sync-blocks-block-modifier)); a block without `sync` is evaluated by dependency.
+A block is an expression: its value is given by the `return` in the block, and without a `return` it has no value. A block introduces a scope. A block with `sync` executes **the statements it writes directly** in the order written ([4.3.1](04_execution_model.md#431-sync-blocks-block-modifier)); the branch arms, loop bodies and nested blocks inside it follow their own spelling (a sync block does not inherit inward, [design principles 3.4](../../design-principles.en.md#34-sync-blocks)). A block without `sync` is evaluated by dependency.
 
 A block is used as a function body, a branch arm or a lambda body, and can also stand alone as a statement.
 

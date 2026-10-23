@@ -1,0 +1,13 @@
+// A conflict is judged by resource (design principles 3.3, F9). `seed` writes the random
+// generator, `exists` reads the file system, `println` writes the console: three effects on three
+// different resources, and none of them is a pair. Two `println`s name one resource (`stdout`),
+// so they are a pair and keep the order the `sync` body gives them.
+import { exists } from fs
+import { seed } from random
+
+func main(): int sync {
+    seed(4)
+    println(exists("no/such/file"))
+    println(exists("no/such/file2"))
+    return 0
+}
