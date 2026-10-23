@@ -666,7 +666,7 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 协调者一方已完成 `graph` 模块 C0–C9（读图、事务、`commitChecked`、Camel 写的遍在流水线上运行、函数到函数、事实、文档；见 `docs/technical/45_graph_module.md`）。
 
 1. **遍所在的模块能导入 Camel 库**（如 `array`）：交接说明给出两种做法与入口，选一种并说明理由。
-2. **命令行遍参数**：`mymod::p(k=v)` 映射到函数的 `with` 参数（配置，设计原则 4.4）。
+2. **命令行遍参数**：`mymod::p k=v` 映射到函数的 `with` 参数（配置，设计原则 4.4）。
 3. **事务中新建值的根规则**：编辑可以创建常量等新值（常量折叠类改写需要），草稿的静态槽在 NodeVM 安全点不得被移动或回收。
 4. **区域的读取**（`region_of`、种类、父区域）与校验器的区域规则（2）（3）：在协调者一方的 R2c/R2b 合入后。
 5. Q1 类型实参落地后把 `constant(n, sample)` 改为 `constant::<T>(n)`（`graph` 已由 H141 声明化；H19 只剩 `ckpt`、`globals`）。

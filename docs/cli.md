@@ -170,6 +170,12 @@ allowed. The parenthesised form (`std::opt(safe_fp=true)`), the colon spelling o
 (`safe_fp: true`) and positional parameters are gone: they are refused as
 `RuntimeDiag::InvalidPassParameter`, and the message says how to write the parameter.
 
+The declarations are read when the pipeline is resolved, from the module search paths. If
+`stdlib/std.cml` cannot be found or does not declare the pass, the pass is refused rather than run
+on defaults the declaration never gave it: the message names module `std` and the file the pipeline
+read (or the `std.cml` paths it looked at), so an install without its standard library says so
+instead of reporting the pass as unknown.
+
 The declaration is the function's own `with` list, so it has a function's rules (design
 principles 4.4): a name, `:`, a type, and a default written `= value`:
 

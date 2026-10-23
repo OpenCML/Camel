@@ -1084,6 +1084,37 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
         result.paramProblem = std::move(problem);
         return result;
     }
+    // A core pass exists only as the declaration in stdlib/std.cml plus its kernel. When the
+    // declaration cannot be read, the kernel must not run on defaults invented elsewhere: the
+    // failure names the module and the files the pipeline looked at.
+    if (ctx) {
+        const std::string resolvedName = resolveAlias(parsed.name);
+        if (resolvedName.rfind("std::", 0) == 0) {
+            const std::string bare = resolvedName.substr(5);
+            if (findCorePass(bare) &&
+                camel::execute::detail::findPassDeclaration("std", bare, ctx) == nullptr) {
+                result.known = true;
+                const std::string path =
+                    camel::execute::detail::moduleDeclarationPath("std", ctx);
+                if (!path.empty()) {
+                    result.problem =
+                        std::format("module 'std' declares no pass '{}' in {}", bare, path);
+                } else {
+                    const auto candidates =
+                        camel::execute::detail::moduleDeclarationCandidates("std", ctx);
+                    std::string looked;
+                    for (const auto &candidate : candidates) {
+                        looked += (looked.empty() ? "" : ", ") + candidate;
+                    }
+                    result.problem = std::format(
+                        "the pass declarations of module 'std' are not found: looked for std.cml "
+                        "at {}",
+                        looked.empty() ? "no module search path" : looked);
+                }
+                return result;
+            }
+        }
+    }
     const auto descriptor = findDescriptor(ctx, parsed.name);
     if (!descriptor) {
         return result;

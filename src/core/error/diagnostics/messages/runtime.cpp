@@ -281,7 +281,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "InvalidPassParameter",
                 "Invalid pass specification '{0}': {1}.",
-                "A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.",
+                "A pass is written on the pipeline as its name followed by its parameters as key=value words, never in parentheses: `std::opt safe_fp=true growth_budget=8192`. The values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.",
             },
         },
         {

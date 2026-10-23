@@ -46,4 +46,10 @@ bool passDeclarationApplies(const PassDeclaration &declaration, std::string &why
 std::string moduleDeclarationPath(
     const std::string &module, const camel::core::context::context_ptr_t &ctx);
 
+/// Every file `moduleDeclarationPath` looks at, in order. A pass whose declarations cannot be
+/// found is refused with this list: the pipeline never falls back to a kernel without the
+/// declaration that gives the pass its parameters.
+std::vector<std::string> moduleDeclarationCandidates(
+    const std::string &module, const camel::core::context::context_ptr_t &ctx);
+
 } // namespace camel::execute::detail

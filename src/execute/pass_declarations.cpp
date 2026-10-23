@@ -26,13 +26,11 @@ namespace camel::execute::detail {
 
 namespace {
 
-std::string declarationPathFor(
+std::vector<std::string> declarationCandidatesFor(
     const std::string &module, const camel::core::context::context_ptr_t &ctx) {
-    if (module.empty() || module.find("::") != std::string::npos) {
-        return {};
-    }
-    if (!ctx) {
-        return {};
+    std::vector<std::string> candidates;
+    if (module.empty() || module.find("::") != std::string::npos || !ctx) {
+        return candidates;
     }
     const std::filesystem::path file = std::filesystem::path(module + ".cml");
     for (const auto &root : ctx->searchPaths()) {
@@ -42,10 +40,18 @@ std::string declarationPathFor(
         const std::filesystem::path base = std::filesystem::path(root);
         for (const auto &candidate :
              {base / file, base / module / file, base / "stdlib" / file}) {
-            std::error_code ec;
-            if (std::filesystem::is_regular_file(candidate, ec)) {
-                return candidate.string();
-            }
+            candidates.push_back(candidate.string());
+        }
+    }
+    return candidates;
+}
+
+std::string declarationPathFor(
+    const std::string &module, const camel::core::context::context_ptr_t &ctx) {
+    for (const auto &candidate : declarationCandidatesFor(module, ctx)) {
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(candidate, ec)) {
+            return candidate;
         }
     }
     return {};
@@ -178,6 +184,11 @@ std::string withoutSpaces(const std::string &text) {
 std::string moduleDeclarationPath(
     const std::string &module, const camel::core::context::context_ptr_t &ctx) {
     return declarationPathFor(module, ctx);
+}
+
+std::vector<std::string> moduleDeclarationCandidates(
+    const std::string &module, const camel::core::context::context_ptr_t &ctx) {
+    return declarationCandidatesFor(module, ctx);
 }
 
 const std::vector<PassDeclaration> &passDeclarations(

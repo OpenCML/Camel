@@ -263,3 +263,14 @@ verify_script = '''
  }
 }
 '''
+
+[[tests]]
+name = "declaration.missing_is_named"
+desc = "A core pass's parameters come from its declaration in stdlib/std.cml: when that file cannot be read the pipeline refuses the pass, naming module 'std' and the file it read, instead of running the kernel on defaults the declaration never gave."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/cases/tools/cli/pass_declarations_missing.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["pass declarations missing: PASS"]
+timeout_ms = 60000
