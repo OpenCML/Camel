@@ -292,7 +292,7 @@ function isSerial(plan, test) {
  * runner: the other tests run while this one waits. The timeout kills the whole process tree
  * (a test may have started a compiler or an interpreter of its own).
  */
-function runProcess(command, args, { cwd, env, timeoutMs }) {
+function runProcess(command, args, { cwd, env, timeoutMs, marks }) {
     return new Promise((resolve) => {
         const started = performance.now()
         let stdout = ''
@@ -304,6 +304,10 @@ function runProcess(command, args, { cwd, env, timeoutMs }) {
         const finish = (status, signal, error) => {
             if (settled) return
             settled = true
+            // The child is gone at this point (on error, never existed). `spawnedAt` and
+            // `exitedAt` are what lets the scheduler separate "a child is running" from "the
+            // slot is held while the runner does its own work".
+            if (marks) marks.exitedAt = performance.now()
             if (timer) clearTimeout(timer)
             resolve({
                 status: typeof status === 'number' ? status : null,
@@ -325,6 +329,12 @@ function runProcess(command, args, { cwd, env, timeoutMs }) {
                 // `taskkill /T` does that.
                 detached: !IS_WINDOWS,
             })
+            // `spawn` returns only after the operating system created the child (fork/exec or
+            // CreateProcess), so the interval before this mark is runner work, not test work.
+            if (marks) {
+                marks.spawnedAt = performance.now()
+                marks.spawnMs = marks.spawnedAt - started
+            }
         } catch (error) {
             finish(null, null, error)
             return
@@ -867,6 +877,11 @@ function verificationConfigOf(test) {
 async function runVerification(test, result) {
     const config = verificationConfigOf(test)
     if (!config) return null
+    // The whole verification is slot-held time: the temporary directory, the payload, the
+    // interpreter's startup and its removal. `childMs` is the part a process was actually
+    // running in; the rest is the runner's own work.
+    const verifyStarted = performance.now()
+    const marks = {}
     if (config.error) {
         return {
             ok: false,
@@ -879,10 +894,13 @@ async function runVerification(test, result) {
             errorMessage: config.error,
             stdout: '',
             stderr: '',
+            wallMs: performance.now() - verifyStarted,
+            childMs: 0,
         }
     }
 
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-test-verify-'))
+    const setupMs = performance.now() - verifyStarted
     let scriptPath = ''
     let sourceKind = ''
     if (config.mode === 'path') {
@@ -901,6 +919,8 @@ async function runVerification(test, result) {
                 errorMessage: `verify script does not exist: ${scriptPath}`,
                 stdout: '',
                 stderr: '',
+                wallMs: performance.now() - verifyStarted,
+                childMs: 0,
             }
         }
     } else {
@@ -941,8 +961,10 @@ async function runVerification(test, result) {
         cwd: REPO_ROOT,
         env: process.env,
         timeoutMs: (test.verify_timeout_ms || 5000) * TIMEOUT_SCALE,
+        marks,
     })
     fs.rmSync(tempDir, { recursive: true, force: true })
+    const verifyFinished = performance.now()
 
     const timedOut = proc.timedOut
     return {
@@ -956,6 +978,11 @@ async function runVerification(test, result) {
         errorMessage: proc.error ? proc.error.message : null,
         stdout: proc.stdout || '',
         stderr: proc.stderr || '',
+        wallMs: verifyFinished - verifyStarted,
+        setupMs,
+        spawnMs: marks.spawnMs ?? 0,
+        childMs: marks.spawnedAt === undefined ? 0 : (marks.exitedAt ?? verifyFinished) - marks.spawnedAt,
+        cleanupMs: verifyFinished - (marks.exitedAt ?? verifyFinished),
     }
 }
 
@@ -1181,14 +1208,18 @@ async function validateTest(test, result, context) {
             }
         }
     }
+    // The test's own process is gone and the assertions on what it printed are done. The slot goes
+    // back only after the verification script has run: the verification is part of this test.
+    if (context.clock) context.clock.validationAt = performance.now()
     result.verification = await runVerification(test, result)
+    if (context.clock) context.clock.verifyDoneAt = performance.now()
     if (result.verification && !result.verification.ok) {
         failures.push(...verifyFailureLines(result.verification))
     }
     return failures
 }
 
-async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative) {
+async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative, marks) {
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
     if (test.__planError) {
         return runnerErrorResult(casePath, test.__planError)
@@ -1239,6 +1270,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         cwd: REPO_ROOT,
         env,
         timeoutMs,
+        marks,
     })
     const raw = {
         command: `${toolExe} ${args.join(' ')}`.trim(),
@@ -1275,6 +1307,10 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     if (test.kind === 'benchmark' && raw.stdout) {
         result.benchmark = benchmarkFromJson(raw.stdout)
     }
+    // Everything above is the runner turning the child's bytes into a result: resuming from the
+    // `close` event, normalizing the two streams, parsing the diagnostics. It all happens on the
+    // runner's thread, after the child is gone, while the slot is still held.
+    if (logContext.clock) logContext.clock.normalizedAt = performance.now()
 
     // The verification reads this test's output: executePlans removes the scratch directory
     // only after this returns.
@@ -1352,6 +1388,9 @@ function writeLogFiles(plan, test, result, status, logDir) {
             2
         )
     )
+    // The log files are written while no test's slot is held, on the one thread every test shares:
+    // `printResult` times the call and records the window, because the cost is paid by whichever
+    // slots the write blocked, not by the test whose log it is.
 }
 
 /**
@@ -1656,6 +1695,324 @@ function runnerErrorResult(casePath, message) {
 }
 
 /**
+ * Slot accounting. "The child is slow" and "the runner is busy" are different findings, and a
+ * plan wall alone cannot tell them apart: both show up as time the plan took. Every test records
+ * when it took a slot, when its child process came into being, when that child was gone, and when
+ * the slot went back. The two intervals that answer the question are `pre_spawn_ms` (slot acquired
+ * -> child created) and `post_exit_ms` (child gone -> slot released); `no_child_ms` is their sum,
+ * which is the slot held while no test process was running.
+ *
+ * A total is not a finding, so each of the two is cut at the marks that name a mechanism:
+ *
+ *   pre_spawn_ms = scratch + probe + prep + spawn
+ *                  the per-test directory's `mkdir`, the `skip_unless` probe, the runner's own
+ *                  argument and environment expansion, and the `spawn` call itself.
+ *   post_exit_ms = settle + validate + verify + cleanup + tail
+ *                  resuming from the child's `close` event and normalizing what it printed, the
+ *                  assertions on that output (a golden is a synchronous read), the verification
+ *                  script, removing the scratch directory, and the last hair before the semaphore
+ *                  goes back.
+ *
+ * Neither `probe_ms` nor `verify_ms` is the test program: a `skip_unless` probe is a check of the
+ * host, and a verification script reads the result after the child is gone. Each is recorded whole
+ * as well as in its in-slot part, so a version that moves one out of the slot can be compared with
+ * one that does not.
+ */
+function roundMs(value) {
+    return Math.round(value * 10) / 10
+}
+
+/** Milliseconds of the absolute interval `[start, end]` that fall inside any of `windows`. */
+function coveredMs(windows, start, end) {
+    let total = 0
+    for (const window of windows) {
+        total += Math.max(0, Math.min(end, window.end) - Math.max(start, window.start))
+    }
+    return total
+}
+
+function slotTiming(entry, clock, marks, windows) {
+    if (clock.acquiredAt === undefined && clock.probeAt === undefined) return null
+    const base = clock.runStart
+    const at = (value) => (value === undefined ? null : Math.round(value - base))
+    const hasSlot = clock.acquiredAt !== undefined
+    const releasedAt = clock.releasedAt ?? performance.now()
+    const spawnedAt = marks.spawnedAt
+    const exitedAt = marks.exitedAt
+    const probeMs = clock.probeAt === undefined ? 0 : (clock.preconditionAt ?? releasedAt) - clock.probeAt
+    const childMs = spawnedAt !== undefined && exitedAt !== undefined ? exitedAt - spawnedAt : 0
+    // A test the precondition skipped never took a slot: its whole cost is the probe.
+    const preSpawnMs = hasSlot ? (spawnedAt ?? releasedAt) - clock.acquiredAt : 0
+    const postExitMs = hasSlot ? releasedAt - (exitedAt ?? releasedAt) : 0
+    const clamp = (value) => Math.max(0, value)
+    // Walk the marks in order and take what each one added since the previous one; a mark that is
+    // absent or that lies before the cursor contributes nothing. That makes each family a partition
+    // of its interval whether or not a step happened, and it stays correct when a step moved out of
+    // the slot (its mark then lies outside the interval and simply contributes nothing).
+    const walk = (from) => {
+        let cursor = from
+        return (mark) => {
+            if (mark === undefined || mark < cursor) return 0
+            const span = mark - cursor
+            cursor = mark
+            return span
+        }
+    }
+    const acquiredAt = clock.acquiredAt ?? base
+    const beforeSlot = walk(acquiredAt)
+    const scratchMs = hasSlot ? beforeSlot(clock.scratchAt) : 0
+    const probeInSlotMs = hasSlot ? beforeSlot(clock.preconditionAt) : 0
+    const spawnMs = marks.spawnMs ?? 0
+    const prepMs = hasSlot ? clamp(preSpawnMs - scratchMs - probeInSlotMs - spawnMs) : 0
+    const afterExit = walk(exitedAt ?? releasedAt)
+    const settleMs = hasSlot ? afterExit(clock.normalizedAt) : 0
+    const validateMs = hasSlot ? afterExit(clock.validationAt) : 0
+    const verifyInSlotMs = hasSlot ? afterExit(clock.verifyDoneAt) : 0
+    const cleanupMs = hasSlot ? afterExit(clock.removeAt) : 0
+    const tailMs = hasSlot ? clamp(postExitMs - settleMs - validateMs - verifyInSlotMs - cleanupMs) : 0
+    const result = entry.outcome ? entry.outcome.result : null
+    const verification = result ? result.verification : null
+    const verifyMs = verification && verification.wallMs ? verification.wallMs : 0
+    return {
+        plan: entry.plan.id,
+        test: entry.test.name,
+        status: entry.outcome ? entry.outcome.status : 'fail',
+        slot_ms: hasSlot ? roundMs(releasedAt - acquiredAt) : 0,
+        child_ms: roundMs(childMs),
+        pre_spawn_ms: roundMs(preSpawnMs),
+        post_exit_ms: roundMs(postExitMs),
+        no_child_ms: roundMs(preSpawnMs + postExitMs),
+        // Slot time that is neither a child nor a probe of the host: the runner's own work, which
+        // is the part a scheduler change can move or make cheap.
+        idle_ms: roundMs(clamp(preSpawnMs + postExitMs - probeInSlotMs)),
+        queue_ms: hasSlot
+            ? roundMs(clock.acquiredAt - (clock.dependenciesDoneAt ?? clock.enqueuedAt ?? clock.acquiredAt))
+            : 0,
+        probe_ms: roundMs(probeMs),
+        probe_in_slot_ms: roundMs(probeInSlotMs),
+        verify_ms: roundMs(verifyMs),
+        verify_in_slot_ms: roundMs(verifyInSlotMs),
+        verify_child_ms: roundMs(verification && verification.childMs ? verification.childMs : 0),
+        components_ms: {
+            scratch: roundMs(scratchMs),
+            probe: roundMs(probeInSlotMs),
+            prep: roundMs(prepMs),
+            spawn: roundMs(spawnMs),
+            settle: roundMs(settleMs),
+            validate: roundMs(validateMs),
+            verify: roundMs(verifyInSlotMs),
+            cleanup: roundMs(cleanupMs),
+            tail: roundMs(tailMs),
+        },
+        log_write_ms: 0,
+        // How much of this test's post-exit window was the runner writing log files for *other*
+        // tests: log writing is synchronous on the runner's only thread, so it blocks the event
+        // loop for everyone and shows up here rather than in the writer's own record.
+        log_block_ms: hasSlot ? roundMs(coveredMs(windows, exitedAt ?? acquiredAt, releasedAt)) : 0,
+        // When this test held a slot, relative to the start of the run: the occupancy timeline
+        // the empty-slot question needs. A slot is held from `acquired` to `released`; a test
+        // child runs from `spawned` to `exited`.
+        at: {
+            enqueued: at(clock.enqueuedAt),
+            acquired: at(clock.acquiredAt),
+            spawned: at(spawnedAt),
+            exited: at(exitedAt),
+            released: at(hasSlot ? clock.releasedAt : clock.preconditionAt),
+        },
+    }
+}
+
+function percentile(sorted, fraction) {
+    if (sorted.length === 0) return 0
+    const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(fraction * sorted.length) - 1))
+    return sorted[index]
+}
+
+function distribution(values) {
+    const sorted = [...values].sort((lhs, rhs) => lhs - rhs)
+    const total = sorted.reduce((sum, value) => sum + value, 0)
+    return {
+        median: roundMs(percentile(sorted, 0.5)),
+        p90: roundMs(percentile(sorted, 0.9)),
+        p99: roundMs(percentile(sorted, 0.99)),
+        max: roundMs(sorted.length > 0 ? sorted[sorted.length - 1] : 0),
+        total: Math.round(total),
+    }
+}
+
+function topContributors(records, field, count = 20) {
+    return [...records]
+        .sort((lhs, rhs) => rhs[field] - lhs[field])
+        .slice(0, count)
+        .map((record) => ({
+            plan: record.plan,
+            test: record.test,
+            status: record.status,
+            ms: roundMs(record[field]),
+            child_ms: record.child_ms,
+            slot_ms: record.slot_ms,
+            pre_spawn_ms: record.pre_spawn_ms,
+            post_exit_ms: record.post_exit_ms,
+            probe_ms: record.probe_ms,
+            verify_ms: record.verify_ms,
+            log_block_ms: record.log_block_ms,
+            components_ms: record.components_ms,
+        }))
+}
+
+/**
+ * Occupancy over the run, one bucket per second: how many slots were held, and in how many of
+ * them a test child was running. An empty slot (held - children) is work the scheduler never
+ * handed out, and a held slot with no child is runner work. Both are in the same picture, which
+ * is the only way to tell them apart after the fact.
+ */
+function buildTimeline(records, planWallMs, jobs, bucketMs = 1000) {
+    const buckets = Math.max(1, Math.ceil(planWallMs / bucketMs))
+    const held = new Array(buckets).fill(0)
+    const children = new Array(buckets).fill(0)
+    const overlap = (start, end, bucket) => {
+        const bucketStart = bucket * bucketMs
+        return Math.max(0, Math.min(end, bucketStart + bucketMs) - Math.max(start, bucketStart)) / bucketMs
+    }
+    for (const record of records) {
+        const { acquired, released, spawned, exited } = record.at
+        if (acquired === null || released === null) continue
+        for (let bucket = Math.floor(acquired / bucketMs); bucket < buckets && bucket * bucketMs < released; bucket++) {
+            held[bucket] += overlap(acquired, released, bucket)
+        }
+        if (spawned !== null && exited !== null) {
+            for (let bucket = Math.floor(spawned / bucketMs); bucket < buckets && bucket * bucketMs < exited; bucket++) {
+                children[bucket] += overlap(spawned, exited, bucket)
+            }
+        }
+    }
+    const round = (value) => Math.round(value * 100) / 100
+    return {
+        bucket_ms: bucketMs,
+        slots_held: held.map(round),
+        children: children.map(round),
+    }
+}
+
+/**
+ * Event-loop lag. The runner has one JavaScript thread, and every synchronous thing it does around
+ * a test happens there: creating a scratch directory, reading a golden, writing the log files. A
+ * synchronous section blocks *every* slot at once, and it hides from the per-test intervals: a
+ * child that finished while the runner was writing another test's log is not seen to have finished
+ * until the write returns, so the wait is charged to that child's `child_ms` and its own
+ * `post_exit_ms` stays small. The one measurement that cannot hide it is a timer that reports how
+ * late it fired: `gap - period` is time the loop could not service.
+ */
+const LOOP_SAMPLE_MS = 25
+
+function startLoopMonitor() {
+    const stalls = []
+    let last = performance.now()
+    const timer = setInterval(() => {
+        const now = performance.now()
+        const gap = now - last
+        last = now
+        if (gap >= LOOP_SAMPLE_MS * 2) {
+            stalls.push({ start: now - gap, end: now, ms: gap })
+        }
+    }, LOOP_SAMPLE_MS)
+    if (typeof timer.unref === 'function') timer.unref()
+    return () => {
+        clearInterval(timer)
+        return stalls
+    }
+}
+
+/**
+ * The whole run's slot accounting, for `summary.json`. A total without names is how the wrong
+ * thing gets optimized, so every total that has a distribution also names its top contributors.
+ */
+function summarizeSlotTimings(records, planWallMs, jobs, stalls, logWindows, runStartMs) {
+    const sum = (field) => records.reduce((total, record) => total + (record[field] || 0), 0)
+    const childTotal = sum('child_ms')
+    const componentNames = ['scratch', 'probe', 'prep', 'spawn', 'settle', 'validate', 'verify', 'cleanup', 'tail']
+    const componentTotals = {}
+    for (const name of componentNames) {
+        componentTotals[name] = Math.round(
+            records.reduce((total, record) => total + (record.components_ms[name] || 0), 0)
+        )
+    }
+    const sortedStalls = [...stalls].sort((lhs, rhs) => rhs.ms - lhs.ms)
+    const stallTotal = stalls.reduce((total, stall) => total + stall.ms, 0)
+    // A stall is the runner's own thread being unavailable. Naming which of its known synchronous
+    // sections the stall overlapped is what turns "the loop was busy" into "the loop was writing
+    // logs": the log windows are exact, so the overlap is not a guess.
+    const stallCovered = stalls.reduce(
+        (total, stall) => total + coveredMs(logWindows, stall.start, stall.end),
+        0
+    )
+    return {
+        tests: records.length,
+        plan_wall_ms: Math.round(planWallMs),
+        // Inside a slot: the test child, and the runner work that still happens while the slot is
+        // held (creating the child, validating what it printed).
+        child_ms_total: Math.round(childTotal),
+        slot_ms_total: Math.round(sum('slot_ms')),
+        no_child_ms_total: Math.round(sum('no_child_ms')),
+        idle_ms_total: Math.round(sum('idle_ms')),
+        probe_ms_total: Math.round(sum('probe_ms')),
+        probe_in_slot_ms_total: Math.round(sum('probe_in_slot_ms')),
+        verify_ms_total: Math.round(sum('verify_ms')),
+        verify_in_slot_ms_total: Math.round(sum('verify_in_slot_ms')),
+        verify_child_ms_total: Math.round(
+            records.reduce((total, record) => total + (record.verify_child_ms || 0), 0)
+        ),
+        log_write_ms_total: Math.round(sum('log_write_ms')),
+        // The same writing, charged to the tests whose slot it blocked instead of to the writer.
+        log_block_ms_total: Math.round(sum('log_block_ms')),
+        log_writes: records.filter((record) => record.log_write_ms > 0).length,
+        probes: records.filter((record) => record.probe_ms > 0).length,
+        verifications: records.filter((record) => record.verify_ms > 0).length,
+        // The reported ratio: how many tests' children ran at once, on average, over the plan.
+        avg_concurrency: planWallMs > 0 ? Math.round((childTotal / planWallMs) * 100) / 100 : 0,
+        // What the slots were actually doing: every held slot, whether or not a child ran in it.
+        avg_slots_held: planWallMs > 0 ? Math.round((sum('slot_ms') / planWallMs) * 100) / 100 : 0,
+        // A slot nobody holds is capacity the run never handed out: jobs * wall minus what was held.
+        empty_slot_ms_total: Math.max(0, Math.round(planWallMs * jobs - sum('slot_ms'))),
+        no_child_ms: distribution(records.map((record) => record.no_child_ms)),
+        pre_spawn_ms: distribution(records.map((record) => record.pre_spawn_ms)),
+        post_exit_ms: distribution(records.map((record) => record.post_exit_ms)),
+        idle_ms: distribution(records.map((record) => record.idle_ms)),
+        queue_ms: distribution(records.map((record) => record.queue_ms)),
+        child_ms: distribution(records.map((record) => record.child_ms)),
+        probe_ms: distribution(records.map((record) => record.probe_ms)),
+        verify_ms: distribution(records.map((record) => record.verify_ms)),
+        log_block_ms: distribution(records.map((record) => record.log_block_ms)),
+        // The runner's own thread, measured instead of inferred.
+        loop_lag: {
+            sample_ms: LOOP_SAMPLE_MS,
+            threshold_ms: LOOP_SAMPLE_MS * 2,
+            stall_count: stalls.length,
+            stall_ms_total: Math.round(stallTotal),
+            stall_ms_covered_by_log_write: Math.round(stallCovered),
+            max_stall_ms: roundMs(sortedStalls.length > 0 ? sortedStalls[0].ms : 0),
+            top_stalls: sortedStalls.slice(0, 20).map((stall) => ({
+                at_ms: Math.round(stall.start - runStartMs),
+                ms: roundMs(stall.ms),
+            })),
+        },
+        // `scratch`, `probe`, `prep`, `spawn`, `settle`, `validate`, `verify`, `cleanup` and `tail`
+        // are the partition of every held slot's not-child time; `verify_ms` and `probe_ms` are the
+        // same two steps whole, where they ran.
+        components_ms: componentTotals,
+        timeline: buildTimeline(records, planWallMs, jobs),
+        top_no_child_ms: topContributors(records, 'no_child_ms'),
+        top_pre_spawn_ms: topContributors(records, 'pre_spawn_ms'),
+        top_post_exit_ms: topContributors(records, 'post_exit_ms'),
+        top_idle_ms: topContributors(records, 'idle_ms'),
+        top_child_ms: topContributors(records, 'child_ms'),
+        top_probe_ms: topContributors(records, 'probe_ms'),
+        top_verify_ms: topContributors(records, 'verify_ms'),
+        top_log_block_ms: topContributors(records, 'log_block_ms'),
+    }
+}
+
+/**
  * Run every selected test, at most `options.jobs` at a time, and print the results in plan and
  * test order: a status line, its failure details and its log files are the same as a serial run's,
  * in the same place, whichever test finishes first. A test that compares against an earlier one
@@ -1689,11 +2046,16 @@ async function executePlans(plans, options, sharedVars, logDir) {
     // the first read the result of the test they compare against.
     const completed = new Map()
     const startedAt = performance.now()
+    // Windows in which the runner was synchronously writing a test's log files: the one section it
+    // can point at when a slot's post-exit time turns out to be someone else's work.
+    const logWindows = []
+    const stopLoopMonitor = startLoopMonitor()
     let printed = 0
     let printedPlan = null
 
     const printResult = (entry) => {
         const { plan, test, outcome } = entry
+        entry.logWriteMs = 0
         if (plan !== printedPlan) {
             printPlanHeader(plan)
             printedPlan = plan
@@ -1714,7 +2076,10 @@ async function executePlans(plans, options, sharedVars, logDir) {
             printDetailLines(outcome.failures)
             if (outcome.status === 'fail') printFailedOutput(outcome.result)
         }
+        const writeStarted = performance.now()
         writeLogFiles(plan, test, outcome.result, outcome.status, logDir)
+        entry.logWriteMs = performance.now() - writeStarted
+        logWindows.push({ start: writeStarted, end: performance.now() })
     }
 
     // Results are printed strictly in plan and test order: whichever test finishes first, the
@@ -1727,20 +2092,42 @@ async function executePlans(plans, options, sharedVars, logDir) {
     }
 
     for (const entry of entries) {
+        // When the slot was taken, when the child existed and when the slot went back: the
+        // scheduler's own accounting, recorded for every test whether it passes, fails or skips.
+        const clock = {}
+        const marks = {}
+        clock.runStart = startedAt
         entry.promise = (async () => {
+            clock.enqueuedAt = performance.now()
             if (entry.dependencies.length > 0) {
                 await Promise.all(entry.dependencies.map((dependency) => dependency.promise))
             }
-            const tokens = isSerial(entry.plan, entry.test) ? options.jobs : 1
+            clock.dependenciesDoneAt = performance.now()
+            const serial = isSerial(entry.plan, entry.test)
+            const tokens = serial ? options.jobs : 1
             // A test that needs another test's result queues at the front: it starts right after
             // its reference instead of behind every test of the run, which would also delay the
             // in-order printer until the end.
-            await slots.acquire(tokens, entry.dependencies.length > 0)
+            const priority = entry.dependencies.length > 0
             let scratch = null
+            let slotAcquired = false
+            let slotReleased = false
+            const releaseSlot = () => {
+                if (slotReleased) return
+                slotReleased = true
+                if (slotAcquired) slots.release(tokens)
+                clock.releasedAt = performance.now()
+            }
             try {
+                await slots.acquire(tokens, priority)
+                slotAcquired = true
+                clock.acquiredAt = performance.now()
                 scratch = createTestScratchDir(entry.test)
+                clock.scratchAt = performance.now()
                 const scratchRelative = path.relative(REPO_ROOT, scratch).split(path.sep).join('/')
+                clock.probeAt = performance.now()
                 const skipReason = await checkPrecondition(entry.test, sharedVars, scratch, scratchRelative)
+                clock.preconditionAt = performance.now()
                 if (skipReason) {
                     entry.outcome = { status: 'skip', reason: skipReason }
                     return
@@ -1750,14 +2137,16 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     result = await runOneTest(
                         entry.test,
                         sharedVars,
-                        { options, completed, planId: entry.plan.id },
+                        { options, completed, planId: entry.plan.id, releaseSlot: null, clock },
                         scratch,
-                        scratchRelative
+                        scratchRelative,
+                        marks
                     )
                 } catch (error) {
                     const casePath = path.resolve(path.dirname(entry.test.__planPath), entry.test.case)
                     result = runnerErrorResult(casePath, error && error.message ? error.message : String(error))
                 }
+                clock.validatedAt = performance.now()
                 completed.set(`${entry.plan.id}/${entry.test.name}`, result)
                 completed.set(entry.test.name, result)
                 if (entry.test.__knownFail) {
@@ -1781,10 +2170,13 @@ async function executePlans(plans, options, sharedVars, logDir) {
             } finally {
                 // The test's own directory is not this run's evidence: it goes whether the
                 // test passed or failed. The run root stays on failure (main prints it).
+                const removeStarted = performance.now()
                 if (scratch) {
                     fs.rmSync(scratch, { recursive: true, force: true })
                 }
-                slots.release(tokens)
+                clock.removeAt = performance.now()
+                clock.removeMs = clock.removeAt - removeStarted
+                releaseSlot()
             }
         })()
             .catch((error) => {
@@ -1796,6 +2188,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
                 entry.outcome = { status: 'fail', result, metric: '', failures: result.failures }
             })
             .finally(() => {
+                entry.timing = slotTiming(entry, clock, marks, logWindows)
                 entry.settled = true
                 drain()
             })
@@ -1803,7 +2196,14 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
     await Promise.all(entries.map((entry) => entry.promise))
     drain()
-    return { summary, wallMs: performance.now() - startedAt }
+    const stalls = stopLoopMonitor()
+    const timings = []
+    for (const entry of entries) {
+        if (!entry.timing) continue
+        entry.timing.log_write_ms = roundMs(entry.logWriteMs || 0)
+        timings.push(entry.timing)
+    }
+    return { summary, wallMs: performance.now() - startedAt, timings, stalls, logWindows, startedAt }
 }
 
 async function main() {
@@ -1871,6 +2271,14 @@ async function main() {
     }
 
     const split = gateSplit(outcome.wallMs)
+    const slotTiming = summarizeSlotTimings(
+        outcome.timings,
+        outcome.wallMs,
+        options.jobs,
+        outcome.stalls,
+        outcome.logWindows,
+        outcome.startedAt
+    )
     fs.writeFileSync(
         path.join(logDir, 'summary.json'),
         JSON.stringify(
@@ -1888,6 +2296,10 @@ async function main() {
                 test_root: TEST_SCRATCH_RUN,
                 test_root_kept: testRootKept,
                 summary: outcome.summary,
+                // Where the slots went, for every test: the slot held before a child existed and
+                // after it was gone, plus the aggregates and the tests that own most of it.
+                slot_timing: slotTiming,
+                test_timings: outcome.timings,
             },
             null,
             2
@@ -1895,6 +2307,23 @@ async function main() {
     )
 
     printRunSummary(outcome.summary)
+    // One line for the flow, with the whole accounting behind it in summary.json: the ratio the
+    // task is about, and the intervals that decide whether the ratio is the host's or the runner's.
+    console.log(
+        `${COLORS.cyan}[SLOT]${COLORS.reset} concurrency ${slotTiming.avg_concurrency}/${options.jobs}`
+        + `, slots held ${slotTiming.avg_slots_held}/${options.jobs}`
+        + `, children ${(slotTiming.child_ms_total / 1000).toFixed(1)} s`
+        + `, no-child ${(slotTiming.no_child_ms_total / 1000).toFixed(1)} s`
+        + ` (pre-spawn ${(slotTiming.pre_spawn_ms.total / 1000).toFixed(1)} s,`
+        + ` post-exit ${(slotTiming.post_exit_ms.total / 1000).toFixed(1)} s)`
+        + `, probes ${(slotTiming.probe_ms_total / 1000).toFixed(1)} s`
+        + ` (in slot ${(slotTiming.probe_in_slot_ms_total / 1000).toFixed(1)} s)`
+        + `, verifications ${(slotTiming.verify_ms_total / 1000).toFixed(1)} s`
+        + ` (in slot ${(slotTiming.verify_in_slot_ms_total / 1000).toFixed(1)} s)`
+        + `, log writes ${(slotTiming.log_write_ms_total / 1000).toFixed(1)} s`
+        + ` (blocking ${(slotTiming.log_block_ms_total / 1000).toFixed(1)} s of slots)`
+        + `, loop stalls ${(slotTiming.loop_lag.stall_ms_total / 1000).toFixed(1)} s`
+    )
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} wall: ${(outcome.wallMs / 1000).toFixed(1)} s, jobs: ${options.jobs}, tier: ${options.tier}`
     )
