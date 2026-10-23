@@ -1,0 +1,17 @@
+h331 — camel-format 吃掉注释：复现、诊断、修复并让闸门能看见（分支 handover/h331-format-comment，980f02b49，5 提交，基线 4674e78ed）
+
+它实际吐出了什么（fixtures test/cases/format/comments_*.cml，真二进制，前→后）：函数 { 之后紧接的 `// a` `// b` 只活下最后一行，现在两行都在（match type T { 之后三行本来就都在）；行尾的 /* c */ 保留但被追加一个空格，现在没有（全树 47 个文件至今带着那个空格）。此前还会丢：`return 2 /* after the value */`、`/* last */`、块的 } 之前的注释、with <…> 里每个多行 /// 串的第一行（stdlib/std.cml 的 45/202/216/247/257 行）。
+
+机制（基线行号）：fmt.h:220 的 start--; 假定"一串前导注释是一个 token"，而每个 // 行各自是一个 token，于是范围只含最后一行；fmt.h:209 的 end = context->lastToken()->index() + 1; 让列表的正向范围止于最后一项，于是"最后一个语句与 } 之间"的注释不在任何范围内；fmt.cpp:112 的 result += " "; 无条件，于是行尾多出空白；fmt.cpp:163 用 declTokenRanges[headWithIndex[0].second]，而 head 列表是**排过序**的，所以文件头注释的范围取自另一个 import（注释被搬走，用例 test/cases/modules/stdlib/registry_all.cml）；另外"同一节点自己写出的两个 token 之间"的注释此前完全没人看。
+
+修法（c2b10e94a、b1c1db50d、afeab21a2；tools/format/fmt.{h,cpp}）：insertComment 收 token 下标、每个注释只写一次（writtenComments），且只有在注释最后一行的下一源 token 与它同行时才补空格；findCmtRange 退回整串；头范围取源码中第一个 import；visitStmtBlock 写 } 之前的（原本与语句同行就仍同行）；formatList 写 ] ) > 之前的；if 访问器写 then/else 之前的；visit(node) 写上方没有任何范围覆盖到的。仍然覆盖不到的写进文件末尾并**计数（unplaced）**：保留、绝不丢，闸门拒绝它。已定的答案：一行内两个 token 之间的注释 → 放在它前面那个 token 的上方；闭括号/else 之前 → 放在该项那一行；文件末尾 → 程序自己的尾部范围，不变；空块内 → 走既有空块路径，不变。
+
+守卫是性质（计划 feat.format.comments，test/plans/feat/format/comments.plan.toml，5 个 fixture + verify/comments_kept.mjs）：每个注释按书写次数出现（**计数**，不用文本查找——两个相同注释会掩盖一次丢失）、不凭空多出、输出是不动点（格式化两次 == 一次）、没有注释的用例必须失败。把 bug 还原后红：a1e157602（只有守卫）让 comments_after_brace/block/after_tokens 失败；今天拿修复前的二进制重跑，守卫 exit 1 并报 `"// not the last item" (2 of 3 kept)`。修后绿。
+
+**已经造成的树损伤**（闸门自己的命令 python3 test/tools/parsecheck/check.py format）：修前 changed=0 unstable=0 broken=0 **dropped=72**——53 个文件里 72 条注释，没有不稳定。**闸门抓不到它**：develop 的摘要不打印注释计数，而且只在 changed/broken 时非零退出；丢掉的注释仍然是不动点，也不在 AST 里（lambda.cml 丢了两条相同 `// invalid` 中的一条，连文本查找都看不出来）。修后：2536 文件、2461 检查、comments=6281 dropped=0 duplicated=0 unplaced=0 changed=0 unstable=0 broken=0，exit 0。
+
+输出变化（报告，未顺手重排）：2536 个文件中 102 个格式化结果不同——47 个只差被移除的行尾空格（stdlib/signatures/{autodiff,graph,json,onnx,tiles}.cml），53 个拿回此前会丢的注释（stdlib/std.cml、showcase/{c1,c2,c6,d5}、test/cases/tools/debugger/fixtures/*），2 个把注释移到正确位置（registry_all.cml、lambda.cml）。**没有改任何 golden 或计划文件**；不变的用例保持逐字不变。
+
+闸门：total 5710, pass 5696, fail 0, skip 14（exit 0）；定向跑 94/94。唯一被碰的既有期望是 frontend.plan.toml 的 expect_stdout_contains，加上了 duplicated=0，理由在提交里。
+
+（协调者注：那 47 个带行尾空格的文件故意**没有**顺手重排——一次纯空白 diff 会污染历史；要不要重排是另一个决定。）
