@@ -166,6 +166,100 @@ verify_script = """
 }
 """
 
+# ---- Across modules: the body of an imported function is part of the program too ----
+
+[[tests]]
+name = "impl.cross_module.direct"
+desc = "A function tagged in another module and only ever called directly from this one: the direct call compiles to the kernel, so nothing reachable from `main` names the body graph, yet the body is still the semantics of the function (design principles 10.4) and `test::impl` must list it through Program::implBodies, marked body=yes and holding the body's `:op/sub_l`, not the kernel. The check names the graph, so a count that includes another graph cannot pass it."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_cross_module.cml"
+args = ["${case}", "test::impl"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const lines = input.normalized.stdout.split('\n')
+    assert(lines.some(l => l === 'IMPL bodies 1'), `expected one impl body:\n${input.normalized.stdout}`)
+    const graph = lines.find(l => l.startsWith('IMPL graph impl_cross_module_lib::add '))
+    assert(graph && graph.includes('body=yes'), `the body of the imported add is not marked impl: ${graph}`)
+    const nodes = lines.filter(l => l.startsWith('IMPL node impl_cross_module_lib::add '))
+    assert(nodes.length === 5, `expected five body nodes, got ${nodes.length}`)
+    assert(nodes.some(l => l.includes('OPER :op/sub_l')), `the body has no sub operator: ${nodes.join(' | ')}`)
+    assert(!nodes.some(l => l.includes(':op/add_l')), `the kernel is inside the body: ${nodes.join(' | ')}`)
+}
+"""
+
+[[tests]]
+name = "impl.cross_module.run"
+desc = "The imported tagged function still runs the kernel on a direct call: `add(19, 23)` is 42 on every back end, and the disagreement case below proves the kernel, not the body, is what the direct call took."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_cross_module.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "kernel=42\n"
+
+[[tests]]
+name = "impl.cross_module.paths"
+desc = "The direct cross-module call runs the kernel once and the retained body zero times: `std::profile` counts one `:op/add_l` and no `:op/sub_l`. A fix that ran the body on the direct call, or ran it twice, would move these counts."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_cross_module.cml"
+args = ["${case}", 'std::profile top=0 json="${test_tmp}/profile.json"', "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const out = input.normalized.stdout
+    assert(out.split('\n')[0] === 'kernel=42', `the value changed:\n${out}`)
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
+    assert(calls[':op/add_l'] === 1, `the kernel ran ${calls[':op/add_l']} times, not once:\n${out}`)
+    assert((calls[':op/sub_l'] ?? 0) === 0, `the body ran ${calls[':op/sub_l']} times on a direct call:\n${out}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "impl.cross_module.disagreement"
+desc = "The cross-module kernel path and body path disagree: the imported function's direct call runs the wrong `:op/sub_l` kernel and prints -4, the call through the imported function value runs the body `a + b` and prints 42. The disagreement makes the agreement check below falsifiable rather than a tautology."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_cross_module_disagreement.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "kernel=-4 body=42\n"
+verify_script = """
+({ input, assert }) => {
+    const m = input.normalized.stdout.match(/^kernel=(-?[0-9]+) body=(-?[0-9]+)/)
+    assert(m, `no values:\n${input.normalized.stdout}`)
+    const kernel = Number(m[1])
+    const body = Number(m[2])
+    assert(kernel === -4 && body === 42, `expected -4 and 42, got ${kernel} and ${body}`)
+    assert(kernel !== body, `the wrong kernel was not observed: both paths printed ${body}`)
+}
+"""
+
+[[tests]]
+name = "impl.cross_module.disagreement.paths"
+desc = "The profile of the cross-module disagreement: one `:op/sub_l` is the imported kernel path and one `:op/add_l` is the body path reached through the function value. The two paths are counted apart, so the equality of values in an agreement case cannot be the equality of one path with itself."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_cross_module_disagreement.cml"
+args = ["${case}", 'std::profile top=0 json="${test_tmp}/profile.json"', "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const out = input.normalized.stdout
+    assert(out.split('\n')[0] === 'kernel=-4 body=42', `the values changed:\n${out}`)
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
+    assert(calls[':op/sub_l'] === 1, `the wrong kernel ran ${calls[':op/sub_l']} times, not once:\n${out}`)
+    assert(calls[':op/add_l'] === 1, `the body ran ${calls[':op/add_l']} times, not once:\n${out}`)
+}
+"""
+timeout_ms = 60000
+
 # ---- A wrong kernel: the comparison must be able to fail ----
 
 [[tests]]

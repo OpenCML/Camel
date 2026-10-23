@@ -31,6 +31,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
+#include "camel/runtime/graph.h"
 
 #include <algorithm>
 #include <cctype>
@@ -670,11 +671,21 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     // them or makes their value, like any function the program does not use: they are not
     // the root graph's own functions, which every reachability walk (encoding, the passes)
     // starts from.
+    //
+    // The semantic body of an `#impl` function is the exception (design principles 10.4): it is
+    // the meaning of the function even when the only call is a direct one, which runs the kernel
+    // operator and names no graph. An entry module keeps its bodies because they are its own
+    // subgraphs; an imported module's body would be erased here and, being unreachable from the
+    // root, never encoded, so Program::implBodies (and every consumer that expands on demand)
+    // would silently lose it. Keep it: it stays a nested reference, which Program::traceGraphs
+    // skips for an ordinary dump or pass, and Program::implBodies still lists it.
     std::vector<compile_graph_ptr_t> imported;
     for (const compile_graph_ptr_t &graph : rootGraph_->subGraphs()) {
         const auto owner = rootSubGraphOwners_.find(graph.get());
+        const bool semanticBody =
+            (graph->draft().flags() & camel::runtime::kGraphFlagImplBody) != 0;
         if (owner != rootSubGraphOwners_.end() && owner->second != nullptr &&
-            !owner->second->entry) {
+            !owner->second->entry && !semanticBody) {
             imported.push_back(graph);
         }
     }
