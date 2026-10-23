@@ -2,7 +2,7 @@ id = "compile.impl"
 order = 228
 tier = "fast"
 tags = ["feat", "compile", "tags", "native", "impl", "semantics"]
-desc = "`#impl<f>` (design principles 10.4): a function's Camel body is its semantics and the body-less declaration f of the same module is the operator that runs it. An ordinary call is one OPER of the kernel, the body is not inlined and is absent from the ordinary dump; the body graph stays the semantic function for what asks to look inside (Program::implBodies / test::impl). The agreement case compiles the same function twice in one program, once as a direct call (the kernel) and once through its function value (the body), and checks that both print the same values while a profile counts the two paths apart; a deliberately wrong kernel shows that the comparison can fail. One production pass is taken through both paths: `std::opt` runs over a program whose tagged function is called both ways, and both values stay 42 on every back end. Fusion, autodiff and the ONNX exporter have no case here for a reason that is a decision rather than effort: all three need a kernel over tensors to say anything at all (the `rules::fusion` library's only tensor rule is the sigmoid chain; the exporter requires an exported function's arguments to be tensors, `modules/onnx/exporter.cpp#InputBinder::bind`; and the reverse pass reaches the operator at the call site, `modules/autodiff/pullback.cpp#Backward::visitOper`), and a test module cannot declare a tensor kernel, because a module may declare only its own operator (SemanticDiag::NativeDeclarationForeignOperator). Six refusals, one case each: the tag on a body-less declaration, a kernel no declaration brings, a kernel of another module, a kernel whose signature differs, a kernel that has a body, and a generic function, whose instances carry no single signature. Each refusal names the misuse and is pinned to its source line and column."
+desc = "`#impl<f>` (design principles 10.4): a function's Camel body is its semantics and the body-less declaration f of the same module is the operator that runs it. An ordinary call is one OPER of the kernel, the body is not inlined and is absent from the ordinary dump; the body graph stays the semantic function for what asks to look inside (Program::implBodies / test::impl). The agreement case compiles the same function twice in one program, once as a direct call (the kernel) and once through its function value (the body), and checks that both print the same values while a profile counts the two paths apart; a deliberately wrong kernel shows that the comparison can fail. Two production passes are taken through both paths: `std::opt` runs over a program whose tagged function is called both ways and both values stay 42 on every back end, and the reverse pass differentiates a direct call of a tagged function as the body the tag kept, a kernel whose registered rule differs from the body's derivative included. Fusion and the ONNX exporter have no case here for a reason that is a decision rather than effort: both need a kernel over tensors to say anything at all (the `rules::fusion` library's only tensor rule is the sigmoid chain; the exporter requires an exported function's arguments to be tensors, `modules/onnx/exporter.cpp#InputBinder::bind`), and a test module cannot declare a tensor kernel, because a module may declare only its own operator (SemanticDiag::NativeDeclarationForeignOperator). Seven refusals, one case each: the tag on a body-less declaration, a kernel no declaration brings, a kernel of another module, a kernel whose signature differs, a kernel that has a body, a generic function, whose instances carry no single signature, and the one the reverse pass adds, a kernel two of the program's bodies answer for, where a call site cannot say which body it means. Each refusal names the misuse and is pinned to its source line and column."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -110,6 +110,17 @@ expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
 # core's scalar operators. Closing fusion and export needs either a stock `#impl` in `stdlib/`
 # beside the operators, or a test-scoped way to declare another module's operator; both are the
 # language author's call.
+#
+# The ruling of 2026-10-23 (`docs/handover/reviews/H141-H213.md`, Q2) chose the first of the two:
+# the standard library gets its first `#impl` kernels, each beside the function whose semantics it
+# implements. For a tensor operator that file does not exist: the module that owns
+# `tensor:log_softmax` is the tensor module, whose `stdlib/tensor.cml` is the declaration module of
+# `tensor.cmo` and may hold no body (`SemanticDiag::DeclarationModuleHasBody`), while no other
+# module may declare that operator (`SemanticDiag::NativeDeclarationForeignOperator`). `array` is
+# the standard library module with both halves, because libcamel registers its operators and
+# `stdlib/array.cml` has therefore no `.cmo` of its own name. Adam, the ruling's other item, is
+# generic over the parameter tree, and a generic function carries no kernel
+# (`SemanticDiag::ImplOnGenericFunction`). `impl.kernel_site` states what both items are missing.
 
 # ---- The optimizer: a direct call is not a call to inline ----
 
@@ -356,6 +367,61 @@ verify_script = """
 }
 """
 
+# ---- The reverse pass: a call of a tagged function is differentiated as its body ----
+
+[[tests]]
+name = "impl.grad.body"
+desc = "Design principles 10.4 on the reverse pass: a direct call of an `#impl` function is one OPER of its kernel, and the kernel is execution, not meaning, so autodiff differentiates the body and the kernel's registered derivative rule does not take part. `t` is `a * b` tagged with the `:op/div_d` kernel, whose registered rule gives 1/b = 0.5 at (4.0, 2.0) where the body's derivative is b = 2.0; `outer` calls `t` by name from inside the differentiated function, so the call site is that kernel OPER. The forward run shows the kernel really ran and is not the body (2.0 against 8.0), the dump shows the call still is one `:op/div_d` OPER, and the derivative is 2.0: one number decides both questions, since a rule read at the call site would print 0.5. The untagged twin is the same call of the same body, which 10.4 requires to differentiate the same way."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_grad_body.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout
+    const forward = out.match(/^impl_grad_body forward kernel=([^ ]+) body=([^ ]+)$/m)
+    assert(forward, `no forward line:\\n${out}`)
+    // The kernel ran and is not the body: one `:op/div_d` of 4.0 and 2.0 against a product.
+    assert(Number(forward[1]) === 2, `the kernel did not run as the kernel: ${forward[1]}`)
+    assert(Number(forward[2]) === 8, `the body is not the product: ${forward[2]}`)
+    const grad = out.match(/^impl_grad_body grad direct=([^ ]+) plain=([^ ]+) value=([^ ]+)$/m)
+    assert(grad, `no gradient line:\\n${out}`)
+    const direct = Number(grad[1])
+    // The guard: 1/b is the kernel's rule, b is the body's derivative, and they differ here.
+    assert(direct === 2, `the call of 't' was differentiated as the kernel, not the body: direct=${grad[1]}`)
+    assert(Number(grad[2]) === direct && Number(grad[3]) === direct,
+        `the tag changed the derivative: plain=${grad[2]} value=${grad[3]} direct=${grad[1]}`)
+}
+"""
+
+[[tests]]
+name = "impl.grad.body.gir"
+desc = "The graph side of the same case: the direct call of the tagged function is still one OPER of the kernel's URI in the forward graph, in `outer` as in `main`, while the untagged call of the same body is a FUNC of the body graph. The body of the tagged function is reachable from nowhere in the forward program (`outer` calls the kernel OPER), so it is exactly the body the ordinary dump does not reach, and the two bodies in the dump are the untagged one and the untagged twin. Differentiation expands that call into the body at the reverse pass; it does not change what the forward program is, so a fix that inlined or lowered the body into the caller would move this."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_grad_body.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout
+    const count = s => out.split(s).length - 1
+    const kernel = 'label=":op/div_d", type="OPER"'
+    const body = 'label=":op/mul_d", type="OPER"'
+    // outer (a direct call of the tagged function) and main (a direct call of the same) are one
+    // kernel OPER each; the tagged function's body is not among them.
+    assert(count(kernel) === 2, `expected two kernel OPERs (outer and main), got ${count(kernel)}`)
+    // tagged_value is the tagged function's untagged twin reached as a value: its graph is the
+    // product, and the untagged `plain` is the other one.
+    assert(count(body) === 2, `expected the two body MULTs, got ${count(body)}`)
+    assert(count('label="plain", type="FUNC"') === 2,
+        `expected the two calls of the untagged body, got ${count('label="plain", type="FUNC"')}`)
+    // The tagged function's own body graph is the one the forward program cannot reach.
+    assert(!/\\n\\s+label="t";/.test(out), `the body of the tagged function is reachable:\\n${out}`)
+}
+"""
+
 # ---- The six refusals, one case each ----
 
 [[tests]]
@@ -436,6 +502,19 @@ expect_diagnostic_line = 10
 expect_diagnostic_column = 2
 expect_output_contains = ["The '#impl' tag of 'at' is on a generic function."]
 
+# ---- The declaration site a standard library kernel would need ----
+
+[[tests]]
+name = "impl.kernel_site"
+desc = "Where a kernel can be declared, and why the ruling's two items (Adam in `optim`, a composite tensor operation) have no site yet: `#op<'tensor:log_softmax'>` outside the tensor module is refused as another module's operator, not as an operator no module implements; `#op<'nn:adam'>` is refused the same way, and `#impl` on a generic function as such; and a copy of the tensor module's own `.cml` beside its `.cmo` may declare the kernel but not hold the definition's body."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/native/impl_kernel_site.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+timeout_ms = 300000
+
 [[tests]]
 name = "impl.syntax_arguments"
 desc = "`#impl<>` names no kernel: the form takes exactly one name, so the use is reported with the argument count before the tag is resolved."
@@ -447,3 +526,17 @@ expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'impl' takes 1 parameter(s), but 0 argument(s) are written."]
+
+# ---- The one refusal the reverse pass adds: a kernel two bodies answer for ----
+
+[[tests]]
+name = "impl.grad.body_ambiguous_kernel"
+desc = "Two `#impl` functions of one program naming one kernel: `t` is `a * b` and `u` is `a + b`, and a call of the tagged function is one OPER of `:op/div_d` with nothing at the call site saying which body it means. Nothing else in the language forbids the sharing, and a kernel implements one function (design principles 10.4), so autodiff refuses at the call rather than taking one body's derivative or the kernel's rule; the refusal names both functions so the mistake is repairable. The same two-body program without the tag differentiates both bodies without a word."
+kind = "negative"
+case = "../../../cases/compile/native/impl_grad_ambiguous_kernel.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 25
+expect_output_contains = ["2 semantic bodies of this program implement that kernel ('t', 'u')"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

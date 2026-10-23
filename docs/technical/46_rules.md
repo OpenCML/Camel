@@ -14,7 +14,9 @@ rule swap(a: int, b: int) { a + b <=> b + a }
 
 `rule` (and `when`, after the closing brace) are names that mean something only where a rule
 declaration starts, so a program may still have a variable called `rule`. `<=>` is a token of its
-own. A parameter marked `const` only matches a constant.
+own. A parameter marked `const` only matches a constant, and it must be a constant of the type the
+parameter is declared with (rewrite design 2 (second version) 1): the matcher checks the declared
+type against the constant's, so a rule no longer guards `isI32(c)`-style itself.
 
 The AST builder (`Builder::visitRuleDecl`) turns a declaration into two functions and a
 module-level value, which is what the design calls the shorthand of a pair of functions with the
@@ -36,6 +38,15 @@ func add_zero__rhs(x: int, y: int) => x
 func add_zero__when(x: Node, y: Node) => isZero(y)   // the parameters as nodes of the draft
 let add_zero = __rule_when('add_zero', false, 0, 0, add_zero__lhs, add_zero__rhs, add_zero__when)
 ```
+
+A `const` parameter is the exception: it is the constant's *value* inside the condition, of the
+type it was declared with (`func keep_positive__when(x: Node, c: float) => positive(c)` for
+`rule keep_positive(x: float, const c: float) { x * c => x } when positive(c)`), so the guard is
+arithmetic on the value and needs neither `constant(node, sample)` nor the `match … case null`
+layers around a read. The engine passes that value where it passed a node, and the parameter bit
+the rule carries is what tells it which parameters are which. Reaching the *node* of a `const`
+parameter (to read a fact, or its shape) needs a `node_of(c)` the language does not have yet; a
+condition that needs a node reads a parameter that is not `const`.
 
 `__rule` and `__rule_when` are operators of the module `rewrite` (`modules/rewrite`), which the
 declaration imports itself (with `graph.Node` for the condition). They make a `RuleObject` (type
@@ -277,19 +288,23 @@ item 1), the rest is planned in the H38 report (`handover note ⟨50954d0⟩ (H3
 short:
 
 **`when` (implemented).** `rule … { lhs => rhs } when expr` compiles to a third function
-`name__when(params as Node) => expr`, and to the value `let name = __rule_when(name, twoWay, needs,
+`name__when(params) => expr`, and to the value `let name = __rule_when(name, twoWay, needs,
 consts, lhs, rhs, when)`; the 6-argument `__rule` stays for rules without a condition. A parameter of the
-condition is a `graph::Node` naming the node the engine bound to that parameter in the draft
-being rewritten (scheme (a)), so a condition sees the live graph: its operator, type, tags,
-inputs, users, constants, anchor flags. The graph module's `Handle` carries a draft, and the node
+condition that is not `const` is a `graph::Node` naming the node the engine bound to that parameter
+in the draft being rewritten (scheme (a)), so a condition sees the live graph: its operator, type,
+tags, inputs, users, constants, anchor flags; a `const` parameter is the constant's value, of the
+type it was declared with (rewrite design 2 (second version) 1). The graph module's `Handle`
+carries a draft, and the node
 readers answer from it; `callee` is the one read that still needs a frozen program. The engine
 already calls `Rule.when` after a match and before a replacement; it now builds that closure from
-the Camel function, roots the rule object and the Node arguments across the call, and registers a
+the Camel function, roots the rule object and its arguments across the call (a node handle, or a
+constant the collector can move), and registers a
 tracer that relocates the draft's static values and the constant slots copied into the compiled
 patterns (a condition call is a safepoint). `check` compares the two sides only through the
 engine for a conditional rule. Tests: `test/cases/modules/rules/when_rules.cml` with
 `when_target.cml` (fact, shape and type conditions, each firing and refusing, all four backends,
-saturation) and `check_when.cml`. A rule, its target and the pass that applies it may also live
+saturation), `when_values.cml` (a `const` parameter read as a value), `const_type.cml` (the
+matcher checking a `const` parameter's declared type) and `check_when.cml`. A rule, its target and the pass that applies it may also live
 in one module (`same_module_pass.cml`): the pass module is a program of its own, and the program
 it is also part of is built afterwards (H38 report §2.5).
 

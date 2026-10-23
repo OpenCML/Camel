@@ -133,7 +133,10 @@ std::shared_ptr<const CostModel> findCostModel(const std::string &name);
 
 /// A term of a rule (rewrite design 2.2, 2.3). On the left it is matched against the writings
 /// of the values; on the right it is built. A variable stands for a value (the same variable
-/// twice: the same value); `constOnly` ones only match a value that has a constant writing.
+/// twice: the same value); `constOnly` ones only match a value that has a constant writing, and
+/// `type` is the type the parameter was declared with, so a `const c: T` reads only a constant
+/// the type of the pattern accepts (rewrite design 2 (second version) 1: the matcher checks the
+/// declared type, and no rule guards `isI32`-style).
 struct Pattern {
     enum class Kind : uint8_t { Var, Constant, Op, Compute };
     Kind kind        = Kind::Var;
@@ -150,7 +153,7 @@ struct Pattern {
     std::function<slot_t(std::span<const slot_t>)> compute;
 };
 Pattern patVar(uint32_t var, camel::core::type::Type *type = nullptr);
-Pattern patConst(uint32_t var);
+Pattern patConst(uint32_t var, camel::core::type::Type *type = nullptr);
 Pattern patLiteral(slot_t value, camel::core::type::Type *type);
 Pattern patOp(camel::core::OperId oper, std::vector<Pattern> args, camel::core::type::Type *type = nullptr);
 Pattern patCompute(
