@@ -315,6 +315,18 @@ expect_output_not_contains = ["FAIL"]
 timeout_ms = 60000
 
 [[tests]]
+name = "draw_classes.params"
+desc = "The pass declares `rounds: int = 6` and `strict: bool = false` in stdlib/std.cml, and a parameter written after the pass name reaches it: `rounds=0` applies no rule, so the program keeps the writing it had and the check of `draw_classes.guard` refuses that dump; `rounds=1` already leaves `x + x` and `x * 2` in one class; `strict=true` keeps the pair, because the integer rules hold bit for bit; `rounds=1+1` is read as an int; and `rounds=true` is refused at the call, naming the declaration's type (`The argument 'rounds' of 'std::opt::saturate' has type 'int', not 'bool'`), before anything runs."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/feat/mm/writings/draw_classes.mjs"
+args = ["${case}", "params"]
+expect_exit = 0
+expect_stdout_contains = ["draw classes params: PASS", "DRAW params rounds0=no-class", "strict=one-class", "wrongtype=refused"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000
+
+[[tests]]
 name = "draw_classes.extract"
 desc = "The pass extracts nothing: the program it leaves is in the state with several writings, a pass that consumes it (`std::nvm`) is given one writing per value by the driver and prints 42, `std::opt::extract` before it does the same, and a rewrite pass that does not declare that it accepts the state (`std::opt::fold`) is still refused with `PassNeedsExtraction` — the new rule is about a pass that asked for the state, not about every pass."
 kind = "behavior"

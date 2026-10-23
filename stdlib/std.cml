@@ -281,8 +281,9 @@ export func extract::<F>(f: F): F! when is_function::<F>()
 /// where a value has several writings; nothing is extracted (H225). The dumps that accept that
 /// state draw it: `camel f.cml std::opt::saturate std::gir`.
 with <
-    /// Rounds of saturation: every round finds all matches of the rules and applies them
-    /// (0 stops after the matches a plain rewrite finds).
+    /// Rounds of saturation: every round finds all matches of the rules and applies them, and the
+    /// rounds go on while a round adds a writing. 0 applies no rule at all, so the program keeps
+    /// exactly the writings it had.
     rounds: int = 6,
     /// Keep the rules to the ones that hold bit for bit, as `safe_fp=true` does for
     /// `std::opt` (design principles 7.4).

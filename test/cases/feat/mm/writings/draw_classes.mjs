@@ -22,7 +22,11 @@
  *     document `egraph-serialize` reads, whose every child is an e-class of the document, whose
  *     roots are e-classes, and in which the two writings are one e-class;
  *   * a pass that consumes the program still gets one writing per value (the program prints 42)
- *     and a rewrite pass that does not declare that it accepts the state is still refused.
+ *     and a rewrite pass that does not declare that it accepts the state is still refused;
+ *   * the pass declares `rounds` and `strict`, and a parameter written after it reaches it: 0
+ *     rounds applies no rule at all (so the check above refuses that dump), 1 round already leaves
+ *     the pair in one class, a bit-for-bit pass keeps that pair, an int takes a constant
+ *     expression, and a bool where the declaration says int is refused at the call.
  *
  * The guard is shown red on a dump that lacks the drawing: `guard` mode runs the pipeline without
  * `std::opt::saturate`, where the value has one writing and no cluster can exist, and requires
@@ -30,7 +34,7 @@
  * stands alone. A check that cannot refuse anything is not evidence, so the red half is part of
  * the case and not a note about it.
  *
- *   node draw_classes.mjs gir|rgir|jgir|egraph|guard|extract
+ *   node draw_classes.mjs gir|rgir|jgir|egraph|guard|params|extract
  */
 
 import fs from 'node:fs'
@@ -419,8 +423,51 @@ if (MODE === 'gir' || MODE === 'rgir') {
         console.log('DRAW extract printed=42 refused_fold=1')
     }
     verdicts.push('DRAW-extract')
+} else if (MODE === 'params') {
+    // The pass declares `rounds: int = 6` and `strict: bool = false`; a parameter reaches the
+    // pass, and the one that bounds the work is read as the declaration says.
+    const zero = run(['std::opt::saturate', 'rounds=0', 'std::gir'])
+    check('params rounds=0 exit', zero.status === 0, zero.output)
+    check(
+        'params rounds=0 applies no rule: the program keeps its writings',
+        drawingProblems(zero.stdout).length > 0,
+        'rounds=0 left a class behind'
+    )
+    const one = run(['std::opt::saturate', 'rounds=1', 'std::gir'])
+    check(
+        'params rounds=1 reaches the state',
+        one.status === 0 && drawingProblems(one.stdout).length === 0,
+        one.output
+    )
+    const strict = run(['std::opt::saturate', 'strict=true', 'std::gir'])
+    check(
+        'params strict=true keeps the rules that hold bit for bit',
+        strict.status === 0 && drawingProblems(strict.stdout).length === 0,
+        strict.output
+    )
+    const expression = run(['std::opt::saturate', 'rounds=1+1', 'std::gir'])
+    check(
+        'params an int parameter takes a constant expression',
+        expression.status === 0 && drawingProblems(expression.stdout).length === 0,
+        expression.output
+    )
+    const wrong = run(['std::opt::saturate', 'rounds=true', 'std::gir'])
+    check(
+        'params the declared type is read: a bool where an int is declared is refused at the call',
+        wrong.status === 1 &&
+            /The argument 'rounds' of 'std::opt::saturate' has type 'int', not 'bool'/.test(
+                wrong.output
+            ),
+        wrong.output
+    )
+    if (!failed) {
+        console.log(
+            'DRAW params rounds0=no-class rounds1=one-class strict=one-class expression=ok wrongtype=refused'
+        )
+    }
+    verdicts.push('DRAW-params')
 } else {
-    check(`mode '${MODE}'`, false, 'gir, rgir, jgir, egraph, guard or extract')
+    check(`mode '${MODE}'`, false, 'gir, rgir, jgir, egraph, guard, params or extract')
 }
 
 console.log(`draw classes ${MODE}: ${failed ? 'FAIL' : 'PASS'}`)

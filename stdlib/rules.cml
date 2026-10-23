@@ -589,7 +589,7 @@ func saturateWith(p: Program, strict: bool): Program! {
 /// @fails error value `RuleInvalid` when a rule does not compile; error value `RewriteInvalid` when a rewrite cannot be carried out
 /// @example saturate_only(p)    // the program with several writings per value
 with <
-    /// Rounds of saturation; 0 applies the matches of one round only.
+    /// Rounds of saturation; 0 applies no rule at all, so the program keeps its writings.
     rounds: int = 6,
     /// Keep the rules to the ones that hold bit for bit (design principles 7.4).
     strict: bool = false
