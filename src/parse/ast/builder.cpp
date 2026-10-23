@@ -1463,10 +1463,6 @@ Value Builder::visitTagDecl(cst::TagDecl context) {
             }
             if (const auto type = pair->type()) {
                 param.type = std::string(type->sourceText());
-            } else {
-                diags_->of(SemanticDiag::TagParameterMissing)
-                    .at(rangeOf(pair->firstToken(), pair->lastToken()))
-                    .commit(param.name, ref.toString());
             }
             decl->addParam(std::move(param));
         }
@@ -1486,10 +1482,6 @@ Value Builder::visitTagDecl(cst::TagDecl context) {
                 const std::string name(ident->text());
                 if (const auto position = camel::core::tag::positionFromName(name)) {
                     decl->addPosition(static_cast<TagPosition>(*position));
-                } else {
-                    diags_->of(SemanticDiag::TagUnknownPosition)
-                        .at(rangeOf(ident->firstToken(), ident->lastToken()))
-                        .commit(name);
                 }
             }
         }
@@ -1497,13 +1489,6 @@ Value Builder::visitTagDecl(cst::TagDecl context) {
             for (const auto reader : readers->all<cst::IdentRef>()) {
                 decl->addReader(value_cast<Reference>(visitIdentRef(reader)));
             }
-        }
-        if (decl->on() == static_cast<uint8_t>(TagPosition::None)) {
-            // No usable position was written (an unknown one was reported above): the tag could
-            // never be written, which is what it says.
-            diags_->of(SemanticDiag::TagUnknownPosition)
-                .at(rangeOf(context->firstToken(), context->lastToken()))
-                .commit("");
         }
     }
 

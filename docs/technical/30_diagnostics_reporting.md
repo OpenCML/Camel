@@ -157,8 +157,7 @@ executing. The catch-all `RuntimeDiag::RuntimeError` says only "An error has occ
 the built-in operators and the modules `fs`, `json`, `re`, `time`, `math` (and single sites of
 `process`, `random`, `hash`, `array`, `statistics`) now raise codes of their own with the values
 involved (`InvalidNumberText`, `FormatFailed`, `OperandTypeUnsupported`, `FieldNotFound`,
-`InvalidArgument`, `FileOpenFailed`, `FileSystemError`, `JsonEncodeUnsupported`, `RegexInvalid`,
-`TimeFormatFailed`, `OperatorNotImplemented`).
+`InvalidArgument`, `FileOpenFailed`, `FileSystemError`, `RegexInvalid`, `TimeFormatFailed`).
 
 Only the code and the message of a fault changed. What is a fault and what is an error value is
 decided by the design principles (3.9): no fault was turned into an error value, and nothing

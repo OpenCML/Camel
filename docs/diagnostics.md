@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-267 diagnostics: 248 errors, 19 warnings.
+251 diagnostics: 232 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -25,7 +25,6 @@ prints one entry.
 | `0x01000002` | [LexicalDiag::UnclosedStringLiteral](#unclosedstringliteral) | Error |
 | `0x01000003` | [LexicalDiag::UnterminatedComment](#unterminatedcomment) | Error |
 | `0x01100000` | [LexicalDiag::InvalidEscapeSequence](#invalidescapesequence) | Warn |
-| `0x02000000` | [SyntaxDiag::UnknownSyntaxError](#unknownsyntaxerror) | Error |
 | `0x02000001` | [SyntaxDiag::MissingClosingDelimiter](#missingclosingdelimiter) | Error |
 | `0x02000002` | [SyntaxDiag::UnmatchedClosingDelimiter](#unmatchedclosingdelimiter) | Error |
 | `0x02000003` | [SyntaxDiag::MissingThen](#missingthen) | Error |
@@ -42,15 +41,12 @@ prints one entry.
 | `0x0200000E` | [SyntaxDiag::LineStartsWithOperator](#linestartswithoperator) | Error |
 | `0x0200000F` | [SyntaxDiag::EmptyInterpolation](#emptyinterpolation) | Error |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn |
-| `0x03000000` | [SemanticDiag::UnknownSemanticError](#unknownsemanticerror) | Error |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error |
 | `0x03000002` | [SemanticDiag::ModuleNotFound](#modulenotfound) | Error |
 | `0x03000003` | [SemanticDiag::ReservedIdentifier](#reservedidentifier) | Error |
 | `0x03000004` | [SemanticDiag::TupleUnpackingCountMismatch](#tupleunpackingcountmismatch) | Error |
 | `0x03000005` | [SemanticDiag::InvalidLiteral](#invalidliteral) | Error |
 | `0x03000006` | [SemanticDiag::DuplicateDictKey](#duplicatedictkey) | Error |
-| `0x03000007` | [SemanticDiag::ParamRefMustBeUnqualified](#paramrefmustbeunqualified) | Error |
-| `0x03000008` | [SemanticDiag::ParamDataMustBeStatic](#paramdatamustbestatic) | Error |
 | `0x03000009` | [SemanticDiag::DuplicateParameter](#duplicateparameter) | Error |
 | `0x0300000A` | [SemanticDiag::UnresolvedTypeReference](#unresolvedtypereference) | Error |
 | `0x0300000B` | [SemanticDiag::UnresolvedReference](#unresolvedreference) | Error |
@@ -67,7 +63,6 @@ prints one entry.
 | `0x03000017` | [SemanticDiag::DynamicCastForbidden](#dynamiccastforbidden) | Error |
 | `0x03000018` | [SemanticDiag::ModuleParseFailed](#moduleparsefailed) | Error |
 | `0x03000019` | [SemanticDiag::InvalidOperatorURI](#invalidoperatoruri) | Error |
-| `0x0300001A` | [SemanticDiag::UnrecognizedExecutorProtocol](#unrecognizedexecutorprotocol) | Error |
 | `0x0300001B` | [SemanticDiag::EntryModuleMissingMain](#entrymodulemissingmain) | Error |
 | `0x0300001C` | [SemanticDiag::ArgumentsRejected](#argumentsrejected) | Error |
 | `0x0300001D` | [SemanticDiag::ImmutablePassedToVarParam](#immutablepassedtovarparam) | Error |
@@ -123,7 +118,6 @@ prints one entry.
 | `0x03000124` | [SemanticDiag::LoopNameRepeated](#loopnamerepeated) | Error |
 | `0x03000130` | [SemanticDiag::DuplicateEnumVariant](#duplicateenumvariant) | Error |
 | `0x03000131` | [SemanticDiag::DuplicateEnumField](#duplicateenumfield) | Error |
-| `0x03000132` | [SemanticDiag::EnumVariantNeedsFields](#enumvariantneedsfields) | Error |
 | `0x03000133` | [SemanticDiag::EnumVariantFieldCount](#enumvariantfieldcount) | Error |
 | `0x03000134` | [SemanticDiag::EnumPatternMismatch](#enumpatternmismatch) | Error |
 | `0x03000135` | [SemanticDiag::EnumMatchNotExhaustive](#enummatchnotexhaustive) | Error |
@@ -137,15 +131,12 @@ prints one entry.
 | `0x03000143` | [SemanticDiag::DimensionMismatch](#dimensionmismatch) | Error |
 | `0x03000144` | [SemanticDiag::InvalidExtentExpression](#invalidextentexpression) | Error |
 | `0x03000150` | [SemanticDiag::NotDifferentiable](#notdifferentiable) | Error |
-| `0x03000160` | [SemanticDiag::TagUnknownPosition](#tagunknownposition) | Error |
 | `0x03000161` | [SemanticDiag::TagNotAtPosition](#tagnotatposition) | Error |
 | `0x03000162` | [SemanticDiag::TagUndeclared](#tagundeclared) | Error |
 | `0x03000163` | [SemanticDiag::TagArgumentCount](#tagargumentcount) | Error |
 | `0x03000164` | [SemanticDiag::TagArgumentNotConstant](#tagargumentnotconstant) | Error |
-| `0x03000166` | [SemanticDiag::TagParameterMissing](#tagparametermissing) | Error |
 | `0x03000167` | [SemanticDiag::TagOnUnnamedField](#tagonunnamedfield) | Error |
 | `0x03000168` | [SemanticDiag::TagArgumentNamed](#tagargumentnamed) | Error |
-| `0x03000169` | [SemanticDiag::TagArgumentUnsupported](#tagargumentunsupported) | Error |
 | `0x0300016A` | [SemanticDiag::TagArgumentType](#tagargumenttype) | Error |
 | `0x0300016B` | [SemanticDiag::TagNotAPermission](#tagnotapermission) | Error |
 | `0x0300016C` | [SemanticDiag::RuleTagNotRequires](#ruletagnotrequires) | Error |
@@ -244,12 +235,7 @@ prints one entry.
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
-| `0x04000003` | [RuntimeDiag::KeyNotFound](#keynotfound) | Error |
 | `0x04000004` | [RuntimeDiag::MaxRecursionDepthExceeded](#maxrecursiondepthexceeded) | Error |
-| `0x04000005` | [RuntimeDiag::MissingMainFunction](#missingmainfunction) | Error |
-| `0x04000006` | [RuntimeDiag::UnrecognizedOperatorURI](#unrecognizedoperatoruri) | Error |
-| `0x04000007` | [RuntimeDiag::UnsupportedBytecode](#unsupportedbytecode) | Error |
-| `0x04000008` | [RuntimeDiag::GraphInliningFailed](#graphinliningfailed) | Error |
 | `0x04000009` | [RuntimeDiag::TensorDimensionMismatch](#tensordimensionmismatch) | Error |
 | `0x0400000A` | [RuntimeDiag::UnrecognizedGraphPass](#unrecognizedgraphpass) | Error |
 | `0x0400000B` | [RuntimeDiag::TranslationRefused](#translationrefused) | Error |
@@ -266,10 +252,8 @@ prints one entry.
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error |
 | `0x04000035` | [RuntimeDiag::FileOpenFailed](#fileopenfailed) | Error |
 | `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error |
-| `0x04000038` | [RuntimeDiag::JsonEncodeUnsupported](#jsonencodeunsupported) | Error |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error |
-| `0x0400003B` | [RuntimeDiag::OperatorNotImplemented](#operatornotimplemented) | Error |
 | `0x0400003C` | [RuntimeDiag::GradientElementTypeMismatch](#gradientelementtypemismatch) | Error |
 | `0x04000050` | [RuntimeDiag::ConversionOutOfRange](#conversionoutofrange) | Error |
 | `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error |
@@ -401,7 +385,18 @@ Unterminated comment: {0}.
 Close the comment with '*/'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/unterminated_comment.cml`, run as `camel test/cases/parse/syntax/unterminated_comment.cml`)
+
+```camel
+/// A block comment with no end: the lexer reports the line where it starts.
+module unterminated_comment
+
+func main(): int {
+    return 0
+}
+
+/* the asterisk-slash that would close this comment is missing
+```
 
 ### InvalidEscapeSequence
 
@@ -440,18 +435,6 @@ func main(): int sync {
 ```
 
 ## Syntax (`SyntaxDiag`)
-
-### UnknownSyntaxError
-
-`0x02000000` · Error · `SyntaxDiag::UnknownSyntaxError`
-
-**Message**
-
-```text
-Syntax error: {0}.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### MissingClosingDelimiter
 
@@ -718,7 +701,19 @@ This '<' touches {0}, so it opens an angle-bracket argument list, which {1} does
 A '<' directly after a name, a literal or a closing bracket starts '<...>' arguments, as in f<a>(x). If a comparison is meant, put a space before the '<': a < b.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/comparison_needs_space.cml`, run as `camel test/cases/parse/syntax/comparison_needs_space.cml`)
+
+```camel
+/// A '<' written directly after a name opens an argument list, not a comparison.
+module comparison_needs_space
+
+func main(): int {
+    let i = 1
+    let n = 2
+    if i<n then { return 1 }
+    return 0
+}
+```
 
 ### AngleCloseAfterSpace
 
@@ -736,7 +731,21 @@ This '>' follows a space and is read as the comparison operator, so the angle-br
 The '>' that closes '<...>' touches the last item or starts its line: f<a, b>. Directly inside '<...>', a '>' after a space is a comparison (xs->filter<(x: int) => x > 1>).
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/angle_close_after_space.cml`, run as `camel test/cases/parse/syntax/angle_close_after_space.cml`)
+
+```camel
+/// A '>' after a space is read as a comparison, leaving the argument list open.
+module angle_close_after_space
+
+func pick::<T>(a: T, b: T): T {
+    return a
+}
+
+func main(): int {
+    let x = pick<int >(1, 2)
+    return x
+}
+```
 
 ### LineStartsWithOperator
 
@@ -754,7 +763,18 @@ A statement cannot start with '{0}': the line break before it ended the statemen
 A line break ends a statement unless the line is visibly unfinished. To continue an expression on the next line, end the line with the operator ('a +', then 'b'). An operator that can only be binary ('*', '->', '&&', '==', ...) also continues the expression when it starts the next line.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/line_starts_with_operator.cml`, run as `camel test/cases/parse/syntax/line_starts_with_operator.cml`)
+
+```camel
+/// A line that starts with '+' ends the statement of the line above.
+module line_starts_with_operator
+
+func main(): int {
+    let x = 1
+    + x
+    return 0
+}
+```
 
 ### EmptyInterpolation
 
@@ -809,18 +829,6 @@ func main(): int sync {
 ```
 
 ## Semantic (`SemanticDiag`)
-
-### UnknownSemanticError
-
-`0x03000000` · Error · `SemanticDiag::UnknownSemanticError`
-
-**Message**
-
-```text
-An error has occurred: {0}.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### Redeclaration
 
@@ -1000,42 +1008,6 @@ func main(): int sync {
     return 0
 }
 ```
-
-### ParamRefMustBeUnqualified
-
-`0x03000007` · Error · `SemanticDiag::ParamRefMustBeUnqualified`
-
-**Message**
-
-```text
-Parameter reference must be unqualified: '{0}'.
-```
-
-**Help**
-
-```text
-Use the parameter name without namespace or scope qualifiers.
-```
-
-*No example: no test small enough to show raises it.*
-
-### ParamDataMustBeStatic
-
-`0x03000008` · Error · `SemanticDiag::ParamDataMustBeStatic`
-
-**Message**
-
-```text
-Data for parameter '{0}' must be static.
-```
-
-**Help**
-
-```text
-Ensure the parameter data is a compile-time constant or literal.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### DuplicateParameter
 
@@ -1513,25 +1485,19 @@ Invalid operator URI format: '{0}'. Expected 'protocol:path'.
 Use a valid operator URI in the form protocol:path (e.g. std:add).
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/native/operator_uri_invalid.cml`, run as `camel test/cases/compile/native/operator_uri_invalid.cml`)
 
-### UnrecognizedExecutorProtocol
+```camel
+/// '#op' names an operator by URI: a URI without 'protocol:path' is refused.
+module operator_uri_invalid
 
-`0x0300001A` · Error · `SemanticDiag::UnrecognizedExecutorProtocol`
+#op<'stdadd'>
+func add(a: int, b: int): int
 
-**Message**
-
-```text
-Executor protocol '{0}' not found.
+func main(): int sync {
+    return add(1, 2)
+}
 ```
-
-**Help**
-
-```text
-Check that the protocol is registered or refer to the documentation for supported operator protocols.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### EntryModuleMissingMain
 
@@ -3223,24 +3189,6 @@ func main(): void sync {
 }
 ```
 
-### EnumVariantNeedsFields
-
-`0x03000132` · Error · `SemanticDiag::EnumVariantNeedsFields`
-
-**Message**
-
-```text
-The variant '{0}' of enum '{1}' carries {2} field(s): write '{3}' to build one.
-```
-
-**Help**
-
-```text
-A variant without a field list is a single value; one with fields is built by writing the fields after its name, 'Shape::Circle(1.0)' or 'Shape::Rect { w: 1.0, h: 2.0 }'.
-```
-
-*No example: no test small enough to show raises it.*
-
 ### EnumVariantFieldCount
 
 `0x03000133` · Error · `SemanticDiag::EnumVariantFieldCount`
@@ -3385,7 +3333,19 @@ Cannot infer the type argument '{0}' of enum '{1}' from the fields of '{2}'.
 The fields of the variant do not say what the argument is; where the value is used the expected type does: 'let x: Option<int> = Option::None'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/enum/type_argument_not_inferred.cml`, run as `camel test/cases/compile/enum/type_argument_not_inferred.cml`)
+
+```camel
+/// A variant whose fields do not say the type argument of the enum.
+module type_argument_not_inferred
+
+type Option<T> = enum { Some(T), None }
+
+func main(): int sync {
+    let x = Option::None
+    return 0
+}
+```
 
 ### EnumFieldTypeMismatch
 
@@ -3463,7 +3423,22 @@ The dimension name '{0}' is bound here, but only a parameter type can bind one.
 A dimension name binds where it first appears in a parameter type, 'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/constas/constas_dimension_name.cml`, run as `camel test/cases/compile/constas/constas_dimension_name.cml`)
+
+```camel
+/// The retired 'const constas n' spelling of a dimension name in a type argument.
+module constas_dimension_name
+
+import { Tensor } from tensor
+
+func f(x: Tensor<f32, const constas n>): int {
+    return 0
+}
+
+func main(): int {
+    return 0
+}
+```
 
 ### DimensionNameNotBound
 
@@ -3513,7 +3488,21 @@ The dimension name '{0}' is already bound; write '{0}' here.
 Only the first occurrence of a dimension name in the parameter types binds it; later occurrences write it. Dimension names and pack names are separate namespaces, so one name cannot be both.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/array_shape/err_pack_name_bound.cml`, run as `camel test/cases/compile/array_shape/err_pack_name_bound.cml`)
+
+```camel
+// A pack name and a dimension name are separate namespaces: reusing a bound dimension name
+// for a pack says two different things with one name.
+module array_shape_err_pack_name_bound
+
+func bad(x: f32[n], y: f32[..n]): int {
+    return 0
+}
+
+func main(): int sync {
+    return 0
+}
+```
 
 ### DimensionMismatch
 
@@ -3607,24 +3596,6 @@ func main(): int sync {
     return 0
 }
 ```
-
-### TagUnknownPosition
-
-`0x03000160` · Error · `SemanticDiag::TagUnknownPosition`
-
-**Message**
-
-```text
-A tag cannot be written at '{0}': the positions are func, type, field, nodes and param.
-```
-
-**Help**
-
-```text
-Write the places the tag may be written, after 'on': '... on func, nodes'.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### TagNotAtPosition
 
@@ -3743,24 +3714,6 @@ func f(n: int): int {
 func main(): int { return f(1) }
 ```
 
-### TagParameterMissing
-
-`0x03000166` · Error · `SemanticDiag::TagParameterMissing`
-
-**Message**
-
-```text
-The parameter '{0}' of the tag '{1}' has no type.
-```
-
-**Help**
-
-```text
-A tag parameter is read as a compile-time value: write its type, 'tag {1}<{0}: int> on ...'.
-```
-
-*No example: no test small enough to show raises it.*
-
 ### TagOnUnnamedField
 
 `0x03000167` · Error · `SemanticDiag::TagOnUnnamedField`
@@ -3777,7 +3730,22 @@ A tag on the field '{0}' of an unnamed struct type belongs to no declaration.
 Declare the struct as a type ('type S = { ... }') and tag the field in that declaration.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/tags/tag_on_unnamed_field.cml`, run as `camel test/cases/compile/tags/tag_on_unnamed_field.cml`)
+
+```camel
+/// A tag on a field of a struct type written inline, which is not a declaration.
+module tag_on_unnamed_field
+
+tag width<w: int> on field
+
+func f(x: { #width<8> a: int }): int {
+    return x.a
+}
+
+func main(): int {
+    return 0
+}
+```
 
 ### TagArgumentNamed
 
@@ -3795,25 +3763,23 @@ A tag argument is positional: '{0}' is named.
 A tag's parameters are given in the order the tag declares them: write '#tag<a, b>', not '#tag<x: a>'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/tags/tag_argument_named.cml`, run as `camel test/cases/compile/tags/tag_argument_named.cml`)
 
-### TagArgumentUnsupported
+```camel
+/// A tag argument is positional; naming one is refused.
+module tag_argument_named
 
-`0x03000169` · Error · `SemanticDiag::TagArgumentUnsupported`
+tag width<w: int> on func
 
-**Message**
+#width<w: 8>
+func g(): int {
+    return 0
+}
 
-```text
-The argument '{0}' of the tag '{1}' has a type a tag cannot carry yet.
+func main(): int {
+    return 0
+}
 ```
-
-**Help**
-
-```text
-A tag carries an integer, a floating-point number, a string, a boolean (as 0 or 1), a symbol or a graph reference; an argument of another type (a function, a composite) is not a tag value yet.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### TagArgumentType
 
@@ -4049,7 +4015,22 @@ The type matched here is still '{0}' when the function is instantiated.
 'match type' needs a concrete type. Bind every type variable of the subject, or use it in a generic function whose call gives them.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/static_expansion/type_not_concrete.cml`, run as `camel test/cases/compile/static_expansion/type_not_concrete.cml`)
+
+```camel
+/// A 'match type' whose subject is still a type variable at instantiation.
+module static_type_not_concrete
+
+func f::<T>(x: int): int {
+    return match type T {
+        case _ => 1
+    }
+}
+
+func main(): int sync {
+    return f(1)
+}
+```
 
 ### StaticMatchTooDeep
 
@@ -4297,7 +4278,18 @@ The body-less declaration '{0}' is incomplete: it has no result type.
 A body-less declaration is the whole signature of a C++ operator, result included; write the result type (`: T`).
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/native/incomplete.cml`, run as `camel test/cases/compile/native/incomplete.cml`)
+
+```camel
+/// A body-less declaration is a whole signature, result type included.
+module incomplete
+
+func foo(x: int)
+
+func main(): int {
+    return 0
+}
+```
 
 ### NativeDeclarationNotLoaded
 
@@ -6850,24 +6842,6 @@ func main(): int sync {
 }
 ```
 
-### KeyNotFound
-
-`0x04000003` · Error · `RuntimeDiag::KeyNotFound`
-
-**Message**
-
-```text
-Key not found in map or dictionary: '{0}'.
-```
-
-**Help**
-
-```text
-Verify the key exists before accessing it.
-```
-
-*No example: no test small enough to show raises it.*
-
 ### MaxRecursionDepthExceeded
 
 `0x04000004` · Error · `RuntimeDiag::MaxRecursionDepthExceeded`
@@ -6905,78 +6879,6 @@ func main(): int sync {
     return 0
 }
 ```
-
-### MissingMainFunction
-
-`0x04000005` · Error · `RuntimeDiag::MissingMainFunction`
-
-**Message**
-
-```text
-No 'main' function found in module '{0}'.
-```
-
-**Help**
-
-```text
-Define a 'main' function in module '{0}' to serve as the program entry point.
-```
-
-*No example: no test small enough to show raises it.*
-
-### UnrecognizedOperatorURI
-
-`0x04000006` · Error · `RuntimeDiag::UnrecognizedOperatorURI`
-
-**Message**
-
-```text
-Unrecognized operator URI: '{0}'.
-```
-
-**Help**
-
-```text
-Ensure the operator URI is correctly specified and supported by the runtime.
-```
-
-*No example: no test small enough to show raises it.*
-
-### UnsupportedBytecode
-
-`0x04000007` · Error · `RuntimeDiag::UnsupportedBytecode`
-
-**Message**
-
-```text
-Encountered unsupported bytecode: '{0}'.
-```
-
-**Help**
-
-```text
-Refer to the documentation and try using a graph scheduler that supports this bytecode.
-```
-
-*No example: no test small enough to show raises it.*
-
-### GraphInliningFailed
-
-`0x04000008` · Error · `RuntimeDiag::GraphInliningFailed`
-
-**Message**
-
-```text
-Failed to inline graph of node '{0}' to graph '{1}'.
-```
-
-**Help**
-
-```text
-Refer to the documentation for possible causes and try adjusting the graph translator or optimization settings.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### TensorDimensionMismatch
 
@@ -7351,7 +7253,26 @@ The struct has no field '{0}'.
 A struct is indexed by the name of one of its fields.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/native/idx_field_missing.cml`, run as `camel test/cases/compile/native/idx_field_missing.cml`)
+
+```camel
+/// A struct indexed by a field name it does not have: the built-in '[]' reports the field.
+///
+/// The declaration is the only way to reach it: `s['y']` is refused when the program is
+/// compiled (the '[]' overloads take an array or a string), while a body-less declaration
+/// names the built-in operator with its own signature.
+module idx_field_missing
+
+type S = { x: int }
+
+#op<':op/idx_str'>
+func field(s: S, k: string): int
+
+func main(): int sync {
+    let s: S = { x: 1 }
+    return field(s, 'y')
+}
+```
 
 ### InvalidArgument
 
@@ -7416,24 +7337,6 @@ Check the path and the permissions of the directories on it.
 
 *No example: no test small enough to show raises it.*
 
-### JsonEncodeUnsupported
-
-`0x04000038` · Error · `RuntimeDiag::JsonEncodeUnsupported`
-
-**Message**
-
-```text
-json.encode cannot encode a value of type '{0}'.
-```
-
-**Help**
-
-```text
-JSON has null, booleans, numbers, strings, arrays and objects: encode values made of bool, int, float, string, arrays, tuples and structs.
-```
-
-*No example: no test small enough to show raises it.*
-
 ### RegexInvalid
 
 `0x04000039` · Error · `RuntimeDiag::RegexInvalid`
@@ -7466,24 +7369,6 @@ Patterns use the ECMAScript syntax. A character with a special meaning is matche
 
 ```text
 Check the format string against the strftime conversion specifiers (%Y, %m, %d, %H, %M, %S, ...).
-```
-
-*No example: no test small enough to show raises it.*
-
-### OperatorNotImplemented
-
-`0x0400003B` · Error · `RuntimeDiag::OperatorNotImplemented`
-
-**Message**
-
-```text
-The operator '{0}' is declared but not implemented.
-```
-
-**Help**
-
-```text
-The name exists so that programs using it are recognised; calling it is not possible yet.
 ```
 
 *No example: no test small enough to show raises it.*
@@ -8023,5 +7908,17 @@ std::cpp has no standalone translation of {0}: the program it writes calls the C
 Every other operator is translated into C++ that needs only the standard library (docs/cpp_export_build.md). The comment at the top of the C++ file gives the command that builds it with the runtime.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/trans/cpp/hash_bridge.cml`, run as `camel test/cases/trans/cpp/hash_bridge.cml std::cpp`)
+
+```camel
+/// std::cpp has no standalone translation of a hash operator: the program links the runtime.
+module cpp_hash_bridge
+
+import hash
+
+func main(): int sync {
+    println(hash::sha256('a'))
+    return 0
+}
+```
 

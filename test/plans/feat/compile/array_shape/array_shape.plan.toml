@@ -147,3 +147,18 @@ expect_exit = 1
 expect_stdout_contains = ["conversion to 'f32[4]' failed: the array has shape [6]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "err_pack_name_bound"
+desc = "A dimension name and a pack name are separate namespaces: writing the bound name `n` again as the pack `..n` would bind it twice, and the diagnostic says to write `n`."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_pack_name_bound.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionNameAlreadyBound"
+expect_diagnostic_code = "0x03000142"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 24
+expect_output_contains = ["The dimension name 'n' is already bound; write 'n' here."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

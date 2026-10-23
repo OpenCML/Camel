@@ -375,3 +375,17 @@ assert(out === want, `stdout: ${out}`)
 """
 timeout_ms = 8000
 
+[[tests]]
+name = "type_argument_not_inferred"
+desc = "A unit variant of a generic enum (`Option::None`) says nothing about the type argument: the construction is refused where it is written, naming the variant's fields, and says to give the expected type (`let x: Option<int> = Option::None`)."
+kind = "negative"
+case = "../../../cases/compile/enum/type_argument_not_inferred.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EnumTypeArgumentNotInferred"
+expect_diagnostic_code = "0x03000139"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 13
+expect_output_contains = ["Cannot infer the type argument 'T' of enum 'Option' from the fields of 'None'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

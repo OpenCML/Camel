@@ -16,7 +16,6 @@
 namespace camel::core::error {
 
 enum class SyntaxDiag : uint32_t {
-    UnknownSyntaxError        = 0x000000,
     MissingClosingDelimiter   = 0x000001,
     UnmatchedClosingDelimiter = 0x000002,
     MissingThen               = 0x000003,

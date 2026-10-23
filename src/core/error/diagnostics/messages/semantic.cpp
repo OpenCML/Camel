@@ -13,14 +13,6 @@ namespace camel::core::error {
 const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
     static const std::unordered_map<SemanticDiag, DiagInfo> infoMap = {
         {
-            SemanticDiag::UnknownSemanticError,
-            {
-                "UnknownSemanticError",
-                "An error has occurred: {0}.",
-                "",
-            },
-        },
-        {
             SemanticDiag::Redeclaration,
             {
                 "Redeclaration",
@@ -66,22 +58,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "DuplicateDictKey",
                 "Duplicate key in dict: '{0}'.",
                 "Make sure all keys in a dictionary are unique.",
-            },
-        },
-        {
-            SemanticDiag::ParamRefMustBeUnqualified,
-            {
-                "ParamRefMustBeUnqualified",
-                "Parameter reference must be unqualified: '{0}'.",
-                "Use the parameter name without namespace or scope qualifiers.",
-            },
-        },
-        {
-            SemanticDiag::ParamDataMustBeStatic,
-            {
-                "ParamDataMustBeStatic",
-                "Data for parameter '{0}' must be static.",
-                "Ensure the parameter data is a compile-time constant or literal.",
             },
         },
         {
@@ -210,14 +186,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "InvalidOperatorURI",
                 "Invalid operator URI format: '{0}'. Expected 'protocol:path'.",
                 "Use a valid operator URI in the form protocol:path (e.g. std:add).",
-            },
-        },
-        {
-            SemanticDiag::UnrecognizedExecutorProtocol,
-            {
-                "UnrecognizedExecutorProtocol",
-                "Executor protocol '{0}' not found.",
-                "Check that the protocol is registered or refer to the documentation for supported operator protocols.",
             },
         },
         {
@@ -661,14 +629,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::EnumVariantNeedsFields,
-            {
-                "EnumVariantNeedsFields",
-                "The variant '{0}' of enum '{1}' carries {2} field(s): write '{3}' to build one.",
-                "A variant without a field list is a single value; one with fields is built by writing the fields after its name, 'Shape::Circle(1.0)' or 'Shape::Rect {{ w: 1.0, h: 2.0 }}'.",
-            },
-        },
-        {
             SemanticDiag::EnumVariantFieldCount,
             {
                 "EnumVariantFieldCount",
@@ -773,14 +733,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::TagUnknownPosition,
-            {
-                "TagUnknownPosition",
-                "A tag cannot be written at '{0}': the positions are func, type, field, nodes and param.",
-                "Write the places the tag may be written, after 'on': '... on func, nodes'.",
-            },
-        },
-        {
             SemanticDiag::TagNotAtPosition,
             {
                 "TagNotAtPosition",
@@ -813,14 +765,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::TagParameterMissing,
-            {
-                "TagParameterMissing",
-                "The parameter '{0}' of the tag '{1}' has no type.",
-                "A tag parameter is read as a compile-time value: write its type, 'tag {1}<{0}: int> on ...'.",
-            },
-        },
-        {
             SemanticDiag::TagOnUnnamedField,
             {
                 "TagOnUnnamedField",
@@ -834,14 +778,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "TagArgumentNamed",
                 "A tag argument is positional: '{0}' is named.",
                 "A tag's parameters are given in the order the tag declares them: write '#tag<a, b>', not '#tag<x: a>'.",
-            },
-        },
-        {
-            SemanticDiag::TagArgumentUnsupported,
-            {
-                "TagArgumentUnsupported",
-                "The argument '{0}' of the tag '{1}' has a type a tag cannot carry yet.",
-                "A tag carries an integer, a floating-point number, a string, a boolean (as 0 or 1), a symbol or a graph reference; an argument of another type (a function, a composite) is not a tag value yet.",
             },
         },
         {

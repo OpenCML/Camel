@@ -15,6 +15,7 @@
 //   node scripts/diagnostics-catalog.mjs --generate    assign numbers, emit headers and tables
 //   node scripts/diagnostics-catalog.mjs --verify-doc  docs/diagnostics.md is what --write produces
 //   node scripts/diagnostics-catalog.mjs --coverage    list the codes no test mentions (report only)
+//   node scripts/diagnostics-catalog.mjs --coverage-check  fail if any code is mentioned by no test
 //   --root DIR                                        read and write under DIR (the proof cases)
 //
 // --check runs in two places, so a hand-edited number cannot reach a build or a test run: the
@@ -585,9 +586,9 @@ for (let i = 0; i < argv.length; i++) {
         mode = argv[i]
     }
 }
-if (!['--check', '--write', '--generate', '--verify-doc', '--coverage'].includes(mode)) {
+if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check'].includes(mode)) {
     console.log(
-        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage [--root DIR]'
+        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check [--root DIR]'
     )
     process.exit(2)
 }
@@ -609,7 +610,7 @@ if (records.length === 0) {
 }
 if (problems.length) fail(problems)
 
-if (mode === '--coverage') {
+if (mode === '--coverage' || mode === '--coverage-check') {
     const entries = catalogEntries(records)
     const corpus = [
         ...walk(path.join(root, 'test', 'plans'), () => true),
@@ -621,6 +622,18 @@ if (mode === '--coverage') {
     const mentions = (entry) =>
         new RegExp(`\\b${entry.name}\\b`).test(corpus) || corpus.includes(hex8(entry.code))
     const missing = entries.filter((e) => !mentions(e))
+    if (mode === '--coverage-check') {
+        // A completeness check over the set of declared codes: the count is pinned so that a
+        // declaration added without a test is noticed, and so is one deleted without the guard
+        // being updated. It is not a target or a performance number.
+        if (missing.length) {
+            console.log(`diagnostic codes mentioned by no test: ${missing.length} of ${entries.length}`)
+            for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+            process.exit(1)
+        }
+        console.log(`every one of ${entries.length} diagnostic codes is mentioned by a test`)
+        process.exit(0)
+    }
     console.log(`diagnostic codes mentioned by no test: ${missing.length} of ${entries.length}`)
     for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
     process.exit(0)

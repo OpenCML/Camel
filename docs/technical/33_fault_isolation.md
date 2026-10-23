@@ -118,14 +118,14 @@ format `error(kind, message)` records; the file name without its directory).
 
 | Fault | Isolated | Why |
 |---|---|---|
-| `DivisionByZero`, `IndexOutOfRange`, `KeyNotFound`, `FieldNotFound` | yes | faults of the program's own computation |
+| `DivisionByZero`, `IndexOutOfRange`, `FieldNotFound` | yes | faults of the program's own computation |
 | `InvalidNumberText`, `FormatFailed`, `InvalidArgument`, `OperandTypeUnsupported`, `TensorDimensionMismatch` | yes | an operator refused its operands (includes failed conversions) |
-| `FileOpenFailed`, `FileSystemError`, `JsonEncodeUnsupported`, `RegexInvalid`, `TimeFormatFailed` | yes | a library operator that is not declared `T!` failed |
+| `FileOpenFailed`, `FileSystemError`, `RegexInvalid`, `TimeFormatFailed` | yes | a library operator that is not declared `T!` failed |
 | `RuntimeError` | yes | the generic fault of module operators (e.g. an exception raised in Python) |
 | `MaxRecursionDepthExceeded` (count reached, native stack nearly full, frame pool full) | yes | the check is made before the call that would not fit, with head room left (1/16 of the stack); unwinding to the boundary returns every frame and the whole stack above it, so the state at the boundary is the state before the call (3.5). Verified: after it, the same recursion to a depth that fits runs, on all four back ends |
 | `MemoryExhausted` | **no** | it is not a `RuntimeFault` but an exception of the allocator, raised with the heap full. Building the error value allocates; nothing guarantees the unwinding freed anything (the objects may be reachable from outside). `DESIGN-QUESTION(attempt-memory-exhausted)` |
-| `PassInternalError`, `UnrecognizedOperatorURI`, `UnsupportedBytecode`, `OperatorNotImplemented`, `GraphInliningFailed`, `GraphTooLarge`, any `InternalDiag`, a failed `ASSERT`, a C++ exception that is not a `RuntimeFault` | **no** | defects or limits of the compiler, not faults of the program. Hiding one behind `!! default` would turn a compiler bug into a wrong result |
-| `MacroEvaluationFailed`, `EntryArgument*`, `EntryResultNotWritten`, `MissingMainFunction`, `TranslationRefused`, `UnrecognizedGraphPass` | **no** | not raised while a graph runs |
+| `PassInternalError`, `GraphTooLarge`, any `InternalDiag`, a failed `ASSERT`, a C++ exception that is not a `RuntimeFault` | **no** | defects or limits of the compiler, not faults of the program. Hiding one behind `!! default` would turn a compiler bug into a wrong result |
+| `MacroEvaluationFailed`, `EntryArgument*`, `EntryResultNotWritten`, `TranslationRefused`, `UnrecognizedGraphPass` | **no** | not raised while a graph runs |
 | `exit(n)` | **no** | not a fault: the program asked to end. It unwinds through the boundary like any exception |
 
 The set is an allow-list (`camel::core::error::isIsolatableFault`, one `switch`): a diagnostic

@@ -103,7 +103,8 @@ std::string jsonTooDeepMessage(size_t limit, size_t line, size_t column) {
 // 递归：将 Camel 值转为 JSON。失败时返回 nullopt 并报告诊断。
 static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
     if (!t) {
-        throwRuntimeFault(RuntimeDiag::JsonEncodeUnsupported, "<unknown>");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported, "json::encode", "<unknown>", "a value with a JSON form");
     }
     if (isJsonType(t)) {
         return fromSlot<JsonValue *>(s)->toJson();
@@ -202,7 +203,8 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
             return out;
         }
     }
-    throwRuntimeFault(RuntimeDiag::JsonEncodeUnsupported, t->toString());
+    throwRuntimeFault(
+        RuntimeDiag::OperandTypeUnsupported, "json::encode", t->toString(), "a value with a JSON form");
 }
 
 const char *jsonKindName(const json &j) {

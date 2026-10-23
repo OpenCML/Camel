@@ -1,0 +1,8 @@
+/// A block comment with no end: the lexer reports the line where it starts.
+module unterminated_comment
+
+func main(): int {
+    return 0
+}
+
+/* the asterisk-slash that would close this comment is missing

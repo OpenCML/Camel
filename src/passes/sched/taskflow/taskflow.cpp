@@ -1952,7 +1952,14 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     const std::string uri(body->uri());
     auto opFunc = context_->execMgr().find(uri);
     if (!opFunc) {
-        raiseFault(RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri), graph, nodeRef);
+        // The graph names an operator no loaded module implements: a compiler defect.
+        raiseFault(
+            RuntimeFault::make(
+                RuntimeDiag::PassInternalError,
+                "std::prl",
+                "the operator '" + uri + "' has no implementation"),
+            graph,
+            nodeRef);
     }
     if (prepared) {
         plan->shared->resolvedOpers[nodeRef].store(

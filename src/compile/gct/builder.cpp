@@ -5256,13 +5256,6 @@ Type *Builder::visitFuncType(
             diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
         }
         const Reference &paramRef = paramLoad->getRef();
-        if (!paramRef.plain()) {
-            // Parameter references must be unqualified
-            diags_->of(SemanticDiag::ParamRefMustBeUnqualified)
-                .at(paramLoad->tokenRange())
-                .commit(paramRef.toString());
-            throw BuildAbortException();
-        }
         const string &name = paramRef.ident();
         Type *type         = nullptr;
         {
@@ -5306,13 +5299,6 @@ Type *Builder::visitFuncType(
         const auto &paramPair = normParams[pi];
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         const Reference &paramRef = paramLoad->getRef();
-        if (!paramRef.plain()) {
-            // Parameter references must be unqualified
-            diags_->of(SemanticDiag::ParamRefMustBeUnqualified)
-                .at(paramLoad->tokenRange())
-                .commit(paramRef.toString());
-            throw BuildAbortException();
-        }
         const string &name = paramRef.ident();
         // Every ordinary parameter takes a place in the defaults list, so that an index into it
         // is a parameter's index: `constas` values and the rest parameter included.

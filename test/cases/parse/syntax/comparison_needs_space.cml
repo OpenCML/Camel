@@ -1,0 +1,9 @@
+/// A '<' written directly after a name opens an argument list, not a comparison.
+module comparison_needs_space
+
+func main(): int {
+    let i = 1
+    let n = 2
+    if i<n then { return 1 }
+    return 0
+}
