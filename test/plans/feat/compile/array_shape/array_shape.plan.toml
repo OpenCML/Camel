@@ -162,3 +162,105 @@ expect_diagnostic_column = 24
 expect_output_contains = ["The dimension name 'n' is already bound; write 'n' here."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "literal_length"
+desc = "A literal's elements are known where it is written: four of them fill an `f32[4]` position."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/literal_length.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_literal_length"
+desc = "Three elements written where the parameter states four are refused at the literal: the length a position states is exact, and a literal's elements are known where it is written. The refusal is the call's own NoMatchingFunction, whose candidate list is the evidence that no parameter takes the argument (the diagnostic is written over several lines, so its name is not asserted)."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_literal_length.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["count: (x: f32[4]) => int"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "call_agree"
+desc = "The control for the two refusals below: `n` is two from the first argument and the second has `n + 1` = three elements."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/call_agree.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_call_mismatch"
+desc = "One name is one value for the whole signature: a second argument whose extent differs from the one the first argument bound is refused, naming the argument and both extents."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_call_mismatch.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionMismatch"
+expect_diagnostic_code = "0x03000143"
+expect_output_contains = ["Argument y has extent 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_call_linear"
+desc = "A linear form is exact: `n` is two from the first argument, so the second must have exactly `n + 1` = three elements, and two is not a length the name may be moved to."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_call_linear.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionMismatch"
+expect_diagnostic_code = "0x03000143"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "unknown_not_inferred"
+desc = "`?` is a size nobody named, not a name: two `?` parameters take different lengths at one call."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/unknown_not_inferred.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constant_dimension"
+desc = "A `constas` value is a compile-time constant, so the name the shape writes is that value: the argument of exactly that extent runs."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/constant_dimension.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "empty_is_unknown"
+desc = "`[]` and `[?]` are one type written two ways: a value of either spelling passes for the other, and neither constrains the length."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/empty_is_unknown.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["6"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_return_shape"
+desc = "A return type that states a shape promises it: a body returning its parameter, whose extent is the name the signature binds and not the constant the return type declares, is refused."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_return_shape.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

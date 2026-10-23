@@ -312,6 +312,24 @@ const literal::Value *writtenValueOf(const GCT::Tree::LiteralElement *element) {
     return element != nullptr && element->value.has_value() ? &*element->value : nullptr;
 }
 
+/// The length an array position states as a constant, or nullopt when it leaves the length open
+/// (`T[]`, `T[n]`, `T[..]`). The first extent is the one a literal's elements are the elements of.
+std::optional<int64_t> statedLength(const ArrayType *type) {
+    const std::span<const ExtentForm> extents = type->extents();
+    if (extents.empty() || !extents.front().isConstant()) {
+        return std::nullopt;
+    }
+    return extents.front().constant();
+}
+
+/// Whether the `data` array holds the number of elements a constant extent of the position
+/// states. A literal's elements are known where it is written, so this is decided here and not
+/// at runtime: `[1.0, 2.0, 3.0]` does not stand in an `f32[4]` position (design principles 5.4).
+bool holdsStatedLength(const ArrayType *type, const ArrayData *array) {
+    const std::optional<int64_t> length = statedLength(type);
+    return !length.has_value() || static_cast<int64_t>(array->raw().size()) == *length;
+}
+
 /// Whether the composite literal `data` can be given `type`: the walk of compositeDataInType,
 /// unchanged, for the positions a literal may enter (design principles 5.1). The two must agree;
 /// a literal this accepts is converted by compositeDataInType, which reports what does not fit.
@@ -323,13 +341,18 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
         return true;
     }
     if (type->code() == TypeCode::Array && data->type()->code() == TypeCode::Array) {
-        Type *elemType   = tt::as_ptr<ArrayType>(type)->elemType();
-        const auto array = std::dynamic_pointer_cast<ArrayData>(data);
+        const auto *arrayType = tt::as_ptr<ArrayType>(type);
+        Type *elemType        = arrayType->elemType();
+        const auto array      = std::dynamic_pointer_cast<ArrayData>(data);
         if (elemType == nullptr || array == nullptr) {
             return false;
         }
+        if (!holdsStatedLength(arrayType, array.get())) {
+            return false;
+        }
         if (array->raw().empty()) {
-            // `[]`: the elements it does not have are the only thing its type leaves open.
+            // `[]`: it has no elements, so only a position that states no length, or the length
+            // zero, took it — which the check above decided.
             return true;
         }
         const auto *written =
@@ -640,9 +663,13 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
         return data;
     }
     if (type->code() == TypeCode::Array && data->type()->code() == TypeCode::Array) {
-        Type *elemType   = tt::as_ptr<ArrayType>(type)->elemType();
-        const auto array = std::dynamic_pointer_cast<ArrayData>(data);
+        const auto *arrayType = tt::as_ptr<ArrayType>(type);
+        Type *elemType        = arrayType->elemType();
+        const auto array      = std::dynamic_pointer_cast<ArrayData>(data);
         if (elemType == nullptr || array == nullptr) {
+            return nullptr;
+        }
+        if (!holdsStatedLength(arrayType, array.get())) {
             return nullptr;
         }
         // The exact value each element was written as, when the GCT kept them (a composite
@@ -653,7 +680,8 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
             // the empty array takes the element type of the position it stands in (design
             // principles 5.1, 5.2) — `[]` where an `int[]` is expected is the empty `int[]`,
             // whether the position is a declaration, a body's value or a loop state. A literal
-            // that has elements keeps their join (H24), so this branch only covers `[]`.
+            // that has elements keeps their join (H24), so this branch only covers `[]`, and a
+            // position that states a length other than zero did not take it (the check above).
             return ArrayData::create(elemType);
         }
         const auto *written =
