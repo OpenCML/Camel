@@ -12,7 +12,7 @@ case = "../../../cases/linear/nvm/hello.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "zen.nvm"
@@ -22,5 +22,5 @@ case = "../../../cases/linear/nvm/zen.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 

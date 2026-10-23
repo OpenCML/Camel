@@ -18,7 +18,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "type_namespace_builtins"
@@ -37,7 +37,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "module_import_qualified"
@@ -55,7 +55,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "module_import_using"
@@ -73,7 +73,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "namespace_inner_import"
@@ -90,7 +90,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "module_import_type_export"
@@ -107,7 +107,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "nested_namespace_using"
@@ -124,7 +124,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "module_import_no_direct_inject"
@@ -135,7 +135,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "module_import_builtins"
@@ -154,7 +154,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "module_import_using_builtins"
@@ -172,4 +172,4 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000

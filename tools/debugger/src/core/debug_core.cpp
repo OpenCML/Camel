@@ -24,14 +24,20 @@
 
 #include "debug_core.h"
 
+#include "../state.h"
+
 #include "camel/core/context/frame.h"
 #include "camel/core/error/runtime.h"
 #include "camel/passes/trans/json/gir.h"
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <iostream>
 #include <sstream>
+#include <string>
 
 namespace debugger::core {
 
@@ -102,6 +108,17 @@ void DebugCore::pushEvent(json event) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         event["seq"] = nextEventSeq_++;
+        // 父进程通过另一条通道（stdout 管道）读程序输出，读到事件时输出可能还在管道里。
+        // 先把带编号的标记写进 stdout，父进程见到它才处理事件，输出与事件的先后就由数据
+        // 决定，而不是由调度决定。以 CAMEL_DB_WORKER_PORT 为界：只有 worker 的 stdout 被
+        // 父进程当作任务日志读取，网关自己跑程序时标记会混进输出。
+        if (const char *workerPort = std::getenv("CAMEL_DB_WORKER_PORT");
+            workerPort != nullptr && *workerPort != '\0') {
+            std::cout.flush();
+            const std::string mark = taskLogMark(event["seq"].get<uint64_t>()) + "\n";
+            std::fwrite(mark.data(), 1, mark.size(), stdout);
+            std::fflush(stdout);
+        }
         events_.push_back(std::move(event));
         while (events_.size() > kMaxEvents) {
             events_.pop_front();

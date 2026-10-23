@@ -15,7 +15,7 @@ expect_diagnostic_code = "0x0300000C"
 expect_diagnostic_line = 7
 expect_diagnostic_column = 12
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "semantic.decorator_nonfunc_return"
@@ -29,7 +29,7 @@ expect_diagnostic_code = "0x03000010"
 expect_diagnostic_line = 1
 expect_diagnostic_column = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "semantic.unresolved_reference"
@@ -43,7 +43,7 @@ expect_diagnostic_code = "0x0300000B"
 expect_diagnostic_line = 7
 expect_diagnostic_column = 17
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "semantic.throw_outside_fallible"
@@ -59,7 +59,7 @@ expect_diagnostic_column = 9
 expect_output_contains = ["'throw' needs a function declared to return 'T!': the function around it returns 'int'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "semantic.raise_is_a_name"
@@ -70,7 +70,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["42"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "semantic.try_not_in_language"
@@ -86,7 +86,7 @@ expect_diagnostic_column = 5
 expect_output_contains = ["'try'/'catch' is not part of Camel.", "'a !! b'", "'x ?-> f'", "case error e", "fault-isolation operator"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "semantic.try_not_in_language_json"
@@ -106,7 +106,7 @@ assert(d.data.modulePath.endsWith('try_not_in_language.cml'), 'file ' + d.data.m
 assert(input.stderr === '', 'stderr empty')
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "semantic.assign_to_temporary"
@@ -120,4 +120,4 @@ expect_diagnostic_line = 15
 expect_diagnostic_column = 17
 expect_output_contains = ["must be a variable, or a path from one", "'var p = { x: 1 }; p.x = 2'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000

@@ -34,7 +34,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["1", "2"]
 expect_stdout_not_contains = ["CONTROL topology"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "control.test_pass_runs_when_named"
@@ -44,4 +44,4 @@ case = "../../../cases/opt/generic/control_chain.cml"
 args = ["${case}", "test::control"]
 expect_exit = 0
 expect_stdout_contains = ["CONTROL topology"]
-timeout_ms = 4000
+timeout_ms = 10000

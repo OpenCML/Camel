@@ -17,7 +17,7 @@ args = ["${case}", "std::fvm"]
 expect_exit = 0
 expect_stdout_exact = "1\n2\n42\n21\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "generic_calls_generic"
@@ -28,7 +28,7 @@ args = ["${case}", "std::fvm"]
 expect_exit = 0
 expect_stdout_exact = "7\ns\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "head_name_wins_over_type"
@@ -39,7 +39,7 @@ args = ["${case}", "std::fvm"]
 expect_exit = 0
 expect_stdout_exact = "1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unused_head_parameter"
@@ -50,7 +50,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stderr_contains = ["SemanticDiag::TypeVariableUnused", "The type parameter 'T' is declared at the head but never written"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "plain_name_is_an_unknown_type"
@@ -63,7 +63,7 @@ expect_diagnostic_name = "SemanticDiag::UnresolvedTypeReference"
 expect_diagnostic_code = "0x0300000A"
 expect_output_contains = ["T"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "duplicate_head_parameter"
@@ -76,7 +76,7 @@ expect_diagnostic_name = "SemanticDiag::TypeVariableRedeclared"
 expect_diagnostic_code = "0x03000051"
 expect_output_contains = ["The type parameter 'T' is declared twice"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "explicit_argument_on_non_generic"
@@ -89,7 +89,7 @@ expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
 expect_diagnostic_code = "0x03000020"
 expect_output_contains = ["the callee does not declare type parameters"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "return_only_head_parameter_needs_context"
@@ -101,4 +101,4 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
 expect_output_contains = ["cannot be determined", "make::<"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000

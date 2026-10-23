@@ -28,7 +28,7 @@ const gradValues = nums(match(/with_context_step_demo grad=(.*)/, out)[1])
 assert(approx(gradValues[0], -2, 1e-6), `expected d(loss)/d(weight[0]) = -2, got ${gradValues[0]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "autograd_linear_demo"
@@ -56,7 +56,7 @@ assert(approx(weightGrad[0], -2, 1e-6), `expected weight gradient -2, got ${weig
 
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "graph_autograd_multi_param_demo"
@@ -87,7 +87,7 @@ const weightGrad = nums(match(/graph_autograd_multi_param_demo weight_grad=(.*)/
 assert(approx(weightGrad[0], -2, 1e-6), `expected weight gradient -2, got ${weightGrad[0]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "graph_autograd_multi_param_gir"
@@ -120,7 +120,7 @@ has('grad(mse_loss)', 'tensor:sum_to')
 assert(count('main', 'nn:sgd') === 1, `expected one nn:sgd call in main, got ${count('main', 'nn:sgd')}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "autoencoder"
@@ -149,7 +149,7 @@ const dec_b_gradLine = match(/autoencoder dec_b_grad=(.*)/, out)[1]
 assert(dec_b_gradLine.startsWith('tensor([') && !dec_b_gradLine.startsWith('tensor([['), `expected rank-1 dec_b_grad, got ${dec_b_gradLine}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "autoencoder.opt.nvm"
@@ -215,7 +215,7 @@ const b_gradLine = match(/tiny_rnn b_grad=(.*)/, out)[1]
 assert(b_gradLine.startsWith('tensor([') && !b_gradLine.startsWith('tensor([['), `expected rank-1 b_grad, got ${b_gradLine}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tiny_rnn.opt.nvm"
@@ -283,7 +283,7 @@ const itemGrad = nums(match(/matrix_factorization item_grad=(.*)/, out)[1])
 assert(approx(itemGrad[0], 0, 1e-9), `expected unselected item row gradient 0, got ${itemGrad[0]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "softmax_cross_entropy_sanity"
@@ -305,7 +305,7 @@ assert(loss > 0, `expected positive loss, got ${loss}`)
 assert(approx(grad0, finite, 1e-3), `gradient ${grad0} should match finite difference ${finite}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "softmax_classifier"
@@ -333,7 +333,7 @@ const bias_gradLine = match(/softmax_classifier bias_grad=(.*)/, out)[1]
 assert(bias_gradLine.startsWith('tensor([') && !bias_gradLine.startsWith('tensor([['), `expected rank-1 bias_grad, got ${bias_gradLine}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "softmax_classifier_gir"
@@ -370,7 +370,7 @@ has('linear.pb', 'tensor:matmul_grad_rhs')
 has('linear.pb', 'tensor:sum_to')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "embedding_grad_sanity"
@@ -395,7 +395,7 @@ assert(approx(row1, 7.0, 1e-6), `repeated row grad should accumulate to 7, got $
 assert(approx(row2, 9.0, 1e-6), `single visited row grad should be 9, got ${row2}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "embedding_mf"
@@ -427,7 +427,7 @@ const itemGrad = nums(match(/embedding_mf item_grad=(.*)/, out)[1])
 assert(approx(itemGrad[0], -0.184, 1e-4), `expected item row 0 gradient -0.184, got ${itemGrad[0]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "embedding_mf_gir"
@@ -460,7 +460,7 @@ has('score.fwd', 'nn:embedding')
 assert(count('score.pb', 'nn:embedding_table_grad') >= 2, 'expected a table-gradient scatter for both embedding tables')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "embedding_index_error"
@@ -478,7 +478,7 @@ assert(text.includes('embedding index out of range'), 'missing embedding index d
 assert(text.includes('RuntimeDiag::RuntimeError'), 'missing runtime diagnostic category')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "softmax_grad_sanity"
@@ -500,7 +500,7 @@ assert(approx(probSum, 1.0, 1e-6), `softmax row should sum to 1, got ${probSum}`
 assert(approx(grad0, finite, 1e-3), `gradient ${grad0} should match finite difference ${finite}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tiny_attention"
@@ -531,7 +531,7 @@ match(/tiny_attention wv_grad=tensor/, out)
 match(/tiny_attention wo_grad=tensor/, out)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tiny_attention_gir"
@@ -566,7 +566,7 @@ has('attend.pb', 'tensor:matmul_grad_rhs')
 has('linear.pb', 'tensor:matmul_grad_rhs')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "softmax_axis_error"
@@ -584,7 +584,7 @@ assert(text.includes('axis 1 is out of range for the rank-1 input'), 'missing so
 assert(text.includes('SemanticDiag::ArgumentsRejected'), 'the axis must be checked at compile time')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "conv2d_grad_sanity"
@@ -606,7 +606,7 @@ assert(approx(grad0, finite, 1e-3), `kernel gradient ${grad0} should match finit
 assert(approx(biasSum, 4.0, 1e-6), `bias gradient sum should be 4, got ${biasSum}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "bn_train_grad_sanity"
@@ -635,7 +635,7 @@ assert(approx(Number(fd[3]), Number(fd[4]), 1e-3), `dbeta ${fd[4]} should match 
 assert(approx(Number(fd[5]), Number(fd[6]), 1e-3), `dx ${fd[6]} should match finite difference ${fd[5]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tiny_cnn"
@@ -667,7 +667,7 @@ assert(bias_gradLine.startsWith('tensor([') && !bias_gradLine.startsWith('tensor
 assert(approx(nums(bias_gradLine)[0], -0.7802, 1e-3), `expected conv bias gradient about -0.7802, got ${bias_gradLine}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tiny_cnn_gir"
@@ -701,7 +701,7 @@ has('features.pb', 'nn:conv2d_bias_grad')
 has('predict.pb', 'tensor:matmul_grad_rhs')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "conv2d_shape_error"
@@ -719,7 +719,7 @@ assert(text.includes("Tensor shape mismatch in 'conv2d': conv2d input channels 1
 assert(text.includes('RuntimeDiag::TensorDimensionMismatch'), 'missing tensor shape diagnostic category')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "residual_mlp"
@@ -742,7 +742,7 @@ assert(byAdam < start, `expected adam training to lower the loss: start=${start}
 assert(depth === 2, `expected the int field to survive sgd updates unchanged, got depth=${depth}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "residual_mlp_gir"
@@ -780,7 +780,7 @@ has('main', 'nn:adam_state')
 assert(text.includes('nn:sgd'), 'GIR output missing nn:sgd')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "siamese_shared_encoder"
@@ -808,7 +808,7 @@ const bias_gradLine = match(/siamese_shared_encoder bias_grad=(.*)/, out)[1]
 assert(bias_gradLine.startsWith('tensor([') && !bias_gradLine.startsWith('tensor([['), `expected rank-1 bias_grad, got ${bias_gradLine}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "siamese_shared_encoder.opt.nvm"
@@ -881,7 +881,7 @@ has('encode.fwd', 'linear.fwd')
 has('linear.pb', 'tensor:matmul_grad_rhs')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "gru_lite"
@@ -912,7 +912,7 @@ match(/gru_lite wxn_grad=tensor/, out)
 match(/gru_lite whn_grad=tensor/, out)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "gru_lite_gir"
@@ -949,7 +949,7 @@ has('gru_cell.pb', 'tensor:matmul_grad_rhs')
 has('predict.pb', 'tensor:matmul_grad_rhs')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "lr"
@@ -959,7 +959,7 @@ case = "../../../cases/modules/nn/lr.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "lrit"
@@ -969,7 +969,7 @@ case = "../../../cases/modules/nn/lrit.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mnist"
@@ -979,7 +979,7 @@ case = "../../../cases/modules/nn/mnist.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tensor_smoke"
@@ -989,7 +989,7 @@ case = "../../../cases/modules/nn/tensor_smoke.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mnist_py"
@@ -1063,7 +1063,7 @@ case = "../../../cases/modules/nn/svm.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "spatial_ops"
@@ -1083,7 +1083,7 @@ for (const value of [...conv.slice(1), ...pool.slice(1)]) {
 }
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "autoencoder_fused"
@@ -1112,7 +1112,7 @@ const dec_b_gradLine = match(/autoencoder dec_b_grad=(.*)/, out)[1]
 assert(dec_b_gradLine.startsWith('tensor([') && !dec_b_gradLine.startsWith('tensor([['), `expected rank-1 dec_b_grad, got ${dec_b_gradLine}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tiny_rnn_fused"
@@ -1142,7 +1142,7 @@ const b_gradLine = match(/tiny_rnn b_grad=(.*)/, out)[1]
 assert(b_gradLine.startsWith('tensor([') && !b_gradLine.startsWith('tensor([['), `expected rank-1 b_grad, got ${b_gradLine}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "softmax_classifier_fused"
@@ -1170,7 +1170,7 @@ const bias_gradLine = match(/softmax_classifier bias_grad=(.*)/, out)[1]
 assert(bias_gradLine.startsWith('tensor([') && !bias_gradLine.startsWith('tensor([['), `expected rank-1 bias_grad, got ${bias_gradLine}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "residual_mlp_fused"
@@ -1193,7 +1193,7 @@ assert(byAdam < start, `expected adam training to lower the loss: start=${start}
 assert(depth === 2, `expected the int field to survive sgd updates unchanged, got depth=${depth}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "gru_lite_fused"
@@ -1224,7 +1224,7 @@ match(/gru_lite wxn_grad=tensor/, out)
 match(/gru_lite whn_grad=tensor/, out)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "svm.simplify.fvm"
@@ -1234,7 +1234,7 @@ case = "../../../cases/modules/nn/svm.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "svm.simplify.jit"
@@ -1244,7 +1244,7 @@ case = "../../../cases/modules/nn/svm.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "residual_mlp.simplify.fvm"
@@ -1267,7 +1267,7 @@ assert(byAdam < start, `expected adam training to lower the loss: start=${start}
 assert(depth === 2, `expected the int field to survive sgd updates unchanged, got depth=${depth}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "residual_mlp.simplify.jit"
@@ -1290,7 +1290,7 @@ assert(byAdam < start, `expected adam training to lower the loss: start=${start}
 assert(depth === 2, `expected the int field to survive sgd updates unchanged, got depth=${depth}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "gru_lite_large_bytecode"
@@ -1321,7 +1321,7 @@ match(/gru_lite wxn_grad=tensor/, out)
 match(/gru_lite whn_grad=tensor/, out)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "residual_mlp_large_bytecode"
@@ -1344,7 +1344,7 @@ assert(byAdam < start, `expected adam training to lower the loss: start=${start}
 assert(depth === 2, `expected the int field to survive sgd updates unchanged, got depth=${depth}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "residual_mlp_inline_large"

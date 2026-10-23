@@ -14,7 +14,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidLiteral"
 expect_output_contains = ["not valid UTF-8"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "escape_spelling_a_character"
@@ -25,7 +25,7 @@ args = ["${case}", "std::fvm"]
 expect_exit = 0
 expect_stdout_exact = "中 1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format_string_too_few_arguments"
@@ -37,7 +37,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["format string '{} and {}'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format_string_bad_specification"
@@ -49,4 +49,4 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["format string '{:d}'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000

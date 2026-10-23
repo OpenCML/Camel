@@ -11,7 +11,7 @@ case = "../../../cases/trans/macro/basic.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "branch_chain"
@@ -21,7 +21,7 @@ case = "../../../cases/trans/macro/branch_chain.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "chain"
@@ -31,7 +31,7 @@ case = "../../../cases/trans/macro/chain.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "deep_chain"
@@ -41,7 +41,7 @@ case = "../../../cases/trans/macro/deep_chain.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "function_arg"
@@ -51,7 +51,7 @@ case = "../../../cases/trans/macro/function_arg.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "closure_runtime_call"
@@ -68,7 +68,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "closure_isolation"
@@ -86,7 +86,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "functor"
@@ -96,7 +96,7 @@ case = "../../../cases/trans/macro/functor.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "pipeline"
@@ -106,7 +106,7 @@ case = "../../../cases/trans/macro/pipeline.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "runtime_boundary"
@@ -123,7 +123,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "static_object_access"
@@ -140,7 +140,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 
 [[tests]]
@@ -164,7 +164,7 @@ assert(!out.includes("'fine'"), `a call that evaluated was reported: ${out}`)
 assert(!out.includes('[Warn]'), `no warning is left: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "failed_evaluation.json"
@@ -186,7 +186,7 @@ assert(d.range.start.line === 18 && d.range.start.character === 12, `range: ${JS
 assert(d.message === "'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero.", `message: ${d.message}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "failed_evaluation.without_macro"
@@ -204,7 +204,7 @@ assert(out.startsWith('main start\n42\nEFFECT boom\n'), `unexpected stdout: ${ou
 assert(!input.normalized.output.includes('MacroEvaluationFailed'), 'no macro diagnostic without the pass')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "failed_no_rule.error"
@@ -224,7 +224,7 @@ assert(/'autodiff:grad' could not be evaluated by std::macro: RuntimeError: An e
 assert(!out.includes('main start'), `the program must not run: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "failed_depth.error"
@@ -245,7 +245,7 @@ assert((out.match(/MacroEvaluationFailed/g) || []).length === 1, `expected one e
 assert(!/^20$/m.test(input.normalized.stdout), `the program must not run: ${input.normalized.stdout}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "failed_depth.without_macro"
@@ -261,7 +261,7 @@ assert(input.normalized.stdout.trim() === '20\n100\n7', `unexpected stdout: ${in
 assert(input.normalized.stderr === '', `stderr: ${input.normalized.stderr}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "failed_unreached.error"
@@ -279,7 +279,7 @@ verify_script = """
 assert(!/^42$/m.test(input.normalized.stdout), `the program must not run: ${input.normalized.stdout}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "failed_unreached.without_macro"
@@ -294,7 +294,7 @@ verify_script = """
 assert(input.normalized.stdout.trim() === '42', `unexpected stdout: ${input.normalized.stdout}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "not_static.note"
@@ -312,7 +312,7 @@ assert(!input.normalized.output.includes('MacroEvaluationFailed'), 'not a failur
 assert(input.normalized.stdout.trim() === '20\n7', `unexpected stdout: ${input.normalized.stdout}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "not_static.quiet"
@@ -328,7 +328,7 @@ assert(input.normalized.stderr === '', `stderr: ${input.normalized.stderr}`)
 assert(input.normalized.stdout.trim() === '20\n7', `unexpected stdout: ${input.normalized.stdout}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tag_positions"
@@ -343,7 +343,7 @@ verify_script = """
 assert(input.normalized.stdout.trim() === '49\n6\n5', `unexpected stdout: ${input.normalized.stdout}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tag_on_block.error"
@@ -356,7 +356,7 @@ expect_diagnostic_name = "SemanticDiag::TagNotAtPosition"
 expect_diagnostic_line = 7
 expect_diagnostic_column = 6
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tag_with_argument.error"
@@ -369,7 +369,7 @@ expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
 expect_diagnostic_line = 6
 expect_diagnostic_column = 2
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "round_budget.error"
@@ -388,7 +388,7 @@ const out = input.normalized.output
 assert(/more than 3 rounds ahead of time/.test(out), `limit missing: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "round_budget.default"
@@ -403,4 +403,4 @@ verify_script = """
 assert(input.normalized.stdout.trim() === '500500', `unexpected stdout: ${input.normalized.stdout}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000

@@ -23,7 +23,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fill_mixed.nvm"
@@ -33,7 +33,7 @@ case = "../../../cases/linear/nvm/fill_mixed.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "render_grid.nvm"
@@ -43,7 +43,7 @@ case = "../../../cases/linear/nvm/render.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tuple_index_pipeline.nvm"
@@ -53,7 +53,7 @@ case = "../../../cases/linear/nvm/index.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mapping_pipeline.nvm"
@@ -63,7 +63,7 @@ case = "../../../cases/linear/nvm/mapping.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unique_subgraph.nvm"
@@ -81,7 +81,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "builtin_operator_chain.jit"
@@ -91,7 +91,7 @@ case = "../../../cases/linear/jit/builtin_operator_chain.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "list_transform.jit"
@@ -113,7 +113,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "list_transform_chain.jit"
@@ -135,7 +135,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tuple_pipeline.jit"
@@ -155,7 +155,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "struct_match.jit"
@@ -174,7 +174,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 
 [[tests]]

@@ -78,7 +78,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["conversion to 'Tensor<float32, [3]>' failed: the tensor has shape [4]", "unknown_extent_mismatch.cml:10:17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unknown_extent_mismatch_fvm"
@@ -89,7 +89,7 @@ args = ["${case}", "std::fvm"]
 expect_exit = 1
 expect_output_contains = ["conversion to 'Tensor<float32, [3]>' failed: the tensor has shape [4]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unknown_extent_mismatch_jit"
@@ -100,7 +100,7 @@ args = ["${case}", "std::jit"]
 expect_exit = 1
 expect_output_contains = ["conversion to 'Tensor<float32, [3]>' failed: the tensor has shape [4]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unknown_extent_mismatch_prl"
@@ -111,7 +111,7 @@ args = ["${case}", "std::prl"]
 expect_exit = 1
 expect_output_contains = ["conversion to 'Tensor<float32, [3]>' failed: the tensor has shape [4]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "return_extent_checked"
@@ -122,7 +122,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["conversion to 'Tensor<float32, [3]>' failed: the tensor has shape [4]", "err_return_extent.cml:9:16"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "err_unbound_name"
@@ -136,7 +136,7 @@ expect_diagnostic_line = 4
 expect_diagnostic_column = 48
 expect_output_contains = ["The dimension name 'n' is not bound by any parameter of this signature."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "err_mismatch"
@@ -150,7 +150,7 @@ expect_diagnostic_line = 7
 expect_diagnostic_column = 33
 expect_output_contains = ["Argument b has extent 4, but the dimensions the earlier arguments bound do not allow it."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "err_name_only_in_return"
@@ -161,7 +161,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DimensionNameNotBound"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "single_instance"

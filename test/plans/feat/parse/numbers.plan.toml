@@ -15,7 +15,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "golden/numbers_tok.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "numbers.ast_snapshot"
@@ -28,7 +28,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "golden/numbers_ast.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "numbers.member_index_exponent"
@@ -41,7 +41,7 @@ expect_diagnostic_name = "SemanticDiag::InvalidLiteral"
 expect_diagnostic_line = 3
 expect_diagnostic_column = 15
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "numbers.leading_zero_decimal"
@@ -55,7 +55,7 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["Invalid number format: '077'", "0o77"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "numbers.bad_octal_digit"
@@ -69,7 +69,7 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["Invalid number format: '0o9'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "numbers.format_snapshot"
@@ -83,7 +83,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "golden/numbers_format.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "numbers.entry_arg_negative"

@@ -19,7 +19,7 @@ verify_script = """
     assert(graph.nodes.filter(n => n.label === ':io/println').length === 4, 'all four prints must remain')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.inline.gates"
@@ -46,7 +46,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.inline.nvm"
@@ -62,7 +62,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.inline.fvm"
@@ -78,7 +78,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.inline.jit"
@@ -94,7 +94,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.inline.tf"
@@ -110,7 +110,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.inline.prl"
@@ -126,7 +126,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "branch_arm_behavior"
@@ -144,7 +144,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "empty_entry_targets_fallback"
@@ -161,7 +161,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "entry_multi_target_with_sync"
@@ -180,7 +180,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "entry_single_target_no_sync"
@@ -198,7 +198,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "no_param_reverse_root"
@@ -215,7 +215,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "registry_sweep_unique_arm"
@@ -233,7 +233,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "scc_entry_guard_recursion"
@@ -250,7 +250,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "inline_strategy_hybrid_mix"
@@ -268,7 +268,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "strategy_small_non_arm"
@@ -285,7 +285,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "value_ctrl_gate_anchor"
@@ -303,7 +303,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_entry_after_inline.reference"
@@ -319,7 +319,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0.512 1.0 3.0 12.0 -3.0', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_entry_after_inline.inline.nvm"
@@ -335,7 +335,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0.512 1.0 3.0 12.0 -3.0', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_entry_after_inline.inline.tf"
@@ -351,7 +351,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0.512 1.0 3.0 12.0 -3.0', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_entry_after_inline.inline.fvm"
@@ -367,7 +367,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0.512 1.0 3.0 12.0 -3.0', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_entry_after_inline.inline.jit"
@@ -383,7 +383,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0.512 1.0 3.0 12.0 -3.0', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_entry_after_inline.opt.nvm"
@@ -399,7 +399,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0.512 1.0 3.0 12.0 -3.0', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_entry_after_inline.opt.tf"
@@ -415,7 +415,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0.512 1.0 3.0 12.0 -3.0', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_entry_after_inline.macro_opt.nvm"
@@ -431,7 +431,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0.512 1.0 3.0 12.0 -3.0', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_entry_after_inline_macro.reference"
@@ -447,7 +447,7 @@ const out = input.normalized.stdout.trim()
 assert(out === '0.512', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_entry_after_inline_macro.macro.nvm"
@@ -463,7 +463,7 @@ const out = input.normalized.stdout.trim()
 assert(out === '0.512', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_entry_after_inline_macro.inline_macro.nvm"
@@ -479,7 +479,7 @@ const out = input.normalized.stdout.trim()
 assert(out === '0.512', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "specialized_arg_keeps_order.reference"
@@ -495,7 +495,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '1 2 40', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "specialized_arg_keeps_order.opt.nvm"
@@ -511,7 +511,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '1 2 40', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "specialized_arg_keeps_order.simplify.fvm"
@@ -527,7 +527,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '1 2 40', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "specialized_arg_keeps_order.macro_simplify_cse_dce.nvm"
@@ -543,7 +543,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '1 2 40', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.reference"
@@ -559,7 +559,7 @@ const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join('
 assert(out === '1 11 203 4', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.specialize_inline.nvm"
@@ -575,7 +575,7 @@ const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join('
 assert(out === '1 11 203 4', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.opt.nvm"
@@ -591,7 +591,7 @@ const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join('
 assert(out === '1 11 203 4', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.opt.fvm"
@@ -607,7 +607,7 @@ const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join('
 assert(out === '1 11 203 4', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.simplify.nvm"
@@ -623,7 +623,7 @@ const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join('
 assert(out === '1 11 203 4', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.simplify.jit"
@@ -639,7 +639,7 @@ const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join('
 assert(out === '1 11 203 4', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "consecutive_sync_calls.macro_simplify_cse_dce.nvm"
@@ -655,7 +655,7 @@ const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join('
 assert(out === '1 11 203 4', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_call_then_effect.reference"

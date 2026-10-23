@@ -121,6 +121,34 @@ const runDeadline = Date.now() + 1000 * 60 * 60
 const load = startLoad(args.load, runDeadline)
 const startedAll = Date.now()
 
+// The load is the experiment, so it is measured, not assumed: after the children have had a
+// moment to enter their loops, read their scheduler state. A green run whose busy loops never
+// started proves nothing, so that is an error of its own (exit 3), not a pass.
+function processState(pid) {
+    try {
+        const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8')
+        return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0]
+    } catch {
+        return null
+    }
+}
+await new Promise((resolve) => setTimeout(resolve, 200))
+if (process.platform === 'linux' && args.load > 0) {
+    const states = load.map((child) => processState(child.pid))
+    const alive = states.filter((state) => state !== null && state !== 'Z').length
+    const running = states.filter((state) => state === 'R').length
+    console.log(
+        `[race-harness] load: ${alive}/${args.load} busy loop(s) alive, ${running} in state R`,
+    )
+    if (alive < args.load) {
+        for (const child of load) {
+            try { child.kill('SIGKILL') } catch {}
+        }
+        console.log('[race-harness] the load did not start: a green run would not be evidence')
+        process.exit(3)
+    }
+}
+
 console.log(
     `[race-harness] ${args.rounds} round(s) x ${args.tests.join(', ')} with ${args.load} busy loop(s); ` +
         `node ${process.version}, ${os.cpus().length} cpus, load1 ${fs.readFileSync('/proc/loadavg', 'utf8').trim()}`,

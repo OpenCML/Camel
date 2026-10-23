@@ -37,7 +37,12 @@ args = ["${case}", "--verify-doc"]
 expect_exit = 0
 expect_stdout_contains = ["docs/diagnostics.md is up to date"]
 normalizers = ["normalize_newlines"]
-timeout_ms = 20000
+# 120 s: --verify-doc regenerates the document and compares it, reading every plan and case to
+# collect the mentions. Measured 6.9-8.8 s alone on the shared host at load 70-90, 11.4 s with
+# three copies at once, and 16.6 s inside the parallel gate at -Jobs 8; the old 20 s was the
+# loaded wall time, not a bound. (--coverage and --coverage-check read the same script and run
+# in 0.15 s.)
+timeout_ms = 120000
 
 [[tests]]
 name = "catalog.coverage_report"
