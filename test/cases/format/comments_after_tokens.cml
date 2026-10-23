@@ -12,3 +12,14 @@ func tokens(a: // the parameter's type follows
         return -c
     }
 }
+
+// Two comments that read the same: the same words after the item that is not last and after the
+// one that is. A check that only looks for the text finds the first and calls the file whole, so
+// the count is what has to be compared.
+func repeated(xs: int[]): int[] {
+    return [
+        xs[0], // not the last item
+        xs[1], // not the last item
+        xs[2] // not the last item
+    ]
+}

@@ -67,12 +67,32 @@ if (expected.length === 0) {
     fail(`${payload.test_name}: the case holds no comment, so a check on it examines nothing`)
 }
 
-const missing = expected.filter((comment) => !written.includes(comment))
-if (missing.length > 0) {
-    const listed = missing.map((comment) => `    ${JSON.stringify(comment)}`).join('\n')
+/// How many times each comment text stands in a list.
+function counts(list) {
+    const byText = new Map()
+    for (const comment of list) byText.set(comment, (byText.get(comment) ?? 0) + 1)
+    return byText
+}
+
+// Counts, not a search for the text of each comment: a case that writes the same comment twice and
+// loses one copy passes a search - the other copy is found - and the loss goes unseen.
+const want = counts(expected)
+const got = counts(commentsOf(written))
+const missing = []
+for (const [comment, n] of want) {
+    const kept = got.get(comment) ?? 0
+    if (kept < n) missing.push(`${JSON.stringify(comment)} (${kept} of ${n} kept)`)
+}
+const invented = []
+for (const [comment, n] of got) {
+    const stood = want.get(comment) ?? 0
+    if (n > stood) invented.push(`${JSON.stringify(comment)} (${n} written, ${stood} in the case)`)
+}
+if (missing.length > 0 || invented.length > 0) {
+    const listed = [...missing, ...invented].map((line) => `    ${line}`).join('\n')
     fail(
-        `${payload.test_name}: ${missing.length} of the ${expected.length} comment(s) of the case ` +
-            `are not in the formatter's output:\n${listed}\n` +
+        `${payload.test_name}: the formatter's output does not hold the comments of the case ` +
+            `(${expected.length} in the case):\n${listed}\n` +
             `---- the formatter wrote ----\n${written}`
     )
 }

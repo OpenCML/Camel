@@ -5,12 +5,14 @@ tags = ["feat", "format", "formatter", "comments"]
 
 # The comment shapes the formatter used to rewrite: a run of `//` lines right after an opening
 # `{`, a `/* ... */` at the end of a line, a comment between two tokens on one line (after `:`,
-# `,`, `)`, `else`), a comment at the end of the file, and a comment inside an otherwise empty
-# block. Every entry formats its case and asserts, in verify/comments_kept.mjs, that each comment
-# of the case is in the output and that the output is a fixed point: the text the formatter writes
-# must be the text it writes for its own output. The same properties are checked over every .cml
-# of the tree by camel-parsecheck fmtcheck (test/plans/feat/parse/frontend.plan.toml); these cases
-# are the shapes that bug was found on, kept as fixtures so the emitted text is inspectable.
+# `,`, `)`, `else`), a comment at the end of the file, a comment inside an otherwise empty block,
+# and the same comment text written twice with one copy lost. Every entry formats its case and
+# asserts, in verify/comments_kept.mjs, that the output holds the comments of the case as many
+# times as the case wrote them and nothing more, and that the output is a fixed point: the text the
+# formatter writes must be the text it writes for its own output. The same properties are checked
+# over every .cml of the tree by camel-parsecheck fmtcheck (test/plans/feat/parse/frontend.plan.toml);
+# these cases are the shapes that bug was found on, kept as fixtures so the emitted text is
+# inspectable.
 
 [[tests]]
 name = "format.comments_after_brace"

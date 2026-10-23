@@ -48,6 +48,16 @@ std::string oneLine(const std::string &comment) {
     return first.size() > 80 ? first.substr(0, 80) + "..." : first;
 }
 
+/// How many times `text` holds `needle`, each match counted once.
+size_t countOccurrences(const std::string &text, const std::string &needle) {
+    size_t n = 0, at = 0;
+    while (!needle.empty() && (at = text.find(needle, at)) != std::string::npos) {
+        ++n;
+        at += needle.size();
+    }
+    return n;
+}
+
 /// The formatter orders the imports by module; the order of imports means nothing.
 std::string withSortedImports(const std::string &structure) {
     std::vector<std::string> lines;
@@ -109,7 +119,7 @@ int runFormatCheck(const std::vector<std::string> &files) {
         return 2;
     }
     size_t checked = 0, skipped = 0, changed = 0, unstable = 0, broken = 0, comments = 0,
-           dropped = 0, unplaced = 0;
+           dropped = 0, unplaced = 0, duplicated = 0;
     for (const std::string &path : files) {
         try {
             const ParseOutcome original = parseText(path, readFile(path));
@@ -118,19 +128,49 @@ int runFormatCheck(const std::vector<std::string> &files) {
                 continue;
             }
             ++checked;
-            // Every comment of the input must appear in the text formatting writes. A comment is
-            // not a node of the AST, so the structural comparison below cannot see one that was
-            // dropped: a formatter that loses a comment rewrites the source silently, and a gate
-            // must not report that as a pass. Checked before the second parse, so a file whose
-            // formatting does not parse back still gets its comment verdict.
+            // Every comment of the input, as many times as it stood there, must appear in the text
+            // formatting writes. A comment is not a node of the AST, so the structural comparison
+            // below cannot see one that was dropped, and a search for a comment's text finds
+            // another comment that reads the same, so a file with two identical comments was read
+            // as whole with one of them gone. The comments of the formatted text are read back with
+            // the lexer that read the input, so the two lists compare exactly; a text that no
+            // longer parses falls back to the search, and is reported as changed in any case.
+            std::map<std::string, size_t> want, got;
             for (const std::string &comment : original.comments) {
+                ++want[comment];
                 ++comments;
-                if (original.formatted.find(comment) == std::string::npos) {
-                    ++dropped;
-                    std::cout << "DROPPED " << path << " " << oneLine(comment) << "\n";
-                }
             }
             const ParseOutcome again = parseText(path, original.formatted);
+            if (again.parsed()) {
+                for (const std::string &comment : again.comments) {
+                    ++got[comment];
+                }
+            } else {
+                for (const auto &[comment, n] : want) {
+                    got[comment] = std::min(n, countOccurrences(original.formatted, comment));
+                }
+            }
+            for (const auto &[comment, n] : want) {
+                const auto found   = got.find(comment);
+                const size_t wrote = found == got.end() ? 0 : found->second;
+                if (wrote < n) {
+                    dropped += n - wrote;
+                    std::cout << "DROPPED " << path << " " << oneLine(comment) << " (" << wrote
+                              << " of " << n << " written)\n";
+                }
+            }
+            // And nothing the input did not write: a comment written twice reads as text no one
+            // wrote. A duplicate is invisible to the structural comparison too, and a second pass
+            // that writes it again is a fixed point.
+            for (const auto &[comment, n] : got) {
+                const auto stood        = want.find(comment);
+                const size_t inOriginal = stood == want.end() ? 0 : stood->second;
+                if (n > inOriginal) {
+                    duplicated += n - inOriginal;
+                    std::cout << "DUPLICATED " << path << " " << oneLine(comment) << " (" << n
+                              << " written, " << inOriginal << " in the file)\n";
+                }
+            }
             if (original.unplaced > 0) {
                 unplaced += original.unplaced;
                 std::cout << "UNPLACED " << path << " " << original.unplaced << "\n";
@@ -157,12 +197,15 @@ int runFormatCheck(const std::vector<std::string> &files) {
     std::cout << "FMTCHECK files=" << files.size() << " checked=" << checked
               << " skipped(not accepted)=" << skipped << " changed=" << changed
               << " unstable=" << unstable << " broken=" << broken << " comments=" << comments
-              << " dropped=" << dropped << " unplaced=" << unplaced << "\n";
+              << " dropped=" << dropped << " duplicated=" << duplicated << " unplaced=" << unplaced
+              << "\n";
     // `comments` is reported but not gated here: the floor that refuses a run which examined no
     // comment is in check.py, which can count the tree's corpus (as it does for the file list).
     // `unplaced` is gated: a comment written at the end of the file instead of where it stood is a
     // shape no visitor reached, and a gate that accepts it stops asking why it happened.
-    return changed == 0 && dropped == 0 && unplaced == 0 && broken == 0 ? 0 : 1;
+    // `duplicated` is gated with `dropped`: text the input did not write is text the formatter
+    // invented, and neither shows up in the AST or in a second pass.
+    return changed == 0 && dropped == 0 && duplicated == 0 && unplaced == 0 && broken == 0 ? 0 : 1;
 }
 
 } // namespace parsecheck
