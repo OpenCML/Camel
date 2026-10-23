@@ -2,51 +2,23 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * The optimizers, written in Camel over `tree` (design/stdlib: `optim` is the Optax-shaped
- * module -- `init` and `update` are the two pure functions, `sgd`, `adam` and `adamw` are values,
- * and so is a learning-rate schedule). The design keeps it in the standard library's layout and
- * also lists it among the official extension libraries that ship separately
- * (docs/design/stdlib/README.cn.md, sections 3 and 5); today it is `stdlib/optim.cml`, next to
- * the `tree` it is built on.
- *
- * A schedule is a function `(step: int) => float`: `constant(rate)`, `linear_decay(peak, total,
- * floor)` and `cosine_decay(peak, total, floor)` build one, and the rate the update of step `n`
- * uses is `schedule(n)`, with `n` numbered from one. An optimization is a value too, so a
- * training loop reads:
+ * The optimizers: `sgd` and `adam`, each a value, with `init` and `update` the two pure functions
+ * a training loop calls.
  *
  *     let opt = adam(cosine_decay(0.001, steps, 0.0001));
  *     let state = init(opt, model);
  *     let (model, state) = update(opt, model, gradient, state);
  *
- * `params` is a tree of nested structs and tuples whose leaves are numbers and tensors, and
- * `grads` is the gradient of that tree -- the value `with_grad` or `grad` gives for the same
- * parameters. `nn`'s optimizers insist on that: a tree that merely has the same type as the
- * parameters is refused when the call is compiled, which is why the tests here hand both sides the
- * gradient autodiff answers. `update` answers `(params, state)`.
+ * A schedule is a function `(step: int) => float`: `constant(rate)`, `linear_decay(peak, total,
+ * floor)` and `cosine_decay(peak, total, floor)` build one, and the rate the update of step `n`
+ * uses is `schedule(n)`, with `n` numbered from one. `params` is a tree of nested structs and
+ * tuples whose leaves are numbers and tensors, and `grads` is the gradient of that tree, which
+ * `with_grad` or `grad` gives; a tree that merely has the same type as the parameters is refused.
  *
- * The state holds the two moment trees, shaped like the parameters, and the number of updates
- * made, which is the step a schedule reads. Its type is one type for every optimizer because a
- * module cannot declare `init` once per optimizer (the language declares a name once:
- * `SemanticDiag::Redeclaration`), so `sgd` carries two zero trees it never reads.
- *
- * The arithmetic of one leaf is the arithmetic of the native optimizers `nn` carried, and the
- * values H64 pinned in test/cases/modules/nn/adam_update_bits.cml: computed in double and rounded
- * once, when it is stored. A tensor leaf of `adam` whose element type is f32 is widened to f64,
- * updated there and narrowed once, and one whose element type is f64 is updated in f64 and stays
- * there, so a trajectory written here is the trajectory `modules/tensor/kernels/update.h` defines,
- * bit for bit -- which test/cases/modules/optim/agreement.cml asserts step by step, the schedule
- * included, against `nn` itself.
- *
- * What the port cannot do yet: `update` walks the parameter tree and reads one gradient leaf per
- * parameter leaf, and a generic walk cannot ask whether a field exists, so the gradient must have
- * exactly the parameters' shape -- every leaf must be trainable. A member with no tangent (an
- * `int` counter, a `string`) has no gradient leaf, and pairing such a tree with its gradient fails
- * the walk with `SemanticDiag` "the struct ... has no field ..."; an array of structs, which the
- * native walk enters element by element (design principles 9.9), is one leaf here. A leaf whose
- * element type the program does not write is updated at the element type its value has, on both
- * sides; `adam` reads that element type from the value's bytes, because no operator names a
- * tensor's element type at run time. docs/technical/optim.md records each of them, with what the
- * native path does, what is missing, and what a program sees today.
+ * Every number is computed in double and rounded once, when it is stored. The arithmetic follows the
+ * element type the leaf's value has: a tensor leaf of `adam` is widened to f64 and updated there,
+ * and stored back at the element type the leaf has, so a trajectory written here is the trajectory
+ * `modules/tensor/kernels/update.h` defines, bit for bit.
  */
 module optim
 
