@@ -14,4 +14,9 @@ namespace camel::tensor {
 /// loads, before any graph runs.
 void registerDivideMulNegFusion();
 
+/// Registers the kernel of the `tensor.fusion = "vjp_mul_neg"` group: the multiply and neg of
+/// that VJP, run in one pass at the neg off the divide's already-stored value. Called once, when
+/// the module loads, before any graph runs.
+void registerMulNegFusion();
+
 } // namespace camel::tensor

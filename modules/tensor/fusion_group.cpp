@@ -2,26 +2,39 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The `tensor.fusion` group a division's VJP emits.
+ * The `tensor.fusion` groups a division's VJP emits.
  *
  * `divideVjp` builds `dlhs = divide(dy, rhs)`, `scaled = multiply(dlhs, y)`, `neg(scaled)` and
- * marks the three nodes with `tensor.fusion = "vjp_div_neg"` (design principles 9.6). In a
- * training step the head and the middle are private to the chain -- only the next member reads
- * them -- so a backend may compute the tail's value in one pass and never store the two
- * intermediates: three buffer reads, one write, one launch, instead of three allocations and
- * three passes.
+ * marks them with `tensor.fusion` (design principles 9.6). In a training step the head and the
+ * middle are private to the chain -- only the next member reads them -- so a backend may compute
+ * the tail's value in one pass and never store the two intermediates: three buffer reads, one
+ * write, one launch, instead of three allocations and three passes.
  *
- * The fused kernel does exactly the operators' work in the operators' order, per element:
- * `q = fl(dy/rhs)`, `s = fl(q*y)`, `r = -s`. The neg is a sign flip, not a rounding, so the
- * result is bit-identical to running the three nodes, and the group is therefore licensed under
- * `#strict` and under the safe mode (7.3, 7.4): no roundings disappear and no permission is
- * consumed. When the operands are not three tensors of one floating dtype and shape (a scalar
- * denominator, a broadcast, an integer type, f16/bf16), the kernel calls the operators' own
- * elementwise kernels in the same order and writes the same tail value: still one group
- * execution, still the operators' bits, no fast path.
+ * When the numerator is differentiated, `dlhs` is also the numerator's gradient and the gradient
+ * struct reads it: the three-node chain is no longer private at its head [1]. The multiply and
+ * the neg still are, so the same VJP marks them `tensor.fusion = "vjp_mul_neg"` instead, and a
+ * backend runs that pair in one pass at the neg, reading the divide's already-stored value: two
+ * passes instead of three. The two values never share a node, so each node names the largest
+ * group its shape allows [2].
+ *
+ * The fused kernels do exactly the operators' work in the operators' order, per element:
+ * `q = fl(dy/rhs)`, `s = fl(q*y)`, `r = -s`; and `s = fl(lhs*y)`, `r = -s`. The neg is a sign
+ * flip, not a rounding, so the result is bit-identical to running the operators one by one, and
+ * the groups are therefore licensed under `#strict` and under the safe mode (7.3, 7.4): no
+ * roundings disappear and no permission is consumed. When the operands are not tensors of one
+ * floating dtype and shape (a scalar operand, a broadcast the fast path does not tile, an integer
+ * type, f16/bf16), the kernels call the operators' own elementwise kernels in the same order and
+ * write the same tail value: still one group execution, still the operators' bits, no fast path.
  *
  * A backend that cannot keep that promise, or that has no kernel for the group, runs the nodes
  * one by one; the attribute grants nothing by itself (camel/execute/fusion_group.h).
+ *
+ * [1] A value a rule keeps (the numerator's gradient) is a reader of the divide's result, so the
+ *     chain's head is not private and the backend declines the three-node group.
+ * [2] One key holds one value per node (camel/core/node_attrs.h): the marking picks the group
+ *     that can run. The pair is also marked when the numerator is active but its gradient is
+ *     dropped; the backend then declines the bigger chain but still fuses the pair, one pass
+ *     less than the operators.
  */
 
 #include "fusion_group.h"
@@ -258,6 +271,119 @@ Array *runChain(
     return k::unary(k::UnaryOp::Neg, scaled, ops::resultAllocator());
 }
 
+/// One pass over `lhs`, `y` and the tail's buffer: `out[i] = -(lhs[i] * y[i])`. The multiply is
+/// one rounding, the neg one sign flip, in that order, so the bits are the two operators' bits.
+template <typename T> void fusedPair(const T *lhs, const T *y, T *out, int64_t count) {
+    k::parallelFor(
+        count,
+        k::grainForWork(2.0 * k::kNsPerFloat),
+        [&](int64_t begin, int64_t end) {
+            for (int64_t i = begin; i < end; ++i) {
+                out[i] = -(lhs[i] * y[i]);
+            }
+        });
+}
+
+Array *runPair(const FusionGroupView &view, gc_node_ref_t middle) {
+    const auto midInputs = view.inputsOf(middle);
+    k::ScalarOperand lhsStore, yStore;
+    const k::Operand lhs = operandOf(view, midInputs[0], lhsStore);
+    const k::Operand y   = operandOf(view, midInputs[1], yStore);
+    if (asTensorType(view.typeOf(midInputs[0])) != nullptr &&
+        asTensorType(view.typeOf(midInputs[1])) != nullptr) {
+        const auto *a = static_cast<const Array *>(lhs.data);
+        const auto *b = static_cast<const Array *>(y.data);
+        const type::TypeCode dtype = a->dtype();
+        if ((dtype == type::TypeCode::Float32 || dtype == type::TypeCode::Float64) &&
+            b->dtype() == dtype && a->sameShape(b)) {
+            const int64_t count = static_cast<int64_t>(a->numel());
+            Array *out          = createTensor(dtype, a->shapeSpan(), ops::resultAllocator(), false);
+            if (dtype == type::TypeCode::Float32) {
+                fusedPair<float>(a->dataAs<float>(), b->dataAs<float>(), out->dataAs<float>(), count);
+            } else {
+                fusedPair<double>(
+                    a->dataAs<double>(), b->dataAs<double>(), out->dataAs<double>(), count);
+            }
+            return out;
+        }
+    }
+
+    // The general path: the operators' own kernels in the operators' order, so the result is what
+    // running the two nodes gives (no fast path, no different bits).
+    Array *product = k::binary(k::BinaryOp::Mul, lhs, y, ops::resultAllocator());
+    return k::unary(k::UnaryOp::Neg, product, ops::resultAllocator());
+}
+
+/// Recognizes `multiply -> neg` from the multiply: its first input is the divide whose value the
+/// group reads as already stored, its only reader is the neg, and both carry the group's
+/// attribute. The head is not a member: it has run (or will run) as the program says.
+bool pairAtMiddle(const FusionGroupView &view, gc_node_ref_t middle, gc_node_ref_t &tail) {
+    const ChainOperators &ops = chainOperators();
+    const auto inputs         = view.inputsOf(middle);
+    if (inputs.size() != 2) {
+        return false;
+    }
+    const gc_node_ref_t head = inputs[0];
+    if (view.operOf(head) != ops.divide || view.memberOf(head)) {
+        return false;
+    }
+    if (asTensorType(view.typeOf(head)) == nullptr ||
+        asTensorType(view.typeOf(inputs[1])) == nullptr) {
+        return false;
+    }
+    const auto users = view.usersOf(middle);
+    if (users.size() != 1) {
+        return false;
+    }
+    tail = users.front();
+    if (view.operOf(tail) != ops.neg || !view.memberOf(tail)) {
+        return false;
+    }
+    const auto tailInputs = view.inputsOf(tail);
+    if (tailInputs.size() != 1 || tailInputs[0] != middle) {
+        return false;
+    }
+    const gc_node_ref_t members[] = {middle, tail};
+    return view.isPrivateTo(middle, members);
+}
+
+FusionGroupAction multiplyNegKernel(
+    const FusionGroupView &view,
+    gc_node_ref_t node,
+    std::span<const gc_node_ref_t> deferred,
+    std::vector<gc_node_ref_t> &members) {
+    const ChainOperators &ops = chainOperators();
+    if (view.operOf(node) == ops.multiply && view.memberOf(node)) {
+        gc_node_ref_t tail = camel::runtime::kInvalidNodeRef;
+        if (!pairAtMiddle(view, node, tail)) {
+            return FusionGroupAction::None;
+        }
+        // The multiply is deferred to the neg, which runs both from the divide's stored value.
+        members.push_back(node);
+        return FusionGroupAction::Deferred;
+    }
+    if (view.operOf(node) != ops.neg || !view.memberOf(node)) {
+        return FusionGroupAction::None;
+    }
+    const auto tailInputs = view.inputsOf(node);
+    if (tailInputs.size() != 1) {
+        return FusionGroupAction::None;
+    }
+    const gc_node_ref_t middle = tailInputs.front();
+    if (view.operOf(middle) != ops.multiply || !view.memberOf(middle)) {
+        return FusionGroupAction::None;
+    }
+    // The pair runs only when the multiply was deferred to this node. If it ran one by one (no
+    // kernel at the middle, another reader there), the neg runs as the program says: that is the
+    // fallback.
+    if (!among(deferred, middle)) {
+        return FusionGroupAction::None;
+    }
+    Array *result = runPair(view, middle);
+    view.setValueOf(node, ops::wrap(result));
+    return FusionGroupAction::Ran;
+}
+
 FusionGroupAction divideMulNegKernel(
     const FusionGroupView &view,
     gc_node_ref_t node,
@@ -311,6 +437,10 @@ FusionGroupAction divideMulNegKernel(
 void registerDivideMulNegFusion() {
     camel::execute::registerFusionGroup(
         fusionAttrKey(), kDivideMulNegFusion, &divideMulNegKernel);
+}
+
+void registerMulNegFusion() {
+    camel::execute::registerFusionGroup(fusionAttrKey(), kMulNegFusion, &multiplyNegKernel);
 }
 
 } // namespace camel::tensor

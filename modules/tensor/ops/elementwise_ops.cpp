@@ -309,8 +309,21 @@ void divideVjp(VjpBuilder &b, const VjpCall &call) {
         // what carries the gradient back to `rhs`); otherwise the three nodes are dropped as
         // dead and the attribute would name nodes that are not a group.
         if (b.isActive(rhs)) {
-            const vjp_node_t members[] = {dlhs, scaled, neg};
-            b.markFusionGroup(fusionAttrKey(), kDivideMulNegFusion, members);
+            // The largest group that can run. When the numerator is not differentiated the
+            // divide's result has one reader (the multiply), so the three nodes are private and
+            // the chain runs as one pass. When it is, the divide's result is also the numerator's
+            // gradient: the gradient struct reads it, the chain's head is not private, and the
+            // backend declines the three-node group. The multiply and the neg are still private,
+            // so the pair is marked instead and runs at the neg off the stored divide's value.
+            // One key holds one value per node (camel/core/node_attrs.h): the two groups never
+            // share a node, so a node names the group its shape allows.
+            if (b.isActive(lhs)) {
+                const vjp_node_t pair[] = {scaled, neg};
+                b.markFusionGroup(fusionAttrKey(), kMulNegFusion, pair);
+            } else {
+                const vjp_node_t chain[] = {dlhs, scaled, neg};
+                b.markFusionGroup(fusionAttrKey(), kDivideMulNegFusion, chain);
+            }
         }
     }
 }

@@ -4,9 +4,9 @@
  * `private_chain` differentiates only the denominator: the divide's result has one reader (the
  * multiply), so the group's earlier members are unobservable and the node VM computes the tail in
  * one pass. `shared_chain` differentiates the numerator too: the divide's result is the
- * numerator's gradient and the gradient struct reads it, so the backend declines and runs the
- * three operators one by one. Both are marked (design principles 9.6); only the first is fused,
- * and both print the bits of the gradient.
+ * numerator's gradient and the gradient struct reads it, so the three-node group declines; the
+ * multiply and the neg are still private and carry `vjp_mul_neg` instead (fusion_group_mul_neg).
+ * Both print the bits of the gradient.
  *
  * The fused kernel keeps the operators' three roundings in the operators' order, so its bytes
  * are the unfused bytes under the default policy and under `#strict` (7.3, 7.4); `std::fvm` has
