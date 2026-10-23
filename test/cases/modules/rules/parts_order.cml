@@ -1,0 +1,93 @@
+/**
+ * A fact query inside a condition, and the parts of a commutative operator (the ruling of
+ * 2026-10-23 on `rule_when_const_node`: "可交换算子的匹配会交换操作数顺序，带参数的事实查询却按顺序找
+ * "操作数正是这些部件的值"，找不到就让**整个遍失败**。两处都改：(1) 对声明了交换律的算子，部件查询
+ * 不看顺序；(2) 条件里的事实查询找不到时，条件为假（这条规则在此不适用），而不是遍失败").
+ *
+ * `mul_by_one(a, b)` is the fact of a product: its `x * y` clause is "by one" when the *second*
+ * operand is the constant 1. The rule `drop_by_one` declares its coefficient `const c: int` and
+ * its factor `x: int`, so the pattern matches either operand and the coefficient has to be a
+ * constant -- and the condition reaches the coefficient's *node* with `node_of(c)`, which is what
+ * `node_of` is for.
+ *
+ * The condition asks `mul_by_one(x, node_of(c))`, the factor's node and the coefficient's node. On
+ * `swapped` (`1 * a`) the pattern's operands are the product's in the other order -- the matcher
+ * finds the pairing that binds the constant to `c`, which is the exchange of `1 * a` -- so the
+ * condition hands the query `(a, 1)` while the product holds `(1, a)`: the parts in the other
+ * order. A commutative operator's operands are not an order -- the declaration of `*` says the
+ * exchange gives the same value (op-semantics 7.4) -- so the query must answer either way. Before
+ * the ruling it looked for the operands in exactly the order it was given, found no value, and
+ * threw `Invalid argument of 'analysis': the analysis 'mul_by_one' has no value whose operands are
+ * these 2 nodes`, which **failed the whole pass**; that is what the case that first met this worked
+ * around by pinning the order by shape (`isConst(y)`), and why a `const` parameter and a parts
+ * query could not be written together at all.
+ *
+ * `kept` (`2 * a`) is the same query on a coefficient that is not one, so the query finds no value
+ * at all and the condition is false -- the rule must not apply, the product and the value must
+ * stay, and the pass must not fail either. `plain` (`a * 5.0`) has a guard on the value, which asks
+ * no question about parts: it loses its product in the same pass, so a pass that quietly stopped
+ * doing its work would show up there.
+ */
+module parts_order
+
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { max } from math
+import { rewrite } from rewrite
+
+analysis sign: int {
+    initial => 0
+    join(a, b) => max(a, b)
+    on (const c: int) => c
+}
+
+analysis mul_by_one(a: Node, b: Node): bool {
+    initial => false
+    join(a, b) => a || b
+    on (x * y) => sign(y) == 1
+}
+
+func positive(c: float): bool {
+    return c > 0.0
+}
+
+/// The coefficient is `const`, so its node is reached with `node_of`; the condition hands the
+/// parts over as `(factor, coefficient)`, and a commutative operator has no order to keep.
+rule drop_by_one(x: int, const c: int) { x * c => x }
+    when mul_by_one(x, node_of(c))
+
+/// A guard on the value, which the value channel answers without any node.
+rule drop_positive(x: float, const c: float) { x * c => x } when positive(c)
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [drop_by_one, drop_positive])
+}
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func countOf(p: Program, function: string, operator: string): int {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return len(nodes(found[0])->filter<(n: Node): bool => opText(n) == operator>)
+}
+
+export func report(p: Program): Program! sync {
+    println('swapped', countOf(p, 'swapped', ':op/mul_l'))
+    println('kept', countOf(p, 'kept', ':op/mul_l'))
+    println('plain', countOf(p, 'plain', ':op/mul_d'))
+    return p
+}
+
+func swapped(a: int): int { return 1 * a }
+
+func kept(a: int): int { return 2 * a }
+
+func plain(a: float): float { return a * 5.0 }
+
+func main(): int sync {
+    println(swapped(7), kept(7), plain(3.0))
+    return 0
+}
