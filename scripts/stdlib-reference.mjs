@@ -656,15 +656,26 @@ function readDeclarations(file, module) {
             withText = ''
             continue
         }
-        // A C++ module names the operator of a declaration with `#op<'module:function'>` when it
-    // does not follow the convention; the line belongs to the declaration, so it does not end
-    // the pending comment (design principles 6.4; handover H19, step 1).
-    if (module.kind === 'cpp' && trimmed.startsWith('#')) {
-        const tagged = trimmed.match(/^#\[?op<['"]([^'"]+)['"]>/)
-        if (!tagged) throw new Error(`${path.basename(file)}:${i + 1}: unknown tag on a declaration`)
-        pendingUri = tagged[1]
-        continue
-    }
+        // A tag line belongs to the declaration below it, in a module written in C++ and in one
+        // written in Camel alike: it is the declaration's front matter, and a doc comment written
+        // above the declaration - above the tag, or between the tag and the declaration - is its
+        // description. The line therefore does not end the pending comment, which is what the AST
+        // builder does too (it reads the comment above the declaration's first token, and the tag
+        // is that token: src/parse/ast/builder.cpp, docOf). A `#op<'module:function'>` names the
+        // operator a C++ declaration implements when it does not follow the convention (design
+        // principles 6.4; handover H19, step 1). This used to end the comment for a module written
+        // in Camel, which lost the description of every such declaration from the page.
+        if (trimmed.startsWith('#')) {
+            const tagged = trimmed.match(/^#\[?op<['"]([^'"]+)['"]>/)
+            if (tagged) {
+                pendingUri = tagged[1]
+            } else if (module.kind === 'cpp') {
+                // A signature file writes `#op<...>` and nothing else: another tag there is a typo,
+                // not a declaration.
+                throw new Error(`${path.basename(file)}:${i + 1}: unknown tag on a declaration`)
+            }
+            continue
+        }
     // A declaration of `operator ==` names a reserved operator group (`__eq__`), which has no
     // Camel name to list: `inspect --ops` hides those names, `--verify-ops` filters them out, and
     // the page introduces the operators of a type in the module's text. Reading the declaration as
