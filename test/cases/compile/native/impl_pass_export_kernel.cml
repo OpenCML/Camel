@@ -1,16 +1,19 @@
 /**
- * The export path with a kernel the ONNX backend can lower: `tensor:sum` is a real body-less
- * kernel of the tensor module and a lowering (`ReduceSum`) exists for it.
+ * The export path with a kernel the ONNX backend can lower: `total`'s kernel is `tensor:sum`,
+ * which the backend lowers to `ReduceSum`, and its Camel body is a reshape — an operator the
+ * backend lowers too, to a different node.
  *
- * The program runs the direct call (the kernel: one OPER of `tensor:sum`) and exports the same
- * function. The exporter walks the graph the call site is in, so what it must translate is the
- * kernel operator, not the Camel body — and a model is only faithful if the kernel it lowers is
- * the kernel the run executes. The case checks both: the runtime value, and the ONNX operator the
- * model carries.
+ * `main` first runs the direct call, which is one OPER of the kernel, so the printed sum is 10.0
+ * where the body would print the reshaped tensor, and then exports the same function. The exporter
+ * walks the graph the call site is in, so what it translates is the kernel operator, and the model
+ * is faithful only if the lowering it picks stands for the kernel the run executes — and not for
+ * the body. The case checks both sides of that: the runtime value and the ONNX node.
+ *
+ * This module writes `module tensor` (as `declaration_per_result_type.cml` does) so that it may
+ * declare the kernel its function is tagged with.
  */
-module impl_pass_export_kernel
+module tensor
 
-import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
@@ -19,13 +22,13 @@ func sum_kernel(t: Tensor): Tensor
 
 #impl<sum_kernel>
 func total(t: Tensor): Tensor {
-    return sum(reshape(t, [4]))
+    return reshape(t, [4])
 }
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
     let k = total(x)
-    'export kernel_sum={}'->format<k>->println
+    'export kernel_sum={}'->format<sum(k)>->println
     export_model(total, x, get_env('ONNX_OUT'))
     println('exported')
     return 0

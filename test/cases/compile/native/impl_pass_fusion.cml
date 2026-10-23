@@ -1,25 +1,23 @@
 /**
- * The fusion pass meets the same tagged function twice. `sigmoid` is the kernel of `chain`'s
- * operator, and `chain`'s Camel body is the `1/(1+exp(-x))` form the `rules::fusion` library
- * rewrites into `sigmoid`.
+ * The fusion pass meets the same tagged function twice. `chain`'s kernel is `tensor:sigmoid` and
+ * its Camel body is the `1/(1+exp(-x))` form the `rules::fusion` library rewrites into `sigmoid`.
  *
- * This program prints, for the kernel path (a direct call of the tagged `chain`, which is one
- * OPER of `tensor:sigmoid`) and for the body path (the same body reached through the function
- * value, which is four operators), the value difference between the two paths, once with no
- * rewrite and once with `rules::fusion` in front of the scheduler. The kernel path needs no
- * rewrite — it is already the fused operator — and the body path must produce the same bits
- * before and after the rewrite, because the rewrite's target `sigmoid` is the operator whose
- * kernel the tagged function names.
+ * `main` prints the two paths — the direct call, which is one OPER of the kernel, and the call
+ * through the function value, which is the body's four operators — summed and subtracted one from
+ * the other, in the same program. Run with `rules::fusion` in front of the scheduler, the body is
+ * rewritten into the operator the kernel already is and the difference stays zero; run without the
+ * pass, the body is the chain in the file. `impl_pass_fusion_wrong.cml` is the same comparison
+ * with a kernel that is not the body's meaning, so a zero here is not the only thing it can say.
  *
- * `impl_pass_fusion_wrong.cml` is the wrong-kernel observation: the same comparison with the tag
- * naming a kernel that is not the body's meaning, so a `0.0` here is not the only thing the
- * comparison can say.
+ * This module writes `module tensor` (as `declaration_per_result_type.cml` does) so that it may
+ * declare the kernel its function is tagged with.
  */
-module impl_pass_fusion
+module tensor
 
-import { Tensor, exp, reshape, sigmoid, sum } from tensor
+#op<'tensor:sigmoid'>
+func sigmoid_kernel(x: Tensor): Tensor
 
-#impl<sigmoid>
+#impl<sigmoid_kernel>
 func chain(x: Tensor): Tensor {
     return 1.0 / (1.0 + exp(-x))
 }

@@ -1,19 +1,39 @@
 /**
- * The agreement case over real kernels: `impl_pass_lib` tags `total` (`tensor:sum`), `average`
- * (`tensor:mean`) and `scale` (`:op/mul_d`), and this program takes both paths of each one — the
- * direct call (one OPER of the kernel) and the call through the function value (the Camel body
- * graph). Every pair takes the same inputs and must print the same value.
+ * The agreement case over real kernels. This module writes `module tensor` (the way
+ * `declaration_per_result_type.cml` does) so that it may declare the kernels its functions are
+ * tagged with: a body-less declaration stands for an operator of the module it is written in, and
+ * only that module may declare it. The kernels here are the tensor module's own
+ * (`tensor:sum`, `tensor:mean`, `tensor:sigmoid`) and the core's (`:op/mul_d`), and each tagged
+ * function keeps a Camel body that is a different expression over the same input.
  *
- * `total`'s two paths run different operators (the kernel `tensor:sum` against the body's
- * reshape), `average`'s run the same one, and `scale`'s run `:op/mul_d` against
- * `:op/mul_d`/`:op/div_d`: a `diff` of zero for all three is the agreement, and the magnitudes
- * show that each side is the value its own path computes. `impl_pass_disagreement.cml` is the same
- * shape with a deliberately wrong kernel, so zero cannot come from printing a pair that never ran.
+ * Every pair is taken both ways by `main`: a direct call (one OPER of the kernel) and a call
+ * through the function value (the Camel body graph). The values must agree; the graphs must not.
  */
-module impl_pass_agreement
+module tensor
 
-import { Tensor, reshape } from tensor
-import { average, scale, total } from impl_pass_lib
+#op<'tensor:sum'>
+func sum_kernel(t: Tensor): Tensor
+
+#impl<sum_kernel>
+export func total(t: Tensor): Tensor {
+    return reshape(t, [4])
+}
+
+#op<'tensor:mean'>
+func mean_kernel(t: Tensor): Tensor
+
+#impl<mean_kernel>
+export func average(t: Tensor): Tensor {
+    return mean(t)
+}
+
+#op<':op/mul_d'>
+func mul_kernel(a: float, b: float): float
+
+#impl<mul_kernel>
+export func scale(a: float, b: float): float {
+    return (a * 2.0) / 2.0
+}
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
@@ -29,8 +49,8 @@ func main(): int sync {
     let ks = scale(2.0, 3.0)
     let bs = by_body_scale(2.0, 3.0)
 
-    'total kernel={} body={} diff={}'->format<kt, bt, kt - bt>->println
-    'average kernel={} body={} diff={}'->format<ka, ba, ka - ba>->println
+    'total kernel={} body={} diff={}'->format<sum(kt), sum(bt), sum(kt - bt)>->println
+    'average kernel={} body={} diff={}'->format<sum(ka), sum(ba), sum(ka - ba)>->println
     'scale kernel={} body={} diff={}'->format<ks, bs, ks - bs>->println
     return 0
 }

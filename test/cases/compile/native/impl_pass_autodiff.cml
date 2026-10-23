@@ -1,30 +1,34 @@
 /**
- * The autodiff pass meets the same tagged function, once with a kernel the reverse pass can
- * differentiate and once with a kernel it cannot, and the two make the two halves of the finding.
+ * The autodiff macro meets a tagged function and meets the kernel, not the body: `std::macro`
+ * expands `grad` over the call's graph, where the direct call of `curve` is one OPER of
+ * `:op/div_d`, so the kernel's own registered derivative rule runs (1/b = 0.5 at (4.0, 2.0)). The
+ * same Camel body reached through the function value is `a * b`, whose gradient is 2.0.
  *
- * `curve` is tagged with `math:sqrt`, a body-less kernel of the math module that carries a
- * derivative rule, while its Camel body says `x * x`. `std::macro` expands `grad` over the call's
- * graph, where the direct call of `curve` is one OPER of `math:sqrt`: the kernel's rule gives
- * 1/(2*sqrt(4.0)) = 0.25, and the same body reached through the function value gives 8.0. The two
- * paths of one tagged function compute two functions, and each gradient is the gradient of the
- * path that ran — the reverse pass reads the kernel, never the semantic body.
- *
- * `total` is tagged with `tensor:sum`, whose rule exists too; the refusal half of the finding is
- * in `impl_pass_autodiff_kernelrule.cml`, where the kernel has no rule at all.
+ * The two gradients differ by 1.5 and the two bodies are different functions, so the number the
+ * reverse pass produced identifies the path it read. Design principles 10.4 says differentiation
+ * expands the body on demand; today it does not — `modules/autodiff/pullback.cpp:3486` looks the
+ * operator's URI up in the derivative registry — and this case is the observable form of that.
  */
 module impl_pass_autodiff
 
 import { grad } from autodiff
-import { curve } from impl_pass_lib
 
-with <x: float>
+#op<':op/div_d'>
+func div_kernel(a: float, b: float): float
+
+#impl<div_kernel>
+func curve(a: float, b: float): float {
+    return a * b
+}
+
+with <a: float, b: float>
 func via_body(): float {
-    return x * x
+    return a * b
 }
 
 func main(): int sync {
-    let d_kernel = grad(curve)<4.0>()
-    let d_body = grad(via_body)<4.0>()
+    let d_kernel = grad(curve)<4.0, 2.0>()
+    let d_body = grad(via_body)<4.0, 2.0>()
     'grad kernel={} body={} diff={}'->format<d_kernel, d_body, d_kernel - d_body>->println
     return 0
 }

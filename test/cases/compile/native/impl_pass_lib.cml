@@ -1,28 +1,30 @@
 /**
  * The library half of the pass cases of `#impl` (design principles 10.4). Every function here
- * keeps its Camel body as the semantics and names a real native kernel of the standard library:
+ * keeps its Camel body as the semantics and names a real native kernel of the tensor module:
  *
- *   - `total`: the kernel is `tensor:sum` (`sum_kernel`), and the body is the argument itself,
- *     so the two paths run different operators over the same input (the kernel's `ReduceSum`
- *     against a reshape) and must still print the same value;
- *   - `average`: the kernel is `tensor:mean` (`mean_kernel`) and the body calls `mean` on the
- *     same argument. Both paths run the same operator here; the case exists to show that the tag
- *     does not change which kernel runs, and the profile counts it once per call;
+ *   - `total`: the kernel is `tensor:sum` (`sum_kernel`); its body reshapes, so the two paths run
+ *     different operators over the same input (a reduction against a reshape) and must still
+ *     print the same value;
+ *   - `average`: the kernel is `tensor:mean` (`mean_kernel`) and the body calls `mean` on the same
+ *     argument. Both paths run the same operator here; the case exists to show that the tag does
+ *     not change which kernel runs, and the profile counts it once per call;
  *   - `scale`: the kernel is `:op/mul_d` (`mul_kernel`) and the body multiplies by 2.0/2.0. The
- *     two agree for the exact binary values of the cases, while the expression is not the
- *     kernel's operator: a pass that reads the kernel and one that reads the body see different
- *     graphs;
+ *     two agree for the exact binary values of the cases, while the expression is not the kernel's
+ *     operator: a pass that reads the kernel and one that reads the body see different graphs;
  *   - `plus`: the kernel is the integer `:op/add_l` (`add_kernel`), whose body is `a - (0 - b)`;
- *   - `curve`: the kernel is `math:sqrt` (`sqrt_kernel`, a kernel of a loaded module) and its
- *     body is `x * x`. The two mean different functions, so `grad` of the two differs: that is
- *     how a case shows the reverse pass read the kernel and not the body.
+ *   - `curve`: the kernel is `:op/div_d` (`div_kernel`) and its body is `a * b`. The two mean
+ *     different functions, so `grad` of the two differs: that is how a case shows the reverse
+ *     pass read the kernel and not the body.
+ *
+ * This module writes `module tensor`, the way `declaration_per_result_type.cml` does: the
+ * declaration of a kernel stands for an operator of the module that implements it, and the
+ * declaration is checked against that module's own protocol. Nothing here replaces or changes the
+ * tensor module; the module search path resolves the import by name as usual.
  *
  * A direct call is one OPER of the kernel; the body is reached only through the function value,
  * which is the expansion every consumer that must look inside reads.
  */
-module impl_pass_lib
-
-import { Tensor, mean, reshape } from tensor
+module tensor
 
 #op<'tensor:sum'>
 func sum_kernel(t: Tensor): Tensor
@@ -56,10 +58,10 @@ export func plus(a: int, b: int): int {
     return a - (0 - b)
 }
 
-#op<'math:sqrt'>
-func sqrt_kernel(x: float): float
+#op<':op/div_d'>
+func div_kernel(a: float, b: float): float
 
-#impl<sqrt_kernel>
-export func curve(x: float): float {
-    return x * x
+#impl<div_kernel>
+export func curve(a: float, b: float): float {
+    return a * b
 }

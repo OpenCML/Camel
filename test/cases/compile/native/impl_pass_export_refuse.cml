@@ -1,18 +1,20 @@
 /**
  * The export path with a kernel the ONNX backend cannot lower, and the point of the case: the
- * exporter must refuse, naming the kernel, rather than drop the call or fall back to the Camel
- * body.
+ * exporter must refuse, naming the kernel, rather than drop the call or silently export the Camel
+ * body instead.
  *
- * `probe`'s Camel body is `tanh(t) * (classes * 1.0)`, all of which would lower; its kernel is
- * `tensor:one_hot`, which has no entry in the lowering table. A direct call runs the kernel, so an
- * honest model would have to contain what `tensor:one_hot` means on this backend — and it cannot
- * be expressed. The exporter therefore refuses at the operator and names it, and writes no file.
- * Exporting the body instead would write a model that computes a scaled `tanh` where the run
- * computes a one-hot: that mismatch is what this case keeps visible.
+ * `probe`'s body is `tanh(t) * 2.0`, all of which lowers; its kernel is `tensor:one_hot`, which
+ * has no entry in the lowering table. A direct call runs the kernel, so a faithful model would
+ * have to contain what `tensor:one_hot` means on this backend, and it cannot be expressed. The
+ * exporter therefore refuses at the kernel operator and names it, and writes no file. Exporting
+ * the body instead would write a model that computes a scaled `tanh` where the run computes a
+ * one-hot: that mismatch is what this case keeps visible.
+ *
+ * This module writes `module tensor` (as `declaration_per_result_type.cml` does) so that it may
+ * declare the kernel its function is tagged with.
  */
-module impl_pass_export_refuse
+module tensor
 
-import { Tensor, one_hot, reshape, shape, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
@@ -20,15 +22,15 @@ import { get_env } from env
 func one_hot_kernel(labels: Tensor, classes: int): Tensor
 
 #impl<one_hot_kernel>
-func probe(t: Tensor, classes: int): Tensor {
-    return tanh(t) * (classes * 1.0)
+func probe(t: Tensor): Tensor {
+    return tanh(t) * 2.0
 }
 
 func main(): int sync {
     let labels = reshape([1.0, 2.0] as f32[], [2])
-    let k = probe(labels, 3)
+    let k = probe(labels)
     'export kernel_shape={}'->format<shape(k)>->println
-    export_model(probe, (labels, 3), get_env('ONNX_OUT'))
+    export_model(probe, labels, get_env('ONNX_OUT'))
     println('unreachable')
     return 0
 }
