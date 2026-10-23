@@ -29,8 +29,7 @@ namespace camel::core {
 
 /// A text read as a bf16 or f16 (`target` is the name in the message): the whole text must be one
 /// number, and one beyond the range of the element type is ConversionOutOfRange.
-template <typename Half>
-camel::core::rtdata::slot_t halfFromText(std::string_view text, const char *target) {
+template <typename Half> slot_t halfFromText(std::string_view text, const char *target) {
     const float asFloat = camel::core::floatFromText<float>(text, target);
     if (camel::core::rtdata::halfOverflows<Half>(asFloat)) {
         error::throwRuntimeFault(

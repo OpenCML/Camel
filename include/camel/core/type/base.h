@@ -133,6 +133,22 @@ template <typename T> inline constexpr bool isComplex(T code) {
     return code == TypeCode::Complex64 || code == TypeCode::Complex128;
 }
 
+/// A floating-point scalar type: `f32`, `float`, and the two reduced-precision floating types
+/// `bf16` and `f16`, which are floating types of the language with a range and a precision of
+/// their own (design principles 7.3). Every test that asks "is this floating point" asks this,
+/// not `code == Float32 || code == Float64`: a question about a family must name the family, or
+/// the next member of it is silently left out of the answer.
+template <typename T> inline constexpr bool isFloatingScalar(T code) {
+    return code == TypeCode::Float32 || code == TypeCode::Float64 || code == TypeCode::BFloat16 ||
+           code == TypeCode::Float16;
+}
+
+/// A numeric scalar type: an integer or a floating-point one (`isFloatingScalar`), the complex
+/// numbers excluded as `isComplex` excludes them everywhere else.
+template <typename T> inline constexpr bool isNumericScalar(T code) {
+    return code == TypeCode::Int32 || code == TypeCode::Int64 || isFloatingScalar(code);
+}
+
 enum class CastSafety {
     Safe      = 1,
     Unsafe    = -1,

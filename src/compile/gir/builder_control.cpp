@@ -226,9 +226,10 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
         }
         if (nodeIsKind(source, runtime::GCNodeKind::Cast)) {
             const auto inputs = normInputsOf(source);
-            Type *from        = inputs.empty() ? nullptr
-                                               : valueTypeOf(nodeTypeOf(nodeDraftOf(source)->ref(inputs.front())));
-            Type *to          = valueTypeOf(nodeTypeOf(source));
+            Type *from = inputs.empty()
+                             ? nullptr
+                             : valueTypeOf(nodeTypeOf(nodeDraftOf(source)->ref(inputs.front())));
+            Type *to   = valueTypeOf(nodeTypeOf(source));
             if (inputs.size() == 1 && from != nullptr && to != nullptr &&
                 from->code() == TypeCode::Struct && to->code() == TypeCode::Struct &&
                 to->castSafetyFrom(from) == CastSafety::Safe) {
@@ -242,10 +243,10 @@ node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
         const auto payload = nodeDraftOf(source)->payloadOf(nodeIdOf(source));
         if (payload.size() >= sizeof(runtime::GCFillBody)) {
             const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
-            const bool structFill = fill->fillKind == runtime::GCFillKind::Struct &&
-                                    type->code() == TypeCode::Struct;
-            const bool tupleFill = fill->fillKind == runtime::GCFillKind::Tuple &&
-                                   type->code() == TypeCode::Tuple;
+            const bool structFill =
+                fill->fillKind == runtime::GCFillKind::Struct && type->code() == TypeCode::Struct;
+            const bool tupleFill =
+                fill->fillKind == runtime::GCFillKind::Tuple && type->code() == TypeCode::Tuple;
             if (structFill || tupleFill) {
                 const auto slots = fill->slots();
                 const auto with  = withInputsOf(source);
@@ -276,13 +277,17 @@ std::optional<literal::Value> exactValueOfData(const data_ptr_t &data) {
     if (const auto real = std::dynamic_pointer_cast<FloatData>(data); real != nullptr) {
         return literal::Value::fromDouble(static_cast<double>(real->data()));
     }
+    if (const auto half = std::dynamic_pointer_cast<HalfData>(data); half != nullptr) {
+        // A bf16 or f16 element: its value is the f32 it widens to, exactly, so an element of a
+        // bf16 or f16 composite converts from the value it holds rather than from a text.
+        return literal::Value::fromDouble(static_cast<double>(half->toFloat()));
+    }
     return std::nullopt;
 }
 
 bool isNumericType(Type *type) {
     return type != nullptr && type->isPrimitive() &&
-           (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64 ||
-            type->code() == TypeCode::Float32 || type->code() == TypeCode::Float64);
+           camel::core::type::isNumericScalar(type->code());
 }
 
 /// Whether the element `data` of a composite literal can be given `type`: the question
@@ -341,8 +346,8 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
         return true;
     }
     if (type->code() == TypeCode::Struct && data->type()->code() == TypeCode::Struct) {
-        auto *structType   = tt::as_ptr<StructType>(type);
-        const auto object  = std::dynamic_pointer_cast<StructData>(data);
+        auto *structType  = tt::as_ptr<StructType>(type);
+        const auto object = std::dynamic_pointer_cast<StructData>(data);
         if (structType == nullptr || object == nullptr ||
             object->raw().size() != structType->size()) {
             return false;
@@ -440,18 +445,19 @@ node_handle_t Builder::convertStructValue(
     // order (design principles 5.2).
     std::vector<size_t> slots(target->size());
     std::iota(slots.begin(), slots.end(), 0);
-    const slot_t empty = camel::core::rtdata::toSlot(
-        ::Struct::create(target->size(), camel::core::mm::autoSpace()));
-    auto &draft       = currGraph_->draft();
+    const slot_t empty =
+        camel::core::rtdata::toSlot(::Struct::create(target->size(), camel::core::mm::autoSpace()));
+    auto &draft        = currGraph_->draft();
     node_handle_t base = draft.ref(draft.materializeStaticValue(empty, target));
     node_handle_t out  = currGraph_->addFillNode(
-        target, runtime::makeFillPayload(runtime::GCFillKind::Struct, slots));
+        target,
+        runtime::makeFillPayload(runtime::GCFillKind::Struct, slots));
     linkNodes(LinkType::Norm, base, out);
     for (size_t i = 0; i < target->size(); ++i) {
         const std::string name(target->fieldName(i));
-        const size_t from      = *source->findField(name);
-        Type *sourceFieldType  = source->typeAt(from);
-        Type *targetFieldType  = target->typeAt(i);
+        const size_t from     = *source->findField(name);
+        Type *sourceFieldType = source->typeAt(from);
+        Type *targetFieldType = target->typeAt(i);
         node_handle_t access =
             currGraph_->addAccsNode(sourceFieldType, std::string(source->fieldName(from)));
         linkNodes(LinkType::Norm, valueOf(value), access);
@@ -461,7 +467,9 @@ node_handle_t Builder::convertStructValue(
             if (targetFieldType->code() == TypeCode::Struct &&
                 sourceFieldType->code() == TypeCode::Struct) {
                 if (node_handle_t inner = convertStructValue(
-                        access, tt::as_ptr<StructType>(targetFieldType), origin)) {
+                        access,
+                        tt::as_ptr<StructType>(targetFieldType),
+                        origin)) {
                     field = inner;
                 } else if (!targetFieldType->assignableFrom(sourceFieldType)) {
                     return nullptr;
@@ -541,8 +549,8 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
     return typed;
 }
 
-node_handle_t Builder::checkValue(
-    node_handle_t node, Type *expected, const GCT::node_ptr_t &origin) {
+node_handle_t
+Builder::checkValue(node_handle_t node, Type *expected, const GCT::node_ptr_t &origin) {
     if (node == nullptr || expected == nullptr) {
         return node;
     }
@@ -569,8 +577,8 @@ node_handle_t Builder::visitInPosition(const GCT::node_ptr_t &gct, Type *expecte
     return node;
 }
 
-node_handle_t Builder::compositeLiteralInType(
-    node_handle_t node, Type *target, const GCT::node_ptr_t &origin) {
+node_handle_t
+Builder::compositeLiteralInType(node_handle_t node, Type *target, const GCT::node_ptr_t &origin) {
     if (origin == nullptr || target == nullptr || asTagged(target) != nullptr ||
         origin->type() != GCT::NodeKind::DATA) {
         return nullptr;
@@ -623,8 +631,8 @@ bool Builder::compositeLiteralEntersIn(
     return compositeEntersIn(data, target, origin);
 }
 
-data_ptr_t Builder::compositeDataInType(
-    const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin) {
+data_ptr_t
+Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin) {
     if (data == nullptr || type == nullptr || asTagged(type) != nullptr) {
         return nullptr;
     }
@@ -663,8 +671,8 @@ data_ptr_t Builder::compositeDataInType(
         return factory.build();
     }
     if (type->code() == TypeCode::Struct && data->type()->code() == TypeCode::Struct) {
-        auto *structType   = tt::as_ptr<StructType>(type);
-        const auto object  = std::dynamic_pointer_cast<StructData>(data);
+        auto *structType  = tt::as_ptr<StructType>(type);
+        const auto object = std::dynamic_pointer_cast<StructData>(data);
         if (structType == nullptr || object == nullptr ||
             object->raw().size() != structType->size()) {
             return nullptr;
@@ -768,8 +776,7 @@ data_ptr_t Builder::literalElementInType(
     rejectLiteralData(data, type, where, nullptr, writtenAt);
 }
 
-void Builder::coerceArmExit(
-    const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
+void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
     Type *exitType = arm->exitType();
     if (exitType != nullptr && target->assignableFrom(exitType)) {
         return;
@@ -1054,8 +1061,10 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     }
     Type *payload          = tagged->payloadType();
     const std::string name = bindTemporary(subject);
-    node_handle_t tagNode      = applyTagOperator(
-        onNull ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError, name, gct);
+    node_handle_t tagNode  = applyTagOperator(
+        onNull ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError,
+        name,
+        gct);
     const camel::core::OperId valueOp =
         onNull ? camel::core::oper::TagNullValue : camel::core::oper::TagErrorValue;
     const GCT::node_ptr_t exec = gct->at(1)->at(0);
@@ -1179,7 +1188,7 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
     }
 
     const std::string name = bindTemporary(scrutinee);
-    node_handle_t tagNode = applyTagOperator(
+    node_handle_t tagNode  = applyTagOperator(
         type->isNullable() ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError,
         name,
         gct);
@@ -1190,8 +1199,7 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
         if (type->isFallible()) {
             insertNode(
                 taggedCase->binding(),
-                applyTagOperator(
-                    camel::core::oper::TagErrorInfo, name, taggedCase));
+                applyTagOperator(camel::core::oper::TagErrorInfo, name, taggedCase));
         }
         return visitBodyNode(taggedExec);
     });
@@ -1345,7 +1353,9 @@ node_handle_t Builder::nullComparison(
         return visitDataNode(literal);
     }
     node_handle_t isNull = applyTagOperator(
-        camel::core::oper::TagIsNull, bindTemporary(valueOf(operands[subject].node)), gct);
+        camel::core::oper::TagIsNull,
+        bindTemporary(valueOf(operands[subject].node)),
+        gct);
     return group == "__eq__" ? isNull : applyTagOperator("__not__", bindTemporary(isNull), gct);
 }
 
@@ -1519,7 +1529,9 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
                     // names kept in the constant), and an unused node costs nothing at run
                     // time, as nothing depends on it.
                     node_handle_t value = applyTagOperator(
-                        camel::core::oper::TagNullValue, opened.temporary, opened.subject);
+                        camel::core::oper::TagNullValue,
+                        opened.temporary,
+                        opened.subject);
                     [[maybe_unused]] const bool bound = insertNode(opened.name, value);
                     ASSERT(bound, "A narrowed name is the first name of its arm.");
                     narrowedValues_.insert(value);
@@ -1551,10 +1563,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
     if (logical) {
         // The right side is the then arm of `&&` and the else arm of `||`.
         const bool rightIsThen = kind == Kind::LogicalAnd;
-        requireBool(
-            arms[rightIsThen == thenFirst ? 0 : 1]->exitType(),
-            "right",
-            rightSideOf(gct));
+        requireBool(arms[rightIsThen == thenFirst ? 0 : 1]->exitType(), "right", rightSideOf(gct));
     }
     // An `if` without `else` has no value (design principles 3.7; see buildBranch).
     const bool valueless = !logical && elseArm.exec->size() == 0;
@@ -1665,8 +1674,8 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
 }
 
 node_handle_t Builder::buildBranch(
-    const GCT::node_ptr_t &gct, node_handle_t condNode,
-    const std::vector<arm_ptr_t> *arms, bool valueless) {
+    const GCT::node_ptr_t &gct, node_handle_t condNode, const std::vector<arm_ptr_t> *arms,
+    bool valueless) {
     node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
     node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, 0);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");
@@ -1792,7 +1801,7 @@ node_handle_t Builder::buildBranch(
                     literal::kindEnters(*pattern, subjectType)) {
                     valueNode = literalInType(*pattern, subjectType, caseNode->at(0), true);
                 }
-                Type *caseType    = valueTypeOf(nodeTypeOf(valueNode));
+                Type *caseType = valueTypeOf(nodeTypeOf(valueNode));
                 if (!subjectType->assignableFrom(caseType)) {
                     diags_->of(SemanticDiag::MatchCaseTypeMismatch)
                         .atOrigin(caseNode->at(0)->origin())
@@ -2146,8 +2155,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         part.graph->draft().setRegionPorts(part.region, ids);
         part.graph->draft().setRegionParams(part.region, params.build());
     };
-    const auto declarePorts = [&](ArmBuild &part, bool withElement,
-                                  const GCT::node_ptr_t &exec) {
+    const auto declarePorts = [&](ArmBuild &part, bool withElement, const GCT::node_ptr_t &exec) {
         const auto add = [&](const std::string &name, Type *type) {
             node_handle_t port = currGraph_->addRegionPortNode(type, name);
             // A port belongs to its region, as the nodes that read it do.
@@ -2184,16 +2192,15 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
         }
-        bodyPart = buildArm(
-            gct->loopBody(),
-            {},
-            runtime::GCRegionKind::LoopBody,
-            [&](ArmBuild &part) { declarePorts(part, hasIterable, gct->loopBody()); });
+        bodyPart =
+            buildArm(gct->loopBody(), {}, runtime::GCRegionKind::LoopBody, [&](ArmBuild &part) {
+                declarePorts(part, hasIterable, gct->loopBody());
+            });
     }
     if (deferredEmpty) {
         node_handle_t next = loopStateValueOf(bodyPart->value);
-        if (bodyPart->returned || !inferLoopStateFromAppend(
-                                      bodyPart, condPart, gct, initial, stateTypes, 0, next)) {
+        if (bodyPart->returned ||
+            !inferLoopStateFromAppend(bodyPart, condPart, gct, initial, stateTypes, 0, next)) {
             diags_->of(SemanticDiag::LoopStateWithoutType)
                 .atOrigin(gct->loopInitial(0)->origin())
                 .commit(
@@ -2247,14 +2254,12 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     };
     SplitPart splitRoot;
     std::vector<SplitPart *> splitComponents;
-    bool splitApplied = false;
+    bool splitApplied    = false;
     Type *splitValueType = nullptr;
     std::vector<bool> privateInitial;
 
     // A part access (`s.x`, `t.0`) of the value a node holds; added to the insert region.
-    const auto addPartAccess = [&](Type *type,
-                                   node_handle_t value,
-                                   size_t step) -> node_handle_t {
+    const auto addPartAccess = [&](Type *type, node_handle_t value, size_t step) -> node_handle_t {
         Type *partType = aggregatePartType(type, step);
         node_handle_t access =
             type->code() == TypeCode::Struct
@@ -2270,8 +2275,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             bodyPart->output == nullptr || !isSplittableAggregate(stateType)) {
             return false;
         }
-        runtime::GraphDraft &draft  = currGraph_->draft();
-        const size_t statePortAt    = camel::core::loopHasIterable(kind) ? 1 : 0;
+        runtime::GraphDraft &draft = currGraph_->draft();
+        const size_t statePortAt   = camel::core::loopHasIterable(kind) ? 1 : 0;
         if (bodyPart->ports.size() != statePortAt + 1) {
             return false;
         }
@@ -2279,11 +2284,12 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             return false;
         }
         const node_handle_t bodyStatePort = bodyPart->ports[statePortAt];
-        const node_handle_t condStatePort =
-            condPart != nullptr ? condPart->ports.front() : nullptr;
+        const node_handle_t condStatePort = condPart != nullptr ? condPart->ports.front() : nullptr;
 
         std::function<bool(
-            SplitPart &, const std::vector<node_handle_t> &, const std::vector<node_handle_t> &)>
+            SplitPart &,
+            const std::vector<node_handle_t> &,
+            const std::vector<node_handle_t> &)>
             buildPart;
         buildPart = [&](SplitPart &part,
                         const std::vector<node_handle_t> &bodyNodes,
@@ -2307,8 +2313,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                         if (user == nullptr) {
                             return true;
                         }
-                        const auto index  = accessedPartOf(user, part.type);
-                        const auto norms  = normInputsOf(user);
+                        const auto index = accessedPartOf(user, part.type);
+                        const auto norms = normInputsOf(user);
                         if (!index.has_value() || norms.size() != 1 ||
                             nodeDraftOf(user)->ref(norms.front()) != source) {
                             return true;
@@ -2317,8 +2323,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                         std::map<size_t, std::vector<node_handle_t>> *uses = nullptr;
                         if (draft.regionWithin(region, bodyPart->region)) {
                             uses = &bodyUses;
-                        } else if (condPart != nullptr &&
-                                   draft.regionWithin(region, condPart->region)) {
+                        } else if (
+                            condPart != nullptr && draft.regionWithin(region, condPart->region)) {
                             uses = &condUses;
                         } else {
                             return true;
@@ -2338,7 +2344,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 child.steps = part.steps;
                 child.steps.push_back(i);
                 const std::string stepName = aggregatePartName(part.type, i);
-                child.name = part.name.empty() ? stepName : part.name + "." + stepName;
+                child.name        = part.name.empty() ? stepName : part.name + "." + stepName;
                 const auto bodyIt = bodyUses.find(i);
                 const auto condIt = condUses.find(i);
                 const std::vector<node_handle_t> none;
@@ -2384,8 +2390,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         for (SplitPart *component : splitComponents) {
             leafTypes.push_back(component->type);
         }
-        Type *valueType =
-            leafTypes.size() == 1 ? leafTypes.front() : TupleType::create(leafTypes);
+        Type *valueType = leafTypes.size() == 1 ? leafTypes.front() : TupleType::create(leafTypes);
 
         const uint32_t outerRegion = draft.insertRegion();
 
@@ -2407,7 +2412,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             std::vector<node_handle_t> condPorts(condPart->ports.begin(), condPart->ports.end());
             condPorts.erase(condPorts.begin());
             for (SplitPart *component : splitComponents) {
-                node_handle_t port = currGraph_->addRegionPortNode(component->type, component->name);
+                node_handle_t port =
+                    currGraph_->addRegionPortNode(component->type, component->name);
                 draft.setNodeRegion(nodeIdOf(port), condPart->region);
                 condComponentPorts.push_back(port);
                 condPorts.push_back(port);
@@ -2434,7 +2440,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 }
             }
             for (const SplitPart &child : part.children) {
-                const size_t step = child.steps.back();
+                const size_t step        = child.steps.back();
                 node_handle_t childValue = nullptr;
                 if (!same) {
                     childValue = projectPart(value, part.type, step);
@@ -2449,8 +2455,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
 
         std::vector<node_handle_t> resolved;
         for (size_t i = 0; i < splitComponents.size(); ++i) {
-            resolved.push_back(
-                nextValues[i] != nullptr ? nextValues[i] : bodyComponentPorts[i]);
+            resolved.push_back(nextValues[i] != nullptr ? nextValues[i] : bodyComponentPorts[i]);
         }
         node_handle_t result = nullptr;
         if (splitComponents.size() == 1) {
@@ -2460,11 +2465,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             std::vector<size_t> slots(count);
             std::iota(slots.begin(), slots.end(), size_t{0});
             result = currGraph_->addFillNode(
-                valueType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
-            const slot_t empty = camel::core::rtdata::toSlot(
-                ::Tuple::create(count, camel::core::mm::autoSpace()));
-            node_handle_t source =
-                draft.ref(draft.materializeStaticValue(empty, valueType));
+                valueType,
+                runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+            const slot_t empty =
+                camel::core::rtdata::toSlot(::Tuple::create(count, camel::core::mm::autoSpace()));
+            node_handle_t source = draft.ref(draft.materializeStaticValue(empty, valueType));
             linkNodes(LinkType::Norm, source, result);
             for (node_handle_t value : resolved) {
                 linkNodes(LinkType::With, value, result);
@@ -2488,7 +2493,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         projections.reserve(splitComponents.size());
         for (SplitPart *component : splitComponents) {
             node_handle_t value = initial.front();
-            Type *current      = const_cast<Type *>(rootStateType);
+            Type *current       = const_cast<Type *>(rootStateType);
             for (size_t step : component->steps) {
                 value   = addPartAccess(current, value, step);
                 current = aggregatePartType(current, step);
@@ -2513,15 +2518,15 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         for (SplitPart *component : splitComponents) {
             stateNames.push_back(component->name);
         }
-        initial       = std::move(projections);
+        initial = std::move(projections);
         privateInitial.assign(splitComponents.size(), false);
         for (size_t i = 0; i < splitComponents.size(); ++i) {
             privateInitial[i] = splitComponents[i]->type != nullptr &&
                                 splitComponents[i]->type->code() == TypeCode::Array;
         }
-        stateType        = valueType;
-        splitValueType   = valueType;
-        splitApplied     = true;
+        stateType      = valueType;
+        splitValueType = valueType;
+        splitApplied   = true;
         refreshPorts(*bodyPart, hasIterable);
         if (condPart != nullptr) {
             refreshPorts(*condPart, false);
@@ -2541,7 +2546,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // the state the program sees (design principles 3.10; the tape autodiff and the exporter
     // read). The state stays the program's value and its gradient channel; the slot is
     // internal, and the FILL below hides it from the loop's users.
-    const std::vector<Type *> collected = collectLoopAppends(bodyPart, gct, stateTypes, emptyInitial);
+    const std::vector<Type *> collected =
+        collectLoopAppends(bodyPart, gct, stateTypes, emptyInitial);
     Type *loopValueType = splitApplied ? splitValueType : stateType;
     if (!collected.empty()) {
         std::vector<Type *> components = stateTypes;
@@ -2554,7 +2560,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     node_handle_t loopNode = currGraph_->addRegionLoopNode(kind, loopValueType);
     if (!collected.empty()) {
         currGraph_->draft().setLoopCollectionCount(
-            nodeIdOf(loopNode), static_cast<uint32_t>(collected.size()));
+            nodeIdOf(loopNode),
+            static_cast<uint32_t>(collected.size()));
     }
     registerNodeOrigin(context_, loopNode, gct, "gir.loop");
     stampPermissions(loopNode);
@@ -2633,13 +2640,16 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             std::vector<size_t> slots(stateTypes.size());
             std::iota(slots.begin(), slots.end(), size_t{0});
             loopValue = currGraph_->addFillNode(
-                stateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
-            const slot_t empty = camel::core::rtdata::toSlot(::Tuple::create(stateTypes.size(), camel::core::mm::autoSpace()));
+                stateType,
+                runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+            const slot_t empty = camel::core::rtdata::toSlot(
+                ::Tuple::create(stateTypes.size(), camel::core::mm::autoSpace()));
             node_handle_t source = currGraph_->draft().ref(
                 currGraph_->draft().materializeStaticValue(empty, stateType));
             linkNodes(LinkType::Norm, source, loopValue);
             for (size_t j = 0; j < stateTypes.size(); ++j) {
-                node_handle_t component = currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
+                node_handle_t component =
+                    currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
                 linkNodes(LinkType::Norm, loopNode, component);
                 linkNodes(LinkType::With, component, loopValue);
             }
@@ -2675,16 +2685,16 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             std::vector<size_t> slots(count);
             std::iota(slots.begin(), slots.end(), size_t{0});
             const bool isStruct = part.type->code() == TypeCode::Struct;
-            node_handle_t fill   = currGraph_->addFillNode(
+            node_handle_t fill  = currGraph_->addFillNode(
                 part.type,
                 runtime::makeFillPayload(
-                    isStruct ? runtime::GCFillKind::Struct : runtime::GCFillKind::Tuple, slots));
-            const slot_t empty =
-                isStruct
-                    ? camel::core::rtdata::toSlot(
-                          ::Struct::create(count, camel::core::mm::autoSpace()))
-                    : camel::core::rtdata::toSlot(
-                          ::Tuple::create(count, camel::core::mm::autoSpace()));
+                    isStruct ? runtime::GCFillKind::Struct : runtime::GCFillKind::Tuple,
+                    slots));
+            const slot_t empty   = isStruct
+                                       ? camel::core::rtdata::toSlot(
+                                             ::Struct::create(count, camel::core::mm::autoSpace()))
+                                       : camel::core::rtdata::toSlot(
+                                             ::Tuple::create(count, camel::core::mm::autoSpace()));
             node_handle_t source = currGraph_->draft().ref(
                 currGraph_->draft().materializeStaticValue(empty, part.type));
             linkNodes(LinkType::Norm, source, fill);
@@ -2727,7 +2737,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
             gct);
     }
     // A function that declares T? or T! returns its plain value boxed (see adaptExitValue).
-    resNode = adaptExitValue(gct, resNode);
+    resNode                    = adaptExitValue(gct, resNode);
     node_handle_t outputAnchor = resNode;
     node_vec_t pendingCtrlInputs;
     if (auto modifier = modifierOf(resNode); modifier.has_value()) {
@@ -2764,9 +2774,9 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         activeRestBody_->returned = true;
     } else if (ArmBuild *arm = activeArm()) {
         // The value of the arm, not of the function (handover H24).
-        arm->output   = outputAnchor;
-        arm->value    = resNode;
-        arm->type     = isVoidGraphExitType(nodeTypeOf(resNode)) ? Type::Void() : nodeTypeOf(resNode);
+        arm->output = outputAnchor;
+        arm->value  = resNode;
+        arm->type   = isVoidGraphExitType(nodeTypeOf(resNode)) ? Type::Void() : nodeTypeOf(resNode);
         arm->returned = true;
     } else {
         checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
@@ -2797,7 +2807,7 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
         result = visitExecNode(gct, tailPositionType());
         if (lastBlockStatement_.first != nullptr) {
             const void *body = activeArm() != nullptr ? static_cast<const void *>(activeArm())
-                                                       : static_cast<const void *>(currGraph_.get());
+                                                      : static_cast<const void *>(currGraph_.get());
             bodyValueStatement_[body] = lastBlockStatement_;
         }
     } catch (...) {
@@ -2971,9 +2981,10 @@ std::vector<Type *> Builder::collectLoopAppends(
     const uint32_t outerRegion = draft.insertRegion();
     draft.setInsertRegion(body->region);
     node_handle_t result = currGraph_->addFillNode(
-        resultType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
-    const slot_t empty = camel::core::rtdata::toSlot(::Tuple::create(
-        resultTypes.size(), camel::core::mm::autoSpace()));
+        resultType,
+        runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+    const slot_t empty = camel::core::rtdata::toSlot(
+        ::Tuple::create(resultTypes.size(), camel::core::mm::autoSpace()));
     node_handle_t source = draft.ref(draft.materializeStaticValue(empty, resultType));
     const std::array<runtime::gc_node_ref_t, 1> sourceInput{nodeIdOf(source)};
     draft.setNormInputs(nodeIdOf(result), sourceInput);
@@ -3092,7 +3103,7 @@ void Builder::markLoopStateInPlaceOne(
     if (normIns.size() != 1) {
         return;
     }
-    node_handle_t port = nodeDraftOf(next)->ref(normIns.front());
+    node_handle_t port  = nodeDraftOf(next)->ref(normIns.front());
     const size_t portAt = index + (camel::core::loopHasIterable(loop->loopKind()) ? 1 : 0);
     if (port == nullptr || portAt >= body->ports.size() || body->ports[portAt] != port) {
         return;
@@ -3115,8 +3126,7 @@ void Builder::markLoopStateInPlaceOne(
         return;
     }
     const std::vector<StaticArg> statics(1);
-    const auto owned =
-        group->resolve({valueType}, {nodeTypeOf(port)}, statics, Modifier::None);
+    const auto owned = group->resolve({valueType}, {nodeTypeOf(port)}, statics, Modifier::None);
     if (!owned.has_value()) {
         return;
     }
