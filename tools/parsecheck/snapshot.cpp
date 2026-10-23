@@ -12,9 +12,13 @@
  * parser was removed.
  *
  * `camel-parsecheck fmtcheck <list>` formats every file that parses and checks that the result
- * parses to the same AST (positions aside) and that formatting it again changes nothing. The
- * first is what makes the formatter safe under the two layout rules: where it breaks a line or
- * removes a space, the meaning must not move.
+ * parses to the same AST (positions aside), that every comment of the input is in it, and that
+ * formatting it again changes nothing. The first is what makes the formatter safe under the two
+ * layout rules: where it breaks a line or removes a space, the meaning must not move. A comment
+ * carries no meaning to the AST, so the second stands in for it: losing a comment is losing source
+ * text, and a formatter that does it is not safe to run in a gate. The third is the
+ * property that makes the gate stable: a second pass that differs would flip it red and green on
+ * the same input.
  */
 
 #include "modes.h"
@@ -35,6 +39,13 @@ uint64_t fnv1a(const std::string &text) {
         hash *= 1099511628211ull;
     }
     return hash;
+}
+
+/// One comment of a file, clipped to one line, for the report of a comment the formatter dropped.
+std::string oneLine(const std::string &comment) {
+    const size_t end = comment.find('\n');
+    const std::string first = comment.substr(0, end);
+    return first.size() > 80 ? first.substr(0, 80) + "..." : first;
 }
 
 /// The formatter orders the imports by module; the order of imports means nothing.
@@ -97,7 +108,8 @@ int runFormatCheck(const std::vector<std::string> &files) {
         std::cerr << "fmtcheck: expected at least 1 file in the list, got 0; refusing to check nothing\n";
         return 2;
     }
-    size_t checked = 0, skipped = 0, changed = 0, unstable = 0, broken = 0;
+    size_t checked = 0, skipped = 0, changed = 0, unstable = 0, broken = 0, comments = 0,
+           dropped = 0;
     for (const std::string &path : files) {
         try {
             const ParseOutcome original = parseText(path, readFile(path));
@@ -106,6 +118,18 @@ int runFormatCheck(const std::vector<std::string> &files) {
                 continue;
             }
             ++checked;
+            // Every comment of the input must appear in the text formatting writes. A comment is
+            // not a node of the AST, so the structural comparison below cannot see one that was
+            // dropped: a formatter that loses a comment rewrites the source silently, and a gate
+            // must not report that as a pass. Checked before the second parse, so a file whose
+            // formatting does not parse back still gets its comment verdict.
+            for (const std::string &comment : original.comments) {
+                ++comments;
+                if (original.formatted.find(comment) == std::string::npos) {
+                    ++dropped;
+                    std::cout << "DROPPED " << path << " " << oneLine(comment) << "\n";
+                }
+            }
             const ParseOutcome again = parseText(path, original.formatted);
             if (!again.accepted ||
                 withSortedImports(again.structure) != withSortedImports(original.structure)) {
@@ -128,8 +152,11 @@ int runFormatCheck(const std::vector<std::string> &files) {
     }
     std::cout << "FMTCHECK files=" << files.size() << " checked=" << checked
               << " skipped(not accepted)=" << skipped << " changed=" << changed
-              << " unstable=" << unstable << " broken=" << broken << "\n";
-    return changed == 0 && broken == 0 ? 0 : 1;
+              << " unstable=" << unstable << " broken=" << broken << " comments=" << comments
+              << " dropped=" << dropped << "\n";
+    // `comments` is reported but not gated here: the floor that refuses a run which examined no
+    // comment is in check.py, which can count the tree's corpus (as it does for the file list).
+    return changed == 0 && dropped == 0 && broken == 0 ? 0 : 1;
 }
 
 } // namespace parsecheck

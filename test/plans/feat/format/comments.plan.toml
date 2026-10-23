@@ -1,0 +1,68 @@
+id = "format.comments"
+order = 321
+tier = "fast"
+tags = ["feat", "format", "formatter", "comments"]
+
+# The comment shapes the formatter used to rewrite: a run of `//` lines right after an opening
+# `{`, a `/* ... */` at the end of a line, a comment between two tokens on one line (after `:`,
+# `,`, `)`, `else`), a comment at the end of the file, and a comment inside an otherwise empty
+# block. Every entry formats its case and asserts, in verify/comments_kept.mjs, that each comment
+# of the case is in the output and that the output is a fixed point: the text the formatter writes
+# must be the text it writes for its own output. The same properties are checked over every .cml
+# of the tree by camel-parsecheck fmtcheck (test/plans/feat/parse/frontend.plan.toml); these cases
+# are the shapes that bug was found on, kept as fixtures so the emitted text is inspectable.
+
+[[tests]]
+name = "format.comments_after_brace"
+desc = "A run of `//` lines immediately after an opening `{` is written whole: after `{` of a `match type`, of a function body, and of a nested block."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/format/comments_after_brace.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script_path = "./verify/comments_kept.mjs"
+timeout_ms = 10000
+
+[[tests]]
+name = "format.comments_block"
+desc = "A `/* ... */` block comment is written where it was, with no space added after it when it ends a line, and a multi-line one keeps its own text."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/format/comments_block.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script_path = "./verify/comments_kept.mjs"
+timeout_ms = 10000
+
+[[tests]]
+name = "format.comments_after_tokens"
+desc = "A `//` comment after `:` or `,` or `)` or `else` or an opening `{` stays on the line it was written on, and the code around it still reads the same."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/format/comments_after_tokens.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script_path = "./verify/comments_kept.mjs"
+timeout_ms = 10000
+
+[[tests]]
+name = "format.comments_end_of_file"
+desc = "A run of `//` lines after the last declaration of the file is kept to the end."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/format/comments_end_of_file.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script_path = "./verify/comments_kept.mjs"
+timeout_ms = 10000
+
+[[tests]]
+name = "format.comments_empty_block"
+desc = "A comment is the content of a `{ }` that holds nothing else: an empty block, one with only `//` lines, and one with only a block comment."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/format/comments_empty_block.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script_path = "./verify/comments_kept.mjs"
+timeout_ms = 10000

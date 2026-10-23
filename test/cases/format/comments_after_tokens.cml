@@ -1,0 +1,14 @@
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func tokens(a: // the parameter's type follows
+           int, b: int): int { // after the return type
+    let c = add(a, // after the comma
+                b) // after the call
+    if c > 0 then { // after the opening brace
+        return c // after the value
+    } else { // after else
+        return -c
+    }
+}

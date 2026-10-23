@@ -1,0 +1,24 @@
+func arms::<T>(x: T): T when is_numeric::<T>() {
+    return match type T {
+        // the integer and complex arms
+        // share this rule, and this
+        // is the third line of the block
+        case int | i32 | c64 | c128 => x
+        case float => x
+    }
+}
+
+func body(): int {
+    // the body's comment
+    // second line
+    return 0
+}
+
+func nested(): int {
+    if 1 > 0 then {
+        // inside the nested block
+        // second nested line
+        return 1
+    }
+    return 0
+}

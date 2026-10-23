@@ -85,6 +85,16 @@ ParseOutcome parseText(const std::string &path, const std::string &text) {
     }
     if (parser.parsed()) {
         outcome.formatted = Formatter(*parser.tree(), Formatter::Options{}).format();
+        // The comment tokens as the formatter has to write them back. The text is the source
+        // spelling, which is what insertComment copies; a comment the formatter drops is a
+        // comment this list holds and `formatted` does not (snapshot.cpp).
+        const syn::TokenBuffer &buffer = parser.tree()->tokens();
+        for (const syn::Token &token : buffer.tokens()) {
+            if (token.kind == TK::LineComment || token.kind == TK::DocComment ||
+                token.kind == TK::BlockComment) {
+                outcome.comments.emplace_back(buffer.text(token));
+            }
+        }
     }
     return outcome;
 }

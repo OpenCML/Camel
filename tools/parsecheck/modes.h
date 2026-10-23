@@ -21,6 +21,10 @@ struct ParseOutcome {
     std::string diagnostics; // the diagnostics alone, as JSON
     std::string structure;   // the AST without positions (empty unless accepted)
     std::string formatted;   // the text camel-format gives (empty unless syntaxOk)
+    /// The text of every comment token of the source, in order (empty unless syntaxOk). A comment
+    /// is not a node of the AST, so comparing two trees cannot see one that formatting dropped;
+    /// this is what fmtcheck compares against `formatted`.
+    std::vector<std::string> comments;
 };
 
 std::string readFile(const std::string &path);
@@ -29,7 +33,7 @@ ParseOutcome parseText(const std::string &path, const std::string &text);
 
 /// `hashes`: a hash of the normalized AST of every file, the regression snapshot of the parser.
 int runHashes(const std::vector<std::string> &files);
-/// `fmtcheck`: formatting keeps the AST, and formatting twice changes nothing.
+/// `fmtcheck`: formatting keeps the AST and every comment, and formatting twice changes nothing.
 int runFormatCheck(const std::vector<std::string> &files);
 /// `fuzz`: the parser on mutated programs; a mutant that breaks an invariant goes to `outDir`.
 int runFuzz(
