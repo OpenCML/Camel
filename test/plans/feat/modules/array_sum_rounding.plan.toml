@@ -1,0 +1,21 @@
+id = "modules.array_sum_rounding"
+order = 377
+tier = "fast"
+tags = ["feat", "modules", "stdlib", "types", "precision"]
+desc = "A floating-point reduction returns the element type and accumulates in f64, rounding once at the end (design principles 7.3; ruling docs/handover/reviews/reduced-precision.md item (d)). `array::sum` over an f32 array used to accumulate in f32 and round after every addition, so it disagreed with the tensor sum over the same elements, which accumulates in double and rounds once; the two paths now answer the same bits."
+
+# The property, on two vectors whose per-step f32 fold and one-rounding f64 sum differ, with the
+# tensor path over the same elements pinned beside them.
+
+[[tests]]
+name = "array_sum_rounding"
+desc = "`array::sum` over an f32 array of 2^24 followed by 1025 ones answers 16778240 (0x4B800200, bytes [0, 2, 128, 75]): the f64 sum 16778241 rounded once, ties to even. A fold with an f32 accumulator answers 16777216 (bytes [0, 0, 128, 75]) — 2^24 + 1 rounds back to 2^24 at every step — so `sum == f32(f64 reference)` and `sum != the per-step fold` are both informative, and the tensor sum over the same elements has the array path's bytes. The 4096-element mixed-magnitude vector agrees the same way (16780288 against the fold's 16777216 and the exact 16780287). Before item (d), `array::sum` answered the per-step fold (16777216 and 16777216) while the tensor path answered 16778240 and 16780288, so these two properties and the byte comparison were red."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/array_sum_rounding.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "A array sum\n16778240.0\nA f64 reference\n16778241.0\nA per-step f32 fold\n16777216.0\nA array bytes\n[0, 2, 128, 75]\nA tensor bytes\n[0, 2, 128, 75]\nB array sum\n16780288.0\nB f64 reference\n16780287.0\nB per-step f32 fold\n16777216.0\nB array bytes\n[0, 6, 128, 75]\nB tensor bytes\n[0, 6, 128, 75]\nround once: true true\ndiffers from the per-step fold: true true\ntensor agrees: true true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
