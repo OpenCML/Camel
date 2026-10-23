@@ -240,7 +240,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     // edge of a writing leaves the class of the value it reads. A graph with one writing per
     // value (the executable state) has none of this and is dumped exactly as before.
     const auto graphClasses = [&]() {
-        const auto model = camel::runtime::findCostModel(kWritingsCostModel);
+        const auto model = camel::runtime::findCostModel(camel::runtime::kWritingsCostModel);
         if (!model || graph->executable()) {
             return camel::runtime::GraphWritings{};
         }
