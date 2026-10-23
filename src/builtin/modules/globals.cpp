@@ -82,52 +82,61 @@ resolver_ptr_t withFixedSignature(resolver_ptr_t resolver, FunctionType *signatu
     return resolver;
 }
 
-/// The overloads of a binary operator over the two reduced-precision floating types: both
-/// operands are one of them and so is the result (`bf16 + bf16` is a bf16), or a bool for the
-/// comparing operators (design principles 7.3). The `f32` and `f64` overloads of these groups
-/// say the same shape; this writes it once for both types.
-std::vector<std::pair<std::string, resolver_ptr_t>>
-halfBinaryOverloads(const std::string &stem, bool returnsBool = false) {
-    std::vector<std::pair<std::string, resolver_ptr_t>> entries;
-    for (const auto &[suffix, type] :
-         {std::pair<std::string, Type *(*)()>{"bf", &Type::BFloat16},
-          std::pair<std::string, Type *(*)()>{"f6", &Type::Float16}}) {
-        entries.push_back(
-            {":op/" + stem + suffix,
-             StaticFuncTypeResolver::create(
-                 {},
-                 {{type(), false}, {type(), false}},
-                 returnsBool ? Type::Bool() : type())});
+/// The two entries a group adds for the reduced-precision floating types, written where the
+/// group's other entries are (a group is a braced list, and a `std::vector` cannot be one of its
+/// elements, so a function call cannot stand in for the two entries). The URI suffix is `bf` for
+/// bf16 and `f6` for f16 (`b` is already bool).
+///
+/// A binary operator of a group whose result is the operand type; both operands are the type.
+#define CAMEL_HALF_BINARY(STEM)                                                                    \
+    {":op/" STEM "_bf",                                                                            \
+     StaticFuncTypeResolver::create(                                                               \
+         {},                                                                                       \
+         {{Type::BFloat16(), false}, {Type::BFloat16(), false}},                                   \
+         Type::BFloat16())},                                                                       \
+    {                                                                                              \
+        ":op/" STEM "_f6", StaticFuncTypeResolver::create(                                         \
+                               {},                                                                 \
+                               {{Type::Float16(), false}, {Type::Float16(), false}},               \
+                               Type::Float16())                                                    \
     }
-    return entries;
-}
 
-/// The overloads of a compound assignment over the two reduced-precision floating types: the
-/// target cell is one of them and keeps its type (`acc += x`).
-std::vector<std::pair<std::string, resolver_ptr_t>> halfAssignOverloads(const std::string &stem) {
-    std::vector<std::pair<std::string, resolver_ptr_t>> entries;
-    for (const auto &[suffix, type] :
-         {std::pair<std::string, Type *(*)()>{"bf", &Type::BFloat16},
-          std::pair<std::string, Type *(*)()>{"f6", &Type::Float16}}) {
-        entries.push_back(
-            {":op/" + stem + suffix,
-             StaticFuncTypeResolver::create({}, {{type(), true}, {type(), false}}, type())});
+/// A comparing operator of a group: the operands are the type, the result is bool.
+#define CAMEL_HALF_COMPARE(STEM)                                                                   \
+    {":op/" STEM "_bf",                                                                            \
+     StaticFuncTypeResolver::create(                                                               \
+         {},                                                                                       \
+         {{Type::BFloat16(), false}, {Type::BFloat16(), false}},                                   \
+         Type::Bool())},                                                                           \
+    {                                                                                              \
+        ":op/" STEM "_f6", StaticFuncTypeResolver::create(                                         \
+                               {},                                                                 \
+                               {{Type::Float16(), false}, {Type::Float16(), false}},               \
+                               Type::Bool())                                                       \
     }
-    return entries;
-}
 
-/// The overloads of a unary operator over the two reduced-precision floating types (`-x`).
-std::vector<std::pair<std::string, resolver_ptr_t>> halfUnaryOverloads(const std::string &stem) {
-    std::vector<std::pair<std::string, resolver_ptr_t>> entries;
-    for (const auto &[suffix, type] :
-         {std::pair<std::string, Type *(*)()>{"bf", &Type::BFloat16},
-          std::pair<std::string, Type *(*)()>{"f6", &Type::Float16}}) {
-        entries.push_back(
-            {":op/" + stem + suffix,
-             StaticFuncTypeResolver::create({}, {{type(), false}}, type())});
+/// A compound assignment of a group: the target is the type and keeps it, the value is the type.
+#define CAMEL_HALF_ASSIGN(STEM)                                                                    \
+    {":op/" STEM "_bf",                                                                            \
+     StaticFuncTypeResolver::create(                                                               \
+         {},                                                                                       \
+         {{Type::BFloat16(), true}, {Type::BFloat16(), false}},                                    \
+         Type::BFloat16())},                                                                       \
+    {                                                                                              \
+        ":op/" STEM "_f6", StaticFuncTypeResolver::create(                                         \
+                               {},                                                                 \
+                               {{Type::Float16(), true}, {Type::Float16(), false}},                \
+                               Type::Float16())                                                    \
     }
-    return entries;
-}
+
+/// A unary operator of a group (`-x`): the operand is the type and so is the result.
+#define CAMEL_HALF_UNARY(STEM)                                                                     \
+    {":op/" STEM "_bf",                                                                            \
+     StaticFuncTypeResolver::create({}, {{Type::BFloat16(), false}}, Type::BFloat16())},           \
+    {                                                                                              \
+        ":op/" STEM "_f6",                                                                         \
+            StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float16())        \
+    }
 
 } // namespace
 
@@ -755,7 +764,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         Type::Complex128()),
                 },
                 // bf16 and f16: `acc += x` on one of them (design principles 7.3).
-                halfAssignOverloads("assn_add"),
+                CAMEL_HALF_ASSIGN("assn_add"),
             }),
         OperatorGroup::create(
             "__assn_sub__",
@@ -802,7 +811,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
-                halfAssignOverloads("assn_sub"),
+                CAMEL_HALF_ASSIGN("assn_sub"),
             }),
         OperatorGroup::create(
             "__assn_mul__",
@@ -849,7 +858,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
-                halfAssignOverloads("assn_mul"),
+                CAMEL_HALF_ASSIGN("assn_mul"),
             }),
         OperatorGroup::create(
             "__assn_div__",
@@ -896,7 +905,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
-                halfAssignOverloads("assn_div"),
+                CAMEL_HALF_ASSIGN("assn_div"),
             }),
         OperatorGroup::create(
             "__assn_mod__",
@@ -991,7 +1000,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), true}, {Type::Int64(), false}},
                         Type::Complex128()),
                 },
-                halfAssignOverloads("assn_pow"),
+                CAMEL_HALF_ASSIGN("assn_pow"),
             }),
         OperatorGroup::create(
             "__assn_and__",
@@ -1124,7 +1133,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             return Type::Bool();
                         }),
                 },
-                halfBinaryOverloads("eq", true),
+                CAMEL_HALF_COMPARE("eq"),
             }),
         OperatorGroup::create(
             "__neq__",
@@ -1211,7 +1220,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             return Type::Bool();
                         }),
                 },
-                halfBinaryOverloads("ne", true),
+                CAMEL_HALF_COMPARE("ne"),
             }),
         // `===` and `!==` are not supported for now (design principles 4.2): the front end
         // refuses them, so there is no operator behind them.
@@ -1254,7 +1263,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
-                halfBinaryOverloads("lt", true),
+                CAMEL_HALF_COMPARE("lt"),
             }),
         OperatorGroup::create(
             "__le__",
@@ -1294,7 +1303,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
-                halfBinaryOverloads("le", true),
+                CAMEL_HALF_COMPARE("le"),
             }),
         OperatorGroup::create(
             "__gt__",
@@ -1334,7 +1343,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
-                halfBinaryOverloads("gt", true),
+                CAMEL_HALF_COMPARE("gt"),
             }),
         OperatorGroup::create(
             "__ge__",
@@ -1374,7 +1383,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
-                halfBinaryOverloads("ge", true),
+                CAMEL_HALF_COMPARE("ge"),
             }),
         // ======= Arithmetic operators =======
         OperatorGroup::create(
@@ -1429,7 +1438,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), false}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
-                halfBinaryOverloads("add"),
+                CAMEL_HALF_BINARY("add"),
             }),
         OperatorGroup::create(
             "__sub__",
@@ -1476,7 +1485,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), false}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
-                halfBinaryOverloads("sub"),
+                CAMEL_HALF_BINARY("sub"),
             }),
         OperatorGroup::create(
             "__mul__",
@@ -1523,7 +1532,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), false}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
-                halfBinaryOverloads("mul"),
+                CAMEL_HALF_BINARY("mul"),
             }),
         OperatorGroup::create(
             "__div__",
@@ -1570,7 +1579,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), false}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
-                halfBinaryOverloads("div"),
+                CAMEL_HALF_BINARY("div"),
             }),
         OperatorGroup::create(
             "__mod__",
@@ -1666,7 +1675,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), false}, {Type::Int64(), false}},
                         Type::Complex128()),
                 },
-                halfBinaryOverloads("pow"),
+                CAMEL_HALF_BINARY("pow"),
             }),
         OperatorGroup::create("__mat__", {}),
         OperatorGroup::create(
@@ -1759,7 +1768,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), false}},
                         Type::Complex128()),
                 },
-                halfUnaryOverloads("neg"),
+                CAMEL_HALF_UNARY("neg"),
             }),
         OperatorGroup::create(
             "__inv__",
