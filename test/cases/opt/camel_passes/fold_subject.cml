@@ -1,0 +1,45 @@
+module fold_subject
+
+// The corpus of the constant-folding comparison (H227): operations whose operands are all
+// constants and that the front end leaves in the graph, beside an operation that must not fold.
+//
+//   chain      `2 * 3 + 4` written as a chain of lets: the front end folds the two literals into
+//              one constant, `a + 4` stays an operation over constants, and `b * 2` stays an
+//              operation over that one — the second round
+//   compare    `a < b` over two let-bound constants: the front end keeps the comparison
+//   live       `x * 3 + 1` over a parameter: nothing to fold, and it must stay as written
+//
+// Every value is printed, so a folded operation feeds an effect and not the graph's own exit: in a
+// function graph the returned value is also the graph's exit and output value, and a node that
+// anchors its graph cannot be replaced (docs/technical/45_graph_module.md). The front end turns a
+// branch over constants (`&&`, `||`, an `if` on constants) into a BRCH/JOIN; `std::opt::fold`
+// reduces that to a constant too and this pass leaves it, because evaluating an operation is not
+// folding the branch structure around it. The two literals of one expression are folded by the
+// front end before either pass runs, which is why the corpus reaches its chains through `let`s.
+
+func chain(): int sync {
+    let a = 2 * 3
+    let b = a + 4
+    let c = b * 2
+    println(c)
+    return 0
+}
+
+func compare(): int sync {
+    let a = 2
+    let b = 3
+    println(a < b)
+    return 0
+}
+
+func live(x: int): int sync {
+    println(x * 3 + 1)
+    return 0
+}
+
+func main(): int sync {
+    println(chain())
+    println(compare())
+    println(live(4))
+    return 0
+}

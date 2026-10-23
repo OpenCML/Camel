@@ -4579,6 +4579,21 @@ Removes a node whose value nobody reads. A fault when the value is read or the n
 - With effects: changes the transaction.
 - Example: `erase(t, n)`
 
+#### `eval`
+
+```camel
+eval: (t: Txn, n: Node) => Node?
+```
+
+Evaluates the pure operator of the node over its constant operands and gives the node holding
+the result, null when there is no value to compute (an operand is no constant of the graph, the
+node is no pure operation, or evaluating it faults). The node the answer names is the
+transaction's to put in place of `n` with `replace`. A constant expression that can only fault
+is left as written and warned about, as the C++ fold does.
+
+- With effects: changes the transaction.
+- Example: `eval(t, n)`
+
 #### `commit`
 
 ```camel
