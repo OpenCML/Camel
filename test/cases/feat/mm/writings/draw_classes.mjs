@@ -455,7 +455,7 @@ if (MODE === 'gir' || MODE === 'rgir') {
     check(
         'params the declared type is read: a bool where an int is declared is refused at the call',
         wrong.status === 1 &&
-            /The argument 'rounds' of 'std::opt::saturate' has type 'int', not 'bool'/.test(
+            /The argument 'rounds' of 'std::opt::saturate' has type 'bool', not 'int'/.test(
                 wrong.output
             ),
         wrong.output

@@ -316,7 +316,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "draw_classes.params"
-desc = "The pass declares `rounds: int = 6` and `strict: bool = false` in stdlib/std.cml, and a parameter written after the pass name reaches it: `rounds=0` applies no rule, so the program keeps the writing it had and the check of `draw_classes.guard` refuses that dump; `rounds=1` already leaves `x + x` and `x * 2` in one class; `strict=true` keeps the pair, because the integer rules hold bit for bit; `rounds=1+1` is read as an int; and `rounds=true` is refused at the call, naming the declaration's type (`The argument 'rounds' of 'std::opt::saturate' has type 'int', not 'bool'`), before anything runs."
+desc = "The pass declares `rounds: int = 6` and `strict: bool = false` in stdlib/std.cml, and a parameter written after the pass name reaches it: `rounds=0` applies no rule, so the program keeps the writing it had and the check of `draw_classes.guard` refuses that dump; `rounds=1` already leaves `x + x` and `x * 2` in one class; `strict=true` keeps the pair, because the integer rules hold bit for bit; `rounds=1+1` is read as an int; and `rounds=true` is refused at the call, naming the declaration's type (`The argument 'rounds' of 'std::opt::saturate' has type 'bool', not 'int'`), before anything runs."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/feat/mm/writings/draw_classes.mjs"
