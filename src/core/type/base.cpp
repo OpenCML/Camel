@@ -285,7 +285,9 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
     // After excluding auxiliary types, only the slot-sized primitive types remain, plus the two
     // reduced-precision element types, whose codes do not index this matrix (a bf16 or f16 is
     // stored in a compact tensor buffer, never in a slot, and a conversion between them and a
-    // scalar is not a scalar cast: it is a tensor operator that needs `change_precision`).
+    // scalar is not a scalar cast: it is the tensor operator `cast`, and the rounding it does is
+    // the precision the program wrote, so no numeric permission is involved; design principles
+    // 7.2-7.3).
     // The matrix is [from][to], i.e. [sourceIndex][targetIndex].
     if (camel::core::type::isPrimitive(code_) &&
         camel::core::type::isPrimitive(sourceType->code())) {

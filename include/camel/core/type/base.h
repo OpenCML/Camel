@@ -90,7 +90,9 @@ enum class TypeCode : uint32_t {
     // Reduced-precision floating element types (design principles 7.3, H238): the storage of
     // `Tensor<bf16>` and `Tensor<f16>`, two bytes per element, with the conversions of
     // camel/core/rtdata/half.h. They are element types only: no value of either fits in a slot,
-    // no literal has one, and a conversion from another element type needs `change_precision`.
+    // no literal has one; a conversion from another element type is the precision the program
+    // wrote and needs no permission (design principles 7.2-7.3: `change_precision` governs a
+    // computation the compiler moves to lower precision).
     // The bit patterns are not the low 16 bits of their type code, so a consumer that indexes a
     // table by `code & 0xF` must handle them first (castSafetyFrom does).
     BFloat16 = makeTypeCode(TypeFlag::Primitive, 0x014),

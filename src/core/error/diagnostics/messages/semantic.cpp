@@ -1413,14 +1413,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::PrecisionChangeNotPermitted,
-            {
-                "PrecisionChangeNotPermitted",
-                "Converting '{0}' to '{1}' needs the numeric permission 'change_precision'.",
-                "Write #[change_precision] on the function or the block that does the conversion, or convert from a type that already holds the values the reduced element type can hold exactly. Reading a bf16 or f16 value into a wider type never needs the permission.",
-            },
-        },
-        {
             SemanticDiag::ReducedPrecisionUnsupported,
             {
                 "ReducedPrecisionUnsupported",
