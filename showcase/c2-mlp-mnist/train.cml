@@ -22,8 +22,8 @@ module c2_mlp_mnist
 import { Tensor, abs, argmax, cast, load_npy, numel, relu, set_num_threads, shape, slice, sum, take } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
-import { load_tree, save_tree, tree_map, tree_reduce } from ckpt
-import { tree_paths } from tree
+import { load_tree, save_tree } from ckpt
+import { tree_paths, tree_map, tree_reduce } from tree
 import { read_text } from fs
 import { trim } from str
 import { now } from time

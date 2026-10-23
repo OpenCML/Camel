@@ -13,6 +13,14 @@
 //   node test/tools/startup-cost.mjs --reps 41  the same, with more samples
 //   node test/tools/startup-cost.mjs --json     the numbers, without the gate
 //
+// Every line carries the ceiling it is read against and a `result=PASS|FAIL`, the host's
+// 1/5/15-minute load average is printed above them, and a crossed ceiling is named on standard
+// output (`startup-cost: FAILED <measurement>: median <value> ms exceeds ceiling <bound> ms`) --
+// the stream the plan keeps. A shared host gives a crossed ceiling two possible causes and the
+// load is the number that separates a regression from a busy machine; a reason on standard error
+// is a reason the gate's reader never sees. A command that cannot run at all is that
+// measurement's result, not a reason to lose the rest of the log.
+//
 // `camel --version` is the process itself: dynamic loading, static initialisation and argument
 // parsing, with no context. `imports_nothing` adds the smallest compile and run. `inspect_ops`
 // imports every standard library module (`registry_all.cml`), so it is where the declaration
@@ -39,6 +47,7 @@
 
 import { spawnSync } from 'child_process'
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { declarationModules } from '../../scripts/stdlib-declarations.mjs'
@@ -255,7 +264,21 @@ function main() {
     const results = []
     const failures = []
     for (const testCase of CASES) {
-        const summary = measure(testCase.argv(), 3, reps)
+        // A command that cannot run (a missing file, a crash) is this case's result, not a
+        // reason to lose the other three: an exception here used to leave standard output
+        // empty, and the plan could only report "expected exit 0, got 1".
+        let summary
+        try {
+            summary = measure(testCase.argv(), 3, reps)
+        } catch (error) {
+            results.push({
+                name: testCase.name,
+                ceiling_ms: testCase.ceilingMs,
+                error: error.message,
+            })
+            failures.push(`${testCase.name}: ${error.message}`)
+            continue
+        }
         results.push({ name: testCase.name, ceiling_ms: testCase.ceilingMs, ...summary })
         // `--json` is the reporting mode: it prints the numbers and gates nothing.
         if (!json && summary.median > testCase.ceilingMs) {
@@ -281,46 +304,74 @@ function main() {
     // left unchanged: it is not too tight, and lowering it to 25% would turn an honest change of
     // the import path into a red gate.
     const DECLARATION_SHARE_CEILING = 30
-    const declarations = declarationCost(reps)
-    if (!json && declarations.median > DECLARATION_CEILING_US) {
-        failures.push(
-            `declaration.cost: median ${declarations.median.toFixed(1)} us per declaration ` +
-                `exceeds ceiling ${DECLARATION_CEILING_US} us`
-        )
+    let declarations = null
+    try {
+        declarations = declarationCost(reps)
+    } catch (error) {
+        // Same rule as the four commands above: name what failed and why on standard output.
+        failures.push(`declaration.cost: ${error.message}`)
     }
-    if (!json && declarations.share.median > DECLARATION_SHARE_CEILING) {
-        failures.push(
-            `declaration.cost: the declaration modules are ${declarations.share.median.toFixed(1)}% ` +
-                `of the compile work, over the ceiling of ${DECLARATION_SHARE_CEILING}%`
-        )
+    if (declarations !== null) {
+        if (!json && declarations.median > DECLARATION_CEILING_US) {
+            failures.push(
+                `declaration.cost: median ${declarations.median.toFixed(1)} us per declaration ` +
+                    `exceeds ceiling ${DECLARATION_CEILING_US} us`
+            )
+        }
+        if (!json && declarations.share.median > DECLARATION_SHARE_CEILING) {
+            failures.push(
+                `declaration.cost: the declaration modules are ${declarations.share.median.toFixed(1)}% ` +
+                    `of the compile work, over the ceiling of ${DECLARATION_SHARE_CEILING}%`
+            )
+        }
     }
     if (json) {
         console.log(JSON.stringify({ camel: camelExe(), reps, results, declaration: declarations }, null, 2))
         return 0
     }
+    // The host's load, in the same log as the medians: on a shared machine a crossed ceiling
+    // has two possible causes, and the reader needs the one number that separates them. The
+    // `result=` field on every line means a red log names the measurement and its ceiling
+    // together, instead of a bare "expected exit 0" with the reason on an unseen stream.
+    console.log(
+        `startup.cost host load=${os.loadavg().map((value) => value.toFixed(1)).join('/')} reps=${reps}`
+    )
     for (const result of results) {
+        if (result.error !== undefined) {
+            console.log(
+                `startup.cost ${result.name.padEnd(16)} result=ERROR ${result.error} ` +
+                    `ceiling=${result.ceiling_ms} ms`
+            )
+            continue
+        }
+        const verdict = result.median > result.ceiling_ms ? 'FAIL' : 'PASS'
         console.log(
             `startup.cost ${result.name.padEnd(16)} median=${result.median.toFixed(1)} ms ` +
                 `p10=${result.p10.toFixed(1)} p90=${result.p90.toFixed(1)} ` +
                 `min=${result.min.toFixed(1)} max=${result.max.toFixed(1)} ` +
-                `n=${result.n} ceiling=${result.ceiling_ms} ms`
+                `n=${result.n} ceiling=${result.ceiling_ms} ms result=${verdict}`
         )
     }
-    console.log(
-        `declaration.cost declarations=${declarations.declarations} ` +
-            `per_declaration_us=${declarations.median.toFixed(1)} ` +
-            `p10=${declarations.p10.toFixed(1)} p90=${declarations.p90.toFixed(1)} ` +
-            `min=${declarations.min.toFixed(1)} max=${declarations.max.toFixed(1)} ` +
-            `share=${declarations.share.median.toFixed(1)}% ` +
-            `n=${declarations.n} ceiling=${DECLARATION_CEILING_US} us`
-    )
-    if (failures.length > 0) {
-        for (const failure of failures) {
-            console.error(`startup-cost: ${failure}`)
-        }
-        return 1
+    if (declarations !== null) {
+        const shareVerdict = declarations.share.median > DECLARATION_SHARE_CEILING ? 'FAIL' : 'PASS'
+        console.log(
+            `declaration.cost declarations=${declarations.declarations} ` +
+                `per_declaration_us=${declarations.median.toFixed(1)} ` +
+                `p10=${declarations.p10.toFixed(1)} p90=${declarations.p90.toFixed(1)} ` +
+                `min=${declarations.min.toFixed(1)} max=${declarations.max.toFixed(1)} ` +
+                `share=${declarations.share.median.toFixed(1)}% ` +
+                `n=${declarations.n} ceiling=${DECLARATION_CEILING_US} us ` +
+                `share_ceiling=${DECLARATION_SHARE_CEILING}% ` +
+                `result=${shareVerdict}`
+        )
     }
-    return 0
+    // Standard output, not standard error: the plan keeps this stream as the test's log, and a
+    // failure the reader cannot see is indistinguishable from a hang. Each line names the
+    // measurement, the value and the bound it crossed.
+    for (const failure of failures) {
+        console.log(`startup-cost: FAILED ${failure}`)
+    }
+    return failures.length > 0 ? 1 : 0
 }
 
 process.exit(main())

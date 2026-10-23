@@ -21,9 +21,19 @@
 # about three times below the ceilings. The ceilings were left unchanged (handover notes ⟨83d6558⟩
 # (H177) and the H221 report); their margin over a load-215 window is thinner than it was, though:
 # H142's load factors project about 127 / 113 ms for the two full-import commands, over the 100 / 90
-# ceilings, so a later re-baseline may need 150 / 140. The gate passes at every load measured here.
-# The test prints one `startup.cost` line per command (median, p10, p90, min, max, n) and fails only
-# when a median crosses its ceiling.
+# ceilings, so a later re-baseline may need 150 / 140.
+#
+# On 2026-10-23 this layer ran on a host at load 106-130 (seven of its eight GPUs and every core in
+# other work) and the gate went red on `imports_all`: 92.8 ms alone at `-Jobs 1` and 101.4 ms in the
+# six-job layer, both against the 90 ms ceiling, with p10 at 56.5 and p90 at 132.9 in the serial run.
+# The other three commands moved with it and for no other reason: `--version`, which compiles
+# nothing, read 13.0 / 10.6 ms against its 40 ms ceiling where the tool had recorded 4.9-5.7 ms on
+# 2026-10-22, and `imports_all` itself read 33.7-43.8 ms in the logs of that day. The load moved
+# every command together, so the ceilings stay where they are; the medians of a quiet host still sit
+# about three times below them.
+#
+# `declarations=` is how many declarations the run compiles; it is printed for the record and
+# moves whenever a module is migrated. It is not asserted: only the per-declaration ceiling is.
 #
 # `declaration.cost` is the same idea one level down (handover H152): the compiler's own
 # `--time-phases` report of the declaration modules, added up and divided by their declarations.
@@ -39,8 +49,18 @@
 # numbers and the per-module table in handover note ⟨83d6558⟩ (H177); H221 recorded its window in
 # docs/technical/50_pyplot_cpython_init.md §4.3.
 #
-# `declarations=` is how many declarations the run compiles; it is printed for the record and
-# moves whenever a module is migrated. It is not asserted: only the per-declaration ceiling is.
+# The test prints one `startup.cost` line per command (median, p10, p90, min, max, n, ceiling,
+# `result=PASS|FAIL`) and fails only when a median crosses its ceiling. The tool also prints the
+# host's 1/5/15-minute load average in the same log: a crossed ceiling has two possible causes,
+# and the load is the number that separates a regression from a busy machine. A failure names
+# the measurement, the value and the ceiling on standard output (`startup-cost: FAILED ...`),
+# which is the stream the plan keeps, so a red log carries the reason rather than a bare exit 1.
+#
+# It is `parallel = false`: the gate is an absolute millisecond bound, and this runner gives a
+# benchmark the machine alone for the same reason. Beside five other tests (the full layer at
+# `-Jobs 6`) the number measures the scheduler, not startup. Alone it does not measure a quiet
+# host either: the other worktrees on this machine are outside this runner's slots, which is why
+# the load average is printed beside the medians rather than assumed away.
 id = "perf.startup"
 order = 401
 tier = "slow"
@@ -50,6 +70,7 @@ tags = ["perf", "startup"]
 name = "startup.cost"
 desc = "The whole-process cost of --version, a one-line program, and inspect --ops over the whole standard library."
 kind = "behavior"
+parallel = false
 tool = "node"
 case = "../../tools/startup-cost.mjs"
 args = ["${case}"]
