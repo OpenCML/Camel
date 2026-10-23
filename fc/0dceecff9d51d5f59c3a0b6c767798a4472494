@@ -53,9 +53,4 @@ and "precision-diagnostic-removal". Branch handover/h338-cpu-ceilings, base 1ddc
    headers --check (1329 files), check-std-includes (1062 files), stdlib-declarations --check
    (25 declaration modules, 0 problems).
 
-5. Limits. The 12 ms total prices this tree's 347 declarations and is re-baselined on a
-migration (the per-declaration ceiling is not); it is 1.2x the busiest median measured here and
-1.6x the quiet estimate of 7.6 ms. The four ceilings and the declaration line report ERROR on a
-Windows developer machine (no child CPU accounting), by design. H177's note (83d6558) still
-states the wall-clock rule: it is a note, not a tree file, and is left as the record of the unit
-the ruling replaced.
+5. Limits. The 12 ms total prices this tree's 347 declarations and is re-baselined on a migration (the per-declaration ceiling is not); it is 1.2x the busiest median measured here and 1.6x the quiet estimate of 7.6 ms. The four ceilings and the declaration line report ERROR on a Windows developer machine (no child CPU accounting), by design. H177's note (83d6558) still states the wall-clock rule: it is a note, not a tree file, and is left as the record of the unit the ruling replaced.
