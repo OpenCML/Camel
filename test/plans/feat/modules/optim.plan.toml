@@ -251,6 +251,41 @@ assert(Number(match(new RegExp('optim unstated_dtype_exact failures=(\\d+)'), ou
 timeout_ms = 30000
 
 [[tests]]
+name = "optim.named_argument_crosses_the_overloads"
+desc = "The first parameter of `init` and of `update` is named `opt` in every overload, so `init(opt: ..., params: ...)` and `update(opt: ..., params: ..., grads: ..., state: ...)` bind at the overload set: each call reaches the overload its optimizer's type selects, by Adam's state (which carries the two moment trees) and by the numbers. One of the calls writes its four names in another order, which a binding that read the position the argument is written in would place wrongly, and every named call is compared with the same call written positionally. The parameters of the Adam overloads used to be named `adam_opt`, which no call could name at all: a named argument at a call of several declarations was refused, so this case could not be written."
+kind = "behavior"
+case = "../../../cases/modules/optim/named_args.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["optim named_args sgd=0.75 sgd_step=1", "adam_step=1 mismatches=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${input.normalized.stdout}`)
+const out = input.normalized.stdout
+const named = match(/optim named_args sgd=(\S+) sgd_step=(\d+) adam=(\S+) adam_m=(\S+) adam_v=(\S+) adam_step=(\d+) mismatches=(\d+)/, out).slice(1, 8).map(Number)
+const [sgd, sgdStep, adam, adamM, adamV, adamStep, mismatches] = named
+// One sgd step at a rate of 0.5 with a gradient of 0.5: 1.0 - 0.5 * 0.5 is 0.75, and the step
+// count is one. The Adam overload lands elsewhere (the same rate and gradient, with the adaptive
+// factor and `eps`), so a named `update` that reached the sgd overload cannot pass this.
+assert(sgdStep === 1, `the sgd state counted ${sgdStep} updates`)
+assert(adamStep === 1, `the adam state counted ${adamStep} updates`)
+assert(sgd === 0.75, `the sgd step gave ${sgd}, not 0.75`)
+assert(approx(adam, 0.5000999800039992, 1e-12), `the adam step gave ${adam}`)
+// The moments of the Adam state after one step: (1 - beta1) * g is 0.25 and (1 - beta2) * g^2 is
+// 0.1875, at the leaves of the parameter tree the state was built from.
+assert(approx(adamM, 0.25, 1e-15), `the adam state's first moment is ${adamM}`)
+assert(approx(adamV, 0.1875, 1e-15), `the adam state's second moment is ${adamV}`)
+// The case compares every named call with the positional one and reads the Adam state's moments;
+// that count is the property, not this script's arithmetic.
+assert(mismatches === 0, `the case counted ${mismatches} mismatches`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
 name = "optim.unknown_optimizer_is_refused"
 desc = "An optimization that is neither `Sgd` nor `Adam` is not one the module knows: `init` has one overload per optimizer, so a call with any other type is refused where it is written. The type used to be accepted whatever it was and answered with the state `adam` builds; the call is now a `SemanticDiag::NoMatchingFunction` that lists the two overloads and nothing else."
 kind = "negative"

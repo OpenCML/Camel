@@ -790,6 +790,24 @@ class Builder {
     /// of a generic declaration. Null for a function value, an operator, or an overload set.
     const std::vector<std::optional<ParameterDefaultValue>> *defaultsOfCallee(
         node_handle_t callee, bool isWith) const;
+    /// One declaration a name stands for: its signature, and the owner its parameter defaults are
+    /// kept under (a graph or a generic template).
+    struct CalleeDeclaration {
+        FunctionType *signature = nullptr;
+        const void *owner      = nullptr;
+    };
+    /// The declarations a callee stands for and the name they are written under: a generic
+    /// function's templates, or the graphs of a name with several functions. Null for a value, a
+    /// native operator group, and a name with one declaration (whose call reads its signature).
+    struct CalleeSet {
+        std::string label;
+        std::vector<CalleeDeclaration> declarations;
+    };
+    std::optional<CalleeSet> declarationsOfCallee(node_handle_t callee) const;
+    /// Whether one of the declarations gives the parameter at `position` of `isWith`'s list a
+    /// default. A call whose callee is several declarations fills no default (one declaration
+    /// writes it), so it reports the parameter instead.
+    bool anyDeclarationDefaults(const CalleeSet &set, size_t position, bool isWith) const;
     /// Binds the arguments written at a call to the callee's parameters: a name to the parameter
     /// it names, an omitted parameter to its default (design principles 4.4). Reports an unknown
     /// name, a parameter given twice, and a parameter left without a value. `isWith` selects the
@@ -805,6 +823,17 @@ class Builder {
     void bindArguments(
         std::vector<Argument> &inputs, node_handle_t callee, const GCT::node_ptr_t &call,
         FunctionType *signature, bool isWith);
+    /// Binds the named arguments of a call whose callee is several declarations, where no single
+    /// signature answers for which parameter a name is (design principles 4.4). The parameter at a
+    /// position carries the same name in every declaration of the set, so a name the call writes
+    /// means one position there and the argument is placed at it; a name no declaration has, a
+    /// name different declarations give to different positions, and a name at a position a
+    /// declaration names differently are refused, as is a call that leaves a parameter of the set
+    /// without a value (a default is written by one declaration, and the call does not say which
+    /// one it means).
+    void bindNamedArgumentsToDeclarations(
+        std::vector<Argument> &inputs, const CalleeSet &set, const GCT::node_ptr_t &call,
+        bool isWith);
     // Variables: the nodes bound by `var` (declarations, `var` parameters, the ports that capture
     // them). Such a node does not hold a value but the variable's cell (TupleType::cell), which
     // is what a `var` parameter or a capture receives; a value is read out of it by `:var/get`

@@ -1365,6 +1365,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::OverloadParameterNames,
+            {
+                "OverloadParameterNames",
+                "The argument '{0}' is given by name, and the overloads of '{1}' do not name the parameter at that position the same way.",
+                "Give every overload the same parameter names at the same positions, or give the arguments positionally.",
+            },
+        },
+        {
             SemanticDiag::ParamArgumentPositionalAfterNamed,
             {
                 "ParamArgumentPositionalAfterNamed",

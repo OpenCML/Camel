@@ -323,6 +323,11 @@ enum class SemanticDiag : uint32_t {
     ParamArgumentMissing = 0x0001CF,
     /// An ordinary argument is given by name where the callee's signature is not known.
     ParamArgumentCallee = 0x0001D0,
+    /// A name is given at a call of several declarations, and the parameter at the position the name
+    /// means is not named the same way in every one of them (design principles 4.4): one named argument
+    /// then means one parameter in one declaration and another in another, so no one parameter answers
+    /// to the name. The rule is one rule for the two lists: a `with` argument is an argument here.
+    OverloadParameterNames = 0x0001DF,
     /// A positional argument is written after a named one.
     ParamArgumentPositionalAfterNamed = 0x0001D1,
     /// The default of an ordinary parameter is not a compile-time constant.

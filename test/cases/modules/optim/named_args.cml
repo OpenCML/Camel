@@ -1,0 +1,51 @@
+/**
+ * The parameter at a position carries the same name in every overload of `init` and of `update`,
+ * so one named argument means the same parameter in each of them: `init(opt: ..., params: ...)` and
+ * `update(opt: ..., params: ..., grads: ..., state: ...)` reach the `sgd` overload and the `adam`
+ * overload alike, and the name, not the place the argument is written in, says where it goes
+ * (docs/handover/reviews/questions-2026-10-23.md, 复核：optim 返工与泛型重载).
+ *
+ * The two states tell the overloads apart: the state of `adam` carries the two moment trees and
+ * the state of `sgd` carries only the step, so reading `state.m` is what a call that reached the
+ * other overload cannot compile. Every named call is also compared, value for value, with the same
+ * call written positionally -- the two are one call and land on the same numbers -- and one of them
+ * writes its four names in another order, which a binding that read the written order would place
+ * wrongly.
+ */
+module optim_named_args
+
+import { constant, adam, init, sgd, update } from optim
+
+type Model = { w: float }
+
+func main(): int sync {
+    let m: Model = { w: 1.0 }
+    let g: Model = { w: 0.5 }
+    let rate = constant(0.5)
+    let betas = adam(rate, beta1: 0.5, beta2: 0.25, eps: 0.0001)
+    var failures = 0
+
+    // Adam, by name, and the same call positionally.
+    let a_state = init(opt: betas, params: m)
+    let a_next = update(opt: betas, params: m, grads: g, state: a_state)
+    let a_plain = update(betas, m, g, init(betas, m))
+    // The state is the one `adam` builds: only it has moments, and they start at zero.
+    if a_state.m.w != 0.0 || a_state.v.w != 0.0 then failures = failures + 1
+    if a_next.1.step != 1 then failures = failures + 1
+    if a_next.0.w != a_plain.0.w then failures = failures + 1
+
+    // Sgd, by name, the same call positionally, and the names written in another order.
+    let sgd_opt = sgd(rate)
+    let s_state = init(opt: sgd_opt, params: m)
+    let s_next = update(opt: sgd_opt, params: m, grads: g, state: s_state)
+    let s_reordered = update(grads: g, state: s_state, opt: sgd_opt, params: m)
+    let s_plain = update(sgd_opt, m, g, init(sgd_opt, m))
+    if s_next.0.w != s_plain.0.w then failures = failures + 1
+    if s_reordered.0.w != s_next.0.w then failures = failures + 1
+    if s_next.1.step != 1 then failures = failures + 1
+
+    'optim named_args sgd={} sgd_step={} adam={} adam_m={} adam_v={} adam_step={} mismatches={}'
+    ->format<s_next.0.w, s_next.1.step, a_next.0.w, a_next.1.m.w, a_next.1.v.w, a_next.1.step, failures>
+    ->println
+    return failures
+}

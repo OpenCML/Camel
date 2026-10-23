@@ -125,7 +125,7 @@ func main(): int sync {
 
 - **默认值是编译期常量表达式**，在声明处求值一次，调用处补进图里：不是每次调用重新求值。所以它不能读同一个声明的形参（`ParamDefaultNotConstant`），也不能是运行期才算出来的值；类型不合是 `ParamDefaultWrongType`。
 - **有默认值的形参之后的形参也必须有默认值**（`ParamAfterDefault`），这样按位置给出时不会出现"后面有值、前面没有"的洞。
-- **按名字的实参写在按位置的之后**，写法与结构体字面量一致：`scale(3, by: 4)`。名字不是该函数的形参是 `ParamArgumentUnknown`，同一个形参给两次是 `ParamArgumentDuplicate`，漏掉没有默认值的形参是 `ParamArgumentMissing`，按名字的实参之后又写按位置的实参是 `ParamArgumentPositionalAfterNamed`。名字在调用处解析，所以被调函数必须是一个已知的声明：同时有几个重载时按名字给实参是 `ParamArgumentCallee`。
+- **按名字的实参写在按位置的之后**，写法与结构体字面量一致：`scale(3, by: 4)`。名字不是该函数的形参是 `ParamArgumentUnknown`，同一个形参给两次是 `ParamArgumentDuplicate`，漏掉没有默认值的形参是 `ParamArgumentMissing`，按名字的实参之后又写按位置的实参是 `ParamArgumentPositionalAfterNamed`。名字在调用处解析：被调函数是一个已知声明时，名字就是它的形参；被调函数是若干个重载时，同一个位置的形参必须在每个重载里同名，名字才指到一个形参上，这样 `opt: …` 这样的实参对每个重载都成立——某个重载把那个位置的形参叫成别的名字，或者一个名字在不同重载里落在不同位置，都是 `OverloadParameterNames`。重载的调用不补默认值：默认值只属于一个声明。被调函数不是已知声明（函数值，或签名各不相同的算子组）时按名字给实参是 `ParamArgumentCallee`。
 - **函数值不携带默认值**：`let g = scale` 之后，`g` 的每个形参都要自己给。默认值属于声明，不属于类型。
 
 ### 7.4.2 `with` 形参
