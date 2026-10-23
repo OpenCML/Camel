@@ -585,6 +585,29 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "gelu_grad.bits"
+desc = "The fused GELU gradient's storage bits at three shapes: the step's own width ([16, 32, 512], the FFN of the d=256 cell), a length that is not a whole number of vectors (1155 = 144 vectors of 8 and a scalar tail of 3), and one element. The digests are the three-pass chain's, shape for shape, in this unit: the kernel rounds the polynomial and the slope as the chain did and takes its tangent from the same vmath::tanh, so one loop in place of three passes moves no bit. They are the vector unit's; the portable entry below carries the portable unit's, which differs in the large shape alone, through the tangent's contraction (0.062% of elements, at most 1.2e-7 — gradient_loops.inl)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gelu_grad_bits.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "gelu_grad_bits ffn=b9a4be7997eefa304e5cab8d818cc4d20aec42178455343d91b654981bdbc001\ngelu_grad_bits tail=296b847f2dd827061f60b7f6165d51eba26a1d89d9dc3c8e12489a6f8c1e7ee6\ngelu_grad_bits single=547151d54b6efe178256131f8bc8049013a5094c5f9309f38457e0e66e81b731\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "gelu_grad.bits.generic_unit"
+desc = "The same bit guard in the portable unit (CAMEL_TENSOR_ISA=generic), which is the one whose bits do not depend on the processor: that unit has no fused multiply-add, so the tangent's expansion cannot contract there and a machine without FMA gives these digests too. The polynomial and the slope are the vector unit's bits as well; the large shape's tangent is where the two part, inside vmath::tanh's declared error (modules/tensor/CMakeLists.txt is the unary units' same setting)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gelu_grad_bits.cml"
+args = ["${case}"]
+envs = ["CAMEL_TENSOR_ISA=generic"]
+expect_exit = 0
+expect_stdout_exact = "gelu_grad_bits ffn=8eaa4caced1c601a800b11efdbe159f85b6780e0233b63cc52022a9f4d389e04\ngelu_grad_bits tail=296b847f2dd827061f60b7f6165d51eba26a1d89d9dc3c8e12489a6f8c1e7ee6\ngelu_grad_bits single=547151d54b6efe178256131f8bc8049013a5094c5f9309f38457e0e66e81b731\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "numeric_contract.generic_unit"
 desc = "The numeric-contract program in the portable kernel units: the same output as the default units."
 kind = "behavior"

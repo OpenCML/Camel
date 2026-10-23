@@ -7,7 +7,7 @@
 
 #include "gradient.h"
 
-#include "elementwise.h"
+#include "cpu.h"
 #include "gemm.h"
 #include "layout.h"
 #include "parallel.h"
@@ -168,39 +168,52 @@ Array *expandAxis(
     return broadcastTo(kept, shape, allocator);
 }
 
+namespace {
+
+/// Serial cost of one element of the fused GELU gradient, as a multiple of one element of a plain
+/// float pass (parallel.h, kNsPerFloat). It is an estimate for sizing the chunk, not a measurement
+/// per call: this pass reads two arrays, writes one and evaluates a tangent, and the isolated probe
+/// puts one element of it at 1.61 ns against 0.16 for a multiply over the same 262144 elements
+/// (test/cases/perf/step_budget.py, one thread) -- about ten plain passes. Eight is the smaller end
+/// of that order, so a chunk has to be worth the split and the chunks stay large enough that their
+/// tails are not worth counting.
+constexpr double kNsPerGeluGradElement = 8.0 * kNsPerFloat;
+
+/// The unit that computes the gradient on this CPU, chosen once (the check the other per-ISA
+/// kernels use). An element is independent of its neighbours and nothing here is a sum, so the unit
+/// decides how many elements one instruction handles and nothing else; both units round the
+/// polynomial and the slope as written (gradient_loops.inl), and the tangent is `vmath::tanh`,
+/// which is where, and the only place where, the two can part.
+detail::GeluGradFn geluGradUnit() {
+    static const detail::GeluGradFn unit = [] {
+#if defined(CAMEL_TENSOR_HAS_AVX2_UNIT)
+        if (cpuFeatures().avx2Fma) {
+            return &detail::geluGradAvx2;
+        }
+#endif
+        return &detail::geluGradGeneric;
+    }();
+    return unit;
+}
+
+} // namespace
+
 Array *geluGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
     const Array *xs = asFloat(x, allocator);
     const Array *gs = asFloat(dy, allocator);
     if (!xs->sameShape(gs)) {
         throw ShapeError("gelu gradient: dy shape differs from the input");
     }
-    const int64_t n          = static_cast<int64_t>(xs->numel());
-    constexpr float kScale   = 0.7978845608028654f; // sqrt(2 / pi)
-    constexpr float kCubic   = 0.044715f;
-    // A polynomial element of this gradient is a few multiply-adds, about twice a plain
-    // elementwise element (parallel.h, kNsPerFloat).
-    const int64_t grain      = grainForWork(kNsPerFloat * 2.0);
-    const float *px          = xs->dataAs<float>();
-    // tanh goes through the vectorized unary kernel; the polynomial parts vectorize as they are.
-    Array *inner = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
-    float *pu           = inner->dataAs<float>();
-    parallelFor(n, grain, [&](int64_t begin, int64_t end) {
-        for (int64_t i = begin; i < end; ++i) {
-            const float v = px[i];
-            pu[i]         = kScale * (v + kCubic * v * v * v);
-        }
-    });
-    const float *pt   = unary(UnaryOp::Tanh, inner, allocator)->dataAs<float>();
-    const float *pg   = gs->dataAs<float>();
-    Array *out = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
-    float *po         = out->dataAs<float>();
-    parallelFor(n, grain, [&](int64_t begin, int64_t end) {
-        for (int64_t i = begin; i < end; ++i) {
-            const float v = px[i], t = pt[i];
-            const float slope = 0.5f * (1.0f + t) +
-                                0.5f * v * (1.0f - t * t) * kScale * (1.0f + 3.0f * kCubic * v * v);
-            po[i]             = pg[i] * slope;
-        }
+    const int64_t n = static_cast<int64_t>(xs->numel());
+    Array *out      = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
+    const float *px = xs->dataAs<float>();
+    const float *pg = gs->dataAs<float>();
+    float *po       = out->dataAs<float>();
+    // One pass: the input and the incoming gradient are read once each, the result is written
+    // once, and nothing holds the polynomial or its tangent (gradient_loops.inl).
+    const detail::GeluGradFn run = geluGradUnit();
+    parallelFor(n, grainForWork(kNsPerGeluGradElement), [&](int64_t begin, int64_t end) {
+        run(px + begin, pg + begin, po + begin, end - begin);
     });
     return out;
 }
