@@ -1,0 +1,39 @@
+// Second order through a gather of an array parameter: the zero array in the gradient graph.
+//
+// f(xs) = xs[0]^3 at xs = [2, 3]:
+//   f'(xs) = [3*xs0^2, 0] = [12, 0]
+//   d/dxs0 (3*xs0^2) = 6*xs0 = 12 ; the other components are exactly 0.
+//
+// The gather's gradient is a zero array of the parameter's length (`tangent/zeros_arr`) with the
+// element's gradient scattered into it. The zero array's values are the zero tangents of the
+// elements of the array it takes only a length from, so its rule passes on no gradient (design
+// principles 9.9): the 12 of the read must survive, and nothing may be added through the zero.
+// A rule that leaked the upstream gradient into the parameter would change the printed numbers.
+// Without the rule the build refuses with "no derivative rule for operator
+// ':tangent/zeros_arr'" (exit 1).
+module second_order_array_zeros
+
+import { grad } from autodiff
+
+with <xs: float[]>
+func f(): float {
+    return xs[0] * xs[0] * xs[0]
+}
+
+with <v: float[]>
+func df0(): float {
+    let g = grad(f)<v>()
+    return g[0]
+}
+
+func main(): int sync {
+    let xs = [2.0, 3.0, 0.0]
+    let g = grad(f)<xs>()
+    let h = grad(df0)<xs>()
+    'second_order_array_zeros d0={:.1f} d1={:.1f} dd0={:.1f} dd1={:.1f}'->format<
+        g[0],
+        g[1],
+        h[0],
+        h[1]>->println
+    return 0
+}
