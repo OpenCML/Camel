@@ -86,11 +86,19 @@ class EdgeChecker {
                 continue;
             }
             if ((user->flags & kGCNodeFlagSyncStatement) == 0) {
-                bad("ends on a node no `sync` block wrote");
+                bad(std::format(
+                    "ends on a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
+                    static_cast<int>(user->kind),
+                    user->flags,
+                    user->dataType() != nullptr ? user->dataType()->toString() : "-"));
                 continue;
             }
             if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
-                bad("starts at a node no `sync` block wrote");
+                bad(std::format(
+                    "starts at a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
+                    static_cast<int>(pred->kind),
+                    pred->flags,
+                    pred->dataType() != nullptr ? pred->dataType()->toString() : "-"));
                 continue;
             }
             if (graph_.syncPredsOf(edge.user).size() > 1) {

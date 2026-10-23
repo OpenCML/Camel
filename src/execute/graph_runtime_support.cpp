@@ -284,6 +284,13 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
                     visit(input);
                 }
             }
+            // The statement written directly before the branch is a statement of the block too, so
+            // it is laid out before the arms (docs/design/effects/edges.cn.md 5.3).
+            for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(index)) {
+                if (!regions.inBranch(edge.pred, brch)) {
+                    visit(edge.pred);
+                }
+            }
             // A value an arm gives that is computed outside the branch is computed before it.
             const auto results = graph->withInputsOf(index);
             for (gc_node_ref_t result : results) {
@@ -345,6 +352,13 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
             for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
                 if (!inLoop(input)) {
                     visit(input);
+                }
+            }
+            // The statement written directly before the loop is one of the block's statements, and
+            // the loop reads it from outside: it belongs before the first round, not after it.
+            for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(index)) {
+                if (!inLoop(edge.pred)) {
+                    visit(edge.pred);
                 }
             }
             for (gc_node_ref_t input : graph->normInputsOf(index)) {
