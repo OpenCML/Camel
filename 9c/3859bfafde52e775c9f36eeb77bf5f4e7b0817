@@ -1,0 +1,9 @@
+h344 — 模块的遍从它的 .cml 声明读，加载失败的模块说自己的话（分支 handover/h344-module-passes，3 提交，基线 87774235e；合入 9c3859bfa）
+
+1) 加载失败的模块有自己的 help：InvalidPassParameter 现在带一条 help，点名模块并带上加载器自己的第一条原因，而不是那段 key=value 参数拼法的说明；两个模块诊断码与各自的修法都保留（裁定第 3 条要求）。
+2) "它提供哪些遍"从声明读：src/execute/camel_pass.cpp 对**声明模块**读 passDeclarations（与流水线用的是同一份解析），导出走查只留给用 Camel 写的模块（那里导出的 `(p: Program) => Program!` 函数**就是**声明）。判别依据是 declarationModule()，不是"搜索路径里有没有 <module>.cml"（入口程序旁边的测试夹具不是声明模块——这个区分是必需的，否则读夹具的 .cml 会弄坏 identity）。onnx 现在报 "it provides the pass 'export_model'"，"provides no passes" 那句消失。
+3) 性质守卫：test/tools/check-pass-declarations.mjs 本来已陈述双射的两半，但没陈述**任何一侧非空**，于是一个停止匹配的走查会报"零个模块通过"。现在关系在模块上一次陈述，两侧都断言非空。红前绿后（手工做、已撤回）：注册 `onnx::not_declared_anywhere` → "a pass is registered and its module's .cml declares no function for it"（exit 1）；削弱 stdlib/onnx.cml 的声明 → "the module 'onnx' contributes a pass and no declaration of it was read"（exit 1）。ckpt 只注册算子与资源、不注册遍，所以它什么都不声明——这是双射的空情形，不是要跳过的模块。
+
+闸门：分支上 total 5769, pass 5755, fail 0, skip 14；test/plans/feat/modules 1320 pass / 0 fail / 4 skip（跳过是 CUDA/vscode/Windows 前提）。**合入后协调者重跑：total 5819, pass 5805, fail 0, skip 14。**
+
+既有、与本改动无关的一处计时红（慢层）：modules.autodiff/benchmark_gradients_vs_torch 只在 runner 的 4 倍墙钟余量上失败（exit 0、312 行梯度全 ok、stdout 结尾 gradient check: PASS；210 s 对 300 s 超时），主机当时 load 135/32 核。同一检查手工跑两次都 PASS（134 s）。**提高那条界限需要一个写下来的理由，所以它没有动**——但按今天的裁定（启动天花板一律读 CPU 时间而不是墙钟），这条更该改成 CPU 时间判据；已另派任务。
