@@ -222,6 +222,9 @@ any Formatter::visitProgram(cst::Program context) {
                     headStr += lineEnd();
                 }
                 headStr += tokens[i].text() + lineEnd();
+                // Written here, and marked as written: the node below the comments asks which of
+                // them are still unwritten, and a comment it reads again is written twice.
+                markCommentWritten(i);
                 previousEnd = line + std::count(tokens[i].text().begin(), tokens[i].text().end(), '\n');
             }
         }
@@ -1289,10 +1292,27 @@ any Formatter::visitCtrlExpr(syn::Node context) {
     {
         string condition = any_cast<string>(visitExpr(context->expr()));
         string thenBlock = any_cast<string>(visitBlockExpr(context->child(3).node()));
-        string result    = "if " + condition + " then " + thenBlock;
+        string result    = "if " + condition;
+        // A comment between the condition and `then`, or between the branch and `else`, stands in
+        // no gap a list looks at: the branch of a block-less `if` is an expression, not a list,
+        // and the keyword after it belongs to this visitor alone.
+        const auto &thenTok = context->tok(TK::KwThen);
+        writeInlineComments(
+            result,
+            context->expr()->lastToken()->index(),
+            thenTok.index(),
+            context->expr()->lastToken()->endLine());
+        result += " then " + thenBlock;
         if (context->tok(TK::KwElse)) {
+            const auto &elseTok       = context->tok(TK::KwElse);
+            const size_t branchEnd    = context->child(3).node()->lastToken()->index();
+            const bool branchLineEnds = writeInlineComments(
+                result,
+                branchEnd,
+                elseTok.index(),
+                context->child(3).node()->lastToken()->endLine());
             string elseBlock = any_cast<string>(visitBlockExpr(context->child(5).node()));
-            if (elseBlock.starts_with("if ") && !thenBlock.ends_with("}")) {
+            if (branchLineEnds || (elseBlock.starts_with("if ") && !thenBlock.ends_with("}"))) {
                 // else if
                 result += lineEnd() + "else ";
             } else {

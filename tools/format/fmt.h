@@ -110,6 +110,32 @@ class Formatter {
         }
     }
 
+    /// The comments between the end of an item and the token that follows it - the closing bracket
+    /// of the construct around it, or `else` after the branch of an `if`. No list range reaches
+    /// past its last item and nothing else looks there: they are written where the item ends, on
+    /// its own line when they stood on one. Returns true when a `//` comment was written, which
+    /// ends the line it is on and would swallow whatever the caller writes next.
+    bool writeInlineComments(
+        std::string &result, size_t afterToken, size_t beforeToken, size_t afterEndLine) {
+        bool endsLine   = false;
+        size_t lastStop = afterEndLine;
+        for (size_t i = afterToken + 1; i < beforeToken && i < tokens.size(); i++) {
+            if (tokens[i].channel <= 1 || commentWritten(i)) {
+                continue;
+            }
+            const long skips = static_cast<long>(tokens[i].line()) - static_cast<long>(lastStop);
+            if (skips <= 0) {
+                result += " ";
+            } else {
+                result += lineEnd();
+            }
+            writeCommentText(result, i);
+            lastStop = tokens[i].line() + countLines(tokens[i].text());
+            endsLine = tokens[i].channel != 4;
+        }
+        return endsLine;
+    }
+
     /// Writes one comment, once, and nothing else: the caller owns the line ends around it.
     void writeCommentText(std::string &result, size_t index) {
         if (commentWritten(index) || tokens[index].channel <= 1) {
@@ -412,6 +438,9 @@ class Formatter {
                     if (comment.channel <= 1) {
                         continue;
                     }
+                    if (commentWritten(j)) {
+                        continue;
+                    }
                     const auto &commentText = comment.text();
 
                     // The break after `{` (or after `;`) has been written already: the first
@@ -453,6 +482,12 @@ class Formatter {
                     ++lastStopLine;
                     continue;
                 }
+                if (commentWritten(j)) {
+                    // Written by the visitor of a node inside this range (the comment before the
+                    // closing bracket of an array literal, say): writing the line ends for it
+                    // again would leave the blank lines it already has.
+                    continue;
+                }
                 const auto &commentText = comment.text();
 
                 const int cmtSkips = comment.line() - lastStopLine;
@@ -467,6 +502,28 @@ class Formatter {
 
                 insertComment(j, result);
                 lastStopLine = comment.line() + countLines(commentText);
+            }
+
+            if (i + 1 == list.size() && tokenRanges.empty()) {
+                // The comments between the last item and the closing bracket of the construct
+                // around it (`]` of an array literal, `)` of a call) are in no range: the ranges
+                // stop at the item, and the bracket belongs to the visitor above, which writes it
+                // straight after this text. They are written where they stood, and a `//` comment
+                // ends its line so that the bracket is not commented out with it.
+                const size_t itemEnd = list[i]->lastToken()->index();
+                size_t closing       = itemEnd + 1;
+                while (closing < tokens.size() && tokens[closing].channel > 1) {
+                    closing++;
+                }
+                const bool closingBracket =
+                    closing < tokens.size() && (tokens[closing].text() == "]" ||
+                                                tokens[closing].text() == ")" ||
+                                                tokens[closing].text() == ">");
+                if (closingBracket &&
+                    writeInlineComments(result, itemEnd, closing, list[i]->lastToken()->endLine()) &&
+                    !(paddingNL && multiLine)) {
+                    result += lineEnd();
+                }
             }
 
             if (predCmtStart < predCmtEnd) {
