@@ -3,7 +3,7 @@
 
 // The declarations of the binary value module. The functions are the operators of the C++ module
 // `modules/bytes` (`bytes:encode` and so on, module:function by convention); this file is the one
-// source of their signatures (design principles 6.4; handover H19, step 1).
+// source of their signatures (design principles 6.4).
 
 module bytes
 

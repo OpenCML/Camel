@@ -2,7 +2,7 @@ id = "modules.threads"
 order = 363
 tier = "fast"
 tags = ["feat", "modules", "tensor", "threads"]
-desc = "`-t` sets the tensor pool as it sets the scheduler, `CAMEL_NUM_THREADS` is gone, and the thread count changes no value: the pool reports the number the run was given, the default is the hardware concurrency, the GEMM spends the run's number on the tensor pool and splits a whole-work product's rows over it (each library call one thread, reported separately, so the process has no second pool and its threads stay within `-t`), and a reduction and a GEMM produce the same bits at one thread, at four and at eight"
+desc = "`-t` sets the tensor pool as it sets the scheduler -- under `--timeit` as in an ordinary run -- `CAMEL_NUM_THREADS` is gone, and the thread count changes no value: the pool reports the number the run was given, the default is the hardware concurrency, the GEMM spends the run's number on the tensor pool and splits a whole-work product's rows over it (each library call one thread, reported separately, so the process has no second pool and its threads stay within `-t`), and a reduction and a GEMM produce the same bits at one thread, at four and at eight"
 
 # The value of record is the run's `-t` (EntryConfig::maxThreads); the tensor module installs it
 # into its kernel pool when it loads, and without `-t` every pool uses the machine's core count.
@@ -82,6 +82,48 @@ args = ["-t", "4", "--arg", "expected=4", "${case}", "std::fvm"]
 envs = ["CAMEL_NUM_THREADS=1"]
 expect_exit = 0
 expect_stdout_exact = "threads=4 expected=4\n"
+
+# `--timeit` builds its own Context for every iteration (tools/camel-cli/timeit.cpp), and until
+# H349 it built it without `EntryConfig::maxThreads`: the flag was accepted and the pools of the
+# timed run took the machine's core count instead, so `camel -t 4 --timeit std::prl/1 ...` measured
+# a width nobody asked for. The two cases below pin the flag on that path, and each one's assertion
+# prints the number the timed run actually saw, so a red names it. What they read is not a time:
+# `num_threads()` is the tensor pool's size, which the module installs from `Context::threadLimit()`
+# -- the same field the timed pass's own executor is built from (taskflow.h: `workerCount` ->
+# `ctx->threadLimit()`) -- and `thread_count()` is the operating system's count of the process's
+# threads. A pool that kept the hardware width fails on the printed number, on any machine whose
+# core count is not the one `-t` wrote.
+
+[[tests]]
+name = "count.timeit_cli_four"
+desc = "`-t 4` reaches the pool a `--timeit` run uses: with `--timeit std::prl/1` the program still reports `num_threads()` 4, not the machine's core count."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_count.cml"
+args = ["-t", "4", "--timeit", "std::prl/1", "--arg", "expected=4", "${case}", "std::prl"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const m = /^threads=([0-9]+) expected=([0-9]+)$/m.exec(input.normalized.stdout)
+assert(m !== null, 'no thread-count line: ' + input.normalized.stdout)
+assert(Number(m[1]) === 4, 'the pool of the timed run reports ' + m[1] + ', the run gave 4')
+}
+"""
+
+[[tests]]
+name = "count.timeit_cli_one_serial"
+desc = "`-t 1` under `--timeit` is a serial run: one timed iteration of `std::fvm` on one thread leaves the process with one thread (the caller) and the pool reports 1."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_pools.cml"
+args = ["-t", "1", "--timeit", "std::fvm/1", "${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const m = /^thread_pools threads=([0-9]+) budget=([0-9]+)$/m.exec(input.normalized.stdout)
+assert(m !== null, 'no thread-pool line: ' + input.normalized.stdout)
+assert(Number(m[2]) === 1, 'the pool of the timed run reports ' + m[2] + ', the run gave 1')
+assert(Number(m[1]) === 1, 'the timed run is serial with ' + m[1] + ' thread(s)')
+}
+"""
 
 [[tests]]
 name = "values.cli_one"

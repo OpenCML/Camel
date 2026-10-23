@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-254 diagnostics: 235 errors, 19 warnings.
+257 diagnostics: 238 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -221,6 +221,9 @@ prints one entry.
 | `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error |
 | `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error |
 | `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error |
+| `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error |
+| `0x030001DF` | [SemanticDiag::OverloadParameterNames](#overloadparameternames) | Error |
+| `0x030001E0` | [SemanticDiag::WhenDeclarationOverlap](#whendeclarationoverlap) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -1201,17 +1204,31 @@ No matching function found for argument types: {0}.
 Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads: {1}
 ```
 
-**Example** (`test/cases/compile/collections/err_subscript_key.cml`, run as `camel test/cases/compile/collections/err_subscript_key.cml`)
+**Example** (`test/cases/modules/optim/unknown_optimizer.cml`, run as `camel test/cases/modules/optim/unknown_optimizer.cml`)
 
 ```camel
-module main
+module optim_unknown_optimizer
 
-// The subscript of a map takes a key of the key type.
+import { Tensor, full } from tensor
+import { init } from optim
+
+type Unknown = { rate: float }
+
+type Model = { w: Tensor }
+
+func model_at(): Model {
+    return { w: full([4], f32(0.5)) }
+}
+
+func init_unknown(): int {
+    let opt: Unknown = { rate: 0.1 }
+    let state = init(opt, model_at())
+    return state.step
+}
 
 func main(): int sync {
-    let m = [("a", 1)] as Map<string, int>
-    println(m[1] ?? 0)
-    println("never printed")
+    let steps = init_unknown()
+    'optim unknown optimizer init steps={}' ->format<steps> ->println
     return 0
 }
 ```
@@ -1268,16 +1285,21 @@ Return type '{0}' does not match the function's declared return type '{1}'.
 Ensure that the value returned from the function matches the type specified in the function signature: {2}. No implicit conversion is applied: convert explicitly, for example float(x) for a number or 'x as T' for a module type.
 ```
 
-**Example** (`test/cases/compile/return_type/string_as_int.cml`, run as `camel test/cases/compile/return_type/string_as_int.cml`)
+**Example** (`test/cases/compile/array_shape/err_return_shape.cml`, run as `camel test/cases/compile/array_shape/err_return_shape.cml std::nvm`)
 
 ```camel
-module return_string_as_int
-func f(): int {
-    return 'abc'
+// A return type that states a shape promises it: the body must give a value of that shape. The
+// body here returns its parameter, whose extent is the name `n` and not the constant 2 the return
+// type declares, so the two shapes do not agree.
+module array_shape_err_return_shape
+
+func firstTwo(x: f32[n]): f32[2] {
+    return x
 }
+
 func main(): int sync {
-    println('ran')
-    println(f())
+    let v: f32[3] = [1.0, 2.0, 3.0]
+    println(len(firstTwo(v)))
     return 0
 }
 ```
@@ -3523,16 +3545,24 @@ Argument {0} has extent {1}, but the dimensions the earlier arguments bound do n
 The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to.
 ```
 
-**Example** (`test/cases/modules/tensor/named_dims/err_mismatch.cml`, run as `camel test/cases/modules/tensor/named_dims/err_mismatch.cml`)
+**Example** (`test/cases/compile/array_shape/err_call_mismatch.cml`, run as `camel test/cases/compile/array_shape/err_call_mismatch.cml std::nvm`)
 
 ```camel
-module named_dims_err_mismatch
-import { Tensor, ones, sum } from tensor
-func pair(a: Tensor<f32, [n]>, b: Tensor<f32, [n]>): float {
-    return sum(a) + sum(b)
+// A dimension name is one value for the whole signature: the first argument's extent is what `n`
+// is, and the second argument must be that same extent. Each argument states its extent where it
+// is made, which is the form the call's binding reads.
+module array_shape_err_call_mismatch
+
+func dot(x: f32[n], y: f32[n]): f32 {
+    return x[0] + y[0]
 }
+
 func main(): int sync {
-    println(pair(ones([3]), ones([4])))
+    let v: f32[] = [1.0, 2.0, 3.0]
+    let w: f32[] = [4.0, 5.0]
+    let a = v as f32[3]
+    let b = w as f32[2]
+    println(dot(a, b))
     return 0
 }
 ```
@@ -5566,23 +5596,23 @@ The 'with' argument '{0}' is given by name, and the signature of '{1}' is not kn
 Name the one function the binding is for, or give the 'with' arguments positionally.
 ```
 
-**Example** (`test/cases/compile/with_defaults/callee_unknown.cml`, run as `camel test/cases/compile/with_defaults/callee_unknown.cml`)
+**Example** (`test/cases/compile/with_defaults/overload_default_hole.cml`, run as `camel test/cases/compile/with_defaults/overload_default_hole.cml`)
 
 ```camel
-module with_argument_callee
+module with_overload_default_hole
 
-with <rounds: int = 8>
-func f(x: int): int {
-    return x + rounds
+with <rounds: int = 8, label: string = 'x'>
+func show(a: int): int {
+    return a * rounds
 }
 
-with <rounds: int = 8>
-func f(x: string): string {
-    return x
+with <rounds: int = 8, label: string = 'x'>
+func show(a: string): int {
+    return rounds
 }
 
 func main(): int sync {
-    return f<rounds: 2>(1)
+    return show<label: 'p'>(3)
 }
 ```
 
@@ -6014,21 +6044,21 @@ The argument '{0}' is given by name, and the signature of '{1}' is not known whe
 Name one function, or give the arguments positionally.
 ```
 
-**Example** (`test/cases/compile/param_defaults/callee_unknown.cml`, run as `camel test/cases/compile/param_defaults/callee_unknown.cml`)
+**Example** (`test/cases/compile/param_defaults/overload_default_hole.cml`, run as `camel test/cases/compile/param_defaults/overload_default_hole.cml`)
 
 ```camel
-module param_argument_callee
+module param_overload_default_hole
 
-func f(x: int): int {
-    return x
+func f(a: int, b: int = 0): int {
+    return a * 10 + b
 }
 
-func f(x: int, y: int): int {
-    return x + y
+func f(a: int, b: int, c: int = 0): int {
+    return a * 100 + b * 10 + c
 }
 
 func main(): int sync {
-    return f(1, y: 2)
+    return f(a: 1, c: 3)
 }
 ```
 
@@ -6366,6 +6396,132 @@ func add(a: int, b: int): int {
 
 func main(): int sync {
     return add(1, 2)
+}
+```
+
+### NodeOfNotAParameter
+
+`0x030001DE` · Error · `SemanticDiag::NodeOfNotAParameter`
+
+**Message**
+
+```text
+'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.
+```
+
+**Help**
+
+```text
+node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.
+```
+
+**Example** (`test/cases/modules/rules/node_of_misuse.cml`, run as `camel test/cases/modules/rules/node_of_misuse.cml std::nvm`)
+
+```camel
+module node_of_misuse
+
+import { Program, Node } from graph
+import { rewrite } from rewrite
+
+rule drop_by_node(x: int, const c: int) { x * c => x } when node_of(x) == node_of(c)
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [drop_by_node])
+}
+
+func scaled(x: int): int { return x * 2 }
+
+func main(): int sync {
+    println(scaled(21))
+    return 0
+}
+```
+
+### OverloadParameterNames
+
+`0x030001DF` · Error · `SemanticDiag::OverloadParameterNames`
+
+**Message**
+
+```text
+The argument '{0}' is given by name, and the overloads of '{1}' do not name the parameter at that position the same way.
+```
+
+**Help**
+
+```text
+Give every overload the same parameter names at the same positions, or give the arguments positionally.
+```
+
+**Example** (`test/cases/compile/param_defaults/overload_names.cml`, run as `camel test/cases/compile/param_defaults/overload_names.cml`)
+
+```camel
+module param_overload_names
+
+func f(a: int, b: int): int {
+    return a * 10 + b
+}
+
+func f(a: int, c: string): int {
+    return a * 10
+}
+
+func main(): int sync {
+    return f(a: 1, b: 2)
+}
+```
+
+### WhenDeclarationOverlap
+
+`0x030001E0` · Error · `SemanticDiag::WhenDeclarationOverlap`
+
+**Message**
+
+```text
+Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'.
+```
+
+**Help**
+
+```text
+A 'when' condition is what makes two declarations of one signature different overloads (design principles 4.4): each must cover the types the other does not. Narrow the conditions so that no type satisfies both, or give the declarations parameter types that cannot both accept one call.
+```
+
+**Example** (`test/cases/compile/native/when_arms_overlap.cml`, run as `camel test/cases/compile/native/when_arms_overlap.cml`)
+
+```camel
+module when_arms_overlap
+
+func is_small_int::<T>(): bool {
+    return match type T {
+        case i32 => true
+        case _ => false
+    }
+}
+
+func is_number::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 => true
+        case _ => false
+    }
+}
+
+#op<':op/add_i'>
+func arms_kernel::<T>(a: T, b: T): T when is_small_int::<T>()
+
+#op<':op/sub_i'>
+func arms_kernel::<T>(a: T, b: T): T when is_number::<T>()
+
+#impl<arms_kernel>
+func combine::<T>(a: T, b: T): T {
+    return a * b
+}
+
+func main(): int sync {
+    let x: i32 = 19
+    let y: i32 = 23
+    println(combine(x, y))
+    return 0
 }
 ```
 
@@ -7810,7 +7966,7 @@ Module '{0}' provides no pass '{1}'; it provides {2}.
 **Help**
 
 ```text
-A pass of a module is one of its exported functions of type `(p: Program) => Program!`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
+A pass of a module is one of the passes its `.cml` file declares — `export func {1}::<F>(f: F): F! when is_function::<F>()`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
 ```
 
 **Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::nosuch std::nvm`)
@@ -7836,7 +7992,7 @@ Module '{0}' declares '{1}' but does not export it, so it cannot be named as a p
 **Help**
 
 ```text
-Write `export func {1}(...)` in module {0}, or name a pass it exports. A pass is an exported function `(p: Program) => Program!`.
+Write `export func {1}::<F>(f: F): F! when is_function::<F>()` in module {0}, or name a pass it declares and exports. A pass of a module is a declaration of that module's `.cml` file.
 ```
 
 **Example** (`test/cases/modules/pass_not_found/main.cml`, run as `camel test/cases/modules/pass_not_found/main.cml declares_not_exported::run std::nvm`)

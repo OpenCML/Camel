@@ -1,0 +1,104 @@
+id = "perf.para_speedup"
+order = 411
+tier = "slow"
+tags = ["perf", "para"]
+
+# The cheap half of the parallel benchmark, gated on a property instead of on a number (the author's
+# ruling of 2026-10-23, docs/handover/reviews/questions-2026-10-23.md, "perf-para-gate"):
+#
+#   "选 B：把已量过的便宜子集（monte_carlo_pi.prl，约 1.6 s）立成可进闸门的计划。度量取同一次运行里
+#    并行对串行的加速比（与绝对墙钟相比对负载不那么敏感），并记 CPU 时间；整条 perf.para 仍在发布前跑。"
+#
+# The expensive full `perf.para` (six cases, 178.7 s a repetition, gigabytes of live set) stays where
+# it is: before a release, by naming its file. What becomes gate-able is the one case the ruling
+# names, `test/cases/para/core/monte_carlo_pi.cml`, measured by `test/tools/para-speedup.mjs` the way
+# `perf.para` runs it -- `--timeit std::nvm/1` and `--timeit std::prl/1` over the same program -- and
+# the plan is run by naming this file: `test/plans/perf/**` is deliberately outside `npm run test`
+# and outside `--changed` (docs/test-plans.md, "Performance measurement"), and a plan file named as
+# the target runs in full whatever `--tier` says.
+#
+# It is not a plan the fast layer carries by itself: the ruling's cheap number is the parallel side
+# of this workload (4.4-4.8 s), and the guard's price is dominated by the serial side, which the
+# same requirement forces it to run. Measured on the reference host (AMD EPYC 7343, 32 threads) on
+# 2026-10-23, both sides in one run, the command line below and nothing else:
+#
+#   serial   std::nvm   pass wall 77,178.6 ms   child CPU 31,660.0 ms   0.41 cores on average
+#   parallel std::prl   pass wall  4,768.8 ms   child CPU 32,040.0 ms   6.66 cores on average
+#   speed-up 16.18 over the 1.5 floor, same workload (50 x 100000000 samples, hits 3926996777)
+#
+# at load 94.5/80.6/80.0, and the same two commands cost 68.1 s earlier the same day at load
+# 58.6/72.1/79.3: the price is the serial side's share of a loaded host, so this plan is named as a
+# target rather than folded into a layer. The plan is the gate, not a layer.
+#
+# One round is enough, and the round count is a decision rather than a default: with the parallel
+# side planted as the serial one (both sides `std::nvm`, so the two sides ran the *same* command)
+# the ratio came out 1.08 off walls of 73,126.2 ms and 67,448.1 ms at load 87 -- a single round of
+# this ratio carries about 8% of noise, against floors that sit 4.4 and 10.8 times away from their
+# reading. `--rounds` is there for a deeper look; the gate does not need one.
+#
+# The red this guard is trusted against is that planted run: `speedup=1.08 floor=1.5` and
+# `parallel_concurrency=0.47 floor=1.5` are the two lines that catch it, and the second is the one
+# that catches a parallel side which is fast but not parallel.
+#
+# What the guard asserts is a property of one run and not a stored baseline: the serial side
+# (`std::nvm`, the scheduler `perf.para` pairs with `std::prl`) and the parallel side (`std::prl`)
+# run the same workload in the same run, and the parallel side must (a) finish it faster, (b) have
+# really used more than one core, while (c) the serial side did not. The cores are read from the
+# child's own CPU time (user + system) over its process wall, which the host's load can only deflate;
+# the wall is trusted only as the ratio of the two pass windows, and no absolute wall is gated -- the
+# CPU time of each side is printed beside it as the work number, ungated, because a ceiling on it
+# would be a stored baseline again. The same workload is proven, not assumed: the program's own
+# receipt (`Running N times`, `Samples per simulation`, `Total hits`) must be identical on both
+# sides, so a speed-up of two different programs is not reportable.
+#
+# `monte_carlo_pi.min_cores_refused` is the same tool asked for more cores than any host has: it
+# must refuse (exit 2) and say that it examined nothing, because a check that examined nothing is not
+# a pass (the same 2026-10-23 review, "declaration-cost-gate" (b), and H185). The real host
+# requirement is `--min-cores 4` inside the tool, and a host below it makes the guard's `skip_unless`
+# report `[SKIP]` with the reason printed -- never a pass.
+
+[[tests]]
+name = "monte_carlo_pi.speedup"
+desc = "Runs test/cases/para/core/monte_carlo_pi.cml twice in one run -- --timeit std::nvm/1 and --timeit std::prl/1 -- and asserts that the parallel side finished the same workload faster while really using more than one core (child CPU time over its own process wall) and the serial side did not, printing both walls and both CPU times."
+kind = "behavior"
+parallel = false
+tool = "node"
+case = "../../tools/para-speedup.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["para.speedup metric=pass_wall_and_child_cpu", "para.speedup serial backend=std::nvm", "para.speedup parallel backend=std::prl", "cpu_ms=", "concurrency=", "speedup=", "result=PASS"]
+# A host that cannot show the parallel side on more than one core skips this test with the reason
+# printed, instead of reddening for the host (the tool refuses to pass there as well).
+skip_unless = ["node", "test/tools/para-speedup.mjs", "--require-cores"]
+skip_unless_timeout_ms = 30000
+# 112.7 s is the test's own wall in the plan's full run on the reference host later the same day
+# (the host was busier, and the serial side takes the loss), 82.2 s was measured at load
+# 94.5/80.6/80.0 and 68.1 s at load 58.6/72.1/79.3. The serial side dominates that cost and is the
+# load-invariant half -- its wall is the host's share of one core over about 31.7 s of CPU -- so the
+# wall of this test tracks the host's load rather than its own work, and 900 s is a hang detector,
+# not a busy-host detector: four times the worst measurement is 451 s, so the timeout is that bound
+# with room to spare, and the tool kills a child of its own at 600 s with a reason.
+# This plan is the wall-bound exception of the 2026-10-24 sweep of the slow tier, and the ruling of
+# 2026-10-23 covers the case (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate"
+# (a)): what this entry measures is a ratio of two wall windows of one run -- the seconds a user waits
+# -- so its own CPU time cannot stand in for it, and no cpu_budget_ms is declared here. It was
+# measured on 2026-10-24 on the loaded host (32 threads, 1-minute load 85.69/91.25/84.56) anyway:
+# 63.33 s of CPU / 62.79 s of wall, the CPU being the serial side's 31.7 s plus the parallel side's
+# 32.0 s, which is what the tool prints as its two ungated child CPU numbers. The timeout below stays
+# as the bound it already describes.
+timeout_ms = 900000
+
+[[tests]]
+name = "monte_carlo_pi.min_cores_refused"
+desc = "The parallel speed-up guard refuses to pass when the host cannot show the parallel side on more than one core: asked for 9999 usable cores it exits 2 and names the host and the fact that it examined nothing."
+kind = "behavior"
+case = "../../tools/para-speedup.mjs"
+tool = "node"
+args = ["${case}", "--min-cores", "9999"]
+expect_exit = 2
+expect_stdout_contains = ["REFUSED", "examined nothing"]
+# The refusal is decided before any child starts: 122 ms measured on the reference host.
+# Same exception as monte_carlo_pi.speedup above, for a different reason: this entry has no
+# computation to bound. The refusal happens before any child of the tool starts -- 30 ms of CPU
+# measured on 2026-10-24 -- so it keeps the wall bound.
+timeout_ms = 30000

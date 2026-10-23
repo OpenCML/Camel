@@ -402,8 +402,13 @@ visible. `--changed` prints a `[WARN]` naming every changed file no rule matched
 the policy excludes are not called holes). And the self-test `test/tools/selftest/run.mjs` walks
 every file in the index plus the untracked, not ignored files, and fails on a class that neither
 a directory rule nor a file rule selects, unless the class is on its allowlist with a reason. The
-plan side is checked the same way: every plan file must be selected by a case path it names, or
-the self-test fails and names the plan (H201). The
+plan side is checked the same way, except that its verdict is about the branch: every plan file in
+git's index must be selected by a case path it names, or the self-test fails and names the plan
+(H201). A plan file that is only in the working tree -- an agent's scratch plan, written to try a
+case out -- is not one of the branch's plans, and the self-test names it as a note instead of
+failing the run: the live tree is shared with whoever is working in it, and two gates of another
+task went red on exactly such a draft (H368). Committing the file makes the check red for real.
+The
 allowlist names only the deliberately unselectable layers (perf, GC stress, progen, the PyTorch
 comparisons) and files no plan reads (vendored code, packaging, CI configuration, repository
 metadata). A new kind of file therefore cannot appear without a rule or a reason: add
@@ -483,14 +488,34 @@ Every `[[tests]]` entry may use these common fields:
 - `expect_exit`
   Optional integer expected process exit code.
 - `timeout_ms`
-  Optional process timeout in milliseconds. Default is `10000`. A timeout is a pass condition on
-  wall time, so it is a bound only with room under it: the runner fails a test that used more
-  than a quarter of its timeout (`TIMEOUT_MARGIN` in `test/tools/run-tests.mjs`), and prints the
-  measured number. A test that legitimately needs a large bound states the measurement in a
-  comment next to the value ("20 s: 2.1 s alone, 4.2 s at `-Jobs 8`"); a test that sits at its
-  bound on a quiet machine has no margin for a busy one and is fixed, not raised. A fast case
-  with no reason for a special bound uses the runner default (`10000`): a 4 s bound is a speed
-  assertion, and it is rejected as soon as the case takes a second on a loaded host.
+  Optional process timeout in milliseconds. Default is `10000`. A timeout is a pass condition, so it
+  is a bound only with room under it: the runner fails a test that used more than a quarter of its
+  timeout **of its own CPU time** (`TIMEOUT_MARGIN` in `test/tools/run-tests.mjs`), and prints the
+  measured number and the wall clock beside it. The quantity is the work's, not the host's: on a
+  shared host a passing test's wall clock is who else is running, and a rule that read it failed the
+  plan runner's own self-test at random (H368). A host whose kernel reports no CPU time (no
+  `/proc/self/stat`) has no such reading, so there the rule falls back to the wall clock and the run
+  says so once; a host that has the reading and does not get one for a test fails that test, because
+  a margin nobody can read is not a margin. A test that legitimately needs a large bound states the
+  measurement in a comment next to the value ("20 s: 2.1 s alone, 4.2 s at `-Jobs 8`"); a test that
+  sits at its bound on a quiet machine has no margin for a busy one and is fixed, not raised. A fast
+  case with no reason for a special bound uses the runner default (`10000`): a 4 s bound is a speed
+  assertion, and it is rejected as soon as the case takes a quarter of it in its own CPU time. A
+  test whose own CPU time exceeds its wall clock is multi-threaded work: the reading sums its
+  threads, so a bound on its total work belongs in `cpu_budget_ms` (measured over the whole fast
+  layer on 2026-10-24: 21 of 5,873 tests, all ONNX-runtime, dlpack and fuzz cases).
+- `cpu_budget_ms`
+  Optional. The test's cost bound in milliseconds of **CPU time** (user + system) of the test's own
+  process tree, read by `test/tools/child-cpu.mjs`, which the runner runs the command under. A test
+  that declares it is judged on that figure and not on the wall clock: `timeout_ms` then states the
+  liveness bound (a hang, not a slow run), the `TIMEOUT_MARGIN` rule above is not applied to it, and
+  a reading that cannot be made is a failure, never a pass. The unit comes from the author's ruling
+  of 2026-10-23 (`docs/handover/reviews/questions-2026-10-23.md`, "declaration-cost-gate" (a)): the
+  wall clock on this shared host drifts with who else is running, while a process's own CPU time
+  barely moves, so a crossed CPU budget is the test's work growing and never "the host was busy". The
+  budget is declared together with a timeout (the runner refuses `cpu_budget_ms` without
+  `timeout_ms`), and, like `timeout_ms`, it states the measurement its number came from in a comment
+  next to the value.
 - `normalizers`
   Optional string array applied to captured output before assertions.
 - `envs`
@@ -766,6 +791,9 @@ Important payload fields:
 - `input.normalized.output`
 - `input.diagnostics`
 - `input.benchmark`
+- `input.cpu_ms`, `input.cpu_budget_ms` — the test's own CPU time (user + system) and the budget it
+  was judged against for a test that declared `cpu_budget_ms`, and `null` for every other test: the
+  payload of a test whose bound is CPU carries the numbers its verdict came from.
 - `input.case_path` — the resolved absolute path of the case: the plan's `case` resolved against
   the plan's directory, which is what the tool was invoked with. The output may repeat it (a
   graph dump names its source file), and it is absolute, so it differs between two checkouts of
@@ -954,9 +982,11 @@ The case must emit the expected JSON benchmark payload format used by the runner
 
 ## Performance Measurement
 
-The ten plans under `test/plans/perf/` are measured on purpose, never by a gate. They are not in
+The plans under `test/plans/perf/` -- one plan file per benchmark, every one of them carrying the
+`slow` tier -- are measured on purpose, never by a gate. They are not in
 `npm run test` (which runs `--tier fast`), editing one of them does not select it from `--changed`
-(see "Selecting Plans From A Change"), and no CI job runs them. That is the policy, not an
+(see "Selecting Plans From A Change"), and no CI job runs them: the only tooling that runs them is
+the plan runner, with the plan file named as its target. That is the policy, not an
 oversight: `agents/test.md` treats the perf/timeit plans as heavy -- they saturate every core for
 minutes and are worth running only at a milestone, by a maintainer, on a quiet machine -- and the
 performance notes record what running the whole layer on a shared host would cost. The price of
@@ -964,17 +994,21 @@ the exclusion is that nothing notices a performance regression, so the
 measurement has one manual entry point:
 
 ```bash
-node scripts/perf-gate.mjs --list        # the ten plans, what each measures, and why it is in or out
+node scripts/perf-gate.mjs --list        # every plan of the directory, what each measures, and why it is in or out
 node scripts/perf-gate.mjs               # measure the gateable subset and compare with the baseline
 node scripts/perf-gate.mjs --update      # reseed test/perf-baseline.json on the host that measured it
 node scripts/perf-gate.mjs --reps 9 --threshold 20
 ```
 
-It measures only the two plans whose commands can be repeated: `perf.startup` (a few seconds per
-repetition) and `perf.fib` (about 11 s). `perf.para` is refused as too expensive per repetition;
-`perf.gc`, `perf.collections_fuzz`, `perf.training_steps` and the four showcase plans are refused
-by name, with the policy quoted. Running one of those stays a milestone decision: name the plan
-file to the runner yourself.
+`--list` prints the classification of every plan in that directory and the kind of each refusal
+(a repetition that costs minutes, a measurement that only means anything inside its own run, or the
+policy `agents/test.md` quotes), and the classification is checked against the directory itself, so
+a plan added under `test/plans/perf/` cannot go unclassified or be classified twice.
+
+`node scripts/perf-gate.mjs` measures only the plans whose commands can be repeated often enough:
+today `perf.startup` (a few seconds per repetition) and `perf.fib` (about 11 s); every other plan is
+refused by name with the kind `--list` prints. Running one of those stays a milestone decision: name
+the plan file to the runner yourself.
 
 How the numbers are read:
 
@@ -993,12 +1027,19 @@ How the numbers are read:
 `test/perf-baseline.json` is data, not a ceiling: the medians, both spreads, the exact command of
 every case, the commit, the build's own stamp, the repetition count and the host load. Seed it on
 the host whose numbers it records; a baseline from another machine is not comparable. The
-performance notes have the cost of each of the ten plans and the evidence for the
+performance notes have the cost of each plan and the evidence for the
 split. The plans left out keep the measurement they already have: `perf.startup` carries its own
 CPU-time ceilings and `declaration.cost`'s per-declaration ceiling, absolute CPU total and
 structural assertion (the 30% compile-work share retired with the 2026-10-23 ruling), `perf.gc`
 asserts what must not grow with the length of the run, the showcases compare against PyTorch, and
 `docs/performance/graph-store-baseline.md` is a separate manual baseline of the graph store.
+
+A plan in any layer may carry the same unit on one test: `cpu_budget_ms` (above) makes the runner
+read the test's own CPU time through `test/tools/child-cpu.mjs` and fail the test when that figure
+crosses the budget, with `timeout_ms` left as the liveness bound. That is the form for a test whose
+wall clock is the host's, not the test's: `modules.autodiff/benchmark_gradients_vs_torch` reads
+943-979 s of its own CPU against 127-211 s of wall clock, and it used to be red on the runner's
+`TIMEOUT_MARGIN` for that reason alone.
 
 ## Variable Expansion
 

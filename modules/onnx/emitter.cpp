@@ -39,7 +39,7 @@ bool isScalarCode(TypeCode code) {
 }
 
 const Array *constantTensor(const Value &value) {
-    if (!value.isConstant() || !tensor::asTensorType(value.ty)) {
+    if (!value.isConstant() || !tensor::isTensorType(value.ty)) {
         return nullptr;
     }
     return rtdata::fromSlot<Array *>(value.slot);

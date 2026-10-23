@@ -85,7 +85,7 @@
 
 ### 1.3 边
 
-三种：`Norm`、`With`、`Ctrl`。【读码 `draft.h#Norm`】
+三种：`Norm`、`With`、`Ctrl`。【读码 `draft.h#Data`】
 
 - `Norm` 与 `With` 都是数据边，区别是"接在目标节点的哪一组输入上"；这两组输入在每种节点上的含义见上表。它们与语言里"普通参数 / `with` 参数"的区分对应（设计原则 4.4），但 `CALL`、`FILL`、`BRCH`、`JOIN` 借用了 `With` 这一组做别的事。
 - `Ctrl` 是控制边：目标排在源之后，不传值。来源有四处【读码 `src/compile/gir/builder.cpp`】：同步块里相邻表达式之间的链（`lastSyncedNode_`）；`wait` 与变量写入的排序（`recordWrite`/`orderAfterLastWriter`）；`BRCH` 指向各臂的入口；臂捕获的外部值指向 `BRCH`（"先于分支就绪"）。

@@ -242,6 +242,10 @@ RunInvocation makeRunInvocation(const std::string &inputPath) {
             .entryDir          = invocation.entryDir,
             .entryFile         = inputPath,
             .searchPaths       = std::move(searchPaths),
+            // `-t` sizes every pool of a run, and a timed iteration is a run: without this field
+            // the pools of the timed run took the machine's core count and `--timeit` measured a
+            // width the user had not asked for. main.cpp sets the same field for the ordinary path.
+            .maxThreads        = Run::maxThreads > 0 ? static_cast<size_t>(Run::maxThreads) : 0,
             .maxRecursionDepth = Run::maxRecursionDepth,
             .maxMacroDepth     = Run::maxMacroDepth,
             .maxMacroRounds    = Run::maxMacroRounds,

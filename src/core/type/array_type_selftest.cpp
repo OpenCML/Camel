@@ -3,11 +3,14 @@
 
 #include "camel/core/type/array_type_selftest.h"
 
+#include "camel/core/data/composite/array.h"
+#include "camel/core/data/primary.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/intern.h"
+#include "camel/core/type/other.h"
 
 #include <stdexcept>
 #include <string>
@@ -343,7 +346,139 @@ std::string debugRunArrayTypeSelfTest() {
             std::string::npos,
         "the check of a dimension from another argument says: " + laterCheck);
 
-    return "shapes interned, relations checked, binding checked, moved check says: " + movedCheck;
+    // ---- The alias's arguments: what `Tensor<dtype, [shape]>` denotes (plan P4, section 5.1) --
+    // `Tensor` is the numeric-unknown array, so the arguments of the module type's name are the
+    // arguments of an array type: one element type, then one shape. Each spelling the tensor
+    // type took keeps its meaning, and every one of them is the interned array object the
+    // equivalent array spelling gives.
+    ArrayType *alias = ArrayType::numericUnknown();
+    std::string argumentError;
+    const auto applyOne = [&](const TypeArgument &argument) {
+        return alias->applyArguments(std::span<const TypeArgument>(&argument, 1), argumentError);
+    };
+    const auto element = [&](Type *type) {
+        return applyOne(TypeArgument{.type = type, .data = nullptr, .extents = nullptr});
+    };
+    const auto shape = [&](std::initializer_list<int64_t> values) {
+        return applyOne(TypeArgument{
+            .type = nullptr,
+            .data = nullptr,
+            .extents = std::make_shared<const std::vector<ExtentForm>>(constants(values))});
+    };
+    const auto both = [&](Type *type, std::initializer_list<int64_t> values) {
+        std::vector<TypeArgument> arguments{
+            TypeArgument{.type = type, .data = nullptr, .extents = nullptr},
+            TypeArgument{
+                .type = nullptr,
+                .data = nullptr,
+                .extents = std::make_shared<const std::vector<ExtentForm>>(constants(values))}};
+        return alias->applyArguments(std::span<const TypeArgument>(arguments), argumentError);
+    };
+    require(element(f32) == ArrayType::openRank(f32), "Tensor<f32> is not f32[..]");
+    require(
+        element(f32)->toString() == "f32[..]",
+        "Tensor<f32> prints as '" + element(f32)->toString() + "'");
+    require(element(i64) == ArrayType::openRank(i64), "Tensor<int> is not int[..]");
+    require(
+        both(f32, {2, 3}) == ArrayType::create(f32, shapeOf({2, 3})),
+        "Tensor<f32, [2, 3]> is not f32[2, 3]");
+    require(shape({3}) == ArrayType::numericUnknown(shapeOf({3})), "Tensor<[3]> is not the alias shaped");
+    require(
+        shape({3})->toString() == "Tensor<[3]>",
+        "Tensor<[3]> prints as '" + shape({3})->toString() + "'");
+    require(
+        static_cast<const ArrayType *>(shape({2, 3}))->rank() == 2,
+        "Tensor<[2, 3]> did not keep its rank");
+    // Every dimension removed: the type is its element type (the rank-zero ruling in
+    // docs/handover/reviews/questions-2026-10-23.md, section rank-zero-tensor): `Tensor<f32, []>`
+    // is `f32`, and not a rank-zero array.
+    require(both(f32, {}) == f32, "Tensor<f32, []> is not f32");
+    require(!element(f32)->equals(f32), "Tensor<f32> with no shape is the scalar");
+    // A shape written over dimension names keeps them, and they do not take part in equality.
+    const ArrayType *namedTensor = static_cast<const ArrayType *>(
+        applyOne(TypeArgument{
+            .type = nullptr,
+            .data = nullptr,
+            .extents = std::make_shared<const std::vector<ExtentForm>>(
+                std::vector<ExtentForm>{named("n"), ExtentForm::constant(784)})}));
+    std::vector<ExtentForm> keptForms;
+    require(
+        namedTensor->isNumericUnknown() && namedTensor->rank() == 2 &&
+            namedTensor->extentForms(keptForms) && keptForms.size() == 2 &&
+            keptForms[0].hasNames() && keptForms[0].terms().front().first == "n" &&
+            keptForms[1].constant() == 784,
+        "Tensor<[n, 784]> did not keep the dimension name");
+    require(
+        namedTensor->equals(
+            ArrayType::numericUnknownFromForms(
+                std::vector<ExtentForm>{ExtentForm::unknown(), ExtentForm::constant(784)})),
+        "a dimension name takes part in the equality of a Tensor");
+    // A constant shape, the spelling the tensor shape had before the array type took shapes
+    // over: an integer list, where a negative extent is the unknown dimension it always was.
+    const std::shared_ptr<camel::core::data::ArrayData> constShapeData =
+        camel::core::data::ArrayData::create(
+            Type::Int32(),
+            {std::make_shared<camel::core::data::IntData>(3),
+             std::make_shared<camel::core::data::IntData>(-1)});
+    std::vector<TypeArgument> constShape{
+        TypeArgument{.type = f32, .data = nullptr, .extents = nullptr},
+        TypeArgument{.type = nullptr, .data = constShapeData, .extents = nullptr}};
+    require(
+        alias->applyArguments(std::span<const TypeArgument>(constShape), argumentError) ==
+            ArrayType::create(
+                f32,
+                std::vector<ExtentForm>{ExtentForm::constant(3), ExtentForm::unknown()}),
+        "Tensor<f32, const [3, -1]> is not f32[3, ?]");
+
+    // What the alias refuses: an element type that is not a numeric scalar, a second element
+    // type, a second shape, an element after the shape, and a shape with no element type.
+    const auto refuses = [&](std::span<const TypeArgument> arguments, const std::string &what) {
+        argumentError.clear();
+        const Type *result = alias->applyArguments(arguments, argumentError);
+        require(result == nullptr, what + " was accepted");
+        require(!argumentError.empty(), what + " was refused without a reason");
+    };
+    std::vector<TypeArgument> notNumeric{
+        TypeArgument{.type = str, .data = nullptr, .extents = nullptr}};
+    refuses(notNumeric, "Tensor<string>");
+    require(
+        argumentError.find("numeric scalar") != std::string::npos,
+        "the refusal of Tensor<string> says: " + argumentError);
+    std::vector<TypeArgument> twoElements{
+        TypeArgument{.type = f32, .data = nullptr, .extents = nullptr},
+        TypeArgument{.type = f32, .data = nullptr, .extents = nullptr}};
+    refuses(twoElements, "two element types");
+    std::vector<TypeArgument> elementAfterShape{
+        TypeArgument{
+            .type = nullptr,
+            .data = nullptr,
+            .extents = std::make_shared<const std::vector<ExtentForm>>(constants({3}))},
+        TypeArgument{.type = f32, .data = nullptr, .extents = nullptr}};
+    refuses(elementAfterShape, "an element type after the shape");
+    std::vector<TypeArgument> twoShapes{
+        TypeArgument{
+            .type = nullptr,
+            .data = nullptr,
+            .extents = std::make_shared<const std::vector<ExtentForm>>(constants({3}))},
+        TypeArgument{
+            .type = nullptr,
+            .data = nullptr,
+            .extents = std::make_shared<const std::vector<ExtentForm>>(constants({4}))}};
+    refuses(twoShapes, "two shapes");
+    std::vector<TypeArgument> noElement{
+        TypeArgument{
+            .type = nullptr,
+            .data = nullptr,
+            .extents = std::make_shared<const std::vector<ExtentForm>>(
+                std::vector<ExtentForm>{})}};
+    refuses(noElement, "a shape with no extent and no element type");
+    require(
+        argumentError.find("Tensor<f32, []>") != std::string::npos,
+        "the refusal of Tensor<[]> does not name the spelling that has a meaning: " + argumentError);
+
+    return "shapes interned, relations checked, binding checked, alias arguments checked, moved "
+           "check says: " +
+           movedCheck;
 }
 
 } // namespace camel::core::type

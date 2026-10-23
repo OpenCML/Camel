@@ -12,6 +12,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/utils/assert.h"
 #include "dtype.h"
 #include "tensor.h"
@@ -199,6 +200,36 @@ Type *TensorType::unify(Type *other) const {
 }
 
 Type *TensorType::widened() const { return Default(); }
+
+Type *TensorType::literalOperandType() const {
+    // A literal operand beside a tensor is an element of it (`x * 2.0` with `x: Tensor<f32>` is
+    // the f32 product, so no f64 operand stays on the graph): it takes the tensor's element type
+    // (design principles 5.1, H371). A tensor whose element type is open gives none, and the
+    // literal keeps its own type.
+    if (!dtype_) {
+        return nullptr;
+    }
+    switch (*dtype_) {
+    case TypeCode::Int32:
+        return Type::Int32();
+    case TypeCode::Int64:
+        return Type::Int64();
+    case TypeCode::Float32:
+        return Type::Float32();
+    case TypeCode::Float64:
+        return Type::Float64();
+    case TypeCode::BFloat16:
+        return Type::BFloat16();
+    case TypeCode::Float16:
+        return Type::Float16();
+    case TypeCode::Bool:
+        // A bool tensor has no arithmetic of its own: its operators compute in f32 (`mask * 1.0`
+        // reads the mask as numbers), so that is the type a literal beside one takes.
+        return Type::Float32();
+    default:
+        return nullptr;
+    }
+}
 
 CastSafety TensorType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr) {
@@ -409,6 +440,63 @@ const TensorType *asTensorType(const Type *type) {
         return nullptr;
     }
     return static_cast<const TensorType *>(type);
+}
+
+bool isTensorType(const Type *type) {
+    if (asTensorType(type) != nullptr) {
+        return true;
+    }
+    // While the alias is being introduced, the only array a tensor can be is the numeric-unknown
+    // array it hands out (`Tensor`, `Tensor<f32>`, `Tensor<f32, [3]>`): an array a program writes
+    // (`f32[]`, `f32[2, 3]`) is still an array. The flip replaces this line with
+    // `isNumericArrayType(type)`.
+    const ArrayType *array = asArrayType(type);
+    return array != nullptr && array->isNumericUnknown();
+}
+
+TensorFacts tensorFactsOf(const Type *type) {
+    if (type == nullptr) {
+        return {};
+    }
+    if (const TensorType *tensor = asTensorType(type)) {
+        return {tensor->dtype(), tensor->shape()};
+    }
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr) {
+        if (isSupportedTensorScalar(type->code())) {
+            // A scalar argument: rank 0, the element type it has.
+            return {type->code(), StaticShape{}};
+        }
+        return {};
+    }
+    if (array->isNumericUnknown()) {
+        // `Tensor`: no element type is fixed. A shape argument fixes the rank and its extents;
+        // a bare `Tensor` fixes neither.
+        TensorFacts facts;
+        if (!array->anyRank()) {
+            StaticShape shape;
+            shape.reserve(array->rank());
+            for (const ExtentForm &form : array->extents()) {
+                shape.push_back(form.isConstant() ? form.constant() : kUnknownDim);
+            }
+            facts.shape = std::move(shape);
+        }
+        return facts;
+    }
+    // A nested array (`f32[][]`): the innermost element type decides the dtype, the nesting depth
+    // is the rank, and the extents of a written-out literal are not known.
+    Type *elem = array->elemType();
+    size_t depth = 1;
+    while (elem->code() == TypeCode::Array) {
+        elem = static_cast<ArrayType *>(elem)->elemType();
+        ++depth;
+    }
+    TensorFacts facts;
+    if (isSupportedTensorScalar(elem->code())) {
+        facts.dtype = elem->code();
+    }
+    facts.shape = StaticShape(depth, kUnknownDim);
+    return facts;
 }
 
 } // namespace camel::tensor

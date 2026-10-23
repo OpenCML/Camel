@@ -7,7 +7,7 @@
  * per name, and no `TensorLike`, `TensorOrScalar` or optional parameter). The C++ operators in
  * `modules/tensor` are the one source of these types; this file is for reference only (it is not
  * compiled) and feeds `docs/stdlib-reference.md` and the `--verify-ops` check. The fixed
- * signatures are declared in `stdlib/tensor.cml` (design principles 6.4; handover H19, H151).
+ * signatures are declared in `stdlib/tensor.cml` (design principles 6.4).
  */
 
 // ---- creation ----
@@ -351,7 +351,7 @@ export func ones_like(t: Tensor): Tensor
 export func cast(t: Tensor | number[], dtype: string): Tensor
 
 // `show` is declared: its result is fixed `void` and its umbrella parameter is two declarations
-// (a tensor, and any array). See `stdlib/tensor.cml` (handover H175).
+// (a tensor, and any array). See `stdlib/tensor.cml`.
 
 // ---- binary form ----
 

@@ -79,6 +79,21 @@ void adaptiveUpdate(
     const float *moment1, const float *moment2, float *nextParam, float *nextMoment1,
     float *nextMoment2);
 
+/**
+ * The same update for a leaf whose element type is f64: `count` contiguous double elements per
+ * stream, each one through `adaptiveUpdateOne` exactly as the pass above does it. Nothing is
+ * narrowed on the way in or on the way out, so an f64 leaf keeps f64 (design principles 7.4: the
+ * element type is exact; `nn`'s leaf keeps the element type its type states). The arithmetic per
+ * element is the same double work the f32 pass does -- only the loads and stores are twice as
+ * wide -- and the range is split by the same grain policy at the portable unit's rate, because the
+ * per-ISA units below are the f32 ones. A per-ISA double unit is a speed decision, not a semantic
+ * one, and the values are the portable unit's either way.
+ */
+void adaptiveUpdate64(
+    int64_t count, const AdaptiveUpdateRates &rates, const double *param, const double *grad,
+    const double *moment1, const double *moment2, double *nextParam, double *nextMoment1,
+    double *nextMoment2);
+
 namespace detail {
 
 using AdaptiveUpdateFn = void (*)(

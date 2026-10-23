@@ -349,10 +349,14 @@ any Formatter::visitBlockStmt(cst::BlockStmt context) {
     // The tags written before the block (`#tag { ... }`) and `@numeric(...)`: each on a line of
     // its own, at the start of a line (design principles 4.1, 6.2).
     for (const auto &tagUse : context->all<cst::TagUse>()) {
-        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+        // The comments written between the tag and the declaration it belongs to are written here,
+        // where the reader put them (commentsInFrontMatter).
+        result += any_cast<string>(visitTagUse(tagUse)) +
+                  commentsInFrontMatter(tagUse->lastToken()->index());
     }
     for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
-        result += any_cast<string>(visitFuncAnno(funcAnno)) + lineEnd();
+        result += any_cast<string>(visitFuncAnno(funcAnno)) +
+                  commentsInFrontMatter(funcAnno->lastToken()->index());
     }
     result += context->tok(TK::KwWait) ? "wait " : "";
     result += any_cast<string>(visitStmtBlock(context->get<cst::StmtBlock>()));
@@ -559,15 +563,20 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
     const auto &stmtBlock    = context->get<cst::StmtBlock>();
 
     for (const auto &tagUse : context->all<cst::TagUse>()) {
-        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+        // The comments written between the tag and the declaration it belongs to are written here,
+        // where the reader put them (commentsInFrontMatter).
+        result += any_cast<string>(visitTagUse(tagUse)) +
+                  commentsInFrontMatter(tagUse->lastToken()->index());
     }
 
     for (const auto funcAnno : funcAnnos) {
-        result += any_cast<string>(visitFuncAnno(funcAnno)) + lineEnd();
+        result += any_cast<string>(visitFuncAnno(funcAnno)) +
+                  commentsInFrontMatter(funcAnno->lastToken()->index());
     }
 
     if (angledParams) {
-        result += "with " + any_cast<string>(visitAngledParams(angledParams)) + lineEnd();
+        result += "with " + any_cast<string>(visitAngledParams(angledParams)) +
+                  commentsInFrontMatter(angledParams->lastToken()->index());
     }
 
     if (context->tok(TK::KwExport)) {
@@ -633,7 +642,10 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
     // The tags written before the rule (`#requires<...>`, design principles 6.2, 7.2): each on a
     // line of its own, as before a function or a type declaration.
     for (const auto &tagUse : context->all<cst::TagUse>()) {
-        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+        // The comments written between the tag and the declaration it belongs to are written here,
+        // where the reader put them (commentsInFrontMatter).
+        result += any_cast<string>(visitTagUse(tagUse)) +
+                  commentsInFrontMatter(tagUse->lastToken()->index());
     }
     result += context->has(TK::KwExport) ? "export rule " : "rule ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
@@ -658,7 +670,10 @@ analysisDecl : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' type
 any Formatter::visitAnalysisDecl(cst::AnalysisDecl context) {
     string result;
     for (const auto &tagUse : context->all<cst::TagUse>()) {
-        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+        // The comments written between the tag and the declaration it belongs to are written here,
+        // where the reader put them (commentsInFrontMatter).
+        result += any_cast<string>(visitTagUse(tagUse)) +
+                  commentsInFrontMatter(tagUse->lastToken()->index());
     }
     result += context->tok(TK::KwExport) ? "export analysis " : "analysis ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
@@ -835,7 +850,10 @@ typeDecl
 any Formatter::visitTypeDecl(cst::TypeDecl context) {
     string result;
     for (const auto &tagUse : context->all<cst::TagUse>()) {
-        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+        // The comments written between the tag and the declaration it belongs to are written here,
+        // where the reader put them (commentsInFrontMatter).
+        result += any_cast<string>(visitTagUse(tagUse)) +
+                  commentsInFrontMatter(tagUse->lastToken()->index());
     }
     result += "type " + any_cast<string>(visitIdentRef(context->get<cst::IdentRef>()));
     if (const auto params = context->all<cst::IdentDef>(); !params.empty()) {

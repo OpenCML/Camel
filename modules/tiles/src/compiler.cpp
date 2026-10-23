@@ -203,7 +203,7 @@ class Compiler {
             }
             return value;
         }
-        if (tensor::asTensorType(type)) {
+        if (tensor::isTensorType(type)) {
             const auto *t = td::fromSlot<tensor::Array *>(slot);
             if (!t || t->dtype() != ty::TypeCode::Float32)
                 throw UnsupportedComputation(
@@ -311,11 +311,11 @@ class Compiler {
         if (type->code() == ty::TypeCode::Float64)
             node.dtype = DType::F64;
         else {
-            const auto *t = tensor::asTensorType(type);
-            if (!t || t->dtype() != ty::TypeCode::Float32 || !t->isStaticShape())
+            const tensor::TensorFacts facts = tensor::tensorFactsOf(type);
+            if (facts.dtype != ty::TypeCode::Float32 || !facts.isStaticShape())
                 throw UnsupportedComputation(
                     "loop values require f64 scalars or static f32 tensors");
-            node.shape = *t->shape();
+            node.shape = *facts.shape;
         }
         return {.type = type, .tensor = append(std::move(node))};
     }
@@ -542,9 +542,9 @@ class Compiler {
                     out.type = target;
                     break;
                 }
-                const auto *tensorTarget = tensor::asTensorType(target);
-                if (!tensorTarget || out.tensor == SIZE_MAX ||
-                    !tensorTarget->assignableFrom(out.type))
+                const bool isTensorTarget = tensor::isTensorType(target);
+                if (!isTensorTarget || out.tensor == SIZE_MAX ||
+                    !target->assignableFrom(out.type))
                     throw std::runtime_error("unsupported cast or tensor shape assertion failed");
                 break;
             }
@@ -831,13 +831,14 @@ class Compiler {
                         .inputs = {input},
                         .dtype  = DType::F64})};
         }
-        const auto *result = inferred ? tensor::asTensorType(*inferred) : nullptr;
-        if (!result || result->dtype() != ty::TypeCode::Float32 || !result->isStaticShape())
+        const tensor::TensorFacts result =
+            inferred ? tensor::tensorFactsOf(*inferred) : tensor::TensorFacts{};
+        if (result.dtype != ty::TypeCode::Float32 || !result.isStaticShape())
             throw UnsupportedComputation(
                 "operator '" + uri() + "' needs a statically known f32 tensor result",
                 uri(),
                 UnsupportedComputation::Reason::Shape);
-        Node n{.op = std::string(def->name), .shape = *result->shape()};
+        Node n{.op = std::string(def->name), .shape = *result.shape};
         if (n.op == "sum_to") {
             n.inputs = {tensorValue(args.at(0))};
             if (program.nodes[n.inputs[0]].shape == n.shape)
@@ -854,7 +855,7 @@ class Compiler {
             // stays on the CPU, where the tensor kernel converts
             // (notes/core-semantics-map.md, "cast_like"). A scalar source is not the same
             // value as the 0-d tensor this result has: keep that on the CPU as well.
-            if (!tensor::asTensorType(args.at(0).type))
+            if (!tensor::isTensorType(args.at(0).type))
                 throw UnsupportedComputation(
                     "'" + n.op + "' needs a tensor operand here",
                     uri(),
@@ -1028,13 +1029,13 @@ static Program compileInputs(
             if (type->code() == ty::TypeCode::Float64) {
                 input.dtype = DType::F64;
             } else {
-                const auto *tensor = tensor::asTensorType(type);
-                if (!tensor || tensor->dtype() != ty::TypeCode::Float32 || !tensor->isStaticShape())
+                const tensor::TensorFacts facts = tensor::tensorFactsOf(type);
+                if (facts.dtype != ty::TypeCode::Float32 || !facts.isStaticShape())
                     throw UnsupportedComputation(
                         "type-only compilation requires static f32 tensor shapes",
                         {},
                         UnsupportedComputation::Reason::Shape);
-                input.shape = *tensor->shape();
+                input.shape = *facts.shape;
             }
             const auto node = c.append(std::move(input));
             c.program.parameterInputs.push_back(node);

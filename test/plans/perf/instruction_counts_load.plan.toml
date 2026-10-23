@@ -1,0 +1,23 @@
+id = "perf.instruction_counts_load"
+order = 426
+tier = "slow"
+tags = ["perf", "training", "instructions", "load"]
+
+# The same case as `instruction_counts.plan.toml`, run while a privileged container holds 96
+# spinners (`yes`) on the 32 hardware threads, settled long enough to show in the 1-minute load
+# average, so the two currencies can be read at two visibly different load averages: retired
+# instructions are the same work whatever the neighbours do, and task-clock and wall time are not.
+# One cell (d=64), two run lengths, two repeats.
+
+[[tests]]
+name = "perf.instruction_counts_load"
+desc = "The naive step's instructions per step at d=64 while 48 spinners hold the host, next to the same measurement taken at ambient load: the point of the pair is what moves and what does not."
+kind = "behavior"
+tool = "python"
+case = "../../cases/perf/instruction_counts.py"
+args = ["${case}", "measure", "--sizes", "64", "--lengths", "64,512", "--repeats", "2", "--control-repeats", "2", "--induce-load", "96", "--load-seconds", "600", "--load-settle", "75", "--label", "induced-load", "--json", "${test_tmp}/instruction-counts-load.json", "--work", "${test_tmp}/work"]
+expect_exit = 0
+expect_stdout_contains = ["instruction counts: PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 900000

@@ -27,20 +27,26 @@ gc_node_ref_t bridgeMacroRewriteControl(
     const std::vector<gc_node_ref_t> ctrlPreds(
         draft.ctrlInputsOf(replacedNodeId).begin(),
         draft.ctrlInputsOf(replacedNodeId).end());
-    if (ctrlPreds.empty()) {
+    // The node a macro rewrote may be a statement of a `sync` block: the gate then takes its place
+    // in the chain (takeStatementPlace, called by the caller), so a gate is needed even when
+    // nothing ordered the node (docs/design/effects/edges.cn.md 1.5).
+    const auto *replacedHeader = draft.header(replacedNodeId);
+    const bool wasStatement =
+        replacedHeader != nullptr &&
+        (replacedHeader->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) != 0;
+    if (ctrlPreds.empty() && !wasStatement) {
         return valueNodeId;
     }
 
     const auto *valueHeader = draft.header(valueNodeId);
     ASSERT(valueHeader != nullptr, "Macro rewrite bridge requires a materialized value node.");
     camel::runtime::DraftNodeInit gateInit{
-        .dataIndex    = valueHeader->dataIndex,
-        .dataType     = valueHeader->dataType,
-        .kind         = GCNodeKind::Gate,
-        .runtimeFlags = 0,
-        .region       = draft.nodeRegion(replacedNodeId),
-        .normInputs   = std::span<const gc_node_ref_t>(&valueNodeId, 1),
-        .ctrlInputs   = ctrlPreds,
+        .dataIndex  = valueHeader->dataIndex,
+        .dataType   = valueHeader->dataType,
+        .kind       = GCNodeKind::Gate,
+        .region     = draft.nodeRegion(replacedNodeId),
+        .normInputs = std::span<const gc_node_ref_t>(&valueNodeId, 1),
+        .ctrlInputs = ctrlPreds,
     };
     return draft.addNode(gateInit);
 }
@@ -71,6 +77,7 @@ bool applyMacroRewrite(
     const gc_node_ref_t replacementNodeId =
         bridgeMacroRewriteControl(draft, draftNodeId, valueNodeId);
 
+    draft.takeStatementPlace(draftNodeId, replacementNodeId);
     draft.replaceAllValueUses(draftNodeId, replacementNodeId);
     draft.replaceAllCtrlUses(draftNodeId, replacementNodeId);
     if (draft.outputNode() == draftNodeId) {

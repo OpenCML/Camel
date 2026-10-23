@@ -2294,7 +2294,36 @@ skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["== transformer_big (camel_opt_nvm)", "gradient check: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 300000
+# The cost bound is this check's own CPU time (user + system), and the timeout is its liveness
+# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)):
+#
+#   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移，这正是 40/45/100/90 ms 在负载 106–130
+#    下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（H167 的判定已经用 CPU 中位数）。
+#    四条命令的天花板改为按 CPU 时间、取安静主机中位数加余量；"负载下红不算回归"的口径因此不需要。"
+#
+# The wall clock this check reads is the host's and not its own: 127.2 s in the slow layer at
+# -Jobs 8 on 2026-10-23, against 210.8 s for the same work earlier the same day while the host was
+# at load 135 with other agents' camel, python and qemu running. Judged on that wall clock it was
+# red with every one of its 312 gradient lines `ok` and `gradient check: PASS` at the end: the 4x
+# margin was reading the neighbours. The CPU figures behind the budget below, measured on the Linux
+# host (32 threads, never quiet that evening: the 1-minute load read 67-98 beside the runs):
+#
+#   943.31 s of CPU / 127.5 s wall   (2026-10-23, load probe beside it: 67-98)
+#   979.37 s of CPU / 165.5 s wall   (2026-10-23, the same commit, -Jobs 8)
+#
+# A 3.8% spread across two runs at different loads, where the wall clocks differ by 30%. The budget
+# is 1600 s: 1.63x the higher reading, which leaves the tick of the reading (10 ms) and a third of
+# the budget as room, and still fails a run whose work has grown by two thirds. Validated in that
+# direction on 2026-10-23 by running this same check twice over inside one test's process tree: its
+# content stayed green (650 output lines, every gradient `ok`, `gradient check: PASS`) and the run
+# failed with `used 1910.29 s of CPU against a cpu_budget_ms of 1600.00 s` (`[SUMMARY] total: 1,
+# pass: 0, fail: 1`). test/tools/selftest/cpu-budget/ keeps the cheap form of both directions.
+cpu_budget_ms = 1600000
+# Fires on a hang, not on a slow run: 15 min is 7x the 127.2 s the check takes on this host, and
+# the check bounds its own work (each `camel` run inside it is capped at 600 s,
+# benchmarks/train.py: run_camel_full), so nothing but a wedged process reaches this.
+timeout_ms = 900000
 
 [[tests]]
 name = "resnet_gradient_smooth_vs_torch64"
@@ -2309,6 +2338,36 @@ skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnet seed=benchmark activation=tanh: PASS (", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# The cost bound is this referee's own CPU time (user + system), and the timeout is its liveness
+# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)):
+#
+#   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
+#    不随负载变"
+#
+# The ruling asks for a quiet host's median plus a margin. Nothing on this shared host was quiet (the
+# 1-minute load stayed between 83 and 162 across every run), and the median of load-affected
+# readings would leave only 13-21% of room to the busiest of them, so each of these four budgets is
+# taken from the highest reading with that same margin instead: the direction that cannot fire on the
+# host's load, which is the defect being removed.
+#
+# Measured on the Linux host (32 threads; the 1-minute load read 83-162 across the runs, so the
+# machine was 3-5x oversubscribed):
+#
+#   44.33 s of CPU / 32.45 s wall   (2026-10-24, the four referees of this plan together at -Jobs 8)
+#   47.15 s of CPU / 38.54 s wall   (2026-10-24, same)
+#   52.95 s of CPU / 50.59 s wall   (2026-10-24, this plan in full, 199 tests at -Jobs 8)
+#
+# A 19% spread in the CPU figure against 56% in the wall clock. The budget is 80 s: 1.63x the higher
+# of the two readings taken to set it (47.15 s, rounded up), the same headroom as
+# benchmark_gradients_vs_torch above, and 1.51x the busiest reading any of the three runs gave. It
+# still fails a run whose work has grown by two thirds. The wall clock used to decide this test
+# through the runner's 4x margin, that is 75 s of this timeout, and at load 100 the referee is
+# CPU-bound: the margin was reading the neighbours.
+cpu_budget_ms = 80000
+# Fires on a hang, not on a slow run: the referee bounds its own work (each camel run inside it is
+# capped at 1800 s, benchmarks/tools/grad_referee.py), and 5 min is 6.4x the 38.5 s the loaded host
+# gives it.
 timeout_ms = 300000
 
 [[tests]]
@@ -2324,6 +2383,18 @@ skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=tanh: PASS (", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# CPU time, by the ruling quoted on resnet_gradient_smooth_vs_torch64 above; measured with it:
+#
+#   52.27 s of CPU / 36.99 s wall   (2026-10-24, -Jobs 8)
+#   54.27 s of CPU / 47.09 s wall   (2026-10-24, -Jobs 8)
+#   52.63 s of CPU / 38.84 s wall   (2026-10-24, this plan in full at -Jobs 8)
+#
+# A 4% spread in the CPU figure against 27% in the wall clock. The budget is 90 s: 1.63x the higher
+# of the two readings taken to set it (54.27 s, rounded up) and 1.71x the busiest of the three. The
+# wall clock used to decide this test through the runner's 4x margin, 75 s of this timeout.
+cpu_budget_ms = 90000
+# Fires on a hang, not on a slow run: 5 min is 6.4x the 47.1 s the loaded host gives it, and the
+# referee caps each camel run inside it at 1800 s.
 timeout_ms = 300000
 
 [[tests]]
@@ -2339,10 +2410,23 @@ skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnet seed=benchmark activation=relu: PASS", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# 60 min: the referee is CPU-bound (3:12 and 1.8 GB peak measured alone on the shared 32-core
-# host at load 100; about 8.5 min for the same work at -Jobs 8). The old 10 min bound sat at
-# the loaded wall time, so the next slower run made it red; that is not a bound. Each Camel run
-# inside the referee is itself capped at 1800 s, so this fires only on a hang.
+# CPU time, by the ruling quoted on resnet_gradient_smooth_vs_torch64 above; measured with it
+# (the same 32-thread host, the four referees of this plan together at -Jobs 8):
+#
+#   438.40 s of CPU / 161.99 s wall   (2026-10-24)
+#   588.67 s of CPU / 289.13 s wall   (2026-10-24)
+#   633.12 s of CPU / 381.65 s wall   (2026-10-24, this plan in full, 199 tests at -Jobs 8)
+#
+# The CPU figure itself moves with the host's load here (44% between those windows, against 19% for
+# the tanh referee above): the thread pool of every Camel run this referee starts spends more CPU
+# when the machine is oversubscribed, while the wall clock moved 136% over the same three runs. The
+# budget is therefore taken from the higher reading with the same 1.63x headroom: 960 s, which is
+# 1.52x the busiest reading seen. That is a wider room than the wall bound it replaces, which fired
+# at 900 s against a loaded wall of 162-382 s for this same entry.
+cpu_budget_ms = 960000
+# 60 min: liveness only, by the ruling above. The referee is CPU-bound, each Camel run inside it is
+# capped at 1800 s, and the wall clock this used to be judged on (the runner's 4x margin) read the
+# neighbours rather than this test.
 timeout_ms = 3600000
 
 [[tests]]
@@ -2358,8 +2442,20 @@ skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=relu: PASS", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# 60 min, by the measurement of resnet_gradient_relu_kinks_vs_torch64 above: this model does
-# more work (batch_norm), and the same referee phases are capped at 1800 s each.
+# CPU time, as above and measured beside it:
+#
+#    916.77 s of CPU / 328.90 s wall   (2026-10-24, -Jobs 8)
+#   1331.68 s of CPU / 710.70 s wall   (2026-10-24, -Jobs 8)
+#   1261.39 s of CPU / 744.96 s wall   (2026-10-24, this plan in full at -Jobs 8)
+#
+# The same moving figure as the resnet kinks above (45% between the windows, the same drifting
+# thread pool, against 126% of wall-clock movement). The budget again comes from the higher reading
+# with the same 1.63x headroom: 2200 s, 1.74x the busiest reading seen. The wall bound this replaces
+# fired at 900 s, only 1.27x the 710.70 s wall the loaded host gave this entry -- it went red on the
+# host's load and not on this test's work.
+cpu_budget_ms = 2200000
+# 60 min, by the measurement above: liveness only. This model does more work (batch_norm), each
+# Camel run inside the referee is capped at 1800 s, and the wall clock no longer decides it.
 timeout_ms = 3600000
 
 [[tests]]
@@ -2875,3 +2971,23 @@ expect_stdout_contains = ["second_order_array_append_init d0=6.0 d1=2.0"]
 expect_output_contains = ["no derivative rule for operator ':tangent/init_arr'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "f64_broadcast_grad"
+desc = "An f64 gradient through a broadcast: sum(x * p0) with x a Tensor<f64, [2, 3]> and p0 a Tensor<f64, [3]> multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'Tensor<f64>'\". Both gradients are printed and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/f64_broadcast_grad.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+assert(text.includes('f64_broadcast_grad value=22.25 a_x=0.0 a_p0=0.0 wa=0.0'), `unexpected distances: ${text}`)
+assert(text.includes('gx tensor([[        0.5,        0.25,       2.],'), `the x gradient is not the row broadcast of p0: ${text}`)
+assert(text.includes('[        0.5,        0.25,       2.]], dtype=float64)'), `the x gradient is not f64: ${text}`)
+assert(text.includes('gp tensor([      5.,       7.,       9.], dtype=float64)'), `the p0 gradient is not the column sum of x: ${text}`)
+assert(text.includes('wp tensor([ 16777217.,       2.,  16777217.], dtype=float64)'), `the wide sum did not accumulate in f64: ${text}`)
+}
+"""
+timeout_ms = 10000

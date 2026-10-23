@@ -296,8 +296,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // it without one has no element type; say so here, where the type can be written. (A
     // name the compiler made for an element of a literal starts with a digit.)
     if (Type *type = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
-        type != nullptr && type->code() == TypeCode::Array &&
-        tt::as_ptr<ArrayType>(type)->elemType()->code() == TypeCode::Void && !ident.empty() &&
+        type != nullptr && isUntypedArrayType(type) && !ident.empty() &&
         !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
         diags_->of(SemanticDiag::EmptyArrayWithoutType)
             .atOrigin(gct->at(0)->origin())
@@ -431,6 +430,13 @@ void Builder::recordWrite(
 }
 
 void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
+    // A control input, and it has to stay one until the read gets the data edge it is owed: for
+    // a call that reads a captured `var` this is the edge that makes the write the read uses
+    // execute (design principles 3.5, F3), and an order edge would leave the read with the value
+    // from before it. The two uses of this helper are one link today, and telling them apart
+    // needs that data edge. The read is a data edge from the nearest write and writes are
+    // ordered by order edges -- docs/handover/reviews/questions-2026-10-23.md,
+    // "h242a-capture-order-edge".
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
             linkNodes(LinkType::Ctrl, *modifier, node);
@@ -763,12 +769,13 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(e)) {
             // A generic function of another module: like a local one it is a marker until a
             // call or the position it stands in chooses the instance, which is built in this
-            // module (instantiateGeneric).
+            // module (instantiateGeneric). A name the other module declares as several generic
+            // functions brings all of them, and a call takes the one its arguments fit.
             node_handle_t drefNode = graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
                     std::make_shared<graph_set_t>()});
-            genericDrefs_[drefNode] = std::static_pointer_cast<GenericTemplate>(
-                camel::core::module::detail::EntityAccess::genericTemplate(e));
+            genericDrefs_[drefNode] = generic_ref_t(std::make_shared<GenericGroup>(
+                genericTemplatesOfEntity(e)));
             registerNodeOrigin(context_, drefNode, gct, "gir.dref.generic");
             LEAVE("DREF");
             return drefNode;
@@ -1192,7 +1199,8 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     // have yet, and a set of overloads has no single value at all.
     const auto restInfo = genericDrefs_.find(targetNode);
     const bool restCall = restInfo != genericDrefs_.end() &&
-                          restInfo->second->funcType->hasRest();
+                          restInfo->second.one() != nullptr &&
+                          restInfo->second.one()->funcType->hasRest();
     const auto isCallableName = [&](node_handle_t node) {
         if (genericDrefs_.contains(node)) {
             return true;

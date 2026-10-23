@@ -1,0 +1,284 @@
+/**
+ * The Camel optimizers (`optim`) against the native ones (`nn`) on the same inputs, over a whole
+ * trajectory: the schedule included, every leaf of every step compared by value.
+ *
+ * The parameter tree holds the four kinds of trainable leaf -- a tensor whose element type and
+ * shape are written, a tensor whose shape and element type the program does not write, an f64
+ * number and an f32 number -- and the starting values and gradients have binary digits below the
+ * point, so an f32 intermediate would move the result. Each loop below runs both implementations
+ * on the same gradient with the same schedule and sums `|a - b|` over every leaf and element:
+ * exactly zero means the two agree bit for bit, and a NaN on either side counts as a mismatch.
+ * The number of leaves the walk looked at is printed next to it, so a walk that skipped a leaf
+ * cannot pass as agreement.
+ *
+ * The native state is opaque (`OptimizerState`), so the two moment trees are compared through the
+ * parameter trajectory they produce: after several steps a moment that differed in one bit has
+ * moved a parameter. The step count of the Camel state is printed too: it is the number of updates
+ * the schedule was read at.
+ *
+ * Two comparisons hold the properties of the module itself: `adamw` with a zero decay is `adam`,
+ * and `adamw` follows the trajectory of `adam` on a parameter tree independently decayed before
+ * every step (`tree_map`), which is what "decoupled" means.
+ */
+module optim_agreement
+
+import math
+import { Tensor, abs, cast, full, range, reshape, sum, tanh } from tensor
+import { adam as native_adam, adam_state, sgd as native_sgd } from nn
+import { adam, adamw, constant, cosine_decay, init, linear_decay, sgd, update } from optim
+import { with_grad } from autodiff
+import { tree_map } from tree
+
+// The parameter tree the native optimizers take. `nn`'s computed signatures match the shapes the
+// native operators registered, and a flat struct of tensors is refused by every spelling I tried
+// (docs/technical/optim.md records the table); this is the shape
+// test/cases/modules/nn/residual_mlp.cml trains with -- nested structs of tensors plus an `int`
+// leaf the optimizers leave alone -- so both implementations take it. Every tensor leaf leaves its
+// element type to the data, and the element type of the value is the element type both walks update
+// at (docs/handover/reviews/questions-2026-10-23.md, section `f64-tensor-leaf`: "unstated" means
+// the type does not say it): the values below are f32, so both sides compute them in double and
+// round once, and they have binary digits below the point, so a step computed at f32 instead of in
+// double would move them.
+type Linear = {
+    weight: Tensor,
+    bias: Tensor
+}
+
+type Model = {
+    l0: Linear,
+    l1: Linear
+}
+
+// A second tree, all tensors, for the property of `adamw`: `tree_map`'s callback is written for a
+// `Tensor`, so every leaf of this tree is one. It is only ever handed to this module.
+type Tensors = {
+    w: Tensor,
+    b: Tensor
+}
+
+// The starting parameters of the first tree, in the one tensor spelling the native side takes: a
+// tensor built by ull has a known element type and a known shape, which is what
+// test/cases/modules/nn/residual_mlp.cml builds its model from.
+func model_at(): Model {
+    return {
+        l0: {
+            weight: full([6], f32(0.0007)),
+            bias: full([6], f32(0.03))
+        },
+        l1: {
+            weight: full([6], f32(0.005)),
+            bias: full([6], f32(0.007))
+        }
+    }
+}
+
+// The loss the gradient comes from: a function of the model that touches every tensor leaf, so a
+// gradient of it is a tree of the same shape and no leaf is left without one. `nn`'s optimizers
+// take the gradient of a model, not a tree that merely has the same type -- a value that is not the
+// gradient of the first argument is refused when the call is compiled -- so both sides are handed
+// what `with_grad` answers for the parameters of this step.
+with <m: Model>
+func loss(x: Tensor): float {
+    return sum(tanh(m.l0.weight * x)) + sum(m.l1.weight * x) + sum(m.l0.bias * x) + sum(m.l1.bias * x)
+}
+
+// The starting parameters and the gradient of step `n` of the all-tensor tree.
+func tensors_at(): Tensors {
+    return {
+        w: cast(range(6), 'float32') * 0.0007 - 0.002,
+        b: cast(range(2), 'float32') * 0.03 + 0.001
+    }
+}
+
+func tensors_gradient_at(step: int): Tensors {
+    return {
+        w: cast(range(6), 'float32') * f32(0.0007 * float(step)) - 0.002,
+        b: cast(range(2), 'float32') * f32(0.03 * float(step)) + 0.001
+    }
+}
+
+// `p * (1 - lr * decay)`, the parameter step of AdamW, written here from the two numbers rather
+// than taken from `optim`, so the property below is not a restatement of the module's expression.
+// The rate factor is rounded to f32 first, because a tensor operator takes the wider of its two
+// element types: a `float` factor would widen these f32 leaves to f64 (design principles 7.4).
+func decayed(w: Tensor): Tensor {
+    return w * f32(1.0 - 0.01 * 0.1)
+}
+
+// The sum of `|a - b|` over every leaf and every element, and the number of leaves it looked at.
+// Each difference is non-negative, so the sum is exactly zero only when every leaf agrees bit for
+// bit; a NaN makes it NaN, which is a mismatch too.
+func difference::<A, B>(a: A, b: B): (float, int) {
+    return match type A {
+        case struct | tuple =>
+            static loop t = (0.0, 0) for (n, _) in fields A do plus(t, difference(a.[n], b.[n]))
+        case float => (math::abs(a - b), 1)
+        case f32 => (float(math::abs(a - b)), 1)
+        case _ => (float(sum(abs(a - b))), 1)
+    }
+}
+
+func plus(x: (float, int), y: (float, int)): (float, int) {
+    return (x.0 + y.0, x.1 + y.1)
+}
+
+// How many of the differences are not exactly zero.
+func mismatches(drifts: float[]): int {
+    return drifts->reduce<(acc: int, d: float): int => if d != 0.0 then acc + 1 else acc, 0>
+}
+
+func main(steps: int): int sync {
+    let model = model_at()
+    let tensors = tensors_at()
+    let x = reshape(cast(range(6), 'float32'), [6]) * 0.125 - 0.5
+    let loss_with_grad = with_grad(loss)
+    var failures = 0
+
+    // (1) sgd with a straight-line decay. The native `sgd` takes the rate as an argument, so the
+    // reference path reads the very schedule the Camel path reads inside `update`.
+    let sgd_schedule = linear_decay(0.05, 4, 0.01)
+    let sgd_opt = sgd(sgd_schedule)
+    let (sgd_camel, sgd_ref, sgd_state, sgd_steps, sgd_drifts, sgd_seen) = loop
+        p = model, r = model, s = init(sgd_opt, model), step = 0, out = [] as float[], seen = 0
+        while step < steps
+        do {
+            let (value, g) = loss_with_grad<p>(x)
+            let next = update(sgd_opt, p, g, s)
+            let other = native_sgd(r, g, sgd_schedule(step + 1))
+            let d = difference(next.0, other)
+            return (next.0, other, next.1, step + 1, out->append<d.0>, seen + d.1)
+        }
+    let sgd_bad = mismatches(sgd_drifts)
+    if sgd_bad != 0 || sgd_seen != steps * 4 || sgd_steps != steps then failures = failures + 1
+    'optim sgd steps={} made={} compared={} mismatches={}'
+    ->format<steps, sgd_state.step, sgd_seen, sgd_bad>
+    ->println
+    'optim sgd camel w00={} w05={} b01={} w10={} b11={}'
+    ->format<sgd_camel.l0.weight[0], sgd_camel.l0.weight[5], sgd_camel.l0.bias[1], sgd_camel.l1.weight[0], sgd_camel.l1.bias[1]>
+    ->println
+    'optim sgd nn w00={} w05={} b01={} w10={} b11={}'
+    ->format<sgd_ref.l0.weight[0], sgd_ref.l0.weight[5], sgd_ref.l0.bias[1], sgd_ref.l1.weight[0], sgd_ref.l1.bias[1]>
+    ->println
+
+    // (2) adam with constants that are not the defaults, and a cosine decay.
+    let adam_schedule = cosine_decay(0.01, 4, 0.001)
+    let adam_opt = adam(adam_schedule, 0.5, 0.25, 0.0001)
+    let (adam_camel, adam_ref, adam_camel_state, adam_native_state, adam_steps, adam_drifts, adam_seen) = loop
+        p = model, r = model, s = init(adam_opt, model), ns = adam_state(model), step = 0,
+        out = [] as float[], seen = 0
+        while step < steps
+        do {
+            let (value, g) = loss_with_grad<p>(x)
+            let next = update(adam_opt, p, g, s)
+            let other = native_adam(r, g, ns, adam_schedule(step + 1), 0.5, 0.25, 0.0001)
+            let d = difference(next.0, other.0)
+            return (next.0, other.0, next.1, other.1, step + 1, out->append<d.0>, seen + d.1)
+        }
+    let adam_bad = mismatches(adam_drifts)
+    if adam_bad != 0 || adam_seen != steps * 4 || adam_steps != steps then failures = failures + 1
+    'optim adam steps={} made={} compared={} mismatches={}'
+    ->format<steps, adam_camel_state.step, adam_seen, adam_bad>
+    ->println
+    'optim adam camel w00={} b01={} w10={} b11={}'
+    ->format<adam_camel.l0.weight[0], adam_camel.l0.bias[1], adam_camel.l1.weight[0], adam_camel.l1.bias[1]>
+    ->println
+    'optim adam nn w00={} b01={} w10={} b11={}'
+    ->format<adam_ref.l0.weight[0], adam_ref.l0.bias[1], adam_ref.l1.weight[0], adam_ref.l1.bias[1]>
+    ->println
+
+    // (3) adam with the defaults of both sides: `adam(schedule)` must be the constants the native
+    // call uses when none are given.
+    let default_opt = adam(adam_schedule)
+    let (default_camel, default_ref, default_camel_state, default_native_state, default_steps, default_drifts, default_seen) = loop
+        p = model, r = model, s = init(default_opt, model), ns = adam_state(model), step = 0,
+        out = [] as float[], seen = 0
+        while step < steps
+        do {
+            let (value, g) = loss_with_grad<p>(x)
+            let next = update(default_opt, p, g, s)
+            let other = native_adam(r, g, ns, adam_schedule(step + 1))
+            let d = difference(next.0, other.0)
+            return (next.0, other.0, next.1, other.1, step + 1, out->append<d.0>, seen + d.1)
+        }
+    let default_bad = mismatches(default_drifts)
+    if default_bad != 0 || default_seen != steps * 4 || default_steps != steps then failures = failures + 1
+    'optim adam_default steps={} made={} compared={} mismatches={}'
+    ->format<steps, default_camel_state.step, default_seen, default_bad>
+    ->println
+    'optim adam_default camel w00={} w10={}'
+    ->format<default_camel.l0.weight[0], default_camel.l1.weight[0]>
+    ->println
+    'optim adam_default nn w00={} w10={}'
+    ->format<default_ref.l0.weight[0], default_ref.l1.weight[0]>
+    ->println
+
+    // (4) `adamw` with a zero decay is `adam`: the decay multiplies every parameter by exactly one.
+    let zero_opt = adamw(constant(0.02), 0.9, 0.999, 0.00000001, 0.0)
+    let plain_opt = adam(constant(0.02), 0.9, 0.999, 0.00000001)
+    let (zero_camel, plain_ref, zero_state, plain_state, zero_steps, zero_drifts, zero_seen) = loop
+        p = model, q = model, s = init(zero_opt, model), t = init(plain_opt, model), step = 0,
+        out = [] as float[], seen = 0
+        while step < steps
+        do {
+            let (value, g) = loss_with_grad<p>(x)
+            let a = update(zero_opt, p, g, s)
+            let b = update(plain_opt, q, g, t)
+            let d = difference(a.0, b.0)
+            return (a.0, b.0, a.1, b.1, step + 1, out->append<d.0>, seen + d.1)
+        }
+    let zero_bad = mismatches(zero_drifts)
+    if zero_bad != 0 || zero_seen != steps * 4 || zero_steps != steps then failures = failures + 1
+    'optim adamw_zero_decay steps={} made={} compared={} mismatches={}'
+    ->format<steps, zero_state.step, zero_seen, zero_bad>
+    ->println
+    'optim adamw_zero_decay camel w00={} w10={}'
+    ->format<zero_camel.l0.weight[0], zero_camel.l1.weight[0]>
+    ->println
+    'optim adamw_zero_decay adam w00={} w10={}'
+    ->format<plain_ref.l0.weight[0], plain_ref.l1.weight[0]>
+    ->println
+
+    // (5) `adamw` with a decay is `adam` on the parameter tree decayed before every step: the
+    // reference path moves its own parameters by `1 - lr * decay` at the top of each step and then
+    // hands them to plain `adam`, whose moments are the same tree of moments.
+    let decay_opt = adamw(constant(0.01), 0.9, 0.999, 0.00000001, 0.1)
+    let decay_ref_opt = adam(constant(0.01), 0.9, 0.999, 0.00000001)
+    let (decay_camel, decay_ref, decay_state, decay_plain_state, decay_steps, decay_drifts, decay_seen) = loop
+        p = tensors, q = tensors, s = init(decay_opt, tensors), t = init(decay_ref_opt, tensors),
+        step = 0, out = [] as float[], seen = 0
+        while step < steps
+        do {
+            let g = tensors_gradient_at(step + 1)
+            let a = update(decay_opt, p, g, s)
+            let qd = tree_map<decayed>(q)
+            let b = update(decay_ref_opt, qd, g, t)
+            let d = difference(a.0, b.0)
+            return (a.0, b.0, a.1, b.1, step + 1, out->append<d.0>, seen + d.1)
+        }
+    let decay_bad = mismatches(decay_drifts)
+    if decay_bad != 0 || decay_seen != steps * 2 || decay_steps != steps then failures = failures + 1
+    'optim adamw_decay steps={} made={} compared={} mismatches={}'
+    ->format<steps, decay_state.step, decay_seen, decay_bad>
+    ->println
+    'optim adamw_decay camel w3={} b1={}'
+    ->format<decay_camel.w[3], decay_camel.b[1]>
+    ->println
+    'optim adamw_decay decayed_adam w3={} b1={}'
+    ->format<decay_ref.w[3], decay_ref.b[1]>
+    ->println
+
+    // (6) the schedules themselves, at the boundaries: the last step of the ramp and the floor
+    // after it, which is what the loops above read.
+    'optim schedule linear step1={} step3={} step4={} step9={}'
+    ->format<sgd_schedule(1), sgd_schedule(3), sgd_schedule(4), sgd_schedule(9)>
+    ->println
+    'optim schedule cosine step1={} step4={} step5={}'
+    ->format<adam_schedule(1), adam_schedule(4), adam_schedule(5)>
+    ->println
+    let flat = constant(0.02)
+    'optim schedule constant step1={} step7={}'
+    ->format<flat(1), flat(7)>
+    ->println
+
+    return failures
+}

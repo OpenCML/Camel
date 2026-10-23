@@ -97,4 +97,42 @@ void adaptiveUpdate(
     });
 }
 
+void adaptiveUpdate64(
+    int64_t count, const AdaptiveUpdateRates &rates, const double *param, const double *grad,
+    const double *moment1, const double *moment2, double *nextParam, double *nextMoment1,
+    double *nextMoment2) {
+    struct Streams {
+        const AdaptiveUpdateRates *rates;
+        const double *param;
+        const double *grad;
+        const double *moment1;
+        const double *moment2;
+        double *nextParam;
+        double *nextMoment1;
+        double *nextMoment2;
+    };
+    const Streams streams{
+        &rates, param, grad, moment1, moment2, nextParam, nextMoment1, nextMoment2};
+    // The grain is the portable unit's: the arithmetic per element is the same double work as the
+    // f32 pass (kNsPerElementGeneric, measured on that pass), and the double streams move twice the
+    // bytes. No per-ISA double unit exists yet, so every element is one portable step.
+    parallelFor(count, grainForWork(kNsPerElementGeneric), [&streams](int64_t begin, int64_t end) {
+        for (int64_t i = begin; i < end; ++i) {
+            double nextP = 0.0, nextM = 0.0, nextV = 0.0;
+            adaptiveUpdateOne(
+                *streams.rates,
+                streams.param[i],
+                streams.grad[i],
+                streams.moment1[i],
+                streams.moment2[i],
+                nextP,
+                nextM,
+                nextV);
+            streams.nextParam[i]   = nextP;
+            streams.nextMoment1[i] = nextM;
+            streams.nextMoment2[i] = nextV;
+        }
+    });
+}
+
 } // namespace camel::tensor::kernels

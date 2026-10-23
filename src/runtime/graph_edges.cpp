@@ -41,6 +41,8 @@ class EdgeChecker {
 
     std::vector<std::string> run() {
         checkWritings();
+        checkOrderEdges();
+        checkSyncEdges();
         findCycle();
         for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
             checkNode(it.ref(), **it);
@@ -49,6 +51,125 @@ class EdgeChecker {
     }
 
   private:
+    /// The other half of the structural rule of 4.6: a sync edge joins two statements one `sync`
+    /// block writes directly -- or the block's chain tail to the block's value -- and nothing else.
+    /// The builder records that fact on each node it chains (kGCNodeFlagSyncStatement), so the
+    /// check is: both ends are such a node, they are not the same node and not a node a rewrite
+    /// removed, and one statement is written directly after one other (the tail that reaches the
+    /// block's value is the one node that two sync edges leave).
+    void checkSyncEdges() {
+        if (!graph_.hasSyncEdges()) {
+            return;
+        }
+        for (const GCGraphSyncEdge &edge : graph_.syncEdges()) {
+            const auto bad = [&](const std::string &what) {
+                violations_.push_back(
+                    std::format(
+                        "graph '{}': sync edge {} -> {} {}",
+                        graph_.name(),
+                        edge.pred,
+                        edge.user,
+                        what));
+            };
+            if (!graph_.containsNodeRef(edge.user) || !graph_.containsNodeRef(edge.pred)) {
+                bad("names a node the graph does not have");
+                continue;
+            }
+            const GCNode *user = graph_.node(edge.user);
+            const GCNode *pred = graph_.node(edge.pred);
+            if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
+                bad("names a node a rewrite removed");
+                continue;
+            }
+            if (edge.user == edge.pred) {
+                bad("chains a node to itself");
+                continue;
+            }
+            if ((user->flags & kGCNodeFlagSyncStatement) == 0) {
+                bad(std::format(
+                    "ends on a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
+                    static_cast<int>(user->kind),
+                    user->flags,
+                    user->dataType() != nullptr ? user->dataType()->toString() : "-"));
+                continue;
+            }
+            if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
+                bad(std::format(
+                    "starts at a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
+                    static_cast<int>(pred->kind),
+                    pred->flags,
+                    pred->dataType() != nullptr ? pred->dataType()->toString() : "-"));
+                continue;
+            }
+            if (graph_.syncPredsOf(edge.user).size() > 1) {
+                bad("is the second predecessor of one statement");
+            }
+        }
+    }
+
+    /// The rule the design has the seal check enforce (docs/design/effects/edges.cn.md 4.6): an
+    /// order edge only orders, and only something that has an order can carry one.
+    void checkOrderEdges() {
+        if (!graph_.hasOrderEdges()) {
+            return;
+        }
+        for (const GCGraphOrderEdge &edge : graph_.orderEdges()) {
+            const auto bad = [&](const std::string &what) {
+                violations_.push_back(
+                    std::format(
+                        "graph '{}': order edge {} -> {} {}",
+                        graph_.name(),
+                        edge.pred,
+                        edge.user,
+                        what));
+            };
+            if (!graph_.containsNodeRef(edge.user) || !graph_.containsNodeRef(edge.pred)) {
+                bad("names a node the graph does not have");
+                continue;
+            }
+            const GCNode *user = graph_.node(edge.user);
+            const GCNode *pred = graph_.node(edge.pred);
+            if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
+                bad("names a node a rewrite removed");
+                continue;
+            }
+            if (edge.user == edge.pred) {
+                bad("orders a node after itself");
+                continue;
+            }
+            if (isPureNode(edge.user)) {
+                bad("is on a pure node, which nothing orders");
+            }
+        }
+    }
+
+    /// A node whose value is entirely determined by its inputs: the kinds that carry no resource
+    /// and no writing, and the operators declared `pure` (design principles 3.3). A node of a
+    /// kind this does not name (a call, a function, a gate, a loop, a sync node) is an anchor
+    /// that may be an effect, and nothing here refuses an order on it.
+    bool isPureNode(gc_node_ref_t ref) const {
+        const GCNode *node = graph_.node(ref);
+        if (node == nullptr) {
+            return false;
+        }
+        switch (node->kind) {
+        case GCNodeKind::Data:
+        case GCNodeKind::Port:
+        case GCNodeKind::Cast:
+        case GCNodeKind::Copy:
+        case GCNodeKind::Fill:
+        case GCNodeKind::Accs:
+        case GCNodeKind::Brch:
+        case GCNodeKind::Join:
+            return true;
+        case GCNodeKind::Oper:
+            return graph_.nodeBodyAs<GCOperBody>(ref) != nullptr &&
+                   camel::core::OperatorTable::instance().isPure(
+                       graph_.nodeBodyAs<GCOperBody>(ref)->oper);
+        default:
+            return false;
+        }
+    }
     /// The equivalences between nodes (the Tabled state): a graph validated as another state has
     /// none; in this one each names two nodes that compute a value of the same type, in the same
     /// region, and the graph says so by its flag.
@@ -119,11 +240,14 @@ class EdgeChecker {
                 what));
     }
 
-    /// Depth-first over the inputs with an explicit stack; a node reached while it is open is
-    /// on a cycle.
+    /// Depth-first over the edges with an explicit stack; a node reached while it is open is on a
+    /// cycle. An order edge takes part: it constrains the order the back ends lay the graph out
+    /// in, so a cycle of them is a graph no scheduler can run (docs/design/effects/edges.cn.md
+    /// 1.5, 2).
     void findCycle() {
         const size_t count = graph_.nodeCount();
         std::vector<uint8_t> state(count, 0); // 0 new, 1 open, 2 done
+        std::vector<gc_node_ref_t> orderPreds;
         struct Frame {
             gc_node_ref_t node;
             uint8_t group;
@@ -139,17 +263,25 @@ class EdgeChecker {
             while (!stack.empty()) {
                 Frame &top = stack.back();
                 std::span<const gc_node_ref_t> inputs;
-                while (top.group < 3) {
-                    inputs = top.group == 0   ? graph_.normInputsOf(top.node)
-                             : top.group == 1 ? graph_.withInputsOf(top.node)
-                                              : graph_.ctrlInputsOf(top.node);
+                while (top.group < 4) {
+                    if (top.group == 3) {
+                        orderPreds.clear();
+                        for (const GCGraphOrderEdge &edge : graph_.orderPredsOf(top.node)) {
+                            orderPreds.push_back(edge.pred);
+                        }
+                        inputs = std::span<const gc_node_ref_t>(orderPreds);
+                    } else {
+                        inputs = top.group == 0   ? graph_.normInputsOf(top.node)
+                                 : top.group == 1 ? graph_.withInputsOf(top.node)
+                                                  : graph_.ctrlInputsOf(top.node);
+                    }
                     if (top.next < inputs.size()) {
                         break;
                     }
                     ++top.group;
                     top.next = 0;
                 }
-                if (top.group == 3) {
+                if (top.group == 4) {
                     state[top.node] = 2;
                     stack.pop_back();
                     continue;

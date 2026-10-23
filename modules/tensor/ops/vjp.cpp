@@ -22,7 +22,7 @@ namespace camel::tensor::ops {
 type::Type *vjpTensorType() { return TensorType::Default(); }
 
 bool isTensorNode(const VjpBuilder &builder, vjp_node_t node) {
-    return asTensorType(builder.nodeType(node)) != nullptr;
+    return isTensorType(builder.nodeType(node));
 }
 
 bool isFloatNode(const VjpBuilder &builder, vjp_node_t node) {

@@ -1,0 +1,263 @@
+id = "opt.algebra_rules"
+order = 333
+tier = "fast"
+tags = ["feat", "opt", "rules", "algebra", "differential", "measurement"]
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+
+# The rule library measured against the legacy C++ algebraic pass, form by form.
+#
+# Two C++ references, and every entry says which one it holds the library to:
+#
+#   * the **deleted law table** (`e8c290554:src/passes/opt/generic/algebra.cpp`): the integer
+#     neutral elements, the like-term combines `x*c1 + x*c2 => x*(c1+c2)`, the coefficient folds
+#     `(x*c1)*c2 => x*(c1*c2)`, the doubling `x + x => x*2` and the element-wise forms of the same
+#     laws. It was deleted by `a510676bb`, which left `std::opt::algebra` the rules library's
+#     `simplify` and kept the reference mode behind `neutral_only`. Its output is recorded in the
+#     `.deleted_table.` goldens of this plan, taken once with that file restored in the working tree;
+#     those goldens are a reference from the past and cannot be produced from this tree again.
+#   * the **reference mode** `std::opt::algebra neutral_only=true` (`src/passes/opt/generic/algebra.cpp`),
+#     the five integer neutral elements of both integer types. It is the pass that
+#     runs from this tree, so its `by_cpp` snapshots are re-recordable, and on the ten neutral forms
+#     it answers exactly what the deleted table answered (measured: the two tables of
+#     `agreement.cml` are identical).
+#
+# Every entry runs the same corpus through both sides with the same pass list, and the measurement is
+# the difference between the two results.
+#
+# The ruling of 2026-10-23 (`docs/handover/reviews/questions-2026-10-23.md`) settled what a difference
+# means, and this file is read under it: `std::opt::algebra` and `rules::simplify` are the same thing
+# (the reference mode is the `neutral_only` subset of the C++ side that remains), the library's
+# default numeric grant is design principles 7.3's default -- which allows `reassociate` and
+# `contract` -- so where the library rewrites and the deleted table refused, the library is the
+# baseline and the old table's `relaxed()` policy is its own deviation, and the conditions the old
+# table applied (its `exclusive()` user rule) have no rule-language counterpart. Where the library
+# differs from the reference mode, the difference is the engine's job and not a rule condition
+# (`rule-conditions-and-policy` items 2 and 3): the one left in this corpus is the anchored form --
+# the C++ pass's `isReplaceable` refuses to rewrite the graph's exit, output and returned value,
+# while the engine rewrites the matched node and moves the anchor onto the replacement, as the
+# ruling's item 3 says the engine must. The effect refusal below is decreed the same way, as a local
+# subgraph check before a rule is applied (`rule-drops-effect`).
+#
+#   `by_cpp`     the reference side of this tree, recorded as a golden: its graph (`std::gir` /
+#                `std::jgir`) and its table.
+#   `by_library` the rule library's graph, held to the golden by `compareGirDotIsomorphic`
+#                (`test/tools/gir-dot.mjs`), the comparison the snapshot tests use: a node is its
+#                kind, its type, its shape and its in/out degree, an edge is its endpoints, its link
+#                type and its label. The dumps are not compared as text, because the rule engine's
+#                commit leaves the port without the span the C++ replacement copies onto it (H160
+#                section 4); the only normalization is the plan's — paths and origin ids.
+#   `table`      the same corpus through `measure::report`, which prints one line per graph: its
+#                nodes, its edges and its operator counts. `tables.mjs` is the property: every graph
+#                the two sides do not answer the same way must be one of the recorded differences,
+#                and every other line must agree character for character, the program's own output
+#                included. It reads the deleted table's golden.
+#   `differs`    the graphs of the divergence corpus, named node by node and edge by edge.
+#   `is_a_fixpoint` the library run on its own output: a sweep that stopped early shows here.
+#   `program_still_runs` the program after the library, on four back ends, computes what it did.
+#
+# Measured, on the four corpora (fifteen forms both sides rewrite, fifteen the library rewrites alone,
+# three neither side rewrites, two graphs the two sides reach differently and one they used to):
+#
+#   * both rewrite: the ten integer neutral forms, the integer coefficient fold and doubling
+#     (`fold`, `double`), the float doubling (`double_d`) and the element-wise doubling
+#     (`tensor_double`) — the same graph on the two sides every time.
+#   * the library alone: the integer `x*0`, `0*x`, `x-x`, `x/1`, `-(-x)` on both integer types, the
+#     five float neutrals, and the two like-term combines (`combine`, `combine_d`, `tensor_combine`)
+#     that the deleted table refuses for a condition it states and the library cannot state.
+#   * neither: the float coefficient folds `(x*3.0)*2.0` (`fold_d`, `tensor_fold`), which need the
+#     `no_infs` grant no node carries on either side, and the element-wise `t*0.0`, which would have
+#     to write a zero tensor of the matched shape.
+#   * different graphs: the two anchored forms -- the C++ pass keeps the operation as the graph's
+#     named node, the engine moves the anchor onto the port the rule wrote -- and one graph the two
+#     sides used to answer differently and no longer do, the form whose product reads a print, which
+#     the engine's effect refusal keeps.
+
+# ---- the ten rewrites both sides perform: x + 0, 0 + x, x - 0, x * 1, 1 * x, on int and i32 ----
+
+[[tests]]
+name = "algebra_rules.agreement.by_cpp"
+desc = "The reference: std::opt::algebra neutral_only=true on the ten neutral forms, followed by the same dce the library side runs, as GIR DOT."
+kind = "snapshot"
+case = "../../../cases/opt/algebra_rules/agreement.cml"
+args = ["${case}", "std::opt::algebra neutral_only=true", "std::opt::dce values_only=true", "std::gir"]
+snapshot_stream = "stdout"
+golden = "./golden/algebra_rules.agreement.cpp.dot"
+
+[[tests]]
+name = "algebra_rules.agreement.by_library"
+desc = "The rule library reaches the same graph the legacy pass reaches on all ten rewrites it performs: rules::simplify's dump is the C++ mode's dump by the isomorphic comparison (a node is its kind, type, shape and degree, an edge its endpoints, link type and label), with paths and origin ids the only normalization."
+case = "../../../cases/opt/algebra_rules/agreement.cml"
+args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "std::gir"]
+verify_script_path = "../../../cases/opt/algebra_rules/algebra_graph_equal.mjs"
+
+[[tests]]
+name = "algebra_rules.agreement.cpp_table"
+desc = "The reference table (measure::report after the C++ mode and dce): eleven graphs — the ten forms and main — each 4 nodes and 3 edges with no operation left, one print, and main 32 nodes and 31 edges with 10 prints."
+kind = "snapshot"
+case = "../../../cases/opt/algebra_rules/agreement.cml"
+args = ["${case}", "std::opt::algebra neutral_only=true", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
+snapshot_stream = "stdout"
+golden = "./golden/algebra_rules.agreement.cpp.txt"
+
+[[tests]]
+name = "algebra_rules.agreement.table"
+desc = "The library's table is the deleted C++ law table's table line for line, the program's own output included: 11 graphs examined, 10 rewrites both sides perform, no recorded difference. The deleted table's output on this corpus is also what the reference mode that remains prints, so the golden is the same eleven lines under either reference. This is the corpus as a property, not one golden: a line that starts differing turns this red."
+case = "../../../cases/opt/algebra_rules/agreement.cml"
+args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
+verify_script_path = "../../../cases/opt/algebra_rules/tables.mjs"
+
+[[tests]]
+name = "algebra_rules.agreement.is_a_fixpoint"
+desc = "The library on its own output prints the same table: the rewrite runs to a fixpoint, so a version that rewrote one round and stopped is refused here."
+kind = "differential"
+case = "../../../cases/opt/algebra_rules/agreement.cml"
+args = ["${case}", "rules::simplify", "rules::simplify", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
+compare_to = "algebra_rules.agreement.table"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "algebra_rules.agreement.program_still_runs"
+desc = "The program after the library computes what it did, on the four back ends."
+case = "../../../cases/opt/algebra_rules/agreement.cml"
+args = ["${case}", "rules::simplify", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "algebra_rules.agreement.without_the_pass"
+desc = "The corpus with no pass, the run `same_values` is held to."
+case = "../../../cases/opt/algebra_rules/agreement.cml"
+args = ["${case}", "std::nvm"]
+
+[[tests]]
+name = "algebra_rules.agreement.same_values"
+desc = "Every one of the ten rewrites is exact: the program after the library prints the values it printed before it, line for line."
+kind = "differential"
+case = "../../../cases/opt/algebra_rules/agreement.cml"
+args = ["${case}", "rules::simplify", "std::nvm"]
+compare_to = "algebra_rules.agreement.without_the_pass"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+# ---- the graphs the two sides answer differently ----
+#
+# Two of them, and they are the anchored forms: the C++ pass's `isReplaceable` refuses the graph's
+# exit, output and returned value, so `anchor_add` and `anchor_mul32` keep their operation as the
+# named node there; the engine rewrites the matched node and moves the anchor onto the replacement,
+# which is what the ruling of 2026-10-23 gives the engine as its job and not as a rule condition
+# (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy` item 3), so those
+# two graphs exit at the port the rule's right side wrote. `effect_mul_zero` was a third difference
+# and is an agreement now: the engine check the ruling's `rule-drops-effect` decrees (before a rule is
+# applied, the subgraph the pattern variables its right side does not use bound is examined, and an
+# effect node, or a node carrying a sync or order edge, there refuses the application) refuses the
+# match that used to drop the print. `library_runs` and `differs` below pin that agreement, and a
+# rule or an engine change that drops a live effect again turns them red. The check is in this tree --
+# `dropsOrdered`/`pureComputation` in src/runtime/writings.cpp -- so the correct five-line expectation
+# below passes rather than being marked a known failure.
+
+[[tests]]
+name = "algebra_rules.divergence.by_cpp"
+desc = "The reference from this tree: std::opt::algebra neutral_only=true on the corpus of differences. It keeps the named node of `anchor_add` and `anchor_mul32` (isReplaceable refuses to rewrite the graph's exit), and it has no `x * 0` law, so the product over the print in `effect_mul_zero` stands. The deleted full law table's dump of the same corpus is byte-identical to this golden, so `differs` reads that one: the same isReplaceable guard and the same absence of a zero law."
+kind = "snapshot"
+case = "../../../cases/opt/algebra_rules/divergence.cml"
+args = ["${case}", "std::opt::algebra neutral_only=true", "std::opt::dce values_only=true", "std::jgir"]
+snapshot_stream = "stdout"
+golden = "./golden/algebra_rules.divergence.cpp.jgir"
+
+[[tests]]
+name = "algebra_rules.divergence.differs"
+desc = "The rule library's graph against the C++ pass's, every graph examined. `anchor_add` and `anchor_mul32` are the difference the ruling leaves open and this entry pins both sides of: the C++ pass keeps the operation as the graph's exit, its output and its returned value (its `isReplaceable` refuses to rewrite those three nodes), and the rule engine rewrites the matched node and moves the anchor onto what the rule's right side wrote, which for `x + 0 => x` is the port alone -- the handover the 2026-10-23 ruling makes the engine's job and not a rule condition (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy` item 3), and the same rewriting of a return expression the `rules` lane holds (`coefficients` and `chain` fold there). `effect_mul_zero` is not a difference any more: the engine refuses the match whose right side would drop the print (design principles 9.7, the same ruling's `rule-drops-effect`). `pairs.mjs` names all four graphs node by node."
+case = "../../../cases/opt/algebra_rules/divergence.cml"
+args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "std::jgir"]
+verify_script_path = "../../../cases/opt/algebra_rules/pairs.mjs"
+
+[[tests]]
+name = "algebra_rules.divergence.source_runs"
+desc = "The corpus with no pass: `println(5)` is read by the product, so it runs and 5 is printed before the 0 the product computes."
+case = "../../../cases/opt/algebra_rules/divergence.cml"
+args = ["${case}", "std::nvm"]
+expect_stdout_exact = "7\n9\n5\n0\n0\n"
+
+[[tests]]
+name = "algebra_rules.divergence.cxx_runs"
+desc = "The legacy side keeps every effect the source runs: the reference mode has no `x * 0` law, so the product stands and 5 is printed, exactly as without the pass."
+case = "../../../cases/opt/algebra_rules/divergence.cml"
+args = ["${case}", "std::opt::algebra neutral_only=true", "std::nvm"]
+expect_stdout_exact = "7\n9\n5\n0\n0\n"
+
+[[tests]]
+name = "algebra_rules.divergence.library_runs"
+desc = "The library keeps the effect, so it agrees with the source and with the C++ side on this corpus. `int_mul_zero` is still in the library and still applies `x * 0 => 0` to `println(5) * 0`, and the engine refuses that match because the part the right side drops is a call, not a pure computation: 设计原则 9.7, 改写不改变哪些效应执行 -- 一条规则的右边如果丢掉了左边匹配到的一部分，只有当丢掉的部分是纯计算时这条规则才适用；这由规则引擎统一检查 ... 例：`x * 0 => 0` 不作用于 `println(5) * 0`. The refusal is `dropsOrdered`/`pureComputation` in src/runtime/writings.cpp, so the rewrite that used to print four lines prints five, and a future rule or engine change that drops the print again turns this red. This entry used to pin the opposite (a measured violation, `7\n9\n0\n0\n`); the ruling of 2026-10-23 calls that writing a defect into the spec and says the entry should have carried the correct five lines and been marked a known failure until the engine refuses (`docs/handover/reviews/questions-2026-10-23.md`, `rule-drops-effect`). With the refusal in this tree the five lines pass, so the entry is green and carries no mark."
+case = "../../../cases/opt/algebra_rules/divergence.cml"
+args = ["${case}", "rules::simplify", "std::nvm"]
+expect_stdout_exact = "7\n9\n5\n0\n0\n"
+
+# ---- the rewrites only the rule library performs ----
+
+[[tests]]
+name = "algebra_rules.library_only.by_cpp"
+desc = "The reference from this tree: std::opt::algebra neutral_only=true performs none of the eighteen forms of this corpus, so its table is the corpus as written. The deleted full law table performs three of them on the same corpus — the integer coefficient fold and doubling and the float doubling — and its table is the golden `table` compares against."
+kind = "snapshot"
+case = "../../../cases/opt/algebra_rules/library_only.cml"
+args = ["${case}", "std::opt::algebra neutral_only=true", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
+snapshot_stream = "stdout"
+golden = "./golden/algebra_rules.library_only.cpp.txt"
+
+[[tests]]
+name = "algebra_rules.library_only.table"
+desc = "The library's table against the deleted C++ law table's, graph by graph, out of 19: three forms both sides rewrite to the same shape (`fold` and `double` to `x * 6` and `x * 2`, `double_d` to `x * 2.0`), one neither rewrites (`fold_d`, the float coefficient fold, which needs the `no_infs` grant no node carries on either side), and fourteen the library rewrites alone — the integer zero, self-subtraction, division-by-one and double-negation laws and the five float neutrals, which the deleted table never had at all, and the two like-term combines, which the old table refuses for reasons of its own: `combine` reads `x * 3` and `x * 5` in a `sync` body where the second product is control-dependent on the first and the old table's `exclusive()` refuses any product with another user, control users included, and `combine_d` is refused by its `relaxed()` policy, which withholds the `reassociate` grant the library has by design principles 7.3's default. The ruling of 2026-10-23 (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy`) reads both as the old table's deviations, not as conditions the rule language lacks: the control edge between two products of one statement is the old builder's always-emit artifact (H242 removes it), and a surviving user of an eliminated product is a cost-function question (rule language v2 section 5), not a `when`. The values the program prints are the values the C++ side printed, line for line."
+case = "../../../cases/opt/algebra_rules/library_only.cml"
+args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
+verify_script_path = "../../../cases/opt/algebra_rules/tables.mjs"
+
+[[tests]]
+name = "algebra_rules.library_only.without_the_pass"
+desc = "The corpus with no pass, the run `same_values` is held to."
+case = "../../../cases/opt/algebra_rules/library_only.cml"
+args = ["${case}", "std::nvm"]
+
+[[tests]]
+name = "algebra_rules.library_only.same_values"
+desc = "The seventeen forms the library performs are exact, the integer laws and the float laws alike: the program after the library prints the values it printed before it, line for line. The three the deleted C++ law table also performed and the twelve it never had answer the same, the combine included."
+kind = "differential"
+case = "../../../cases/opt/algebra_rules/library_only.cml"
+args = ["${case}", "rules::simplify", "std::nvm"]
+compare_to = "algebra_rules.library_only.without_the_pass"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+# ---- the element-wise tensor forms ----
+
+[[tests]]
+name = "algebra_rules.tensor.by_cpp"
+desc = "The reference from this tree: the C++ mode performs nothing on the element-wise tensor corpus — its table is the corpus as written. The deleted full law table performs one form here, `tensor_double`, whose table is the golden `table` compares against."
+kind = "snapshot"
+case = "../../../cases/opt/algebra_rules/tensor_forms.cml"
+args = ["${case}", "std::opt::algebra neutral_only=true", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
+snapshot_stream = "stdout"
+golden = "./golden/algebra_rules.tensor.cpp.txt"
+
+[[tests]]
+name = "algebra_rules.tensor.table"
+desc = "The library's table against the deleted C++ law table's, out of 5 graphs: `tensor_double` is the one form both rewrite (`t + t` becomes `t * 2.0`), `tensor_combine` is refused by the deleted table for the `reassociate` grant its float path demands while the library's `#requires<reassociate>` is granted (design principles 7.3's default allows it; the old table's `relaxed()` policy is its own deviation), and two forms are left by both — `tensor_fold`, which needs the `no_infs` grant no node carries, and `tensor_zero`, whose replacement is a zero tensor of the matched shape: the rule language does write it, as a right side that calls a Camel function (rule language v2 section 4, `t * 0.0 => zeros_like(t)`), which is H232 step 3, so what is missing here is a law and not a language feature. The values the program prints are the values the C++ side printed, line for line."
+case = "../../../cases/opt/algebra_rules/tensor_forms.cml"
+args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
+verify_script_path = "../../../cases/opt/algebra_rules/tables.mjs"
+
+[[tests]]
+name = "algebra_rules.tensor.without_the_pass"
+desc = "The corpus with no pass, the run `same_values` is held to."
+case = "../../../cases/opt/algebra_rules/tensor_forms.cml"
+args = ["${case}", "std::nvm"]
+
+[[tests]]
+name = "algebra_rules.tensor.same_values"
+desc = "The two element-wise rewrites the library performs are exact: the tensor `t * 3.0 + t * 5.0` it turns into one product and the `t + t` it turns into `t * 2.0` print the same eight lines of tensors they printed before it."
+kind = "differential"
+case = "../../../cases/opt/algebra_rules/tensor_forms.cml"
+args = ["${case}", "rules::simplify", "std::nvm"]
+compare_to = "algebra_rules.tensor.without_the_pass"
+compare_fields = ["exit_code", "stdout_normalized"]

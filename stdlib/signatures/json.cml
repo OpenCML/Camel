@@ -6,7 +6,7 @@
  * a type rule rather than from a written signature. The C++ resolvers in `modules/json` are the
  * one source of these types; this file is for reference only (it is not compiled), and feeds
  * `docs/stdlib-reference.md` and the `--verify-ops` check for these two entries. The other ten
- * names of the module are declared in `stdlib/json.cml` (handover H115).
+ * names of the module are declared in `stdlib/json.cml`.
  */
 
 /// The JSON text of a value, on one line. The type of the value must have a JSON form:

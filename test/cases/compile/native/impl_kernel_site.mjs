@@ -1,21 +1,17 @@
 #!/usr/bin/env node
 /**
- * Where a `#impl` kernel can be declared, after the ruling of 2026-10-23
- * (`docs/handover/reviews/questions-2026-10-23.md`, 「## impl-kernel-site」). The ruling chose that
- * the standard library gets its first kernels beside the functions whose semantics they implement,
- * and removed the two walls that had left Adam and a composite tensor operation without a site:
- * 「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」 and
- * 「泛型函数可以带 `#impl`」. This case is what is left of those two walls: the three experiments
- * below are programs built with the installed standard library, and nothing in the tree is changed.
+ * Where a `#impl` kernel can be declared (design principles 10.4: everything the language defines
+ * itself is written in Camel, so a module's kernel and the Camel definition whose semantics it
+ * implements belong to the module that owns the operator). The standard library's kernels go beside
+ * the functions they implement, which is what this case pins down:
  *
  *   A. `#op<'tensor:log_softmax'>` in a module that is not `tensor` is refused with
  *      NativeDeclarationForeignOperator, and not with NativeDeclarationNotLoaded: the operator is
- *      registered and the module imports it, so what refuses the declaration is ownership. This is
- *      the ruling's option (b), which stays refused: a module writes its own signature, and no
- *      other module's.
- *   B. The same for `#op<'nn:adam'>` (Adam's kernel is `nn`'s). The generic function it is written
- *      on is no longer refused on its own: the shape an Adam over a parameter tree has is legal
- *      now, and only ownership refuses the declaration.
+ *      registered and the module imports it, so what refuses the declaration is ownership. A module
+ *      writes its own signature, and no other module's.
+ *   B. The same for `#op<'nn:adam'>` (Adam's kernel is `nn`'s). The ownership rule is the only
+ *      refusal: the shape of an Adam over a parameter tree is legal, and the kernel's presence on a
+ *      generic function is not what refuses the declaration.
  *   C. The module that does own `tensor:log_softmax` is a declaration module (a `.cml` beside a
  *      `.cmo`): a copy of the pair in a scratch directory in which the kernel is declared and the
  *      definition keeps its Camel body is accepted, and the module runs.
@@ -153,9 +149,8 @@ check(
     JSON.stringify(b.names),
 )
 check(
-    'B. the generic function is not refused on its own',
-    !b.names.some((name) => name === 'SemanticDiag::ImplOnGenericFunction') &&
-        !b.names.some((name) => name === 'SemanticDiag::ImplSignatureMismatch'),
+    'B. the ownership rule is the only refusal',
+    !b.names.some((name) => name === 'SemanticDiag::ImplSignatureMismatch'),
     JSON.stringify(b.names),
 )
 const bFound = b.diagnostics.find((d) => d.data && d.data.name === 'SemanticDiag::NativeDeclarationForeignOperator')

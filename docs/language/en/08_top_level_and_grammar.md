@@ -56,10 +56,10 @@ additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
 nullable   : unary (('??' | '!!') dataExpr)?
-unary      : link (as type)?
-link       : neg (('->' | '?->') comp)*
-neg        : ('-' | '!' | '~') negPower | comp
-negPower   : ('-' | '!' | '~') negPower | comp ('^' negPower)?
+unary      : neg (as type)?
+neg        : ('-' | '!' | '~') negPower | link
+negPower   : ('-' | '!' | '~') negPower | link ('^' negPower)?
+link       : comp (('->' | '?->') comp)*
 comp       : anno ('..' anno)*
 anno       : primary ( '.'field | '[' subscript ']' | '(' arguments ')' | '<' with arguments '>' )*
 primary    : name | literal | '[' element, ... ']' | '{' key: value, ... '}' | '(' expression, ... ')' | lambda
@@ -266,7 +266,7 @@ Where there is more than one reading, the following rules decide, each on a boun
 | `{`: struct or block | a struct for `{ name :` and `{ ...`; `{}` is the empty block as a branch arm or a lambda body and the empty struct as a statement |
 | Arguments: positional or named | named from the first `name :` on |
 | `+` `-` `^` after a type | part of the type when a type can start after it (`x as T + U` casts to the type `T + U`) |
-| Unary `-` | always an operator; looser than `^`, tighter than `->`; applied directly to a number it gives the negative literal |
+| Unary `-` | always an operator; looser than `^` and `->`; applied directly to a number it gives the negative literal |
 
 Related files:
 

@@ -1,0 +1,32 @@
+// A field whose value is a variable does not stop the empty array literal in a sibling field
+// from taking the element type of the position it stands in (design principles 5.1, 5.2): `[]`
+// in `Node.children` is the empty `Node[]` whether the fields around it are literals or values
+// the program computes. The declared type is what the literal is read against, so the empty
+// array is typed where it stands, not left as the array whose element type nobody wrote.
+module contextual_empty_array_named_sibling
+
+type State = { board: int[], to_move: int }
+type Node = { state: State, children: Node[] }
+type Tree = { value: int, children: Tree[] }
+
+func width(node: Node): int {
+    return len(node.children) + node.state.to_move
+}
+
+func siblings(tree: Tree): int {
+    return len(tree.children)
+}
+
+func main(): int sync {
+    let state: State = { board: [0, 0, 0, 0, 0, 0, 0, 0, 0], to_move: 1 }
+    // The reported shape: one field is a variable of a named struct type, the other is `[]`.
+    let node: Node = { state: state, children: [] }
+    // The same position with a computed scalar beside it.
+    let value: int = 7
+    let tree: Tree = { value: value, children: [] }
+    println(len(node.state.board))
+    println(width(node))
+    println(len(tree.children))
+    println(siblings(tree))
+    return 0
+}

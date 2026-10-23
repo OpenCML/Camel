@@ -106,7 +106,7 @@ bool isEmptyArrayLiteral(node_handle_t node) {
     if (type == nullptr || type->code() != TypeCode::Array) {
         return false;
     }
-    if (tt::as_ptr<const ArrayType>(type)->elemType()->code() == TypeCode::Void) {
+    if (isUntypedArrayType(type)) {
         return true; // the untyped `[]`: it has no elements by construction
     }
     if (nodeIsKind(node, runtime::GCNodeKind::Data)) {
@@ -122,6 +122,11 @@ bool isEmptyArrayLiteral(node_handle_t node) {
     }
     return withInputsOf(node).empty();
 }
+
+/// The type of the untyped empty array literal `[]`: an array whose element type nobody wrote.
+/// Its element type is the only thing it leaves open, so every position it stands in fixes it.
+/// (The numeric-unknown array is not one of these; isUntypedArrayType tells them apart.)
+bool isEmptyArrayLiteralType(const Type *type) { return isUntypedArrayType(type); }
 
 /// Whether a value of this type is a struct or tuple whose parts can be the components of a
 /// loop state (H71). A cell and the tagged forms are representations, not collections of values:
@@ -312,6 +317,24 @@ const literal::Value *writtenValueOf(const GCT::Tree::LiteralElement *element) {
     return element != nullptr && element->value.has_value() ? &*element->value : nullptr;
 }
 
+/// The length an array position states as a constant, or nullopt when it leaves the length open
+/// (`T[]`, `T[n]`, `T[..]`). The first extent is the one a literal's elements are the elements of.
+std::optional<int64_t> statedLength(const ArrayType *type) {
+    const std::span<const ExtentForm> extents = type->extents();
+    if (extents.empty() || !extents.front().isConstant()) {
+        return std::nullopt;
+    }
+    return extents.front().constant();
+}
+
+/// Whether the `data` array holds the number of elements a constant extent of the position
+/// states. A literal's elements are known where it is written, so this is decided here and not
+/// at runtime: `[1.0, 2.0, 3.0]` does not stand in an `f32[4]` position (design principles 5.4).
+bool holdsStatedLength(const ArrayType *type, const ArrayData *array) {
+    const std::optional<int64_t> length = statedLength(type);
+    return !length.has_value() || static_cast<int64_t>(array->raw().size()) == *length;
+}
+
 /// Whether the composite literal `data` can be given `type`: the walk of compositeDataInType,
 /// unchanged, for the positions a literal may enter (design principles 5.1). The two must agree;
 /// a literal this accepts is converted by compositeDataInType, which reports what does not fit.
@@ -323,13 +346,18 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
         return true;
     }
     if (type->code() == TypeCode::Array && data->type()->code() == TypeCode::Array) {
-        Type *elemType   = tt::as_ptr<ArrayType>(type)->elemType();
-        const auto array = std::dynamic_pointer_cast<ArrayData>(data);
+        const auto *arrayType = tt::as_ptr<ArrayType>(type);
+        Type *elemType        = arrayType->elemType();
+        const auto array      = std::dynamic_pointer_cast<ArrayData>(data);
         if (elemType == nullptr || array == nullptr) {
             return false;
         }
+        if (!holdsStatedLength(arrayType, array.get())) {
+            return false;
+        }
         if (array->raw().empty()) {
-            // `[]`: the elements it does not have are the only thing its type leaves open.
+            // `[]`: it has no elements, so only a position that states no length, or the length
+            // zero, took it — which the check above decided.
             return true;
         }
         const auto *written =
@@ -474,6 +502,18 @@ node_handle_t Builder::convertStructValue(
                 } else if (!targetFieldType->assignableFrom(sourceFieldType)) {
                     return nullptr;
                 }
+            } else if (isEmptyArrayLiteralType(sourceFieldType) &&
+                       targetFieldType->code() == TypeCode::Array) {
+                // The field is a position with an expected type like any other, and the empty
+                // array literal takes the element type of the type it stands in (design
+                // principles 5.1, 5.2) — the same rule, and the same call, that types `[]` when
+                // the whole literal is a constant (compositeDataInType). A field beside it whose
+                // value the program computes is what kept this path from being reached before.
+                node_handle_t typed = coerceTo(access, targetFieldType, origin);
+                if (typed == nullptr) {
+                    return nullptr;
+                }
+                field = typed;
             } else if (!targetFieldType->assignableFrom(sourceFieldType)) {
                 // A field of another type (a refined module type is assignable; a number of
                 // another type is not).
@@ -640,9 +680,13 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
         return data;
     }
     if (type->code() == TypeCode::Array && data->type()->code() == TypeCode::Array) {
-        Type *elemType   = tt::as_ptr<ArrayType>(type)->elemType();
-        const auto array = std::dynamic_pointer_cast<ArrayData>(data);
+        const auto *arrayType = tt::as_ptr<ArrayType>(type);
+        Type *elemType        = arrayType->elemType();
+        const auto array      = std::dynamic_pointer_cast<ArrayData>(data);
         if (elemType == nullptr || array == nullptr) {
+            return nullptr;
+        }
+        if (!holdsStatedLength(arrayType, array.get())) {
             return nullptr;
         }
         // The exact value each element was written as, when the GCT kept them (a composite
@@ -653,7 +697,8 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
             // the empty array takes the element type of the position it stands in (design
             // principles 5.1, 5.2) — `[]` where an `int[]` is expected is the empty `int[]`,
             // whether the position is a declaration, a body's value or a loop state. A literal
-            // that has elements keeps their join (H24), so this branch only covers `[]`.
+            // that has elements keeps their join (H24), so this branch only covers `[]`, and a
+            // position that states a length other than zero did not take it (the check above).
             return ArrayData::create(elemType);
         }
         const auto *written =
@@ -1933,6 +1978,23 @@ node_handle_t Builder::buildBranch(
         if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, brchNode)) {
             linkNodes(LinkType::Ctrl, lastSyncedNode_, brchNode);
         }
+        // A branch is one statement of the block and the join is where that statement's chain goes
+        // on: the statements written after the branch are written directly after it, and the arm
+        // regions hang on the branch itself (docs/design/effects/edges.cn.md 1.5, 5.3, 5.7). The
+        // statement written directly before the branch is the chain's tail there, so the join follows
+        // it -- the shape a loop has, where the node that stands for the statement follows the
+        // statement written before it. Without the link nothing orders the statements after a branch
+        // after the ones before it once the control edges go, and the layout reads it this way
+        // already: it lays the statement written before a branch out before the arms
+        // (src/execute/graph_runtime_support.cpp). A sync edge from the branch to its join instead is
+        // not this link: the layout reads the join's sync predecessor as the statement written
+        // before the branch, and every `??` of test/cases/consistency/entering/fallback_chain.cml
+        // then takes the arm that branch did not.
+        if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, joinNode)) {
+            markSyncStatement(lastSyncedNode_);
+            markSyncStatement(joinNode);
+            linkNodes(LinkType::Sync, lastSyncedNode_, joinNode);
+        }
         lastSyncedNode_ = joinNode;
         chainedNodes_.insert(brchNode);
         chainedNodes_.insert(joinNode);
@@ -2059,8 +2121,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
         Type *type         = valueTypeOf(nodeTypeOf(node));
         const bool untyped = type == nullptr || type->code() == TypeCode::Void ||
-                             (type->code() == TypeCode::Array &&
-                              tt::as_ptr<ArrayType>(type)->elemType()->code() == TypeCode::Void);
+                             isUntypedArrayType(type);
         if (untyped) {
             // `loop losses = [] for ... do losses->append<l>`: the element type is the value
             // the body appends, and it is known once the body is built (design principles 5.1,

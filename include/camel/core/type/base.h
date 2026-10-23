@@ -231,6 +231,16 @@ class Type {
      * refinement. The default is the type itself.
      */
     virtual Type *widened() const;
+    /**
+     * The type a literal operand takes beside a value of this type (design principles 5.1): in a
+     * binary operation the literal takes the type of the other operand, and the value an
+     * operation on a numeric array is about is an element of it (`x * 2.0` with `x` an `f32`
+     * tensor is the f32 product `x * 2.0f`, not an f64 product that no device program has).
+     * A numeric scalar gives itself; a numeric array gives its element type; a type that fixes
+     * neither (a `Tensor` whose element type is open, a `string`) gives none, and the literal
+     * keeps its own type.
+     */
+    virtual Type *literalOperandType() const;
     virtual CastSafety castSafetyFrom(Type *sourceType) const;
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const;
     bool assignableFrom(Type *sourceType) const;

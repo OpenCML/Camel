@@ -102,12 +102,12 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.library_passes_the_check"
-desc = "Every rule of the standard rules (stdlib/rules.cml: the integer and float laws that hold bit for bit, the i32 and f32 forms of the same laws, the float laws a permission allows, with commutation, association and distribution both ways) passes the check: 200 random instances agree and the engine fires the rule on its own left side."
+desc = "Every rule of the standard rules (stdlib/rules.cml: the integer and float laws that hold bit for bit, the i32 and f32 forms of the same laws, the float laws a permission allows, and distribution both ways) passes the check: 200 random instances agree and the engine fires the rule on its own left side. Commutation and association are not rules to check any more: they are properties of the operator's declaration, read by the matcher (rewrite design 2 (second version) 6)."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int32_add_zero: 200 samples agree, fired 8 of 8", "ok int32_combine: 200 samples agree, fired 8 of 8", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float_mul_comm: 200 samples agree, fired 8 of 8", "ok float32_mul_one: 200 samples agree, fired 8 of 8", "ok float32_combine: the condition selects the instances", "ok float32_double: the condition selects the instances", "ok float_combine: the condition selects the instances", "ok float_fold: the condition selects the instances", "ok float_double: the condition selects the instances"]
+expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int32_add_zero: 200 samples agree, fired 8 of 8", "ok int32_combine: 200 samples agree, fired 8 of 8", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float32_mul_one: 200 samples agree, fired 8 of 8", "ok float32_combine: the condition selects the instances", "ok float32_double: the condition selects the instances", "ok float_combine: the condition selects the instances", "ok float_fold: the condition selects the instances", "ok float_double: the condition selects the instances"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
@@ -164,6 +164,76 @@ case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "counts::report", "rules::saturate_all", "counts::report", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.multiset_reads_a_sum_in_any_brackets"
+desc = "The matcher reads a chain of one operator as the multiset of its terms (rewrite design 6): `x + 0` finds the zero of `a + (b + 0)` and leaves `a + b` behind, and `(a + b) + 0` loses its zero too, so both bracketings of the sum reach the same result with one rewrite each. The counts before and after say which additions went, the rewrites say the law fired once per shape, and the program prints the values it printed before. (A neutral term always has a node to pair with, so this guard pins the outcome, not the association read; the two guards below are the ones that need it.)"
+kind = "behavior"
+case = "../../../cases/modules/rules/multiset_target.cml"
+args = ["${case}", "multiset_counts::report_zero", "multiset_counts::multiset", "multiset_counts::report_zero", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["left_zero 2\nright_zero 2\nmultiset rewrites 6 rounds 2\nleft_zero 1\nright_zero 1\n3 3 7 7 7\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.multiset_folds_constants_written_apart"
+desc = "The same read for a law over two constants: `(x + c1) + c2` folds the sum written with the constants apart from the variable and with the variable between them, since the order of a commutative sum is the matcher's business, not the law's. A three-term sum of one variable and two constants is reachable by exchanging operands alone (the variable is always next to a constant), so this guard pins the outcome of all three writings, and the guard that carries the rest of a sum is the one that needs the association read."
+kind = "behavior"
+case = "../../../cases/modules/rules/multiset_target.cml"
+args = ["${case}", "multiset_counts::report_fold", "multiset_counts::multiset", "multiset_counts::report_fold", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["left_fold 2\nright_fold 2\nthree_fold 2\nmultiset rewrites 6 rounds 2\nleft_fold 1\nright_fold 1\nthree_fold 1\n3 3 7 7 7\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.multiset_carries_the_rest_of_a_sum"
+desc = "A rule parameter that no pattern on the left names takes the terms the pattern did not name, and the right side builds them into one value again: `x*c1 + x*c2 + r` turns `a*3 + z + a*5` and `a*5 + (z + a*3)` into `a*8 + z`, one rewrite each. Both nestings are read as the same multiset."
+kind = "behavior"
+case = "../../../cases/modules/rules/multiset_target.cml"
+args = ["${case}", "multiset_counts::report_products", "multiset_counts::carried", "multiset_counts::report_products", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["split 2 2\nsplit_nested 2 2\ncarried rewrites 2 rounds 2\nsplit 1 1\nsplit_nested 1 1\n3 3 7 7 7\n23 23 23.0\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.multiset_keeps_a_term_no_law_names"
+desc = "The read is complete or it is not a match: the coefficient law without a parameter for the rest of the sum leaves `a*3 + z + a*5` alone, since `z` is a term of the chain that no pattern names and dropping it would change the value. A multiset match that cannot cover the whole chain is refused."
+kind = "behavior"
+case = "../../../cases/modules/rules/multiset_target.cml"
+args = ["${case}", "multiset_counts::report_products", "multiset_counts::multiset", "multiset_counts::report_products", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["split 2 2\nsplit_nested 2 2\nmultiset rewrites 6 rounds 2\nsplit 2 2\nsplit_nested 2 2\n3 3 7 7 7\n23 23 23.0\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.multiset_leaves_a_float_chain_alone"
+desc = "The read follows the operator's declaration: a float sum is commutative and not exactly associative, so no law may read `a*3.0 + z + a*5.0` as one chain of three terms -- the same coefficient law with a rest parameter fires on the int shapes and leaves the float one at two products. The float neutral law still reads each written `x + -0.0` where the program wrote it."
+kind = "behavior"
+case = "../../../cases/modules/rules/multiset_target.cml"
+args = ["${case}", "multiset_counts::report_float", "multiset_counts::floats", "multiset_counts::report_float", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["float_left 2 float_right 2\nsplit_float 2 2\nfloats rewrites 2 rounds 2\nfloat_left 1 float_right 1\nsplit_float 2 2\n3 3 7 7 7\n23 23 23.0\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.multiset_keeps_the_effect_a_dropped_factor_runs"
+desc = "A rewrite keeps every effect the program runs (design principles 9.7): `x * 0 => 0` fires on `a * 0` and not on `effectful(a) * 0`, whose other factor runs a call that prints. The counts show the product that stayed, and the program prints the call."
+kind = "behavior"
+case = "../../../cases/modules/rules/multiset_target.cml"
+args = ["${case}", "multiset_counts::report_effects", "multiset_counts::multiset", "multiset_counts::report_effects", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["dropped 1 zero 1\nmultiset rewrites 6 rounds 2\ndropped 1 zero 0\n3 3 7 7 7\n23 23 23.0\n14 12 12.0\ntick\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.store_merges_the_writings_of_one_chain"
+desc = "The canonical form is also the store's key: with no rule at all, saturation and extraction already leave one addition for `(a + b) + (b + a)` and one chain for `((a + b) + c) + (a + (b + c))`, because the same-operator terms of an exactly associative chain are one multiset. The same two writings over floats stay apart, where only the exchange of two terms is exact."
+kind = "behavior"
+case = "../../../cases/modules/rules/multiset_target.cml"
+args = ["${case}", "multiset_counts::classes", "multiset_counts::report_classes", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["merged 2\ngrouped 3 grouped_float 5\n3 3 7 7 7\n23 23 23.0\n14 12 12.0\n"]
 timeout_ms = 20000
 
 [[tests]]
@@ -334,12 +404,69 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.analysis_takes_the_parts_of_a_compound"
-desc = "A declaration with parameters (`analysis mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the pattern variables, and the fact is the one of the compound whose parts they are. `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, y)` reads `sign(y) == 1` through the `x * y` clause; `x * 2` keeps its product because the query answers false. A parts query reads the parts in the order the pattern binds them, so the condition pins that order by shape (`isConst(y)`): a `const` parameter is the constant's value in a condition (rewrite design 2 (second version) 1), and the commuted pairing of a two-variable pattern would otherwise ask the query with the parts exchanged, where no value has them. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
+desc = "A declaration with parameters (`analysis mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the parts of the compound, and the fact is the one of the value whose parts they are (rewrite design 4.1-4.2). `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, node_of(c))` reads `sign(y) == 1` through the `x * y` clause; `x * 2` keeps its product because the query answers false. The coefficient is a `const` parameter, so its node is reached with `node_of(c)` (rule-language design v2, section 1: `const c` is the constant's value in a condition, and `node_of(c)` is the node), and the two parts are a factor and a node rather than two values pinned by shape. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
 kind = "behavior"
 case = "../../../cases/modules/rules/analysis_parts.cml"
 args = ["${case}", "analysis_parts::report", "analysis_parts::apply", "analysis_parts::report", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["one 1 two 1\none 0 two 1\n7 14\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.node_of_reaches_a_const_parameter"
+desc = "A condition reaches the node of a `const` parameter with `node_of(c)` (rule-language design v2, section 1: `const c` is the constant's value in a condition and `node_of(c)` is its node; the name takes one of the rule's own `const` parameters, and nothing else). `drop_int_coefficient` guards on a shape of the coefficient's node (`typeText(node_of(c)) == 'int' && is_constant(node_of(c))`), which no value of the coefficient can be given: it fires on `x * 2` (an `int` constant) and drops the product, while `negative_coefficient` (`x * -2.0`) keeps its product because its node says `float`. `drop_positive` is the value channel (`positive(c)`), which drops the product of `positive_coefficient` and is false for the negative one; the three functions are what tells the two channels apart. The counts are one product in each function before the pass, none in `positive_coefficient` and `int_coefficient` after it and one in `negative_coefficient`, and the values are `5.0 5 -10.0` (each rewrite replaces the product by its factor)."
+kind = "behavior"
+case = "../../../cases/modules/rules/node_of.cml"
+args = ["${case}", "node_of::report", "node_of::apply", "node_of::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["positive 1\nint 1\nnegative 1\npositive 0\nint 0\nnegative 1\n5.0 5 -10.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.node_of_reaches_a_const_parameter_on_every_backend"
+desc = "The program the `node_of` rules rewrote runs the same on the node VM, the byte-code interpreter and the parallel scheduler."
+kind = "behavior"
+case = "../../../cases/modules/rules/node_of.cml"
+args = ["${case}", "node_of::apply", "${backend}"]
+backends = ["nvm", "fvm", "prl"]
+expect_exit = 0
+expect_stdout_contains = ["5.0 5 -10.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.node_of_refuses_a_name_that_is_not_a_const_parameter"
+desc = "`node_of(x)` where `x` is a parameter the rule does not declare `const` is refused by name, with a located diagnostic that names the argument and the rule, not a crash and not a silent false: the declaration is the report."
+kind = "negative"
+case = "../../../cases/modules/rules/node_of_misuse.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["NodeOfNotAParameter", "'x' is not a const parameter of the rule 'drop_by_node'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.parts_query_ignores_the_order_of_a_commutative_operator"
+desc = "A rule whose coefficient is a `const` parameter asks a parameterized fact query (`mul_by_one(x, node_of(c))`), and the query's two parts reach it in the order the rule's own match bound them -- the pairing which the declaration of a commutative operator may exchange (`swapped` is `a * 1` against the pattern `x * c`, where only the exchange binds the constant to `c`, so the query is asked with the parts in the order the product holds them the other way). Both orders name the same value (op-semantics 7.4: the exchange gives the same value), so the query answers with the operands in either order and the product goes: `swapped` loses its product and keeps the factor as its value (`7`). `kept` (`a * 2`), whose coefficient is not one, keeps its product and the value `14`, and `plain`, whose guard is on the value, loses its product in the same pass -- so the pass is neither failing nor quietly idle. The counts are one product in each function before the pass and none in `swapped` and `plain` after it."
+kind = "behavior"
+case = "../../../cases/modules/rules/parts_order.cml"
+args = ["${case}", "parts_order::report", "parts_order::apply", "parts_order::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["swapped 1\nkept 1\nplain 1\nswapped 0\nkept 1\nplain 0\n7 14 3.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fact_query_that_finds_nothing_leaves_the_rule_out"
+desc = "A fact query inside a condition that finds no value whose parts it was given makes the condition false -- this rule does not apply here -- and not a failure of the pass (design principles 4.4: `when` is the rule's applicability condition, so a case it does not hold for is a case the rule is left out of). `sub(a, b)` is the fact of a subtraction, whose two operands are not interchangeable, and the condition of `drop_by_one` asks `sub(x, node_of(c))` with the parts of `kept` (`a * 2`): no subtraction of the draft has those two nodes, so the query answers false, the rule leaves the product and the value `14` alone, and the pass goes on to drop the product of `plain` with its guard on the value (`0` in the second report) -- the pass's other work, which a pass that quietly did nothing would fail to show."
+kind = "behavior"
+case = "../../../cases/modules/rules/no_value.cml"
+args = ["${case}", "no_value::report", "no_value::apply", "no_value::report", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_contains = ["kept 1\nplain 1\nkept 1\nplain 0\n14 3.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
@@ -501,12 +628,12 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 [[tests]]
 name = "rules.tensor_laws_counts"
-desc = "The tensor element laws of the standard rules, by operator count: `tensor_f32_combine` folds x*3 + x*5 under the default reassociate, the mixed and the product-chain laws wait for the permissions their guards name, `tensor_f32_double` (exact doubling) needs none, the bare-operand laws fold x*c + x with the same permissions as the two-term combine, `tensor_f32_add_self` turns t + t into t*2, the neutral laws reach a bare tensor, coefficients f32 does not hold exactly are left alone, and an i64 tensor keeps its own add (the f32 laws are typed and must not read it)."
+desc = "The tensor element laws of the standard rules, by operator count: `tensor_f32_combine` folds x*3 + x*5 under the default reassociate, the mixed and the product-chain laws wait for the permissions their guards name, `tensor_f32_double` (exact doubling) needs none, the bare-operand laws fold x*c + x with the same permissions as the two-term combine, `tensor_f32_add_self` turns t + t into t*2, the neutral laws reach a bare tensor, a coefficient is an f32 value (the tensor's element type) so `inexact` folds as any other f32 pair does, and an i64 tensor keeps its own add (the f32 laws are typed and must not read it)."
 kind = "behavior"
 case = "../../../cases/modules/rules/tensor_target.cml"
 args = ["${case}", "tensor_counts::report", "rules::simplify", "tensor_counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["combine 1 2\ncombine_mixed 1 2\ncombine_mixed_granted 1 2\nfold 0 2\nfold_granted 0 2\ndouble 1 2\nself 1 0\none 1 1\none_other 1 1\none_mixed 1 1\none_mixed_granted 1 1\nneutral 1 1\ninexact 1 2\ninexact_one 1 1\ni64_self 1 0\ni64_distribute 1 1\ncombine 0 1\ncombine_mixed 1 2\ncombine_mixed_granted 0 1\nfold 0 2\nfold_granted 0 1\ndouble 0 1\nself 0 1\none 0 1\none_other 0 1\none_mixed 1 1\none_mixed_granted 0 1\nneutral 0 0\ninexact 1 2\ninexact_one 1 1\ni64_self 1 0\ni64_distribute 1 1\n"]
+expect_stdout_contains = ["combine 1 2\ncombine_mixed 1 2\ncombine_mixed_granted 1 2\nfold 0 2\nfold_granted 0 2\ndouble 1 2\nself 1 0\none 1 1\none_other 1 1\none_mixed 1 1\none_mixed_granted 1 1\nneutral 1 1\ninexact 1 2\ninexact_one 1 1\ni64_self 1 0\ni64_distribute 1 1\ncombine 0 1\ncombine_mixed 1 2\ncombine_mixed_granted 0 1\nfold 0 2\nfold_granted 0 1\ndouble 0 1\nself 0 1\none 0 1\none_other 0 1\none_mixed 1 1\none_mixed_granted 0 1\nneutral 0 0\ninexact 0 1\ninexact_one 0 1\ni64_self 1 0\ni64_distribute 1 1\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1014,24 +1141,24 @@ normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trai
 timeout_ms = 10000
 
 [[tests]]
-name = "rules.const_parameter_type_refuses_another_type"
-desc = "The matcher checks a `const` parameter's declared type (rewrite design 2 (second version) 1: `const c: T` matches only a constant of type `T`; reviews/stdlib-rules.md item 2: the `isI32`-style helpers are deleted). A tensor coefficient is an f64 constant even under an f32 element type, so the rule declared for an f32 coefficient must not read `x * 3.0`: the product stays and the sum is 18.0."
+name = "rules.const_parameter_type_reads_its_own_type"
+desc = "The matcher checks a `const` parameter's declared type (rewrite design 2 (second version) 1: `const c: T` matches only a constant of type `T`; reviews/stdlib-rules.md item 2: the `isI32`-style helpers are deleted). A coefficient takes the type of the value it multiplies, so the rule declared for an f32 coefficient reads the tensor's `x * 3.0` (6.0) and leaves the scalar's f64 coefficient alone (15.0)."
 kind = "behavior"
 case = "../../../cases/modules/rules/const_type.cml"
 args = ["${case}", "const_type::by_f32", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["18.0\n"]
+expect_stdout_contains = ["6.0\n15.0\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
-name = "rules.const_parameter_type_reads_its_own_type"
-desc = "The other half of the same pair: the rule whose `const` parameter is declared f64 does read the f64 coefficient of `x * 3.0`, so the product is replaced and the sum is 6.0. Without it, `rules.const_parameter_type_refuses_another_type` would pass for a rule that never fires at all."
+name = "rules.const_parameter_type_refuses_another_type"
+desc = "The other half of the same pair: the rule declared for an f64 coefficient reads the scalar program's and leaves the tensor's f32 coefficient alone (18.0). Without it, `rules.const_parameter_type_reads_its_own_type` would pass for a rule that never fires at all."
 kind = "behavior"
 case = "../../../cases/modules/rules/const_type.cml"
 args = ["${case}", "const_type::by_f64", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["6.0\n"]
+expect_stdout_contains = ["18.0\n5.0\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 

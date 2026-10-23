@@ -339,18 +339,22 @@ gc_node_ref_t GraphDraft::addDrefNode(camel::core::type::Type *type, gc_slot_idx
         });
 }
 
-void GraphDraft::appendInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId) {
+void GraphDraft::appendInput(
+    DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId, PortRole role) {
     requireOneWriting("appendInput");
     ++mutations_;
     ASSERT(node(userId) != nullptr, "Cannot append input to a missing draft node.");
     ASSERT(node(inputId) != nullptr, "Cannot append a missing input draft node.");
+    const DraftEdgeSlot slot = edgeSlotOf(kind, role);
     // Value inputs are positional and may legitimately repeat, e.g. `(x, x)`, `[x, x]`, or
     // `x + x`; `with` inputs carry ordered payloads for FILL/JOIN/CALL. The runtime graph must
-    // preserve that multiplicity instead of collapsing repeated edges into a set. A control
-    // input is a dependency, which is stated once.
-    if (kind == DraftEdgeKind::Ctrl) {
-        const auto present = ctrlInputsOf(userId);
-        const auto users   = ctrlUsersOf(inputId);
+    // preserve that multiplicity instead of collapsing repeated edges into a set. Every other
+    // kind states a dependency, each stated once: a control input, an order input, and a sync
+    // edge (one statement is written directly before another, once).
+    if (kind == DraftEdgeKind::Ctrl || kind == DraftEdgeKind::Order ||
+        kind == DraftEdgeKind::Sync) {
+        const auto present = inputsOf(userId, kind, role);
+        const auto users   = usersOf(inputId, slot);
         const bool already = present.size() <= users.size()
                                  ? std::find(present.begin(), present.end(), inputId) !=
                                        present.end()
@@ -359,73 +363,63 @@ void GraphDraft::appendInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_r
             return;
         }
     }
-    appendInputEntry(userId, kind, inputId);
-    appendUserRef(
-        inputId,
-        userId,
-        kind == DraftEdgeKind::Norm,
-        kind == DraftEdgeKind::With,
-        kind == DraftEdgeKind::Ctrl);
+    appendInputEntry(userId, slot, inputId);
+    appendUserRef(inputId, userId, slot);
 }
 
-bool GraphDraft::unlinkInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId) {
+bool GraphDraft::unlinkInput(
+    DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId, PortRole role) {
     requireOneWriting("unlinkInput");
     ++mutations_;
     DraftNode *draftNode = node(userId);
     ASSERT(draftNode != nullptr, "Cannot unlink input from a missing draft node.");
+    const DraftEdgeSlot slot = edgeSlotOf(kind, role);
     // The first entry that names `inputId` goes; the entries after it move down.
-    auto group = mutableInputs(draftNode, kind);
+    auto group = mutableInputs(draftNode, slot);
     auto it    = std::find(group.begin(), group.end(), inputId);
     if (it == group.end()) {
         return false;
     }
     DraftNodeHeader &h = draftNode->header;
     auto *base         = reinterpret_cast<gc_node_ref_t *>(draftNode->tail + h.payloadBytes);
-    const size_t total = static_cast<size_t>(h.normInputCount) + h.withInputCount + h.ctrlInputCount;
+    const size_t total = static_cast<size_t>(h.normInputCount) + h.withInputCount + h.ctrlInputCount +
+                         h.orderInputCount + h.syncInputCount;
     const size_t at    = static_cast<size_t>(&*it - base);
     std::memmove(base + at, base + at + 1, (total - at - 1) * sizeof(gc_node_ref_t));
-    (kind == DraftEdgeKind::Norm   ? h.normInputCount
-     : kind == DraftEdgeKind::With ? h.withInputCount
-                                   : h.ctrlInputCount)--;
-    // The user stays a user of `inputId` while another entry of the group names it.
-    group = mutableInputs(draftNode, kind);
+    switch (slot) {
+    case DraftEdgeSlot::NormalPorts:
+        h.normInputCount--;
+        break;
+    case DraftEdgeSlot::ContextPorts:
+        h.withInputCount--;
+        break;
+    case DraftEdgeSlot::Ctrl:
+        h.ctrlInputCount--;
+        break;
+    case DraftEdgeSlot::Order:
+        h.orderInputCount--;
+        break;
+    case DraftEdgeSlot::Sync:
+        h.syncInputCount--;
+        break;
+    }
+    // The user stays a user of `inputId` while another entry of the run names it.
+    group = mutableInputs(draftNode, slot);
     if (std::find(group.begin(), group.end(), inputId) == group.end()) {
-        removeUserRef(
-            inputId,
-            userId,
-            kind == DraftEdgeKind::Norm,
-            kind == DraftEdgeKind::With,
-            kind == DraftEdgeKind::Ctrl);
+        removeUserRef(inputId, userId, slot);
     }
     return true;
 }
 
 void GraphDraft::replaceInput(
-    DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t oldInputId, gc_node_ref_t newInputId) {
+    DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t oldInputId, gc_node_ref_t newInputId,
+    PortRole role) {
     requireOneWriting("replaceInput");
     ++mutations_;
     ASSERT(node(userId) != nullptr, "Cannot replace input on a missing draft node.");
     ASSERT(node(newInputId) != nullptr, "Cannot replace with a missing draft node.");
-    switch (kind) {
-    case DraftEdgeKind::Norm: {
-        const auto inputs =
-            mutatedInputs(normInputsOf(userId), oldInputId, false, true, newInputId);
-        setNormInputs(userId, inputs);
-        break;
-    }
-    case DraftEdgeKind::With: {
-        const auto inputs =
-            mutatedInputs(withInputsOf(userId), oldInputId, false, true, newInputId);
-        setWithInputs(userId, inputs);
-        break;
-    }
-    case DraftEdgeKind::Ctrl: {
-        const auto inputs =
-            mutatedInputs(ctrlInputsOf(userId), oldInputId, false, true, newInputId);
-        setCtrlInputs(userId, inputs);
-        break;
-    }
-    }
+    const auto inputs = mutatedInputs(inputsOf(userId, kind, role), oldInputId, false, true, newInputId);
+    setInputs(userId, kind, role, inputs);
 }
 
 void GraphDraft::setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type) {
@@ -476,15 +470,27 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     const std::vector<gc_node_ref_t> oldCtrlInputs(
         DraftNodeView::ctrlInputs(draftNode).begin(),
         DraftNodeView::ctrlInputs(draftNode).end());
+    const std::vector<gc_node_ref_t> oldOrderInputs(
+        DraftNodeView::orderInputs(draftNode).begin(),
+        DraftNodeView::orderInputs(draftNode).end());
+    const std::vector<gc_node_ref_t> oldSyncInputs(
+        DraftNodeView::syncInputs(draftNode).begin(),
+        DraftNodeView::syncInputs(draftNode).end());
 
     for (gc_node_ref_t oldInput : oldNormInputs) {
-        removeUserRef(oldInput, id, true, false, false);
+        removeUserRef(oldInput, id, DraftEdgeSlot::NormalPorts);
     }
     for (gc_node_ref_t oldInput : oldWithInputs) {
-        removeUserRef(oldInput, id, false, true, false);
+        removeUserRef(oldInput, id, DraftEdgeSlot::ContextPorts);
     }
     for (gc_node_ref_t oldInput : oldCtrlInputs) {
-        removeUserRef(oldInput, id, false, false, true);
+        removeUserRef(oldInput, id, DraftEdgeSlot::Ctrl);
+    }
+    for (gc_node_ref_t oldInput : oldOrderInputs) {
+        removeUserRef(oldInput, id, DraftEdgeSlot::Order);
+    }
+    for (gc_node_ref_t oldInput : oldSyncInputs) {
+        removeUserRef(oldInput, id, DraftEdgeSlot::Sync);
     }
 
     // A rewritten node keeps its source origin, its numeric permissions, its attributes and
@@ -528,14 +534,22 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     const auto newNormInputs = copy(DraftNodeView::normInputs(rebuilt));
     const auto newWithInputs = copy(DraftNodeView::withInputs(rebuilt));
     const auto newCtrlInputs = copy(DraftNodeView::ctrlInputs(rebuilt));
+    const auto newOrderInputs = copy(DraftNodeView::orderInputs(rebuilt));
+    const auto newSyncInputs = copy(DraftNodeView::syncInputs(rebuilt));
     for (gc_node_ref_t input : newNormInputs) {
-        appendUserRef(input, id, true, false, false);
+        appendUserRef(input, id, DraftEdgeSlot::NormalPorts);
     }
     for (gc_node_ref_t input : newWithInputs) {
-        appendUserRef(input, id, false, true, false);
+        appendUserRef(input, id, DraftEdgeSlot::ContextPorts);
     }
     for (gc_node_ref_t input : newCtrlInputs) {
-        appendUserRef(input, id, false, false, true);
+        appendUserRef(input, id, DraftEdgeSlot::Ctrl);
+    }
+    for (gc_node_ref_t input : newOrderInputs) {
+        appendUserRef(input, id, DraftEdgeSlot::Order);
+    }
+    for (gc_node_ref_t input : newSyncInputs) {
+        appendUserRef(input, id, DraftEdgeSlot::Sync);
     }
 }
 

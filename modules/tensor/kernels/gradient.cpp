@@ -25,16 +25,30 @@ using type::TypeCode;
 
 namespace {
 
-/// The gradient and update kernels compute in f32 only. An f64 or integer tensor is refused,
-/// naming the argument type and the supported set, never narrowed to f32 (design principles
-/// 5.1: no implicit conversion between numeric types).
+/// The gradient kernels that carry a tensor as it is -- the backward of a broadcast (`sum_to`)
+/// and the update kernels -- take the two float widths a gradient is written at: f32 and f64.
+/// An integer or bool tensor, and the reduced widths bf16 and f16, are refused, naming the
+/// argument type and the supported set, never narrowed (design principles 5.1: no implicit
+/// conversion between numeric types). A caller that reads the result as f32 is therefore the f32
+/// arm; the f64 arm reads it at f64 (`dtypeOf<T>`, dtype.h).
 const Array *asFloat(const Array *t, mm::IAllocator &allocator) {
     (void)allocator;
-    if (t->dtype() != TypeCode::Float32) {
-        refuseTensorElementType("the gradient kernels", t, {TypeCode::Float32});
+    if (t->dtype() != TypeCode::Float32 && t->dtype() != TypeCode::Float64) {
+        refuseTensorElementType(
+            "the gradient kernels", t, {TypeCode::Float32, TypeCode::Float64});
     }
     return t;
 }
+
+/// The element type of `asFloat`'s argument (f32 or f64): what the gradient is written at, what
+/// its additions are done at and what one rounding stores back. The accumulator is the input's
+/// element type, so an f32 sum keeps every bit it has today (f32 additions, f32 answer) and an
+/// f64 sum adds f64s and rounds once into f64 (design principles 7.3; the ruling
+/// docs/handover/reviews/reduced-precision.md (d): a float reduction returns its input's element
+/// type and accumulates in f64). A bf16 or f16 arm would accumulate in f64 and would need the
+/// half types' own store, so it is not added here.
+template <TypeCode Code>
+using SumElement = std::conditional_t<Code == TypeCode::Float64, double, float>;
 
 std::string shapeText(std::span<const int64_t> shape) {
     std::string text = "[";
@@ -171,38 +185,26 @@ broadcastRuns(std::span<const int64_t> big, const std::vector<int64_t> &strides,
     return runs;
 }
 
-} // namespace
-
-/// Sum of `g` over the axes that `shape` broadcasts away: the backward of a broadcast.
-///
-/// Accumulation type: f32. The input is converted to f32 (`asFloat` above) whatever its element
-/// type, the accumulator is f32 and the answer is f32, so the additions happen at the width of
-/// the values being added: nothing is accumulated below the type it is given, and no permission
-/// enters. The rule that a floating-point reduction accumulates in f64 and rounds once at the end
-/// (design principles 7.3, ruling reduced-precision.md (d)) is stated for the reductions that
-/// return their input's element type — `array::sum` and the tensor axis `sum` — and this helper
-/// is neither: it is the module's broadcast backward and answers f32 by construction. Raising
-/// this accumulator to f64 would move the bits of every f32 gradient computed through it, which
-/// is a decision of its own rather than a consequence of (d), so it is left as it is.
-Array *
-sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator) {
-    if (g->shapeSpan().size() == shape.size() &&
-        std::equal(shape.begin(), shape.end(), g->shapeSpan().begin())) {
-        return const_cast<Array *>(g);
-    }
-    const Array *src = asFloat(g, allocator);
-    const auto strides      = broadcastStrides(shape, src->shapeSpan(), "sum_to");
-    Array *out       = createTensor(TypeCode::Float32, shape, allocator, true);
-    const float *in         = src->dataAs<float>();
-    float *acc              = out->dataAs<float>();
-    const auto big          = src->shapeSpan();
+/// One arm of `sumTo`, for the element type `Code`: the input is read at that type, every
+/// addition is done in that type, and the answer is that type. `Code` is the arm's name, so
+/// nothing here reads the element type at run time (the per-element-type executors of the array
+/// reductions are the same shape). The decomposition into runs is the same for both arms; only
+/// the width of `in`, `acc` and the accumulator moves with `Code`.
+template <TypeCode Code>
+Array *sumToArm(const Array *src, std::span<const int64_t> shape, mm::IAllocator &allocator) {
+    using T            = SumElement<Code>;
+    const auto strides = broadcastStrides(shape, src->shapeSpan(), "sum_to");
+    Array *out         = createTensor(Code, shape, allocator, true);
+    const T *in        = src->dataAs<T>();
+    T *acc             = out->dataAs<T>();
+    const auto big     = src->shapeSpan();
     // Both shapes the step issues are three runs: the bias and gain gradients reduce leading axes
     // ([512, 256] to [256], 512 inputs per output element) and the RMSNorm denominator's gradient
     // reduces the trailing one ([512, 256] to [512, 1], 256 contiguous inputs per output).  Each
-    // output's contributions are added in the order the index walk visits them, into the same f32
-    // accumulator, so this is the reduction the declaration folds and the walk below computes --
-    // the licence and the accumulation type do not move.  What it does not do is walk 131072
-    // elements through a rank-2 odometer.
+    // output's contributions are added in the order the index walk visits them, into one
+    // accumulator of the input's element type, so this is the reduction the declaration folds and
+    // the walk below computes -- the accumulation type does not move with the decomposition.
+    // What it does not do is walk 131072 elements through a rank-2 odometer.
     if (const auto runs = broadcastRuns(big, strides, static_cast<int64_t>(src->numel()))) {
         const int64_t lanes = runs->outer * runs->inner;
         // One unit is one element of the input, whichever branch runs: a lane's `reduced`
@@ -214,8 +216,8 @@ sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator)
             // dependent chain -- one accumulator, in index order, is the declared reduction.
             parallelFor(lanes, grain, [&](int64_t begin, int64_t end) {
                 for (int64_t lane = begin; lane < end; ++lane) {
-                    const float *row = in + lane * runs->reduced;
-                    float sum        = 0.0f;
+                    const T *row = in + lane * runs->reduced;
+                    T sum        = T(0);
                     for (int64_t r = 0; r < runs->reduced; ++r) {
                         sum += row[r];
                     }
@@ -233,10 +235,10 @@ sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator)
                 const int64_t block = lane / runs->inner;
                 const int64_t first = lane % runs->inner;
                 const int64_t stop  = std::min(end, (block + 1) * runs->inner);
-                float *held         = acc + block * runs->inner + first;
-                const float *plane  = in + (block * runs->reduced) * runs->inner + first;
+                T *held             = acc + block * runs->inner + first;
+                const T *plane      = in + (block * runs->reduced) * runs->inner + first;
                 for (int64_t r = 0; r < runs->reduced; ++r) {
-                    const float *row = plane + r * runs->inner;
+                    const T *row = plane + r * runs->inner;
                     for (int64_t k = 0; k < stop - first; ++k) {
                         held[k] += row[k];
                     }
@@ -247,9 +249,35 @@ sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator)
         return out;
     }
     // Interleaved: a kept axis between two reduced ones, so no run is contiguous. Kept for the
-    // shapes no run describes.
+    // shapes no run describes. The accumulator is the output element itself, so its width is the
+    // arm's type as well.
     forEachBroadcast(big, strides, [&](uint64_t i, int64_t j) { acc[j] += in[i]; });
     return out;
+}
+
+} // namespace
+
+/// Sum of `g` over the axes that `shape` broadcasts away: the backward of a broadcast.
+///
+/// Accumulation type: the input's element type, and one arm per admitted type (f32 and f64). An
+/// f32 gradient is added as f32 from +0 and answers f32, exactly as before; an f64 gradient is
+/// added as f64 from +0 and answers f64 in one rounding. The accumulator is never narrower than
+/// the values it adds (design principles 7.3; the ruling docs/handover/reviews/reduced-precision.md
+/// (d) states the one-rounding rule for the reductions that return their input's element type, and
+/// this is one of them), and the width is named by the declaration rather than read at run time:
+/// `sumToArm<Float32>` is instantiated as the f32 arm and `sumToArm<Float64>` as the f64 arm, and
+/// no code inside either one asks what the element type is.
+Array *
+sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator) {
+    if (g->shapeSpan().size() == shape.size() &&
+        std::equal(shape.begin(), shape.end(), g->shapeSpan().begin())) {
+        return const_cast<Array *>(g);
+    }
+    const Array *src = asFloat(g, allocator);
+    if (src->dtype() == TypeCode::Float64) {
+        return sumToArm<TypeCode::Float64>(src, shape, allocator);
+    }
+    return sumToArm<TypeCode::Float32>(src, shape, allocator);
 }
 
 /// A pure layout op: every element type is copied as it is, so a bool or int64 tensor broadcasts

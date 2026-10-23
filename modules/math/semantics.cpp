@@ -69,6 +69,12 @@ struct FloatType {
 };
 constexpr FloatType kFloatTypes[] = {{"_f", TypeCode::Float32}, {"_d", TypeCode::Float64}};
 
+/// The two reduced-precision floating types, under the on-disk names of their operators (`_bf` is
+/// bf16 and `_f6` is f16: `b` is already bool). They are declared the same way as the float
+/// widths where the operation is theirs at all, which is `min`, `max` and `abs` (the ruling
+/// docs/handover/reviews/reduced-precision.md item 2).
+constexpr FloatType kHalfTypes[] = {{"_bf", TypeCode::BFloat16}, {"_f6", TypeCode::Float16}};
+
 /// approx_math, change_precision and the finite_math assumptions are the permissions that can
 /// change a bounded function (design principles 7.2, docs/design/op-semantics 6.2).
 constexpr PermissionMask kApprox = kApproxMath | kChangePrecision | kFiniteMath;
@@ -344,6 +350,35 @@ void declareElementaryFunctions() {
             exactFloat(
                 type.code,
                 "true when x is an infinity, false otherwise (a test, no arithmetic)"));
+    }
+
+    // The two reduced-precision floating types take `abs`, `min` and `max` and nothing else of
+    // this module: every one of the three is the exact operation of its value, computed on the f32
+    // the operand widens to, so it is Exact in the element type's own width and `compute` is that
+    // type (design principles 7.3; the ruling's item 2). `abs` clears the sign, so both zeros are
+    // one value: the arithmetic is exact and only the finite_math assumptions about a special
+    // value can change what the reader sees.
+    for (const FloatType &type : kHalfTypes) {
+        declare(
+            std::string("math:min") + type.suffix,
+            exactFloat(
+                type.code,
+                "IEEE 754-2019 minimum of the two values widened to f32: a NaN on either side "
+                "gives the canonical quiet NaN, -0 < +0; the result is one of the operands, which "
+                "the element type holds exactly, so the store rounding rounds nothing"));
+        declare(
+            std::string("math:max") + type.suffix,
+            exactFloat(
+                type.code,
+                "IEEE 754-2019 maximum of the two values widened to f32: a NaN on either side "
+                "gives the canonical quiet NaN, -0 < +0; the result is one of the operands, which "
+                "the element type holds exactly, so the store rounding rounds nothing"));
+        declare(
+            std::string("math:abs") + type.suffix,
+            exactFloat(
+                type.code,
+                "|x| of the value widened to f32: the sign cleared (NaN gives NaN, -0 gives +0), "
+                "which the element type holds exactly, so the store rounding rounds nothing"));
     }
 
     // One correctly rounded square root in the width of the argument; an integer argument is

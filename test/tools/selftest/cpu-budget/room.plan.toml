@@ -1,0 +1,24 @@
+# Fixture of test/tools/selftest/load-class/run.mjs. It is not under test/plans.
+#
+# The other way a test can be over a margin: by waiting. The margin rule reads the work's CPU time,
+# so 2 s of waiting is 2 s of wall clock and almost no CPU, and this test is not what the margin rule
+# is about at all -- its bound is the 20 s CPU budget, which the wait does not touch. margin/
+# tight.plan.toml is the same question with work in it (400 ms of CPU against a 1000 ms timeout,
+# which the margin rule fails). 2 s of waiting against a 6 s timeout is over the old wall-clock
+# reading of the 4x margin by the wait alone (4 x 2 s > 6 s, whatever the host's startup costs), and
+# 4 s of slack is more than node startup needs even on a busy host, so the run is not killed either
+# -- the fixture is red for neither leg at any load.
+id = "selftest.cpu_budget.room"
+order = 1
+tier = "fast"
+
+[[tests]]
+name = "cpu_budget_load_room"
+desc = "2 s of waiting against a 6 s timeout and a 20 s CPU budget: the wall clock is over the 4x margin, the CPU is not, and the CPU is the bound."
+kind = "behavior"
+tool = "node"
+case = "../load-class/sleep.mjs"
+args = ["${case}", "2000"]
+expect_exit = 0
+timeout_ms = 6000
+cpu_budget_ms = 20000

@@ -28,6 +28,27 @@ kind = "behavior"
 case = "../../cases/perf/gemm_threads_curve.cml"
 args = ["${case}", "--arg", "rounds=1", "--arg", "reps=1", "tensor::fuse", "std::jit"]
 expect_exit = 0
+# The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
+# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)):
+#
+#   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
+#    不随负载变"
+#
+#
+# The 84 points of the curve are a fixed amount of work and the plan asserts no timing (the
+# header says so: the `ms` field of a point only has to be finite and positive), so the
+# runner bounds the cost of this entry. Measured on the Linux host (32 threads; the
+# 1-minute load read 76.41/76.92/80.97 and 85.69/91.25/84.56), at two run lengths:
+#
+#   7.89 s of CPU / 9.51 s wall   (2026-10-24, nine perf plans in one run at -Jobs 8)
+#   8.08 s of CPU / 8.23 s wall   (2026-10-24, those plans beside feat/mm/gc and two gpu)
+#
+# The CPU figure spreads 2.4 % between the windows where the wall clock spreads 16 %. The
+# budget is 14 s: 1.63x the higher reading rounded up to the next 1000 ms -- the headroom the
+# four resnet referees of feat/modules/autodiff.plan.toml took -- and 1.73x the busiest
+# reading seen. The timeout below stays; by the ruling above it is the liveness bound only.
+cpu_budget_ms = 14000
 timeout_ms = 300000
 verify_script = """
 ({ input, assert }) => {

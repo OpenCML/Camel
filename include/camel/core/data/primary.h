@@ -126,9 +126,15 @@ class HalfData : public Data {
         return std::make_shared<HalfData>(bits_, type_);
     }
 
-    /// The float text of the value it holds, as every float of the language prints (11.5).
+    /// The float text of the value it holds, as every float of the language prints (11.5, 7.7):
+    /// the shortest that reads back as the same element of its own type, not the text of the f32
+    /// it widens to (`0.1` for bf16 `0.1`, not `0.100097656`; ruling 2026-10-23,
+    /// "reduced-precision-text"). Every path that prints a constant -- `--inspect`, a tag
+    /// argument's written form -- reads its text here.
     virtual const std::string toString() const override {
-        return camel::utils::floatText(toFloat());
+        return type_->code() == type::TypeCode::BFloat16
+                   ? camel::core::rtdata::halfText(camel::core::rtdata::BFloat16::fromBits(bits_))
+                   : camel::core::rtdata::halfText(camel::core::rtdata::Float16::fromBits(bits_));
     }
 
     /// A bf16 or f16 value becomes the other of the two only by rounding through a wider type,

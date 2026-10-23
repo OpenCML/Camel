@@ -1,0 +1,120 @@
+/**
+ * A training loop driven by the Camel optimizer, against the same loop driven by the native one:
+ * the autodiff gradient, a cosine schedule, twenty steps, and the same final parameters.
+ *
+ * This is `showcase/c2-mlp-mnist/train.cml` reduced to what proves the port: the model type is the
+ * same struct of tensors, `with_grad` gives the gradient of it, `update` consumes it with the
+ * state, and the loop collects the loss curve the way c2 does. The native path runs `nn:adam` on
+ * the same gradient with the same schedule, and the drift printed for every step is the difference
+ * between the two parameter trees *before* the update, so the two are the same value at every
+ * step, not only at the end: that is what makes the one gradient the gradient of both.
+ *
+ * The loss curve is collected from the Camel path and the last loss of both paths is printed: the
+ * same number means the two trained models are the same model.
+ */
+module optim_training
+
+import { Tensor, abs, cast, range, relu, reshape, sum } from tensor
+import { with_grad } from autodiff
+import { adam as native_adam, adam_state, softmax_cross_entropy } from nn
+import { adam, cosine_decay, init, update } from optim
+
+// The parameter tree: one type, four tensors in two nested structs, plus an `int` leaf the
+// optimizers leave alone. The nesting and the `int` are what `nn`'s computed signatures take (see
+// docs/technical/optim.md); the leaf kinds and the values are c2's.
+type Linear = {
+    weight: Tensor,
+    bias: Tensor
+}
+
+type Mlp = {
+    l0: Linear,
+    l1: Linear
+}
+
+// x: [4, 3] -> hidden: [4, 4] -> logits: [4, 4], one row per sample and four class ids.
+with <m: Mlp>
+func logits(x: Tensor): Tensor {
+    let hidden = relu(x @ m.l0.weight + m.l0.bias)
+    return hidden @ m.l1.weight + m.l1.bias
+}
+
+with <m: Mlp>
+func loss(x: Tensor, labels: Tensor): float {
+    return softmax_cross_entropy(logits<m>(x), cast(labels, 'int64'))
+}
+
+// The starting weights: values with binary digits below the point.
+func model_at(): Mlp {
+    return {
+        l0: {
+            weight: reshape(cast(range(12), 'float32'), [3, 4]) * 0.05 - 0.3,
+            bias: reshape(cast(range(4), 'float32'), [4]) * 0.01
+        },
+        l1: {
+            weight: reshape(cast(range(16), 'float32'), [4, 4]) * 0.05 - 0.4,
+            bias: reshape(cast(range(4), 'float32'), [4]) * 0.01 + 0.02
+        }
+    }
+}
+
+// The total difference between two parameter trees, tensor by tensor and element by element (c2's
+// checkpoint drift): exactly zero only when every tensor leaf agrees bit for bit. The `int` leaf is
+// not part of it, which is what the optimizers do with a leaf they cannot train; the loop below
+// checks it separately.
+func drift(a: Mlp, b: Mlp): float {
+    return sum(abs(a.l0.weight - b.l0.weight)) + sum(abs(a.l0.bias - b.l0.bias)) + sum(abs(a.l1.weight - b.l1.weight)) + sum(abs(a.l1.bias - b.l1.bias))
+}
+
+func main(steps: int): int sync {
+    // A tiny deterministic batch: four samples of three features, four class ids.
+    let x = reshape(cast(range(12), 'float32'), [4, 3]) * 0.125 - 0.5
+    let labels = cast(range(4), 'int64')
+    let model = model_at()
+    let loss_with_grad = with_grad(loss)
+    let opt = adam(cosine_decay(0.02, 10, 0.002))
+    var failures = 0
+
+    // The loop carries both parameter trees, both optimizer states, the step, the loss curve and
+    // the count of steps whose two parameter trees did not agree before the update.
+    let (camel, reference, camel_state, native_state, steps_made, curve, bad_steps) = loop
+        m = model, r = model, s = init(opt, model), ns = adam_state(model), step = 0,
+        curve = [] as float[], bad = 0
+        while step < steps
+        do {
+            let (value, gradient) = loss_with_grad<m>(x, labels)
+            let before = drift(m, r)
+            let missed = if before != 0.0 then 1 else 0
+            let next = update(opt, m, gradient, s)
+            let other = native_adam(r, gradient, ns, opt.schedule(step + 1))
+            return (next.0, other.0, next.1, other.1, step + 1, curve->append<value>, bad + missed)
+        }
+    let final = drift(camel, reference)
+    let camel_loss = loss<camel>(x, labels)
+    let reference_loss = loss<reference>(x, labels)
+    let first = curve[0]
+    let last = curve[steps - 1]
+
+    // The two paths were the same parameters at every step, landed on the same parameters, made
+    // the number of steps asked for, and the loop trained: the last loss is below the first.
+    if bad_steps != 0 || final != 0.0 || steps_made != steps then failures = failures + 1
+    if !(last < first) then failures = failures + 1
+    if camel_loss != reference_loss then failures = failures + 1
+
+    'optim training steps={} made={} bad_steps={} final_drift={}'
+    ->format<steps, camel_state.step, bad_steps, final>
+    ->println
+    'optim training first_loss={} last_loss={} camel_loss={} nn_loss={}'
+    ->format<first, last, camel_loss, reference_loss>
+    ->println
+    'optim training camel sum_w1={} b1_3={} sum_w2={}'
+    ->format<sum(camel.l0.weight), camel.l0.bias[3], sum(camel.l1.weight)>
+    ->println
+    'optim training nn sum_w1={} b1_3={} sum_w2={}'
+    ->format<sum(reference.l0.weight), reference.l0.bias[3], sum(reference.l1.weight)>
+    ->println
+    'optim training curve={}'
+    ->format<curve>
+    ->println
+    return failures
+}

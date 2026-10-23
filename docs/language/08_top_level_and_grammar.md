@@ -56,10 +56,10 @@ additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
 nullable   : unary (('??' | '!!') dataExpr)?
-unary      : link (as 类型)?
-link       : neg (('->' | '?->') comp)*
-neg        : ('-' | '!' | '~') negPower | comp
-negPower   : ('-' | '!' | '~') negPower | comp ('^' negPower)?
+unary      : neg (as 类型)?
+neg        : ('-' | '!' | '~') negPower | link
+negPower   : ('-' | '!' | '~') negPower | link ('^' negPower)?
+link       : comp (('->' | '?->') comp)*
 comp       : anno ('..' anno)*
 anno       : primary ( '.'字段 | '[' 下标 ']' | '(' 实参 ')' | '<' with 实参 '>' )*
 primary    : 名字 | 字面量 | '[' 元素, ... ']' | '{' 键: 值, ... '}' | '(' 表达式, ... ')' | lambda
@@ -266,7 +266,7 @@ analysisClause     : IDENTIFIER '=>' dataExpr
 | `{` 开头：结构体还是块 | `{ 名字 :`、`{ ...` 是结构体；`{}` 作分支臂、lambda 体时是空块，作语句时是空结构体 |
 | 实参：位置实参还是具名实参 | 第一个 `名字 :` 起是具名实参 |
 | 类型之后的 `+` `-` `^` | 其后能开始一个类型时属于类型（`x as T + U` 是转换为类型 `T + U`） |
-| 一元 `-` | 永远是运算符；比 `^` 松、比 `->` 紧；直接作用在数字上时给出负的字面量 |
+| 一元 `-` | 永远是运算符；比 `^` 与 `->` 松；直接作用在数字上时给出负的字面量 |
 
 相关文件：
 

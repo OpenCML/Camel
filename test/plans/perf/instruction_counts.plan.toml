@@ -1,0 +1,32 @@
+id = "perf.instruction_counts"
+order = 425
+tier = "slow"
+tags = ["perf", "training", "instructions"]
+
+# Retired user-space instructions per step of the naive training step, by the slope over two run
+# lengths.  The currency is the one the d=64 step-regression question is decided in: wall time and
+# CPU time on the shared reference host carry the neighbours, and retired instructions do not.  The
+# workload is the committed one (`train_step.cml` with `measure.py`'s substitution table, and the
+# program's own `naive config` line checked against the cell); the counter is
+# `/usr/bin/perf stat -e instructions:u`, run inside a privileged container that chroots into the
+# host root because `kernel.perf_event_paranoid` is 4 here and an unprivileged perf is refused.
+#
+# The cell sizes and the run lengths are the case's arguments: the plan runs the default
+# measurement (d=64 and the d=256 control, three repeats, 64/256/512 steps), and a run under
+# induced load is the same case with `--induce-load` and one repeat.  The absolute counts are
+# recorded, not asserted; what is asserted is structural: every run produced a count, the program
+# ran the cell it was generated for, and each slope is positive.  A load average is recorded per run
+# so a reader can see what else the host was doing.
+
+[[tests]]
+name = "perf.instruction_counts"
+desc = "The naive step's retired instructions per step by the slope over two run lengths, at d=64 and at the d=256 control cell: the same generated program on both builds, with the per-run counts, the slopes, and the load average each run saw."
+kind = "behavior"
+tool = "python"
+case = "../../cases/perf/instruction_counts.py"
+args = ["${case}", "measure", "--sizes", "64,256", "--lengths", "64,256,512", "--repeats", "3", "--control-repeats", "2", "--json", "${test_tmp}/instruction-counts.json", "--work", "${test_tmp}/work"]
+expect_exit = 0
+expect_stdout_contains = ["instruction counts: PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 2400000

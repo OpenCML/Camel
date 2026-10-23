@@ -17,6 +17,7 @@
 #include "camel/execute/pass/params.h"
 #include "camel/runtime/definitions.h"
 #include "camel/utils/assert.h"
+#include "pass_declarations.h"
 #include "passes/sched/nodevm/nodevm.h"
 
 #include <algorithm>
@@ -121,19 +122,40 @@ bool hasPassSignature(
     return hasPassSignature(*type, params, problem);
 }
 
-/// The passes a module provides, by name: the functions it exports with the signature of a pass,
-/// which is what `<module>::<name>` can name (H130).
-std::vector<std::string> passNamesOf(const camel::core::module::UserDefinedModule &module) {
+/// The passes a module provides, by name: the pass declarations of its `.cml` file, which is what
+/// `<module>::<name>` can name (H130, H233, ruling of 2026-10-23). "Which passes it provides" is
+/// read from the declaration and from nothing else: an exported function is a pass because the
+/// module declared it one, never because its signature happens to look like one, and never because
+/// C++ registered a kernel under that name. The declaration's applicability condition is what
+/// `findDescriptor` checks before it runs, so this follows `findPassDeclaration` for the same
+/// reason the pipeline does.
+///
+/// Only a declaration module is read this way. `declarationModule()` is what says that the `.cml` is
+/// the single statement of a native module's surface, and `Context` sets it exactly where a `.cml`
+/// is found beside the `.cmo` it declares (6.4, H19 step 1). A module written in Camel is read the
+/// older way, from the functions it exports: it declares its passes itself, and there the exported
+/// `(p: Program) => Program!` function is its pass — the shape is the whole declaration.
+std::vector<std::string> passNamesOf(
+    const camel::core::module::UserDefinedModule &module, const std::string &name,
+    const context_ptr_t &ctx) {
+    if (!module.declarationModule()) {
+        std::vector<std::string> names;
+        for (const auto &function : module.exportedFunctions()) {
+            if (function.type == nullptr) {
+                continue;
+            }
+            std::vector<CamelParam> params;
+            std::string problem;
+            if (hasPassSignature(*function.type, params, problem)) {
+                names.push_back(function.name);
+            }
+        }
+        std::sort(names.begin(), names.end());
+        return names;
+    }
     std::vector<std::string> names;
-    for (const auto &function : module.exportedFunctions()) {
-        if (function.type == nullptr) {
-            continue;
-        }
-        std::vector<CamelParam> params;
-        std::string problem;
-        if (hasPassSignature(*function.type, params, problem)) {
-            names.push_back(function.name);
-        }
+    for (const auto &declaration : camel::execute::detail::passDeclarations(name, ctx)) {
+        names.push_back(declaration.name);
     }
     std::sort(names.begin(), names.end());
     return names;
@@ -254,7 +276,7 @@ void registerCamelPass(
         if (missing != nullptr && lookup.moduleFound && lookup.module) {
             missing->moduleHasNoSuchPass = true;
             missing->declaresUnexported  = lookup.declaresUnexported;
-            missing->provided            = passNamesOf(*lookup.module);
+            missing->provided            = passNamesOf(*lookup.module, module, ctx);
         }
         return;
     }

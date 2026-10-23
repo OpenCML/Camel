@@ -38,7 +38,18 @@ std::optional<std::string> checkFormatPattern(
             store.push_back(camel::builtin::LanguageFloat<Float32>{0});
             break;
         case TypeCode::Float64:
-            store.push_back(camel::builtin::LanguageFloat<Float64>{0});
+            store.push_back(camel::builtin::LanguageFloat<Float64>{
+                0, camel::builtin::FloatTextFormat::Float64});
+            break;
+        case TypeCode::BFloat16:
+            // The two reduced-precision types take a plain `{}` and a specification alike, as
+            // f32 does: the pattern check must accept what the run-time `__format__` accepts.
+            store.push_back(camel::builtin::LanguageFloat<Float32>{
+                0, camel::builtin::FloatTextFormat::BFloat16});
+            break;
+        case TypeCode::Float16:
+            store.push_back(camel::builtin::LanguageFloat<Float32>{
+                0, camel::builtin::FloatTextFormat::Float16});
             break;
         case TypeCode::Complex64:
             store.push_back(camel::builtin::LanguageComplex<Float32>{0, 0});
@@ -80,7 +91,20 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
             store.push_back(camel::builtin::LanguageFloat<Float32>{with.get<Float32>(i)});
             break;
         case TypeCode::Float64:
-            store.push_back(camel::builtin::LanguageFloat<Float64>{with.get<Float64>(i)});
+            store.push_back(camel::builtin::LanguageFloat<Float64>{
+                with.get<Float64>(i), camel::builtin::FloatTextFormat::Float64});
+            break;
+        case TypeCode::BFloat16:
+            // A bf16 or an f16 has one text of its own (7.7, ruling 2026-10-23), and this is the
+            // path `format` and string interpolation take: a plain `{}` writes that text.
+            store.push_back(camel::builtin::LanguageFloat<Float32>{
+                rtdata::halfValueFloat(with.slot(i), type),
+                camel::builtin::FloatTextFormat::BFloat16});
+            break;
+        case TypeCode::Float16:
+            store.push_back(camel::builtin::LanguageFloat<Float32>{
+                rtdata::halfValueFloat(with.slot(i), type),
+                camel::builtin::FloatTextFormat::Float16});
             break;
         case TypeCode::Complex64: {
             const Complex *value = with.get<Complex *>(i);

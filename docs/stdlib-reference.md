@@ -62,6 +62,7 @@ Not in this reference: the profiler (`perf`).
 | [pyplot](#pyplot) | `import { ... } from pyplot` | C++ |
 | [python](#python) | `import { ... } from python` | C++ |
 | [nn](#nn) | `import { ... } from nn` | C++ |
+| [optim](#optim) | `import { ... } from optim` | Camel |
 | [autodiff](#autodiff) | `import { ... } from autodiff` | C++ |
 | [sim](#sim) | `import { ... } from sim` | C++ |
 | [onnx](#onnx) | `import { ... } from onnx` | C++ |
@@ -92,6 +93,7 @@ Not in this reference: the profiler (`perf`).
 | [pyplot](#pyplot) | `import { ... } from pyplot` |  |
 | [python](#python) | `import { ... } from python` |  |
 | [nn](#nn) | `import { ... } from nn` |  |
+| [optim](#optim) | `import { ... } from optim` |  |
 | [autodiff](#autodiff) | `import { ... } from autodiff` |  |
 | [sim](#sim) | `import { ... } from sim` |  |
 | [onnx](#onnx) | `import { ... } from onnx` |  |
@@ -1270,8 +1272,8 @@ The declarations written here are the operators whose signature is fixed. The on
 type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
 axis forms of a reduction — cannot be written as a declaration; they are implemented in
 `modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
-under the same sections (design principles 6.4; handover H19, H151). `show`'s umbrella parameter
-— a tensor, or any array — is written as one declaration per accepted type (handover H175).
+under the same sections (design principles 6.4). `show`'s umbrella parameter
+— a tensor, or any array — is written as one declaration per accepted type.
 
 ### Creation
 
@@ -2136,7 +2138,7 @@ A type is named once: the family predicates (`is_integer`, `is_float`, `is_compl
 `is_string`, `is_bool`) carry the identity cases, and `is_numeric` and `is_ordered` ask them
 instead of listing the types again, so a new integer width is added in one place.
 
-`bf16` and `f16` are floating-point types (design principles 7.3; handover H238): a tensor
+`bf16` and `f16` are floating-point types (design principles 7.3): a tensor
 stores an element in one of them, every kernel computes in f32 and rounds once, and the
 language itself gives them what it gives `f32`: literals, a written conversion (`bf16(x)`,
 `f16(x)`, `x as bf16`), scalar arithmetic and comparison, and arrays of them. They belong to
@@ -2647,10 +2649,13 @@ abs: (x: f32) => f32
 abs: (x: float) => float
 abs: (x: c64) => f32
 abs: (x: c128) => float
+abs: (x: bf16) => bf16
+abs: (x: f16) => f16
 ```
 
 The absolute value. The smallest integer has no positive counterpart: its absolute value is
-not defined.
+not defined. A bf16 or f16 value is the sign cleared, computed on the f32 it widens to
+exactly, so -0 becomes +0 and no value of either type rounds (design principles 7.3).
 
 - Pure.
 - Example: `abs(-3)` gives `3`
@@ -2970,11 +2975,15 @@ min: (a: f32, b: f32) => f32
 min: (a: float, b: float) => float
 min: (a: string, b: string) => string
 min: (a: bool, b: bool) => bool
+min: (a: bf16, b: bf16) => bf16
+min: (a: f16, b: f16) => f16
 ```
 
 The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
 NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-prefix first), and false is below true.
+prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
+operand widens to exactly, and the result is that operand itself: neither type rounds here
+(design principles 7.3).
 
 - Pure.
 - Example: `min(3, 5)` gives `3`
@@ -2989,11 +2998,15 @@ max: (a: f32, b: f32) => f32
 max: (a: float, b: float) => float
 max: (a: string, b: string) => string
 max: (a: bool, b: bool) => bool
+max: (a: bf16, b: bf16) => bf16
+max: (a: f16, b: f16) => f16
 ```
 
 The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
 NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-prefix first), and false is below true.
+prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
+operand widens to exactly, and the result is that operand itself: neither type rounds here
+(design principles 7.3).
 
 - Pure.
 - Example: `max(3, 5)` gives `5`
@@ -3653,7 +3666,7 @@ delete; a file or a symbolic link is an error too.
 
 The terminal: what it has waiting to be read, the keys themselves, and raw mode. The standard
 streams and `print`/`println`/`input`/`eprintln` are the prelude's; `Stream` and a `stdin` value
-are later work (H19 question 5).
+are later work.
 
 #### `set_terminal_raw_mode`
 
@@ -3716,7 +3729,7 @@ Discards the terminal input that is waiting.
 ## `process`: the process and the machine
 
 Every function touches the process or the machine and is declared with effects. `sleep` and
-`exit` are also built in: they need no import. The terminal is `io`'s (H19 step 4).
+`exit` are also built in: they need no import. The terminal is `io`'s.
 
 #### `sleep`
 
@@ -4566,6 +4579,21 @@ Removes a node whose value nobody reads. A fault when the value is read or the n
 - With effects: changes the transaction.
 - Example: `erase(t, n)`
 
+#### `eval`
+
+```camel
+eval: (t: Txn, n: Node) => Node?
+```
+
+Evaluates the pure operator of the node over its constant operands and gives the node holding
+the result, null when there is no value to compute (an operand is no constant of the graph, the
+node is no pure operation, or evaluating it faults). The node the answer names is the
+transaction's to put in place of `n` with `replace`. A constant expression that can only fault
+is left as written and warned about, as the C++ fold does.
+
+- With effects: changes the transaction.
+- Example: `eval(t, n)`
+
 #### `commit`
 
 ```camel
@@ -4616,7 +4644,7 @@ Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an a
 values to a `Program`, `check` tests rules on random programs, and the four readers report a
 `Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
 round budget explicit and the cost kept: it answers a `Run`, the program and what the
-application cost (H226). Its `explain` with parameter opens the attribution record; `explain`
+application cost. Its `explain` with parameter opens the attribution record; `explain`
 prints the shortest chain between two values and `explain_all` every rewrite that was made,
 each with the rule, round, graph and nodes (rewrite design 8.7); `why_not` says why a rule did
 not fire at a value. A rule that stops a rewrite without changing the program is a fault,
@@ -4686,8 +4714,8 @@ run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = fal
 
 Applies `rules` to `p` one way, for at most `rounds` rounds, and gives the program it produced
 and what the application cost. This is `rewrite` with the round budget explicit and the cost
-kept (H226). The rule set, the budget and the choices are configuration, so they are `with`
-parameters, written at the call (design principles 4.4; handover H235): `p->run<rules>`,
+kept. The rule set, the budget and the choices are configuration, so they are `with`
+parameters, written at the call (design principles 4.4): `p->run<rules>`,
 `p->run<rules, explain: true>`, `p->run<rules, rounds: 8, strict: true>`. The first one has no
 default and must be written; `rounds` defaults to 16 and `strict` and `explain` to false.
 `explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
@@ -4920,8 +4948,8 @@ memory. Asking is a requirement, not a preference: with no device the call is a 
 Plots: draw an array of numbers with matplotlib, and fall back to an SVG file when matplotlib
 is not installed. The operator writes an image file and is never folded or dropped by a pass.
 
-The declarations of the operator of the C++ module `modules/pyplot` (design principles 6.4;
-handover H19, step 10; H166). This file is the one source of its fixed signature; the C++ side
+The declarations of the operator of the C++ module `modules/pyplot` (design principles 6.4).
+This file is the one source of its fixed signature; the C++ side
 keeps the kernel, the executor, the operator traits and the purity.
 
 `plot` is one operator with one URI, over four element types and two arities: an array of
@@ -4960,8 +4988,8 @@ dispose of the handles the calls return. Every operator observes or advances the
 which no argument names, so every one has effects and is never folded, merged or dropped by a
 pass. A result of type `PyObject` is a handle into the interpreter, not a value of the program.
 
-The declarations of the operators of the C++ module `modules/python` (design principles 6.4;
-handover H19, step 10; H166). This file is the one source of the six fixed signatures; the C++
+The declarations of the operators of the C++ module `modules/python` (design principles 6.4).
+This file is the one source of the six fixed signatures; the C++
 side keeps the kernels, the executor, the operator traits and the purity.
 
 Five operators stay in C++ and are recorded as computed signatures in
@@ -5385,6 +5413,149 @@ created when missing.
 - Failure: fault `RuntimeError` when the directory cannot be created or a leaf cannot be written.
 - Example (a fragment, not compiled): `save_params({ w: new([1.0, 2.0]), b: new([0.0]) }, 'checkpoints/step-1')`
 - Why it is not compiled: the example builds its tensors with `new` from the `tensor` module, which this page does not import
+
+<a id="optim"></a>
+
+## `optim`: optimizers written in Camel over `tree`
+
+The optimizers: `sgd` and `adam`, each a value, with `init` and `update` the two pure functions
+a training loop calls.
+
+    let opt = adam(cosine_decay(0.001, steps, 0.0001));
+    let state = init(opt, model);
+    let (model, state) = update(opt, model, gradient, state);
+
+A schedule is a function `(step: int) => float`: `constant(rate)`, `linear_decay(peak, total,
+floor)` and `cosine_decay(peak, total, floor)` build one, and the rate the update of step `n`
+uses is `schedule(n)`, with `n` numbered from one. `params` is a tree of nested structs and
+tuples whose leaves are numbers and tensors, and `grads` is the gradient of that tree, which
+`with_grad` or `grad` gives; a tree that merely has the same type as the parameters is refused.
+
+Every number is computed in double and rounded once, when it is stored. The arithmetic follows the
+element type the leaf's value has: a tensor leaf of `adam` is widened to f64 and updated there,
+and stored back at the element type the leaf has, so a trajectory written here is the trajectory
+`modules/tensor/kernels/update.h` defines, bit for bit.
+
+#### `constant`
+
+```camel
+constant: (rate: float) => (step: int) => float
+```
+
+The same rate at every step.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `constant(0.1)(3)` gives `0.1`
+
+#### `linear_decay`
+
+```camel
+linear_decay: (peak: float, total: int, floor: float) => (step: int) => float
+```
+
+A rate that falls from `peak` to `floor` in a straight line: `peak * (1 - step / total)` below
+step `total`, and exactly `floor` from there on. `total` is at least one.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `linear_decay(0.1, 4, 0.0)(2)` gives `0.05`
+
+#### `cosine_decay`
+
+```camel
+cosine_decay: (peak: float, total: int, floor: float) => (step: int) => float
+```
+
+A rate that falls from `peak` to `floor` along a cosine: `floor + (peak - floor) *
+(1 + cos(pi * step / total)) / 2` below step `total`, and exactly `floor` from there on.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `cosine_decay(0.1, 4, 0.0)(1)` gives `0.08535533905932738`
+
+#### `sgd`
+
+```camel
+sgd: (schedule: (step: int) => float) => Sgd
+```
+
+Plain stochastic gradient descent: `p - rate * g` at every leaf, the rate of the step taken.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `sgd(constant(0.1))`
+
+#### `adam`
+
+```camel
+adam: (schedule: (step: int) => float, beta1: float = 0.9, beta2: float = 0.999, eps: float = 0.00000001, decay: float = 0.0) => Adam
+```
+
+Adam. The constants default to the ones the reference kernel's callers use: beta1 0.9, beta2
+0.999, eps 1e-8, and a decoupled weight decay of zero.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `adam(constant(0.001))`
+- Example: `adam(constant(0.001), beta1: 0.5, eps: 0.0001)`
+
+#### `adamw`
+
+```camel
+adamw: (schedule: (step: int) => float, beta1: float = 0.9, beta2: float = 0.999, eps: float = 0.00000001, decay: float = 0.01) => Adam
+```
+
+`adam` with a decoupled weight decay, 0.01 by default: the parameter is first moved by
+`rate * decay` of itself, and the adaptive update then works on the moved parameter; the moments
+see the gradient alone, which is what makes the decay decoupled.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `adamw(constant(0.001))`
+- Example: `adamw(constant(0.001), decay: 0.1)`
+
+#### `init`
+
+```camel
+init: (opt: Sgd, params: P) => SgdState
+```
+
+The state `sgd` starts from: no moments to carry, only the step count.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `init(sgd(constant(0.1)), { w: 1.0 })` gives `{ step: 0 }`
+
+#### `init`
+
+```camel
+init: (opt: Adam, params: P) => AdamState<P>
+```
+
+The state `adam` starts from: the two moment trees at zero, shaped like the parameters, and the
+step count.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `init(adam(constant(0.1)), { w: 1.0 })` gives `{ m: { w: 0.0 }, v: { w: 0.0 }, step: 0 }`
+
+#### `update`
+
+```camel
+update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
+```
+
+One `sgd` update: `(params, state)`, with the step advanced by one and the rate taken from
+`opt.schedule` at the step this update takes, numbered from one.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `update(sgd(constant(0.1)), { w: 1.0 }, { w: 0.5 }, init(sgd(constant(0.1)), { w: 1.0 }))`
+
+#### `update`
+
+```camel
+update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
+```
+
+One `adam` update: `(params, state)`, with the step advanced by one and the rate taken from
+`opt.schedule` at the step this update takes, numbered from one. A `decay` other than zero moves
+the parameters by the decoupled weight decay first.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `update(adam(constant(0.1)), { w: 1.0 }, { w: 0.5 }, init(adam(constant(0.1)), { w: 1.0 }))`
 
 <a id="autodiff"></a>
 

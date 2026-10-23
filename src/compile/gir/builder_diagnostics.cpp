@@ -290,6 +290,8 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
                  {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
                 work.insert(work.end(), inputs.begin(), inputs.end());
             }
+            // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5).
+            work.insert(work.end(), draft.syncInputsOf(id).begin(), draft.syncInputsOf(id).end());
         }
         return false;
     }
@@ -322,7 +324,7 @@ void Builder::reportDroppedEffectsOfBodies() {
 
 void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report) {
     auto &draft = graph->draft();
-    // What the exit depends on, through data and control edges.
+    // What the exit depends on, through data, control and sync edges.
     std::unordered_set<draft_node_ref_t> needed;
     std::vector<draft_node_ref_t> work;
     for (draft_node_ref_t root : {draft.outputNode(), draft.exitNode(), draft.returnNode()}) {
@@ -342,6 +344,13 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
                 if (needed.insert(input).second) {
                     work.push_back(input);
                 }
+            }
+        }
+        // A statement of a `sync` block is used by the one written after it (and the block's
+        // value by its chain tail): liveness follows a sync edge as it follows a data input.
+        for (draft_node_ref_t input : draft.syncInputsOf(id)) {
+            if (needed.insert(input).second) {
+                work.push_back(input);
             }
         }
     }
@@ -372,7 +381,8 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             const draft_node_ref_t id = stack.back();
             stack.pop_back();
             for (auto users :
-                 {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id)}) {
+                 {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id),
+                  draft.syncUsersOf(id)}) {
                 for (draft_node_ref_t user : users) {
                     if (!seen.insert(user).second) {
                         continue;
@@ -494,7 +504,10 @@ void Builder::reportUnusedFallibleValues() {
             default:
                 continue; // not the result of an evaluation
             }
-            const bool ordered = !draft.ctrlUsersOf(id).empty();
+            // "Ordered" here means a statement of a `sync` block: the edge that says so is a
+            // sync edge, and the old control edge still carries it where one is left.
+            const bool ordered =
+                !draft.ctrlUsersOf(id).empty() || !draft.syncUsersOf(id).empty();
             if (nodeIsKind(node, runtime::GCNodeKind::Join) &&
                 isVoidGraphExitType(nodeTypeOf(node)) && (ordered || isExit(id))) {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
@@ -1109,6 +1122,14 @@ void Builder::rejectLiteralValue(
         reason = folded ? "the value " + value.toString() +
                               " is too small to be represented (the nearest value is zero)"
                         : "too small to be represented (the nearest value is zero)";
+    } else if (!literal::kindEnters(value, type)) {
+        // A value of a kind the type has no form of: a fractional value in an integer type, an
+        // imaginary part in a real one. Said before the range, which would answer a question the
+        // value does not raise (`0.5` is not outside the range of an integer, it is not an
+        // integer). The words match the ones a decimal literal in an integer type already gets
+        // (rejectLiteralData, `int(1.9)`).
+        reason = isIntegerType(type) ? "the value would be truncated"
+                                     : "the value cannot become that type";
     } else if (!range.empty()) {
         // A folded expression is quoted as written, so the value it came to is also said.
         reason = folded ? "the value " + value.toString() + " is out of range (" + range + ")"
@@ -1324,6 +1345,68 @@ void Builder::checkDeclaredReturn(
     }
     diag.commit(resultType->toString(), declared->toString(), funcType->toString());
     throw BuildAbortException();
+}
+
+// ---- A body that does not compile for the types it was tried with ----
+
+Builder::SpeculativeInstantiation::SpeculativeInstantiation(Builder &builder)
+    : self_(builder), previous_(builder.speculative_), outer_(builder.diags_) {
+    // The sink of the bodies answers for the module the search happens in: the same name and the
+    // same file, so a diagnostic kept from it reads as one the builder would have made. The sink is
+    // not swapped in here: only a body build writes to it (`BodyDiagnostics`), so a verdict the
+    // attempt makes on its way to the body is reported where it always was.
+    inner_ = std::make_shared<Diagnostics>(
+        outer_->moduleName(), outer_->modulePath(), outer_->sourceContext());
+    inner_->setConfig(outer_->getConfig());
+    self_.speculative_ = this;
+}
+
+Builder::SpeculativeInstantiation::~SpeculativeInstantiation() {
+    settled_ = true;
+    if (self_.speculative_ == this) {
+        self_.speculative_ = previous_;
+    }
+    if (self_.diags_ == inner_) {
+        // A body that is still open when the scope ends: nothing kept it, so nothing is reported.
+        self_.diags_ = outer_;
+    }
+}
+
+void Builder::SpeculativeInstantiation::close() {
+    settled_ = true;
+    if (self_.speculative_ == this) {
+        self_.speculative_ = previous_;
+    }
+    if (self_.diags_ == inner_) {
+        self_.diags_ = outer_;
+    }
+}
+
+void Builder::SpeculativeInstantiation::attach() {
+    if (settled_) {
+        return;
+    }
+    // The errors carry what the body said about them (the instance and the call that asked for it,
+    // from addRelatedToErrorsFrom); they are added to the sink in place, in order, and then the
+    // scope ends, so the refusal the caller makes next is reported with them.
+    for (const Diagnostic *error : inner_->errors()) {
+        outer_->add(Diagnostic(*error));
+    }
+    close();
+}
+
+Builder::BodyDiagnostics::BodyDiagnostics(Builder &builder)
+    : self_(builder), scope_(builder.speculative_) {
+    if (scope_ != nullptr) {
+        outer_        = self_.diags_;
+        self_.diags_  = scope_->inner_;
+    }
+}
+
+Builder::BodyDiagnostics::~BodyDiagnostics() {
+    if (scope_ != nullptr && self_.diags_ == scope_->inner_) {
+        self_.diags_ = outer_;
+    }
 }
 
 } // namespace camel::compile::gir

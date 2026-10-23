@@ -1,0 +1,29 @@
+/**
+ * A named argument binds across an overload set when every declaration names each position the
+ * same way: `f`'s first parameter is `x` everywhere, its second is `y`, so `f(y: 2, x: 1)` names
+ * one parameter per position and reaches the two-parameter declaration, and the names may be
+ * written in any order (design principles 4.4).
+ */
+module param_named_across_overloads
+
+func f(x: int): int {
+    return x
+}
+
+func f(x: int, y: int): int {
+    return x * 10 + y
+}
+
+func f(x: int, y: int, z: int): int {
+    return x * 100 + y * 10 + z
+}
+
+func main(): int sync {
+    let two = f(x: 1, y: 2)
+    let reordered = f(y: 2, x: 1)
+    let three = f(1, z: 3, y: 2)
+    'param named_across_overloads two={} reordered={} three={}'
+    ->format<two, reordered, three>
+    ->println
+    return 0
+}

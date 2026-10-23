@@ -20,7 +20,7 @@ namespace camel::tiles {
 using namespace core::type;
 namespace {
 Type *buildResidentType(Type *type) {
-    if (tensor::asTensorType(type) || type->code() == TypeCode::Float64)
+    if (tensor::isTensorType(type) || type->code() == TypeCode::Float64)
         return DeviceType::get(type);
     if (type->code() == TypeCode::Tuple) {
         auto *tuple = static_cast<TupleType *>(type);

@@ -8,6 +8,11 @@
  * every line below is a number, or the little-endian bytes of the element, that only the stated
  * rule gives.
  *
+ * The text of one of these values is the shortest that reads back as the same element of its own
+ * type (design principles 7.7; ruling docs/handover/reviews/questions-2026-10-23.md,
+ * "reduced-precision-text"), so the last section asserts that of every value it prints by reading
+ * the text back through `bf16(s)` / `f16(s)` rather than by pinning the digits a second time.
+ *
  *   exact          bf16    f16     why
  *   1 + 2^-8       1.0     -       bf16 has 8 significand bits: exactly between 1 and 1+2^-7,
  *                                 the tie goes to the even neighbour (1.0 is 0x3F80)
@@ -15,8 +20,9 @@
  *                 0.0999755859375 bf16 0x3DCD is 1.6015625 x 2^-4 and f16 0x2E66 is
  *                                 1.599609375 x 2^-4; the two types round the same f32 in
  *                                 opposite directions, which is what makes this pair worth
- *                                 pinning. Printed, the bf16 one is `0.100097656`
- *                                 (docs/handover/questions/reduced-precision-text.md)
+ *                                 pinning. Printed, the bf16 one is `0.1`: the shortest text
+ *                                 that reads back as that bf16, not the `0.100097656` of the
+ *                                 f32 it widens to.
  *   1 + 2^-11      -       1.0     the same tie to even, ten significand bits
  *   -0.0           -0.0    -       a negative literal keeps its sign bit, and the two zeros
  *                                 compare equal although their slots differ
@@ -67,6 +73,28 @@ func narrowed(x: Tensor<f32>): Tensor<bf16> { return cast(x, 'bf16') }
 
 func halved(x: Tensor<f32>): Tensor<f16> { return cast(x, 'f16') }
 
+/// The text of a bf16 read back as a bf16, which must be the value itself (design principles 7.7:
+/// the text is the shortest that reads back as the same element of its own type). `string(x)` and
+/// `println(x)` write one text, so this asks the property of the printing rule itself. The short
+/// helper keeps the reader's eye on the rule, not on the spelling of the assertion.
+func readBackBf16(value: bf16): bool { return bf16(string(value)) == value }
+
+func readBackF16(value: f16): bool { return f16(string(value)) == value }
+
+/// The text of the same element as an array element: an array prints each element by the element
+/// type (`rtdata/print.cpp` pushes every element slot with its element type), so the array's text
+/// must be the scalar's text inside `[` and `]`. This is what says the two paths are one rule, and
+/// it would catch an array element printed by a different rule from the scalar.
+func inArrayBf16(value: bf16): bool {
+    let one: bf16[] = [value]
+    return string(one) == '[' + string(value) + ']'
+}
+
+func inArrayF16(value: f16): bool {
+    let one: f16[] = [value]
+    return string(one) == '[' + string(value) + ']'
+}
+
 func main(): int sync {
     // ---- a literal is the nearest bf16 or f16 of what is written, rounded once ----
     let bfTie: bf16 = 1.00390625
@@ -80,7 +108,7 @@ func main(): int sync {
     let widenedTenth = tenth->map<(x: f32) => bf16(x)>
     println(to_array(to_bytes(cast(new(tenth), 'bf16'))))
     println(to_array(to_bytes(cast(new(tenth), 'f16'))))
-    println(widenedTenth[0], bitsOfBf16(widenedTenth[0])[0], bitsOfBf16(widenedTenth[0])[1])
+    println(widenedTenth[0], bitsOfBf16(widenedTenth[0])[0], bitsOfBf16(widenedTenth[0])[1], string(widenedTenth[0]))
     println(bitsOfBf16(0.1)[0], bitsOfBf16(0.1)[1])
     println(bitsOfF16(0.1)[0], bitsOfF16(0.1)[1])
 
@@ -129,5 +157,50 @@ func main(): int sync {
     let rows: f32[] = [16777216.0, 1.0, -16777216.0]
     println(to_array(to_bytes(narrowed(new(rows)))))
     println(to_array(to_bytes(halved(new(tenth)))))
+
+    // ---- the text of one of these values, read back as the same element ----
+    //
+    // Design principles 7.7: a float becomes text as the shortest text that reads back as the
+    // same value. A bf16 or an f16 is a value of its own type, so "the same value" is an element
+    // of that type, and the text is the shortest that reads back as it (ruling
+    // docs/handover/reviews/questions-2026-10-23.md, "reduced-precision-text"). Each value below
+    // is printed and read back by the language's own conversion, whose result is compared with
+    // the value itself, so the property lines pin no digit count and no spelling: they assert
+    // that the text names the element it came from, for every value of either type, which is what
+    // a text rule has to keep true. The digits themselves are pinned where every other line of
+    // this case pins them, by the plan's `expect_stdout`, and that is the line that catches
+    // today's defect: `0.1 as bf16` printed `0.100097656` (the f32 text of the bf16), and `0.1`
+    // is the text of the ruling. A round-tripping property alone cannot catch it -- the f32 text
+    // does read back as the same bf16, it is simply not the shortest text of that bf16 -- so the
+    // two belong together: `expect_stdout` holds the digits, these lines hold the round trip.
+    // What they do catch on their own is a text that names a different element, and printing an
+    // array element by another rule than the scalar (below).
+    //
+    // The pair that shows the rule: the bf16 of 0.1 and the f32 of 0.1 are different numbers, and
+    // both print `0.1`, because each prints the shortest text that reads back as itself. Widening
+    // the bf16 to f32 first would print `0.100097656`, which is the f32 rule applied to a bf16
+    // (the defect this section replaces).
+
+    // The widest value each type holds, the least positive normal value, a subnormal, a third,
+    // and the two zeros with their signs -- one line per property of the digits. A bf16 or an f16
+    // literal whose rounding overflows is refused with the type's own range (the table at the top
+    // of this case says so), so a value at the top of the type is reached by adding zero: the
+    // stored element is the value, and the literal above only has to name it.
+    let bfLargest: bf16 = 3.3895314e38 + 0.0
+    let hLargest: f16 = 65504.0 + 0.0
+    let bfNormal: bf16 = 1.1754944e-38
+    let bfSubnormal: bf16 = 5.877472e-39
+    let hNormal: f16 = 6.1035156e-05
+    let hSubnormal: f16 = 5.9604645e-08
+    println(bfLargest, bfNormal, bfSubnormal, bfLargest * 0.5, bf16(1.0) / bf16(3.0))
+    println(hLargest, hNormal, hSubnormal, hLargest * 0.5, f16(1.0) / f16(3.0))
+    println(bf16(0.0), bf16(-0.0), f16(0.0), f16(-0.0))
+
+    // The property, asserted twice for each value: the text reads back as the element, and the
+    // text of the element as an array element is the text of the element (rtdata/print.cpp
+    // pushes every array element slot with its element type, so both must reach one rule).
+    println(readBackBf16(bfLargest), readBackBf16(bfNormal), readBackBf16(bfSubnormal))
+    println(readBackF16(hLargest), readBackF16(hNormal), readBackF16(hSubnormal))
+    println(inArrayBf16(widenedTenth[0]), inArrayF16(f16Tie))
     return 0
 }

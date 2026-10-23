@@ -9,7 +9,7 @@
  */
 
 // The declaration of the one fixed signature of the C++ module `modules/nn` (design principles
-// 6.4; handover H19, step 10; H165). This file is the one source of `save_params`'s signature;
+// 6.4). This file is the one source of `save_params`'s signature;
 // the C++ side keeps the kernel, the executor, the operator traits, the resource and the
 // semantics.
 //
@@ -22,7 +22,7 @@
 //   - the three optimizers (`sgd`, `adam_state`, `adam`) answer the parameter tree's own type or
 //     the module's `OptimizerState`, and their gradient parameter is typed by the parameter tree.
 // Their reference entries are in `stdlib/signatures/nn.cml`, as `json` and `random` keep the
-// entries of their computed signatures (handover H115, H128).
+// entries of their computed signatures.
 //
 // `save_params` is fixed: it takes a value and a directory, writes the tensor leaves of the value,
 // and returns nothing. A declaration can say that with a type variable over the value.

@@ -1,0 +1,314 @@
+id = "modules.optim"
+order = 379
+tier = "fast"
+tags = ["feat", "modules", "optim", "optimizer", "tree"]
+
+[[tests]]
+name = "optim.trajectory_matches_native"
+desc = "The Camel optimizers against `nn` over a whole trajectory: sgd with a linear decay, adam with non-default constants and a cosine decay, adam with both sides' defaults, and the two AdamW properties (a zero decay is `adam`, and a decay is `adam` on a parameter tree decayed before every step). Every leaf of every step agrees bit for bit, the step count is the number of updates, and the schedules are the ones the loops read."
+kind = "behavior"
+case = "../../../cases/modules/optim/agreement.cml"
+args = ["${case}", "--arg", "steps=6", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["optim sgd steps=6 made=6 compared=24 mismatches=0", "optim adam steps=6 made=6 compared=24 mismatches=0", "optim adam_default steps=6 made=6 compared=24 mismatches=0", "optim adamw_zero_decay steps=6 made=6 compared=24 mismatches=0", "optim adamw_decay steps=6 made=6 compared=12 mismatches=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${input.normalized.stdout}`)
+const out = input.normalized.stdout
+const steps = 6
+const leaves = { sgd: 4, adam: 4, adam_default: 4, adamw_zero_decay: 4, adamw_decay: 2 }
+for (const name of Object.keys(leaves)) {
+  const found = match(new RegExp(`optim ${name} steps=(\\d+) made=(\\d+) compared=(\\d+) mismatches=(\\d+)`), out)
+  const [ran, made, seen, bad] = found.slice(1, 5).map(Number)
+  assert(ran === steps, `${name}: the loop ran ${ran} steps of ${steps}`)
+  assert(made === steps, `${name}: the optimizer state counted ${made} updates of ${steps}`)
+  assert(seen === steps * leaves[name], `${name}: the walk compared ${seen} leaves, expected ${steps * leaves[name]}`)
+  assert(bad === 0, `${name}: ${bad} of ${seen} leaves differ`)
+}
+// Both sides print the same text for the same leaves, and the shortest float text names one float
+// exactly (design principles 7.7), so the same text is the same bits.
+const values = (name, label) => match(new RegExp(`^optim ${name} ${label} (.*)$`, 'm'), out)[1].trim()
+const pairs = [['sgd', 'camel', 'nn'], ['adam', 'camel', 'nn'], ['adam_default', 'camel', 'nn'], ['adamw_zero_decay', 'camel', 'adam'], ['adamw_decay', 'camel', 'decayed_adam']]
+for (const [name, left, right] of pairs) {
+  const a = values(name, left)
+  const b = values(name, right)
+  assert(a.length > 0, `${name}: ${left} printed no values`)
+  assert(a === b, `${name}: ${left} printed [${a}] and ${right} printed [${b}]`)
+}
+// The schedules: the ramp falls and then stays exactly at the floor, and so does the cosine.
+const linear = match(/optim schedule linear step1=(\S+) step3=(\S+) step4=(\S+) step9=(\S+)/, out).slice(1).map(Number)
+assert(approx(linear[0], 0.0375, 1e-15), `linear step 1 = ${linear[0]}`)
+assert(approx(linear[1], 0.0125, 1e-15), `linear step 3 = ${linear[1]}`)
+assert(linear[0] > linear[1] && linear[1] > linear[2], `the ramp does not fall: ${linear}`)
+assert(linear[2] === 0.01 && linear[3] === 0.01, `the floor is not exact: ${linear[2]} and ${linear[3]}`)
+const cosine = match(/optim schedule cosine step1=(\S+) step4=(\S+) step5=(\S+)/, out).slice(1).map(Number)
+assert(approx(cosine[0], 0.008681980515339464, 1e-12), `cosine step 1 = ${cosine[0]}`)
+assert(cosine[1] === 0.001 && cosine[2] === 0.001, `the cosine floor is not exact: ${cosine[1]} and ${cosine[2]}`)
+assert(cosine[0] > cosine[1], `the cosine does not fall: ${cosine}`)
+const flat = match(/optim schedule constant step1=(\S+) step7=(\S+)/, out).slice(1).map(Number)
+assert(flat[0] === 0.02 && flat[1] === 0.02, `constant is not constant: ${flat}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "optim.training_loop_matches_native"
+desc = "A training loop on c2's parameter tree: `with_grad` gives the gradient, the Camel optimizer advances the model with a cosine schedule, and `nn:adam` advances a second copy on the same gradient. The two hold the same parameters before every step, land on the same parameters and reach the same loss, while the loss curve the loop collected falls."
+kind = "behavior"
+case = "../../../cases/modules/optim/training.cml"
+args = ["${case}", "--arg", "steps=20", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["optim training steps=20 made=20 bad_steps=0 final_drift=0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${input.normalized.stdout}`)
+const out = input.normalized.stdout
+const steps = 20
+const summary = match(/optim training steps=(\d+) made=(\d+) bad_steps=(\d+) final_drift=(\S+)/, out).slice(1, 5)
+assert(Number(summary[0]) === steps, `the loop ran ${summary[0]} steps of ${steps}`)
+assert(Number(summary[1]) === steps, `the optimizer state counted ${summary[1]} updates of ${steps}`)
+assert(Number(summary[2]) === 0, `${summary[2]} steps held different parameters before the update`)
+assert(Number(summary[3]) === 0, `the final parameters differ by ${summary[3]}`)
+const losses = match(/optim training first_loss=(\S+) last_loss=(\S+) camel_loss=(\S+) nn_loss=(\S+)/, out).slice(1, 5).map(Number)
+assert(losses.every(Number.isFinite), `a loss is not finite: ${losses}`)
+assert(losses[2] === losses[3], `the final losses differ: ${losses[2]} and ${losses[3]}`)
+assert(losses[1] < losses[0], `the loop did not train: first ${losses[0]}, last ${losses[1]}`)
+const camel = match(/^optim training camel (.*)$/m, out)[1].trim()
+const nn = match(/^optim training nn (.*)$/m, out)[1].trim()
+assert(camel.length > 0, 'the Camel path printed no parameters')
+assert(camel === nn, `the final parameters differ: [${camel}] and [${nn}]`)
+const curve = match(/optim training curve=(.*)$/m, out)[1]
+const numbers = curve.match(/-?[0-9]+(\.[0-9]+)?(e[-+]?[0-9]+)?/g) || []
+assert(numbers.length === steps, `the curve printed ${numbers.length} losses of ${steps}`)
+assert(Number(numbers[0]) === losses[0], `the curve starts at ${numbers[0]}, not at the first loss ${losses[0]}`)
+assert(Number(numbers[steps - 1]) === losses[1], `the curve ends at ${numbers[steps - 1]}, not at the last loss ${losses[1]}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "optim.f64_leaf_keeps_its_element_type"
+desc = "A tensor leaf whose element type is written as f64 keeps f64: one `sgd` step of 16777217.0 with a rate of 0.5 is 16777216.5, a value no f32 can hold, in a leaf of 16 bytes, and one `adam` step of the same leaf stays f64 too, so the stored value is the f64 one and the leaf is not narrowed (design principles 7.4: the element type is exact)."
+kind = "behavior"
+case = "../../../cases/modules/optim/dtype_exact.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["optim dtype_exact steps=1 value=16777216.5", "optim dtype_exact scalar sgd=16777216.5 wide_sgd=16777216.5 adam=16777216.500049993 wide_adam=16777216.500049993"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${input.normalized.stdout}`)
+const out = input.normalized.stdout
+const sgd = match(/optim dtype_exact steps=(\d+) value=(\S+) f32_value=(\S+) bytes=(\d+)/, out).slice(1, 5).map(Number)
+assert(sgd[0] === 1, `the state counted ${sgd[0]} steps`)
+assert(sgd[1] === 16777216.5, `the f64 step gave ${sgd[1]}`)
+assert(sgd[2] === 16777216, `f32(16777216.5) is ${sgd[2]}`)
+assert(sgd[3] === 16, `the leaf is ${sgd[3]} bytes, not 16`)
+assert(sgd[1] !== sgd[2], 'the stored value is representable in f32, so the leaf was narrowed')
+const adam = match(/optim dtype_exact adam steps=(\d+) value=(\S+) bytes=(\d+)/, out).slice(1, 4).map(Number)
+assert(adam[0] === 1, `the adam state counted ${adam[0]} steps`)
+assert(Math.abs(adam[1] - 16777216.50005) < 0.000001, `the f64 adam step gave ${adam[1]}`)
+assert(adam[2] === 16, `the adam leaf is ${adam[2]} bytes, not 16`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "optim.native_tensor_leaf_keeps_its_element_type"
+desc = "A tensor leaf keeps its own element type through the native optimizers: after one `nn:sgd` step of a `Tensor<f64, [?]>` leaf of 16777217.0 at a rate of 0.5 the leaf holds 16777216.5 (a value no f32 can hold) in 16 bytes, and its bytes decode as two f64 elements, while a `Tensor<f32, [?]>` leaf of the same number stays 8 bytes of f32. Two `nn:adam` steps later the f64 leaf is still 16 bytes and its bytes are those of the Camel module's f64 arm bit for bit, so the moments carry the leaf's element type too. The native path used to narrow every tensor leaf to f32 (`floatTensor`/`newLike`, modules/nn/optim.cpp) and hand back an f32 array under an f64 type, which design principles 7.4 forbids."
+kind = "behavior"
+case = "../../../cases/modules/optim/native_dtype_exact.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["optim native_dtype_exact sgd leaves=4 elements=8 wide_bytes=16 narrow_bytes=8 wide_elements=2", "optim native_dtype_exact adam leaves=2 elements=4 wide_bytes=16 narrow_bytes=8 wide_agrees=1 narrow_agrees=1", "optim native_dtype_exact failures=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${input.normalized.stdout}`)
+const out = input.normalized.stdout
+
+// The check examined the two parameter leaves and the two gradient leaves, four elements of each:
+// the counts are asserted, so a walk that examined nothing (or one leaf of the four) fails here
+// instead of passing quietly.
+const sgd = match(new RegExp('optim native_dtype_exact sgd leaves=(\\d+) elements=(\\d+) wide_bytes=(\\d+) narrow_bytes=(\\d+) wide_elements=(\\d+)'), out).slice(1, 6).map(Number)
+assert(sgd[0] === 4, `the sgd check examined ${sgd[0]} leaves (parameters and gradients), not 4`)
+assert(sgd[1] === 8, `the sgd check examined ${sgd[1]} elements, not 8`)
+assert(sgd[2] === 16, `the f64 leaf is ${sgd[2]} bytes, not 16 (two 8-byte elements)`)
+assert(sgd[3] === 8, `the f32 leaf is ${sgd[3]} bytes, not 8 (two 4-byte elements)`)
+assert(sgd[4] === 2, `the f64 leaf holds ${sgd[4]} elements, not 2`)
+
+// The bytes themselves: an f64 element is the eight bytes of the double and an f32 element the
+// four of the float. 16777216.5 is not representable in f32, so a narrowed leaf cannot hold it.
+const byteArray = (label) => JSON.parse(match(new RegExp('optim native_dtype_exact ' + label + '=(\\[.*\\])'), out)[1])
+const wide = byteArray('wide_bytes')
+const narrow = byteArray('narrow_bytes')
+assert(wide.length === 16, `the f64 leaf's bytes number ${wide.length}, not 16`)
+assert(narrow.length === 8, `the f32 leaf's bytes number ${narrow.length}, not 8`)
+const f64 = (b, i) => new DataView(new Uint8Array(b.slice(i * 8, i * 8 + 8)).buffer).getFloat64(0, true)
+const f32 = (b, i) => new DataView(new Uint8Array(b.slice(i * 4, i * 4 + 4)).buffer).getFloat32(0, true)
+assert(f64(wide, 0) === 16777216.5, `the f64 leaf holds ${f64(wide, 0)} at 0, not 16777216.5`)
+assert(f64(wide, 1) === 0.5, `the f64 leaf holds ${f64(wide, 1)} at 1, not 0.5`)
+assert(Math.fround(f64(wide, 0)) !== f64(wide, 0), `the f64 leaf holds ${f64(wide, 0)}, which f32 can hold, so it was narrowed`)
+assert(f32(narrow, 0) === 16777216, `the f32 leaf holds ${f32(narrow, 0)} at 0, not 16777216 (f32(16777217.0))`)
+assert(f32(narrow, 1) === 0.5, `the f32 leaf holds ${f32(narrow, 1)} at 1, not 0.5`)
+
+// Two adam steps: the moments carry the leaf's element type too, so the f64 leaf is still 16 bytes
+// after them and its bytes are the Camel f64 arm's bytes exactly; the f32 leaf is still 8 bytes of
+// f32 and its bytes are the Camel f32 arm's. The byte blocks are compared, not the printed values.
+const adam = match(new RegExp('optim native_dtype_exact adam leaves=(\\d+) elements=(\\d+) wide_bytes=(\\d+) narrow_bytes=(\\d+) wide_agrees=(\\d+) narrow_agrees=(\\d+)'), out).slice(1, 7).map(Number)
+assert(adam[0] === 2, `the adam check examined ${adam[0]} leaves, not 2`)
+assert(adam[1] === 4, `the adam check examined ${adam[1]} elements, not 4`)
+assert(adam[2] === 16, `the f64 leaf is ${adam[2]} bytes after two adam steps, not 16`)
+assert(adam[3] === 8, `the f32 leaf is ${adam[3]} bytes after two adam steps, not 8`)
+assert(adam[4] === 1, 'the f64 leaf differs from the Camel f64 arm (its moments or its arithmetic were narrowed)')
+assert(adam[5] === 1, 'the f32 leaf differs from the Camel f32 arm')
+assert(Number(match(new RegExp('optim native_dtype_exact failures=(\\d+)'), out)[1]) === 0, 'the case counted failures')
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "optim.unstated_tensor_leaf_follows_its_value"
+desc = "A tensor leaf whose element type the program does not write follows the element type of its value, on both sides: a leaf of `full([2], 0.1)` stays f64 through `nn:sgd` and two `nn:adam` steps (eight bytes an element) and one of `full([2], f32(0.25))` stays f32 (four bytes an element), the Camel `optim` module lands on the same bytes as `nn` on both, and the Camel state's moments carry the parameter's element type. The byte width is the element type, and the plan decodes the bytes as f64 and as f32 rather than reading a printed number."
+kind = "behavior"
+case = "../../../cases/modules/optim/unstated_dtype_exact.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["optim unstated_dtype_exact gradient leaves=2 elements=4 wide_bytes=16 narrow_bytes=8", "optim unstated_dtype_exact sgd leaves=2 elements=4 wide_bytes=16 narrow_bytes=8 agrees_wide=1 agrees_narrow=1", "optim unstated_dtype_exact adam leaves=4 elements=8 wide_bytes=16 narrow_bytes=8 moment_wide=16 moment_narrow=8 agrees_wide=1 agrees_narrow=1", "optim unstated_dtype_exact failures=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${input.normalized.stdout}`)
+const out = input.normalized.stdout
+const fields = (name, tail) => match(new RegExp('optim unstated_dtype_exact ' + name + ' ' + tail), out).slice(1).map(Number)
+
+// The gradient of an unstated leaf follows its value before anything is stepped: the f64 leaf's
+// tangent is two doubles and the f32 leaf's two floats. A gradient read at the wrong width is not
+// the derivative, so the steps below mean nothing if this fails.
+const gradient = fields('gradient', 'leaves=(\\d+) elements=(\\d+) wide_bytes=(\\d+) narrow_bytes=(\\d+) total=(\\S+)')
+assert(gradient[0] === 2, `the gradient check examined ${gradient[0]} leaves, not 2`)
+assert(gradient[1] === 4, `the gradient check examined ${gradient[1]} elements, not 4`)
+assert(gradient[2] === 16, `the f64 gradient leaf is ${gradient[2]} bytes, not 16 (two 8-byte elements)`)
+assert(gradient[3] === 8, `the f32 gradient leaf is ${gradient[3]} bytes, not 8 (two 4-byte elements)`)
+assert(approx(gradient[4], 0.7, 1e-15), `the loss of the two leaves is ${gradient[4]}, not 0.7`)
+
+// One `sgd` step of 0.1 and 0.25 at a rate of 0.5 with a gradient of one: -0.4 and -0.25 in the
+// element type of each leaf. The two sides are compared as bytes, so the element type and the
+// arithmetic are both pinned -- a leaf that was narrowed, or one whose rate was not rounded to its
+// element type, differs here.
+const sgd = fields('sgd', 'leaves=(\\d+) elements=(\\d+) wide_bytes=(\\d+) narrow_bytes=(\\d+) agrees_wide=(\\d+) agrees_narrow=(\\d+)')
+assert(sgd[0] === 2, `the sgd check examined ${sgd[0]} leaves, not 2`)
+assert(sgd[1] === 4, `the sgd check examined ${sgd[1]} elements, not 4`)
+assert(sgd[2] === 16, `the f64 leaf is ${sgd[2]} bytes after the sgd step, not 16`)
+assert(sgd[3] === 8, `the f32 leaf is ${sgd[3]} bytes after the sgd step, not 8`)
+assert(sgd[4] === 1, 'the f64 leaf differs from the native sgd result')
+assert(sgd[5] === 1, 'the f32 leaf differs from the native sgd result')
+
+// The bytes themselves, decoded: an f64 element is the eight bytes of the double and an f32
+// element the four of the float, so a length alone would not say what the bytes hold.
+const bytes = (name, tail) => JSON.parse(match(new RegExp('optim unstated_dtype_exact ' + name + ' ' + tail + '=(\\[.*\\])'), out)[1])
+const f64 = (b, i) => new DataView(new Uint8Array(b.slice(i * 8, i * 8 + 8)).buffer).getFloat64(0, true)
+const f32 = (b, i) => new DataView(new Uint8Array(b.slice(i * 4, i * 4 + 4)).buffer).getFloat32(0, true)
+const wide = bytes('sgd', 'wide')
+const narrow = bytes('sgd', 'narrow')
+assert(wide.length === 16, `the f64 leaf's bytes number ${wide.length}, not 16`)
+assert(narrow.length === 8, `the f32 leaf's bytes number ${narrow.length}, not 8`)
+assert(approx(f64(wide, 0), -0.4, 1e-15), `the f64 leaf holds ${f64(wide, 0)} at 0, not -0.4`)
+assert(approx(f64(wide, 1), -0.4, 1e-15), `the f64 leaf holds ${f64(wide, 1)} at 1, not -0.4`)
+assert(f32(narrow, 0) === Math.fround(-0.25), `the f32 leaf holds ${f32(narrow, 0)} at 0, not f32(-0.25)`)
+assert(f32(narrow, 1) === Math.fround(-0.25), `the f32 leaf holds ${f32(narrow, 1)} at 1, not f32(-0.25)`)
+assert(Math.fround(f64(wide, 0)) !== f64(wide, 0), `the f64 leaf holds ${f64(wide, 0)}, which f32 can hold, so it was narrowed`)
+
+// Two `adam` steps: the parameters on both sides and the Camel state's two moment trees, at the
+// element type of their parameter. Four leaves and eight elements are examined, and the counts are
+// asserted, so a check that looked at nothing cannot pass as agreement.
+const adam = fields('adam', 'leaves=(\\d+) elements=(\\d+) wide_bytes=(\\d+) narrow_bytes=(\\d+) moment_wide=(\\d+) moment_narrow=(\\d+) agrees_wide=(\\d+) agrees_narrow=(\\d+)')
+assert(adam[0] === 4, `the adam check examined ${adam[0]} leaves (parameters and moments), not 4`)
+assert(adam[1] === 8, `the adam check examined ${adam[1]} elements, not 8`)
+assert(adam[2] === 16, `the f64 parameter is ${adam[2]} bytes after two adam steps, not 16`)
+assert(adam[3] === 8, `the f32 parameter is ${adam[3]} bytes after two adam steps, not 8`)
+assert(adam[4] === 16, `the f64 leaf's moment is ${adam[4]} bytes, not 16`)
+assert(adam[5] === 8, `the f32 leaf's moment is ${adam[5]} bytes, not 8`)
+assert(adam[6] === 1, 'the f64 parameter differs from the native adam result (a moment or the arithmetic was narrowed)')
+assert(adam[7] === 1, 'the f32 parameter differs from the native adam result')
+const adamWide = bytes('adam', 'wide')
+assert(approx(f64(adamWide, 0), -0.8999000099990001, 1e-12), `the f64 parameter landed on ${f64(adamWide, 0)}, not two steps of 0.5/(1 + eps) below 0.1`)
+assert(Number(match(new RegExp('optim unstated_dtype_exact failures=(\\d+)'), out)[1]) === 0, 'the case counted failures')
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "optim.named_argument_crosses_the_overloads"
+desc = "The first parameter of `init` and of `update` is named `opt` in every overload, so `init(opt: ..., params: ...)` and `update(opt: ..., params: ..., grads: ..., state: ...)` bind at the overload set: each call reaches the overload its optimizer's type selects, by Adam's state (which carries the two moment trees) and by the numbers. One of the calls writes its four names in another order, which a binding that read the position the argument is written in would place wrongly, and every named call is compared with the same call written positionally. The parameters of the Adam overloads used to be named `adam_opt`, which no call could name at all: a named argument at a call of several declarations was refused, so this case could not be written."
+kind = "behavior"
+case = "../../../cases/modules/optim/named_args.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["optim named_args sgd=0.75 sgd_step=1", "adam_step=1 mismatches=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${input.normalized.stdout}`)
+const out = input.normalized.stdout
+const named = match(/optim named_args sgd=(\S+) sgd_step=(\d+) adam=(\S+) adam_m=(\S+) adam_v=(\S+) adam_step=(\d+) mismatches=(\d+)/, out).slice(1, 8).map(Number)
+const [sgd, sgdStep, adam, adamM, adamV, adamStep, mismatches] = named
+// One sgd step at a rate of 0.5 with a gradient of 0.5: 1.0 - 0.5 * 0.5 is 0.75, and the step
+// count is one. The Adam overload lands elsewhere (the same rate and gradient, with the adaptive
+// factor and `eps`), so a named `update` that reached the sgd overload cannot pass this.
+assert(sgdStep === 1, `the sgd state counted ${sgdStep} updates`)
+assert(adamStep === 1, `the adam state counted ${adamStep} updates`)
+assert(sgd === 0.75, `the sgd step gave ${sgd}, not 0.75`)
+assert(approx(adam, 0.5000999800039992, 1e-12), `the adam step gave ${adam}`)
+// The moments of the Adam state after one step: (1 - beta1) * g is 0.25 and (1 - beta2) * g^2 is
+// 0.1875, at the leaves of the parameter tree the state was built from.
+assert(approx(adamM, 0.25, 1e-15), `the adam state's first moment is ${adamM}`)
+assert(approx(adamV, 0.1875, 1e-15), `the adam state's second moment is ${adamV}`)
+// The case compares every named call with the positional one and reads the Adam state's moments;
+// that count is the property, not this script's arithmetic.
+assert(mismatches === 0, `the case counted ${mismatches} mismatches`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "optim.unknown_optimizer_is_refused"
+desc = "An optimization that is neither `Sgd` nor `Adam` is not one the module knows: `init` has one overload per optimizer, so a call with any other type is refused where it is written. The type used to be accepted whatever it was and answered with the state `adam` builds; the call is now a `SemanticDiag::NoMatchingFunction` that lists the two overloads and nothing else."
+kind = "negative"
+case = "../../../cases/modules/optim/unknown_optimizer.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "argument types: Unknown, Model.", "init: (opt: Sgd, params: P) => SgdState", "init: (opt: Adam, params: P) => AdamState<P>"]
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 22
+expect_diagnostic_column = 21
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "optim.unknown_optimizer_update_is_refused"
+desc = "The same for `update`: it has one overload per optimizer too, so an unknown optimizer is refused where it is written rather than reaching an `adam` fallback that reads a field the type does not have. The diagnostic is a `SemanticDiag::NoMatchingFunction` at the call, and the state argument's type is named in it."
+kind = "negative"
+case = "../../../cases/modules/optim/unknown_optimizer_update.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "argument types: Unknown, Model, Model, AdamState<Model>.", "update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)", "update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)"]
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 31
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

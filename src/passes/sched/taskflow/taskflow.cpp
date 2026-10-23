@@ -818,24 +818,32 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
         }
         waitsForDone[ref] = 1;
         std::vector<gc_node_ref_t> out;
+        const auto addWait = [&](gc_node_ref_t input) {
+            if (input >= blocks) {
+                return;
+            }
+            if (loc[input].scope >= 0) {
+                out.push_back(input);
+            } else if (graph->node(input) != nullptr) {
+                // A node that executes nothing: one of the elided kinds, or a node in the
+                // range of a branch that no arm covers. The second kind matters: an arm
+                // reads a value of the enclosing scope through a GATE placed there (the
+                // GATE never runs; its reader resolves the forwarded value), so the
+                // reader waits for whatever the GATE waits for.
+                const auto &inner = collectWaits(input);
+                out.insert(out.end(), inner.begin(), inner.end());
+            }
+        };
         for (auto inputs :
              {graph->ctrlInputsOf(ref), graph->normInputsOf(ref), graph->withInputsOf(ref)}) {
             for (gc_node_ref_t input : inputs) {
-                if (input >= blocks) {
-                    continue;
-                }
-                if (loc[input].scope >= 0) {
-                    out.push_back(input);
-                } else if (graph->node(input) != nullptr) {
-                    // A node that executes nothing: one of the elided kinds, or a node in the
-                    // range of a branch that no arm covers. The second kind matters: an arm
-                    // reads a value of the enclosing scope through a GATE placed there (the
-                    // GATE never runs; its reader resolves the forwarded value), so the
-                    // reader waits for whatever the GATE waits for.
-                    const auto &inner = collectWaits(input);
-                    out.insert(out.end(), inner.begin(), inner.end());
-                }
+                addWait(input);
             }
+        }
+        // A sync edge is a use and an order at once (docs/design/effects/edges.cn.md 1.5): the
+        // statement written before this one runs before it, exactly as a control input does.
+        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(ref)) {
+            addWait(edge.pred);
         }
         std::sort(out.begin(), out.end());
         out.erase(std::unique(out.begin(), out.end()), out.end());
@@ -2286,16 +2294,19 @@ void TaskflowExecSchedPass::connectRuntimeDependencies(
     std::vector<uint8_t> &taskBuilt) {
     (void)flowLike;
     (void)frame;
+    auto addEdge = [&](gc_node_ref_t inputRef, tf::Task task) {
+        if (inputRef >= taskBuilt.size() || taskBuilt[inputRef] == 0) {
+            return;
+        }
+        if (inputRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[inputRef] != 0 &&
+            requireNode(graph, inputRef)->kind != GCNodeKind::Join) {
+            return;
+        }
+        taskMap[inputRef].precede(task);
+    };
     auto addEdges = [&](std::span<const gc_node_ref_t> inputs, tf::Task task) {
         for (gc_node_ref_t inputRef : inputs) {
-            if (inputRef >= taskBuilt.size() || taskBuilt[inputRef] == 0) {
-                continue;
-            }
-            if (inputRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[inputRef] != 0 &&
-                requireNode(graph, inputRef)->kind != GCNodeKind::Join) {
-                continue;
-            }
-            taskMap[inputRef].precede(task);
+            addEdge(inputRef, task);
         }
     };
 
@@ -2313,6 +2324,16 @@ void TaskflowExecSchedPass::connectRuntimeDependencies(
         addEdges(graph->normInputsOf(nodeRef), taskMap[nodeRef]);
         addEdges(graph->withInputsOf(nodeRef), taskMap[nodeRef]);
         addEdges(graph->ctrlInputsOf(nodeRef), taskMap[nodeRef]);
+        // An order edge is a precedence between two tasks that both run; a predecessor that has
+        // no task of its own is skipped by addEdge, so the order never creates work.
+        for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(nodeRef)) {
+            addEdge(edge.pred, taskMap[nodeRef]);
+        }
+        // A sync edge orders the two statements as well (docs/design/effects/edges.cn.md 1.5),
+        // and both of them run: the predecessor's task is there whenever the node's is.
+        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(nodeRef)) {
+            addEdge(edge.pred, taskMap[nodeRef]);
+        }
     }
 }
 

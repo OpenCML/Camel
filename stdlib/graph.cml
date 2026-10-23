@@ -11,16 +11,16 @@
 // module-level values are computed before the pass runs. It may import modules written in C++ and
 // libraries written in Camel (for example `array`); the imports are declared and built with it.
 //
-// The declarations of the operators of the C++ module `modules/graph` (design principles 6.4;
-// handover H19, step 10). This file is the one source of the fixed signatures a declaration can
+// The declarations of the operators of the C++ module `modules/graph` (design principles 6.4).
+// This file is the one source of the fixed signatures a declaration can
 // carry: the C++ side keeps the kernels, the executor, the handles and the purity of every
 // operator. Two shapes are not declarations:
 //   - the computed signatures (`program_of`, `graph_of`, `open_function`, `to_function`) have the
 //     type of a function value, which C++ computes from the argument. Their reference entries are
-//     in `stdlib/signatures/graph.cml`, named by the module's `computed:` field (handover H180).
+//     in `stdlib/signatures/graph.cml`, named by the module's `computed:` field.
 //     A declaration generic over `F` would accept every type, and a call the operator must refuse
 //     would pass the check (standard library conventions 2). `constant` and `add_constant` take a
-//     sample's type and are written out per sample type instead (handover H202).
+//     sample's type and are written out per sample type instead.
 //   - `operator ==` is declared as the reserved group `__eq__`. `operator !=` cannot be declared
 //     (design principles 4.3: an overload of `==` gives it, and `operator !=` is
 //     OperatorNotOverloadable), and the compiler negates a Camel overload of `==`, not a native
@@ -224,6 +224,15 @@ export func replace(t: Txn, old: Node, new: Node): void
 /// @effect changes the transaction
 /// @example erase(t, n)
 export func erase(t: Txn, n: Node): void
+
+/// Evaluates the pure operator of the node over its constant operands and gives the node holding
+/// the result, null when there is no value to compute (an operand is no constant of the graph, the
+/// node is no pure operation, or evaluating it faults). The node the answer names is the
+/// transaction's to put in place of `n` with `replace`. A constant expression that can only fault
+/// is left as written and warned about, as the C++ fold does.
+/// @effect changes the transaction
+/// @example eval(t, n)
+export func eval(t: Txn, n: Node): Node?
 
 /// Checks the edits and makes the new Program, which shares every graph nothing changed; the transaction is over. The error value has the kind `GraphConflict` (a graph the transaction touched changed since it was opened), `GraphInvalid` (an edit broke an invariant; the message names the graph, the node and the edge) or `TxnUsed` (the transaction was over already).
 /// @effect changes the transaction

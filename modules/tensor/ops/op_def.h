@@ -62,22 +62,28 @@ using ConstArg = std::variant<int64_t, double, bool, std::string, std::vector<in
 /// {nullopt, 3}. What inference sees of an array written in place with computed elements.
 using PartialInts = std::vector<std::optional<int64_t>>;
 
-/// What is statically known about a tensor-valued argument.
-struct TensorFacts {
-    std::optional<type::TypeCode> dtype;
-    std::optional<StaticShape> shape;
-};
+/// The facts of a tensor-valued argument: `camel::tensor::TensorFacts` (modules/tensor/type.h),
+/// where one definition serves the operators and the callers outside this module that used to
+/// import it from here.
+using TensorFacts = ::camel::tensor::TensorFacts;
 
 class InferContext {
   public:
+    /// `sourceLevel` says the inference resolves a call a program wrote, where design principles
+    /// 5.1's literal rule has already run and a scalar of another type than the tensor's element
+    /// type is a value to report. A pass that reads a graph again (the exporter, the tiles
+    /// compiler) infers with the default: it must keep the tolerance the program was compiled
+    /// under, because a generic function's body was inferred with open element types and a
+    /// literal there could take no element type.
     InferContext(
         std::span<type::Type *const> types, std::span<const std::optional<ConstArg>> constants = {},
-        std::span<const std::optional<PartialInts>> partials = {})
-        : types_(types), constants_(constants), partials_(partials) {}
+        std::span<const std::optional<PartialInts>> partials = {}, bool sourceLevel = false)
+        : types_(types), constants_(constants), partials_(partials), sourceLevel_(sourceLevel) {}
 
     size_t size() const { return types_.size(); }
     type::Type *type(size_t index) const { return types_[index]; }
     bool has(size_t index) const { return index < types_.size(); }
+    bool sourceLevel() const { return sourceLevel_; }
 
     /// Tensor facts of argument `index`: tensors report their type, numeric
     /// arrays report their element dtype (shape unknown), scalars are rank 0.
@@ -98,6 +104,7 @@ class InferContext {
     std::span<type::Type *const> types_;
     std::span<const std::optional<ConstArg>> constants_;
     std::span<const std::optional<PartialInts>> partials_;
+    bool sourceLevel_ = false;
 };
 
 using InferFn = std::function<std::optional<type::Type *>(const InferContext &)>;

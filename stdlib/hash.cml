@@ -1,13 +1,13 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The declarations of the operators of the C++ module `modules/hash` (design principles 6.4;
-// handover H19, step 10; H163). This file is the one source of their signatures; the C++ side
+// The declarations of the operators of the C++ module `modules/hash` (design principles 6.4).
+// This file is the one source of their signatures; the C++ side
 // keeps the kernels, the executor and the purity.
 //
 // `sha256` accepts a `string` and a `Bytes` value, which are two operators with two URIs
 // (`hash:sha256_str`, `hash:sha256_bytes`); a declaration names one URI, so each of the two
-// declarations carries the `#op` tag that names its operator (H113). No signature of this module
+// declarations carries the `#op` tag that names its operator. No signature of this module
 // is computed from an argument, so the module needs no `stdlib/signatures/hash.cml`.
 
 module hash

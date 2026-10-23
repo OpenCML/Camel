@@ -1,0 +1,39 @@
+/// H371: a literal operand beside a tensor takes the tensor's element type (design principles
+/// 5.1), so `x * 2.0` is the f32 product and no f64 operand stays on the graph. A `#gpu` scope
+/// that scales, shifts or divides by a constant therefore compiles: the operator becomes a
+/// segment of the device program instead of being excluded as a `scalar_tensor_operand`.
+module gpu_nofallback_scalar_literal
+
+import { Tensor, reshape, sum } from tensor
+import { regions } from tiles
+
+#gpu
+func scale(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    return x * 2.0
+}
+
+#gpu
+func shift(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    return 1.0 - x
+}
+
+#gpu
+func divide(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+    return x / 0.0
+}
+
+#gpu
+func bf16_scale(x: Tensor<bf16, [3]>): Tensor<bf16, [3]> {
+    return x * 2.0
+}
+
+func main(): int sync {
+    println(regions<scale>())
+    println(regions<shift>())
+    println(regions<divide>())
+    println(regions<bf16_scale>())
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println(sum(scale(x)))
+    println(sum(shift(x)))
+    return 0
+}

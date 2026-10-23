@@ -1,0 +1,28 @@
+/**
+ * `node_of` reaches the node of one of the rule's own `const` parameters, and nothing else
+ * (rule-language design v2, section 1: `node_of(c)` is the node of the constant parameter `c`). A
+ * name that is not a `const` parameter of this rule is refused by name -- a parameter that is not
+ * `const` is a node of the draft already, and a name that is not a parameter of this rule has no
+ * node here -- rather than read as a node that does not exist or silently make the rule
+ * inapplicable.
+ *
+ * The program below asks for the node of `x`, which the rule declares without `const`: the
+ * declaration is refused, and the message names both the argument and the rule.
+ */
+module node_of_misuse
+
+import { Program, Node } from graph
+import { rewrite } from rewrite
+
+rule drop_by_node(x: int, const c: int) { x * c => x } when node_of(x) == node_of(c)
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [drop_by_node])
+}
+
+func scaled(x: int): int { return x * 2 }
+
+func main(): int sync {
+    println(scaled(21))
+    return 0
+}

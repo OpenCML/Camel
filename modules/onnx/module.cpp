@@ -131,7 +131,7 @@ OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
                       -> std::optional<Type *> {
                       if (norm.size() < 3 || norm.size() > 5 ||
                           norm[0]->code() != TypeCode::Function ||
-                          !(camel::tensor::asTensorType(norm[1]) ||
+                          !(camel::tensor::isTensorType(norm[1]) ||
                             norm[1]->code() == TypeCode::Tuple ||
                             norm[1]->code() == TypeCode::Struct) ||
                           norm[2]->code() != TypeCode::String) {

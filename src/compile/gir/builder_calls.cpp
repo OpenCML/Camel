@@ -851,7 +851,7 @@ const std::vector<std::optional<Builder::ParameterDefaultValue>> *Builder::defau
     // A generic function: its declaration is the template, and every instance takes the same
     // defaults.
     if (const auto generic = genericDrefs_.find(callee); generic != genericDrefs_.end()) {
-        return defaultsOf(generic->second.get());
+        return defaultsOf(generic->second.one().get());
     }
     if (!nodeIsKind(callee, runtime::GCNodeKind::Dref)) {
         return nullptr;
@@ -896,6 +896,206 @@ const std::vector<std::optional<Builder::ParameterDefaultValue>> *Builder::defau
     return defaultsOf(graphs->front().get());
 }
 
+std::optional<Builder::CalleeSet> Builder::declarationsOfCallee(node_handle_t callee) const {
+    if (callee == nullptr) {
+        return std::nullopt;
+    }
+    CalleeSet set;
+    if (const auto generic = genericDrefs_.find(callee); generic != genericDrefs_.end()) {
+        for (const auto &candidate : genericOverloadsOf(callee)) {
+            if (candidate == nullptr || candidate->funcType == nullptr) {
+                return std::nullopt;
+            }
+            set.label = candidate->name;
+            set.declarations.push_back({candidate->funcType, candidate.get()});
+        }
+    } else if (nodeIsKind(callee, runtime::GCNodeKind::Dref)) {
+        const auto &target = nodeGraphOf(callee)->drefTarget(callee);
+        if (!std::holds_alternative<graph_vec_ptr_t>(target)) {
+            // A native operator's entries are its declarations, and a name that is not a dref at
+            // all (a value, an operator node) has none: neither is a set of Camel declarations.
+            return std::nullopt;
+        }
+        const auto graphs = std::get<graph_vec_ptr_t>(target);
+        if (!graphs) {
+            return std::nullopt;
+        }
+        for (const auto &graph : *graphs) {
+            // A decorated declaration is what its decorators return: the call is the decorated
+            // one's, and this declaration's parameters are not the ones its arguments are given
+            // to, so its names do not say where a named argument goes.
+            if (graph == nullptr || graph->funcType() == nullptr ||
+                decoratedOf_.contains(graph.get())) {
+                return std::nullopt;
+            }
+            set.label = graph->name();
+            set.declarations.push_back({graph->funcType(), graph.get()});
+        }
+    } else {
+        return std::nullopt;
+    }
+    // One declaration is not a set: a call of it reads its signature, and a name with none is
+    // reported at the call like any other unresolved name.
+    if (set.declarations.size() < 2) {
+        return std::nullopt;
+    }
+    return set;
+}
+
+bool Builder::anyDeclarationDefaults(const CalleeSet &set, size_t position, bool isWith) const {
+    for (const CalleeDeclaration &declaration : set.declarations) {
+        const auto defaults = defaults_.find(declaration.owner);
+        if (defaults == defaults_.end()) {
+            continue;
+        }
+        const auto &values = isWith ? defaults->second.with : defaults->second.norm;
+        if (position < values.size() && values[position].has_value()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Builder::bindNamedArgumentsToDeclarations(
+    std::vector<Argument> &inputs, const CalleeSet &set, const GCT::node_ptr_t &call, bool isWith) {
+    const auto firstNamed = [&]() -> const Argument & {
+        return *std::find_if(inputs.begin(), inputs.end(), [](const Argument &input) {
+            return input.name.has_value();
+        });
+    };
+    const std::string &label = set.label;
+    const SemanticDiag calleeDiag =
+        isWith ? SemanticDiag::WithArgumentCallee : SemanticDiag::ParamArgumentCallee;
+    const auto countOf = [&](const FunctionType *other) {
+        return isWith ? other->withTypesCount() : other->normTypesCount();
+    };
+    const auto nameOfPosition = [&](const FunctionType *other, size_t position) {
+        return std::string(other->argNameAt(isWith ? position : other->withTypesCount() + position));
+    };
+    // The name every declaration that has this position gives it; null when they do not agree.
+    const auto agreedName = [&](size_t position) -> std::optional<std::string> {
+        std::optional<std::string> agreed;
+        for (const CalleeDeclaration &declaration : set.declarations) {
+            const FunctionType *other = declaration.signature;
+            if (position >= countOf(other)) {
+                continue;
+            }
+            const std::string name = nameOfPosition(other, position);
+            if (!agreed.has_value()) {
+                agreed = name;
+            } else if (*agreed != name) {
+                return std::nullopt;
+            }
+        }
+        return agreed;
+    };
+    // Where each written argument goes. A positional argument is at its own position (the named
+    // ones come after the positional ones), and a name places the rest: it has to mean one
+    // position in the declarations of the set.
+    const size_t written = inputs.size();
+    std::vector<size_t> position(written, 0);
+    for (size_t at = 0; at < written; ++at) {
+        const Argument &input = inputs[at];
+        if (!input.name) {
+            position[at] = at;
+            continue;
+        }
+        const std::string &name = *input.name;
+        std::optional<size_t> one;
+        bool elsewhere = false;
+        for (const CalleeDeclaration &declaration : set.declarations) {
+            const FunctionType *other = declaration.signature;
+            for (size_t p = 0; p < countOf(other); ++p) {
+                if (nameOfPosition(other, p) != name) {
+                    continue;
+                }
+                if (!one.has_value()) {
+                    one = p;
+                } else if (*one != p) {
+                    // Two declarations give the name to two parameters: the call's name is not
+                    // the name of one parameter of the set.
+                    elsewhere = true;
+                }
+            }
+        }
+        if (!one.has_value()) {
+            diags_
+                ->of(isWith ? SemanticDiag::WithArgumentUnknown : SemanticDiag::ParamArgumentUnknown)
+                .atOrigin(input.expr->origin())
+                .commit(name, label);
+            throw BuildAbortException();
+        }
+        if (elsewhere) {
+            diags_
+                ->of(SemanticDiag::OverloadParameterNames)
+                .atOrigin(input.expr->origin())
+                .commit(name, label);
+            throw BuildAbortException();
+        }
+        // The parameter at that position carries the name in every declaration that has it: a
+        // declaration that names it otherwise is one the call's name does not reach, and the
+        // overloads of a name have to name each position the same way for a named argument to
+        // hold for each of them (docs/handover/reviews/questions-2026-10-23.md, 复核：optim 返工
+        // 与泛型重载).
+        for (const CalleeDeclaration &declaration : set.declarations) {
+            const FunctionType *other = declaration.signature;
+            if (*one < countOf(other) && nameOfPosition(other, *one) != name) {
+                diags_
+                    ->of(SemanticDiag::OverloadParameterNames)
+                    .atOrigin(input.expr->origin())
+                    .commit(name, label);
+                throw BuildAbortException();
+            }
+        }
+        position[at] = *one;
+    }
+    // The positions the call reaches: a name it gives to a parameter past its own argument count
+    // leaves a position below that one empty, and the call then gives no value for it.
+    size_t slots = written;
+    for (size_t at = 0; at < written; ++at) {
+        slots = std::max(slots, position[at] + 1);
+    }
+    std::vector<bool> taken(slots, false);
+    for (size_t at = 0; at < written; ++at) {
+        if (taken[position[at]]) {
+            const Argument &input = inputs[at];
+            diags_
+                ->of(isWith ? SemanticDiag::WithArgumentDuplicate
+                            : SemanticDiag::ParamArgumentDuplicate)
+                .atOrigin(input.expr->origin())
+                .commit(*input.name, label);
+            throw BuildAbortException();
+        }
+        taken[position[at]] = true;
+    }
+    // A call fills the first positions or none of them: one left empty is a parameter it gives no
+    // value for. The set cannot supply the value -- a default is written by one declaration, and
+    // the call does not say which one it means -- so a parameter a declaration defaults is refused
+    // here too. Nothing is reached past this loop with an empty position: fewer arguments than
+    // positions leave one, so the loop either reports or every position is filled.
+    for (size_t p = 0; p < slots; ++p) {
+        if (taken[p]) {
+            continue;
+        }
+        const std::optional<std::string> name = agreedName(p);
+        if (!name.has_value() || anyDeclarationDefaults(set, p, isWith)) {
+            const Argument &input = firstNamed();
+            diags_->of(calleeDiag).atOrigin(input.expr->origin()).commit(*input.name, label);
+            throw BuildAbortException();
+        }
+        diags_
+            ->of(isWith ? SemanticDiag::WithArgumentMissing : SemanticDiag::ParamArgumentMissing)
+            .atOrigin(call->origin())
+            .commit(*name, label);
+        throw BuildAbortException();
+    }
+    std::vector<Argument> ordered(slots);
+    for (size_t at = 0; at < written; ++at) {
+        ordered[position[at]] = inputs[at];
+    }
+    inputs = std::move(ordered);
+}
+
 void Builder::bindArguments(
     std::vector<Argument> &inputs, node_handle_t callee, const GCT::node_ptr_t &call,
     FunctionType *signature, bool isWith) {
@@ -903,20 +1103,42 @@ void Builder::bindArguments(
         inputs.begin(), inputs.end(), [](const Argument &input) { return input.name.has_value(); });
     // `signature` is the call's own reading of the callee (signatureForArgumentContext), so
     // the names below are resolved against exactly the signature the call resolves against.
+    //
+    // A callee that is several declarations is read as the declarations themselves, when they
+    // record their names: the parameter at a position carries the same name in every one of them,
+    // which is what lets one named argument mean the same parameter in each of them
+    // (docs/handover/reviews/questions-2026-10-23.md, 复核：optim 返工与泛型重载). The signature a
+    // call of several declarations does have -- the one entry whose parameters are the same as the
+    // others' -- answers for the types of the arguments, not for which parameter a name is.
+    const std::optional<CalleeSet> declarations = declarationsOfCallee(callee);
+    bool readable                               = declarations.has_value();
+    if (readable) {
+        for (const CalleeDeclaration &declaration : declarations->declarations) {
+            const FunctionType *other = declaration.signature;
+            // A `rest` parameter and a `constas` parameter are written at their own position, not
+            // by name, and a signature that records no names answers nothing.
+            if (!other->hasArgNames() || other->hasRest() || other->hasConstas()) {
+                readable = false;
+                break;
+            }
+        }
+    }
+    if (named && readable) {
+        bindNamedArgumentsToDeclarations(inputs, *declarations, call, isWith);
+        return;
+    }
     std::string label;
     if (signature == nullptr) {
         if (!named) {
             return;
         }
-        const Argument &first =
-            *std::find_if(inputs.begin(), inputs.end(), [](const Argument &input) {
-                return input.name.has_value();
-            });
+        const Argument &first = *std::find_if(
+            inputs.begin(), inputs.end(),
+            [](const Argument &input) { return input.name.has_value(); });
         diags_
-            ->of(isWith ? SemanticDiag::WithArgumentCallee
-                        : SemanticDiag::ParamArgumentCallee)
+            ->of(isWith ? SemanticDiag::WithArgumentCallee : SemanticDiag::ParamArgumentCallee)
             .atOrigin(first.expr->origin())
-            .commit(*first.name, call->at(0)->toString());
+            .commit(*first.name, declarations ? declarations->label : call->at(0)->toString());
         throw BuildAbortException();
     }
     const size_t count = isWith ? signature->withTypesCount() : signature->normTypesCount();

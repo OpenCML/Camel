@@ -1,0 +1,41 @@
+module divergence
+
+// The forms the legacy C++ algebraic pass and the rule library do not answer the same way (H160).
+// Each one is a graph the measurement reports as a difference rather than normalises away: the two
+// sides are put through the same pass list and the tables are compared line by line.
+//
+//   anchor_add     `x + 0` as the value the function returns. The add is the graph's named node
+//                  (`exit`/`output`/`return`); the C++ pass's `isReplaceable` refuses to rewrite
+//                  it, the rule engine retargets the anchor onto the port.
+//   anchor_mul32   `x * 1` at i32, in the same position: the same difference on the other integer
+//                  type, so the difference is the position and not the type.
+//
+// `effect_mul_zero` used to be the third difference and is kept in the corpus as the agreement
+// instead: `println(5) * 0`. The legacy law table has no `x * 0` law and leaves it alone; the rules
+// library has `int_mul_zero`, which would replace the product by the constant 0 and leave the print
+// without a user, and the engine refuses that match, because the part the right side drops is a
+// call and not a pure computation (design principles 9.7). Both sides therefore keep the effect, and
+// the two entries that pin it -- `algebra_rules.divergence.library_runs` for the values and
+// `algebra_rules.divergence.differs` for the graph -- turn red if a rule or an engine change drops
+// it again.
+
+func anchor_add(x: int): int {
+    return x + 0
+}
+
+func anchor_mul32(x: i32): i32 {
+    return x * 1
+}
+
+func effect_mul_zero(): int sync {
+    let a = println(5) * 0
+    println(a)
+    return 0
+}
+
+func main(): int sync {
+    println(anchor_add(7))
+    println(anchor_mul32(9))
+    println(effect_mul_zero())
+    return 0
+}

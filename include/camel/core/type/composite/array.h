@@ -120,6 +120,11 @@ class ArrayType : public CompositeType {
     /// The numeric-unknown array `Tensor`: element type not fixed, but a numeric scalar. With
     /// no extents it is `Tensor` (any rank); with extents it is `Tensor<[...]>`.
     static ArrayType *numericUnknown(std::span<const int64_t> extents = {}, std::string_view pack = {});
+    /// The same numeric-unknown array whose shape is written over dimension names: the extents
+    /// are kept as the linear forms they were written as, so a named extent keeps its name
+    /// (design principles 5.4). A shape argument fixes the rank; no shape is any rank.
+    static ArrayType *
+    numericUnknownFromForms(std::span<const ExtentForm> extents, std::string_view pack = {});
 
     /// create() with the factory's element type.
     static ArrayType *fromFactory(ArrayTypeFactory &factory);
@@ -153,6 +158,11 @@ class ArrayType : public CompositeType {
     std::string shapeMangle() const;
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
+    /// `Tensor<f32>`, `Tensor<f32, [2, 3]>`, `Tensor<[n, 784]>`: the numeric array reads the
+    /// arguments of its own alias (docs/design/arrays-memory/plan.cn.md section 5), so the two
+    /// spellings of one type are one type and `Name<args...>` needs no second path.
+    virtual const Type *
+    applyArguments(std::span<const TypeArgument> arguments, std::string &error) const override;
     virtual bool resolved() const override;
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
@@ -165,6 +175,10 @@ class ArrayType : public CompositeType {
     /// Widens every element type and keeps the shape's rank, forgetting every dimension value
     /// (they are `?`); what `var` bindings hold. A named pack is dropped.
     virtual Type *widened() const override;
+    /// A literal beside a numeric array is an element of it (`x * 2.0` with `x: f32[3]`), so it
+    /// takes the array's element type (design principles 5.1). An array whose element type
+    /// nobody fixed (`Tensor`) gives none.
+    virtual Type *literalOperandType() const override;
 
     std::string_view packName() const override;
     bool extentForms(std::vector<ExtentForm> &out) const override;
@@ -192,5 +206,22 @@ class ArrayType : public CompositeType {
     bool numericUnknown_;
     const std::string *packName_; // interned, nullptr for an anonymous pack or no pack
 };
+
+/// The array type of `type`, or nullptr when `type` is not an array. The counterpart of the
+/// per-composite `as...Type` casts, for the code that used to ask a module whether a value was
+/// its own kind of type (plan section 5.3).
+const ArrayType *asArrayType(const Type *type);
+
+/// True for an array whose element is a numeric scalar, or is not fixed yet but is known to be
+/// one (the numeric-unknown array, `Tensor`): the arrays a tensor operator takes. A nested array
+/// (`f32[][]`) is an array of arrays, not one numeric array, and is not one of these.
+bool isNumericArrayType(const Type *type);
+
+/// True for the type of an array literal written with no element type at all (`[]`): its element
+/// type is `Void` — and nobody wrote one, so every position it stands in fixes it. The
+/// numeric-unknown array's element type is `Void` as well (that it is numeric is the marker, and
+/// it is what the alias `Tensor` hands out), and it is a complete type of its own: it is not one
+/// of these (design principles 5.1, 5.2).
+bool isUntypedArrayType(const Type *type);
 
 } // namespace camel::core::type

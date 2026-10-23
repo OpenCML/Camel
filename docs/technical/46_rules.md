@@ -44,9 +44,26 @@ type it was declared with (`func keep_positive__when(x: Node, c: float) => posit
 `rule keep_positive(x: float, const c: float) { x * c => x } when positive(c)`), so the guard is
 arithmetic on the value and needs neither `constant(node, sample)` nor the `match … case null`
 layers around a read. The engine passes that value where it passed a node, and the parameter bit
-the rule carries is what tells it which parameters are which. Reaching the *node* of a `const`
-parameter (to read a fact, or its shape) needs a `node_of(c)` the language does not have yet; a
-condition that needs a node reads a parameter that is not `const`.
+the rule carries is what tells it which parameters are which.
+
+Reaching the *node* of a `const` parameter is `node_of(c)` (the ruling of 2026-10-23 on
+`rule_when_const_node`: "条件函数按 `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)` 换成它；
+不引入新类型"). The condition takes one hidden node parameter per `const` parameter, appended after
+the rule's own, in the same order:
+
+```camel
+rule mul_one(x: int, const c: int) { x * c => x } when sign(node_of(c)) == 1
+
+// func mul_one__when(x: Node, c: int, c__node: Node) => sign(c__node) == 1
+```
+
+`node_of` is read where the condition is built, so it is not a call of a function and there is no
+new type: the name `node_of(c)` becomes that hidden parameter, and the map the builder holds while
+it builds one rule's condition is what refuses a name that is not that rule's own `const`
+parameter (`SemanticDiag::NodeOfNotAParameter`). `node_of` written anywhere else meets an empty map
+and is refused by the same diagnostic, by name. The hidden parameters are what
+`RuleSource::whenNodesStart` counts from, and the engine hands each of them the node its `const`
+parameter was bound to.
 
 `__rule` and `__rule_when` are operators of the module `rewrite` (`modules/rewrite`), which the
 declaration imports itself (with `graph.Node` for the condition). They make a `RuleObject` (type

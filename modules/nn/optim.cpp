@@ -9,6 +9,7 @@
 
 #include "state.h"
 
+#include "../tensor/dtype.h"
 #include "../tensor/kernels/elementwise.h"
 #include "../tensor/kernels/update.h"
 #include "../tensor/npy.h"
@@ -171,15 +172,39 @@ void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const L
 
 // ---------------------------------------------------------------- leaves
 
-bool isTensorLeaf(Type *type) { return camel::tensor::asTensorType(type) != nullptr; }
+bool isTensorLeaf(Type *type) { return camel::tensor::isTensorType(type); }
 
-const Array *floatTensor(slot_t slot) {
-    auto *t = fromSlot<Array *>(slot);
-    return t->dtype() == TypeCode::Float32 ? t : k::cast(t, TypeCode::Float32, mm::autoSpace());
+/// The element type of a tensor leaf: the one its value has. It is read, never converted: a leaf
+/// whose type states an element type and its value always agree (the slot refuses a value of
+/// another type), and a leaf whose type states none has its element type written in its value
+/// alone -- `full([3, 2], 0.1)` is an f64 tensor, and "unstated" means the type does not say it,
+/// not that the value is f32 (docs/handover/reviews/questions-2026-10-23.md, section
+/// `f64-tensor-leaf`). A written element type is kept exactly and is never narrowed either (design
+/// principles 7.4: the element type is exact; computing at a lower precision than the program
+/// wrote would need the `change_precision` permission of 7.2-7.3).
+TypeCode leafElementType(const Array *t) {
+    const TypeCode dtype = t->dtype();
+    if (dtype != TypeCode::Float32 && dtype != TypeCode::Float64) {
+        // An element type that is not a floating one has no tangent (`tensorTangentType`), so no
+        // such leaf reaches an optimizer. Naming it instead of converting it keeps the rule in one
+        // place.
+        throw std::invalid_argument(std::format(
+            "a tensor leaf of element type {} is not trainable",
+            camel::tensor::elementTypeSpelling(dtype)));
+    }
+    return dtype;
 }
 
+/// The leaf's tensor, as its value is: nothing converts it on the way in, and the pointer this
+/// returns is read at the value's own element type by every caller (`dataAs<float>` only for an f32
+/// leaf), so the bytes of an f64 leaf are never copied through a float local.
+const Array *leafTensor(slot_t slot) { return fromSlot<Array *>(slot); }
+
+/// A fresh tensor with `t`'s shape and `t`'s element type: `t` is the leaf's own value
+/// (`leafTensor`), and an output of another type would change the leaf's element type on the way
+/// out.
 Array *newLike(const Array *t) {
-    return createTensor(TypeCode::Float32, t->shapeSpan(), mm::autoSpace());
+    return createTensor(t->dtype(), t->shapeSpan(), mm::autoSpace());
 }
 
 void requireSameShape(const Array *param, const Array *grad, const char *op) {
@@ -204,15 +229,27 @@ LeafUpdate sgdLeaf(double lr) {
             out[0] = floatSlot(type, floatValue(type, in[0]) - lr * floatValue(type, in[1]));
             return;
         }
-        const Array *p = floatTensor(in[0]);
-        const Array *g = floatTensor(in[1]);
+        const Array *p = leafTensor(in[0]);
+        const Array *g = leafTensor(in[1]);
         requireSameShape(p, g, "sgd");
         Array *next = newLike(p);
-        const float *pp = p->dataAs<float>(), *pg = g->dataAs<float>();
-        float *pn       = next->dataAs<float>();
-        const auto rate = static_cast<float>(lr);
-        for (uint64_t i = 0; i < p->numel(); ++i) {
-            pn[i] = pp[i] - rate * pg[i];
+        // One step per element at the leaf's own element type, with the rate rounded to it: an f32
+        // leaf keeps the f32 arithmetic it had, and an f64 leaf -- a written one or one whose type
+        // states no element type and whose value is f64 -- keeps the f64 one (no float local stands
+        // between the leaf's bytes and the result).
+        if (p->dtype() == TypeCode::Float32) {
+            const float *pp = p->dataAs<float>(), *pg = g->dataAs<float>();
+            float *pn       = next->dataAs<float>();
+            const auto rate = static_cast<float>(lr);
+            for (uint64_t i = 0; i < p->numel(); ++i) {
+                pn[i] = pp[i] - rate * pg[i];
+            }
+        } else {
+            const double *pp = p->dataAs<double>(), *pg = g->dataAs<double>();
+            double *pn       = next->dataAs<double>();
+            for (uint64_t i = 0; i < p->numel(); ++i) {
+                pn[i] = pp[i] - lr * pg[i];
+            }
         }
         out[0] = toSlot<Array *>(next);
     };
@@ -252,26 +289,43 @@ LeafUpdate adamLeaf(const AdamConfig &c) {
             out[2] = floatSlot(type, nv);
             return;
         }
-        const Array *p = floatTensor(in[0]);
-        const Array *g = floatTensor(in[1]);
-        const Array *m = floatTensor(in[2]);
-        const Array *v = floatTensor(in[3]);
+        const Array *p = leafTensor(in[0]);
+        const Array *g = leafTensor(in[1]);
+        const Array *m = leafTensor(in[2]);
+        const Array *v = leafTensor(in[3]);
         requireSameShape(p, g, "adam");
         requireSameShape(p, m, "adam");
         requireSameShape(p, v, "adam");
         Array *np = newLike(p), *nm = newLike(p), *nv = newLike(p);
         // One pass over whole tensors, in double per element, split by the tensor module's grain
-        // policy; the values are bit for bit those of the element-by-element loop it replaces.
-        k::adaptiveUpdate(
-            static_cast<int64_t>(p->numel()),
-            rates,
-            p->dataAs<float>(),
-            g->dataAs<float>(),
-            m->dataAs<float>(),
-            v->dataAs<float>(),
-            np->dataAs<float>(),
-            nm->dataAs<float>(),
-            nv->dataAs<float>());
+        // policy; the values are bit for bit those of the element-by-element loop it replaces. The
+        // leaf's own element type decides which pass and which buffers: the f32 one computes in
+        // double and rounds once on the store, and the f64 one keeps the double result, so neither
+        // narrows the leaf (the accumulation width is the design's, the value's type is the
+        // program's).
+        if (p->dtype() == TypeCode::Float32) {
+            k::adaptiveUpdate(
+                static_cast<int64_t>(p->numel()),
+                rates,
+                p->dataAs<float>(),
+                g->dataAs<float>(),
+                m->dataAs<float>(),
+                v->dataAs<float>(),
+                np->dataAs<float>(),
+                nm->dataAs<float>(),
+                nv->dataAs<float>());
+        } else {
+            k::adaptiveUpdate64(
+                static_cast<int64_t>(p->numel()),
+                rates,
+                p->dataAs<double>(),
+                g->dataAs<double>(),
+                m->dataAs<double>(),
+                v->dataAs<double>(),
+                np->dataAs<double>(),
+                nm->dataAs<double>(),
+                nv->dataAs<double>());
+        }
         out[0] = toSlot<Array *>(np);
         out[1] = toSlot<Array *>(nm);
         out[2] = toSlot<Array *>(nv);
@@ -286,9 +340,13 @@ void zerosLeaf(Type *type, std::span<const slot_t> in, std::span<slot_t> out) {
         return;
     }
     const auto *p = fromSlot<Array *>(in[0]);
+    // The moments are tensors of the leaf's own element type -- the value's (`leafElementType`) --
+    // so an f64 leaf's moments are f64 and a step of it stays f64 (an f32 moment would move the
+    // parameter, which is what the guard test/cases/modules/optim/native_dtype_exact.cml pins), and
+    // a leaf whose type states no element type gets the moments its value asks for.
+    const TypeCode dtype = leafElementType(p);
     for (size_t t = 1; t <= 2; ++t) {
-        out[t] = toSlot<Array *>(
-            createTensor(TypeCode::Float32, p->shapeSpan(), mm::autoSpace(), true));
+        out[t] = toSlot<Array *>(createTensor(dtype, p->shapeSpan(), mm::autoSpace(), true));
     }
 }
 

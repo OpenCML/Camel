@@ -155,11 +155,11 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
                 }
             }
         } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(ent)) {
-            auto tmpl = std::static_pointer_cast<GenericTemplate>(
-                camel::core::module::detail::EntityAccess::genericTemplate(ent));
-            if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
-                set.templates.push_back(tmpl);
-                set.moduleOf[tmpl.get()] = imported.mod->name();
+            for (const generic_template_ptr_t &tmpl : genericTemplatesOfEntity(ent)) {
+                if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
+                    set.templates.push_back(tmpl);
+                    set.moduleOf[tmpl.get()] = imported.mod->name();
+                }
             }
         }
     }
@@ -274,12 +274,12 @@ bool Builder::addDeclaringModuleOverloads(
                     }
                 }
             } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(exported)) {
-                auto generic = std::static_pointer_cast<GenericTemplate>(
-                    camel::core::module::detail::EntityAccess::genericTemplate(exported));
-                if (std::ranges::find(set.templates, generic) == set.templates.end()) {
-                    set.templates.push_back(generic);
-                    set.moduleOf[generic.get()] = moduleName;
-                    added                       = true;
+                for (const generic_template_ptr_t &generic : genericTemplatesOfEntity(exported)) {
+                    if (std::ranges::find(set.templates, generic) == set.templates.end()) {
+                        set.templates.push_back(generic);
+                        set.moduleOf[generic.get()] = moduleName;
+                        added                       = true;
+                    }
                 }
             }
         }
@@ -388,7 +388,7 @@ node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_
 }
 
 bool Builder::genericOperatorAccepts(
-    const template_ptr_t &tmpl, const std::vector<Argument> &normInputs,
+    const generic_template_ptr_t &tmpl, const std::vector<Argument> &normInputs,
     const type_vec_t &normTypes) {
     FunctionType *signature = tmpl->funcType;
     if (signature->withTypesCount() != 0 || signature->normTypesCount() != normTypes.size()) {
@@ -473,7 +473,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     // a call of a function, visitLinkNode). The built-in overloads take only the first.
     for (const bool entering : {false, true}) {
         std::vector<compile_graph_ptr_t> graphs;
-        std::vector<template_ptr_t> templates;
+        std::vector<generic_template_ptr_t> templates;
         for (const auto &graph : set.graphs) {
             if (accepts(graph->funcType(), entering)) {
                 graphs.push_back(graph);
@@ -1341,10 +1341,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     Type *assignedType      = nullptr;
     // The declaration of a rest function, when this call names one: its arguments are expanded
     // into a body in place of the call, and no instance is made (inlineRestCall).
-    template_ptr_t restTemplate;
+    generic_template_ptr_t restTemplate;
     if (auto generic = genericDrefs_.find(targetNode);
-        generic != genericDrefs_.end() && generic->second->funcType->hasRest()) {
-        restTemplate = generic->second;
+        generic != genericDrefs_.end() && generic->second.one() != nullptr &&
+        generic->second.one()->funcType->hasRest()) {
+        restTemplate = generic->second.one();
     }
     const size_t restFixedCount =
         restTemplate != nullptr
@@ -1952,9 +1953,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return inlineRestCall(restTemplate, withInputs, normInputs, gct, expectedResult);
     } else if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end()) {
         // A call of a generic function: the argument types select (and, the first time,
-        // build) the instance, which is then called like any other function.
+        // build) the instance, which is then called like any other function. A name with
+        // several generic functions of it is a set of overloads like any other: the one whose
+        // parameters take these arguments is the call (design principles 4.4).
+        const generic_template_ptr_t chosenTemplate = chooseGenericOverload(
+            genericOverloadsOf(targetNode),
+            withInputs,
+            normInputs,
+            withInputTypes,
+            normInputTypes,
+            gct);
         targetGraph = resolveGenericCall(
-            generic->second,
+            chosenTemplate,
             withInputs,
             normInputs,
             withInputTypes,
@@ -2244,13 +2254,44 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 explicitTypes = std::move(typed->second);
                 explicitOperatorTypes_.erase(typed);
             }
-            const auto &res = ops->resolveForCall(
+            auto res = ops->resolveForCall(
                 explicitTypes,
                 expectedResult,
                 withInputTypes,
                 normInputTypes,
                 normStatics,
                 Modifier::None);
+            if (!res.has_value()) {
+                // A literal operand takes the other operand's type in a named operator call too:
+                // `add(x, 2.0)` with an f32 tensor is the f32 sum, as `x * 2.0` already is
+                // (design principles 5.1). Tried only where the first resolution failed, so an
+                // operand of another meaning in the same position - an index, a shape - keeps its
+                // type, and a predicate that still does not fit reports as it always did. The
+                // adapted call is resolved again; when that fails too, the original report stands.
+                std::vector<Argument> retriedInputs = normInputs;
+                type_vec_t retriedTypes            = normInputTypes;
+                adaptLiteralOperands(ops->name(), retriedInputs, retriedTypes, gct, true);
+                if (retriedTypes != normInputTypes) {
+                    std::vector<StaticArg> retriedStatics;
+                    retriedStatics.reserve(retriedInputs.size());
+                    for (const Argument &input : retriedInputs) {
+                        retriedStatics.push_back(staticArgOf(input.node));
+                    }
+                    auto retried = ops->resolveForCall(
+                        explicitTypes,
+                        expectedResult,
+                        withInputTypes,
+                        retriedTypes,
+                        retriedStatics,
+                        Modifier::None);
+                    if (retried.has_value()) {
+                        normInputs     = std::move(retriedInputs);
+                        normInputTypes = std::move(retriedTypes);
+                        normStatics    = std::move(retriedStatics);
+                        res            = retried;
+                    }
+                }
+            }
             if (!res.has_value() && withInputs.empty()) {
                 // `x == null` / `x != null` over a `T?`: the tag of `x`, not a comparison of
                 // two values (design principles 3.8).

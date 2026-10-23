@@ -263,10 +263,10 @@ std::optional<BinaryAlgebra> binaryLaws(std::string_view name) {
     }
     BinaryAlgebra algebra{.laws = {law}, .elementwise = true};
     algebra.elementOf = [](const camel::core::type::Type *type) -> std::optional<TypeCode> {
-        if (const TensorType *tensor = asTensorType(type)) {
-            return tensor->dtype();
+        if (!isTensorType(type)) {
+            return std::nullopt;
         }
-        return std::nullopt;
+        return tensorFactsOf(type).dtype;
     };
     return algebra;
 }

@@ -667,25 +667,37 @@ bool regionsOverlap(
 
 // ---- Paths -------------------------------------------------------------------------------------
 
-/// Whether `to` reaches `from` backwards through inputs (Norm and With; Ctrl too when asked).
+/// Whether `to` reaches `from` backwards through inputs (Norm and With; the three kinds that order
+/// -- control, order and sync -- too when asked).
 bool reaches(const GCGraph &graph, gc_node_ref_t from, gc_node_ref_t to, bool ctrl) {
     std::vector<bool> seen(graph.nodeCount(), false);
     std::vector<gc_node_ref_t> work{from};
+    const auto visitOne = [&](gc_node_ref_t input) {
+        if (graph.containsNodeRef(input) && !seen[input]) {
+            seen[input] = true;
+            work.push_back(input);
+        }
+    };
+    const auto visit = [&](std::span<const gc_node_ref_t> inputs) {
+        for (gc_node_ref_t input : inputs) {
+            visitOne(input);
+        }
+    };
     while (!work.empty()) {
         const gc_node_ref_t ref = work.back();
         work.pop_back();
-        const auto visit = [&](std::span<const gc_node_ref_t> inputs) {
-            for (gc_node_ref_t input : inputs) {
-                if (graph.containsNodeRef(input) && !seen[input]) {
-                    seen[input] = true;
-                    work.push_back(input);
-                }
-            }
-        };
         visit(graph.normInputsOf(ref));
         visit(graph.withInputsOf(ref));
         if (ctrl) {
             visit(graph.ctrlInputsOf(ref));
+            // A sync edge carries the order of the statement written directly before it, and an
+            // order edge only orders: both say "this runs after that", which is the question here.
+            for (const GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
+                visitOne(edge.pred);
+            }
+            for (const GCGraphOrderEdge &edge : graph.orderPredsOf(ref)) {
+                visitOne(edge.pred);
+            }
         }
         if (graph.containsNodeRef(to) && seen[to]) {
             return true;

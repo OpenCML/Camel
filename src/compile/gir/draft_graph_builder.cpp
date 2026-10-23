@@ -269,13 +269,15 @@ runtime::DraftNodeRef DraftGraphBuilder::addDrefNode(DrefTarget target) {
 }
 
 void DraftGraphBuilder::link(
-    runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to) {
-    draft_->appendInput(kind, to.id, from.id);
+    runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to,
+    runtime::PortRole role) {
+    draft_->appendInput(kind, to.id, from.id, role);
 }
 
 bool DraftGraphBuilder::unlink(
-    runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to) {
-    return draft_->unlinkInput(kind, to.id, from.id);
+    runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to,
+    runtime::PortRole role) {
+    return draft_->unlinkInput(kind, to.id, from.id, role);
 }
 
 void DraftGraphBuilder::addDependencyGraph(const graph_ptr_t &graph) {

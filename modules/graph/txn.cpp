@@ -9,11 +9,15 @@
  *
  * The edits normally create no values of the program being processed: replacing a node by
  * another existing node, and erasing one, need none. `add_constant` is the way an edit makes a
- * value (constant folding does): a draft holds the static values of its nodes as raw
- * references, so a value made there must not move or be collected while Camel code runs. A
- * string constant is therefore copied into the permanent space, which is neither collected nor
- * moved (a number is the slot itself); the draft's static slot keeps that reference until
- * `commit` encodes it. Design principles 3.9 and the graph-store note, 4.2.
+ * value the pass already holds, and `eval` makes one the program's own operator computes over
+ * constants (a fold does): a draft holds the static values of its nodes as raw references, so a
+ * value made there must not move or be collected while Camel code runs. A string constant is
+ * therefore copied into the permanent space, which is neither collected nor moved (a number is
+ * the slot itself); the draft's static slot keeps that reference until `commit` encodes it.
+ * Design principles 3.9 and the graph-store note, 4.2.
+ *
+ * Design principles 9.3 keeps the semantics on the module's side: a caller names a node and a
+ * value, not a place in a list.
  */
 
 #include "txn.h"
@@ -23,11 +27,15 @@
 
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm/gen.h"
+#include "camel/core/operator.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
+#include "camel/execute/executor.h"
+#include "camel/execute/pass/warnings.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
 #include "src/passes/opt/generic/rewrite.h"
@@ -38,6 +46,9 @@ using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 using camel::runtime::GCGraph;
+using camel::runtime::gc_node_ref_t;
+using camel::runtime::GCNodeKind;
+using camel::runtime::GCOperBody;
 using camel::runtime::GraphCommitConflict;
 using camel::runtime::GraphDraft;
 using camel::runtime::kInvalidNodeRef;
@@ -215,6 +226,117 @@ slot_t eraseKernel(ArgsView &, ArgsView &norm, Context &) {
     return NullSlot;
 }
 
+/// The operands of an operator whose values are static slots of the graph: the argument view a
+/// kernel reads, the way the C++ fold builds one (generic.cpp's StaticArgsView).
+class StaticArgsView final : public ArgsView {
+  public:
+    StaticArgsView(std::vector<slot_t> slots, std::vector<Type *> types)
+        : slots_(std::move(slots)), types_(std::move(types)) {}
+    size_t size() const override { return slots_.size(); }
+    slot_t slot(size_t index) const override { return slots_[index]; }
+    void setSlot(size_t index, slot_t value) override { slots_[index] = value; }
+    TypeCode code(size_t index) const override { return types_[index]->code(); }
+    Type *type(size_t index) const override { return types_[index]; }
+
+  private:
+    std::vector<slot_t> slots_;
+    std::vector<Type *> types_;
+};
+
+/// The static value and its type, or nothing: what `eval` reads its operands from and what the
+/// C++ fold's `staticValueOf` reads (minus its walk through a GATE, which the module's reads do
+/// not make; docs/technical/45_graph_module.md).
+std::optional<std::pair<slot_t, Type *>> staticValue(const GraphDraft &draft, gc_node_ref_t ref) {
+    const auto *h = draft.header(ref);
+    if (h == nullptr || h->kind != GCNodeKind::Data || h->dataIndex >= 0) {
+        return std::nullopt;
+    }
+    const size_t index = static_cast<size_t>(-h->dataIndex);
+    if (index >= draft.staticSlots().size()) {
+        return std::nullopt;
+    }
+    Type *type = draft.staticSlotTypes()[index];
+    return std::make_pair(draft.staticSlots()[index], type != nullptr ? type : h->dataType);
+}
+
+/// Evaluates the pure operator of `n` over its constant operands and gives the node that holds
+/// the result, or null when there is no value to compute. This is what a fold written in Camel
+/// needs and the transaction did not have: `constant` reads the value of a constant node and
+/// `add_constant` mints a value the pass already holds, while neither evaluates an operator.
+/// The result is a node of the graph, not a Camel value, because the value is the graph's.
+///
+/// Null when `n` is no operation (a conversion, a copy, a fill and an access are not evaluated
+/// here; the C++ fold has a case for each), when an operand is no constant of the graph, when
+/// the operator has no kernel, or when evaluating it faults. A fault is not an error value: a
+/// constant expression that can only fault is left as written (design principles 3.9), so this
+/// raises the warning the C++ fold raises and answers null, and the program behaves the same
+/// with and without the fold.
+slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+    static const char *site = "<graph::eval>";
+    TxnState &state         = openState(norm, 0, site);
+    auto [draft, ref]       = draftOf(state, norm.get<Handle *>(1), site);
+    const auto *header      = draft.header(ref);
+    if (header == nullptr || header->kind != GCNodeKind::Oper ||
+        header->dataType == nullptr || !draft.withInputsOf(ref).empty()) {
+        return NullSlot;
+    }
+    const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(ref).data());
+    if (body == nullptr ||
+        !camel::core::OperatorTable::instance().isPure(body->oper)) {
+        return NullSlot;
+    }
+    std::vector<slot_t> slots;
+    std::vector<Type *> types;
+    for (gc_node_ref_t in : draft.normInputsOf(ref)) {
+        const auto value = staticValue(draft, in);
+        if (!value || value->second == nullptr) {
+            return NullSlot;
+        }
+        slots.push_back(value->first);
+        types.push_back(value->second);
+    }
+    operator_t kernel = body->op;
+    if (kernel == nullptr) {
+        const auto found = ctx.execMgr().find(std::string(body->uri()));
+        if (!found) {
+            return NullSlot;
+        }
+        kernel = *found;
+    }
+    // The kernel of an operator reads its operands by the operator's declared signature: the two
+    // argument views are as the scheduler builds them, with the node's own result type.
+    StaticArgsView with({}, {});
+    StaticArgsView normal(std::move(slots), std::move(types));
+    normal.setResultType(header->dataType);
+    slot_t result = NullSlot;
+    try {
+        result = kernel(with, normal, ctx);
+    } catch (const camel::core::error::RuntimeFault &fault) {
+        raisePassWarning(
+            ctx,
+            camel::core::error::RuntimeDiag::ConstantExpressionFaults,
+            draft.nodeOrigin(ref),
+            fault.what());
+        return NullSlot;
+    } catch (...) {
+        return NullSlot; // the failure is reported when the program runs, as the C++ fold leaves it
+    }
+    GCGraph *graph = state.base->graph(norm.get<Handle *>(1)->graph());
+    if (graph == nullptr) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
+    }
+    const gc_node_ref_t value = draft.materializeStaticValue(result, header->dataType);
+    return makeSome(
+        toSlot(Handle::create(
+            HandleKind::Node,
+            state.base,
+            graph->id(),
+            value,
+            nullptr,
+            mm::autoSpace())),
+        TupleType::nullable(HandleType::get(HandleKind::Node)));
+}
+
 /// The new Program, or an error value: `GraphConflict` when a graph the transaction read or
 /// wrote has another version in the context's program since, `GraphInvalid` when a graph it
 /// edited breaks an invariant (the message names it). The transaction is over either way.
@@ -376,6 +498,7 @@ const std::vector<TxnOp> &txnOps() {
         {"erase", eraseKernel},
         {"commit", commitKernel},
         {"abort", abortKernel},
+        {"eval", evalKernel},
     };
     return ops;
 }

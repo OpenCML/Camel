@@ -1,0 +1,77 @@
+/**
+ * A fact query inside a condition that finds no value whose parts it was given. A rule's condition
+ * is the question "does this rule apply here" (design principles 4.4: `when` is the applicability
+ * condition, and a case it does not hold for is a case the rule does not apply to), so a query that
+ * names parts no value has answers false and leaves the rule out.
+ *
+ * `sub(a, b)` is the fact of a subtraction -- a non-commutative operator, so the two operands are
+ * not interchangeable and a query can name parts no value has. `drop_by_one`'s condition asks
+ * `sub(x, node_of(c)) == 1`: for `kept` (`a * 2`) the product's operands are `(a, 2)`, the query is
+ * asked with those two nodes, and no subtraction of the draft has them. That is what this input
+ * detects: a query with no answer must make the condition false rather than fail the pass, because
+ * the rule it guards simply does not apply to `kept`.
+ *
+ * `kept` must therefore keep its product and its value `14` while the same pass still drops the
+ * product of `plain` with the other rule, whose guard is on the value and asks no query -- the
+ * pass's other work, which a pass that quietly stopped rewriting anything would fail to show.
+ */
+module no_value
+
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { max } from math
+import { rewrite } from rewrite
+
+analysis sign: int {
+    initial => 0
+    join(a, b) => max(a, b)
+    on (const c: int) => c
+}
+
+analysis sub(a: Node, b: Node): int {
+    initial => 0
+    join(a, b) => max(a, b)
+    on (x - y) => sign(y)
+}
+
+func positive(c: float): bool {
+    return c > 0.0
+}
+
+/// The parts are the factor's node and the coefficient's node, and a subtraction is not a product:
+/// no value has them as its operands, so the query answers false and the rule does not apply.
+rule drop_by_one(x: int, const c: int) { x * c => x }
+    when sub(x, node_of(c)) == 1
+
+/// A guard on the value, which the value channel answers without any node.
+rule drop_positive(x: float, const c: float) { x * c => x } when positive(c)
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [drop_by_one, drop_positive])
+}
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func countOf(p: Program, function: string, operator: string): int {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return len(nodes(found[0])->filter<(n: Node): bool => opText(n) == operator>)
+}
+
+export func report(p: Program): Program! sync {
+    println('kept', countOf(p, 'kept', ':op/mul_l'))
+    println('plain', countOf(p, 'plain', ':op/mul_d'))
+    return p
+}
+
+func kept(a: int): int { return a * 2 }
+
+func plain(a: float): float { return a * 5.0 }
+
+func main(): int sync {
+    println(kept(7), plain(3.0))
+    return 0
+}

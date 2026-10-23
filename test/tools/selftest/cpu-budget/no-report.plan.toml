@@ -1,0 +1,24 @@
+# Fixture of test/tools/selftest/load-class/run.mjs: the half of a CPU budget that says a reading
+# the runner cannot make is a failure and never a pass.
+#
+# The command here is green in every other way -- it exits 0 and prints exactly what this plan
+# expects -- and the wrapper still reports no figure: no-report.cjs is loaded as a `--require`
+# module inside test/tools/child-cpu.mjs, where it makes the wrapper's one read of /proc/self/stat
+# fail, the state a host without procfs leaves. The runner must fail this test and name the missing
+# reading; a verdict that ignored it would be a bound that examined nothing.
+id = "selftest.cpu_budget.no_report"
+order = 4
+tier = "fast"
+
+[[tests]]
+name = "cpu_budget_no_report"
+desc = "Exit 0 and exactly the expected stdout, and no CPU reading: the missing reading alone must fail this test."
+kind = "behavior"
+tool = "node"
+case = "no-report.cjs"
+args = ["${case}"]
+envs = ["NODE_OPTIONS=--require ${case}"]
+expect_exit = 0
+expect_stdout_exact = "no-report ok\n"
+timeout_ms = 10000
+cpu_budget_ms = 60000

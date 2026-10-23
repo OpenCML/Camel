@@ -1,0 +1,13 @@
+// The shape is checked when the conversion runs: a bare numeric array that turns out not to
+// have the declared shape stops the program at the conversion (plan section 5.1), where the
+// message names the shape the value has.
+module array_alias_err_as_shape
+
+import { Tensor, ones } from tensor
+
+func main(): int sync {
+    let t: Tensor = ones([2, 3])
+    let a = t as f32[3, 2]
+    println(len(a))
+    return 0
+}

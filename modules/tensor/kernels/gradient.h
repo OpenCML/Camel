@@ -7,7 +7,10 @@
  * to its input, and the backward passes that are not compositions of forward
  * operators (gelu, layer_norm, slice, matmul with broadcast batch dims).
  *
- * Gradients are float32, like the forward kernels' float results.
+ * Gradients are the width of the value they belong to: the backward of a broadcast
+ * (`sumTo`) carries f32 and f64 gradients, adding each at its own width. The
+ * kernels that are f32 by construction (gelu, erf, layer_norm, slice, matmul,
+ * the update family) refuse another element type at the call.
  */
 
 #pragma once

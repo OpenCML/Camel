@@ -42,11 +42,61 @@
 
 namespace camel::runtime {
 
+/// The kinds of edge a node can have (docs/design/effects/edges.cn.md sections 1 and 1.5):
+/// **Data** -- the value of the node comes from the port (one kind: the ports of a node are one
+/// ordered list and each carries a role, `PortRole`, declared with the frozen graph, so that a
+/// pass that does not care about the role sees one input list and a pass that does sees which port
+/// is the context one); **Sync** -- the statement written before it in the same `sync` block, which
+/// is thereby *used* (liveness follows a sync edge as it follows a data port); **Order** -- only
+/// orders: when both run the predecessor runs first, and nothing travels along it (the
+/// same-resource order between two effects and the order between two writes of one `var`).
+///
+/// **Ctrl** is the fourth entry and is not one of the design's three: it is the old "control
+/// edge", kept only for the read-use edges the design wants as data edges and cannot have yet
+/// (the rulings on the var initializer's write and on the capture order edge, in
+/// docs/handover/reviews/questions-2026-10-23.md). It
+/// carries "used" like a data port and orders like an order edge, which is exactly why it must
+/// go: no pass can treat it as either. Every remaining producer is named in the handover note of
+/// the stage that introduced this enum.
 enum class DraftEdgeKind : uint8_t {
-    Norm,
-    With,
+    Data,
+    Sync,
+    Order,
     Ctrl,
 };
+
+/// Where an edge is stored in a node's tail, in the order the tail holds them:
+/// `[payload][normal ports][context ports][ctrl inputs][order inputs][sync inputs]`. The data
+/// ports are one list, stored as its two role runs, which is also how the frozen graph stores
+/// them (GCNode::inBegin .. GCNode::withBegin .. GCNode::ctrlBegin); the sync run comes last so
+/// that adding it moved no run that was there before.
+enum class DraftEdgeSlot : uint8_t {
+    NormalPorts,
+    ContextPorts,
+    Ctrl,
+    Order,
+    Sync,
+};
+
+/// The storage slot of a `(kind, role)` pair; Data is the only kind with two slots.
+inline DraftEdgeSlot edgeSlotOf(DraftEdgeKind kind, PortRole role = PortRole::Normal) {
+    switch (kind) {
+    case DraftEdgeKind::Data:
+        return role == PortRole::Context ? DraftEdgeSlot::ContextPorts : DraftEdgeSlot::NormalPorts;
+    case DraftEdgeKind::Sync:
+        return DraftEdgeSlot::Sync;
+    case DraftEdgeKind::Order:
+        return DraftEdgeSlot::Order;
+    case DraftEdgeKind::Ctrl:
+        return DraftEdgeSlot::Ctrl;
+    }
+    return DraftEdgeSlot::NormalPorts;
+}
+
+/// True for the two slots that hold the ports of the one data edge kind.
+inline bool isDataPortSlot(DraftEdgeSlot slot) {
+    return slot == DraftEdgeSlot::NormalPorts || slot == DraftEdgeSlot::ContextPorts;
+}
 
 enum class DraftNodeStorageClass : uint8_t {
     Slab64,
@@ -72,6 +122,13 @@ struct DraftNodeHeader {
     gc_cnt_t normInputCount = 0;
     gc_cnt_t withInputCount = 0;
     gc_cnt_t ctrlInputCount = 0;
+    /// Order inputs (DraftEdgeKind::Order): predecessors that only order. Stored after the
+    /// control run in the tail, so adding them moves no existing offset.
+    gc_cnt_t orderInputCount = 0;
+    /// Sync inputs (DraftEdgeKind::Sync): the statement written before this one in the same
+    /// `sync` block, whose "used" reaches this node. Stored last in the tail, after the order
+    /// run, so that adding them moved no existing offset either.
+    gc_cnt_t syncInputCount = 0;
 
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
@@ -101,7 +158,8 @@ struct DraftNodeHeader {
     constexpr size_t usedBytes() const {
         return static_cast<size_t>(payloadBytes) +
                (static_cast<size_t>(normInputCount) + static_cast<size_t>(withInputCount) +
-                static_cast<size_t>(ctrlInputCount)) *
+                static_cast<size_t>(ctrlInputCount) + static_cast<size_t>(orderInputCount) +
+                static_cast<size_t>(syncInputCount)) *
                    sizeof(gc_node_ref_t);
     }
 };
@@ -122,9 +180,13 @@ struct DraftNodeInit {
     uint32_t region                   = 0; // see DraftNodeHeader::region; 0 on a rewrite: kept
     uint32_t name                     = 0; // see DraftNodeHeader::name; 0 on a rewrite: kept
     std::span<const std::byte> payload{};
+    /// The ports of the one data edge kind, by role (the normal ports, then the context ports).
     std::span<const gc_node_ref_t> normInputs{};
     std::span<const gc_node_ref_t> withInputs{};
     std::span<const gc_node_ref_t> ctrlInputs{};
+    std::span<const gc_node_ref_t> orderInputs{};
+    /// The statement written before this node in the same `sync` block (DraftEdgeKind::Sync).
+    std::span<const gc_node_ref_t> syncInputs{};
 };
 
 class DraftNodeView {
@@ -138,6 +200,10 @@ class DraftNodeView {
     static std::span<const gc_node_ref_t> withInputs(const DraftNode *node);
     static std::span<gc_node_ref_t> ctrlInputs(DraftNode *node);
     static std::span<const gc_node_ref_t> ctrlInputs(const DraftNode *node);
+    static std::span<gc_node_ref_t> orderInputs(DraftNode *node);
+    static std::span<const gc_node_ref_t> orderInputs(const DraftNode *node);
+    static std::span<gc_node_ref_t> syncInputs(DraftNode *node);
+    static std::span<const gc_node_ref_t> syncInputs(const DraftNode *node);
 
     template <typename Body> static Body *payloadAs(DraftNode *node) {
         auto bytes = payload(node);
@@ -197,18 +263,32 @@ struct DraftUserLists {
     std::vector<gc_node_ref_t> norm;
     std::vector<gc_node_ref_t> with;
     std::vector<gc_node_ref_t> ctrl;
-    std::unique_ptr<std::unordered_map<gc_node_ref_t, uint32_t>> places[3];
+    std::vector<gc_node_ref_t> order;
+    std::vector<gc_node_ref_t> sync;
+    std::unique_ptr<std::unordered_map<gc_node_ref_t, uint32_t>> places[5];
 
-    std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) {
-        return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
+    std::vector<gc_node_ref_t> &of(DraftEdgeSlot slot) {
+        switch (slot) {
+        case DraftEdgeSlot::NormalPorts:
+            return norm;
+        case DraftEdgeSlot::ContextPorts:
+            return with;
+        case DraftEdgeSlot::Ctrl:
+            return ctrl;
+        case DraftEdgeSlot::Order:
+            return order;
+        case DraftEdgeSlot::Sync:
+            return sync;
+        }
+        return norm;
     }
-    const std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) const {
-        return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
+    const std::vector<gc_node_ref_t> &of(DraftEdgeSlot slot) const {
+        return const_cast<DraftUserLists *>(this)->of(slot);
     }
-    /// The index of the `kind` list, built when the list is long enough to want one.
-    std::unordered_map<gc_node_ref_t, uint32_t> *index(DraftEdgeKind kind) {
-        auto &items = of(kind);
-        auto &place = places[static_cast<size_t>(kind)];
+    /// The index of the `slot` list, built when the list is long enough to want one.
+    std::unordered_map<gc_node_ref_t, uint32_t> *index(DraftEdgeSlot slot) {
+        auto &items = of(slot);
+        auto &place = places[static_cast<size_t>(slot)];
         if (!place && items.size() >= kIndexedUsers) {
             place = std::make_unique<std::unordered_map<gc_node_ref_t, uint32_t>>();
             place->reserve(items.size() * 2);
@@ -365,18 +445,42 @@ class GraphDraft {
     /// that owns the tag.
     const std::vector<GraphId> &ruleGraphs() const { return ruleGraphs_; }
 
+    /// The normal-role ports of a node: the view of the data ports that a pass caring about the
+    /// role reads (`normInputsOf`); `withInputsOf` is the context-role view of the same list.
+    /// `dataPortsOf` is the whole list, in port order (all normal-role ports, then the context
+    /// ones), and `portRoleOf(id, port)` says which role the port at that index has.
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> normInputsOf(const DraftNode *node) const;
+    std::span<const gc_node_ref_t> contextPortsOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> contextPortsOf(const DraftNode *node) const;
+    /// The ports of the one data edge kind, in port order (docs/design/effects/edges.cn.md 1.5).
+    std::span<const gc_node_ref_t> dataPortsOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> dataPortsOf(const DraftNode *node) const;
+    /// The role of the port at `port` of the node's data port list.
+    PortRole portRoleOf(gc_node_ref_t id, size_t port) const;
+    PortRole portRoleOf(const DraftNode *node, size_t port) const;
+    /// The context-role (`with`) view, kept as the historical name of `contextPortsOf`.
     std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> withInputsOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> ctrlInputsOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> ctrlInputsOf(const DraftNode *node) const;
+    /// Order inputs: predecessors that only order (DraftEdgeKind::Order).
+    std::span<const gc_node_ref_t> orderInputsOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> orderInputsOf(const DraftNode *node) const;
+    /// Sync inputs: the statements written before this one in the same `sync` block, whose "used"
+    /// reaches it (DraftEdgeKind::Sync).
+    std::span<const gc_node_ref_t> syncInputsOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> syncInputsOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> normUsersOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> normUsersOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> withUsersOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> withUsersOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> ctrlUsersOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> ctrlUsersOf(const DraftNode *node) const;
+    std::span<const gc_node_ref_t> orderUsersOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> orderUsersOf(const DraftNode *node) const;
+    std::span<const gc_node_ref_t> syncUsersOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> syncUsersOf(const DraftNode *node) const;
     bool isControlAnchor(gc_node_ref_t id) const;
     bool isControlAnchor(const DraftNode *node) const;
     gc_node_ref_t resolveForwardedValueRef(gc_node_ref_t id) const;
@@ -462,17 +566,63 @@ class GraphDraft {
     gc_node_ref_t addDrefNode(camel::core::type::Type *type = nullptr, gc_slot_idx_t dataIndex = 0);
 
     void eraseNode(gc_node_ref_t id);
+    /// The statements written directly after `id` follow what `id` followed: the block's chain
+    /// closes over a node the graph loses (docs/design/effects/edges.cn.md 4, removing a node
+    /// splices the orderings that pass through it). While the control kind still exists the control
+    /// edge naming the same pair is written beside the sync edge, because the graph has to carry
+    /// the ordering in both kinds until the control edges go (src/runtime/graph_edges.cpp,
+    /// checkControlAndSyncAgree reads that back). A successor whose predecessor belongs to another
+    /// block heads its own block's chain instead: a sync edge never leaves the block it joins
+    /// (docs/design/effects/edges.cn.md 4.6). eraseNode calls this itself, so no erasure leaves a
+    /// hole; a rewrite that erases the node through its own path calls it before the edges go.
+    void closeChainOver(gc_node_ref_t id);
+    /// The node `newId` takes the place `oldId` had in its block's chain: the statements written
+    /// after `oldId` are written after `newId`, and `newId` is written after what `oldId` followed
+    /// (docs/design/effects/edges.cn.md 4: a replacement transfers the replaced node's orderings to
+    /// its replacer). `newId` is marked as a statement of that block. A rewrite that puts a node it
+    /// built where a statement stood calls this before erasing the statement; a node already
+    /// written somewhere in a chain keeps that place.
+    void takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId);
     void setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
     void setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
     void setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
-    void appendInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId);
-    bool unlinkInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId);
+    /// The edit surface of a node's port list (docs/design/effects/edges.cn.md 1.5): the ports of
+    /// a node are one ordered list whose `withStart` first port has the context role, so the only
+    /// edit that can express "insert or replace port 2" is the whole list. Value-based edits
+    /// (replaceInput, unlinkInput) stay for a rewrite that only swaps or drops one producer.
+    void setPorts(
+        gc_node_ref_t id, std::span<const gc_node_ref_t> ports,
+        std::span<const gc_node_ref_t> withPorts);
+    /// Order predecessors as a whole list (DraftEdgeKind::Order). One whole-list edit rather than
+    /// add/remove-one, because validity is a property of the list: it is the resource order the
+    /// node executes in, and a half-edited list is a state the seal check forbids.
+    void setOrderInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
+    /// The next order predecessor of `id`, in the order it is written (`predecessor` before
+    /// `id`); refuses a self edge and one the node already has.
+    bool appendOrderDependency(gc_node_ref_t id, gc_node_ref_t predecessor);
+    /// Sync predecessors as a whole list (DraftEdgeKind::Sync). Like the order list, validity is a
+    /// property of the list -- it is a chain of the statements one `sync` block writes, and the
+    /// chain's tail is what the block's value reads -- so it is edited as a whole.
+    void setSyncInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
+    /// Makes `predecessor` the statement written before `id` in the same `sync` block; refuses a
+    /// self edge. A node has at most one: the block is a chain.
+    bool setSyncPredecessor(gc_node_ref_t id, gc_node_ref_t predecessor);
+    /// `role` says which port of the one data edge kind the input is (the default is the ordinary
+    /// argument role); every other kind ignores it.
+    void appendInput(
+        DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId,
+        PortRole role = PortRole::Normal);
+    bool unlinkInput(
+        DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId,
+        PortRole role = PortRole::Normal);
     void replaceInput(
-        DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t oldInputId,
-        gc_node_ref_t newInputId);
+        DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t oldInputId, gc_node_ref_t newInputId,
+        PortRole role = PortRole::Normal);
     void replaceAllNormUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId);
+    void replaceAllOrderUses(gc_node_ref_t oldId, gc_node_ref_t newId);
+    void replaceAllSyncUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     /// Removes GATEs that wait on nothing (no control input): such a gate only forwards its value,
     /// so its users read the value directly. Rewrites that remove what a gate waited on (a pruned
@@ -626,23 +776,31 @@ class GraphDraft {
         const std::vector<gc_node_ref_t> &sourceToDraft);
     DraftNode *rebuildNode(gc_node_ref_t id, const DraftNodeInit &init);
     void replaceNodeStorage(gc_node_ref_t id, DraftNode *node);
-    void removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
-    void appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
+    void removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, DraftEdgeSlot slot);
+    void appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, DraftEdgeSlot slot);
     /// A node that reads a node of a control region (an arm, a loop part) is in that region, or in
     /// one inside it: it cannot run before what it reads. A JOIN reads the results of its arms and
     /// a LOOP those of its parts; they stay where the branch or the loop is.
     void inheritRegion(gc_node_ref_t input, gc_node_ref_t user);
-    std::span<const gc_node_ref_t> usersOf(gc_node_ref_t id, DraftEdgeKind kind) const;
-    std::vector<gc_node_ref_t> &userListOf(gc_node_ref_t id, DraftEdgeKind kind);
-    std::span<gc_node_ref_t> mutableInputs(DraftNode *node, DraftEdgeKind kind);
-    /// Adds `inputId` at the end of the `kind` inputs of `userId`, in place when the node's
+    std::span<const gc_node_ref_t> usersOf(gc_node_ref_t id, DraftEdgeSlot slot) const;
+    std::vector<gc_node_ref_t> &userListOf(gc_node_ref_t id, DraftEdgeSlot slot);
+    std::span<gc_node_ref_t> mutableInputs(DraftNode *node, DraftEdgeSlot slot);
+    /// The inputs of a node for a `(kind, role)` pair, and the whole-list edit of them: the
+    /// entry points of the public API that name an edge kind rather than a storage slot.
+    std::span<const gc_node_ref_t>
+    inputsOf(gc_node_ref_t id, DraftEdgeKind kind, PortRole role) const;
+    void setInputs(
+        gc_node_ref_t id, DraftEdgeKind kind, PortRole role,
+        std::span<const gc_node_ref_t> inputs);
+    /// Adds `inputId` at the end of the `slot` inputs of `userId`, in place when the node's
     /// storage has room.
-    void appendInputEntry(gc_node_ref_t userId, DraftEdgeKind kind, gc_node_ref_t inputId);
+    void appendInputEntry(gc_node_ref_t userId, DraftEdgeSlot slot, gc_node_ref_t inputId);
     void replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
+    void replaceSyncStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceUsesInList(
         gc_node_ref_t ownerId, std::span<const gc_node_ref_t> users, gc_node_ref_t oldId,
-        gc_node_ref_t newId, bool norm, bool with, bool ctrl);
+        gc_node_ref_t newId, DraftEdgeSlot slot);
     GraphId payloadGraphAt(uint32_t index) const;
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
     /// Records node `id` in the list of its kind when that kind has one (see gateIds_).

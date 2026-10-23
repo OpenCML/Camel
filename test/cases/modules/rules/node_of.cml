@@ -1,0 +1,84 @@
+/**
+ * A condition reaches the node of a `const` parameter. A `const` parameter is the constant's *value*
+ * in a condition, and the node itself is reached with `node_of(c)` (rule-language design v2, section
+ * 1). The surface name is `node_of(c)`, and it takes the name of one of the rule's own `const`
+ * parameters.
+ *
+ * The two channels answer different questions, and this case holds them apart. `drop_positive` asks
+ * about the value (`c > 0.0`) -- no `constant(node, sample)` and no `match ... case null`.
+ * `drop_int_coefficient` needs the other channel: its guard is `typeText(node_of(c)) == 'int' &&
+ * is_constant(node_of(c))`, a test of the coefficient's *node*, which no value of the coefficient
+ * can be given -- there is nothing in a float value that says `int`. The three functions tell the
+ * channels apart:
+ *
+ *   positive_coefficient  `x * 3.0`  the value is positive, so `drop_positive` fires (its node is
+ *                                    a `float` constant, so the int rule does not);
+ *   int_coefficient       `x * 2`    the node says `int`, so `drop_int_coefficient` fires, and no
+ *                                    float rule can read that node;
+ *   negative_coefficient  `x * -2.0` no condition here holds: the value is not positive and the
+ *                                    node is not an `int`, so the product stays.
+ *
+ * `report` prints one `:op/mul_d` or `:op/mul_l` product per function before and after the pass:
+ * one each before, then none in the two the conditions could decide and one in
+ * `negative_coefficient`, which no condition reaches. The values are the same before and after,
+ * because each rule replaces the product by its factor.
+ */
+module node_of
+
+import { Program, Node, Graph, graphs, nodes, op, op_name, name, type_of, type_name, is_constant } from graph
+import { rewrite } from rewrite
+
+/// The condition on the coefficient's value: the type is the parameter's own, so no dummy sample
+/// value tells `constant` which type to read.
+func positive(c: float): bool {
+    return c > 0.0 && c - c == 0.0
+}
+
+/// The condition on the coefficient's node: `node_of(c)` is the hidden node parameter of `c`.
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => ''
+        case t => type_name(t)
+    }
+}
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+rule drop_positive(x: float, const c: float) { x * c => x } when positive(c)
+
+/// An `int` coefficient is a constant node of the `int` multiplier: `type_of` of it says `int`,
+/// and no float rule has such a node.
+rule drop_int_coefficient(x: int, const c: int) { x * c => x }
+    when typeText(node_of(c)) == 'int' && is_constant(node_of(c))
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [drop_positive, drop_int_coefficient])
+}
+
+func countOf(p: Program, function: string, operator: string): int {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return len(nodes(found[0])->filter<(n: Node): bool => opText(n) == operator>)
+}
+
+export func report(p: Program): Program! sync {
+    println('positive', countOf(p, 'positive_coefficient', ':op/mul_d'))
+    println('int', countOf(p, 'int_coefficient', ':op/mul_l'))
+    println('negative', countOf(p, 'negative_coefficient', ':op/mul_d'))
+    return p
+}
+
+func positive_coefficient(x: float): float { return x * 3.0 }
+
+func int_coefficient(x: int): int { return x * 2 }
+
+func negative_coefficient(x: float): float { return x * -2.0 }
+
+func main(): int sync {
+    println(positive_coefficient(5.0), int_coefficient(5), negative_coefficient(5.0))
+    return 0
+}

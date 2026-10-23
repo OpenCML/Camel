@@ -1,0 +1,14 @@
+// A `constas` value parameter is a compile-time constant, so the name the shape writes is the
+// value the call passes, and the argument's extent is the one that value fixes.
+module array_shape_constant_dimension
+
+func total(constas IN: int, x: f32[IN]): int {
+    return len(x)
+}
+
+func main(): int sync {
+    let v: f32[] = [1.0, 2.0, 3.0, 4.0]
+    let a = v as f32[4]
+    println(total(4, a))
+    return 0
+}

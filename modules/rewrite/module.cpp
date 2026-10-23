@@ -140,12 +140,19 @@ struct WhenCall {
 
 /// Whether a rule's condition holds at this match (rewrite design 2 (second version) 1). A `const`
 /// parameter is the constant's value, of the type the parameter is declared with, so the guard is
-/// written on the value (`c > 0.0`) instead of reading it out of a node; any other parameter is a
-/// Node handle of the draft being rewritten, and a parameter the left side does not use names no
-/// node and faults when it is read.
+/// written on the value (`c > 0.0`) instead of reading it out of a node. Every other parameter is
+/// a Node handle of the draft being rewritten. The condition's last parameters are the hidden node
+/// parameters of the `const` ones, which `node_of(c)` was rewritten to at build time (the ruling
+/// of 2026-10-23 on `rule_when_const_node`); a `const` parameter reaches its node only through
+/// them. A parameter the left side does not use names no node and faults when it is read.
 bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
+    // The rule is read from the rooted handle, and the errors below read it again from there: a
+    // condition is Camel code, so making the argument handles below collects, and a RuleObject the
+    // engine held by address across one of those safepoints would be stale. The closure that calls
+    // this holds only the WhenCall, whose RootHandle the collector keeps up to date.
     const RuleObject *rule = call.rule->getAs<RuleObject>();
     const size_t arity = static_cast<size_t>(rule->when()->graph()->funcType()->normTypesCount());
+    const size_t own   = static_cast<size_t>(rule->lhs()->graph()->normPorts().size());
     const uint64_t constParams = rule->constParams();
     camel::runtime::GraphDraft &draft = match.writings.draft();
     // One slot per parameter: a rooted Node handle for a node parameter, a rooted object for a
@@ -159,40 +166,85 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
                    ? match.constant(static_cast<uint32_t>(i))
                    : std::optional<std::pair<slot_t, camel::core::type::Type *>>{};
     };
-    for (size_t i = 0; i < arity; ++i) {
-        if (i < 64 && ((constParams >> i) & 1) != 0) {
-            const auto found = constantOf(i);
-            if (!found) {
-                throw std::runtime_error(std::format(
-                    "Rule '{}': parameter {} of its condition is `const`, and the left side bound "
-                    "no constant there.",
-                    rule->name(),
-                    i + 1));
+    // The `const` parameter the hidden node parameter `i` belongs to: the hidden ones follow the
+    // rule's own in the order of the `const` parameters, so it is the (i - own)-th of them.
+    const auto constParamOfNode = [&](size_t i) {
+        const size_t wanted = i - own;
+        size_t seen         = 0;
+        for (size_t p = 0; p < own; ++p) {
+            if (p < 64 && ((constParams >> p) & 1) != 0) {
+                if (seen == wanted) {
+                    return p;
+                }
+                ++seen;
             }
+        }
+        return SIZE_MAX;
+    };
+    for (size_t i = 0; i < arity; ++i) {
+        const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
+        if (i < own) {
+            if (isConst) {
+                const auto found = constantOf(i);
+                if (!found) {
+                    throw std::runtime_error(std::format(
+                        "Rule '{}': parameter {} of its condition is `const`, and the left side "
+                        "bound no constant there.",
+                        call.rule->getAs<RuleObject>()->name(),
+                        i + 1));
+                }
+                roots.push_back(
+                    found->second != nullptr && found->second->isGCTraced()
+                        ? std::make_unique<mm::RootHandle>(
+                              mm::autoSpace(),
+                              rtdata::fromSlot<rtdata::Object *>(found->first),
+                              found->second,
+                              "rewrite.whenConst")
+                        : nullptr);
+                continue;
+            }
+            const camel::runtime::gc_node_ref_t ref =
+                i < match.vars.size() ? match.vars[i] : camel::runtime::kInvalidNodeRef;
+            Handle *handle = Handle::createInDraft(draft, ref, mm::autoSpace());
             roots.push_back(
-                found->second != nullptr && found->second->isGCTraced()
-                    ? std::make_unique<mm::RootHandle>(
-                          mm::autoSpace(),
-                          rtdata::fromSlot<rtdata::Object *>(found->first),
-                          found->second,
-                          "rewrite.whenConst")
-                    : nullptr);
+                std::make_unique<mm::RootHandle>(
+                    mm::autoSpace(),
+                    handle,
+                    HandleType::get(HandleKind::Node),
+                    "rewrite.whenArg"));
             continue;
         }
-        const camel::runtime::gc_node_ref_t ref =
-            i < match.vars.size() ? match.vars[i] : camel::runtime::kInvalidNodeRef;
-        Handle *handle = Handle::createInDraft(draft, ref, mm::autoSpace());
+        // A hidden node parameter: the node the `const` parameter it belongs to was bound to.
+        const size_t constParam = constParamOfNode(i);
+        if (constParam == SIZE_MAX || !constantOf(constParam)) {
+            // A `const` parameter the left side does not use has no node to hand over: a node the
+            // condition could read does not exist, and the rule says nothing about the program.
+            throw camel::runtime::RuleCompileError(std::format(
+                "Rule '{}': parameter {} of its condition is the node of a `const` parameter "
+                "(`node_of`), but the left side binds no node for it.",
+                call.rule->getAs<RuleObject>()->name(),
+                i + 1));
+        }
+        const camel::runtime::gc_node_ref_t bound = match.vars[constParam];
+        if (bound == camel::runtime::kInvalidNodeRef) {
+            throw camel::runtime::RuleCompileError(std::format(
+                "Rule '{}': parameter {} of its condition is the node of a `const` parameter "
+                "(`node_of`), and the left side bound no node there.",
+                call.rule->getAs<RuleObject>()->name(),
+                i + 1));
+        }
+        Handle *handle = Handle::createInDraft(draft, bound, mm::autoSpace());
         roots.push_back(
             std::make_unique<mm::RootHandle>(
                 mm::autoSpace(),
                 handle,
                 HandleType::get(HandleKind::Node),
-                "rewrite.whenArg"));
+                "rewrite.whenNodeArg"));
     }
     // Making a handle can collect: the arguments are read from the roots after the last one, so
     // each slot names where the collector put it, or the constant's bits.
     for (size_t i = 0; i < arity; ++i) {
-        if (i < 64 && ((constParams >> i) & 1) != 0) {
+        if (i < own && i < 64 && ((constParams >> i) & 1) != 0) {
             args.push_back(
                 roots[i] != nullptr ? toSlot(roots[i]->get()) : constantOf(i)->first);
             continue;
@@ -202,7 +254,17 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
     // A call can move the objects: the condition is read from the rooted rule after the last
     // allocation and immediately before the call.
     ::Function *when    = call.rule->getAs<RuleObject>()->when();
-    const slot_t result = call.vm->callGraph(when->program(), when->graph(), args);
+    const slot_t result = [&]() -> slot_t {
+        try {
+            return call.vm->callGraph(when->program(), when->graph(), args);
+        } catch (const camel::core::error::FactQueryNoValue &) {
+            // A fact query inside the condition named parts that are no value's operands: the
+            // condition is false -- this rule does not apply here -- and not a failure of the pass
+            // (the ruling of 2026-10-23 on `rule_when_const_node`: "条件里的事实查询找不到时，条件为假
+            // （这条规则在此不适用），而不是遍失败——条件本来就是"适用与否"的判断").
+            return toSlot<rtdata::Bool>(false);
+        }
+    }();
     return fromSlot<rtdata::Bool>(result);
 }
 
@@ -224,7 +286,17 @@ sourceOf(const RuleObject &rule, uint16_t id, const std::shared_ptr<WhenCall> &c
     if (rule.when() != nullptr) {
         source.whenArity =
             static_cast<uint32_t>(rule.when()->graph()->funcType()->normTypesCount());
-        source.when = [call](const camel::runtime::Match &match) { return callWhen(*call, match); };
+        // The parameters of the condition that are the rule's own are its first ones: it takes
+        // them in the order the rule writes them and then one hidden node per `const` parameter,
+        // in the same order (the ruling of 2026-10-23 on `rule_when_const_node`). The hidden
+        // node parameters therefore begin where the sides' parameters end, whatever order the
+        // `const` ones stand in.
+        source.whenNodesStart = static_cast<uint32_t>(rule.lhs()->graph()->normPorts().size());
+        // The closure keeps the rooted rule (`call`), never its address: the engine holds it across
+        // the safepoints of every condition the application evaluates, and the rule moves under it.
+        source.when = [call](const camel::runtime::Match &match) {
+            return callWhen(*call, match);
+        };
     }
     return source;
 }

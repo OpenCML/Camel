@@ -9,7 +9,8 @@
 // pass's own library renumbers every node's source origin.
 //
 // The entry's name selects the pair (see GOLDENS): the corpus whose literals and expressions
-// repeat, the dead-value corpus, and the var corpus whose expression is reread after a write.
+// repeat, the dead-value corpus, the var corpus whose expression is reread after a write, and the
+// corpus whose operations are over constants.
 
 import fs from 'node:fs'
 import { compareGirDotIsomorphic } from '../../../tools/gir-dot.mjs'
@@ -22,6 +23,7 @@ const GOLDENS = {
     'camel_passes.cse.by_camel': 'camel_passes.cse.dot',
     'camel_passes.dce.by_camel': 'camel_passes.dce.dot',
     'camel_passes.cse_written_variable.by_camel': 'camel_passes.cse_written_variable.dot',
+    'camel_passes.fold.by_camel': 'camel_passes.fold.dot',
 }
 
 const input = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))

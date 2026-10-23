@@ -158,6 +158,82 @@ not only the host. The 16-thread cells are in
 Camel is 1146.6 against compiled 369.4 at d=1024, because the library pool is capped at four
 threads and the canonical kernels take the rest of the run.
 
+**The same three cells in CPU time, with the system CBLAS the default.** The rows above are wall
+times, and the host they were taken on reports load averages in the hundreds, so the paragraph's own
+warning applies to them. This scan re-measures the same workloads — `measure.py`'s shapes, generated
+source and config check — with the process's CPU seconds (user + system) as the currency: each step
+is the slope of CPU seconds against step count over two run lengths, so start-up and preemption
+cancel. Run 2026-10-23 11:44–12:52 +08:00, build `102dbc5d1` group (fingerprint
+`a39d2d4c570a`, `CAMEL_TENSOR_BLAS=ON`, OpenBLAS 0.3.20), load average 97–128 on 32 hardware
+threads. `camel-library` is the default path (`tensor::fuse`); `camel-canonical` is the same program
+with the pass removed. Both figures of every cell are given in
+[`results/2026-10-23-cpu-scale-scan.json`](results/2026-10-23-cpu-scale-scan.json):
+
+| CPU ms/step, one thread | library (default) | canonical | library ÷ canonical |
+| --- | ---: | ---: | ---: |
+| d=64 | 2.701 (2.254, 2.701) | 2.612 (2.612, 2.589) | 1.03 |
+| d=256 | 62.292 (58.750, 62.292) | 61.615 (61.198, 61.615) | 1.01 |
+| d=1024 | 2 656.9 (2 656.9, 2 576.9) | 2 780.3 (2 780.3, 2 703.1) | 0.956 |
+
+The library pays only at d=1024 — 4.4% — and the reason is the 7.3 threshold, not a measurement of
+the library at the small sizes: every product at d=64 and d=256 is below `kLibraryMinProducts`
+(2^30 multiply-adds a call), so `sgemmLibrary` runs the canonical kernel there and the two columns
+are the same kernel. At one thread the recorded paired row for this host was 3236 → 2544 (−21%); the
+column above is −4.4%, so the library's advantage at d=1024 has narrowed to about a fifth of what it
+was when it was introduced. That comparison carries the post-sweep code changes in both columns, so
+it measures the default against the default, not the library against the canonical kernel; what it
+does bound is that a 21% library effect is no longer reproducible on this host. The 16-thread cells
+(2 656 → 3 819 CPU ms/step at d=1024 for the same step that costs 27.0 ms at d=64) are in the same
+file and are **not** usable: the worker threads spin under the load, so 16-thread CPU seconds count
+preemption as work, and the two kernels come out within 2% of each other there while the one-thread
+pair separates them by 4.4%. A 16-thread CPU figure needs an idle host and a run of its own.
+
+**The d=64 CPU-time gap is the host, not a regression.** The paragraph above leaves 2.612–2.701
+CPU ms/step next to the 2.085 wall ms of the sweep table, and the question that leaves is whether
+the current build grew. It is decided in retired instructions — `perf stat -e instructions:u`, the
+slope against step count over 64 and 512 steps so start-up, JIT warm-up and the parameter save
+cancel — because that counter measures the same work whatever the neighbours do. Both builds ran the
+same generated program in one window at load 87–112, with `std::jit` and no `tensor::fuse`, so both
+are on the canonical kernels: the recorded one (fingerprint `808a7e445efc`, rebuilt from
+`539ad3808`, the tree the sweep table was measured on) and the current one (`0ad92b961`, fingerprint
+`2ad1ad1d1e0e`).
+
+| slope, one thread | recorded build | current build | ratio |
+| --- | ---: | ---: | ---: |
+| d=64 instructions/step | 23 446 507 | 20 430 096 | 0.871 |
+| d=256 instructions/step | 718 900 802 | 620 906 080 | 0.864 |
+| d=64 CPU ms/step (task-clock) | 2.477 | 2.363 | 0.954 |
+| d=256 CPU ms/step (task-clock) | 65.46 | 63.02 | 0.963 |
+
+The current build retires **12.9% fewer** instructions a step at d=64 and 13.6% fewer at d=256: the
+opposite direction from a regression, and thousands of times the counter's own scatter (three
+repeats of one slope agree to 0.005% at d=64 and 0.0001% at d=256). The 25% is the window: the
+recorded d=64 cell ran at load 15.6–20.3, and the same tree measures 2.477 CPU ms/step here at load
+87–112. Adding 96 spinners (load 87–112 → 136–138) left the instruction slope at 1.000000 of its
+ambient value, while task-clock went from 2.363 to 2.321, inside the 1–4% scatter of its own repeats
+(11% across the recorded build's three). A control on the same tree, built with and without the
+system CBLAS, moves the count by 0.002%, so the option is not a confound. **No recorded number was
+changed.** Both build pairs, the load pair and the control are in
+[`results/2026-10-24-d64-instruction-counts.json`](results/2026-10-24-d64-instruction-counts.json).
+
+**The d=1024 gap against `torch.compile`, and why it no longer divides.** On the same CPU basis,
+`torch.compile(naive)` costs 2 645.0 ms a step (CPU seconds 80.71 at 24 steps and 165.35 at 56, its
+`torchtrace.py` profile under the same two-length slope), against the library path's 2 656.9 — 0.4%
+apart. The recorded profile had Camel at 3 511 wall ms against 2 664, an 847 ms gap; that was a wall
+measurement of an earlier build and a different currency, so the narrowing is not attributed here to
+either change alone, but it is real in both currencies this scan can check (the wall medians of the
+same runs, which are in the result file, are 5 009–6 143 ms for Camel's long runs and 5 418–6 276 ms
+for torch's, inside each other). The two matmul rows profiled inside those two runs, per step,
+however, are 4 395 ms against 3 036 ms for `tensor:matmul` and 3 273/3 297 against 2 001/1 988 for
+the two gradient rows, and the derived attributions of the 12 ms gap do not reconstruct it (the
+difference of the two decompositions is hundreds of milliseconds). The recorded
+`matmul_share_of_gap: 0.992` was taken when the step gap was 847 ms; at a 12 ms gap the attribution
+has no resolution, so this scan does not confirm 99% and does not replace it with another share.
+What it establishes is the size of the thing that used to be 99%: the gap itself is now inside the
+run-to-run spread. The per-run sanity check that the profile rows sum to the profiled round's own
+mean came out at 1.22 (library) and 1.21 (canonical), so the absolute row values carry that much
+inflation too.
+
 **Where the d=256 gap is not: allocation.** `std::profile` now separates the allocator from the
 operator that called it: every operator row carries the time spent inside the Camel value
 allocators, the allocator calls, the data blocks among them and their payload bytes, and the step

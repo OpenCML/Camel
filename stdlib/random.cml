@@ -15,12 +15,12 @@
  * output modulo the number of places left.
  */
 
-// The declarations of the operators of the C++ module `modules/random` (design principles 6.4;
-// handover H19, step 10). This file is the one source of their signatures; the C++ side keeps
+// The declarations of the operators of the C++ module `modules/random` (design principles 6.4).
+// This file is the one source of their signatures; the C++ side keeps
 // the kernels, the executor, the operator traits and the resources. Every operator of this
 // module answers on `rand:` rather than on the module's name, so each declaration carries the
 // `#op` tag that names its operator. Every name is declared and no computed signature is left
-// (handover H202): `choice`, `sample` and `shuffle` take the element type of their array
+// `choice`, `sample` and `shuffle` take the element type of their array
 // argument, which `func choice::<T>(xs: T[])` states exactly.
 
 module random

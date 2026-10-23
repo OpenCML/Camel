@@ -7,9 +7,25 @@
 //     port, a fixed temporary path in a case) and pass on good/ (the same shape under
 //     ${test_tmp}). A guard that cannot fail is not a guard;
 //   * the runner's margin rule (TIMEOUT_MARGIN in test/tools/run-tests.mjs) must fail a test
-//     that uses a quarter of its timeout or more (margin/tight.plan.toml: 400 ms against
-//     1000 ms) and pass the same work with room (margin/room.plan.toml: 400 ms against 120 s,
-//     which no amount of load on a working machine turns into 30 s).
+//     that uses a quarter of its timeout or more **of its own CPU time** (margin/tight.plan.toml:
+//     eight workers burning to a 400 ms deadline against a 1600 ms bound) and pass the same work
+//     with room (margin/room.plan.toml: the same work against 120 s, which no amount of load on a
+//     working machine turns into 30 s of the test's own CPU time). The reading is the work's, not
+//     the host's (H368); a fixture that waited instead of burning would be a test with no work
+//     against a bound with room, and would stop proving anything the moment the rule stopped
+//     reading the wall clock. A fixture that burned that work on one thread would be killed by its
+//     own liveness bound on a busy host before this rule could speak -- measured at 970-1040 ms of
+//     wall for 400 ms of CPU inside a -Jobs 8 gate against a 1000 ms bound -- so burn_parallel.mjs
+//     stops every worker at a deadline and the wall cannot decide this fixture;
+//   * a test that declares `cpu_budget_ms` is judged on its own CPU time instead of the wall
+//     clock (the author's ruling of 2026-10-23, quoted in run-tests.mjs and
+//     docs/test-plans.md): the same waiting that margin/tight.plan.toml fails passes when the
+//     bound is CPU (cpu-budget/room.plan.toml), CPU work over the budget is failed and named
+//     (cpu-budget/over.plan.toml), and a test that stops working is still killed by its
+//     liveness bound (cpu-budget/liveness.plan.toml). A CPU budget with nothing on the other
+//     side of it would be a bound that examined nothing: cpu-budget/no-report.plan.toml is
+//     green in its exit code and its stdout and fails anyway, because the wrapper's reading
+//     never arrives.
 //
 //   node test/tools/selftest/load-class/run.mjs
 import path from 'node:path'
@@ -86,6 +102,79 @@ function expect(name, condition, detail) {
     expect('room run passes', room.output.includes('[PASS] room_to_spare'), room.output)
 }
 
+// (3) A test whose bound is its own CPU time is judged on CPU and not on the wall clock.
+{
+    const room = run(process.execPath, [
+        runner,
+        path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'room.plan.toml'),
+        '--jobs',
+        '1',
+    ])
+    expect('cpu-budget room exits 0', room.status === 0, `exit ${room.status}: ${room.output}`)
+    expect(
+        'cpu-budget room passes with the wall clock over the margin',
+        room.output.includes('[PASS] cpu_budget_load_room') && room.output.includes('cpu of'),
+        room.output
+    )
+}
+{
+    const over = run(process.execPath, [
+        runner,
+        path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'over.plan.toml'),
+        '--jobs',
+        '1',
+    ])
+    expect('cpu-budget over exits 1', over.status === 1, `exit ${over.status}: ${over.output}`)
+    expect(
+        'cpu-budget over names the CPU figure and the budget',
+        over.output.includes('[FAIL] cpu_budget_exceeded') &&
+            over.output.includes('of CPU against a cpu_budget_ms'),
+        over.output
+    )
+}
+{
+    const liveness = run(process.execPath, [
+        runner,
+        path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'liveness.plan.toml'),
+        '--jobs',
+        '1',
+    ])
+    expect('cpu-budget liveness exits 1', liveness.status === 1, `exit ${liveness.status}: ${liveness.output}`)
+    expect(
+        'cpu-budget liveness is killed by the timeout, not failed on CPU',
+        liveness.output.includes('[FAIL] cpu_budget_liveness') &&
+            liveness.output.includes('liveness bound') &&
+            !liveness.output.includes('of CPU against a cpu_budget_ms'),
+        liveness.output
+    )
+}
+
+{
+    const missing = run(process.execPath, [
+        runner,
+        path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'no-report.plan.toml'),
+        '--jobs',
+        '1',
+    ])
+    expect('cpu-budget no-report exits 1', missing.status === 1, `exit ${missing.status}: ${missing.output}`)
+    expect(
+        'cpu-budget no-report fails for the missing reading alone',
+        missing.output.includes('[FAIL] cpu_budget_no_report') &&
+            missing.output.includes('[SUMMARY] total: 1, pass: 0, fail: 1') &&
+            missing.output.includes('has no CPU reading') &&
+            // The fixture makes the wrapper's one read of /proc/self/stat fail, so the runner must
+            // name that reading and not a missing report: a report it never opened would be a
+            // different case.
+            missing.output.includes('no /proc/self/stat') &&
+            // The command exited 0 and printed exactly what the plan expects: if either of those
+            // had failed, the run would say so, and this fixture would be proving something else.
+            !missing.output.includes('expected exit 0, got') &&
+            !missing.output.includes('stdout does not contain') &&
+            !missing.output.includes('expect_stdout'),
+        missing.output
+    )
+}
+
 // The fixture run writes a log directory under test/results like any other run; the outer
 // runner keeps its own. Nothing here deletes a path the caller owns.
 if (problems.length > 0) {
@@ -94,5 +183,8 @@ if (problems.length > 0) {
 }
 console.log(
     'load-class self-test ok: 3 shared-place rules fire on a bad plan, none on a good one, ' +
-        'and the runner refuses a timeout with no margin'
+        'the runner refuses a bound with no room over the work\'s own CPU time, a CPU budget ' +
+        'bounds the work a wall clock cannot see, fails work over it, leaves the liveness bound to ' +
+        'catch a test that waits, and fails a test whose CPU reading never arrives even when its ' +
+        'exit code and stdout are green'
 )

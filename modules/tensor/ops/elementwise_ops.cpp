@@ -65,28 +65,70 @@ template <k::UnaryOp Op> slot_t unaryKernel(ArgsView &, ArgsView &norm, context:
 }
 
 bool isTensorArg(const InferContext &ctx, size_t index) {
-    return asTensorType(ctx.type(index)) != nullptr;
+    return isTensorType(ctx.type(index));
 }
 
-/// The element type a binary operator's two operands are computed in, mirroring
-/// `kernels::operandType`: a scalar takes the tensor's element type (a float meeting an integer
-/// tensor computes in f32, as the operator always has), and two tensors promote only by
-/// widening. Unknown when an operand's element type is unknown.
+/// Whether a scalar argument is a constant whose value inference can see: a literal written in
+/// place, or a local variable the compiler folded to one. It is not a scalar whose type is its
+/// own - a parameter (`a: float`), a conversion (`float(i)`), the result of an arithmetic on
+/// them - which is the scalar design principles 5.1 refuses beside a tensor.
+bool isConstantScalar(const InferContext &ctx, size_t index) {
+    return ctx.constNumber(index).has_value() || ctx.constInt(index).has_value() ||
+           ctx.constBool(index).has_value();
+}
+
+/// The type an operator with a tensor and a scalar computes in when the scalar does not have the
+/// element type: the element type itself for a float tensor, and f32 for an integer or bool one
+/// (there is no bool arithmetic, and a float meeting an integer tensor has always computed in
+/// f32). Reported as the conversion to write.
+TypeCode computedElementType(TypeCode element, TypeCode scalar) {
+    if (isFloatingTensorType(element)) {
+        return element;
+    }
+    return isFloatingTensorType(scalar) ? TypeCode::Float32 : element;
+}
+
+/// The element type a binary operator's two operands are computed in: a scalar operand has the
+/// tensor's element type, and two tensors promote only by widening (design principles 5.1). A
+/// scalar of another type is refused, not converted: a value whose type is its own (`a: float`)
+/// is an error, the same rule as `f32 * f64` between two scalars, and the report names the
+/// conversion to write. A literal takes the element type before the operator is resolved -
+/// `x * 2.0` and `add(x, 2.0)` alike - so what is left at a call the program wrote is a value. A
+/// constant that still arrives with a type of its own is one the literal rule could not reach:
+/// a literal the element type holds no form of (a `bool` tensor's arithmetic is f32) or one
+/// written inside a generic function, whose element type is open where the literal is typed and
+/// fixed only at instantiation. The operator then keeps the answer it always gave, and the
+/// kernel reads the constant in the element type - the narrowing is a defect the literal rule
+/// does not yet cover, not a value to report. A pass that reads the graph again infers without
+/// `sourceLevel` and keeps that tolerance for every operand alike, because the program was
+/// compiled under it (a generic body is inferred with open element types).
+/// Unknown when an operand's element type is unknown.
 std::optional<TypeCode>
 operandType(const InferContext &ctx, const TensorFacts &lhs, const TensorFacts &rhs) {
-    if (isTensorArg(ctx, 0) != isTensorArg(ctx, 1)) {
-        const bool tensorFirst = isTensorArg(ctx, 0);
-        const TensorFacts &tensor = tensorFirst ? lhs : rhs;
-        const TypeCode scalar = tensorFirst ? ctx.type(1)->code() : ctx.type(0)->code();
-        if (!tensor.dtype) {
-            return std::nullopt;
-        }
-        if (isFloatingTensorType(*tensor.dtype)) {
-            return *tensor.dtype;
-        }
-        return isFloatingTensorType(scalar) ? std::optional(TypeCode::Float32) : tensor.dtype;
+    if (isTensorArg(ctx, 0) == isTensorArg(ctx, 1)) {
+        return promote(lhs.dtype, rhs.dtype);
     }
-    return promote(lhs.dtype, rhs.dtype);
+    const bool tensorFirst = isTensorArg(ctx, 0);
+    const size_t scalarIndex = tensorFirst ? 1 : 0;
+    const TensorFacts &tensor = tensorFirst ? lhs : rhs;
+    Type *scalar = ctx.type(scalarIndex);
+    if (!tensor.dtype || scalar == nullptr) {
+        return std::nullopt;
+    }
+    if (scalar->code() == *tensor.dtype) {
+        return tensor.dtype;
+    }
+    const TypeCode computed = computedElementType(*tensor.dtype, scalar->code());
+    if (!ctx.sourceLevel() || isConstantScalar(ctx, scalarIndex)) {
+        return computed;
+    }
+    throw std::invalid_argument(
+        "the scalar operand has type '" + scalar->toString() + "', but the tensor's element "
+        "type is '" +
+        typeCodeToString(*tensor.dtype) +
+        "': a tensor operator computes in its element type, and there "
+        "is no implicit conversion between numeric types (write the conversion, " +
+        typeCodeToString(computed) + "(value))");
 }
 
 InferFn binaryInfer(bool producesFloat) {

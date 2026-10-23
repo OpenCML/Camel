@@ -9,9 +9,9 @@
  */
 
 // The declarations of the operators of the C++ module `math` (`modules/math`). This file is the
-// one source of their signatures (design principles 6.4; handover H19, step 10): the C++ side
+// one source of their signatures (design principles 6.4): the C++ side
 // keeps the kernels, the executor, the operator traits, the numeric semantics and the constants.
-// Every operator is declared here and no computed signature is left (handover H202): `sqrt` and
+// Every operator is declared here and no computed signature is left: `sqrt` and
 // the two shifts, whose result type C++ computes from the argument, are written out per spelling
 // (`i32`/`int` for `sqrt`, both integer types for a shift count), which is the whole accept set
 // of the old resolvers. One entry is not a declaration:
@@ -50,7 +50,8 @@ export func sqrt(x: f32): f32
 export func sqrt(x: float): float
 
 /// The absolute value. The smallest integer has no positive counterpart: its absolute value is
-/// not defined.
+/// not defined. A bf16 or f16 value is the sign cleared, computed on the f32 it widens to
+/// exactly, so -0 becomes +0 and no value of either type rounds (design principles 7.3).
 /// @pure
 /// @example abs(-3)    // 3
 #op<'math:abs_i'>
@@ -65,6 +66,10 @@ export func abs(x: float): float
 export func abs(x: c64): f32
 #op<'math:abs_z'>
 export func abs(x: c128): float
+#op<'math:abs_bf'>
+export func abs(x: bf16): bf16
+#op<'math:abs_f6'>
+export func abs(x: f16): f16
 
 /// The real part of a complex number.
 /// @pure
@@ -276,7 +281,9 @@ export func trunc(x: float): float
 
 /// The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
 /// NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-/// prefix first), and false is below true.
+/// prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
+/// operand widens to exactly, and the result is that operand itself: neither type rounds here
+/// (design principles 7.3).
 /// @pure
 /// @example min(3, 5)    // 3
 /// @example min('b', 'a')    // 'a'
@@ -292,10 +299,16 @@ export func min(a: float, b: float): float
 export func min(a: string, b: string): string
 #op<'math:min_b'>
 export func min(a: bool, b: bool): bool
+#op<'math:min_bf'>
+export func min(a: bf16, b: bf16): bf16
+#op<'math:min_f6'>
+export func min(a: f16, b: f16): f16
 
 /// The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
 /// NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-/// prefix first), and false is below true.
+/// prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
+/// operand widens to exactly, and the result is that operand itself: neither type rounds here
+/// (design principles 7.3).
 /// @pure
 /// @example max(3, 5)    // 5
 /// @example max('a', 'b')    // 'b'
@@ -311,6 +324,10 @@ export func max(a: float, b: float): float
 export func max(a: string, b: string): string
 #op<'math:max_b'>
 export func max(a: bool, b: bool): bool
+#op<'math:max_bf'>
+export func max(a: bf16, b: bf16): bf16
+#op<'math:max_f6'>
+export func max(a: f16, b: f16): f16
 
 /// x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
 /// @pure

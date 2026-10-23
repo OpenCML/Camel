@@ -779,7 +779,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "tensor.graph.default"
-desc = "The elementwise tensor operators declare the laws the algebra pass uses (OperatorSemantics::binary), so x * 3 + x * 5 becomes x * 8 under the default policy as the scalar case does (the coefficient law); a chain of float products is not regrouped without the finite_math grant, as for scalars; coefficients the element type does not hold exactly are left alone; t + t becomes t * 2 by the add-self law; and a product both uses read keeps its two operators."
+desc = "The elementwise tensor operators declare the laws the algebra pass uses (OperatorSemantics::binary), so x * 3 + x * 5 becomes x * 8 under the default policy as the scalar case does (the coefficient law); a chain of float products is not regrouped without the finite_math grant, as for scalars; a tensor coefficient is always an f32 value, because a literal beside an f32 tensor takes its element type (5.1) and one the element type cannot hold is refused at the call, so the law reads 0.1 and 0.2 as the f32 coefficients they are and regroups them too; t + t becomes t * 2 by the add-self law; and a product both uses read keeps its two operators."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra_tensor.cml"
 args = ["${case}","std::opt::fold","std::opt::algebra","std::jgir"]
@@ -789,7 +789,7 @@ verify_script = '''
  const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
  const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label==='tensor:add').length,m=g(name).nodes.filter(n=>n.label==='tensor:multiply').length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
  counts('merged',safe?1:0,safe?2:1);counts('merged_explicit',safe?1:0,safe?2:1);
- counts('chain',0,2);counts('inexact',1,2);counts('shared_product',safe?1:0,safe?1:2);
+ counts('chain',0,2);counts('rounded_coefficients',safe?1:0,safe?2:1);counts('shared_product',safe?1:0,safe?1:2);
 }
 '''
 
@@ -805,7 +805,7 @@ verify_script = '''
  const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
  const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label==='tensor:add').length,m=g(name).nodes.filter(n=>n.label==='tensor:multiply').length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
  counts('merged',safe?1:0,safe?2:1);counts('merged_explicit',safe?1:0,safe?2:1);
- counts('chain',0,2);counts('inexact',1,2);counts('shared_product',0,2);
+ counts('chain',0,2);counts('rounded_coefficients',1,2);counts('shared_product',0,2);
 }
 '''
 
@@ -826,7 +826,7 @@ timeout_ms = 20000
 # rule engine under the default policy (7.3), so it is the one to compare with `std::opt::algebra`.
 [[tests]]
 name = "tensor.rules_simplify_matches_algebra"
-desc = "rules::simplify, after the same std::opt::fold the algebra entries run, reproduces on algebra_tensor.cml the operator multiset of std::opt::algebra: merged and merged_explicit 0 adds and 1 product (the element coefficient law x * 3 + x * 5 => x * 8), shared_product 0 adds and 2 products (the add-self law t + t => t * 2), while chain keeps its 2 products (the fold needs no_infs and no node grants it, as the algebra pass leaves it) and inexact keeps 1 add and 2 products (0.1 and 0.2 are not exact f32 coefficients, so no law reads them, as the algebra pass's constant<float> refuses them)."
+desc = "rules::simplify, after the same std::opt::fold the algebra entries run, reproduces on algebra_tensor.cml the operator multiset of std::opt::algebra: merged and merged_explicit 0 adds and 1 product (the element coefficient law x * 3 + x * 5 => x * 8), shared_product 0 adds and 2 products (the add-self law t + t => t * 2), while chain keeps its 2 products (the fold needs no_infs and no node grants it, as the algebra pass leaves it) and rounded_coefficients is regrouped to 0 adds and 1 product as the algebra pass regroups it: 0.1 and 0.2 are f32 values beside an f32 tensor (5.1), so the guard's exactness question is answered by the literal rule and the coefficient law reads them."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra_tensor.cml"
 args = ["${case}","std::opt::fold","rules::simplify","std::jgir"]
@@ -836,7 +836,7 @@ verify_script = '''
  const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
  const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label==='tensor:add').length,m=g(name).nodes.filter(n=>n.label==='tensor:multiply').length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
  counts('merged',0,1);counts('merged_explicit',0,1);
- counts('shared_product',0,2);counts('chain',0,2);counts('inexact',1,2);
+ counts('shared_product',0,2);counts('chain',0,2);counts('rounded_coefficients',0,1);
 }
 '''
 
@@ -855,7 +855,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "tensor.rules_simplify_strict"
-desc = "rules::simplify_strict is the rule library under NumericPolicy::strict(), the policy safe_fp=true gives: merged and merged_explicit are not regrouped (1 add and 2 products), chain and inexact are as under the default policy, and shared_product still becomes t * 2 because doubling a coefficient is exact and 7.4 lets a strict pass keep it. That last count is the one place where the library differs from algebra(safe_fp=true), which leaves t + t alone (tensor.graph.safe counts 1 add and 1 product there); the library follows 7.4, so the difference is the pass's and not the laws'."
+desc = "rules::simplify_strict is the rule library under NumericPolicy::strict(), the policy safe_fp=true gives: merged and merged_explicit are not regrouped (1 add and 2 products), chain keeps its 2 products and rounded_coefficients keeps its add and its 2 products (the coefficient law needs reassociate, which strict withholds, as it withholds it for the scalar case), and shared_product still becomes t * 2 because doubling a coefficient is exact and 7.4 lets a strict pass keep it. That last count is the one place where the library differs from algebra(safe_fp=true), which leaves t + t alone (tensor.graph.safe counts 1 add and 1 product there); the library follows 7.4, so the difference is the pass's and not the laws'."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra_tensor.cml"
 args = ["${case}","rules::simplify_strict","std::jgir"]
@@ -865,7 +865,7 @@ verify_script = '''
  const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
  const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label==='tensor:add').length,m=g(name).nodes.filter(n=>n.label==='tensor:multiply').length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
  counts('merged',1,2);counts('merged_explicit',1,2);
- counts('shared_product',0,2);counts('chain',0,2);counts('inexact',1,2);
+ counts('shared_product',0,2);counts('chain',0,2);counts('rounded_coefficients',1,2);
 }
 '''
 

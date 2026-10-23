@@ -1,27 +1,23 @@
 /**
  * `analysis` over pattern variables (rewrite design 4): a declaration with parameters is queried
  * with the parts of a value. That is how a rule's condition reads the fact of the compound it is
- * rewriting — the language does not name the whole match.
+ * rewriting -- the language does not name the whole match, and it reaches the node of a `const`
+ * parameter with `node_of(c)` (rule-language design v2, section 1).
  *
  * `mul_by_one(a, b)` is the fact of a product: the clause for `x * y` says it is "by one" when
  * `sign(y) == 1` (the same one-value analysis the other test uses). The rule
- * `mul_one_by_parts(x, y)` passes the two parts of the multiplication to it, so `one`
- * (`x * 1`) is rewritten and `two` (`x * 2`) is not: the false case must leave the product alone.
- * The parts are pattern variables, and so nodes of the draft: a `const` parameter of a rule is
- * the constant's *value* in a condition (rewrite design 2 (second version) 1;
- * reviews/stdlib-rules.md item 5), and reaching the node of one needs a `node_of` the language
- * does not have yet.
- *
- * A parts query reads the parts in the order the pattern binds them, so the pattern has to pin
- * that order: `isConst(y)` does it by shape, and it is what keeps the matcher's commuted pairing
- * of `x * y` (which two pattern variables also match) from asking the fact with the parts
- * exchanged, where no value has them.
+ * `mul_one_by_parts(x, const c)` passes the two parts of the multiplication to it -- the factor as
+ * the pattern binds it, and the coefficient's node through `node_of(c)` -- so `one` (`x * 1`) is
+ * rewritten and `two` (`x * 2`) is not: the false case must leave the product alone. That is what
+ * this input detects: the parts reach the query as a factor and a *node*, so the clause reading the
+ * second part as the constant `1` fires only for the coefficient that is one, and a `const`
+ * parameter carries a value that cannot be turned back into a node by itself.
  *
  * `report` prints the number of products before and after `apply`, and `main` the values, which
  * are the same before and after the rewrite.
  */
 module analysis_parts
-import { Program, Node, Graph, graphs, nodes, op, op_name, name, constant } from graph
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 import { max } from math
 import { rewrite } from rewrite
 
@@ -37,16 +33,7 @@ analysis mul_by_one(a: Node, b: Node): bool {
     on (x * y) => sign(y) == 1
 }
 
-/// Whether a value is a constant; the rule below needs the second part to be one, so that the
-/// parts reach the query in the order the product holds them.
-func isConst(n: Node): bool {
-    return match constant(n, 0) {
-        case null => false
-        case _ => true
-    }
-}
-
-rule mul_one_by_parts(x: int, y: int) { x * y => x } when isConst(y) && mul_by_one(x, y)
+rule mul_one_by_parts(x: int, const c: int) { x * c => x } when mul_by_one(x, node_of(c))
 
 func opText(n: Node): string {
     return match op(n) {

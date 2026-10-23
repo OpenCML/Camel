@@ -287,6 +287,13 @@ semantic	NativeDeclarationNotLoaded	0x00017C	error	The declaration '{0}' names t
 # Handover H94 (the author's rulings on body-less declarations): 0x17E and up.
 #/ Two generic declarations of one name can take the same call (ruling 2).
 semantic	NativeDeclarationOverlap	0x000180	error	Two declarations of '{0}' can take the same call: '{1}' and '{2}'.	An operator has one meaning for one call: which rule applies must be decided by the types of the arguments, never by the order the declarations are written in. Give the declarations parameter types that cannot both accept one argument list, or keep one of them.
+# The language author's ruling of 2026-10-24 on same-named `#impl` declarations split by their
+# conditions (`docs/handover/reviews/questions-2026-10-23.md`, "impl-declaration-arms"): two
+# same-named declarations whose `when` conditions are mutually exclusive are overloads and may
+# stand side by side; a type that satisfies both is this overlap. The conditions are asked about
+# every type the compiler registers, and a condition it cannot answer leaves the pair refused by
+# the older code above.
+semantic	WhenDeclarationOverlap	0x0001E0	error	Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'.	A 'when' condition is what makes two declarations of one signature different overloads (design principles 4.4): each must cover the types the other does not. Narrow the conditions so that no type satisfies both, or give the declarations parameter types that cannot both accept one call.
 #/ A declaration names an operator of another module (ruling 5).
 semantic	NativeDeclarationForeignOperator	0x000181	error	The declaration '{0}' names the operator '{1}', which another module declares.	A module declares only the operators it implements: a body-less declaration stands for an operator of the module it is written in, and declares no other module's operator. Write the declaration beside the implementation, or call the operator through the module that declares it.
 #
@@ -333,6 +340,11 @@ semantic	ParamArgumentDuplicate	0x0001CE	error	The parameter '{0}' of '{1}' is g
 semantic	ParamArgumentMissing	0x0001CF	error	The call gives no value for the parameter '{0}' of '{1}', and it has no default.	Give the parameter, or write a default where the parameter is declared ('name: type = value').
 #/ An ordinary argument is given by name where the callee's signature is not known.
 semantic	ParamArgumentCallee	0x0001D0	error	The argument '{0}' is given by name, and the signature of '{1}' is not known where the call is written.	Name one function, or give the arguments positionally.
+#/ A name is given at a call of several declarations, and the parameter at the position the name
+#/ means is not named the same way in every one of them (design principles 4.4): one named argument
+#/ then means one parameter in one declaration and another in another, so no one parameter answers
+#/ to the name. The rule is one rule for the two lists: a `with` argument is an argument here.
+semantic	OverloadParameterNames	0x0001DF	error	The argument '{0}' is given by name, and the overloads of '{1}' do not name the parameter at that position the same way.	Give every overload the same parameter names at the same positions, or give the arguments positionally.
 #/ A positional argument is written after a named one.
 semantic	ParamArgumentPositionalAfterNamed	0x0001D1	error	A positional argument follows a named one in the call of '{0}'.	Write the positional arguments first, then the named ones ('f(1, by: 2)').
 #/ The default of an ordinary parameter is not a compile-time constant.
@@ -416,8 +428,8 @@ runtime	PassNeedsExtraction	0x000062	error	Pass '{0}' cannot take the program: s
 # pass (H130). The name is what is wrong, so the message names the module and the passes it
 # does provide and says nothing else; a module that declares the function without exporting
 # it is a different mistake, with the hint that fixes it.
-runtime	PassNotProvidedByModule	0x000186	error	Module '{0}' provides no pass '{1}'; it provides {2}.	A pass of a module is one of its exported functions of type `(p: Program) => Program!`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
-runtime	PassNotExportedByModule	0x000187	error	Module '{0}' declares '{1}' but does not export it, so it cannot be named as a pass; it provides {2}.	Write `export func {1}(...)` in module {0}, or name a pass it exports. A pass is an exported function `(p: Program) => Program!`.
+runtime	PassNotProvidedByModule	0x000186	error	Module '{0}' provides no pass '{1}'; it provides {2}.	A pass of a module is one of the passes its `.cml` file declares — `export func {1}::<F>(f: F): F! when is_function::<F>()`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
+runtime	PassNotExportedByModule	0x000187	error	Module '{0}' declares '{1}' but does not export it, so it cannot be named as a pass; it provides {2}.	Write `export func {1}::<F>(f: F): F! when is_function::<F>()` in module {0}, or name a pass it declares and exports. A pass of a module is a declaration of that module's `.cml` file.
 # A device the run named with `--devices` that is not there. A capability miss stays
 # BackendUnavailable (the host runs the program); this is the run's own configuration
 # naming a device that must exist (design principles 13.4).
@@ -445,3 +457,8 @@ semantic	ImplKernelUnknown	0x0001D9	error	The '#impl' tag of '{0}' names '{1}', 
 semantic	ImplKernelForeign	0x0001DA	error	The '#impl' tag of '{0}' names '{1}', which another module declares.	A kernel is the implementation detail of the function that keeps it: declare the body-less declaration in the same module as the function, private to that module (not exported), and name it there.
 semantic	ImplSignatureMismatch	0x0001DB	error	The kernel '{0}' of the '#impl' function '{1}' has the signature {2}, but the function has {3}.	The kernel is another implementation of the very same function: same 'with' and normal parameters (types and 'var' marks), same result type, and no 'constas' parameter (a body-less declaration cannot carry one).
 semantic	ImplKernelNotBodyless	0x0001DC	error	The '#impl' tag of '{0}' names '{1}', which has a body.	The kernel is the body-less declaration of the C++ operator that runs the function's semantics. A function that already has a body is the semantics itself, so there is nothing for the tag to do: name a body-less declaration, or remove the tag.
+# The node of a `const` parameter inside a rule's condition (rewrite design 2 (second version)
+# 1; the ruling of 2026-10-23 on `rule_when_const_node`): the surface name is `node_of(c)`,
+# it takes the name of one of the rule's own `const` parameters, and it is written in the
+# condition. Nothing else reaches a node there.
+semantic	NodeOfNotAParameter	0x0001DE	error	'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.	node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.

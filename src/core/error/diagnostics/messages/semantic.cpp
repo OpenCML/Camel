@@ -1237,6 +1237,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::WhenDeclarationOverlap,
+            {
+                "WhenDeclarationOverlap",
+                "Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'.",
+                "A 'when' condition is what makes two declarations of one signature different overloads (design principles 4.4): each must cover the types the other does not. Narrow the conditions so that no type satisfies both, or give the declarations parameter types that cannot both accept one call.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationForeignOperator,
             {
                 "NativeDeclarationForeignOperator",
@@ -1365,6 +1373,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::OverloadParameterNames,
+            {
+                "OverloadParameterNames",
+                "The argument '{0}' is given by name, and the overloads of '{1}' do not name the parameter at that position the same way.",
+                "Give every overload the same parameter names at the same positions, or give the arguments positionally.",
+            },
+        },
+        {
             SemanticDiag::ParamArgumentPositionalAfterNamed,
             {
                 "ParamArgumentPositionalAfterNamed",
@@ -1450,6 +1466,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ImplKernelNotBodyless",
                 "The '#impl' tag of '{0}' names '{1}', which has a body.",
                 "The kernel is the body-less declaration of the C++ operator that runs the function's semantics. A function that already has a body is the semantics itself, so there is nothing for the tag to do: name a body-less declaration, or remove the tag.",
+            },
+        },
+        {
+            SemanticDiag::NodeOfNotAParameter,
+            {
+                "NodeOfNotAParameter",
+                "'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.",
+                "node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.",
             },
         },
         {

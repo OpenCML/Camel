@@ -1,0 +1,89 @@
+/**
+ * An f64 gradient through a broadcast: `sum(x * p0)` with `x: Tensor<f64, [2, 3]>` and
+ * `p0: Tensor<f64, [3]>`, the product broadcasting `p0` over the rows of `x`. The gradient
+ * reduction of a broadcast is `tensor:sum_to`, so this is where an f64 gradient met a gate that
+ * said f32 only and was refused with:
+ *
+ *   'the gradient kernels' does not support a value of type 'Tensor<f64>'; it takes f32 tensors.
+ *
+ * H238's direction is to support f64 (and bf16 and f16) rather than refuse it, and the element
+ * type of a value is always determined, so the missing arm is a hole and not a rule: a float
+ * reduction returns its input's element type and accumulates in f64, rounding once
+ * (docs/handover/reviews/reduced-precision.md section 4).
+ *
+ * Both gradients are printed element by element and every value below is written out by hand
+ * from the forward expression, with the parameters the handover note names (x = 1..6 as a
+ * [2, 3] f64 tensor, p0 = [0.5, 0.25, 2.0]):
+ *
+ *   loss  = sum(x * p0) = sum([[0.5, 0.5, 6.0], [2.0, 1.25, 12.0]]) = 22.25
+ *   d/dx  = broadcast of p0 over the rows  -> [[0.5, 0.25, 2.0], [0.5, 0.25, 2.0]]
+ *   d/dp0 = x added over the rows          -> [5.0, 7.0, 9.0]
+ *
+ * `sum_to` reduces p0's gradient over the broadcast axis: it is the column sum of dy, one f64
+ * addend per row. The two distances are the numerical proof of the gradient's values: each is
+ * zero when the printed tensor is the hand-written one, exactly, and non-zero otherwise (the
+ * second term of each carries the whole sum, so a gradient right in shape but wrong in
+ * magnitude moves it too).
+ *
+ * The wide pair is the proof that the additions happen at f64's width and not f32's. Its x is
+ * [[2^24, 1, 1], [1, 1, 2^24]] and its p0 is [1, 2^24, 1], so d/dp0 is the column sum
+ * [2^24 + 1, 2, 2^24 + 1]: the third coordinate is 16777217.0 in f64, while f32 rounds
+ * 2^24 + 1 back to 2^24 and answers 16777216.0 (a 1 is below half an ulp of 2^24, and the tie
+ * at exactly half an ulp goes to the even significand). The printed tensor therefore shows
+ * which accumulator ran, and the distance to the hand-written [2^24 + 1, 2, 2^24 + 1] is 1.0
+ * under an f32 accumulator and 0.0 under an f64 one. The wide tensors are reshapes of literals
+ * and the expected sums are written here, not read back from a kernel.
+ *
+ * Red when: the f64 arm is missing (the program refuses and exits 1 with no line printed), the
+ * gradient of the broadcast operand is computed in f32 (the wide distance is 1.0 and the
+ * printed third coordinate is 16777216.0), the gradient of `x` loses the broadcast (the first
+ * distance and the printed x gradient move), or the reduction's axis is wrong (the x gradient
+ * becomes the column sum, or the p0 gradient the row broadcast of p0).
+ */
+module f64_broadcast_grad
+
+import { Tensor, abs, reshape, sum } from tensor
+import { with_grad } from autodiff
+
+type M = {
+    p0: Tensor<f64, [3]>,
+    x: Tensor<f64, [2, 3]>,
+}
+
+with <m: M>
+func loss(): float sync {
+    return sum(m.x * m.p0)
+}
+
+func main(): int sync {
+    let m = {
+        p0: reshape([0.5, 0.25, 2.0] as f64[], [3]),
+        x: reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f64[], [2, 3]),
+    }
+    let b = reshape([0.5, 0.25, 2.0, 0.5, 0.25, 2.0] as f64[], [2, 3])
+    let c = reshape([5.0, 7.0, 9.0] as f64[], [3])
+    let vg = with_grad(loss)<m>()
+    let g = vg.1
+    let gx = g.x
+    let gp = g.p0
+
+    // The same loss on a pair whose sums separate the two accumulators: 2^24 + 1 is exact in
+    // f64 and rounds back to 2^24 in f32, and the large values sit in the third column.
+    let mw = {
+        p0: reshape([1.0, 16777216.0, 1.0] as f64[], [3]),
+        x: reshape([16777216.0, 1.0, 1.0, 1.0, 1.0, 16777216.0] as f64[], [2, 3]),
+    }
+    let wc = reshape([16777217.0, 2.0, 16777217.0] as f64[], [3])
+    let wvg = with_grad(loss)<mw>()
+    let wp = wvg.1.p0
+
+    let a_x = sum(b - b) + sum(abs(gx - b))
+    let a_p0 = sum(c - c) + sum(abs(gp - c))
+    let wa = sum(wc - wc) + sum(abs(wp - wc))
+
+    println("f64_broadcast_grad value={} a_x={} a_p0={} wa={}"->format<vg.0, a_x, a_p0, wa>)
+    println("gx {}"->format<gx>)
+    println("gp {}"->format<gp>)
+    println("wp {}"->format<wp>)
+    return 0
+}

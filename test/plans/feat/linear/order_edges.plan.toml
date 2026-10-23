@@ -1,0 +1,102 @@
+id = "linear.order_edges"
+order = 346
+tier = "fast"
+tags = ["feat", "linear", "runtime", "effects"]
+
+# The execution rule of docs/design/effects/edges.cn.md (sections 1 and 2) and design principles
+# 3.1: a node executes when the program's result reaches it along the ports that carry a value or
+# through the statement chain of a sync block. An edge that only orders (formal F2) does not make
+# its source execute, and a `var`'s write that no read uses does not execute (formal F3).
+#
+# `order_edges.cml` prints, in order: what `first_dropped()` prints, the value `main` prints for it,
+# what `write_used()` prints, its value, then the two lines of the sync block's own body and the
+# value `main` prints for it. Every scheduler must print the same thing.
+#
+# The other half of F3 (`var x = println(1); x = println(2); return x` prints nothing for the
+# initializer) is not asserted here yet: the `var` representation still makes the initializer's
+# value a data input of the cell. The ruling takes that input away, which is what makes the half
+# assertable -- docs/handover/reviews/questions-2026-10-23.md, "h242a-var-initializer-write".
+
+[[tests]]
+name = "order_edges.nvm"
+desc = "Only what the result reaches runs: `let a = println(1); let b = println(2); return b` prints 2 and not 1, `var x = println(1); x = println(2); return x` prints only the second write, and a sync block's own chain still runs every statement of it in order (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/order_edges.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+const expected = ['2', '2', '2', '2', '1', '2', '2']
+assert(lines.length === expected.length, `expected ${expected.length} lines, got ${lines.length}: ${lines.join(',')}`)
+const where = ['first_dropped', 'main(1)', 'write_used', 'main(2)', 'both_kept(1)', 'both_kept(2)', 'main(3)']
+for (let i = 0; i < expected.length; i++) {
+assert(lines[i] === expected[i], `${where[i]}: expected ${expected[i]}, got ${lines[i]} (all: ${lines.join(',')})`)
+}
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "order_edges.fvm"
+desc = "Only what the result reaches runs: `let a = println(1); let b = println(2); return b` prints 2 and not 1, `var x = println(1); x = println(2); return x` prints only the second write, and a sync block's own chain still runs every statement of it in order (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/order_edges.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+const expected = ['2', '2', '2', '2', '1', '2', '2']
+assert(lines.length === expected.length, `expected ${expected.length} lines, got ${lines.length}: ${lines.join(',')}`)
+const where = ['first_dropped', 'main(1)', 'write_used', 'main(2)', 'both_kept(1)', 'both_kept(2)', 'main(3)']
+for (let i = 0; i < expected.length; i++) {
+assert(lines[i] === expected[i], `${where[i]}: expected ${expected[i]}, got ${lines[i]} (all: ${lines.join(',')})`)
+}
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "order_edges.jit"
+desc = "Only what the result reaches runs: `let a = println(1); let b = println(2); return b` prints 2 and not 1, `var x = println(1); x = println(2); return x` prints only the second write, and a sync block's own chain still runs every statement of it in order (jit)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/order_edges.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+const expected = ['2', '2', '2', '2', '1', '2', '2']
+assert(lines.length === expected.length, `expected ${expected.length} lines, got ${lines.length}: ${lines.join(',')}`)
+const where = ['first_dropped', 'main(1)', 'write_used', 'main(2)', 'both_kept(1)', 'both_kept(2)', 'main(3)']
+for (let i = 0; i < expected.length; i++) {
+assert(lines[i] === expected[i], `${where[i]}: expected ${expected[i]}, got ${lines[i]} (all: ${lines.join(',')})`)
+}
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "order_edges.prl"
+desc = "Only what the result reaches runs: `let a = println(1); let b = println(2); return b` prints 2 and not 1, `var x = println(1); x = println(2); return x` prints only the second write, and a sync block's own chain still runs every statement of it in order (prl)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/order_edges.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+const expected = ['2', '2', '2', '2', '1', '2', '2']
+assert(lines.length === expected.length, `expected ${expected.length} lines, got ${lines.length}: ${lines.join(',')}`)
+const where = ['first_dropped', 'main(1)', 'write_used', 'main(2)', 'both_kept(1)', 'both_kept(2)', 'main(3)']
+for (let i = 0; i < expected.length; i++) {
+assert(lines[i] === expected[i], `${where[i]}: expected ${expected[i]}, got ${lines[i]} (all: ${lines.join(',')})`)
+}
+}
+"""
+timeout_ms = 10000

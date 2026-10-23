@@ -29,10 +29,10 @@ std::optional<Shape> shape(ty::Type *type) {
         return std::nullopt;
     if (type->code() == ty::TypeCode::Float64)
         return Shape{};
-    const auto *tensor = tensor::asTensorType(type);
-    if (!tensor || tensor->dtype() != ty::TypeCode::Float32 || !tensor->isStaticShape())
+    const tensor::TensorFacts facts = tensor::tensorFactsOf(type);
+    if (facts.dtype != ty::TypeCode::Float32 || !facts.isStaticShape())
         return std::nullopt;
-    return *tensor->shape();
+    return *facts.shape;
 }
 const std::unordered_map<core::OperId, std::string> &operations() {
     static const auto result = [] {

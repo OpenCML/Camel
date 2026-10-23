@@ -1,0 +1,670 @@
+{
+  "format": "camel.gir",
+  "graphs": [
+    {
+      "capturePorts": [],
+      "contextPorts": [],
+      "dependencies": [
+        "g1",
+        "g2",
+        "g3",
+        "g4"
+      ],
+      "edges": [
+        {
+          "kind": "context",
+          "source": "g0n0",
+          "sourceIndex": 0,
+          "target": "g0n1",
+          "targetIndex": 0
+        }
+      ],
+      "exit": "g0n1",
+      "id": "g0",
+      "name": "__root__",
+      "nodes": [
+        {
+          "callee": "g1",
+          "id": "g0n0",
+          "kind": "DATA",
+          "label": "Function(graph=main, tupleSlots=0)",
+          "origin": "<ORIGIN>",
+          "outputType": "() => int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 1,
+              "line": 40
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 0,
+              "line": 35
+            }
+          }
+        },
+        {
+          "id": "g0n1",
+          "kind": "CALL",
+          "label": "CALL",
+          "outputType": "int",
+          "roles": []
+        }
+      ],
+      "normalPorts": [],
+      "signature": "() => int"
+    },
+    {
+      "capturePorts": [],
+      "contextPorts": [],
+      "dependencies": [
+        "g2",
+        "g3",
+        "g4"
+      ],
+      "edges": [
+        {
+          "kind": "normal",
+          "source": "g1n0",
+          "sourceIndex": 0,
+          "target": "g1n1",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g1n1",
+          "sourceIndex": 0,
+          "target": "g1n2",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g1n4",
+          "sourceIndex": 0,
+          "target": "g1n3",
+          "targetIndex": 0
+        },
+        {
+          "kind": "control",
+          "source": "g1n2",
+          "sourceIndex": 0,
+          "target": "g1n3",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g1n3",
+          "sourceIndex": 0,
+          "target": "g1n5",
+          "targetIndex": 0
+        },
+        {
+          "kind": "control",
+          "source": "g1n5",
+          "sourceIndex": 0,
+          "target": "g1n6",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g1n6",
+          "sourceIndex": 0,
+          "target": "g1n7",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g1n8",
+          "sourceIndex": 0,
+          "target": "g1n9",
+          "targetIndex": 0
+        },
+        {
+          "kind": "control",
+          "source": "g1n7",
+          "sourceIndex": 0,
+          "target": "g1n9",
+          "targetIndex": 0
+        }
+      ],
+      "exit": "g1n9",
+      "id": "g1",
+      "name": "main",
+      "nodes": [
+        {
+          "id": "g1n0",
+          "kind": "DATA",
+          "label": "7",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 24,
+              "line": 36
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 23,
+              "line": 36
+            }
+          }
+        },
+        {
+          "callee": "g2",
+          "id": "g1n1",
+          "kind": "FUNC",
+          "label": "anchor_add",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 25,
+              "line": 36
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 12,
+              "line": 36
+            }
+          }
+        },
+        {
+          "id": "g1n2",
+          "kind": "OPER",
+          "label": ":io/println",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [
+            "effect"
+          ],
+          "source": {
+            "end": {
+              "character": 11,
+              "line": 36
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 4,
+              "line": 36
+            }
+          }
+        },
+        {
+          "callee": "g3",
+          "id": "g1n3",
+          "kind": "FUNC",
+          "label": "anchor_mul32",
+          "origin": "<ORIGIN>",
+          "outputType": "i32",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 27,
+              "line": 37
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 12,
+              "line": 37
+            }
+          }
+        },
+        {
+          "id": "g1n4",
+          "kind": "DATA",
+          "label": "9",
+          "origin": "<ORIGIN>",
+          "outputType": "i32",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 26,
+              "line": 37
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 25,
+              "line": 37
+            }
+          }
+        },
+        {
+          "id": "g1n5",
+          "kind": "OPER",
+          "label": ":io/println",
+          "origin": "<ORIGIN>",
+          "outputType": "i32",
+          "roles": [
+            "effect"
+          ],
+          "source": {
+            "end": {
+              "character": 11,
+              "line": 37
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 4,
+              "line": 37
+            }
+          }
+        },
+        {
+          "callee": "g4",
+          "id": "g1n6",
+          "kind": "FUNC",
+          "label": "effect_mul_zero",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 29,
+              "line": 38
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 12,
+              "line": 38
+            }
+          }
+        },
+        {
+          "id": "g1n7",
+          "kind": "OPER",
+          "label": ":io/println",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [
+            "effect"
+          ],
+          "source": {
+            "end": {
+              "character": 11,
+              "line": 38
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 4,
+              "line": 38
+            }
+          }
+        },
+        {
+          "id": "g1n8",
+          "kind": "DATA",
+          "label": "0",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 12,
+              "line": 39
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 11,
+              "line": 39
+            }
+          }
+        },
+        {
+          "id": "g1n9",
+          "kind": "GATE",
+          "label": "GATE",
+          "outputType": "int",
+          "roles": []
+        }
+      ],
+      "normalPorts": [],
+      "signature": "() => int"
+    },
+    {
+      "capturePorts": [],
+      "contextPorts": [],
+      "dependencies": [],
+      "edges": [
+        {
+          "kind": "normal",
+          "source": "g2n0",
+          "sourceIndex": 0,
+          "target": "g2n2",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g2n1",
+          "sourceIndex": 0,
+          "target": "g2n2",
+          "targetIndex": 1
+        }
+      ],
+      "exit": "g2n2",
+      "id": "g2",
+      "name": "anchor_add",
+      "nodes": [
+        {
+          "id": "g2n0",
+          "kind": "PORT",
+          "label": "x",
+          "outputType": "int",
+          "parameter": {
+            "index": 0,
+            "kind": "normal",
+            "name": "x"
+          },
+          "roles": []
+        },
+        {
+          "id": "g2n1",
+          "kind": "DATA",
+          "label": "0",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 16,
+              "line": 22
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 15,
+              "line": 22
+            }
+          }
+        },
+        {
+          "id": "g2n2",
+          "kind": "OPER",
+          "label": ":op/add_l",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 14,
+              "line": 22
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 13,
+              "line": 22
+            }
+          }
+        }
+      ],
+      "normalPorts": [
+        "g2n0"
+      ],
+      "signature": "(x: int) => int"
+    },
+    {
+      "capturePorts": [],
+      "contextPorts": [],
+      "dependencies": [],
+      "edges": [
+        {
+          "kind": "normal",
+          "source": "g3n0",
+          "sourceIndex": 0,
+          "target": "g3n2",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g3n1",
+          "sourceIndex": 0,
+          "target": "g3n2",
+          "targetIndex": 1
+        }
+      ],
+      "exit": "g3n2",
+      "id": "g3",
+      "name": "anchor_mul32",
+      "nodes": [
+        {
+          "id": "g3n0",
+          "kind": "PORT",
+          "label": "x",
+          "outputType": "i32",
+          "parameter": {
+            "index": 0,
+            "kind": "normal",
+            "name": "x"
+          },
+          "roles": []
+        },
+        {
+          "id": "g3n1",
+          "kind": "DATA",
+          "label": "1",
+          "origin": "<ORIGIN>",
+          "outputType": "i32",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 16,
+              "line": 26
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 15,
+              "line": 26
+            }
+          }
+        },
+        {
+          "id": "g3n2",
+          "kind": "OPER",
+          "label": ":op/mul_i",
+          "origin": "<ORIGIN>",
+          "outputType": "i32",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 14,
+              "line": 26
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 13,
+              "line": 26
+            }
+          }
+        }
+      ],
+      "normalPorts": [
+        "g3n0"
+      ],
+      "signature": "(x: i32) => i32"
+    },
+    {
+      "capturePorts": [],
+      "contextPorts": [],
+      "dependencies": [],
+      "edges": [
+        {
+          "kind": "normal",
+          "source": "g4n0",
+          "sourceIndex": 0,
+          "target": "g4n1",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g4n1",
+          "sourceIndex": 0,
+          "target": "g4n3",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g4n2",
+          "sourceIndex": 0,
+          "target": "g4n3",
+          "targetIndex": 1
+        },
+        {
+          "kind": "normal",
+          "source": "g4n3",
+          "sourceIndex": 0,
+          "target": "g4n4",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g4n5",
+          "sourceIndex": 0,
+          "target": "g4n6",
+          "targetIndex": 0
+        },
+        {
+          "kind": "control",
+          "source": "g4n4",
+          "sourceIndex": 0,
+          "target": "g4n6",
+          "targetIndex": 0
+        }
+      ],
+      "exit": "g4n6",
+      "id": "g4",
+      "name": "effect_mul_zero",
+      "nodes": [
+        {
+          "id": "g4n0",
+          "kind": "DATA",
+          "label": "5",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 21,
+              "line": 30
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 20,
+              "line": 30
+            }
+          }
+        },
+        {
+          "id": "g4n1",
+          "kind": "OPER",
+          "label": ":io/println",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [
+            "effect"
+          ],
+          "source": {
+            "end": {
+              "character": 19,
+              "line": 30
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 12,
+              "line": 30
+            }
+          }
+        },
+        {
+          "id": "g4n2",
+          "kind": "DATA",
+          "label": "0",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 26,
+              "line": 30
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 25,
+              "line": 30
+            }
+          }
+        },
+        {
+          "id": "g4n3",
+          "kind": "OPER",
+          "label": ":op/mul_l",
+          "name": "a",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 24,
+              "line": 30
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 23,
+              "line": 30
+            }
+          }
+        },
+        {
+          "id": "g4n4",
+          "kind": "OPER",
+          "label": ":io/println",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [
+            "effect"
+          ],
+          "source": {
+            "end": {
+              "character": 11,
+              "line": 31
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 4,
+              "line": 31
+            }
+          }
+        },
+        {
+          "id": "g4n5",
+          "kind": "DATA",
+          "label": "0",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 12,
+              "line": 32
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 11,
+              "line": 32
+            }
+          }
+        },
+        {
+          "id": "g4n6",
+          "kind": "GATE",
+          "label": "GATE",
+          "outputType": "int",
+          "roles": []
+        }
+      ],
+      "normalPorts": [],
+      "signature": "() => int"
+    }
+  ],
+  "root": "g0",
+  "version": 1
+}

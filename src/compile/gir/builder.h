@@ -15,6 +15,9 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/abort.h"
 #include "camel/core/module/module.h"
+// The payload of a module entity: a generic function of another module arrives as it was
+// exported (genericTemplatesOfEntity).
+#include "core/module/entity_internal.h"
 
 #include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
@@ -46,6 +49,141 @@ using graph_scope_t         = Scope<std::string, graph_set_ptr_t>;
 using graph_scope_ptr_t     = std::shared_ptr<graph_scope_t>;
 using decorated_scope_t     = Scope<std::string, compile_graph_ptr_t>;
 using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
+
+class Builder;
+
+struct GenericTemplate;
+struct ConstasValue;
+
+/// A `constas` parameter of a generic declaration and the compile-time value a call bound to
+/// it (design principles 5.4): the value selects the instance and the body reads it as a static
+/// value. It is not a runtime argument, so the instance has no port for it.
+struct ConstasValue {
+    Type *type = nullptr;      // the declared type of the parameter, the other extents substituted
+    Type *valueType = nullptr; // the type of the constant the call wrote
+    data_ptr_t data;           // the constant itself, the instance key's value
+    node_handle_t node = {};   // the node the call gave it as
+};
+using ConstasValues = std::map<std::string, ConstasValue>;
+
+/// One set of types a generic function was instantiated at, and the graph built for it.
+struct GenericInstance {
+    camel::core::type::type_bindings_t bindings;
+    // The compile-time values bound to the `constas` parameters of the declaration, and the
+    // integer ones among them as the extent bindings they stand for.
+    ConstasValues constas;
+    camel::core::type::ExtentValues extents;
+    compile_graph_ptr_t graph;
+    // An error was found in the body: later calls with the same types fail quietly.
+    bool failed = false;
+};
+
+/// The generic functions of one name declared in one block. They are told apart by their
+/// parameter types, exactly as ordinary overloads are (design principles 4.4): a call takes the
+/// one whose parameters accept its arguments. One name is one template until a second generic
+/// function is declared beside it, and then one group, whose first template is the one an
+/// unqualified read of the name means.
+using generic_template_ptr_t = std::shared_ptr<GenericTemplate>;
+using GenericGroup        = std::vector<generic_template_ptr_t>;
+using generic_group_ptr_t = std::shared_ptr<GenericGroup>;
+/// What the scope of a name and a generic DREF holds: one template, or a group of overloads.
+/// `->` answers the first of the group, which is the template a name with one overload is.
+class generic_ref_t {
+  public:
+    generic_ref_t() = default;
+    /// Defined where GenericTemplate is complete: it reads the template's name.
+    generic_ref_t(generic_template_ptr_t one);
+    explicit generic_ref_t(generic_group_ptr_t group) : group_(std::move(group)) {}
+    explicit operator bool() const { return group_ != nullptr && !group_->empty(); }
+    const generic_group_ptr_t &group() const { return group_; }
+    /// The template a name with one overload stands for, and the first of a group.
+    generic_template_ptr_t one() const {
+        return group_ != nullptr && !group_->empty() ? group_->front() : nullptr;
+    }
+    generic_template_ptr_t operator->() const { return one(); }
+
+  private:
+    generic_group_ptr_t group_;
+};
+/// The names of the generic functions in force where a template was declared: one entry per
+/// name, holding the one generic function of that name or the group of its overloads.
+using template_scope_t     = Scope<std::string, generic_ref_t>;
+using template_scope_ptr_t = std::shared_ptr<template_scope_t>;
+
+/// A generic declaration: the function that still holds type variables, and everything an
+/// instance of it needs. The instance key is the bindings with the `constas` values, and the
+/// instance is built in the module that declared the function, not at the call.
+struct GenericTemplate {
+    std::string name;
+    GCT::node_ptr_t func = nullptr;
+    // The declared type with the variables of enclosing instances replaced; the function's
+    // own variables remain.
+    FunctionType *funcType = nullptr;
+    // The type parameters the declaration put at its head, in order, whether or not the
+    // signature writes them; an explicit `::<...>` binds them by position or by name.
+    std::vector<std::string> headParams;
+    // The bindings in force where the template was declared (a generic function declared
+    // inside an instance of another one).
+    camel::core::type::type_bindings_t outerBindings;
+    // Where the function was declared: instances are built there, not at the call. There is
+    // one instance per set of types in the whole program, whichever module calls it.
+    compile_graph_ptr_t ownerGraph;
+    // The module that declares the function: the names of the body are resolved there.
+    camel::core::module::module_ptr_t module;
+    node_scope_ptr_t nodeScope;
+    graph_scope_ptr_t graphScope;
+    decorated_scope_ptr_t decoratedScope;
+    template_scope_ptr_t templateScope;
+    // The node attributes in force where it was declared (currentAttrs_).
+    camel::core::attr::AttrSetId attrs = camel::core::attr::kNoAttrs;
+    // The namespace and the `using namespace` in force where it was declared: its body
+    // resolves its names as if it were built there.
+    std::vector<std::string> namespacePath;
+    std::vector<const std::vector<Reference> *> usingFrames;
+    std::vector<GenericInstance> instances;
+    // Instances whose bodies are being built right now, one inside another.
+    size_t openInstances = 0;
+};
+
+inline generic_ref_t::generic_ref_t(generic_template_ptr_t one)
+    : group_(std::make_shared<GenericGroup>()) {
+    if (one != nullptr) {
+        group_->push_back(std::move(one));
+    }
+}
+/// The group a scope entry holds, in one expression: the entry is always a group.
+inline GenericGroup *genericGroupOf(const generic_ref_t &ref) { return ref.group().get(); }
+
+/// The generic functions an imported name brings: the payload of the module entity is the list of
+/// the templates of that name, one of them for a name declared once and all of them when the name
+/// is declared as several generic overloads (`makeGenericTemplates`). A call of the name picks
+/// among them exactly as it does for a name of this module (design principles 4.4, 5.5).
+inline std::vector<generic_template_ptr_t>
+genericTemplatesOfEntity(const camel::core::module::Entity &entity) {
+    if (!camel::core::module::detail::EntityAccess::isGenericTemplate(entity)) {
+        return {};
+    }
+    const auto &tmpls = camel::core::module::detail::EntityAccess::genericTemplates(entity);
+    std::vector<generic_template_ptr_t> templates;
+    templates.reserve(tmpls.size());
+    for (const std::shared_ptr<void> &one : tmpls) {
+        templates.push_back(std::static_pointer_cast<GenericTemplate>(one));
+    }
+    return templates;
+}
+
+/// The payload a module exports for a name with generic functions: every template of the group,
+/// so that an importer selects the overload a call takes.
+inline std::vector<std::shared_ptr<void>> genericTemplatePayloadOf(const generic_ref_t &ref) {
+    std::vector<std::shared_ptr<void>> payload;
+    if (GenericGroup *group = genericGroupOf(ref); group != nullptr) {
+        payload.reserve(group->size());
+        for (const generic_template_ptr_t &tmpl : *group) {
+            payload.push_back(std::static_pointer_cast<void>(tmpl));
+        }
+    }
+    return payload;
+}
 
 /// What a declaration's `when` condition says at one instantiation (design principles 5.13).
 /// The condition is a compile-time predicate over the declaration's type parameters and `with`
@@ -156,7 +294,6 @@ class Builder {
     // top level (the names it declares; its functions are graphs whose scopes are entered
     // from these). A function body of the module is built with these in force, whichever
     // module asks for it.
-    struct GenericTemplate;
     struct BuiltFunction;
     struct PendingIgnoredWrite;
     struct ModuleUnit;
@@ -180,7 +317,7 @@ class Builder {
         node_scope_ptr_t nodeScope;
         graph_scope_ptr_t graphScope;
         decorated_scope_ptr_t decoratedScope;
-        std::shared_ptr<Scope<std::string, std::shared_ptr<GenericTemplate>>> templateScope;
+        template_scope_ptr_t templateScope;
         // The types the module declares, for its exports.
         std::unordered_map<Reference, Type *> typeDecls;
         // Whether the module is the entry of the program.
@@ -257,6 +394,20 @@ class Builder {
         oper_group_ptr_t group;
     };
     std::unordered_map<const GenericTemplate *, ImplTemplateKernel> implTemplateKernels_;
+    // The applicability condition a rule of a body-less declaration was written with (design
+    // principles 4.4: `when` says where a rule applies), by the rule's resolver. Its one reader
+    // is the `#impl` machinery: for the kernel of an `#impl` function the condition is what says
+    // which instances of that function the rule is the executor of, so an instance outside it
+    // has no executor and runs the function's body (design principles 10.4). A rule without a
+    // condition applies wherever its signature does.
+    struct NativeRuleCondition {
+        GCT::Tree::WhenClause clause;
+        // The module that declares the rule: its condition's predicate is looked up there,
+        // wherever the instance that selects the rule is built (evaluateWhenCondition).
+        const ModuleUnit *unit = nullptr;
+    };
+    std::unordered_map<const camel::core::type::FuncTypeResolver *, NativeRuleCondition>
+        nativeRuleConditions_;
     // generic instance of one, a lambda at the top level): the root graph lists as its own
     // functions only the entry module's, so that what the program does not use of the
     // modules it imports is not part of it.
@@ -401,6 +552,12 @@ class Builder {
     camel::core::context::context_ptr_t context_;
     camel::core::module::module_ptr_t module_;
     camel::core::error::diagnostics_ptr_t diags_;
+    /// The speculative scope in force, if any: the only thing it changes is what a *body build*
+    /// reports (`BodyDiagnostics`) and how a body that does not compile is answered
+    /// (`instantiateGeneric` returns nullptr instead of aborting). Every other diagnostic goes to
+    /// `diags_` wherever it is made, scope or no scope.
+    class SpeculativeInstantiation;
+    SpeculativeInstantiation *speculative_ = nullptr;
     /// The program's export table (see the constructors): `exports_` points at `ownExports_`
     /// for a builder of a program of its own, or at the context's table for the context's
     /// program. Never at a module's table: that is the module's own (native) declarations.
@@ -639,6 +796,24 @@ class Builder {
     /// of a generic declaration. Null for a function value, an operator, or an overload set.
     const std::vector<std::optional<ParameterDefaultValue>> *defaultsOfCallee(
         node_handle_t callee, bool isWith) const;
+    /// One declaration a name stands for: its signature, and the owner its parameter defaults are
+    /// kept under (a graph or a generic template).
+    struct CalleeDeclaration {
+        FunctionType *signature = nullptr;
+        const void *owner      = nullptr;
+    };
+    /// The declarations a callee stands for and the name they are written under: a generic
+    /// function's templates, or the graphs of a name with several functions. Null for a value, a
+    /// native operator group, and a name with one declaration (whose call reads its signature).
+    struct CalleeSet {
+        std::string label;
+        std::vector<CalleeDeclaration> declarations;
+    };
+    std::optional<CalleeSet> declarationsOfCallee(node_handle_t callee) const;
+    /// Whether one of the declarations gives the parameter at `position` of `isWith`'s list a
+    /// default. A call whose callee is several declarations fills no default (one declaration
+    /// writes it), so it reports the parameter instead.
+    bool anyDeclarationDefaults(const CalleeSet &set, size_t position, bool isWith) const;
     /// Binds the arguments written at a call to the callee's parameters: a name to the parameter
     /// it names, an omitted parameter to its default (design principles 4.4). Reports an unknown
     /// name, a parameter given twice, and a parameter left without a value. `isWith` selects the
@@ -654,6 +829,17 @@ class Builder {
     void bindArguments(
         std::vector<Argument> &inputs, node_handle_t callee, const GCT::node_ptr_t &call,
         FunctionType *signature, bool isWith);
+    /// Binds the named arguments of a call whose callee is several declarations, where no single
+    /// signature answers for which parameter a name is (design principles 4.4). The parameter at a
+    /// position carries the same name in every declaration of the set, so a name the call writes
+    /// means one position there and the argument is placed at it; a name no declaration has, a
+    /// name different declarations give to different positions, and a name at a position a
+    /// declaration names differently are refused, as is a call that leaves a parameter of the set
+    /// without a value (a default is written by one declaration, and the call does not say which
+    /// one it means).
+    void bindNamedArgumentsToDeclarations(
+        std::vector<Argument> &inputs, const CalleeSet &set, const GCT::node_ptr_t &call,
+        bool isWith);
     // Variables: the nodes bound by `var` (declarations, `var` parameters, the ports that capture
     // them). Such a node does not hold a value but the variable's cell (TupleType::cell), which
     // is what a `var` parameter or a capture receives; a value is read out of it by `:var/get`
@@ -898,64 +1084,6 @@ class Builder {
     // A `constas` parameter binds a compile-time value the same way (design principles 5.4):
     // the value is given at the call, is part of the instance key, and is read by the body as
     // a static value. It is not a runtime argument, so the instance has no port for it.
-    struct ConstasValue {
-        // The declared type of the parameter, with the other extents substituted; the type the
-        // constant must have.
-        Type *type = nullptr;
-        // The type of the constant the call wrote.
-        Type *valueType = nullptr;
-        // The constant itself. It is the instance key's value, and the body reads it as a
-        // static data node.
-        data_ptr_t data;
-        // The node the call gave the value as (a rest expansion binds it directly; an instance
-        // makes a static data node of its own in its graph).
-        node_handle_t node = {};
-    };
-    using ConstasValues = std::map<std::string, ConstasValue>;
-    struct GenericInstance {
-        camel::core::type::type_bindings_t bindings;
-        // The compile-time values bound to the `constas` parameters of the declaration, and
-        // the integer ones among them as the extent bindings they stand for.
-        ConstasValues constas;
-        camel::core::type::ExtentValues extents;
-        compile_graph_ptr_t graph;
-        // An error was found in the body: later calls with the same types fail quietly.
-        bool failed = false;
-    };
-    struct GenericTemplate {
-        std::string name;
-        GCT::node_ptr_t func = nullptr;
-        // The declared type with the variables of enclosing instances replaced; the function's
-        // own variables remain.
-        FunctionType *funcType = nullptr;
-        // The type parameters the declaration put at its head, in order, whether or not the
-        // signature writes them; an explicit `::<...>` binds them by position or by name.
-        std::vector<std::string> headParams;
-        // The bindings in force where the template was declared (a generic function declared
-        // inside an instance of another one).
-        camel::core::type::type_bindings_t outerBindings;
-        // Where the function was declared: instances are built there, not at the call. There is
-        // one instance per set of types in the whole program, whichever module calls it.
-        compile_graph_ptr_t ownerGraph;
-        // The module that declares the function: the names of the body are resolved there.
-        camel::core::module::module_ptr_t module;
-        node_scope_ptr_t nodeScope;
-        graph_scope_ptr_t graphScope;
-        decorated_scope_ptr_t decoratedScope;
-        std::shared_ptr<Scope<std::string, std::shared_ptr<GenericTemplate>>> templateScope;
-        // The node attributes in force where it was declared (currentAttrs_).
-        camel::core::attr::AttrSetId attrs = camel::core::attr::kNoAttrs;
-        // The namespace and the `using namespace` in force where it was declared: its body
-        // resolves its names as if it were built there.
-        std::vector<std::string> namespacePath;
-        std::vector<const std::vector<Reference> *> usingFrames;
-        std::vector<GenericInstance> instances;
-        // Instances whose bodies are being built right now, one inside another.
-        size_t openInstances = 0;
-    };
-    using template_ptr_t       = std::shared_ptr<GenericTemplate>;
-    using template_scope_t     = Scope<std::string, template_ptr_t>;
-    using template_scope_ptr_t = std::shared_ptr<template_scope_t>;
     // Bounds on instantiation. A generic function that calls itself with ever larger types
     // (`f(x) = f([x])`) would never stop building instances, so the instances of ONE function
     // being built inside one another are limited; the number is small because such types
@@ -994,10 +1122,10 @@ class Builder {
         ~ExpectedValueScope() { current = outer; }
     };
     std::unordered_map<node_handle_t, camel::core::type::type_vec_t> explicitOperatorTypes_;
-    std::unordered_map<node_handle_t, template_ptr_t> genericDrefs_;
+    std::unordered_map<node_handle_t, generic_ref_t> genericDrefs_;
     // The templates of functions written in place (anonymousTemplateOf): nothing else owns
     // them.
-    std::vector<template_ptr_t> anonymousTemplates_;
+    std::vector<generic_template_ptr_t> anonymousTemplates_;
 
     // A type read from the GCT, with the type variables and the named extents of the current
     // instance replaced.
@@ -1032,7 +1160,7 @@ class Builder {
     }
     // The type parameters of a template in declaration order: the head names first, then the
     // variables its signature writes that the head did not declare.
-    std::vector<std::string> typeParameterNames(const template_ptr_t &tmpl) const;
+    std::vector<std::string> typeParameterNames(const generic_template_ptr_t &tmpl) const;
     // Registers the generic functions declared directly in the block `exec`, before anything
     // in the block is built: a call may precede the declaration.
     void registerGenericTemplates(const GCT::node_ptr_t &exec);
@@ -1047,7 +1175,14 @@ class Builder {
     // and the type lists). Everything happens here, at the call; the graph only ever holds
     // the instances.
     compile_graph_ptr_t resolveGenericCall(
-        const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+        const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
+        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
+        Type *expectedResult = nullptr);
+    /// The instance of one chosen template; `resolveGenericCall` is this for the single template
+    /// a name holds, and the call site is this for each candidate of a name with several.
+    compile_graph_ptr_t instantiateForCall(
+        const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         Type *expectedResult = nullptr);
@@ -1068,15 +1203,80 @@ class Builder {
     /// still be open), or nullptr with the reason in `why`: the parameter types of `expected`
     /// fix the type variables, and the instance must then have exactly those parameters.
     compile_graph_ptr_t instantiateGenericAs(
-        const template_ptr_t &tmpl, FunctionType *expected, const GCT::node_ptr_t &origin,
+        const generic_template_ptr_t &tmpl, FunctionType *expected, const GCT::node_ptr_t &origin,
         std::string &why);
+    /// A body build inside a speculative scope: while this lives, what the body reports goes to the
+    /// scope's sink. The body of a candidate is the only thing a search may hold back, and this is
+    /// the only door into that sink.
+    class BodyDiagnostics {
+      public:
+        explicit BodyDiagnostics(Builder &builder);
+        ~BodyDiagnostics();
+
+      private:
+        Builder &self_;
+        SpeculativeInstantiation *scope_;
+        camel::core::error::diagnostics_ptr_t outer_;
+    };
+    /// The diagnostics of a body that does not compile for the types it was tried with, and the
+    /// answer to them. A position that fixes the type variables of a generic name tries the
+    /// candidates its name offers one after another, and a candidate whose *body* does not compile
+    /// for those types is not the one the position wants: what its body said is about a function the
+    /// program does not use, so it is held here instead of reported, and the attempt is answered
+    /// with "no instance" (`instantiateGeneric` returns nullptr) rather than with an abort. The
+    /// attempt that failed remembers the failure in its template (`GenericInstance::failed`,
+    /// :77-78), so a second attempt at the same types makes no diagnostic and does not build the
+    /// body again.
+    ///
+    /// Nothing else is held. The argument form of a call, a `constas` value that is not constant, a
+    /// condition that cannot be answered, an incomplete return type and every other verdict of the
+    /// program reach the sink in place the moment they are made, whether a scope is open or not: a
+    /// search may skip a candidate, never a verdict. What is held is only ever the body of a
+    /// candidate that may still turn out not to be the one wanted.
+    ///
+    /// A caller with no candidate left calls `attach()`, which adds those errors to the sink in
+    /// place -- so the refusal that follows carries them, at the positions and with the labels the
+    /// body gave them -- and ends the scope; a caller that found its instance lets the scope end,
+    /// which drops them. The search that has no fallback does not use this at all: one candidate and
+    /// no alternative is not speculative, and its diagnostics are the program's.
+    class SpeculativeInstantiation {
+      public:
+        friend class BodyDiagnostics;
+        explicit SpeculativeInstantiation(Builder &builder);
+        ~SpeculativeInstantiation();
+        /// Adds the errors of the bodies that did not compile to the sink in place, and ends the
+        /// scope: from here the builder reports where it always did, so the diagnostic the caller
+        /// is about to make is the program's, and it is preceded by what the bodies said.
+        void attach();
+        /// Ends the scope and reports nothing more: what the bodies said is dropped, for a caller
+        /// that knows a candidate nobody chose is not the program's business (a rule's search for an
+        /// instance for one type: the reason is remembered and reported only when the user asks).
+        void close();
+
+      private:
+        Builder &self_;
+        /// The scope this one replaced, so that scopes nest.
+        SpeculativeInstantiation *previous_ = nullptr;
+        camel::core::error::diagnostics_ptr_t outer_;
+        camel::core::error::diagnostics_ptr_t inner_;
+        bool settled_ = false;
+    };
     /// The function value of the generic function `node` names, instantiated for the type
     /// the position expects; an error (GenericFunctionAsValue) that says which variables
     /// cannot be determined when `expected` is not a function type that fixes them.
     node_handle_t genericValueFor(
         node_handle_t node, camel::core::type::Type *expected, const GCT::node_ptr_t &origin);
     [[noreturn]] void rejectGenericValue(
-        const template_ptr_t &tmpl, const GCT::node_ptr_t &origin, const std::string &why);
+        const generic_template_ptr_t &tmpl, const GCT::node_ptr_t &origin, const std::string &why);
+    /// The generic functions the name of a generic DREF stands for: the single template, or the
+    /// group of several overloads of one name.
+    std::vector<generic_template_ptr_t> genericOverloadsOf(node_handle_t node) const;
+    /// The one of them that a call with these arguments takes, or nullptr when none or several
+    /// do. `normInputs` and `normTypes` are read only; the arguments are not changed.
+    generic_template_ptr_t chooseGenericOverload(
+        const std::vector<generic_template_ptr_t> &candidates, const std::vector<Argument> &withInputs,
+        const std::vector<Argument> &normInputs, const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
     /// An argument of a built-in operator that names a generic function. An operator's type
     /// rule is C++ code that needs the argument types, so it cannot say which function it
     /// expects; the instances the types of the other arguments suggest are tried (their
@@ -1134,7 +1334,7 @@ class Builder {
     /// Expands `tmpl`, a rest function, at `call`: binds its type variables and fixed
     /// parameters, checks the arguments, and builds its body in the caller's graph.
     node_handle_t inlineRestCall(
-        const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+        const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, const GCT::node_ptr_t &call,
         Type *expectedResult);
     /// The leaves of a tree as one flat tuple: the one tree intrinsic still expanded here, because
@@ -1143,7 +1343,7 @@ class Builder {
         const oper_group_ptr_t &ops, const std::vector<Argument> &with,
         const std::vector<Argument> &norm, const GCT::node_ptr_t &call);
     compile_graph_ptr_t instantiateGeneric(
-        const template_ptr_t &tmpl, const camel::core::type::type_bindings_t &bindings,
+        const generic_template_ptr_t &tmpl, const camel::core::type::type_bindings_t &bindings,
         const camel::core::type::ExtentValues &extents, const ConstasValues &constas,
         const GCT::node_ptr_t &call);
     // Enters the scope of `graph`, an existing graph, as enterScope does for one it finds.
@@ -1203,7 +1403,16 @@ class Builder {
     /// impl-kernel-site; H228). An instance no rule accepts has no executor: it runs the body,
     /// which is the semantics, and gives the same result.
     void adoptImplKernel(
-        const template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType);
+        const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType);
+    /// Whether the rule `rule` of a body-less declaration applies to an instance of these types:
+    /// the condition the declaration wrote, answered for the instance's types (design principles
+    /// 4.4), with the declaration's own type parameters bound by them. True when the rule has no
+    /// condition. A condition that cannot be answered from the types alone is reported as the
+    /// defect it is (reportWhenProblem).
+    bool declaredRuleApplies(
+        const camel::core::type::resolver_ptr_t &rule, const std::string &name,
+        const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes);
     /// The kernel of `graphs` when they are exactly the one `#impl` body: what a call of the
     /// function is, instead of a call of the body (design principles 10.4).
     std::optional<ImplKernel> implKernelOf(const graph_set_ptr_t &graphs) const;
@@ -1251,7 +1460,7 @@ class Builder {
         const GCT::node_ptr_t &condition, FunctionType *signature,
         const camel::core::type::type_bindings_t &bindings,
         const std::unordered_map<std::string, data_ptr_t> &withValues,
-        const template_ptr_t &declaring = nullptr, const ModuleUnit *contextUnit = nullptr);
+        const generic_template_ptr_t &declaring = nullptr, const ModuleUnit *contextUnit = nullptr);
     /// Switches the builder to the module a condition is written in for as long as it lives:
     /// the search for a predicate is the declaration's, wherever the selection happens.
     class ConditionContext;
@@ -1260,7 +1469,7 @@ class Builder {
     /// prefix, then the prelude. `problem` is set when the name exists but cannot be called at
     /// compile time (imported and not a generic function, or two imports that both bring it).
     /// nullopt with `problem` still NotEvaluable when the name is not found by those layers.
-    std::optional<template_ptr_t> whenPredicateNamed(
+    std::optional<generic_template_ptr_t> whenPredicateNamed(
         const std::string &written, const GCT::node_ptr_t &at, WhenResult &problem);
     /// Whether two selective imports bring a predicate of the name, in which case `problem`
     /// says so and neither is chosen.
@@ -1383,10 +1592,12 @@ class Builder {
     // creating its graph the first time. Functions of one name in one block are overloads;
     // the declared type object identifies which one is meant.
     compile_graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
-    // A second function of this name with the same parameter types in the same block:
-    // reports Redeclaration at `gct` and abandons the declaration.
+    // A second function of this name with the same parameter types in the same block, or an
+    // ordinary declaration under a generic function of the name (`plain`): reports
+    // Redeclaration at `gct` and abandons the declaration.
     void rejectRedeclaredFunction(
-        const std::string &name, FunctionType *funcType, const GCT::node_ptr_t &gct);
+        const std::string &name, FunctionType *funcType, const GCT::node_ptr_t &gct,
+        bool plain = false);
     // The declared types of the functions rejected so (the forward declaration reports, the
     // definition that follows is skipped quietly).
     std::unordered_set<FunctionType *> redeclaredFuncTypes_;
@@ -1809,7 +2020,7 @@ class Builder {
         /// The program's own, from every enclosing scope and every module that exports some.
         std::vector<compile_graph_ptr_t> graphs;
         /// The generic ones (a head that declares type parameters), in this module and imported.
-        std::vector<template_ptr_t> templates;
+        std::vector<generic_template_ptr_t> templates;
         /// Those of the built-in module and of the C++ modules imported, one group.
         oper_group_ptr_t ops;
         /// The module each imported overload comes from, for diagnostics (absent: this one).
@@ -1823,7 +2034,7 @@ class Builder {
     std::unordered_set<node_handle_t> negatedEqualities_;
     /// The generic overloads of an operator declared in this module, each with the scope it
     /// was declared in (visible from that scope and the scopes inside it).
-    std::unordered_map<std::string, std::vector<std::pair<template_scope_ptr_t, template_ptr_t>>>
+    std::unordered_map<std::string, std::vector<std::pair<template_scope_ptr_t, generic_template_ptr_t>>>
         operatorTemplates_;
     /// Signatures already checked by rejectOperatorConflict (a function is declared ahead and
     /// then defined).
@@ -1913,7 +2124,7 @@ class Builder {
     /// (resolveGenericCall without the diagnostics). An argument that is a composite literal
     /// enters its parameter's type, as it does in a call (design principles 5.1).
     bool genericOperatorAccepts(
-        const template_ptr_t &tmpl, const std::vector<Argument> &normInputs,
+        const generic_template_ptr_t &tmpl, const std::vector<Argument> &normInputs,
         const camel::core::type::type_vec_t &normTypes);
     /// OperatorOverloadConflict when the overload `funcType` of the operator `group` takes
     /// parameter types a built-in, C++ module or imported overload of it takes.
@@ -2120,10 +2331,13 @@ class Builder {
     node_handle_t foldLiteralCall(const GCT::node_ptr_t &gct, camel::core::type::Type *expected);
     /// The design principles 5.1 resolution order for the operands of an operator: a literal
     /// operand takes the type of the other operand when that one is numeric, and then the
-    /// value is converted exactly (an operand that does not fit is reported).
+    /// value is converted exactly (an operand that does not fit is reported). With
+    /// `anyOperatorCall`, a named operator call (`add(x, 2.0)`) is adapted as well; without it
+    /// only the infix operators whose operands are related that way.
     void adaptLiteralOperands(
         const std::string &group, std::vector<Argument> &inputs,
-        camel::core::type::type_vec_t &types, const GCT::node_ptr_t &call);
+        camel::core::type::type_vec_t &types, const GCT::node_ptr_t &call,
+        bool anyOperatorCall = false);
     /// The return type the function around the current position declares (looking out of
     /// branch arms), or nullptr when it declares none.
     camel::core::type::Type *declaredExitTypeHere() const;

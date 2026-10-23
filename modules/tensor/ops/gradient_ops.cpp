@@ -239,11 +239,10 @@ OpDef internal(
 // ---------------------------------------------------------------- tangent space
 
 Type *tensorTangentType(Type *primal) {
-    const TensorType *tensor = asTensorType(primal);
-    if (tensor == nullptr) {
+    if (!isTensorType(primal)) {
         return nullptr;
     }
-    if (auto dtype = tensor->dtype();
+    if (auto dtype = tensorFactsOf(primal).dtype;
         dtype && *dtype != TypeCode::Float32 && *dtype != TypeCode::Float64) {
         return nullptr; // integer and boolean tensors have no gradient
     }
@@ -255,11 +254,10 @@ Type *tensorTangentType(Type *primal) {
 /// one -- an argmax result, a comparison mask -- neither loses a gradient nor must be refused
 /// when it is converted back to float: the derivative there is zero.
 bool tensorIsDiscrete(const type::Type *type) {
-    const TensorType *tensor = asTensorType(type);
-    if (tensor == nullptr) {
+    if (!isTensorType(type)) {
         return false;
     }
-    const auto dtype = tensor->dtype();
+    const auto dtype = tensorFactsOf(type).dtype;
     return dtype && (*dtype == TypeCode::Int32 || *dtype == TypeCode::Int64 ||
                      *dtype == TypeCode::Bool);
 }
