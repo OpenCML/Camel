@@ -1,0 +1,866 @@
+{
+  "schema": 1,
+  "what": "torch.compile's d=1024 step in CPU time, with torch.profiler's CPU self times",
+  "generated_at": "2026-10-23T13:05:00+08:00",
+  "variant": "compiled",
+  "threads": 1,
+  "shape": {
+    "batch": 32,
+    "sequence": 64,
+    "d_model": 1024,
+    "heads": 64,
+    "d_ff": 2048,
+    "vocab": 32
+  },
+  "instrument": "torchtrace.py under /usr/bin/time -v, one thread, CUDA_VISIBLE_DEVICES empty",
+  "compiler": "CC=clang CXX=g++: Inductor's cpp_builder needs omp.h, which the conda clang does not have on its default search path; the profile pass failed with clang++ and succeeded with g++",
+  "steps": {
+    "24": {
+      "cpu_seconds": 80.71,
+      "wall_seconds": 157.27,
+      "median_ms": 5418.293536000419,
+      "step_ms": [
+        11570.348281995393,
+        4275.843643001281,
+        5347.534723987337,
+        3646.6231949743815,
+        4164.442226989195,
+        3768.119183019735,
+        4163.921022962313,
+        6164.280269993469,
+        4195.737686997745,
+        5009.872240014374,
+        5480.235372029711,
+        4939.218116982374,
+        5831.58217696473,
+        6487.837911001407,
+        5792.461268021725,
+        6391.838898998685,
+        5376.512646966148,
+        5551.4711259747855,
+        5437.516577017959,
+        5418.293536000419,
+        4826.559979002923,
+        6155.778754036874,
+        6209.580811031628,
+        4903.124604024924
+      ],
+      "profiled_total_ms": 131815.83537599942,
+      "categories_us": {
+        "layout/copy/creation": 3559735.8329997174,
+        "other": 15237705.140000297,
+        "other (Inductor fused)": 16820013.172999714,
+        "reductions": 2010.333999998591,
+        "matmul": 96195884.9459997,
+        "gradient assembly": 485.94999999919673
+      },
+      "rows": [
+        {
+          "key": "aten::mm",
+          "self_us": 91453826.9549997,
+          "calls": 1169,
+          "category": "matmul"
+        },
+        {
+          "key": "## Call CompiledFxGraph fv2726j64f5u5fvckme2vdi4nj654lz7v4ajd5bu5zijg23njyoe ##",
+          "self_us": 4999691.1230000835,
+          "calls": 24,
+          "category": "other"
+        },
+        {
+          "key": "aten::sqrt",
+          "self_us": 4923248.651000118,
+          "calls": 564,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "aten::mul",
+          "self_us": 4766276.470999794,
+          "calls": 3493,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "aten::bmm",
+          "self_us": 4739461.179999998,
+          "calls": 362,
+          "category": "matmul"
+        },
+        {
+          "key": "## Call CompiledFxGraph fevimgqpwq7yjn6wmalwaz65jinsao5xfgritrdsionweytfsoay ##",
+          "self_us": 3999389.099000055,
+          "calls": 24,
+          "category": "other"
+        },
+        {
+          "key": "aten::copy_",
+          "self_us": 3366261.0850000903,
+          "calls": 3712,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aten::add",
+          "self_us": 3145912.4019999113,
+          "calls": 1795,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "aten::div",
+          "self_us": 3133037.5490000565,
+          "calls": 1795,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "Scheduler.codegen (dynamo_timed)",
+          "self_us": 1973757.6729999837,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "GraphLowering.run (dynamo_timed)",
+          "self_us": 1264543.8239999893,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "aten::sub",
+          "self_us": 841841.9539998306,
+          "calls": 535,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "PythonDispatchMode",
+          "self_us": 695423.4639999962,
+          "calls": 2951,
+          "category": "other"
+        },
+        {
+          "key": "Scheduler.__init__ (dynamo_timed)",
+          "self_us": 590840.5360000001,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "min_cut_rematerialization_partition (dynamo_timed)",
+          "self_us": 260363.96399999992,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "fx_codegen_and_compile (dynamo_timed)",
+          "self_us": 156966.29799999972,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "pass.joint_graph_passes.pass_pattern_0 (dynamo_timed)",
+          "self_us": 134371.4550000002,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "Scheduler.fused_nodes (dynamo_timed)",
+          "self_us": 100296.73800000036,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "## Call CompiledFxGraph f4nx6qcb2exnrjwmfcqoanconsjpbnedggdwejwj75t72dyxds3j ##",
+          "self_us": 90846.72399997711,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "bytecode_tracing (dynamo_timed)",
+          "self_us": 81977.79399999998,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "PythonWrapperCodegen.generate (dynamo_timed)",
+          "self_us": 71946.39299999969,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "create_aot_dispatcher_function (dynamo_timed)",
+          "self_us": 70837.43299999926,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "_recursive_post_grad_passes (dynamo_timed)",
+          "self_us": 68042.42399999988,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "additional_fake_tensor_prop (dynamo_timed)",
+          "self_us": 66099.51300000167,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "PyCodeCache.load_by_key_path (dynamo_timed)",
+          "self_us": 62887.61800000025,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "aten::empty_strided",
+          "self_us": 56935.127000275046,
+          "calls": 5480,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "backward._backward_impl (dynamo_timed)",
+          "self_us": 53047.07600000035,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "pass.post_grad_passes.reinplace_inplaceable_ops (dynamo_timed)",
+          "self_us": 52944.59900000016,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "aten::fill_",
+          "self_us": 51631.924999978044,
+          "calls": 51,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "pass.post_grad_passes.pass_pattern_1 (dynamo_timed)",
+          "self_us": 49061.88800000027,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "build_guards (dynamo_timed)",
+          "self_us": 43664.33999999985,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "aot_trace_joint_graph (dynamo_timed)",
+          "self_us": 37785.37200000038,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "async_compile.wait (dynamo_timed)",
+          "self_us": 37455.00900000008,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "aten::_to_copy",
+          "self_us": 34395.47199991022,
+          "calls": 3795,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "OutputGraph.call_user_compiler (dynamo_timed)",
+          "self_us": 32135.3759999997,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "_recursive_joint_graph_passes (dynamo_timed)",
+          "self_us": 24447.905000000144,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "CompiledFunction",
+          "self_us": 22391.682999998797,
+          "calls": 24,
+          "category": "other"
+        },
+        {
+          "key": "CompiledFunctionBackward",
+          "self_us": 17446.319999963045,
+          "calls": 24,
+          "category": "other"
+        },
+        {
+          "key": "compile_fx_inner (dynamo_timed)",
+          "self_us": 16119.444999999134,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "compile_attempt_0 (dynamo_timed)",
+          "self_us": 14846.158999999985,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "GraphLowering.compile_to_module (dynamo_timed)",
+          "self_us": 12853.522000000812,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "GraphLowering.codegen (dynamo_timed)",
+          "self_us": 11528.958999999333,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "pass.joint_graph_passes.constant_fold_uniform_value (dynamo_timed)",
+          "self_us": 11250.84600000002,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "pass.post_grad_passes.pass_pattern_2 (dynamo_timed)",
+          "self_us": 10235.647000000346,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "TorchDynamo Cache Lookup",
+          "self_us": 9706.19300003691,
+          "calls": 25,
+          "category": "other"
+        },
+        {
+          "key": "aten::to",
+          "self_us": 9459.013999440314,
+          "calls": 3874,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aten::view",
+          "self_us": 8420.077999990055,
+          "calls": 497,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aot_collect_metadata (dynamo_timed)",
+          "self_us": 8321.789000000048,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "insert_deferred_runtime_asserts (dynamo_timed)",
+          "self_us": 6962.448999999993,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "Torch-Compiled Region: 0/1",
+          "self_us": 6558.789000033401,
+          "calls": 24,
+          "category": "other"
+        },
+        {
+          "key": "pass.post_grad_passes.remove_noop_ops (dynamo_timed)",
+          "self_us": 6495.92799999984,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "pass.joint_graph_passes.remove_noop_ops (dynamo_timed)",
+          "self_us": 5864.930999999982,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "aten::detach",
+          "self_us": 5593.2259999888265,
+          "calls": 4152,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aten::zero_",
+          "self_us": 5453.06499999829,
+          "calls": 548,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aten::exp",
+          "self_us": 4551.691000000501,
+          "calls": 44,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "detach",
+          "self_us": 4502.604999997027,
+          "calls": 1499,
+          "category": "other"
+        },
+        {
+          "key": "aten::empty",
+          "self_us": 4048.5460000078747,
+          "calls": 587,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "prims::convert_element_type",
+          "self_us": 3811.394000000975,
+          "calls": 78,
+          "category": "other"
+        },
+        {
+          "key": "aten::set_",
+          "self_us": 3694.058000005971,
+          "calls": 584,
+          "category": "other"
+        },
+        {
+          "key": "gc (dynamo_timed)",
+          "self_us": 3602.436999999918,
+          "calls": 1,
+          "category": "other"
+        }
+      ],
+      "final_loss": NaN,
+      "init_loss": 3.649515151977539
+    },
+    "56": {
+      "cpu_seconds": 165.35,
+      "wall_seconds": 394.58,
+      "median_ms": 6276.258009020239,
+      "step_ms": [
+        7097.523421049118,
+        6532.436776033137,
+        4066.773384984117,
+        4295.004551007878,
+        5792.852205981035,
+        7269.41342902137,
+        5964.719353010878,
+        6211.919397988822,
+        5312.962975003757,
+        6018.246373045258,
+        5794.01485004928,
+        6943.507100979332,
+        9684.808828984387,
+        8697.275811980944,
+        10420.706346980296,
+        6710.684964025859,
+        6530.77651996864,
+        7739.644585002679,
+        9174.069448024966,
+        9110.723410965875,
+        7319.672364974394,
+        5504.359191982076,
+        5447.975302988198,
+        5573.7269499804825,
+        5167.862730973866,
+        6789.412569021806,
+        7563.88671399327,
+        4847.88784396369,
+        5046.834045031574,
+        5565.555872977711,
+        5609.329305996653,
+        5082.683008047752,
+        6484.487751033157,
+        6907.511467987206,
+        6361.201461986639,
+        6179.626722005196,
+        4720.67791596055,
+        11370.813550020102,
+        9695.484630006831,
+        6668.1155689875595,
+        6704.390895029064,
+        5172.612879949156,
+        5868.958746024873,
+        4801.513891026843,
+        5400.379303027876,
+        4431.796015007421,
+        6072.532920981757,
+        6713.087056996301,
+        6240.956226014532,
+        8004.850588971749,
+        6085.181016998831,
+        7098.6782039981335,
+        7812.568414956331,
+        6276.258009020239,
+        6967.013329965994,
+        6898.661954968702
+      ],
+      "profiled_total_ms": 367349.7880370002,
+      "categories_us": {
+        "layout/copy/creation": 9483901.471000537,
+        "other": 27391549.072999418,
+        "other (Inductor fused)": 48908634.6589995,
+        "reductions": 4305.946000000142,
+        "matmul": 281561303.2390008,
+        "gradient assembly": 93.64900000032503
+      },
+      "rows": [
+        {
+          "key": "aten::mm",
+          "self_us": 267465605.52700177,
+          "calls": 2227,
+          "category": "matmul"
+        },
+        {
+          "key": "## Call CompiledFxGraph fv2726j64f5u5fvckme2vdi4nj654lz7v4ajd5bu5zijg23njyoe ##",
+          "self_us": 15016073.49300001,
+          "calls": 56,
+          "category": "other"
+        },
+        {
+          "key": "aten::sqrt",
+          "self_us": 14587028.337999215,
+          "calls": 1238,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "aten::bmm",
+          "self_us": 14091080.439999025,
+          "calls": 686,
+          "category": "matmul"
+        },
+        {
+          "key": "aten::mul",
+          "self_us": 13731400.850002445,
+          "calls": 7410,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "## Call CompiledFxGraph fevimgqpwq7yjn6wmalwaz65jinsao5xfgritrdsionweytfsoay ##",
+          "self_us": 11368051.172000138,
+          "calls": 56,
+          "category": "other"
+        },
+        {
+          "key": "aten::div",
+          "self_us": 9150541.11499916,
+          "calls": 3710,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "aten::add",
+          "self_us": 9132244.905999128,
+          "calls": 3716,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "aten::copy_",
+          "self_us": 9086165.092000546,
+          "calls": 8624,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aten::sub",
+          "self_us": 2294132.9369995575,
+          "calls": 1232,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "bytecode_tracing (dynamo_timed)",
+          "self_us": 293347.17699999997,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "PyCodeCache.load_by_key_path (dynamo_timed)",
+          "self_us": 155171.299,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "aten::_to_copy",
+          "self_us": 135768.3859964539,
+          "calls": 8639,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "PythonDispatchMode",
+          "self_us": 135597.08500000008,
+          "calls": 231,
+          "category": "other"
+        },
+        {
+          "key": "aten::fill_",
+          "self_us": 112221.6030000149,
+          "calls": 82,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aten::empty_strided",
+          "self_us": 106068.70500213616,
+          "calls": 8981,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "## Call CompiledFxGraph f4nx6qcb2exnrjwmfcqoanconsjpbnedggdwejwj75t72dyxds3j ##",
+          "self_us": 92638.47900015116,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "build_guards (dynamo_timed)",
+          "self_us": 80176.16799999995,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "CompiledFunctionBackward",
+          "self_us": 60428.292999832425,
+          "calls": 56,
+          "category": "other"
+        },
+        {
+          "key": "OutputGraph.call_user_compiler (dynamo_timed)",
+          "self_us": 31357.641999999876,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "aten::to",
+          "self_us": 31307.735001580877,
+          "calls": 8639,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "async_compile.wait (dynamo_timed)",
+          "self_us": 31180.195000000065,
+          "calls": 2,
+          "category": "other"
+        },
+        {
+          "key": "CompiledFunction",
+          "self_us": 27361.247999946587,
+          "calls": 56,
+          "category": "other"
+        },
+        {
+          "key": "Torch-Compiled Region: 0/1",
+          "self_us": 14893.594999688677,
+          "calls": 56,
+          "category": "other"
+        },
+        {
+          "key": "compile_attempt_0 (dynamo_timed)",
+          "self_us": 12707.48999999999,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "aten::resolve_conj",
+          "self_us": 12132.707999155042,
+          "calls": 6487,
+          "category": "other"
+        },
+        {
+          "key": "insert_deferred_runtime_asserts (dynamo_timed)",
+          "self_us": 10474.26000000001,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "AOTDispatcher Runtime Wrapper Prologue",
+          "self_us": 8256.848000075319,
+          "calls": 57,
+          "category": "other"
+        },
+        {
+          "key": "TorchDynamo Cache Lookup",
+          "self_us": 8193.18399992821,
+          "calls": 57,
+          "category": "other"
+        },
+        {
+          "key": "aten::exp",
+          "self_us": 7232.198000000208,
+          "calls": 8,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "AOTAutogradCache.inductor_load (dynamo_timed)",
+          "self_us": 4905.912000000011,
+          "calls": 1,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "_compile.compile_inner (dynamo_timed)",
+          "self_us": 4816.883000000031,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "prims::squeeze",
+          "self_us": 4783.498000000138,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "aten::matmul",
+          "self_us": 4617.272000000317,
+          "calls": 17,
+          "category": "matmul"
+        },
+        {
+          "key": "gc (dynamo_timed)",
+          "self_us": 4615.847000000067,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "dynamo",
+          "self_us": 4610.476999999955,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "aten::mean",
+          "self_us": 4049.3039999999746,
+          "calls": 8,
+          "category": "reductions"
+        },
+        {
+          "key": "aten::_unsafe_view",
+          "self_us": 3826.4379999998782,
+          "calls": 21,
+          "category": "other"
+        },
+        {
+          "key": "aten::detach",
+          "self_us": 3798.5609999454464,
+          "calls": 361,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "autograd::engine::evaluate_function: CompiledFunctionBackward",
+          "self_us": 3588.076000164263,
+          "calls": 56,
+          "category": "other"
+        },
+        {
+          "key": "aten::expand",
+          "self_us": 1824.751000000164,
+          "calls": 17,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aten::new_empty",
+          "self_us": 1656.7199999999139,
+          "calls": 7,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aten::view",
+          "self_us": 1286.6279999998515,
+          "calls": 46,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aten::as_strided",
+          "self_us": 1109.5479999997187,
+          "calls": 69,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aten::set_",
+          "self_us": 873.061999999918,
+          "calls": 101,
+          "category": "other"
+        },
+        {
+          "key": "autograd::engine::evaluate_function: ToCopyBackward0",
+          "self_us": 869.6270002890378,
+          "calls": 1210,
+          "category": "other"
+        },
+        {
+          "key": "Pregraph bytecode",
+          "self_us": 638.4990002245177,
+          "calls": 57,
+          "category": "other"
+        },
+        {
+          "key": "PythonSubclass",
+          "self_us": 524.8929999999527,
+          "calls": 12,
+          "category": "other"
+        },
+        {
+          "key": "aten::permute",
+          "self_us": 470.62200000006123,
+          "calls": 10,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "prims::broadcast_in_dim",
+          "self_us": 443.19799999985844,
+          "calls": 12,
+          "category": "other"
+        },
+        {
+          "key": "detach",
+          "self_us": 431.9939998885093,
+          "calls": 120,
+          "category": "other"
+        },
+        {
+          "key": "aten::ones_like",
+          "self_us": 421.0119999651797,
+          "calls": 56,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "aten::clone",
+          "self_us": 369.85699999993085,
+          "calls": 10,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "AOTAutogradCache.inductor_load",
+          "self_us": 357.262999999919,
+          "calls": 1,
+          "category": "other (Inductor fused)"
+        },
+        {
+          "key": "aten::reshape",
+          "self_us": 350.58399999991525,
+          "calls": 29,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "Torch-Compiled Region: 0/0",
+          "self_us": 337.9070000052452,
+          "calls": 1,
+          "category": "other"
+        },
+        {
+          "key": "aten::empty_permuted",
+          "self_us": 262.4620000005234,
+          "calls": 27,
+          "category": "layout/copy/creation"
+        },
+        {
+          "key": "prims::sum",
+          "self_us": 261.05999999993946,
+          "calls": 4,
+          "category": "other"
+        },
+        {
+          "key": "prims::div",
+          "self_us": 260.4389999999257,
+          "calls": 3,
+          "category": "other"
+        },
+        {
+          "key": "aten::sum",
+          "self_us": 256.6420000001672,
+          "calls": 5,
+          "category": "reductions"
+        }
+      ],
+      "final_loss": NaN,
+      "init_loss": 3.649515151977539
+    }
+  },
+  "cpu_ms_per_step": 2645.0,
+  "load_average": {
+    "1m": 95.19,
+    "5m": 99.53,
+    "15m": 104.6
+  },
+  "note": "The run covers an extra forward and the run's warm-up steps, so the two-length slope is the step; the profiled total (367.35 ms over 56 steps) is far below the step's CPU time because torch.compile's generated kernels are largely outside the profiler's tree, and the categories are a lower bound."
+}
