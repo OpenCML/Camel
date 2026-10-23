@@ -186,3 +186,55 @@ poison 例是 `poison:modules.tensor:binary_roundtrip`（原因同上，期望�
 （另：`poison:linear.var_reference:var_tensor.default`、`poison:modules.ddpm_primitives:math.sqrt.runtime.nvm`、
 `poison:modules.nn:with_context_step_demo`、`poison:trans.annotated_dump:boundaries.agir` 也是翻自己的红，
 尚未逐条分类；它们在我量过的每一次运行里都红。）
+
+## 489 个红的分类（flip7 实测，按每个用例的首个诊断归并）
+
+- **B 内核元素类型拒绝：162** ← 最大的一类，且全是真缺陷（`var_grad.*` 30 例、
+  `tensor_grad_check.*`/`nn_grad_check.*`、`grad_closure.*`、`grad_function_values*`、
+  `slice_grad.*`、`gelu_grad.bits`、`fusion_group.*`、`autoencoder/tiny_rnn/siamese_*` …），
+  文本是 `'the gradient kernels' does not support a value of type '…'`。
+- Z 未细分：166（还要再归并一轮）
+- A No matching function：49（其中张量复合赋值 7 例；其余是真洞，名单见下）
+- E internal error：44；F 旧打印形式期望：**36**；D 返回/声明类型不匹配：15；
+  C to_bytes dtype：14；H 梯度元素类型：2；G 不可迭代：1
+
+⇒ **期望那一类只有 36 例，不是主体**；主体是 162 例内核元素类型拒绝，落点在 autodiff/VJP 这条线。
+⇒ 翻离绿还很远，期望那一刀不是最后一步。
+
+A 的真洞名单（去掉 7 个复合赋值）：01_scalar_boundary、08_structured_control_flow、
+alias.err_var_rank.nvm、alias.type_text.nvm、arms_laid_out_whole_tensor.{default,simplify_nvm,
+simplify_fvm,simplify_jit,simplify_tf}、boundaries.{agir,argir,tooltip_slots}、call_mismatch、
+declared_numeric_semantics、export_branch、generic.arms_laid_out_whole_tensor、lrit、mnist、
+module_import_builtins、native.tensor_{show_wrong_arity,wrong_arity}、nn.{lrit,mnist}、
+numeric_contract.{nvm,fvm,jit,prl,generic_unit}、onnx.export_branch、ort_branch、ort_dynamic_batch、
+poison:trans.annotated_dump:boundaries.agir、propagated_mismatch、rank_mismatch、
+si_computed_extent_stays_open、si_computed_slice、si_loaded_struct、si_plain_result、
+si_recursion_leaf、si_var_argument、static_types、unshaped_argument
+
+## 复合赋值：翻之前模块**没有**声明过这四个算子（证据）
+
+`git grep -n "assn" 221cfe18b -- modules/tensor` → **0 命中**；`stdlib` 同样 0；全仓库也没有任何
+模块声明 `assn_*`（只有 `src/builtin/executors/builtin.cpp` 的内建标量表）。所以「把模块的四个
+声明放回去」没有可放回的东西：开发分支上的 `t += u` 走的是 `compoundAssignmentByRebinding`
+对「模块定义的类型」的推导，而 `TensorType` 正是模块定义的类型。
+
+三条路连同代价：
+1. （推荐，改动最小）让推导认「模块**声明**了该普通算子」的情形——复合形式跟随模块的 `+`。
+   代码里本就有「复合赋值跟随声明该算子的模块」（design principles 5.7）的说法，那条注释说的
+   是「模块定义的类型」。代价与风险：普通数值数组会经由张量模块的 `+` 一起获得 `+=`；
+   在 P4 终态下这大概正是想要的，但它仍是语义放宽，**需要作者确认**。
+2. 让张量模块新声明 `assn_add/sub/mul/div`：新算子表面 + 重绑定语义的实现，代价大得多。
+3. 拒绝：6 个用例改成「拒绝」形态，文档同步。
+
+推荐 1；本 lane 没有自行落，因为这是语义裁决，不是漏改的门。
+
+## f64 叶子（optim）为什么落到 f32 梯度内核：bisect 在这条历史上走不通
+
+- 基线 `221cfe18b`：`test/plans/feat/modules/optim.plan.toml` **22/22 全绿**（已实测），
+  所以这一格的红是翻带来的。
+- 但**中间提交编不过**：在 `a5a32a077`（第一个提交）上构建直接失败（85 s 后 exit 1）。这次是按
+  主题拆的提交，类型、消费者与 API 分散在不同提交里，单个提交不是可构建状态。所以「逐个提交
+  bisect」不可行；要 bisect 需要一份可构建的 squash 副本，或按文件回退到 tip 之前。
+- 因此这一格还差一步才能说出「哪个提交改的」：拿一份可构建的对照（tip 与 tip 去掉 VJP/秩 0 两刀），
+  并在 `agreement.cml` 里打出那个叶子的解析类型。没有猜，也没有改内核去迁就 f64——内核只收 f32
+  是决定，不该 f64 的叶子要停止是 f64。
