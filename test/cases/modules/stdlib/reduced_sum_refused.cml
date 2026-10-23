@@ -8,18 +8,22 @@
  *
  * Every check is a property of the answer, with the second way of computing it written out here:
  *
- *   [2^24, 1, -2^24]   the exact sum is 1, and 1 is a bf16. An f32 accumulator rounds 2^24 + 1
- *                      back to 2^24 and answers 0, so this is the pair that separates the
- *                      accumulator width. The answer is also compared with the f64 sum over the
- *                      same elements rounded once by hand, and with the tensor reduction, which
- *                      the ruling says agrees with the array reduction bit for bit.
- *   [1.0, 0.25]        the exact sum is 1.25, which bf16 cannot hold: it is the halfway point
- *                      between 1.0 and 1.5, and ties to even gives 1.0. The property is that the
- *                      answer is one rounding of the total, not a rounding per addition.
- *   [65504, 736]       f16: the total 66240 is beyond the range of f16, so the one rounding of the
- *                      total is +infinity -- the same value adding the two in f16 gives, and what
- *                      IEEE rounding does rather than a saturation.
- *   []                 the sum of no elements is +0 in the element type.
+ *   [2^24, 1, -2^24]      the exact sum is 1, and 1 is a bf16. An f32 accumulator rounds
+ *                         2^24 + 1 back to 2^24 and answers 0, so this is the pair that separates
+ *                         the accumulator width. The answer is also compared with the f64 sum over
+ *                         the same elements rounded once by hand, and with the tensor reduction,
+ *                         which the ruling says agrees with the array reduction bit for bit.
+ *   [1.0, 2^-8]           the exact sum is 1 + 2^-8, the halfway point between 1 and 1 + 2^-7:
+ *                         ties to even gives 1.0. The property is that one rounding of the total
+ *                         is what the answer is.
+ *   [1.0, 2^-8, 2^-8]     the exact sum is 1 + 2^-7, which bf16 holds exactly, so the answer is
+ *                         1.0078125. Rounding each addition into the element type would give 1.0
+ *                         at the first step and keep it, so this is the pair that separates
+ *                         "one rounding of the total" from "a rounding per addition".
+ *   [65504, 736]          f16: the total 66240 is beyond the range of f16, so the one rounding of
+ *                         the total is +infinity -- the same value adding the two in f16 gives,
+ *                         and what IEEE rounding does rather than a saturation.
+ *   []                    the sum of no elements is +0 in the element type.
  */
 module stdlib_reduced_sum_refused
 
@@ -34,12 +38,6 @@ func widened(xs: bf16[]): f64[] {
     return xs->map<(x: bf16) => float(x)>
 }
 
-/// The four bytes of one f32 value, read back through a one-element f32 tensor.
-func bitsOfF32(value: f32): int[] {
-    let one: f32[] = [value]
-    return to_array(to_bytes(new(one)))
-}
-
 func main(): int sync {
     let cancelling: bf16[] = [16777216.0, 1.0, -16777216.0]
     let total = sum(cancelling)
@@ -47,15 +45,19 @@ func main(): int sync {
     let reference = bf16(sum(widened(cancelling)))
     println(total, total == one, total == reference, total == bf16(0.0))
 
-    // The same three elements through the tensor reduction, on one row: the ruling says the two
-    // paths agree bit for bit, so the two bytes are the bf16 1.0 of the array answer above.
-    let rows: f32[] = [16777216.0, 1.0, -16777216.0]
-    let matrix = reshape(new(rows) as Tensor, [1, 3])
+    // The same three elements through the tensor reduction, on one row: the two paths must agree
+    // bit for bit, so the two bytes are the bf16 1.0 the array answer above is.
+    let rowElements: bf16[] = [16777216.0, 1.0, -16777216.0]
+    let matrix = reshape(new(rowElements) as Tensor, [1, 3])
     println(to_array(to_bytes(tensor_sum(matrix, 1, true))))
 
-    let tied: bf16[] = [1.0, 0.25]
+    let tied: bf16[] = [1.0, 0.00390625]
     let tiedTotal = sum(tied)
     println(tiedTotal, tiedTotal == one, tiedTotal == bf16(sum(widened(tied))))
+
+    let carried: bf16[] = [1.0, 0.00390625, 0.00390625]
+    let carriedTotal = sum(carried)
+    println(carriedTotal, carriedTotal == one, carriedTotal == bf16(sum(widened(carried))))
 
     let wide: f16[] = [65504.0, 736.0]
     let over = sum(wide)

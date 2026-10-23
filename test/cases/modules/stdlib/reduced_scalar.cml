@@ -11,16 +11,22 @@
  *   exact          bf16    f16     why
  *   1 + 2^-8       1.0     -       bf16 has 8 significand bits: exactly between 1 and 1+2^-7,
  *                                 the tie goes to the even neighbour (1.0 is 0x3F80)
- *   0.1            0.09997558593750 / bf16 [205, 61] (0x3DCD), f16 [102, 46] (0x2E66): the
- *                                 nearest of each, which is not the f32 of 0.1 in either
+ *   0.1            0.10009765625 / the nearest of each, which is not the f32 of 0.1 in either.
+ *                 0.0999755859375 bf16 0x3DCD is 1.6015625 x 2^-4 and f16 0x2E66 is
+ *                                 1.599609375 x 2^-4; the two types round the same f32 in
+ *                                 opposite directions, which is what makes this pair worth
+ *                                 pinning. Printed, the bf16 one is `0.100097656`
+ *                                 (docs/handover/questions/reduced-precision-text.md)
  *   1 + 2^-11      -       1.0     the same tie to even, ten significand bits
- *   -0.0           -0.0    -       a negative literal keeps its sign bit
- *   3.3895314e38   finite  -       the largest finite bf16 (0x7F7F); one more exponent is
- *                                 infinity, and a rounding that flushed would not be IEEE
+ *   -0.0           -0.0    -       a negative literal keeps its sign bit, and the two zeros
+ *                                 compare equal although their slots differ
  *   65504.0        -       finite  the largest finite f16 (0x7BFF)
- *   65520.0        -       inf     the halfway point between 65504 and 2^16 rounds up
+ *   65504 + 16     -       inf     the exact sum 65520 is the halfway point between 65504 and
+ *                                 2^16; ties to even give the even neighbour, which the type
+ *                                 does not have, so the store rounding is an infinity
  *   1.0 + 1.0      2.0     -       arithmetic is done in f32 and rounded once
- *   0.1 * 0.1      0.0099945...    the product of the two stored elements, rounded once
+ *   0.1 * 0.1      0.010009766     the product of the two stored elements (0.10009765625^2 =
+ *                                 0.0100195...), rounded once into bf16 0x3C24
  *   65504 + 65504  -       inf     a result beyond the range of the element type is infinity,
  *                                 as it is for f32: no saturation, no fault
  *   2^24 + 1       -       -       over a sum: the accumulator is f64, so 2^24 + 1 - 2^24 is 1
@@ -29,6 +35,12 @@
  * What each rule would give instead is written out where it matters: a conversion that rounded
  * twice (through f16 and on to bf16), that broke ties away from zero, that saturated an overflow,
  * or an arithmetic that kept full f32 precision would each change one of these lines.
+ *
+ * The latitudes of the two types are reached by arithmetic (`65504.0 + 0.0`, `3.3895314e38 +
+ * 0.0`) rather than written as the literal itself, because a bf16 or f16 literal is a member of
+ * the type and a written value above the largest one is refused by the literal rule with the
+ * type's own range (`let x: f16 = 65520.0` is an error, not an infinity: the rounding that
+ * overflows is the store rounding of a computed value, which the arithmetic lines pin).
  */
 module stdlib_reduced_scalar
 
@@ -36,20 +48,21 @@ import { sum } from array
 import { Tensor, new, cast, to_bytes } from tensor
 import { to_array } from bytes
 
-/// The little-endian bytes of one bf16 element, read back through a one-element tensor.
+/// The little-endian bytes of one element of a one-element tensor of `T`. The helper is written
+/// once for bf16 and once for f16: a generic form needs the conversion of `bf16(x)` with a type
+/// variable as its target, which is a declaration of its own and not what this case is about.
 func bitsOfBf16(value: bf16): int[] {
     let one: bf16[] = [value]
     return to_array(to_bytes(new(one)))
 }
 
-/// The little-endian bytes of one f16 element.
 func bitsOfF16(value: f16): int[] {
     let one: f16[] = [value]
     return to_array(to_bytes(new(one)))
 }
 
-/// One rounding of a full-precision literal into bf16: the two values the case writes by hand,
-/// and the same values put through the written conversion rather than a literal.
+/// One rounding of an f32 tensor into bf16 or f16: the same elements the literal and the written
+/// conversion give, so the three spellings must agree element for element.
 func narrowed(x: Tensor<f32>): Tensor<bf16> { return cast(x, 'bf16') }
 
 func halved(x: Tensor<f32>): Tensor<f16> { return cast(x, 'f16') }
@@ -61,42 +74,44 @@ func main(): int sync {
     println(bfTie, f16Tie, bitsOfBf16(bfTie)[0], bitsOfBf16(bfTie)[1])
     println(bitsOfF16(f16Tie)[0], bitsOfF16(f16Tie)[1])
 
-    // The written conversion and `as` give the same element as the literal: the rounding is one,
-    // and it is the store rounding of the element type, not the f32 one.
+    // The written conversion and the tensor cast give the same element as the literal: the
+    // rounding is one, and it is the store rounding of the element type, not the f32 one.
     let tenth: f32[] = [0.1]
-    let convertedBf = cast(new(tenth), 'bf16')
-    println(to_array(to_bytes(convertedBf)))
+    let widenedTenth = tenth->map<(x: f32) => bf16(x)>
+    println(to_array(to_bytes(cast(new(tenth), 'bf16'))))
+    println(to_array(to_bytes(cast(new(tenth), 'f16'))))
+    println(widenedTenth[0], bitsOfBf16(widenedTenth[0])[0], bitsOfBf16(widenedTenth[0])[1])
     println(bitsOfBf16(0.1)[0], bitsOfBf16(0.1)[1])
-    let convertedF16 = cast(new(tenth), 'f16')
-    println(to_array(to_bytes(convertedF16)))
     println(bitsOfF16(0.1)[0], bitsOfF16(0.1)[1])
 
     // ---- the boundaries of each type: the largest finite value, and the step to infinity ----
-    let bfMax: bf16 = 3.3895314e38
-    let bfOver: bf16 = 3.4e38
-    let asF32: f32 = bfMax
-    println(bitsOfBf16(bfMax)[0], bitsOfBf16(bfMax)[1], bfOver, bitsOfBf16(bfOver)[0])
-    // Reading a bf16 as an f32 is exact, and it is the same value a cast of the tensor gives.
-    println(asF32, to_array(to_bytes(cast(convertedBf, 'f32'))))
+    let bfMax: bf16 = 3.3895314e38 + 0.0
+    // The widest value a bf16 holds, read back exactly: 0x7F7F is 3.3895314e38, and the f32 it
+    // widens to is that value, not the literal 3.3895314e38 an f32 would hold.
+    let asF32: f32 = f32(bfMax)
+    println(bitsOfBf16(bfMax)[0], bitsOfBf16(bfMax)[1], asF32)
+    println(bfMax + bfMax, bitsOfBf16(bfMax + bfMax)[0])
 
     let f16Max: f16 = 65504.0
-    let f16Over: f16 = 65520.0
-    println(bitsOfF16(f16Max)[0], bitsOfF16(f16Max)[1], f16Over)
-    println(f16Max + f16Max, bitsOfF16(f16Max + f16Max)[0], bitsOfF16(f16Max + f16Max)[1])
+    let f16Over: f16 = f16Max + 16.0
+    println(bitsOfF16(f16Max)[0], bitsOfF16(f16Max)[1], f16Max + 0.0)
+    println(f16Over, f16Max + f16Max, bitsOfF16(f16Over)[0], bitsOfF16(f16Over)[1], bitsOfF16(f16Max + f16Max)[0], bitsOfF16(f16Max + f16Max)[1])
 
     // ---- a negative literal keeps its sign, and the two zeros compare equal ----
+    // The two slots are 0x0000 and 0x8000, so this is the pair that separates a comparison by
+    // value from a comparison of the stored bits; the bytes pin both signs.
     let negative: bf16 = -0.0
     let positive: bf16 = 0.0
-    println(negative, negative == positive, bitsOfBf16(negative)[0])
+    println(negative, negative == positive, bitsOfBf16(negative)[0], bitsOfBf16(negative)[1])
 
     // ---- arithmetic: computed in f32, rounded once into the element type ----
     let one: bf16 = 1.0
     let product: bf16 = 0.1 * 0.1
     let quotient: bf16 = 1.0 / 3.0
     println(one + one, product, quotient)
-    println(bitsOfBf16(one + one)[0], bitsOfBf16(product)[0], bitsOfBf16(quotient)[0])
+    println(bitsOfBf16(one + one)[0], bitsOfBf16(one + one)[1], bitsOfBf16(product)[0], bitsOfBf16(product)[1])
 
-    // ---- comparison: by value, not by the bits of the slot ----
+    // ---- comparison: the six answers of two equal values ----
     let a = bf16(6.0)
     let b = bf16(6.0)
     println(a == b, a != b, a < b, a <= b, a > b, a >= b)
@@ -109,8 +124,10 @@ func main(): int sync {
     let total = sum(cancelling)
     println(total, total == bf16(1.0), bitsOfBf16(total)[0], bitsOfBf16(total)[1])
 
-    // The same three elements through the tensor path, which the ruling says agrees bit for bit.
+    // The same elements through the tensor path: the two bytes are the ones above, which is what
+    // "the array reduction and the tensor reduction agree bit for bit" means.
     let rows: f32[] = [16777216.0, 1.0, -16777216.0]
     println(to_array(to_bytes(narrowed(new(rows)))))
+    println(to_array(to_bytes(halved(new(tenth)))))
     return 0
 }
