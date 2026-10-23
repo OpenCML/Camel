@@ -440,6 +440,12 @@ Every `[[tests]]` entry may use these common fields:
   `skip_unless = ["${python}", "-c", "import onnxruntime"]`.
 - `skip_unless_timeout_ms`
   Optional timeout for the precondition command. Default is `120000`.
+- `cuda_devices`
+  Optional boolean, default `false`: `true` declares that this test's Python child wants the
+  machine's CUDA devices, and the runner then leaves `CUDA_VISIBLE_DEVICES` exactly as it found it.
+  A test that does not declare it sees no device at all, so a CPU-only PyTorch program cannot die
+  on a card another tenant holds. See "CUDA visibility"; every plan tagged `gpu` declares it in
+  `[defaults]`.
 - `tier`
   `fast`, `slow` or `debug`, overriding the plan's layer for this test only.
 - `parallel`
@@ -752,11 +758,63 @@ end compiles) says `sweep = false` with a comment.
 - `CAMEL_TEST_TIMEOUT_SCALE=<n>` multiplies every test and verification timeout: for running
   whole plans under a mode that slows every program down, e.g.
   `CAMEL_GC_POISON=1 CAMEL_TEST_TIMEOUT_SCALE=20 node scripts/test.js feat`.
-- Variables in the environment of the runner reach every test; a test's own `envs` win.
+- Variables in the environment of the runner reach every test; a test's own `envs` win. The one
+  exception is `CUDA_VISIBLE_DEVICES`, which the runner writes for a Python child that did not ask
+  for the devices: see "CUDA visibility".
 - `--jobs N` limits the parallel tests; it is an option of the runner process, not an
   environment variable, so a test cannot change how many of its neighbours run.
 - The timeouts above apply to one test; a parallel run does not relax them, and a test whose
   time depends on the machine's load belongs alone (`parallel = false`) or in the slow layer.
+
+## CUDA visibility
+
+A Python test that imports a CUDA-aware library can reach a card without naming one, and then it
+answers to whoever else is on the host. `torch.optim.Adam(...).step()` calls torch's
+`_accelerator_graph_capture_health_check()`, which asks for the current accelerator and its current
+stream and so retains the primary context of every card; `cuDevicePrimaryCtxRetain` returns
+`CUDA_ERROR_UNKNOWN` (999) while another tenant holds one, and the process dies before its first
+assertion. `SGD` makes no such call, so a CPU-only program's `Adam` step is green on an idle host
+and red on a busy one: one test of `feat/modules/onnx` failed for a reason that had nothing to do
+with the code it tested, and the same program with `SGD` in its place passed.
+
+The runner hides the machine's devices from every Python child of a test that did not ask for them:
+it writes `CUDA_VISIBLE_DEVICES=` (empty, CUDA's spelling for "names no device") into the
+environment of a `tool = "python"` test process and of a `skip_unless = ["${python}", ...]`
+precondition. The value is written before the test's own `envs`, so a test that names the variable
+itself keeps its value; `CUDA_VISIBLE_DEVICES=-1` is the other spelling that names no device.
+
+A test that really wants a device says so:
+
+```toml
+[[tests]]
+name = "compiles_and_runs_on_a_card"
+cuda_devices = true
+case = "../../cases/..."
+```
+
+`cuda_devices = true` means "do not touch my Python child's devices": the runner then leaves the
+machine's `CUDA_VISIBLE_DEVICES` exactly as it found it, so a test that uses several cards keeps
+them, and a missing or busy card stays that test's own failure instead of something the runner
+hides. Every plan tagged `gpu` declares it in `[defaults]`, because its tests exist to run against
+the cards.
+
+The default lives in the runner rather than in a pin per plan, deliberately. The protection has to
+reach a plan nobody has written yet; a test's `envs` never reach its `skip_unless` process (a
+precondition that stops holding is a silent skip, so a lost pin would cost coverage rather than
+fail a run); a pinned value has to name an ordinal, and `CUDA_VISIBLE_DEVICES=0` cannot express
+"the cards" for a test that uses several; and a `[defaults]` line or a generated copy can be
+dropped without the plan noticing. The price of the default is that a device test which forgets
+its declaration measures the CPU and still passes, so
+`test/tools/check-cuda-visibility.mjs` refuses a Python test in a plan tagged `gpu` that does not
+declare, and a test that names a card in its own `envs` without declaring.
+
+The guard reads every plan under `test/plans/` -- the perf layer excepted, because those plans are
+manual and pin inside `showcase/` -- and refuses a test that reaches Python with a CUDA-aware import
+and is neither hidden (by the runner's default, by its plan, or by the case script) nor declared.
+It prints how many tests it examined and fails when that number moves, so it cannot stop examining
+anything unnoticed. `test/tools/selftest/cuda-visibility/` is its fixture and the runner's:
+`visibility.plan.toml` runs the default, its precondition, the opt-in and a test's own value against
+an untouched `node` reference, and `unpinned/` is the plan the guard must refuse, test by test.
 
 ## Snapshot Tests
 

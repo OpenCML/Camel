@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url'
 import { parseTomlFile } from './toml-lite.mjs'
 import { compareGirDotIsomorphic } from './gir-dot.mjs'
 import { applyNormalizers } from './normalizers.mjs'
+import { CUDA_HIDDEN, CUDA_VISIBLE_DEVICES, hidesCudaDevices, pythonEntryPoints } from './cuda-visibility.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -39,7 +40,7 @@ const PLAN_FIELDS = new Set([
 ])
 const TEST_FIELDS = new Set([
     'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'verify_timeout_ms',
-    'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep',
+    'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep', 'cuda_devices',
     'known_fail', 'known_fail_note', 'failure_note',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
     'golden', 'snapshot_stream', 'snapshot_compare', 'normalizers',
@@ -115,7 +116,9 @@ function checkFieldType(planPath, entry, field, where, type) {
         ? typeof value === 'string'
         : type === 'number'
             ? typeof value === 'number' && Number.isFinite(value)
-            : false
+            : type === 'boolean'
+                ? typeof value === 'boolean'
+                : false
     if (ok) return
     const shown = type === 'string' ? JSON.stringify(value) : String(value)
     throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: ${field} must be a ${type}, got ${shown}`)
@@ -168,6 +171,7 @@ function validatePlanSchema(doc, planPath) {
         checkFieldType(planPath, entry, 'expect_stdout_exact', where, 'string')
         checkFieldType(planPath, entry, 'expect_stdout', where, 'string')
         checkFieldType(planPath, entry, 'perf_budget_platform', where, 'string')
+        checkFieldType(planPath, entry, 'cuda_devices', where, 'boolean')
     }
 }
 
@@ -729,6 +733,16 @@ function formatGateSplit(split) {
 }
 
 /**
+ * Hide the machine's CUDA devices from a Python child that did not ask for them. Called before a
+ * test's own `envs` are applied, so a value the test writes itself still wins; the rule and the
+ * evidence behind it are in test/tools/cuda-visibility.mjs.
+ */
+function hideCudaDevicesFrom(env, test) {
+    if (hidesCudaDevices(test)) env[CUDA_VISIBLE_DEVICES] = CUDA_HIDDEN
+    return env
+}
+
+/**
  * A test's precondition: `skip_unless` is a command (same variable expansion as `args`) run from
  * the repository root before the test. A non-zero exit skips the test, reporting the command's
  * output as the reason; the test is then neither passed nor failed. Use it only for conditions
@@ -741,11 +755,16 @@ async function checkPrecondition(test, sharedVars, scratch, scratchRelative) {
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
     const scope = { ...sharedVars, case: casePath, test_tmp: scratchRelative }
     const [cmd, ...args] = expandArgs(test.skip_unless, scope)
+    // The precondition is a Python child of the runner too, and it gets the same visibility as
+    // the test it guards: a precondition that fails on a busy card would skip the test, and a
+    // skip is a silent loss of coverage, not a red (docs/test-plans.md, "CUDA visibility").
+    const env = { ...process.env, CAMEL_TEST_TMPDIR: scratch }
+    if (pythonEntryPoints(test).precondition) hideCudaDevicesFrom(env, test)
     const proc = await runProcess(cmd, args, {
         cwd: REPO_ROOT,
         // The precondition writes where the test would: a dataset downloaded for it lands in
         // its own scratch directory, so two tests (or two runs) cannot corrupt one cache.
-        env: { ...process.env, CAMEL_TEST_TMPDIR: scratch },
+        env,
         timeoutMs: test.skip_unless_timeout_ms || 120000,
     })
     if (proc.status === 0) {
@@ -1263,6 +1282,8 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // A test of the format with source excerpts passes --error-format text, which wins.
     env.CAMEL_ERROR_FORMAT = 'short'
     env.CAMEL_TEST_TMPDIR = scratch
+    // Before the test's own `envs`: a value the test writes for itself wins over the default.
+    if (pythonEntryPoints(test).tool) hideCudaDevicesFrom(env, test)
     for (const entry of test.envs || []) {
         const text = expandTextTokens(entry, scope)
         const eq = text.indexOf('=')

@@ -1,0 +1,71 @@
+# Fixture of test/tools/selftest/run.mjs (not under test/plans: it is the fixture of the rule, not
+# a case of the tree). The runner hides the machine's CUDA devices from a Python child that
+# declared nothing, so that a CPU-only PyTorch program cannot die on a card another tenant holds
+# (docs/test-plans.md, "CUDA visibility"); this plan pins what that means:
+# the hidden default, the precondition that gets the same value, the `cuda_devices = true` opt-in
+# that leaves the machine's own value alone, and a test whose own `envs` win.
+#
+# `reference.node` is the yardstick: a node child is not touched, so it prints what the machine
+# really has, and `declared.python` is compared against it rather than against a literal (the
+# value differs from host to host and is not this fixture's subject).
+id = "selftest.cuda_visibility"
+desc = "The Python CUDA-visibility default, its opt-in and its precondition"
+tier = "fast"
+
+[[tests]]
+name = "reference.node"
+kind = "behavior"
+tool = "node"
+case = "devices.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "CUDA_VISIBLE_DEVICES=["
+timeout_ms = 20000
+
+[[tests]]
+name = "hidden.python"
+desc = "A Python test that declares nothing sees no device: the runner writes the empty value."
+kind = "behavior"
+tool = "python"
+case = "devices.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "CUDA_VISIBLE_DEVICES=[]\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "hidden.precondition"
+desc = "The rule reaches `skip_unless` too: this precondition exits 0 only when it sees no device, so a skip here would mean the precondition kept the cards (and its test would be lost silently)."
+kind = "behavior"
+tool = "python"
+case = "devices.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import os, sys; sys.exit(0 if os.environ.get('CUDA_VISIBLE_DEVICES') == '' else 1)"]
+expect_exit = 0
+expect_stdout_exact = "CUDA_VISIBLE_DEVICES=[]\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "declared.python"
+desc = "cuda_devices = true: the runner leaves the machine's value alone, so this child sees exactly what the untouched node reference saw."
+kind = "differential"
+tool = "python"
+cuda_devices = true
+case = "devices.py"
+args = ["${case}"]
+compare_to = "reference.node"
+compare_fields = ["stdout_normalized"]
+expect_exit = 0
+timeout_ms = 20000
+
+[[tests]]
+name = "pinned.python"
+desc = "A test that writes CUDA_VISIBLE_DEVICES itself has decided, and the runner does not overrule it."
+kind = "behavior"
+tool = "python"
+case = "devices.py"
+args = ["${case}"]
+envs = ["CUDA_VISIBLE_DEVICES=0"]
+expect_exit = 0
+expect_stdout_exact = "CUDA_VISIBLE_DEVICES=[0]\n"
+timeout_ms = 20000

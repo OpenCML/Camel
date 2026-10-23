@@ -1,0 +1,27 @@
+# The plan test/tools/check-cuda-visibility.mjs must refuse, and refuse by name.
+#
+# Nothing selects or runs this file: it lives under test/tools/selftest/ so the guard's own
+# fixture, like the load-class one next to it, is never read as a plan of the tree. The runner's
+# self-test points the guard at this directory and requires both problems below.
+id = "selftest.cuda_visibility.unpinned"
+desc = "The shapes the runner's Python default cannot reach"
+tier = "fast"
+
+[[tests]]
+name = "unpinned.harness"
+desc = "Python behind a node harness: the runner wraps `tool = \"python\"`, not a child a case starts itself."
+kind = "behavior"
+tool = "node"
+case = "../cases/spawn_cuda.mjs"
+args = ["${case}"]
+expect_exit = 0
+
+[[tests]]
+name = "unpinned.names_a_card"
+desc = "A CPU-only test that pins CUDA_VISIBLE_DEVICES=0 names a card and never declares that it wants one: its own value wins over the runner's default."
+kind = "behavior"
+tool = "python"
+case = "../cases/cuda_case.py"
+args = ["${case}"]
+envs = ["CUDA_VISIBLE_DEVICES=0"]
+expect_exit = 0
