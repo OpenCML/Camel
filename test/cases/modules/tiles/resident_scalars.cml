@@ -6,7 +6,10 @@ with <x: Tensor<f32>>
 func loss(): float { return sum(x * x) }
 func total(x: Tensor<f32>): float { return sum(x) }
 func identity(x: float): float { return x }
-func scale(x: Tensor<f32>, k: float): Tensor<f32> { return x * k }
+// The scalar stays a `float` at the boundary (a device resident one is passed in), and the
+// operand the tensor sees is the f32 conversion: a tensor operator computes in its element type,
+// so `x * k` with a `float` k is a type error (design principles 5.1).
+func scale(x: Tensor<f32>, k: float): Tensor<f32> { return x * f32(k) }
 func mixed(x: Tensor<f32>): (float, Tensor<f32>, float) {
     return (sum(x), x + 1.0, 1.0000000000000002)
 }

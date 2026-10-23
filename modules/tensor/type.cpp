@@ -223,7 +223,9 @@ Type *TensorType::literalOperandType() const {
     case TypeCode::Float16:
         return Type::Float16();
     case TypeCode::Bool:
-        return Type::Bool();
+        // A bool tensor has no arithmetic of its own: its operators compute in f32 (`mask * 1.0`
+        // reads the mask as numbers), so that is the type a literal beside one takes.
+        return Type::Float32();
     default:
         return nullptr;
     }

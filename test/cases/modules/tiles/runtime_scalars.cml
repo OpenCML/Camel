@@ -3,7 +3,7 @@ import { Tensor, reshape, sum, abs } from tensor
 import { download, source, inspect, benchmark, run_preferred_resident } from tiles
 func arithmetic(a: float, b: float): float { return (a + b) * 0.5 - a / b }
 func identity(x: float): float { return x }
-func scale(x: Tensor<f32>, k: float): Tensor<f32> { return x * k }
+func scale(x: Tensor<f32>, k: f32): Tensor<f32> { return x * k }
 with <k: float>
 func shifted(x: float): float { return x + k }
 func main(): int sync {

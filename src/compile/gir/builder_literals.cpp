@@ -296,8 +296,8 @@ node_handle_t Builder::foldLiteralCall(const GCT::node_ptr_t &gct, Type *expecte
 
 void Builder::adaptLiteralOperands(
     const std::string &group, std::vector<Argument> &inputs, type_vec_t &types,
-    const GCT::node_ptr_t &call) {
-    if (inputs.size() < 2 || !isFoldedOperator(group)) {
+    const GCT::node_ptr_t &call, bool anyOperatorCall) {
+    if (inputs.size() < 2 || (!anyOperatorCall && !isFoldedOperator(group))) {
         return;
     }
     // The value of the other operand decides the literal's type ("二元运算中另一个操作数的

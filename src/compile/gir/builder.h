@@ -2217,10 +2217,13 @@ class Builder {
     node_handle_t foldLiteralCall(const GCT::node_ptr_t &gct, camel::core::type::Type *expected);
     /// The design principles 5.1 resolution order for the operands of an operator: a literal
     /// operand takes the type of the other operand when that one is numeric, and then the
-    /// value is converted exactly (an operand that does not fit is reported).
+    /// value is converted exactly (an operand that does not fit is reported). With
+    /// `anyOperatorCall`, a named operator call (`add(x, 2.0)`) is adapted as well; without it
+    /// only the infix operators whose operands are related that way.
     void adaptLiteralOperands(
         const std::string &group, std::vector<Argument> &inputs,
-        camel::core::type::type_vec_t &types, const GCT::node_ptr_t &call);
+        camel::core::type::type_vec_t &types, const GCT::node_ptr_t &call,
+        bool anyOperatorCall = false);
     /// The return type the function around the current position declares (looking out of
     /// branch arms), or nullptr when it declares none.
     camel::core::type::Type *declaredExitTypeHere() const;

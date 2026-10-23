@@ -10,13 +10,13 @@ func effect(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
 }
 func crosslane(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
     let pre = x + x
-    let y = loop s = pre for k in [1, 2] do s + sum(s)
+    let y = loop s = pre for k in [1, 2] do s + f32(sum(s))
     return y * y
 }
 func conditional(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
     let pre = x + x
     let n = loop s = 0.0 while s < 3.0 do s + 1.0
-    return pre * n
+    return pre * f32(n)
 }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3]) as Tensor<f32, [3]>
