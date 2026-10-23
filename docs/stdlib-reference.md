@@ -5523,7 +5523,7 @@ The state `sgd` starts from: no moments to carry, only the step count.
 #### `init`
 
 ```camel
-init: (adam_opt: Adam, params: P) => AdamState<P>
+init: (opt: Adam, params: P) => AdamState<P>
 ```
 
 The state `adam` starts from: the two moment trees at zero, shaped like the parameters, and the
@@ -5547,7 +5547,7 @@ One `sgd` update: `(params, state)`, with the step advanced by one and the rate 
 #### `update`
 
 ```camel
-update: (adam_opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
+update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
 One `adam` update: `(params, state)`, with the step advanced by one and the rate taken from

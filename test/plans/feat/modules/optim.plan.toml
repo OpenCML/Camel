@@ -257,7 +257,7 @@ kind = "negative"
 case = "../../../cases/modules/optim/unknown_optimizer.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "argument types: Unknown, Model.", "init: (opt: Sgd, params: P) => SgdState", "init: (adam_opt: Adam, params: P) => AdamState<P>"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "argument types: Unknown, Model.", "init: (opt: Sgd, params: P) => SgdState", "init: (opt: Adam, params: P) => AdamState<P>"]
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 expect_diagnostic_line = 22
 expect_diagnostic_column = 21
@@ -271,7 +271,7 @@ kind = "negative"
 case = "../../../cases/modules/optim/unknown_optimizer_update.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "argument types: Unknown, Model, Model, AdamState<Model>.", "update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)", "update: (adam_opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "argument types: Unknown, Model, Model, AdamState<Model>.", "update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)", "update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)"]
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 expect_diagnostic_line = 25
 expect_diagnostic_column = 31
