@@ -1,0 +1,258 @@
+{
+  "format": "camel.gir",
+  "graphs": [
+    {
+      "capturePorts": [],
+      "contextPorts": [],
+      "dependencies": [
+        "g1"
+      ],
+      "edges": [
+        {
+          "kind": "context",
+          "source": "g0n0",
+          "sourceIndex": 0,
+          "target": "g0n1",
+          "targetIndex": 0
+        }
+      ],
+      "exit": "g0n1",
+      "id": "g0",
+      "name": "__root__",
+      "nodes": [
+        {
+          "callee": "g1",
+          "id": "g0n0",
+          "kind": "DATA",
+          "label": "Function(graph=main, tupleSlots=0)",
+          "origin": "<ORIGIN>",
+          "outputType": "() => int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 1,
+              "line": 14
+            },
+            "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
+            "start": {
+              "character": 0,
+              "line": 7
+            }
+          }
+        },
+        {
+          "id": "g0n1",
+          "kind": "CALL",
+          "label": "CALL",
+          "outputType": "int",
+          "roles": []
+        }
+      ],
+      "normalPorts": [],
+      "signature": "() => int"
+    },
+    {
+      "capturePorts": [],
+      "contextPorts": [],
+      "dependencies": [],
+      "edges": [
+        {
+          "kind": "normal",
+          "source": "g1n0",
+          "sourceIndex": 0,
+          "target": "g1n2",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g1n1",
+          "sourceIndex": 0,
+          "target": "g1n2",
+          "targetIndex": 1
+        },
+        {
+          "kind": "normal",
+          "source": "g1n8",
+          "sourceIndex": 0,
+          "target": "g1n6",
+          "targetIndex": 0
+        },
+        {
+          "kind": "control",
+          "source": "g1n2",
+          "sourceIndex": 0,
+          "target": "g1n6",
+          "targetIndex": 0
+        },
+        {
+          "kind": "normal",
+          "source": "g1n2",
+          "sourceIndex": 0,
+          "target": "g1n7",
+          "targetIndex": 0
+        },
+        {
+          "kind": "control",
+          "source": "g1n6",
+          "sourceIndex": 0,
+          "target": "g1n7",
+          "targetIndex": 0
+        }
+      ],
+      "exit": "g1n7",
+      "id": "g1",
+      "name": "main",
+      "nodes": [
+        {
+          "id": "g1n0",
+          "kind": "DATA",
+          "label": "1",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 13,
+              "line": 8
+            },
+            "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
+            "start": {
+              "character": 12,
+              "line": 8
+            }
+          }
+        },
+        {
+          "id": "g1n1",
+          "kind": "DATA",
+          "label": "0",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 17,
+              "line": 8
+            },
+            "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
+            "start": {
+              "character": 16,
+              "line": 8
+            }
+          }
+        },
+        {
+          "id": "g1n2",
+          "kind": "OPER",
+          "label": ":op/div_l",
+          "name": "a",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 15,
+              "line": 8
+            },
+            "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
+            "start": {
+              "character": 14,
+              "line": 8
+            }
+          }
+        },
+        {
+          "id": "g1n3",
+          "kind": "DATA",
+          "label": "2",
+          "name": "x",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 13,
+              "line": 9
+            },
+            "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
+            "start": {
+              "character": 12,
+              "line": 9
+            }
+          }
+        },
+        {
+          "id": "g1n4",
+          "kind": "DATA",
+          "label": "3",
+          "name": "y",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 13,
+              "line": 10
+            },
+            "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
+            "start": {
+              "character": 12,
+              "line": 10
+            }
+          }
+        },
+        {
+          "id": "g1n6",
+          "kind": "OPER",
+          "label": ":io/println",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [
+            "effect"
+          ],
+          "source": {
+            "end": {
+              "character": 11,
+              "line": 12
+            },
+            "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
+            "start": {
+              "character": 4,
+              "line": 12
+            }
+          }
+        },
+        {
+          "id": "g1n7",
+          "kind": "GATE",
+          "label": "GATE",
+          "outputType": "int",
+          "roles": []
+        },
+        {
+          "id": "g1n8",
+          "kind": "DATA",
+          "label": "6",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 15,
+              "line": 11
+            },
+            "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
+            "start": {
+              "character": 14,
+              "line": 11
+            }
+          }
+        }
+      ],
+      "normalPorts": [],
+      "signature": "() => int"
+    }
+  ],
+  "root": "g0",
+  "version": 1
+}

@@ -5,12 +5,14 @@
  * The optimizations of the standard library written in Camel: the reference implementation of
  * what the C++ pass does, held to it by `test/plans/feat/opt/camel_passes.plan.toml`. A pass here
  * is a function `(p: Program) => Program!` exported by this module, so the pipeline names it
- * `opt::cse` and `opt::dce` and `test/tools/check-pass-declarations.mjs` reads it as one.
+ * `opt::fold`, `opt::cse` and `opt::dce` and `test/tools/check-pass-declarations.mjs` reads it as
+ * one.
  *
- * What a pass can do today is a transaction over the snapshot the `graph` module hands out: read
- * a node, `replace` it by another, `erase` one nobody reads, `commit`, and read the next round
- * from the new snapshot. Two of the four passes of handover H227's first layer are here and two
- * are not, and both times the reason is a missing operation rather than a missing idea:
+ * What a pass does is a transaction over the snapshot the `graph` module hands out: read a node,
+ * `replace` it by another, `erase` one nobody reads, evaluate an operator over constants with
+ * `eval`, `commit`, and read the next round from the new snapshot. Three of the four passes of
+ * handover H227's first layer are here and one is not, and that time the reason is a missing
+ * operation rather than a missing idea:
  *
  *   `opt::cse`   here. Constants of a type whose `==` is the equality of the graph's values
  *                (int, i32, bool) are one value, and pure operations with the same operator,
@@ -23,8 +25,18 @@
  *                erased, until none is left. The gates and the syncs stay: bypassing a forwarding
  *                gate moves its waits to its consumers, which is edge surgery a transaction
  *                cannot write.
- *   `opt::fold`  not here. It evaluates a pure operation whose inputs are all constants, and the
- *                `graph` module exposes no way to evaluate an operator on values.
+ *   `opt::fold`  here. A pure operation whose operands are all constants is replaced by the value
+ *                its operator computes (`eval`). The C++ pass also folds a conversion, a copy, a
+ *                fill and an access, and answers from an operator's *type* folder when the
+ *                operand types alone fix the result; the `graph` module evaluates an operation
+ *                over values, so those cases are the C++ pass's own and are not folded here. Two
+ *                more cases are the C++ pass's own: a branch over constants, because evaluating an
+ *                operation is not folding the branch structure around it, and a *returned*
+ *                constant expression, because the C++ pass moves the graph's exit, output and
+ *                return anchors onto the value it computed (`replaceFoldResult`) and a transaction
+ *                has no operation that moves an anchor. A constant expression that can only fault
+ *                is evaluated and left as written by both, so that the program is the same with
+ *                and without the pass and the fault is still reported where it is written.
  *   `opt::ctrl`  not here. It removes a control edge that a mandatory data or control path
  *                already implies, and a transaction can only replace or erase a whole node; it
  *                has no way to drop one edge and no way to add one.
@@ -39,7 +51,7 @@
 module opt
 
 import { flatten, all, any } from array
-import { Program, Node, Graph, Txn, NodeKind, graphs, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, is_anchor, is_written_slot, is_constant, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, commit } from graph
+import { Program, Node, Graph, Txn, NodeKind, graphs, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, is_anchor, is_written_slot, is_constant, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
 
 // ---- reading a node as the key of a comparison ----
 
@@ -223,3 +235,108 @@ func deadValues(p: Program): Program! sync {
 export func dce(p: Program): Program! {
     return deadValues(p)
 }
+
+// ---- constant folding ----
+
+/// Whether the node is one this pass may put a value in the place of: not one that anchors its
+/// graph, and not one whose value may be written in place. In a function graph the returned value
+/// is also the graph's exit and output value: the C++ fold replaces it and re-points those anchors
+/// (`replaceFoldResult`), and the module's `replace` refuses a node that anchors its graph, so a
+/// returned constant expression is left as written here (docs/technical/45_graph_module.md). A
+/// value that may be written in place is left too: a constant replacing it would share one object
+/// between every run of the graph.
+func foldable(n: Node): bool {
+    return is_anchor(n) == false && is_written_slot(n) == false
+}
+
+/// Whether the node is a pure operation: the one kind of node this pass evaluates. The
+/// conversions, copies, accesses and fills the C++ fold also folds are not evaluated here; the
+/// `graph` module evaluates an operation (docs/technical/45_graph_module.md).
+func operation(n: Node): bool {
+    return kind(n) == NodeKind::Oper && is_pure(n)
+}
+
+/// Whether every value the node reads is a constant of the graph: what its operator is computed
+/// over. An operation that reads nothing is not one: `eval` has nothing to compute it from.
+func constantOperands(n: Node): bool {
+    let ins = inputs(n)
+    return len(ins) > 0 && ins->all<is_constant>
+}
+
+/// Whether the round evaluates this node: a pure operation whose operands are all constants. A
+/// node the round may not replace is evaluated all the same, because `eval` is what warns about a
+/// constant expression that can only fault: the C++ fold evaluates such a node "to tell the user of
+/// a constant that faults where it is written" (`generic.cpp`) and leaves it where it is.
+func evaluated(n: Node): bool {
+    return operation(n) && constantOperands(n)
+}
+
+/// The value the round computes for this node, or null when there is nothing to compute or when the
+/// expression can only fault — which is left as written and warned about.
+func computed(t: Txn, n: Node): Node? {
+    let can = evaluated(n)
+    return if can then eval(t, n) else null
+}
+
+/// Replaces one operation by the value its operator computes; the answer is whether it did.
+func foldOne(t: Txn, n: Node): bool sync {
+    return match computed(t, n) {
+        case null => false
+        case v => putValue(t, n, v)
+    }
+}
+
+/// Puts the value in the place of the node it was computed from, when the node may be replaced at
+/// all: a node that anchors its graph is evaluated for the warning and then left as written.
+func putValue(t: Txn, n: Node, value: Node): bool sync {
+    return if foldable(n) then replaced(t, n, value) else false
+}
+
+/// Performs the replacement. The arm of a `match` is a graph of its own, so the edit is a call of
+/// its own: a statement inside an arm has nothing that depends on it and does not run.
+func replaced(t: Txn, n: Node, value: Node): bool sync {
+    replace(t, n, value)
+    return true
+}
+
+/// One round over the whole program: whether it replaced anything.
+func foldRound(t: Txn, hits: Node[]): bool {
+    return hits->map<(n: Node): bool => foldOne(t, n)>->any<(did: bool): bool => did>
+}
+
+/// The nodes one round evaluates, read off the program the round starts from.
+func foldHits(p: Program): Node[] {
+    return allNodes(p)->filter<evaluated>
+}
+
+/// Commits a round that replaced something. The commit is a function of its own because the round
+/// that replaced nothing is not the only outcome: an effect written inside an arm of a `match` or
+/// an `if` does not run, so the one branch cannot commit inline while the other abandons.
+func committed(t: Txn): Program! sync {
+    return commit(t)
+}
+
+/// Abandons a transaction: nothing the round did takes effect, and the program is the one the
+/// round started from.
+func abandoned(t: Txn, p: Program): Program! sync {
+    abort(t)
+    return p
+}
+
+/// Folds round after round until a round replaces nothing, which is the end. A round whose nodes
+/// `eval` all refused — a constant expression that can only fault is left as written and warned
+/// about — is such a round, and recursing on the program it started from would not stop, so it is
+/// abandoned and the program the round started from is the answer.
+func foldRounds(p: Program): Program! sync {
+    let t = open(p)
+    let changed = foldRound(t, foldHits(p))
+    return if changed then committed(t) ?-> foldRounds else abandoned(t, p)
+}
+
+/// A pure operation whose operands are all constants is the value they compute, until none is
+/// left: `opt::fold` against `std::opt::fold` (H227's first layer). A program that holds no node to
+/// evaluate at all is answered without opening a transaction.
+export func fold(p: Program): Program! {
+    return if len(foldHits(p)) > 0 then foldRounds(p) else p
+}
+
