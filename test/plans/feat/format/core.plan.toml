@@ -15,7 +15,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/namespace.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.mixed_arguments_snapshot"
@@ -29,7 +29,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/mixed_arguments.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.fstring_snapshot"
@@ -43,7 +43,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/fstring.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.options_snapshot"
@@ -57,7 +57,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/options.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.use_tabs_option"
@@ -75,7 +75,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.pattern_empty_snapshot"
@@ -89,7 +89,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/pattern_empty.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.tuple_singleton_snapshot"
@@ -103,7 +103,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/tuple_singleton.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.syntax_error"
@@ -119,7 +119,7 @@ expect_diagnostic_line = 1
 expect_diagnostic_column = 11
 expect_output_contains = ["Unexpected ':'; expected ',', ')', 'var', 'constas' or a name."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.type_params_snapshot"
@@ -133,7 +133,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/type_params.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.match_and_type_arguments_snapshot"
@@ -147,7 +147,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/match_and_type_arguments.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.static_for_and_access_snapshot"
@@ -161,7 +161,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/static_for_and_access.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.subscript_snapshot"
@@ -175,7 +175,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/subscript.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.when_clause_snapshot"
@@ -189,7 +189,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/when_clause.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.static_loop_snapshot"
@@ -202,7 +202,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/static_loop.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "format.indices_snapshot"
@@ -216,4 +216,4 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/indices.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000

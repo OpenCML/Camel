@@ -14,7 +14,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["cannot broadcast extents 3 and 4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "call_mismatch"
@@ -25,7 +25,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["Tensor<float32, [4]>", "SemanticDiag::NoMatchingFunction"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "rank_mismatch"
@@ -36,7 +36,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["Tensor<float32, [3, 1]>", "SemanticDiag::NoMatchingFunction"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "matmul_mismatch"
@@ -48,7 +48,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["matmul inner dimensions differ: 3 vs 4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "propagated_mismatch"
@@ -59,7 +59,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["Tensor<?, [2, 5]>", "SemanticDiag::NoMatchingFunction"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unshaped_argument"
@@ -72,7 +72,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
 expect_output_contains = ["argument 1 ('t', for parameter 'b') has type 'Tensor', which is less exact than 'Tensor<?, [3]>'", "'t as Tensor<const [3]>'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "bad_argument"
@@ -84,7 +84,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
 expect_output_contains = ["the constant argument of a Tensor type is its shape"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "not_parameterised"
@@ -96,7 +96,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
 expect_output_contains = ["this type takes no arguments"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "ok"
@@ -107,7 +107,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unknown_extent"
@@ -118,7 +118,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["dtype=float32"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "dtype_and_shape"
@@ -129,7 +129,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "reshape_gives_shape"
@@ -141,7 +141,7 @@ envs = ["X=test/cases/modules/tensor/shape_types/x3.npy"]
 expect_exit = 0
 expect_stdout_contains = ["3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "as_checked"
@@ -152,7 +152,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "as_runtime_mismatch"
@@ -163,7 +163,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["ran", "conversion to 'Tensor<?, [4]>' failed: the tensor has shape [3]", "as_runtime_mismatch.cml:9:15"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "as_static_mismatch"
@@ -175,4 +175,4 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
 expect_output_contains = ["Tensor<float32, [3]>", "Tensor<?, [4]>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000

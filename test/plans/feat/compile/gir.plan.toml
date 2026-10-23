@@ -14,7 +14,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "gir_dot_isomorphic"
 golden = "./golden/sync_ctrl_dedup.dot"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 
 [[tests]]
@@ -32,7 +32,7 @@ assert(out.includes('bound_closures plain=6 captured=6 float=5'), `unexpected ou
 assert(out.includes('bound_closures with=7'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "closure.function_values"
@@ -48,4 +48,4 @@ const out = input.normalized.stdout
 assert(out.includes('function_values named=9.0 positive=6.0 negative=0.5'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000

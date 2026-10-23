@@ -14,7 +14,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "../../smoke/golden/tok.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "inspect.cst_snapshot"
@@ -27,7 +27,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "../../smoke/golden/cst.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "inspect.ast_snapshot"
@@ -40,7 +40,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "../../smoke/golden/ast.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_addresses"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "syntax.missing_then"
@@ -55,7 +55,7 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 21
 expect_output_contains = ["Expected 'then' after the condition of the 'if', before '{'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 
 [[tests]]
@@ -67,7 +67,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["annotated 1 2", "with-call 7 13", "call 1.5", "index y 1", "compare true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "syntax.subscript_forms"
@@ -78,7 +78,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["part [2, 3]", "after [3, 4]", "till [1, 2]", "whole [1, 2, 3, 4]", "stepped [1, 2, 3, 4]", "rows [3, 1]", "end 4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "lexical.unterminated_comment"
@@ -93,7 +93,7 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 1
 expect_output_contains = ["Unterminated comment: '/*' without its '*/'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "syntax.comparison_needs_space"
@@ -108,7 +108,7 @@ expect_diagnostic_line = 7
 expect_diagnostic_column = 9
 expect_output_contains = ["This '<' touches 'i', so it opens an angle-bracket argument list, which 'then' does not continue."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "syntax.angle_close_after_space"
@@ -123,7 +123,7 @@ expect_diagnostic_line = 9
 expect_diagnostic_column = 22
 expect_output_contains = ["This '>' follows a space and is read as the comparison operator, so the angle-bracket list it was meant to close is still open at 'return'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "syntax.line_starts_with_operator"
@@ -138,4 +138,4 @@ expect_diagnostic_line = 6
 expect_diagnostic_column = 5
 expect_output_contains = ["A statement cannot start with '+': the line break before it ended the statement of the line above."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000

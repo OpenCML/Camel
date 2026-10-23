@@ -15,7 +15,7 @@ expect_diagnostic_code = "0x04000001"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 16
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 
 [[tests]]
@@ -32,7 +32,7 @@ expect_diagnostic_column = 38
 expect_stdout_contains = ["200", "Maximum recursion depth (1000) exceeded"]
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "recursion_depth_limit.fvm"
@@ -48,7 +48,7 @@ expect_diagnostic_column = 38
 expect_stdout_contains = ["200", "Maximum recursion depth (1000) exceeded"]
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "recursion_depth_limit.jit"
@@ -64,7 +64,7 @@ expect_diagnostic_column = 38
 expect_stdout_contains = ["200", "Maximum recursion depth (1000) exceeded"]
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "recursion_depth_limit.inline_nvm"
@@ -80,7 +80,7 @@ expect_diagnostic_column = 38
 expect_stdout_contains = ["200", "Maximum recursion depth (1000) exceeded"]
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.nvm"
@@ -97,7 +97,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.fvm"
@@ -114,7 +114,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.jit"
@@ -131,7 +131,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.tf"
@@ -148,7 +148,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n10\nKEPT main end', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "sync_literal_operands.reference"

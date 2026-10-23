@@ -13,7 +13,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
 expect_output_contains = ["Return type 'string' does not match the function's declared return type 'int'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "int_as_float"
@@ -25,7 +25,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
 expect_output_contains = ["Return type 'int' does not match the function's declared return type 'float'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tensor_shape"
@@ -37,7 +37,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
 expect_output_contains = ["does not match the function's declared return type 'Tensor<?, [3, 2]>'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "accepted"
@@ -48,7 +48,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_starts_with = "2\n3\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "nested_literals"

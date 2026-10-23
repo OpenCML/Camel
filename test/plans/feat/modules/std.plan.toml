@@ -11,7 +11,7 @@ case = "../../../cases/modules/std/array/sort_basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "array.every_operator"
@@ -22,7 +22,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3, 4]\n[1, 2, 0]\n[1, 2, 3]\n[3, 1, 2]\n[1, 2, 3] [3, 1, 2]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "hash.basic"
@@ -32,7 +32,7 @@ case = "../../../cases/modules/std/hash/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "env.basic"
@@ -42,7 +42,7 @@ case = "../../../cases/modules/std/env/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "env.string_equality"
@@ -54,7 +54,7 @@ envs = ["CAMEL_TEST_STRING_EQ=abc"]
 expect_exit = 0
 expect_stdout_contains = ["eq_empty=true ne_empty=false eq_value=true", "arm unset", "arm set", "picked=12"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fs.basic"
@@ -64,7 +64,7 @@ case = "../../../cases/modules/std/fs/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fs.remove"
@@ -99,7 +99,7 @@ case = "../../../cases/modules/std/io/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "json.decode"
@@ -109,7 +109,7 @@ case = "../../../cases/modules/std/json/decode.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "json.encode"
@@ -119,7 +119,7 @@ case = "../../../cases/modules/std/json/encode.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "math.basic"
@@ -129,7 +129,7 @@ case = "../../../cases/modules/std/math/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "process.basic"
@@ -139,7 +139,7 @@ case = "../../../cases/modules/std/process/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "pyplot.simple"
@@ -159,7 +159,7 @@ case = "../../../cases/modules/std/python/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "python.integration"
@@ -169,7 +169,7 @@ case = "../../../cases/modules/std/python/main.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "python.integration.prl"
@@ -190,7 +190,7 @@ case = "../../../cases/modules/std/random/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "re.basic"
@@ -200,7 +200,7 @@ case = "../../../cases/modules/std/re/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "sim.basic"
@@ -210,7 +210,7 @@ case = "../../../cases/modules/std/sim/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "statistics.basic"
@@ -220,7 +220,7 @@ case = "../../../cases/modules/std/statistics/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "this.basic"
@@ -230,7 +230,7 @@ case = "../../../cases/modules/std/this/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "time.basic"
@@ -240,7 +240,7 @@ case = "../../../cases/modules/std/time/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 
 [[tests]]

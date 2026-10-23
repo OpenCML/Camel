@@ -15,7 +15,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/tok.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "inspect.cst_snapshot"
@@ -28,7 +28,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/cst.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "inspect.ast_snapshot"
@@ -41,7 +41,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/ast.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_addresses"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "runtime.nvm_runtime"
@@ -52,7 +52,7 @@ args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["Fibonacci(10) = 55"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "runtime.fvm_runtime"
@@ -64,7 +64,7 @@ expect_exit = 0
 compare_to = "runtime.nvm_runtime"
 compare_fields = ["exit_code", "stdout_normalized"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "runtime.inline_fvm_runtime"
@@ -76,7 +76,7 @@ expect_exit = 0
 compare_to = "runtime.nvm_runtime"
 compare_fields = ["exit_code", "stdout_normalized"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "gir.gir_snapshot"
@@ -89,7 +89,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "gir_dot_isomorphic"
 golden = "./golden/gir.dot"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "gir.inline_gir_snapshot"
@@ -102,7 +102,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "gir_dot_isomorphic"
 golden = "./golden/inline_gir.dot"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "gir.rgir_snapshot"
@@ -115,7 +115,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/rgir.dot"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "prl.runtime"
@@ -134,7 +134,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 
 

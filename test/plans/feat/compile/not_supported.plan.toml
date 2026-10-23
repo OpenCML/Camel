@@ -13,7 +13,7 @@ expect_exit = 0
 expect_stdout_starts_with = "reached\n[4, 6]\n"
 expect_output_not_contains = ["UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "not_supported.pattern_identifier"
@@ -29,7 +29,7 @@ expect_diagnostic_column = 9
 expect_output_contains = ["'other' is not supported: an identifier pattern is implemented only for a value of type 'T?' or 'T!'; over 'int' only literal patterns and '_' are."]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "not_supported.pattern_tuple"
@@ -45,7 +45,7 @@ expect_diagnostic_column = 14
 expect_output_contains = ["'(1,2)' is not supported: a tuple pattern is not implemented"]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "not_supported.pattern_struct"
@@ -61,7 +61,7 @@ expect_diagnostic_column = 14
 expect_output_contains = ["'{x:1}' is not supported: a struct pattern is not implemented"]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "not_supported.optional_comp"
@@ -77,7 +77,7 @@ expect_diagnostic_column = 16
 expect_output_contains = ["'?..' is not supported: the operator is not implemented."]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "not_supported.is_operator"
@@ -93,7 +93,7 @@ expect_diagnostic_column = 15
 expect_output_contains = ["'is' is not supported: the operator is not implemented."]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "not_supported.non_null_assert"
@@ -109,7 +109,7 @@ expect_diagnostic_column = 14
 expect_output_contains = ["'!' is not supported: the postfix non-null assertion is not implemented."]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "not_supported.spread_array"
@@ -242,7 +242,7 @@ expect_diagnostic_column = 13
 expect_output_contains = ["'===' is not supported: identity comparison is not part of the language for now"]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "not_supported.strict_not_equal"
@@ -258,4 +258,4 @@ expect_diagnostic_column = 13
 expect_output_contains = ["'!==' is not supported"]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000

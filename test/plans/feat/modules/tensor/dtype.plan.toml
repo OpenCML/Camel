@@ -75,7 +75,7 @@ expect_diagnostic_name = "SemanticDiag::PrecisionChangeNotPermitted"
 expect_diagnostic_line = 12
 expect_output_contains = ["Converting 'Tensor<f32>' to 'Tensor<bf16>' needs the numeric permission 'change_precision'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "bf16_strict_no_licence"
@@ -88,7 +88,7 @@ expect_diagnostic_name = "SemanticDiag::PrecisionChangeNotPermitted"
 expect_diagnostic_line = 12
 expect_output_contains = ["Converting 'Tensor<f32>' to 'Tensor<bf16>' needs the numeric permission 'change_precision'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 # A kernel whose declaration is f32 only says so where it is called: it never converts.
 
@@ -116,7 +116,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
 expect_output_contains = ["the element type is f32, f64, bf16, f16, i32, i64 or bool, not 'string'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 # f32 keeps working, on every backend: the same values, the same bits.
 

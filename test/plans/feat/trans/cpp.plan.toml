@@ -13,7 +13,7 @@ expect_exit = 0
 expect_stdout_contains = ["#include \"camel/standalone/runtime.h\"", "A standalone program", "rt::mod(", "int main(int argc, char **argv) {", "return camel::standalone::run(1000, [&] { return program::entry(argc, argv); });"]
 expect_output_not_contains = ["bridge.h", "camel/core/", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "complex_numbers"
@@ -53,7 +53,7 @@ expect_exit = 0
 expect_stdout_contains = ["Maximum recursion depth (1000) exceeded when evaluating graph 'depth'.", "const rt::Site"]
 expect_output_not_contains = ["Maximum recursion depth (\\037", "\\0370) exceeded"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "named_struct_types"
@@ -65,7 +65,7 @@ expect_exit = 0
 expect_stdout_contains = ["struct Point {", "struct Swapped {", "using Spot = Point;", "Point{lit::record_2.x, lit::record_2.y}"]
 expect_output_not_contains = ["TranslationRefused", "camel/core/", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "main_io"
@@ -75,7 +75,7 @@ case = "../../../cases/trans/cpp/main_io.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 
 [[tests]]
@@ -125,7 +125,7 @@ expect_exit = 0
 expect_stdout_contains = ["struct Shape {", "std::variant<std::monostate, Circle, Rect, Empty> value;", "Shape::make<", "rt::enumField<", "out += \"Shape::Circle\";"]
 expect_output_not_contains = ["camel/core/", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "recursive_enum_types"
@@ -137,7 +137,7 @@ expect_exit = 0
 expect_stdout_contains = ["struct Chain {", "std::shared_ptr<Chain>", "rt::box<Chain>", "rt::beginDestroy()", "std::vector<std::pair<const Chain *, const Chain *>> pending"]
 expect_output_not_contains = ["camel/core/", "libcamel", "TranslationRefused"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "links_runtime_warning"

@@ -353,7 +353,9 @@ Every `[[tests]]` entry may use these common fields:
   than a quarter of its timeout (`TIMEOUT_MARGIN` in `test/tools/run-tests.mjs`), and prints the
   measured number. A test that legitimately needs a large bound states the measurement in a
   comment next to the value ("20 s: 2.1 s alone, 4.2 s at `-Jobs 8`"); a test that sits at its
-  bound on a quiet machine has no margin for a busy one and is fixed, not raised.
+  bound on a quiet machine has no margin for a busy one and is fixed, not raised. A fast case
+  with no reason for a special bound uses the runner default (`10000`): a 4 s bound is a speed
+  assertion, and it is rejected as soon as the case takes a second on a loaded host.
 - `normalizers`
   Optional string array applied to captured output before assertions.
 - `envs`

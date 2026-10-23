@@ -23,7 +23,7 @@ assert(lines[7] === '[1, 0, 128, 127, 1, 0, 192, 127, 0, 0, 128, 127, 1, 0, 0, 0
 assert(lines[8] === '[0, 0, 128, 63]', 'scalar tensor decode failed')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "binary_payload_length"
@@ -35,7 +35,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
 expect_output_contains = ["payload has 3 bytes", "require 4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "binary_bool_encoding"
@@ -47,7 +47,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
 expect_output_contains = ["must contain only 0 or 1 at byte 0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "binary_shape_overflow"
@@ -59,7 +59,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
 expect_output_contains = ["byte count overflows the address space"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "binary_bytes"
@@ -78,7 +78,7 @@ assert(lines[1] === '[1, 0, 0, 0, 0, 0, 32, 0, 254, 255, 255, 255, 255, 255, 255
 assert(lines[2] === '[1, 0, 1]' && lines[3] === '0', 'bool or empty payload changed')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "broadcast_ops"
@@ -99,7 +99,7 @@ const act = match(/broadcast relu_sum=([0-9.]+) max_sum=([0-9.]+)/, out)
 assert(Number(act[1]) === 2 && Number(act[2]) === 2, `unexpected relu/maximum results ${act[0]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "reductions"
@@ -121,7 +121,7 @@ const c = match(/reduce softmax0_sum=([0-9.eE+-]+) logsoftmax_expsum=([0-9.eE+-]
 assert(approx(Number(c[1]), 3, 1e-5) && approx(Number(c[2]), 2, 1e-5), `unexpected softmax sums ${c[0]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "linalg_layout"
@@ -143,7 +143,7 @@ assert(approx(Number(ln[1]), 0, 1e-4), `layer_norm rows should be zero-mean, got
 assert(out.includes('layout permute=[4, 2, 3] slice=[2, 3, 2] slice_sum=144.0 flatten=[2, 12] unsqueeze=[1, 2, 4, 3]'), 'unexpected layout results')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "shape_error"
@@ -160,7 +160,7 @@ assert(text.includes("Tensor shape mismatch in 'add': cannot broadcast [2, 3] wi
 assert(text.includes('RuntimeDiag::TensorDimensionMismatch'), 'missing TensorDimensionMismatch category')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "static_types"
@@ -175,7 +175,7 @@ verify_script = """
 assert(input.normalized.stdout.includes('static_types w_sum=5.0 pick=[3, 2] same_seed=true'), 'unexpected static type results')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "gemm_consistency"
@@ -214,7 +214,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["covariance struct=5.0 array=8.0 tuple=5.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "transcendentals"
@@ -240,7 +240,7 @@ const p = match(/softmax (\S+) (\S+) (\S+) (\S+)/, out)
 assert(Number(p[1]) === 0.5 && Number(p[2]) === 0.5 && Number(p[3]) === 0 && Number(p[4]) === 0, `softmax ${p[0]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fuse_linear_reference"
@@ -251,7 +251,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["fuse a=0.0 c=-12.825000286102295 chained=-12.825000286102295 product=-12.625 d=-12.825000286102295 e=-2.625"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fuse_linear_pass"
@@ -262,7 +262,7 @@ args = ["${case}", "tensor::fuse"]
 expect_exit = 0
 expect_stdout_contains = ["fuse a=0.0 c=-12.825000286102295 chained=-12.825000286102295 product=-12.625 d=-12.825000286102295 e=-2.625"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fuse_linear_graph"
@@ -289,7 +289,7 @@ assert(count('tensor.fusion=') === 11, `expected 11 grouped nodes, got ${count('
 assert(count('tensor.kernel=' + q + 'library' + q) === 6, 'every matmul records how it runs')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fuse_linear_graph_safe"
@@ -310,7 +310,7 @@ assert(count('tensor.kernel=' + q + 'library' + q) === 0, 'no library GEMM in sa
 assert(count('matmul_add') === 0, 'no fused operator may appear')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "static_shape_error"
@@ -328,7 +328,7 @@ assert(text.includes('SemanticDiag::ArgumentsRejected'), 'expected a semantic (c
 assert(!text.includes('unreachable'), 'nothing may run')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "runtime_shape_column.nvm"
@@ -342,7 +342,7 @@ expect_diagnostic_line = 11
 expect_diagnostic_column = 14
 expect_output_contains = ["matmul inner dimensions differ: 3 vs 2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "runtime_shape_column.fvm"
@@ -355,7 +355,7 @@ expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
 expect_diagnostic_line = 11
 expect_diagnostic_column = 14
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "reshape_view_gc.nvm"
@@ -447,7 +447,7 @@ case = "../../../cases/modules/tensor/fuse_bits.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fuse_bits.safe"
@@ -457,7 +457,7 @@ case = "../../../cases/modules/tensor/fuse_bits.cml"
 args = ["${case}", "tensor::fuse safe_fp=true"]
 expect_exit = 0
 expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fuse_bits.default"
@@ -467,7 +467,7 @@ case = "../../../cases/modules/tensor/fuse_bits.cml"
 args = ["${case}", "tensor::fuse"]
 expect_exit = 0
 expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fuse_bits.default_again"
@@ -477,7 +477,7 @@ case = "../../../cases/modules/tensor/fuse_bits.cml"
 args = ["${case}", "tensor::fuse"]
 expect_exit = 0
 expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fuse_bits.fvm"
@@ -487,7 +487,7 @@ case = "../../../cases/modules/tensor/fuse_bits.cml"
 args = ["${case}", "tensor::fuse", "std::fvm"]
 expect_exit = 0
 expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fuse_bits.jit"

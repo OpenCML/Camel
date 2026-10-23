@@ -25,7 +25,7 @@ case = "../../../cases/para/core/file_chunk_hash.cml"
 args = ["${case}", "${run_prl}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "monte_carlo_pi"
@@ -41,7 +41,7 @@ const out = input.normalized.stdout
 assert(out.includes('Estimated pi = 3.14'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unordered_foreach_smoke.nvm"
@@ -51,7 +51,7 @@ case = "../../../cases/para/core/unordered_foreach_smoke.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unordered_foreach_smoke.fvm"
@@ -61,7 +61,7 @@ case = "../../../cases/para/core/unordered_foreach_smoke.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unordered_foreach_smoke.prl"
@@ -71,7 +71,7 @@ case = "../../../cases/para/core/unordered_foreach_smoke.cml"
 args = ["${case}", "${run_prl}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unordered_foreach_timing.prl"
@@ -83,7 +83,7 @@ case = "../../../cases/para/core/unordered_foreach_timing.cml"
 args = ["${case}", "${run_prl}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unordered_reduce_sum.nvm"
@@ -93,7 +93,7 @@ case = "../../../cases/para/core/unordered_reduce_sum.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unordered_reduce_sum.fvm"
@@ -103,7 +103,7 @@ case = "../../../cases/para/core/unordered_reduce_sum.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unordered_reduce_sum.prl"
@@ -113,7 +113,7 @@ case = "../../../cases/para/core/unordered_reduce_sum.cml"
 args = ["${case}", "${run_prl}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 
 [[tests]]

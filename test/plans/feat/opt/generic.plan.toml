@@ -33,7 +33,7 @@ verify_script = """
     assert(graph.nodes.some(n => n.kind === 'DATA' && n.label === '23'), 'constant expression was not folded')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "results_reference"
@@ -49,7 +49,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "results_fold"
@@ -65,7 +65,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "results_cse"
@@ -81,7 +81,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "results_dce"
@@ -97,7 +97,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "results_all"
@@ -113,7 +113,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'before\nafter\ngeneric a=23 p=1 q=1 r=2', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "rewrites"
@@ -132,7 +132,7 @@ assert(count(':op/add_l') === 2, `expected 2 additions (p and the else arm), got
 assert(count(':io/println') === 3, 'effects must be kept')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "static_branches.reference"
@@ -148,7 +148,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'taken\nbig\ntick 3\ntick 2\ntick 1\nbefore call\ntwice=6 ticks=3', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "static_branches.simplify"
@@ -164,7 +164,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'taken\nbig\ntick 3\ntick 2\ntick 1\nbefore call\ntwice=6 ticks=3', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "static_branches.simplify.rgir"
@@ -194,7 +194,7 @@ assert(own.length > 0, 'no main graph in the dump')
 assert(!own.some(([kind]) => kind === 'BRCH' || kind === 'JOIN'), `main still branches: ${JSON.stringify(own)}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "recursion_unroll.simplify"
@@ -210,7 +210,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'unroll=4.75', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "recursion_unroll.simplify.rgir"
@@ -242,7 +242,7 @@ for (const kind of ['FUNC', 'CALL', 'BRCH', 'JOIN']) {
 }
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "shape_unroll.simplify"
@@ -258,7 +258,7 @@ const out = input.normalized.stdout
 assert(out.includes('[      3.,       3.,       3.,       3.]'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "shape_unroll.simplify.rgir"
@@ -304,7 +304,7 @@ for (const [kind, callee] of forward.filter(([k]) => k === 'FUNC')) {
 }
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "effect_order_folded.nvm"
@@ -428,7 +428,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "written_variable.fold.nvm"
@@ -444,7 +444,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "written_variable.cse.nvm"
@@ -460,7 +460,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "written_variable.simplify.nvm"
@@ -476,7 +476,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "written_variable.simplify.fvm"
@@ -492,7 +492,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "written_variable.opt_fold.nvm"
@@ -508,7 +508,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "written_variable.opt_cse.nvm"
@@ -524,7 +524,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "written_variable.inline_fold_cse.nvm"
@@ -540,7 +540,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "written_variable.inline_fold_cse.jit"
@@ -556,7 +556,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '3 2 7 3 2 7 3 2 7', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "cse_arm_constants.reference"
@@ -572,7 +572,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "cse_arm_constants.inline_cse.nvm"
@@ -588,7 +588,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "cse_arm_constants.inline_cse.fvm"
@@ -604,7 +604,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "cse_arm_constants.inline_cse.jit"
@@ -620,7 +620,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "cse_arm_constants.inline_arm_cse.nvm"
@@ -636,7 +636,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "cse_arm_constants.simplify_cse.nvm"
@@ -652,7 +652,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "cse_arm_constants.inline_specialize_cse_devirtualize.nvm"
@@ -668,7 +668,7 @@ const out = input.normalized.stdout.trim()
 assert(out === 'cse_arm_constants l=16 15 n=1111 709 rt=16', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "arm_tail_gate.reference"

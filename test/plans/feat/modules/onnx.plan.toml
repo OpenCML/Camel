@@ -25,7 +25,7 @@ assert(count('Mul') === 1 && model.ops.length === 2, `a single product and its o
 assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_fold"
@@ -52,7 +52,7 @@ assert(model.initializers.includes('w') && model.initializers.includes('b'), `we
 assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_unsupported_op"
@@ -71,7 +71,7 @@ assert(/at [^ ]*export_unsupported[.]cml:15:45[)]/.test(text), 'missing source p
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_impure_op"
@@ -90,7 +90,7 @@ assert(/at [^ ]*export_impure[.]cml:13:45[)]/.test(text), 'missing source positi
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_branch"
@@ -112,7 +112,7 @@ const model = readOnnxModel(path.join(input.test_tmp, 'export_branch.onnx'))
 assert(model.ops.join() === 'Cast,Gather,Greater,If,Identity', `unexpected top-level ops ${model.ops}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_dynamic_batch"
@@ -138,7 +138,7 @@ const found = match(/exported supported=([0-9]+)/, input.normalized.stdout)
 assert(Number(found[1]) > 100, `capability list too small: ${found[1]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_import_order"
@@ -150,7 +150,7 @@ envs = ["ONNX_OUT=${test_tmp}/export_import_order.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_train_step"
@@ -744,7 +744,7 @@ const path = await import('path')
 assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_refused_a.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "pass_export_refuses_without_macro"
@@ -767,7 +767,7 @@ const path = await import('path')
 assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_refused_b.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "pass_export_refusals_json"
@@ -819,7 +819,7 @@ assert(!text.includes('EFFECT'), 'the exported function must not be executed')
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_ctrl_effect.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "pass_export_ctrl_effect_json"
@@ -842,7 +842,7 @@ assert(d.range.start.line === 13 && d.range.start.character === 4 && d.range.end
 assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_ctrl_effect.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_ctrl_effect_in_callee"
@@ -864,7 +864,7 @@ assert(!text.includes('unreachable') && !text.includes('EFFECT'), 'neither the s
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "pass_export_ctrl_effect_in_callee_json"
@@ -887,7 +887,7 @@ assert(d.range.start.line === 13 && d.range.start.character === 4, `unexpected r
 assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_train_step.fuse"
@@ -2722,4 +2722,4 @@ assert(model.initializers.includes('ints'), `expected i64 index initializer, got
 assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000

@@ -313,7 +313,7 @@ const reads = [...section.matchAll(/(N[0-9A-F]+) \[label=":var\/get", type="OPER
 assert(reads.some(r => edge(join[1], r, 'CTRL')), 'missing JOIN -> read of c after the branch')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "wait_direct_user.default"
@@ -617,7 +617,7 @@ const reads = [...text.matchAll(/(N[0-9A-F]+) \[label=":var\/get", type="OPER"/g
 assert(reads.some(r => edge(modify, r, 'CTRL')), 'missing control edge modify -> later read of i')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "captured_write_graph.warnings"
@@ -642,4 +642,4 @@ assert(JSON.stringify(undeclared) === JSON.stringify(["Function 'write_a'", "Fun
 assert(!diags.some(d => d.message.includes("'look'") || d.message.includes("'limit'")), 'the read-only recursive function is not reported')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000

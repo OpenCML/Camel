@@ -17,7 +17,7 @@ const out = input.normalized.stdout
 assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "scalar_grad.macro.nvm"
@@ -33,7 +33,7 @@ const out = input.normalized.stdout
 assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "scalar_grad.simplified.nvm"
@@ -49,7 +49,7 @@ const out = input.normalized.stdout
 assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "scalar_grad.macro.fvm"
@@ -65,7 +65,7 @@ const out = input.normalized.stdout
 assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "scalar_grad.macro.jit"
@@ -81,7 +81,7 @@ const out = input.normalized.stdout
 assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "control_flow_grad.runtime.nvm"
@@ -97,7 +97,7 @@ const out = input.normalized.stdout
 assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "control_flow_grad.macro.nvm"
@@ -113,7 +113,7 @@ const out = input.normalized.stdout
 assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "control_flow_grad.simplified.nvm"
@@ -129,7 +129,7 @@ const out = input.normalized.stdout
 assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "control_flow_grad.macro.fvm"
@@ -145,7 +145,7 @@ const out = input.normalized.stdout
 assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "control_flow_grad.macro.jit"
@@ -161,7 +161,7 @@ const out = input.normalized.stdout
 assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tensor_grad_check.macro.nvm"
@@ -285,7 +285,7 @@ const out = input.normalized.stdout
 assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "custom_rule.simplified.nvm"
@@ -301,7 +301,7 @@ const out = input.normalized.stdout
 assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "custom_rule.macro.fvm"
@@ -317,7 +317,7 @@ const out = input.normalized.stdout
 assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "collapse.simplified.rgir"
@@ -345,7 +345,7 @@ for (const kind of ['CALL', 'FUNC', 'FILL', 'ACCS']) {
 }
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "collapse.simplified.nvm"
@@ -361,7 +361,7 @@ const out = input.normalized.stdout
 assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "collapse.stats"
@@ -382,7 +382,7 @@ assert(after.direct_calls === 0 && after.indirect_calls === 0, `calls left: ${JS
 assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "second_order.nvm"
@@ -462,7 +462,7 @@ const out = input.normalized.stdout
 assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "control_flow_grad.runtime.fvm"
@@ -478,7 +478,7 @@ const out = input.normalized.stdout
 assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tensor_grad_check.runtime.fvm"
@@ -541,7 +541,7 @@ const out = input.normalized.stdout
 assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "scalar_grad.simplify.jit"
@@ -557,7 +557,7 @@ const out = input.normalized.stdout
 assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "control_flow_grad.simplify.fvm"
@@ -573,7 +573,7 @@ const out = input.normalized.stdout
 assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "control_flow_grad.simplify.jit"
@@ -589,7 +589,7 @@ const out = input.normalized.stdout
 assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tensor_grad_check.simplify.fvm"
@@ -659,7 +659,7 @@ const out = input.normalized.stdout
 assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "custom_rule.simplify.jit"
@@ -675,7 +675,7 @@ const out = input.normalized.stdout
 assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "second_order.simplify.fvm"
@@ -713,7 +713,7 @@ const out = input.normalized.stdout
 assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "collapse.simplify.jit"
@@ -729,7 +729,7 @@ const out = input.normalized.stdout
 assert(out.includes('collapse dh=22'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "scalar_grad.runtime.jit"
@@ -745,7 +745,7 @@ const out = input.normalized.stdout
 assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "control_flow_grad.runtime.jit"
@@ -761,7 +761,7 @@ const out = input.normalized.stdout
 assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tensor_grad_check.runtime.jit"
@@ -878,7 +878,7 @@ const out = input.normalized.stdout
 assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "pb_statics_gc.runtime.nvm"

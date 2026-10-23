@@ -17,7 +17,7 @@ expect_diagnostic_column = 16
 expect_output_contains = ["cannot broadcast extents 2 and 4"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "op_plus"
@@ -32,7 +32,7 @@ expect_diagnostic_column = 29
 expect_output_contains = ["cannot broadcast extents 2 and 4"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "multiply"
@@ -47,7 +47,7 @@ expect_diagnostic_column = 21
 expect_output_contains = ["cannot broadcast extents 3 and 4"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "maximum"
@@ -62,7 +62,7 @@ expect_diagnostic_column = 20
 expect_output_contains = ["cannot broadcast extents 3 and 5"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "lt"
@@ -77,7 +77,7 @@ expect_diagnostic_column = 29
 expect_output_contains = ["cannot broadcast extents 2 and 3"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "where"
@@ -92,7 +92,7 @@ expect_diagnostic_column = 18
 expect_output_contains = ["cannot broadcast extents 2 and 4"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "matmul"
@@ -107,7 +107,7 @@ expect_diagnostic_column = 29
 expect_output_contains = ["matmul inner dimensions differ: 3 vs 4"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "concat"
@@ -122,7 +122,7 @@ expect_diagnostic_column = 19
 expect_output_contains = ["concat along axis 0: [2, 3] and [2, 4] differ in dimension 1"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "concat_rank"
@@ -137,7 +137,7 @@ expect_diagnostic_column = 19
 expect_output_contains = ["concat requires tensors of the same rank: [2, 3] and [3]"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "reshape"
@@ -152,7 +152,7 @@ expect_diagnostic_column = 20
 expect_output_contains = ["reshape changes tensor element count: [2, 3] -> [4, 2]"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "transpose"
@@ -167,7 +167,7 @@ expect_diagnostic_column = 22
 expect_output_contains = ["needs a rank >= 2 tensor, got [3]"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "permute"
@@ -182,7 +182,7 @@ expect_diagnostic_column = 20
 expect_output_contains = ["invalid permutation [0, 0]"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "sum_axis"
@@ -197,7 +197,7 @@ expect_diagnostic_column = 16
 expect_output_contains = ["axis 5 is out of range for the rank-2 input [2, 3]"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mean_axis"
@@ -212,7 +212,7 @@ expect_diagnostic_column = 17
 expect_output_contains = ["axis -3 is out of range for the rank-2 input [2, 3]"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "softmax"
@@ -227,7 +227,7 @@ expect_diagnostic_column = 20
 expect_output_contains = ["axis 4 is out of range for the rank-2 input [2, 3]"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "layer_norm"
@@ -242,7 +242,7 @@ expect_diagnostic_column = 23
 expect_output_contains = ["gamma [4] does not match the trailing dimensions of the input [2, 3]"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "slice"
@@ -257,7 +257,7 @@ expect_diagnostic_column = 18
 expect_output_contains = ["axis 3 is out of range for a rank-2 tensor"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "linear"
@@ -272,7 +272,7 @@ expect_diagnostic_column = 19
 expect_output_contains = ["linear input features vs weight rows: 3 vs 4"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "conv2d"
@@ -287,4 +287,4 @@ expect_diagnostic_column = 19
 expect_output_contains = ["conv2d input channels 3 do not match"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000

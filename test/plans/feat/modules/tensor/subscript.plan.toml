@@ -12,7 +12,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["[3]", "9"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "slice_view"
@@ -23,7 +23,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "[2]\n5.0\n[2]\n[2]\n[4]\n[4]\n[0]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "slice_const_bounds"
@@ -35,7 +35,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["slice bounds 0..9 are outside the first dimension of extent 4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "slice_rank2"
@@ -47,7 +47,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["rank 2 or more", "H17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "slice_multidim"
@@ -59,7 +59,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
 expect_output_contains = ["a subscript that slices a dimension other than the first", "H17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "slice_step"
@@ -71,7 +71,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["a slice step other than the constant 1", "H17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "slice_step_negative"
@@ -83,4 +83,4 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["a slice step other than the constant 1", "H17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
