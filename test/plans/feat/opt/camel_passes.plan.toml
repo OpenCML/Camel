@@ -3,13 +3,38 @@ order = 332
 tier = "fast"
 tags = ["feat", "opt", "camel", "differential", "dce", "cse"]
 
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+
 # A pass written in Camel (`stdlib/opt.cml`, handover H227) against the C++ pass that does the
 # same (`std::opt::cse`, `std::opt::dce values_only=true`). The evidence is graph equality: the
 # C++ run records the graph it produced in a golden, and the Camel run's graph is put to the
 # isomorphic comparison the snapshot tests use (`gir_dot_isomorphic`, `test/tools/gir-dot.mjs`),
 # which compares each node's kind, type, shape and in/out degree and each edge's endpoint kinds,
-# link type and label. The two dumps are not compared as text: compiling the pass's own library
+# link type and label — the same values, of the same types, in the same region structure, wired
+# the same way round. The two dumps are never compared as text: compiling the pass's own library
 # renumbers every node's source origin, and a node's id is the compiler's, not the graph's.
+#
+#   `by_cpp`      the reference: the C++ pass, recorded as a golden.
+#   `by_camel`    the Camel pass, compared with that golden by `graph_equal.mjs`.
+#   `is_a_fixpoint` the Camel pass run on its own output: a sweep that stopped early shows here.
+#   `property`    what the Camel pass leaves, read from the JSON `std::jgir` prints: a node count
+#                 cannot say that the right pair was merged and the right node kept.
+#   `subject`     the same case one pass earlier, asserting the corpus holds what the sweep is
+#                 about: a guard that examined nothing would pass on a graph with nothing to do.
+#   `program_still_runs` the program after the Camel pass, on four back ends, computes what it did.
+
+# ---- common subexpressions ----
+
+[[tests]]
+name = "camel_passes.cse.subject"
+desc = "The corpus before any pass: `shared` writes `x * 7` twice over two separate 7s, `literals` has two constants of 7 that its one product reads, and `written` has two 3s beside the two products over two different reads of the cell."
+case = "../../../cases/opt/camel_passes/cse_subject.cml"
+args = ["${case}", "std::jgir"]
+verify_script_path = "../../../cases/opt/camel_passes/cse_subject.mjs"
 
 [[tests]]
 name = "camel_passes.cse.by_cpp"
@@ -17,32 +42,117 @@ desc = "The reference: std::opt::cse on the corpus whose literals and expression
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/cse_subject.cml"
 args = ["${case}", "std::opt::cse", "std::gir"]
-expect_exit = 0
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.cse.dot"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
-timeout_ms = 20000
 
 [[tests]]
-name = "camel_passes.dce.by_cpp"
-desc = "The reference: std::opt::dce restricted to values on the corpus with an unread chain."
-kind = "snapshot"
-case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::opt::dce values_only=true", "std::gir"]
-expect_exit = 0
-snapshot_stream = "stdout"
-golden = "./golden/camel_passes.dce.dot"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
-timeout_ms = 20000
+name = "camel_passes.cse.by_camel"
+desc = "opt::cse, written in Camel with the graph module, gives the graph the C++ pass gives: the golden of the entry above, compared node by node and edge by edge."
+case = "../../../cases/opt/camel_passes/cse_subject.cml"
+args = ["${case}", "opt::cse", "std::gir"]
+verify_script_path = "../../../cases/opt/camel_passes/graph_equal.mjs"
+
+[[tests]]
+name = "camel_passes.cse.is_a_fixpoint"
+desc = "opt::cse run on its own output gives the same graph: the sweep repeats its rounds until no two nodes are one value, so a version that merged one round of duplicates and stopped is refused here."
+kind = "differential"
+case = "../../../cases/opt/camel_passes/cse_subject.cml"
+args = ["${case}", "opt::cse", "opt::cse", "std::gir"]
+compare_to = "camel_passes.cse.by_camel"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "camel_passes.cse.property"
+desc = "What opt::cse leaves: no graph keeps two nodes that are one value, the two products over two reads of a written cell stay two nodes over two different reads, `shared`'s sum reads its one product twice, `literals`' product reads one value twice, and `apart`'s two sums keep the constants 1 and 2."
+case = "../../../cases/opt/camel_passes/cse_subject.cml"
+args = ["${case}", "opt::cse", "std::jgir"]
+verify_script_path = "../../../cases/opt/camel_passes/cse_property.mjs"
+
+[[tests]]
+name = "camel_passes.cse.program_still_runs"
+desc = "The program after opt::cse prints `shared(3)`, `literals()`, `written(4)` and `apart(5)`: merging equal values changed no result, on NVM, FastVM, JIT and the parallel scheduler."
+case = "../../../cases/opt/camel_passes/cse_subject.cml"
+args = ["${case}", "opt::cse", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_stdout_exact = "42\n49\n27\n42\n"
 
 [[tests]]
 name = "camel_passes.cse_written_variable.by_cpp"
-desc = "The reference: std::opt::cse on the var corpus whose expression is reread after a write."
+desc = "The reference: std::opt::cse on the var corpus whose expression is reread after a write, whose two reads of the cell must stay apart."
 kind = "snapshot"
 case = "../../../cases/opt/generic/written_variable.cml"
 args = ["${case}", "std::opt::cse", "std::gir"]
-expect_exit = 0
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.cse_written_variable.dot"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
-timeout_ms = 20000
+
+[[tests]]
+name = "camel_passes.cse_written_variable.by_camel"
+desc = "opt::cse gives the graph std::opt::cse gives on the var corpus too: the two products over two reads of a cell with a write between them are not merged, and the two constants they read are."
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "opt::cse", "std::gir"]
+verify_script_path = "../../../cases/opt/camel_passes/graph_equal.mjs"
+
+[[tests]]
+name = "camel_passes.cse_written_variable.program_still_runs"
+desc = "The program after opt::cse prints what it printed before it, the same nine values the reference entry of `feat.opt.generic` (`written_variable.cse.nvm`) pins for the C++ pass."
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "opt::cse", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_stdout_exact = "3\n2\n7\n3\n2\n7\n3\n2\n7\n"
+
+# ---- dead values ----
+
+# The dead values are not in the compiled graph by themselves: a `let` of the source that no
+# expression reads is never built. `std::opt::inline` is what leaves values nobody reads — it takes
+# the only user of `chain`'s product away — and the sweep is what removes them, the product first
+# and the constant it reads after.
+
+[[tests]]
+name = "camel_passes.dce.subject"
+desc = "The corpus one pass before the sweep: after std::opt::inline, `chain` holds a product no node reads, over a constant 2 that the product is the only user of — the node a sweep that stopped after one round would leave behind."
+case = "../../../cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "std::opt::inline", "std::jgir"]
+verify_script_path = "../../../cases/opt/camel_passes/dce_subject.mjs"
+
+[[tests]]
+name = "camel_passes.dce.by_cpp"
+desc = "The reference: std::opt::dce restricted to values, after the inlining that leaves the dead chain."
+kind = "snapshot"
+case = "../../../cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "std::opt::inline", "std::opt::dce values_only=true", "std::gir"]
+snapshot_stream = "stdout"
+golden = "./golden/camel_passes.dce.dot"
+
+[[tests]]
+name = "camel_passes.dce.by_camel"
+desc = "opt::dce, written in Camel with the graph module, gives the graph the C++ pass gives, on the corpus whose dead chain needs two rounds: the product, then the constant it reads."
+case = "../../../cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "std::opt::inline", "opt::dce", "std::gir"]
+verify_script_path = "../../../cases/opt/camel_passes/graph_equal.mjs"
+
+[[tests]]
+name = "camel_passes.dce.is_a_fixpoint"
+desc = "opt::dce run on its own output gives the same graph: the sweep repeats its rounds until no value nobody reads is left, so removing `chain`'s product and leaving the constant it read behind is refused here."
+kind = "differential"
+case = "../../../cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "std::opt::inline", "opt::dce", "opt::dce", "std::gir"]
+compare_to = "camel_passes.dce.by_camel"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "camel_passes.dce.property"
+desc = "What opt::dce leaves: no graph keeps a value nobody reads, and the value the program uses is still there — `kept`'s product is read by its sum and keeps both its operands."
+case = "../../../cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "std::opt::inline", "opt::dce", "std::jgir"]
+verify_script_path = "../../../cases/opt/camel_passes/dce_property.mjs"
+
+[[tests]]
+name = "camel_passes.dce.program_still_runs"
+desc = "The program after opt::dce prints `chain(3)` and `kept(5)`: removing values nobody reads changed no result, on NVM, FastVM, JIT and the parallel scheduler."
+case = "../../../cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "std::opt::inline", "opt::dce", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_stdout_exact = "5\n11\n"
