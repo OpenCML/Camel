@@ -579,6 +579,10 @@ class Builder {
     // Keyed by the declaration's graph (an instance for a generic declaration) or by the
     // template of a generic declaration.
     std::unordered_map<const void *, DeclarationDefaults> defaults_;
+    /// A native operator's declaration has no graph of its own: a call reaches it through the
+    /// operator group, which carries the URI of each of its entries. The defaults of such a
+    /// declaration (a `#op` line with `with <p: int = 8>`) are kept under that URI.
+    std::unordered_map<std::string, DeclarationDefaults> nativeDefaults_;
     /// A function value made by explicit type arguments (`f::<int>`) is instantiated where it is
     /// written, so the call cannot reach the declaration's graph: the defaults are kept under
     /// the value here. A value that is then bound to a name carries no defaults, as any function

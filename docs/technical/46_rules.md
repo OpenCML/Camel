@@ -97,8 +97,11 @@ calls a user function. A `<=>` rule gives two `Rule`s.
 | `saturate(p, rules, rounds)` | both ways on the writings of every value; the result has values with several writings |
 | `extract(p, cost)` | one writing per value by the named cost model |
 | `check(rules, samples, seed)` | the check of section 4 |
-| `run(p, rules, rounds, strict)` | `rewrite` with the round budget explicit, as a `Run` with its cost (section 3.1) |
-| `run(p, rules, rounds, strict, explain)` | the same, with the attribution record open; `explain(r)` reads it (section 3.2) |
+| `p->run<rules>` | `rewrite` with the round budget explicit, as a `Run` with its cost (section 3.1); `rounds` (16), `strict` (false) and `explain` (false) have defaults |
+| `p->run<rules, explain: true>` | the same, with the attribution record open; `explain(r, a, b)` reads the chain between two values and `explain_all(r)` the whole log (section 3.2) |
+| `explain(r, a, b)` | the shortest chain of rewrites connecting the value `a` to the value `b`, as a `Proof` |
+| `explain_all(r)` | every rewrite the run made, as a `Proof`; the debugging view |
+| `why_not(r, rule, v)` | why `rule` did not fire at the value `v` |
 
 `rewrite` and `saturate` leave the functions that are the sides of rules (`__lhs`, `__rhs`, and
 `__when`) alone. The result is `Program!`; the errors are `RuleInvalid`, `RuleTwoWay`,
@@ -135,8 +138,9 @@ is the last application's; `proof` is described in section 3.2). The functions a
 helper carries an index or an accumulator. A combinator never reorders a stage's rules and never
 drops a match: a stage that applies nothing leaves the count at zero.
 
-`run(p, rules, rounds, strict)` is the same engine with the round budget explicit and the cost
-kept in a `Run` value. `Run` is a plain Camel struct declared in `stdlib/rewrite.cml`; the native
+`p->run<rules, rounds: 8, strict: true>` is the same engine with the round budget explicit and the
+cost kept in a `Run` value: the rule array is the ordinary argument and the three settings are
+`with` parameters, each with a default, so `p->run<rules>` is the whole call for the common case. `Run` is a plain Camel struct declared in `stdlib/rewrite.cml`; the native
 kernel fills its eight fields in that order, so a field is read as `r.rewrites` and the program is
 `r.result`. `seconds` is the wall time of one application: compiling the rules, matching,
 rewriting the graphs and the commit; it is measured in the kernel with
@@ -145,7 +149,7 @@ summed over rounds and graphs (`DraftWritings::rewrite` increments it for every 
 considers); `rewrites` is the number of replacements actually made. The numbers are ordinary
 values, so a benchmark prints them from Camel and the plan can pin them.
 
-### 3.2 Attribution, and `explain`
+### 3.2 Attribution, `explain` and `why_not`
 
 A rewrite is only useful to a reader if it can be attributed to the rule that made it (rewrite
 design 8.7). The record is kept where the application happens: `DraftWritings::rewrite` sees the
@@ -165,11 +169,15 @@ to read. With a null log the engine allocates nothing and takes no branch in the
 `rewrite` and `saturate` keep their H226 cost, which `bench::compare` measures side by side with
 the recording on.
 
-`run`'s fifth parameter decides whether the application passes a log. With it, the kernel builds
-one `Proof` from the log and stores it in the `proof` field of the `Run` (a finalizer releases the
-steps); without it the field is null, nothing was recorded, and `explain` refuses the run with the
-error value `NoAttribution`, rather than answering with an empty chain. `explain(r)` gives the
-`Proof` back, and its printing is the derivation:
+`run`'s `explain` parameter decides whether the application passes a log. With it, the kernel
+builds one `Proof` from the log and stores it in the `proof` field of the `Run` (a finalizer
+releases the steps); without it the field is null, nothing was recorded, and `explain` and
+`explain_all` refuse the run with the error value `NoAttribution`, rather than answering with an
+empty chain.
+
+`explain_all(r)` gives the whole `Proof` back: every rewrite in the order of the applications,
+graph by graph, round by round, nodes in id order, rules in the order of the array, which is what
+makes a `seq` schedule's log follow the schedule and what the plan pins:
 
 ```
 2 rewrites in 2 rounds, 9 nodes visited
@@ -184,10 +192,54 @@ error value `NoAttribution`, rather than answering with an empty chain. `explain
 ```
 
 A run that applied nothing prints one sentence (`no rewrite matched in 1 round: the program is
-unchanged`), not an empty table. The order of the lines is the order of the applications: graph by
-graph, round by round, nodes in id order, rules in the order of the array, which is what makes a
-`seq` schedule's proof follow the schedule.
+unchanged`), not an empty table. `explain_all` is the debugging view; the user-facing question is
+the next one.
 
+`explain(r, a, b)` answers "why are these two values equal". It reads the record as a graph rather
+than a log: a step is an edge from the value its left side matched to the value its right side
+produced, so the chain is a path over those pairs, read in either direction, within one graph (a
+value of one function is never rewritten into a value of another). Only the chain is printed:
+
+```
+chain %2 :op/add_l : int = %6 :op/add_l : int: 2 rewrites
+  %2 :op/add_l : int
+    = %4 :op/add_l : int  by zero_to_one  (round 1, graph f)
+    = %6 :op/add_l : int  by bump_one  (round 2, graph f)
+```
+
+- **Shortest** is the fewest rewrites: breadth-first from `a` over the step edges, stopping at the
+  first depth that reaches `b`. A longer chain that happens to print shorter is never offered; the
+  chain is a proof, so the step count is the claim.
+- **A non-confluent intermediate** is printed, not skipped: when `a` became `v` and `v` became `b`,
+  the chain names `v` even though the final program no longer has it. `v`'s text is the text the
+  record took at the step; a chain that jumped from `a` to `b` because `b` is the final value would
+  be a claim without a justification.
+- **Backwards**: when the connection reads steps against the direction they were made, each such
+  step is marked `(backwards)`; the rule named is still the one that fired. The same pair asked the
+  other way round prints the same steps in the opposite order with the marks swapped.
+- **Two equally short chains**: the search keeps every predecessor of a node at its depth, so it
+  never silently picks one. All shortest chains are printed, in the order of the schedule (their
+  step indexes, lexicographically) and numbered, under a header that says how many there are
+  (`2 chains of the same length from %2 ... to %6 ..., in the order the rewrites were made`). In
+  this engine a value is rewritten at most once, so the step graph of an in-place run is a forest
+  of chains and a tie cannot arise today; the print does not rely on that, and a schedule that
+  rewrites a value twice would show both chains rather than choosing.
+- **No chain**: `explain` refuses with the error value `NoChain`, naming the two values and what it
+  looked for (`no chain of rewrites connects %0 and %4: the run made no step that turns one into
+  the other, directly or through a value it rewrote in between`). An empty chain would read as
+  "equal", so it is not printed. One value given twice prints one sentence (`the same value: %2 ...
+  is one node, so no rewrite is needed to connect it to itself`); a handle of another program is
+  `InvalidArgument`.
+
+`why_not(r, rule, v)` answers the other question 8.7 names: why the rule did not fire at a value
+of the program the run produced. It answers with the first place the left side fails to match (a
+different operator, a different constant, a value of the wrong type, a different permission class,
+a missing permission, a node a rewrite may not read) and the values it compared; when the left
+side matches, with the values the condition read and its result (a condition that cannot be
+evaluated is reported as such, not as `false`). A rule that did fire at `v` is reported with the
+round, the graph and the value it made, rather than as "no chain". The result is a `string!`: the
+`NoAttribution` and `InvalidArgument` cases are error values, so a caller cannot mistake one for an
+answer.
 ## 4. The check
 
 `check(rules, samples, seed)` is the check every rule passes before it enters a library (graph
@@ -304,3 +356,6 @@ libcamel function the module calls is exported without a hand edit; `rewrite` li
   answers the fact of the value those parts belong to.
 - `analysis`: are a clause's variables values or nodes? They are `Node`s (the review of H38;
   implemented in H38b).
+
+
+

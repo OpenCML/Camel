@@ -708,5 +708,12 @@ class GraphDraft {
     std::vector<GraphId> ruleGraphs_;
 };
 
+/// The runtime node id every live node of `draft` takes when the draft is encoded, indexed by
+/// draft node id (`kInvalidNodeRef` for a node the draft erased, which no commitment keeps unless
+/// the draft keeps its ids). The commit drops the dead places and numbers the rest in order, so a
+/// step recorded with draft ids can name a node of the program the commit made (rewrite design
+/// 8.7, `explain`: a `Node` of the program finds the rewrite it was made by).
+std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphDraft &draft);
+
 } // namespace camel::runtime
 
