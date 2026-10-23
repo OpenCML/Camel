@@ -369,9 +369,51 @@ slot_t evaluate(Frame &frame, gc_node_ref_t ref) {
     return fact;
 }
 
+/// Whether the operator of the node `ref` is declared commutative for its own type (op-semantics
+/// 7.4: the law's `commutative` flag per element type). This is the declaration the matcher reads
+/// to try the exchange (runtime/writings.cpp, `declaredCommutative`), and the one a parts query
+/// reads here: only an operator whose declaration says the exchange gives the same value may be
+/// matched with its operands exchanged.
+bool declaredCommutative(const Source &source, gc_node_ref_t ref) {
+    if (source.kind(ref) != GCNodeKind::Oper) {
+        return false;
+    }
+    const core::OperId oper = source.operOf(ref);
+    const core::sem::OperatorSemantics *declared =
+        core::OperatorTable::instance().semantics(oper);
+    if (declared == nullptr || !declared->binary) {
+        return false;
+    }
+    type::Type *type = source.typeOf(ref);
+    if (type == nullptr) {
+        return false;
+    }
+    const core::sem::BinaryAlgebra &algebra = *declared->binary;
+    const std::optional<type::TypeCode> element =
+        algebra.elementOf ? algebra.elementOf(type)
+                          : std::optional<type::TypeCode>(type->code());
+    if (!element) {
+        return false;
+    }
+    for (const core::sem::BinaryLaw &law : algebra.laws) {
+        if (law.element == *element) {
+            return law.commutative;
+        }
+    }
+    return false;
+}
+
 /// Whether the value `ref` is the compound the parts belong to: `clause` matches it with the
 /// parts bound to its variables in the order the pattern binds them. The candidate must have
 /// exactly these operands, which is what makes the parts a way to name the value.
+///
+/// The parts come from the rule's own match, whose pairing of a commutative operator's operands
+/// may be the other one from the order the program wrote (`1 * a` matched by `x * c`: the
+/// constant can only be the second operand, so the matcher exchanges them). A query asks about the
+/// *value*, and the declaration of such an operator says the exchange gives the same value
+/// (op-semantics 7.4), so the query answers for either order of the two operands. An operator whose
+/// declaration does not say it is read in the order the program wrote, exactly as the matcher
+/// reads it.
 bool matchesParts(
     Frame &frame, gc_node_ref_t ref, const Definition::Clause &clause,
     std::span<const gc_node_ref_t> parts) {
@@ -381,9 +423,19 @@ bool matchesParts(
     if (patternVariables(clause.pattern) != parts.size()) {
         return false;
     }
-    std::vector<gc_node_ref_t> refs(parts.begin(), parts.end());
-    std::vector<slot_t> values(parts.size(), 0);
-    return matchNode(frame, ref, clause.pattern, refs, values, clause.constParams);
+    const auto inOrder = [&](std::span<const gc_node_ref_t> ordered) {
+        std::vector<gc_node_ref_t> refs(ordered.begin(), ordered.end());
+        std::vector<slot_t> values(ordered.size(), 0);
+        return matchNode(frame, ref, clause.pattern, refs, values, clause.constParams);
+    };
+    if (inOrder(parts)) {
+        return true;
+    }
+    if (parts.size() == 2 && declaredCommutative(frame.source, ref)) {
+        const gc_node_ref_t exchanged[2] = {parts[1], parts[0]};
+        return inOrder(exchanged);
+    }
+    return false;
 }
 
 /// The fact a query answers, and the value it is the fact of: the queried value itself, or the
