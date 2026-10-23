@@ -1,0 +1,15 @@
+h328 — 运行产物保留策略：runner 绑定自己写的东西，并停止每个测试复制计划与用例（分支 handover/h328-retention，4 提交）
+
+实测（旧 runner 写的最大运行目录，smoke+feat 快层 5,691 个测试）：43,898 项、245.0 MB 内容、353 MB 磁盘块。其中"计划与用例的副本"是 11,382 个文件、214.2 MB——87% 的字节、26% 的条目，同一个计划被每测试重写一遍。同一层在本分支上：32,461 项、31.0 MB、112 MB 块，没有一个文件不是 runner 写的。一次闸门后的树：114 MB / 26,992 文件 / 22 个运行目录。对照：verify 的树今早手工清到 20 个运行目录，四小时内又长回约 660 个目录、8.8 GB，全是当天写的。
+
+1) runner 里的策略：test/tools/runner-output.mjs（RUN_DIRS_KEPT = 20，与理由并列），run-tests.mjs 在建记录前调用，每次运行一条 [RETAIN] 收据。真实一行：[RETAIN] run dirs: 22 scanned, 2 removed (0.1 MB, 68 entries), 20 kept of the newest 20; scratch roots: 0 removed (0.0 MB), 17 kept。永不删：本次运行的目录（按身份**与** pid 存活）、任何 pid 还活着的目录（self-test 在外层运行旁再起嵌套运行）、runner 从不写的名字（计数并报告）。tmp/test/run-<pid> 在它的运行结束且根目录一小时未动后退休。
+2) 从源头砍掉副本：没有任何工具读 test/results（除了跳过它），git ls-files test/results = 0，唯一的读者是人看自己刚跑的那次。用 run.json（revision/dirty/build/tier/targets/plans，11 KB）加上每个测试 meta.json 本来就有的 plan_path/case_path 代替。
+3) 检查是性质：test/plans/feat/tools/retention.plan.toml 的 retention.policy（同一棵植入的树在绑定 2 与无绑定下分别剪，断言确切的名单/条目/字节、"剪了零个东西就是失败"、以及被重定向的记录树必须正是被剪的那棵）与 retention.runner（用 CAMEL_TEST_RESULTS_ROOT + CAMEL_TEST_RUN_DIRS_KEEP=1 真跑两次，对着植入的死/活/外来目录）。关掉剪枝时红：11 项失败、exit 1；现在是绿。
+4) 一份定义：isRunnerOutput 现在由 check-no-algo.mjs、scripts/check-doc-links.mjs、scripts/headers.mjs --root、scripts/clean.js 与 runner 自己的 scratch 根提问。
+5) 文档：docs/test-plans.md 的 "Runner Output"（绑定、理由、什么会老化、两个环境开关、清单、实测数字）+ docs/npm-scripts.md 一行。
+
+途中发现自己策略的一个 bug：剪枝从仓库根推导日志根，于是记录被重定向的那次运行剪了检出自己的树、却把自己的留成无界——已修并由重定向 fixture 钉住。
+按名字报告、未修（当时被禁止改）：test/tools/check-doc-pass-forms.mjs:168-173 仍自带 NOT_WALKED = ['test/results','tmp']（第二份手抄的定义，应改用 isRunnerOutput），其头部 :85-99 仍说 test/results 存着"每个计划与用例的副本"——第 1 个提交之后已不成立（它的结论——跳过那棵树不会丢页面——仍然成立）。→ 已另派任务（h339）。
+一处提醒：docs/technical/56_cpu_baselines_and_cuda_visible_devices.md:67 引用某个运行目录的 stderr.txt 作为一次红结果的原始记录；这个绑定按设计会退休这类引用（不会变红，只是对读者不再可解析）。
+
+闸门（最终提交）：[SUMMARY] total: 5696, pass: 5682, fail: 0, skip: 14，exit 0。
