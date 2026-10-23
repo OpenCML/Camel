@@ -252,6 +252,11 @@ std::vector<draft_node_ref_t> collectLiveDraftNodes(const GraphDraft &draft) {
         for (draft_node_ref_t input : draft.ctrlInputsOf(current)) {
             pushRoot(input);
         }
+        // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5): the statement
+        // written before this one in the same `sync` block is live exactly as a data input is.
+        for (draft_node_ref_t input : draft.syncInputsOf(current)) {
+            pushRoot(input);
+        }
         const runtime::DraftNodeHeader *header = draft.header(current);
         if (header == nullptr) {
             continue;
@@ -423,6 +428,8 @@ class EncodeSession {
         std::vector<std::vector<draft_node_ref_t>> pendingNormInputs;
         std::vector<std::vector<draft_node_ref_t>> pendingWithInputs;
         std::vector<std::vector<draft_node_ref_t>> pendingCtrlInputs;
+        std::vector<std::vector<draft_node_ref_t>> pendingOrderInputs;
+        std::vector<std::vector<draft_node_ref_t>> pendingSyncInputs;
         draft_node_ref_t nextPreparedId = 0;
         for (draft_node_ref_t sourceId = 0; sourceId < graph->draft().nodeSlotCount(); ++sourceId) {
             if (graph->draft().alive(sourceId) && liveSet.contains(sourceId)) {
@@ -432,6 +439,8 @@ class EncodeSession {
         pendingNormInputs.reserve(nextPreparedId);
         pendingWithInputs.reserve(nextPreparedId);
         pendingCtrlInputs.reserve(nextPreparedId);
+        pendingOrderInputs.reserve(nextPreparedId);
+        pendingSyncInputs.reserve(nextPreparedId);
         for (draft_node_ref_t sourceId = 0; sourceId < graph->draft().nodeSlotCount(); ++sourceId) {
             if (!graph->draft().alive(sourceId) || !liveSet.contains(sourceId)) {
                 continue;
@@ -549,6 +558,8 @@ class EncodeSession {
             pendingNormInputs.emplace_back();
             pendingWithInputs.emplace_back();
             pendingCtrlInputs.emplace_back();
+            pendingOrderInputs.emplace_back();
+            pendingSyncInputs.emplace_back();
             auto remapInputs = [&](std::span<const draft_node_ref_t> sourceInputs,
                                    std::vector<draft_node_ref_t> &target) {
                 target.reserve(sourceInputs.size());
@@ -556,9 +567,25 @@ class EncodeSession {
                     target.push_back(remapNodeRef(input, sourceToPrepared));
                 }
             };
+            // Order and sync edges carry no liveness of their own: an order predecessor that
+            // nothing else reaches is dead code, and the runtime graph does not name it. A sync
+            // predecessor is live by definition (the statement before it is "used"), so it is
+            // always there.
+            auto remapLiveInputs = [&](std::span<const draft_node_ref_t> sourceInputs,
+                                       std::vector<draft_node_ref_t> &target) {
+                target.reserve(sourceInputs.size());
+                for (draft_node_ref_t input : sourceInputs) {
+                    const draft_node_ref_t mapped = remapNodeRef(input, sourceToPrepared);
+                    if (mapped != runtime::kInvalidNodeRef) {
+                        target.push_back(mapped);
+                    }
+                }
+            };
             remapInputs(graph->draft().normInputsOf(sourceId), pendingNormInputs.back());
             remapInputs(graph->draft().withInputsOf(sourceId), pendingWithInputs.back());
             remapInputs(graph->draft().ctrlInputsOf(sourceId), pendingCtrlInputs.back());
+            remapLiveInputs(graph->draft().orderInputsOf(sourceId), pendingOrderInputs.back());
+            remapLiveInputs(graph->draft().syncInputsOf(sourceId), pendingSyncInputs.back());
 
             sourceToPrepared[sourceId] = prepared.draft->addNode(init);
         }
@@ -572,6 +599,12 @@ class EncodeSession {
             prepared.draft->setNormInputs(preparedId, pendingNormInputs[preparedOrdinal]);
             prepared.draft->setWithInputs(preparedId, pendingWithInputs[preparedOrdinal]);
             prepared.draft->setCtrlInputs(preparedId, pendingCtrlInputs[preparedOrdinal]);
+            if (!pendingOrderInputs[preparedOrdinal].empty()) {
+                prepared.draft->setOrderInputs(preparedId, pendingOrderInputs[preparedOrdinal]);
+            }
+            if (!pendingSyncInputs[preparedOrdinal].empty()) {
+                prepared.draft->setSyncInputs(preparedId, pendingSyncInputs[preparedOrdinal]);
+            }
             ++preparedOrdinal;
         }
         for (draft_node_ref_t nodeId : graph->draft().normPorts()) {

@@ -47,16 +47,23 @@ inline std::string writtenCallName(const GCT::node_ptr_t &call) {
 inline runtime::DraftEdgeKind toDraftEdgeKind(LinkType type) {
     switch (type) {
     case LinkType::Norm:
-        return runtime::DraftEdgeKind::Norm;
     case LinkType::With:
-        return runtime::DraftEdgeKind::With;
+        return runtime::DraftEdgeKind::Data;
     case LinkType::Ctrl:
         return runtime::DraftEdgeKind::Ctrl;
     case LinkType::Order:
         return runtime::DraftEdgeKind::Order;
+    case LinkType::Sync:
+        return runtime::DraftEdgeKind::Sync;
     }
     ASSERT(false, "Unknown link type.");
-    return runtime::DraftEdgeKind::Norm;
+    return runtime::DraftEdgeKind::Data;
+}
+
+/// The role of the port a link makes: `with` is the context role, everything else the ordinary
+/// one (the capture role is the callee's capture table's, not a `LinkType`).
+inline runtime::PortRole toPortRole(LinkType type) {
+    return type == LinkType::With ? runtime::PortRole::Context : runtime::PortRole::Normal;
 }
 
 inline runtime::GCNodeKind nodeKindOf(node_handle_t node) {
@@ -130,7 +137,7 @@ inline bool sameGraph(node_handle_t lhs, const compile_graph_ptr_t &graph) {
 inline void linkNodes(LinkType type, node_handle_t from, node_handle_t to) {
     ASSERT(from != nullptr && to != nullptr, "Cannot link null draft nodes.");
     ASSERT(nodeGraphOf(from) == nodeGraphOf(to), "Compile-time link must stay within one graph.");
-    nodeGraphOf(from)->link(toDraftEdgeKind(type), from, to);
+    nodeGraphOf(from)->link(toDraftEdgeKind(type), from, to, toPortRole(type));
 }
 
 inline void tryRemoveCtrlLink(node_handle_t from, node_handle_t to) {

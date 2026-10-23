@@ -231,10 +231,10 @@ void manyReaders() {
     readers.reserve(kReaders);
     for (size_t i = 0; i < kReaders; ++i) {
         const auto reader = node(draft);
-        draft.appendInput(DraftEdgeKind::Norm, reader, producer);
+        draft.appendInput(DraftEdgeKind::Data, reader, producer);
         // Reading it twice does not make it two readers.
         if (i % 3 == 0) {
-            draft.appendInput(DraftEdgeKind::Norm, reader, producer);
+            draft.appendInput(DraftEdgeKind::Data, reader, producer);
         }
         readers.push_back(reader);
     }
@@ -248,7 +248,7 @@ void manyReaders() {
         if (i % 2 == 0) {
             draft.eraseNode(readers[i]);
         } else {
-            while (draft.unlinkInput(DraftEdgeKind::Norm, readers[i], producer)) {
+            while (draft.unlinkInput(DraftEdgeKind::Data, readers[i], producer)) {
             }
         }
         if (i % 50000 == 0) {

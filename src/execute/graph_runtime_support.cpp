@@ -168,6 +168,11 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
                  {graph->ctrlInputsOf(n), graph->normInputsOf(n), graph->withInputsOf(n)}) {
                 work.insert(work.end(), inputs.begin(), inputs.end());
             }
+            // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5): the statement
+            // written before this one in the same block is reachable exactly as a data port is.
+            for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(n)) {
+                work.push_back(edge.pred);
+            }
         }
     }
 
@@ -371,6 +376,13 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         }
         for (gc_node_ref_t input : graph->withInputsOf(index)) {
             visit(input);
+        }
+        // A sync edge is a use and an order at once (docs/design/effects/edges.cn.md 1.5): the
+        // statement written before this one runs before it. It is live whenever the node is --
+        // the liveness walk above follows it -- so it is visited whether or not the layout holds
+        // it for another reason.
+        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(index)) {
+            visit(edge.pred);
         }
         // An order edge orders two nodes that both run; it does not make either of them run
         // (docs/design/effects/edges.cn.md 1.5 and 2). A predecessor that the layout does not

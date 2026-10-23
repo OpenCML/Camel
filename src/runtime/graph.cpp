@@ -129,6 +129,7 @@ struct GraphArenaLayout {
     size_t regionPortBytes  = 0; // the form ports of the regions
     size_t writingBytes     = 0; // the equivalences between nodes
     size_t orderEdgeBytes   = 0; // the order edges between nodes
+    size_t syncEdgeBytes    = 0; // the sync edges between nodes
     size_t normPortBytes    = 0;
     size_t withPortBytes    = 0;
     size_t closureBytes     = 0;
@@ -168,6 +169,9 @@ GraphArenaLayout planGraphArenaLayout(
         .orderEdgeBytes = camel::core::mm::alignUp(
             bytesForArray<GCGraphOrderEdge>(payload.orderEdgeCount),
             alignof(GCGraphOrderEdge)),
+        .syncEdgeBytes = camel::core::mm::alignUp(
+            bytesForArray<GCGraphSyncEdge>(payload.syncEdgeCount),
+            alignof(GCGraphSyncEdge)),
         .normPortBytes = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.normPortCount),
             alignof(gc_node_ref_t)),
@@ -180,7 +184,7 @@ GraphArenaLayout planGraphArenaLayout(
     };
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
-        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.writingBytes + layout.orderEdgeBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes;
+        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.writingBytes + layout.orderEdgeBytes + layout.syncEdgeBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes;
     // The frame layout comes last. The arrays before it may end at any 4-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
     if (frameSlots) {
@@ -557,6 +561,7 @@ struct DraftPayloadPlan {
     std::vector<gc_node_ref_t> runtimeRefsByDraftId;
     gc_cnt_t edgeCount        = 0;
     gc_cnt_t orderEdgeCount   = 0;
+    gc_cnt_t syncEdgeCount    = 0;
     gc_cnt_t payloadWordCount = 0;
 };
 
@@ -619,6 +624,7 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     size_t nodeCount      = 0;
     size_t edgeCount      = 0;
     size_t orderEdgeCount = 0;
+    size_t syncEdgeCount  = 0;
     size_t payloadWords   = 0;
     const bool keepIds = draft.keepsNodeIds();
     for (gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
@@ -649,6 +655,9 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
             requireAlive(draftId, ref, "order-input");
         }
+        for (gc_node_ref_t ref : draft.syncInputsOf(draftId)) {
+            requireAlive(draftId, ref, "sync-input");
+        }
         const size_t words = draftPayloadWords(*header);
         // The NodeId kInvalidNodeRef and the payload offset kNoPayload are reserved.
         ASSERT(
@@ -667,6 +676,7 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
                      draft.ctrlInputsOf(draftId).size();
         orderEdgeCount += draft.orderInputsOf(draftId).size();
+        syncEdgeCount += draft.syncInputsOf(draftId).size();
     }
 
     for (gc_node_ref_t ref : draft.normPorts()) {
@@ -685,6 +695,7 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
 
     plan.edgeCount        = static_cast<gc_cnt_t>(edgeCount);
     plan.orderEdgeCount   = static_cast<gc_cnt_t>(orderEdgeCount);
+    plan.syncEdgeCount    = static_cast<gc_cnt_t>(syncEdgeCount);
     plan.payloadWordCount = static_cast<gc_cnt_t>(payloadWords);
     return plan;
 }
@@ -713,6 +724,7 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
         .regionPortCount = static_cast<gc_cnt_t>(draft.regionPortCount()),
         .writingCount    = static_cast<gc_cnt_t>(draft.writings().size()),
         .orderEdgeCount  = plan.orderEdgeCount,
+        .syncEdgeCount   = plan.syncEdgeCount,
         .base = draft.baseGraph(),
     };
 }
@@ -899,30 +911,39 @@ void emitDraftPayload(
         .ctrlBegin = static_cast<gc_off_t>(inputCursor),
     };
 
-    // The order edges (docs/design/effects/edges.cn.md 1.5): they are not ports and not control
-    // inputs, so they are written to the graph's own array, in the node order the records have.
-    if (payload.orderEdgeCount != 0) {
+    // The order edges and the sync edges (docs/design/effects/edges.cn.md 1.5): neither is a port,
+    // so each is written to the graph's own array, in the node order the records have (which is
+    // what makes the arrays sorted by user).
+    const auto emitSideEdges = [&](auto *edges, gc_cnt_t count, const auto &inputsOf) {
+        if (count == 0) {
+            return;
+        }
         size_t at = 0;
         for (const PlannedDraftNode &planned : plan.nodes) {
             if (planned.dead) {
                 continue;
             }
-            for (gc_node_ref_t pred : draft.orderInputsOf(planned.draftId)) {
-                ASSERT(
-                    at < payload.orderEdgeCount,
-                    "Draft order-edge emission wrote past the planned order edges.");
+            for (gc_node_ref_t pred : inputsOf(planned.draftId)) {
+                ASSERT(at < count, "Draft side-edge emission wrote past the planned edges.");
                 ASSERT(
                     pred < plan.runtimeRefsByDraftId.size(),
-                    "Draft order-edge emission encountered a node outside the payload plan.");
+                    "Draft side-edge emission encountered a node outside the payload plan.");
                 const gc_node_ref_t runtimePred = plan.runtimeRefsByDraftId[pred];
                 ASSERT(
                     runtimePred != kInvalidNodeRef,
-                    "Draft order-edge emission encountered a dead node.");
-                payload.orderEdges[at++] = GCGraphOrderEdge{planned.ref, runtimePred};
+                    "Draft side-edge emission encountered a dead node.");
+                edges[at] = {planned.ref, runtimePred};
+                ++at;
             }
         }
-        ASSERT(at == payload.orderEdgeCount, "Draft order-edge emission wrote the wrong count.");
-    }
+        ASSERT(at == count, "Draft side-edge emission wrote the wrong count.");
+    };
+    emitSideEdges(
+        payload.orderEdges, payload.orderEdgeCount,
+        [&](gc_node_ref_t id) { return draft.orderInputsOf(id); });
+    emitSideEdges(
+        payload.syncEdges, payload.syncEdgeCount,
+        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); });
 
     for (size_t i = 0; i < draft.normPorts().size(); ++i) {
         payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];
@@ -1083,6 +1104,8 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
     payload.writingCount    = shape.writingCount;
     payload.orderEdges      = arenaAllocArray<GCGraphOrderEdge>(arena, shape.orderEdgeCount);
     payload.orderEdgeCount  = shape.orderEdgeCount;
+    payload.syncEdges       = arenaAllocArray<GCGraphSyncEdge>(arena, shape.syncEdgeCount);
+    payload.syncEdgeCount   = shape.syncEdgeCount;
     payload.normPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.normPortCount);
     payload.withPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.withPortCount);
     payload.closure          = arenaAllocArray<gc_node_ref_t>(arena, shape.closureCount);
@@ -1122,6 +1145,8 @@ GCGraphPayloadArena makePayloadArenaView(GCGraphNativePayload &payload, PayloadS
         .writingCount     = payload.writingCount,
         .orderEdges       = payload.orderEdges,
         .orderEdgeCount   = payload.orderEdgeCount,
+        .syncEdges        = payload.syncEdges,
+        .syncEdgeCount    = payload.syncEdgeCount,
         .inputs           = staging.inputs.data(),
         .payload          = staging.payload.data(),
         .normPorts        = payload.normPorts,
@@ -1852,6 +1877,13 @@ uint64_t GCGraph::nodeContentHash(gc_node_ref_t ref) const {
     const auto orderEdges = orderPredsOf(ref);
     mixValue(static_cast<uint64_t>(orderEdges.size()));
     for (const GCGraphOrderEdge &edge : orderEdges) {
+        mixValue(edge.pred);
+    }
+    // The sync predecessor: the statement this one is written after, which is part of what the
+    // node is, exactly as the order predecessors are.
+    const auto syncEdges = syncPredsOf(ref);
+    mixValue(static_cast<uint64_t>(syncEdges.size()));
+    for (const GCGraphSyncEdge &edge : syncEdges) {
         mixValue(edge.pred);
     }
     const std::span<const std::byte> payload = nodePayloadBytes(ref);
