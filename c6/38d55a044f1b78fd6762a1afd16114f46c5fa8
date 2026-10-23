@@ -1,0 +1,9 @@
+h356（H13 D4）— 用 Camel 写的 MCTS 示例，配 Python 基线且零容差（分支 handover/h356-mcts-example，1 提交 9c7b05226；合入 c638d55a0）
+
+交付：`showcase/d4-mcts/`（search.cml 341 行：UCT、扩展、轻量走子策略、回传；baseline/mcts.py 245 行仅标准库；compare.py；RESULTS.md；中英 README；.gitignore）、`test/plans/feat/showcase_d4.plan.toml`（19 例：4 个搜索 × nvm/fvm/jit/prl，整份 stdout 钉住，加 3 个拒绝）、`test/plans/perf/showcase_d4.plan.toml`、以及 `test/plan-selection.json` 里一条规则（**没有它 runner 自检会失败**：新 showcase 目录下的用例必须被选中规则覆盖）。
+**实测**（四后端逐字节相同；种子 42、2000 次模拟除非另说）：win now `XX.OO....` best=2 nodes=72，获胜子节点的均值恰为 1.000000 且无第二个为 1；block `.X..O.X.O` best=0 mean=0.967624 nodes=89；fork `X..OX...O` best=2 mean=0.944802 nodes=198；空盘（种子 7、5000）best=4 mean=0.665418 nodes=4937。守卫 exit 1：`playouts=0`、非法盘面、终局盘面。compare.py 7 次运行**每一行与 Python 相同**（访问数、和、均值全等，无容差），0 个越界；空盘种子 42/5000 两侧都是 4929 节点。墙钟与峰值内存只报告不断言（fork 0.227 s 对 0.146 s，24.9 对 11.5 MiB）。
+**Gap 1（唯一遇到的语言缺陷，已另派）**：结构体字面量里的 `[]` 在**兄弟字段的值是命名结构体类型的变量**时变成 `void[]`（`DeclaredTypeMismatch 0x03000110`），而全字面量的拼法能编译——即"`[]` 从上下文取类型"这条规则**没走到这个位置**，是规则本身的缺陷而非缺功能。示例暂时把空数组放进有类型的局部量，两个 README 都把它记为 workaround。
+Gap 2：`if`/`match` 臂里的 `return` 不是函数出口（`ExitInUnusedBranch`）。Gap 3：非 `sync` 块里对 `var` 的路径赋值需要 `wait`，而**非 `sync` 函数里的 `wait` 不会传染给调用者**。Gap 4：`loop` 的状态不能是 `[]`（`LoopStateWithoutType`，在那里写类型标注是语法错误）。
+Q6 已答：`var` 为根的路径赋值与"递归结构体持有自身序列"都能用（5000 次模拟的树 4929 个节点）。Q7 未触及：搜索部分不需要运行时的数组→张量转换。缩小范围：不做策略/价值网络与自对弈（那是算力与篇幅，不是语言缺口），中英 README 与 RESULTS.md 都写明了。
+闸门：分支上 5850/5836/0/14（整层 + 两个 d4 计划整份 + 范例计划整份）；**合入后协调者重跑整层：5853/5839/0/14**。
+**需要作者更新（不是我们的）**：`docs/handover/README.cn.md` 的 D4 行（未做→已完成）与 `docs/design/showcase/README.cn.md` 的 D4 状态与首批清单。
