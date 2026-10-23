@@ -6,6 +6,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/module/introspect.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/tags.h"
 #include "camel/core/type.h"
@@ -368,7 +369,8 @@ int runCommand(int argc, char *argv[]) {
                 }
             }
             if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps &&
-                !Inspect::dumpInstances && !Inspect::dumpFacts && !Inspect::dumpTags) {
+                !Inspect::dumpInstances && !Inspect::dumpFacts && !Inspect::dumpTags &&
+                !Inspect::dumpAttrs) {
                 // Inspect Command ends here if only
                 // tokens, CST or AST is requested
                 return 0;
@@ -380,7 +382,8 @@ int runCommand(int argc, char *argv[]) {
                 mainModule->compile(CompileStage::GCT);
             }
             if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps ||
-                Inspect::dumpInstances || Inspect::dumpFacts || Inspect::dumpTags) {
+                Inspect::dumpInstances || Inspect::dumpFacts || Inspect::dumpTags ||
+                Inspect::dumpAttrs) {
                 mainModule->compile(CompileStage::Done);
             }
             // Every dump below reads something the compile produced, so the question is asked
@@ -441,6 +444,21 @@ int runCommand(int argc, char *argv[]) {
                     camel::runtime::fact::FactStore &facts = ctx->facts();
                     camel::runtime::fact::computeFacts(facts, *ctx->runtimeProgram());
                     camel::runtime::fact::dumpFacts(facts, *ctx->runtimeProgram(), os);
+                }
+            }
+            if (Inspect::dumpAttrs) {
+                // The imports are loaded first, as for --ops: a module registers its attribute
+                // keys when it loads, and the check is about every key the program can see.
+                for (const auto &module : ctx->importedModules()) {
+                    if (!module->loaded()) {
+                        module->load();
+                    }
+                }
+                // The standard tags (the permissions and #strict) are attribute keys too; they
+                // are interned by the tag registry, not by a module the program imports.
+                camel::core::tag::declareStandardTags();
+                if (!camel::core::attr::dumpFates(os)) {
+                    return 1;
                 }
             }
             if (Inspect::dumpOps) {

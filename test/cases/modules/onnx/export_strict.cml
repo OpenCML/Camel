@@ -1,0 +1,23 @@
+/**
+ * Refused: `#strict` (design principles 7.4) says the code it marks uses the canonical algorithm
+ * with no permission at all. An ONNX model cannot carry that promise — its MatMul is whatever
+ * the target's kernel does — so the export refuses at the `strict` attribute instead of writing
+ * a model that is not the program's promise.
+ */
+module export_strict
+import { Tensor, reshape, sum } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+#strict func net(x: Tensor): Tensor {
+    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[], [3, 2])
+    return x @ w
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[], [2, 3])
+    println(sum(net(x)))
+    export_model((x: Tensor): Tensor => net(x), x, get_env('ONNX_OUT'))
+    println('model written')
+    return 0
+}

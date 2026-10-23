@@ -1,0 +1,28 @@
+/**
+ * Refused: `@mark` of the test module writes `test.mark` on the nodes of `net`, and the attribute
+ * fate table (camel/core/node_attrs.h) classifies no consumer for it. A new attribute nobody has
+ * classified is exactly the class this task guards against: the export must not guess what the
+ * choice means, so it refuses and names the attribute and the node.
+ *
+ * The same case is the failure case of `camel inspect --attrs`: the key is interned by a loaded
+ * module and has no row, which is what the classification check reports.
+ */
+module export_unclassified
+import { Tensor, reshape, sum } from tensor
+import { mark } from test_attrs
+import { export_model } from onnx
+import { get_env } from env
+
+@mark
+func net(x: Tensor): Tensor {
+    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[], [3, 2])
+    return x @ w
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[], [2, 3])
+    println(sum(net(x)))
+    export_model((x: Tensor): Tensor => net(x), x, get_env('ONNX_OUT'))
+    println('model written')
+    return 0
+}

@@ -3,12 +3,14 @@
 
 // Translate the supported pure tensor subgraphs without running user operators on the host.
 
+#include "camel/core/node_attrs.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/array.h"
-#include "camel/core/tags.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -29,6 +31,7 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <format>
 #include <limits>
 #include <stdexcept>
 #include <unordered_map>
@@ -60,6 +63,51 @@ struct Frame {
     std::unordered_map<rt::gc_node_ref_t, Value> values;
     std::unordered_set<rt::gc_node_ref_t> visiting;
 };
+
+/// A node attribute Tiles has no fate for is a choice the compiled kernel would not honour:
+/// refuse it by name instead of running a program that means something else (the fate table,
+/// camel/core/node_attrs.h, is the one place a key is classified for every consumer).
+void checkAttributeFates(const rt::GCGraph &g, rt::gc_node_ref_t id) {
+    namespace attr          = core::attr;
+    const auto *node        = g.node(id);
+    const std::string where = node && node->kind == rt::GCNodeKind::Oper
+                                  ? std::format(
+                                        "'{}' (node {})",
+                                        g.nodeBodyAs<rt::GCOperBody>(id)->uri(),
+                                        static_cast<uint64_t>(id))
+                                  : std::format("node {}", static_cast<uint64_t>(id));
+    for (const attr::Attr &a : attr::entries(g.nodeAttrs(id))) {
+        const std::string name(attr::keyName(a.key));
+        const std::string value   = attr::fateValueText(a.value);
+        const std::string spelled = value.empty() ? name : std::format("{}={}", name, value);
+        const attr::FateRow *row  = attr::fateOf(name, value);
+        if (row == nullptr) {
+            throw UnsupportedComputation(
+                std::format(
+                    "attribute '{}' on {} is not classified: Tiles has no fate for it, so "
+                    "compiling "
+                    "would drop the choice; add it to the fate table (camel/core/node_attrs.h) for "
+                    "the interpreter, the dumps, ONNX and Tiles",
+                    spelled,
+                    where));
+        }
+        if (row->tiles == attr::Fate::Refused) {
+            throw UnsupportedComputation(
+                std::format(
+                    "attribute '{}' on {} cannot be honoured by Tiles: {}",
+                    spelled,
+                    where,
+                    row->note));
+        }
+        if (row->tiles == attr::Fate::NotOnANode) {
+            throw UnsupportedComputation(
+                std::format(
+                    "attribute '{}' on {} is a declaration fact, not a node attribute",
+                    spelled,
+                    where));
+        }
+    }
+}
 
 class Compiler {
   public:
@@ -418,6 +466,7 @@ class Compiler {
         auto *g          = f.graph;
         const auto *node = g->node(id);
         try {
+            checkAttributeFates(*g, id);
             for (auto dep : g->ctrlInputsOf(id))
                 eval(f, dep);
             Value out;
@@ -588,7 +637,10 @@ class Compiler {
                 // Arguments and separately called functions have already been
                 // lowered with their own permissions and must remain unchanged.
                 const camel::core::sem::PermissionMask permissions =
-                    camel::core::tag::factsOf(*g, id).permissions;
+                    camel::core::tag::effectivePermissions(
+                        *g,
+                        id,
+                        camel::core::sem::NumericPolicy::explicitOnly());
                 for (size_t i = first; i < program.nodes.size(); ++i) {
                     program.nodes[i].permissions = permissions;
                     if (program.nodes[i].semantic == SIZE_MAX)

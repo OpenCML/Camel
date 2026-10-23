@@ -380,6 +380,35 @@ Every node evaluates to either a constant or a symbolic tensor:
 - `LoweringRegistry::supported(opset)` lists what the backend can express at an
   opset, and `onnx.supported_operators()` exposes it to Camel programs. That
   per-operator capability table is what the paper's ORT_007 exemplar needs.
+- Node attributes are choices (design principles 9.6), so the export carries
+  each one or refuses it -- it never drops one. ONNX has no node attribute a
+  target would read, so `ModelProto.metadata_props` holds them: one
+  `camel.node.<n>` entry per node that carries anything, naming the graph, node,
+  operator, `attrs="..."` (the node attribute set) and `numeric="..."` (its
+  permission column), with the source position. The fates
+  (`camel/core/node_attrs.h`) are:
+  - carried: `tensor.kernel=library`, `tensor.fusion=linear|linear_relu`,
+    `tiles.placement=cpu|gpu`, `independent`, and every numeric permission;
+  - refused, naming the attribute, the node and the reason in the diagnostic:
+    `tensor.kernel=canonical` (what `tensor::fuse safe_fp=true` records) and
+    `strict`; also any key the table does not classify.
+  The licence is why the first group is allowed and the second is not: a
+  `library` kernel is permitted to reassociate (design principles 7.3 grants
+  `reassociate` by default), and the export's MatMul -- whose kernel the target
+  picks -- stays inside that licence; a `canonical` choice is a promise about
+  the accumulation order that an ONNX model cannot keep, and `strict` promises
+  canonical arithmetic with no permission at all (7.4), so the export refuses
+  instead of producing a model that computes something else. `tensor.fusion`
+  records a group ONNX has no marker for: the operators stay the program's and
+  the target may fuse them. `tiles.placement` is a request the session's
+  execution providers decide on, not a guarantee.
+- The same table classifies each attribute for the interpreter, both dumps and
+  Tiles. `camel inspect --attrs` prints it and exits 1 when a loaded module
+  interns a key with no row; the exporter and the Tiles compiler refuse an
+  unclassified attribute by name, and Tiles reads the effective permission set
+  (`effectivePermissions`), so `#strict` revokes the defaults there too. This is
+  the class guard: an attribute a pass writes cannot reach a consumer that
+  silently ignores it.
 
 Export covers inference graphs. Training steps produced by `apply_gradients` are
 not exported.

@@ -509,6 +509,10 @@ void Emitter::retain(rtdata::Object *object, const type::Type *type) {
     }
 }
 
+void Emitter::addMetadata(std::string key, std::string value) {
+    metadata_.push_back(MetadataEntry{std::move(key), std::move(value)});
+}
+
 void Emitter::pushScope(std::string name) {
     scopes_.emplace_back();
     scopes_.back().graph.name = std::move(name);

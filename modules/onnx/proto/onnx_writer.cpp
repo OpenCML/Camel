@@ -135,7 +135,11 @@ class WireWriter {
 // ---------------------------------------------------------------------------
 
 namespace model_f {
-constexpr uint32_t IrVersion = 1, ProducerName = 2, ProducerVersion = 3, Graph = 7, OpsetImport = 8;
+constexpr uint32_t IrVersion = 1, ProducerName = 2, ProducerVersion = 3, Graph = 7, OpsetImport = 8,
+                   MetadataProps = 14;
+}
+namespace metadata_f {
+constexpr uint32_t Key = 1, Value = 2;
 }
 namespace opset_f {
 constexpr uint32_t Domain = 1, Version = 2;
@@ -440,6 +444,12 @@ std::vector<std::byte> serialize(const Model &model) {
     w.messageField(model_f::OpsetImport, encodeOpset("", model.opset));
     for (const auto &op : model.extraOpsets) {
         w.messageField(model_f::OpsetImport, encodeOpset(op.domain, op.version));
+    }
+    for (const MetadataEntry &entry : model.metadata) {
+        WireWriter w2;
+        w2.stringField(metadata_f::Key, entry.key);
+        w2.stringField(metadata_f::Value, entry.value);
+        w.messageField(model_f::MetadataProps, w2);
     }
     return std::move(w).take();
 }

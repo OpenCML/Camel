@@ -11,6 +11,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <ostream>
 #include <shared_mutex>
 #include <stdexcept>
 #include <unordered_map>
@@ -175,9 +176,7 @@ AttrValueId flagWords(std::vector<uint64_t> words) {
 
 AttrValueId integer(int64_t v) { return internValue(Value{.kind = ValueKind::Int, .integer = v}); }
 
-AttrValueId real(double v) {
-    return internValue(Value{.kind = ValueKind::Float, .real = v});
-}
+AttrValueId real(double v) { return internValue(Value{.kind = ValueKind::Float, .real = v}); }
 
 AttrValueId symbol(std::string_view text) {
     return internValue(Value{.kind = ValueKind::Symbol, .text = std::string(text)});
@@ -471,6 +470,286 @@ std::string text(AttrSetId set) {
         }
     }
     return out;
+}
+
+// ---- Fates in the consumers ---------------------------------------------------------------
+
+namespace {
+
+/// The table (Fate above): every attribute the tree can write, one row per key and value.
+const std::vector<FateRow> &fateTable() {
+    static const std::vector<FateRow> rows = [] {
+        std::vector<FateRow> t;
+        const auto add = [&t](
+                             std::string_view key,
+                             std::string_view value,
+                             std::string_view writtenBy,
+                             Fate interpreter,
+                             Fate dump,
+                             Fate onnx,
+                             Fate tiles,
+                             std::string_view note) {
+            t.push_back(FateRow{key, value, writtenBy, interpreter, dump, onnx, tiles, note});
+        };
+        const Fate carried = Fate::Carried;
+        const Fate refused = Fate::Refused;
+        const Fate notNode = Fate::NotOnANode;
+
+        // Node attributes: what a pass or a decorator writes on a node.
+        add("strict",
+            "",
+            "#strict (a function or block)",
+            carried,
+            carried,
+            refused,
+            carried,
+            "ONNX cannot promise canonical arithmetic bit for bit (design principles 7.4); "
+            "Tiles' kernels are the canonical algorithm, so the tag keeps its meaning there.");
+        add("independent",
+            "",
+            "#independent (a function or block)",
+            carried,
+            carried,
+            carried,
+            carried,
+            "a scheduling permission: the executor, both dumps and the model's metadata record "
+            "it, and Tiles schedules the elements independently.");
+        add("tiles.placement",
+            "cpu",
+            "#cpu (a function or block)",
+            carried,
+            carried,
+            carried,
+            carried,
+            "Tiles reads it to choose the device; the ONNX model records the request in its "
+            "metadata and the session's execution providers decide where it runs.");
+        add("tiles.placement",
+            "gpu",
+            "#gpu (a function or block)",
+            carried,
+            carried,
+            carried,
+            carried,
+            "Tiles reads it to choose the device; the ONNX model records the request in its "
+            "metadata and the session's execution providers decide where it runs.");
+        add("tensor.kernel",
+            "library",
+            "tensor::fuse, and the tensor VJP (the forward matmul)",
+            carried,
+            carried,
+            carried,
+            carried,
+            "ONNX has no implementation to choose: the export records the choice in the model's "
+            "metadata and emits MatMul, whose kernel the target picks. `reassociate` is granted "
+            "by default (design principles 7.3), which permits that; Tiles' canonical matmul is "
+            "permitted too.");
+        add("tensor.kernel",
+            "canonical",
+            "tensor::fuse safe_fp=true; a #strict function",
+            carried,
+            carried,
+            refused,
+            carried,
+            "an ONNX MatMul does not promise the canonical accumulation order, so the model "
+            "would compute differently from the recorded choice; Tiles' matmul is the canonical "
+            "chain, so it keeps the choice.");
+        add("tensor.fusion",
+            "linear",
+            "tensor::fuse",
+            carried,
+            carried,
+            carried,
+            carried,
+            "ONNX has no group marker: the operators are exported as they are and the metadata "
+            "records the group, which the target may fuse; Tiles' region analysis forms the "
+            "marked group into one region.");
+        add("tensor.fusion",
+            "linear_relu",
+            "tensor::fuse",
+            carried,
+            carried,
+            carried,
+            carried,
+            "ONNX has no group marker: the operators are exported as they are and the metadata "
+            "records the group, which the target may fuse; Tiles' region analysis forms the "
+            "marked group into one region.");
+
+        // Numeric permissions: the node's permission column, not its attribute set.
+        const std::string_view permissions[] = {
+            "reassociate",
+            "contract",
+            "approx_math",
+            "change_precision",
+            "no_nans",
+            "no_infs",
+            "no_signed_zeros",
+            "flush_subnormals",
+            "nondeterministic",
+            "refine_accuracy",
+            "finite_math"};
+        for (std::string_view permission : permissions) {
+            add(permission,
+                "",
+                "a permission tag on a function or block",
+                carried,
+                carried,
+                carried,
+                carried,
+                "a grant, not a promise: the model's metadata records it and the target's "
+                "arithmetic must stay inside what it allows; Tiles reads the effective set "
+                "(empty under #strict), which is what the interpreter's passes used.");
+        }
+
+        // Declaration facts: interned as keys, but never written on a node.
+        add("resource",
+            "*",
+            "a `resource` declaration",
+            notNode,
+            notNode,
+            notNode,
+            notNode,
+            "a declaration fact (a resource name): no node carries it.");
+        add("reads",
+            "*",
+            "#reads (a pass declaration)",
+            notNode,
+            notNode,
+            notNode,
+            notNode,
+            "a declaration fact (the tags a pass reads): no node carries it.");
+        add("op",
+            "*",
+            "#op (a declaration)",
+            notNode,
+            notNode,
+            notNode,
+            notNode,
+            "a declaration fact (an operator URI): no node carries it.");
+        add("macro",
+            "*",
+            "#macro (a declaration)",
+            notNode,
+            notNode,
+            notNode,
+            notNode,
+            "a declaration fact: no node carries it.");
+        add("autodiff::vjp",
+            "*",
+            "autodiff's `tag vjp<rule>` declaration",
+            notNode,
+            notNode,
+            notNode,
+            notNode,
+            "a declaration fact (the graph of a derivative rule): no node "
+            "carries it.");
+        return t;
+    }();
+    return rows;
+}
+
+} // namespace
+
+std::span<const FateRow> fates() { return fateTable(); }
+
+const FateRow *fateOf(std::string_view key, std::string_view value) {
+    const FateRow *fallback = nullptr;
+    for (const FateRow &row : fateTable()) {
+        if (row.key != key) {
+            continue;
+        }
+        if (row.value == value) {
+            return &row;
+        }
+        if (row.value == "*") {
+            fallback = &row;
+        }
+    }
+    return fallback;
+}
+
+std::string fateValueText(AttrValueId id) {
+    const Value v = value(id);
+    switch (v.kind) {
+    case ValueKind::Unit:
+        return {};
+    case ValueKind::Symbol:
+        return v.text;
+    default:
+        return valueText(id);
+    }
+}
+
+std::string_view fateName(Fate fate) {
+    switch (fate) {
+    case Fate::Carried:
+        return "carried";
+    case Fate::Refused:
+        return "refused";
+    case Fate::NotOnANode:
+        return "not-on-a-node";
+    }
+    return "unknown";
+}
+
+std::vector<std::string> registeredKeys() {
+    Registry &r = registry();
+    std::shared_lock lock(r.mutex);
+    std::vector<std::string> names;
+    names.reserve(r.names.size());
+    for (size_t i = 1; i < r.names.size(); ++i) {
+        names.push_back(r.names[i]);
+    }
+    return names;
+}
+
+bool dumpFates(std::ostream &os) {
+    const std::span<const FateRow> table = fates();
+    for (const FateRow &row : table) {
+        os << std::format(
+            "ATTRIBUTE {} written_by=\"{}\" interpreter={} dump={} onnx={} tiles={}\n",
+            row.value.empty()  ? row.key
+            : row.value == "*" ? std::format("{}=*", row.key)
+                               : std::format("{}={}", row.key, row.value),
+            row.writtenBy,
+            fateName(row.interpreter),
+            fateName(row.dump),
+            fateName(row.onnx),
+            fateName(row.tiles));
+    }
+    bool complete = !table.empty();
+    // A row's four columns are an enum, so the incompleteness to catch is a key with no row and
+    // two rows that disagree about one key and value.
+    const auto classified = [&table](std::string_view key) {
+        return std::ranges::any_of(table, [key](const FateRow &row) { return row.key == key; });
+    };
+    for (const std::string &key : registeredKeys()) {
+        if (!classified(key)) {
+            os << std::format(
+                "UNCLASSIFIED ATTRIBUTE \"{}\": interned as an attribute key but absent from "
+                "the fate table (node_attrs.cpp, fateTable); classify it for the interpreter, "
+                "the dumps, the ONNX export and Tiles\n",
+                key);
+            complete = false;
+        }
+    }
+    for (size_t i = 0; i < table.size(); ++i) {
+        for (size_t j = i + 1; j < table.size(); ++j) {
+            const FateRow &a = table[i];
+            const FateRow &b = table[j];
+            if (a.key != b.key || a.value != b.value) {
+                continue;
+            }
+            if (a.interpreter != b.interpreter || a.dump != b.dump || a.onnx != b.onnx ||
+                a.tiles != b.tiles) {
+                os << std::format(
+                    "UNCLASSIFIED ATTRIBUTE \"{}={}\": two rows disagree about its consumers\n",
+                    a.key,
+                    a.value);
+                complete = false;
+            }
+        }
+    }
+    return complete;
 }
 
 } // namespace camel::core::attr

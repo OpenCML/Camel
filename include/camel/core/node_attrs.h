@@ -49,6 +49,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <iosfwd>
 #include <optional>
 #include <span>
 #include <string>
@@ -170,5 +171,61 @@ std::optional<AttrSetId> merge(AttrSetId a, AttrSetId b);
 /// "name" for a Unit value, "name=<valueText>" otherwise, separated by ", ", ordered by name;
 /// empty for the empty set. Process-independent: caches, hashes and dumps use it.
 std::string text(AttrSetId set);
+
+// ---- Fates in the consumers ---------------------------------------------------------------
+
+/**
+ * What one consumer does with an attribute a node carries. A node attribute is a choice, not a
+ * comment: a consumer that neither acts on it nor records it has dropped it, and a program then
+ * means something else there (the same family as a gradient dropped on the floor). No attribute
+ * may be in that state, so every (key, value) the tree can write has one row below naming, for
+ * each consumer, which of these it is:
+ *
+ *   Carried     uses the choice, or records it where its format can hold it
+ *   Refused     stops, with a message naming the attribute, the node and the reason
+ *   NotOnANode  the key is a declaration fact or a numeric permission, never a node attribute
+ *
+ * The row is the single source the consumers read: the ONNX export refuses a key the table does
+ * not hold (or holds with `Refused` for ONNX), Tiles does the same, and `inspect --attrs`
+ * checks the table against every attribute key the loaded modules interned. A new key, or a new
+ * value of a key with a closed set (`tensor.kernel=...`), therefore fails until classified in
+ * all four consumers; that is the class guard (handover H294).
+ */
+enum class Fate : uint8_t { Carried, Refused, NotOnANode };
+
+/// One attribute (a key, or a key with one of its values) and what each consumer does with it.
+struct FateRow {
+    std::string_view key;
+    /// The value as `fateValueText` writes it; "*" matches any value; "" is a Unit value.
+    std::string_view value;
+    /// The pass, decorator or tag that writes it.
+    std::string_view writtenBy;
+    Fate interpreter;
+    Fate dump;
+    Fate onnx;
+    Fate tiles;
+    /// Where a carrying consumer puts it, or why a refusing one stops. One sentence.
+    std::string_view note;
+};
+
+/// Every attribute the tree can write, ordered by key and value.
+std::span<const FateRow> fates();
+/// The row of `key` with `value` (exact, else the key's "*" row); nullptr when unclassified.
+/// `value` is `fateValueText`'s form: the bare text of a Symbol, "" for a Unit.
+const FateRow *fateOf(std::string_view key, std::string_view value);
+/// The value as the table writes it: the bare text of a Symbol, "" for Unit, `valueText`
+/// otherwise.
+std::string fateValueText(AttrValueId id);
+/// "carried", "refused", "not-on-a-node"; "unknown" for a value outside the enum.
+std::string_view fateName(Fate fate);
+/// The names of every attribute key interned so far, in registration order. `inspect --attrs`
+/// holds the table against them: a key with no row fails the check.
+std::vector<std::string> registeredKeys();
+
+/// Prints the table, one `ATTRIBUTE` line per row, then one `UNCLASSIFIED ATTRIBUTE` line for
+/// every interned key with no row and every (key, value) that two rows classify differently;
+/// false when there was anything to report that way. `inspect --attrs` prints this and exits 1
+/// when it returns false: a new attribute has to be classified in all four consumers.
+bool dumpFates(std::ostream &os);
 
 } // namespace camel::core::attr

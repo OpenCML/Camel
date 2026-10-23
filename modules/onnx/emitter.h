@@ -145,6 +145,13 @@ class Emitter {
     /// Keeps a GC object produced during export alive until the export finishes.
     void retain(rtdata::Object *object, const type::Type *type);
 
+    /// Records one metadata_props entry: a Camel node's attributes and numeric permissions,
+    /// which the ONNX format cannot put on a node. The keys are `camel.node.<n>`; the exporter
+    /// writes them once per node that carries anything.
+    void addMetadata(std::string key, std::string value);
+    /// The metadata recorded so far, in insertion order.
+    const std::vector<MetadataEntry> &metadata() const { return metadata_; }
+
     /// Starts a nested scope (an If branch body); nodes go there until popScope().
     void pushScope(std::string name);
     Graph popScope();
@@ -181,6 +188,7 @@ class Emitter {
     std::unordered_set<std::string> usedNames_;
     std::unordered_map<std::string, size_t> nameCounts_;
     std::unordered_map<std::string, std::string> initializerByKey_;
+    std::vector<MetadataEntry> metadata_;
     std::deque<core::mm::RootHandle> roots_;
 };
 
