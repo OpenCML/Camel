@@ -176,3 +176,76 @@ assert(Number(match(new RegExp('optim native_dtype_exact failures=(\\d+)'), out)
 }
 """
 timeout_ms = 30000
+
+[[tests]]
+name = "optim.unstated_tensor_leaf_follows_its_value"
+desc = "A tensor leaf whose element type the program does not write follows the element type of its value, on both sides: a leaf of `full([2], 0.1)` stays f64 through `nn:sgd` and two `nn:adam` steps (eight bytes an element) and one of `full([2], f32(0.25))` stays f32 (four bytes an element), the Camel `optim` module lands on the same bytes as `nn` on both, and the Camel state's moments carry the parameter's element type. The byte width is the element type, and the plan decodes the bytes as f64 and as f32 rather than reading a printed number."
+kind = "behavior"
+case = "../../../cases/modules/optim/unstated_dtype_exact.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["optim unstated_dtype_exact gradient leaves=2 elements=4 wide_bytes=16 narrow_bytes=8", "optim unstated_dtype_exact sgd leaves=2 elements=4 wide_bytes=16 narrow_bytes=8 agrees_wide=1 agrees_narrow=1", "optim unstated_dtype_exact adam leaves=4 elements=8 wide_bytes=16 narrow_bytes=8 moment_wide=16 moment_narrow=8 agrees_wide=1 agrees_narrow=1", "optim unstated_dtype_exact failures=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${input.normalized.stdout}`)
+const out = input.normalized.stdout
+const fields = (name, tail) => match(new RegExp('optim unstated_dtype_exact ' + name + ' ' + tail), out).slice(1).map(Number)
+
+// The gradient of an unstated leaf follows its value before anything is stepped: the f64 leaf's
+// tangent is two doubles and the f32 leaf's two floats. A gradient read at the wrong width is not
+// the derivative, so the steps below mean nothing if this fails.
+const gradient = fields('gradient', 'leaves=(\\d+) elements=(\\d+) wide_bytes=(\\d+) narrow_bytes=(\\d+) total=(\\S+)')
+assert(gradient[0] === 2, `the gradient check examined ${gradient[0]} leaves, not 2`)
+assert(gradient[1] === 4, `the gradient check examined ${gradient[1]} elements, not 4`)
+assert(gradient[2] === 16, `the f64 gradient leaf is ${gradient[2]} bytes, not 16 (two 8-byte elements)`)
+assert(gradient[3] === 8, `the f32 gradient leaf is ${gradient[3]} bytes, not 8 (two 4-byte elements)`)
+assert(approx(gradient[4], 0.7, 1e-15), `the loss of the two leaves is ${gradient[4]}, not 0.7`)
+
+// One `sgd` step of 0.1 and 0.25 at a rate of 0.5 with a gradient of one: -0.4 and -0.25 in the
+// element type of each leaf. The two sides are compared as bytes, so the element type and the
+// arithmetic are both pinned -- a leaf that was narrowed, or one whose rate was not rounded to its
+// element type, differs here.
+const sgd = fields('sgd', 'leaves=(\\d+) elements=(\\d+) wide_bytes=(\\d+) narrow_bytes=(\\d+) agrees_wide=(\\d+) agrees_narrow=(\\d+)')
+assert(sgd[0] === 2, `the sgd check examined ${sgd[0]} leaves, not 2`)
+assert(sgd[1] === 4, `the sgd check examined ${sgd[1]} elements, not 4`)
+assert(sgd[2] === 16, `the f64 leaf is ${sgd[2]} bytes after the sgd step, not 16`)
+assert(sgd[3] === 8, `the f32 leaf is ${sgd[3]} bytes after the sgd step, not 8`)
+assert(sgd[4] === 1, 'the f64 leaf differs from the native sgd result')
+assert(sgd[5] === 1, 'the f32 leaf differs from the native sgd result')
+
+// The bytes themselves, decoded: an f64 element is the eight bytes of the double and an f32
+// element the four of the float, so a length alone would not say what the bytes hold.
+const bytes = (name, tail) => JSON.parse(match(new RegExp('optim unstated_dtype_exact ' + name + ' ' + tail + '=(\\[.*\\])'), out)[1])
+const f64 = (b, i) => new DataView(new Uint8Array(b.slice(i * 8, i * 8 + 8)).buffer).getFloat64(0, true)
+const f32 = (b, i) => new DataView(new Uint8Array(b.slice(i * 4, i * 4 + 4)).buffer).getFloat32(0, true)
+const wide = bytes('sgd', 'wide')
+const narrow = bytes('sgd', 'narrow')
+assert(wide.length === 16, `the f64 leaf's bytes number ${wide.length}, not 16`)
+assert(narrow.length === 8, `the f32 leaf's bytes number ${narrow.length}, not 8`)
+assert(approx(f64(wide, 0), -0.4, 1e-15), `the f64 leaf holds ${f64(wide, 0)} at 0, not -0.4`)
+assert(approx(f64(wide, 1), -0.4, 1e-15), `the f64 leaf holds ${f64(wide, 1)} at 1, not -0.4`)
+assert(f32(narrow, 0) === Math.fround(-0.25), `the f32 leaf holds ${f32(narrow, 0)} at 0, not f32(-0.25)`)
+assert(f32(narrow, 1) === Math.fround(-0.25), `the f32 leaf holds ${f32(narrow, 1)} at 1, not f32(-0.25)`)
+assert(Math.fround(f64(wide, 0)) !== f64(wide, 0), `the f64 leaf holds ${f64(wide, 0)}, which f32 can hold, so it was narrowed`)
+
+// Two `adam` steps: the parameters on both sides and the Camel state's two moment trees, at the
+// element type of their parameter. Four leaves and eight elements are examined, and the counts are
+// asserted, so a check that looked at nothing cannot pass as agreement.
+const adam = fields('adam', 'leaves=(\\d+) elements=(\\d+) wide_bytes=(\\d+) narrow_bytes=(\\d+) moment_wide=(\\d+) moment_narrow=(\\d+) agrees_wide=(\\d+) agrees_narrow=(\\d+)')
+assert(adam[0] === 4, `the adam check examined ${adam[0]} leaves (parameters and moments), not 4`)
+assert(adam[1] === 8, `the adam check examined ${adam[1]} elements, not 8`)
+assert(adam[2] === 16, `the f64 parameter is ${adam[2]} bytes after two adam steps, not 16`)
+assert(adam[3] === 8, `the f32 parameter is ${adam[3]} bytes after two adam steps, not 8`)
+assert(adam[4] === 16, `the f64 leaf's moment is ${adam[4]} bytes, not 16`)
+assert(adam[5] === 8, `the f32 leaf's moment is ${adam[5]} bytes, not 8`)
+assert(adam[6] === 1, 'the f64 parameter differs from the native adam result (a moment or the arithmetic was narrowed)')
+assert(adam[7] === 1, 'the f32 parameter differs from the native adam result')
+const adamWide = bytes('adam', 'wide')
+assert(approx(f64(adamWide, 0), -0.8999000099990001, 1e-12), `the f64 parameter landed on ${f64(adamWide, 0)}, not two steps of 0.5/(1 + eps) below 0.1`)
+assert(Number(match(new RegExp('optim unstated_dtype_exact failures=(\\d+)'), out)[1]) === 0, 'the case counted failures')
+}
+"""
+timeout_ms = 30000
