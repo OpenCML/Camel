@@ -3,6 +3,13 @@ order = 900
 tier = "slow"
 tags = ["gpu", "modules", "tiles"]
 
+# This layer runs against the cards: a Python test here drives camel or a native check on a
+# device, and the runner's Python default (docs/test-plans.md, "CUDA visibility") would otherwise
+# hide the devices from it and let it measure the CPU. The declaration is the plan's because every
+# test of the layer wants the same thing.
+[defaults]
+cuda_devices = true
+
 [[tests]]
 name = "runtime_scalars"
 kind = "behavior"

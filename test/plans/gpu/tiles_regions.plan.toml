@@ -3,6 +3,12 @@ order = 904
 tier = "slow"
 tags = ["gpu", "modules", "tiles"]
 
+# This layer runs against the cards: the Python test here drives camel on a device, and the
+# runner's Python default (docs/test-plans.md, "CUDA visibility") would otherwise hide the devices
+# from it and let it measure the CPU.
+[defaults]
+cuda_devices = true
+
 [[tests]]
 name = "compiled_region_fresh_inputs_and_captures"
 kind = "behavior"
