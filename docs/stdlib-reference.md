@@ -5447,8 +5447,9 @@ module cannot declare `init` once per optimizer (the language declares a name on
 
 The arithmetic of one leaf is the arithmetic of the native optimizers `nn` carried, and the
 values H64 pinned in test/cases/modules/nn/adam_update_bits.cml: computed in double and rounded
-once, when it is stored. A tensor leaf of `adam` is widened to f64, updated there and narrowed
-once, so a trajectory written here is the trajectory `modules/tensor/kernels/update.h` defines,
+once, when it is stored. A tensor leaf of `adam` whose element type is f32 is widened to f64,
+updated there and narrowed once, and one whose element type is f64 is updated in f64 and stays
+there, so a trajectory written here is the trajectory `modules/tensor/kernels/update.h` defines,
 bit for bit -- which test/cases/modules/optim/agreement.cml asserts step by step, the schedule
 included, against `nn` itself.
 
@@ -5458,9 +5459,10 @@ exactly the parameters' shape -- every leaf must be trainable. A member with no 
 `int` counter, a `string`) has no gradient leaf, and pairing such a tree with its gradient fails
 the walk with `SemanticDiag` "the struct ... has no field ..."; an array of structs, which the
 native walk enters element by element (design principles 9.9), is one leaf here. A leaf whose
-written element type is f64 keeps f64 where the native path silently narrows it to f32.
-docs/technical/optim.md records each of them, with what the native path does, what is missing,
-and what a program sees today.
+element type the program does not write is updated at the element type its value has, on both
+sides; `adam` reads that element type from the value's bytes, because no operator names a
+tensor's element type at run time. docs/technical/optim.md records each of them, with what the
+native path does, what is missing, and what a program sees today.
 
 #### `constant`
 
