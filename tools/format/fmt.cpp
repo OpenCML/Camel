@@ -368,18 +368,24 @@ any Formatter::visitStmtBlock(cst::StmtBlock context) {
     if (stmtList) {
         // The comments between the last statement of the block and its closing brace belong to the
         // block: the statement list writes comments up to its last statement and no further, and
-        // they used to be dropped - `// mark:` after the last statement of a body, say. They take
-        // the place the `}` was about to take, one indent in, and the brace keeps its own line.
+        // they used to be dropped - `// mark:` after the last statement of a body, say. They are
+        // written where they stood: on the statement's line if they were on it, which is where
+        // every statement but the last one keeps such a comment. The brace keeps its own line.
         const size_t lastStmt = stmtList->lastToken()->index();
         const size_t brace    = context->lastToken()->index();
         std::string inner     = any_cast<string>(visitStmtList(stmtList));
         std::string comments;
         pushIndent();
+        size_t lastStopLine =
+            tokens[lastStmt].line() + countLines(tokens[lastStmt].text());
         for (size_t i = lastStmt + 1; i < brace; i++) {
-            if (tokens[i].channel > 1 && !commentWritten(i)) {
-                comments += lineEnd();
-                writeCommentText(comments, i);
+            if (tokens[i].channel <= 1 || commentWritten(i)) {
+                continue;
             }
+            const long skips = static_cast<long>(tokens[i].line()) - static_cast<long>(lastStopLine);
+            comments += skips <= 0 ? " " : lineEnd();
+            writeCommentText(comments, i);
+            lastStopLine = tokens[i].line() + countLines(tokens[i].text());
         }
         popIndent();
         if (comments.empty()) {
