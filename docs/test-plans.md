@@ -167,6 +167,74 @@ The output is the serial run's output: results are printed in plan and test orde
 test finished first, and the exit code and failure text are the same. The run's log directory
 and `summary.json` land under `test/results/log/` as before.
 
+### What Holds a Slot, And Where The Rest Of The Time Goes
+
+A slot is held for the test program. Everything the runner does around it is its own work on its
+own thread, and none of it needs a slot: it happens with the slot already back, next to the tests
+that are still running. Two of those steps are processes of their own, and each gets a width of
+its own instead of a test slot:
+
+- **A `skip_unless` precondition** is the runner asking the host a question, not the test running.
+  It runs before the slot is taken, under a width of `--jobs` like the verification scripts: a
+  probe that hangs for its whole `skip_unless_timeout_ms` cannot take a slot away from a test, and
+  it costs one lane rather than every probe behind it. A one-wide lane was measured and rejected:
+  two 120 s MNIST preconditions left 42 probe tests queued and the run's last 150 s with no slot
+  held at all, because a test waits for its probe before it takes a slot.
+- **A verification script** starts after the slot went back, under a width of `--jobs`: the test's
+  own process is gone and its output is already checked, so the verification's node starts next to
+  the next test instead of in its place.
+
+A test marked `parallel = false` (and a benchmark, `isSerial`) is the exception: it keeps its slot
+through its probe, its verification and its cleanup, because it was marked precisely because it
+shares something outside its own scratch directory.
+
+`summary.json` records where every slot went, so the next person does not have to guess.
+`slot_timing` is the whole run: `child_ms_total` (children running), `slot_ms_total` (slots held),
+`no_child_ms_total` (slots held with no child in them) with its distribution, and the same for
+`pre_spawn_ms` (slot taken -> child created) and `post_exit_ms` (child gone -> slot released).
+Each step is reported twice, because moving a step out of the slot changes the first number and
+not the second: `verify_ms_total` / `verify_in_slot_ms_total` and the same pair for `probe_ms`,
+`settle_ms` (resuming from the child's `close` and normalizing), `validate_ms`, `cleanup_ms`
+(removing the test's scratch directory) and `verify_wait_ms_total` (the queue in front of the
+verification width). `components_ms` is the partition of `no_child_ms_total` into `scratch`,
+`probe`, `prep`, `spawn`, `settle`, `validate`, `verify`, `cleanup` and `tail`, so it always sums
+to it. There is a one-second `timeline` of slots held and children running, a `loop_lag` block (a
+timer that reports how late it fired: the runner's own thread being unavailable is what makes a
+chatty child wait on a full stdout pipe), and the top contributors by name for each field — a
+total without names is how the wrong thing gets optimized. `test_timings` is one record per test
+with all of those intervals and its `at` marks relative to the start of the run. The run prints
+one `[SLOT]` line with the ratio and the totals.
+
+Measured on the `smoke` + `feat` fast layer at `-Jobs 8` (5,667 tests, a 32-core host shared with
+other gates), eight runs before and eight after:
+
+| per run | before | after |
+|---|---|---|
+| slots held with no child in them | 255-532 s, 28% of all held slot time | 51-78 s, 6.9% |
+| of it: verification scripts booting node | 168-265 s (1,920 scripts, 88-145 ms each) | 0 s in the slot, 209-277 s beside it |
+| of it: `skip_unless` probes | 44-304 s (75-83 tests) | 0 s in the slot, 35-46 s beside it |
+| of it: everything else | 2.9-4.4 s (scratch, prep, settle, validate, cleanup, tail) | `prep` 13-17 s, `scratch` 0.7 s |
+| children / plan wall | 5.64 of 8 (median) | 6.70 of 8 (median) |
+| plan wall | 124.2 s (median, 114-197 s) | 124.4 s (median, 97-272 s) |
+
+The plan wall is the one number that does not move, and the reason is in the same table: the host
+runs several gates at once, and the summed child time alone varied from 648 s to 995 s between runs
+of the same tests, more than the change is worth. Where the load happened to match, the wall moved:
+the final gate run summed 713 s of child time against 674-721 s in three of the before runs, and took
+100.0 s against their 118-128 s.
+
+The two mechanisms the numbers rule out are worth naming: writing the log files blocks the runner's
+thread for 4-6 s over the run and is charged to the slots it blocks (`log_block_ms`), not to the
+hundreds of seconds above; and `validateTest`'s own JavaScript (resuming, normalizing, comparing)
+is 0.7 s over 5,667 tests. The irreducible part of what is left is `spawn` itself: 6.6-11 ms per
+test, 37-62 s of synchronous work in the runner's thread for the run.
+
+Removing those 213-346 s from the slots does not remove them from the plan: the same work now runs
+beside the tests, so the wall is bounded by the machine rather than by the eight slots. On a host
+loaded by other work the plan wall moves by more than the change does — the children alone varied
+from 648 s to 995 s between runs — which is why the ratio and the slot accounting, not the wall, are
+the numbers this section reports.
+
 ## Selecting Plans From A Change
 
 `node scripts/test.js --changed` takes the files that differ from the base branch (committed,
