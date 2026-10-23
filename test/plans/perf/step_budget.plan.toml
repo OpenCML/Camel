@@ -14,7 +14,13 @@ tags = ["perf", "training", "budget"]
 #                 right argument gradients, 53 multiplies, 31 divides, 34 adds, 60 sum_to, and so on,
 #                 and the forward-only build must issue no gradient operator at all.  A change that
 #                 doubles a product, adds a pass over the parameters or breaks the backward pass
-#                 fails here; a slow host cannot.
+#                 fails here; a slow host cannot.  The element-wise shape tables (which the per
+#                 operator probe measures) are checked against the same counts.
+#   step.elementwise
+#                 the guard on the kernels, also a count: every element-wise operator of the step
+#                 allocates exactly one allocator block per call, its output.  A kernel that
+#                 materializes a polynomial or a tangent in a temporary allocates more, and this is
+#                 where that shows up; no duration is asserted.
 #   step.budget   the budget itself.  It records the step's CPU time, profiles the step and its two
 #                 phases, and prints one row per measured quantity with its share and the residual.
 #                 The assertions are structural: every phase's rows account for its round mean, the
@@ -37,6 +43,19 @@ case = "../../cases/perf/step_budget.py"
 args = ["${case}", "count"]
 expect_exit = 0
 expect_stdout_contains = ["step operator counts: PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+
+[[tests]]
+name = "step.elementwise"
+desc = "Every element-wise operator of the d=256 step allocates exactly one allocator block per call (its output): a gradient kernel that materializes an intermediate scores more, which is a count of blocks and not a duration."
+kind = "behavior"
+tool = "python"
+case = "../../cases/perf/step_budget.py"
+args = ["${case}", "elementwise"]
+expect_exit = 0
+expect_stdout_contains = ["step elementwise: PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000

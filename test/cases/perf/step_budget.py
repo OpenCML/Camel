@@ -13,6 +13,11 @@ Modes
            over the parameters or reorders the graph so backward stops running fails here, on a
            count rather than on a duration: no timing is asserted.
 
+  elementwise
+           The guard for the element-wise kernels: every element-wise operator of the step
+           allocates exactly one allocator block per call, the output.  A kernel that materializes
+           an intermediate allocates more; a count of blocks, not a duration.
+
   budget   The perf case.  Measures the step's CPU time (two run lengths, so the start-up
            cancels), profiles the step and its two phases (forward; forward + backward; full), and
            prints the budget with every row measured and the residual named.  The invariants are
@@ -21,8 +26,9 @@ Modes
            accounting for all of the element-wise time.
 
   measure  The same plus the canonical GEMM's per-shape CPU time from test/tools/gemmprobe (which
-           needs the build host's compiler), written as one JSON document.  This is the file
-           committed under the example's results/.
+           needs the build host's compiler) and the per-operator element-wise probe (one operator at
+           one of the step's own shapes, the run repeated -- the repeats are the null control),
+           written as one JSON document.  This is the file committed under the example's results/.
 
 Why the absolute numbers are normalised.  `std::profile` times operators with `steady_clock`, and
 the reference host is shared: a step that costs 62 ms of CPU time measured 126-138 ms of wall time
@@ -51,6 +57,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from math import prod
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent          # test/cases/perf
@@ -375,6 +382,18 @@ def counts_mode() -> int:
         if products != PRODUCT_COUNTS:
             missing = {k: v for k, v in products.items() if PRODUCT_COUNTS.get(k) != v}
             failures.append(f"the product table and the program disagree on {missing}")
+        # The element-wise shapes the budget's per-operator probe measures are the step's own: their
+        # calls per step are the counts this guard pins, so a change to the reverse pass that moves
+        # a shape, adds a call or drops the backward half fails here rather than in a table nobody
+        # checks.
+        for op, calls in sorted(elementwise_call_totals().items()):
+            uri = f"tensor:{op}"
+            pinned = CALLS_PER_STEP[uri]
+            if calls != pinned:
+                failures.append(f"the {op} shape table sums to {calls} calls per step, "
+                                f"CALLS_PER_STEP pins {pinned}")
+        print(f"count: element-wise shape tables cover "
+              f"{sum(elementwise_call_totals().values())} calls per step")
         print(f"count: {len(rows)} operator rows, {doc['step']['operators_per_round']:.3f} "
               f"operator calls per round, {sum(CALLS_PER_STEP.values())} pinned by this case")
         for uri in sorted(set(rows) - set(CALLS_PER_STEP)):
@@ -385,6 +404,59 @@ def counts_mode() -> int:
     if failures:
         return 1
     print("step operator counts: PASS")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# The element-wise guard
+
+
+def elementwise_mode() -> int:
+    """The property that keeps the backward half from growing a temporary: one block per call.
+
+    An element-wise operator reads its operands and writes one result, so it allocates exactly one
+    block of an allocator per call -- the output.  A kernel that materializes an intermediate (the
+    polynomial of a gradient, the tangent of that polynomial) allocates more, and the instrument
+    the profile already carries (`docs/technical/54_profiler_allocations.md`) counts it per
+    operator row.  This is a count, not a duration: it says the kernel does one pass over its
+    output and nothing else, and it stays true on any host and any load.
+
+    The second half of the same property is that the block is the output and not something else of
+    the same count: the payload the allocator recorded has to be 4 bytes times the elements the
+    shape table claims for that operator.  That is what holds the table to the program -- the call
+    counts `count` pins say how many calls there are, this says how big each one is.
+    """
+    failures = []
+    with tempfile.TemporaryDirectory() as t:
+        program = Path(t) / "step.cml"
+        program.write_text(generate(CELL, 3), encoding="utf-8")
+        doc = profile(program)
+        rounds = doc["step"]["rounds"]
+        rows = {row["uri"]: row for row in doc["operator_rows"]}
+        for uri in sorted(CALLS_PER_STEP):
+            if uri not in ELEMENTWISE:
+                continue
+            row = rows.get(uri)
+            if row is None or not row["calls"]:
+                failures.append(f"{uri}: no calls to check")
+                continue
+            blocks = row.get("alloc_blocks", 0) / row["calls"]
+            if abs(blocks - 1.0) > 1e-9:
+                failures.append(f"{uri}: {blocks:g} allocator blocks per call, expected 1 "
+                                "(the output; a temporary in the kernel makes it more)")
+            mean = elementwise_mean_elements_per_call(uri.split(":")[1])
+            payload = row.get("alloc_bytes", 0) / row["calls"]
+            if mean is not None and abs(payload - 4.0 * mean) > 1e-6 * 4.0 * mean + 1.0:
+                failures.append(f"{uri}: {payload:g} payload bytes per call, expected "
+                                f"{4.0 * mean:g} (4 times the {mean:g} elements per call the "
+                                "shape table claims)")
+            print(f"elementwise: {uri:18s} {row['calls'] / rounds:6.2f} calls/step, "
+                  f"{blocks:g} block(s) of {payload:g} bytes per call")
+    for message in failures:
+        print(f"FAIL: {message}")
+    if failures:
+        return 1
+    print("step elementwise: PASS")
     return 0
 
 
@@ -515,6 +587,240 @@ def run_probe() -> dict:
     header = [line for line in proc.stdout.splitlines() if line.startswith(("clock ", "machine "))]
     return {"command": "sh test/tools/gemmprobe/run.sh --threads 1 --reps 7",
             "shapes": shape_rates_from_probe(proc.stdout), "header": header}
+
+
+# ---------------------------------------------------------------------------
+# The per-operator probe
+#
+# The budget's rows are per operator, and a row's share of the step cannot say which operator
+# carries the time.  This probe measures one operator at one of the step's own shapes at a time:
+# a generated loop that calls the operator twice a round under the profiler, so the operator's own
+# row carries its calls and their time and the loop's own cost (the interpreter, the allocation of
+# the output, the reduction that keeps the result alive) lands in other rows instead of in the
+# number.  The generator never writes one call a round: it writes two, and the row's call count
+# says so.
+#
+# The null control is the repeat.  The same program is run `samples` times and the spread between
+# the runs is what the host contributes to the number; a before/after claim is only worth its
+# control operator, so a probe reads each operator's repeat AND keeps a control operator (the ones
+# the change did not touch) measured in the same sweep.
+#
+# `call_rounds` is what makes a repeat worth anything on the reference host: one call's own time is
+# a few tens of microseconds and a preemption there is the whole of it, so the probe aggregates
+# 2 x call_rounds calls and takes the minimum over the samples.  At 16 rounds (32 calls, ~8 ms of
+# work) the repeats of one operator disagreed by 1.7x to 10.7x; at 400 rounds one preempted
+# millisecond is 0.3 % of the measurement.
+DEFAULT_PROBE_ROUNDS = 400
+DEFAULT_PROBE_SAMPLES = 5
+
+ELEMENTWISE_SIGN = {"multiply": "*", "add": "+", "divide": "/"}
+# The unary ones are called by name: an operator with one operand has no infix form.
+UNARY_TERM = {"neg": "neg(x)", "gelu": "gelu(x)"}
+
+# The element-wise calls one step makes, backward half first: `(shape, calls)`.  The shapes are
+# the step's own (one block of the d=256 cell, `CELL`), and the per-operator calls per step sum to
+# CALLS_PER_STEP's entry for that operator, which `count` checks -- the table cannot drift from the
+# program without that check failing.  The element counts are checked too, and not against this
+# table: `elementwise` reads the payload the allocator recorded for the operator's block and holds
+# it to 4 bytes times the elements this table claims, so a shape that stops being the step's own
+# moves a measured byte count.  `neg` is unary; the backward forms of `multiply`, `divide`,
+# `add` and `neg` are what `divideVjp`/`multiplyVjp`/`accumulateInto` emit.
+BACKWARD_ELEMENTWISE = {
+    "multiply": [((16, 32, 256), 25), ((16, 16, 32, 32), 8), ((16, 32, 32), 4), ((16, 32, 1), 5)],
+    "add":      [((16, 32, 256), 18), ((16, 16, 32, 32), 2), ((16, 32, 32), 1)],
+    "divide":   [((16, 32, 256), 10), ((16, 16, 32, 32), 4), ((16, 32, 32), 2), ((16, 32, 1), 5)],
+    "neg":      [((16, 32, 256), 5), ((16, 16, 32, 32), 4), ((16, 32, 32), 1)],
+}
+FORWARD_ELEMENTWISE = {
+    "multiply": [((16, 32, 256), 10), ((16, 32, 32), 1)],
+    "add":      [((16, 32, 256), 6), ((16, 32, 1), 5), ((16, 32, 512), 2)],
+    "divide":   [((16, 32, 256), 5), ((16, 16, 32, 32), 4), ((16, 32, 32), 1)],
+    "gelu":     [((16, 32, 512), 2)],
+}
+# `gelu_grad` is not callable from a Camel program (its operator has no export): it is measured
+# through `gelu`'s gradient, whose backward is exactly that call, one per `gelu`.
+GELU_GRAD_SHAPE = (16, 32, 512)
+GELU_GRAD_CALLS = 2
+
+
+def elementwise_call_totals() -> dict:
+    """Calls per step per operator, from the shape tables: the numbers CALLS_PER_STEP pins."""
+    totals = {}
+    for table in (FORWARD_ELEMENTWISE, BACKWARD_ELEMENTWISE):
+        for op, shapes in table.items():
+            totals[op] = totals.get(op, 0) + sum(calls for _, calls in shapes)
+    totals["gelu_grad"] = GELU_GRAD_CALLS
+    return totals
+
+
+def elementwise_elements_per_step() -> dict:
+    """Elements one step pushes through each operator, forward and backward together."""
+    totals = {}
+    for table in (FORWARD_ELEMENTWISE, BACKWARD_ELEMENTWISE):
+        for op, shapes in table.items():
+            totals[op] = totals.get(op, 0) + sum(prod(shape) * calls for shape, calls in shapes)
+    return totals
+
+
+def elementwise_mean_elements_per_call(op: str) -> float | None:
+    """The step's mean output elements per call of `op`, or None for an operator with no table.
+
+    The weighted mean over that operator's shapes, so it can be held against a measured mean
+    payload: one f32 output of `n` elements is one block of `4n` bytes and nothing else, which is
+    what makes this a check of the table and not a restatement of it.
+    """
+    elements = 0
+    calls = 0
+    for table in (FORWARD_ELEMENTWISE, BACKWARD_ELEMENTWISE):
+        for shape, count in table.get(op, []):
+            elements += prod(shape) * count
+            calls += count
+    if op == "gelu_grad":
+        elements += prod(GELU_GRAD_SHAPE) * GELU_GRAD_CALLS
+        calls += GELU_GRAD_CALLS
+    return elements / calls if calls else None
+
+OP_PROGRAM = """module op_profile
+
+import {{ Tensor, gelu, neg, seed, set_num_threads, sum, zeros }} from tensor
+
+// Two element-wise calls per round under the profiler: the operator's own row carries its calls
+// and their time, so the per-call cost does not depend on how many calls the round makes, and the
+// row's call count is what the probe reads back.  The two-call body adds the two results, and that
+// add is charged to `tensor:add` rather than to the operator under test -- so when the operator
+// under test is `add` the body is three of them, and the row says three.
+func main(bench: bool, init_dir: string, final_dir: string): int sync {{
+    set_num_threads(1)
+    seed(7)
+    let x = zeros([{dims}]) + 0.5
+    let y = zeros([{dims}]) + 1.5
+    let (i_last, kept) = loop i = 0, k = x while i < {rounds} do {{
+        let p = {body}
+        return (i + 1, p)
+    }}
+    let check = sum(kept)
+    `op profile op={opname} shape={dims} calls={calls} check=${{check}}`->println
+    return 0
+}}
+"""
+
+
+def dims_text(shape) -> str:
+    return ", ".join(str(d) for d in shape)
+
+
+def probe_elementwise(
+        rounds: int = DEFAULT_PROBE_ROUNDS, samples: int = DEFAULT_PROBE_SAMPLES) -> dict:
+    """One operator at one of the step's shapes, in the profile's own instrument.
+
+    A profiled program calls the operator twice a round for `rounds` rounds; the operator's row
+    reports its calls and their time, so dividing gives a per-call time that does not carry the
+    loop, the allocation or the clock's start-up.  The program is run `samples` times and the
+    spread between the runs is the null control: the same operator, the same shape, measured again
+    on the same host, so a number whose repeat does not agree with it is a number about the host.
+    """
+    work = Path(tempfile.mkdtemp(prefix="op-profile-"))
+    out = {}
+    for backend, calls in (("backward", BACKWARD_ELEMENTWISE), ("forward", FORWARD_ELEMENTWISE)):
+        for op, shapes in calls.items():
+            term = UNARY_TERM.get(op) or f"x {ELEMENTWISE_SIGN.get(op, '*')} y"
+            # The body is `term + term`: two calls of the operator under test, plus the `+` that
+            # joins the two terms when that operator is `add` itself.
+            body_calls = 3 if op == "add" else 2
+            for shape, count in shapes:
+                elements = prod(shape)
+                entry = {"shape": list(shape), "elements": elements, "calls_per_step": count,
+                         "rounds": rounds, "runs": [], "alloc_blocks_per_call": []}
+                program = work / f"{op}-{dims_text(shape).replace(', ', 'x')}.cml"
+                program.write_text(
+                    OP_PROGRAM.format(dims=dims_text(shape), body=f"{term} + {term}", opname=op,
+                                      calls=body_calls, rounds=rounds),
+                    encoding="utf-8")
+                for _ in range(samples):
+                    doc = profile(program)
+                    uri = f"tensor:{op}"
+                    rows = {row["uri"]: row for row in doc["operator_rows"]}
+                    row = rows.get(uri)
+                    if row is None or not row["calls"]:
+                        raise SystemExit(f"the {op} probe ran no {uri}:\n{doc['_stdout'][-600:]}")
+                    entry["runs"].append(row["ns"] / row["calls"])
+                    entry["alloc_blocks_per_call"].append(row.get("alloc_blocks", 0) / row["calls"])
+                    entry["calls_per_round"] = row["calls"] / doc["step"]["rounds"]
+                # The round count is the loop's and the calls are the body's, so a row that reports
+                # another number measured a program this probe did not write. The tolerance is the
+                # prologue: when the operator under test is `add`, the two `zeros(...) + 0.5` that
+                # build the operands are adds too, and they are once per program, not per round.
+                if abs(entry["calls_per_round"] - body_calls) > 0.02:
+                    raise SystemExit(f"the {op} probe reports {entry['calls_per_round']} calls a "
+                                     f"round at {dims_text(shape)}, not the {body_calls} its body "
+                                     "makes")
+                entry["ns_per_call"] = min(entry["runs"])
+                entry["null_spread"] = max(entry["runs"]) / min(entry["runs"])
+                entry["ns_per_element"] = entry["ns_per_call"] / elements
+                out.setdefault(op, {}).setdefault(backend, []).append(entry)
+    return out
+
+
+GELU_ONLY_PROGRAM = """module gelu_rate
+
+import {{ Tensor, random, seed, sum, gelu }} from tensor
+import {{ grad }} from autodiff
+
+with <x: Tensor>
+func loss(): float {{ return sum(gelu(x)) }}
+
+func main(bench: bool, init_dir: string, final_dir: string): int sync {{
+    seed(17)
+    let x = random([{dims}], -8.0, 8.0)
+    let d = grad(loss)
+    let warm = loop i = 0 while i < 8 do {{
+        let g = d<x>()
+        return i + 1
+    }}
+    let (i_last, kept) = loop i = 0, t = 0.0 while i < {rounds} do {{
+        let g = d<x>()
+        return (i + 1, t + sum(g))
+    }}
+    `gelu rate rounds={rounds} check=${{kept}}`->println
+    return 0
+}}
+"""
+
+
+def probe_gelu_grad(
+        rounds: int = DEFAULT_PROBE_ROUNDS, samples: int = DEFAULT_PROBE_SAMPLES) -> dict:
+    """`gelu`'s gradient in the profile's own instrument.
+
+    The isolated loop cannot time this one: the autodiff graph allocates the gradient every
+    iteration, so the loop's own garbage collection lands in a wall-clock difference.  A profiled
+    run charges the kernel and the allocation to different rows, and the round count is the loop's
+    own.  Runs of the same program are the null control.
+    """
+    out = {"rounds": rounds, "runs": []}
+    with tempfile.TemporaryDirectory() as t:
+        program = Path(t) / "gelu.cml"
+        program.write_text(GELU_ONLY_PROGRAM.format(dims=dims_text(GELU_GRAD_SHAPE), rounds=rounds),
+                           encoding="utf-8")
+        for _ in range(samples):
+            doc = profile(program)
+            rows = {row["uri"]: row for row in doc["operator_rows"]}
+            entry = {"rounds": doc["step"]["rounds"],
+                     "round_mean_ms": doc["step"]["wall_per_round_ns"] / 1e6}
+            for uri in ("tensor:gelu", "tensor:gelu_grad"):
+                row = rows.get(uri, {})
+                if row.get("calls"):
+                    entry[uri] = {"calls_per_round": row["calls"] / doc["step"]["rounds"],
+                                  "ns_per_call": row["ns"] / row["calls"],
+                                  "alloc_blocks_per_call": row.get("alloc_blocks", 0) / row["calls"]}
+            if "tensor:gelu_grad" not in entry:
+                raise SystemExit(f"the gelu probe ran no gradient:\n{doc['_stdout'][-1000:]}")
+            out["runs"].append(entry)
+    out["ns_per_call"] = min(run["tensor:gelu_grad"]["ns_per_call"] for run in out["runs"])
+    out["null_spread"] = (max(run["tensor:gelu_grad"]["ns_per_call"] for run in out["runs"]) /
+                          out["ns_per_call"])
+    out["elements"] = prod(GELU_GRAD_SHAPE)
+    out["ns_per_element"] = out["ns_per_call"] / out["elements"]
+    return out
 
 
 def budget(with_probe: bool, with_torch: bool, steps: int, warmup: int) -> dict:
@@ -695,6 +1001,48 @@ def budget(with_probe: bool, with_torch: bool, steps: int, warmup: int) -> dict:
 
     total = sum(row["ms"] for row in table)
     result["rows_ns_per_step"] = {uri: rows[uri]["ns"] for uri in rows}
+    # The per-operator probe: what each backward element-wise operator costs per call and per
+    # element at the step's own shapes, next to the same operator's row in this profile.
+    if with_probe:
+        ops = probe_elementwise()
+        gelu = probe_gelu_grad()
+        result["elementwise_ops"] = ops
+        result["gelu_grad_probe"] = gelu
+        elements = elementwise_elements_per_step()
+        per_op = []
+        for op, groups in ops.items():
+            isolated_ns = sum(item["ns_per_call"] * item["calls_per_step"]
+                              for group in groups.values() for item in group)
+            in_step_elements = elements.get(op, 0)
+            uri = f"tensor:{op}"
+            row = rows.get(uri)
+            per_op.append({
+                "op": op,
+                "calls_per_step": elementwise_call_totals()[op],
+                "elements_per_step": in_step_elements,
+                "in_step_ns": row["ns"] if row else float("nan"),
+                "in_step_ns_per_element": (row["ns"] / in_step_elements)
+                if row and in_step_elements else float("nan"),
+                "isolated_ns": isolated_ns,
+                "isolated_ns_per_element": (isolated_ns / in_step_elements)
+                if in_step_elements else float("nan"),
+                "null_spread": max(item["null_spread"] for group in groups.values()
+                                   for item in group),
+            })
+        in_step_elements = prod(GELU_GRAD_SHAPE) * GELU_GRAD_CALLS
+        row = rows.get("tensor:gelu_grad")
+        isolated_ns = gelu["ns_per_call"] * GELU_GRAD_CALLS
+        per_op.append({
+            "op": "gelu_grad",
+            "calls_per_step": elementwise_call_totals()["gelu_grad"],
+            "elements_per_step": in_step_elements,
+            "in_step_ns": row["ns"] if row else float("nan"),
+            "in_step_ns_per_element": (row["ns"] / in_step_elements) if row else float("nan"),
+            "isolated_ns": isolated_ns,
+            "isolated_ns_per_element": isolated_ns / in_step_elements,
+            "null_spread": gelu["null_spread"],
+        })
+        result["elementwise_per_op"] = per_op
     result["forward_fraction"] = {uri: forward_fraction(uri) for uri in rows}
     result["table"] = table
     result["step_cpu_ms"] = cpu_step
@@ -738,11 +1086,40 @@ def print_table(result: dict) -> None:
         print(f"matmul: {result['matmul_measured_ms']:.2f} ms by shape against "
               f"{result['matmul_profile_row_ms']:.2f} ms in the profile's three rows "
               f"({result['matmul_vs_profile_pct']:+.1f}%)")
+    if "elementwise_ops" in result:
+        print("\nelement-wise operators at the step's own shapes, profiled two calls a round")
+        print(f"{'operator':10s} {'shape':18s} {'half':8s} {'calls/step':>10s} {'elements':>9s} "
+              f"{'ns/call':>9s} {'ns/element':>10s} {'blocks/call':>11s} {'null spread':>11s}")
+        for op, groups in result["elementwise_ops"].items():
+            for name in ("backward", "forward"):
+                for item in groups.get(name, []):
+                    shape = "x".join(str(d) for d in item["shape"])
+                    print(f"{op:10s} {shape:18s} {name:8s} {item['calls_per_step']:10d} "
+                          f"{item['elements']:9d} {item['ns_per_call']:9.0f} "
+                          f"{item['ns_per_element']:10.3f} "
+                          f"{max(item['alloc_blocks_per_call']):11.2f} "
+                          f"{item['null_spread']:11.2f}")
+        gelu = result["gelu_grad_probe"]
+        print(f"{'gelu_grad':10s} {'x'.join(str(d) for d in GELU_GRAD_SHAPE):18s} {'backward':8s} "
+              f"{GELU_GRAD_CALLS:10d} {gelu['elements']:9d} {gelu['ns_per_call']:9.0f} "
+              f"{gelu['ns_per_element']:10.3f} "
+              f"{max(run['tensor:gelu_grad']['alloc_blocks_per_call'] for run in gelu['runs']):11.2f} "
+              f"{gelu['null_spread']:11.2f}")
+        print(f"\n{'operator':10s} {'calls/step':>10s} {'elements/step':>13s} {'in step ms':>11s} "
+              f"{'ns/element':>10s} {'isolated ns/element':>19s} {'ratio':>6s}")
+        for entry in result["elementwise_per_op"]:
+            ratio = entry["isolated_ns_per_element"] / entry["in_step_ns_per_element"]
+            print(f"{entry['op']:10s} {entry['calls_per_step']:10d} {entry['elements_per_step']:13d} "
+                  f"{entry['in_step_ns'] / 1e6:11.2f} {entry['in_step_ns_per_element']:10.3f} "
+                  f"{entry['isolated_ns_per_element']:19.3f} {ratio:6.2f}")
+        print("the isolated column is one shape at a time in an otherwise idle process; the in-step "
+              "column is the same operator among all of a step's calls, so the ratio is what "
+              "contention and cache do to a DRAM-bound kernel, not an error in either.")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("count", "budget", "measure"))
+    parser.add_argument("mode", choices=("count", "elementwise", "budget", "measure"))
     parser.add_argument("--json", default=None)
     parser.add_argument("--steps", type=int, default=32)
     parser.add_argument("--warmup", type=int, default=3)
@@ -751,6 +1128,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.mode == "count":
         return counts_mode()
+    if args.mode == "elementwise":
+        return elementwise_mode()
     result = budget(args.mode == "measure", args.torch, args.steps, args.warmup)
     result["generated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     result["mode"] = args.mode
