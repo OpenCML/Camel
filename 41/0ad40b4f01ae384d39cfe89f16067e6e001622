@@ -1,0 +1,12 @@
+h332 / H227 第一层 — 用 Camel 写编译器自己的遍（分支 handover/h332-camel-passes，6 提交）
+
+结论：opt::cse 与 opt::dce 写得出来，且与 C++ 版本同构；opt::fold 与 opt::ctrl 写不出来——不是预算问题，是 graph 模块缺操作。缺口清单按"缺口即任务"逐条记进 docs/technical/45_graph_module.md（本项最重要的产出）。
+
+写出来的两个遍（stdlib/opt.cml，226 行）：opt::cse 合并同类型同值的常量（int/i32/bool，按位相等；float 不合并）与算子/类型/输入/区域/权限相同的纯运算，每组留最小 id，跳过 is_written_slot 及其读者，重复到不动点；opt::dce 删除没人读的常量、转换、拷贝、访问、填充与纯运算（即 C++ 的 values_only=true 那一半），同样到不动点。每轮一次事务；不需要 C++ 的 reaches 守卫（输入列完全相同的两个节点不可能互为祖先，理由写在模块与文档里）。
+
+证据（test/plans/feat/opt/camel_passes.plan.toml，15 条目 → 24 个测试，全绿）：同构判定用计划里已有的 gir_dot_isomorphic，不是文本 diff（节点按 kind/类型/形状/出入度，边按两端 kind/连接类型/标签；两侧从不按文本比）。红→绿都是真实运行：去掉 sameValue 的常量分支、把 deadValues 改成一轮，6 条红（cse.property 指名 '7' (g2n1) 与 '7' (g2n3)；dce.property 指名 '3' (g1n0) has no user；cse.by_camel 53≠49、dce.by_camel 33≠30、cse_written_variable.by_camel 70≠66；dce.is_a_fixpoint stdout_normalized 不符），改回后 24/24 绿。每个语料另有"遍之前"的条目断言重复与死值确实在（防"什么都没看"的守卫）。死值语料必须带 std::opt::inline 前缀：编译器不建没人读的 let，死链是内联留下的（--dump-after-each-pass 证实，两轮级联）。四个后端逐字一致。
+
+缺口清单（每条给"C++ 做什么/模块缺什么/今天的结果"）：opt::fold 需要"在值上求值一个算子"（constant 只读常量、add_constant 只造值）；opt::ctrl 与 dce values_only=false 那一半需要"删/加一条边"（事务只有整节点的 replace/erase）；常量合并只到 int/i32/bool（读不到标量的位：0.0 与 -0.0 按 == 相等却是两个值）；属性不可写/不可合并（tags 只读，replace 不搬运属性）；type_of 上没有 isGCTraced 查询；没有 id(Region)；Camel 遍的 with 参数没有默认值，每个都要写在流水线里；#impl<cse_native> 当时落不下来（内核需要一个既声明算子又持函数体的模块）。
+
+闸门：total 5729, pass 5715, fail 0, skip 14（干净检出）。未做/未量：速度比（本项不作门槛，一页结论里写明为何不计时）、dce values_only=false、第二至四层。
+后续（合并后）：作者当天裁定了 impl-kernel-site（声明模块可以有函数体、泛型函数可以带 #impl），#impl<cse_native> 的障碍已消失；docs/technical/45_graph_module.md 的引用与 docs/handover/reviews/H141-H213.md 的缺口记录已由协调者改指裁定处。
