@@ -27,7 +27,14 @@ gc_node_ref_t bridgeMacroRewriteControl(
     const std::vector<gc_node_ref_t> ctrlPreds(
         draft.ctrlInputsOf(replacedNodeId).begin(),
         draft.ctrlInputsOf(replacedNodeId).end());
-    if (ctrlPreds.empty()) {
+    // The node a macro rewrote may be a statement of a `sync` block: what ordered it is then the
+    // sync edge from the statement written before it, and the replacement has to keep that order
+    // (docs/design/effects/edges.cn.md 1.5). The users' own sync edges are re-pointed by
+    // replaceAllCtrlUses, so only the predecessor side is bridged here.
+    const std::vector<gc_node_ref_t> syncPreds(
+        draft.syncInputsOf(replacedNodeId).begin(),
+        draft.syncInputsOf(replacedNodeId).end());
+    if (ctrlPreds.empty() && syncPreds.empty()) {
         return valueNodeId;
     }
 
@@ -37,10 +44,14 @@ gc_node_ref_t bridgeMacroRewriteControl(
         .dataIndex    = valueHeader->dataIndex,
         .dataType     = valueHeader->dataType,
         .kind         = GCNodeKind::Gate,
-        .runtimeFlags = 0,
+        // The gate stands where a statement of the block stood, so the sync edge may still join it
+        // to the statement written before.
+        .runtimeFlags = static_cast<uint8_t>(
+            syncPreds.empty() ? 0 : camel::runtime::kGCNodeFlagSyncStatement),
         .region       = draft.nodeRegion(replacedNodeId),
         .normInputs   = std::span<const gc_node_ref_t>(&valueNodeId, 1),
         .ctrlInputs   = ctrlPreds,
+        .syncInputs   = syncPreds,
     };
     return draft.addNode(gateInit);
 }
