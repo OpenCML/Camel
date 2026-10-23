@@ -167,14 +167,13 @@ const runtime::Program *outlineRegions(
         const auto origin = graph.nodeOrigin(id);
         if (origin != camel::source::kInvalidOriginId)
             diag.atOrigin(origin);
-        diag.commit(
-            scopeNameOf(graph),
-            "operator '" +
-                std::string(
-                    core::OperatorTable::instance().uri(
-                        graph.nodeBodyAs<rt::GCOperBody>(id)->oper)) +
-                "'",
-            detail);
+        const std::string name(
+            core::OperatorTable::instance().uri(graph.nodeBodyAs<rt::GCOperBody>(id)->oper));
+        // `GpuScopeNoDeviceProgram` writes the operator in quotes itself (「operator '{1}'」), so
+        // it takes the bare name; `GpuScopeUnsupported` takes a reason phrase, where naming the
+        // operator is part of the sentence.
+        const bool bareName = code == core::error::RuntimeDiag::GpuScopeNoDeviceProgram;
+        diag.commit(scopeNameOf(graph), bareName ? name : "operator '" + name + "'", detail);
     };
     if (refuseGpuScopes) {
         // Report every node the promise cannot keep and leave the graphs alone; the pass fails on
@@ -279,8 +278,8 @@ const runtime::Program *outlineRegions(
                         e.oper().empty() || e.reason() == UnsupportedComputation::Reason::Shape;
                     diag.commit(
                         scopeNameOf(*graph),
-                        "operator '" + (e.oper().empty() ? std::string("<region>") : e.oper()) +
-                            "'",
+                        // The message writes the operator in quotes itself; the name is passed bare.
+                        e.oper().empty() ? std::string("<region>") : e.oper(),
                         shape ? "no device program for this shape"
                               : "no device program for this operator");
                     regionRefused = true;
