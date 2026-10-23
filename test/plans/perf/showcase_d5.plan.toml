@@ -5,7 +5,9 @@ tags = ["showcase", "slow", "d5", "tree-lstm", "recursion"]
 
 # The small configuration of showcase/d5-tree-lstm (H13): 256 four-leaf trees, a recursive
 # Tree-LSTM, 200 Adam steps, one sentence per step.  It runs in seconds and fails when the
-# losses or the validation accuracy disagree beyond the tolerances.
+# losses or the validation accuracy disagree beyond the tolerances.  The data and the report
+# go under ${test_tmp}, this run's own scratch directory: a literal `tmp/...` is one place two
+# runs would write.
 
 [[tests]]
 name = "small"
@@ -13,7 +15,7 @@ desc = "D5 small configuration: compare.py runs the recursive Camel Tree-LSTM an
 kind = "behavior"
 tool = "python"
 case = "../../../showcase/d5-tree-lstm/compare.py"
-args = ["${case}", "--profile", "small", "--data", "tmp/d5-showcase-small", "--results", "tmp/d5-showcase-small/RESULTS.md"]
+args = ["${case}", "--profile", "small", "--data", "${test_tmp}/d5-showcase-small", "--results", "${test_tmp}/d5-showcase-small/RESULTS.md"]
 skip_unless = ["${python}", "-c", "import numpy, torch, psutil"]
 expect_exit = 0
 expect_stdout_contains = ["d5 compare: PASS"]

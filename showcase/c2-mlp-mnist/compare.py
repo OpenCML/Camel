@@ -184,6 +184,11 @@ def python_env(threads: int) -> dict[str, str]:
     env = os.environ.copy()
     env["OMP_NUM_THREADS"] = str(threads)
     env["MKL_NUM_THREADS"] = str(threads)
+    # CPU against CPU: the baseline never calls `.cuda()`, but a CUDA build of torch creates a
+    # context at the first `Adam.step()` (its accelerator health check asks for the current
+    # stream). On a host whose GPUs are held by other work that check fails with
+    # "CUDA-capable device(s) is/are busy or unavailable", before any number is compared.
+    env["CUDA_VISIBLE_DEVICES"] = ""
     return env
 
 

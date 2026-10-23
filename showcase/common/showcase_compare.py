@@ -89,6 +89,13 @@ def python_env(threads: int) -> dict[str, str]:
     env = os.environ.copy()
     for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         env[name] = str(threads)
+    # The PyTorch counterparts are CPU programs: no baseline calls `.cuda()`. A CUDA build of
+    # torch still creates a context on the machine's first GPU from `Optimizer.step()` (its
+    # accelerator-graph-capture health check asks for the current stream), so on a host whose
+    # GPUs belong to other work the comparison fails with "CUDA-capable device(s) is/are busy
+    # or unavailable" before it computes anything. Hide the devices: this comparison is CPU
+    # against CPU, and whether a stranger's context holds the card is not its subject.
+    env["CUDA_VISIBLE_DEVICES"] = ""
     return env
 
 
