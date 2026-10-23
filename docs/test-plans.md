@@ -526,13 +526,32 @@ path nothing); it runs with the default test set (`test/plans/feat/consistency/r
   build (the case's `none` mode prints the failing check; write the two goldens from
   `normalize_doc` / `normalize_text`), do not hand-edit the number, and do not loosen the case: a
   profile row's position is not a count and moves whenever an imported declaration does.
+- `normalize_node_ids`
+  Renumbers `node#N` in a rich DOT dump (`std::rgir`, `std::argir`) by first appearance *within
+  each graph*: the first id a graph prints becomes `n0`, the next distinct one `n1`, and an id
+  already seen keeps its label. A tooltip names the slot a node's value lives in — its
+  `dataIndex`, a frame slot when positive and a static slot when negative — which the compiler's
+  allocator numbers: a lowering change that allocates one temporary more, or materializes a
+  constant earlier, moves every id after it while the graph the dump describes is the same. The
+  relation the ids state is what is worth pinning, and it survives renumbering: two nodes that
+  name one slot are one value (a `GATE` names its producer's slot, a constant written twice shares
+  a static slot) and two that name different slots must not collapse into one. The graph name is
+  printed beside the label, so renumbering per graph is what the ids mean: static slot 1 of `main`
+  and static slot 1 of `gate` are different slots. Use it on a `text_exact` snapshot of a rich
+  dump, whose golden keeps the absolute ids as the record of what the tree emitted; a
+  `gir_dot_isomorphic` comparison ignores tooltips entirely and needs nothing. `std::agir` and
+  `std::gir` print no tooltip, so their snapshots do not name it. A real change still reddens such
+  a golden: it moves the nodes' order, the set of nodes sharing a slot, or any other attribute,
+  and `feat/trans/annotated_dump`'s `boundaries.tooltip_slots` states the slot relation itself as
+  an assertion rather than as text.
 - `normalize_duration_seconds`
 
 `test/tools/normalizers.mjs` holds the one definition of these; the plan runner and
 `exemplars/check.mjs` (whose goldens the plan only launches) both call it, so a separate
-comparison path cannot keep comparing less than a plan snapshot does. `exemplars/check.mjs`
-additionally refuses a golden that still records a raw origin id, so the next such pin fails
-where it is recorded instead of on another machine.
+comparison path cannot keep comparing less than a plan snapshot does. `exemplars/check.mjs` names
+`normalize_node_ids` too, so an exemplar golden recorded from a rich dump cannot pin the
+compiler's numbering either, and it additionally refuses a golden that still records a raw origin
+id, so the next such pin fails where it is recorded instead of on another machine.
 
 Normalizers affect:
 
@@ -960,6 +979,12 @@ instances run at the same time without seeing each other's files. A case run out
 - Print observable runtime state from the case, then assert on it externally.
 - Keep `name` stable; logs and differentials depend on it.
 - Keep `normalizers` intentional. Over-normalizing can hide real regressions.
+- When a snapshot pins a compiler-internal counter (an origin id, a node's slot, an index into a
+  table), compare the *identity* the counter stands for, not the number. A normalizer that
+  renumbers the counter by first appearance (`normalize_origins`, `normalize_node_ids`) keeps the
+  relation the counter states and stops reddening when unrelated code moves the allocator; a
+  counter that *is* the artifact under test (an exported operator list, a growth budget, the node
+  count a pass reports) stays exactly as printed.
 
 ## Migration Note
 

@@ -57,6 +57,10 @@ function normalize(text) {
         'trim_trailing_space',
         'normalize_paths',
         'normalize_origins',
+        // A rich exemplar dump prints a tooltip per node, and the tooltip's `<graph>::node#N` is
+        // the allocator's numbering of one graph, not structure: a plan snapshot of the same dump
+        // names this normalizer, so this path must not compare more than that one does.
+        'normalize_node_ids',
     ])
 }
 
