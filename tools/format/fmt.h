@@ -54,6 +54,16 @@ class Formatter {
     const syn::Tree &tree;
     std::vector<FmtToken> tokens;
 
+    /// The comments already written into the output, by token index. A comment can fall inside two
+    /// ranges once the ranges cover the tokens they stand between, and the second one to reach it
+    /// must not write it twice; `format()` also asks which ones nothing wrote.
+    std::vector<bool> writtenComments;
+
+    /// The comments that no range and no visitor reached, written at the end of the file by
+    /// `format()`. A comment is source text: losing one silently rewrites the source, so this is
+    /// the floor, and it is reported rather than hidden (the format gate refuses a non-zero count).
+    size_t unplacedComments = 0;
+
     template <typename List> static std::vector<syn::Node> vec(const List &list) {
         std::vector<syn::Node> nodes;
         for (const auto node : list) {
@@ -89,7 +99,92 @@ class Formatter {
 
     void configure(const Options &options);
 
-    void insertComment(const FmtToken &comment, std::string &result);
+    void insertComment(size_t index, std::string &result);
+
+    bool commentWritten(size_t index) const {
+        return index < writtenComments.size() && writtenComments[index];
+    }
+    void markCommentWritten(size_t index) {
+        if (index < writtenComments.size()) {
+            writtenComments[index] = true;
+        }
+    }
+
+    /// The comments between the end of an item and the token that follows it - the closing bracket
+    /// of the construct around it, or `else` after the branch of an `if`. No list range reaches
+    /// past its last item and nothing else looks there: they are written where the item ends, on
+    /// its own line when they stood on one. Returns true when a `//` comment was written, which
+    /// ends the line it is on and would swallow whatever the caller writes next.
+    bool writeInlineComments(
+        std::string &result, size_t afterToken, size_t beforeToken, size_t afterEndLine) {
+        bool endsLine   = false;
+        size_t lastStop = afterEndLine;
+        for (size_t i = afterToken + 1; i < beforeToken && i < tokens.size(); i++) {
+            if (tokens[i].channel <= 1 || commentWritten(i)) {
+                continue;
+            }
+            const long skips = static_cast<long>(tokens[i].line()) - static_cast<long>(lastStop);
+            if (skips <= 0) {
+                result += " ";
+            } else {
+                result += lineEnd();
+            }
+            writeCommentText(result, i);
+            lastStop = tokens[i].line() + countLines(tokens[i].text());
+            endsLine = tokens[i].channel != 4;
+        }
+        return endsLine;
+    }
+
+    /// Writes one comment, once, and nothing else: the caller owns the line ends around it.
+    void writeCommentText(std::string &result, size_t index) {
+        if (commentWritten(index) || tokens[index].channel <= 1) {
+            return;
+        }
+        markCommentWritten(index);
+        result += tokens[index].text();
+    }
+
+    /// Writes one comment - once - with whatever must follow it so that it cannot swallow the text
+    /// after it: a `//` or `#` line ends there, and a block comment keeps its own line unless the
+    /// code that follows stands on its line in the input.
+    void writeComment(std::string &result, size_t index) {
+        if (commentWritten(index) || tokens[index].channel <= 1) {
+            return;
+        }
+        const std::string &commentText = tokens[index].text();
+        const bool sameLine            = index + 1 < tokens.size() &&
+                              tokens[index + 1].line() ==
+                                  tokens[index].line() + countLines(commentText);
+        writeCommentText(result, index);
+        if (tokens[index].channel != 4) {
+            result += lineEnd();
+        } else if (sameLine) {
+            result += " ";
+        } else {
+            result += lineEnd();
+        }
+    }
+
+    /// The comments that stand right above a node's first token and are still unwritten: a comment
+    /// between two tokens a node writes itself (a parameter and its type, say) is in no gap any
+    /// list looks at. Writing it here, at the token it precedes, is what makes the next pass find
+    /// it in the same gap and write it in the same place.
+    std::string commentsBefore(syn::Node context) {
+        const size_t first = context->firstToken().index();
+        if (first == 0 || writtenComments.empty()) {
+            return "";
+        }
+        size_t runStart = first;
+        while (runStart > 0 && tokens[runStart - 1].channel > 1) {
+            runStart--;
+        }
+        std::string prefix;
+        for (size_t i = runStart; i < first; i++) {
+            writeComment(prefix, i);
+        }
+        return prefix;
+    }
 
     inline std::string lineEnd(int repeat = 1) {
         if (repeat <= 0) {
@@ -170,7 +265,7 @@ class Formatter {
             for (size_t i = firstTokIdx + 1; i < lastTokIdx; i++) {
                 if (tokens[i].channel > 1) {
                     result += lineEnd();
-                    insertComment(tokens[i], result);
+                    insertComment(i, result);
                     foundComment = true;
                 }
             }
@@ -213,11 +308,15 @@ class Formatter {
                 } else {
                     start = context->firstToken()->index();
                     // A list that starts its context (the statements of a block) has its leading
-                    // comments before the context: look one token back. A context with a token
+                    // comments before the context: step back over that whole run of comments, to
+                    // the token the run follows. None of them is anybody else's, and a comment
+                    // above the last one had nothing looking for it once. A context with a token
                     // of its own first (`case` before the patterns) has none there, and the
                     // comment before it belongs to the item above.
                     if (start > 0 && list[0]->firstToken()->index() == start) {
-                        start--;
+                        while (start > 0 && tokens[start - 1].channel > 1) {
+                            start--;
+                        }
                     }
                     end = list[0]->firstToken()->index();
                 }
@@ -339,6 +438,9 @@ class Formatter {
                     if (comment.channel <= 1) {
                         continue;
                     }
+                    if (commentWritten(j)) {
+                        continue;
+                    }
                     const auto &commentText = comment.text();
 
                     // The break after `{` (or after `;`) has been written already: the first
@@ -352,7 +454,7 @@ class Formatter {
                     }
 
                     firstComment = false;
-                    insertComment(comment, result);
+                    insertComment(j, result);
                     lastStopLine = comment.line() + countLines(commentText);
                 }
 
@@ -380,6 +482,12 @@ class Formatter {
                     ++lastStopLine;
                     continue;
                 }
+                if (commentWritten(j)) {
+                    // Written by the visitor of a node inside this range (the comment before the
+                    // closing bracket of an array literal, say): writing the line ends for it
+                    // again would leave the blank lines it already has.
+                    continue;
+                }
                 const auto &commentText = comment.text();
 
                 const int cmtSkips = comment.line() - lastStopLine;
@@ -392,8 +500,30 @@ class Formatter {
                     result += lineEnd();
                 }
 
-                insertComment(comment, result);
+                insertComment(j, result);
                 lastStopLine = comment.line() + countLines(commentText);
+            }
+
+            if (i + 1 == list.size() && tokenRanges.empty()) {
+                // The comments between the last item and the closing bracket of the construct
+                // around it (`]` of an array literal, `)` of a call) are in no range: the ranges
+                // stop at the item, and the bracket belongs to the visitor above, which writes it
+                // straight after this text. They are written where they stood, and a `//` comment
+                // ends its line so that the bracket is not commented out with it.
+                const size_t itemEnd = list[i]->lastToken()->index();
+                size_t closing       = itemEnd + 1;
+                while (closing < tokens.size() && tokens[closing].channel > 1) {
+                    closing++;
+                }
+                const bool closingBracket =
+                    closing < tokens.size() && (tokens[closing].text() == "]" ||
+                                                tokens[closing].text() == ")" ||
+                                                tokens[closing].text() == ">");
+                if (closingBracket &&
+                    writeInlineComments(result, itemEnd, closing, list[i]->lastToken()->endLine()) &&
+                    !(paddingNL && multiLine)) {
+                    result += lineEnd();
+                }
             }
 
             if (predCmtStart < predCmtEnd) {
@@ -431,10 +561,20 @@ class Formatter {
     /// The formatted text of the tree (which must have no errors).
     std::string format();
 
+    /// The comments of the input that `format()` had to write at the end of the file because no
+    /// range and no visitor wrote them: kept, but not kept in their place.
+    size_t unplacedCommentCount() const { return unplacedComments; }
+
     /// Any node, by its kind.
     std::any visit(syn::Node context);
     std::any visitExpr(syn::Node context) { return visit(context); }
     std::any visitType(syn::Node context) { return visit(context); }
+
+  private:
+    /// `visit` without the comments that stand above the node: the dispatch on the node's kind.
+    std::any dispatch(syn::Node context);
+
+  public:
 
     // Auto-generated visitor methods
 

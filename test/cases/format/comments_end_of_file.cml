@@ -1,0 +1,5 @@
+func last(): int {
+    return 0
+}
+// the final line of the file
+// and the one before it

@@ -1,0 +1,14 @@
+func nothing() {
+}
+
+func onlyComment() {
+    // the only content of the block
+}
+
+func onlyBlockComment() {
+    /* the only content, as a block */
+}
+
+func main(): int {
+    return 0
+}

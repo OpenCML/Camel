@@ -1,0 +1,15 @@
+/* the licence line of the case */
+func blocks(): int {
+    /* straight after the brace */
+    return 1
+}
+
+func trailing(): int {
+    return 2 /* after the value */
+}
+
+func both(): int {
+    /* first
+       second */
+    return 3 /* last */
+}
