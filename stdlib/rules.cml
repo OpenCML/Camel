@@ -566,7 +566,7 @@ export func simplify(p: Program): Program! {
 }
 
 /// The same laws under the strict numeric policy (design principles 7.4, 7.5): the pass grants no
-/// permission, as `std::opt(safe_fp=true)` does, so only the laws that need none fire.
+/// permission, as `std::opt safe_fp=true` does, so only the laws that need none fire.
 export func simplify_strict(p: Program): Program! {
     return simplifyWith(p, true)
 }
