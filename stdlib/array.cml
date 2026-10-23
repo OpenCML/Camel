@@ -188,18 +188,12 @@ export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
         case int | i32 | c64 | c128 => xs->reduce<(a, b) => a + b, 0>
         // A floating-point T accumulates in f64 (`sumF64`, from +0 in order) and converts once
         // into the element type, and that conversion is the only rounding of the whole reduction.
-        // The conversions for `float` and `f32` are the two the language declares today. bf16 and
-        // f16 are floating-point element types of the same kind (design principles 7.3), and
-        // their arms belong in this `match type`, written the same way: `bf16(sumF64(xs))` and
-        // `f16(sumF64(xs))`. They are not written yet because the language still declares no
-        // conversion into the two reduced-precision element types (ruling reduced-precision.md
-        // item (c)): naming `bf16(...)` or `f16(...)` does not resolve, and every arm of a
-        // `match type` is resolved even when its case is not selected. Until that conversion
-        // exists, a sum over a bf16 or f16 array is refused where this `match type` looks for its
-        // case — loudly, naming the instance — instead of being answered at the element type's
-        // own width.
+        // bf16 and f16 are floating-point element types of the same kind (design principles 7.3),
+        // and their arms are written the same way.
         case float => float(sumF64(xs))
         case f32 => f32(sumF64(xs))
+        case bf16 => bf16(sumF64(xs))
+        case f16 => f16(sumF64(xs))
     }
 }
 

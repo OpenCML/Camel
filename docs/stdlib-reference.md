@@ -133,6 +133,8 @@ int: (x: int) => int
 int: (x: f32) => int
 int: (x: float) => int
 int: (x: string) => int
+int: (x: bf16) => int
+int: (x: f16) => int
 ```
 
 x as a 64-bit integer.
@@ -149,6 +151,8 @@ i64: (x: int) => int
 i64: (x: f32) => int
 i64: (x: float) => int
 i64: (x: string) => int
+i64: (x: bf16) => int
+i64: (x: f16) => int
 ```
 
 The same as int.
@@ -165,6 +169,8 @@ i32: (x: int) => i32
 i32: (x: f32) => i32
 i32: (x: float) => i32
 i32: (x: string) => i32
+i32: (x: bf16) => i32
+i32: (x: f16) => i32
 ```
 
 x as a 32-bit integer.
@@ -181,6 +187,8 @@ float: (x: int) => float
 float: (x: f32) => float
 float: (x: float) => float
 float: (x: string) => float
+float: (x: bf16) => float
+float: (x: f16) => float
 ```
 
 x as a 64-bit float.
@@ -197,6 +205,8 @@ f64: (x: int) => float
 f64: (x: f32) => float
 f64: (x: float) => float
 f64: (x: string) => float
+f64: (x: bf16) => float
+f64: (x: f16) => float
 ```
 
 The same as float.
@@ -213,6 +223,8 @@ f32: (x: int) => f32
 f32: (x: f32) => f32
 f32: (x: float) => f32
 f32: (x: string) => f32
+f32: (x: bf16) => f32
+f32: (x: f16) => f32
 ```
 
 x as a 32-bit float.
@@ -220,6 +232,43 @@ x as a 32-bit float.
 - Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f32 (overflow or underflow).
 - Example: `f32(0.5)` gives `0.5`
+
+#### `bf16`
+
+```camel
+bf16: (x: i32) => bf16
+bf16: (x: int) => bf16
+bf16: (x: f32) => bf16
+bf16: (x: float) => bf16
+bf16: (x: bf16) => bf16
+bf16: (x: string) => bf16
+```
+
+x as a bf16: the nearest bf16 of x, rounding to nearest with ties to even, once. A bf16 is a
+floating-point type of the language (design principles 7.3), not only a tensor element type,
+and writing the conversion asks for that precision, so no numeric permission is involved.
+
+- Pure.
+- Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of bf16 (overflow or underflow).
+- Example: `bf16(0.5)` gives `0.5`
+
+#### `f16`
+
+```camel
+f16: (x: i32) => f16
+f16: (x: int) => f16
+f16: (x: f32) => f16
+f16: (x: float) => f16
+f16: (x: f16) => f16
+f16: (x: string) => f16
+```
+
+x as an f16: the nearest f16 of x, rounding to nearest with ties to even, once. The same
+conversion as bf16, at the other reduced precision (design principles 7.3).
+
+- Pure.
+- Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f16 (overflow or underflow).
+- Example: `f16(0.5)` gives `0.5`
 
 #### `c64`
 
@@ -2088,11 +2137,10 @@ A type is named once: the family predicates (`is_integer`, `is_float`, `is_compl
 instead of listing the types again, so a new integer width is added in one place.
 
 `bf16` and `f16` are floating-point types (design principles 7.3; handover H238): a tensor
-stores an element in one of them and every kernel computes in f32 and rounds once, so they
-belong to `is_float` and inherit `is_numeric` and `is_ordered` from it. They are element
-types: the language has no bf16 or f16 literal, scalar operator or conversion, so a generic
-function that combines two element values is refused where it is written rather than
-answered at a narrower width.
+stores an element in one of them, every kernel computes in f32 and rounds once, and the
+language itself gives them what it gives `f32`: literals, a written conversion (`bf16(x)`,
+`f16(x)`, `x as bf16`), scalar arithmetic and comparison, and arrays of them. They belong to
+`is_float` and inherit `is_numeric` and `is_ordered` from it.
 
 #### `is_integer`
 
@@ -2113,7 +2161,7 @@ is_float: () => bool
 ```
 
 True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit, `bf16` and
-`f16` are the two-byte tensor element types).
+`f16` are the two reduced-precision floating types).
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `is_float::<float>()` gives `true`

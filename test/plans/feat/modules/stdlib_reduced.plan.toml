@@ -2,13 +2,13 @@ id = "modules.stdlib_reduced"
 order = 376
 tier = "fast"
 tags = ["feat", "modules", "stdlib", "types", "tensor"]
-desc = "The standard library knows the two reduced-precision element types (handover H238, design principles 7.3): `is_float` names bf16 and f16 once, `is_numeric` and `is_ordered` inherit them, so a declaration guarded by either is applicable for them instead of being quietly excluded with WhenConditionUnmet. A function that would compute with an element value is refused by name — where the computation is written, or where the `match type` of its definition looks for the element type's case — naming the instance and the element type; a tensor reduction computes, accumulating in f64 and rounding once into the two-byte element type."
+desc = "The reduced-precision floating types are scalar types of the language (handover H238, design principles 7.3, ruling docs/handover/reviews/reduced-precision.md): `bf16` and `f16` have literals that round once to the nearest member of the type, written conversions (`bf16(x)`, `f16(x)`, `x as f32`) that need no numeric permission, the scalar arithmetic and comparison of any other float computed in f32 and rounded once into the element type, and a place in an array; `is_float` names both, so `is_numeric` and `is_ordered` inherit them; and `array::sum` over one of them accumulates in f64 and rounds once, as the tensor reduction does. What is left refused is refused by name, with the element type and the operation that cannot take it."
 
 # The predicates: the element types belong to the float family, and the composed predicates follow.
 
 [[tests]]
 name = "reduced_predicates"
-desc = "`is_float`, `is_numeric` and `is_ordered` answer true for bf16 and f16, and a generic function guarded by `is_numeric::<T>()` and one guarded by `is_ordered::<T>()` both accept an array of them. Before this change `is_float::<bf16>()` was false, `is_numeric::<bf16>()` was false, and both guarded calls failed with WhenConditionUnmet — the element types were excluded from every numeric declaration by silence."
+desc = "`is_float`, `is_numeric` and `is_ordered` answer true for bf16 and f16, and a generic function guarded by `is_numeric::<T>()` and one guarded by `is_ordered::<T>()` both accept an array of them. Before this change `is_float::<bf16>()` was false, `is_numeric::<bf16>()` was false, and both guarded calls failed with WhenConditionUnmet -- the element types were excluded from every numeric declaration by silence."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/reduced_predicates.cml"
 args = ["${case}", "${backend}"]
@@ -19,21 +19,38 @@ expect_stdout = "float\nfloat\nnumeric\nnumeric\nordered\nordered\n0\n0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
-# The first refusal by name: an array reduction over bf16 cannot be computed yet, and says so.
+# The language half of the ruling: literals, the written conversion, the arithmetic and the
+# comparison of the two types, each pinned by a value or by the bytes of the stored element.
+
+[[tests]]
+name = "reduced_scalar"
+desc = "A bf16 or f16 literal is the nearest member of the written number, rounded once with ties to even (1+2^-8 is bf16 1.0 and 1+2^-11 is f16 1.0, the even neighbour of the tie), and an element of a cast tensor holding the same number has the same bytes. The written conversion `bf16(x)` / `f16(x)` gives that element by another route; reading one back as f32 is exact; an overflow is an infinity and not a saturation (65520.0 is f16 +inf, and so is 65504 + 65504); a negative literal keeps its sign; arithmetic is computed in f32 and rounded once; and the comparison is by value, not by the bits of the slot (two 6.0 values whose slots hold different bits are equal). Before this change no line of the case compiled: bf16 had no literal, no conversion and no operator."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/reduced_scalar.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "@@GENERATED@@"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The reduction the ruling re-pointed: the refusal this case asserted became a computation.
 
 [[tests]]
 name = "reduced_sum_refused"
-desc = "`array::sum` over a `bf16[]` passes its `when is_numeric::<T>()` and is refused where the `match type` of its definition looks for the element type's case: SemanticDiag::StaticMatchNotExhaustive names the type bf16 and the instance note names `sum<bf16>`. The ruling docs/handover/reviews/reduced-precision.md (d) puts the two arms `bf16(sumF64(xs))` and `f16(sumF64(xs))` there, and they need the conversion of the same ruling's item (c), which the language does not declare yet; before (d) the refusal was at the `+` the whole reduction was written with. With `is_numeric::<bf16>()` false the call would stop earlier, at WhenConditionUnmet, so this case fails if the predicate change is undone."
-kind = "negative"
+desc = "The case that used to assert that `sum` over a bf16 array is refused with SemanticDiag::StaticMatchNotExhaustive now computes, because the ruling gives the two types the conversion the `match type` of `sum` was missing: `[2^24, 1, -2^24]` answers bf16 1.0 (an f32 accumulator answers 0, so the width is pinned), the same answer the tensor reduction gives bit for bit, the halfway total of [1.0, 0.25] rounds once with ties to even to 1.0, [65504, 736] rounds to f16 +infinity rather than saturating, and the sum of no elements is +0."
+kind = "behavior"
 case = "../../../cases/modules/stdlib/reduced_sum_refused.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::StaticMatchNotExhaustive"
-expect_output_contains = ["No case of this 'match type' selects the type 'bf16'.", "in the instance 'sum<bf16>'"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "1.0 true true false\n[128, 63]\n1.0 true true\ninf true true\n0.0 true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
-# A reduction over a bf16 tensor computes: wider accumulator, one rounding, two bytes per element.
+# The reduction over a bf16 tensor still computes, wider accumulator and one rounding.
 
 [[tests]]
 name = "reduced_reduction_bytes"
@@ -53,7 +70,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "reduced_sort_refused"
-desc = "`sort` over an `f16[]` is refused at run time by the ordering kernel: RuntimeDiag::OperandTypeUnsupported names the algorithm and `f16[]`, and the supported set is written as the four element types the kernel orders, not as `numbers` — bf16 and f16 are numbers, so the old wording claimed to take what it refuses."
+desc = "`sort` over an `f16[]` is refused at run time by the ordering kernel: RuntimeDiag::OperandTypeUnsupported names the algorithm and `f16[]`, and the supported set is written as the four element types the kernel orders, not as `numbers` -- bf16 and f16 are numbers, so the old wording claimed to take what it refuses."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_sort_refused.cml"
 args = ["${case}"]
@@ -63,16 +80,30 @@ expect_output_contains = ["does not support a value of type 'f16[]'", "an array 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
-# The scalar refusal that diagnostic is about: a bf16 value has no arithmetic to compute with.
+# What diagnostic ReducedPrecisionUnsupported is left about: `%`, which no float has.
 
 [[tests]]
 name = "reduced_arithmetic_refused"
-desc = "A `bf16` value has no scalar operation: `+` over two of them has no candidate, and the call is refused as SemanticDiag::ReducedPrecisionUnsupported, naming `operator +` and the element type bf16 instead of listing overloads it could never match. This is the diagnostic's own subject (design principles 7.3, H238). `array::sum` used to reach it, through the `+` its whole body was written with; now that the reduction accumulates in f64 and rounds once, a bf16 array is refused where the definition looks for the element type's case, and this case keeps the sentence that says what a bf16 value itself cannot do."
+desc = "A `%` over two bf16 values has no candidate -- `__mod__` is registered for the integer types only, as it is for f32 -- so the call is refused as SemanticDiag::ReducedPrecisionUnsupported, naming `operator %` and the element type bf16 rather than listing overloads that could never match. `+` over the same values is no longer refused: it is the ruling's item (b), and reduced_scalar pins what it computes. The case used to write `+`; the ruling's item (b) is what re-points it at `%`."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_arithmetic_refused.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ReducedPrecisionUnsupported"
-expect_output_contains = ["The call of 'operator +' cannot take a value of the reduced-precision element type 'bf16'."]
+expect_output_contains = ["operator %", "bf16"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+# The other half of the conversion rule: `as` refuses the narrowing, the written conversion is it.
+
+[[tests]]
+name = "reduced_narrowing_as_refused"
+desc = "`x as bf16` on an f32 is refused with SemanticDiag::DynamicCastForbidden: the conversion rounds, so a cast that says nothing about that is the wrong form for it, exactly as `x as i32` on an f32 is refused. `bf16(x)` is the written conversion of the ruling's item (c) and needs no permission; `b as f32` widens and is accepted, which reduced_scalar writes."
+kind = "negative"
+case = "../../../cases/modules/stdlib/reduced_narrowing_as_refused.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
+expect_output_contains = ["f32", "bf16"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

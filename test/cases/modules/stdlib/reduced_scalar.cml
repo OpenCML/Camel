@@ -1,0 +1,116 @@
+/**
+ * `bf16` and `f16` are floating types of the language, on par with `f32` (design principles 7.3;
+ * ruling docs/handover/reviews/reduced-precision.md items (a) and (b)): a literal has one, the
+ * nearest value rounds to nearest with ties to even once, `bf16(x)` / `f16(x)` are written
+ * conversions and need no numeric permission, the scalar arithmetic and comparison compute in
+ * f32 and round once into the element type, and reading such a value as a wider number is exact.
+ * This case pins all of that, and it pins it by value rather than by the shape of the source:
+ * every line below is a number, or the little-endian bytes of the element, that only the stated
+ * rule gives.
+ *
+ *   exact          bf16    f16     why
+ *   1 + 2^-8       1.0     -       bf16 has 8 significand bits: exactly between 1 and 1+2^-7,
+ *                                 the tie goes to the even neighbour (1.0 is 0x3F80)
+ *   0.1            0.09997558593750 / bf16 [205, 61] (0x3DCD), f16 [102, 46] (0x2E66): the
+ *                                 nearest of each, which is not the f32 of 0.1 in either
+ *   1 + 2^-11      -       1.0     the same tie to even, ten significand bits
+ *   -0.0           -0.0    -       a negative literal keeps its sign bit
+ *   3.3895314e38   finite  -       the largest finite bf16 (0x7F7F); one more exponent is
+ *                                 infinity, and a rounding that flushed would not be IEEE
+ *   65504.0        -       finite  the largest finite f16 (0x7BFF)
+ *   65520.0        -       inf     the halfway point between 65504 and 2^16 rounds up
+ *   1.0 + 1.0      2.0     -       arithmetic is done in f32 and rounded once
+ *   0.1 * 0.1      0.0099945...    the product of the two stored elements, rounded once
+ *   65504 + 65504  -       inf     a result beyond the range of the element type is infinity,
+ *                                 as it is for f32: no saturation, no fault
+ *   2^24 + 1       -       -       over a sum: the accumulator is f64, so 2^24 + 1 - 2^24 is 1
+ *                                 (an f32 or bf16 accumulator answers 0)
+ *
+ * What each rule would give instead is written out where it matters: a conversion that rounded
+ * twice (through f16 and on to bf16), that broke ties away from zero, that saturated an overflow,
+ * or an arithmetic that kept full f32 precision would each change one of these lines.
+ */
+module stdlib_reduced_scalar
+
+import { sum } from array
+import { Tensor, new, cast, to_bytes } from tensor
+import { to_array } from bytes
+
+/// The little-endian bytes of one bf16 element, read back through a one-element tensor.
+func bitsOfBf16(value: bf16): int[] {
+    let one: bf16[] = [value]
+    return to_array(to_bytes(new(one)))
+}
+
+/// The little-endian bytes of one f16 element.
+func bitsOfF16(value: f16): int[] {
+    let one: f16[] = [value]
+    return to_array(to_bytes(new(one)))
+}
+
+/// One rounding of a full-precision literal into bf16: the two values the case writes by hand,
+/// and the same values put through the written conversion rather than a literal.
+func narrowed(x: Tensor<f32>): Tensor<bf16> { return cast(x, 'bf16') }
+
+func halved(x: Tensor<f32>): Tensor<f16> { return cast(x, 'f16') }
+
+func main(): int sync {
+    // ---- a literal is the nearest bf16 or f16 of what is written, rounded once ----
+    let bfTie: bf16 = 1.00390625
+    let f16Tie: f16 = 1.00048828125
+    println(bfTie, f16Tie, bitsOfBf16(bfTie)[0], bitsOfBf16(bfTie)[1])
+    println(bitsOfF16(f16Tie)[0], bitsOfF16(f16Tie)[1])
+
+    // The written conversion and `as` give the same element as the literal: the rounding is one,
+    // and it is the store rounding of the element type, not the f32 one.
+    let tenth: f32[] = [0.1]
+    let convertedBf = cast(new(tenth), 'bf16')
+    println(to_array(to_bytes(convertedBf)))
+    println(bitsOfBf16(0.1)[0], bitsOfBf16(0.1)[1])
+    let convertedF16 = cast(new(tenth), 'f16')
+    println(to_array(to_bytes(convertedF16)))
+    println(bitsOfF16(0.1)[0], bitsOfF16(0.1)[1])
+
+    // ---- the boundaries of each type: the largest finite value, and the step to infinity ----
+    let bfMax: bf16 = 3.3895314e38
+    let bfOver: bf16 = 3.4e38
+    let asF32: f32 = bfMax
+    println(bitsOfBf16(bfMax)[0], bitsOfBf16(bfMax)[1], bfOver, bitsOfBf16(bfOver)[0])
+    // Reading a bf16 as an f32 is exact, and it is the same value a cast of the tensor gives.
+    println(asF32, to_array(to_bytes(cast(convertedBf, 'f32'))))
+
+    let f16Max: f16 = 65504.0
+    let f16Over: f16 = 65520.0
+    println(bitsOfF16(f16Max)[0], bitsOfF16(f16Max)[1], f16Over)
+    println(f16Max + f16Max, bitsOfF16(f16Max + f16Max)[0], bitsOfF16(f16Max + f16Max)[1])
+
+    // ---- a negative literal keeps its sign, and the two zeros compare equal ----
+    let negative: bf16 = -0.0
+    let positive: bf16 = 0.0
+    println(negative, negative == positive, bitsOfBf16(negative)[0])
+
+    // ---- arithmetic: computed in f32, rounded once into the element type ----
+    let one: bf16 = 1.0
+    let product: bf16 = 0.1 * 0.1
+    let quotient: bf16 = 1.0 / 3.0
+    println(one + one, product, quotient)
+    println(bitsOfBf16(one + one)[0], bitsOfBf16(product)[0], bitsOfBf16(quotient)[0])
+
+    // ---- comparison: by value, not by the bits of the slot ----
+    let a = bf16(6.0)
+    let b = bf16(6.0)
+    println(a == b, a != b, a < b, a <= b, a > b, a >= b)
+
+    // ---- a narrowing to i32 truncates toward zero; a widening is exact ----
+    println(i32(a), f32(a), a as f32)
+
+    // ---- a reduction over a bf16 array accumulates in f64 and rounds once ----
+    let cancelling: bf16[] = [16777216.0, 1.0, -16777216.0]
+    let total = sum(cancelling)
+    println(total, total == bf16(1.0), bitsOfBf16(total)[0], bitsOfBf16(total)[1])
+
+    // The same three elements through the tensor path, which the ruling says agrees bit for bit.
+    let rows: f32[] = [16777216.0, 1.0, -16777216.0]
+    println(to_array(to_bytes(narrowed(new(rows)))))
+    return 0
+}
