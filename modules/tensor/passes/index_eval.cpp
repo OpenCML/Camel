@@ -335,7 +335,7 @@ struct Arg {
     Type *type() const {
         switch (kind) {
         case Kind::Tensor:
-            return TensorType::get(data.dtype, data.shape);
+            return ops::tensorOf(data.dtype, data.shape);
         case Kind::Number:
             return Type::Float64();
         case Kind::Int:
@@ -1181,7 +1181,7 @@ void query(
 
 void queries(std::ostream &os) {
     const auto T = [](std::optional<StaticShape> shape, TypeCode t = TypeCode::Float32) -> Type * {
-        return TensorType::get(t, std::move(shape));
+        return ops::tensorOf(t, std::move(shape));
     };
     Type *const integer = Type::Int64();
     Type *const ints    = camel::core::type::ArrayType::create(Type::Int64());

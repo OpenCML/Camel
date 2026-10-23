@@ -43,7 +43,9 @@ bool isIntArray(Type *type) {
 }
 
 bool matchesKind(ParamKind kind, Type *type) {
-    const bool tensor = asTensorType(type) != nullptr;
+    // A tensor is a numeric array, and the alias `Tensor` is one spelling of it, so the kind of
+    // an argument is read through the one predicate that answers for both.
+    const bool tensor = isTensorType(type);
     switch (kind) {
     case ParamKind::Tensor:
         return tensor;

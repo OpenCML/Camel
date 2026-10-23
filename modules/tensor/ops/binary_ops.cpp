@@ -30,7 +30,7 @@ Type *resultType(TypeCode dtype, const InferContext &ctx) {
             shape->push_back(value.value_or(kUnknownDim));
         }
     }
-    return TensorType::get(dtype, shape);
+    return tensorOf(dtype, shape);
 }
 
 template <TypeCode DType> slot_t fromBytesKernel(ArgsView &, ArgsView &norm, context::Context &) {

@@ -192,7 +192,7 @@ type::Type *inferenceTypeOf(const Value &value) {
     }
     if (value.isSymbolic() || constantTensor(value)) {
         const TensorFacts facts = factsOf(value);
-        return tensor::TensorType::get(facts.dtype, facts.shape);
+        return tensor::ops::tensorOf(facts.dtype, facts.shape);
     }
     return value.ty;
 }
@@ -463,8 +463,9 @@ std::string Emitter::constantOperand(const Value &value, std::optional<TypeCode>
         // Numeric (nested) arrays become tensors of their inferred dtype and shape.
         Array *t =
             tensor::tensorFromArray(value.slot, value.ty, tensor::ops::resultAllocator());
-        retain(t, tensor::TensorType::Default());
-        Value asTensor = Value::constant(rtdata::toSlot(t), tensor::TensorType::Default());
+        retain(t, camel::core::type::ArrayType::numericUnknown());
+        Value asTensor =
+            Value::constant(rtdata::toSlot(t), camel::core::type::ArrayType::numericUnknown());
         asTensor.label = value.label;
         return constantOperand(asTensor, dtype);
     }

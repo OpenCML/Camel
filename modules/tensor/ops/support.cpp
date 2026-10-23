@@ -21,7 +21,11 @@ using camel::core::error::throwRuntimeFault;
 
 Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
     Type *argType = args.type(index);
-    if (asTensorType(argType)) {
+    if (isTensorType(argType)) {
+        // A tensor is a numeric array (plan section 5.2): the value the argument holds is the
+        // tensor itself, at whatever rank and element type it states. An array the module cannot
+        // use as one — a nested array of arrays, which has to be flattened — is what the
+        // conversion below is for.
         auto *tensor = args.get<Array *>(index);
         if (!tensor) {
             throwRuntimeFault(RuntimeDiag::RuntimeError, "Tensor argument cannot be null");
@@ -35,7 +39,7 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
 }
 
 kernels::Operand operandArg(ArgsView &args, size_t index, kernels::ScalarOperand &storage) {
-    if (asTensorType(args.type(index)) || args.type(index)->code() == TypeCode::Array) {
+    if (args.type(index)->code() == TypeCode::Array) {
         return kernels::Operand::of(tensorArg(args, index, true));
     }
     storage = kernels::ScalarOperand::fromSlot(args.type(index)->code(), args.slot(index));
@@ -133,10 +137,38 @@ StaticFacts::StaticFacts(std::span<type::Type *const> types, type::static_args_t
     }
 }
 
-type::Type *tensorOf(const TensorFacts &facts) { return TensorType::get(facts.dtype, facts.shape); }
+type::Type *tensorOf(const TensorFacts &facts) {
+    // The type a value with these facts has: a numeric array of that element type and shape
+    // (plan section 5.2). No dimension at all is the element type itself — the rank-zero ruling,
+    // docs/handover/reviews/questions-2026-10-23.md, section rank-zero-tensor — and a rank
+    // nobody fixed is the open-rank array, which is what a bare `Tensor` is.
+    std::vector<ExtentForm> forms;
+    if (facts.shape) {
+        forms.reserve(facts.shape->size());
+        for (int64_t extent : *facts.shape) {
+            forms.push_back(
+                extent < 0 ? ExtentForm::unknown() : ExtentForm::constant(extent));
+        }
+    }
+    if (facts.dtype && !isSupportedTensorScalar(*facts.dtype)) {
+        throw std::invalid_argument("Unsupported Tensor element type");
+    }
+    if (!facts.dtype) {
+        return facts.shape ? ArrayType::numericUnknownFromForms(forms)
+                           : ArrayType::numericUnknown();
+    }
+    type::Type *elem = type::Type::create(*facts.dtype);
+    if (!facts.shape) {
+        return ArrayType::openRank(elem);
+    }
+    if (forms.empty()) {
+        return elem;
+    }
+    return ArrayType::create(elem, std::span<const ExtentForm>(forms));
+}
 
 type::Type *tensorOf(std::optional<TypeCode> dtype, std::optional<StaticShape> shape) {
-    return TensorType::get(dtype, std::move(shape));
+    return tensorOf(TensorFacts{dtype, std::move(shape)});
 }
 
 std::optional<TypeCode> promote(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
@@ -210,7 +242,7 @@ reduceShape(const std::optional<StaticShape> &input, std::optional<int64_t> axis
 
 bool anyTensor(const InferContext &ctx, size_t count) {
     for (size_t i = 0; i < count && i < ctx.size(); ++i) {
-        if (asTensorType(ctx.type(i))) {
+        if (isTensorType(ctx.type(i))) {
             return true;
         }
     }
@@ -219,7 +251,7 @@ bool anyTensor(const InferContext &ctx, size_t count) {
 
 bool anyTensorLike(const InferContext &ctx, size_t count) {
     for (size_t i = 0; i < count && i < ctx.size(); ++i) {
-        if (asTensorType(ctx.type(i)) || ctx.type(i)->code() == TypeCode::Array) {
+        if (ctx.type(i)->code() == TypeCode::Array) {
             return true;
         }
     }

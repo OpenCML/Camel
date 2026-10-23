@@ -96,9 +96,9 @@ std::optional<Type *> iterInfer(const InferContext &ctx) {
             throw std::invalid_argument("a rank-0 tensor has no first dimension");
         }
         StaticShape row(in.shape->begin() + 1, in.shape->end());
-        return ArrayType::create(TensorType::get(in.dtype, row));
+        return ArrayType::create(tensorOf(in.dtype, row));
     }
-    return ArrayType::create(TensorType::get(in.dtype, std::nullopt));
+    return ArrayType::create(tensorOf(in.dtype, std::nullopt));
 }
 
 slot_t iterKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -109,9 +109,20 @@ slot_t iterKernel(ArgsView &, ArgsView &norm, context::Context &) {
         }
         const auto shape    = t->shapeSpan();
         const uint64_t rows = static_cast<uint64_t>(shape[0]);
+        if (t->rank() == 1) {
+            // One dimension: its elements are values of the element type (the rank-zero ruling,
+            // docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor). The round
+            // is the element itself and the sequence is `T[]`, the type iterInfer states.
+            auto *arrayType = ArrayType::create(const_cast<Type *>(t->elemType()));
+            ::Array *result = ::Array::create(mm::autoSpace(), static_cast<size_t>(rows));
+            for (uint64_t i = 0; i < rows; ++i) {
+                result->setSlot(i, t->getSlot(i), arrayType);
+            }
+            return camel::core::rtdata::toSlot(result);
+        }
         const StaticShape rowShape(shape.begin() + 1, shape.end());
         const uint64_t inner = numelOf(rowShape);
-        auto *arrayType      = ArrayType::create(TensorType::get(t->dtype(), rowShape));
+        auto *arrayType      = ArrayType::create(tensorOf(t->dtype(), rowShape));
         ::Array *result      = ::Array::create(mm::autoSpace(), static_cast<size_t>(rows));
         for (uint64_t i = 0; i < rows; ++i) {
             Array *row = viewTensor(t, rowShape, mm::autoSpace(), i * inner);
@@ -126,7 +137,7 @@ std::optional<Type *> voidResult(const InferContext &) { return Type::Void(); }
 slot_t showKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("show", [&] {
         Array *t = tensorArg(norm, 0, true);
-        t->print(std::cout, TensorType::Default());
+        t->print(std::cout, nullptr);
         std::cout << std::endl;
         return NullSlot;
     });
@@ -242,7 +253,7 @@ std::vector<OpDef> utilityOps() {
             .params    = {{"path", ParamKind::String}},
             .resultDoc = "Tensor",
             .infer     = [](const InferContext &) -> std::optional<Type *> {
-                return TensorType::Default();
+                return ArrayType::numericUnknown();
             },
             .kernel = &loadNpyKernel,
             .traits = impure});

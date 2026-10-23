@@ -12,6 +12,7 @@
 #include "../tensor/interop.h"
 #include "../tensor/ops/indexing.h"
 #include "../tensor/ops/registry.h"
+#include "../tensor/ops/support.h"
 #include "../tensor/tensor.h"
 #include "capability.h"
 #include "emitter.h"
@@ -875,7 +876,7 @@ Value Evaluator::evalCast(Activation &act, gc_node_ref_t ref, Value src) {
     if (tensor::isTensorType(target)) {
         const TensorFacts facts = factsOf(src);
         type::Type *known       = src.form == Value::Form::Tensor
-                                      ? tensor::TensorType::get(facts.dtype, facts.shape)
+                                      ? tensor::ops::tensorOf(facts)
                                       : inferenceTypeOf(src);
         type::Type *declared    = g->node(source)->dataType();
         const auto safety       = target->castSafetyFrom(known);
@@ -3888,7 +3889,7 @@ class InputBinder {
                                                : std::format("{}_dim{}", name, a)};
             }
             emitter_.addInput(std::move(inputInfo));
-            return {input, tensor::TensorType::get(t->dtype(), shape)};
+            return {input, tensor::ops::tensorOf(t->dtype(), std::move(shape))};
         }
         if (ty->code() == camel::nn::OptimizerStateType::typeCode()) {
             // An optimizer state flattens to its two moment trees (one input per leaf, named
@@ -3953,7 +3954,7 @@ class InputBinder {
 
   private:
     static bool isTensor(const Example &example) {
-        return example.type && example.type->code() == tensor::TensorType::typeCode();
+        return tensor::isTensorType(example.type);
     }
 
     Emitter &emitter_;
@@ -4130,8 +4131,7 @@ bindInputs(Emitter &emitter, const ExportOptions &options, std::span<const Examp
     // nothing is claimed about their equality.
     size_t batched = 0;
     for (const Example &example : examples) {
-        if (!tensor::isTensorType(example.type) &&
-            !(example.type && example.type->code() == tensor::TensorType::typeCode())) {
+        if (!tensor::isTensorType(example.type)) {
             continue;
         }
         const auto *t = rtdata::fromSlot<tensor::Array *>(example.value);
@@ -4213,9 +4213,9 @@ type::Type *exactTypeOf(slot_t value, type::Type *declared) {
     if (!declared || value == NullSlot) {
         return declared;
     }
-    if (declared->code() == tensor::TensorType::typeCode()) {
+    if (tensor::isTensorType(declared)) {
         const auto *t = rtdata::fromSlot<tensor::Array *>(value);
-        return tensor::TensorType::get(
+        return tensor::ops::tensorOf(
             t->dtype(),
             tensor::StaticShape(t->shapeSpan().begin(), t->shapeSpan().end()));
     }

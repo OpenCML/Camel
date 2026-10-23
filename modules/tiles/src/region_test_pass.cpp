@@ -12,6 +12,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/facts.h"
 #include "modules/tensor/tensor.h"
+#include "modules/tensor/ops/support.h"
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
 #include "tiles/internal/compiled_region.h"
@@ -166,7 +167,7 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
         std::fill_n(tensor->dataAs<float>(), elements(node.shape), 0.0f);
         args.push_back(
             {core::rtdata::toSlot(tensor),
-             tensor::TensorType::get(core::type::TypeCode::Float32, node.shape)});
+             tensor::ops::tensorOf(core::type::TypeCode::Float32, node.shape)});
     }
     const auto before = compilationExtractions();
     context.facts().invalidateGraph(function->graph());

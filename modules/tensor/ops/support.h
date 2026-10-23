@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "../dtype.h"
 #include "../kernels/elementwise.h"
 #include "camel/core/error/runtime.h"
 #include "op_def.h"
