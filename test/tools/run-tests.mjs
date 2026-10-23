@@ -22,6 +22,14 @@ const VARS_PATH = path.join(TEST_ROOT, 'vars.toml')
 // reports the CPU time the kernel charged it on file descriptor 3 (its header has the why; the
 // ruling it implements is quoted where the reading is judged, in runOneTest).
 const CHILD_CPU_TOOL = path.join(TOOLS_ROOT, 'child-cpu.mjs')
+// Whether this host's kernel can report the CPU time of a process tree at all: the reading
+// test/tools/child-cpu.mjs makes is `cutime` + `cstime` of /proc/self/stat, which no other platform
+// has. Where it exists the wrapper runs for every test and the margin rule is judged on CPU time;
+// where it does not (a Windows or macOS developer machine) the wrapper cannot report a figure
+// either, so it is not started for the tests that do not ask for one and the margin rule falls back
+// to the wall clock -- and the run prints that it did, once. The shared host the gate runs on is
+// Linux, so the fallback never decides a gate.
+const CAN_READ_CHILD_CPU = fs.existsSync('/proc/self/stat')
 // Where a run's record goes. `test/results` unless CAMEL_TEST_RESULTS_ROOT names another tree: a
 // check that has to assert what the retention kept drives two real runs into a scratch tree
 // (test/cases/tools/retention/retention.mjs), and the tree it prunes is the one it writes.
@@ -307,12 +315,16 @@ const TIMEOUT_SCALE = (() => {
 const DEBUG_BUILD_TIMEOUT_SCALE = 4
 
 // How much room a test must leave under its `timeout_ms` to count as a real bound: the run fails
-// when a passing test used more than a quarter of it. A timeout is a pass condition on wall time,
-// and four machines' worth of headroom is what keeps it one when the host is busy with other
-// tests. A test that needs more time states it in a comment next to the number (docs/test-plans.md).
-// A test that declares `cpu_budget_ms` is judged on its own CPU time instead and does not read the
-// wall clock as a bound at all: its timeout is a liveness bound (see the ruling quoted at the two
-// places below), so this rule has nothing to say about it.
+// when a passing test used more than a quarter of it **of its own CPU time**. The quantity is the
+// work's, not the host's, and deliberately so (H368): judged on the wall clock, this rule failed
+// the plan runner's own self-test at random on the shared host -- 1 of 12 runs at a 60 s bound,
+// and twice in two agents' gates -- while every run inside it was green,
+// because a passing test's wall clock on a busy host is the neighbours' scheduling. Four machines'
+// worth of headroom is what keeps a bound a bound. A test that needs more time states it in a
+// comment next to the number (docs/test-plans.md). A test that declares `cpu_budget_ms` is judged
+// on that budget instead and does not read the wall clock as a bound at all: its timeout is a
+// liveness bound (see the ruling quoted where the reading is judged), so this rule has nothing to
+// say about it.
 const TIMEOUT_MARGIN = 4
 
 /**
@@ -1432,19 +1444,24 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     const timeoutMs =
         (test.timeout_ms || 10000) * TIMEOUT_SCALE *
         (logContext.options.build === 'debug' ? DEBUG_BUILD_TIMEOUT_SCALE : 1)
-    // A test that declares `cpu_budget_ms` runs under the wrapper that reports its own CPU time:
-    // the command and its environment are unchanged, the wrapper reaps this test's tree and puts
-    // the kernel's figure on a fourth pipe (test/tools/child-cpu.mjs).
+    // Every test on a host whose kernel reports CPU time runs under the wrapper that reports its
+    // own: the command and its environment are unchanged, the wrapper reaps this test's tree and
+    // puts the kernel's figure on a fourth pipe (test/tools/child-cpu.mjs). A test that declares
+    // `cpu_budget_ms` needs the figure wherever it runs -- it is judged on it -- so it keeps the
+    // wrapper on a host that cannot read one, where the reading comes back as the reason and the
+    // test fails for it. The cost of the wrapper for the whole fast layer, measured on the host at
+    // -Jobs 8: 2.80 min for smoke + feat against 2.60 min for the same 5,890 tests unwrapped.
     const cpuBudgetMs = typeof test.cpu_budget_ms === 'number' ? test.cpu_budget_ms : null
-    const launch = cpuBudgetMs === null
-        ? { command: toolExe, args }
-        : { command: process.execPath, args: [CHILD_CPU_TOOL, '--', toolExe, ...args] }
+    const wrapForCpu = CAN_READ_CHILD_CPU || cpuBudgetMs !== null
+    const launch = wrapForCpu
+        ? { command: process.execPath, args: [CHILD_CPU_TOOL, '--', toolExe, ...args] }
+        : { command: toolExe, args }
     const proc = await runProcess(launch.command, launch.args, {
         cwd: REPO_ROOT,
         env,
         timeoutMs,
         marks,
-        cpuReport: cpuBudgetMs !== null,
+        cpuReport: wrapForCpu,
     })
     // The test program is gone, so the slot has done its job. Everything left -- resuming from the
     // child's `close` event, normalizing and asserting on what it printed, the verification script,
@@ -1455,9 +1472,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // steps in the slot were 2.9-4.4 s together.
     // A `parallel = false` test passes no hook and keeps its slot to the end (see executePlans).
     if (typeof logContext.releaseSlot === 'function') logContext.releaseSlot()
-    const cpuReading = cpuBudgetMs === null
-        ? { cpuMs: null, reason: null }
-        : readCpuReport(proc.cpuReport)
+    const cpuReading = wrapForCpu ? readCpuReport(proc.cpuReport) : { cpuMs: null, reason: null }
     const raw = {
         command: `${toolExe} ${args.join(' ')}`.trim(),
         exitCode: proc.status,
@@ -1541,17 +1556,46 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
             )
         }
     }
-    // A timeout is a pass condition on wall time, so it is only a real bound when the test
-    // finishes with room to spare. Below the margin the number decides on a busy host, and this
-    // says so here instead of in a red run weeks later. A test whose bound is its CPU budget is
-    // not read on the wall clock at all: its timeout is the liveness bound above, and the margin
-    // rule would be asking the wall clock to say what the ruling moved to CPU time.
-    if (failures.length === 0 && cpuBudgetMs === null && result.wallMs * TIMEOUT_MARGIN > timeoutMs) {
-        failures.push(
-            `finished in ${result.wallMs.toFixed(0)} ms against a ${timeoutMs.toFixed(0)} ms timeout, ` +
-                `below the ${TIMEOUT_MARGIN}x margin: the bound is today's wall time, not a bound ` +
-                `(raise it with a stated reason, or make the test do less)`
-        )
+    // A timeout is a pass condition, so it is only a real bound when the test finishes with room to
+    // spare. The room is measured in the work's own currency -- the CPU time the kernel charged this
+    // test's process tree -- and not in the wall clock, which on a shared host belongs to whoever
+    // else is running. This is the same reading, from the same wrapper, that `cpu_budget_ms` is
+    // judged against, and the reason the wrapper runs for every test (H368).
+    //
+    // What the rule cannot read it does not guess: on a host with no /proc/self/stat there is no
+    // CPU figure for any test, so the wall clock is all there is and the run says so once at the
+    // start (see the header in runPlans). Where the figure is available and a test's reading did
+    // not arrive, the test fails rather than passing on a bound whose room nothing examined: a
+    // margin that cannot be read is not a margin. A test whose own CPU exceeds its wall clock is
+    // multi-threaded work: the reading sums its threads, so this rule reads the work, not the
+    // schedule, and such a test states its cost as a `cpu_budget_ms` if its total work is what it
+    // wants bounded. Measured over the whole fast layer on 2026-10-24: 21 of 5,873 tests used more
+    // CPU than their wall clock (all ONNX-runtime, dlpack and fuzz cases), and every test in the
+    // layer had at least four times its own CPU time of room under its timeout, so no bound in the
+    // layer is read differently in a green run than it was before this rule.
+    if (failures.length === 0 && cpuBudgetMs === null) {
+        if (cpuReading.cpuMs !== null && cpuReading.cpuMs * TIMEOUT_MARGIN > timeoutMs) {
+            failures.push(
+                `used ${cpuReading.cpuMs.toFixed(0)} ms of CPU against a ${timeoutMs.toFixed(0)} ms timeout, ` +
+                    `below the ${TIMEOUT_MARGIN}x margin: the bound is the work's own time, not a bound ` +
+                    `(raise it with a stated reason, or make the test do less). The wall clock read ` +
+                    `${result.wallMs.toFixed(0)} ms, which on a shared host is the neighbours'`
+            )
+        } else if (cpuReading.cpuMs === null && CAN_READ_CHILD_CPU) {
+            failures.push(
+                `no CPU reading to judge the margin of its ${timeoutMs.toFixed(0)} ms timeout by: ` +
+                    `${cpuReading.reason || 'the wrapper reported nothing'}. A bound whose margin nobody ` +
+                    `can read is not a bound, and it is not a pass either (H368)`
+            )
+        } else if (cpuReading.cpuMs === null && result.wallMs * TIMEOUT_MARGIN > timeoutMs) {
+            // No /proc/self/stat on this host: the wall clock is the only reading there is.
+            failures.push(
+                `finished in ${result.wallMs.toFixed(0)} ms against a ${timeoutMs.toFixed(0)} ms timeout, ` +
+                    `below the ${TIMEOUT_MARGIN}x margin: the bound is today's wall time, not a bound ` +
+                    `(raise it with a stated reason, or make the test do less). This host reports no CPU ` +
+                    `time (/proc/self/stat), so the wall clock is the reading this run has`
+            )
+        }
     }
     const status = failures.length === 0 ? 'pass' : 'fail'
     return { ...result, failures, status }
@@ -2620,6 +2664,14 @@ async function main() {
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
     )
+    if (!CAN_READ_CHILD_CPU) {
+        // Said once, and only where it changes what the run means: on this host every test's
+        // timeout margin is judged on the wall clock, because the kernel offers no CPU figure.
+        console.log(
+            `${COLORS.yellow}[WARN]${COLORS.reset} no /proc/self/stat here: a test's timeout margin is ` +
+                `judged on the wall clock, which this host owns (the shared host judges it on CPU time)`
+        )
+    }
     console.log(`${COLORS.cyan}[RETAIN]${COLORS.reset} ${formatRetention(retention)}`)
     if (options.layeredPlans.size > 0 && options.tier !== 'all') {
         // `--changed` marked these plans `layer: true`: naming them is not "run the whole file",
