@@ -1,15 +1,16 @@
 /**
  * The optimizer meets the same tagged function twice: `std::opt` (inline, devirtualize,
- * specialize, fold, algebra, cse, dce, ctrl) is applied to the program and the two graphs are then
- * dumped. A direct call of `plus` is one OPER of its kernel `:op/add_l`, so the optimizer has
- * nothing to inline and must leave it as the kernel operator — the body `a - (0 - b)` is not a
- * function it can see at all. A call through the function value is a CALL of the body graph: the
- * call is what an optimizer may inline, and `diff` shows that inlining it did not change the
- * answer.
+ * specialize, fold, algebra, cse, dce, ctrl) runs over a program that calls `plus` both ways. A
+ * direct call is one OPER of its kernel `:op/add_l`, so there is no call for the optimizer to
+ * inline and nothing it may look inside. A call through the function value is a CALL of the body
+ * graph `a - (0 - b)`: that call is what the optimizer may inline, and `diff` shows that inlining
+ * it did not change the answer.
  *
- * `std::gir` after the pass prints both graphs, so the two paths are comparable on the same
- * program: the kernel path is one operator, the body path is the body graph's nodes inlined into
- * `main`, and neither is the other.
+ * What the case pins is the pair of values and their agreement on every back end. A `std::gir`
+ * dump of the optimized program is where the graph side of that statement lives; the two graphs it
+ * prints (the kernel operator in `main`, the body's `:op/sub_l` nodes in the graph of `plus`) are
+ * read by inspection there, not asserted here, because the case is about what the two paths
+ * compute once a production pass has been through the program.
  */
 module impl_pass_optimizer
 
