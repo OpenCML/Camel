@@ -1,0 +1,15 @@
+/**
+ * A bf16 value has no scalar operation to compute with: the language stores the two
+ * reduced-precision element types and computes on them inside the tensor module, so an operator
+ * that meets a bf16 value is refused by name (design principles 7.3, H238). This is
+ * SemanticDiag::ReducedPrecisionUnsupported, located at the operator, naming it and the element
+ * type, rather than a list of overloads the call could never match. The refusal is part of
+ * compiling the program, so the empty array is never read at run time.
+ */
+module stdlib_reduced_arithmetic_refused
+
+func main(): int sync {
+    let xs: bf16[] = []
+    println(xs[0] + xs[0])
+    return 0
+}

@@ -62,3 +62,17 @@ expect_diagnostic_name = "RuntimeDiag::OperandTypeUnsupported"
 expect_output_contains = ["does not support a value of type 'f16[]'", "an array of i32, i64, f32 or f64 values"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+# The scalar refusal that diagnostic is about: a bf16 value has no arithmetic to compute with.
+
+[[tests]]
+name = "reduced_arithmetic_refused"
+desc = "A `bf16` value has no scalar operation: `+` over two of them has no candidate, and the call is refused as SemanticDiag::ReducedPrecisionUnsupported, naming `operator +` and the element type bf16 instead of listing overloads it could never match. This is the diagnostic's own subject (design principles 7.3, H238). `array::sum` used to reach it, through the `+` its whole body was written with; now that the reduction accumulates in f64 and rounds once, a bf16 array is refused where the definition looks for the element type's case, and this case keeps the sentence that says what a bf16 value itself cannot do."
+kind = "negative"
+case = "../../../cases/modules/stdlib/reduced_arithmetic_refused.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReducedPrecisionUnsupported"
+expect_output_contains = ["The call of 'operator +' cannot take a value of the reduced-precision element type 'bf16'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
