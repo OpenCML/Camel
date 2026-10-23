@@ -169,6 +169,25 @@ const PLANS = [
         own: 'no budget; the plan has timeouts only',
     },
     {
+        id: 'perf.para_speedup',
+        file: 'test/plans/perf/para_speedup.plan.toml',
+        gateable: false,
+        refusal: 'in-run',
+        measures:
+            'the cheap half of the parallel benchmark, as a property: monte_carlo_pi timed once on ' +
+            'std::nvm and once on std::prl in the same run, asserting the speed-up of the parallel ' +
+            'side, that it really used more than one core and that the serial side did not (the ' +
+            '2026-10-23 ruling, "perf-para-gate")',
+        cost:
+            '68.1-112.7 s for one run on the reference host on 2026-10-23, tracking the serial ' +
+            "side's share of a loaded host: the serial side is 63.5-77.2 s of that and the parallel " +
+            'side 4.4-4.8 s',
+        own:
+            'yes, and it is the only reader that must be: the assertion is the ratio of the two ' +
+            'sides measured in the run, with each side\'s CPU time printed and not gated. A stored ' +
+            'baseline is what the ruling replaced, so this gate compares nothing here',
+    },
+    {
         id: 'perf.gc',
         file: 'test/plans/perf/gc.plan.toml',
         gateable: false,
@@ -348,7 +367,17 @@ function selectPlans(options) {
 }
 
 function refuse(plan) {
-    if (plan.refusal === 'expensive') {
+    if (plan.refusal === 'in-run') {
+        console.error(
+            `perf-gate: refusing to run "${plan.id}": it carries its own measurement.\n\n` +
+                `  ${plan.id} ${plan.measures}.\n` +
+                `  ${plan.cost}.\n` +
+                '  The number it reads is the ratio of two sides of one run, and this gate compares\n' +
+                '  medians against test/perf-baseline.json -- a stored baseline, which the 2026-10-23\n' +
+                '  review ("perf-para-gate") replaced for this plan. Run that plan itself; it asserts\n' +
+                '  the property in the run that measured it.\n'
+        )
+    } else if (plan.refusal === 'expensive') {
         console.error(
             `perf-gate: refusing to run "${plan.id}": it is measurable but not gateable.\n\n` +
                 `  ${plan.id} ${plan.measures}.\n` +
@@ -826,7 +855,9 @@ function printList(options) {
             ? 'gateable'
             : plan.refusal === 'expensive'
               ? 'not gateable: minutes per repetition'
-              : 'refused by policy'
+              : plan.refusal === 'in-run'
+                ? 'not gateable: it measures itself in one run'
+                : 'refused by policy'
         console.log(`\n${plan.id}  (${plan.file})`)
         console.log(`  ${verdict}`)
         console.log(`  measures: ${plan.measures}`)
