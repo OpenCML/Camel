@@ -524,6 +524,103 @@ async ({ input, assert }) => {
 """
 timeout_ms = 60000
 
+[[tests]]
+name = "impl.kernel_arms"
+desc = "The arms of a generic kernel are its own applicability condition (design principles 4.4, 10.4): `add_kernel::<T>` and `sub_kernel::<T>` name `:op/add_i` and `:op/sub_i`, which compute on `i32`, and both are narrowed to that element type by `when is_armed::<T>()`; `flipped`'s kernel computes a subtraction where its body computes an addition, so the two paths of one function print different numbers. The `i32` instances take the kernels (42 and -4); the `int` instances are outside the conditions, have no executor, and run the bodies (42 and 42). A compiler that bound a kernel by name alone adopts `:op/add_i` and `:op/sub_i` for `int` as well and prints the kernels' answers there, which is what the second line pins."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_kernel_arms.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "armed=42/-4\nbody=42/42\n"
+
+[[tests]]
+name = "impl.kernel_arms.paths"
+desc = "The same run under `std::profile`: which executor each instance chose is the counts. One `:op/add_i` and one `:op/sub_i` — the `i32` instances' kernels, once each — and the `int` instances' bodies in their place (`:op/sub_l` for `add`, whose body is `a - (0 - b)`, and `:op/add_l` for `flipped`), with no `:op/neg_i`: the `i32` instance of `add` never ran its body. A compiler that adopted a kernel outside its condition counts `:op/add_i` and `:op/sub_i` twice and no body operator at all; one that never bound a kernel counts neither `:op/add_i` nor `:op/sub_i`."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_kernel_arms.cml"
+args = ["${case}", 'std::profile top=0 json="${test_tmp}/profile.json"', "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const out = input.normalized.stdout
+    const lines = out.split('\n')
+    assert(lines[0] === 'armed=42/-4', `the kernels' answers changed:\n${out}`)
+    assert(lines[1] === 'body=42/42', `the instances outside the condition did not run their bodies:\n${out}`)
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
+    const shown = JSON.stringify(calls)
+    assert(calls[':op/add_i'] === 1, `the i32 instance of 'add' ran its kernel ${calls[':op/add_i']} times, not once: ${shown}`)
+    assert(calls[':op/sub_i'] === 1, `the i32 instance of 'flipped' ran its kernel ${calls[':op/sub_i']} times, not once: ${shown}`)
+    assert(calls[':op/sub_l'] >= 1, `the int instance of 'add' did not run its body: ${shown}`)
+    assert(calls[':op/add_l'] >= 1, `the int instance of 'flipped' did not run its body: ${shown}`)
+    assert(!calls[':op/neg_i'], `the i32 instance of 'add' ran its body too: ${shown}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "impl.kernel_arms.structure"
+desc = "The graph side of the same case: each `i32` call site is one OPER of its kernel's URI (`:op/add_i`, `:op/sub_i`), and each `int` call site is a call of a body graph, whose operators (`:op/sub_l` for `add`, `:op/add_l` for `flipped`) are the only body nodes the ordinary dump reaches. The `i32` instances' own body graphs are nested entries the dump skips, so no `:op/neg_i` appears: the instance's condition is answered where the instance is built, and a run-time choice or a widened kernel would move these counts."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_kernel_arms.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout
+    const count = s => out.split(s).length - 1
+    const oper = uri => `label="${uri}", type="OPER"`
+    assert(count(oper(':op/add_i')) === 1, `expected one ':op/add_i' OPER (the i32 instance of 'add'), got ${count(oper(':op/add_i'))}:\\n${out}`)
+    assert(count(oper(':op/sub_i')) === 1, `expected one ':op/sub_i' OPER (the i32 instance of 'flipped'), got ${count(oper(':op/sub_i'))}:\\n${out}`)
+    assert(count(oper(':op/sub_l')) >= 1, `the int instance of 'add' is not the body's subtraction:\\n${out}`)
+    assert(count(oper(':op/add_l')) >= 1, `the int instance of 'flipped' is not the body's addition:\\n${out}`)
+    assert(count(oper(':op/neg_i')) === 0, `the i32 instance of 'add' has its body in the program:\\n${out}`)
+}
+"""
+
+[[tests]]
+name = "impl.kernel_arms.agreement"
+desc = "The arms rule with a kernel that agrees with its body, which is the shape the array reductions need: `add_kernel::<T>` names `:op/add_i` and its own condition narrows it to `i32`, so `add<i32>` takes the kernel and `add<int>` has no executor and runs the body `a - (0 - b)`. Both paths are 42, so this case says nothing about which one ran by itself — the profile and dump cases above do that — and it is the vehicle of the measurement below, whose value must not depend on the answer."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_kernel_arms_agreement.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "armed=42 body=42\n"
+
+[[tests]]
+name = "impl.kernel_arms.agreement.expansion"
+desc = "The measurement `test::expand_definitions` gives on this case. The tool expands every OPER node whose operator declares a `Definition` — a runtime record of a module and a function of it to compile and check (`camel/runtime/definitions.h`) — and a kernel declares none: its semantics is the compiler's Camel body (`Program::implBodies`, `kGraphFlagImplBody`), which names no module and no function to compile and no `Definition` in the operator's semantics. So the tool reports no `EXPANDED` line for `:op/add_i` and this run is the ordinary one: the `i32` instance still runs its kernel and the `int` instance still runs its body. The value is 42 either way, which is why the assertion is the value and not a count: the acceptance 'the kernel and the body agree' is read here whichever path the run takes, and today the run is the kernel's — the reading is in the tool's stderr (`EXPANDED`/`NOT EXPANDED`), which names no operator of this program. The agreement is proved by `impl.agreement` and `impl.differential` (the same body written without the tag, in one program, both paths counted); extending this tool to kernels would need a second expansion path over an in-program graph, since a kernel's body is kept as a nested entry that `Program::traceGraphs` skips, so an expanded call has to make it a callee as well."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_kernel_arms_agreement.cml"
+args = ["${case}", "test::expand_definitions", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout
+    assert(out.split('\n')[0] === 'armed=42 body=42', `the run under the tool changed:\n${out}`)
+    const err = input.normalized.stderr
+    for (const uri of [':op/add_i', ':op/sub_i']) {
+        assert(!err.includes(`EXPANDED ${uri}`), `${uri} was expanded:\n${err}`)
+    }
+}
+"""
+
+[[tests]]
+name = "impl.kernel_arms.plain"
+desc = "The same rule where the function is not generic: `#impl` matches the kernel by signature, so the condition of a kernel declaration is read for a concrete signature too, and a rule that applies nowhere leaves the instance without an executor. `sub_kernel` names `:op/sub_l` (`a - b`) and says `when false`, so the direct call of `twisted` runs the body `a + b` and prints 42; binding the kernel by name alone would print -4 there. The call through the function value is the semantic body either way (design principles 10.4), so the two paths agree at 42, and the first number is the one that moves."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_kernel_arms_plain.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "direct=42 value=42\n"
+
 # ---- The declaration site a standard library kernel needs ----
 
 [[tests]]

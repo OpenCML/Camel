@@ -1,0 +1,25 @@
+/**
+ * The same rule for a function that is not generic: `#impl` matches the kernel by signature, and
+ * the declaration's own condition is read where the instance's types are known
+ * (resolveImplDeclarations), so a rule that says it applies nowhere leaves the instance with no
+ * executor. `sub_kernel` names `:op/sub_l` (`a - b`) and its condition is false, so the direct
+ * call of `twisted` runs the body `a + b` and prints 42 — a kernel that was bound by name alone
+ * would print -4. The call through the function value is the body either way, and the two agree.
+ */
+module impl_kernel_arms_plain
+
+#op<':op/sub_l'>
+func sub_kernel(a: int, b: int): int when false
+
+#impl<sub_kernel>
+func twisted(a: int, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    let direct = twisted(19, 23)
+    let semantics = twisted
+    let throughValue = semantics(19, 23)
+    'direct={} value={}'->format<direct, throughValue>->println
+    return 0
+}

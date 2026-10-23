@@ -1,0 +1,39 @@
+/**
+ * The same arms rule with a kernel that agrees with its body — the shape the array reductions
+ * need (the kernel and the Camel body compute the same thing). `add_kernel::<T>` names
+ * `:op/add_i`, which computes on `i32`, and its own condition narrows it to that element type,
+ * so `add<i32>` takes the kernel and `add<int>` has no executor and runs the body
+ * `a - (0 - b)`; both are 42.
+ *
+ * Because the two paths agree, the value is the same whichever one a run takes, and
+ * `test::expand_definitions` — which expands OPERs of operators that declare a `Definition`, and
+ * a kernel declares none (its semantics is `Program::implBodies`, not a `Definition`) — reads 42
+ * as well, having expanded no kernel.
+ */
+module impl_kernel_arms_agreement
+
+/// The element type the kernel implements: `i32` alone (design principles 4.4 on a body-less
+/// declaration, 10.4 on the body of an instance with no executor).
+func is_armed::<T>(): bool {
+    return match type T {
+        case i32 => true
+        case _ => false
+    }
+}
+
+#op<':op/add_i'>
+func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()
+
+#impl<add_kernel>
+func add::<T>(a: T, b: T): T {
+    return a - (0 - b)
+}
+
+func main(): int sync {
+    let x: i32 = 19
+    let y: i32 = 23
+    let armed = add(x, y)
+    let body = add(19, 23)
+    'armed={} body={}'->format<armed, body>->println
+    return 0
+}

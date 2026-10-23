@@ -232,11 +232,31 @@ class RuleSkipped : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+/// The terms an associative-commutative left side read but did not name, and the one variable of
+/// the left side that stands for them (rewrite design 6): the matcher reads `a + b + c` as the
+/// multiset of its terms, so a pattern that names fewer terms than the program wrote leaves the
+/// rest to a variable instead of forcing the program into a shape it does not have.
+struct MatchRemainder {
+    /// The variable that takes the terms no pattern term matched; `set` is false when the left
+    /// side named every term and `terms` is empty.
+    bool set      = false;
+    uint32_t var  = 0;
+    /// The operator the terms are terms of: the right side builds their chain with it.
+    uint32_t oper = 0;
+    /// The terms, ascending by identity.
+    std::vector<gc_node_ref_t> terms;
+};
+
 /// What a match of a rule's left side found: the value each variable stands for.
 struct Match {
     DraftWritings &writings;
     gc_node_ref_t root;
     std::span<const gc_node_ref_t> vars;
+    /// What the variable `remainder.var` stands for: the chain of the terms the left side did not
+    /// name, built with `remainder.oper`. Reading it in the condition or the right side is what
+    /// keeps a law from dropping a term (the engine refuses a match that would drop an effect,
+    /// design principles 9.7).
+    MatchRemainder remainder;
     /// The constant a variable's value has, if it has one.
     std::optional<std::pair<slot_t, camel::core::type::Type *>> constant(uint32_t var) const;
 };
@@ -449,6 +469,14 @@ class DraftWritings : private WritingObserver {
     uint8_t shapeOf(gc_node_ref_t node);
     bool writtenInPlace(gc_node_ref_t node);
     bool takesPart(gc_node_ref_t node);
+    /// Whether `node` and everything it is computed from is a pure computation: what a rewrite
+    /// drops has to be (design principles 9.7; rewrite design 8).
+    bool pureComputation(gc_node_ref_t node);
+    /// Whether the right side of `rule` stops reading a value of the left side that is not a pure
+    /// computation, which would drop an effect or a computation ordered after one. `remainder` is
+    /// the value the variable taking the terms no pattern term named stands for.
+    bool dropsOrdered(
+        const Rule &rule, std::span<const gc_node_ref_t> bind, const MatchRemainder &remainder);
     camel::core::sem::PermissionMask contextOf(gc_node_ref_t node) const;
     struct Item {
         const Pattern *pattern;
@@ -473,10 +501,18 @@ class DraftWritings : private WritingObserver {
     /// only doubled the matches of the rearranging laws: `rules::saturate_all` went from about
     /// half a second to past the 20 s timeout, H118.) A one-way rule (`=>`) has no reverse and
     /// passes true.
+    ///
+    /// An operator whose own declaration says exchanging its operands and regrouping its chain
+    /// give the same value (`BinaryLaw.commutative` and `exactAssociative`, per element type) is
+    /// read one way further: the chain is flattened into the multiset of its terms and the
+    /// pattern's terms are matched against it in any order, the terms no pattern term names going
+    /// to the single variable `remainder` reports. Only the bit-exact association is read, so a
+    /// float sum is never regrouped here (`reassociate` and its rules are that path), and the
+    /// written order is still tried first.
     bool matchFrom(
         camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
         std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, bool commuted,
-        const std::function<bool()> &emit);
+        const std::function<bool()> &emit, MatchRemainder *remainder = nullptr);
     gc_node_ref_t build(
         const Pattern &pattern, const Match &match, const DraftNodeInit &base);
     void enqueue(gc_node_ref_t node);

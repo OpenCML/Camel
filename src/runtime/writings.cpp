@@ -491,6 +491,65 @@ bool shapeTakesPart(
     }
 }
 
+/// Whether `oper`'s declared semantics say that exchanging its two operands gives the same value
+/// for a result of type `type` (op-semantics 7.4: `BinaryLaw.commutative`, per element type;
+/// `elementOf` names the element type of an aggregate, an empty one reads the type itself). This
+/// is the fact the matcher reads to try the other order; an operator that does not declare it is
+/// read in the order the program wrote, because only the value of the operator (not a guess about
+/// its name or its shape) can justify the exchange.
+bool declaredCommutative(camel::core::OperId oper, const camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    const camel::core::sem::OperatorSemantics *declared =
+        camel::core::OperatorTable::instance().semantics(oper);
+    if (declared == nullptr || !declared->binary) {
+        return false;
+    }
+    const camel::core::sem::BinaryAlgebra &algebra = *declared->binary;
+    const std::optional<camel::core::type::TypeCode> element =
+        algebra.elementOf ? algebra.elementOf(type)
+                          : std::optional<camel::core::type::TypeCode>(type->code());
+    if (!element) {
+        return false;
+    }
+    for (const camel::core::sem::BinaryLaw &law : algebra.laws) {
+        if (law.element == *element) {
+            return law.commutative;
+        }
+    }
+    return false;
+}
+
+/// Whether `oper`'s declared semantics say that regrouping `(a op b) op c` as `a op (b op c)` gives
+/// the same value for a result of type `type` (op-semantics 7b: `BinaryLaw.exactAssociative`, per
+/// element type). Only the bit-exact kind is read: a float sum declares none, so regrouping it
+/// stays with the `reassociate` permission and the rules that ask for it, and the matcher never
+/// does it on its own (rewrite design 6).
+bool declaredAssociative(camel::core::OperId oper, const camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    const camel::core::sem::OperatorSemantics *declared =
+        camel::core::OperatorTable::instance().semantics(oper);
+    if (declared == nullptr || !declared->binary) {
+        return false;
+    }
+    const camel::core::sem::BinaryAlgebra &algebra = *declared->binary;
+    const std::optional<camel::core::type::TypeCode> element =
+        algebra.elementOf ? algebra.elementOf(type)
+                          : std::optional<camel::core::type::TypeCode>(type->code());
+    if (!element) {
+        return false;
+    }
+    for (const camel::core::sem::BinaryLaw &law : algebra.laws) {
+        if (law.element == *element) {
+            return law.commutative && law.exactAssociative;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 bool DraftWritings::writtenInPlace(gc_node_ref_t node) {
@@ -622,6 +681,41 @@ void DraftWritings::index(gc_node_ref_t node) {
         draft_.normInputsOf(node),
         draft_.withInputsOf(node),
         [&](gc_node_ref_t in) { return store_.canon(context, in); });
+    // An associative-commutative chain is one value however the program ordered or bracketed it,
+    // so its key is not the written inputs but the flattened multiset of its terms' canonical ids,
+    // ascending (rewrite design 6, and the canonical form the plan fixes: the same-operator terms
+    // flattened and sorted by identity). The key is what the congruence closure reads, so two
+    // writings that differ only in the order or the bracketing of such a chain become one class
+    // without a rule saying so, which is what the commutation and association rules used to say.
+    // Only the declared laws decide, per element type: a float sum is commutative and is read as
+    // two terms in either order, while regrouping it stays with `reassociate` and its rules.
+    if (h->kind == GCNodeKind::Oper && !key.norm.empty()) {
+        const auto oper = reinterpret_cast<const GCOperBody *>(draft_.payloadOf(node).data())->oper;
+        const bool associative = declaredAssociative(oper, h->dataType);
+        if (associative || declaredCommutative(oper, h->dataType)) {
+            std::vector<gc_node_ref_t> terms;
+            const std::function<void(gc_node_ref_t)> collect = [&](gc_node_ref_t in) {
+                const auto *ih = draft_.header(in);
+                if (associative && ih != nullptr && draft_.alive(in) &&
+                    ih->kind == GCNodeKind::Oper && ih->permissions == h->permissions &&
+                    ih->dataType == h->dataType && takesPart(in) &&
+                    draft_.withInputsOf(in).empty() && !draft_.normInputsOf(in).empty() &&
+                    reinterpret_cast<const GCOperBody *>(draft_.payloadOf(in).data())->oper ==
+                        oper) {
+                    for (gc_node_ref_t next : draft_.normInputsOf(in)) {
+                        collect(next);
+                    }
+                    return;
+                }
+                terms.push_back(store_.canon(context, in));
+            };
+            for (gc_node_ref_t in : draft_.normInputsOf(node)) {
+                collect(in);
+            }
+            std::sort(terms.begin(), terms.end());
+            key.norm = std::move(terms);
+        }
+    }
     if (ix.keyOf[node].has_value()) {
         if (*ix.keyOf[node] == key) {
             return;
@@ -1283,41 +1377,12 @@ bool acceptsType(
            patternType->assignableFrom(const_cast<camel::core::type::Type *>(nodeType));
 }
 
-/// Whether `oper`'s declared semantics say that exchanging its two operands gives the same value
-/// for a result of type `type` (op-semantics 7.4: `BinaryLaw.commutative`, per element type;
-/// `elementOf` names the element type of an aggregate, an empty one reads the type itself). This
-/// is the fact the matcher reads to try the other order; an operator that does not declare it is
-/// read in the order the program wrote, because only the value of the operator (not a guess about
-/// its name or its shape) can justify the exchange.
-bool declaredCommutative(camel::core::OperId oper, const camel::core::type::Type *type) {
-    if (type == nullptr) {
-        return false;
-    }
-    const camel::core::sem::OperatorSemantics *declared =
-        camel::core::OperatorTable::instance().semantics(oper);
-    if (declared == nullptr || !declared->binary) {
-        return false;
-    }
-    const camel::core::sem::BinaryAlgebra &algebra = *declared->binary;
-    const std::optional<camel::core::type::TypeCode> element =
-        algebra.elementOf ? algebra.elementOf(type)
-                          : std::optional<camel::core::type::TypeCode>(type->code());
-    if (!element) {
-        return false;
-    }
-    for (const camel::core::sem::BinaryLaw &law : algebra.laws) {
-        if (law.element == *element) {
-            return law.commutative;
-        }
-    }
-    return false;
-}
 } // namespace
 
 bool DraftWritings::matchFrom(
     camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
     std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, bool commuted,
-    const std::function<bool()> &emit) {
+    const std::function<bool()> &emit, MatchRemainder *remainder) {
     if (at == work.size()) {
         return emit();
     }
@@ -1430,6 +1495,257 @@ bool DraftWritings::matchFrom(
                 accepted = matchCandidate(candidate, true) || accepted;
             }
         }
+        if (!accepted && commuted && remainder != nullptr && at == 0 && p.args.size() >= 2) {
+            // A chain of an operator whose own declaration says exchanging its operands and
+            // regrouping its chain give the same value is read as the multiset of its terms
+            // (rewrite design 6): `a + b + c` is not expanded into every bracketing and order, so a
+            // pattern that names fewer terms than the program wrote -- `x + 0` -- finds its `0` in
+            // the multiset and leaves the rest to the one variable the left side leaves for it.
+            // Reached only when the written order and the exchanged order both missed, and only
+            // for a one-way law, as the exchange is.
+            const auto matchMultiset = [&](gc_node_ref_t candidate) -> bool {
+                const auto *h = draft_.header(candidate);
+                if (h == nullptr || !draft_.alive(candidate) || h->kind != GCNodeKind::Oper ||
+                    h->permissions != matchPerms_ || !acceptsType(p.type, h->dataType) ||
+                    !takesPart(candidate) || !draft_.withInputsOf(candidate).empty() ||
+                    reinterpret_cast<const GCOperBody *>(draft_.payloadOf(candidate).data())->oper !=
+                        p.oper ||
+                    !declaredAssociative(p.oper, h->dataType)) {
+                    return false;
+                }
+                // The terms: what takes part in the chain is a term of it, the rest is a leaf. The
+                // intermediate nodes are collected too, because they are the only values the
+                // multiset view must not build (design 6 reads a chain that is already there).
+                std::vector<gc_node_ref_t> terms;
+                const std::function<void(gc_node_ref_t)> collect = [&](gc_node_ref_t in) {
+                    const auto *ih = draft_.header(in);
+                    const bool inChain =
+                        ih != nullptr && draft_.alive(in) && ih->kind == GCNodeKind::Oper &&
+                        ih->permissions == matchPerms_ && takesPart(in) &&
+                        draft_.withInputsOf(in).empty() && draft_.ctrlInputsOf(in).empty() &&
+                        draft_.normInputsOf(in).size() == 2 &&
+                        reinterpret_cast<const GCOperBody *>(draft_.payloadOf(in).data())->oper ==
+                            p.oper;
+                    if (!inChain) {
+                        terms.push_back(in);
+                        return;
+                    }
+                    for (gc_node_ref_t next : draft_.normInputsOf(in)) {
+                        collect(next);
+                    }
+                };
+                for (gc_node_ref_t in : draft_.normInputsOf(candidate)) {
+                    collect(in);
+                }
+                std::sort(terms.begin(), terms.end());
+                // The pattern's own terms: its chain flattens the same way.
+                std::vector<const Pattern *> pterms;
+                const std::function<void(const Pattern &)> flatten = [&](const Pattern &q) {
+                    if (q.kind == Pattern::Kind::Op && q.oper == p.oper) {
+                        for (const Pattern &arg : q.args) {
+                            flatten(arg);
+                        }
+                        return;
+                    }
+                    pterms.push_back(&q);
+                };
+                for (const Pattern &arg : p.args) {
+                    flatten(arg);
+                }
+                if (pterms.size() > terms.size()) {
+                    return false;
+                }
+                // Which variable may take the terms no pattern term names: one that stands for a
+                // single value of the left side and is read exactly once, so a repeated variable
+                // (`x + x`) never swallows the rest and nothing is dropped by accident.
+                size_t restIndex = pterms.size();
+                if (pterms.size() < terms.size()) {
+                    std::vector<uint32_t> seen;
+                    const std::function<void(const Pattern &)> count = [&](const Pattern &q) {
+                        if (q.kind == Pattern::Kind::Var) {
+                            seen.push_back(q.var);
+                            return;
+                        }
+                        for (const Pattern &arg : q.args) {
+                            count(arg);
+                        }
+                    };
+                    count(p);
+                    size_t candidates_ = 0;
+                    for (size_t i = 0; i < pterms.size(); ++i) {
+                        const Pattern &q = *pterms[i];
+                        if (q.kind != Pattern::Kind::Var || q.constOnly) {
+                            continue;
+                        }
+                        if (std::count(seen.begin(), seen.end(), q.var) != 1) {
+                            continue;
+                        }
+                        restIndex = i;
+                        ++candidates_;
+                    }
+                    if (candidates_ != 1) {
+                        return false;
+                    }
+                }
+                // The terms the pattern's own terms take, and the ones the rest variable takes:
+                // every term of the chain goes to exactly one of them, or the left side would
+                // mean a value the program does not have. Which term each pattern term takes is a
+                // search, not a walk over every permutation: a chain of two hundred calls must not
+                // be permuted to find out that not one of them is the zero a law asks for (the
+                // timeout of H118 was this explosion through saturation). So a pattern term that
+                // can read no term of the chain ends the search at once, the pattern terms that
+                // could read the fewest terms are placed first, and terms that are one value are
+                // interchangeable -- the second of two equal terms says nothing the first did not.
+                const size_t named = restIndex == pterms.size() ? pterms.size() : pterms.size() - 1;
+                std::vector<size_t> namedIndex;
+                for (size_t i = 0; i < pterms.size(); ++i) {
+                    if (i != restIndex) {
+                        namedIndex.push_back(i);
+                    }
+                }
+                // Whether one pattern term could read one term of the chain: the necessary
+                // conditions of the cases of the matcher, checked without binding anything.
+                const auto reads = [&](const Pattern &q, gc_node_ref_t term) {
+                    const auto *th = draft_.header(term);
+                    if (th == nullptr || !draft_.alive(term)) {
+                        return false;
+                    }
+                    switch (q.kind) {
+                    case Pattern::Kind::Var:
+                        if (q.constOnly && !constantOf(term).has_value()) {
+                            return false;
+                        }
+                        return acceptsType(q.type, th->dataType);
+                    case Pattern::Kind::Constant: {
+                        const auto found = constantOf(term);
+                        return found && found->second == q.type &&
+                               canonicalConstant(found->first, q.type) ==
+                                   canonicalConstant(q.value, q.type);
+                    }
+                    case Pattern::Kind::Op: {
+                        // A term stands for its whole class: any writing of it is a candidate,
+                        // exactly as it is lower down the pattern.
+                        const auto readsWriting = [&](gc_node_ref_t writing) {
+                            const auto *wh = draft_.header(writing);
+                            return wh != nullptr && draft_.alive(writing) &&
+                                   wh->kind == GCNodeKind::Oper && wh->permissions == matchPerms_ &&
+                                   acceptsType(q.type, wh->dataType) && takesPart(writing) &&
+                                   reinterpret_cast<const GCOperBody *>(
+                                       draft_.payloadOf(writing).data())
+                                           ->oper == q.oper;
+                        };
+                        const auto members = store_.members(context, term);
+                        if (members.empty()) {
+                            return readsWriting(term);
+                        }
+                        for (gc_node_ref_t writing : members) {
+                            if (readsWriting(writing)) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                    case Pattern::Kind::Compute:
+                        return false;
+                    }
+                    return false;
+                };
+                std::vector<size_t> fits(named, 0);
+                for (size_t i = 0; i < named; ++i) {
+                    for (gc_node_ref_t term : terms) {
+                        if (reads(*pterms[namedIndex[i]], term)) {
+                            ++fits[i];
+                        }
+                    }
+                    if (fits[i] == 0) {
+                        return false;
+                    }
+                }
+                std::vector<size_t> visit(named);
+                for (size_t i = 0; i < named; ++i) {
+                    visit[i] = i;
+                }
+                std::sort(visit.begin(), visit.end(), [&](size_t a, size_t b) {
+                    return fits[a] < fits[b];
+                });
+                const size_t savedWaits = waits != nullptr ? waits->size() : 0;
+                if (waits != nullptr) {
+                    for (gc_node_ref_t wait : draft_.ctrlInputsOf(candidate)) {
+                        if (std::find(waits->begin(), waits->end(), wait) == waits->end()) {
+                            waits->push_back(wait);
+                        }
+                    }
+                }
+                std::vector<size_t> placement(named, 0);
+                std::vector<uint8_t> used(terms.size(), 0);
+                const size_t savedWork = work.size();
+                const std::function<bool(size_t)> place = [&](size_t step) -> bool {
+                    if (step == named) {
+                        for (size_t i = 0; i < named; ++i) {
+                            work.push_back({pterms[namedIndex[i]], terms[placement[i]]});
+                        }
+                        if (restIndex != pterms.size()) {
+                            // What the rest variable stands for, set before the condition and the
+                            // right side read it: the terms the pattern's own terms did not take.
+                            remainder->set  = true;
+                            remainder->var  = pterms[restIndex]->var;
+                            remainder->oper = p.oper;
+                            remainder->terms.clear();
+                            for (size_t i = 0; i < terms.size(); ++i) {
+                                if (!used[i]) {
+                                    remainder->terms.push_back(terms[i]);
+                                }
+                            }
+                        } else {
+                            remainder->set = false;
+                            remainder->terms.clear();
+                        }
+                        const bool matched = matchFrom(
+                            context, work, at + 1, bind, bound, waits, commuted, emit, remainder);
+                        work.resize(savedWork);
+                        if (!matched) {
+                            remainder->set = false;
+                            remainder->terms.clear();
+                        }
+                        return matched;
+                    }
+                    const size_t pi = visit[step];
+                    const Pattern &q = *pterms[namedIndex[pi]];
+                    for (size_t j = 0; j < terms.size(); ++j) {
+                        if (used[j] != 0 || !reads(q, terms[j])) {
+                            continue;
+                        }
+                        bool equal = false;
+                        for (size_t k = 0; k < j && !equal; ++k) {
+                            equal = used[k] == 0 && terms[k] == terms[j];
+                        }
+                        if (equal) {
+                            continue;
+                        }
+                        used[j]      = 1;
+                        placement[pi] = j;
+                        if (place(step + 1)) {
+                            return true;
+                        }
+                        used[j] = 0;
+                    }
+                    return false;
+                };
+                if (!place(0)) {
+                    if (waits != nullptr) {
+                        waits->resize(savedWaits);
+                    }
+                    return false;
+                }
+                return true;
+            };
+            for (gc_node_ref_t candidate : candidates) {
+                if (matchMultiset(candidate)) {
+                    accepted = true;
+                    break;
+                }
+            }
+        }
         return accepted;
     }
     case Pattern::Kind::Compute:
@@ -1442,6 +1758,30 @@ gc_node_ref_t
 DraftWritings::build(const Pattern &pattern, const Match &match, const DraftNodeInit &base) {
     switch (pattern.kind) {
     case Pattern::Kind::Var:
+        if (match.remainder.set && match.remainder.var == pattern.var &&
+            !match.remainder.terms.empty()) {
+            // The terms of the chain the left side did not name, as one value of the same operator:
+            // the canonical form of the multiset, ascending, folded left to right (rewrite design
+            // 6; the terms are terms of a bit-exactly associative operator, so the bracketing is
+            // the program's to choose and this one only has to be deterministic).
+            std::vector<gc_node_ref_t> terms = match.remainder.terms;
+            std::sort(terms.begin(), terms.end());
+            GCOperBody body;
+            body.oper = match.remainder.oper;
+            std::vector<std::byte> bytes(sizeof(GCOperBody));
+            std::memcpy(bytes.data(), &body, sizeof(body));
+            gc_node_ref_t chain = terms.front();
+            for (size_t i = 1; i < terms.size(); ++i) {
+                DraftNodeInit init = base;
+                init.kind          = GCNodeKind::Oper;
+                init.dataIndex     = 0;
+                init.dataType      = writingType(pattern.type, base.dataType);
+                init.payload       = bytes;
+                const gc_node_ref_t pair[2] = {chain, terms[i]};
+                chain              = lookupOrAdd(init, pair);
+            }
+            return chain;
+        }
         return match.vars[pattern.var];
     case Pattern::Kind::Constant:
         return constantNode(
@@ -1479,6 +1819,73 @@ DraftWritings::build(const Pattern &pattern, const Match &match, const DraftNode
     }
     }
     return kInvalidNodeRef;
+}
+
+/// Whether `node` and everything it is computed from is a pure computation: no effect, no
+/// computation ordered by a control input, no value written in place. What a rewrite drops has to
+/// be pure this way, or the program would stop running what it ran (design principles 9.7; rewrite
+/// design 8).
+bool DraftWritings::pureComputation(gc_node_ref_t node) {
+    std::vector<gc_node_ref_t> work{node};
+    std::vector<gc_node_ref_t> seen;
+    while (!work.empty()) {
+        const gc_node_ref_t at = work.back();
+        work.pop_back();
+        if (std::find(seen.begin(), seen.end(), at) != seen.end()) {
+            continue;
+        }
+        seen.push_back(at);
+        const auto *h = draft_.header(at);
+        if (h == nullptr || !draft_.alive(at)) {
+            continue;
+        }
+        if (carriesOrdering(draft_, at) || !draft_.ctrlInputsOf(at).empty() ||
+            writtenInPlace(at)) {
+            return false;
+        }
+        for (auto part : {draft_.normInputsOf(at), draft_.withInputsOf(at)}) {
+            for (gc_node_ref_t in : part) {
+                work.push_back(in);
+            }
+        }
+    }
+    return true;
+}
+
+bool DraftWritings::dropsOrdered(
+    const Rule &rule, std::span<const gc_node_ref_t> bind, const MatchRemainder &remainder) {
+    std::vector<uint8_t> read(bind.size(), 0);
+    const std::function<void(const Pattern &)> mark = [&](const Pattern &p) {
+        if (p.kind == Pattern::Kind::Var) {
+            if (p.var < read.size()) {
+                read[p.var] = 1;
+            }
+            return;
+        }
+        for (const Pattern &arg : p.args) {
+            mark(arg);
+        }
+    };
+    mark(rule.rhs);
+    for (size_t var = 0; var < bind.size(); ++var) {
+        if (bind[var] == kInvalidNodeRef || read[var]) {
+            continue;
+        }
+        if (remainder.set && remainder.var == var) {
+            // The terms the left side did not name: the right side builds them into one value, so
+            // they are dropped only if it does not read that variable at all.
+            for (gc_node_ref_t term : remainder.terms) {
+                if (!pureComputation(term)) {
+                    return true;
+                }
+            }
+            continue;
+        }
+        if (!pureComputation(bind[var])) {
+            return true;
+        }
+    }
+    return false;
 }
 
 RewriteStats DraftWritings::rewrite(
@@ -1615,15 +2022,27 @@ RewriteStats DraftWritings::rewrite(
                     draft_.ctrlInputsOf(node).begin(), draft_.ctrlInputsOf(node).end());
                 std::optional<std::vector<gc_node_ref_t>> chosen;
                 std::optional<std::vector<gc_node_ref_t>> chosenWaits;
+                MatchRemainder                            remainder;
+                std::optional<MatchRemainder>             chosenRemainder;
                 matchFrom(context, work, 0, bind, bound, &matchedWaits, true, [&] {
-                    if (!chosen && (!rule.when || rule.when(Match{*this, node, bind}))) {
-                        chosen      = bind;
-                        chosenWaits = matchedWaits;
+                    if (!chosen && (!rule.when || rule.when(Match{*this, node, bind, remainder}))) {
+                        chosen          = bind;
+                        chosenWaits     = matchedWaits;
+                        chosenRemainder = remainder;
                         return true;
                     }
                     return false;
-                });
+                }, &remainder);
                 if (!chosen) {
+                    continue;
+                }
+                // A rewrite keeps every effect the program runs (design principles 9.7; rewrite
+                // design 8): a part of the left side the right side does not read may leave the
+                // program only if it is a pure computation. The engine decides this once for every
+                // law, so a rule like `x * 0 => 0` does not apply to a value whose other factor runs
+                // a call or is ordered after one: the call would stop being what the value is made
+                // of, and the program would stop running what it ran.
+                if (dropsOrdered(rule, *chosen, chosenRemainder.value_or(MatchRemainder{}))) {
                     continue;
                 }
                 const auto *h = draft_.header(node);
@@ -1636,7 +2055,7 @@ RewriteStats DraftWritings::rewrite(
                 const size_t before = draft_.nodeSlotCount();
                 gc_node_ref_t made  = kInvalidNodeRef;
                 try {
-                    made = build(rule.rhs, Match{*this, node, *chosen}, base);
+                    made = build(rule.rhs, Match{*this, node, *chosen, chosenRemainder.value_or(MatchRemainder{})}, base);
                 } catch (const RuleSkipped &) {
                     continue;
                 }
@@ -1940,6 +2359,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
         size_t rule;
         gc_node_ref_t root;
         std::vector<gc_node_ref_t> vars;
+        MatchRemainder             remainder;
     };
     size_t varCount                                = 0;
     std::function<void(const Pattern &)> countVars = [&](const Pattern &p) {
@@ -1986,13 +2406,19 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
                 std::vector<Item> work{{&rule.lhs, node}};
                 std::vector<gc_node_ref_t> bind(varCount, kInvalidNodeRef);
                 std::vector<uint8_t> bound(varCount, 0);
+                MatchRemainder     remainder;
                 matchFrom(context, work, 0, bind, bound, nullptr, !rule.twoWay, [&] {
-                    if (!rule.when || rule.when(Match{*this, node, bind})) {
-                        found.push_back(Found{r, node, bind});
+                    if (!rule.when || rule.when(Match{*this, node, bind, remainder})) {
+                        // What the right side would drop has to be a pure computation, here as in a
+                        // rewrite (design principles 9.7; rewrite design 8).
+                        if (dropsOrdered(rule, bind, remainder)) {
+                            return false;
+                        }
+                        found.push_back(Found{r, node, bind, remainder});
                         return true;
                     }
                     return false;
-                });
+                }, &remainder);
             }
         }
         stats.matches += found.size();
@@ -2014,7 +2440,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
             const size_t before = draft_.nodeSlotCount();
             gc_node_ref_t made  = kInvalidNodeRef;
             try {
-                made = build(rule.rhs, Match{*this, match.root, match.vars}, base);
+                made = build(rule.rhs, Match{*this, match.root, match.vars, match.remainder}, base);
             } catch (const RuleSkipped &) {
                 continue;
             }

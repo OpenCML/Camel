@@ -562,6 +562,24 @@ export func add(a: int, b: int): int {
 - `f` must be a body-less declaration of **the same module**. By design it is a private declaration of that module (not exported: the kernel is an implementation detail, not part of the module interface), written beside the function. A declaration of another module (`SemanticDiag::ImplKernelForeign`), a name no declaration brings (`ImplKernelUnknown`), a function that has a body (`ImplKernelNotBodyless`), and `#impl` on the body-less declaration itself (`ImplOnBodylessDeclaration`) are all refused, and `#impl` cannot be written on a lambda, a type, a field or a block (tag-position error). A module that owns a `.cmo` (as `stdlib/tensor.cml` does for `tensor.cmo`) may declare its kernel and write the definition just the same: a `.cml` and a `.cmo` of the same name are **one module** (H94), and a declaration module may hold bodies (the language author's ruling of 2026-10-23, `docs/handover/reviews/questions-2026-10-23.md`, 「## impl-kernel-site」： 「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」).
 - **A generic function may carry `#impl`**: the kernel is a body-less declaration with the function's own type parameters (`sum_kernel::<T>`), and by H228 ("one operator, per-type executors") the executor is chosen at instantiation — a fixed rule of the declaration matches by signature, and a rule declared with type parameters is solved with the instance's types. When a `T` has no executor, that instance runs the function body: the body is the semantics, so the result is the same, and `std::profile` shows which path it took (`docs/handover/reviews/questions-2026-10-23.md`, 「## impl-kernel-site」: 「泛型函数可以带 `#impl`」).
 - **The signatures must agree**: the same number of `with` and normal parameters, the same types and `var` marks, the same result type, and no `constas` parameter on the kernel; otherwise `ImplSignatureMismatch`.
+- **Which types a kernel covers is what the kernel declaration's own `when` says** (design principle 4.4: on a rule, `when` means "this rule applies where …"; 10.4; H228). A kernel declaration that carries the function's own type parameters solves for every type the function can be instantiated with, so which instances it implements has to be written down separately: a `when condition` on the body-less declaration is evaluated at instantiation with the instance's argument types (they bind the declaration's type parameters, and the predicate is resolved in the declaring module). A condition that is false makes that rule inapplicable to this instance, and overload selection tries the kernel's other rules (a fixed rule is still the more specific one, design principle 4.3); when no rule applies, the instance has no executor and runs the function body — the same path as "a `T` with no executor", and `std::profile` shows which path it took just the same. A condition that cannot be answered from the types alone (it reads the declaration's own `with` parameter, it is not a compile-time query, …) is reported with the existing diagnostics (`WhenConditionNotConstant` and the rest) rather than silently taken for an arm that applies. For example:
+
+  ```cml
+  func is_armed::<T>(): bool {
+      return match type T {
+          case i32 => true
+          case _ => false
+      }
+  }
+
+  #op<':op/add_i'>
+  func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()   // implements the i32 instances alone
+
+  #impl<add_kernel>
+  func add::<T>(a: T, b: T): T { return a - (0 - b) }        // an int instance has no executor: it runs the body
+  ```
+
+  The reader of this condition is the `#impl` path that chooses the executor (`Builder::declaredRuleApplies`); elsewhere a body-less declaration is still matched by signature alone (ordinary call resolution, function values).
 - **Not inlined by default**: an ordinary call calls the kernel operator (one `OPER` node, labelled with the kernel's URI). Ordinary passes and executors do not reach the body, and the body is not inlined into callers; compiling and running it costs what calling an atomic operator costs. The semantic graph is still built and kept, out of the ordinary program's reachable graphs.
 - **Expanded on demand**: a consumer that must look inside takes the semantic graph the tag kept. A function value (`let g = add`, `grad(add)`) is that graph, and at run time `Program::implBodies` returns the graphs that carry `kGraphFlagImplBody`. No production pass expands `#impl` bodies yet; the tag leaves that to autodiff, fusion, export and rules as they need it. The test-only `test::impl` pass is the demonstration: it reads `Program::implBodies`, expands the body of the tagged function, and compares it node for node with the same Camel body written without the tag. A differential test keeps the kernel path and the body path in agreement (a test that cannot be exact states its tolerance).
 

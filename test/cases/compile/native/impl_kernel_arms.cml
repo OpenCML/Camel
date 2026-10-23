@@ -1,0 +1,56 @@
+/**
+ * The arms of a generic kernel, written in Camel (design principles 10.4; H228: one operator,
+ * per-type executors). A kernel declared with the function's own type parameter can be
+ * instantiated with every element type the function admits, so which instances it implements is
+ * what its own applicability condition says (`when`, design principles 4.4): `add_kernel` and
+ * `sub_kernel` name `:op/add_i` and `:op/sub_i`, which compute on `i32`, and both are narrowed to
+ * `i32` by `is_armed`. The `int` instances are outside the conditions, have no executor, and run
+ * the functions' bodies, which are the semantics (10.4).
+ *
+ * `flipped`'s kernel does not agree with its body (`:op/sub_i` where the body adds): a tag
+ * checks the signature, not the semantics (impl_disagreement.cml), so the two paths print
+ * different numbers and which path ran is readable in the value, not only in `std::profile`. The
+ * `i32` instances print their kernels' answers (42 and -4); the `int` instances must print their
+ * bodies' (42 and 42), and a compiler that bound the kernel by name alone prints -4 twice.
+ */
+module impl_kernel_arms
+
+/// The element type the kernels below implement: `i32` alone. A body-less declaration's
+/// condition says which instances of the function that rule is the executor of (design
+/// principles 4.4); an instance it does not cover has no executor and runs the body (10.4).
+func is_armed::<T>(): bool {
+    return match type T {
+        case i32 => true
+        case _ => false
+    }
+}
+
+#op<':op/add_i'>
+func add_kernel::<T>(a: T, b: T): T when is_armed::<T>()
+
+#impl<add_kernel>
+func add::<T>(a: T, b: T): T {
+    return a - (0 - b)
+}
+
+#op<':op/sub_i'>
+func sub_kernel::<T>(a: T, b: T): T when is_armed::<T>()
+
+#impl<sub_kernel>
+func flipped::<T>(a: T, b: T): T {
+    return a + b
+}
+
+func main(): int sync {
+    let x: i32 = 19
+    let y: i32 = 23
+    // `i32` is the element type both conditions name: both calls are the kernels.
+    let armed_add = add(x, y)
+    let armed_flipped = flipped(x, y)
+    // `int` is outside both conditions: both instances run their bodies.
+    let body_add = add(19, 23)
+    let body_flipped = flipped(19, 23)
+    'armed={}/{}'->format<armed_add, armed_flipped>->println
+    'body={}/{}'->format<body_add, body_flipped>->println
+    return 0
+}
