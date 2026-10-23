@@ -655,9 +655,11 @@ if (mode === '--coverage' || mode === '--coverage-check') {
         return text
     }
     const asserted = files.map(assertedText).join('\n')
+    // A section-qualified citation is kept with its section, so `LexicalDiag::UnterminatedComment`
+    // is not read as `SyntaxDiag::UnterminatedComment`: the name is not the code.
     const citedNames = new Set(
-        [...asserted.matchAll(/\b(?:Internal|Lexical|Syntax|Semantic|Runtime)Diag::([A-Za-z_]\w*)/g)].map(
-            (m) => m[1]
+        [...asserted.matchAll(/\b(Internal|Lexical|Syntax|Semantic|Runtime)Diag::([A-Za-z_]\w*)/g)].map(
+            (m) => `${m[1]}Diag::${m[2]}`
         )
     )
     for (const match of asserted.matchAll(/\bname=([A-Za-z_]\w*), code=/g)) {
@@ -667,10 +669,13 @@ if (mode === '--coverage' || mode === '--coverage-check') {
     for (const match of asserted.matchAll(/\bcode=(0[xX][0-9A-Fa-f]{1,8})/g)) {
         citedCodes.add(hex8(Number(match[1])))
     }
-    const inRegistryByName = new Set(entries.map((e) => e.name))
+    const inRegistryByName = new Set(entries.map((e) => e.fullName))
+    const inRegistryByNameOnly = new Set(entries.map((e) => e.name))
     const inRegistryByCode = new Set(entries.map((e) => hex8(e.code)))
     const inTestsOnly = [
-        ...[...citedNames].filter((name) => !inRegistryByName.has(name)).map((n) => `'${n}'`),
+        ...[...citedNames]
+            .filter((name) => !inRegistryByName.has(name) && !inRegistryByNameOnly.has(name))
+            .map((n) => `'${n}'`),
         ...[...citedCodes].filter((code) => !inRegistryByCode.has(code)).map((c) => `'${c}'`),
     ].sort()
     const problems = []
