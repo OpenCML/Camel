@@ -2,7 +2,7 @@ id = "compile.impl"
 order = 228
 tier = "fast"
 tags = ["feat", "compile", "tags", "native", "impl", "semantics"]
-desc = "`#impl<f>` (design principles 10.4): a function's Camel body is its semantics and the body-less declaration f of the same module is the operator that runs it. An ordinary call is one OPER of the kernel, the body is not inlined and is absent from the ordinary dump; the body graph stays the semantic function for what asks to look inside (Program::implBodies / test::impl); a differential test shows the kernel path and the body path agree. Five refusals, one case each: the tag on a body-less declaration, a kernel no declaration brings, a kernel of another module, a kernel whose signature differs, and a kernel that has a body. A generic function carries no single signature, so the tag is refused there too."
+desc = "`#impl<f>` (design principles 10.4): a function's Camel body is its semantics and the body-less declaration f of the same module is the operator that runs it. An ordinary call is one OPER of the kernel, the body is not inlined and is absent from the ordinary dump; the body graph stays the semantic function for what asks to look inside (Program::implBodies / test::impl). The agreement case compiles the same function twice in one program, once as a direct call (the kernel) and once through its function value (the body), and checks that both print the same values while a profile counts the two paths apart; a deliberately wrong kernel shows that the comparison can fail. Six refusals, one case each: the tag on a body-less declaration, a kernel no declaration brings, a kernel of another module, a kernel whose signature differs, a kernel that has a body, and a generic function, whose instances carry no single signature. Each refusal names the misuse and is pinned to its source line and column."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -78,7 +78,7 @@ for (let i = 0; i < expanded.length; ++i) {
 }
 """
 
-# ---- The differential test ----
+# ---- The twin differential: the same body written twice, one tagged ----
 
 [[tests]]
 name = "impl.differential"
@@ -91,23 +91,145 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
 
+# ---- The agreement case: the same function, direct (kernel) and by value (body) ----
+
 [[tests]]
-name = "impl.differential.gir"
-desc = "The two paths in one program: the tagged function is an OPER of the kernel inside `main`; the tag-less twin is a FUNC and a CALL of its body graph."
+name = "impl.agreement"
+desc = "The same function `add` in one program: the direct calls are OPERs of the kernel `:op/add_l`, the calls through the function value `by_body = add` are CALLs of the semantic body graph (`:op/sub_l` in `a - (0 - b)`). Both paths take the same four inputs and print the same values, on every back end."
 kind = "behavior"
-case = "../../../cases/compile/native/impl_differential.cml"
+case = "../../../cases/compile/native/impl_agreement.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1\n"
+
+[[tests]]
+name = "impl.agreement.paths"
+desc = "In the run that printed equal values, `std::profile` counts four calls of the kernel's `:op/add_l` and eight calls of the body's `:op/sub_l`: both paths ran, and the equality is not the equality of one path with itself. A compiler that ran the body for both calls would count 0 and 16; one that ran the kernel for both would count 8 and 0."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_agreement.cml"
+args = ["${case}", 'std::profile top=0 json="${test_tmp}/profile.json"', "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const out = input.normalized.stdout
+    const line = out.split('\n')[0]
+    assert(line === 'kernel=42,2,0,1 body=42,2,0,1', `the values changed:\n${out}`)
+    assert(out.includes('cpu  :op/add_l') && out.includes('cpu  :op/sub_l'), `the profile names neither path:\n${out}`)
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
+    assert(calls[':op/add_l'] === 4, `the kernel ran ${calls[':op/add_l']} times, not four:\n${out}`)
+    assert(calls[':op/sub_l'] === 8, `the body ran ${calls[':op/sub_l']} sub operators, not eight:\n${out}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "impl.agreement.gir"
+desc = "`std::gir` shows the split of the same function: four `:op/add_l` OPERs from the direct calls, a `Function(graph=add)` value, four CALLs of it, and the body graph `add` with its two `:op/sub_l` nodes. There is no `FUNC` node: the kernel call is an operator and the body call is a call of the function value."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_agreement.cml"
 args = ["${case}", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout
-assert(out.includes('label=":op/add_l", type="OPER"'), `the kernel call is missing:\n${out}`)
-assert(out.includes('type="FUNC"'), `the tag-less twin has no function value:\n${out}`)
-assert(out.includes('label=":op/sub_l"'), `the tag-less twin has no body nodes:\n${out}`)
+    const out = input.normalized.stdout
+    const count = s => out.split(s).length - 1
+    assert(count('label=":op/add_l", type="OPER"') === 4, `expected four kernel OPERs:\n${out}`)
+    assert(count('label=":op/sub_l", type="OPER"') === 2, `expected the body's two OPERs:\n${out}`)
+    assert(count('label="CALL", type="CALL"') === 5, `expected four body CALLs plus the entry CALL:\n${out}`)
+    assert(out.includes('label="Function(graph=add, tupleSlots=0)", type="DATA"'), `no function value of add:\n${out}`)
+    assert(out.includes('label="add";'), `the body graph is not in the dump:\n${out}`)
+    assert(!out.includes('type="FUNC"'), `a call of add was compiled as a function call:\n${out}`)
 }
 """
 
-# ---- The five refusals, one case each ----
+[[tests]]
+name = "impl.agreement.expansion"
+desc = "`test::impl` reads Program::implBodies: the semantic body of the same function is retained as one graph marked body=yes, with the body's five nodes (two `:op/sub_l`) and none of the kernel's `:op/add_l`. The body is the graph a consumer that asks to look inside gets."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_agreement.cml"
+args = ["${case}", "test::impl"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const lines = input.normalized.stdout.split('\n')
+    assert(lines.some(l => l === 'IMPL bodies 1'), `expected one impl body:\n${input.normalized.stdout}`)
+    const graph = lines.find(l => l.startsWith('IMPL graph add '))
+    assert(graph && graph.includes('body=yes'), `the body of add is not marked impl: ${graph}`)
+    const nodes = lines.filter(l => l.startsWith('IMPL node add '))
+    assert(nodes.length === 5, `expected five body nodes, got ${nodes.length}`)
+    assert(nodes.some(l => l.includes('OPER :op/sub_l')), `the body has no sub operator: ${nodes.join(' | ')}`)
+    assert(!nodes.some(l => l.includes(':op/add_l')), `the kernel is inside the body: ${nodes.join(' | ')}`)
+}
+"""
+
+# ---- A wrong kernel: the comparison must be able to fail ----
+
+[[tests]]
+name = "impl.disagreement"
+desc = "The same body `a + b` with the real `:op/sub_l` kernel as its implementation: the direct call prints -4, the body path prints 42. The agreement test above expects the two to be equal, so this case is the observation that makes that expectation a check rather than a tautology; this test pins the disagreement itself."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_disagreement.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "kernel=-4 body=42\n"
+verify_script = """
+({ input, assert }) => {
+    const m = input.normalized.stdout.match(/^kernel=(-?[0-9]+) body=(-?[0-9]+)/)
+    assert(m, `no values:\n${input.normalized.stdout}`)
+    const kernel = Number(m[1])
+    const body = Number(m[2])
+    assert(kernel === -4 && body === 42, `expected -4 and 42, got ${kernel} and ${body}`)
+    assert(kernel !== body, `the wrong kernel was not observed: both paths printed ${body}`)
+    assert(body - kernel === 46, `the disagreement changed: ${body} - ${kernel}`)
+}
+"""
+
+[[tests]]
+name = "impl.disagreement.paths"
+desc = "The same profile check applied to the wrong kernel: one `:op/sub_l` call is the kernel path and one `:op/add_l` call is the body path. The paths are distinguishable even when their values are not equal, so the profile cannot be a count of the same operator twice."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_disagreement.cml"
+args = ["${case}", 'std::profile top=0 json="${test_tmp}/profile.json"', "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const out = input.normalized.stdout
+    assert(out.split('\n')[0] === 'kernel=-4 body=42', `the values changed:\n${out}`)
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
+    assert(calls[':op/sub_l'] === 1, `the wrong kernel ran ${calls[':op/sub_l']} times, not once:\n${out}`)
+    assert(calls[':op/add_l'] === 1, `the body ran ${calls[':op/add_l']} times, not once:\n${out}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "impl.disagreement.gir"
+desc = "`std::gir` of the wrong kernel: the direct call is one `:op/sub_l` OPER, and the body of the same function is the one `:op/add_l` in the `add` graph behind the function value. The builder checked the signature and accepted this kernel; only the differential comparison can see the difference."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_disagreement.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout
+    const count = s => out.split(s).length - 1
+    assert(count('label=":op/sub_l", type="OPER"') === 1, `expected one kernel OPER:\n${out}`)
+    assert(count('label=":op/add_l", type="OPER"') === 1, `expected one body OPER:\n${out}`)
+    assert(count('label="CALL", type="CALL"') === 2, `expected the body CALL and the entry CALL:\n${out}`)
+    assert(out.includes('label="Function(graph=add, tupleSlots=0)", type="DATA"'), `no function value of add:\n${out}`)
+    assert(out.includes('label="add";'), `the body graph is not in the dump:\n${out}`)
+}
+"""
+
+# ---- The six refusals, one case each ----
 
 [[tests]]
 name = "impl.on_bodyless"
@@ -118,7 +240,9 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImplOnBodylessDeclaration"
 expect_diagnostic_code = "0x030001D8"
-expect_output_contains = ["cannot carry '#impl", "add_kernel", "it has no Camel body"]
+expect_diagnostic_line = 8
+expect_diagnostic_column = 2
+expect_output_contains = ["The body-less declaration 'add_kernel' cannot carry '#impl<add_kernel>': it has no Camel body."]
 
 [[tests]]
 name = "impl.unknown_kernel"
@@ -129,7 +253,9 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImplKernelUnknown"
 expect_diagnostic_code = "0x030001D9"
-expect_output_contains = ["names 'nope'", "which is no body-less declaration"]
+expect_diagnostic_line = 7
+expect_diagnostic_column = 2
+expect_output_contains = ["The '#impl' tag of 'add' names 'nope', which is no body-less declaration."]
 
 [[tests]]
 name = "impl.foreign_kernel"
@@ -140,7 +266,9 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImplKernelForeign"
 expect_diagnostic_code = "0x030001DA"
-expect_output_contains = ["names 'at'", "which another module declares"]
+expect_diagnostic_line = 10
+expect_diagnostic_column = 2
+expect_output_contains = ["The '#impl' tag of 'first' names 'at', which another module declares."]
 
 [[tests]]
 name = "impl.signature_mismatch"
@@ -151,7 +279,9 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImplSignatureMismatch"
 expect_diagnostic_code = "0x030001DB"
-expect_output_contains = ["add_kernel", "has the signature", "but the function has"]
+expect_diagnostic_line = 10
+expect_diagnostic_column = 2
+expect_output_contains = ["The kernel 'add_kernel' of the '#impl' function 'add' has the signature (a: int, b: int) => int, but the function has (a: float, b: float) => float."]
 
 [[tests]]
 name = "impl.kernel_has_body"
@@ -162,7 +292,9 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImplKernelNotBodyless"
 expect_diagnostic_code = "0x030001DC"
-expect_output_contains = ["names 'helper'", "which has a body"]
+expect_diagnostic_line = 11
+expect_diagnostic_column = 2
+expect_output_contains = ["The '#impl' tag of 'add' names 'helper', which has a body."]
 
 [[tests]]
 name = "impl.on_generic_function"
@@ -173,7 +305,9 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImplOnGenericFunction"
 expect_diagnostic_code = "0x030001DD"
-expect_output_contains = ["is on a generic function", "signatures of their own"]
+expect_diagnostic_line = 10
+expect_diagnostic_column = 2
+expect_output_contains = ["The '#impl' tag of 'at' is on a generic function."]
 
 [[tests]]
 name = "impl.syntax_arguments"
@@ -183,4 +317,6 @@ case = "../../../cases/compile/native/impl_syntax_args.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
-expect_output_contains = ["takes 1 parameter(s)", "0 argument(s)"]
+expect_diagnostic_line = 12
+expect_diagnostic_column = 2
+expect_output_contains = ["The tag 'impl' takes 1 parameter(s), but 0 argument(s) are written."]
