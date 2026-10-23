@@ -323,5 +323,5 @@ tool = "node"
 case = "../../../../test/tools/check-doc-pass-forms.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["doc pass forms: 246 pass invocation(s)", "38 distinct", "38 run through the real parser", "37 of them reached the probe"]
+expect_stdout_contains = ["doc pass forms: 246 pass invocation(s)", "37 distinct", "37 run through the real parser", "36 of them reached the probe"]
 timeout_ms = 300000

@@ -699,7 +699,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 
 - `Device<T>` is kept, and for structs and tuples it allocates by field: `Device<{ a: A }>` and `{ a: Device<A> }` are the same type. Moving data is an ordinary operation with side effects; it can be written explicitly in code, inserted by a transformation function written in Camel acting on a function value ("a pass is a function"), or done automatically by an optimization pass.
 - Asynchrony does not enter the semantics: order is decided by data dependencies and `sync`; streams, events and overlapped execution are implementation matters of the back end.
-- The upload, region execution and download of `std::tiles` are pure computations, and device memory is an unobservable allocation; identical region calls can be merged.
+- The upload, region execution and download of `tiles::compile` are pure computations, and device memory is an unobservable allocation; identical region calls can be merged.
 
 ### 13.4 Distribution
 
