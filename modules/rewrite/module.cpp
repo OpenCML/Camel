@@ -61,6 +61,7 @@
 #include <ostream>
 #include <random>
 #include <set>
+#include <span>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -231,10 +232,8 @@ std::string countedText(size_t n, const char *one, const char *many) {
     return std::to_string(n) + " " + (n == 1 ? one : many);
 }
 
-/// `Proof`: what `explain` answers (rewrite design 8.7). It owns the steps of one recorded
-/// application, so it stays readable after the `Run` it came from is gone, and it prints as the
-/// derivation: a header, then one step per rewrite naming the rule, the round and the graph, the
-/// nodes that matched, the node that was produced and the nodes that were erased.
+/// `Proof`, the opaque type of `explain` and `explain_all` (rewrite design 8.7). A proof holds a
+/// copy of the run's record: the steps are values, not references into a graph that may be gone.
 class ProofType final : public OtherType {
   public:
     static ProofType *get();
@@ -252,17 +251,65 @@ class ProofType final : public OtherType {
     explicit ProofType(TypeCode code) : OtherType(code) {}
 };
 
+/// The record of one attributed application (rewrite design 8.7): the steps, and for each graph
+/// the runtime node id every live draft node took in the program the run produced. A step names
+/// its nodes by draft id, the identity that chains one step to the next; the map is what lets a
+/// `Node` of the produced program find the rewrite it stands in.
+struct RewriteRecord {
+    camel::runtime::RewriteLog steps;
+    std::unordered_map<camel::runtime::GraphId, std::vector<camel::runtime::gc_node_ref_t>>
+        nodeRefsByGraph;
+    /// The numeric policy the run applied the rules with: `why_not` matches under the same one,
+    /// so a permission the run did not grant is not granted to its answer either.
+    bool strict = false;
+    /// The program the run started from. A decoded draft keeps each node's runtime id as its draft
+    /// id (draft.cpp, GraphDraft::decode), so a node handle into this program names a step of the
+    /// record by its own id; a node of the program the run produced is found through the map
+    /// above instead. Kept as a traced reference by `Proof`.
+    const camel::runtime::Program *input = nullptr;
+};
+
+/// `Proof`: what `explain` and `explain_all` answer (rewrite design 8.7). It owns a copy of the
+/// run's record, so it stays readable after the `Run` it came from is gone. A proof is either the
+/// full derivation (`explain_all`: a header, then one step per rewrite naming the rule, the round
+/// and the graph, the nodes that matched, the node that was produced and the nodes that were
+/// erased) or one targeted chain (`explain`: the shortest chain between two values, printed as
+/// `a = ... = b`, with every equally short chain in the order the rewrites were made).
 class ProofObject final : public rtdata::Object {
   public:
-    ProofObject(const ProofObject &)            = delete;
-    ProofObject &operator=(const ProofObject &) = delete;
+    /// One step of a chain and the direction it is read in. The rule was made from its left side
+    /// to its right; a chain may read it backwards, because a rewrite is an equality.
+    struct Link {
+        size_t step  = 0;
+        bool reverse = false;
+    };
+    using ChainPath = std::vector<Link>;
+    /// A targeted chain. `same` is set when both values are one node (no rewrite is needed);
+    /// `none`, when set, says why no chain connects them. Otherwise `paths` holds every shortest
+    /// chain, in schedule order.
+    struct Chain {
+        std::string from;
+        std::string to;
+        bool same = false;
+        std::string none;
+        std::vector<ChainPath> paths;
+    };
 
     static ProofObject *create(
-        const camel::runtime::RewriteLog &log, const camel::runtime::RewriteStats &stats,
+        const RewriteRecord &record, const camel::runtime::RewriteStats &stats,
+        mm::IAllocator &allocator);
+    static ProofObject *createChain(
+        const RewriteRecord &record, const camel::runtime::RewriteStats &stats, Chain chain,
         mm::IAllocator &allocator);
 
-    const camel::runtime::RewriteLog &steps() const { return *log_; }
+    const RewriteRecord &record() const { return *record_; }
     const camel::runtime::RewriteStats &stats() const { return stats_; }
+    /// The program the run started from, or null when it is no longer reachable.
+    const camel::runtime::Program *input() const { return input_; }
+
+    /// Turns a fresh proof into a targeted one. Set once, by the factory, before the proof is
+    /// handed out: a proof never changes after that.
+    void setChain(Chain chain) { chain_ = std::move(chain); }
 
     bool equals(const rtdata::Object *other, const Type *type, bool deep = false) const override;
     rtdata::Object *
@@ -272,12 +319,16 @@ class ProofObject final : public rtdata::Object {
     void updateRefs(const rtdata::Object::RefRelocator &relocate, const Type *type) override;
     void finalize() noexcept override;
 
-  private:
-    ProofObject(camel::runtime::RewriteLog *log, const camel::runtime::RewriteStats &stats)
-        : log_(log), stats_(stats) {}
+    ProofObject(RewriteRecord *record, const camel::runtime::RewriteStats &stats)
+        : record_(record), stats_(stats), input_(record != nullptr ? record->input : nullptr) {}
 
-    camel::runtime::RewriteLog *log_;
+  private:
+    RewriteRecord *record_;
     camel::runtime::RewriteStats stats_;
+    /// Traced: the proof keeps the program the run started from alive as long as a chain may name
+    /// one of its nodes. Relocated in updateRefs like any other reference into the graph space.
+    const camel::runtime::Program *input_ = nullptr;
+    std::optional<Chain> chain_;
 };
 
 ProofType *ProofType::get() {
@@ -308,20 +359,37 @@ bool ProofType::assignableFrom(Type *source) const { return is(source); }
 
 OtherType *ProofType::cloneWithParams(std::span<Type *const>) const { return get(); }
 
-ProofObject *ProofObject::create(
-    const camel::runtime::RewriteLog &log, const camel::runtime::RewriteStats &stats,
-    mm::IAllocator &allocator) {
-    auto *copy = new camel::runtime::RewriteLog(log);
+namespace {
+ProofObject *allocateProof(
+    const RewriteRecord &record, const camel::runtime::RewriteStats &stats,
+    std::optional<ProofObject::Chain> chain, mm::IAllocator &allocator) {
+    auto *copy = new RewriteRecord(record);
     void *mem  = allocator.alloc(sizeof(ProofObject), alignof(ProofObject));
     if (mem == nullptr) {
         delete copy;
         throw std::bad_alloc();
     }
     auto *proof = new (mem) ProofObject(copy, stats);
+    if (chain) {
+        proof->setChain(std::move(*chain));
+    }
     // The collector does not look at dead young objects one by one; it must be told which ones
     // own memory it has to release (the same contract as `Foreign` and `Array`).
     allocator.noteFinalizable(proof);
     return proof;
+}
+} // namespace
+
+ProofObject *ProofObject::create(
+    const RewriteRecord &record, const camel::runtime::RewriteStats &stats,
+    mm::IAllocator &allocator) {
+    return allocateProof(record, stats, std::nullopt, allocator);
+}
+
+ProofObject *ProofObject::createChain(
+    const RewriteRecord &record, const camel::runtime::RewriteStats &stats, Chain chain,
+    mm::IAllocator &allocator) {
+    return allocateProof(record, stats, std::move(chain), allocator);
 }
 
 bool ProofObject::equals(const rtdata::Object *other, const Type *, bool) const {
@@ -330,11 +398,70 @@ bool ProofObject::equals(const rtdata::Object *other, const Type *, bool) const 
 
 rtdata::Object *
 ProofObject::clone(mm::IAllocator &allocator, const Type *, bool) const {
-    return create(*log_, stats_, allocator);
+    return chain_ ? createChain(*record_, stats_, *chain_, allocator)
+                  : create(*record_, stats_, allocator);
 }
 
+namespace {
+/// The text a link starts from and the text it reaches. A step was made from the node it matched
+/// to the node it produced; a chain may read it the other way round, because a rewrite is an
+/// equality, and then the produced text is the one it starts from.
+std::string linkBefore(const camel::runtime::RewriteStep &step, bool reverse) {
+    if (reverse) {
+        return step.producedText;
+    }
+    return step.matchedText.empty() ? std::string("%?") : step.matchedText.front();
+}
+
+std::string linkAfter(const camel::runtime::RewriteStep &step, bool reverse) {
+    return reverse ? linkBefore(step, false) : step.producedText;
+}
+
+/// One chain as `a = ... = b`: the first value, then a line per rewrite naming the value it
+/// reaches, the rule, and whether the step was made the other way round.
+void printChain(
+    std::ostream &os, const camel::runtime::RewriteLog &log, const ProofObject::Chain &chain,
+    const ProofObject::ChainPath &path, const std::string &indent) {
+    os << indent << chain.from << "\n";
+    for (const ProofObject::Link &link : path) {
+        const camel::runtime::RewriteStep &step = log[link.step];
+        os << indent << "  = " << linkAfter(step, link.reverse) << "  by " << step.rule;
+        if (link.reverse) {
+            os << "  (backwards)";
+        }
+        os << "  (round " << step.round << ", graph " << step.graph << ")\n";
+    }
+}
+} // namespace
+
 void ProofObject::print(std::ostream &os, const Type *) const {
-    const auto &log = *log_;
+    if (chain_) {
+        const Chain &chain = *chain_;
+        if (chain.same) {
+            os << "the same value: " << chain.from
+               << " is one node, so no rewrite is needed to connect it to itself";
+            return;
+        }
+        if (!chain.none.empty()) {
+            os << chain.none;
+            return;
+        }
+        const size_t count = chain.paths.size();
+        if (count == 1) {
+            os << "chain " << chain.from << " = " << chain.to << ": "
+               << countedText(chain.paths.front().size(), "rewrite", "rewrites") << "\n";
+            printChain(os, record_->steps, chain, chain.paths.front(), "  ");
+            return;
+        }
+        os << countedText(count, "chain", "chains") << " of the same length from " << chain.from
+           << " to " << chain.to << ", in the order the rewrites were made\n";
+        for (size_t i = 0; i < count; ++i) {
+            os << "  " << (i + 1) << ". ";
+            printChain(os, record_->steps, chain, chain.paths[i], "     ");
+        }
+        return;
+    }
+    const auto &log = record_->steps;
     if (log.empty()) {
         os << "no rewrite matched in " << countedText(stats_.rounds, "round", "rounds")
            << ": the program is unchanged";
@@ -364,12 +491,28 @@ void ProofObject::print(std::ostream &os, const Type *) const {
 }
 
 void ProofObject::finalize() noexcept {
-    delete log_;
-    log_ = nullptr;
+    chain_.reset();
+    delete record_;
+    record_ = nullptr;
 }
 
-void ProofObject::updateRefs(const rtdata::Object::RefRelocator &, const Type *) {
-    // A proof holds no reference into the graph: its steps are text and node ids, not GC values.
+void ProofObject::updateRefs(const rtdata::Object::RefRelocator &relocate, const Type *type) {
+    // A proof's steps are text and node ids, not GC values; the one reference it holds is the
+    // program the run started from, which a chain may still name nodes of.
+    if (input_ == nullptr ||
+        !mm::graphSpace().isAllocated(const_cast<camel::runtime::Program *>(input_))) {
+        input_ = nullptr;
+        return;
+    }
+    input_ = static_cast<const camel::runtime::Program *>(relocate(
+        const_cast<camel::runtime::Program *>(input_), nullptr,
+        rtdata::RefTraceInfo{
+            .owner     = this,
+            .ownerType = type,
+            .slotType  = nullptr,
+            .ownerKind = "Proof",
+            .slotName  = "input",
+        }));
 }
 
 /// One application of rules: the program it produced and what the engine counted while applying
@@ -386,17 +529,19 @@ struct Application {
 /// reads them again, not only the one being rewritten now.
 ///
 /// `log`, when given, is the attribution of the application (rewrite design 8.7): the engine
-/// records one step per rewrite, and this function names the graph each step was made in. It is
-/// passed in from `run` and is null for every other caller, so a plain `rewrite` records nothing
-/// and allocates nothing for the record.
+/// records one step per rewrite, and this function names the graph each step was made in and the
+/// runtime node id each live draft node took in the program the commit made. It is passed in from
+/// `run` and is null for every other caller, so a plain `rewrite` records nothing and allocates
+/// nothing for the record.
 Application applyRewrite(
     Context &ctx, const camel::runtime::Program *base,
     std::span<const camel::runtime::Rule> compiled, camel::core::sem::NumericPolicy policy,
-    size_t maxRounds, camel::runtime::RewriteLog *log = nullptr) {
+    size_t maxRounds, RewriteRecord *record = nullptr) {
     camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
     camel::runtime::RuntimeGraphDraftSession::RootScope draftRoots(session);
     camel::runtime::RewriteStats total;
     total.fixpoint = true;
+    camel::runtime::RewriteLog *log = record != nullptr ? &record->steps : nullptr;
     for (camel::runtime::GCGraph *graph : base->graphs()) {
         if (isRuleSide(*graph)) {
             continue;
@@ -410,6 +555,9 @@ Application applyRewrite(
                 (*log)[i].graph   = graph->name();
                 (*log)[i].graphId = graph->id();
             }
+            // The ids the steps name are draft ids; the encoder numbers the committed nodes its
+            // own way. Kept before the commit, which encodes the drafts as they are now.
+            record->nodeRefsByGraph[graph->id()] = session.committedNodeRefs(graph);
         }
         total.rounds = std::max(total.rounds, stats.rounds);
         total.visited += stats.visited;
@@ -449,22 +597,23 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     }
 }
 
-/// `run(p, rules, rounds, strict)` and `run(p, rules, rounds, strict, explain)`: one application
-/// of the rules, with what it cost (H226). It answers the `Run<Program>` that
-/// `stdlib/rewrite.cml` declares: a struct with the program, the rewrites applied, the rounds, the
-/// nodes visited, the nodes erased, whether the last round reached a fixpoint, the wall time in
-/// seconds, and the proof when the attribution was recorded. The fields are built in the
-/// declaration's order, which is the only place their names and positions are decided together
-/// with `Run`.
+/// `run<rules, rounds: 16, strict: false, explain: false>(p)`: one application of the rules, with
+/// what it cost (H226). The configuration is the declaration's `with` parameters (handover H235),
+/// which is why the kernel reads them from `with` and the program from `norm`. It answers the
+/// `Run<Program>` that `stdlib/rewrite.cml` declares: a struct with the program, the rewrites
+/// applied, the rounds, the nodes visited, the nodes erased, whether the last round reached a
+/// fixpoint, the wall time in seconds, and the proof when the attribution was recorded. The fields
+/// are built in the declaration's order, which is the only place their names and positions are
+/// decided together with `Run`.
 ///
-/// The fifth parameter opens the attribution record (rewrite design 8.7). Only then is a `Proof`
-/// made and put in the struct; without it the field is null and no step was recorded, so a plain
-/// run pays nothing for a reader that never comes.
-slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+/// `explain` opens the attribution record (rewrite design 8.7). Only then is a record kept and a
+/// `Proof` made and put in the struct; without it the field is null and no step was recorded, so a
+/// plain run pays nothing for a reader that never comes.
+slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const auto *base     = norm.get<const camel::runtime::Program *>(0);
-    const int64_t rounds = norm.get<Int64>(2);
-    const bool strict    = norm.size() > 3 && norm.get<Bool>(3);
-    const bool explain   = norm.size() > 4 && norm.get<Bool>(4);
+    const int64_t rounds = with.size() > 1 ? with.get<Int64>(1) : 16;
+    const bool strict    = with.size() > 2 && with.get<Bool>(2);
+    const bool explain   = with.size() > 3 && with.get<Bool>(3);
     TupleType *proofType = TupleType::nullable(ProofType::get());
     StructTypeFactory factory;
     factory.add("result", norm.type(0));
@@ -479,13 +628,15 @@ slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(runType);
     try {
         const auto start    = std::chrono::steady_clock::now();
-        const auto compiled = engineRules(ctx, norm, 1);
-        camel::runtime::RewriteLog evidence;
+        const auto compiled = engineRules(ctx, with, 0);
+        RewriteRecord record;
+        record.strict = strict;
+        record.input  = base;
         const Application application = applyRewrite(
             ctx, base, compiled,
             strict ? camel::core::sem::NumericPolicy::strict()
                    : camel::core::sem::NumericPolicy::relaxed(),
-            rounds < 0 ? 0 : static_cast<size_t>(rounds), explain ? &evidence : nullptr);
+            rounds < 0 ? 0 : static_cast<size_t>(rounds), explain ? &record : nullptr);
         const double seconds =
             std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         // The struct is rooted while the fallible box is made: that allocation can collect.
@@ -503,7 +654,7 @@ slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             // The proof allocation can collect; the run is rooted, and the program it produced is
             // already in its first slot, so both survive while the proof is made.
             ProofObject *proof =
-                ProofObject::create(evidence, application.stats, mm::autoSpace());
+                ProofObject::create(record, application.stats, mm::autoSpace());
             mm::RootHandle proofRoot(
                 mm::autoSpace(), proof, ProofType::get(), "rewrite.proof");
             run->set(7, makeSome(toSlot(proof), proofType));
@@ -520,9 +671,193 @@ slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     }
 }
 
-/// `explain(r)`: the proof of the run `r`, a printable chain of the rewrites that were made
-/// (rewrite design 8.7). A run made without attribution carries a null proof, and asking is
-/// refused rather than answered with an empty chain.
+namespace {
+/// The draft node id a handle names: the inverse of the map the run recorded for a node of the
+/// program it produced, and the node's own id for a node of the program it started from (a
+/// decoded draft numbers its nodes exactly as the program it was decoded from, draft.cpp). Null
+/// for a handle of another program, or of a value no step of the run named.
+std::optional<camel::runtime::gc_node_ref_t> draftNodeOf(
+    const RewriteRecord &record, const camel::runtime::Program *input,
+    const camel::runtime::Program *result, const camel::graphmod::Handle *handle) {
+    const auto found = record.nodeRefsByGraph.find(handle->graph());
+    if (found == record.nodeRefsByGraph.end()) {
+        return std::nullopt;
+    }
+    if (handle->program() == result) {
+        for (size_t draft = 0; draft < found->second.size(); ++draft) {
+            if (found->second[draft] == handle->index()) {
+                return static_cast<camel::runtime::gc_node_ref_t>(draft);
+            }
+        }
+        return std::nullopt;
+    }
+    if (handle->program() == input && handle->index() < found->second.size()) {
+        return static_cast<camel::runtime::gc_node_ref_t>(handle->index());
+    }
+    return std::nullopt;
+}
+} // namespace
+
+/// The shortest chain of rewrites of `record` that connects `a` and `b`, over the steps as
+/// undirected edges: a rewrite is an equality, so a chain may read a step backwards (a value that
+/// was replaced is a writing of the value that replaced it, not just the other way round). When
+/// two chains are equally short, both are returned, in schedule order — the order of the step with
+/// the smallest index each chain uses, then the next, so the answer does not depend on how the
+/// graph happens to be stored.
+///
+/// The answer refuses to guess: a value the run never rewrote has no chain to anything but itself,
+/// and the proof prints why, rather than an empty chain. A chain may pass through a value that was
+/// rewritten away later; that value is named by the text the step recorded, and the step that
+/// reads it backwards is marked in the print.
+ProofObject::Chain findChain(
+    const RewriteRecord &record, const camel::runtime::Program *input,
+    const camel::runtime::Program *result, const camel::graphmod::Handle *a,
+    const camel::graphmod::Handle *b) {
+    using namespace camel::runtime;
+    ProofObject::Chain chain;
+    chain.from = std::format("%{}", a->index());
+    chain.to   = std::format("%{}", b->index());
+    if (a->graph() != b->graph()) {
+        chain.none = std::format(
+            "the two values are in different graphs (%{} in graph {} and %{} in graph {}): no "
+            "rewrite connects them",
+            a->index(), camel::runtime::toText(a->graph()), b->index(),
+            camel::runtime::toText(b->graph()));
+        return chain;
+    }
+    const auto startDraft = draftNodeOf(record, input, result, a);
+    const auto goalDraft  = draftNodeOf(record, input, result, b);
+    if (!startDraft || !goalDraft) {
+        chain.none = std::format(
+            "the run made no rewrite at {}: it is not a value any step of the run matched or "
+            "produced, so no chain starts there",
+            startDraft ? chain.to : chain.from);
+        return chain;
+    }
+    if (*startDraft == *goalDraft) {
+        chain.same = true;
+        return chain;
+    }
+    struct Edge {
+        gc_node_ref_t other;
+        size_t step;
+        bool reverse;
+    };
+    std::unordered_map<gc_node_ref_t, std::vector<Edge>> adjacency;
+    for (size_t i = 0; i < record.steps.size(); ++i) {
+        const RewriteStep &step = record.steps[i];
+        if (step.graphId != a->graph() || step.matched.empty()) {
+            continue;
+        }
+        const gc_node_ref_t lhs = step.matched.front();
+        const gc_node_ref_t rhs = step.produced;
+        if (lhs == kInvalidNodeRef || rhs == kInvalidNodeRef || lhs == rhs) {
+            continue;
+        }
+        adjacency[lhs].push_back({rhs, i, false});
+        adjacency[rhs].push_back({lhs, i, true});
+    }
+    // Breadth first, so the first time the goal is reached is the shortest chain. Every shortest
+    // predecessor is kept, which is how the equally short chains are enumerated afterwards.
+    std::unordered_map<gc_node_ref_t, size_t> distance;
+    std::unordered_map<gc_node_ref_t, std::vector<std::pair<gc_node_ref_t, Edge>>> from;
+    std::deque<gc_node_ref_t> queue;
+    distance[*startDraft] = 0;
+    queue.push_back(*startDraft);
+    while (!queue.empty()) {
+        const gc_node_ref_t node = queue.front();
+        queue.pop_front();
+        const auto found = adjacency.find(node);
+        if (found == adjacency.end()) {
+            continue;
+        }
+        for (const Edge &edge : found->second) {
+            const auto seen = distance.find(edge.other);
+            if (seen == distance.end()) {
+                distance[edge.other] = distance[node] + 1;
+                from[edge.other].push_back({node, edge});
+                queue.push_back(edge.other);
+            } else if (seen->second == distance[node] + 1) {
+                from[edge.other].push_back({node, edge});
+            }
+        }
+    }
+    const auto reached = distance.find(*goalDraft);
+    if (reached == distance.end()) {
+        chain.none = std::format(
+            "no chain of rewrites connects {} and {}: the run made no step that turns one into the "
+            "other, directly or through a value it rewrote in between",
+            chain.from, chain.to);
+        return chain;
+    }
+    // At most this many equally short chains are printed; a run that ties more often than this is
+    // reported with the first ones rather than with a proof nobody can read.
+    constexpr size_t kMaxChains = 16;
+    ProofObject::ChainPath reversed;
+    std::vector<ProofObject::ChainPath> paths;
+    std::function<void(gc_node_ref_t)> walk = [&](gc_node_ref_t node) {
+        if (paths.size() >= kMaxChains) {
+            return;
+        }
+        if (node == *startDraft) {
+            paths.emplace_back(reversed.rbegin(), reversed.rend());
+            return;
+        }
+        const auto found = from.find(node);
+        if (found == from.end()) {
+            return;
+        }
+        for (const auto &[previous, edge] : found->second) {
+            if (distance[previous] + 1 != distance[node]) {
+                continue;
+            }
+            reversed.push_back({edge.step, edge.reverse});
+            walk(previous);
+            reversed.pop_back();
+        }
+    };
+    walk(*goalDraft);
+    std::sort(
+        paths.begin(), paths.end(),
+        [](const ProofObject::ChainPath &x, const ProofObject::ChainPath &y) {
+            for (size_t i = 0; i < std::min(x.size(), y.size()); ++i) {
+                if (x[i].step != y[i].step) {
+                    return x[i].step < y[i].step;
+                }
+            }
+            return x.size() < y.size();
+        });
+    chain.paths = std::move(paths);
+    if (!chain.paths.empty()) {
+        const ProofObject::ChainPath &first = chain.paths.front();
+        chain.from = linkBefore(record.steps[first.front().step], first.front().reverse);
+        chain.to   = linkAfter(record.steps[first.back().step], first.back().reverse);
+    }
+    return chain;
+}
+
+/// `explain_all(r)`: the full record of the run `r` (rewrite design 8.7), every step it made in
+/// the order it made them. This is the debugging view; `explain` narrows the same record to the
+/// chain between two values.
+slot_t explainAllKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *run    = norm.get<Struct *>(0);
+    const slot_t field = run->slotAt(7);
+    if (isNullValue(field)) {
+        return makeError(
+            "NoAttribution",
+            "the run was made without attribution: call run(..., explain: true) to record it",
+            "<rewrite::explain_all>");
+    }
+    const TupleType *resultType = TupleType::fallible(ProofType::get());
+    auto *full                  = fromSlot<ProofObject *>(nullablePayload(field));
+    ProofObject *copy           = ProofObject::create(full->record(), full->stats(), mm::autoSpace());
+    mm::RootHandle root(mm::autoSpace(), copy, ProofType::get(), "rewrite.proof");
+    return makeOk(toSlot(copy), resultType);
+}
+
+/// `explain(r, a, b)`: the shortest chain of rewrites of the run `r` that connects the values `a`
+/// and `b` (rewrite design 8.7). Only that chain is printed — the full record stays available as
+/// `explain_all` — and a pair no chain connects is an error value, never an empty chain.
 slot_t explainKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *run    = norm.get<Struct *>(0);
     const slot_t field = run->slotAt(7);
@@ -532,8 +867,134 @@ slot_t explainKernel(ArgsView &, ArgsView &norm, Context &) {
             "the run was made without attribution: call run(..., explain: true) to record it",
             "<rewrite::explain>");
     }
-    const TupleType *resultType = TupleType::fallible(ProofType::get());
-    return makeOk(nullablePayload(field), resultType);
+    const auto *a = norm.get<const camel::graphmod::Handle *>(1);
+    const auto *b = norm.get<const camel::graphmod::Handle *>(2);
+    if (a == nullptr || b == nullptr || a->kind() != camel::graphmod::HandleKind::Node ||
+        b->kind() != camel::graphmod::HandleKind::Node) {
+        return makeError(
+            "InvalidArgument", "explain reads two nodes of the program the run produced",
+            "<rewrite::explain>");
+    }
+    auto *full = fromSlot<ProofObject *>(nullablePayload(field));
+    const camel::runtime::Program *program =
+        fromSlot<const camel::runtime::Program *>(run->slotAt(0));
+    const camel::runtime::Program *input = full->input();
+    const auto known                      = [&](const camel::graphmod::Handle *h) {
+        return h->program() == program || (input != nullptr && h->program() == input);
+    };
+    if (!known(a) || !known(b)) {
+        return makeError(
+            "InvalidArgument",
+            "a names a node of a program the run neither started from nor produced: there is no "
+            "record of it",
+            "<rewrite::explain>");
+    }
+    ProofObject::Chain chain = findChain(full->record(), input, program, a, b);
+    if (!chain.none.empty()) {
+        return makeError("NoChain", chain.none, "<rewrite::explain>");
+    }
+    ProofObject *proof =
+        ProofObject::createChain(full->record(), full->stats(), std::move(chain), mm::autoSpace());
+    mm::RootHandle root(mm::autoSpace(), proof, ProofType::get(), "rewrite.proof");
+    return makeOk(toSlot(proof), TupleType::fallible(ProofType::get()));
+}
+
+/// `why_not(r, rule, v)`: why `rule` did not fire at the value `v` of the run `r` (rewrite design
+/// 8.7). The answer names the first place the left side fails to match with the value the program
+/// has there, or the permission the value lacks, or the condition that is false with the values it
+/// matched, or the rule that did fire and made `v`. It matches the way the run did: with the
+/// same numeric policy and against the same program.
+slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+    const auto *run    = norm.get<Struct *>(0);
+    const slot_t field = run->slotAt(7);
+    if (isNullValue(field)) {
+        return makeError(
+            "NoAttribution",
+            "the run was made without attribution: call run(..., explain: true) to record it",
+            "<rewrite::why_not>");
+    }
+    const auto *rule  = norm.get<RuleObject *>(1);
+    const auto *value = norm.get<const camel::graphmod::Handle *>(2);
+    if (value == nullptr || value->kind() != camel::graphmod::HandleKind::Node) {
+        return makeError(
+            "InvalidArgument", "why_not reads a node of the program the run produced",
+            "<rewrite::why_not>");
+    }
+    const auto *program = fromSlot<const camel::runtime::Program *>(run->slotAt(0));
+    if (value->program() != program) {
+        return makeError(
+            "InvalidArgument",
+            "why_not reads a node of the program the run produced; a value the run started from is "
+            "followed with explain, which names the value it became",
+            "<rewrite::why_not>");
+    }
+    auto *full          = fromSlot<ProofObject *>(nullablePayload(field));
+    const RewriteRecord &record = full->record();
+    const camel::runtime::GraphId graphId = value->graph();
+    const auto draftNode = draftNodeOf(record, nullptr, program, value);
+    const TupleType *resultType = TupleType::fallible(Type::String());
+    const auto answer = [&](std::string text) -> slot_t {
+        String *out = String::from(std::move(text), mm::autoSpace());
+        mm::RootHandle root(mm::autoSpace(), out, Type::String(), "rewrite.why_not");
+        return makeOk(toSlot(out), resultType);
+    };
+    if (!draftNode) {
+        return answer(std::format(
+            "the run made no rewrite at %{}: the value is not one any step matched or produced",
+            value->index()));
+    }
+    // A value the run produced has a step behind it: the question "why not" is answered by saying
+    // which rewrite did happen, and by which rule.
+    for (const camel::runtime::RewriteStep &step : record.steps) {
+        if (step.graphId == graphId && step.produced == *draftNode) {
+            const std::string before =
+                step.matchedText.empty() ? std::string("%?") : step.matchedText.front();
+            if (step.rule == rule->name()) {
+                return answer(std::format(
+                    "the rule fired here in round {} of graph {}: {} was made from {}",
+                    step.round, step.graph, step.producedText, before));
+            }
+            return answer(std::format(
+                "another rule fired here in round {} of graph {}: {} was made from {} by `{}`",
+                step.round, step.graph, step.producedText, before, step.rule));
+        }
+    }
+    if (program == nullptr || program->graph(graphId) == nullptr) {
+        return answer(std::format(
+            "the graph {} the value belongs to is not in the program the run produced",
+            camel::runtime::toText(graphId)));
+    }
+    try {
+        std::shared_ptr<WhenCall> call;
+        if (rule->when() != nullptr) {
+            call       = std::make_shared<WhenCall>();
+            call->rule = std::make_shared<mm::RootHandle>(
+                mm::autoSpace(), const_cast<RuleObject *>(rule), RuleType::get(),
+                "rewrite.whyNotRule");
+            call->vm = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
+        }
+        const camel::runtime::RuleSource source = sourceOf(*rule, 1, call);
+        std::vector<camel::runtime::Rule> compiled = camel::runtime::compileRule(ctx, source);
+        if (compiled.empty()) {
+            return answer(std::format("`{}` compiles to no rule", rule->name()));
+        }
+        camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), program);
+        camel::runtime::GraphDraft &draft =
+            session.edit(const_cast<camel::runtime::GCGraph *>(program->graph(graphId)));
+        camel::runtime::DraftWritings writings(
+            draft, record.strict ? camel::core::sem::NumericPolicy::strict()
+                                 : camel::core::sem::NumericPolicy::relaxed());
+        const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
+        return answer(std::format(
+            "`{}` did not fire at {}: {}", rule->name(), writings.textOf(*draftNode),
+            miss.detail));
+    } catch (const camel::runtime::RuleCompileError &e) {
+        return makeError("RuleInvalid", e.what(), "<rewrite::why_not>");
+    } catch (const mm::MemoryExhausted &) {
+        throw;
+    } catch (const std::exception &e) {
+        return makeError("RewriteInvalid", e.what(), "<rewrite::why_not>");
+    }
 }
 
 /// `saturate(p, rules, rounds)` and `saturate(p, rules, rounds, strict)`: the program with the
@@ -2101,6 +2562,8 @@ class RewriteExecutor final : public Executor {
             {"rewrite", rewriteKernel},
             {"run", runKernel},
             {"explain", explainKernel},
+            {"explain_all", explainAllKernel},
+            {"why_not", whyNotKernel},
             {"saturate", saturateKernel},
             {"extract", extractKernel},
             {"check", checkKernel},
@@ -2232,6 +2695,8 @@ class RewriteModule final : public BuiltinModule {
              {"rewrite", false},
              {"run", false},
              {"explain", true},
+             {"explain_all", true},
+             {"why_not", false},
              {"saturate", false},
              {"extract", false},
              {"check", false},

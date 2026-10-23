@@ -1354,6 +1354,14 @@ std::vector<GraphId> RuntimeGraphDraftSession::conflictsWithProgram(const Progra
     return differing;
 }
 
+std::vector<gc_node_ref_t> RuntimeGraphDraftSession::committedNodeRefs(GCGraph *graph) const {
+    const auto found = drafts_.find(graph);
+    if (found == drafts_.end() || found->second->draft == nullptr) {
+        return {};
+    }
+    return draftRuntimeNodeRefs(*found->second->draft);
+}
+
 const Program *RuntimeGraphDraftSession::commitChecked() {
     std::vector<GraphId> differing = conflicts();
     if (!differing.empty()) {

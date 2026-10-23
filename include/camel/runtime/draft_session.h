@@ -234,6 +234,14 @@ class RuntimeGraphDraftSession {
     /// commit(), but throws GraphCommitConflict when conflicts() is not empty.
     const Program *commitChecked();
 
+    /// The runtime node id every live node of `graph`'s draft takes in the program the commit
+    /// makes, indexed by draft node id (kInvalidNodeRef where the rewrite erased the node). Empty
+    /// when the session holds no draft of `graph`. Read it before commitChecked: the commit
+    /// encodes the drafts as they are now. The encoder drops the dead places and numbers the rest
+    /// in order (unless the draft keeps its ids), so this is the only way a step recorded with
+    /// draft ids can name a node of the committed program (rewrite design 8.7).
+    std::vector<gc_node_ref_t> committedNodeRefs(GCGraph *graph) const;
+
   private:
     struct DraftEntry {
         std::unique_ptr<GraphDraft> draft;
