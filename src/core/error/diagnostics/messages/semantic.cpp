@@ -1429,6 +1429,54 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ImplOnBodylessDeclaration,
+            {
+                "ImplOnBodylessDeclaration",
+                "The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body.",
+                "'#impl<f>' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.",
+            },
+        },
+        {
+            SemanticDiag::ImplKernelUnknown,
+            {
+                "ImplKernelUnknown",
+                "The '#impl' tag of '{0}' names '{1}', which is no body-less declaration.",
+                "The kernel of a '#impl' function is a body-less declaration of the same module ('func k(...): T'). Declare the operator, and write its name in the tag.",
+            },
+        },
+        {
+            SemanticDiag::ImplKernelForeign,
+            {
+                "ImplKernelForeign",
+                "The '#impl' tag of '{0}' names '{1}', which another module declares.",
+                "A kernel is the implementation detail of the function that keeps it: declare the body-less declaration in the same module as the function, private to that module (not exported), and name it there.",
+            },
+        },
+        {
+            SemanticDiag::ImplSignatureMismatch,
+            {
+                "ImplSignatureMismatch",
+                "The kernel '{0}' of the '#impl' function '{1}' has the signature {2}, but the function has {3}.",
+                "The kernel is another implementation of the very same function: same 'with' and normal parameters (types and 'var' marks), same result type, and no 'constas' parameter (a body-less declaration cannot carry one).",
+            },
+        },
+        {
+            SemanticDiag::ImplKernelNotBodyless,
+            {
+                "ImplKernelNotBodyless",
+                "The '#impl' tag of '{0}' names '{1}', which has a body.",
+                "The kernel is the body-less declaration of the C++ operator that runs the function's semantics. A function that already has a body is the semantics itself, so there is nothing for the tag to do: name a body-less declaration, or remove the tag.",
+            },
+        },
+        {
+            SemanticDiag::ImplOnGenericFunction,
+            {
+                "ImplOnGenericFunction",
+                "The '#impl' tag of '{0}' is on a generic function.",
+                "A generic function's instances have signatures of their own, so one kernel cannot be the implementation of all of them. Write each instance as an ordinary function and give it its own '#impl', or remove the tag.",
+            },
+        },
+        {
             SemanticDiag::VarParamInAsyncFunction,
             {
                 "VarParamInAsyncFunction",

@@ -257,6 +257,11 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
             }
         }
         exportNativeOperators(expt);
+        // The `#impl` functions of this module, once every body-less declaration of it is
+        // known: each kernel is checked against the function it stands for, and the function's
+        // body graph is recorded as the semantic body a call does not use (design principles
+        // 10.4).
+        resolveImplDeclarations(root);
         // What step two builds, in the order it is written.
         for (size_t i = 0; i < root->size(); ++i) {
             const GCT::node_ptr_t &child = root->at(i);

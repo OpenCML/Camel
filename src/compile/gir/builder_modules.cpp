@@ -627,6 +627,213 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
     }
 }
 
+std::optional<Builder::ImplKernel> Builder::implKernelOf(const graph_set_ptr_t &graphs) const {
+    if (graphs == nullptr || graphs->size() != 1) {
+        return std::nullopt;
+    }
+    const auto found = implKernels_.find(graphs->front().get());
+    if (found == implKernels_.end()) {
+        return std::nullopt;
+    }
+    return found->second;
+}
+
+bool Builder::insideImplBody() const {
+    for (DraftGraphBuilder *graph = currGraph_.get(); graph != nullptr;) {
+        if (implKernels_.find(graph) != implKernels_.end()) {
+            return true;
+        }
+        const graph_ptr_t &outer = graph->outerGraph();
+        graph                    = outer ? outer.get() : nullptr;
+    }
+    return false;
+}
+
+void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
+    if (root == nullptr) {
+        return;
+    }
+    // The kernel must be another implementation of the very same function (design principles
+    // 10.4): same with and normal parameters, types and `var` marks alike, and the same result
+    // type. A `constas` parameter has no counterpart in a body-less declaration (design
+    // principles 5.4), so a function that takes one cannot have a kernel.
+    const auto sameSignature = [](FunctionType *function, FunctionType *kernel) {
+        if (function == nullptr || kernel == nullptr ||
+            function->withTypesCount() != kernel->withTypesCount() ||
+            function->normTypesCount() != kernel->normTypesCount() ||
+            function->hasConstas() != kernel->hasConstas() ||
+            function->hasExitType() != kernel->hasExitType()) {
+            return false;
+        }
+        for (size_t i = 0; i < function->withTypesCount(); ++i) {
+            if (function->withIsVarAt(i) != kernel->withIsVarAt(i) ||
+                !function->withTypeAt(i)->equals(kernel->withTypeAt(i))) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < function->normTypesCount(); ++i) {
+            if (function->normIsVarAt(i) != kernel->normIsVarAt(i) ||
+                !function->normTypeAt(i)->equals(kernel->normTypeAt(i))) {
+                return false;
+            }
+        }
+        return !function->hasExitType() || function->exitType()->equals(kernel->exitType());
+    };
+    // The name of the kernel as a name of this module: a program may write it qualified with
+    // the module it is declared in (`impl_demo::add_kernel`), which means the same name here.
+    const auto localName = [&](const std::string &written) {
+        for (const std::string &prefix :
+             {unit_->module->name(), unit_->module->declaredName()}) {
+            if (prefix.empty()) {
+                continue;
+            }
+            const std::string scope = prefix + "::";
+            if (written.starts_with(scope)) {
+                return written.substr(scope.size());
+            }
+        }
+        return written;
+    };
+    for (size_t i = 0; i < root->size(); ++i) {
+        const GCT::node_ptr_t &child = root->at(i);
+        if (child->type() != GCT::NodeKind::FUNC) {
+            continue;
+        }
+        // A wrong argument count or kind is reported at the tag; the rest of the module is
+        // still declared and built.
+        std::optional<ImplTag> tag;
+        try {
+            tag = implTagOf(child);
+        } catch (const BuildAbortException &) {
+            continue;
+        }
+        if (!tag.has_value()) {
+            continue;
+        }
+        try {
+            const std::string functionName = child->name();
+            if (child->nativeDeclaration()) {
+                // A body-less declaration is the kernel itself: there is no body to keep.
+                diags_->of(SemanticDiag::ImplOnBodylessDeclaration)
+                    .atOrigin(tag->origin)
+                    .commit(functionName, tag->kernel);
+                throw BuildAbortException();
+            }
+            FunctionType *funcType = tt::as_ptr<FunctionType>(child->at(0)->dataType());
+            if (isGenericHere(funcType)) {
+                // Each instance has a signature of its own; one kernel cannot be all of them.
+                diags_->of(SemanticDiag::ImplOnGenericFunction)
+                    .atOrigin(tag->origin)
+                    .commit(functionName);
+                throw BuildAbortException();
+            }
+            const std::string kernelName = localName(tag->kernel);
+            const auto declared          = unit_->nativeOperatorGroups.find(kernelName);
+            if (declared == unit_->nativeOperatorGroups.end()) {
+                // A name of this module that has a body is not a kernel; a name an import
+                // brings is another module's kernel, which this module cannot use.
+                bool hasBody = false;
+                if (const auto graphs = graphScope_->get(kernelName, false);
+                    graphs.has_value()) {
+                    hasBody = !graphs.value()->empty();
+                }
+                if (hasBody) {
+                    diags_->of(SemanticDiag::ImplKernelNotBodyless)
+                        .atOrigin(tag->origin)
+                        .commit(functionName, tag->kernel);
+                    throw BuildAbortException();
+                }
+                if (importedEntity(Reference(tag->kernel)).has_value()) {
+                    diags_->of(SemanticDiag::ImplKernelForeign)
+                        .atOrigin(tag->origin)
+                        .commit(functionName, tag->kernel);
+                    throw BuildAbortException();
+                }
+                diags_->of(SemanticDiag::ImplKernelUnknown)
+                    .atOrigin(tag->origin)
+                    .commit(functionName, tag->kernel);
+                throw BuildAbortException();
+            }
+            const oper_group_ptr_t &group = declared->second;
+            // The one rule of the group that implements this signature. A generic rule (one
+            // with no fixed signature) is the kernel when no fixed rule matches; its call is
+            // checked where the operator is resolved, by the argument types.
+            std::string uri;
+            camel::core::type::resolver_ptr_t kernel;
+            FunctionType *shown = nullptr;
+            for (const auto &[ruleUri, resolver] : group->resolvers()) {
+                FunctionType *fixed = resolver->fixedSignature();
+                if (fixed != nullptr && shown == nullptr) {
+                    shown = fixed;
+                }
+                if (fixed != nullptr && sameSignature(funcType, fixed)) {
+                    uri    = ruleUri;
+                    kernel = resolver;
+                    break;
+                }
+                if (fixed == nullptr && kernel == nullptr) {
+                    uri    = ruleUri;
+                    kernel = resolver;
+                }
+            }
+            if (funcType->hasConstas()) {
+                // A `constas` parameter is bound at the call, and a body-less declaration
+                // cannot carry one (design principles 5.4): no kernel can implement it.
+                diags_->of(SemanticDiag::ImplSignatureMismatch)
+                    .atOrigin(tag->origin)
+                    .commit(
+                        tag->kernel,
+                        functionName,
+                        shown != nullptr ? shown->toString() : funcType->toString(),
+                        funcType->toString());
+                throw BuildAbortException();
+            }
+            if (kernel == nullptr) {
+                diags_->of(SemanticDiag::ImplSignatureMismatch)
+                    .atOrigin(tag->origin)
+                    .commit(
+                        tag->kernel,
+                        functionName,
+                        shown != nullptr ? shown->toString() : funcType->toString(),
+                        funcType->toString());
+                throw BuildAbortException();
+            }
+            // The graph the declaration made, by the declared type object (overloads share a
+            // name and differ by it; builder.cpp, enterScope).
+            compile_graph_ptr_t body;
+            if (const auto graphs = graphScope_->get(functionName, false);
+                graphs.has_value()) {
+                for (const auto &graph : **graphs) {
+                    if (graph != nullptr && graph->funcType() == funcType) {
+                        body = graph;
+                        break;
+                    }
+                }
+            }
+            if (body == nullptr) {
+                continue; // its declaration was refused, and that error is reported
+            }
+            // A direct call resolves in the kernel's own one-rule group: the operator path
+            // then picks the type, the conversions and the execution the kernel declares.
+            ImplKernel record;
+            record.name  = tag->kernel;
+            record.uri   = uri;
+            record.group = OperatorGroup::create(
+                group->name(), std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{{uri, kernel}});
+            implKernels_[body.get()] = std::move(record);
+            // The graph stays the semantic body: expanding the function means reading this
+            // graph, and a consumer that asks for it (autodiff, fusion, export, a rule) gets
+            // exactly the graph the compiler built for the Camel body.
+            body->draft().setFlags(
+                static_cast<uint8_t>(body->draft().flags() | camel::runtime::kGraphFlagImplBody));
+        } catch (const BuildAbortException &) {
+            // Reported at the tag; the other declarations are still read.
+        } catch (Diagnostic &d) {
+            diags_->add(std::move(d));
+        }
+    }
+}
+
 std::optional<camel::core::module::entity> Builder::ownNativeEntity(const Reference &ref) {
     // The module whose code is being built, which is not always the unit a caller is in: an
     // instance of a generic function is built in the module that declares it, and reaches that

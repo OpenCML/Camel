@@ -1,0 +1,17 @@
+/**
+ * The kernel is an implementation of the very same function: `add_kernel` takes two integers and
+ * returns one, `add` takes two floats, so the tag is refused (ImplSignatureMismatch).
+ */
+module impl_signature
+
+#op<':op/add_l'>
+func add_kernel(a: int, b: int): int
+
+#impl<add_kernel>
+func add(a: float, b: float): float {
+    return a + b
+}
+
+func main(): int sync {
+    return 0
+}

@@ -227,6 +227,18 @@ class Builder {
     static std::string qualifiedName(const ModuleUnit &unit, const std::string &name);
     // The top-level functions of every module by their graphs.
     std::unordered_map<DraftGraphBuilder *, TopLevelDeclaration *> topLevelFunctions_;
+    // A body-less declaration that runs the semantics of an `#impl` function (design
+    // principles 10.4): the operator's URI, and the group a direct call of the function
+    // resolves in (one rule, the kernel's).
+    struct ImplKernel {
+        std::string name;
+        std::string uri;
+        oper_group_ptr_t group;
+    };
+    // The semantic bodies of the `#impl` functions of every module, by their graphs (design
+    // principles 10.4): a direct call of the function is a call of the kernel instead; the
+    // graph is kept for what asks to look inside (autodiff, fusion, export, a rule).
+    std::unordered_map<DraftGraphBuilder *, ImplKernel> implKernels_;
     // The module of each graph made directly under the root graph (a top-level function, a
     // generic instance of one, a lambda at the top level): the root graph lists as its own
     // functions only the entry module's, so that what the program does not use of the
@@ -1146,6 +1158,26 @@ class Builder {
     /// not a compile-time value or that the tag cannot carry.
     camel::core::attr::AttrValueId tagValueOf(
         const camel::core::tag::Decl &decl, const GCT::TagUse &use);
+    /// The `#impl<f>` use written on `gct`, when it has one: the kernel's name as written and
+    /// where the tag is. The tag is a declaration fact (`on func`); a use anywhere else is
+    /// reported by tagFactsOf like any other misplaced tag.
+    struct ImplTag {
+        std::string kernel;
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    };
+    std::optional<ImplTag> implTagOf(const GCT::node_ptr_t &gct);
+    /// Resolves the `#impl` tags of the module whose declarations were just read (step one):
+    /// checks each kernel and records the body graph it stands for, so a direct call of the
+    /// function is a call of the kernel (visitDRefNode) while the graph stays the semantic body
+    /// (the expansion a consumer uses).
+    void resolveImplDeclarations(const GCT::node_ptr_t &root);
+    /// The kernel of `graphs` when they are exactly the one `#impl` body: what a call of the
+    /// function is, instead of a call of the body (design principles 10.4).
+    std::optional<ImplKernel> implKernelOf(const graph_set_ptr_t &graphs) const;
+    /// Whether the graph being built is an `#impl` body or nested in one (a lambda in the
+    /// body). A call written there stays a call of the function's semantic graph, so that the
+    /// body the expansion reads is the body without the tag; the kernel is for callers.
+    bool insideImplBody() const;
     /// The tags written on the fields of the type declaration `decl` (its GCT node), recorded
     /// in the module with the declaration.
     void recordFieldTags(const GCT::node_ptr_t &decl);

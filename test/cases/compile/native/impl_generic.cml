@@ -1,0 +1,17 @@
+/**
+ * `#impl` on a generic function: its instances have signatures of their own, so one kernel
+ * cannot be the implementation of all of them (ImplOnGenericFunction).
+ */
+module impl_generic
+
+#op<':op/idx_arr'>
+func idx_kernel::<T>(xs: T[], i: int): T
+
+#impl<idx_kernel>
+func at::<T>(xs: T[], i: int): T {
+    return xs[i]
+}
+
+func main(): int sync {
+    return at([1, 2, 3], 0)
+}
