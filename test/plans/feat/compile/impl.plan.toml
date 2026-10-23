@@ -134,14 +134,14 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const count = (hay, s) => hay.split(s).length - 1
-const start = out.indexOf('cluster_F01')
-const end = out.indexOf('cluster_F02')
-assert(start >= 0 && end > start, `the dump has no main graph beside the body's:\\n${out}`)
-const main = out.slice(start, end)
+const mainAt = out.indexOf('label="main"')
+const plusAt = out.indexOf('label="plus"')
+assert(mainAt >= 0, `the dump has no main graph:\\n${out}`)
+assert(plusAt > mainAt, `the dump has no body graph beside main:\\n${out}`)
+const main = out.slice(mainAt, plusAt)
 assert(count(main, 'label=":op/add_l", type="OPER"') === 1, `the kernel is not one OPER in main after the optimizer:\\n${main}`)
 assert(!main.includes('label=":op/sub_l"'), `the body was inlined into main:\\n${main}`)
-assert(out.includes('label="plus"'), `the body graph of plus is not in the dump:\\n${out}`)
-const plus = out.slice(end)
+const plus = out.slice(plusAt)
 assert(count(plus, 'label=":op/sub_l", type="OPER"') === 2, `the body's two operators are not in its own graph:\\n${plus}`)
 }
 """
