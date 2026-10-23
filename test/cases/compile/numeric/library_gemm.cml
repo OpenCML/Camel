@@ -3,7 +3,7 @@
  * operator (design principles 9.6). Per 7.3 the CPU library GEMM is available by default, so in
  * default mode all three matmuls record "library" (the `#[reassociate, change_precision]` tag is
  * no longer needed: a library order is an accumulation change, which `reassociate` covers).
- * `tensor::fuse(safe_fp=true)` records "canonical" for every one of them (7.4), and in a build
+ * `tensor::fuse safe_fp=true` records "canonical" for every one of them (7.4), and in a build
  * without CAMEL_TENSOR_BLAS the library name resolves to the canonical kernel, so the three
  * results are the canonical ones either way.
  */

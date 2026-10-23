@@ -783,7 +783,7 @@ instances run at the same time without seeing each other's files. A case run out
 (a benchmark, or a direct `camel` command) may keep its older fixed path as a fallback when
 `CAMEL_TEST_TMPDIR` is unset; the examples and mnist cases take it through
 `get_env('CAMEL_TEST_TMPDIR')`, and the one ONNX refusal case that writes a model gets an
-`onnx::export(out="${test_tmp}/...")` path.
+`onnx::export out="${test_tmp}/..."` path.
 
 ## Field Constraints And Style
 

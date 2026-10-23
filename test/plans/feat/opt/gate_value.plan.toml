@@ -52,7 +52,7 @@ verify_script = '''
 [[tests]]
 name = "ordering.safe"
 case = "../../../cases/opt/generic/gate_value_dependency.cml"
-args = ["${case}","std::macro","std::opt(safe_fp=true)","${backend}"]
+args = ["${case}","std::macro","std::opt safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -72,7 +72,7 @@ verify_script = '''
 [[tests]]
 name = "covered_value.graph.false"
 case = "../../../cases/modules/autodiff/collapse_random.cml"
-args = ["${case}", "std::macro", "std::opt(safe_fp=false)", "std::jgir"]
+args = ["${case}", "std::macro", "std::opt safe_fp=false", "std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -89,7 +89,7 @@ verify_script = '''
 [[tests]]
 name = "covered_value.graph.true"
 case = "../../../cases/modules/autodiff/collapse_random.cml"
-args = ["${case}", "std::macro", "std::opt(safe_fp=true)", "std::jgir"]
+args = ["${case}", "std::macro", "std::opt safe_fp=true", "std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');

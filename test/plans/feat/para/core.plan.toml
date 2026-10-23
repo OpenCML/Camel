@@ -337,7 +337,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "arm_reads_outer_value.opt_prl"
-desc = "A branch arm that reads values computed outside the branch (through GATE nodes that execute nothing, after std::opt inlined a loop round) waits for them under PRL. The program is scalar, so the granularity rule would run it inline: std::prl(fanout_all=true) makes every unordered scope a task graph, which is what this test is about."
+desc = "A branch arm that reads values computed outside the branch (through GATE nodes that execute nothing, after std::opt inlined a loop round) waits for them under PRL. The program is scalar, so the granularity rule would run it inline: std::prl fanout_all=true makes every unordered scope a task graph, which is what this test is about."
 kind = "behavior"
 case = "../../../cases/para/core/arm_reads_outer_value.cml"
 args = ["-t", "4", "${case}", "std::opt", "${run_prl_fanout_all}"]
@@ -409,7 +409,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "recursion_too_deep.prl_evaluator"
-desc = "The same program with the bytecode hand-off off (std::prl(bytecode=false)), so that the scheduler's own evaluator runs the recursion and every call nests on the native stack: it stops with MaxRecursionDepthExceeded when the stack of the thread is nearly full (the shared guard reserves space for reporting and fault unwinding on each platform) instead of a segmentation fault; depth(1000) printed before it, nothing after."
+desc = "The same program with the bytecode hand-off off (std::prl bytecode=false), so that the scheduler's own evaluator runs the recursion and every call nests on the native stack: it stops with MaxRecursionDepthExceeded when the stack of the thread is nearly full (the shared guard reserves space for reporting and fault unwinding on each platform) instead of a segmentation fault; depth(1000) printed before it, nothing after."
 kind = "negative"
 case = "../../../cases/para/core/recursion_too_deep.cml"
 args = ["-t", "4", "--max-recursion-depth", "1000000", "${case}", "${run_prl_no_bytecode}"]
@@ -425,7 +425,7 @@ timeout_ms = 30000
 # Granularity: a scope runs as a task graph only when it has two unordered items that are each
 # a higher-order operator or a call of a heavy graph (one that reaches a higher-order operator,
 # a module operator or a call of a function value). Asserted through the scheduler's statistics
-# line (std::prl(gc_stats=1): "[taskflow] run: task_graphs=N workers=W"), not through time.
+# line (std::prl gc_stats=1: "[taskflow] run: task_graphs=N workers=W"), not through time.
 [[tests]]
 name = "scalar_recursion_inline.prl"
 desc = "Light side of the granularity rule: fib and a mutual recursion, bodies of built-in arithmetic only, make unordered recursive calls but run inline under PRL: 0 task graphs."
@@ -447,7 +447,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "scalar_recursion_inline.prl_fanout_all"
-desc = "The same program with the rule switched off (std::prl(fanout_all=true)) does run task graphs: the 0 above comes from the rule, not from the program."
+desc = "The same program with the rule switched off (std::prl fanout_all=true) does run task graphs: the 0 above comes from the rule, not from the program."
 kind = "behavior"
 case = "../../../cases/para/core/scalar_recursion_inline.cml"
 args = ["-t", "4", "${case}", "${run_prl_gc_stats1_fanout_all}"]

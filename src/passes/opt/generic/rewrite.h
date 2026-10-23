@@ -23,7 +23,7 @@ using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphDraft;
 
 /// The integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), the implementation of
-/// `std::opt::algebra(neutral_only=true)`. The algebraic laws themselves are the rules library's
+/// `std::opt::algebra neutral_only=true`. The algebraic laws themselves are the rules library's
 /// (`rules::simplify`, registered as `std::opt::algebra`); this residual exists only because the
 /// library has no neutral-only mode, and does nothing without `neutralOnly`.
 size_t algebraDraft(GraphDraft &draft, bool safeFp = false, bool neutralOnly = false);

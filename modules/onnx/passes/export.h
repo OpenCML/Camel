@@ -11,7 +11,7 @@
  * graph the preceding passes left, where its arguments must be constants (the
  * function, with constant captures; the example values; the options). The
  * output path may instead be given as the pass's parameter `out`,
- * `onnx::export(out="model.onnx")`, which overrides the call's path argument.
+ * `onnx::export out="model.onnx"`, which overrides the call's path argument.
  *
  * The pass translates the function's graph as the preceding passes left it
  * (exporter.h, translateFunction). It does not expand macros, devirtualize,

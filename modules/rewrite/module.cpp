@@ -347,7 +347,7 @@ Application applyRewrite(
 /// `rewrite(p, rules)` and `rewrite(p, rules, strict)`: the program with the rules applied one way,
 /// in place, to a fixpoint (rewrite design 3). The third parameter chooses the numeric policy of
 /// the pass itself (design principles 7.4, 7.5): `strict` grants no permission, as
-/// `std::opt(safe_fp=true)` does, so only the laws that need none fire.
+/// `std::opt safe_fp=true` does, so only the laws that need none fire.
 /// An error value when a rule cannot be a rule, holds both ways, or the result is not a program.
 slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(norm.type(0));

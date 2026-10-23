@@ -85,7 +85,7 @@ std::atomic<bool> autoSpaceCreated{false};
 std::atomic<size_t> selectedBlockLimitBytes{0};
 std::atomic<bool> blockSpaceCreated{false};
 
-// std::profile(gc_stats=<level>): the statistics asked for, kept until the allocator exists.
+// std::profile gc_stats=<level>: the statistics asked for, kept until the allocator exists.
 std::atomic<int> requestedStatsLevel{0};
 std::once_flag statsAtExitOnce;
 
@@ -275,7 +275,7 @@ GenerationalAllocatorWithGC &autoSpace() {
                 .enableYoungGenCopying = youngCopying});
         instance->configureDebug(debugConfig);
         maybePrintDebugConfig(youngCopying, debugConfig);
-        // std::profile(gc_stats=1): one line of pacing statistics on stderr at exit; =2: also
+        // std::profile gc_stats=1: one line of pacing statistics on stderr at exit; =2: also
         // one line per major collection. The request is kept until the allocator exists, since
         // the pass may run before the heap is first used.
         if (const int level = requestedStatsLevel.load(std::memory_order_acquire); level != 0) {

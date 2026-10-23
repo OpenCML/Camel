@@ -30,7 +30,7 @@ cast inside the differentiated function, softmax cross entropy, grad, sgd): the 
 model stay alive and the peak stays at the live set plus one window, at twice the steps too.
 
 Every number below is read from the program (`std::mem::blocks()`) or the allocator's statistics
-line (std::profile(gc_stats=1)). Nothing depends on time; the collections are counted, and the bounds are
+line (std::profile gc_stats=1). Nothing depends on time; the collections are counted, and the bounds are
 wide enough for the three back ends (the parallel scheduler may allocate the same values in a
 different order).
 """
@@ -44,7 +44,7 @@ name = "gc_pacing.live_fvm"
 desc = "40 MB live, 200 temporaries of 0.8 MB: the peak is 4.8 MB above the live set (3.6 MB window + 0.8 MB temporary), the low point is one temporary above it, and the block of the live array never enters the large-object space (no collection is asked for by the large-object budget). Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_pacing.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=200", "--arg", "temp=100000", "${run_fvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=200", "--arg", "temp=100000", "${run_fvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_block_pacing base=40000000"]
@@ -80,7 +80,7 @@ name = "gc_pacing.live_steps"
 desc = "The same live set with 600 temporaries instead of 200: the peak does not move (4.8 MB above the live set), the collections and released blocks triple. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_pacing.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=100000", "${run_fvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "temp=100000", "${run_fvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_block_pacing base=40000000"]
@@ -113,7 +113,7 @@ name = "gc_pacing.live_nvm"
 desc = "The live-set case on the node VM: the same peak, low point and released blocks as std::fvm. Pipeline: std::nvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_pacing.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=200", "--arg", "temp=100000", "${run_nvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=200", "--arg", "temp=100000", "${run_nvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_block_pacing base=40000000"]
@@ -140,7 +140,7 @@ name = "gc_pacing.churn_fvm"
 desc = "Nothing live, 600 temporaries of 2.4 MB: 180 MB of block data allocated, 7.2 MB high-water mark (a 3.6 MB window and one 2.4 MB block), every block but the window released. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_block_churn base=0"]
@@ -174,7 +174,7 @@ name = "gc_pacing.churn_nvm"
 desc = "The churn case on the node VM: the same high-water mark and released blocks. Pipeline: std::nvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=300000", "${run_nvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "temp=300000", "${run_nvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_block_churn base=0"]
@@ -202,7 +202,7 @@ parallel = false
 desc = "The churn case under the parallel scheduler: the program has no two unordered heavy items, so it allocates in the same order and the numbers are those of std::fvm, without the exact-count flakiness the old plan had (bounds, not equalities). Pipeline: std::prl."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=300000", "std::prl"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "temp=300000", "std::prl"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_block_churn base=0"]
@@ -224,7 +224,7 @@ name = "gc_pacing.churn_mark_sweep"
 desc = "Mark-sweep collector: no young generation, so every array is born in the elder space and its block is registered at the takeover; the promoted-block floor (4 MB) asks for the major collections instead of the elder-space budget, and the peak is 7.2 MB (the 2.4 MB temporary block plus the floor) for the same 180 MB of garbage (--gc mark-sweep). Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
-args = ["--gc", "mark-sweep", "${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
+args = ["--gc", "mark-sweep", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_block_churn base=0"]
@@ -258,7 +258,7 @@ name = "gc_pacing.churn_nursery8"
 desc = "The window is the birth space: with CAMEL_GC_NURSERY_MB=8 it is 7.2 MB, so the high-water mark of the same churn is 12 MB (one window and two blocks) and the collections halve. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
 envs = ["CAMEL_GC_NURSERY_MB=8"]
 expect_exit = 0
 expect_stdout_contains = ["gc_block_churn base=0"]
@@ -288,7 +288,7 @@ name = "gc_pacing.promoted_fvm"
 desc = "A rolling window of 16 rows of 1 MB is kept; a row survives the four minor collections that promote it and is then garbage. The promoted block bytes (15 MB after the last sweep) ask for a major collection at the 4 MB floor: 64 majors in 300 steps, and the peak is 34.6 MB, which is the live window plus the floor and the young rows, not the 300 MB allocated. CAMEL_GC_GROWTH_PERCENT=25 keeps the budget at the floor. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_promoted_blocks.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
 envs = ["CAMEL_GC_GROWTH_PERCENT=25"]
 expect_exit = 0
 expect_stdout_contains = ["gc_promoted_blocks base=0"]
@@ -325,7 +325,7 @@ name = "gc_pacing.promoted_steps"
 desc = "The same rolling window with 600 steps: the high-water mark does not move from 34.6 MB while the majors double. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_promoted_blocks.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=600", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
 envs = ["CAMEL_GC_GROWTH_PERCENT=25"]
 expect_exit = 0
 expect_stdout_contains = ["gc_promoted_blocks base=0"]
@@ -355,7 +355,7 @@ name = "gc_pacing.promoted_floor"
 desc = "CAMEL_GC_LARGE_BUDGET_MB is the floor of the promoted-block budget too: with 16 MB (above 25 % of the live blocks) the majors fall from 64 to 22 and the high-water mark rises to 43 MB. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_promoted_blocks.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
 envs = ["CAMEL_GC_GROWTH_PERCENT=25", "CAMEL_GC_LARGE_BUDGET_MB=16"]
 expect_exit = 0
 expect_stdout_contains = ["gc_promoted_blocks base=0"]
@@ -387,7 +387,7 @@ name = "gc_pacing.views_once"
 desc = "One 3 MB block reached through an array and its reshape view, both promoted: the block is counted once, so the promoted-block volume stays below the 4 MB floor and no major collection is asked for. Counting it per view would make 6 MB and ask for one. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_views.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=40", "--arg", "temp=100000", "${run_fvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=40", "--arg", "temp=100000", "${run_fvm}"]
 envs = ["CAMEL_GC_GROWTH_PERCENT=25"]
 expect_exit = 0
 expect_stdout_contains = ["gc_block_views peak="]
@@ -417,7 +417,7 @@ name = "gc_pacing.adopted_block"
 desc = "An array promoted while inline (CAMEL_GC_PROMOTION_AGE=1, small allocations fill the birth space first) then grows its own block to 8 MB: the takeover registers the block, the sweep counts 4.7 MB of elder block bytes, and one major collection is asked for. Without the takeover registration the block is never counted and the collection count is zero. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_adopted.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "pause=20", "--arg", "rounds=3000", "--arg", "grow=450000", "${run_fvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "pause=20", "--arg", "rounds=3000", "--arg", "grow=450000", "${run_fvm}"]
 envs = ["CAMEL_GC_GROWTH_PERCENT=25", "CAMEL_GC_PROMOTION_AGE=1"]
 expect_exit = 0
 expect_stdout_contains = ["gc_block_adopted len=450000"]
@@ -452,7 +452,7 @@ name = "gc_pacing.training_400"
 desc = "400 training steps (batch 1024, model 512 x 4): 5.9 MB peak over a 2.1 MB live set, the longest stop is a 3.6 MB window, 2685 blocks released, and the loss falls to 0.0035. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_training_peak.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=400", "--arg", "batch=1024", "--arg", "width=512", "${run_fvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=400", "--arg", "batch=1024", "--arg", "width=512", "${run_fvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_training_peak base=2117768"]
@@ -486,7 +486,7 @@ name = "gc_pacing.training_800"
 desc = "Twice the training steps: the peak stays at the live set plus one window (the same bound as 400 steps), the blocks released double and the loss halves. Pipeline: std::nvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_training_peak.cml"
-args = ["${case}", "std::profile(gc_stats=1,report=false,hints=false)", "--arg", "steps=800", "--arg", "batch=1024", "--arg", "width=512", "${run_nvm}"]
+args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=800", "--arg", "batch=1024", "--arg", "width=512", "${run_nvm}"]
 
 expect_exit = 0
 expect_stdout_contains = ["gc_training_peak base=2117768"]

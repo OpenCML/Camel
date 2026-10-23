@@ -17,8 +17,8 @@ struct CmlOptions {
     size_t maxLiteralBytes = 64 * 1024;
 };
 
-/// The parameters of `std::cml`.
-PassDescriptor cmlDescriptor();
+/// The implementation of `std::cml`; its name, documentation and parameters are the`r`n/// declaration in stdlib/std.cml.
+PassMaker cmlPass();
 
 class CmlDumpPass : public RuntimeGraphTranslatePass {
   public:

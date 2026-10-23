@@ -96,7 +96,7 @@ def check(tmp: Path, label: str, program: str, values: dict, bound: list[str], w
     files = {name: save_tree(tmp, f"{label}_{name}", value) for name, value in values.items()}
     model = tmp / f"{label}.onnx"
     export_args = [a for name in bound for a in ("--arg", f"{name}={files[name]}")]
-    export = [f'onnx::export(out="{model.as_posix()}")' if p == "onnx::export" else p for p in EXPORT]
+    export = [f'onnx::export out="{model.as_posix()}"' if p == "onnx::export" else p for p in EXPORT]
     out = camel(program, *export_args, *export)
     if f"onnx::export: wrote {model.as_posix()}" not in out:
         raise SystemExit(f"FAIL: {label}: no model written: {out}")

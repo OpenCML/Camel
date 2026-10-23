@@ -5088,7 +5088,7 @@ std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_lite
 **Help**
 
 ```text
-Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a module the printed program imports.
+Raise the limit with `std::cml max_literal_bytes=...`, or keep the value in a module the printed program imports.
 ```
 
 *No example: no test small enough to show raises it.*
@@ -6225,7 +6225,7 @@ The argument '{0}' of '{1}' has type '{2}', not '{3}'.
 Write a value of the parameter's type; an integer may be given where a float is declared.
 ```
 
-**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml params::report(label='x', n=1.5) std::nvm`)
+**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml params::report label='x' n=1.5 std::nvm`)
 
 ```camel
 module tiny
@@ -7649,7 +7649,7 @@ Invalid pass specification '{0}': {1}.
 **Help**
 
 ```text
-A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.
+A pass is written on the pipeline as its name followed by its parameters as key=value words, never in parentheses: `std::opt safe_fp=true growth_budget=8192`. The values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.
 ```
 
 **Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml unparsable_pass::run std::nvm`)

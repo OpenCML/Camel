@@ -11,7 +11,7 @@ atom), tag atoms -- that keeps node kinds, inputs by kind and target slot, opera
 payloads, attributes, region kind/parent/owner/index/ports/params/result and static values by
 value.
 
-The document itself is produced by `std::jgir(canonical=true)`
+The document itself is produced by `std::jgir canonical=true`
 (`docs/technical/gir-interchange.md`, "Canonical documents"). This checker is independent of
 the dump: it reads only the JSON. Names, origins and node numbers are not in the document, so
 they cannot be compared -- that is the point of the canonical form, not a gap.

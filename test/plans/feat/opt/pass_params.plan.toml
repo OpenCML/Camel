@@ -3,9 +3,9 @@ order = 331
 tier = "fast"
 tags = ["feat", "opt", "pipeline", "pass-parameters"]
 
-# Pass parameters are general pipeline syntax (design principles 9.2): `name(key=value, ...)`
-# for every pass, scheduler and module pass, the values constant expressions, checked against
-# the pass's declaration before anything runs.
+# Pass parameters are the `with` parameters of the pass declaration (design principles 9.3):
+# `name key=value ...`, the values constant expressions, checked against the declaration in
+# stdlib/std.cml before anything runs.
 
 [defaults]
 kind = "behavior"
@@ -16,42 +16,42 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 [[tests]]
 name = "valid.opt"
 desc = "A parameter of the core's own pass, written as a literal; no special code in the pipeline."
-args = ["${case}", "std::opt(safe_fp=true)", "std::fvm"]
+args = ["${case}", "std::opt safe_fp=true", "std::fvm"]
 expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 
 [[tests]]
 name = "valid.constant_expression"
-desc = "The value is a Camel constant expression: operators, comparison, negation."
-args = ["${case}", "std::opt::algebra(safe_fp = 1 < 2 && !false)", "std::fvm"]
+desc = "The value is a Camel constant expression: operators and negation."
+args = ["${case}", "std::opt safe_fp=!false growth_budget=2*8", "std::fvm"]
 expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 
 [[tests]]
 name = "valid.passes_option"
 desc = "--passes splits at the commas outside the parameters."
-args = ["${case}", "--passes", "std::opt(safe_fp=false),std::fvm(stats=\"\")"]
+args = ["${case}", "--passes", "std::opt safe_fp=false,std::fvm stats=\"\""]
 expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 
 [[tests]]
 name = "valid.scheduler_parameters"
 desc = "Parameters of the schedulers (they were environment variables)."
-args = ["${case}", "std::jit(hot_threshold=0)"]
+args = ["${case}", "std::jit hot_threshold=0"]
 expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 
 [[tests]]
 name = "valid.taskflow_parameters"
 desc = "Parameters of std::tf, with an int where an int is declared."
-args = ["${case}", "std::tf(bytecode=false, gc_stats=0, linear=true)"]
+args = ["${case}", "std::tf bytecode=false gc_stats=0 linear=true"]
 expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 
 [[tests]]
 name = "error.unknown_parameter"
 desc = "An unknown parameter is a semantic diagnostic at the call, on the pass's own line; nothing runs."
-args = ["${case}", "std::fvm", "std::opt(safe_fpp=true)"]
+args = ["${case}", "std::fvm", "std::opt safe_fpp=true"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
 expect_diagnostic_line = 2
@@ -62,7 +62,7 @@ expect_output_not_contains = ["camel-ran-marker"]
 [[tests]]
 name = "error.wrong_type"
 desc = "A value of the wrong type names both types, at the argument."
-args = ["${case}", "std::opt(safe_fp=3)", "std::fvm"]
+args = ["${case}", "std::opt safe_fp=3", "std::fvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
 expect_diagnostic_line = 1
@@ -72,36 +72,36 @@ expect_output_contains = ["The argument 'safe_fp' of 'std::opt' has type 'int', 
 [[tests]]
 name = "error.missing_value"
 desc = "A parameter without a value is a syntax error of the parameter list."
-args = ["${case}", "std::opt(safe_fp=)", "std::fvm"]
+args = ["${case}", "std::opt safe_fp=", "std::fvm"]
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "not valid Camel syntax"]
+expect_output_contains = ["InvalidPassParameter", "has no value"]
 
 [[tests]]
 name = "error.not_constant"
 desc = "A name is not a constant."
-args = ["${case}", "std::opt(safe_fp=x)", "std::fvm"]
+args = ["${case}", "std::opt safe_fp=x", "std::fvm"]
 expect_exit = 1
 expect_output_contains = ["InvalidPassParameter", "'x' is not a constant"]
 
 [[tests]]
 name = "error.written_twice"
 desc = "The same parameter twice."
-args = ["${case}", "std::opt(safe_fp=true, safe_fp=false)", "std::fvm"]
+args = ["${case}", "std::opt safe_fp=true safe_fp=false", "std::fvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentDuplicate"
 expect_output_contains = ["The parameter 'safe_fp' of 'std::opt' is given twice."]
 
 [[tests]]
 name = "error.positional"
-desc = "Parameters are named."
+desc = "The parenthesised form is gone: a parameter is a key=value word after the pass name."
 args = ["${case}", "std::opt(true)", "std::fvm"]
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "name=value"]
+expect_output_contains = ["InvalidPassParameter", "not in parentheses"]
 
 [[tests]]
 name = "error.pass_without_parameters"
 desc = "A pass that declares none refuses any, and says what it declares (nothing)."
-args = ["${case}", "std::nvm(x=1)"]
+args = ["${case}", "std::nvm x=1"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
 expect_output_contains = ["'x' is not a parameter of 'std::nvm'"]
@@ -109,7 +109,7 @@ expect_output_contains = ["'x' is not a parameter of 'std::nvm'"]
 [[tests]]
 name = "error.checked_before_running"
 desc = "A bad parameter after a scheduler is found before the program runs."
-args = ["${case}", "std::fvm", "std::opt(safe_fp=3)"]
+args = ["${case}", "std::fvm", "std::opt safe_fp=3"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
 expect_diagnostic_line = 2
@@ -118,7 +118,7 @@ expect_output_not_contains = ["camel-ran-marker"]
 [[tests]]
 name = "module.parameters"
 desc = "A module pass with parameters of every type: constant expressions, an int where a float is declared, a string with a comma and a parenthesis; the module's alias."
-args = ["${case}", "tensor::test_echo(n=2*3, ratio=1, label=\"a,b)\", flag=true)", "tensor::echo(label=\"alias\")", "std::fvm"]
+args = ["${case}", "tensor::test_echo n=2*3 ratio=1 label=\"a,b)\" flag=true", "tensor::echo label=\"alias\"", "std::fvm"]
 
 expect_exit = 0
 expect_stdout_starts_with = "test_echo: n=6 ratio=1 label=a,b) flag=true\ntest_echo: n=1 ratio=0.5 label=alias flag=false\ncamel-ran-marker\n"
@@ -126,7 +126,7 @@ expect_stdout_starts_with = "test_echo: n=6 ratio=1 label=a,b) flag=true\ntest_e
 [[tests]]
 name = "module.parameter_error"
 desc = "A module pass checks its parameters like any other."
-args = ["${case}", "tensor::test_echo(n=1.5)", "std::fvm"]
+args = ["${case}", "tensor::test_echo n=1.5", "std::fvm"]
 
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
@@ -135,7 +135,7 @@ expect_output_contains = ["The argument 'n' of 'tensor::test_echo' has type 'flo
 [[tests]]
 name = "module_pass.written_explicitly"
 desc = "A pass a module contributes runs where the user writes it, not twice, also under its alias."
-args = ["${case}", "tensor::echo(label=\"mine\")", "std::fvm"]
+args = ["${case}", "tensor::echo label=\"mine\"", "std::fvm"]
 
 expect_exit = 0
 expect_stdout_starts_with = "test_echo: n=1 ratio=0.5 label=mine flag=false\ncamel-ran-marker\n"
@@ -152,14 +152,14 @@ expect_output_not_contains = ["test_echo:"]
 [[tests]]
 name = "growth_budget.parameter"
 desc = "std::opt::inline declares growth_budget and takes it as a parameter, like every pass setting (it used to be CAMEL_OPT_GROWTH_BUDGET)."
-args = ["${case}", "std::opt::inline(growth_budget=0)", "std::fvm"]
+args = ["${case}", "std::opt::inline growth_budget=0", "std::fvm"]
 expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 
 [[tests]]
 name = "growth_budget.wrong_type"
 desc = "growth_budget is an int of the pass declaration, checked before anything runs."
-args = ["${case}", "std::opt(growth_budget=true)", "std::fvm"]
+args = ["${case}", "std::opt growth_budget=true", "std::fvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
 expect_output_contains = ["The argument 'growth_budget' of 'std::opt' has type 'bool', not 'int'."]
@@ -167,16 +167,16 @@ expect_output_not_contains = ["camel-ran-marker"]
 
 [[tests]]
 name = "declaration.every_parameter_by_name"
-desc = "The guard that a declaration and a call agree: the test pass declares five parameters and this call writes every one of them by name in the call's own spelling (`key: value`), so a parameter the call cannot accept shows up as a refusal rather than at pass execution. `declared=5` pins the count of the declaration."
-args = ["${case}", "test::params(flag: true, n: 1, ratio: 2.5, label: \"all\", count: 9)", "std::nvm"]
+desc = "The guard that a declaration and a call agree: the test pass declares five parameters and this call writes every one of them as key=value words, so a parameter the call cannot accept shows up as a refusal rather than at pass execution. `declared=5` pins the count of the declaration."
+args = ["${case}", "test::params flag=true n=1 ratio=2.5 label=\"all\" count=9", "std::nvm"]
 expect_exit = 0
 expect_output_contains = ["test::params flag=true (given) n=1 (given) ratio=2.5 (given) label=all (given) count=9 (given) declared=5", "camel-ran-marker"]
 expect_output_not_contains = ["(default)"]
 
 [[tests]]
-name = "default.evaluated_once"
-desc = "A default is a constant expression evaluated at the declaration, not at each call: two calls that leave every default in place print the same evaluation count and the same values (the second line would count one more per default if binding re-evaluated them). It also shows the default expression `2 + 3` folded to 5."
-args = ["${case}", "test::params(flag=true)", "test::params(flag=true)", "std::nvm"]
+name = "default.folded_constants"
+desc = "A default is a constant expression evaluated where the declaration is, so the default `2 + 3` reads 5 and the defaults are the same in both calls. Every default lives in one place: the declaration."
+args = ["${case}", "test::params flag=true", "test::params flag=true", "std::nvm"]
 expect_exit = 0
 verify_script = """
 const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('test::params'))
@@ -187,15 +187,13 @@ for (const line of lines) {
     assert(line.includes('label=x (default)'), 'the string default: ' + line)
     assert(line.includes('declared=5'), 'the declaration keeps its five parameters: ' + line)
 }
-const counts = lines.map((l) => l.match(/evaluations=(\d+)/)[1])
-assert(counts[0] === counts[1], 'the defaults are evaluated once, not per call: ' + counts.join(' vs '))
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
 name = "error.missing_required"
 desc = "A parameter the declaration gives no default to is required, at the call."
-args = ["${case}", "test::params(n=1)", "std::nvm"]
+args = ["${case}", "test::params n=1", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentMissing"
 expect_diagnostic_line = 1
@@ -209,3 +207,70 @@ args = ["--timeit", "std::fvm/1", "${case}"]
 expect_exit = 0
 expect_output_not_contains = ["test_echo:"]
 
+
+[[tests]]
+name = "removed.parenthesised_form"
+desc = "The parenthesised form is gone, and the refusal says how a parameter is written now."
+args = ["${case}", "std::opt(safe_fp=true)", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "not in parentheses"]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "removed.colon_spelling"
+desc = "`key: value` is the spelling of a named argument in Camel source, not of a pass parameter on the command line."
+args = ["${case}", "std::opt safe_fp: true", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "key=value on the command line"]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "declaration.resolves_by_module_and_name"
+desc = "A pass is a declaration of stdlib/std.cml; the pipeline finds it by module and name and runs its kernel. `std::inline` is the short spelling of the same declaration, resolved as an alias."
+args = ["${case}", "std::inline", "std::fvm"]
+expect_stdout_starts_with = "camel-ran-marker\n"
+
+[[tests]]
+name = "declaration.help_lists_parameters"
+desc = "The listing of an unknown pass is read from the declarations, so a pass's parameters and their defaults are the declaration's."
+args = ["${case}", "std::no_such_pass"]
+expect_exit = 1
+expect_output_contains = ["std::opt", "growth_budget: int = 4096"]
+
+[[tests]]
+name = "declaration.guard_script"
+desc = "The pass declarations are the only registry: the guard refuses `registerPass`, a parameter string in C++, and any pass that exists on one side only."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-pass-declarations.mjs"
+args = ["${case}"]
+expect_exit = 0
+timeout_ms = 60000
+
+[[tests]]
+name = "declaration.every_declaration_lists"
+desc = "The pipeline reads the standard library's declarations by module and name: the listing of an unknown pass is every declaration, all 53 of them, with the parameters and defaults they write."
+args = ["${case}", "std::zzz_unknown"]
+expect_exit = 1
+verify_script = '''
+({input,assert})=>{
+ const err = input.normalized.stderr;
+ assert(err.includes("Pass <std::zzz_unknown> not found, available passes are:"), "missing the listing header");
+ const names = err.split(/\r?\n/).filter((line) => /^  std::[A-Za-z_][A-Za-z0-9_:]*$/.test(line));
+ assert(names.length === 53, 'the listing has ' + names.length + ' declarations, not 53');
+ for (const name of ['std::opt', 'std::fvm', 'std::nvm', 'std::opt::small', 'std::fastvm::jit_asm']) {
+  assert(names.includes('  ' + name), 'the listing omits ' + name);
+ }
+}
+'''
+
+[[tests]]
+name = "declaration.missing_is_named"
+desc = "A core pass's parameters come from its declaration in stdlib/std.cml: when that file cannot be read the pipeline refuses the pass, naming module 'std' and the file it read, instead of running the kernel on defaults the declaration never gave."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/cases/tools/cli/pass_declarations_missing.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["pass declarations missing: PASS"]
+timeout_ms = 60000

@@ -132,9 +132,9 @@ value is given with `--arg` at export. The convention the language suggests (dat
 parameters, weights as `with` parameters) therefore reads naturally on the command line:
 
     # weights baked in, data as input
-    camel model.cml --arg p=weights std::macro std::opt 'onnx::export(out="m.onnx")'
+    camel model.cml --arg p=weights std::macro std::opt 'onnx::export out="m.onnx"'
     # weights as inputs (and, for a training step, as outputs)
-    camel step.cml std::macro std::opt 'onnx::export(out="m.onnx")'
+    camel step.cml std::macro std::opt 'onnx::export out="m.onnx"'
 
 An ordinary parameter given with `--arg` is baked in the same way; the exporter does not treat
 the two kinds differently beyond their order.

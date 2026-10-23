@@ -179,7 +179,7 @@ for (const name of ['pow', 'hypot']) {
 for (const name of ['abs', 'round', 'ceil', 'floor', 'trunc', 'min', 'max', 'clamp', 'sign',
                     'is_nan', 'is_inf']) both(name, 'exact', FINITE)
 // Complex: re, im and conj are exact (a part read and a sign flip are not arithmetic); abs is
-// hypot and exp is the platform's std::exp(std::complex), bounded by the platform's accuracy of
+// hypot and exp is the platform's std::exp std=:complex, bounded by the platform's accuracy of
 // the functions they are built from (4 ulp, not the 2 ulp target of the real exp alone).
 for (const name of ['re', 'im', 'conj']) {
   add(`math:${name}_c`, 'exact', 'f32', FINITE)

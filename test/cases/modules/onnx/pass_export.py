@@ -75,7 +75,7 @@ def camel(args: list, env_extra: dict) -> subprocess.CompletedProcess:
 
 def with_out(passes: list, model: Path) -> list:
     """The pass list with the model file given as the parameter out of onnx::export."""
-    return [f'onnx::export(out="{model.as_posix()}")' if p == "onnx::export" else p for p in passes]
+    return [f'onnx::export out="{model.as_posix()}"' if p == "onnx::export" else p for p in passes]
 
 
 def rel(program: str) -> str:

@@ -10,7 +10,7 @@
  *                  decision (7.3): the node's effective numeric permissions, read through
  *                  tag::effectivePermissions, which applies the stage's policy
  *                  (relaxed by default: reassociate allowed) and withholds everything from a
- *                  `#strict` node. `tensor::fuse(safe_fp=true)` uses the strict policy, so the
+*                  `#strict` node. `tensor::fuse safe_fp=true` uses the strict policy, so the
  *                  safe mode's products run the canonical algorithm (7.4). For `linear` the
  *                  attribute is the choice its VJP carries to the matmul gradients; the forward
  *                  kernel is the canonical x @ w + b.
@@ -39,7 +39,7 @@ class TensorFusePass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
   private:
-    /// tensor::fuse(safe_fp=true): the canonical algorithm for every matmul (design principles
+    /// tensor::fuse safe_fp=true: the canonical algorithm for every matmul (design principles
     /// 7.4); the default uses the stage's relaxed policy (7.3).
     bool safeFp_ = false;
 };

@@ -1,0 +1,289 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The passes of the core, declared the way the language declares a function (design principles
+// 9.3, H233). A pass is a function of a program's graph, `(f: F) => F!`; its parameters are the
+// `with` parameters of its declaration, and the pipeline reads them from here. There is no
+// second declaration of a pass's name, parameters or documentation in C++: the implementation of
+// each one is a kernel of the core, keyed by the module and the name below.
+//
+// The pipeline names a pass by its module and this name, and writes its parameters after it:
+//
+//     camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm
+
+module std
+
+// -----------------------------------------------------------------------------
+// The program itself
+// -----------------------------------------------------------------------------
+
+/// A pass that does nothing: the graph is handed on unchanged.
+export func nop::<F>(f: F): F! when is_function::<F>()
+
+/// Expands the macro operators over functions (`grad`, `with_grad`, `vjp` of autodiff) ahead of
+/// the passes that follow.
+export func macro::<F>(f: F): F! when is_function::<F>()
+
+// -----------------------------------------------------------------------------
+// Dumps and translations of the graph
+// -----------------------------------------------------------------------------
+
+/// Prints the compact GIR of the graph and consumes it.
+export func gir::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the rich GIR of the graph, styled for Graphviz, and consumes it.
+export func rgir::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the compact GIR with the boundary roles of every node and consumes the graph.
+export func gir_regions::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the rich GIR with the boundary roles of every node and consumes the graph.
+export func rgir_regions::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the versioned JSON GIR of the graph and consumes it.
+with <
+    /// Write the JSON with its keys in a canonical order, so two runs compare byte for byte.
+    canonical: bool = false
+>
+export func jgir::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the graph as Camel source and consumes it.
+with <
+    /// The longest literal the printed source may hold before it is written as a call that
+    /// rebuilds it.
+    max_literal_bytes: int = 64 * 1024
+>
+export func cml::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the compact GIR with the boundary roles annotated.
+export func agir::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the rich GIR with the boundary roles annotated.
+export func argir::<F>(f: F): F! when is_function::<F>()
+
+/// Prints `GRAPH_STATS {json}` and hands the graph on unchanged.
+export func stats::<F>(f: F): F! when is_function::<F>()
+
+/// Profiles the run and prints the report when it ends.
+with <
+    /// Rows of the operator table; 0 writes every operator that ran.
+    top: int = 24,
+    /// Report the element-wise loops that run on the host, and why they did not go to a device.
+    hints: bool = true,
+    /// Also write the report as one JSON object to this file.
+    json: string = "",
+    /// Print the text report when the run ends.
+    report: bool = true,
+    /// The allocator's statistics at exit: 1 one line, 2 also one line per collection.
+    gc_stats: int = 0,
+    /// The type storage's statistics at exit.
+    type_stats: bool = false,
+    /// Append one JSON line per executed effectful operator to this file.
+    effect_trace: string = ""
+>
+export func profile::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the graph as standalone C++ source and consumes it.
+export func cpp::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the graph as a topological node sequence and consumes it.
+export func topo_node_seq::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the task graph the parallel scheduler would build and consumes the program.
+export func tfdump::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the array type implementation's self-test and hands the graph on.
+export func arraytype::<F>(f: F): F! when is_function::<F>()
+
+namespace cpp {
+/// Builds a C++ module from the graph and consumes it.
+export func module_file::<F>(f: F): F! when is_function::<F>()
+
+/// Prints what a C++ module built from the graph exports.
+export func inspect::<F>(f: F): F! when is_function::<F>()
+}
+
+// -----------------------------------------------------------------------------
+// The allocator
+// -----------------------------------------------------------------------------
+
+namespace gc {
+/// Prints a snapshot of the allocator's heap as JSON.
+export func snapshot::<F>(f: F): F! when is_function::<F>()
+
+/// Verifies the allocator's heap and fails with the issues it finds.
+export func verify::<F>(f: F): F! when is_function::<F>()
+
+/// Runs a minor collection and prints its result.
+export func minor::<F>(f: F): F! when is_function::<F>()
+
+/// Runs a major collection and prints its result.
+export func major::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the allocator's configuration.
+export func config::<F>(f: F): F! when is_function::<F>()
+
+/// Prints a summary of the allocator's spaces.
+export func summary::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the allocator's blocks.
+export func blocks::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the allocator's views.
+export func views::<F>(f: F): F! when is_function::<F>()
+
+/// Runs the view-escape self-test of the allocator.
+export func views_escape::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the allocator's remembered set.
+export func remembered_set::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the allocator's foreign resources.
+export func foreign_resource::<F>(f: F): F! when is_function::<F>()
+
+/// Runs the allocator's poison check.
+export func poison::<F>(f: F): F! when is_function::<F>()
+}
+
+// -----------------------------------------------------------------------------
+// Schedulers: the passes that execute the program
+// -----------------------------------------------------------------------------
+
+/// Executes the program on the node-virtual-machine interpreter.
+export func nvm::<F>(f: F): F! when is_function::<F>()
+
+/// Executes the program on the bytecode interpreter.
+with <
+    /// Append per-graph bytecode and execution counts of the run to this file.
+    stats: string = ""
+>
+export func fvm::<F>(f: F): F! when is_function::<F>()
+
+namespace fastvm {
+/// Prints the bytecode of every graph and consumes the program.
+export func bytecode::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the linked bytecode of every graph and consumes the program.
+export func linked_bytecode::<F>(f: F): F! when is_function::<F>()
+
+/// Executes the program on the bytecode interpreter with on-demand native code.
+with <
+    /// Append per-graph bytecode and execution counts of the run to this file.
+    stats: string = "",
+    /// Calls from one call site before a graph is compiled; 0 compiles at the first call.
+    hot_threshold: int = 1
+>
+export func jit::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the machine code the JIT generated and consumes the program.
+export func jit_asm::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the generated binary of the JIT and consumes the program.
+export func jit_bin::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the register machine IR of the JIT and consumes the program.
+export func jit_rmir::<F>(f: F): F! when is_function::<F>()
+
+/// Prints the machine IR of the JIT and consumes the program.
+export func jit_mir::<F>(f: F): F! when is_function::<F>()
+}
+/// Executes the program on the parallel task scheduler.
+with <
+    /// Evaluate every graph node by node (for comparison and diagnosis).
+    linear: bool = false,
+    /// Fan every unordered higher-order call out, not only those worth it by measurement.
+    fanout_all: bool = false,
+    /// Print the decision for every graph and why a graph stays node by node.
+    diag: bool = false,
+    /// Hand graphs that need no parallelism to the bytecode interpreter.
+    bytecode: bool = true,
+    /// 1: print the task graphs and collections of the run when it ends; 2: also one per
+    /// collection.
+    gc_stats: int = 0
+>
+export func taskflow::<F>(f: F): F! when is_function::<F>()
+
+// -----------------------------------------------------------------------------
+// The optimizing rewrite pipeline
+// -----------------------------------------------------------------------------
+
+/// The standard optimization pipeline.
+with <
+    /// Keep the algebraic stage to strictly equivalent floating-point transformations
+    /// (design principles 7.4).
+    safe_fp: bool = false,
+    /// Nodes specialization and inlining may copy before the remaining calls are left as calls;
+    /// 0 stops them (design principles 9.6).
+    growth_budget: int = 4096,
+    /// Test of the generic passes' screens: give the graphs they skip to the pass anyway and
+    /// fail if it rewrites one.
+    check_screens: bool = false
+>
+export func opt::<F>(f: F): F! when is_function::<F>()
+
+namespace opt {
+/// Inlining only.
+with <
+    /// Nodes specialization and inlining may copy before the remaining calls are left as calls;
+    /// 0 stops them (design principles 9.6).
+    growth_budget: int = 4096
+>
+export func inline::<F>(f: F): F! when is_function::<F>()
+
+/// Inlining only, small targets.
+with <growth_budget: int = 4096>
+export func small::<F>(f: F): F! when is_function::<F>()
+
+/// Inlining only, branch-arm targets.
+with <growth_budget: int = 4096>
+export func arm::<F>(f: F): F! when is_function::<F>()
+
+/// Inlining only, hybrid target strategy.
+with <growth_budget: int = 4096>
+export func hybrid::<F>(f: F): F! when is_function::<F>()
+
+/// Devirtualization only.
+with <growth_budget: int = 4096>
+export func devirtualize::<F>(f: F): F! when is_function::<F>()
+
+/// Specialization only.
+with <growth_budget: int = 4096>
+export func specialize::<F>(f: F): F! when is_function::<F>()
+
+/// Constant folding.
+export func fold::<F>(f: F): F! when is_function::<F>()
+
+/// Algebraic simplification (the laws of stdlib/rules.cml, under the strict numeric policy when
+/// `safe_fp` is true).
+with <
+    /// Keep the algebraic stage to strictly equivalent floating-point transformations
+    /// (design principles 7.4).
+    safe_fp: bool = false,
+    /// Apply only the integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), not the
+    /// merging of like terms and constant factors (the C++ reference mode).
+    neutral_only: bool = false
+>
+export func algebra::<F>(f: F): F! when is_function::<F>()
+
+/// One writing for every value that has several, chosen by a cost model.
+with <
+    /// The cost model: 'nodes' (every node costs one), 'weighted' (a division costs more than a
+    /// product, a product more than a sum), or one a module registered.
+    cost: string = "weighted"
+>
+export func extract::<F>(f: F): F! when is_function::<F>()
+
+/// Common subexpression elimination.
+export func cse::<F>(f: F): F! when is_function::<F>()
+
+/// Dead code elimination.
+with <
+    /// Remove only the constants and pure operations that no node reads, not gates and syncs.
+    values_only: bool = false
+>
+export func dce::<F>(f: F): F! when is_function::<F>()
+
+/// Control-flow reduction.
+export func ctrl::<F>(f: F): F! when is_function::<F>()
+}
+

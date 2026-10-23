@@ -61,7 +61,7 @@ indices, sharing their source-side consumer index. They do not require duplicate
 
 ## Canonical documents (version 2)
 
-`std::jgir(canonical=true)` writes a second, version 2 document, `canonical: true`. It is the
+`std::jgir canonical=true` writes a second, version 2 document, `canonical: true`. It is the
 input of the equivalence checker used by the graph-to-source work; it is not a replacement for
 the version 1 document, which is unchanged and stays the default.
 

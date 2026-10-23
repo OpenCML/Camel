@@ -50,7 +50,7 @@ bool selectBlockSpaceLimit(size_t bytes);
 /// One line with the occupancy of the graph, permanent and meta spaces (`[camel] spaces: ...`):
 /// bytes in use now and at the high-water mark, bytes reserved, segments, allocations, limit.
 /// Printed at exit after the collector's line when the statistics were turned on with
-/// `std::profile(gc_stats=...)`.
+/// `std::profile gc_stats=...`.
 void reportSpaceUsage(std::ostream &os);
 
 /// Which collector the auto space runs.
@@ -59,7 +59,7 @@ enum class CollectorMode {
     Generational, // Young objects are copied (they move); old ones are marked and swept. Default.
 };
 
-/// Asks for the allocator's statistics at exit, the way `std::profile(gc_stats=<level>)` does:
+/// Asks for the allocator's statistics at exit, the way `std::profile gc_stats=<level>` does:
 /// 1 prints one line of pacing statistics and the occupancy of the spaces, 2 also prints one
 /// line per major collection. May be called before the auto space exists (the request is kept)
 /// or after it (it is applied at once).

@@ -38,8 +38,8 @@ REPS=7 benchmarks/parallel/run.sh fib small_calls serial_math map_heavy driver_i
 BUILDS="new=$CAMEL_HOME old=/path/to/other/out/latest" benchmarks/parallel/run.sh fib
 
 # the bytecode hand-off on and off in one table: the off column is a parameter of the pass
-# (std::prl(bytecode=false) evaluates every graph itself, as before 4.3.3)
-CONFIGS="std::fvm std::prl std::prl(bytecode=false)" benchmarks/parallel/run.sh fib small_calls
+# (std::prl bytecode=false evaluates every graph itself, as before 4.3.3)
+CONFIGS="std::fvm std::prl std::prl+bytecode=false" benchmarks/parallel/run.sh fib small_calls
 ```
 
 `run.sh` interleaves the configurations round by round and records the load average with

@@ -112,10 +112,10 @@ assert(count('matmul_add') === 0 && count('matmul_blas') === 0, 'no fused operat
 
 [[tests]]
 name = "fuse.safe"
-desc = "tensor::fuse(safe_fp=true) records the canonical algorithm on every matmul (7.4) and still marks the groups: the safe mode's graph is the same graph."
+desc = "tensor::fuse safe_fp=true records the canonical algorithm on every matmul (7.4) and still marks the groups: the safe mode's graph is the same graph."
 kind = "behavior"
 case = "../../../cases/compile/numeric/fuse.cml"
-args = ["${case}", "tensor::fuse(safe_fp=true)", "std::gir"]
+args = ["${case}", "tensor::fuse safe_fp=true", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -169,10 +169,10 @@ assert(kernel('canonical') === 0, 'nothing is withheld in default mode')
 
 [[tests]]
 name = "library_gemm.safe"
-desc = "tensor::fuse(safe_fp=true) withholds the library GEMM from every matmul (7.4): the operator is unchanged, only the attribute differs."
+desc = "tensor::fuse safe_fp=true withholds the library GEMM from every matmul (7.4): the operator is unchanged, only the attribute differs."
 kind = "behavior"
 case = "../../../cases/compile/numeric/library_gemm.cml"
-args = ["${case}", "tensor::fuse(safe_fp=true)", "std::gir"]
+args = ["${case}", "tensor::fuse safe_fp=true", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {

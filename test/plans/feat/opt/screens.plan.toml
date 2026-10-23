@@ -16,604 +16,604 @@ expect_exit = 0
 [[tests]]
 name = "nn.autoencoder"
 case = "../../../cases/modules/nn/autoencoder.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.autograd_linear_demo"
 case = "../../../cases/modules/nn/autograd_linear_demo.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.bn_train_grad_sanity"
 case = "../../../cases/modules/nn/bn_train_grad_sanity.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.checkpoint_interrupted"
 case = "../../../cases/modules/nn/checkpoint_interrupted.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.checkpoint_roundtrip"
 case = "../../../cases/modules/nn/checkpoint_roundtrip.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.checkpoint_tensor"
 case = "../../../cases/modules/nn/checkpoint_tensor.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.conv2d_grad_sanity"
 case = "../../../cases/modules/nn/conv2d_grad_sanity.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.conv2d_shape_error"
 case = "../../../cases/modules/nn/conv2d_shape_error.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.embedding_grad_sanity"
 case = "../../../cases/modules/nn/embedding_grad_sanity.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.embedding_index_error"
 case = "../../../cases/modules/nn/embedding_index_error.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.embedding_mf"
 case = "../../../cases/modules/nn/embedding_mf.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.graph_autograd_multi_param_demo"
 case = "../../../cases/modules/nn/graph_autograd_multi_param_demo.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.gru_lite"
 case = "../../../cases/modules/nn/gru_lite.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.lr"
 case = "../../../cases/modules/nn/lr.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.lrit"
 case = "../../../cases/modules/nn/lrit.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.matrix_factorization"
 case = "../../../cases/modules/nn/matrix_factorization.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.mnist"
 case = "../../../cases/modules/nn/mnist.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.mnist_py"
 case = "../../../cases/modules/nn/mnist_py.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.residual_mlp"
 case = "../../../cases/modules/nn/residual_mlp.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.siamese_shared_encoder"
 case = "../../../cases/modules/nn/siamese_shared_encoder.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.softmax_classifier"
 case = "../../../cases/modules/nn/softmax_classifier.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.softmax_cross_entropy_sanity"
 case = "../../../cases/modules/nn/softmax_cross_entropy_sanity.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.softmax_grad_sanity"
 case = "../../../cases/modules/nn/softmax_grad_sanity.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.softmax_labels"
 case = "../../../cases/modules/nn/softmax_labels.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.softmax_labels_oob"
 case = "../../../cases/modules/nn/softmax_labels_oob.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.spatial_ops"
 case = "../../../cases/modules/nn/spatial_ops.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.svm"
 case = "../../../cases/modules/nn/svm.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.tensor_smoke"
 case = "../../../cases/modules/nn/tensor_smoke.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.tiny_attention"
 case = "../../../cases/modules/nn/tiny_attention.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.tiny_cnn"
 case = "../../../cases/modules/nn/tiny_cnn.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.tiny_rnn"
 case = "../../../cases/modules/nn/tiny_rnn.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.with_context_step_demo"
 case = "../../../cases/modules/nn/with_context_step_demo.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_branch"
 case = "../../../cases/modules/onnx/export_branch.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_capability"
 case = "../../../cases/modules/onnx/export_capability.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_ctrl_effect"
 case = "../../../cases/modules/onnx/export_ctrl_effect.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_ctrl_effect_callee"
 case = "../../../cases/modules/onnx/export_ctrl_effect_callee.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_dynamic"
 case = "../../../cases/modules/onnx/export_dynamic.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_dynamic_recursion"
 case = "../../../cases/modules/onnx/export_dynamic_recursion.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_float_array"
 case = "../../../cases/modules/onnx/export_float_array.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_fold"
 case = "../../../cases/modules/onnx/export_fold.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_gated_gru_forward"
 case = "../../../cases/modules/onnx/export_gated_gru_forward.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_gated_gru_step"
 case = "../../../cases/modules/onnx/export_gated_gru_step.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_grad_matmul_vector"
 case = "../../../cases/modules/onnx/export_grad_matmul_vector.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_grad_mean"
 case = "../../../cases/modules/onnx/export_grad_mean.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_import_order"
 case = "../../../cases/modules/onnx/export_import_order.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_impure"
 case = "../../../cases/modules/onnx/export_impure.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_linear_recursion"
 case = "../../../cases/modules/onnx/export_linear_recursion.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_loop"
 case = "../../../cases/modules/onnx/export_loop.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_loop_tuple_argument"
 case = "../../../cases/modules/onnx/export_loop_tuple_argument.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_loop_values"
 case = "../../../cases/modules/onnx/export_loop_values.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_loop_values_array"
 case = "../../../cases/modules/onnx/export_loop_values_array.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_nontail_recursion"
 case = "../../../cases/modules/onnx/export_nontail_recursion.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_slice_loop"
 case = "../../../cases/modules/onnx/export_slice_loop.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_take"
 case = "../../../cases/modules/onnx/export_take.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step"
 case = "../../../cases/modules/onnx/export_train_step.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_adam"
 case = "../../../cases/modules/onnx/export_train_step_adam.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_adam_dump"
 case = "../../../cases/modules/onnx/export_train_step_adam_dump.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_bn"
 case = "../../../cases/modules/onnx/export_train_step_bn.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_branch"
 case = "../../../cases/modules/onnx/export_train_step_branch.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_branch_disjoint"
 case = "../../../cases/modules/onnx/export_train_step_branch_disjoint.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_branch_scalar"
 case = "../../../cases/modules/onnx/export_train_step_branch_scalar.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_branch_tensor"
 case = "../../../cases/modules/onnx/export_train_step_branch_tensor.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_conv"
 case = "../../../cases/modules/onnx/export_train_step_conv.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_dynamic"
 case = "../../../cases/modules/onnx/export_train_step_dynamic.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_dynamic_mean"
 case = "../../../cases/modules/onnx/export_train_step_dynamic_mean.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_frozen"
 case = "../../../cases/modules/onnx/export_train_step_frozen.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_train_step_vjp"
 case = "../../../cases/modules/onnx/export_train_step_vjp.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_tree_recursion"
 case = "../../../cases/modules/onnx/export_tree_recursion.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_unsupported"
 case = "../../../cases/modules/onnx/export_unsupported.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_var_append"
 case = "../../../cases/modules/onnx/export_var_append.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_var_compound"
 case = "../../../cases/modules/onnx/export_var_compound.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_var_local"
 case = "../../../cases/modules/onnx/export_var_local.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "onnx.export_var_parameter"
 case = "../../../cases/modules/onnx/export_var_parameter.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "tiles.resident"
 case = "../../../cases/modules/tiles/resident.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.algebra"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.algebra_boundary"
 case = "../../../cases/opt/generic/algebra_boundary.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.algebra_boundary32"
 case = "../../../cases/opt/generic/algebra_boundary32.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.algebra_integer"
 case = "../../../cases/opt/generic/algebra_integer.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.algebra_tensor"
 case = "../../../cases/opt/generic/algebra_tensor.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.arm_tail_gate"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.arms_laid_out_whole"
 case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.arms_laid_out_whole_tensor"
 case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.broken_branch"
 case = "../../../cases/opt/generic/broken_branch.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.broken_graph"
 case = "../../../cases/opt/generic/broken_graph.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.control_chain"
 case = "../../../cases/opt/generic/control_chain.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.control_data_paths"
 case = "../../../cases/opt/generic/control_data_paths.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.control_unused_argument"
 case = "../../../cases/opt/generic/control_unused_argument.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.cse_arm_constants"
 case = "../../../cases/opt/generic/cse_arm_constants.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.effect_order_folded"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.equal_branch_values"
 case = "../../../cases/opt/generic/equal_branch_values.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.fold_cast"
 case = "../../../cases/opt/generic/fold_cast.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.fold_cast_fails"
 case = "../../../cases/opt/generic/fold_cast_fails.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.fold_constant_fault"
 case = "../../../cases/opt/generic/fold_constant_fault.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.fold_constant_fault_reached"
 case = "../../../cases/opt/generic/fold_constant_fault_reached.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.gate_branch_wait"
 case = "../../../cases/opt/generic/gate_branch_wait.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.gate_value_dependency"
 case = "../../../cases/opt/generic/gate_value_dependency.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.generic_passes"
 case = "../../../cases/opt/generic/generic_passes.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.pruned_branch_keeps_condition_effect"
 case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.recursion_unroll"
 case = "../../../cases/opt/generic/recursion_unroll.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.shape_unroll"
 case = "../../../cases/opt/generic/shape_unroll.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.simplify_growth_budget"
 case = "../../../cases/opt/generic/simplify_growth_budget.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.specialize_growing_shape"
 case = "../../../cases/opt/generic/specialize_growing_shape.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.static_branches"
 case = "../../../cases/opt/generic/static_branches.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.unread_gate"
 case = "../../../cases/opt/generic/unread_gate.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.written_variable"
 case = "../../../cases/opt/generic/written_variable.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.arm_call_then_effect"
 case = "../../../cases/opt/inline/arm_call_then_effect.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.arm_entry_after_inline"
 case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.arm_entry_after_inline_macro"
 case = "../../../cases/opt/inline/arm_entry_after_inline_macro.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.branch_arm_behavior"
 case = "../../../cases/opt/inline/branch_arm_behavior.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.consecutive_sync_calls"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.empty_entry_targets_fallback"
 case = "../../../cases/opt/inline/empty_entry_targets_fallback.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.entry_multi_target_with_sync"
 case = "../../../cases/opt/inline/entry_multi_target_with_sync.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.entry_single_target_no_sync"
 case = "../../../cases/opt/inline/entry_single_target_no_sync.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.no_param_reverse_root"
 case = "../../../cases/opt/inline/no_param_reverse_root.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.registry_sweep_unique_arm"
 case = "../../../cases/opt/inline/registry_sweep_unique_arm.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.scc_entry_guard_recursion"
 case = "../../../cases/opt/inline/scc_entry_guard_recursion.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.specialized_arg_keeps_order"
 case = "../../../cases/opt/inline/specialized_arg_keeps_order.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.strategy_hybrid_mix"
 case = "../../../cases/opt/inline/strategy_hybrid_mix.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.strategy_small_non_arm"
 case = "../../../cases/opt/inline/strategy_small_non_arm.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "inline.value_ctrl_gate_anchor"
 case = "../../../cases/opt/inline/value_ctrl_gate_anchor.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "perf.fib_recursive"
 case = "../../../cases/perf/fib_recursive.cml"
-args = ["${case}", "std::opt(check_screens=true)", "std::null"]
+args = ["${case}", "std::opt check_screens=true", "std::null"]

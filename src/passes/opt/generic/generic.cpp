@@ -957,7 +957,7 @@ const camel::runtime::Program *simplifyGraph(
         // in stdlib/rules.cml. std::opt orders it after fold, as the library's corpus
         // measurements assume.
         const std::string algebraPass =
-            config.safeFloatingPoint ? "std::opt::algebra(safe_fp=true)" : "std::opt::algebra";
+            config.safeFloatingPoint ? "std::opt::algebra safe_fp=true" : "std::opt::algebra";
         const PassRunResult algebra = applyRegisteredPass(program, algebraPass, context, os);
         if (algebra.program == nullptr) {
             return nullptr;
@@ -986,3 +986,4 @@ const camel::runtime::Program *simplifyGraph(
         maxRounds);
     return finish(program);
 }
+

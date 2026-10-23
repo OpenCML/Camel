@@ -20,7 +20,7 @@ timeout_ms = 20000
 name = "loops.native_callback.scheduler"
 kind = "behavior"
 case = "../../../cases/loops/native_callback.cml"
-args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl(bytecode=false)"]
+args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl bytecode=false"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "30 42 30\n24\n3744\n"
@@ -42,7 +42,7 @@ timeout_ms = 20000
 name = "loops.native_callback.fault.scheduler"
 kind = "negative"
 case = "../../../cases/loops/native_callback_fault.cml"
-args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl(bytecode=false)"]
+args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl bytecode=false"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 1
 expect_diagnostic_line = 3
@@ -638,7 +638,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.compiled"
-desc = "A loop of regions in a function the JIT compiled (framed code, `std::jit(hot_threshold=0)` compiles the callee at its first call): one state over an array, two states under a condition, `for ... while` with an `if` body, an empty array, a nested loop, a loop that collects, a body that calls a function, a body that calls a function whose own loop runs while the outer loop is on the machine stack, a `sync` body whose effects run every round in order, and a block whose `return` ends it with the next state. The compiled values are the interpreters' (`backends_agree`), and the same under `std::opt::inline`, where the loops are compiled as part of main."
+desc = "A loop of regions in a function the JIT compiled (framed code, `std::jit hot_threshold=0` compiles the callee at its first call): one state over an array, two states under a condition, `for ... while` with an `if` body, an empty array, a nested loop, a loop that collects, a body that calls a function, a body that calls a function whose own loop runs while the outer loop is on the machine stack, a `sync` body whose effects run every round in order, and a block whose `return` ends it with the next state. The compiled values are the interpreters' (`backends_agree`), and the same under `std::opt::inline`, where the loops are compiled as part of main."
 kind = "behavior"
 case = "../../../cases/loops/compiled.cml"
 args = ["${case}", "${backend}"]
@@ -697,7 +697,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "loops.compiled.round_safepoint"
-desc = "A collection at every safepoint (CAMEL_GC_STRESS_SAFEPOINT=1, poisoning on) during 500 rounds of a compiled loop that allocates in the body: the compiled rounds reach the same safepoints as the interpreter's rounds (the same number of collections and the same objects moved, checked by hand with std::profile(gc_stats=1)), so the state a round carries is always in the frame when the collector runs."
+desc = "A collection at every safepoint (CAMEL_GC_STRESS_SAFEPOINT=1, poisoning on) during 500 rounds of a compiled loop that allocates in the body: the compiled rounds reach the same safepoints as the interpreter's rounds (the same number of collections and the same objects moved, checked by hand with std::profile gc_stats=1), so the state a round carries is always in the frame when the collector runs."
 kind = "behavior"
 case = "../../../cases/loops/compiled_churn.cml"
 args = ["--gc", "generational", "${case}", "${backend}"]
