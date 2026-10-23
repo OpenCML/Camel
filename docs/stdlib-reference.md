@@ -2026,13 +2026,26 @@ The name of the matrix-multiplication kernel the module dispatches to.
 gemm_threads: () => int
 ```
 
-The thread count the matrix multiplication had for its most recent call: the run's thread
-count for a product that was the whole work, 1 for one call inside a batch region, where the
-worker pool already spends that budget. The count is one budget, not a second pool beside the
-workers: `num_threads()` is what the run was given, and this is what one product got.
+The thread count the matrix multiplication had for its most recent call: 1 for a library
+call (a whole-work product or one batch chunk; the library runs one thread and owns no pool
+of its own), and the worker pool's width for a canonical call, 1 inside a region. The count is
+what one product got: `num_threads()` is what the run was given, and this is what one product
+spent.
 
 - With effects: reads the size of the worker pool.
 - Example: `gemm_threads()`
+
+#### `gemm_library`
+
+```camel
+gemm_library: () => string
+```
+
+The name of the matrix-multiplication kernel the library path calls: `cblas` in a build with a
+CBLAS, otherwise the canonical kernel's name, which is what the path forwards to.
+
+- Pure.
+- Example: `gemm_library()`
 
 #### `seed`
 
@@ -3662,6 +3675,19 @@ The number of hardware threads, at least 1.
 
 - With effects: reads the machine.
 - Example: `cpu_count()` gives `8`
+
+#### `thread_count`
+
+```camel
+thread_count: () => int
+```
+
+The number of threads this process has, the caller included: the count the operating system
+reports for the process, not the number of processors. A test reads it to pin how many worker
+threads a run creates.
+
+- With effects: reads the process.
+- Example: `thread_count()` gives `1 at -t 1`
 
 <a id="env"></a>
 

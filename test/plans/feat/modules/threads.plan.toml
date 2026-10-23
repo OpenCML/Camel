@@ -2,7 +2,7 @@ id = "modules.threads"
 order = 363
 tier = "fast"
 tags = ["feat", "modules", "tensor", "threads"]
-desc = "`-t` sets the tensor pool as it sets the scheduler, `CAMEL_NUM_THREADS` is gone, and the thread count changes no value: the pool reports the number the run was given, the default is the hardware concurrency, the GEMM spends the run's number (all of it for a product that is the whole work, one thread per call inside a batch region), and a reduction and a GEMM produce the same bits at one thread, at four and at eight"
+desc = "`-t` sets the tensor pool as it sets the scheduler, `CAMEL_NUM_THREADS` is gone, and the thread count changes no value: the pool reports the number the run was given, the default is the hardware concurrency, the GEMM spends the run's number on the tensor pool and runs the library one thread (so a product's library call reports 1, the process has no second pool, and the count of its threads stays within `-t`), and a reduction and a GEMM produce the same bits at one thread, at four and at eight"
 
 # The value of record is the run's `-t` (EntryConfig::maxThreads); the tensor module installs it
 # into its kernel pool when it loads, and without `-t` every pool uses the machine's core count.
@@ -123,49 +123,134 @@ expect_exit = 0
 compare_to = "values.cli_one"
 compare_fields = ["exit_code", "stdout_normalized"]
 
-# The library GEMM's share of the run's budget (gemm.cpp): `-t` is one number of threads for the
-# run, and the GEMM spends that number — all of it for a product that is the whole work, one thread
-# per call inside a batch region, where the pool already spends it. The program prints the count
-# each product actually had (`gemm_threads`) and exits non-zero when it is not the budget's; a wall
-# clock takes no part in it. Before the budget, `-t 16` gave a product four threads, so
-# `gemm_budget.cli_sixteen` was the red case.
+# The library GEMM's own pool is one thread (gemm.cpp, H303): the tensor pool spends the run's
+# budget, and a second pool beside it competed for the same cores on a loaded host (H288 measured
+# the uncapped library losing to the canonical kernel from four threads up). So a whole-work
+# product is one library call on one thread and reports 1, and a batched product's calls take one
+# each while the pool spreads the batch. The program prints the count each product actually had
+# (`gemm_threads`) and exits non-zero when it is not that; a wall clock takes no part in it.
 #
-# What makes these cases red: a cap on the library's own pool (`plain` then reports the cap, not the
-# budget), and a batch region that leaves the library its full share (`batched` then reports the
-# budget instead of 1, which is the oversubscription the cap used to prevent).
+# The contract changed with the reason: before H303 `plain` had to equal `-t`, because the library
+# took the whole budget for a whole-work product. Now `plain` is 1 at every `-t`, and `-t` is what
+# the tensor pool reports (`pool`); the library's one thread is honest, not a cap the program
+# cannot see. A build without a CBLAS forwards the library path to the canonical kernel, which
+# splits over the pool, and the program then expects `-t` for `plain` (it asks `gemm_library()`).
+#
+# What makes these cases red: a library pool wider than one (`plain` then reports more than 1), a
+# batch region that leaves the library more than one thread (`batched` reports the budget), and a
+# process with more threads than `-t` (`pools.*`, which counts them at the operating system).
+#
+# The program prints `library=`, the name of the kernel the library path calls, and the script holds
+# `plain` to what that build can honestly report: 1 with a CBLAS, the pool's width on a build whose
+# library path is the canonical kernel. A single expected number would silently pass the build that
+# only looks like the one measured.
 
 [[tests]]
 name = "gemm_budget.cli_one"
-desc = "At `-t 1` one product is the budget and a batch of four takes one thread per call: `gemm_threads` reports 1 for both."
+desc = "At `-t 1` the whole-work product is one library call with one thread and the batch of four takes one thread per call: `gemm_threads` reports 1 for both."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_threads.cml"
 args = ["-t", "1", "--arg", "expected=1", "${case}", "tensor::fuse", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "gemm_threads pool=1 plain=1 batched=1 expected=1\n"
+verify_script = """
+({ input, assert }) => {
+const m = /^gemm_threads pool=(\d+) plain=(\d+) batched=(\d+) expected=(\d+) library=(\S+)$/.exec(input.normalized.stdout.trim())
+assert(m !== null, 'no gemm_threads line: ' + input.normalized.stdout)
+assert(Number(m[1]) === Number(m[4]), 'the pool reports ' + m[1] + ', the run gave ' + m[4])
+assert(Number(m[3]) === 1, 'the batched product reports ' + m[3] + ' threads per call')
+assert(Number(m[2]) === (m[5] === 'cblas' ? 1 : Number(m[4])), 'the whole-work product reports ' + m[2] + ' with library=' + m[5])
+}
+"""
 
 [[tests]]
 name = "gemm_budget.cli_four"
-desc = "At `-t 4` the product takes four threads and the batched product's calls take one each: the batch loop already spends the budget over four chunks."
+desc = "At `-t 4` the tensor pool reports four threads while the library call reports one: the budget is the pool's, not a second pool's."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_threads.cml"
 args = ["-t", "4", "--arg", "expected=4", "${case}", "tensor::fuse", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "gemm_threads pool=4 plain=4 batched=1 expected=4\n"
+verify_script = """
+({ input, assert }) => {
+const m = /^gemm_threads pool=(\d+) plain=(\d+) batched=(\d+) expected=(\d+) library=(\S+)$/.exec(input.normalized.stdout.trim())
+assert(m !== null, 'no gemm_threads line: ' + input.normalized.stdout)
+assert(Number(m[1]) === Number(m[4]), 'the pool reports ' + m[1] + ', the run gave ' + m[4])
+assert(Number(m[2]) === (m[5] === 'cblas' ? 1 : Number(m[4])), 'the whole-work product reports ' + m[2] + ' with library=' + m[5])
+assert(Number(m[3]) === 1, 'the batched product reports ' + m[3] + ' threads per call')
+}
+"""
 
 [[tests]]
 name = "gemm_budget.cli_eight"
-desc = "At `-t 8` the product takes eight threads, not four: the number comes from the run's budget, not from a cap."
+desc = "At `-t 8` the pool reports eight and the library call one: neither the pool's number nor a cap, but what the call got."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_threads.cml"
 args = ["-t", "8", "--arg", "expected=8", "${case}", "tensor::fuse", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "gemm_threads pool=8 plain=8 batched=1 expected=8\n"
+verify_script = """
+({ input, assert }) => {
+const m = /^gemm_threads pool=(\d+) plain=(\d+) batched=(\d+) expected=(\d+) library=(\S+)$/.exec(input.normalized.stdout.trim())
+assert(m !== null, 'no gemm_threads line: ' + input.normalized.stdout)
+assert(Number(m[1]) === Number(m[4]), 'the pool reports ' + m[1] + ', the run gave ' + m[4])
+assert(Number(m[2]) === (m[5] === 'cblas' ? 1 : Number(m[4])), 'the whole-work product reports ' + m[2] + ' with library=' + m[5])
+assert(Number(m[3]) === 1, 'the batched product reports ' + m[3] + ' threads per call')
+}
+"""
 
 [[tests]]
 name = "gemm_budget.cli_sixteen"
-desc = "At `-t 16` the product takes sixteen threads and the batched product's calls still take one: one budget, spent in one place at a time."
+desc = "At `-t 16` the pool reports sixteen and the library call one, in the whole-work product and in every chunk of the batch: one budget, one pool."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_threads.cml"
 args = ["-t", "16", "--arg", "expected=16", "${case}", "tensor::fuse", "std::fvm"]
 expect_exit = 0
-expect_stdout_exact = "gemm_threads pool=16 plain=16 batched=1 expected=16\n"
+verify_script = """
+({ input, assert }) => {
+const m = /^gemm_threads pool=(\d+) plain=(\d+) batched=(\d+) expected=(\d+) library=(\S+)$/.exec(input.normalized.stdout.trim())
+assert(m !== null, 'no gemm_threads line: ' + input.normalized.stdout)
+assert(Number(m[1]) === Number(m[4]), 'the pool reports ' + m[1] + ', the run gave ' + m[4])
+assert(Number(m[2]) === (m[5] === 'cblas' ? 1 : Number(m[4])), 'the whole-work product reports ' + m[2] + ' with library=' + m[5])
+assert(Number(m[3]) === 1, 'the batched product reports ' + m[3] + ' threads per call')
+}
+"""
+
+# The process's own thread count, read from the operating system (`process.thread_count`), after a
+# whole-work library product and a batched product have created every pool the run will have. At
+# `-t 1` the run is the caller alone; at 4, 8 and 16 the tensor pool's workers are the only others.
+# Before H303 the library's constructor had already created 31 threads at `-t 1`, so all four cases
+# were red by a wide margin.
+
+[[tests]]
+name = "pools.cli_one"
+desc = "`-t 1` creates exactly one worker: the process has one thread, the caller, after the library and the batch have run."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_pools.cml"
+args = ["-t", "1", "${case}", "tensor::fuse", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "thread_pools threads=1 budget=1\n"
+
+[[tests]]
+name = "pools.cli_four"
+desc = "`-t 4` has four threads: the caller and three pool workers, and no library pool."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_pools.cml"
+args = ["-t", "4", "${case}", "tensor::fuse", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "thread_pools threads=4 budget=4\n"
+
+[[tests]]
+name = "pools.cli_eight"
+desc = "`-t 8` has eight threads: the caller and seven pool workers, and no library pool."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_pools.cml"
+args = ["-t", "8", "${case}", "tensor::fuse", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "thread_pools threads=8 budget=8\n"
+
+[[tests]]
+name = "pools.cli_sixteen"
+desc = "`-t 16` has sixteen threads: the caller and fifteen pool workers. A library pool would put the count above the budget, which is the failure this case pins."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_pools.cml"
+args = ["-t", "16", "${case}", "tensor::fuse", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "thread_pools threads=16 budget=16\n"

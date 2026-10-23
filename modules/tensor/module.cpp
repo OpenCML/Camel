@@ -55,6 +55,7 @@ class TensorExecutor : public Executor {
 constexpr std::string_view kDeclaredOperators[] = {
     "dim",
     "gemm_backend",
+    "gemm_library",
     "gemm_threads",
     "load_npy",
     "num_threads",

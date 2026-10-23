@@ -23,7 +23,9 @@
  * paired measurements put the library's advantage only above that size, and a
  * batched attention product must not pay a per-call overhead it cannot repay.
  * The operator stays `matmul` (design principles 9.6). `libraryGemmName()`
- * reports what sgemmLibrary calls.
+ * reports what sgemmLibrary calls. The library runs one thread per call: its
+ * own worker pool is the second pool the tensor pool would compete with (H288,
+ * H303).
  *
  * `matmul` follows NumPy semantics: rank-1 operands are promoted to a row or
  * column vector and the promoted dimension is removed from the result; leading
@@ -50,20 +52,16 @@ void sgemmLibrary(
 std::string_view gemmBackendName();
 std::string_view libraryGemmName();
 
-/// Sets the library GEMM's share of the run's thread budget: the number the run's `-t` names (or
-/// the hardware concurrency without it). There is no separate cap. A build without a library does
-/// nothing, and `libraryGemmName()` then reports the builtin kernel.
-///
-/// The library is not a second pool beside the tensor pool: it is the other way of spending the
-/// same budget (see `matmul`). A product that is the whole work gives the library all of it; a
-/// product inside a batch region takes one thread per call, because the pool already spends the
-/// budget. The budget and its measured curve are in `gemm.cpp`.
+/// Sets the library GEMM's own pool to one thread: the run's budget belongs to the tensor pool,
+/// and a second pool beside it competes for the same cores (the measured curve is in `gemm.cpp`
+/// and docs/technical/25_tensor_stack_and_onnx_export.md). The argument is the run's budget, not
+/// applied to the library. A build without a library does nothing, and `libraryGemmName()` then
+/// reports the builtin kernel.
 void setGemmThreads(int threads);
 
-/// The thread count the GEMM path had for its most recent call: the run's budget for a call that
-/// was the whole work, 1 for a call made inside a pool region (the batched products), and the
-/// canonical kernel reports the same two numbers because it splits over the same pool. What a
-/// program sees as the tensor module's `gemm_threads()`.
+/// The thread count the GEMM path had for its most recent call: one for a library call (whole
+/// work or batch chunk), the pool's width for a canonical call, and 1 for a canonical call inside
+/// a pool region. What a program sees as the tensor module's `gemm_threads()`.
 int gemmThreadsUsed();
 
 /// Result shape of matmul(lhs, rhs). Throws std::invalid_argument when inner extents differ.

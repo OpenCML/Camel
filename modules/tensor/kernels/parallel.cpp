@@ -282,9 +282,10 @@ void setNumThreads(int threads) {
     if (WorkerPool *created = poolSlot()) {
         created->resize(threads);
     }
-    // The run's thread budget is one number, spent in one place at a time: a product that is the
-    // whole work gives it to the library GEMM, and one inside a batch region takes a single thread
-    // because the pool already spends it (gemm.cpp). setGemmThreads is a no-op without a library.
+    // The run's thread budget is the tensor pool's. The library GEMM's own pool is one thread
+    // whatever this number is (gemm.cpp, H303): a second pool beside this one competed for the
+    // same cores, and one library thread is what the measured cells support. setGemmThreads is a
+    // no-op without a library.
     setGemmThreads(threads);
 }
 
