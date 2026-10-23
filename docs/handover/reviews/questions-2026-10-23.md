@@ -101,3 +101,28 @@ develop 上这一批有一半提交没有 Conventional Commits 前缀，有的�
 
 1. **`catalog.coverage_zero` 钉了诊断码的个数**（255），描述里还逐次记着"257→256→254→255 因为某裁定删了/加了哪条"。这正是"测试断言性质，不钉计数"要去掉的形态，而且描述成了变更日志。改为：检查本身就是性质——**注册表里的每个码都被至少一个测试提到，每个被提到的码都在注册表里**（双射）；`expect_stdout_contains` 只断言"没有遗漏"那一行，不含数字；描述一句话说它检查什么，删掉全部历史。加码、删码不再需要碰这个计划。
 2. **规则用例的注释在讲历史**：`parts_order.cml` 等写着"Before the ruling it looked for…""this test is red exactly that way"。注释陈述现在的事实——这个用例检查什么、为什么这个输入能检出它——不写裁定之前的行为与红绿经过（`agents/refactor.md` 的标准）。`test/cases/modules/rules/` 下五个文件一并清理；引用裁定的地方改为引用设计原则或规则语言设计稿的条目。
+
+## prefix-bang-precedence（负责人已裁定）
+
+选 A：一元 `-` `!` `~` 比 `->` 结合得松，`!x->contains<1>` 是 `!(x->contains<1>)`。对 `-` 同样适用（规则统一）：`-1->abs` 是 `-(1->abs)`，先取负写 `(-1)->abs`。语言参考已改，实施见交接说明 H243 第 1 条。
+
+## array-kernel-executors（`array::sum`/`min`/`max` 的执行器）
+
+**A，但不新增第三份陈述。**
+
+- `array:sum`/`min`/`max` 是数组**归约**的实现原子，与 `math:min_bf` 一类**标量二元**运算不是同一个东西——后者算两个数，前者沿一个数组做一遍归约（含 f64 累加、舍入一次，设计原则 7.7）。数组模块自己的归约内核放在 `array` 的执行器组里，是 10.4 说的"热点定义带 `#impl` 内核"的标准形态，不是重复。
+- **比较与求和的算式只写一份**：`array:*` 的执行器调用 `modules/math/minmax.h` 里已有的模板（逐类型的比较、NaN 处理、半精度展宽），不抄一份；`tensor/kernels/minmax.h` 若与它重复，一并改为调用同一个头文件。所以 C++ 里"怎么比较两个 bf16"仍只有一处。
+- **不选 B**：内核只能命名本模块的算子是模块封装的规则，一个模块的语义不应依赖另一模块的私有实现。**不选 C**：`sum` 是最热的泛型归约，正是 `#impl` 要覆盖的。
+- 验收：`test::expand_definitions` 的内核与函数体一致（每种元素类型，含 bf16/f16 与空数组、NaN）；`std::profile` 能看到内核路径；没有执行器的元素类型（例如用户自定义的有序类型）走函数体，结果与之一致。
+
+## 抽查：顺序边第一步、`opt::fold`、`optim`（返工四项）
+
+顺序边成为单独的边种类并参与布局（H242 起步）、`graph::eval` 与 Camel 写的 `opt::fold`（与 C++ 遍的转储逐字相同）、Camel 写的 `optim`（与原生优化器逐位一致）——方向都对，提交信息也按约定了。标准库是 Camel 写法的范本（`stdlib-conventions` 6.5），下面四项要返工：
+
+1. **`optim` 的形状被一个语言缺口扭曲了，修语言而不是绕开它。** `init` 的注释说"语言没有带函数体的函数重载，所以每个优化器的状态是同一个类型，`sgd` 白带两棵零树"；`update` 用 `match type O` 分派，还有一个 `case _ =>` 拿 Adam 的默认值兜底。设计原则 4.4 定了函数重载（`when` 是其适用条件），同一文件里 `adam` 也已经按参数个数重载——缺的是**泛型函数按参数类型重载**。
+   - 先修语言：`func init::<P>(opt: Sgd, params: P): SgdState` 与 `func init::<P>(opt: Adam, params: P): AdamState` 能并存（若 `Redeclaration` 拦了它，那是缺陷，按 4.4 修）。
+   - 再改 `optim`：每个优化器自己的状态类型与 `init`/`update` 重载；删掉 `case _` 兜底（未知的优化器类型是编译错误，不是悄悄当成 Adam）。
+   - `adam`/`adamw` 的两个重载合为一个带默认值的函数（`beta1: float = 0.9, …`），调用处可用具名实参。
+2. **Camel 源码里的任务编号与交接引用**：`stdlib/` 与 `modules/` 下 36 个 `.cml` 的注释引用了 `handover H19, step 10`、`H64 pinned`、`H227's first layer` 之类。注释只陈述事实，引用设计原则或语言参考的条目；任务编号一律删除（公开仓库设计稿第 5 节）。一次机械提交。
+3. **`opt.cml` 写法**：`is_anchor(n) == false && is_written_slot(n) == false` 改为 `!is_anchor(n) && !is_written_slot(n)`（新优先级下 `!` 作用于整个调用）。函数注释里大段"C++ 遍还做什么"的对照移到 `docs/technical/45_graph_module.md`，函数注释只说它做什么。
+4. **`optim.cml` 头注释**讲了它在设计稿里的归属、"今天在哪"、测试怎么断言——这些不属于模块文档。模块头只写：它是什么、一个用法示例、数值约定（f64 中算、存储时舍入一次）。

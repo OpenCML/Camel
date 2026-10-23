@@ -700,8 +700,8 @@ From lowest to highest:
 | 8a | `^` | Right-associative, one level above the multiplicative operators |
 | 9 | `??` `!!` | The right side is a complete expression |
 | 10 | `as` | |
+| 10a | Unary `-` `!` `~` | Looser than `->` and `^`: `!xs->is_empty()` is `!(xs->is_empty())`, `-a->f` is `-(a->f)`, `-a ^ 2` is `-(a ^ 2)`; a literal and a name read alike (`-1->abs` is `-(1->abs)`; to negate first write `(-1)->abs`) |
 | 11 | `->` `?->` | Left-associative |
-| 11a | Unary `-` `!` `~` | Tighter than `->`, looser than `^`: `-a->f` is `(-a)->f`, `!a->f` is `(!a)->f`, `-a ^ 2` is `-(a ^ 2)`; a literal and a name read alike |
 | 12 | `..` `?..` | |
 | 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>` | Must directly follow |
 
