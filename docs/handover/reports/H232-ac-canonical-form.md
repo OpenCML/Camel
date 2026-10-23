@@ -76,6 +76,18 @@
   `algebra_rules.divergence.library_runs`（值）与 `algebra_rules.divergence.differs`（图，`pairs.mjs`）
   从"记录一次 9.7 违规"改成"钉住两侧一致"，语料 `test/cases/opt/algebra_rules/divergence.cml` 保留，
   注释与两条描述都写明机制（引擎拒绝，规则未删）。
+- 库的注释按同一条裁决改正（`docs/handover/reviews/questions-2026-10-23.md` 的 `rule-cannot-write-a-tensor`）：
+  张量那段"这些律留在 `algebra.cpp`"删掉，改成"浮点零律需要 `finite_math`，写法见规则语言第二版第 4 节"
+  （`docs/design/rewrite/v2.cn.md` §4：右边可以调用 Camel 函数）。浮点 `x*0`、`x-x` 不是 0（`NaN*0`、`inf*0`
+  是 NaN，负数乘 0 是 `-0`，`inf-inf` 是 NaN），所以浮点零律要 `finite_math`，整数不需要：库里今天没有浮点
+  零律与浮点 `x-x`，整数那两条原样不动，因此没有既有规则需要补许可。张量零律的目标拼写
+  `t * 0.0 => zeros_like(t)`（`zeros_like` 读 `t` 取形状，所以匹配到的值没被丢掉，丢弃检查也满足）依赖泛型
+  规则 `::<T>` 与 `is_float::<T>`，留给第 3 步——第 1 步的泛型规则没有落地（见
+  `docs/handover/questions/generic-rule-instantiation.md`）。
+- 对照计划的读法按另一条裁决改正：`std::opt::algebra` 与 `rules::simplify` 是同一个东西；库的默认授权就是
+  设计原则 7.3 的默认（**允许** `reassociate`/`contract`）；旧表的拒绝（`exclusive()` 的用户规则、`relaxed()`
+  不给 `reassociate`）是它自己的偏差，不对齐；规则替换图出口时的锚点交接由引擎做。计划表头与相关条目
+  （`divergence.differs`、`library_only.table`、`tensor.table`）按此改写。
 - 未做（已知缺口，供协调者决定是否单开一步）：`why_not` 与 `explain` 的措辞仍只走位置配对与换序，一条只在
   多重集上成立的匹配会被 `why_not` 报成"不匹配"；`check` 也不再逐条覆盖交换/结合（那两种性质现在由上面的
   守卫覆盖，而不是由 `<=>` 规则覆盖）。
