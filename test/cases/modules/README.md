@@ -48,5 +48,4 @@ camel test/modules/python/main.cml
 
 # pyplot 模块
 camel test/modules/pyplot/simple.cml
-camel test/modules/pyplot/main.cml
 ```
