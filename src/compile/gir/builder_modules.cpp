@@ -561,6 +561,13 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
             }
         }
     }
+    if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
+        // The condition this rule was written with (design principles 4.4): `when` says where a
+        // rule applies, and the `#impl` machinery reads it as the arms of a kernel -- the
+        // instances of the function this rule is the executor of (declaredRuleApplies). A pass
+        // declaration is not an operator and is read before this point, so it never reaches here.
+        nativeRuleConditions_[resolver.get()] = NativeRuleCondition{*when, unit_};
+    }
     auto found = std::find_if(
         unit_->nativeOperators.begin(),
         unit_->nativeOperators.end(),
@@ -673,6 +680,49 @@ bool Builder::sameImplSignature(FunctionType *function, FunctionType *kernel) {
     return !function->hasExitType() || function->exitType()->equals(kernel->exitType());
 }
 
+bool Builder::declaredRuleApplies(
+    const camel::core::type::resolver_ptr_t &rule, const std::string &name,
+    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+    const auto found = nativeRuleConditions_.find(rule.get());
+    if (found == nativeRuleConditions_.end()) {
+        // No condition: the rule applies wherever its signature does.
+        return true;
+    }
+    // The instance's parameter types are what the declaration's type parameters are here, and
+    // they are what its condition asks about (`is_armed::<T>()`): the same bindings the rule's
+    // own resolution makes, from the declaration's closed signature.
+    FunctionType *declared = nullptr;
+    camel::core::type::type_bindings_t bindings;
+    if (const auto *generic = dynamic_cast<const DeclaredFuncTypeResolver *>(rule.get());
+        generic != nullptr) {
+        declared = generic->funcType();
+        for (size_t i = 0; i < declared->withTypesCount() && i < withTypes.size(); ++i) {
+            if (!unifyTypeVars(declared->withTypeAt(i), valueTypeOf(withTypes[i]), bindings)) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < declared->normTypesCount() && i < normTypes.size(); ++i) {
+            if (!unifyTypeVars(declared->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
+                return false;
+            }
+        }
+    }
+    // A rule has no `with` arguments of its own where it is selected for a kernel, so a
+    // condition that reads one of the declaration's cannot be answered here; whatever the
+    // outcome, a condition that is neither true nor false is the declaration's defect and is
+    // reported where it is written, never taken for an arm that applies.
+    const WhenResult verdict = evaluateWhenCondition(
+        found->second.clause.condition, declared, bindings, {}, nullptr, found->second.unit);
+    if (verdict.holds()) {
+        return true;
+    }
+    if (verdict.fails()) {
+        return false;
+    }
+    reportWhenProblem(verdict, name, found->second.clause.condition);
+    return false;
+}
+
 void Builder::adoptImplKernel(
     const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType) {
     if (tmpl == nullptr || graph == nullptr || funcType == nullptr) {
@@ -686,14 +736,19 @@ void Builder::adoptImplKernel(
     // Which rule of the declaration is this instance's executor (H228: one operator, per-type
     // executors). A rule with a fixed signature answers for the signature it names; a rule
     // declared with the function's own type parameters is asked with the instance's parameter
-    // types, and its own result type is what a call of the instance gets.
+    // types, and its own result type is what a call of the instance gets. A rule only applies
+    // where its own condition says it does (design principles 4.4): a rule whose condition is
+    // false for these types does not apply, and the next candidate is tried -- which is what
+    // makes the arms of a generic kernel sayable at all, since its single rule otherwise accepts
+    // every element type the function admits.
     const type_vec_t withTypes(funcType->withTypesSpan().begin(), funcType->withTypesSpan().end());
     const type_vec_t normTypes(funcType->normTypesSpan().begin(), funcType->normTypesSpan().end());
     std::string uri;
     camel::core::type::resolver_ptr_t executor;
     for (const auto &[ruleUri, resolver] : kernel.group->resolvers()) {
         if (FunctionType *fixed = resolver->fixedSignature(); fixed != nullptr) {
-            if (sameImplSignature(funcType, fixed)) {
+            if (sameImplSignature(funcType, fixed) &&
+                declaredRuleApplies(resolver, kernel.name, withTypes, normTypes)) {
                 uri      = ruleUri;
                 executor = resolver;
                 break;
@@ -703,8 +758,8 @@ void Builder::adoptImplKernel(
         if (executor != nullptr) {
             continue;
         }
-        if (resolver->resolve(withTypes, normTypes, Modifier::None)
-                .has_value()) {
+        if (resolver->resolve(withTypes, normTypes, Modifier::None).has_value() &&
+            declaredRuleApplies(resolver, kernel.name, withTypes, normTypes)) {
             uri      = ruleUri;
             executor = resolver;
         }
@@ -908,6 +963,19 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                         funcType->toString());
                 throw BuildAbortException();
             }
+            // The rule the declaration names is this instance's executor only where the
+            // declaration's own condition says it is (design principles 4.4): a non-generic
+            // function's types are known here, and a rule narrowed to other types leaves this
+            // instance without an executor. A signature the declaration does not name at all is
+            // the misuse reported above, not a narrowing.
+            camel::core::type::resolver_ptr_t executor;
+            const type_vec_t withTypes(
+                funcType->withTypesSpan().begin(), funcType->withTypesSpan().end());
+            const type_vec_t normTypes(
+                funcType->normTypesSpan().begin(), funcType->normTypesSpan().end());
+            if (declaredRuleApplies(kernel, tag->kernel, withTypes, normTypes)) {
+                executor = kernel;
+            }
             // The graph the declaration made, by the declared type object (overloads share a
             // name and differ by it; builder.cpp, enterScope).
             compile_graph_ptr_t body;
@@ -923,13 +991,25 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
             if (body == nullptr) {
                 continue; // its declaration was refused, and that error is reported
             }
+            if (executor == nullptr) {
+                // No executor for these types: this instance runs the body, which is the
+                // semantics and gives the same result, and a direct call of the function is a
+                // call of that graph rather than of a kernel (adoptImplKernel's no-executor
+                // path, for the instance of a generic function).
+                body->draft().setFlags(
+                    static_cast<uint8_t>(body->draft().flags() | camel::runtime::kGraphFlagImplBody));
+                body->draft().setImplKernelUri(std::string(uri));
+                continue;
+            }
             // A direct call resolves in the kernel's own one-rule group: the operator path
             // then picks the type, the conversions and the execution the kernel declares.
             ImplKernel record;
             record.name  = tag->kernel;
             record.uri   = uri;
             record.group = OperatorGroup::create(
-                group->name(), std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{{uri, kernel}});
+                group->name(),
+                std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
+                    {uri, executor}});
             implKernels_[body.get()] = std::move(record);
             // The graph stays the semantic body: expanding the function means reading this
             // graph, and a consumer that asks for it (autodiff, fusion, export, a rule) gets

@@ -394,6 +394,20 @@ class Builder {
         oper_group_ptr_t group;
     };
     std::unordered_map<const GenericTemplate *, ImplTemplateKernel> implTemplateKernels_;
+    // The applicability condition a rule of a body-less declaration was written with (design
+    // principles 4.4: `when` says where a rule applies), by the rule's resolver. Its one reader
+    // is the `#impl` machinery: for the kernel of an `#impl` function the condition is what says
+    // which instances of that function the rule is the executor of, so an instance outside it
+    // has no executor and runs the function's body (design principles 10.4). A rule without a
+    // condition applies wherever its signature does.
+    struct NativeRuleCondition {
+        GCT::Tree::WhenClause clause;
+        // The module that declares the rule: its condition's predicate is looked up there,
+        // wherever the instance that selects the rule is built (evaluateWhenCondition).
+        const ModuleUnit *unit = nullptr;
+    };
+    std::unordered_map<const camel::core::type::FuncTypeResolver *, NativeRuleCondition>
+        nativeRuleConditions_;
     // generic instance of one, a lambda at the top level): the root graph lists as its own
     // functions only the entry module's, so that what the program does not use of the
     // modules it imports is not part of it.
@@ -1299,6 +1313,15 @@ class Builder {
     /// which is the semantics, and gives the same result.
     void adoptImplKernel(
         const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType);
+    /// Whether the rule `rule` of a body-less declaration applies to an instance of these types:
+    /// the condition the declaration wrote, answered for the instance's types (design principles
+    /// 4.4), with the declaration's own type parameters bound by them. True when the rule has no
+    /// condition. A condition that cannot be answered from the types alone is reported as the
+    /// defect it is (reportWhenProblem).
+    bool declaredRuleApplies(
+        const camel::core::type::resolver_ptr_t &rule, const std::string &name,
+        const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes);
     /// The kernel of `graphs` when they are exactly the one `#impl` body: what a call of the
     /// function is, instead of a call of the body (design principles 10.4).
     std::optional<ImplKernel> implKernelOf(const graph_set_ptr_t &graphs) const;
