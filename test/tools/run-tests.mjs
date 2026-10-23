@@ -18,6 +18,10 @@ const TOOLS_ROOT = path.dirname(__filename)
 const TEST_ROOT = path.dirname(TOOLS_ROOT)
 const PLANS_ROOT = path.join(TEST_ROOT, 'plans')
 const VARS_PATH = path.join(TEST_ROOT, 'vars.toml')
+// The wrapper a `cpu_budget_ms` test runs under: it reaps exactly that test's process tree and
+// reports the CPU time the kernel charged it on file descriptor 3 (its header has the why; the
+// ruling it implements is quoted where the reading is judged, in runOneTest).
+const CHILD_CPU_TOOL = path.join(TOOLS_ROOT, 'child-cpu.mjs')
 // Where a run's record goes. `test/results` unless CAMEL_TEST_RESULTS_ROOT names another tree: a
 // check that has to assert what the retention kept drives two real runs into a scratch tree
 // (test/cases/tools/retention/retention.mjs), and the tree it prunes is the one it writes.
@@ -45,7 +49,7 @@ const PLAN_FIELDS = new Set([
     'id', 'desc', 'order', 'tier', 'debug_tier', 'parallel', 'tags', 'defaults', 'tests', 'sweeps',
 ])
 const TEST_FIELDS = new Set([
-    'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'verify_timeout_ms',
+    'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'cpu_budget_ms', 'verify_timeout_ms',
     'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep', 'cuda_devices',
     'known_fail', 'known_fail_note', 'failure_note',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
@@ -178,6 +182,17 @@ function validatePlanSchema(doc, planPath) {
         checkFieldType(planPath, entry, 'expect_stdout', where, 'string')
         checkFieldType(planPath, entry, 'perf_budget_platform', where, 'string')
         checkFieldType(planPath, entry, 'cuda_devices', where, 'boolean')
+        checkFieldType(planPath, entry, 'cpu_budget_ms', where, 'number')
+        // A CPU budget is the test's cost bound and the timeout is only its liveness bound, so the
+        // two are declared together: a test that states a budget and leaves the timeout at the
+        // runner's 10 s default would be killed long before its own work could cross it, and the
+        // plan would be asserting a bound nothing reaches.
+        if (typeof entry.cpu_budget_ms === 'number' && typeof entry.timeout_ms !== 'number') {
+            throw new PlanSchemaError(
+                `${planLabel(planPath)}: ${where}: cpu_budget_ms needs timeout_ms: the budget is the ` +
+                    `cost bound and the timeout is the liveness bound (a hang, not a slow run)`
+            )
+        }
     }
 }
 
@@ -295,6 +310,9 @@ const DEBUG_BUILD_TIMEOUT_SCALE = 4
 // when a passing test used more than a quarter of it. A timeout is a pass condition on wall time,
 // and four machines' worth of headroom is what keeps it one when the host is busy with other
 // tests. A test that needs more time states it in a comment next to the number (docs/test-plans.md).
+// A test that declares `cpu_budget_ms` is judged on its own CPU time instead and does not read the
+// wall clock as a bound at all: its timeout is a liveness bound (see the ruling quoted at the two
+// places below), so this rule has nothing to say about it.
 const TIMEOUT_MARGIN = 4
 
 /**
@@ -355,12 +373,18 @@ function isSerial(plan, test) {
  * Run one child process and collect its output, as `spawnSync` did, but without blocking the
  * runner: the other tests run while this one waits. The timeout kills the whole process tree
  * (a test may have started a compiler or an interpreter of its own).
+ *
+ * `cpuReport` opens a fourth pipe, on which test/tools/child-cpu.mjs writes the CPU time the
+ * kernel charged the command's process tree. The runner cannot read that itself: the one reading
+ * Node has of a child's CPU is the `cutime` + `cstime` delta of /proc/self/stat, which sums every
+ * child this process reaped, and the runner reaps every test's child from one process.
  */
-function runProcess(command, args, { cwd, env, timeoutMs, marks }) {
+function runProcess(command, args, { cwd, env, timeoutMs, marks, cpuReport = false }) {
     return new Promise((resolve) => {
         const started = performance.now()
         let stdout = ''
         let stderr = ''
+        let cpuReportText = ''
         let timedOut = false
         let settled = false
         let timer = null
@@ -381,13 +405,14 @@ function runProcess(command, args, { cwd, env, timeoutMs, marks }) {
                 wallMs: performance.now() - started,
                 stdout,
                 stderr,
+                cpuReport: cpuReportText,
             })
         }
         try {
             child = spawn(command, args, {
                 cwd,
                 env,
-                stdio: ['ignore', 'pipe', 'pipe'],
+                stdio: cpuReport ? ['ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
                 windowsHide: true,
                 // On POSIX a process group lets the timeout take the whole tree down; on Windows
                 // `taskkill /T` does that.
@@ -411,6 +436,13 @@ function runProcess(command, args, { cwd, env, timeoutMs, marks }) {
         child.stderr.on('data', (chunk) => {
             stderr += chunk
         })
+        if (cpuReport) {
+            const report = child.stdio[3]
+            report.setEncoding('utf8')
+            report.on('data', (chunk) => {
+                cpuReportText += chunk
+            })
+        }
         child.on('error', (error) => finish(null, null, error))
         child.on('close', (status, signal) => finish(status, signal, null))
         if (timeoutMs > 0) {
@@ -680,7 +712,43 @@ function benchmarkSampleCount(benchmark) {
     return null
 }
 
+/**
+ * The CPU reading of a test that declared `cpu_budget_ms`: the last JSON line
+ * test/tools/child-cpu.mjs wrote on file descriptor 3. A missing or unreadable reading is a reason
+ * the caller turns into a failure -- a budget the runner cannot read has examined nothing.
+ */
+function readCpuReport(text) {
+    const line = String(text || '')
+        .split('\n')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .pop()
+    if (!line) {
+        return { cpuMs: null, reason: 'the runner got no CPU report from test/tools/child-cpu.mjs' }
+    }
+    let report
+    try {
+        report = JSON.parse(line)
+    } catch (error) {
+        return { cpuMs: null, reason: `the CPU report is not JSON (${error.message})` }
+    }
+    if (!Number.isFinite(report.cpu_ms)) {
+        return { cpuMs: null, reason: report.reading || 'the child reported no CPU figure' }
+    }
+    return { cpuMs: report.cpu_ms, reason: null }
+}
+
 function formatMetric(result) {
+    // A test judged on its own CPU time prints the CPU figure it was judged on, with the budget it
+    // was read against and the wall clock beside it as information: on this host the wall figure is
+    // the neighbours' scheduling, and a reader who wants it should not have to open meta.json.
+    if (typeof result.cpuBudgetMs === 'number') {
+        const reading = Number.isFinite(result.cpuMs)
+            ? formatDurationMs(result.cpuMs)
+            : 'no reading'
+        return `${reading} cpu of ${formatDurationMs(result.cpuBudgetMs)} budget, ` +
+            `${formatDurationMs(result.wallMs)} wall`
+    }
     // A failed `--timeit` iteration reports the diagnosis, not a mean (H66): the failure is the
     // test's result, so the status line carries no number.
     if (result.benchmark && Number.isFinite(result.benchmark.mean_ms)) {
@@ -1031,6 +1099,10 @@ async function runVerification(test, result) {
         normalized: result.normalized,
         diagnostics: result.diagnostics,
         benchmark: result.benchmark,
+        // The CPU cost judgement, when the test declared one: the figure read on the test's own
+        // process tree and the budget it was judged against (`null` for every other test).
+        cpu_ms: result.cpuMs ?? null,
+        cpu_budget_ms: result.cpuBudgetMs ?? null,
         test_tmp: result.testTmp,
         test_tmp_relative: result.testTmpRelative,
     }
@@ -1360,11 +1432,19 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     const timeoutMs =
         (test.timeout_ms || 10000) * TIMEOUT_SCALE *
         (logContext.options.build === 'debug' ? DEBUG_BUILD_TIMEOUT_SCALE : 1)
-    const proc = await runProcess(toolExe, args, {
+    // A test that declares `cpu_budget_ms` runs under the wrapper that reports its own CPU time:
+    // the command and its environment are unchanged, the wrapper reaps this test's tree and puts
+    // the kernel's figure on a fourth pipe (test/tools/child-cpu.mjs).
+    const cpuBudgetMs = typeof test.cpu_budget_ms === 'number' ? test.cpu_budget_ms : null
+    const launch = cpuBudgetMs === null
+        ? { command: toolExe, args }
+        : { command: process.execPath, args: [CHILD_CPU_TOOL, '--', toolExe, ...args] }
+    const proc = await runProcess(launch.command, launch.args, {
         cwd: REPO_ROOT,
         env,
         timeoutMs,
         marks,
+        cpuReport: cpuBudgetMs !== null,
     })
     // The test program is gone, so the slot has done its job. Everything left -- resuming from the
     // child's `close` event, normalizing and asserting on what it printed, the verification script,
@@ -1375,6 +1455,9 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // steps in the slot were 2.9-4.4 s together.
     // A `parallel = false` test passes no hook and keeps its slot to the end (see executePlans).
     if (typeof logContext.releaseSlot === 'function') logContext.releaseSlot()
+    const cpuReading = cpuBudgetMs === null
+        ? { cpuMs: null, reason: null }
+        : readCpuReport(proc.cpuReport)
     const raw = {
         command: `${toolExe} ${args.join(' ')}`.trim(),
         exitCode: proc.status,
@@ -1405,6 +1488,12 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         // Set before validation: the verify script payload carries this as `case_path`, and the
         // script that normalizes a source path out of its output needs it (H143).
         casePath,
+        // The CPU cost judgement, if this test declared one: the figure the wrapper reported and
+        // the budget it is read against, both recorded on the result (meta.json, the verify
+        // payload, the status line) so a reader sees the numbers the verdict came from.
+        cpuBudgetMs,
+        cpuMs: cpuBudgetMs === null ? null : cpuReading.cpuMs,
+        cpuReason: cpuBudgetMs === null ? null : cpuReading.reason,
     }
 
     if (test.kind === 'benchmark' && raw.stdout) {
@@ -1418,10 +1507,46 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // The verification reads this test's output: executePlans removes the scratch directory
     // only after this returns.
     const failures = await validateTest(test, result, { ...logContext, scope })
+    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit the author's ruling
+    // of 2026-10-23 asks for (docs/handover/reviews/questions-2026-10-23.md,
+    // "declaration-cost-gate" (a)):
+    //
+    //   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）
+    //    基本不随负载变"
+    //
+    // So the figure judged here is the CPU time (user + system) the kernel charged the test's own
+    // process tree, and a crossed budget is the test's work growing -- never "the host was busy".
+    // `timeout_ms` stays, and is what it is for such a test: a liveness bound. A program that stops
+    // working crosses the timeout while its CPU budget stands still, and a program that works
+    // harder crosses the budget while the wall clock may say anything at all. The reading is in
+    // 10 ms ticks (USER_HZ), which is a thousandth of the budget these plans declare.
+    if (cpuBudgetMs !== null && result.timedOut) {
+        failures.push(
+            `killed at its ${formatDurationMs(timeoutMs)} liveness bound after ` +
+                `${formatDurationMs(result.wallMs)}: a cpu_budget_ms test's timeout catches a program ` +
+                `that stopped working, and the CPU budget is what catches one that works harder`
+        )
+    } else if (cpuBudgetMs !== null) {
+        if (result.cpuMs === null) {
+            failures.push(
+                `cpu_budget_ms ${cpuBudgetMs.toFixed(0)} ms has no CPU reading: ${result.cpuReason} ` +
+                    `(a budget the runner cannot read is not a bound; test/tools/child-cpu.mjs reads ` +
+                    `a child's CPU from /proc/self/stat and needs Linux)`
+            )
+        } else if (result.cpuMs > cpuBudgetMs) {
+            failures.push(
+                `used ${formatDurationMs(result.cpuMs)} of CPU against a cpu_budget_ms of ` +
+                    `${formatDurationMs(cpuBudgetMs)}: the test's own work grew (its wall clock read ` +
+                    `${formatDurationMs(result.wallMs)}, which is not the bound on this host)`
+            )
+        }
+    }
     // A timeout is a pass condition on wall time, so it is only a real bound when the test
     // finishes with room to spare. Below the margin the number decides on a busy host, and this
-    // says so here instead of in a red run weeks later.
-    if (failures.length === 0 && result.wallMs * TIMEOUT_MARGIN > timeoutMs) {
+    // says so here instead of in a red run weeks later. A test whose bound is its CPU budget is
+    // not read on the wall clock at all: its timeout is the liveness bound above, and the margin
+    // rule would be asking the wall clock to say what the ruling moved to CPU time.
+    if (failures.length === 0 && cpuBudgetMs === null && result.wallMs * TIMEOUT_MARGIN > timeoutMs) {
         failures.push(
             `finished in ${result.wallMs.toFixed(0)} ms against a ${timeoutMs.toFixed(0)} ms timeout, ` +
                 `below the ${TIMEOUT_MARGIN}x margin: the bound is today's wall time, not a bound ` +
@@ -1488,6 +1613,10 @@ function writeLogFiles(plan, test, result, status, logDir) {
                     : null,
                 wall_ms: result.wallMs,
                 timeout_ms: result.timeoutMs ?? null,
+                // A test whose bound is its own CPU time records the figure and the budget beside
+                // the wall clock, which is provenance for it and not the bound.
+                cpu_ms: result.cpuMs ?? null,
+                cpu_budget_ms: result.cpuBudgetMs ?? null,
                 plan_path: test.__planPath,
                 test_tmp: result.testTmpRelative || null,
             },
@@ -1795,6 +1924,9 @@ function runnerErrorResult(casePath, message) {
         testTmp: null,
         testTmpRelative: null,
         verification: null,
+        cpuBudgetMs: null,
+        cpuMs: null,
+        cpuReason: null,
         failures: [`runner error: ${message}`],
         status: 'fail',
         casePath,
