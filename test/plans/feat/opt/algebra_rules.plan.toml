@@ -36,9 +36,12 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 # `contract` -- so where the library rewrites and the deleted table refused, the library is the
 # baseline and the old table's `relaxed()` policy is its own deviation, and the conditions the old
 # table applied (its `exclusive()` user rule) have no rule-language counterpart. Where the library
-# still differs from the reference mode, the difference is the engine's job and not a rule condition
-# (`rule-conditions-and-policy` item 3). The effect refusal below is decreed the same way, as a
-# local subgraph check before a rule is applied (`rule-drops-effect`).
+# differs from the reference mode, the difference is the engine's job and not a rule condition
+# (`rule-conditions-and-policy` items 2 and 3): the one left in this corpus is the anchored form --
+# the C++ pass's `isReplaceable` refuses to rewrite the graph's exit, output and returned value,
+# while the engine rewrites the matched node and moves the anchor onto the replacement, as the
+# ruling's item 3 says the engine must. The effect refusal below is decreed the same way, as a local
+# subgraph check before a rule is applied (`rule-drops-effect`).
 #
 #   `by_cpp`     the reference side of this tree, recorded as a golden: its graph (`std::gir` /
 #                `std::jgir`) and its table.
@@ -58,7 +61,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 #   `program_still_runs` the program after the library, on four back ends, computes what it did.
 #
 # Measured, on the four corpora (fifteen forms both sides rewrite, fifteen the library rewrites alone,
-# three neither side rewrites, three graphs the two sides reach differently):
+# three neither side rewrites, two graphs the two sides reach differently and one they used to):
 #
 #   * both rewrite: the ten integer neutral forms, the integer coefficient fold and doubling
 #     (`fold`, `double`), the float doubling (`double_d`) and the element-wise doubling
@@ -69,7 +72,10 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 #   * neither: the float coefficient folds `(x*3.0)*2.0` (`fold_d`, `tensor_fold`), which need the
 #     `no_infs` grant no node carries on either side, and the element-wise `t*0.0`, which would have
 #     to write a zero tensor of the matched shape.
-#   * different graphs: the two anchored forms and the form whose product reads a print.
+#   * different graphs: the two anchored forms -- the C++ pass keeps the operation as the graph's
+#     named node, the engine moves the anchor onto the port the rule wrote -- and one graph the two
+#     sides used to answer differently and no longer do, the form whose product reads a print, which
+#     the engine's effect refusal keeps.
 
 # ---- the ten rewrites both sides perform: x + 0, 0 + x, x - 0, x * 1, 1 * x, on int and i32 ----
 
@@ -137,16 +143,21 @@ args = ["${case}", "rules::simplify", "std::nvm"]
 compare_to = "algebra_rules.agreement.without_the_pass"
 compare_fields = ["exit_code", "stdout_normalized"]
 
-# ---- the graphs the two sides do not answer the same way ----
+# ---- the graphs the two sides answer differently ----
 #
-# Two of them, not three: `effect_mul_zero` was the third, and the engine check the ruling of
-# 2026-10-23 decrees (`docs/handover/reviews/questions-2026-10-23.md`, `rule-drops-effect`: before a
-# rule is applied, the subgraph the pattern variables its right side does not use bound is examined,
-# and an effect node, or a node carrying a sync or order edge, there refuses the application) refuses
-# the match that used to drop the print. `library_runs` and `differs` below now pin that agreement,
-# and a rule or an engine change that drops a live effect again turns them red. The check is in this
-# tree -- `dropsOrdered`/`pureComputation` in src/runtime/writings.cpp -- so the correct five-line
-# expectation below passes rather than being marked a known failure.
+# Two of them, and they are the anchored forms: the C++ pass's `isReplaceable` refuses the graph's
+# exit, output and returned value, so `anchor_add` and `anchor_mul32` keep their operation as the
+# named node there; the engine rewrites the matched node and moves the anchor onto the replacement,
+# which is what the ruling of 2026-10-23 gives the engine as its job and not as a rule condition
+# (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy` item 3), so those
+# two graphs exit at the port the rule's right side wrote. `effect_mul_zero` was a third difference
+# and is an agreement now: the engine check the ruling's `rule-drops-effect` decrees (before a rule is
+# applied, the subgraph the pattern variables its right side does not use bound is examined, and an
+# effect node, or a node carrying a sync or order edge, there refuses the application) refuses the
+# match that used to drop the print. `library_runs` and `differs` below pin that agreement, and a
+# rule or an engine change that drops a live effect again turns them red. The check is in this tree --
+# `dropsOrdered`/`pureComputation` in src/runtime/writings.cpp -- so the correct five-line expectation
+# below passes rather than being marked a known failure.
 
 [[tests]]
 name = "algebra_rules.divergence.by_cpp"
@@ -159,7 +170,7 @@ golden = "./golden/algebra_rules.divergence.cpp.jgir"
 
 [[tests]]
 name = "algebra_rules.divergence.differs"
-desc = "The rule library's graph against it, every graph examined: `anchor_add` and `anchor_mul32` lose the operation, the constant and both edges, and the graph exits at its port where the C++ pass keeps the operation as the named node, and main is the same graph; the ruling of 2026-10-23 makes that difference the engine's job and not a rule condition (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy` item 3). `effect_mul_zero` is not a difference any more: the engine refuses the match whose right side would drop the print (design principles 9.7, the same ruling's `rule-drops-effect`), so the library's graph is the C++ graph there and `pairs.mjs` compares it with the rest. Two reported differences, named node by node."
+desc = "The rule library's graph against the C++ pass's, every graph examined. `anchor_add` and `anchor_mul32` are the difference the ruling leaves open and this entry pins both sides of: the C++ pass keeps the operation as the graph's exit, its output and its returned value (its `isReplaceable` refuses to rewrite those three nodes), and the rule engine rewrites the matched node and moves the anchor onto what the rule's right side wrote, which for `x + 0 => x` is the port alone -- the handover the 2026-10-23 ruling makes the engine's job and not a rule condition (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy` item 3), and the same rewriting of a return expression the `rules` lane holds (`coefficients` and `chain` fold there). `effect_mul_zero` is not a difference any more: the engine refuses the match whose right side would drop the print (design principles 9.7, the same ruling's `rule-drops-effect`). `pairs.mjs` names all four graphs node by node."
 case = "../../../cases/opt/algebra_rules/divergence.cml"
 args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "std::jgir"]
 verify_script_path = "../../../cases/opt/algebra_rules/pairs.mjs"
