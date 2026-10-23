@@ -2,7 +2,7 @@ id = "modules.stdlib_reduced"
 order = 376
 tier = "fast"
 tags = ["feat", "modules", "stdlib", "types", "tensor"]
-desc = "The standard library knows the two reduced-precision element types (handover H238, design principles 7.3): `is_float` names bf16 and f16 once, `is_numeric` and `is_ordered` inherit them, so a declaration guarded by either is applicable for them instead of being quietly excluded with WhenConditionUnmet. A function that would compute with an element value is refused where the computation is written, naming the instance and the element type; a tensor reduction computes, accumulating in a wider type and rounding once into the two-byte element type."
+desc = "The standard library knows the two reduced-precision element types (handover H238, design principles 7.3): `is_float` names bf16 and f16 once, `is_numeric` and `is_ordered` inherit them, so a declaration guarded by either is applicable for them instead of being quietly excluded with WhenConditionUnmet. A function that would compute with an element value is refused by name — where the computation is written, or where the `match type` of its definition looks for the element type's case — naming the instance and the element type; a tensor reduction computes, accumulating in f64 and rounding once into the two-byte element type."
 
 # The predicates: the element types belong to the float family, and the composed predicates follow.
 
@@ -19,17 +19,17 @@ expect_stdout = "float\nfloat\nnumeric\nnumeric\nordered\nordered\n0\n0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
-# The first refusal by name: an array reduction over bf16 cannot be computed, and says so.
+# The first refusal by name: an array reduction over bf16 cannot be computed yet, and says so.
 
 [[tests]]
 name = "reduced_sum_refused"
-desc = "`array::sum` over a `bf16[]` now passes its `when is_numeric::<T>()` and is refused at the addition it writes: SemanticDiag::ReducedPrecisionUnsupported names `operator +` and the element type bf16, and the instance note names `sum<bf16>`. With `is_numeric::<bf16>()` still false the call stopped earlier, at WhenConditionUnmet, so this case fails if the predicate change is undone."
+desc = "`array::sum` over a `bf16[]` passes its `when is_numeric::<T>()` and is refused where the `match type` of its definition looks for the element type's case: SemanticDiag::StaticMatchNotExhaustive names the type bf16 and the instance note names `sum<bf16>`. The ruling docs/handover/reviews/reduced-precision.md (d) puts the two arms `bf16(sumF64(xs))` and `f16(sumF64(xs))` there, and they need the conversion of the same ruling's item (c), which the language does not declare yet; before (d) the refusal was at the `+` the whole reduction was written with. With `is_numeric::<bf16>()` false the call would stop earlier, at WhenConditionUnmet, so this case fails if the predicate change is undone."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_sum_refused.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ReducedPrecisionUnsupported"
-expect_output_contains = ["The call of 'operator +' cannot take a value of the reduced-precision element type 'bf16'.", "in the instance 'sum<bf16>'"]
+expect_diagnostic_name = "SemanticDiag::StaticMatchNotExhaustive"
+expect_output_contains = ["No case of this 'match type' selects the type 'bf16'.", "in the instance 'sum<bf16>'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
