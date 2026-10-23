@@ -1,0 +1,58 @@
+/**
+ * The shapes the multiset read of an associative-commutative chain is about (rewrite design 6):
+ * the same sum written with the constants apart from the variable, a product whose coefficient
+ * pair is not adjacent, the rest of a sum a law has a parameter for, a float sum that must not be
+ * regrouped, and a product whose other factor runs a call. One function per shape, so a test can
+ * count what each law read.
+ */
+module multiset_target
+
+/// `(a + b) + 0` and `a + (b + 0)`: the same sum, the second one written so no binary pattern in
+/// the written order finds the `0`.
+func zero_left(a: int, b: int): int { return (a + b) + 0 }
+func zero_right(a: int, b: int): int { return a + (b + 0) }
+
+/// `(1 + a) + 2`, `1 + (a + 2)` and `1 + (2 + a)`: the folded sum `a + 3` however the two
+/// constants and the variable were written.
+func fold_left(a: int): int { return (1 + a) + 2 }
+func fold_right(a: int): int { return 1 + (a + 2) }
+func fold_three(a: int): int { return 1 + (2 + a) }
+
+/// Two products of one variable with a term between them: the coefficient law has no parameter for
+/// that term, so it may not drop it; the law that carries the rest may take it.
+func split_products(a: int, z: int): int { return a * 3 + z + a * 5 }
+func split_products_nested(a: int, z: int): int { return a * 5 + (z + a * 3) }
+
+/// The same shape over floats: the products are commutative, the sum of them is not exactly
+/// associative, so no law may read it as one chain of three terms.
+func split_float(a: float, z: float): float { return a * 3.0 + z + a * 5.0 }
+
+/// The values the class of a sum is about: the two writings of one value under the declared laws
+/// of `int` (commutative and exactly associative), and the same two under the laws of a float
+/// (commutative only).
+func merged_sum(a: int, b: int): int { return (a + b) + (b + a) }
+func grouped_sum(a: int, b: int, c: int): int { return ((a + b) + c) + (a + (b + c)) }
+func grouped_float(a: float, b: float, c: float): float { return ((a + b) + c) + (a + (b + c)) }
+
+/// A float sum with the neutral element inside: only the written order may be read, since a float
+/// sum declares no exact association.
+func float_left(a: float, b: float): float { return (a + b) + -0.0 }
+func float_right(a: float, b: float): float { return a + (b + -0.0) }
+
+/// Runs a call that prints, then multiplies it by zero: the value of the product is zero, and the
+/// call is what the value was made of, so a rewrite may not drop it (design principles 9.7).
+func effectful(a: int): int sync {
+    println('tick')
+    return a
+}
+
+func dropped(a: int): int sync { return effectful(a) * 0 }
+func zero(a: int): int { return a * 0 }
+
+func main(): int sync {
+    println(zero_left(1, 2), zero_right(1, 2), fold_left(4), fold_right(4), fold_three(4))
+    println(split_products(2, 7), split_products_nested(2, 7), split_float(2.0, 7.0))
+    println(merged_sum(3, 4), grouped_sum(1, 2, 3), grouped_float(1.0, 2.0, 3.0))
+    println(float_left(1.0, 2.0), float_right(1.0, 2.0), dropped(5), zero(5))
+    return 0
+}
