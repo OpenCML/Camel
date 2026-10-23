@@ -36,7 +36,8 @@
  *     (`RuntimeDiag::UnrecognizedGraphPass`) or a parameter the declaration does not accept
  *     (`SemanticDiag::ParamArgument*`). An invocation the real parser accepts is one a reader
  *     can copy. This stage reads the value's text as the parser reads it, so it catches what no
- *     rule here mirrors: a value that is not a constant expression.
+ *     rule here mirrors: a value a constant parameter refuses (a `bool`, `int` or `float`
+ *     parameter takes a constant expression; a `string` parameter takes the word as written).
  *
  * What it cannot catch, and why:
  *
@@ -64,9 +65,12 @@
  *     happened. They are not scanned.
  *
  * A line the guard would report is excused when it says why it is not a defect: the removed form
- * is written there in order to be called removed, or a decision and the parser disagree and the
- * conflict is recorded rather than patched. The exceptions are listed in EXCUSED with their
+ * is written there in order to be called removed. The exceptions are listed in EXCUSED with their
  * words, and each is checked to still match a line, so none can outlive what it was written for.
+ * An exception for a decision and the parser disagreeing is only needed while they disagree: the
+ * two that excused design principles 9.3 (`out=model.onnx` as a string value written as it is)
+ * were deleted when the parser took a `string` parameter as written, and that was found by the
+ * check that every exception still matches a line, not by reading the pages.
  * `args` in a test plan are pins, not pages: a refusal test must contain the spelling it pins
  * (`error.positional` in `test/plans/feat/opt/pass_params.plan.toml`), so test plans contribute
  * their `desc` strings to the pass-name rule and nothing to the invocation rule.
@@ -87,6 +91,8 @@
  *     That put the guard at the runner's margin — a passing test is red above a quarter of its
  *     `timeout_ms` (`TIMEOUT_MARGIN` in `test/tools/run-tests.mjs`) — so it went red on a busy
  *     host while every check of it passed, which is a red that says nothing about the pages.
+ *     (That checkout has since been pruned to 6.65 GB and 0.86 M entries, where the guard as it
+ *     was costs 10.4 s and passes: the pruning hides the cost, the skip removes it.)
  *     No page can be lost by the skip, and that is measured rather than argued: under those two
  *     trees in that checkout there is no `.md` file at all, a `.cml` there is a case copy (a page
  *     is only `stdlib/*.cml`) and a `.toml` there is a plan copy (a page is only `test/plans/**`),
@@ -169,13 +175,11 @@ const NOT_WALKED = ['test/results', 'tmp']
 // A line the guard does not report, with the words that make it an exception. Every entry is
 // checked to still match a line, so an exception cannot outlive what it was written for.
 //
-// The first three show a removed form while saying it was removed. The last two are a decision
-// the implementation does not keep: design principles 9.3 writes `out=model.onnx` and says a
-// string value is taken as written, while the parser reads a value as a Camel constant
-// expression and refuses that one ("the value of 'out' is not a constant"). The design
-// principles are normative (AGENTS.md), so the conflict is recorded here and reported rather
-// than patched in passing: either the example becomes the `'onnx::export out="model.onnx"'`
-// spelling `docs/cli.md` and `AGENTS.md` already teach, or the parser takes a string as written.
+// Each shows a removed form while saying it was removed. A decision and the parser no longer
+// disagree about anything this guard reads: design principles 9.3 writes `out=model.onnx` and
+// says a string value is taken as written, and the parser now takes a `string` parameter as
+// written (`onnx::export out=model.onnx` really writes that file), so the two entries that used
+// to excuse that sentence are gone and the sentence needs no exception.
 const EXCUSED = [
     {
         file: 'docs/cli.md',
@@ -191,19 +195,6 @@ const EXCUSED = [
         file: 'docs/design/gpu/plan.cn.md',
         pattern: /没有 `tiles::compile\(device=\)`/,
         reason: 'quotes the review question and answers it in the negative: only `--devices` stays',
-    },
-    {
-        file: 'docs/design-principles.cn.md',
-        pattern: /（字符串取原文），不需要引号/,
-        reason:
-            'design principles 9.3 says a string value is written as it is and needs no quotes; ' +
-            'the parser refuses `out=model.onnx` as a value that is not a constant — a recorded ' +
-            'conflict between the norm and the implementation, for the author to settle',
-    },
-    {
-        file: 'docs/design-principles.en.md',
-        pattern: /\(a string takes the text as written\), and no quoting is needed/,
-        reason: 'the English page of the same recorded conflict',
     },
 ]
 
@@ -790,10 +781,14 @@ async function decideOne(spec, occurrences) {
 // — may leave a specification after it unread, and a spelling the parser would refuse there would
 // be hidden. Anything else than the probe's own name therefore decides none of the members, and
 // they are decided one by one above, which is the evidence this guard collected for every
-// specification before the batch existed. (Measured: a single batch of all 38 specifications
-// contains `std::no_such_pass`, so it is refused there and never reaches the probe — and the
-// specification the parser refuses, `onnx::export out=model.onnx`, is then reported by its own
-// run, exactly as it was before.)
+// specification before the batch existed. (Measured: a single invocation carrying all 37
+// specifications of the tree is refused at `mod::pass` — and it does mention the probe, in the
+// `PassesNeverRun` warning that quotes every pass written after the first graph-consuming one,
+// which is why the check is for the probe's own complaint and not for its name. The batches that
+// hold `std::no_such_pass`, `mymod::fn` and `std::opt safe_fpp=true` are refused at those members
+// and are decided one specification at a time; a page that adds a spelling the parser refuses,
+// `camel train.cml std::opt(safe_fp=true)`, is reported by its own run with the same problem list
+// whether the specifications are batched, one per invocation, or all in one.)
 async function decideBatch(batch) {
     // A batch of one is the old path exactly: one specification, one invocation, its own verdict
     // (a specification whose own name is unknown is read by `decideOne` as reaching the probe,
