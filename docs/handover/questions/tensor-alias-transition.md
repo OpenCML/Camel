@@ -155,3 +155,34 @@ float——正是裁决要的，所以要等期望那一刀跟着改才可能转
 `poison:modules.tiles:compiled_region_invalidation_and_ownership` 在本分支的**每一次**运行里
 都红（带修法、不带修法、带秩 0 收口都一样），不是这次改动抖出来的；这次改动唯一动到的
 poison 例是 `poison:modules.tensor:binary_roundtrip`（原因同上，期望文本）。
+
+## 三个 `poison:` 红的判决（2026-10-24，逐条查过）
+
+先说结论：它们**不是抖动**，develop 上都是绿的，所以是翻自己的红；三条各有各的因，只有一条是期望。
+
+1. `poison:modules.tiles:compiled_region_invalidation_and_ownership`（连带它的非 poison 同体）
+   ——**期望文本**：`expect_stdout_exact` 里还是旧的张量打印形式
+   （`expected "TILES_OUTLINED 2\ntensor([      4.,      16.,      36.], ..."`，实测已是
+   `TILES_OUTLINED 2\n[4.0, 16.0, 36.0]`）。属于打印/期望那一刀。
+
+2. `poison:modules.tensor.compound_assign:tensor.compound_assign.nvm`（连同
+   `tensor.compound_assign.{nvm,fvm,jit,prl,opt,inline}` 六例）——**真缺陷，但根因是裁决的后果**，
+   已单独写成 `docs/handover/questions/compound-assignment-on-a-tensored-array.md`：
+   `compoundAssignmentByRebinding` 只对「模块定义的类型」推导复合赋值（注释点名 `+=` on an array
+   仍是错误），`Tensor` 变成内建数组类型后 `t += u` 必然掉出这一格，需要作者在「模块声明四个
+   assn_* 算子」与「终态就是错误」之间选一条。
+
+3. `poison:modules.optim:optim.trajectory_matches_native.nvm`（连同非 poison 的
+   `.nvm/.fvm/.jit/.prl`）——**真缺陷，落点在别的 lane**：运行期报
+   `(grad(loss)):?:?: 'the gradient kernels' does not support a value of type 'Tensor<f64>';
+   it takes f32 tensors.`，拒绝的代码在 `modules/tensor/kernels/gradient.cpp:34`
+   （`refuseTensorElementType("the gradient kernels", t, {TypeCode::Float32})`，内核 lane，本 lane 不动）。
+   而用例 `test/cases/modules/optim/agreement.cml` 第 6、38 行是**故意**留一个「形状与元素类型都不写」
+   的 f64 叶子（引 `f64-tensor-leaf` 那条裁决），它在 develop 上不走张量的 f32 梯度内核。
+   所以这一格要判的是：f64 叶子在翻之后为什么落到了 `grad` 的 f32 内核上——
+   是 `stdlib/optim.cml`（另一 lane，只读）的分派变了，还是 autodiff 这一侧的候选变了。
+   本 lane 只能报到这一步，改法取决于这一判。
+
+（另：`poison:linear.var_reference:var_tensor.default`、`poison:modules.ddpm_primitives:math.sqrt.runtime.nvm`、
+`poison:modules.nn:with_context_step_demo`、`poison:trans.annotated_dump:boundaries.agir` 也是翻自己的红，
+尚未逐条分类；它们在我量过的每一次运行里都红。）
