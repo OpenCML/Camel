@@ -50,6 +50,7 @@
 | [53_import_cost_audit.md](53_import_cost_audit.md) | `import` 不执行任何代码的逐模块审计：标准库 28 个模块导入时除声明名字外还做什么、a/b/c 分类（a=0 / b=2 / c=26）、每行的探针与源码扫描两份证据、`python` 与 `pyplot` 的 CPython 初始化价格、搜索根与目录扫描和声明模块整份编译的价格，以及为什么模块顶层 `let` 的探针只能断言"不依赖就永不发生" |
 | [54_profiler_allocations.md](54_profiler_allocations.md) | `std::profile` 的分配列：三个值分配器的计时点、按线程归属到算子调用、报告里的总行/步行/算子列与 JSON、开启与关闭的代价、看不到的 `new`/BLAS 打包/`memcpy`/首次触页、d=256 与 d=1024 的测量（分配占一步 0.40% / 0.02%，因此 34% 的差距是内核时间），以及它替换掉的旧说明 |
 | [55_fusion_groups_in_tools.md](55_fusion_groups_in_tools.md) | 融合组在两个工具里的呈现：`std::profile` 为什么给组一行而成员一行都不给、`executions = calls + runs×members` 这条不重复计数的恒等式、JSON 键与输出只在组真的跑过时才出现（关闭时与基线逐字节相同）、调试器为什么停在尾部而不是被跳过的成员、以及它仍然看不到的组内部与内核内断点 |
+| [56_cpu_baselines_and_cuda_visible_devices.md](56_cpu_baselines_and_cuda_visible_devices.md) | CPU 基线里的 CUDA 上下文：`torch.optim.Adam(...).step()` 的健康检查会为从不用 GPU 的对照程序建上下文，卡被别的租户占着时以 `CUDA_ERROR_UNKNOWN` 死在第一个数字之前，而 `SGD.step()` 不会；最小复现、与 `--data` 路径无关的 2×2、以及为什么基线要钉 `CUDA_VISIBLE_DEVICES=""` |
 | [ddpm-primitives.md](ddpm-primitives.md) | DDPM 实验暴露的运行时与 GPU 原语：`math:sqrt` 的 VJP、`fs.write_text` 的字节长度、Tiles 的 `numel` / `shape` / `permute_inverse` / 矩阵乘 lowering、BF16 cuBLAS 的选择，以及检查它们的计划 |
 | [gir-interchange.md](gir-interchange.md) | GIR 导出：`std::gir` / `rgir` / `jgir` / `agir` / `argir` 的格式与分工，以及供编辑器消费的 JSON 版本 1 |
 | [nn-autograd.md](nn-autograd.md) | `nn` 没有自己的自动求导：求导是 `modules/autodiff` 的图重写（`grad` / `with_grad`），见 26 与设计原则 9.9 |
