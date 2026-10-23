@@ -1,0 +1,20 @@
+/**
+ * `reduce` takes its initial accumulator as a with parameter and that value is differentiable.
+ * The operator survives to the backward pass, has no derivative rule, and the gate now refuses at
+ * the call, naming the operator and the parameter, rather than returning 0.0 for a derivative of
+ * 2.0 (the constant array sums to 3, so f(w) = (3 + w) * 2).
+ */
+module value_with_reduce
+
+import { grad } from autodiff
+
+with <w: float>
+func reduced(): float {
+    let xs = [1.0, 2.0]
+    return xs->reduce<(acc: float, item: float) => acc + item, w>() * 2.0
+}
+
+func main(): int sync {
+    println(grad(reduced)<5.0>())
+    return 0
+}

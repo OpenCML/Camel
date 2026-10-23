@@ -114,6 +114,23 @@ using type::TypeCode;
             .cachedOrigin = static_cast<camel::source::origin_id_t>(origin)});
 }
 
+/// A differentiable value passed through an operator's `with` parameter that the backward pass
+/// cannot carry (design principles 9.9). A `with` parameter is configuration by default (a flag,
+/// a mode, a bound), so no gradient flows through it; an operator that takes a *value* this way
+/// (`append`) says so by the value's type having a tangent, and its rule has to send the value its
+/// gradient. A missing rule, or a rule that adds nothing for that value, is the silent omission
+/// this diagnostic replaces, and it names the operator and the parameter.
+[[noreturn]] void failValueWith(
+    uint64_t origin, std::string_view uri, size_t index, Type *type, std::string_view why) {
+    throw camel::core::error::RuntimeFault(
+        RuntimeDiag::ValueWithNoDerivativeRule,
+        {std::string(uri), std::to_string(index + 1), type->toString(), std::string(why)},
+        "",
+        nullptr,
+        camel::core::error::ExecutionSiteHint{
+            .cachedOrigin = static_cast<camel::source::origin_id_t>(origin)});
+}
+
 /// The source of the program being differentiated, to say where a refused node is.
 thread_local camel::source::source_context_ptr_t currentSource;
 
@@ -967,6 +984,11 @@ class Backward final : public VjpBuilder {
     /// contribution of that parameter cannot be carried through them (design principles 9.9).
     std::unordered_set<gc_node_ref_t> tainted_;
     mutable std::unordered_map<gc_node_ref_t, Tangent> gradients_;
+    /// How many gradient contributions each primal value has received. A rule that is given an
+    /// active value through a `with` parameter must add one to it (visitOper checks the count
+    /// after the rule runs); without the count, a rule that forgot the value would leave the
+    /// gradient silently absent.
+    std::unordered_map<gc_node_ref_t, uint64_t> contributions_;
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> toTarget_;
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> toPrimal_;
     std::vector<gc_node_ref_t> captures_;
@@ -2534,6 +2556,7 @@ void Backward::accumulate(gc_node_ref_t primal, gc_node_ref_t gradient) {
     if (!active_.contains(primal)) {
         return; // a constant, or a value no parameter flows into
     }
+    ++contributions_[primal];
     accumulateInto(gradients_[primal], typeOf(forward_, primal), gradient, primal);
 }
 
@@ -3409,16 +3432,42 @@ void Backward::visitOper(gc_node_ref_t node) {
     const auto *body   = reinterpret_cast<const rt::GCOperBody *>(payload.data());
     const std::string uri(body->uri());
     // Operators without an active input (conversions from integers, arithmetic on shapes) pass
-    // no gradient on and need no rule.
+    // no gradient on and need no rule. A `with` input is configuration by default (a flag, a
+    // mode, a bound), so no gradient flows through it; an operator may also take a *value* this
+    // way (`append`), and such an input has a tangent type and is differentiable like an
+    // ordinary input (design principles 9.9). The activity analysis in run() already counts a
+    // with input as an input, so the gate must count the ones that carry a value too: looking at
+    // the ordinary inputs alone is what dropped the value's gradient silently.
+    struct ValueWith {
+        gc_node_ref_t input;
+        size_t index; // in the call's with inputs, from 0
+    };
     bool active = false;
     for (gc_node_ref_t input : forward_.normInputsOf(node)) {
         active |= active_.contains(input);
+    }
+    std::vector<ValueWith> valueWith;
+    size_t withIndex = 0;
+    for (gc_node_ref_t input : forward_.withInputsOf(node)) {
+        if (active_.contains(input) && tangentTypeOf(typeOf(forward_, input)) != nullptr) {
+            valueWith.push_back(ValueWith{.input = input, .index = withIndex});
+            active = true;
+        }
+        ++withIndex;
     }
     if (!active) {
         return;
     }
     const camel::core::VjpRule rule = DerivativeRegistry::instance().findRule(uri);
     if (rule == nullptr) {
+        if (!valueWith.empty()) {
+            failValueWith(
+                forward_.nodeOrigin(node),
+                uri,
+                valueWith.front().index,
+                typeOf(forward_, valueWith.front().input),
+                "no derivative rule is registered for it");
+        }
         failAt(
             forward_.nodeOrigin(node),
             std::format(
@@ -3436,6 +3485,15 @@ void Backward::visitOper(gc_node_ref_t node) {
     for (gc_node_ref_t input : forward_.withInputsOf(node)) {
         withInputs.push_back(ref(input));
     }
+    // A rule that is given an active value through a with parameter must add a gradient for it;
+    // a rule that ignores the parameter would leave the contribution silently absent, which is
+    // the defect this check exists for. The count is per value, so another path that already
+    // accumulated a gradient cannot hide the omission.
+    std::vector<uint64_t> before;
+    before.reserve(valueWith.size());
+    for (const ValueWith &value : valueWith) {
+        before.push_back(contributions_[value.input]);
+    }
     // What the rule hands the accumulator is checked against the value's element type; the
     // location of a refusal is this operator's own place in the program.
     producing_ = node;
@@ -3448,6 +3506,18 @@ void Backward::visitOper(gc_node_ref_t node) {
             .output     = ref(node),
             .origin     = forward_.nodeOrigin(node)});
     producing_ = kInvalidNodeRef;
+    for (size_t i = 0; i < valueWith.size(); ++i) {
+        const auto found = contributions_.find(valueWith[i].input);
+        const uint64_t now = found == contributions_.end() ? 0 : found->second;
+        if (now == before[i]) {
+            failValueWith(
+                forward_.nodeOrigin(node),
+                uri,
+                valueWith[i].index,
+                typeOf(forward_, valueWith[i].input),
+                "its derivative rule added no gradient for it");
+        }
+    }
 }
 
 void Backward::visitAccs(gc_node_ref_t node) {

@@ -195,6 +195,44 @@ vjp_node_t staticInt(VjpBuilder &b, int64_t value) {
     return b.addStatic(toSlot<int64_t>(value), Type::Int64());
 }
 
+// y = xs->extend<ys>: the gradient of y is the gradient of xs followed by the gradient of ys,
+// split at len(xs). Both halves are slices of the upstream gradient, so unlike append's
+// init_arr/last_arr halves this rule needs no operator that grows an array with a computed
+// element and composes to second order through :op/slice_sub. The appended array is the call's
+// with input (design principles 9.9).
+void extendArrayVjp(VjpBuilder &b, const VjpCall &call) {
+    requireInputs(call, 1);
+    const auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    Type *const arrayType   = b.nodeType(call.inputs[0]);
+    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    if (tangentType == nullptr) {
+        return;
+    }
+    if (call.withInputs.size() != 1) {
+        throw std::runtime_error(std::format(
+            "Derivative of '{}' expects 1 with input (other), got {}.",
+            call.uri,
+            call.withInputs.size()));
+    }
+    const std::array<vjp_node_t, 1> xs{call.inputs[0]};
+    const vjp_node_t split = b.addOper(Type::Int64(), ":struct/len_arr", xs);
+    const std::array<vjp_node_t, 1> upstream{*dy};
+    const vjp_node_t end = b.addOper(Type::Int64(), ":struct/len_arr", upstream);
+    // The mask of a slice: bit 0 the end, bit 1 the start. The prefix writes both bounds; the
+    // suffix starts at len(xs) and ends at the upstream gradient's own length.
+    const std::array<vjp_node_t, 5> prefix{
+        *dy, staticInt(b, 0), split, staticInt(b, 1), staticInt(b, 3)};
+    b.accumulateGradient(
+        call.inputs[0], b.addOper(tangentType, ":op/slice_sub", prefix));
+    const std::array<vjp_node_t, 5> suffix{
+        *dy, split, end, staticInt(b, 1), staticInt(b, 2)};
+    b.accumulateGradient(
+        call.withInputs[0], b.addOper(tangentType, ":op/slice_sub", suffix));
+}
+
 // A slice of an array — `xs->slice<start, end>` (`:struct/slice_arr`) and `xs[a:b:s]`
 // (`:op/slice_sub`) — takes a range of positions, so its adjoint is an array of the parent's
 // length with the upstream gradient at those positions and the zero tangent everywhere else.
@@ -357,6 +395,11 @@ void registerBuiltinDerivatives() {
     // The form the loop-state rewrite uses (Builder::markLoopStateInPlace): the same call, so
     // the same rule - it reads the output's gradient and never the array's own value.
     registry.setRule(":struct/append_arr_owned", appendArrayVjp);
+    // The in-place form of a rebinding (`Builder::inPlaceRebindingOf`): an append whose appended
+    // value is still the call's with input, so the value's gradient is the same last element.
+    registry.setRule(":struct/append_arr_in_place", appendArrayVjp);
+    // The appended array is a value too: its gradient is the tail of the output's gradient.
+    registry.setRule(":struct/extend_arr", extendArrayVjp);
     // The private copy a rewritten loop starts from is the identity on values: its gradient is
     // the gradient of the array it copied, unchanged.
     registry.setRule(":struct/copy_arr", identityVjp);

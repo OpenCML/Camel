@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-266 diagnostics: 247 errors, 19 warnings.
+267 diagnostics: 248 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -282,6 +282,7 @@ prints one entry.
 | `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error |
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error |
 | `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error |
+| `0x040001A8` | [RuntimeDiag::ValueWithNoDerivativeRule](#valuewithnoderivativerule) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -7893,6 +7894,41 @@ func step(x: Tensor<f32>): Tensor<f32> {
 func main() {
     let x = reshape([1.0, 2.0] as f32[], [2])
     println(step(x))
+}
+```
+
+### ValueWithNoDerivativeRule
+
+`0x040001A8` · Error · `RuntimeDiag::ValueWithNoDerivativeRule`
+
+**Message**
+
+```text
+The operator '{0}' takes a differentiable value through its with parameter {1} (counting from 1), of type '{2}', but {3}.
+```
+
+**Help**
+
+```text
+A value that depends on a differentiated parameter must not lose its gradient (design principles 9.9). A derivative rule for '{0}' has to accumulate the value's gradient into that with parameter; a with parameter that is configuration takes no gradient, so a value is passed there only when its gradient can be returned.
+```
+
+**Example** (`test/cases/modules/autodiff/value_with_refusal.cml`, run as `camel test/cases/modules/autodiff/value_with_refusal.cml`)
+
+```camel
+module value_with_refusal
+
+import { grad } from autodiff
+
+with <w: float>
+func defaulted(): float {
+    let m = [(1, 2.0)] as Map<int, float>
+    return m->get_or<2, w>() * 3.0
+}
+
+func main(): int sync {
+    println(grad(defaulted)<5.0>())
+    return 0
 }
 ```
 

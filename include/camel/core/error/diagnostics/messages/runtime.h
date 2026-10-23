@@ -51,6 +51,7 @@ enum class RuntimeDiag : uint32_t {
     TimeFormatFailed            = 0x00003A,
     OperatorNotImplemented      = 0x00003B,
     GradientElementTypeMismatch = 0x00003C,
+    ValueWithNoDerivativeRule   = 0x0001A8,
     // Faults and reports of the rulings of 2026-10-12 (design principles log 2.10).
     ConversionOutOfRange = 0x000050,
     UnhandledError       = 0x000051,

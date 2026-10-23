@@ -253,6 +253,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::ValueWithNoDerivativeRule,
+            {
+                "ValueWithNoDerivativeRule",
+                "The operator '{0}' takes a differentiable value through its with parameter {1} (counting from 1), of type '{2}', but {3}.",
+                "A value that depends on a differentiated parameter must not lose its gradient (design principles 9.9). A derivative rule for '{0}' has to accumulate the value's gradient into that with parameter; a with parameter that is configuration takes no gradient, so a value is passed there only when its gradient can be returned.",
+            },
+        },
+        {
             RuntimeDiag::ConversionOutOfRange,
             {
                 "ConversionOutOfRange",
