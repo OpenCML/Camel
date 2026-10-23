@@ -1122,6 +1122,14 @@ void Builder::rejectLiteralValue(
         reason = folded ? "the value " + value.toString() +
                               " is too small to be represented (the nearest value is zero)"
                         : "too small to be represented (the nearest value is zero)";
+    } else if (!literal::kindEnters(value, type)) {
+        // A value of a kind the type has no form of: a fractional value in an integer type, an
+        // imaginary part in a real one. Said before the range, which would answer a question the
+        // value does not raise (`0.5` is not outside the range of an integer, it is not an
+        // integer). The words match the ones a decimal literal in an integer type already gets
+        // (rejectLiteralData, `int(1.9)`).
+        reason = isIntegerType(type) ? "the value would be truncated"
+                                     : "the value cannot become that type";
     } else if (!range.empty()) {
         // A folded expression is quoted as written, so the value it came to is also said.
         reason = folded ? "the value " + value.toString() + " is out of range (" + range + ")"
