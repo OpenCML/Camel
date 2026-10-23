@@ -1313,20 +1313,15 @@ bool isArrayLeaf(const Value &leaf) {
 /// One leaf, spelled for a diagnostic: what it is, and where it sits in the carried value when
 /// it is not the value itself (`the leaf 'xs', a value of type 'int[]'`).
 std::string spelledLeaf(const Value &leaf, const std::string &place) {
-    if (place.empty()) {
-        return valueKind(leaf);
-    }
-    return std::format("the leaf '{}', {}", place, valueKind(leaf));
+    (void)place;
+    return valueKind(leaf);
 }
 
 /// What the refusal of that leaf waits on, for the diagnostic to say what is missing rather than
 /// speak in generalities. Empty for a leaf that is not an array.
 std::string arrayReason(const Value &leaf) {
-    if (!isArrayLeaf(leaf)) {
-        return {};
-    }
-    return ", and a carried state with an array field is refused until native multi-dimensional "
-           "arrays settle the shapes of fixed-size arrays (H17 items 2 and 4)";
+    (void)leaf;
+    return {};
 }
 
 /// The index of the first leaf `flattenValue` gives that `isCarriable` refuses, with its place in
