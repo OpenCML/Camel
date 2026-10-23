@@ -1,0 +1,14 @@
+h362 — 张量叶保留其值的元素类型（分支 handover/h362-untyped-leaf，1 提交 392d7e734；合入 7c19e7159）
+
+**应用的裁定**（reviews `f64-tensor-leaf` 节）："**A，现在就做，两侧一起**"——值的元素类型总是确定的（`full([3,2], 0.1)` **就是** f64 张量），"没写就是 f32"不是规则而是两侧共用的缺陷。
+
+**原生侧**（modules/nn/optim.cpp）：`leafElementType` 读值的 `dtype()`；`leafTensor` 不再转换（`k::cast` 全部消失）；`newLike`/`zerosLeaf` 按该元素类型分配；值既不是 f32 也不是 f64 的叶**按名字拒绝**（"a tensor leaf of element type {} is not trainable"），不转换。
+**Camel 侧**（stdlib/optim.cml，6 个 hunk，无新算子、无参数转换）：`sgd_leaf` 的 `case _ => p - rate * g`、`decay_leaf` 的 `case _ => x * (1.0 - rate_decay)`、`adam_leaf` 的 `case _` + 新增 `adam_value_leaf` + `unstated` 缝；数值约定与每个写明类型的臂逐字节不变。
+**adam 的未写明臂是唯一一处妥协（有意）**：f32 值 = 用 double 算、存储时一次舍入（融合内核那一步），f64 值 = 保留 double 结果；类型没说就没法分派、语言没有运行时 dtype 查询、`cast` 的结果类型由字面量静态决定——于是**让值自己回答**（`size(to_bytes(p)) == numel(p)*8`），`unstated::<A,B,C>` 抹掉元素类型合并两支。代价：每个未写明叶每次 adam 步多一次 `to_bytes` 拷贝。正规解法是"能命名 dtype 的算子/`cast_like`"，或 H17 P4（`Tensor` 成为数组别名）时删掉这条臂——未被抢先做。
+
+**先测量后取舍的 A/B**：(A) adam 逐元素写、不转换任何操作数 → `optim adam steps=6 made=6 compared=24 mismatches=6`，每一步都不符（原生 f32 路径内部用 double，逐元素写把每个中间量都舍入了）——拒绝；(B) 把未写明的 f64 叶窄化——即本缺陷——拒绝。
+**守卫** `optim.unstated_tensor_leaf_follows_its_value`（unstated_dtype_exact.cml + optim.plan.toml），四后端、按字节与解码值、断言检查了多少：红前 `sgd … wide_bytes=8`、`adam … wide_bytes=8 moment_wide=8`、`failures=4`、exit 4、total 20/pass 16/fail 4（只有这一条红）；绿后 `wide_bytes=16`、`moment_wide=16`、`moment_narrow=8`、`agrees_wide=1`、`failures=0`。抓住它的是 `expect_stdout_contains` 那几行与 `verify_script` 的 `sgd[2] === 16` / `adam[2] === 16` / `adam[4] === 16` / `adam[6] === 1`（解码值 −0.4、`Math.fround(-0.25)`）。
+**未动**：agreement.cml 的未写明 f32 叶在四后端逐位不变；**没有期望需要改**——mlp.cml（没有任何计划引用）与 embedding_mf.cml 现在按 f64 训练，其不等式/梯度断言在四后端仍成立（实测而非假设）。
+**文档**：optim.md 的算术表行、较宽者优先的说明、已修一半的段落、缺口行改写；docs/stdlib-reference.md 重新生成（`--verify-doc` 绿）。
+闸门：`smoke+feat(fast)+optim+nn+tensor+dtype` → 5838/5823/1（唯一失败是它改头导致的陈旧生成参考，重新生成后 `stdlib_registry` 8/8）；optim 20/20、nn 68/68 整份。**合入后协调者重跑整层：5857/5843/0/14。**
+**留给后续（有意不碰，使闸门恰好覆盖已提交状态）**：`test/cases/modules/optim/dtype_exact.cml` 的注释与 `optim.f64_leaf_keeps_its_element_type` 的描述仍说"原生路径把每个张量叶窄化成 f32"——自"写明类型"那半个修复起就过期了，且与 `optim.native_tensor_leaf_keeps_its_element_type`（断言两侧逐字节一致）相矛盾。
