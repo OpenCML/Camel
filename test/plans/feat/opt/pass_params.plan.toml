@@ -314,3 +314,14 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["pass declarations missing: PASS"]
 timeout_ms = 60000
+
+[[tests]]
+name = "docs.word_form_only"
+desc = "A page cannot teach a spelling the command line refuses. The guard reads every pass invocation the pages show the way the command line reads it (`splitPassList`, `groupPassWords` and `parseSpec`), and runs each distinct specification through the real parser followed by a pass name no build registers, so a spelling the parser rejects is refused before anything runs. It prints the number of invocations it checked: that number is pinned here, so a rule that stops matching pages is red rather than silent. A page that adds or removes an invocation updates the pin."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-doc-pass-forms.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["doc pass forms: 246 pass invocation(s)", "38 distinct", "38 run through the real parser", "37 of them reached the probe"]
+timeout_ms = 300000
