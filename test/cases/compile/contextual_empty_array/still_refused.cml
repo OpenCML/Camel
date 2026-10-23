@@ -1,0 +1,12 @@
+// The empty array literal takes the element type of the position it stands in; it does not make
+// the position accept anything. A field of another type is still refused: the fix is one rule
+// about where `[]` gets its element type, not a looser conversion of the fields beside it.
+module contextual_empty_array_still_refused
+
+type Tree = { value: int, children: Tree[] }
+
+func main(): int sync {
+    let tree: Tree = { value: "seven", children: [] }
+    println(len(tree.children))
+    return 0
+}

@@ -1,0 +1,17 @@
+// A bare `Tensor` is the numeric array whose element type is not fixed (plan Q6): any numeric
+// array fits, whatever its rank and element type, and `len` reads its first dimension.
+module array_alias_bare_tensor
+
+import { Tensor, ones } from tensor
+
+func count(t: Tensor): int {
+    return len(t)
+}
+
+func main(): int sync {
+    let ints: int[3] = [1, 2, 3]
+    let floats: f32[2, 3] = ones([2, 3])
+    println(count(ints))
+    println(count(floats))
+    return 0
+}

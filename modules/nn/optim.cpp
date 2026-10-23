@@ -172,7 +172,7 @@ void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const L
 
 // ---------------------------------------------------------------- leaves
 
-bool isTensorLeaf(Type *type) { return camel::tensor::asTensorType(type) != nullptr; }
+bool isTensorLeaf(Type *type) { return camel::tensor::isTensorType(type); }
 
 /// The element type of a tensor leaf: the one its value has. It is read, never converted: a leaf
 /// whose type states an element type and its value always agree (the slot refuses a value of

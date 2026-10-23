@@ -64,8 +64,8 @@ class FromBytesResolver final : public FuncTypeResolver {
         if (types.size() == 1)
             requested = types[0]->code();
         else if (types.empty()) {
-            if (const auto target = asTensorType(expected))
-                requested = target->dtype();
+            if (const auto target = tensorFactsOf(expected); target.dtype)
+                requested = target.dtype;
         }
         if (!requested || *requested != dtype_)
             return std::nullopt;

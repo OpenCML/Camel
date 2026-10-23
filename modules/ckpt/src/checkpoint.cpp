@@ -52,7 +52,7 @@ using core::type::tree::isInternal;
     throw std::invalid_argument(displayPath(path) + ": " + reason);
 }
 std::string kind(Type *type) {
-    if (tensor::asTensorType(type))
+    if (tensor::isTensorType(type))
         return "tensor";
     if (isBytesType(type))
         return "bytes";
@@ -189,7 +189,7 @@ NativeNode readNode(
         spec.at("sha256") != sha256Hex(node.payload))
         mismatch(path, "leaf length or SHA-256 mismatch");
     if (tag == "tensor") {
-        const auto target  = tensor::asTensorType(type);
+        const auto target  = tensor::tensorFactsOf(type);
         const auto shape   = spec.at("shape").get<tensor::Shape>();
         const auto dtype   = spec.at("dtype").get<std::string>();
         const auto storage = [&] {
@@ -201,10 +201,10 @@ NativeNode readNode(
         }();
         if (std::string(tensor::dtypeName(storage.dtype)) != dtype || storage.shape != shape)
             mismatch(path, "NPY dtype or shape differs from manifest");
-        if (target->dtype() && tensor::dtypeName(*target->dtype()) != dtype)
+        if (target.dtype && tensor::dtypeName(*target.dtype) != dtype)
             mismatch(path, "tensor dtype differs");
-        if (target->shape()) {
-            const auto &want = *target->shape();
+        if (target.shape) {
+            const auto &want = *target.shape;
             if (want.size() != shape.size())
                 mismatch(path, "tensor rank differs");
             for (size_t i = 0; i < want.size(); ++i)

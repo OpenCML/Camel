@@ -1,0 +1,29 @@
+// `Tensor<f32, [2, 3]>` and `f32[2, 3]` are one type written two ways (plan P4, section 5.1):
+// a value of either spelling passes for the other, and `Tensor<f32>` is `f32[..]`. The two
+// arguments state their extent where they are made, so the call binds and checks a real shape
+// rather than a literal's.
+module array_alias_eq_two_spellings
+
+import { Tensor, ones } from tensor
+
+func from_tensor_type(t: Tensor<f32, [2, 3]>): int {
+    return len(t)
+}
+
+func from_array_type(t: f32[2, 3]): int {
+    return len(t)
+}
+
+func any_rank(t: Tensor<f32>): int {
+    return len(t)
+}
+
+func main(): int sync {
+    let a: f32[2, 3] = ones([2, 3])
+    let b: Tensor<f32, [2, 3]> = ones([2, 3])
+    let c: f32[..] = ones([2, 3])
+    println(from_tensor_type(a))
+    println(from_array_type(b))
+    println(any_rank(c))
+    return 0
+}

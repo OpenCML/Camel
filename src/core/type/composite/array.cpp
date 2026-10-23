@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/core/type/composite/array.h"
+#include "camel/core/data/composite/array.h"
+#include "camel/core/data/primary.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
+#include "camel/core/type/other.h"
 #include "camel/core/type/pure.h"
 #include "camel/core/type/storage.h"
 #include "camel/core/type/text.h"
@@ -15,6 +18,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -192,6 +196,15 @@ ArrayType *ArrayType::numericUnknown(std::span<const int64_t> extents, std::stri
     return make(Type::Void(), std::move(forms), anyRank, pack, true);
 }
 
+ArrayType *
+ArrayType::numericUnknownFromForms(std::span<const ExtentForm> extents, std::string_view pack) {
+    // As numericUnknown: a shape argument fixes the rank and no shape is any rank. The forms are
+    // kept as they were written, so an extent written over a dimension name keeps its name.
+    std::vector<ExtentForm> forms(extents.begin(), extents.end());
+    const bool anyRank = forms.empty() || !pack.empty();
+    return make(Type::Void(), std::move(forms), anyRank, pack, true);
+}
+
 ArrayType *ArrayType::fromFactory(ArrayTypeFactory &factory) { return create(factory.elemType_); }
 
 ArrayType *ArrayType::fromData(Type *elemType) { return create(elemType); }
@@ -245,6 +258,96 @@ ArrayType *ArrayType::withElementType(Type *elemType) const {
         return const_cast<ArrayType *>(this);
     }
     return make(elemType, extents_, anyRank_, packName(), numericUnknown_);
+}
+
+const Type *
+ArrayType::applyArguments(std::span<const TypeArgument> arguments, std::string &error) const {
+    // `Tensor` is this numeric array written with a module type's name, so its arguments are the
+    // array type's own: one element type, then one shape (docs/design/arrays-memory/plan.cn.md
+    // section 5). `Tensor<f32>` is `f32[..]` (a rank nobody fixed),
+    // `Tensor<f32, [2, 3]>` is `f32[2, 3]`, and `Tensor<[3]>` is the numeric array whose
+    // element type is not fixed yet. Every spelling the old tensor type accepted keeps its
+    // meaning here, so a program that writes one does not change.
+    Type *elemType = nullptr;
+    std::vector<ExtentForm> extents;
+    bool hasShape = false;
+    for (const TypeArgument &argument : arguments) {
+        if (argument.type != nullptr) {
+            if (elemType != nullptr || hasShape) {
+                error = "a Tensor takes one element type, written before the shape: "
+                        "Tensor<dtype, [d0, d1, ...]> (or dtype[d0, d1, ...])";
+                return nullptr;
+            }
+            // The element of a numeric array is a numeric scalar (array.h): exactly the type
+            // written, because the array stores it and the kernels dispatch on it.
+            const TypeCode code = argument.type->code();
+            if (!isNumericScalarTypeCode(code)) {
+                error = "the element type of a Tensor is a numeric scalar (i32, i64, f32, f64, "
+                        "bf16, f16, bool, c64 or c128), not '" +
+                        typeCodeToString(code) + "'";
+                return nullptr;
+            }
+            elemType = argument.type;
+            continue;
+        }
+        if (hasShape) {
+            error = "a Tensor takes one shape: Tensor<dtype, [d0, d1, ...]>";
+            return nullptr;
+        }
+        if (argument.extents) {
+            // A shape written over dimension names: the forms are kept as written, and the
+            // non-constant ones are the shape's unknown dimensions (the name is the metadata).
+            extents.assign(argument.extents->begin(), argument.extents->end());
+            hasShape = true;
+            continue;
+        }
+        // A constant argument is a shape of integer constants, the spelling a tensor shape had
+        // before the array type took shapes over (plan P3, 4.1): a negative extent is the
+        // unknown dimension it always was, now written `?`.
+        const auto array = std::dynamic_pointer_cast<camel::core::data::ArrayData>(argument.data);
+        if (!array) {
+            error = "the constant argument of a Tensor type is its shape, an array of integers "
+                    "such as const [3, 4] (a negative extent means unknown)";
+            return nullptr;
+        }
+        for (const auto &element : array->raw()) {
+            if (auto i = std::dynamic_pointer_cast<camel::core::data::IntData>(element)) {
+                extents.push_back(
+                    i->data() < 0 ? ExtentForm::unknown()
+                                  : ExtentForm::constant(static_cast<int64_t>(i->data())));
+            } else if (auto l = std::dynamic_pointer_cast<camel::core::data::LongData>(element)) {
+                extents.push_back(
+                    l->data() < 0 ? ExtentForm::unknown() : ExtentForm::constant(l->data()));
+            } else {
+                error = "every extent of a Tensor shape must be an integer constant (a negative "
+                        "extent means unknown)";
+                return nullptr;
+            }
+        }
+        hasShape = true;
+    }
+    if (!hasShape) {
+        // `Tensor<f32>`: no shape is stated, so nothing fixes the rank (`f32[..]`). A Tensor
+        // with no argument at all does not come here: the builder hands back the type itself.
+        return elemType != nullptr ? openRank(elemType) : const_cast<ArrayType *>(this);
+    }
+    if (extents.empty()) {
+        // Every dimension is removed, and a type with no dimension is its element type (the
+        // rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md): `Tensor<f32, []>`
+        // is `f32`, the scalar. A spelling that states no element type has nothing left to
+        // denote, and says which two spellings do.
+        if (elemType == nullptr) {
+            error = "a Tensor with no dimension is its element type, and this spelling states "
+                    "no element type: write 'Tensor<f32, []>', which is 'f32', or give the "
+                    "shape a dimension";
+            return nullptr;
+        }
+        return elemType;
+    }
+    if (elemType != nullptr) {
+        return create(elemType, std::span<const ExtentForm>(extents));
+    }
+    return numericUnknownFromForms(std::span<const ExtentForm>(extents));
 }
 
 Type *ArrayType::resolve(const type_vec_t &typeList) const {
@@ -583,3 +686,23 @@ ArrayType::withExtentValues(const ExtentValues &values, const ExtentPacks &packs
     return make(elemType_, std::move(forms), anyRank, anyRank ? packName() : std::string_view(),
                 numericUnknown_);
 }
+
+namespace camel::core::type {
+
+const ArrayType *asArrayType(const Type *type) {
+    if (type == nullptr || type->code() != TypeCode::Array) {
+        return nullptr;
+    }
+    return static_cast<const ArrayType *>(type);
+}
+
+bool isNumericArrayType(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr) {
+        return false;
+    }
+    // The numeric-unknown array has no element type to read; that it is numeric is the marker.
+    return array->isNumericUnknown() || isNumericScalarTypeCode(array->elemTypeCode());
+}
+
+} // namespace camel::core::type

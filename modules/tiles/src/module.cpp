@@ -159,7 +159,7 @@ slot_t runPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
             offset += sizeof(value);
             return td::toSlot(value);
         }
-        if (tensor::asTensorType(type)) {
+        if (tensor::isTensorType(type)) {
             const auto &shape  = program->nodes[program->outputs.at(leaf++)].shape;
             const size_t count = elements(shape);
             auto *out = tensor::createTensor(TypeCode::Float32, shape, core::mm::autoSpace());
@@ -469,7 +469,7 @@ slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
 
 bool supportedLeaves(Type *type) {
     return !core::type::tree::firstRejectedLeaf(type, [](Type *leaf) {
-        return leaf->code() == TypeCode::Float64 || tensor::asTensorType(leaf) != nullptr;
+        return leaf->code() == TypeCode::Float64 || tensor::isTensorType(leaf);
     });
 }
 // Placement changes storage, not the computation function's tensor signature.
