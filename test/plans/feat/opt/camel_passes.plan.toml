@@ -1,0 +1,48 @@
+id = "opt.camel_passes"
+order = 332
+tier = "fast"
+tags = ["feat", "opt", "camel", "differential", "dce", "cse"]
+
+# A pass written in Camel (`stdlib/opt.cml`, handover H227) against the C++ pass that does the
+# same (`std::opt::cse`, `std::opt::dce values_only=true`). The evidence is graph equality: the
+# C++ run records the graph it produced in a golden, and the Camel run's graph is put to the
+# isomorphic comparison the snapshot tests use (`gir_dot_isomorphic`, `test/tools/gir-dot.mjs`),
+# which compares each node's kind, type, shape and in/out degree and each edge's endpoint kinds,
+# link type and label. The two dumps are not compared as text: compiling the pass's own library
+# renumbers every node's source origin, and a node's id is the compiler's, not the graph's.
+
+[[tests]]
+name = "camel_passes.cse.by_cpp"
+desc = "The reference: std::opt::cse on the corpus whose literals and expressions repeat."
+kind = "snapshot"
+case = "../../../cases/opt/camel_passes/cse_subject.cml"
+args = ["${case}", "std::opt::cse", "std::gir"]
+expect_exit = 0
+snapshot_stream = "stdout"
+golden = "./golden/camel_passes.cse.dot"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "camel_passes.dce.by_cpp"
+desc = "The reference: std::opt::dce restricted to values on the corpus with an unread chain."
+kind = "snapshot"
+case = "../../../cases/opt/camel_passes/dce_subject.cml"
+args = ["${case}", "std::opt::dce values_only=true", "std::gir"]
+expect_exit = 0
+snapshot_stream = "stdout"
+golden = "./golden/camel_passes.dce.dot"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "camel_passes.cse_written_variable.by_cpp"
+desc = "The reference: std::opt::cse on the var corpus whose expression is reread after a write."
+kind = "snapshot"
+case = "../../../cases/opt/generic/written_variable.cml"
+args = ["${case}", "std::opt::cse", "std::gir"]
+expect_exit = 0
+snapshot_stream = "stdout"
+golden = "./golden/camel_passes.cse_written_variable.dot"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000

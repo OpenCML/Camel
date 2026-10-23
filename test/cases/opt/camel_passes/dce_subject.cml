@@ -1,0 +1,30 @@
+module dce_subject
+
+// The corpus of the dead-value comparison (H227): a chain nothing reads, longer than one
+// removal deep (removing `c` leaves `b` unread), a string chain nothing reads, and a value the
+// program uses. The chain is what makes one round insufficient.
+
+func waste(x: int, y: int): int {
+    let a = x * y
+    let b = a + 1
+    let c = b * b
+    return x + y
+}
+
+func spare(s: string): int {
+    let t = s + '!'
+    let u = len(t)
+    return 4
+}
+
+func kept(x: int): int {
+    let a = x * 2
+    return a + 1
+}
+
+func main(): int sync {
+    println(waste(3, 4))
+    println(spare('ab'))
+    println(kept(5))
+    return 0
+}
