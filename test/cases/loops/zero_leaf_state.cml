@@ -1,0 +1,32 @@
+// A loop whose state is a struct with no leaves, the zero-leaf case of "a struct's fields are
+// the loop's state components" (design principles 3.10, the split of H71). The ruling of
+// 2026-10-23 allows this shape as that rule's degenerate case: no rule and no diagnostic of its
+// own. The state carries nothing, so the loop runs for the elements it is given; its value is
+// that same zero-leaf struct, and only the body's effects show the rounds.
+module zero_leaf_state
+
+type Nothing = {}
+
+// The body is the state itself: it never changes, so the loop runs one round per element and
+// its value is the empty struct it started with.
+func carried(n: int): Nothing {
+    return loop s = {} for x in range(0, n) do s
+}
+
+// A `sync` body: one line per round, which is how the rounds are counted, and the empty struct
+// written out each round is the next state.
+func printing(xs: int[]): Nothing {
+    return loop s = {} for x in xs do sync {
+        println('round', x)
+        {}
+    }
+}
+
+func main(): int sync {
+    let a = carried(3)
+    let c = printing([7, 8])
+    let fresh: Nothing = {}
+    println(a, c)
+    println(a == fresh)
+    return 0
+}

@@ -88,6 +88,49 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "loops.zero_leaf_state"
+desc = "A loop's state may be a struct with no leaves, the zero-leaf case of the split that makes a struct's fields the state's components (design principles 3.10, H71). The ruling of 2026-10-23 allows it — 「(a) 允许空结构体状态：它是「按叶子拆成分量」的零叶子情形，不加规则、不加诊断。」 — so nothing refuses it and nothing diagnoses it: the state carries nothing, the loop runs one round per element (round 7, round 8, which only the body's effects can show), its value is still that zero-leaf struct ({} {}, and equal to a fresh one), and the four back ends agree."
+kind = "behavior"
+case = "../../../cases/loops/zero_leaf_state.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "round 7\nround 8\n{} {}\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.zero_leaf_state.opt_jit"
+desc = "The zero-leaf struct state after `std::opt` and on the JIT: the optimizer keeps the empty struct the loop's state and gives the interpreters' values."
+kind = "behavior"
+case = "../../../cases/loops/zero_leaf_state.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "round 7\nround 8\n{} {}\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.zero_leaf_state.dump"
+desc = "On the graph the zero-leaf state stays the loop's one state, not a list of components: the LOOP node's value_type is the empty struct '{  }', and its value enters the named type `Nothing` by a CAST, so what the program sees is still a zero-leaf struct of the type it declared."
+kind = "behavior"
+case = "../../../cases/loops/zero_leaf_state.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split(String.fromCharCode(10))
+const loops = lines.filter((l) => l.includes('type="LOOP"'))
+assert(loops.length > 0, 'the dump has no LOOP node to read the state shape from: ' + input.normalized.stdout)
+assert(loops.every((l) => l.includes('value_type="{  }"')), 'a zero-leaf loop state is not the empty struct: ' + loops.join(' | '))
+assert(lines.some((l) => l.includes('type="CAST"') && l.includes('value_type="Nothing"')), 'the empty struct does not enter the named type: ' + input.normalized.stdout)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
 name = "loops.effects"
 desc = "A body that is a sync block runs its effects every round, in order, and its last value is the next state; a loop in a sync function returns its last state (countdown 0)."
 kind = "behavior"
