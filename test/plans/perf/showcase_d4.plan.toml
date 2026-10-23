@@ -1,0 +1,24 @@
+id = "perf.showcase_d4_mcts"
+order = 904
+tier = "slow"
+tags = ["showcase", "slow", "d4", "mcts", "search"]
+
+# The small configuration of showcase/d4-mcts (H13): the Camel search and its Python counterpart
+# on seven cases -- four positions and the three guards -- at 2000 playouts, 5000 on the empty
+# board.  compare.py diffs the two outputs line for line, so a single differing line fails the
+# test, and it writes its report under ${test_tmp}, this run's own scratch directory: a literal
+# `tmp/...` is one place two runs would write.  The Python counterpart is the standard library
+# alone, so nothing here needs torch or NumPy.
+
+[[tests]]
+name = "small"
+desc = "D4 small configuration: compare.py runs the Camel Monte-Carlo tree search and its Python counterpart on four positions and the three guards and requires the same exit code and the same output, line for line; it also checks the four back ends build the same tree, and it exits non-zero on the first difference."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/d4-mcts/compare.py"
+args = ["${case}", "--profile", "small", "--results", "${test_tmp}/d4-showcase-small/RESULTS.md"]
+skip_unless = ["${python}", "-c", "import sys"]
+expect_exit = 0
+expect_stdout_contains = ["d4 compare: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
