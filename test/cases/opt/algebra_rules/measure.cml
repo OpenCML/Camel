@@ -1,0 +1,59 @@
+/**
+ * The H226 measurement's table: one line per graph of the program, with the graph's node count, its
+ * edge count and the count of every operator the algebraic corpora write.
+ *
+ * The same corpus goes through this pass on both sides of the comparison — the C++ algebraic pass
+ * (`std::opt::algebra neutral_only=true`) and the rule library (`rules::simplify`) — so the two
+ * tables are the measurement: a line that differs is a difference, and the line carries the nodes,
+ * the edges and the operators of that graph on each side.
+ */
+module measure
+
+import { Program, Node, Graph, graphs, nodes, inputs, with_inputs, ctrl_inputs, op, op_name, name } from graph
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func opsOf(g: Graph): string[] {
+    return nodes(g)->map<(n: Node): string => opText(n)>->filter<(s: string): bool => s != ''>
+}
+
+func countOf(ops: string[], which: string): int {
+    return len(ops->filter<(s: string): bool => s == which>)
+}
+
+/// The edges of the graph: every input of every node is one edge, of one of the three kinds.
+func edgesOf(g: Graph): int {
+    return loop total = 0 for n in nodes(g) do total + len(inputs(n)) + len(with_inputs(n)) + len(ctrl_inputs(n))
+}
+
+func line(g: Graph) {
+    let ops = opsOf(g)
+    println(
+        name(g), 'nodes', len(nodes(g)), 'edges', edgesOf(g),
+        'add_l', countOf(ops, ':op/add_l'), 'add_i', countOf(ops, ':op/add_i'),
+        'sub_l', countOf(ops, ':op/sub_l'), 'sub_i', countOf(ops, ':op/sub_i'),
+        'mul_l', countOf(ops, ':op/mul_l'), 'mul_i', countOf(ops, ':op/mul_i'),
+        'div_l', countOf(ops, ':op/div_l'), 'div_i', countOf(ops, ':op/div_i'),
+        'neg_l', countOf(ops, ':op/neg_l'), 'neg_i', countOf(ops, ':op/neg_i'),
+        'add_d', countOf(ops, ':op/add_d'), 'sub_d', countOf(ops, ':op/sub_d'),
+        'mul_d', countOf(ops, ':op/mul_d'), 'div_d', countOf(ops, ':op/div_d'),
+        'neg_d', countOf(ops, ':op/neg_d'),
+        'println', countOf(ops, ':io/println'),
+        'tensor_add', countOf(ops, 'tensor:add'), 'tensor_mul', countOf(ops, 'tensor:multiply'))
+}
+
+/// The table of `p`, in graph order, with the root graph (`__root__`) left out: it holds the entry
+/// call alone and is the same on both sides.
+export func report(p: Program): Program! sync {
+    let gs = graphs(p)->filter<(g: Graph): bool => name(g) != '__root__'>
+    let _ = loop n = 0 for g in gs do sync {
+        line(g)
+        return n + 1
+    }
+    return p
+}
