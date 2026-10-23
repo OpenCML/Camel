@@ -221,7 +221,11 @@ void sumVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:broadcast_like", {*dy, call.inputs[0]}));
+            addTensorOperFor(
+                b,
+                call.inputs[0],
+                "tensor:broadcast_like",
+                {*dy, call.inputs[0]}));
     }
 }
 
@@ -232,14 +236,18 @@ void meanVjp(VjpBuilder &b, const VjpCall &call) {
         const vjp_node_t count =
             addFloatOper(b, ":op/ltod", {b.addOper(Type::Int64(), "tensor:numel", std::array{x})});
         const vjp_node_t share = addFloatOper(b, ":op/div_d", {*dy, count});
-        b.accumulateGradient(x, addTensorOper(b, "tensor:broadcast_like", {share, x}));
+        b.accumulateGradient(x, addTensorOperFor(b, x, "tensor:broadcast_like", {share, x}));
     }
 }
 
 /// dy of a reduction over an axis, re-expanded to the input's shape.
 vjp_node_t expandReduced(VjpBuilder &b, const VjpCall &call, vjp_node_t dy) {
     const vjp_node_t keepDims = call.inputs.size() > 2 ? call.inputs[2] : staticBool(b, false);
-    return addTensorOper(b, "tensor:expand_axis", {dy, call.inputs[0], call.inputs[1], keepDims});
+    return addTensorOperFor(
+        b,
+        call.inputs[0],
+        "tensor:expand_axis",
+        {dy, call.inputs[0], call.inputs[1], keepDims});
 }
 
 void sumAxisVjp(VjpBuilder &b, const VjpCall &call) {
@@ -283,7 +291,7 @@ void softmaxVjp(VjpBuilder &b, const VjpCall &call) {
         }
         b.accumulateGradient(
             call.inputs[0],
-            b.addOper(vjpTensorType(), "tensor:softmax_grad", inputs));
+            addTensorOperFor(b, call.inputs[0], "tensor:softmax_grad", inputs));
     }
 }
 
@@ -316,7 +324,11 @@ void layerNormVjp(VjpBuilder &b, const VjpCall &call) {
             }
             b.accumulateGradient(
                 call.inputs[static_cast<size_t>(which)],
-                b.addOper(vjpTensorType(), "tensor:layer_norm_grad", inputs));
+                addTensorOperFor(
+                    b,
+                    call.inputs[static_cast<size_t>(which)],
+                    "tensor:layer_norm_grad",
+                    inputs));
         }
     }
 }

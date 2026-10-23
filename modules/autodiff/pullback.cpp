@@ -135,13 +135,17 @@ using type::TypeCode;
 thread_local camel::source::source_context_ptr_t currentSource;
 
 /// The element type a tangent of `type` is made of: an array's innermost element type, or the type
-/// itself. A module-owned type (a tensor) is its own element type: the core cannot see inside it,
-/// and this build's tensor element type is f32 -- a written `Tensor<f64>` is refused before a value
-/// of it can exist -- so comparing the two types' codes is the comparison there is to make.
+/// itself. An array that states no element type (`Tensor`, the alias's transitional spelling) has
+/// none to report: nothing there says which width a gradient must have, so the caller checks
+/// nothing rather than refusing a gradient of a width the type never named.
 Type *tangentElementType(Type *type) {
     Type *tangent = tangentTypeOf(type);
     while (tangent != nullptr && tangent->code() == TypeCode::Array) {
-        tangent = tt::as_ptr<ArrayType>(tangent)->elemType();
+        Type *elem = tt::as_ptr<ArrayType>(tangent)->elemType();
+        if (elem == nullptr || elem->code() == TypeCode::Void) {
+            return nullptr;
+        }
+        tangent = elem;
     }
     return tangent;
 }
@@ -600,7 +604,10 @@ bool carriesGradient(Type *type) {
         return false;
     }
     if (type->code() == TypeCode::Array) {
-        return carriesGradient(tt::as_ptr<type::ArrayType>(type)->elemType());
+        // An array's gradient is carried as the array of its elements' gradients; a kind whose
+        // values share the array code states one of its own (`Tensor` is a numeric array whose
+        // element type is not fixed yet, so there is no element tangent to build one from).
+        return tangentTypeOf(type) != nullptr;
     }
     if (isAggregate(type)) {
         for (size_t i = 0; i < aggregateSize(type); ++i) {

@@ -271,7 +271,7 @@ void sumToVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:broadcast_like", {*dy, call.inputs[0]}));
+            addTensorOperFor(b, call.inputs[0], "tensor:broadcast_like", {*dy, call.inputs[0]}));
     }
 }
 
@@ -281,7 +281,7 @@ void broadcastLikeVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t g = call.inputs[0];
         if (isTensorNode(b, g)) {
-            b.accumulateGradient(g, addTensorOper(b, "tensor:sum_to", {*dy, g}));
+            b.accumulateGradient(g, addTensorOperFor(b, g, "tensor:sum_to", {*dy, g}));
         } else if (isFloatNode(b, g)) {
             // tensor:sum answers at float64; a value of type f32 keeps the gradient at its own
             // width (see floatGradientAtWidth).
@@ -299,7 +299,11 @@ void expandAxisVjp(VjpBuilder &b, const VjpCall &call) {
         const vjp_node_t keepDims = call.inputs.size() > 3 ? call.inputs[3] : staticBool(b, true);
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:sum_axis", {*dy, call.inputs[2], keepDims}));
+            addTensorOperFor(
+                b,
+                call.inputs[0],
+                "tensor:sum_axis",
+                {*dy, call.inputs[2], keepDims}));
     }
 }
 
@@ -308,7 +312,7 @@ void castLikeVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:cast_like", {*dy, call.inputs[0]}));
+            addTensorOperFor(b, call.inputs[0], "tensor:cast_like", {*dy, call.inputs[0]}));
     }
 }
 
@@ -317,7 +321,7 @@ void permuteInverseVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:permute", {*dy, call.inputs[1]}));
+            addTensorOperFor(b, call.inputs[0], "tensor:permute", {*dy, call.inputs[1]}));
     }
 }
 
@@ -486,13 +490,16 @@ std::vector<OpDef> gradientOps() {
 }
 
 void registerTensorTangentSpace() {
-    camel::core::TangentSpace space;
-    space.tangentType  = &tensorTangentType;
-    space.addUri       = "tensor:add";
-    space.zerosLikeUri = "tensor:zeros_like";
-    camel::core::DerivativeRegistry::instance().setTangentSpace(TensorType::typeCode(), space);
+    // A tensor is a numeric array, so the code the tangent space and the discrete predicate are
+    // registered for is the array's. The array kind's own space (`:tangent/add_arr`,
+    // `:tangent/zeros_arr`) stays as the core registered it: those operators answer for every
+    // array, and a tensor is one. What only the tensor module can say is that the numeric-unknown
+    // array — the alias `Tensor`, whose element type is not fixed yet — has a tangent of its own
+    // (itself), which is the case the core's element-wise rule cannot work out.
+    camel::core::DerivativeRegistry::instance().setTangentType(
+        camel::core::type::TypeCode::Array, &tensorTangentType);
     camel::core::DerivativeRegistry::instance().setDiscretePredicate(
-        TensorType::typeCode(), &tensorIsDiscrete);
+        camel::core::type::TypeCode::Array, &tensorIsDiscrete);
 }
 
 } // namespace camel::tensor::ops

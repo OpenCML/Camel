@@ -36,7 +36,6 @@ using namespace camel::tensor::ops;
 using camel::core::error::RuntimeDiag;
 using camel::core::error::throwRuntimeFault;
 namespace k      = camel::tensor::kernels;
-using TensorType = camel::tensor::TensorType;
 using camel::tensor::kUnknownDim;
 using camel::tensor::StaticShape;
 using camel::tensor::Array;
@@ -346,7 +345,7 @@ slot_t tripleOf(Array *first, Array *second, Array *third) {
     namespace mm          = camel::core::mm;
     const auto tensorType = [](const Array *t) -> Type * {
         StaticShape shape(t->shapeSpan().begin(), t->shapeSpan().end());
-        return TensorType::get(t->dtype(), std::move(shape));
+        return camel::tensor::ops::tensorOf(t->dtype(), std::move(shape));
     };
     TupleType *type = TupleType::create({tensorType(first), tensorType(second), tensorType(third)});
     auto *tuple     = ::Tuple::create(3, mm::autoSpace());
@@ -586,10 +585,10 @@ void conv2dVjp(VjpBuilder &b, const VjpCall &call) {
     gradInputs.insert(gradInputs.end(), call.inputs.begin() + 3, call.inputs.end());
     b.accumulateGradient(
         call.inputs[0],
-        b.addOper(vjpTensorType(), "nn:conv2d_input_grad", gradInputs));
+        addTensorOperFor(b, call.inputs[0], "nn:conv2d_input_grad", gradInputs));
     b.accumulateGradient(
         call.inputs[1],
-        b.addOper(vjpTensorType(), "nn:conv2d_kernel_grad", gradInputs));
+        addTensorOperFor(b, call.inputs[1], "nn:conv2d_kernel_grad", gradInputs));
     b.accumulateGradient(
         call.inputs[2],
         addTensorOper(b, "nn:conv2d_bias_grad", {call.inputs[2], *dy}));
@@ -612,7 +611,9 @@ void batchNormTrainVjp(VjpBuilder &b, const VjpCall &call) {
     if (call.inputs.size() > 6) {
         gradInputs.push_back(call.inputs[6]);
     }
-    Type *gradType         = TupleType::create({vjpTensorType(), vjpTensorType(), vjpTensorType()});
+    // The three gradients are those of x, gamma and beta: the tuple states each one's own type.
+    Type *gradType = TupleType::create(
+        {b.nodeType(call.inputs[0]), b.nodeType(call.inputs[1]), b.nodeType(call.inputs[2])});
     const vjp_node_t grads = b.addOper(gradType, "nn:batch_norm_train_grad", gradInputs);
     b.accumulateGradient(call.inputs[0], b.addAccess(grads, 0));
     b.accumulateGradient(call.inputs[1], b.addAccess(grads, 1));
@@ -631,7 +632,9 @@ template <const char *GradUri> void pool2dVjp(VjpBuilder &b, const VjpCall &call
     }
     std::vector<vjp_node_t> gradInputs{call.inputs[0], *dy};
     gradInputs.insert(gradInputs.end(), call.inputs.begin() + 1, call.inputs.end());
-    b.accumulateGradient(call.inputs[0], b.addOper(vjpTensorType(), GradUri, gradInputs));
+    b.accumulateGradient(
+        call.inputs[0],
+        addTensorOperFor(b, call.inputs[0], GradUri, gradInputs));
 }
 
 std::vector<OpDef> nnTensorOps() {

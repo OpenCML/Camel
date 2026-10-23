@@ -85,7 +85,15 @@ std::optional<slot_t> shapeFold(const InferContext &ctx, mm::IAllocator &allocat
 slot_t reshapeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("reshape", [&] {
         const std::vector<int64_t> target = parseIntArray(norm.get<::Array *>(1), norm.type(1));
-        return wrap(k::reshape(tensorArg(norm, 0, true), target, resultAllocator()));
+        Array *t = tensorArg(norm, 0, true);
+        if (target.empty()) {
+            // No dimension at all: the value with no dimension is the element it holds (the
+            // rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md section
+            // rank-zero-tensor), and `resolveReshape` refuses a value that is not one element.
+            (void)k::resolveReshape(t->shapeSpan(), target);
+            return t->getSlot(0);
+        }
+        return wrap(k::reshape(t, target, resultAllocator()));
     });
 }
 
@@ -709,7 +717,7 @@ void sliceVjp(VjpBuilder &b, const VjpCall &call) {
         inputs.insert(inputs.end(), call.inputs.begin(), call.inputs.end());
         b.accumulateGradient(
             call.inputs[0],
-            b.addOper(vjpTensorType(), "tensor:slice_grad", inputs));
+            addTensorOperFor(b, call.inputs[0], "tensor:slice_grad", inputs));
     }
 }
 
@@ -744,8 +752,9 @@ void sliceSubVjp(VjpBuilder &b, const VjpCall &call) {
     }
     b.accumulateGradient(
         parent,
-        addTensorOper(
+        addTensorOperFor(
             b,
+            parent,
             "tensor:slice_grad",
             {*dy, parent, staticInt(b, 0), start, end, step}));
 }
@@ -757,7 +766,11 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:take_grad", {call.inputs[0], call.inputs[1], *dy}));
+            addTensorOperFor(
+                b,
+                call.inputs[0],
+                "tensor:take_grad",
+                {call.inputs[0], call.inputs[1], *dy}));
     }
 }
 
