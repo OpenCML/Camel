@@ -405,6 +405,7 @@ H237 的规模扫描（`examples/models/naive-in-expert-out`）：d=64 时 Camel
 4. **所有遍**：删死代码沿数据边与同步边判断存活，删节点时把穿过它的顺序边接上；内联、改写原样复制或转交同步边与顺序边；规则匹配只看数据端口（H110 的控制边特例、`std::opt::ctrl` 与 `dce` 的 `values_only` 参数随之简化或删除，报告逐项说明）；自动微分、部分应用、特化、导出读端口角色。
 5. **`graph` 模块**：`inputs`/`with_inputs`/`ctrl_inputs` 合为带角色的端口列表加 `sync_preds`/`order_preds`；规则语言与 `fact` 的模式不变（源码写法本身标出角色）。
 6. **其余**：ONNX 导出、Tiles、`std::cpp`、`std::cml`、调试器、转储（`std::gir` 画出三种边的不同样式）。
+6.5 **表示细节**见设计稿第 5 节（结构节点的端口按位置、`BRCH` 与臂只靠区域归属、`GATE`/`SYNC` 删除、`std::opt::ctrl` 改为 `std::opt::order` 只约简顺序边）；规则改写使效应不再被用到（论文侧 F20）未定，不据此定用例期望。
 7. **验收**：H241 第 6 条的用例；纯计算上不再出现任何非数据边（断言）；`effects_outside_sync.cml` 的 `returned()` 不执行；`std::opt` 在内联后的乘积上能做代数化简（H110 的情形）；四个后端结果一致。
 
 ### 5.0 调度
