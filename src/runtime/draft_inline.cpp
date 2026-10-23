@@ -1291,10 +1291,19 @@ DraftInlineResult inlineCallableInDraft(
         funcNodeId,
         static_cast<void *>(calleeGraph));
 
-    // What the body has to wait on: the control predecessors of the call.
+    // What the body has to wait on: the control predecessors of the call, and the statement the
+    // call was written after in its `sync` block (the chain is an ordering of its own,
+    // docs/design/effects/edges.cn.md 1.5). The bodies of the statements in it are a chain of
+    // another block, so the order crosses to them as control, exactly as it does for the other
+    // ordering the call carried.
     std::vector<gc_node_ref_t> ctrlPreds(
         draft.ctrlInputsOf(funcNodeId).begin(),
         draft.ctrlInputsOf(funcNodeId).end());
+    for (gc_node_ref_t syncPred : draft.syncInputsOf(funcNodeId)) {
+        if (std::ranges::find(ctrlPreds, syncPred) == ctrlPreds.end()) {
+            ctrlPreds.push_back(syncPred);
+        }
+    }
     ctrlPreds                  = controlFrontier(draft, ctrlPreds);
     const bool hasExternalCtrl = !ctrlPreds.empty();
 
@@ -1546,6 +1555,26 @@ DraftInlineResult inlineCallableInDraft(
     // inlined output/completion anchor instead.
     draft.replaceAllValueUses(funcNodeId, result.valueExit);
     draft.replaceAllCtrlUses(funcNodeId, result.ctrlExit);
+    // The statements written directly after the call keep their place in the chain of the block
+    // they are written in: the call is gone, so they follow what the call followed. They do not
+    // follow the body's anchor instead -- that anchor is a node of the region the body was given,
+    // and a sync edge never leaves the region of its block -- and what the body ordered before them
+    // is carried as one order edge, order alone (docs/design/effects/edges.cn.md 1.5).
+    if (const std::vector<gc_node_ref_t> callSyncUsers(
+            draft.syncUsersOf(funcNodeId).begin(),
+            draft.syncUsersOf(funcNodeId).end());
+        !callSyncUsers.empty()) {
+        const std::vector<gc_node_ref_t> callSyncPreds(
+            draft.syncInputsOf(funcNodeId).begin(),
+            draft.syncInputsOf(funcNodeId).end());
+        for (gc_node_ref_t user : callSyncUsers) {
+            if (!draft.alive(user)) {
+                continue;
+            }
+            draft.setSyncInputs(user, callSyncPreds);
+            draft.appendOrderDependency(user, result.ctrlExit);
+        }
+    }
 
     draft.eraseNode(funcNodeId);
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice finished for draft node {}.", funcNodeId);
