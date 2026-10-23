@@ -1,0 +1,153 @@
+module library_only
+
+// The forms the legacy C++ algebraic pass does not perform and the rule library does, one form per
+// function. They measure the other direction of the comparison: what the library reaches that the
+// reference mode cannot.
+//
+// Three families, and the C++ side of each is a different fact:
+//
+//   * the integer laws the C++ law table never had — `x * 0`, `0 * x`, `x - x`, `x / 1`, `-(-x)`
+//     (the deleted table had the neutral elements, the like-term combines and the coefficient
+//     folds, and nothing else: `e8c290554:src/passes/opt/generic/algebra.cpp`). The library carries
+//     them (`int_mul_zero`, `int_zero_mul`, `int_sub_self`, `int_div_one`, `int_neg_neg`) and
+//     `simplify` applies them.
+//   * the laws the deleted C++ law table did have and the reference mode does not run — the combine
+//     `x*c1 + x*c2`, the coefficient fold `(x*c1)*c2` and the doubling `x + x`. The reference mode
+//     is `neutral_only`, so it leaves all three; the library's `int_combine`, `int_fold` and
+//     `int_add_self` perform them, and `feat.opt.algebra` holds the library to the operator shapes
+//     the deleted table produced on its own corpus.
+//   * the floating-point neutrals, which the C++ law table deliberately did not infer
+//     ("Floating-point identities need separate NaN/zero rules and are deliberately not inferred
+//     from real arithmetic", `e8c290554:algebra.cpp`). The library states them as rules that hold
+//     bit for bit (`float_mul_one`, `float_add_minus_zero`, `float_sub_zero`, `float_div_one`,
+//     `float_neg_neg`) beside the ones that need a permission (`float_combine`, `float_fold`).
+
+func mul_zero(x: int): int sync {
+    let a = x * 0
+    println(a)
+    return 0
+}
+
+func zero_mul(x: int): int sync {
+    let a = 0 * x
+    println(a)
+    return 0
+}
+
+func sub_self(x: int): int sync {
+    let a = x - x
+    println(a)
+    return 0
+}
+
+func div_one(x: int): int sync {
+    let a = x / 1
+    println(a)
+    return 0
+}
+
+func neg_neg(x: int): int sync {
+    let a = -(-x)
+    println(a)
+    return 0
+}
+
+func mul_zero32(x: i32): i32 sync {
+    let a = x * 0
+    println(a)
+    return 0
+}
+
+func sub_self32(x: i32): i32 sync {
+    let a = x - x
+    println(a)
+    return 0
+}
+
+func combine(x: int): int sync {
+    let a = x * 3 + x * 5
+    println(a)
+    return 0
+}
+
+func fold(x: int): int sync {
+    let a = (x * 3) * 2
+    println(a)
+    return 0
+}
+
+func double(x: int): int sync {
+    let a = x + x
+    println(a)
+    return 0
+}
+
+func mul_one_d(x: float): float sync {
+    let a = x * 1.0
+    println(a)
+    return 0
+}
+
+func add_neg_zero_d(x: float): float sync {
+    let a = x + -0.0
+    println(a)
+    return 0
+}
+
+func sub_zero_d(x: float): float sync {
+    let a = x - 0.0
+    println(a)
+    return 0
+}
+
+func div_one_d(x: float): float sync {
+    let a = x / 1.0
+    println(a)
+    return 0
+}
+
+func neg_neg_d(x: float): float sync {
+    let a = -(-x)
+    println(a)
+    return 0
+}
+
+func combine_d(x: float): float sync {
+    let a = x * 3.0 + x * 5.0
+    println(a)
+    return 0
+}
+
+func fold_d(x: float): float sync {
+    let a = (x * 3.0) * 2.0
+    println(a)
+    return 0
+}
+
+func double_d(x: float): float sync {
+    let a = x + x
+    println(a)
+    return 0
+}
+
+func main(): int sync {
+    println(mul_zero(3))
+    println(zero_mul(4))
+    println(sub_self(5))
+    println(div_one(6))
+    println(neg_neg(7))
+    println(mul_zero32(8))
+    println(sub_self32(9))
+    println(combine(2))
+    println(fold(2))
+    println(double(2))
+    println(mul_one_d(1.5))
+    println(add_neg_zero_d(1.5))
+    println(sub_zero_d(1.5))
+    println(div_one_d(1.5))
+    println(neg_neg_d(1.5))
+    println(combine_d(1.5))
+    println(fold_d(1.5))
+    println(double_d(1.5))
+    return 0
+}

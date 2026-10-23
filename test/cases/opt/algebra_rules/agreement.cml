@@ -1,0 +1,92 @@
+module agreement
+
+// The corpus of the H226 measurement: the rewrites the legacy C++ algebraic pass performs and the
+// rule library can perform, one form per function, so a difference is one line of the table and one
+// graph.
+//
+// The ten forms are the five integer neutral elements on both integer types — `x + 0`, `0 + x`,
+// `x - 0`, `x * 1`, `1 * x`. They are the laws the deleted C++ law table applied to the integers
+// (`e8c290554:src/passes/opt/generic/algebra.cpp`, `simplify<T>`) and the ones the documented
+// reference mode that remains applies (`src/passes/opt/generic/algebra.cpp`, `neutral_only=true`),
+// and the rules library carries one rule per form (`stdlib/rules.cml`): `int_add_zero`,
+// `int_zero_add`, `int_sub_zero`, `int_mul_one`, `int_one_mul` and the `int32_*` five.
+//
+// Every form is written so that the expression is not its graph's named node: the value is printed
+// and the function returns 0. A node that anchors its graph is kept by the C++ pass's
+// `isReplaceable` and retargeted by the rule engine, and that difference has its own corpus
+// (`divergence.cml`) — here the two implementations must reach the same graph, and the plan holds
+// them to it node for node and edge for edge.
+
+func add_zero(x: int): int sync {
+    let a = x + 0
+    println(a)
+    return 0
+}
+
+func zero_add(x: int): int sync {
+    let a = 0 + x
+    println(a)
+    return 0
+}
+
+func sub_zero(x: int): int sync {
+    let a = x - 0
+    println(a)
+    return 0
+}
+
+func mul_one(x: int): int sync {
+    let a = x * 1
+    println(a)
+    return 0
+}
+
+func one_mul(x: int): int sync {
+    let a = 1 * x
+    println(a)
+    return 0
+}
+
+func add_zero32(x: i32): i32 sync {
+    let a = x + 0
+    println(a)
+    return 0
+}
+
+func zero_add32(x: i32): i32 sync {
+    let a = 0 + x
+    println(a)
+    return 0
+}
+
+func sub_zero32(x: i32): i32 sync {
+    let a = x - 0
+    println(a)
+    return 0
+}
+
+func mul_one32(x: i32): i32 sync {
+    let a = x * 1
+    println(a)
+    return 0
+}
+
+func one_mul32(x: i32): i32 sync {
+    let a = 1 * x
+    println(a)
+    return 0
+}
+
+func main(): int sync {
+    println(add_zero(3))
+    println(zero_add(4))
+    println(sub_zero(5))
+    println(mul_one(6))
+    println(one_mul(7))
+    println(add_zero32(8))
+    println(zero_add32(9))
+    println(sub_zero32(10))
+    println(mul_one32(11))
+    println(one_mul32(12))
+    return 0
+}
