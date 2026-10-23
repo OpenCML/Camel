@@ -192,6 +192,7 @@ class GraphModule final : public BuiltinModule {
                 {"erase", false},
                 {"commit", false},
                 {"abort", false},
+                {"eval", false},
                 {"open_function", false},
                 {"to_function", false},
                 {"program_of", true},
