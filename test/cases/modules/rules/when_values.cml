@@ -1,0 +1,36 @@
+/**
+ * A `const` parameter of a rule is the constant's value inside `when` (rewrite design 2, second
+ * version, 1; reviews/stdlib-rules.md item 5: "when 里的 const 形参应当就是那个常量值"): the
+ * condition is a function of the value, typed by the parameter's declared type, so it needs
+ * neither `constant(node, sample)` nor the two `match … case null` layers around it. A parameter
+ * that is not `const` stays a node of the draft.
+ *
+ * The law of this case is deliberately not a law: the product is dropped when the coefficient is
+ * positive, so the value the program prints says whether the condition saw the coefficient --
+ * `positive_case` loses its product, `negative_case` keeps it.
+ */
+module when_values
+
+import { Program } from graph
+import { rewrite } from rewrite
+
+/// The guard on the coefficient's value: the type is the parameter's own, so no dummy sample
+/// value tells `constant` which type to read.
+func positive(c: float): bool {
+    return c > 0.0 && c - c == 0.0
+}
+
+rule keep_positive(x: float, const c: float) { x * c => x } when positive(c)
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [keep_positive])
+}
+
+func positive_case(x: float): float { return x * 3.0 }
+
+func negative_case(x: float): float { return x * -3.0 }
+
+func main(): int sync {
+    println(positive_case(5.0), negative_case(5.0))
+    return 0
+}
