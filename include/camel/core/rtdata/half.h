@@ -37,6 +37,7 @@
 
 #pragma once
 
+#include "camel/core/slot.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/number_text.h"
 
