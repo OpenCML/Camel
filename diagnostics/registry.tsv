@@ -287,6 +287,13 @@ semantic	NativeDeclarationNotLoaded	0x00017C	error	The declaration '{0}' names t
 # Handover H94 (the author's rulings on body-less declarations): 0x17E and up.
 #/ Two generic declarations of one name can take the same call (ruling 2).
 semantic	NativeDeclarationOverlap	0x000180	error	Two declarations of '{0}' can take the same call: '{1}' and '{2}'.	An operator has one meaning for one call: which rule applies must be decided by the types of the arguments, never by the order the declarations are written in. Give the declarations parameter types that cannot both accept one argument list, or keep one of them.
+# The language author's ruling of 2026-10-24 on same-named `#impl` declarations split by their
+# conditions (`docs/handover/reviews/questions-2026-10-23.md`, "impl-declaration-arms"): two
+# same-named declarations whose `when` conditions are mutually exclusive are overloads and may
+# stand side by side; a type that satisfies both is this overlap. The conditions are asked about
+# every type the compiler registers, and a condition it cannot answer leaves the pair refused by
+# the older code above.
+semantic	WhenDeclarationOverlap	0x0001E0	error	Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'.	A 'when' condition is what makes two declarations of one signature different overloads (design principles 4.4): each must cover the types the other does not. Narrow the conditions so that no type satisfies both, or give the declarations parameter types that cannot both accept one call.
 #/ A declaration names an operator of another module (ruling 5).
 semantic	NativeDeclarationForeignOperator	0x000181	error	The declaration '{0}' names the operator '{1}', which another module declares.	A module declares only the operators it implements: a body-less declaration stands for an operator of the module it is written in, and declares no other module's operator. Write the declaration beside the implementation, or call the operator through the module that declares it.
 #

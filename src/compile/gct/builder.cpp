@@ -609,6 +609,17 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 if (const auto *defaults = tree_->parameterDefaultsOf(node)) {
                     tree_->setParameterDefaults(declNode, *defaults);
                 }
+                // The condition goes with the declaration record too, for every function and not
+                // only for a body-less one: a body-less declaration with the pass applicability
+                // is a pass, not an operator, and the graph builder tells them apart by it
+                // (design principles 9.3), and for a function with a body the record is where the
+                // condition of the declaration is read while the declarations of one name are
+                // compared -- two of them whose conditions exclude each other are overloads and
+                // may stand side by side (design principles 4.4; the ruling of 2026-10-24 on
+                // `impl-declaration-arms`, docs/handover/reviews/questions-2026-10-23.md).
+                if (const auto *when = tree_->whenOf(node); when != nullptr) {
+                    tree_->setWhen(declNode, *when);
+                }
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
                     // makes an operator rule of it instead of a graph (handover H19 step 1),
@@ -617,12 +628,6 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                     declNode->setNativeDeclaration();
                     if (const auto *uses = tree_->tagUsesOf(node); uses != nullptr) {
                         tree_->addTagUses(declNode, *uses);
-                    }
-                    // Its condition goes with it too: a body-less declaration with the pass
-                    // applicability is a pass, not an operator, and the graph builder tells them
-                    // apart by this condition (design principles 9.3).
-                    if (const auto *when = tree_->whenOf(node); when != nullptr) {
-                        tree_->setWhen(declNode, *when);
                     }
                 }
                 setOriginFromAst(

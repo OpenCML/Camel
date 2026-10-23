@@ -307,6 +307,52 @@ void Builder::rejectRedeclaredFunction(
     };
     for (const auto &graph : *graphs.value()) {
         if (sameParameters(graph->funcType(), funcType)) {
+            // Two declarations of one name with the same parameters are told apart by their
+            // conditions, if they write any: `when` is the applicability condition of an
+            // overload (design principles 4.4), so two whose conditions exclude each other cover
+            // one family of argument types each and are overloads (the language author's ruling
+            // of 2026-10-24 on `impl-declaration-arms`,
+            // docs/handover/reviews/questions-2026-10-23.md: the same check applies to every
+            // same-named overload that has `when`, ordinary functions with bodies included).
+            if (const auto *ownWhen = GCT::Tree::of(gct)->whenOf(gct)) {
+                const auto other = whenClauses_.find(graph.get());
+                if (other != whenClauses_.end()) {
+                    SpeculativeInstantiation quiet(*this);
+                    std::string overlappingType;
+                    const ConditionSeparation separation = separateWhenConditions(
+                        ownWhen->condition,
+                        other->second.condition,
+                        [&](const camel::core::type::type_bindings_t &bindings) {
+                            return evaluateWhenCondition(
+                                ownWhen->condition, funcType, bindings, {}, nullptr, unit_);
+                        },
+                        [&](const camel::core::type::type_bindings_t &bindings) {
+                            return evaluateWhenCondition(
+                                other->second.condition,
+                                graph->funcType(),
+                                bindings,
+                                {},
+                                nullptr,
+                                unit_);
+                        },
+                        overlappingType);
+                    if (separation == ConditionSeparation::Disjoint) {
+                        continue; // one family of argument types each
+                    }
+                    if (separation == ConditionSeparation::Overlapping) {
+                        redeclaredFuncTypes_.insert(funcType);
+                        diags_->of(SemanticDiag::WhenDeclarationOverlap)
+                            .atOrigin(gct->origin())
+                            .commit(
+                                name,
+                                overlappingType,
+                                graph->funcType()->toString() + " — when " +
+                                    other->second.text,
+                                funcType->toString() + " — when " + ownWhen->text);
+                        throw BuildAbortException();
+                    }
+                }
+            }
             redeclaredFuncTypes_.insert(funcType);
             diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
             throw BuildAbortException();
@@ -599,6 +645,13 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     rejectRedeclaredFunction(gct->name(), funcType, gct, true);
     rejectOperatorConflict(gct->name(), funcType, gct);
     compile_graph_ptr_t graph = enterScope(funcType, gct->name());
+    if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
+        // The declaration's condition, kept while the declarations of one name are read: the
+        // next declaration of the name is compared with this one before either body is built
+        // (`rejectRedeclaredFunction`; design principles 4.4, and the ruling of 2026-10-24 on
+        // `impl-declaration-arms`).
+        whenClauses_[graph.get()] = *when;
+    }
     // The declaration's parameter defaults are evaluated here, where the declaration is,
     // before any body is built: a call written above the definition fills them too, and every
     // call shares the one value (design principles 4.4, handover H235/H276).

@@ -1,0 +1,38 @@
+/**
+ * The overlap check asks about the shapes a value can have, not only about the scalar types (the
+ * ruling of 2026-10-24 on `impl-declaration-arms`,
+ * `docs/handover/reviews/questions-2026-10-23.md`): "对已登记的类型逐个求两条 `when`". `always`
+ * holds for every type and `is_callable` only for a function type, so the two conditions hold
+ * together for exactly one of the types the compiler registers -- the function shape -- and that
+ * is the type the report names. A check that asked about the scalar types alone would find no
+ * type satisfying both, and would let the pair through.
+ *
+ * The shape predicate is deliberately not spelled `is_function::<T>()`: a body-less declaration
+ * whose condition is that call is a pass declaration rather than an operator rule
+ * (`Builder::isPassDeclaration`), so the two declarations below would not be a pair of rules at
+ * all. `is_callable` says the same thing about the type it is given.
+ */
+module when_shape_overlap
+
+func always::<T>(): bool {
+    return match type T {
+        case _ => true
+    }
+}
+
+func is_callable::<T>(): bool {
+    return match type T {
+        case func => true
+        case _ => false
+    }
+}
+
+#op<':op/add_i'>
+func arms_kernel::<T>(a: T, b: T): T when always::<T>()
+
+#op<':op/sub_i'>
+func arms_kernel::<T>(a: T, b: T): T when is_callable::<T>()
+
+func main(): int sync {
+    return 0
+}
