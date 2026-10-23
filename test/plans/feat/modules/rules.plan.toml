@@ -102,12 +102,12 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.library_passes_the_check"
-desc = "Every rule of the standard rules (stdlib/rules.cml: the integer and float laws that hold bit for bit, the i32 and f32 forms of the same laws, the float laws a permission allows, with commutation, association and distribution both ways) passes the check: 200 random instances agree and the engine fires the rule on its own left side."
+desc = "Every rule of the standard rules (stdlib/rules.cml: the integer and float laws that hold bit for bit, the i32 and f32 forms of the same laws, the float laws a permission allows, and distribution both ways) passes the check: 200 random instances agree and the engine fires the rule on its own left side. Commutation and association are not rules to check any more: they are properties of the operator's declaration, read by the matcher (rewrite design 2 (second version) 6)."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int32_add_zero: 200 samples agree, fired 8 of 8", "ok int32_combine: 200 samples agree, fired 8 of 8", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float_mul_comm: 200 samples agree, fired 8 of 8", "ok float32_mul_one: 200 samples agree, fired 8 of 8", "ok float32_combine: the condition selects the instances", "ok float32_double: the condition selects the instances", "ok float_combine: the condition selects the instances", "ok float_fold: the condition selects the instances", "ok float_double: the condition selects the instances"]
+expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int32_add_zero: 200 samples agree, fired 8 of 8", "ok int32_combine: 200 samples agree, fired 8 of 8", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float32_mul_one: 200 samples agree, fired 8 of 8", "ok float32_combine: the condition selects the instances", "ok float32_double: the condition selects the instances", "ok float_combine: the condition selects the instances", "ok float_fold: the condition selects the instances", "ok float_double: the condition selects the instances"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
