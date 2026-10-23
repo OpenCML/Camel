@@ -1,40 +1,73 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The cost of everything `camel` does before the program runs (handover H142).
+// The cost of everything `camel` does before the program runs (handover H142), read in each child's
+// CPU time (user + system) instead of the wall clock, and the cost of the declaration modules
+// (handover H152).
 //
-// Four commands, each a fresh process, timed with `process.hrtime.bigint()` around the whole
-// child, and each gated on a ceiling that is a few times the median measured on the Linux host.
-// The gate is deliberately generous: it catches "the standard library is now loaded before the
-// program runs" or "a declaration module costs milliseconds", not a few percent of noise on a
-// shared host.
+// The unit is the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+// "declaration-cost-gate" (a)):
 //
-//   node test/tools/startup-cost.mjs            measure and check the ceilings
-//   node test/tools/startup-cost.mjs --reps 41  the same, with more samples
-//   node test/tools/startup-cost.mjs --json     the numbers, without the gate
+//   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移，这正是 40/45/100/90 ms 在负载 106–130
+//    下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（H167 的判定已经用 CPU 中位数）。
+//    四条命令的天花板改为按 CPU 时间、取安静主机中位数加余量；"负载下红不算回归"的口径因此不需要。"
 //
-// Every line carries the ceiling it is read against and a `result=PASS|FAIL`, the host's
-// 1/5/15-minute load average is printed above them, and a crossed ceiling is named on standard
-// output (`startup-cost: FAILED <measurement>: median <value> ms exceeds ceiling <bound> ms`) --
-// the stream the plan keeps. A shared host gives a crossed ceiling two possible causes and the
-// load is the number that separates a regression from a busy machine; a reason on standard error
-// is a reason the gate's reader never sees. A command that cannot run at all is that
-// measurement's result, not a reason to lose the rest of the log.
+// So a crossed ceiling is a regression and never "the host was busy"; the 1/5/15-minute load average
+// is printed beside the numbers as provenance, not as an excuse, and the wall clock is not measured
+// at all. The four ceilings are CPU-time ceilings: the quiet host's median plus a margin, both
+// recorded next to them with the samples they came from.
 //
-// `camel --version` is the process itself: dynamic loading, static initialisation and argument
-// parsing, with no context. `imports_nothing` adds the smallest compile and run. `inspect_ops`
-// imports every standard library module (`registry_all.cml`), so it is where the declaration
-// modules (`stdlib/<module>.cml`) are parsed and compiled, and `imports_all` runs the same
-// program through `std::nvm` instead of listing its operators.
+//   node test/tools/startup-cost.mjs                 measure and check the ceilings
+//   node test/tools/startup-cost.mjs --json          the numbers, without the gate
+//   node test/tools/startup-cost.mjs --reps 40       more processes per sample
+//   node test/tools/startup-cost.mjs --samples 9     more samples per command
 //
-// The last measurement, `declaration.cost`, is the one that can see a change of a few
-// milliseconds in that work: it asks the compiler for its own `--time-phases` report of one
-// `inspect --ops` run and adds up the parse, GCT and declare phases of the declaration
-// modules, divided by the declarations they hold (handover H152). The four ceilings above are
-// tens of milliseconds wide and cannot resolve it; the phase report can, and it reads about
-// 20 us per declaration, which is what the ceiling is built on. The same line also prints the
-// declarations' share of the compile work of the whole run: load slows that work and the
-// declarations alike, so the share is the half of the pair that does not move with the host.
+// Every line carries the ceiling it is read against and a `result=PASS|FAIL`, and a crossed ceiling
+// is named on standard output (`startup-cost: FAILED <measurement>: cpu median <value> ms exceeds
+// ceiling <bound> ms`) -- the stream the plan keeps. A reason on standard error is a reason the
+// gate's reader never sees. A command that cannot run at all is that measurement's result, not a
+// reason to lose the rest of the log.
+//
+// Node cannot ask for RUSAGE_CHILDREN, so a child's CPU time is the delta of the CPU time of every
+// child reaped so far (`cutime` + `cstime` of /proc/self/stat, fields 16 and 17; spawnSync has
+// already waited for the child when it returns, and the kernel folds a reaped child's CPU into those
+// fields at that point). The kernel reports them in USER_HZ ticks, 10 ms, which is a third of the
+// smallest number here, so one sample is not one child: a sample is the CPU time of `runs_per_sample`
+// fresh processes divided by that count, which puts the tick's share under a millisecond. That is
+// also why the reading is a sample mean and the spread is across samples.
+//
+// The four commands: `camel --version` is the process itself, dynamic loading, static initialisation
+// and argument parsing, with no context. `imports_nothing` adds the smallest compile and run.
+// `inspect_ops` imports every standard library module (`registry_all.cml`), so it is where the
+// declaration modules (`stdlib/<module>.cml`) are parsed and compiled, and `imports_all` runs the
+// same program through `std::nvm` instead of listing its operators.
+//
+// The last measurement, `declaration.cost`, is the compiler's own `--time-phases` report of one
+// `inspect --ops` run: the parse, GCT and declare phases of the declaration modules, per declaration
+// and in total, read in the CPU time the report writes for each phase (`cpu_ns`, beside the `wall_ns`
+// it always carried). The four ceilings above are tens of milliseconds wide and cannot resolve it;
+// the phase report can, and it reads some 28 us of CPU per declaration on this tree at load 68-93,
+// which is what the per-declaration ceiling is built on. Its two remaining readings are the two the
+// author chose on 2026-10-23 ("declaration-cost-gate" (b)):
+//
+//   "选 3 + 2：结构断言"每个（阶段, 模块）每轮恰好出现一次"管重复编译；绝对的 CPU 总量管整体变慢；
+//    30% 共享率这条线退休。"
+//
+// The structural assertion is checked on every round: each (phase, module) among the pinned phases
+// appears exactly once, and a pair that appears twice names itself. The absolute total is the
+// declaration modules' parse + GCT + declare work of one run in milliseconds -- the number H177
+// ($5.3) proposed gating after the share stopped moving with the declaration path. The 30% share of
+// the compile work is deleted, not commented out: it was the load-invariant half of a pair whose
+// other half was the wall clock, and with CPU time there is nothing left for it to excuse.
+//
+// Why this measurement is CPU too, and not the wall time the report had carried since H152: the wall
+// clock of those same phases read 21 us per declaration on H177's quiet host and 75-104 us in the
+// windows of 2026-10-23 at load 106-112 -- three to five times the number for the same declarations,
+// because a wall clock follows whatever else the host is doing. A ceiling on it is red on a busy day
+// and green on a quiet one for the same binary, which is the reading the ruling retired; the CPU time
+// of the same rounds read 27-29 us in every window measured at load 68-112. So the compiler writes
+// `cpu_ns` per phase beside `wall_ns` (src/utils/phase_timer.cpp), and a platform with no process CPU
+// clock makes this measurement report an error rather than fall back to the wall clock.
 //
 // The declaration modules are read from the tree, not listed here (H177): H152 pinned the nine of
 // its day, thirteen more were migrated, and this tool kept pricing 182 declarations while this tree
@@ -56,6 +89,10 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const REGISTRY_ALL = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
 const IMPORTS_NOTHING = path.join(REPO_ROOT, 'test', 'cases', 'perf', 'startup', 'imports_nothing.cml')
 
+// The phases whose rows price the declaration work, and the population of the structural assertion:
+// a (phase, module) pair is a phase from this list and the module its `detail` names.
+const PINNED_PHASES = ['parse', 'gct', 'declare']
+
 // The modules whose `.cml` beside a C++ `.cmo` declares the operators of that module (design
 // principles 6.4): their declarations are the work `declaration.cost` measures. Derived from the
 // tree (H177), so a new declaration module is counted without editing this tool.
@@ -63,6 +100,20 @@ const DECLARATION_MODULES = declarationModules().map((module) => module.name)
 if (DECLARATION_MODULES.length === 0) {
     throw new Error('no declaration module under stdlib/: the measurement would price no declaration')
 }
+
+// /proc/self/stat reports children in USER_HZ ticks, which is 100 on every Linux architecture
+// (scripts/perf-gate.mjs reads the same two fields for the same reason).
+const CLOCK_TICKS = 100
+// One sample is this many fresh processes, so the kernel's 10 ms tick is divided by it before it
+// reaches a number whose quiet median is a few milliseconds.
+const RUNS_PER_SAMPLE = 12
+// Samples per command. The median is what the ceiling is read against and the spread across samples
+// is printed beside it.
+const SAMPLES = 5
+const WARMUPS = 2
+// Below this the 10 ms tick is more than a millisecond of one sample's mean, which is the resolution
+// the small ceilings are built on.
+const MIN_RUNS_PER_SAMPLE = 8
 
 function camelExe() {
     if (process.env.CAMEL_EXE) {
@@ -72,8 +123,41 @@ function camelExe() {
     return path.join(home, 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
 }
 
+// The CPU time of every child reaped so far, in seconds, as RUSAGE_CHILDREN reports it: /proc
+// self/stat fields 16 and 17. Null on a platform that has no such accounting -- and a null is
+// reported as the measurement's error, never as a reason to read the wall clock instead.
+function childrenCpuSeconds() {
+    if (process.platform !== 'linux') {
+        return null
+    }
+    try {
+        const stat = fs.readFileSync('/proc/self/stat', 'utf8')
+        // The command name (field 2) is in parentheses and may contain spaces, so the fields are
+        // counted from the last ')'. The first one is field 3 (state), which makes cutime field 16
+        // index 13 and cstime field 17 index 14.
+        const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/)
+        const cutime = Number(fields[13])
+        const cstime = Number(fields[14])
+        if (!Number.isFinite(cutime) || !Number.isFinite(cstime)) {
+            return null
+        }
+        return (cutime + cstime) / CLOCK_TICKS
+    } catch {
+        return null
+    }
+}
+
+function cpuUnavailableReason() {
+    return (
+        `the CPU time of a child cannot be read on this platform (${process.platform}): ` +
+        'the ceilings are CPU-time ceilings, not wall-clock ones ' +
+        '(docs/handover/reviews/questions-2026-10-23.md, declaration-cost-gate (a)), so this ' +
+        'command has no reading here'
+    )
+}
+
 // Median, p10 and p90 in milliseconds. The host is shared, so the median is the number the gate
-// reads and the percentiles say how wide the spread was; one slow sample is not a regression.
+// reads and the percentiles say how wide the spread was.
 function summarize(samples) {
     const sorted = [...samples].sort((a, b) => a - b)
     const at = (fraction) => sorted[Math.min(sorted.length - 1, Math.floor(fraction * sorted.length))]
@@ -87,32 +171,50 @@ function summarize(samples) {
     }
 }
 
-function timeOne(argv) {
-    const started = process.hrtime.bigint()
+function runOnce(argv) {
     const run = spawnSync(argv[0], argv.slice(1), {
         cwd: REPO_ROOT,
         stdio: 'ignore',
         maxBuffer: 1 << 26,
     })
-    const elapsed = Number(process.hrtime.bigint() - started) / 1e6
     if (run.error) {
         throw new Error(`could not start ${argv[0]}: ${run.error.message}`)
+    }
+    if (run.signal) {
+        throw new Error(`${argv.join(' ')} was killed by ${run.signal}`)
     }
     if (run.status !== 0) {
         throw new Error(`${argv.join(' ')} exited ${run.status}`)
     }
-    return elapsed
 }
 
-function measure(argv, warmup, reps) {
-    for (let i = 0; i < warmup; i++) {
-        timeOne(argv)
+// One sample: `runsPerSample` fresh processes, and the CPU time the kernel charged for all of them.
+function measureCpu(argv, warmups, samples, runsPerSample) {
+    for (let i = 0; i < warmups; i++) {
+        runOnce(argv)
     }
-    const samples = []
-    for (let i = 0; i < reps; i++) {
-        samples.push(timeOne(argv))
+    const means = []
+    for (let sample = 0; sample < samples; sample++) {
+        const before = childrenCpuSeconds()
+        if (before === null) {
+            throw new Error(cpuUnavailableReason())
+        }
+        for (let i = 0; i < runsPerSample; i++) {
+            runOnce(argv)
+        }
+        const after = childrenCpuSeconds()
+        if (after === null) {
+            throw new Error(cpuUnavailableReason())
+        }
+        if (after <= before) {
+            throw new Error(
+                `${runsPerSample} runs of ${argv.join(' ')} were charged no CPU time: ` +
+                    'the reading examined nothing'
+            )
+        }
+        means.push(((after - before) * 1000) / runsPerSample)
     }
-    return summarize(samples)
+    return { runsPerSample, ...summarize(means) }
 }
 
 // The declarations the standard library writes: one body-less `export func` per operator of a
@@ -144,18 +246,34 @@ function phaseReport(stderr) {
     }
 }
 
-// Microseconds of parse + GCT + declare per declaration, from one `inspect --ops` run: the
-// compiler's own timing of the declaration modules, which the process wall clock cannot
-// resolve (handover H152). The share is the same sum over the compile work of every module in the
-// run: under load both grow together, so the share is the number that does not read as load.
-function declarationCost(reps) {
+// Every (phase, module) pair of the pinned phases in one round, with how often the round reported
+// it. The structural assertion reads this: a pair that appears twice is a module compiled twice,
+// which no ratio and no total can name.
+function pinnedPairs(report) {
+    const pairs = new Map()
+    for (const phase of report.phases) {
+        if (!PINNED_PHASES.includes(phase.name)) {
+            continue
+        }
+        const key = `${phase.name} ${phase.detail}`
+        pairs.set(key, (pairs.get(key) || 0) + 1)
+    }
+    return pairs
+}
+
+// Milliseconds of parse + GCT + declare per declaration and in total, from `rounds` runs of
+// `inspect --ops`: the compiler's own CPU accounting of the declaration modules, which the process
+// clock cannot resolve (handover H152). The same rounds carry the structural assertion of the
+// 2026-10-23 ruling, so a duplicate compilation is named by the round that reported it.
+function declarationCost(rounds) {
     const argv = [camelExe(), 'inspect', '--ops', REGISTRY_ALL]
     const env = { ...process.env, CAMEL_TIME_PHASES: '-' }
     const declarations = declarationCount()
-    const samples = []
-    const shares = []
+    const perDeclaration = []
+    const totals = []
     const seen = new Set()
-    for (let i = 0; i < reps; i++) {
+    let duplicates = 0
+    for (let round = 0; round < rounds; round++) {
         const run = spawnSync(argv[0], argv.slice(1), {
             cwd: REPO_ROOT,
             env,
@@ -173,23 +291,53 @@ function declarationCost(reps) {
         if (report === null) {
             throw new Error(`${argv.join(' ')} wrote no phase report`)
         }
+        const pairs = pinnedPairs(report)
+        if (pairs.size === 0) {
+            throw new Error(
+                `${argv.join(' ')} reported no ${PINNED_PHASES.join(', ')} phase: ` +
+                    'the structural assertion would examine nothing'
+            )
+        }
+        for (const name of PINNED_PHASES) {
+            if (![...pairs.keys()].some((key) => key.startsWith(`${name} `))) {
+                throw new Error(
+                    `${argv.join(' ')} reported no ${name} phase: the structural assertion ` +
+                        'would examine nothing for it'
+                )
+            }
+        }
+        const repeated = [...pairs.entries()].filter(([, times]) => times > 1)
+        if (repeated.length > 0) {
+            throw new Error(
+                `round ${round + 1} compiled ` +
+                    repeated.map(([key, times]) => `(${key}) ${times} times`).join(', ') +
+                    ': each (phase, module) appears exactly once per round'
+            )
+        }
+        duplicates += repeated.length
         let nanos = 0
-        let total = 0
         for (const phase of report.phases) {
-            if (phase.name !== 'parse' && phase.name !== 'gct' && phase.name !== 'declare') {
+            if (!PINNED_PHASES.includes(phase.name) || !DECLARATION_MODULES.includes(phase.detail)) {
                 continue
             }
-            total += phase.wall_ns
-            if (DECLARATION_MODULES.includes(phase.detail)) {
-                nanos += phase.wall_ns
-                seen.add(phase.detail)
+            if (!(phase.cpu_ns >= 0)) {
+                throw new Error(
+                    `${argv.join(' ')} reported no CPU time for the phase ${phase.name} ` +
+                        `${phase.detail}: without a process CPU clock the measurement would have to ` +
+                        'read the wall clock, which follows the host\'s load'
+                )
             }
+            nanos += phase.cpu_ns
+            seen.add(phase.detail)
         }
-        if (total === 0) {
-            throw new Error(`${argv.join(' ')} reported no parse, gct or declare phase: the share has no denominator`)
+        if (nanos <= 0) {
+            throw new Error(
+                `${argv.join(' ')} charged the declaration modules no ${PINNED_PHASES.join(', ')} ` +
+                    'time: the measurement examined nothing'
+            )
         }
-        samples.push(nanos / 1e3 / declarations)
-        shares.push(nanos / total)
+        perDeclaration.push(nanos / 1e3 / declarations)
+        totals.push(nanos / 1e6)
     }
     // A derived module that the compiler did not compile (a `.cml` that no program imports, a
     // registry that stopped reaching it) contributes declarations to the unit but no time to the
@@ -201,45 +349,54 @@ function declarationCost(reps) {
                 'the measurement would price only the modules the run compiled',
         )
     }
-    return { declarations, ...summarize(samples), share: summarize(shares.map((s) => s * 100)) }
+    return {
+        declarations,
+        rounds,
+        duplicates,
+        perDeclaration: summarize(perDeclaration),
+        total: summarize(totals),
+    }
 }
 
-// The ceilings. The medians they are built on, measured on the Linux host at H142 (21-101
-// samples, the numbers and their spread are in handover note ⟨c49da87⟩ (H142)): 5.0 / 8.5 / 26.1 /
-// 23.6 ms on a quiet host. The last two ceilings are about four times that; the first two are five
-// to eight times, because 5-8 ms is below this host's scheduling noise: 3 x 5 ms would flake at the
-// 20 / 36.5 ms medians seen at load average 215. For the same reason the ceilings are above the
-// medians at load average 150 (16.5 / 19.3 / 53.4 / 51.5 ms) and 215 (20 / 36 / 87 / 72 ms). The
-// gate is a smoke alarm ("the standard library is loaded before the program runs", "a declaration
-// module costs milliseconds"), not a percentage budget; it cannot see the 4.6 ms the declaration
-// modules cost in H142's day, and handover note ⟨c49da87⟩ (H142) is where that number is recorded.
+// The ceilings, all in CPU milliseconds, as the quiet host's median plus a margin. Both numbers are
+// re-measured here rather than remembered: the samples below are the ones this tree's ceilings were
+// set from, with the host's load beside them, and the comment names the window they came from. The
+// reading is the median of the samples and the spread is min..max; a ceiling nobody can reproduce is
+// worse than none, so a crossed one has to be a regression a reader could reproduce on a quiet host.
 //
-// They were re-measured, not re-set, at H177 (same host, load average 21-22): 5.1 / 7.4 / 38.3 /
-// 37.0 ms. The two commands that import every module were about 2.6 and 2.4 times the quiet median
-// there, not four, because `tiles`, `tensor`, `nn` and `autodiff` load too, and because `pyplot`
-// then initialised CPython from its `load()` (about 9.5 ms). H221 removed that last part: `import`
-// executes no code (design principles 3.1), the interpreter is created by the first `plot` or `py_*`
-// call, and the two full-import medians fell from 42.9 / 40.7 to 31.8 / 31.5 ms (load 10.7, 41
-// samples; docs/technical/50_pyplot_cpython_init.md §4.3). The ceilings stay where they are on
-// purpose. They are smoke alarms ("the standard library is loaded before the program runs"), the
-// medians now sit about three times below them, and a first `plot` still pays the ~9 ms, so
-// tightening them would turn this host's noise into a red gate without saying anything true. The
-// numbers of both windows are in handover notes ⟨83d6558⟩ (H177) and the H221 report.
+// Measured on the Linux host (AMD EPYC 7343, 32 threads) on 2026-10-23, five samples of twelve fresh
+// processes each (sixty per command) in each of four windows (load 92.9, 75.2, 72.6 and 68.7); the
+// quiet column is H177's window at load 21.4, which read the same CPU time:
+//
+//   version          median 4.2-5.0 ms (samples 4.2-5.8)     quiet 4.89
+//   imports_nothing  median 7.5-10.0 ms (samples 7.5-10.8)    quiet 7.01
+//   inspect_ops      median 39.2-44.2 ms (samples 38.3-45.0)  quiet 37.97
+//   imports_all      median 40.8-42.5 ms (samples 37.5-43.3)  quiet 36.19
+//
+// CPU time is the unit the 2026-10-23 ruling asked for. The wall-clock ceilings it replaces read
+// 40/45/100/90 ms against the same work, and at load 106-130 they went red while `--version`, which
+// compiles nothing, read 13.0 ms; the CPU median of that same command moves between 4.2 and 5.4 ms
+// from load 21 to load 215. Every ceiling here is about two and a half times the quiet median of its
+// command: enough for this host's sample spread and for the ten to thirty percent that CPU time still
+// moves with frequency and neighbours, and tight enough that "the standard library is loaded before
+// the program runs" -- the small commands' cost jumping to the full-import cost, +30 ms -- crosses
+// `version` and `imports_nothing` on the first sample. It is a smoke alarm, not a percentage budget,
+// exactly as the wall-clock ceilings it replaces were.
 const CASES = [
     {
         name: 'version',
         argv: () => [camelExe(), '--version'],
-        ceilingMs: 40,
+        ceilingMs: 12,
     },
     {
         name: 'imports_nothing',
         argv: () => [camelExe(), IMPORTS_NOTHING, 'std::nvm'],
-        ceilingMs: 45,
+        ceilingMs: 18,
     },
     {
         name: 'inspect_ops',
         argv: () => [camelExe(), 'inspect', '--ops', REGISTRY_ALL],
-        ceilingMs: 100,
+        ceilingMs: 95,
     },
     {
         name: 'imports_all',
@@ -248,13 +405,43 @@ const CASES = [
     },
 ]
 
+// Three times the ~20 us of one declaration (H152): a smoke alarm for "a declaration now costs
+// hundreds of microseconds", not a percentage budget. The number does not move with the unit the
+// 2026-10-23 ruling changed: it read 27.5-28.5 us of CPU per declaration in every window measured at
+// load 68-93, against 21.0 us of wall on H177's quiet host, so it keeps the margin it was given.
+const DECLARATION_CEILING_US = 60
+// The absolute total of the same work, which is the half of H177 §5.3's pair that the per-declaration
+// ceiling cannot see: 4.6 ms of declaration regression spread over this tree's 347 declarations is
+// only 13 us per declaration, far under 60, but it moves the total. H177 sized its candidate at 9 ms
+// against the 6.04 ms of its quiet window (1.5 times the quiet total, the regression named); this
+// tree's total read 9.6-9.9 ms in every window measured at load 68-93, and H177's quiet wall reading
+// of 21.0 us per declaration is 7.6 ms over 347 declarations, with this host's CPU readings some
+// third above a quiet wall reading. Twelve milliseconds is that calibration applied to this tree:
+// the quiet total plus the regression the line was chosen to name, 1.2 times the busiest median
+// measured here and 1.6 times the quiet one. It prices this tree's declaration count, so it is
+// re-baselined when a module is migrated (the printed `declarations=` says by how much) -- the
+// per-declaration ceiling above is the one that does not move with the count.
+const DECLARATION_TOTAL_CEILING_MS = 12
+// Rounds of `inspect --ops` for `declaration.cost`: each round is one sample of the two numbers and
+// one application of the structural assertion.
+const DECLARATION_ROUNDS = 21
+
 function main() {
     const args = process.argv.slice(2)
     const json = args.includes('--json')
     const repsAt = args.indexOf('--reps')
-    const reps = repsAt >= 0 ? Number(args[repsAt + 1]) : 21
-    if (!Number.isInteger(reps) || reps < 5) {
-        console.error('startup-cost: --reps needs an integer of at least 5')
+    const runsPerSample = repsAt >= 0 ? Number(args[repsAt + 1]) : RUNS_PER_SAMPLE
+    const samplesAt = args.indexOf('--samples')
+    const samples = samplesAt >= 0 ? Number(args[samplesAt + 1]) : SAMPLES
+    if (!Number.isInteger(runsPerSample) || runsPerSample < MIN_RUNS_PER_SAMPLE) {
+        console.error(
+            `startup-cost: --reps needs an integer of at least ${MIN_RUNS_PER_SAMPLE} ` +
+                '(one sample divides the kernel\'s 10 ms CPU tick by it)'
+        )
+        return 2
+    }
+    if (!Number.isInteger(samples) || samples < 3) {
+        console.error('startup-cost: --samples needs an integer of at least 3')
         return 2
     }
     if (!fs.existsSync(camelExe())) {
@@ -264,12 +451,12 @@ function main() {
     const results = []
     const failures = []
     for (const testCase of CASES) {
-        // A command that cannot run (a missing file, a crash) is this case's result, not a
-        // reason to lose the other three: an exception here used to leave standard output
-        // empty, and the plan could only report "expected exit 0, got 1".
+        // A command that cannot run (a missing file, a crash, a host that cannot read a child's CPU
+        // time) is this case's result, not a reason to lose the other three: an exception here used
+        // to leave standard output empty, and the plan could only report "expected exit 0, got 1".
         let summary
         try {
-            summary = measure(testCase.argv(), 3, reps)
+            summary = measureCpu(testCase.argv(), WARMUPS, samples, runsPerSample)
         } catch (error) {
             results.push({
                 name: testCase.name,
@@ -283,58 +470,55 @@ function main() {
         // `--json` is the reporting mode: it prints the numbers and gates nothing.
         if (!json && summary.median > testCase.ceilingMs) {
             failures.push(
-                `${testCase.name}: median ${summary.median.toFixed(1)} ms exceeds ceiling ${testCase.ceilingMs} ms`
+                `${testCase.name}: cpu median ${summary.median.toFixed(1)} ms exceeds ceiling ${testCase.ceilingMs} ms`
             )
         }
     }
-    // Three times the ~20 us the declaration modules cost per declaration at H152: a smoke alarm
-    // for "a declaration now costs hundreds of microseconds", not a percentage budget. A
-    // regression of a few milliseconds stays under it; the printed number is what is read.
-    // H177 measured 21.0 us over all 286 declarations (20.3 us over H152's nine), so the per
-    // declaration cost did not move as the set grew. H221 measured 22.3 us over the 345 of this
-    // tree, so this ceiling is unchanged too.
-    const DECLARATION_CEILING_US = 60
-    // The share of the compile work, which does not read as load: 18-19% at load average 14-30
-    // in H152's tree, and about 45% if the 4.6 ms of H142 came back. H177 measured 17.8% with all
-    // 286 declarations counted (10.9% over H152's nine alone), so the ceiling still passes. Read
-    // it as a coarse alarm, not as a declaration budget: the denominator is the whole import +
-    // compile region of the run, and H221 took CPython's ~9.5 ms out of it (the interpreter is
-    // created at the first use now), so the share rose to 24.2% for the same 22.3 us per
-    // declaration (load 10.7; docs/technical/50_pyplot_cpython_init.md §4.3). The ceiling was
-    // left unchanged: it is not too tight, and lowering it to 25% would turn an honest change of
-    // the import path into a red gate.
-    const DECLARATION_SHARE_CEILING = 30
     let declarations = null
     try {
-        declarations = declarationCost(reps)
+        declarations = declarationCost(DECLARATION_ROUNDS)
     } catch (error) {
         // Same rule as the four commands above: name what failed and why on standard output.
         failures.push(`declaration.cost: ${error.message}`)
     }
+    let declarationVerdict = 'PASS'
     if (declarations !== null) {
-        if (!json && declarations.median > DECLARATION_CEILING_US) {
+        if (!json && declarations.perDeclaration.median > DECLARATION_CEILING_US) {
+            declarationVerdict = 'FAIL'
             failures.push(
-                `declaration.cost: median ${declarations.median.toFixed(1)} us per declaration ` +
+                `declaration.cost: cpu median ${declarations.perDeclaration.median.toFixed(1)} us per declaration ` +
                     `exceeds ceiling ${DECLARATION_CEILING_US} us`
             )
         }
-        if (!json && declarations.share.median > DECLARATION_SHARE_CEILING) {
+        if (!json && declarations.total.median > DECLARATION_TOTAL_CEILING_MS) {
+            declarationVerdict = 'FAIL'
             failures.push(
-                `declaration.cost: the declaration modules are ${declarations.share.median.toFixed(1)}% ` +
-                    `of the compile work, over the ceiling of ${DECLARATION_SHARE_CEILING}%`
+                `declaration.cost: the declaration modules' cpu total ${declarations.total.median.toFixed(1)} ms ` +
+                    `exceeds ceiling ${DECLARATION_TOTAL_CEILING_MS} ms`
             )
         }
     }
     if (json) {
-        console.log(JSON.stringify({ camel: camelExe(), reps, results, declaration: declarations }, null, 2))
+        console.log(
+            JSON.stringify(
+                {
+                    camel: camelExe(),
+                    samples,
+                    runsPerSample,
+                    results,
+                    declaration: declarations,
+                },
+                null,
+                2
+            )
+        )
         return 0
     }
-    // The host's load, in the same log as the medians: on a shared machine a crossed ceiling
-    // has two possible causes, and the reader needs the one number that separates them. The
-    // `result=` field on every line means a red log names the measurement and its ceiling
-    // together, instead of a bare "expected exit 0" with the reason on an unseen stream.
+    // The host's load, in the same log as the medians, as provenance: CPU time barely moves with it,
+    // so it no longer has to separate a regression from a busy machine (the 2026-10-23 ruling).
     console.log(
-        `startup.cost host load=${os.loadavg().map((value) => value.toFixed(1)).join('/')} reps=${reps}`
+        `startup.cost metric=cpu_user_plus_system samples=${samples} runs_per_sample=${runsPerSample} ` +
+            `host load=${os.loadavg().map((value) => value.toFixed(1)).join('/')}`
     )
     for (const result of results) {
         if (result.error !== undefined) {
@@ -346,23 +530,26 @@ function main() {
         }
         const verdict = result.median > result.ceiling_ms ? 'FAIL' : 'PASS'
         console.log(
-            `startup.cost ${result.name.padEnd(16)} median=${result.median.toFixed(1)} ms ` +
-                `p10=${result.p10.toFixed(1)} p90=${result.p90.toFixed(1)} ` +
-                `min=${result.min.toFixed(1)} max=${result.max.toFixed(1)} ` +
-                `n=${result.n} ceiling=${result.ceiling_ms} ms result=${verdict}`
+            `startup.cost ${result.name.padEnd(16)} cpu_median=${result.median.toFixed(1)} ms ` +
+                `cpu_min=${result.min.toFixed(1)} cpu_max=${result.max.toFixed(1)} ` +
+                `n=${result.n} runs_per_sample=${result.runsPerSample} ` +
+                `ceiling=${result.ceiling_ms} ms result=${verdict}`
         )
     }
     if (declarations !== null) {
-        const shareVerdict = declarations.share.median > DECLARATION_SHARE_CEILING ? 'FAIL' : 'PASS'
         console.log(
             `declaration.cost declarations=${declarations.declarations} ` +
-                `per_declaration_us=${declarations.median.toFixed(1)} ` +
-                `p10=${declarations.p10.toFixed(1)} p90=${declarations.p90.toFixed(1)} ` +
-                `min=${declarations.min.toFixed(1)} max=${declarations.max.toFixed(1)} ` +
-                `share=${declarations.share.median.toFixed(1)}% ` +
-                `n=${declarations.n} ceiling=${DECLARATION_CEILING_US} us ` +
-                `share_ceiling=${DECLARATION_SHARE_CEILING}% ` +
-                `result=${shareVerdict}`
+                `metric=cpu_user_plus_system ` +
+                `per_declaration_us=${declarations.perDeclaration.median.toFixed(1)} ` +
+                `us_min=${declarations.perDeclaration.min.toFixed(1)} ` +
+                `us_max=${declarations.perDeclaration.max.toFixed(1)} ` +
+                `total_ms=${declarations.total.median.toFixed(1)} ` +
+                `total_min=${declarations.total.min.toFixed(1)} ` +
+                `total_max=${declarations.total.max.toFixed(1)} ` +
+                `rounds=${declarations.rounds} duplicates=${declarations.duplicates} ` +
+                `ceiling=${DECLARATION_CEILING_US} us ` +
+                `total_ceiling=${DECLARATION_TOTAL_CEILING_MS} ms ` +
+                `result=${declarationVerdict}`
         )
     }
     // Standard output, not standard error: the plan keeps this stream as the test's log, and a

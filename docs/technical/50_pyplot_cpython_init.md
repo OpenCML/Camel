@@ -121,6 +121,16 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 正常的导入期变化重新变成红灯。两组数字写进 `test/tools/startup-cost.mjs` 的注释与
 `test/plans/perf/startup.plan.toml`。
 
+**2026-10-23 后记：这一节的口径已被作者裁决取代，表格按原样保留为记录。** 裁决
+（`docs/handover/reviews/questions-2026-10-23.md`，`declaration-cost-gate`）把四条命令的天花板改成
+**CPU 时间**（安静主机中位数加余量，仍是不收紧的烟雾报警，数字为 12 / 18 / 95 / 90 ms），并回答
+H177 §5.3 的候选："选 3 + 2"——加"每个（阶段, 模块）每轮恰好出现一次"的结构断言、加绝对的 CPU 总量
+（12 ms），**30% 共享率这条线退休**（比例是在墙钟口径下绕开负载的替代品，CPU 时间不再需要它）。
+`declaration.cost` 的两个读数也换成 CPU：`--time-phases` 的每个阶段多写一个 `cpu_ns`
+（`src/utils/phase_timer.cpp`），因为同一批阶段在 load 21 读 21 us/条、在 load 106–112 读 75–104 us/条
+——墙钟会随邻居漂移，而 CPU 时间在 load 68–112 的每个窗口都是 27.5–28.5 us/条。上表的 22.0/22.3 us
+与 19.1%/24.2% 因此是旧口径的读数，不再是闸门。
+
 ## 5. 把规则钉住
 
 `test/cases/modules/stdlib/interpreter_first_use.mjs`（计划

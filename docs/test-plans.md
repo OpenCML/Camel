@@ -995,9 +995,10 @@ every case, the commit, the build's own stamp, the repetition count and the host
 the host whose numbers it records; a baseline from another machine is not comparable. The
 performance notes have the cost of each of the ten plans and the evidence for the
 split. The plans left out keep the measurement they already have: `perf.startup` carries its own
-ceilings and `declaration.cost` share, `perf.gc` asserts what must not grow with the length of the
-run, the showcases compare against PyTorch, and `docs/performance/graph-store-baseline.md` is a
-separate manual baseline of the graph store.
+CPU-time ceilings and `declaration.cost`'s per-declaration ceiling, absolute CPU total and
+structural assertion (the 30% compile-work share retired with the 2026-10-23 ruling), `perf.gc`
+asserts what must not grow with the length of the run, the showcases compare against PyTorch, and
+`docs/performance/graph-store-baseline.md` is a separate manual baseline of the graph store.
 
 ## Variable Expansion
 

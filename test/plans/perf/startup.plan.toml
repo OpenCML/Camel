@@ -2,65 +2,79 @@
 #
 # A declaration module (`stdlib/<module>.cml`) is parsed and compiled like a library when it is
 # imported. The tool derives their set and their declaration count from the tree, so a new module is
-# measured the day its `.cml` lands; the printed count is the tool's, never a pinned one. This plan pins three commands that run before any program code does: the
-# process itself (`--version`), a one-line program with no imports, and `inspect --ops` on a
-# program that imports every standard library module. It also runs that program, so the same import
-# work is timed on the run path.
+# measured the day its `.cml` lands; the printed count is the tool's, never a pinned one. This plan
+# pins four commands that run before any program code does: the process itself (`--version`), a
+# one-line program with no imports, `inspect --ops` on a program that imports every standard library
+# module, and that same program run through `std::nvm`.
 #
-# The ceilings are about four times the H142 quiet median for `inspect_ops` and `imports_all`, and
-# five to eight times for `--version` and `imports_nothing`, whose 5-8 ms medians are below this
-# host's scheduling noise; at H142 all four were above the medians seen at load average 150 and 215.
-# The numbers and their spread are in handover note ⟨c49da87⟩ (H142). They are a smoke alarm for "the
-# standard library is now loaded before the program runs", not a percentage budget: this host is
-# shared, and a few milliseconds of spread is normal. H177 re-measured them at load average 21-22:
-# 5.1 / 7.4 / 38.3 / 37.0 ms. The two full-import commands were about 2.6 and 2.4 times the quiet
-# median, not four, because `tiles`, `tensor`, `nn` and `autodiff` load too and because importing
-# `pyplot` then initialised CPython in `load()` (~9.5 ms). H221 took that initialisation out of
-# every `load()` — `import` executes no code (design principles 3.1), the interpreter is created by
-# the first `plot` or `py_*` call — so at load 10.7 those two medians are 31.8 / 31.5 ms and sit
-# about three times below the ceilings. The ceilings were left unchanged (handover notes ⟨83d6558⟩
-# (H177) and the H221 report); their margin over a load-215 window is thinner than it was, though:
-# H142's load factors project about 127 / 113 ms for the two full-import commands, over the 100 / 90
-# ceilings, so a later re-baseline may need 150 / 140.
+# The unit is CPU time (user + system), not the wall clock -- the author's ruling of 2026-10-23
+# (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
 #
-# On 2026-10-23 this layer ran on a host at load 106-130 (seven of its eight GPUs and every core in
-# other work) and the gate went red on `imports_all`: 92.8 ms alone at `-Jobs 1` and 101.4 ms in the
-# six-job layer, both against the 90 ms ceiling, with p10 at 56.5 and p90 at 132.9 in the serial run.
-# The other three commands moved with it and for no other reason: `--version`, which compiles
-# nothing, read 13.0 / 10.6 ms against its 40 ms ceiling where the tool had recorded 4.9-5.7 ms on
-# 2026-10-22, and `imports_all` itself read 33.7-43.8 ms in the logs of that day. The load moved
-# every command together, so the ceilings stay where they are; the medians of a quiet host still sit
-# about three times below them.
+#   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移，这正是 40/45/100/90 ms 在负载 106–130
+#    下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（H167 的判定已经用 CPU 中位数）。
+#    四条命令的天花板改为按 CPU 时间、取安静主机中位数加余量；"负载下红不算回归"的口径因此不需要。"
 #
-# `declarations=` is how many declarations the run compiles; it is printed for the record and
-# moves whenever a module is migrated. It is not asserted: only the per-declaration ceiling is.
+# So a crossed ceiling is a regression and never "the host was busy": the 1/5/15-minute load average
+# is printed beside the numbers as provenance, not as an excuse, and the wall clock is not gated at
+# all. Each ceiling is about two and a half times the quiet median of its command. Measured on the
+# Linux host (AMD EPYC 7343, 32 threads) on 2026-10-23 -- sixty fresh processes per command (five
+# samples of twelve) in each of four windows, at load 92.9, 75.2, 72.6 and 68.7 -- with H177's window
+# at load 21.4, which read the same CPU time, as the quiet column:
+#
+#   version          median 4.2-5.0 ms (samples 4.2-5.8)     quiet 4.89   ceiling 12
+#   imports_nothing  median 7.5-10.0 ms (samples 7.5-10.8)    quiet 7.01   ceiling 18
+#   inspect_ops      median 39.2-44.2 ms (samples 38.3-45.0)  quiet 37.97  ceiling 95
+#   imports_all      median 40.8-42.5 ms (samples 37.5-43.3)  quiet 36.19  ceiling 90
+#
+# They are a smoke alarm for "the standard library is now loaded before the program runs", not a
+# percentage budget: the small commands' cost jumping to the full-import cost, +30 ms, crosses the
+# first two on the first sample. The wall-clock ceilings they replace were 40/45/100/90 ms and read
+# 13.0 ms for `--version`, which compiles nothing, at load 106-130 on 2026-10-23 -- the reading the
+# ruling answered. The older numbers and their spread are in handover notes ⟨c49da87⟩ (H142) and
+# ⟨83d6558⟩ (H177).
+#
+# `declarations=` is how many declarations the run compiles; it is printed for the record and moves
+# whenever a module is migrated. It is not asserted: the per-declaration ceiling and the absolute
+# total are.
 #
 # `declaration.cost` is the same idea one level down (handover H152): the compiler's own
-# `--time-phases` report of the declaration modules, added up and divided by their declarations.
-# The process wall clock cannot see that work (the ceilings above are tens of milliseconds), so
-# this is the measurement that moves when the declaration path changes; it reads ~20 us per
-# declaration and is gated at three times that. The line also prints the declarations' share of
-# the compile work of the whole run, which is the half of the pair that does not read as load.
-# H152 measured 18-19% with nine modules; H177 measured 17.8% with all twenty (10.9% with the old
-# nine only). The share fell then because the run's import work grew (CPython's initialisation is
-# not declaration work). H221 removed that initialisation from the import path, so the same
-# declaration work is now 24.2% of a smaller denominator; the ceiling is still a coarse alarm, not a
-# declaration budget, and 24.2% is under it. H177 left the ceiling unchanged and recorded the
-# numbers and the per-module table in handover note ⟨83d6558⟩ (H177); H221 recorded its window in
-# docs/technical/50_pyplot_cpython_init.md §4.3.
+# `--time-phases` report of the declaration modules, added up and divided by their declarations, read
+# in the CPU time that report writes per phase. The process clock cannot resolve that work (the four
+# ceilings above are tens of milliseconds), so this is the measurement that moves when the declaration
+# path changes. Its two readings and its structural assertion are the two the author chose on
+# 2026-10-23 ("declaration-cost-gate" (b)):
 #
-# The test prints one `startup.cost` line per command (median, p10, p90, min, max, n, ceiling,
-# `result=PASS|FAIL`) and fails only when a median crosses its ceiling. The tool also prints the
-# host's 1/5/15-minute load average in the same log: a crossed ceiling has two possible causes,
-# and the load is the number that separates a regression from a busy machine. A failure names
-# the measurement, the value and the ceiling on standard output (`startup-cost: FAILED ...`),
-# which is the stream the plan keeps, so a red log carries the reason rather than a bare exit 1.
+#   "选 3 + 2：结构断言"每个（阶段, 模块）每轮恰好出现一次"管重复编译；绝对的 CPU 总量管整体变慢；
+#    30% 共享率这条线退休。"
+#
+# Every round of the measurement asserts that each (phase, module) among parse, GCT and declare
+# appears exactly once -- a module compiled twice names itself, which no ratio and no total can -- and
+# the round's parse + GCT + declare CPU is read against an absolute total (12 ms: H177 §5.3's
+# candidate, sized for the 4.6 ms regression the per-declaration ceiling cannot see, and 1.2 times the
+# busiest median measured here). The 30% share of the compile work is deleted, not commented out: it
+# was the load-invariant half of a pair whose other half was the wall clock, and with CPU time there
+# is nothing left for it to excuse. Its numbers stay in handover note ⟨83d6558⟩ (H177) and
+# docs/technical/50_pyplot_cpython_init.md §4.3 as the record of the口径 it belonged to.
+#
+# That measurement is CPU for the same reason as the four ceilings: the wall clock of those same
+# phases read 21 us per declaration on H177's quiet host and 75-104 us at load 106-112 on 2026-10-23,
+# while the CPU reading of the same rounds is 27.5-28.5 us in every window measured at load 68-112.
+# The compiler henceforth writes `cpu_ns` beside `wall_ns` per phase (src/utils/phase_timer.cpp), and
+# a platform with no process CPU clock makes the line report an error instead of reading the wall
+# clock.
+#
+# The test prints one `startup.cost` line per command (cpu median, min, max, n, runs per sample,
+# ceiling, `result=PASS|FAIL`) and one `declaration.cost` line (declarations, CPU per declaration and
+# total, rounds, duplicates, both ceilings, result), and fails only when a median crosses its ceiling.
+# A failure names the measurement, the value and the ceiling on standard output
+# (`startup-cost: FAILED ...`), which is the stream the plan keeps, so a red log carries the reason
+# rather than a bare exit 1.
 #
 # It is `parallel = false`: the gate is an absolute millisecond bound, and this runner gives a
 # benchmark the machine alone for the same reason. Beside five other tests (the full layer at
-# `-Jobs 6`) the number measures the scheduler, not startup. Alone it does not measure a quiet
-# host either: the other worktrees on this machine are outside this runner's slots, which is why
-# the load average is printed beside the medians rather than assumed away.
+# `-Jobs 6`) the number measures the scheduler, not startup. Alone it does not measure a quiet host
+# either: the other worktrees on this machine are outside this runner's slots, which is why the load
+# average is printed beside the medians rather than assumed away, and why the unit is CPU time.
 id = "perf.startup"
 order = 401
 tier = "slow"
@@ -68,14 +82,14 @@ tags = ["perf", "startup"]
 
 [[tests]]
 name = "startup.cost"
-desc = "The whole-process cost of --version, a one-line program, and inspect --ops over the whole standard library."
+desc = "The whole-process CPU cost of --version, a one-line program, inspect --ops over the whole standard library and the same program on the run path, plus the declaration modules' own CPU work."
 kind = "behavior"
 parallel = false
 tool = "node"
 case = "../../tools/startup-cost.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations="]
-# Four commands, 21 timed runs each after three warm-ups, are a few seconds on a quiet host and
-# well under half a minute under load. 120 s catches a hang, not a slow run.
+expect_stdout_contains = ["startup.cost metric=cpu_user_plus_system", "startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=", "per_declaration_us=", "total_ms=", "duplicates=0"]
+# Four commands (two warm-ups plus five samples of twelve runs each: 248 processes) and 21 rounds of
+# `inspect --ops` took 18.6-18.9 s on this host at load 92.9, so 120 s catches a hang, not a slow run.
 timeout_ms = 120000
