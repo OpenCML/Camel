@@ -992,10 +992,23 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     node_ptr_t lhsFunc = side("__lhs", sides[0]);
     node_ptr_t rhsFunc = side("__rhs", sides[1]);
 
-    // A condition is a fourth function of the same parameters, as nodes of the draft being
-    // rewritten: `func name__when(params as graph::Node) => expr`.
+    // A condition is a fourth function of the same parameters: `func name__when(params) => expr`.
+    // A parameter that is not `const` is a node of the draft being rewritten (`graph::Node`); a
+    // `const` one is the constant's value, of the type it was declared with (rewrite design 2
+    // (second version) 1, reviews/stdlib-rules.md item 5), so the guard is written on the value
+    // and needs neither `constant(node, sample)` nor the `match … case null` layers around it.
     node_ptr_t whenFunc;
     if (when) {
+        const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams();
+        const auto constValueParam = [](cst::KeyParamPair pair) {
+            return static_cast<bool>(pair->has(TK::KwConst)) && static_cast<bool>(pair->type());
+        };
+        bool nodesUsed = false;
+        if (params) {
+            for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                nodesUsed = nodesUsed || !constValueParam(pair);
+            }
+        }
         if (!whenImportAdded_) {
             whenImportAdded_   = true;
             auto rewriteImport = std::make_shared<ImportLoad>();
@@ -1003,7 +1016,10 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             rewriteImport->setPath("rewrite");
             rewriteImport->setRefs({Reference("__rule_when")});
             imports_.push_back(rewriteImport);
-            auto graphImport = std::make_shared<ImportLoad>();
+        }
+        if (nodesUsed && !whenNodeImportAdded_) {
+            whenNodeImportAdded_ = true;
+            auto graphImport     = std::make_shared<ImportLoad>();
             graphImport->setTokenRange(extractTokenRangeFromContext(context));
             graphImport->setPath("graph");
             graphImport->setRefs({Reference("Node")});
@@ -1013,22 +1029,26 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         node_ptr_t whenParams   = createNodeAs<RepeatedLoad>("NamedPair");
         setNodeTokenRangeByContext(whenParams, context);
         if (params) {
-            if (const auto paired = params->get<cst::PairedParams>()) {
-                for (const auto pair : paired->all<cst::KeyParamPair>()) {
-                    node_ptr_t named = createNodeAs<NamedPairLoad>(
-                        Reference(std::string(pair->get<cst::IdentDef>()->text())),
-                        false,
-                        false);
-                    setNodeTokenRangeByContext(named, pair);
-                    node_ptr_t nodeType = createNodeAs<RefTypeLoad>(Reference("Node"));
-                    setNodeTokenRangeByContext(nodeType, pair);
-                    *named << nodeType << createNodeAs<OptionalLoad>("DataExpr");
-                    *whenParams << named;
+            for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                node_ptr_t named = createNodeAs<NamedPairLoad>(
+                    Reference(std::string(pair->get<cst::IdentDef>()->text())),
+                    false,
+                    false);
+                setNodeTokenRangeByContext(named, pair);
+                node_ptr_t paramType;
+                if (constValueParam(pair)) {
+                    paramType = any2node(visitType(pair->type()));
+                } else {
+                    paramType = createNodeAs<RefTypeLoad>(Reference("Node"));
+                    setNodeTokenRangeByContext(paramType, pair);
                 }
+                *named << paramType << createNodeAs<OptionalLoad>("DataExpr");
+                *whenParams << named;
             }
         }
         node_ptr_t whenType = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(whenType, when);
+        unwrapNodeAs<FuncTypeLoad>(whenType)->setTypeParams(typeParams);
         *whenType << createNodeAs<RepeatedLoad>("NamedPair");
         *whenType << whenParams;
         node_ptr_t whenResult = createNodeAs<OptionalLoad>("Type");

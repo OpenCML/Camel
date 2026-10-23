@@ -113,7 +113,10 @@ class SideReader {
                 fail("reads a port that is not a parameter");
             }
             variables_.insert(*index);
-            return !right_ && isConstParam(*index) ? patConst(*index)
+            // A `const` parameter is matched as a constant writing of the type it was declared
+            // with (rewrite design 2 (second version) 1): the type check is the matcher's, so no
+            // rule guards `isI32(c)` itself.
+            return !right_ && isConstParam(*index) ? patConst(*index, node->dataType())
                                                    : patVar(*index, node->dataType());
         }
         case GCNodeKind::Data: {
