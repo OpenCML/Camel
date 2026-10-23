@@ -94,7 +94,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "optim.f64_leaf_keeps_its_element_type"
-desc = "A tensor leaf whose element type is written as f64 keeps f64: one `sgd` step of 16777217.0 with a rate of 0.5 is 16777216.5, a value no f32 can hold, in a leaf of 16 bytes, and one `adam` step of the same leaf stays f64 too. The native path turns every tensor leaf into f32 (`floatTensor`/`newLike`, modules/nn/optim.cpp), which design principles 7.4 forbids, so the two cannot agree on this leaf; the case guards this side of the divergence."
+desc = "A tensor leaf whose element type is written as f64 keeps f64: one `sgd` step of 16777217.0 with a rate of 0.5 is 16777216.5, a value no f32 can hold, in a leaf of 16 bytes, and one `adam` step of the same leaf stays f64 too, so the stored value is the f64 one and the leaf is not narrowed (design principles 7.4: the element type is exact)."
 kind = "behavior"
 case = "../../../cases/modules/optim/dtype_exact.cml"
 args = ["${case}", "std::macro", "${backend}"]
@@ -249,3 +249,31 @@ assert(Number(match(new RegExp('optim unstated_dtype_exact failures=(\\d+)'), ou
 }
 """
 timeout_ms = 30000
+
+[[tests]]
+name = "optim.unknown_optimizer_is_refused"
+desc = "An optimization that is neither `Sgd` nor `Adam` is not one the module knows: `init` has one overload per optimizer, so a call with any other type is refused where it is written. The type used to be accepted whatever it was and answered with the state `adam` builds; the call is now a `SemanticDiag::NoMatchingFunction` that lists the two overloads and nothing else."
+kind = "negative"
+case = "../../../cases/modules/optim/unknown_optimizer.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "argument types: Unknown, Model.", "init: (opt: Sgd, params: P) => SgdState", "init: (adam_opt: Adam, params: P) => AdamState<P>"]
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 22
+expect_diagnostic_column = 21
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "optim.unknown_optimizer_update_is_refused"
+desc = "The same for `update`: it has one overload per optimizer too, so an unknown optimizer is refused where it is written rather than reaching an `adam` fallback that reads a field the type does not have. The diagnostic is a `SemanticDiag::NoMatchingFunction` at the call, and the state argument's type is named in it."
+kind = "negative"
+case = "../../../cases/modules/optim/unknown_optimizer_update.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "argument types: Unknown, Model, Model, AdamState<Model>.", "update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)", "update: (adam_opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)"]
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 31
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

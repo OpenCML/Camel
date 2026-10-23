@@ -92,29 +92,26 @@ func cosine_rate(peak: float, total: int, floor: float, step: int): float {
     return if step >= total then floor else floor + (peak - floor) * (1.0 + math::cos(3.141592653589793 * float(step) / float(total))) * 0.5
 }
 
-/// The optimization `sgd`: a rate schedule, and nothing else. Its state is the step count.
+/// The optimization `sgd`: a rate schedule, and nothing else.
 export type Sgd = { schedule: (step: int) => float }
 
-/// The optimization `adam`: a rate schedule and the three constants of the update.
+/// The optimization `adam`: a rate schedule and the constants of the update. `decay` is the
+/// decoupled weight decay of `adamw`, which moves the parameter by `rate * decay` of itself before
+/// the adaptive update; it is zero, the plain `adam`.
 export type Adam = {
-    schedule: (step: int) => float,
-    beta1: float,
-    beta2: float,
-    eps: float
-}
-
-// `adamw` is `adam` with one more constant: the decoupled weight decay.
-
-/// The optimization `adamw`: `adam` with a decoupled weight decay. The parameter is first moved
-/// by `rate * decay` of itself, and the adaptive update then works on the moved parameter; the
-/// moments see the gradient alone, which is what makes the decay decoupled.
-export type Adamw = {
     schedule: (step: int) => float,
     beta1: float,
     beta2: float,
     eps: float,
     decay: float
 }
+
+/// The state of `sgd`: the number of updates made, which is the step its schedule reads.
+export type SgdState = { step: int }
+
+/// The state of `adam`: a tree of zeros for each moment, shaped like the parameters, and the number
+/// of updates made, which is the step the schedule reads.
+export type AdamState<P> = { m: P, v: P, step: int }
 
 /// Plain stochastic gradient descent: `p - rate * g` at every leaf, the rate of the step taken.
 /// @pure
@@ -123,59 +120,56 @@ export func sgd(schedule: (step: int) => float): Sgd {
     return { schedule: schedule }
 }
 
-/// Adam with the constants the reference kernel's callers use (beta1 0.9, beta2 0.999, eps 1e-8).
+/// Adam. The constants default to the ones the reference kernel's callers use: beta1 0.9, beta2
+/// 0.999, eps 1e-8, and a decoupled weight decay of zero.
 /// @pure
 /// @example adam(constant(0.001))
-export func adam(schedule: (step: int) => float): Adam {
-    return adam(schedule, 0.9, 0.999, 0.00000001)
-}
-
-// The same with the three constants given.
-// @pure
-export func adam(schedule: (step: int) => float, beta1: float, beta2: float, eps: float): Adam {
-    return { schedule: schedule, beta1: beta1, beta2: beta2, eps: eps }
-}
-
-/// AdamW with the same constants and a weight decay of 0.01.
-/// @pure
-/// @example adamw(constant(0.001))
-export func adamw(schedule: (step: int) => float): Adamw {
-    return adamw(schedule, 0.9, 0.999, 0.00000001, 0.01)
-}
-
-// The same with the constants and the weight decay given.
-// @pure
-export func adamw(schedule: (step: int) => float, beta1: float, beta2: float, eps: float, decay: float): Adamw {
+/// @example adam(constant(0.001), beta1: 0.5, eps: 0.0001)
+export func adam(schedule: (step: int) => float, beta1: float = 0.9, beta2: float = 0.999, eps: float = 0.00000001, decay: float = 0.0): Adam {
     return { schedule: schedule, beta1: beta1, beta2: beta2, eps: eps, decay: decay }
 }
 
-/// The state of an optimization: a tree of zeros for each moment and the number of updates made.
-/// The moments have the shape of the parameters. A module cannot declare `init` once per
-/// optimizer (the language has no overloading of a function with a body), so the state of every
-/// optimizer has one type and `sgd` pays for two zero trees it never reads; the step is what a
-/// schedule reads.
+/// `adam` with a decoupled weight decay, 0.01 by default: the parameter is first moved by
+/// `rate * decay` of itself, and the adaptive update then works on the moved parameter; the moments
+/// see the gradient alone, which is what makes the decay decoupled.
+/// @pure
+/// @example adamw(constant(0.001))
+/// @example adamw(constant(0.001), decay: 0.1)
+export func adamw(schedule: (step: int) => float, beta1: float = 0.9, beta2: float = 0.999, eps: float = 0.00000001, decay: float = 0.01): Adam {
+    return { schedule: schedule, beta1: beta1, beta2: beta2, eps: eps, decay: decay }
+}
+
+/// The state `sgd` starts from: no moments to carry, only the step count.
+/// @pure
+/// @example init(sgd(constant(0.1)), { w: 1.0 })    // { step: 0 }
+export func init::<P>(opt: Sgd, params: P): SgdState {
+    return { step: 0 }
+}
+
+/// The state `adam` starts from: the two moment trees at zero, shaped like the parameters, and the
+/// step count.
 /// @pure
 /// @example init(adam(constant(0.1)), { w: 1.0 })    // { m: { w: 0.0 }, v: { w: 0.0 }, step: 0 }
-export func init::<O, P>(opt: O, params: P): { m: P, v: P, step: int } {
+export func init::<P>(adam_opt: Adam, params: P): AdamState<P> {
     return moments(params)
 }
 
-/// One update of any of the three optimizations: `(params, state)`, with the step advanced by one
-/// and the rate taken from `opt.schedule` at the step this update takes, numbered from one. `sgd`
-/// moves the parameters by the rate alone; `adam` and `adamw` run the adaptive update, `adamw`
-/// moving the parameters by the decoupled weight decay first.
+/// One `sgd` update: `(params, state)`, with the step advanced by one and the rate taken from
+/// `opt.schedule` at the step this update takes, numbered from one.
+/// @pure
+/// @example update(sgd(constant(0.1)), { w: 1.0 }, { w: 0.5 }, init(sgd(constant(0.1)), { w: 1.0 }))
+export func update::<P, G>(opt: Sgd, params: P, grads: G, state: SgdState): (P, SgdState) {
+    let step = state.step + 1
+    return (sgd_tree(params, grads, opt.schedule(step)), { step: step })
+}
+
+/// One `adam` update: `(params, state)`, with the step advanced by one and the rate taken from
+/// `opt.schedule` at the step this update takes, numbered from one. A `decay` other than zero moves
+/// the parameters by the decoupled weight decay first.
 /// @pure
 /// @example update(adam(constant(0.1)), { w: 1.0 }, { w: 0.5 }, init(adam(constant(0.1)), { w: 1.0 }))
-export func update::<O, P, G>(opt: O, params: P, grads: G, state: { m: P, v: P, step: int }): (P, { m: P, v: P, step: int }) {
-    return match type O {
-        case Sgd => (
-            sgd_tree(params, grads, opt.schedule(state.step + 1)),
-            { m: state.m, v: state.v, step: state.step + 1 }
-        )
-        case Adam => adam_update(opt.schedule, opt.beta1, opt.beta2, opt.eps, 0.0, params, grads, state)
-        case Adamw => adam_update(opt.schedule, opt.beta1, opt.beta2, opt.eps, opt.decay, params, grads, state)
-        case _ => adam_update(opt.schedule, 0.9, 0.999, 0.00000001, 0.0, params, grads, state)
-    }
+export func update::<P, G>(adam_opt: Adam, params: P, grads: G, state: AdamState<P>): (P, AdamState<P>) {
+    return adam_update(adam_opt.schedule, adam_opt.beta1, adam_opt.beta2, adam_opt.eps, adam_opt.decay, params, grads, state)
 }
 
 // The numbers one update uses: the rate of this step, the two decay rates, `eps`, and the bias
@@ -258,13 +252,12 @@ func sgd_leaf::<P, G>(p: P, g: G, rate: float) {
     }
 }
 
-// One `adam` (or `adamw`) step of a whole tree, from a state. The walk answers one triple per
-// leaf -- the new parameter and the two new moments -- and `tree_unzip` turns the tree of triples
-// into the three trees. `state.m` and `state.v` are shaped like `grads`, so the walk can read
-// them leaf by leaf.
+// One `adam` step of a whole tree, from a state. The walk answers one triple per leaf -- the new
+// parameter and the two new moments -- and `tree_unzip` turns the tree of triples into the three
+// trees. `state.m` and `state.v` are shaped like `grads`, so the walk can read them leaf by leaf.
 func adam_update::<P, G>(
     schedule: (step: int) => float, beta1: float, beta2: float, eps: float, decay: float,
-    params: P, grads: G, state: { m: P, v: P, step: int }
+    params: P, grads: G, state: AdamState<P>
 ) {
     let step = state.step + 1
     let c = rates(schedule(step), beta1, beta2, eps, step)
@@ -274,8 +267,8 @@ func adam_update::<P, G>(
 }
 
 // The whole parameter tree moved by one decoupled weight decay, before the adaptive update
-// (`decay` is zero for plain Adam, and `p * (1 - 0)` is `p` exactly, so `adamw` with a zero decay
-// is `adam`).
+// (`decay` is zero for plain Adam, and `p * (1 - 0)` is `p` exactly, so a zero decay leaves the
+// parameters alone).
 func decay_tree::<P>(p: P, rate_decay: float) {
     return match type P {
         case struct | tuple => P { static for (n, _) in fields P => decay_tree(p.[n], rate_decay) }
@@ -283,10 +276,10 @@ func decay_tree::<P>(p: P, rate_decay: float) {
     }
 }
 
-// One leaf of the decay: `p * (1 - rate * decay)`, the expression `torch.optim.AdamW` computes
-// (`param.mul_(1 - lr * weight_decay)`), at the element type the leaf's value has: a tensor leaf
-// keeps its element type, because the rate is a `float` and a `float` does not widen a tensor, and
-// the factors are rounded to the leaf's element type as the native kernel rounds its rate (design
+// One leaf of the decay: `p * (1 - rate * decay)`, the expression the reference AdamW computes
+// (`param.mul_(1 - lr * weight_decay)`), at the leaf's own element type: a tensor leaf keeps its
+// element type, because the rate is a `float` and a `float` does not widen a tensor, and the
+// factors are rounded to the leaf's element type as the native kernel rounds its rate (design
 // principles 7.4). A number written as f32 is computed in double and rounded once, like every other
 // f32 number here, and a leaf whose element type the program does not write is not converted: the
 // multiplication takes the element type of `x`.
@@ -362,13 +355,6 @@ func adam_number(p: float, g: float, m: float, v: float, c: Rates): (float, floa
 // the result back. Every operator is one pass over the buffer, and a pass over f64 keeps the
 // double result exactly, so the three double divisions and the square root of the fused kernel
 // come out the same numbers.
-//
-// This function and the one above are the seam a kernel attaches to: the fused pass
-// (modules/tensor/kernels/update.h) computes the same triple per element in one traversal, and
-// the ruling in docs/handover/reviews/questions-2026-10-23.md (section `impl-kernel-site`) is
-// what lets a generic function carry the kernel -- it defers attaching Adam's until this module
-// has landed. Until then the leaves above are one operator pass each, which is the cost H51's
-// fifth item takes up.
 func adam_wide::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
     let p64 = cast(p, 'float64')
     let g64 = cast(g, 'float64')
