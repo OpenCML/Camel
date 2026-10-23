@@ -22,12 +22,15 @@
  *
  * Blocking (Goto-style) changes where the work happens, never the order of the
  * steps of one chain:
- *   for each (MC x NC) output tile, in parallel:
+ *   for each NC-wide column band, in parallel over (row tile, band) runs:
  *     for each K block of depth KC, in ascending order:
- *       pack the tile's B[KC x NC] columns into NR-wide panels (zero padded)
- *       pack the tile's A[MC x KC] rows into MR-tall panels (zero padded)
- *       run the MR x NR micro-kernel over the tile, continuing each chain from
- *       the value the previous K block left in the tile's carry buffer
+ *       pack the band's B[KC x NC] columns into NR-wide panels (zero padded)
+ *       for each MC x KC row block of the band:
+ *         pack its A[MC x KC] rows into MR-tall panels (zero padded)
+ *         run the MR x NR micro-kernel over the block, continuing each chain
+ *         from the value the previous K block left in the block's carry buffer
+ * The packed B panel is reused by every row block of the band; A is packed once
+ * per row block and K block.
  * The micro-kernel keeps an MR x NR accumulator block in vector registers
  * using GCC/Clang vector extensions. Transposed operands are handled entirely
  * by the packing routines. The zero padding only fills lanes (rows beyond mr,
@@ -41,6 +44,40 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+
+/*
+ * Measurement hooks. Nothing in the build defines CAMEL_GEMM_PROBE; test/tools/gemmprobe defines it
+ * before including this file from a translation unit of its own, and supplies the two functions
+ * below. The points are the phases of one entry call: setup, the two packings, the full and edge
+ * micro tiles, one chunk of the tile loop, the whole region, and the call. A release unit compiles
+ * none of it, so the arithmetic and the order of operations are the same with and without the
+ * macro.
+ */
+#if defined(CAMEL_GEMM_PROBE)
+namespace camel::tensor::kernels::gemmprobe {
+enum Phase {
+    kSetup,
+    kPackB,
+    kPackA,
+    kMicroFull,
+    kMicroEdge,
+    kChunk,
+    kRegion,
+    kTotal,
+    kPhaseCount
+};
+void add(int phase, unsigned long long ns, long long flops, long long bytes);
+unsigned long long now();
+} // namespace camel::tensor::kernels::gemmprobe
+#define CAMEL_GEMM_PROBE_BEGIN(name) \
+    const unsigned long long name = ::camel::tensor::kernels::gemmprobe::now()
+#define CAMEL_GEMM_PROBE_END(phase, name, flops, bytes)                                          \
+    ::camel::tensor::kernels::gemmprobe::add(                                                    \
+        (phase), ::camel::tensor::kernels::gemmprobe::now() - (name), (flops), (bytes))
+#else
+#define CAMEL_GEMM_PROBE_BEGIN(name)
+#define CAMEL_GEMM_PROBE_END(phase, name, flops, bytes)
+#endif
 
 namespace camel::tensor::kernels::detail {
 
@@ -244,6 +281,8 @@ void CAMEL_GEMM_ENTRY(
     if (M == 0 || N == 0) {
         return;
     }
+    CAMEL_GEMM_PROBE_BEGIN(probeTotal);
+    CAMEL_GEMM_PROBE_BEGIN(probeSetup);
     // Use only as many threads as the work pays for: waking a worker costs a few microseconds,
     // more than a whole small inference product (e.g. 32x64x128) takes on one core.
     const double flops    = 2.0 * static_cast<double>(M) * static_cast<double>(N) * K;
@@ -266,11 +305,19 @@ void CAMEL_GEMM_ENTRY(
     const int64_t tiles  = mTiles * nTiles;
     // parallelFor splits into chunks of at least `grain` tiles; this grain yields `workers` chunks.
     const int64_t grain = std::max<int64_t>(1, tiles / workers);
+    CAMEL_GEMM_PROBE_END(gemmprobe::kSetup, probeSetup, 0, 0);
+    CAMEL_GEMM_PROBE_BEGIN(probeRegion);
 
-    // One parallel region for the whole product: each task owns an output tile
-    // and walks all K blocks, packing just the A rows and B columns it needs.
-    // Re-packing across tiles costs O(1/MC + 1/ncTile) of the arithmetic.
+    // One parallel region for the whole product. Tiles are ordered by column band first, then by
+    // row, and a task walks its contiguous run of that order. Within a task, one packed B panel
+    // [kc x nc] serves every row tile of its band: the panel is the expensive one (a transposed B
+    // is copied element by element), and packing it once per output tile made it 23% of a
+    // backward product and 28% of 1024^3 (test/tools/gemmprobe). A is packed per row tile, once
+    // per K block, and the accumulators of each row tile are kept between K blocks, so every
+    // element is still one chain of fused multiply-adds in ascending k from +0: where the work
+    // happens moves, the order of the steps does not.
     parallelFor(tiles, workers == 1 ? tiles : grain, [&](int64_t begin, int64_t end) {
+        CAMEL_GEMM_PROBE_BEGIN(probeChunk);
         const int64_t kcMax = std::min(kKC, K);
         thread_local std::unique_ptr<float[]> bufferA, bufferB;
         thread_local size_t capacityA = 0, capacityB = 0;
@@ -282,61 +329,103 @@ void CAMEL_GEMM_ENTRY(
             bufferB,
             capacityB,
             static_cast<size_t>(((ncTile + kNR - 1) / kNR) * kNR * kcMax));
-        // The accumulators of a whole tile between K blocks (only when there is more than one
-        // K block): one MR x NR block per micro tile.
+        // The accumulators of one row tile between K blocks (only when there is more than one K
+        // block): one MR x NR block per micro tile, one set of blocks per row tile of a band.
         const int64_t rowBlocks = (kMC + kMR - 1) / kMR;
         const int64_t colBlocks = (ncTile + kNR - 1) / kNR;
         thread_local std::unique_ptr<float[]> bufferCarry;
         thread_local size_t capacityCarry = 0;
         float *carry                      = nullptr;
         if (K > kKC) {
-            carry = scratch(
+            // One set of blocks per row tile of the band this task is in, and a task owns at most
+            // one band's worth of rows (a run of the column-major tile order).
+            const int64_t rows = std::min<int64_t>(mTiles, end - begin);
+            carry              = scratch(
                 bufferCarry,
                 capacityCarry,
-                static_cast<size_t>(rowBlocks * colBlocks * kMR * kNR));
+                static_cast<size_t>(rows * rowBlocks * colBlocks * kMR * kNR));
         }
-        for (int64_t t = begin; t < end; ++t) {
-            const int64_t ic = (t / nTiles) * kMC;
-            const int64_t mc = std::min(kMC, M - ic);
-            const int64_t jc = (t % nTiles) * ncTile;
-            const int64_t nc = std::min(ncTile, N - jc);
+        for (int64_t t = begin; t < end;) {
+            // The contiguous run of rows in one column band that this task owns.
+            const int64_t band = t / mTiles;
+            const int64_t rowBegin = t - band * mTiles;
+            const int64_t rowEnd   = std::min<int64_t>(mTiles, end - band * mTiles);
+            const int64_t jc       = band * ncTile;
+            const int64_t nc       = std::min(ncTile, N - jc);
+            t                      = band * mTiles + rowEnd;
             if (alpha == 0.0f || K == 0) {
-                finishEmptyTile(C, ldc, ic, mc, jc, nc, alpha, beta);
+                for (int64_t r = rowBegin; r < rowEnd; ++r) {
+                    const int64_t ic = r * kMC;
+                    const int64_t mc = std::min(kMC, M - ic);
+                    finishEmptyTile(C, ldc, ic, mc, jc, nc, alpha, beta);
+                }
                 continue;
             }
             for (int64_t pc = 0; pc < K; pc += kKC) {
                 const int64_t kc = std::min(kKC, K - pc);
                 const bool first = pc == 0;
                 const bool last  = pc + kc == K;
+                CAMEL_GEMM_PROBE_BEGIN(probePackB);
                 packB(B, ldb, transB, pc, kc, jc, nc, packedB);
-                packA(A, lda, transA, ic, mc, pc, kc, packedA);
-                for (int64_t jr = 0; jr < nc; jr += kNR) {
-                    const float *Bp  = packedB + (jr / kNR) * kc * kNR;
-                    const int64_t nr = std::min<int64_t>(kNR, nc - jr);
-                    for (int64_t ir = 0; ir < mc; ir += kMR) {
-                        const float *Ap  = packedA + (ir / kMR) * kc * kMR;
-                        const int64_t mr = std::min<int64_t>(kMR, mc - ir);
-                        float *blockCarry =
-                            carry ? carry + ((ir / kMR) * colBlocks + jr / kNR) * kMR * kNR
-                                  : nullptr;
-                        microKernel(
-                            kc,
-                            Ap,
-                            Bp,
-                            blockCarry,
-                            first,
-                            last,
-                            C + (ic + ir) * ldc + jc + jr,
-                            ldc,
-                            alpha,
-                            beta,
-                            mr,
-                            nr);
+                CAMEL_GEMM_PROBE_END(
+                    gemmprobe::kPackB,
+                    probePackB,
+                    0,
+                    4LL * ((nc + kNR - 1) / kNR) * kNR * kc);
+                for (int64_t r = rowBegin; r < rowEnd; ++r) {
+                    const int64_t ic = r * kMC;
+                    const int64_t mc = std::min(kMC, M - ic);
+                    CAMEL_GEMM_PROBE_BEGIN(probePackA);
+                    packA(A, lda, transA, ic, mc, pc, kc, packedA);
+                    CAMEL_GEMM_PROBE_END(
+                        gemmprobe::kPackA,
+                        probePackA,
+                        0,
+                        4LL * ((mc + kMR - 1) / kMR) * kMR * kc);
+                    float *tileCarry =
+                        carry ? carry + (r - rowBegin) * rowBlocks * colBlocks * kMR * kNR
+                              : nullptr;
+                    for (int64_t jr = 0; jr < nc; jr += kNR) {
+                        const float *Bp  = packedB + (jr / kNR) * kc * kNR;
+                        const int64_t nr = std::min<int64_t>(kNR, nc - jr);
+                        for (int64_t ir = 0; ir < mc; ir += kMR) {
+                            const float *Ap  = packedA + (ir / kMR) * kc * kMR;
+                            const int64_t mr = std::min<int64_t>(kMR, mc - ir);
+                            float *blockCarry =
+                                tileCarry
+                                    ? tileCarry +
+                                          ((ir / kMR) * colBlocks + jr / kNR) * kMR * kNR
+                                    : nullptr;
+                            CAMEL_GEMM_PROBE_BEGIN(probeMicro);
+                            microKernel(
+                                kc,
+                                Ap,
+                                Bp,
+                                blockCarry,
+                                first,
+                                last,
+                                C + (ic + ir) * ldc + jc + jr,
+                                ldc,
+                                alpha,
+                                beta,
+                                mr,
+                                nr);
+                            CAMEL_GEMM_PROBE_END(
+                                (mr == kMR && nr == kNR && beta == 0.0f)
+                                    ? gemmprobe::kMicroFull
+                                    : gemmprobe::kMicroEdge,
+                                probeMicro,
+                                2LL * mr * nr * kc,
+                                0);
+                        }
                     }
                 }
             }
         }
+        CAMEL_GEMM_PROBE_END(gemmprobe::kChunk, probeChunk, 0, 0);
     });
+    CAMEL_GEMM_PROBE_END(gemmprobe::kRegion, probeRegion, 0, 0);
+    CAMEL_GEMM_PROBE_END(gemmprobe::kTotal, probeTotal, 0, 0);
 }
 
 } // namespace camel::tensor::kernels::detail

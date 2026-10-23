@@ -1,0 +1,189 @@
+{
+  "schema": 1,
+  "what": "The canonical GEMM inside the d=256 training step: how far it is from one core's FMA peak, where its time goes, and what the band-major B-packing change moved. Measured on the reference host with one thread; the A/B columns are alternating runs of two binaries that differ only in modules/tensor/kernels/gemm_blocked.inl.",
+  "generated_at": "2026-10-23T02:20:00+08:00",
+  "machine": {
+    "host": "tangshan88",
+    "cpu": "AMD EPYC 7343 16-Core Processor",
+    "cores": 16,
+    "hardware_threads": 32,
+    "isa": "AVX2 (no AVX-512)",
+    "nominal_mhz": 2900,
+    "boosting_mhz": 3941,
+    "clock_ns_per_tick_measured": 0.313082,
+    "clock_ghz_measured": 3.194,
+    "tsc_calibration": "the cycle counter read against the wall clock across a 300 ms sleep: both advance during a preemption, so the ratio is the same on a loaded host as on an idle one"
+  },
+  "load_average": {
+    "probe_ab": {"1m": 51.1, "5m": 85.3, "15m": 98.0},
+    "probe_before_phases": {"1m": 102.8, "5m": 121.6, "15m": 108.8},
+    "step": {"1m": 98.1, "5m": 107.9, "15m": 106.0},
+    "note": "a shared host; every column is a ratio or a CPU time, and the probes run pinned to one core (taskset -c 30) with the medians over rounds. A CPU-time rate is what the core did while it ran, which is the only rate this host can report honestly."
+  },
+  "method": {
+    "probe": "test/tools/gemmprobe/gemm_probe.cpp, built with the AVX2 unit's flags (-O3 -DNDEBUG -std=gnu++23 -march=native -mavx2 -mfma -ffp-contract=off) and linked against the real worker pool (kernels/parallel.cpp); CAMEL_GEMM_PROBE enables per-phase cycle-counter hooks in gemm_blocked.inl. Never built on the workstation.",
+    "peak": "a loop of 12 independent fused multiply-add vector accumulators over 12 registers, measured in the same process: 120.8 GFLOP/s at 3.194 GHz reference clock (AVX2 FMA, 8 floats per vector, 2 FMA per cycle)",
+    "micro_ceiling": "the real microKernel over an L1-resident panel: 117.9 GFLOP/s, i.e. the inner loop is at the register peak and is not the thing that loses",
+    "cpu_time": "clock_gettime(CLOCK_THREAD_CPUTIME_ID) around each call (median over 7 rounds); phases are cycle-counter nanoseconds of the shortest round, scaled to that round's CPU time, so pack and micro are shares of the same call",
+    "reference": "naive triple loop with std::fma at the shapes small enough to finish, and the host's OpenBLAS 0.3.20 (dlopen'd, one thread) at every shape",
+    "before_after": "two binaries built from the same probe and the same checkout, differing only in gemm_blocked.inl (git HEAD vs the change); the host ran old,new,old,new,old,new and each cell is the minimum CPU time over the three runs, because preemption only ever adds time"
+  },
+  "shapes": [
+    {
+      "shape": "256x64x256",
+      "gflops_before": 85.7,
+      "gflops_after": 85.3,
+      "ms_before": 0.098,
+      "ms_after": 0.098,
+      "speedup": 1.00,
+      "blas_gflops": 83.2,
+      "peak_pct_after": 70.2,
+      "phases_ms_after": {"total": 0.0989, "packB": 0.0017, "packA": 0.0185, "micro_full": 0.0745, "micro_edge": 0.0019, "residual": 0.0022, "join": 0.0000},
+      "micro_gflops": 109.8,
+      "note": "N = 64 makes A packing the largest non-inner item (18.7%): each packed A row is used for only 64 columns."
+    },
+    {
+      "shape": "256x256x64",
+      "gflops_before": 96.3,
+      "gflops_after": 83.2,
+      "ms_before": 0.087,
+      "ms_after": 0.101,
+      "speedup": 0.86,
+      "blas_gflops": 79.4,
+      "peak_pct_after": 68.8,
+      "phases_ms_after": {"total": 0.1009, "packB": 0.0020, "packA": 0.0051, "micro_full": 0.0842, "micro_edge": 0.0022, "residual": 0.0074, "join": 0.0000},
+      "micro_gflops": 97.1,
+      "note": "the 0.087 ms before is the fastest of three runs and the k=64 call is only 4 tiles; repeated runs before the change gave 0.104-0.106 ms, so this cell is sample noise, not a regression (the after column matches those runs)"
+    },
+    {
+      "shape": "32x32x16",
+      "gflops_before": 27.2,
+      "gflops_after": 22.0,
+      "ms_before": 0.001,
+      "ms_after": 0.002,
+      "speedup": 0.80,
+      "blas_gflops": 27.3,
+      "peak_pct_after": 18.2,
+      "phases_ms_after": {"total": 0.0015, "packB": 0.0000, "packA": 0.0002, "micro_full": 0.0007, "micro_edge": 0.0002, "residual": 0.0002, "join": 0.0000},
+      "micro_gflops": 37.8,
+      "note": "one attention score call of a d=256 block (16 batches x 16 heads, 32x32x16 per call); 1.5 us per call prints as 0.001-0.002 ms at the probe's resolution. Per-call overhead, not the kernel: 12 micro tiles of 96 flops each."
+    },
+    {
+      "shape": "512x768x256",
+      "gflops_before": 98.4,
+      "gflops_after": 99.0,
+      "ms_before": 2.045,
+      "ms_after": 2.033,
+      "speedup": 1.01,
+      "blas_gflops": 101.8,
+      "note": "three column bands already at N = 768, so B was packed three times, not eight; the change has little to remove here."
+    },
+    {
+      "shape": "512x512x256",
+      "gflops_before": 92.4,
+      "gflops_after": 98.6,
+      "ms_before": 1.453,
+      "ms_after": 1.361,
+      "speedup": 1.07,
+      "blas_gflops": 101.1
+    },
+    {
+      "shape": "512x256x512",
+      "gflops_before": 97.1,
+      "gflops_after": 99.4,
+      "ms_before": 1.382,
+      "ms_after": 1.351,
+      "speedup": 1.02,
+      "blas_gflops": 102.1,
+      "peak_pct_after": 82.2,
+      "phases_ms_after": {"total": 1.3513, "packB": 0.0190, "packA": 0.0744, "micro_full": 1.2111, "micro_edge": 0.0144, "residual": 0.0322, "join": 0.0000},
+      "micro_gflops": 109.5,
+      "note": "two K blocks through the carry buffer; B packing was 10% before, 1.4% after."
+    },
+    {
+      "shape": "512x256x768tA",
+      "gflops_before": 94.8,
+      "gflops_after": 97.7,
+      "ms_before": 2.124,
+      "ms_after": 2.060,
+      "speedup": 1.03,
+      "blas_gflops": 98.1
+    },
+    {
+      "shape": "256x768x512tB",
+      "gflops_before": 81.5,
+      "gflops_after": 93.9,
+      "ms_before": 2.471,
+      "ms_after": 2.144,
+      "speedup": 1.15,
+      "blas_gflops": 99.1
+    },
+    {
+      "shape": "512x256x512tA",
+      "gflops_before": 94.9,
+      "gflops_after": 99.0,
+      "ms_before": 1.415,
+      "ms_after": 1.355,
+      "speedup": 1.04,
+      "blas_gflops": 99.0
+    },
+    {
+      "shape": "512x256x512tB",
+      "gflops_before": 80.9,
+      "gflops_after": 97.4,
+      "ms_before": 1.660,
+      "ms_after": 1.378,
+      "speedup": 1.20,
+      "blas_gflops": 100.9,
+      "peak_pct_after": 80.5,
+      "phases_ms_after": {"total": 1.3796, "packB": 0.0499, "packA": 0.0739, "micro_full": 1.2092, "micro_edge": 0.0143, "residual": 0.0322, "join": 0.0000},
+      "micro_gflops": 109.7,
+      "note": "matmul_grad_lhs takes B transposed, whose packing is element by element; before the change it was 23.4% of the call and the kernel ran at 81 GFLOP/s."
+    },
+    {
+      "shape": "512x256x256tA",
+      "gflops_before": 96.0,
+      "gflops_after": 98.6,
+      "ms_before": 0.699,
+      "ms_after": 0.681,
+      "speedup": 1.03,
+      "blas_gflops": 96.1
+    },
+    {
+      "shape": "256x256x512tB",
+      "gflops_before": 81.8,
+      "gflops_after": 94.5,
+      "ms_before": 0.820,
+      "ms_after": 0.710,
+      "speedup": 1.15,
+      "blas_gflops": 95.3
+    },
+    {
+      "shape": "1024x1024x1024",
+      "gflops_before": 81.7,
+      "gflops_after": 97.5,
+      "ms_before": 26.272,
+      "ms_after": 22.029,
+      "speedup": 1.19,
+      "blas_gflops": 106.8,
+      "peak_pct_after": 74.7,
+      "micro_gflops": 133.4,
+      "note": "the largest measured item before the change was packB at 7.9 ms of 28.1 (28%): B was packed once per row tile, 15 times. After, packB is 0.35 ms; packA is 4.2 ms (18%) and is what still loses. The phase split of this call is the least reliable of the table (micro reads above the ceiling because the preempted round's shares do not divide exactly), so the call-level rate is the number to quote."
+    }
+  ],
+  "step": {
+    "program": "examples/models/naive-in-expert-out/train_step.cml at b=16, t=32, d=256, heads=16, d_head=16, FFN=512, two blocks, run with -t 1 and --block-limit 8192; the generated copy /tmp/h290/train_step_256_long.cml is the same file with steps=128 to make the step, not the start-up, dominate",
+    "command": "camel -t 1 --block-limit 8192 train_step_256_long.cml tensor::fuse std::jit --arg bench=true --arg init_dir= --arg final_dir=",
+    "cpu_seconds_over_128_steps": {"before": [9.26, 8.99], "after": [8.60, 8.40]},
+    "median_cpu_seconds": {"before": 9.125, "after": 8.50},
+    "delta_ms_per_step": -4.9,
+    "relative": -0.069,
+    "note": "process CPU time (user+sys) from /usr/bin/time; start-up is a common constant (about 0.45 s) in both columns and cancels in the difference. Per step including start-up: 71.3 ms before, 66.4 ms after. The 66.1 ms/step recorded for this step before the change is this same old kernel on a quieter host, which puts the 128-step run's start-up at about 0.45 s and the step itself at about 67 -> 62 ms."
+  },
+  "what_still_loses": [
+    "packA: 18.5% of 256x64x256 and 18% of 1024^3 after the change. It writes six floats per k with scalar stores (packA in gemm_blocked.inl), 4-5 GB/s; the next change should be a vectorized 6-row pack (one 4-wide and one 2-wide store per k, or a 6x4 transpose block).",
+    "the inner loop is at 109 GFLOP/s against a 118 GFLOP/s micro ceiling and a 121 GFLOP/s peak: about 8%, which is the loop's load and pointer arithmetic, not the FMA chain.",
+    "the attention product (32x32x16, 256 calls per step) sits at 22 GFLOP/s: 1.5 us per call, dominated by entering the kernel, not by its 12 micro tiles.",
+    "the step after the change is 62 ms against the 49.5 ms/step recorded for torch.compile on this model; torch was not run in this measurement, so what that gap is made of is the next question, not a number here. At 1024^3 the kernel is still 0.85x OpenBLAS single-thread, whose packing and micro-kernel are the remaining difference."
+  ]
+}
