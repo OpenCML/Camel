@@ -334,12 +334,69 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.analysis_takes_the_parts_of_a_compound"
-desc = "A declaration with parameters (`analysis mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the pattern variables, and the fact is the one of the compound whose parts they are. `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, y)` reads `sign(y) == 1` through the `x * y` clause; `x * 2` keeps its product because the query answers false. A parts query reads the parts in the order the pattern binds them, so the condition pins that order by shape (`isConst(y)`): a `const` parameter is the constant's value in a condition (rewrite design 2 (second version) 1), and the commuted pairing of a two-variable pattern would otherwise ask the query with the parts exchanged, where no value has them. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
+desc = "A declaration with parameters (`analysis mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the parts of the compound, and the fact is the one of the value whose parts they are. `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, node_of(c))` reads `sign(y) == 1` through the `x * y` clause; `x * 2` keeps its product because the query answers false. The coefficient is a `const` parameter and its node is reached with `node_of(c)` (the ruling of 2026-10-23 on `rule_when_const_node`), which is what the case had to give up while the language had no way to reach that node -- the two parts are no longer pinned by shape. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
 kind = "behavior"
 case = "../../../cases/modules/rules/analysis_parts.cml"
 args = ["${case}", "analysis_parts::report", "analysis_parts::apply", "analysis_parts::report", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["one 1 two 1\none 0 two 1\n7 14\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.node_of_reaches_a_const_parameter"
+desc = "A condition reaches the node of a `const` parameter with `node_of(c)` (the ruling of 2026-10-23: \"条件函数按 `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)` 换成它；不引入新类型\" and \"名字是 `node_of(c)`，只接受该规则（或 `fact` 的 `case`）自己的形参名\"). `drop_int_coefficient` guards on a shape of the coefficient's node (`typeText(node_of(c)) == 'int' && is_constant(node_of(c))`), which no value of the coefficient can be given: it fires on `x * 2` (an `int` constant) and drops the product, while `negative_coefficient` (`x * -2.0`) keeps its product because its node says `float`. `drop_positive` is the value channel (`positive(c)`), which drops the product of `positive_coefficient` and is false for the negative one; the three functions are what tells the two channels apart. The counts are one product in each function before the pass, none in `positive_coefficient` and `int_coefficient` after it and one in `negative_coefficient`, and the values are `5.0 5 -10.0` (each rewrite replaces the product by its factor)."
+kind = "behavior"
+case = "../../../cases/modules/rules/node_of.cml"
+args = ["${case}", "node_of::report", "node_of::apply", "node_of::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["positive 1\nint 1\nnegative 1\npositive 0\nint 0\nnegative 1\n5.0 5 -10.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.node_of_reaches_a_const_parameter_on_every_backend"
+desc = "The program the `node_of` rules rewrote runs the same on the node VM, the byte-code interpreter and the parallel scheduler."
+kind = "behavior"
+case = "../../../cases/modules/rules/node_of.cml"
+args = ["${case}", "node_of::apply", "${backend}"]
+backends = ["nvm", "fvm", "prl"]
+expect_exit = 0
+expect_stdout_contains = ["5.0 5 -10.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.node_of_refuses_a_name_that_is_not_a_const_parameter"
+desc = "`node_of(x)` where `x` is a parameter the rule does not declare `const` is refused by name, with a located diagnostic that names the argument and the rule, not a crash and not a silent false: the declaration is the report."
+kind = "negative"
+case = "../../../cases/modules/rules/node_of_misuse.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["NodeOfNotAParameter", "'x' is not a const parameter of the rule 'drop_by_node'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.parts_query_ignores_the_order_of_a_commutative_operator"
+desc = "A rule whose coefficient is a `const` parameter asks a parameterized fact query with the parts in the order its match bound them, and the engine's pairing of a commutative operator can bind them the other way from the one the product holds: `drop_by_one` matches `1 * a` with `x` on the constant, so the condition is asked `mul_by_one(node_of(c), x)` while the product holds `(x, c)`. The ruling of 2026-10-23 makes the parts of a declared-commutative operator unordered (\"对声明了交换律的算子，部件查询不看顺序\"), so the query answers for that order and the product goes; before it the query found no value and the whole pass failed (`the analysis 'mul_by_one' has no value whose operands are these 2 nodes`), which is why a `const` parameter and a parts query could not be written together. The counts are one product in each function before the pass, none in `swapped` after it, one in `kept` (the coefficient is not one, so the query answers false) and one in `plain` before the value guard drops it; the values are `1 14 3.0`."
+kind = "behavior"
+case = "../../../cases/modules/rules/parts_order.cml"
+args = ["${case}", "parts_order::report", "parts_order::apply", "parts_order::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["swapped 1\nkept 1\nplain 1\nswapped 0\nkept 1\nplain 0\n1 14 3.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fact_query_that_finds_nothing_leaves_the_rule_out"
+desc = "A fact query inside a condition that finds no value whose parts it was given makes the condition false -- this rule does not apply here -- and not a failure of the pass (the ruling of 2026-10-23: \"条件里的事实查询找不到时，条件为假（这条规则在此不适用），而不是遍失败\"). `kept` is the product `2 * a`, the same parts as `swapped` with a coefficient that is not one, so `mul_by_one` answers no value for it: the rule leaves the product and the value `14` alone, while the same pass still drops the product of `plain` with its guard on the value (`0` in the second report), which is the pass's other work and what a pass that quietly did nothing would fail to show."
+kind = "behavior"
+case = "../../../cases/modules/rules/parts_order.cml"
+args = ["${case}", "parts_order::apply", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_contains = ["1 14 3.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]

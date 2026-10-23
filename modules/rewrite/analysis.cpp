@@ -17,7 +17,8 @@
  * nodes its pattern variables name, and the fact is the one of the value those parts belong to
  * — the value a user of the first part with exactly these parts as its operands, one of the `on`
  * clauses matching it. This is how a condition reads the fact of the compound it is rewriting
- * without a syntax naming the whole match.
+ * without a syntax naming the whole match (`node_of` is how it names the node of a `const`
+ * parameter).
  */
 
 #include "analysis.h"
