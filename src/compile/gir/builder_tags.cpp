@@ -192,9 +192,9 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
             return camel::core::attr::symbol(
                 std::static_pointer_cast<camel::core::data::StringData>(data)->data());
         default:
-            diags_->of(SemanticDiag::TagArgumentUnsupported)
-                .atOrigin(use.origin)
-                .commit(data->toString(), use.name);
+            // Every kind this switch does not handle is refused by the parameter's declared
+            // kind before the value is read (TagParameterType / TagArgumentType), so no
+            // argument of such a type reaches this point.
             throw BuildAbortException();
         }
     };

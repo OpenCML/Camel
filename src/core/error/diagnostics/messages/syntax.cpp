@@ -13,14 +13,6 @@ namespace camel::core::error {
 const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
     static const std::unordered_map<SyntaxDiag, DiagInfo> infoMap = {
         {
-            SyntaxDiag::UnknownSyntaxError,
-            {
-                "UnknownSyntaxError",
-                "Syntax error: {0}.",
-                "",
-            },
-        },
-        {
             SyntaxDiag::MissingClosingDelimiter,
             {
                 "MissingClosingDelimiter",

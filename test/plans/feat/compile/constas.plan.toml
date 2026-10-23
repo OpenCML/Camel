@@ -348,3 +348,18 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ConstasInNativeDeclaration"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "constas_dimension_name_retired"
+desc = "The old `const constas n` spelling of a dimension name in a type argument is refused: only a parameter type binds a dimension name, and the diagnostic says where one may bind. A program written against the old docs migrates by writing `[n]`."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_dimension_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasNotAllowed"
+expect_diagnostic_code = "0x03000140"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 29
+expect_output_contains = ["The dimension name 'n' is bound here, but only a parameter type can bind one."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

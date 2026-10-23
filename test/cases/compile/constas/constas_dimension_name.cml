@@ -1,0 +1,12 @@
+/// The retired 'const constas n' spelling of a dimension name in a type argument.
+module constas_dimension_name
+
+import { Tensor } from tensor
+
+func f(x: Tensor<f32, const constas n>): int {
+    return 0
+}
+
+func main(): int {
+    return 0
+}

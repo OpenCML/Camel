@@ -902,3 +902,33 @@ expect_diagnostic_name = "SemanticDiag::StaticMatchPatternCannotMatch"
 expect_diagnostic_line = 9
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "match_type_not_concrete"
+desc = "A `match type` whose subject is a type variable at the call is refused when the function is instantiated: the type is still 'T', and the note names the call that instantiated it. `T` here is a result-only variable, so the call fixes nothing."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/type_not_concrete.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticTypeNotConcrete"
+expect_diagnostic_code = "0x03000172"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 12
+expect_output_contains = ["The type matched here is still 'T' when the function is instantiated."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "match_type_too_deep"
+desc = "A `match type` inside the selected body of another one is expanded at compile time, and the compiler stops at 256 nested bodies: the 257th is refused at its own line. The case is synthetic (the nesting is written out); the limit is the compiler's, so the test pins the number in the message."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/match_type_too_deep.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchTooDeep"
+expect_diagnostic_code = "0x03000173"
+expect_diagnostic_line = 261
+expect_diagnostic_column = 5
+expect_output_contains = ["The 'match type' bodies are nested 256 deep."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

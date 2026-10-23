@@ -229,7 +229,6 @@ bool isIsolatableFault(RuntimeDiag diag) {
     case RuntimeDiag::IndexOutOfRange:
     case RuntimeDiag::SliceOutOfRange:
     case RuntimeDiag::ConversionOutOfRange:
-    case RuntimeDiag::KeyNotFound:
     case RuntimeDiag::FieldNotFound:
     // Checked before the call that does not fit: unwinding gives everything back.
     case RuntimeDiag::MaxRecursionDepthExceeded:
@@ -242,13 +241,11 @@ bool isIsolatableFault(RuntimeDiag diag) {
     // A library operator that is not declared `T!` failed.
     case RuntimeDiag::FileOpenFailed:
     case RuntimeDiag::FileSystemError:
-    case RuntimeDiag::JsonEncodeUnsupported:
     case RuntimeDiag::RegexInvalid:
     case RuntimeDiag::TimeFormatFailed:
         return true;
     default:
-        // Defects and limits of the compiler (PassInternalError, UnrecognizedOperatorURI,
-        // UnsupportedBytecode, OperatorNotImplemented, MemoryExhausted, ...),
+        // Defects and limits of the compiler (PassInternalError, MemoryExhausted, ...),
         // diagnostics that are not raised while a graph runs, and everything not listed.
         // DESIGN-QUESTION(attempt-memory-exhausted): memory exhaustion is not isolated (it
         // is an exception of the allocator, not a RuntimeFault, and never gets here either).

@@ -50,3 +50,15 @@ expect_exit = 0
 expect_stdout_contains = ["diagnostic codes mentioned by no test:"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+
+[[tests]]
+name = "catalog.coverage_zero"
+desc = "Every diagnostic code in the registry is mentioned by a test: the check fails if one is not. The count is pinned because this is a completeness check over the set of declared codes — a new declaration without a test, or a deletion whose guard line was not updated, changes it — not a target or a performance number."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/diagnostics-catalog.mjs"
+args = ["${case}", "--coverage-check"]
+expect_exit = 0
+expect_stdout_contains = ["every one of 251 diagnostic codes is mentioned by a test"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000

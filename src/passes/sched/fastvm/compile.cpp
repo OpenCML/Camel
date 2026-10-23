@@ -519,7 +519,12 @@ static bytecode_vec_t compileRuntimeGraph(
             if (camel::core::OperatorTable::instance().isMarked(operBody->oper)) {
                 const std::optional<MarkOpCode> markOp = markOpCodeOf(operBody->oper);
                 if (!markOp) {
-                    ctx->rtmDiags()->of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
+                    // A marked operator the bytecode set cannot express: a compiler defect.
+                    ctx->rtmDiags()
+                        ->of(RuntimeDiag::PassInternalError)
+                        .commit(
+                            "std::fvm",
+                            "the marked operator '" + uri + "' has no bytecode of its own");
                     break;
                 }
 
@@ -540,7 +545,12 @@ static bytecode_vec_t compileRuntimeGraph(
             const auto opFunc = ctx->execMgr().find(uri);
 
             if (!opFunc) {
-                ctx->rtmDiags()->of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
+                // The graph names an operator no loaded module implements: a compiler defect,
+                // and the node can get no bytecode.
+                ctx->rtmDiags()
+                    ->of(RuntimeDiag::PassInternalError)
+                    .commit("std::fvm", "the operator '" + uri + "' has no implementation");
+                break;
             }
 
             auto *native = appendBytecode(

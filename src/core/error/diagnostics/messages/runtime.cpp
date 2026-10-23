@@ -37,51 +37,11 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
-            RuntimeDiag::KeyNotFound,
-            {
-                "KeyNotFound",
-                "Key not found in map or dictionary: '{0}'.",
-                "Verify the key exists before accessing it.",
-            },
-        },
-        {
             RuntimeDiag::MaxRecursionDepthExceeded,
             {
                 "MaxRecursionDepthExceeded",
                 "Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.",
                 "Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n> or CAMEL_MAX_RECURSION_DEPTH=<n>.",
-            },
-        },
-        {
-            RuntimeDiag::MissingMainFunction,
-            {
-                "MissingMainFunction",
-                "No 'main' function found in module '{0}'.",
-                "Define a 'main' function in module '{0}' to serve as the program entry point.",
-            },
-        },
-        {
-            RuntimeDiag::UnrecognizedOperatorURI,
-            {
-                "UnrecognizedOperatorURI",
-                "Unrecognized operator URI: '{0}'.",
-                "Ensure the operator URI is correctly specified and supported by the runtime.",
-            },
-        },
-        {
-            RuntimeDiag::UnsupportedBytecode,
-            {
-                "UnsupportedBytecode",
-                "Encountered unsupported bytecode: '{0}'.",
-                "Refer to the documentation and try using a graph scheduler that supports this bytecode.",
-            },
-        },
-        {
-            RuntimeDiag::GraphInliningFailed,
-            {
-                "GraphInliningFailed",
-                "Failed to inline graph of node '{0}' to graph '{1}'.",
-                "Refer to the documentation for possible causes and try adjusting the graph translator or optimization settings.",
             },
         },
         {
@@ -213,14 +173,6 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
-            RuntimeDiag::JsonEncodeUnsupported,
-            {
-                "JsonEncodeUnsupported",
-                "json.encode cannot encode a value of type '{0}'.",
-                "JSON has null, booleans, numbers, strings, arrays and objects: encode values made of bool, int, float, string, arrays, tuples and structs.",
-            },
-        },
-        {
             RuntimeDiag::RegexInvalid,
             {
                 "RegexInvalid",
@@ -234,14 +186,6 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "TimeFormatFailed",
                 "'{0}' failed: {1}.",
                 "Check the format string against the strftime conversion specifiers (%Y, %m, %d, %H, %M, %S, ...).",
-            },
-        },
-        {
-            RuntimeDiag::OperatorNotImplemented,
-            {
-                "OperatorNotImplemented",
-                "The operator '{0}' is declared but not implemented.",
-                "The name exists so that programs using it are recognised; calling it is not possible yet.",
             },
         },
         {

@@ -19,12 +19,7 @@ enum class RuntimeDiag : uint32_t {
     RuntimeError              = 0x000000,
     DivisionByZero            = 0x000001,
     IndexOutOfRange           = 0x000002,
-    KeyNotFound               = 0x000003,
     MaxRecursionDepthExceeded = 0x000004,
-    MissingMainFunction       = 0x000005,
-    UnrecognizedOperatorURI   = 0x000006,
-    UnsupportedBytecode       = 0x000007,
-    GraphInliningFailed       = 0x000008,
     TensorDimensionMismatch   = 0x000009,
     UnrecognizedGraphPass     = 0x00000A,
     TranslationRefused        = 0x00000B,
@@ -46,10 +41,8 @@ enum class RuntimeDiag : uint32_t {
     FileSystemError        = 0x000036,
     // 0x37 (JsonDecodeFailed) was the fault of json.decode on text that is not JSON; decode
     // returns an error value instead (design principles 11.2). The code is not reused.
-    JsonEncodeUnsupported       = 0x000038,
     RegexInvalid                = 0x000039,
     TimeFormatFailed            = 0x00003A,
-    OperatorNotImplemented      = 0x00003B,
     GradientElementTypeMismatch = 0x00003C,
     ValueWithNoDerivativeRule   = 0x0001A8,
     // Faults and reports of the rulings of 2026-10-12 (design principles log 2.10).

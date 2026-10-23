@@ -17,15 +17,12 @@ namespace camel::core::error {
 
 enum class SemanticDiag : uint32_t {
     // Errors
-    UnknownSemanticError        = 0x000000,
     Redeclaration               = 0x000001,
     ModuleNotFound              = 0x000002,
     ReservedIdentifier          = 0x000003,
     TupleUnpackingCountMismatch = 0x000004,
     InvalidLiteral              = 0x000005,
     DuplicateDictKey            = 0x000006,
-    ParamRefMustBeUnqualified   = 0x000007,
-    ParamDataMustBeStatic       = 0x000008,
     DuplicateParameter          = 0x000009,
     UnresolvedTypeReference     = 0x00000A,
     UnresolvedReference         = 0x00000B,
@@ -44,19 +41,18 @@ enum class SemanticDiag : uint32_t {
     // in an integer type), or not a value of that type at all (a text that is not a number).
     // One diagnostic for all of them (handover H24): it says which literal, which type, and
     // why.
-    LiteralNotRepresentable      = 0x000016,
-    DynamicCastForbidden         = 0x000017,
-    ModuleParseFailed            = 0x000018,
-    InvalidOperatorURI           = 0x000019,
-    UnrecognizedExecutorProtocol = 0x00001A,
-    EntryModuleMissingMain       = 0x00001B,
-    ArgumentsRejected            = 0x00001C,
-    ImmutablePassedToVarParam    = 0x00001D,
-    AssignmentTargetNotVariable  = 0x00001E,
-    ConstructNotSupported        = 0x00001F,
-    InvalidTypeArgument          = 0x000020,
-    ArgumentNeedsConversion      = 0x000021,
-    ReturnNeedsConversion        = 0x000022,
+    LiteralNotRepresentable     = 0x000016,
+    DynamicCastForbidden        = 0x000017,
+    ModuleParseFailed           = 0x000018,
+    InvalidOperatorURI          = 0x000019,
+    EntryModuleMissingMain      = 0x00001B,
+    ArgumentsRejected           = 0x00001C,
+    ImmutablePassedToVarParam   = 0x00001D,
+    AssignmentTargetNotVariable = 0x00001E,
+    ConstructNotSupported       = 0x00001F,
+    InvalidTypeArgument         = 0x000020,
+    ArgumentNeedsConversion     = 0x000021,
+    ReturnNeedsConversion       = 0x000022,
     // 0x000023 was LiteralOutOfRange, merged into LiteralNotRepresentable (0x000016).
     // 0x000025 was ImportCycle: modules may import each other (design principles 10.1).
     // 0x000026 was ImportedFunctionUsesModuleValue: a function of another module may use the
@@ -134,7 +130,6 @@ enum class SemanticDiag : uint32_t {
     // Rulings of 2026-10-19 (design principles log 2.13): the nominal enum, 0x130 and up.
     DuplicateEnumVariant   = 0x000130,
     DuplicateEnumField     = 0x000131,
-    EnumVariantNeedsFields = 0x000132,
     EnumVariantFieldCount  = 0x000133,
     EnumPatternMismatch    = 0x000134,
     EnumMatchNotExhaustive = 0x000135,
@@ -153,15 +148,12 @@ enum class SemanticDiag : uint32_t {
     // Automatic differentiation (design principles 9.9): 0x150 and up.
     NotDifferentiable = 0x000150,
     // Tags (design principles 6.2): 0x160 and up.
-    TagUnknownPosition     = 0x000160,
     TagNotAtPosition       = 0x000161,
     TagUndeclared          = 0x000162,
     TagArgumentCount       = 0x000163,
     TagArgumentNotConstant = 0x000164,
-    TagParameterMissing    = 0x000166,
     TagOnUnnamedField      = 0x000167,
     TagArgumentNamed       = 0x000168,
-    TagArgumentUnsupported = 0x000169,
     TagArgumentType        = 0x00016A,
     TagNotAPermission      = 0x00016B,
     RuleTagNotRequires     = 0x00016C,

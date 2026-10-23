@@ -8,7 +8,6 @@ lexical	UnterminatedComment	0x000003	error	Unterminated comment: {0}.	Close the 
 # severity = 1 (Warning). The value used to be 0x010000, which has the severity bits of
 # an error; nothing reports this code yet, so the number could be put right.
 lexical	InvalidEscapeSequence	0x100000	warn	Invalid escape sequence in string: {0}.	Check and correct the escape sequence.
-syntax	UnknownSyntaxError	0x000000	error	Syntax error: {0}.
 syntax	MissingClosingDelimiter	0x000001	error	Expected '{0}' before {2}, to close the '{1}'.	Every '{1}' needs its '{0}'. The note shows the '{1}' that is still open here.
 syntax	UnmatchedClosingDelimiter	0x000002	error	Unexpected '{0}': no '{1}' is open here.	Remove the '{0}', or add the '{1}' it was meant to close.
 syntax	MissingThen	0x000003	error	Expected 'then' after the condition of the 'if', before {0}.	A conditional is written: if <condition> then <value> else <value>. Each branch may be a block: if c then {{ ... }} else {{ ... }}.
@@ -28,15 +27,12 @@ syntax	EmptyInterpolation	0x00000F	error	An interpolation has no expression to f
 # Warnings (severity bits = Warn).
 syntax	ComparisonAcrossLines	0x100001	warn	This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one.	A '>' after a space, at the end of a line, is the comparison operator, and the expression goes on with the next line. The '>' that closes '<...>' arguments touches the last argument; a chain of comparisons (a < b > c) is never what a program means.
 # Errors
-semantic	UnknownSemanticError	0x000000	error	An error has occurred: {0}.
 semantic	Redeclaration	0x000001	error	Redeclaration of reference: '{0}'.	Each identifier must be declared only once in its scope.
 semantic	ModuleNotFound	0x000002	error	Module '{0}' not found. {1}	Check if the module path is correct or add the directory to search paths.
 semantic	ReservedIdentifier	0x000003	error	Identifiers starting and ending with double underscores are reserved for internal use.	Avoid using names like '__example__'; choose different identifiers. To overload an operator, write 'func operator +(a: V, b: V): V'.
 semantic	TupleUnpackingCountMismatch	0x000004	error	Tuple unpacking requires the same number of references and data nodes, or exactly one tuple data.	Ensure the number of variables matches the number of unpacked data elements, or use a single tuple value.
 semantic	InvalidLiteral	0x000005	error	Invalid {0} literal: '{1}'.	Ensure the literal '{1}' is valid and supported by the language.
 semantic	DuplicateDictKey	0x000006	error	Duplicate key in dict: '{0}'.	Make sure all keys in a dictionary are unique.
-semantic	ParamRefMustBeUnqualified	0x000007	error	Parameter reference must be unqualified: '{0}'.	Use the parameter name without namespace or scope qualifiers.
-semantic	ParamDataMustBeStatic	0x000008	error	Data for parameter '{0}' must be static.	Ensure the parameter data is a compile-time constant or literal.
 semantic	DuplicateParameter	0x000009	error	Duplicate parameter detected: '{0}'.	Remove or rename the duplicated parameter.
 semantic	UnresolvedTypeReference	0x00000A	error	Unresolved type reference: '{0}'.	Ensure the type is defined and visible in the current scope.
 semantic	UnresolvedReference	0x00000B	error	Unresolved reference: '{0}'.	Make sure the name is declared and in scope.
@@ -59,7 +55,6 @@ semantic	LiteralNotRepresentable	0x000016	error	The literal '{0}' cannot be repr
 semantic	DynamicCastForbidden	0x000017	error	Dynamic cast from '{0}' to '{1}' is not allowed.	Use types that allow safe conversion, or ensure the conversion is valid. Nothing is converted implicitly: a text becomes a number with 'int(s)' or 'parse_int(s)' ('float(s)', 'parse_float(s)' for a float), a number of another type with 'float(n)', and a module type with 'v as T'.
 semantic	ModuleParseFailed	0x000018	error	Failed to parse module file: {0}.	Check the file for syntax errors.
 semantic	InvalidOperatorURI	0x000019	error	Invalid operator URI format: '{0}'. Expected 'protocol:path'.	Use a valid operator URI in the form protocol:path (e.g. std:add).
-semantic	UnrecognizedExecutorProtocol	0x00001A	error	Executor protocol '{0}' not found.	Check that the protocol is registered or refer to the documentation for supported operator protocols.
 semantic	EntryModuleMissingMain	0x00001B	error	Entry module '{0}' must define a resolvable 'main' on the module root (__root__).	Add a top-level main function or ensure it is registered as a direct root subgraph.
 semantic	ArgumentsRejected	0x00001C	error	Invalid call to '{0}' with argument types {1}: {2}.	The argument kinds match the operator's signature, but their statically known properties (such as tensor shapes or dtypes) are incompatible. Fix the arguments or relax their static types.
 semantic	ImmutablePassedToVarParam	0x00001D	error	'{0}' is immutable and cannot be passed to a var parameter of '{1}'.	Only a variable declared with 'var' (or a var parameter) can be modified. Declare it with 'var', or bind the new value to a new name.
@@ -145,7 +140,6 @@ semantic	LoopNameRepeated	0x000124	error	The name '{0}' is declared twice in thi
 # Rulings of 2026-10-19 (design principles log 2.13): the nominal enum, 0x130 and up.
 semantic	DuplicateEnumVariant	0x000130	error	The variant '{0}' is declared twice in enum '{1}'.	A variant is one of the values of its enum and is written by its name; each name occurs once.
 semantic	DuplicateEnumField	0x000131	error	The field '{0}' is declared twice in variant '{1}' of enum '{2}'.	A field of a struct variant is written by its name; each name occurs once.
-semantic	EnumVariantNeedsFields	0x000132	error	The variant '{0}' of enum '{1}' carries {2} field(s): write '{3}' to build one.	A variant without a field list is a single value; one with fields is built by writing the fields after its name, 'Shape::Circle(1.0)' or 'Shape::Rect {{ w: 1.0, h: 2.0 }}'.
 semantic	EnumVariantFieldCount	0x000133	error	The variant '{0}' of enum '{1}' takes {2} field(s), but {3} were given.	The fields of a variant are those its declaration writes: as many, and in the same order for a variant written with '(...)'.
 semantic	EnumPatternMismatch	0x000134	error	The pattern '{0}' does not match a value of type '{1}': {2}.	A pattern names a variant of the enum it matches and, if that variant has fields, binds each of them by its position ('Shape::Circle(r)') or by the name its declaration gives ('Shape::Rect {{ w, h }}').
 semantic	EnumMatchNotExhaustive	0x000135	error	The match over '{0}' has no case for {1}, and no 'case _'.	Every variant of an enum is a value of it, so a match that names variants must name all of them or end with 'case _'. The compiler adds no arm the program does not show.
@@ -164,15 +158,12 @@ semantic	InvalidExtentExpression	0x000144	error	This is not a shape: the extents
 # Automatic differentiation (design principles 9.9): 0x150 and up.
 semantic	NotDifferentiable	0x000150	error	The function cannot be differentiated: {0}.	grad and with_grad differentiate the first `with` parameter of a function that returns a float (design principles 9.9). Weights are `with` parameters; the remaining `with` parameters are constants and the ordinary parameters are data. Give the function a `with` parameter of a differentiable type, or wrap the value to differentiate in a lambda that makes it the first `with` parameter.
 # Tags (design principles 6.2): 0x160 and up.
-semantic	TagUnknownPosition	0x000160	error	A tag cannot be written at '{0}': the positions are func, type, field, nodes and param.	Write the places the tag may be written, after 'on': '... on func, nodes'.
 semantic	TagNotAtPosition	0x000161	error	The tag '{0}' may not be written at a {1}: it is declared for {2}.	Write the tag where its declaration says it belongs, or add the position to the declaration after 'on'.
 semantic	TagUndeclared	0x000162	error	No tag '{0}' is declared.	Tags share the namespace of functions and types: import the module that declares it, or declare it with 'tag {0} on ...'.
 semantic	TagArgumentCount	0x000163	error	The tag '{0}' takes {1} parameter(s), but {2} argument(s) are written.	Write one argument for each parameter of the tag, in the order of the declaration.
 semantic	TagArgumentNotConstant	0x000164	error	The argument '{0}' of the tag '{1}' is not a compile-time value.	A tag is read before the program runs: write a literal, a top-level constant or a function name.
-semantic	TagParameterMissing	0x000166	error	The parameter '{0}' of the tag '{1}' has no type.	A tag parameter is read as a compile-time value: write its type, 'tag {1}<{0}: int> on ...'.
 semantic	TagOnUnnamedField	0x000167	error	A tag on the field '{0}' of an unnamed struct type belongs to no declaration.	Declare the struct as a type ('type S = {{ ... }}') and tag the field in that declaration.
 semantic	TagArgumentNamed	0x000168	error	A tag argument is positional: '{0}' is named.	A tag's parameters are given in the order the tag declares them: write '#tag<a, b>', not '#tag<x: a>'.
-semantic	TagArgumentUnsupported	0x000169	error	The argument '{0}' of the tag '{1}' has a type a tag cannot carry yet.	A tag carries an integer, a floating-point number, a string, a boolean (as 0 or 1), a symbol or a graph reference; an argument of another type (a function, a composite) is not a tag value yet.
 semantic	TagArgumentType	0x00016A	error	The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}' ({4}).	A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for 'func' (the fact is the graph reference of that function).
 semantic	TagNotAPermission	0x00016B	error	The tag '{0}' grants no numeric permission.	A requirement names a permission of design principles 7.2: reassociate, contract, approx_math, change_precision, nondeterministic, finite_math, no_nans, no_infs, no_signed_zeros or flush_subnormals.
 semantic	RuleTagNotRequires	0x00016C	error	A rule may be preceded only by '#requires<...>', not by the tag '{0}'.	State the permissions the rule needs as tag arguments: '#requires<reassociate>' (design principles 7.2).
@@ -385,12 +376,7 @@ semantic	TypeVariableUnused	0x1001A5	warn	The type parameter '{0}' is declared a
 runtime	RuntimeError	0x000000	error	An error has occurred: {0}.	Check the runtime environment and input data for unexpected issues.
 runtime	DivisionByZero	0x000001	error	Attempted division by zero.	Ensure the denominator is not zero before performing division.
 runtime	IndexOutOfRange	0x000002	error	Index {0} is out of range for {1} of length {2}.	Ensure the index is within the valid range of the collection.
-runtime	KeyNotFound	0x000003	error	Key not found in map or dictionary: '{0}'.	Verify the key exists before accessing it.
 runtime	MaxRecursionDepthExceeded	0x000004	error	Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.	Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n> or CAMEL_MAX_RECURSION_DEPTH=<n>.
-runtime	MissingMainFunction	0x000005	error	No 'main' function found in module '{0}'.	Define a 'main' function in module '{0}' to serve as the program entry point.
-runtime	UnrecognizedOperatorURI	0x000006	error	Unrecognized operator URI: '{0}'.	Ensure the operator URI is correctly specified and supported by the runtime.
-runtime	UnsupportedBytecode	0x000007	error	Encountered unsupported bytecode: '{0}'.	Refer to the documentation and try using a graph scheduler that supports this bytecode.
-runtime	GraphInliningFailed	0x000008	error	Failed to inline graph of node '{0}' to graph '{1}'.	Refer to the documentation for possible causes and try adjusting the graph translator or optimization settings.
 runtime	TensorDimensionMismatch	0x000009	error	Tensor shape mismatch in '{0}': {1}.	Check the shapes of all operands involved in the operation and ensure they are compatible for broadcasting or direct computation.
 runtime	UnrecognizedGraphPass	0x00000A	error	Unrecognized graph rewriting/scheduling/translation pass '{0}'.	Check the pass name for possible typos, or refer to the documentation to see the passes supported in the current version.
 runtime	TranslationRefused	0x00000B	error	Translation pass '{0}' refused the graph: {1}.	A translation pass only translates the graph the preceding passes left. Run the passes named in the message before it, or remove the construct it cannot express.
@@ -412,10 +398,8 @@ runtime	FileOpenFailed	0x000035	error	'{0}' cannot open the file '{1}': {2}.	Che
 runtime	FileSystemError	0x000036	error	'{0}' failed for '{1}': {2}.	Check the path and the permissions of the directories on it.
 # 0x37 (JsonDecodeFailed) was the fault of json.decode on text that is not JSON; decode
 # returns an error value instead (design principles 11.2). The code is not reused.
-runtime	JsonEncodeUnsupported	0x000038	error	json.encode cannot encode a value of type '{0}'.	JSON has null, booleans, numbers, strings, arrays and objects: encode values made of bool, int, float, string, arrays, tuples and structs.
 runtime	RegexInvalid	0x000039	error	'{0}': '{1}' is not a valid regular expression: {2}.	Patterns use the ECMAScript syntax. A character with a special meaning is matched literally when it is written with a backslash.
 runtime	TimeFormatFailed	0x00003A	error	'{0}' failed: {1}.	Check the format string against the strftime conversion specifiers (%Y, %m, %d, %H, %M, %S, ...).
-runtime	OperatorNotImplemented	0x00003B	error	The operator '{0}' is declared but not implemented.	The name exists so that programs using it are recognised; calling it is not possible yet.
 runtime	GradientElementTypeMismatch	0x00003C	error	The gradient of a value of type '{0}' has element type '{1}': {2}. A gradient must have the element type of the value it is the gradient of (design principles 9.9); accumulated as it is, the value would be read at the wrong width and answer with a number that is not the derivative.	A derivative rule returns a gradient of the parameter's element type. Convert the gradient in the rule instead of relying on the accumulator to reinterpret it.
 runtime	ValueWithNoDerivativeRule	0x0001A8	error	The operator '{0}' takes a differentiable value through its with parameter {1} (counting from 1), of type '{2}', but {3}.	A value that depends on a differentiated parameter must not lose its gradient (design principles 9.9). A derivative rule for '{0}' has to accumulate the value's gradient into that with parameter; a with parameter that is configuration takes no gradient, so a value is passed there only when its gradient can be returned.
 # Faults and reports of the rulings of 2026-10-12 (design principles log 2.10).
