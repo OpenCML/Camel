@@ -1,6 +1,6 @@
 # 模块 `optim`：写在 Camel 里的优化器
 
-`optim` 是用 Camel 写的模块（`stdlib/optim.cml`），把优化器变成值：`sgd`、`adam`、`adamw` 各是一个值，学习率表也是一个值，两个纯函数 `init` / `update` 把一个参数树推进一步。形状取自 Optax（`init(opt, params)` 给状态、`update(opt, params, grads, state)` 给 `(params, state)`），每一步的算术取自 `nn` 原来的原生优化器与融合内核 `modules/tensor/kernels/update.h`：本模块在同样的输入、同样的学习率表上给出与它们**逐位相同**的轨迹（f64 叶子的例外见「缺口」第 3 条）。逐个名字的签名与例子见 [`docs/stdlib-reference.md`](../stdlib-reference.md) 的 `optim` 一节，那一节由 `stdlib/optim.cml` 生成。
+`optim` 是用 Camel 写的模块（`stdlib/optim.cml`），把优化器变成值：`sgd`、`adam`、`adamw` 各是一个值，学习率表也是一个值，两个纯函数 `init` / `update` 把一个参数树推进一步。形状取自 Optax（`init(opt, params)` 给状态、`update(opt, params, grads, state)` 给 `(params, state)`），每一步的算术取自 `nn` 原来的原生优化器与融合内核 `modules/tensor/kernels/update.h`：本模块在同样的输入、同样的学习率表上给出与它们**逐位相同**的轨迹，写明的 f64 张量叶子也在内——原生路径原来把它窄化成 f32，2026-10-23 已按「缺口」第 3 条改正，现在两边都留在写下的元素类型上。逐个名字的签名与例子见 [`docs/stdlib-reference.md`](../stdlib-reference.md) 的 `optim` 一节，那一节由 `stdlib/optim.cml` 生成。
 
 设计稿（`docs/design/stdlib/README.cn.md`）第 3 节把它列在标准库布局的“数值与 AI”里，第 5 节又把 `optim` 列在官方扩展库的第一档（单独维护、单独发布）：今天它在 `stdlib/`，与它建立在之上的 `tree` 放在一起，将来随打包方式移动。
 
@@ -34,24 +34,28 @@
 | 元素类型没写的张量 | 先都转 f32，再 f32 算术 | 先都转 f32，再在 f64 上算、结果存一次 f32 |
 
 - 张量的二元算子取两个元素类型里**更宽**的那个（`stdlib/signatures/tensor.cml` 的 `add` 一节），所以 f32 叶子与 `float` 学习率相乘会被抬成 f64：写明的元素类型要留住，就必须写成 `f32(rate)`。这一条是移植里最容易踩的地方，`sgd_leaf` / `decay_leaf` 的每一支都按它写。
+- 原生路径与上表逐行对应：叶子写下的元素类型经 `leafElementType` 决定执行支与输出缓冲（`leafTensor` 不再铸造，`newLike` 与 `zerosLeaf` 用叶子自己的元素类型），f64 叶子走 `modules/tensor/kernels/update.h` 的 `adaptiveUpdate64`（逐元素走同一个 `adaptiveUpdateOne`，值不经过任何 float），f32 叶子仍旧是 `adaptiveUpdate`，字节与轨迹都没变。守卫用例：`test/cases/modules/optim/native_dtype_exact.cml`（`optim.native_tensor_leaf_keeps_its_element_type`，四个后端，按字节比较）。
 - `adam` 的偏差修正与原生一样用 `pow`：`correct1 = 1 - beta1^step`、`correct2 = 1 - beta2^step`（`math::pow`），`step` 从 1 数起。
 - 逐元素算子的每一遍各自舍入一次，与融合内核“每元素三次正确舍入的双精度除法与一次双精度平方根”的结果相同，前提是编译不把乘加合成 FMA（项目构建用 `-ffp-contract=off`，设计原则的数值许可默认不做重结合）。这条依赖由测试兜住：三个用例都在 `std::nvm` / `std::fvm` / `std::jit` / `std::prl` 四个后端上跑，并且要求四个后端的标准输出逐字相同。
 - 融合内核的位置（性能）属于 H51 第 5 项：原生路径一趟遍历完成，本模块一张量一算子（5 至 7 遍）。`#impl` 的接法已裁定（`docs/handover/reviews/questions-2026-10-23.md` 的 `impl-kernel-site` 一节：声明模块可以有函数体、泛型函数可以带 `#impl`），裁定同时写明 Adam 的内核要等 `optim` 落地之后接上，所以本模块只标注位置：`adam_number` 与 `adam_wide` 就是那个接口。
 
 ## 缺口即任务
 
+写明的元素类型这一条已经修好（`handover/h353-f64-leaf`，2026-10-23）：原生路径按叶子**写下的**元素类型取执行支与输出缓冲（`modules/nn/optim.cpp` 的 `leafElementType` / `leafTensor` / `newLike` / `zerosLeaf`；`floatTensor` 那个「不是 f32 就铸成 f32」的函数没有了），f64 叶子走 `modules/tensor/kernels/update.h` 的 `adaptiveUpdate64`，逐个元素走同一个 `adaptiveUpdateOne`，字节不经过任何 float；`Tensor<f32, …>` 叶子的字节与轨迹一点没变。守卫是用例 `test/cases/modules/optim/native_dtype_exact.cml`（`optim.native_tensor_leaf_keeps_its_element_type`，四个后端，按字节比较：f64 叶子 16 字节、值是 f32 装不下的 `16777216.5`，f32 叶子 8 字节；两步 `adam` 的 f64 叶子与 `adam_wide` 逐字节相同）。下面是还缺的。
+
 | 原生路径做什么 | 现在缺什么 | 今天的结果 |
 | --- | --- | --- |
 | 只把有切线的成员交给叶子（`tangentTypeOf` 去掉没有切线的成员） | 一个类型级的形状投影：写出“与 `P` 同形、叶子换成切线”的类型。`grad` 的结果类型就是这样算出来的，Camel 还没有这种类型级操作 | `update` 的遍历由参数树驱动、按字段名去梯度里取对应叶子，而泛型遍历问不出“这个字段在不在”，所以梯度必须与参数**逐字段同形**：`test/cases/modules/nn/residual_mlp.cml` 那种带 `depth: int` 的模型，它的梯度里没有 `depth`，实例化时报 `SemanticDiag`“该结构没有字段 `depth`”。原生路径用 `tangentTypeOf` 去掉没有切线的成员，照样训练这棵树 |
 | `walkArray` 逐元素进入数组，数组元素是叶子（设计原则 9.9） | R3 把数组当叶子，`match type` 不能静态展开数组元素；`ckpt:tree_leaves` 缺的也是同一件事（`stdlib/tree.cml` 的模块注释写了原因：值元组不能拼接） | `examples/models/naive-in-expert-out/train_step.cml` 的 `blocks: Block[]` 写不出来：数组叶子既没有 `zeros_like`，也没有逐元素的减法 |
-| 把每个张量叶子转成 f32（`floatTensor`、`newLike`），f64 叶子因此在一步之后变成 f32 | 设计原则 7.4 要求元素类型精确：写明的 f64 叶子必须留在 f64 | 两边在**写明的 f64 张量叶子**上不可能一致：本模块给 f64 的步进值，原生路径给 f32 的。这是原生路径的缺陷，不是移植要放弃的性质；本项按裁定把它与删除 C++ 优化器一并处理，在那之前 `optim.f64_leaf_keeps_its_element_type` 用例守住本模块这一侧（数值见该用例） |
+| 元素类型**没写在类型里**的张量叶子（`Tensor`，元素类型取自数据）按 f32 更新：`full([3, 2], 0.1)` 造出来的其实是 f64 张量，走到优化器里被窄化成 f32，本模块的 `case _` 支与原生路径的 `leafElementType` 用的是同一条规则 | 一个元素类型没写在类型里的叶子，是按它**值的**元素类型走，还是按「没写就是 f32」这条两边共用的规则走：前者会改变现有程序（如 `test/cases/modules/nn/mlp.cml` 的 `full([3, 2], 0.1)` 参数）的数值，而且必须同时改本模块的 `case _` 支，否则两边又会出现新的不一致 | 见 `docs/handover/questions/f64-tensor-leaf.md`：测量、选项与代价、建议 |
 | —— | 一个模块只声明一个 `init` / `update`（不能按优化器重载），Optax 那种“每个优化器一个状态类型”因此写不出来 | 三个优化器共用一个状态类型 `{ m: P, v: P, step: int }`：`sgd` 多带两棵零树，白占内存；要按优化器分状态，语言得先有重载或和类型 |
 | 一次遍历完成一整棵树的更新（融合内核） | 一个把逐元素更新融成一趟的内核，以及 `#impl` 的落地（`impl-kernel-site` 裁定明确排在 `optim` 之后） | 每一步是 5 至 7 遍逐元素算子：正确，但比原生慢。性能属于 H51 第 5 项（H64 的 Adam 基线），本项不作门槛 |
 
 ## 对照与测试
 
-三个用例都在 `test/cases/modules/optim/`，计划是 `test/plans/feat/modules/optim.plan.toml`：
+四个用例都在 `test/cases/modules/optim/`，计划是 `test/plans/feat/modules/optim.plan.toml`：
 
 - `agreement.cml`：同一个参数树、同一个梯度、同一个学习率表下，Camel 的 `sgd` / `adam` / `adamw` 与 `nn` 的 `sgd` / `adam` 走多步，每一步把两棵树逐叶、逐元素相减求和：恰好为零才算一致，并且打印比较过的叶子数，跳过叶子的遍不能冒充一致。两种性质另立：`adamw` 的零衰减就是 `adam`；`adamw` 的轨迹等于“每一步先把参数按 `1 - lr * decay` 移动、再用普通 `adam`”。
 - `training.cml`：`showcase/c2-mlp-mnist/train.cml` 的训练循环缩到证明移植所需的部分（模型是 c2 那棵树的结构，只是去掉了 `int` 成员：本模块要求梯度与参数逐字段同形，见「缺口」第 1 条，而原生路径接受带 `depth: int` 的树）——`with_grad` 给梯度、`update` 消费它、循环收集损失曲线；原生 `nn:adam` 在同一条梯度、同一张表上走二十步，两步之间的参数漂移与最终漂移都必须恰好为零。
-- `dtype_exact.cml`：写明的 f64 张量叶子留在 f64：`16777217.0` 走一步 `sgd`（rate 0.5）得 `16777216.5`，一个 f32 装不下的数，叶子仍是 16 字节。同一个用例把数叶子那条路钉在张量叶子上：同样的数、同样的梯度、同样一步，`{ w: float }` 的结果必须与一个单元素 `Tensor<f64, [?]>` 的结果相等（`adam_number` 对 `adam_wide`）——把 `adam_number` 的偏差修正写错，只有这条会红。
+- `dtype_exact.cml`：写明的 f64 张量叶子留在 f64：`16777217.0` 走一步 `sgd`（rate 0.5）得 `16777216.5`，一个 f32 装不下的数，叶子仍是 16 字节。同一个用例把数叶子那条路钉在张量叶子上：同样的数、同样的梯度、同样一步，`{ w: float }` 的结果必须与一个单元素 `Tensor<f64, [?]>` 的结果相等（`adam_number` 对 `adam_wide`）——把 `adam_number` 的偏差修正写错，只有这条会红。这是模块这一侧；原生那一侧是 `native_dtype_exact.cml`。
+- `native_dtype_exact.cml`：同一件事在**原生路径**上：一棵写着 `Tensor<f64, [?]>` 与 `Tensor<f32, [?]>` 两种叶子的树（梯度取自 `with_grad`，`nn` 要的是那种形状的梯度），一步 `nn:sgd` 后按 `to_bytes` 的字节比较——f64 叶子 16 字节、两个元素解出来是 `16777216.5` 与 `0.5`，f32 叶子 8 字节、是 f32 的 `16777216.0` 与 `0.5`；两步 `nn:adam` 后 f64 叶子的字节与 `adam_wide` 的逐字节相同（矩的元素类型就在这条性质里），f32 叶子同理。计划断言两侧各自看过的叶子数与元素数（sgd 4 叶 8 元素，adam 2 叶 4 元素），所以「一条都没看」不会冒充通过。改动前这条在四个后端全红（f64 叶子 8 字节、字节就是两个 f32，`failures=3`）。
