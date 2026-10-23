@@ -22,7 +22,8 @@ func wrong(a: int, b: int): int {
 }
 
 #op<':op/div_d'>
-func div_kernel(a: float, b: float): float
+with <a: float, b: float>
+func div_kernel(): float
 
 #impl<div_kernel>
 with <a: float, b: float>

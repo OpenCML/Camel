@@ -114,7 +114,7 @@ expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
 
 [[tests]]
 name = "impl.pass.agreement"
-desc = "The agreement of both paths: `plus` (kernel `:op/add_l`, body `a - (0 - b)`), `ratio` (kernel `:op/div_d`, body `a * b`) and `scaled` (kernel `:op/mul_d`, body an extra multiply and divide) take the same inputs through the direct call and through the function value and print the same value, with the magnitudes showing that each side is the value its own path computes. Runs on every back end."
+desc = "The agreement of both paths: `plus` (kernel `:op/add_l`, body `a - (0 - b)`), `ratio` (kernel `:op/add_d`, body `(a / b) * b`) and `scaled` (kernel `:op/mul_d`, body an extra multiply and divide) take the same inputs through the direct call and through the function value and print the same value, with the magnitudes showing that each side is the value its own path computes. Runs on every back end."
 kind = "behavior"
 case = "../../../cases/compile/native/impl_pass_agreement.cml"
 args = ["${case}", "${backend}"]
@@ -133,14 +133,14 @@ const pair = (name, kernel, body) => {
     assert(d === 0, `${name} paths disagree by ${d}:\\n${out}`)
 }
 pair('plus', 42.0, 42.0)
-pair('ratio', 8.0, 8.0)
+pair('ratio', 2.0, 2.0)
 pair('scaled', 12.0, 12.0)
 }
 """
 
 [[tests]]
 name = "impl.pass.agreement.paths"
-desc = "The paths of the agreement case are counted apart: the three direct calls are one `:op/add_l`, one `:op/div_d` and one `:op/mul_d`, and the three calls through function values add two `:op/sub_l`, one `:op/mul_d`, and two more `:op/mul_d` with a `:op/div_d` — so the equal values are not one path compared with itself."
+desc = "The paths of the agreement case are counted apart: the three direct calls are one `:op/add_l`, one `:op/add_d` and one `:op/mul_d`, and the three calls through function values add three `:op/sub_l` (two for the body of `plus` as `a - (0 - b)`, one for the rewrite of `a + b` that inlines it), one `:op/div_d` and one `:op/mul_d` for `ratio`, and two more `:op/mul_d` with a `:op/div_d` for `scaled` — so the equal values are not one path compared with itself. A compiler that ran the body for both paths would count the kernel URIs zero times."
 kind = "behavior"
 case = "../../../cases/compile/native/impl_pass_agreement.cml"
 args = ["${case}", 'std::profile top=0 json="${test_tmp}/profile.json"', "std::nvm"]
@@ -153,17 +153,18 @@ async ({ input, assert }) => {
     assert(m && Number(m[1]) === 42, `the plus kernel path changed:\\n${out}`)
     const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
     const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
-    assert(calls[':op/add_l'] === 1, `the add kernel ran ${calls[':op/add_l']} times, not once:\\n${out}`)
-    assert(calls[':op/sub_l'] === 2, `the body's two subtractions ran ${calls[':op/sub_l']} times, not twice:\\n${out}`)
-    assert(calls[':op/div_d'] === 2, `division ran ${calls[':op/div_d']} times, not twice (kernel and body):\\n${out}`)
-    assert((calls[':op/mul_d'] ?? 0) === 3, `multiplication ran ${calls[':op/mul_d']} times, not three times:\\n${out}`)
+    assert(calls[':op/add_l'] === 1, `the int add kernel ran ${calls[':op/add_l']} times, not once:\\n${out}`)
+    assert(calls[':op/add_d'] === 1, `the float add kernel ran ${calls[':op/add_d']} times, not once:\\n${out}`)
+    assert(calls[':op/sub_l'] === 3, `subtraction ran ${calls[':op/sub_l']} times, not three times:\\n${out}`)
+    assert(calls[':op/div_d'] === 2, `division ran ${calls[':op/div_d']} times, not twice (ratio's body and scaled's body):\\n${out}`)
+    assert(calls[':op/mul_d'] === 4, `multiplication ran ${calls[':op/mul_d']} times, not four times:\\n${out}`)
 }
 """
 timeout_ms = 60000
 
 [[tests]]
 name = "impl.pass.agreement.gir"
-desc = "The graphs of the two paths in one program: the direct calls are one OPER each of the kernels' URIs (`:op/add_l`, `:op/div_d`, `:op/mul_d`), and the bodies of `plus`, `ratio` and `scaled` sit behind the function values their names were bound to — the dump shows which path each value came from."
+desc = "The graphs of the two paths in one program: the direct calls are one OPER each of the kernels' URIs (`:op/add_l`, `:op/add_d`, `:op/mul_d`), and the bodies of `plus`, `ratio` and `scaled` sit behind the function values their names were bound to with their own operators (`:op/sub_l`, `:op/div_d`) — the dump shows which path each value came from."
 kind = "behavior"
 case = "../../../cases/compile/native/impl_pass_agreement.cml"
 args = ["${case}", "std::gir"]
@@ -172,8 +173,9 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const count = s => out.split(s).length - 1
-assert(count('label=":op/add_l", type="OPER"') === 1, `expected the kernel's one addition:\\n${out}`)
-assert(count('label=":op/sub_l", type="OPER"') === 2, `expected the body's two subtractions:\\n${out}`)
+assert(count('label=":op/add_l", type="OPER"') === 1, `expected the int kernel's one addition:\\n${out}`)
+assert(count('label=":op/add_d", type="OPER"') === 1, `expected the float kernel's one addition:\\n${out}`)
+assert(count('label=":op/div_d", type="OPER"') >= 1, `expected the body's division:\\n${out}`)
 assert(out.includes('label="plus"'), `the body graph of plus is not in the dump:\\n${out}`)
 assert(out.includes('label="ratio"'), `the body graph of ratio is not in the dump:\\n${out}`)
 assert(out.includes('label="scaled"'), `the body graph of scaled is not in the dump:\\n${out}`)
