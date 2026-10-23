@@ -2,17 +2,16 @@
  * `analysis` over pattern variables (rewrite design 4): a declaration with parameters is queried
  * with the parts of a value. That is how a rule's condition reads the fact of the compound it is
  * rewriting -- the language does not name the whole match, and it reaches the node of a `const`
- * parameter with `node_of(c)` (the ruling of 2026-10-23 on `rule_when_const_node`: "条件函数按
- * `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)` 换成它；不引入新类型").
+ * parameter with `node_of(c)` (rule-language design v2, section 1).
  *
  * `mul_by_one(a, b)` is the fact of a product: the clause for `x * y` says it is "by one" when
  * `sign(y) == 1` (the same one-value analysis the other test uses). The rule
  * `mul_one_by_parts(x, const c)` passes the two parts of the multiplication to it -- the factor as
  * the pattern binds it, and the coefficient's node through `node_of(c)` -- so `one` (`x * 1`) is
- * rewritten and `two` (`x * 2`) is not: the false case must leave the product alone. Before
- * `node_of` existed the coefficient had to be a pattern variable and the second part had to be
- * pinned by shape (`isConst(y)`), because a `const` parameter is the constant's value in a
- * condition and a value cannot be turned back into a node; that workaround is gone.
+ * rewritten and `two` (`x * 2`) is not: the false case must leave the product alone. That is what
+ * this input detects: the parts reach the query as a factor and a *node*, so the clause reading the
+ * second part as the constant `1` fires only for the coefficient that is one, and a `const`
+ * parameter carries a value that cannot be turned back into a node by itself.
  *
  * `report` prints the number of products before and after `apply`, and `main` the values, which
  * are the same before and after the rewrite.

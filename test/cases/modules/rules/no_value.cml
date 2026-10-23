@@ -1,14 +1,15 @@
 /**
- * A fact query inside a condition that finds nothing (the ruling of 2026-10-23 on
- * `rule_when_const_node`: "条件里的事实查询找不到时，条件为假（这条规则在此不适用），而不是遍失败——条件本来
- * 就是"适用与否"的判断").
+ * A fact query inside a condition that finds no value whose parts it was given. A rule's condition
+ * is the question "does this rule apply here" (design principles 4.4: `when` is the applicability
+ * condition, and a case it does not hold for is a case the rule does not apply to), so a query that
+ * names parts no value has answers false and leaves the rule out.
  *
  * `sub(a, b)` is the fact of a subtraction -- a non-commutative operator, so the two operands are
  * not interchangeable and a query can name parts no value has. `drop_by_one`'s condition asks
  * `sub(x, node_of(c)) == 1`: for `kept` (`a * 2`) the product's operands are `(a, 2)`, the query is
- * asked with those two nodes, and no subtraction of the draft has them. Before the ruling that was
- * `Invalid argument of 'analysis': the analysis 'sub' has no value whose operands are these 2
- * nodes` and **the pass failed** over a rule that simply does not apply here.
+ * asked with those two nodes, and no subtraction of the draft has them. That is what this input
+ * detects: a query with no answer must make the condition false rather than fail the pass, because
+ * the rule it guards simply does not apply to `kept`.
  *
  * `kept` must therefore keep its product and its value `14` while the same pass still drops the
  * product of `plain` with the other rule, whose guard is on the value and asks no query -- the
