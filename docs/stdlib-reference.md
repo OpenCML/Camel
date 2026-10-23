@@ -2647,10 +2647,13 @@ abs: (x: f32) => f32
 abs: (x: float) => float
 abs: (x: c64) => f32
 abs: (x: c128) => float
+abs: (x: bf16) => bf16
+abs: (x: f16) => f16
 ```
 
 The absolute value. The smallest integer has no positive counterpart: its absolute value is
-not defined.
+not defined. A bf16 or f16 value is the sign cleared, computed on the f32 it widens to
+exactly, so -0 becomes +0 and no value of either type rounds (design principles 7.3).
 
 - Pure.
 - Example: `abs(-3)` gives `3`
@@ -2970,11 +2973,15 @@ min: (a: f32, b: f32) => f32
 min: (a: float, b: float) => float
 min: (a: string, b: string) => string
 min: (a: bool, b: bool) => bool
+min: (a: bf16, b: bf16) => bf16
+min: (a: f16, b: f16) => f16
 ```
 
 The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
 NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-prefix first), and false is below true.
+prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
+operand widens to exactly, and the result is that operand itself: neither type rounds here
+(design principles 7.3).
 
 - Pure.
 - Example: `min(3, 5)` gives `3`
@@ -2989,11 +2996,15 @@ max: (a: f32, b: f32) => f32
 max: (a: float, b: float) => float
 max: (a: string, b: string) => string
 max: (a: bool, b: bool) => bool
+max: (a: bf16, b: bf16) => bf16
+max: (a: f16, b: f16) => f16
 ```
 
 The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
 NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-prefix first), and false is below true.
+prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
+operand widens to exactly, and the result is that operand itself: neither type rounds here
+(design principles 7.3).
 
 - Pure.
 - Example: `max(3, 5)` gives `5`

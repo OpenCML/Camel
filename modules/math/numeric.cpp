@@ -14,6 +14,8 @@
  */
 
 #include "numeric.h"
+#include "half.h"
+#include "minmax.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
@@ -30,6 +32,7 @@
 
 using namespace camel::core::context;
 using namespace camel::core::error;
+using namespace camel::core::math;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 
@@ -77,28 +80,8 @@ CAMEL_MATH_FN2(hypot)
 // ---- min, max, clamp, sign: the four numeric types ----
 
 // min and max are IEEE 754-2019 minimum and maximum (design principles 7.7), as the tensor
-// operators are (modules/tensor/kernels/minmax.h): a NaN argument gives the canonical quiet
-// NaN, whichever side it is on, and -0 is below +0 (std::min and std::max depend on the order
-// for both). Equal floats are identical except for the sign of zero, which decides between them.
-template <typename T> T minOf(T a, T b) {
-    if constexpr (std::is_floating_point_v<T>) {
-        if (std::isnan(a) || std::isnan(b))
-            return std::numeric_limits<T>::quiet_NaN();
-        if (a == b)
-            return std::signbit(a) ? a : b;
-    }
-    return b < a ? b : a;
-}
-
-template <typename T> T maxOf(T a, T b) {
-    if constexpr (std::is_floating_point_v<T>) {
-        if (std::isnan(a) || std::isnan(b))
-            return std::numeric_limits<T>::quiet_NaN();
-        if (a == b)
-            return std::signbit(a) ? b : a;
-    }
-    return a < b ? b : a;
-}
+// operators are (modules/tensor/kernels/minmax.h) and as the bf16 and f16 overloads are
+// (operators.cpp): the shared comparison is minmax.h, so there is one statement of it.
 
 template <typename T> T clampOf(T x, T lo, T hi) {
     if constexpr (std::is_floating_point_v<T>) {
@@ -353,6 +336,12 @@ std::unordered_map<std::string, operator_t> getMathNumericOpsMap() {
     ops["max_s"] = __math_max__;
     ops["min_b"] = __math_min__;
     ops["max_b"] = __math_max__;
+    // The two reduced-precision floating types take the same IEEE 754-2019 minimum and maximum,
+    // computed on the value each operand widens to exactly (operators.cpp, ruling item 2).
+    ops["min_bf"] = __math_min_bf__;
+    ops["max_bf"] = __math_max_bf__;
+    ops["min_f6"] = __math_min_f6__;
+    ops["max_f6"] = __math_max_f6__;
     numbers("clamp", __math_clamp__);
     numbers("sign", __math_sign__);
     both("is_nan", __math_is_nan__);
