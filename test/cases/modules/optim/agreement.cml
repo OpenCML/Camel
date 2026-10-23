@@ -34,9 +34,11 @@ import { tree_map } from tree
 // (docs/technical/optim.md records the table); this is the shape
 // test/cases/modules/nn/residual_mlp.cml trains with -- nested structs of tensors plus an `int`
 // leaf the optimizers leave alone -- so both implementations take it. Every tensor leaf leaves its
-// element type to the data, which is the one spelling both sides take and both walks narrow to
-// f32, and the values below have binary digits below the point, so a step computed at f32 instead
-// of in double would move them.
+// element type to the data, and the element type of the value is the element type both walks update
+// at (docs/handover/reviews/questions-2026-10-23.md, section `f64-tensor-leaf`: "unstated" means
+// the type does not say it): the values below are f32, so both sides compute them in double and
+// round once, and they have binary digits below the point, so a step computed at f32 instead of in
+// double would move them.
 type Linear = {
     weight: Tensor,
     bias: Tensor
