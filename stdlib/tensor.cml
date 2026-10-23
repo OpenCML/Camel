@@ -9,12 +9,12 @@
  * type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
  * axis forms of a reduction — cannot be written as a declaration; they are implemented in
  * `modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
- * under the same sections (design principles 6.4; handover H19, H151). `show`'s umbrella parameter
- * — a tensor, or any array — is written as one declaration per accepted type (handover H175).
+ * under the same sections (design principles 6.4). `show`'s umbrella parameter
+ * — a tensor, or any array — is written as one declaration per accepted type.
  */
 
-// The fixed signatures of the operators of `modules/tensor` (design principles 6.4; handover H19,
-// H151). This file is the one source of those signatures; the C++ side keeps the kernels, the
+// The fixed signatures of the operators of `modules/tensor` (design principles 6.4).
+// This file is the one source of those signatures; the C++ side keeps the kernels, the
 // executors, the operator traits, the resources and the folds (`shape`, `numel` and `dim` still
 // fold from a type that fixes every extent). A declaration names `tensor:<function>` by
 // convention, so no `#op` tag is needed.

@@ -81,7 +81,7 @@ std::vector<node_handle_t> Builder::expandRestArgument(
 }
 
 node_handle_t Builder::inlineRestCall(
-    const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+    const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
     std::vector<Argument> &normInputs, const GCT::node_ptr_t &call, Type *expectedResult) {
     FunctionType *signature = tmpl->funcType;
     const size_t withCount  = signature->withTypesCount();

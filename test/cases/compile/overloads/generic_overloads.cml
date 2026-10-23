@@ -1,0 +1,29 @@
+/**
+ * Two generic functions of one name whose parameters differ in type are overloads, as two
+ * ordinary ones are (design principles 4.4): a call takes the one whose parameter accepts its
+ * argument, and each is instantiated at the type variables its own signature left open.
+ */
+module generic_overloads
+
+type Sgd = { rate: float }
+type Adam = { beta1: float, beta2: float }
+
+type SgdState = { steps: int, m: float }
+type AdamState = { steps: int, m: float }
+
+func init::<P>(opt: Sgd, params: P): SgdState {
+    return { steps: 1, m: 0.0 }
+}
+
+func init::<P>(adam: Adam, params: P): AdamState {
+    return { steps: 2, m: adam.beta1 }
+}
+
+func main(): int sync {
+    let sgd: Sgd = { rate: 0.1 }
+    let adam: Adam = { beta1: 0.9, beta2: 0.999 }
+    let a = init(sgd, (1.0, 2.0))
+    let b = init(adam, (1.0, 2.0))
+    'generic_overloads sgd={} adam={} m={}'->format<a.steps, b.steps, b.m>->println
+    return 0
+}

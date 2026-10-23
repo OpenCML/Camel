@@ -11,8 +11,8 @@
  * (`tiles:driver`), so every operator of this module has effects and none is folded or dropped.
  */
 
-// The declarations of the operators of the C++ module `modules/tiles` (design principles 6.4;
-// handover H19, step 10; H156). This file is the one source of the two fixed signatures; the C++
+// The declarations of the operators of the C++ module `modules/tiles` (design principles 6.4).
+// This file is the one source of the two fixed signatures; the C++
 // side keeps the kernels, the executor, the operator traits, the resources and the semantics.
 //
 // The other seven operators the module exports compute their signature from an argument, so they
@@ -21,8 +21,7 @@
 // parameter list as the ordinary parameter and answers its result type wrapped in `Device<...>`;
 // `source`, `inspect` and `benchmark` answer text but their ordinary parameter is the function's
 // parameter list; `regions` takes any function value. `stdlib/signatures/tiles.cml` keeps their
-// reference entries, as `json` and `random` do with their computed signatures (handover H115,
-// H128).
+// reference entries, as `json` and `random` do with their computed signatures.
 //
 // No signature of this module depends on which device the run selects, or on a shape known at
 // compile time: `available` and `device` answer a capability question at run time and their types

@@ -674,7 +674,7 @@ bool Builder::sameImplSignature(FunctionType *function, FunctionType *kernel) {
 }
 
 void Builder::adoptImplKernel(
-    const template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType) {
+    const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType) {
     if (tmpl == nullptr || graph == nullptr || funcType == nullptr) {
         return;
     }
@@ -801,12 +801,12 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
             // instance no rule accepts has no executor and runs the body, which is the
             // semantics, so the result is the same.
             const bool generic = isGenericHere(funcType);
-            template_ptr_t genericTemplate;
+            generic_ref_t genericTemplate;
             if (generic) {
                 if (templateScope_ == nullptr) {
                     continue;
                 }
-                std::optional<template_ptr_t> declaredTemplate =
+                std::optional<generic_ref_t> declaredTemplate =
                     templateScope_->get(functionName);
                 if (!declaredTemplate.has_value()) {
                     // The function of a namespace: its template is registered under the name
@@ -883,7 +883,7 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 adopted.name  = tag->kernel;
                 adopted.uri   = group->resolvers().front().first;
                 adopted.group = group;
-                implTemplateKernels_[genericTemplate.get()] = std::move(adopted);
+                implTemplateKernels_[genericTemplate.one().get()] = std::move(adopted);
                 continue;
             }
             if (funcType->hasConstas()) {
@@ -1079,13 +1079,15 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
             continue;
         }
         if (auto optTemplate = templateScope_->get(name); optTemplate.has_value()) {
-            // A generic function has no graph to export: the template is exported, and there
-            // is one instance per set of types in the program (instantiateGeneric).
+            // A generic function has no graph to export: the templates are exported, and there
+            // is one instance per set of types in the program (instantiateGeneric). A name
+            // whose generic functions are several exports them all, so a call in the importing
+            // module takes the overload its arguments fit (design principles 4.4, 5.5).
             exports_->exportEntity(
                 *module_,
                 ref,
-                camel::core::module::detail::EntityAccess::makeGenericTemplate(
-                    std::static_pointer_cast<void>(optTemplate.value())));
+                camel::core::module::detail::EntityAccess::makeGenericTemplates(
+                    genericTemplatePayloadOf(optTemplate.value())));
             continue;
         }
         if (isPoisonedName(name)) {

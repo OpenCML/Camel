@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // The passes of the core, declared the way the language declares a function (design principles
-// 9.3, H233). A pass is a function of a program's graph, `(f: F) => F!`; its parameters are the
+// 9.3). A pass is a function of a program's graph, `(f: F) => F!`; its parameters are the
 // `with` parameters of its declaration, and the pipeline reads them from here. There is no
 // second declaration of a pass's name, parameters or documentation in C++: the implementation of
 // each one is a kernel of the core, keyed by the module and the name below.
@@ -46,7 +46,7 @@ with <
     canonical: bool = false,
     /// Write the document in the shape `egraph-serialize` reads instead of the display document:
     /// the classes are the egraph's e-classes and every writing is one of its nodes, so the
-    /// community's interactive viewers open it (H225).
+    /// community's interactive viewers open it.
     egraph: bool = false
 >
 export func jgir::<F>(f: F): F! when is_function::<F>()
@@ -278,7 +278,7 @@ with <
 export func extract::<F>(f: F): F! when is_function::<F>()
 
 /// Saturates the standard rules library (stdlib/rules.cml) and leaves the program in the state
-/// where a value has several writings; nothing is extracted (H225). The dumps that accept that
+/// where a value has several writings; nothing is extracted. The dumps that accept that
 /// state draw it: `camel f.cml std::opt::saturate std::gir`.
 with <
     /// Rounds of saturation: every round finds all matches of the rules and applies them, and the

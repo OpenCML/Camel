@@ -201,14 +201,81 @@ compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::strin
     return currGraph_;
 }
 
+/// The type written with every type variable replaced by its positional name: two signatures
+/// that differ only in the names of their type variables give one key.
+std::string genericShapeText(Type *type, std::unordered_map<std::string, size_t> &seen) {
+    if (type == nullptr) {
+        return "?";
+    }
+    if (type->code() == camel::core::type::TypeCode::TypeVar) {
+        const auto &name = static_cast<camel::core::type::TypeVarType *>(type)->name();
+        auto found       = seen.find(name);
+        size_t index     = found != seen.end() ? found->second : seen.size();
+        if (found == seen.end()) {
+            seen.emplace(name, index);
+        }
+        return "$" + std::to_string(index);
+    }
+    if (type->code() == camel::core::type::TypeCode::Function) {
+        auto *func       = static_cast<FunctionType *>(type);
+        std::string text = "(";
+        for (size_t i = 0; i < func->withTypesCount(); ++i) {
+            text += "with " + genericShapeText(func->withTypeAt(i), seen) + ", ";
+        }
+        for (size_t i = 0; i < func->normTypesCount(); ++i) {
+            text += genericShapeText(func->normTypeAt(i), seen);
+            text += i + 1 < func->normTypesCount() ? ", " : "";
+        }
+        text += ")";
+        if (func->hasExitType()) {
+            text += " => " + genericShapeText(func->exitType(), seen);
+        }
+        return text;
+    }
+    return type->toString();
+}
+
+/// Whether two generic declarations are one signature with the type variables renamed: the
+/// second family writes the same call as the first (`generic_same_signature`).
+bool sameGenericSignature(FunctionType *left, FunctionType *right) {
+    if (left == nullptr || right == nullptr) {
+        return false;
+    }
+    std::unordered_map<std::string, size_t> leftSeen;
+    std::unordered_map<std::string, size_t> rightSeen;
+    return genericShapeText(left, leftSeen) == genericShapeText(right, rightSeen);
+}
+
 void Builder::rejectRedeclaredFunction(
-    const std::string &name, FunctionType *funcType, const GCT::node_ptr_t &gct) {
+    const std::string &name, FunctionType *funcType, const GCT::node_ptr_t &gct, bool plain) {
     if (name.empty()) {
         return;
     }
     if (redeclaredFuncTypes_.contains(funcType)) {
         // Reported at the forward declaration of this function.
         throw BuildAbortException();
+    }
+    // A generic function of the name is a family of functions, one per type its parameters can
+    // take, so an ordinary declaration of the same name in the same block is inside it: the
+    // language declares a name once per block (design principles 4.4, 10.2). The generic
+    // declarations were registered first, so this is where the ordinary one is refused.
+    if (plain && templateScope_->has(name, false)) {
+        redeclaredFuncTypes_.insert(funcType);
+        diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
+        throw BuildAbortException();
+    }
+    // A second generic declaration whose parameters are the same types is the same family of
+    // signatures, one with other names for the type variables, so the second is a
+    // redeclaration too: the two write the same call (`generic_same_signature`).
+    if (auto group = templateScope_->get(name, false); group.has_value() &&
+        !genericGroupOf(group.value())->empty()) {
+        for (const auto &other : *genericGroupOf(group.value())) {
+            if (other != nullptr && sameGenericSignature(other->funcType, funcType)) {
+                redeclaredFuncTypes_.insert(funcType);
+                diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
+                throw BuildAbortException();
+            }
+        }
     }
     auto graphs = graphScope_->get(name, false);
     if (!graphs.has_value()) {
@@ -529,7 +596,7 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
         return nullptr;
     }
     FunctionType *funcType = tt::as_ptr<FunctionType>(type);
-    rejectRedeclaredFunction(gct->name(), funcType, gct);
+    rejectRedeclaredFunction(gct->name(), funcType, gct, true);
     rejectOperatorConflict(gct->name(), funcType, gct);
     compile_graph_ptr_t graph = enterScope(funcType, gct->name());
     // The declaration's parameter defaults are evaluated here, where the declaration is,
@@ -593,7 +660,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         // position the lambda stands in (design principles 5.9).
         funcType = completeLambdaSignature(gct, funcType, expectedHere);
     }
-    rejectRedeclaredFunction(name, funcType, gct);
+    rejectRedeclaredFunction(name, funcType, gct, true);
     rejectOperatorConflict(name, funcType, gct);
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name);

@@ -1272,8 +1272,8 @@ The declarations written here are the operators whose signature is fixed. The on
 type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
 axis forms of a reduction — cannot be written as a declaration; they are implemented in
 `modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
-under the same sections (design principles 6.4; handover H19, H151). `show`'s umbrella parameter
-— a tensor, or any array — is written as one declaration per accepted type (handover H175).
+under the same sections (design principles 6.4). `show`'s umbrella parameter
+— a tensor, or any array — is written as one declaration per accepted type.
 
 ### Creation
 
@@ -2138,7 +2138,7 @@ A type is named once: the family predicates (`is_integer`, `is_float`, `is_compl
 `is_string`, `is_bool`) carry the identity cases, and `is_numeric` and `is_ordered` ask them
 instead of listing the types again, so a new integer width is added in one place.
 
-`bf16` and `f16` are floating-point types (design principles 7.3; handover H238): a tensor
+`bf16` and `f16` are floating-point types (design principles 7.3): a tensor
 stores an element in one of them, every kernel computes in f32 and rounds once, and the
 language itself gives them what it gives `f32`: literals, a written conversion (`bf16(x)`,
 `f16(x)`, `x as bf16`), scalar arithmetic and comparison, and arrays of them. They belong to
@@ -3666,7 +3666,7 @@ delete; a file or a symbolic link is an error too.
 
 The terminal: what it has waiting to be read, the keys themselves, and raw mode. The standard
 streams and `print`/`println`/`input`/`eprintln` are the prelude's; `Stream` and a `stdin` value
-are later work (H19 question 5).
+are later work.
 
 #### `set_terminal_raw_mode`
 
@@ -3729,7 +3729,7 @@ Discards the terminal input that is waiting.
 ## `process`: the process and the machine
 
 Every function touches the process or the machine and is declared with effects. `sleep` and
-`exit` are also built in: they need no import. The terminal is `io`'s (H19 step 4).
+`exit` are also built in: they need no import. The terminal is `io`'s.
 
 #### `sleep`
 
@@ -4644,7 +4644,7 @@ Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an a
 values to a `Program`, `check` tests rules on random programs, and the four readers report a
 `Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
 round budget explicit and the cost kept: it answers a `Run`, the program and what the
-application cost (H226). Its `explain` with parameter opens the attribution record; `explain`
+application cost. Its `explain` with parameter opens the attribution record; `explain`
 prints the shortest chain between two values and `explain_all` every rewrite that was made,
 each with the rule, round, graph and nodes (rewrite design 8.7); `why_not` says why a rule did
 not fire at a value. A rule that stops a rewrite without changing the program is a fault,
@@ -4714,8 +4714,8 @@ run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = fal
 
 Applies `rules` to `p` one way, for at most `rounds` rounds, and gives the program it produced
 and what the application cost. This is `rewrite` with the round budget explicit and the cost
-kept (H226). The rule set, the budget and the choices are configuration, so they are `with`
-parameters, written at the call (design principles 4.4; handover H235): `p->run<rules>`,
+kept. The rule set, the budget and the choices are configuration, so they are `with`
+parameters, written at the call (design principles 4.4): `p->run<rules>`,
 `p->run<rules, explain: true>`, `p->run<rules, rounds: 8, strict: true>`. The first one has no
 default and must be written; `rounds` defaults to 16 and `strict` and `explain` to false.
 `explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
@@ -4948,8 +4948,8 @@ memory. Asking is a requirement, not a preference: with no device the call is a 
 Plots: draw an array of numbers with matplotlib, and fall back to an SVG file when matplotlib
 is not installed. The operator writes an image file and is never folded or dropped by a pass.
 
-The declarations of the operator of the C++ module `modules/pyplot` (design principles 6.4;
-handover H19, step 10; H166). This file is the one source of its fixed signature; the C++ side
+The declarations of the operator of the C++ module `modules/pyplot` (design principles 6.4).
+This file is the one source of its fixed signature; the C++ side
 keeps the kernel, the executor, the operator traits and the purity.
 
 `plot` is one operator with one URI, over four element types and two arities: an array of
@@ -4988,8 +4988,8 @@ dispose of the handles the calls return. Every operator observes or advances the
 which no argument names, so every one has effects and is never folded, merged or dropped by a
 pass. A result of type `PyObject` is a handle into the interpreter, not a value of the program.
 
-The declarations of the operators of the C++ module `modules/python` (design principles 6.4;
-handover H19, step 10; H166). This file is the one source of the six fixed signatures; the C++
+The declarations of the operators of the C++ module `modules/python` (design principles 6.4).
+This file is the one source of the six fixed signatures; the C++
 side keeps the kernels, the executor, the operator traits and the purity.
 
 Five operators stay in C++ and are recorded as computed signatures in
@@ -5418,51 +5418,23 @@ created when missing.
 
 ## `optim`: optimizers written in Camel over `tree`
 
-The optimizers, written in Camel over `tree` (design/stdlib: `optim` is the Optax-shaped
-module -- `init` and `update` are the two pure functions, `sgd`, `adam` and `adamw` are values,
-and so is a learning-rate schedule). The design keeps it in the standard library's layout and
-also lists it among the official extension libraries that ship separately
-(docs/design/stdlib/README.cn.md, sections 3 and 5); today it is `stdlib/optim.cml`, next to
-the `tree` it is built on.
-
-A schedule is a function `(step: int) => float`: `constant(rate)`, `linear_decay(peak, total,
-floor)` and `cosine_decay(peak, total, floor)` build one, and the rate the update of step `n`
-uses is `schedule(n)`, with `n` numbered from one. An optimization is a value too, so a
-training loop reads:
+The optimizers: `sgd` and `adam`, each a value, with `init` and `update` the two pure functions
+a training loop calls.
 
     let opt = adam(cosine_decay(0.001, steps, 0.0001));
     let state = init(opt, model);
     let (model, state) = update(opt, model, gradient, state);
 
-`params` is a tree of nested structs and tuples whose leaves are numbers and tensors, and
-`grads` is the gradient of that tree -- the value `with_grad` or `grad` gives for the same
-parameters. `nn`'s optimizers insist on that: a tree that merely has the same type as the
-parameters is refused when the call is compiled, which is why the tests here hand both sides the
-gradient autodiff answers. `update` answers `(params, state)`.
+A schedule is a function `(step: int) => float`: `constant(rate)`, `linear_decay(peak, total,
+floor)` and `cosine_decay(peak, total, floor)` build one, and the rate the update of step `n`
+uses is `schedule(n)`, with `n` numbered from one. `params` is a tree of nested structs and
+tuples whose leaves are numbers and tensors, and `grads` is the gradient of that tree, which
+`with_grad` or `grad` gives; a tree that merely has the same type as the parameters is refused.
 
-The state holds the two moment trees, shaped like the parameters, and the number of updates
-made, which is the step a schedule reads. Its type is one type for every optimizer because a
-module cannot declare `init` once per optimizer (the language declares a name once:
-`SemanticDiag::Redeclaration`), so `sgd` carries two zero trees it never reads.
-
-The arithmetic of one leaf is the arithmetic of the native optimizers `nn` carried, and the
-values H64 pinned in test/cases/modules/nn/adam_update_bits.cml: computed in double and rounded
-once, when it is stored. A tensor leaf of `adam` whose element type is f32 is widened to f64,
-updated there and narrowed once, and one whose element type is f64 is updated in f64 and stays
-there, so a trajectory written here is the trajectory `modules/tensor/kernels/update.h` defines,
-bit for bit -- which test/cases/modules/optim/agreement.cml asserts step by step, the schedule
-included, against `nn` itself.
-
-What the port cannot do yet: `update` walks the parameter tree and reads one gradient leaf per
-parameter leaf, and a generic walk cannot ask whether a field exists, so the gradient must have
-exactly the parameters' shape -- every leaf must be trainable. A member with no tangent (an
-`int` counter, a `string`) has no gradient leaf, and pairing such a tree with its gradient fails
-the walk with `SemanticDiag` "the struct ... has no field ..."; an array of structs, which the
-native walk enters element by element (design principles 9.9), is one leaf here. A leaf whose
-element type the program does not write is updated at the element type its value has, on both
-sides; `adam` reads that element type from the value's bytes, because no operator names a
-tensor's element type at run time. docs/technical/optim.md records each of them, with what the
-native path does, what is missing, and what a program sees today.
+Every number is computed in double and rounded once, when it is stored. The arithmetic follows the
+element type the leaf's value has: a tensor leaf of `adam` is widened to f64 and updated there,
+and stored back at the element type the leaf has, so a trajectory written here is the trajectory
+`modules/tensor/kernels/update.h` defines, bit for bit.
 
 #### `constant`
 
@@ -5513,38 +5485,49 @@ Plain stochastic gradient descent: `p - rate * g` at every leaf, the rate of the
 #### `adam`
 
 ```camel
-adam: (schedule: (step: int) => float) => Adam
-adam: (schedule: (step: int) => float, beta1: float, beta2: float, eps: float) => Adam
+adam: (schedule: (step: int) => float, beta1: float = 0.9, beta2: float = 0.999, eps: float = 0.00000001, decay: float = 0.0) => Adam
 ```
 
-Adam with the constants the reference kernel's callers use (beta1 0.9, beta2 0.999, eps 1e-8).
+Adam. The constants default to the ones the reference kernel's callers use: beta1 0.9, beta2
+0.999, eps 1e-8, and a decoupled weight decay of zero.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `adam(constant(0.001))`
+- Example: `adam(constant(0.001), beta1: 0.5, eps: 0.0001)`
 
 #### `adamw`
 
 ```camel
-adamw: (schedule: (step: int) => float) => Adamw
-adamw: (schedule: (step: int) => float, beta1: float, beta2: float, eps: float, decay: float) => Adamw
+adamw: (schedule: (step: int) => float, beta1: float = 0.9, beta2: float = 0.999, eps: float = 0.00000001, decay: float = 0.01) => Adam
 ```
 
-AdamW with the same constants and a weight decay of 0.01.
+`adam` with a decoupled weight decay, 0.01 by default: the parameter is first moved by
+`rate * decay` of itself, and the adaptive update then works on the moved parameter; the moments
+see the gradient alone, which is what makes the decay decoupled.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `adamw(constant(0.001))`
+- Example: `adamw(constant(0.001), decay: 0.1)`
 
 #### `init`
 
 ```camel
-init: (opt: O, params: P) => { m: P, v: P, step: int }
+init: (opt: Sgd, params: P) => SgdState
 ```
 
-The state of an optimization: a tree of zeros for each moment and the number of updates made.
-The moments have the shape of the parameters. A module cannot declare `init` once per
-optimizer (the language has no overloading of a function with a body), so the state of every
-optimizer has one type and `sgd` pays for two zero trees it never reads; the step is what a
-schedule reads.
+The state `sgd` starts from: no moments to carry, only the step count.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `init(sgd(constant(0.1)), { w: 1.0 })` gives `{ step: 0 }`
+
+#### `init`
+
+```camel
+init: (adam_opt: Adam, params: P) => AdamState<P>
+```
+
+The state `adam` starts from: the two moment trees at zero, shaped like the parameters, and the
+step count.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `init(adam(constant(0.1)), { w: 1.0 })` gives `{ m: { w: 0.0 }, v: { w: 0.0 }, step: 0 }`
@@ -5552,13 +5535,24 @@ schedule reads.
 #### `update`
 
 ```camel
-update: (opt: O, params: P, grads: G, state: { m: P, v: P, step: int }) => (P, { m: P, v: P, step: int })
+update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 ```
 
-One update of any of the three optimizations: `(params, state)`, with the step advanced by one
-and the rate taken from `opt.schedule` at the step this update takes, numbered from one. `sgd`
-moves the parameters by the rate alone; `adam` and `adamw` run the adaptive update, `adamw`
-moving the parameters by the decoupled weight decay first.
+One `sgd` update: `(params, state)`, with the step advanced by one and the rate taken from
+`opt.schedule` at the step this update takes, numbered from one.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `update(sgd(constant(0.1)), { w: 1.0 }, { w: 0.5 }, init(sgd(constant(0.1)), { w: 1.0 }))`
+
+#### `update`
+
+```camel
+update: (adam_opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
+```
+
+One `adam` update: `(params, state)`, with the step advanced by one and the rate taken from
+`opt.schedule` at the step this update takes, numbered from one. A `decay` other than zero moves
+the parameters by the decoupled weight decay first.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `update(adam(constant(0.1)), { w: 1.0 }, { w: 0.5 }, init(adam(constant(0.1)), { w: 1.0 }))`

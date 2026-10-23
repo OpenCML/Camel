@@ -9,7 +9,7 @@
  */
 
 // The declaration of the one fixed signature of the C++ module `modules/onnx` (design
-// principles 6.4; handover H19, step 10; H179). This file is the one source of
+// principles 6.4). This file is the one source of
 // `supported_operators`'s signature; the C++ side keeps the kernel, the executor and the purity.
 //
 // `export_model` stays in C++ and is recorded as a computed signature in

@@ -7,10 +7,10 @@
  * `supported_operators` has one fixed signature and is declared in stdlib/onnx.cml. The one entry
  * here is the operator whose signature a declaration cannot write:
  *   - `export_model` takes a function of any parameter list and result (`(...) => R`), which no
- *     declaration can name (the arbitrary-function-type gap, handover H168, Q-F);
+ *     declaration can name (the arbitrary-function-type gap);
  *   - its `example` parameter is a tensor, a tuple or a struct, and every leaf of it must be the
  *     parameter tree of the function — a predicate on a type variable, which a declaration
- *     cannot state either (H168, Q3);
+ *     cannot state either;
  *   - its `dynamic_axes` and `target` parameters are optional, so the arity is three to five.
  * The `DynamicFuncTypeResolver` of modules/onnx is the one source of this signature. The entry
  * below writes one instance of the calls it accepts, not a declaration: a declaration that wrote

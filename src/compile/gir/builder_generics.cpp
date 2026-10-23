@@ -42,6 +42,20 @@ using namespace camel::core::type;
 
 namespace camel::compile::gir {
 
+/// Whether an argument's own type is an unnamed struct. Such an argument is the entering form of
+/// a named type (design principles 5.2: an unnamed struct value may be used directly as the
+/// structurally identical named type), so where a type variable occurs at this position and at a
+/// named one, the binding takes the named type: the exact form first, the entering one after
+/// (design principles 5.1). `update(opt, qd, g, t)` with `params: P` and `state: AdamState<P>`,
+/// where `qd` is a `tree_map` result whose type is the unnamed `{ w: Tensor, b: Tensor }` and `t`
+/// is an `AdamState<Tensors>` for the `Tensors` that structure is named, binds `P = Tensors`;
+/// binding the unnamed occurrence first would make `P` the written-out form and refuse `t` as
+/// another named type, which is the one thing the position cannot be.
+bool isUnnamedStructArgument(Type *type) {
+    return type != nullptr && type->code() == TypeCode::Struct &&
+           !static_cast<const StructType *>(type)->named();
+}
+
 /// The value of a `constas` constant as the key it stands for when it names a field or a
 /// position: `w`, `0`, `true`. This is what `t.[n]` reads.
 std::string constasKeyOf(const data_ptr_t &data) {
@@ -163,14 +177,14 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         if (name.empty() || !isGenericHere(type, child)) {
             continue;
         }
-        // One name is either a generic function or a set of ordinary ones: which of two
-        // generic functions, or of a generic and an ordinary one, a call means is not defined.
-        // An operator is the exception: its overloads, generic or not, are one set, and a call
-        // that more than one of them accepts is an error (chooseOperatorOverload).
+        // The generic functions of one name declared in one block are overloads, told apart by
+        // their parameter types exactly as ordinary ones are (design principles 4.4): a call
+        // takes the one its arguments fit. Two that their parameters cannot tell apart are one
+        // signature, and the second is a redeclaration, which rejectRedeclaredFunction reports.
+        // An operator takes its overloads from every layer instead (builder_operators.cpp).
         const bool isOperator = camel::core::isOverloadableOperatorGroup(name);
-        if (!isOperator && (templateScope_->has(name, false) || plainNames.contains(name))) {
-            diags_->of(SemanticDiag::Redeclaration).atOrigin(child->origin()).commit(name);
-            continue;
+        if (!isOperator) {
+            rejectRedeclaredFunction(name, tt::as_ptr<FunctionType>(boundType(type)), child);
         }
         if (!appliedDecoratorsOf(child).empty()) {
             diags_->of(SemanticDiag::GenericFunctionUnsupported)
@@ -208,12 +222,21 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         if (isOperator) {
             operatorTemplates_[name].push_back({templateScope_, tmpl});
         } else {
-            templateScope_->insert(name, tmpl);
+            // Several generic functions of one name stay one entity: the scope holds the
+            // group, whose first template is the name's own until a second one is declared.
+            auto group = templateScope_->get(name, false);
+            if (group.has_value()) {
+                genericGroupOf(group.value())->push_back(tmpl);
+            } else {
+                auto fresh = std::make_shared<GenericGroup>();
+                fresh->push_back(tmpl);
+                templateScope_->insert(name, generic_ref_t(fresh));
+            }
         }
     }
 }
 
-std::vector<std::string> Builder::typeParameterNames(const template_ptr_t &tmpl) const {
+std::vector<std::string> Builder::typeParameterNames(const generic_template_ptr_t &tmpl) const {
     std::vector<std::string> names = tmpl->headParams;
     std::vector<std::string> fromSignature;
     collectTypeVars(tmpl->funcType, fromSignature);
@@ -250,7 +273,7 @@ node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
 }
 
 void Builder::rejectGenericValue(
-    const template_ptr_t &tmpl, const GCT::node_ptr_t &origin, const std::string &why) {
+    const generic_template_ptr_t &tmpl, const GCT::node_ptr_t &origin, const std::string &why) {
     diags_->of(SemanticDiag::GenericFunctionAsValue)
         .atOrigin(origin->origin())
         .commit(tmpl->name, why, tmpl->name + ": " + tmpl->funcType->toString());
@@ -258,7 +281,7 @@ void Builder::rejectGenericValue(
 }
 
 compile_graph_ptr_t Builder::instantiateGenericAs(
-    const template_ptr_t &tmpl, FunctionType *expected, const GCT::node_ptr_t &origin,
+    const generic_template_ptr_t &tmpl, FunctionType *expected, const GCT::node_ptr_t &origin,
     std::string &why) {
     FunctionType *signature = tmpl->funcType;
     if (signature->hasRest()) {
@@ -378,7 +401,50 @@ node_handle_t
 Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr_t &origin) {
     const auto generic = genericDrefs_.find(node);
     ASSERT(generic != genericDrefs_.end(), "Not the name of a generic function.");
-    const template_ptr_t tmpl = generic->second;
+    // A name with several generic functions stands for the one the type expected here fixes
+    // (design principles 5.5), as a name with several ordinary ones does (overloadValueFor).
+    const std::vector<generic_template_ptr_t> candidates = genericOverloadsOf(node);
+    if (candidates.size() > 1) {
+        // The checks below are the single-template ones, made for the candidates together: the
+        // position is what says which function is wanted, so nothing else can be answered.
+        for (const auto &candidate : candidates) {
+            if (candidate->funcType->hasConstas()) {
+                diags_->of(SemanticDiag::ConstasFunctionNeedsCall)
+                    .atOrigin(origin != nullptr ? origin->origin() : 0)
+                    .commit(candidate->name);
+                throw BuildAbortException();
+            }
+            if (candidate->funcType->hasRest()) {
+                diags_->of(SemanticDiag::RestFunctionNeedsExpansion)
+                    .atOrigin(origin != nullptr ? origin->origin() : 0)
+                    .commit(
+                        candidate->name,
+                        "a rest function has no runtime arity, so it cannot be passed as a "
+                        "value; call it directly");
+                throw BuildAbortException();
+            }
+        }
+        if (expected == nullptr || expected->code() != TypeCode::Function) {
+            rejectGenericValue(
+                candidates.front(),
+                origin,
+                "nothing here says which of the overloads is wanted; write the type, e.g. "
+                "'let f: (x: int) => int = " +
+                    candidates.front()->name + "'");
+        }
+        std::string why;
+        for (const auto &candidate : candidates) {
+            std::string reason;
+            if (compile_graph_ptr_t graph = instantiateGenericAs(
+                    candidate, tt::as_ptr<FunctionType>(expected), origin, reason);
+                graph != nullptr) {
+                return createFuncDataNode(graph, true, false);
+            }
+            why = reason;
+        }
+        rejectGenericValue(candidates.front(), origin, why);
+    }
+    const generic_template_ptr_t tmpl = candidates.empty() ? nullptr : candidates.front();
     if (tmpl->funcType->hasConstas()) {
         diags_->of(SemanticDiag::ConstasFunctionNeedsCall)
             .atOrigin(origin != nullptr ? origin->origin() : 0)
@@ -502,8 +568,119 @@ void Builder::takeConstasValues(
     }
 }
 
+std::vector<generic_template_ptr_t> Builder::genericOverloadsOf(node_handle_t node) const {
+    const auto found = genericDrefs_.find(node);
+    if (found == genericDrefs_.end()) {
+        return {};
+    }
+    const generic_group_ptr_t &group = found->second.group();
+    return group != nullptr ? *group : std::vector<generic_template_ptr_t>{};
+}
+
+generic_template_ptr_t Builder::chooseGenericOverload(
+    const std::vector<generic_template_ptr_t> &candidates, const std::vector<Argument> &withInputs,
+    const std::vector<Argument> &normInputs, const type_vec_t &withTypes, const type_vec_t &normTypes,
+    const GCT::node_ptr_t &call) {
+    // Design principles 4.4 and 5.1: a call takes the one overload whose parameters accept its
+    // arguments, with the argument types first exactly as they are, and then with the literals
+    // entering the parameter types. Two that fit are an ambiguity, not a matter of the order
+    // they are declared in.
+    const auto binds = [&](const generic_template_ptr_t &tmpl) {
+        FunctionType *signature = tmpl->funcType;
+        if (signature->hasRest() || signature->withTypesCount() != withTypes.size()) {
+            return false;
+        }
+        const size_t params = signature->normTypesCount() - signature->constasCount();
+        if (params != normTypes.size()) {
+            return false;
+        }
+        // The arguments are matched to the parameters the way the call wrote them: a `constas`
+        // parameter is written at its own position and is not a runtime argument. A variable
+        // that occurs at an unnamed-struct position and at a named one takes the named type
+        // (isUnnamedStructArgument).
+        type_bindings_t bindings;
+        for (int pass = 0; pass < 2; ++pass) {
+            size_t written = 0;
+            for (size_t i = 0; i < signature->normTypesCount(); ++i) {
+                if (signature->normIsConstasAt(i)) {
+                    continue;
+                }
+                Type *actual = valueTypeOf(normTypes[written]);
+                ++written;
+                if (isUnnamedStructArgument(actual) != (pass == 1)) {
+                    continue;
+                }
+                if (!bindTypeVars(signature->normTypeAt(i), actual, bindings)) {
+                    return false;
+                }
+            }
+        }
+        size_t written = 0;
+        for (size_t i = 0; i < signature->normTypesCount(); ++i) {
+            if (signature->normIsConstasAt(i)) {
+                continue;
+            }
+            const size_t at  = written++;
+            Type *pattern    = signature->normTypeAt(i);
+            unifyTypeVars(pattern, valueTypeOf(normTypes[at]), bindings);
+            Type *wanted = substituteTypeVars(pattern, bindings);
+            Type *actual = valueTypeOf(normTypes[at]);
+            if (entersImplicitly(wanted, actual)) {
+                continue;
+            }
+            if (at < normInputs.size() &&
+                compositeLiteralEntersIn(normInputs[at].node, wanted, normInputs[at].expr)) {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    };
+    // A name with one generic function keeps it, and its own report when the arguments do not
+    // fit; only a name with several needs the choice made here.
+    if (candidates.size() == 1) {
+        return candidates.front();
+    }
+    std::vector<generic_template_ptr_t> fits;
+    for (const auto &candidate : candidates) {
+        if (binds(candidate)) {
+            fits.push_back(candidate);
+        }
+    }
+    if (fits.size() == 1) {
+        return fits.front();
+    }
+    std::string argTypes;
+    for (const auto &type : normTypes) {
+        argTypes += (argTypes.empty() ? "" : ", ") + type->toString();
+    }
+    std::vector<std::string> listed;
+    for (const auto &candidate : candidates) {
+        listed.push_back(candidate->name + ": " + candidate->funcType->toString());
+    }
+    if (fits.size() > 1) {
+        std::vector<std::string> also;
+        for (const auto &candidate : fits) {
+            also.push_back(candidate->name + ": " + candidate->funcType->toString());
+        }
+        rejectAmbiguousCall(candidates.front()->name, argTypes, also, call);
+    }
+    diags_->of(SemanticDiag::NoMatchingFunction)
+        .atOrigin(call->origin())
+        .commit(argTypes, strutil::join(listed, "; ", [](const std::string &s) { return s; }));
+    throw BuildAbortException();
+}
+
 compile_graph_ptr_t Builder::resolveGenericCall(
-    const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+    const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+    std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
+    const GCT::node_ptr_t &call, Type *expectedResult) {
+    return instantiateForCall(
+        tmpl, withInputs, normInputs, withTypes, normTypes, call, expectedResult);
+}
+
+compile_graph_ptr_t Builder::instantiateForCall(
+    const generic_template_ptr_t &tmpl, std::vector<Argument> &withInputs,
     std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
     const GCT::node_ptr_t &call, Type *expectedResult) {
     FunctionType *signature = tmpl->funcType;
@@ -526,11 +703,11 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         return i < withCount ? i : withCount + runtimeIndices[i - withCount];
     };
     // The arguments that name a generic function themselves: they have no type yet.
-    std::vector<template_ptr_t> waiting(withCount + normCount);
+    std::vector<generic_template_ptr_t> waiting(withCount + normCount);
     const auto typesText = [&](const type_vec_t &types, size_t offset) {
         std::string text;
         for (size_t i = 0; i < types.size(); ++i) {
-            const template_ptr_t &generic =
+            const generic_template_ptr_t &generic =
                 offset + i < waiting.size() ? waiting[offset + i] : nullptr;
             text += (i == 0 ? "" : ", ") +
                     (generic ? "<generic " + generic->name + ">" : types[i]->toString());
@@ -610,7 +787,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
     };
     for (size_t i = 0; i < withCount + normCount; ++i) {
         if (auto generic = genericDrefs_.find(inputAt(i).node); generic != genericDrefs_.end()) {
-            waiting[i] = generic->second;
+            waiting[i] = generic->second.one();
         }
     }
     // A parameter by its position among all parameters (`with` ones first), with the `constas`
@@ -640,6 +817,11 @@ compile_graph_ptr_t Builder::resolveGenericCall(
     // not of the form of a `T?` / `T!` parameter enters it (design principles 3.8), so it
     // binds the variables of the payload: `or_zero(5, 0)` with `x: T?` gives
     // `T = int`. `null` binds nothing.
+    //
+    // The positions whose argument has a named type come first, and the ones whose argument is
+    // an unnamed struct second (isUnnamedStructArgument), as in chooseGenericOverload: a `T?`
+    // payload and a variable that a later named argument determines are bound the same way
+    // whichever of the two comes first in the signature.
     type_bindings_t bindings;
     const std::function<bool(Type *, Type *)> bindEntering = [&](Type *pattern, Type *actual) {
         type_bindings_t attempt = bindings;
@@ -656,9 +838,14 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         }
         return bindEntering(tagged->payloadType(), actual);
     };
-    for (size_t i = 0; i < withCount + normCount; ++i) {
-        if (!waiting[i] && !bindEntering(patternAt(i), actualAt(i))) {
-            reject(describe(i) + " needs a type of that form to bind its type variables");
+    for (int pass = 0; pass < 2; ++pass) {
+        for (size_t i = 0; i < withCount + normCount; ++i) {
+            if (waiting[i] || isUnnamedStructArgument(actualAt(i)) != (pass == 1)) {
+                continue;
+            }
+            if (!bindEntering(patternAt(i), actualAt(i))) {
+                reject(describe(i) + " needs a type of that form to bind its type variables");
+            }
         }
     }
     // 2. A variable that its first binding position left open (the argument there is `null`, or a
@@ -969,7 +1156,7 @@ void Builder::settleGenericOperatorArguments(
             settleOverloaded(arg, type);
             return;
         }
-        const template_ptr_t tmpl = genericDrefs_.find(arg.node)->second;
+        const generic_template_ptr_t tmpl = genericDrefs_.find(arg.node)->second.one();
         FunctionType *signature   = tmpl->funcType;
         const size_t params       = signature->normTypesCount();
         std::vector<std::string> names;
@@ -1113,7 +1300,7 @@ void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) 
 }
 
 compile_graph_ptr_t Builder::instantiateGeneric(
-    const template_ptr_t &tmpl, const type_bindings_t &bindings, const ExtentValues &extents,
+    const generic_template_ptr_t &tmpl, const type_bindings_t &bindings, const ExtentValues &extents,
     const ConstasValues &constas, const GCT::node_ptr_t &call) {
     ExpectedValueScope instanceScope(expectedValueType_, nullptr);
     // All routes (inferred calls, function values and ::<T>) enforce the same type rules.
@@ -1361,10 +1548,21 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         }
         // Scopes are kept by name under the scope they were entered from, here the scope the
         // function was declared in: two functions written in place, which have no name to
-        // tell them apart, need two scopes; so do two generic overloads of one operator,
-        // which share their name.
-        const bool sharedName =
-            tmpl->name.empty() || camel::core::isOverloadableOperatorGroup(tmpl->func->name());
+        // tell them apart, need two scopes; so do two generic overloads, which share their
+        // name. Two overloads can also be given the same instance name -- `init::<P>(opt: Sgd,
+        // params: P)` and `init::<P>(opt: Adam, params: P)` are both `init<Model>` for a
+        // `Model` -- and they must not share a scope either: one instance's parameters would
+        // answer for the other's names.
+        const bool severalUnderOneName = [&] {
+            if (tmpl->name.empty() || tmpl->templateScope == nullptr) {
+                return false;
+            }
+            const auto declared = tmpl->templateScope->get(tmpl->name);
+            return declared.has_value() && declared->group() != nullptr &&
+                   declared->group()->size() > 1;
+        }();
+        const bool sharedName = tmpl->name.empty() || severalUnderOneName ||
+                                camel::core::isOverloadableOperatorGroup(tmpl->func->name());
         enterGraphScope(
             graph,
             sharedName ? std::format("{}@{:p}", instanceName, static_cast<void *>(tmpl.get()))

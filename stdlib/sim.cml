@@ -9,8 +9,8 @@
  * are pure.
  */
 
-// The declarations of the operators of the C++ module `modules/sim` (design principles 6.4;
-// handover H19, step 10; H179). This file is the one source of both fixed signatures; the C++
+// The declarations of the operators of the C++ module `modules/sim` (design principles 6.4).
+// This file is the one source of both fixed signatures; the C++
 // side keeps the kernels, the executor and the purity.
 //
 // No signature of this module is computed: `pi_hits` and `asian_call_price` answer `int` and

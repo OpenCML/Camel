@@ -901,13 +901,13 @@ timeout_ms = 10000
 
 [[tests]]
 name = "generic_and_plain_same_name"
-desc = "A generic function and an ordinary one with the same name."
+desc = "A generic function and an ordinary one with the same name: the generic one is a family of functions, one per type its parameters take, so the ordinary declaration is refused where it is written."
 kind = "negative"
 case = "../../../cases/compile/generics/err_redecl.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::Redeclaration"
-expect_diagnostic_line = 3
+expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["'id'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

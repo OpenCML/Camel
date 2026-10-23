@@ -498,7 +498,7 @@ func saturateWith(p: Program, strict: bool): Program! {
 
 /// Every rule of the library applied both ways to the writings of every value, for at most
 /// `rounds` rounds, with no extraction: the program keeps every writing the saturation found.
-/// `std::opt::saturate` is this pass under the core's name (H225); `saturate_all` adds the
+/// `std::opt::saturate` is this pass under the core's name; `saturate_all` adds the
 /// extraction, so a caller that wants the classes as they are uses this one.
 /// @effect runs the rules' functions
 /// @fails error value `RuleInvalid` when a rule does not compile; error value `RewriteInvalid` when a rewrite cannot be carried out
@@ -557,8 +557,8 @@ export func saturate_all_strict(p: Program): Program! {
 // A stage is a `Rule[]`: `run` applies it one way to a fixpoint. The combinators are ordinary
 // Camel functions over stages, written with `loop` and `?->`: no helper carries an index or an
 // accumulator. Each answers a `Run`: the program, the rewrites applied, the rounds made, the nodes
-// visited, the nodes erased, whether the last application reached a fixpoint, and the wall time
-// (H226). No combinator reorders a stage's rules or drops a match: a stage that applies nothing
+// visited, the nodes erased, whether the last application reached a fixpoint, and the wall time.
+// No combinator reorders a stage's rules or drops a match: a stage that applies nothing
 // stays applied nothing.
 //
 // The rule sets and the choices are configuration, so they are `with` parameters (design
@@ -715,8 +715,7 @@ func pair(r: Run<Program>, left: Rule[], right: Rule[], strict: bool): Run<Progr
 // form's small element has error 7.76e-8, the stable form's 1.91e-6. The stable form subtracts
 // the maximum first, and `exp`'s argument-scaling error grows with the magnitude of its argument:
 // `x - max` is about -27, so the relative error of `exp` is about 27 * 2^-24 * ln 2, near 1e-6.
-// The exclusion is pinned by `test/cases/modules/rules/check_rejected_softmax.cml`; the mechanism
-// and the trade are in `docs/handover/reports/accuracy-softmax-trade.md`.
+// The exclusion is pinned by `test/cases/modules/rules/check_rejected_softmax.cml`.
 //
 // `log(softmax(x, axis))` is different: both sides share the same subtraction, so the log-of-
 // softmax rule is accepted and `check` passes it on vectors, matrices and rank-3 tensors.
