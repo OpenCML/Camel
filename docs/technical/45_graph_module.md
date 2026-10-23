@@ -54,7 +54,7 @@
 
 ## 标准库里的 Camel 遍
 
-`stdlib/opt.cml`（模块 `opt`）是标准库里用 Camel 写的优化遍：`opt::cse` 与 `opt::dce` 分别与 C++ 的 `std::opt::cse`、`std::opt::dce values_only=true` 做同一件事，流水线里写作 `camel p.cml opt::cse std::nvm`（H227 的第一层；遍参数的写法见 `docs/cli.md`）。`opt::cse` 合并同类型同值的常量（`int`、`i32`、`bool`）与算子、类型、输入、区域、权限都相同的纯运算，每一组留下第一个节点；`opt::dce` 删除没人读取的常量、转换、拷贝、访问、填充与纯运算。两个遍都跳过值可能被原地写的节点与读取这种值的节点，并按轮次重复到没有可改的为止：合并两个常量会让它们上面的运算相等，删掉一个值会让读它的值变成没人读，所以一轮不够。
+`stdlib/opt.cml`（模块 `opt`）是标准库里用 Camel 写的优化遍：`opt::cse` 与 `opt::dce` 分别与 C++ 的 `std::opt::cse`、`std::opt::dce values_only=true` 做同一件事，流水线里按模块名写作 `opt::cse`（H227 的第一层；遍名与遍参数的写法见 `docs/cli.md`）。`opt::cse` 合并同类型同值的常量（`int`、`i32`、`bool`）与算子、类型、输入、区域、权限都相同的纯运算，每一组留下第一个节点；`opt::dce` 删除没人读取的常量、转换、拷贝、访问、填充与纯运算。两个遍都跳过值可能被原地写的节点与读取这种值的节点，并按轮次重复到没有可改的为止：合并两个常量会让它们上面的运算相等，删掉一个值会让读它的值变成没人读，所以一轮不够。
 
 每轮一次事务。同一轮里每个待改的节点都被换成"输入完全相同且更早的那个节点"，而这样的两个节点不可能互为祖先——若 `b` 是 `a` 的传递使用者，`b` 的某个输入必在 `a` 的使用者闭包里，于是 `b` 的输入列不可能与 `a` 的相同——所以一轮一次 `commit` 就够，不需要 C++ 的 `reaches` 守卫（`replace` 自带的成环检查是第二道防线）。
 
@@ -73,7 +73,9 @@
 | 以区域为键的 Map | `id(Region)` 没有导出，只有 `region_of`、`region_kind`、`region_parent` 与 `==` | 区域只能用 `==` 比较 |
 | 遍参数带默认值（`std::opt safe_fp=false`） | Camel 遍的源码没有默认值，每个 `with` 参数都必填（上一节第 4 条） | 每个参数都要写在流水线里 |
 
-H227 第 5 项"`camel f.cml 'opt::cse'` 与 `std::opt::cse` 互换"今天只在结果上成立（同构，四个后端一致）：两个名字仍是两条实现。把 `opt::cse` 的 Camel 定义用 `#impl<cse_native>` 接到 C++ 实现（H233 第 7 条，H227 第 5 项末句）落不下来——`#impl` 的内核需要一个既声明算子又持有函数体的模块，而 `tensor:log_softmax`、`nn:adam` 这类算子没有这样的位置；这已记为 `docs/handover/questions/impl-kernel-site.md` 的问题，作者未定。
+H227 第 5 项说的"`opt::cse` 与 `std::opt::cse` 互换"今天只在结果上成立（同构，四个后端一致）：两个名字仍是两条实现。把 `opt::cse` 的 Camel 定义用 `#impl<cse_native>` 接到 C++ 实现（H233 第 7 条，H227 第 5 项末句）落不下来——`#impl` 的内核需要一个既声明算子又持有函数体的模块，而 `tensor:log_softmax`、`nn:adam` 这类算子没有这样的位置；这已记为 `docs/handover/questions/impl-kernel-site.md` 的问题，作者未定。
+
+**一页结论**（H227 第 4 项）。行数按各自的语言量：`opt::cse` 的 Camel 定义 131 行（`stdlib/opt.cml` 64–194，含与 `opt::dce` 共用的比较辅助）对 C++ 的 `cseDraft` 130 行（`src/passes/opt/generic/generic.cpp` 689–818）；`opt::dce` 的 31 行（195–225）对 `dceDraft` 38 行（820–857）。这是"同一件工作在同一抽象层上的长度"，不是等价的工作量：草稿、使用者索引与提交在 C++ 侧要自己维护，在 Camel 侧交给了 `graph` 模块。同构率：三个语料（`cse_subject`、`written_variable` 的 cse、`dce_subject` 的 dce）全部同构，四个后端上的结果逐字一致。速度不在本项作门槛，这里也没有计时——计时会把 NodeVM 跑一个 Camel 遍的固定成本与遍本身混在一起，而本项回答的是"写得出来吗"。
 
 ## 一次编译问的是哪些模块
 
