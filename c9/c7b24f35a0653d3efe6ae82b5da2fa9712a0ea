@@ -1,0 +1,15 @@
+h348（H17 第 2 项）— 字面量的长度要受位置声明的约束；P4/P5 未做（分支 handover/h348-h17-dims，4 提交，基线 3ee0447f7；合入 c9c7b24f3）
+
+**已明确：P2（ecaa31f58）与 P3（fee698bb9）是 develop 的祖先**，test/cases/compile/array_shape/* 已是绿的——任务书上"第 2 项未开始"过期，已在 8f3a49c65 改正。**剩下**：P4（`Tensor` 变成 `ArrayType` 的别名、删掉 `TensorType`、统一打印、入口实参）与 P5（map/filter/sort 按第一维，按计划需先有 P4）。P4 是一次原子提交：本树上 63 处 `asTensorType`（27 文件）、src/include/modules 里 115 处 `TensorType`（15 文件）、test/cases 下 198 个 .cml 带 1096 处 `Tensor<` 写法。**它没有开工**——半转换的树会把闸门弄红，计划禁止；而 P5 在 P4 之前没有可观测表面：`ones([2, 3]) as f32[2, 3]` 被拒（"Dynamic cast from 'Tensor<float32, [2, 3]>' to 'f32[2, 3]' is not allowed"），`f32[2, 3]` 位置上的嵌套字面量是 NoMatchingFunction，所以 rank≥2 的数组值**根本产生不出来**。
+
+两处缺陷已修，各有红前绿后：
+1) 468880f60：**字面量的长度从未与位置声明的常量维度比较**——`func count(x: f32[4])` 用 `count([1.0, 2.0, 3.0])` 调用能编译并打印 3。src/compile/gir/builder_control.cpp 的 compositeEntersIn 与 compositeDataInType 现在先问 holdsStatedLength（:328，检查在 :350 与 :672）；位置留开的长度（`T[]`、`T[n]`、`T[..]`）在那里不检查。这也解释了计划原本的调用点用例 binding.cml/linear.cml **检查了零个形状**（它们传的是字面量）。
+2) e7611d704：**分支点上快层本来就是红的**——docs/diagnostics.md 被带着合并冲突标记提交进去了，feat/compile/diag_catalog 失败（这是协调者的错，见 h347 的 note）。重生成；230eb0da9 又生成一次，因为诊断的示例是从引发它的用例里挑的，新用例成了 NoMatchingFunction 与 ReturnTypeMismatch 的示例（计划用的是 --verify-doc，--check 不读示例）。
+
+核心检查确实在跑、非空转的证据（array_shape 计划 22 测试 = 13 既有 + 9 新，全绿）：err_call_mismatch 与 err_call_linear——用 `as` 声明维度后 `dot(x: f32[n], y: f32[n])` 给 3 和 2、`pair(a: f32[n], b: f32[n+1])` 给 2 和 2，被 SemanticDiag::DimensionMismatch（0x03000143）拒绝；决定它的那一行是 Type::bindExtents（src/core/type/base.cpp:207）经 ExtentForm::bind（include/camel/core/type/extent.h:105）。`T[]` 的 golden 逐字节未变。
+
+**已提问、未自行决定**：docs/handover/questions/declared-extent-reaches-the-call.md——声明的维度既不与字面量核对、也不带进值的类型（`let a: f32[3] = [...]` 的类型是 `f32[]`，调用因此绑不上；`let x: f32[4] = [1.0, 2.0, 3.0]` 能跑并打印 3）；`constas` 的值不能固定数组形参的维度（`total(4, v as f32[3])` 能跑，同样的写法在 `Tensor` 上被拒）；`[]` 仍能站在常量长度位置上。
+
+**第 4 项**（前后测量）——前窗口 load 84.9/94.9/100.8、后窗口 142.6/118.0/109.0：峰值内存按精确块字节两边完全相同（base=2117768 peak=5886088 low=2175112，released 2685/5553，loss 0.0034657/0.0017329），**峰值没有升高**；进程 CPU 不受负载影响（version 5.8→5.0 ms、imports_nothing 11.7→10.8、inspect_ops 42.5→45.0、imports_all 39.2→43.3、declaration 29.7→30.3 µs），**无回归**；**墙钟数字不可用并按不可用报告**——load 142 时四个 fib timeit 阈值变红，而每个 CPU 中位数朝反方向走；本改动是编译期对字面量的比较，fib 不写数组字面量。
+
+闸门：分支上 smoke + 全 feat + array_shape/tensor/gc_pacing 整份 → 5798 测试，5784 通过，0 失败，14 跳过。**合入后协调者重跑整层：total 5828, pass 5814, fail 0, skip 14。**（它早先两次 gate 里 runner.backend_matrix 失败，只因为它未跟踪的草稿计划放在 test/plans/ 下而自检读 `git ls-files --others`；移除后通过。）
