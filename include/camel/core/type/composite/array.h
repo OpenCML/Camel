@@ -175,6 +175,10 @@ class ArrayType : public CompositeType {
     /// Widens every element type and keeps the shape's rank, forgetting every dimension value
     /// (they are `?`); what `var` bindings hold. A named pack is dropped.
     virtual Type *widened() const override;
+    /// A literal beside a numeric array is an element of it (`x * 2.0` with `x: f32[3]`), so it
+    /// takes the array's element type (design principles 5.1). An array whose element type
+    /// nobody fixed (`Tensor`) gives none.
+    virtual Type *literalOperandType() const override;
 
     std::string_view packName() const override;
     bool extentForms(std::vector<ExtentForm> &out) const override;

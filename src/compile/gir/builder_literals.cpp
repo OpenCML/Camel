@@ -296,8 +296,8 @@ node_handle_t Builder::foldLiteralCall(const GCT::node_ptr_t &gct, Type *expecte
 
 void Builder::adaptLiteralOperands(
     const std::string &group, std::vector<Argument> &inputs, type_vec_t &types,
-    const GCT::node_ptr_t &call) {
-    if (inputs.size() < 2 || !isFoldedOperator(group)) {
+    const GCT::node_ptr_t &call, bool anyOperatorCall) {
+    if (inputs.size() < 2 || (!anyOperatorCall && !isFoldedOperator(group))) {
         return;
     }
     // The value of the other operand decides the literal's type ("二元运算中另一个操作数的
@@ -315,15 +315,13 @@ void Builder::adaptLiteralOperands(
                 continue;
             }
             Type *candidate = valueTypeOf(types[j]);
-            // A bf16 or f16 operand takes the literal too: it is a floating type of the language,
-            // and a literal has one of it (design principles 5.1, 7.3). Leaving it out left
-            // `bf16_v + 0.0` with no overload at all, while `f32_v + 0.0` is an f32 sum.
-            if (candidate != nullptr &&
-                (candidate->isPrimitive() || camel::core::type::isComplex(candidate->code())) &&
-                (candidate->code() == TypeCode::Int32 || candidate->code() == TypeCode::Int64 ||
-                 camel::core::type::isFloatingScalar(candidate->code()) ||
-                 camel::core::type::isComplex(candidate->code()))) {
-                other = candidate;
+            // The type of the other operand decides, and the operand's type says what it gives a
+            // literal (design principles 5.1): a numeric scalar gives itself, a numeric array its
+            // element type (a tensor's element type included — leaving element types out left
+            // `bf16_v + 0.0` with no overload at all, while `f32_v + 0.0` is an f32 sum). One
+            // answer for both, so the rule is stated once.
+            if (candidate != nullptr) {
+                other = candidate->literalOperandType();
             }
         }
         if (other == nullptr || other->equals(types[i])) {
