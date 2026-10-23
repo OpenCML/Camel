@@ -238,3 +238,25 @@ si_recursion_leaf、si_var_argument、static_types、unshaped_argument
 - 因此这一格还差一步才能说出「哪个提交改的」：拿一份可构建的对照（tip 与 tip 去掉 VJP/秩 0 两刀），
   并在 `agreement.cml` 里打出那个叶子的解析类型。没有猜，也没有改内核去迁就 f64——内核只收 f32
   是决定，不该 f64 的叶子要停止是 f64。
+
+## 主体那一类的根因（2026-10-24 一次实测定位）
+
+`'the gradient kernels' does not support a value of type 'Tensor<f64>'` 在 flip7 的日志里出现
+**248 次**，`'Tensor<f32>'` **0 次**。所以 162 例内核元素类型拒绝（连同 optim 的 4 例 trajectory、
+2 例 GradientElementTypeMismatch，约 168 例）是**同一个根因**：`Tensor` 变成数值数组类型之后，
+元素类型没有写出来的张量按**数组/字面量的规则**取到元素类型 `float`（= f64），而张量类型自己的
+约定是 **f32**，于是经过它的每一次梯度都被只收 f32 的内核拒绝。落点在本 lane（refiner 给未写元素
+的张量取什么元素类型 / VJP 的算子类型），不在内核 lane：内核只收 f32 是决定，不改。
+
+## 文件级回退 bisect（f64 叶子为什么走到 f32 内核）
+
+基线 `221cfe18b`：optim 计划 **22/22 全绿**（实测）⇒ 红是翻带来的。逐个提交不可行（中间提交
+编不过，见上）。按文件回退实测两组：
+
+- 秩 0 那一对（`modules/tensor/ops/support.cpp` 回到 bf8d9a40a）：optim **6/22**，trajectory 仍红
+  ⇒ **不是它**；而且它承重——去掉它坏得更多。
+- `modules/autodiff/pullback.cpp`（回到 221cfe18b）：optim **6/22** ⇒ **不是它**，同样承重
+  （它正是让 200 例 GradientElementTypeMismatch 消失的那一刀）。
+
+⇒ 剩下的候选是入口类型（`src/execute/entry_args.cpp`）与 VJP 的算子类型（`vjp.*` 与各 op）。
+但 f64 叶子与上面 162 例同源这件事已经可以断定：都是「未写元素的张量现在按 f64 解析」。
