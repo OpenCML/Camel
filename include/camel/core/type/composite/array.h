@@ -120,6 +120,11 @@ class ArrayType : public CompositeType {
     /// The numeric-unknown array `Tensor`: element type not fixed, but a numeric scalar. With
     /// no extents it is `Tensor` (any rank); with extents it is `Tensor<[...]>`.
     static ArrayType *numericUnknown(std::span<const int64_t> extents = {}, std::string_view pack = {});
+    /// The same numeric-unknown array whose shape is written over dimension names: the extents
+    /// are kept as the linear forms they were written as, so a named extent keeps its name
+    /// (design principles 5.4). A shape argument fixes the rank; no shape is any rank.
+    static ArrayType *
+    numericUnknownFromForms(std::span<const ExtentForm> extents, std::string_view pack = {});
 
     /// create() with the factory's element type.
     static ArrayType *fromFactory(ArrayTypeFactory &factory);
@@ -153,6 +158,11 @@ class ArrayType : public CompositeType {
     std::string shapeMangle() const;
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
+    /// `Tensor<f32>`, `Tensor<f32, [2, 3]>`, `Tensor<[n, 784]>`: the numeric array reads the
+    /// arguments of its own alias (docs/design/arrays-memory/plan.cn.md section 5), so the two
+    /// spellings of one type are one type and `Name<args...>` needs no second path.
+    virtual const Type *
+    applyArguments(std::span<const TypeArgument> arguments, std::string &error) const override;
     virtual bool resolved() const override;
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
