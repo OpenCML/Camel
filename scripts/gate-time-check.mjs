@@ -21,8 +21,22 @@
  *   3. `scripts/build-info.js check` accepts the install: this is the precondition the helper's
  *      -NoBuild path refuses on, so a -NoBuild gate run can skip the build only when this passes.
  *
+ * `--stamp-rebuild` adds a fourth, measured check and rebuilds the tree, so it is not part of a
+ * routine run:
+ *
+ *   4. moving the build stamp (`BUILD_FOOTPRINT`, written by `configure_file` into
+ *      `build_config.h`) rebuilds the stamp's own translation unit in each target and relinks it,
+ *      and nothing else. The check rewrites the generated headers exactly as a reconfigure does
+ *      when the pin in `build/footprint.json` moves, runs ninja for real, and names every object
+ *      and link edge it saw. Red when a heavy translation unit includes `build_config.h` again:
+ *      `tools/camel-cli/config.cpp` (17 s) and `tools/debugger/src/repl.cpp` (15 s) did, so any
+ *      stamp change cost 32 s of compilation for a string that reaches one `cout`.
+ *      `--repeat N` measures the same change N times and prints the spread, because the build
+ *      host is shared and a single number cannot tell a real difference from load.
+ *
  * The header's timestamps are restored in a finally block; a check that dies mid-way leaves the
- * tree as it found it.
+ * tree as it found it. `--stamp-rebuild` restores the generated headers and rebuilds them in the
+ * same finally block, so the binaries on disk match the tree again when it returns.
  */
 import fs from 'fs'
 import path from 'path'
@@ -36,12 +50,13 @@ const buildDir = path.join(repoRoot, 'build')
 function usage(message) {
     if (message) console.error(`[gate-time-check] ${message}`)
     console.error(
-        'usage: node scripts/gate-time-check.mjs [--config Release|Debug] [--header <path under the repository>]'
+        'usage: node scripts/gate-time-check.mjs [--config Release|Debug] [--header <path under the repository>]\n' +
+            '       [--stamp-rebuild [--repeat N]]'
     )
     process.exit(2)
 }
 
-const options = { config: 'Release', header: 'include/camel/core/operator.h' }
+const options = { config: 'Release', header: 'include/camel/core/operator.h', stampRebuild: false, repeat: 1 }
 const argv = process.argv.slice(2)
 for (let i = 0; i < argv.length; i++) {
     const next = () => {
@@ -50,7 +65,11 @@ for (let i = 0; i < argv.length; i++) {
     }
     if (argv[i] === '--config') options.config = next()
     else if (argv[i] === '--header') options.header = next()
-    else if (argv[i] === '--help' || argv[i] === '-h') usage()
+    else if (argv[i] === '--stamp-rebuild') options.stampRebuild = true
+    else if (argv[i] === '--repeat') {
+        options.repeat = Number(next())
+        if (!Number.isInteger(options.repeat) || options.repeat < 1) usage('--repeat needs a positive integer')
+    } else if (argv[i] === '--help' || argv[i] === '-h') usage()
     else usage(`unknown argument "${argv[i]}"`)
 }
 
@@ -175,6 +194,161 @@ if (stamp.status !== 0) {
     )
 } else {
     console.log('[gate-check] -NoBuild precondition: out/latest is stamped from this tree')
+}
+
+// --- 4. a stamp change rebuilds one small translation unit per target ------------------------
+// The generated header exists to carry one string into the binary. Every translation unit that
+// includes it pays its own compilation for a value only its own `cout` reads, so the header's
+// dependents are the whole blast radius of a stamp change. `build_stamp.cpp` is the unit that is
+// allowed to depend on it: it is five lines and its only job is that include.
+if (options.stampRebuild) {
+    if (noopEdges.length > 0) {
+        problems.push(
+            'stamp change: the tree was not up to date before the measurement; build it first, then re-run'
+        )
+    } else {
+        const stampHeaders = [
+            ...new Set([...byObject.values()].flat().filter((input) => path.basename(input) === 'build_config.h')),
+        ].sort()
+        if (stampHeaders.length === 0) {
+            problems.push(
+                'stamp change: no object records a dependency on a generated build_config.h; the measurement is empty'
+            )
+        }
+        const stampDependents = [...byObject]
+            .filter(([, inputs]) => inputs.some((input) => stampHeaders.includes(input)))
+            .map(([object]) => object)
+            .sort()
+        const wrongUnits = stampDependents.filter((object) => !/(^|\/)build_stamp\.cpp(\.o|\.obj)$/.test(object))
+        if (wrongUnits.length > 0) {
+            problems.push(
+                `stamp change: ${wrongUnits.length} translation unit(s) besides build_stamp.cpp include the stamp header, ` +
+                    `first ${wrongUnits[0]}: every stamp change recompiles them`
+            )
+        }
+        if (stampDependents.length === 0) {
+            problems.push('stamp change: no object depends on the stamp header; the measurement is empty')
+        }
+        for (const header of stampHeaders) {
+            if (!stampDependents.some((object) => byObject.get(object).includes(header))) {
+                problems.push(
+                    `stamp change: ${path.relative(buildDir, header)} reaches no build_stamp.cpp; the stamp in the binary is not the one this build configured`
+                )
+            }
+        }
+
+        function stampText(original, value) {
+            const define = /(#define\s+BUILD_FOOTPRINT\s+")[^"]*(")/
+            if (!define.test(original)) throw new Error('build_config.h has no BUILD_FOOTPRINT define')
+            return original.replace(define, (_match, before, after) => `${before}${value}${after}`)
+        }
+
+        function buildEdges(output) {
+            return {
+                objects: [...output.matchAll(/^\[\d+\/\d+\] Building CXX object (.+)$/gm)].map((m) => m[1].trim()),
+                links: [...output.matchAll(/^\[\d+\/\d+\] Linking (?:CXX|C|ASM) executable (.+)$/gm)].map((m) =>
+                    m[1].trim()
+                ),
+            }
+        }
+
+        const saved = new Map()
+        for (const header of stampHeaders) {
+            const stat = fs.statSync(header)
+            saved.set(header, { text: fs.readFileSync(header, 'utf-8'), atime: stat.atime, mtime: stat.mtime })
+        }
+        const baseline = saved.size > 0 ? (saved.get(stampHeaders[0]).text.match(/BUILD_FOOTPRINT\s+"([^"]*)"/) || [])[1] : undefined
+        if (!baseline) {
+            problems.push('stamp change: the generated header has no BUILD_FOOTPRINT value; the measurement is empty')
+        }
+        const targetDirs = [
+            ...new Set(stampDependents.map((object) => object.replace(/CMakeFiles[\\/].*$/, ''))),
+        ].sort()
+        const measurements = []
+        // A real stamp change is a cache miss for every unit that includes the header; a reused
+        // probe value would let ccache turn the second measurement into a hit and understate it.
+        const probeTag = `${Date.now()}_${process.pid}`
+        try {
+            for (let run = 1; run <= options.repeat && baseline; run++) {
+                const value = `${baseline}_probe${probeTag}_${run}`
+                for (const header of stampHeaders) {
+                    fs.writeFileSync(header, stampText(saved.get(header).text, value))
+                }
+                const started = process.hrtime.bigint()
+                const build = runNinja([])
+                const seconds = Number(process.hrtime.bigint() - started) / 1e9
+                const edges = buildEdges(build.output)
+                const rebuilt = [...new Set(edges.objects)].sort()
+                const missing = stampDependents.filter((object) => !rebuilt.includes(object))
+                const extra = rebuilt.filter((object) => !stampDependents.includes(object))
+                const stray = edges.links.filter(
+                    (link) => !targetDirs.some((dir) => path.resolve(buildDir, link).startsWith(path.resolve(buildDir, dir)))
+                )
+                console.log(
+                    `[gate-check] stamp change ${run}: ${rebuilt.length} object(s), ${edges.links.length} link(s), ` +
+                        `${seconds.toFixed(1)} s`
+                )
+                console.log(`[gate-check]   objects: ${rebuilt.join(', ') || '(none)'}`)
+                console.log(`[gate-check]   links:   ${edges.links.join(', ') || '(none)'}`)
+                if (build.status !== 0) {
+                    problems.push(
+                        `stamp change ${run}: ninja failed (${build.status}): ${build.output.trim().split('\n').slice(-3).join(' | ')}`
+                    )
+                }
+                if (missing.length > 0) {
+                    problems.push(`stamp change ${run}: ${missing.length} stamp unit(s) did NOT rebuild, first ${missing[0]}`)
+                }
+                if (extra.length > 0) {
+                    problems.push(
+                        `stamp change ${run}: ${extra.length} object(s) rebuilt that do not include the stamp header, first ${extra[0]}`
+                    )
+                }
+                for (const dir of targetDirs) {
+                    if (!edges.links.some((link) => path.resolve(buildDir, link).startsWith(path.resolve(buildDir, dir)))) {
+                        problems.push(`stamp change ${run}: ${dir} was not relinked`)
+                    }
+                }
+                if (stray.length > 0) {
+                    problems.push(`stamp change ${run}: ${stray.length} unrelated target(s) relinked, first ${stray[0]}`)
+                }
+                measurements.push({ seconds, objects: rebuilt.length })
+            }
+        } finally {
+            // Put the header and the binaries back: the objects were compiled with the probe value,
+            // so restoring only the header would leave a binary that prints a stamp the tree does
+            // not configure. Touching the header makes ninja rebuild the stamp units once more.
+            for (const [header, original] of saved) {
+                fs.writeFileSync(header, original.text)
+                const now = new Date()
+                fs.utimesSync(header, now, now)
+            }
+            if (saved.size > 0) {
+                const restore = runNinja([])
+                if (restore.status !== 0) {
+                    problems.push(
+                        `stamp change: restoring the tree failed (${restore.status}): ${restore.output.trim().split('\n').slice(-2).join(' | ')}`
+                    )
+                }
+                const settled = runNinja(['-n'])
+                const stillDirty = dirtyObjects(settled.output)
+                if (stillDirty.length > 0) {
+                    problems.push(`stamp change: ${stillDirty.length} object(s) still want to build after the measurement`)
+                } else if (!settled.output.includes('no work to do')) {
+                    problems.push(
+                        'stamp change: ninja -n wants work after the measurement but printed no object lines; the dry-run format changed'
+                    )
+                }
+            }
+        }
+        if (measurements.length > 1) {
+            const times = measurements.map((measurement) => measurement.seconds)
+            const spread = Math.max(...times) - Math.min(...times)
+            console.log(
+                `[gate-check] stamp change spread over ${times.length} runs: ` +
+                    `${times.map((time) => `${time.toFixed(1)} s`).join(', ')} (${spread.toFixed(1)} s)`
+            )
+        }
+    }
 }
 
 if (problems.length > 0) {

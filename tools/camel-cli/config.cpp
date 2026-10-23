@@ -12,7 +12,7 @@
 #include <string_view>
 #include <vector>
 
-#include "build_config.h"
+#include "build_stamp.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/execute/devices.h"
@@ -27,10 +27,6 @@
 #include "opencmlrc.h"
 
 #include <filesystem>
-
-#ifndef BUILD_FOOTPRINT
-#define BUILD_FOOTPRINT "%y%m%d_%H%M%S"
-#endif
 
 using namespace clipp;
 using namespace std;
@@ -804,9 +800,9 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showVersion) {
 #ifdef NDEBUG
-        cout << "Camel v" << VERSION << " (Build " << BUILD_FOOTPRINT << ")" << endl;
+        cout << "Camel v" << VERSION << " (Build " << camelBuildFootprint() << ")" << endl;
 #else
-        cout << "Camel v" << VERSION << " (Debug " << BUILD_FOOTPRINT << ")" << endl;
+        cout << "Camel v" << VERSION << " (Debug " << camelBuildFootprint() << ")" << endl;
 #endif
     }
 
@@ -822,9 +818,9 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showAbout) {
 #ifdef NDEBUG
-        cout << "Camel v" << VERSION << " (Build " << BUILD_FOOTPRINT << ")";
+        cout << "Camel v" << VERSION << " (Build " << camelBuildFootprint() << ")";
 #else
-        cout << "Camel v" << VERSION << " (Debug " << BUILD_FOOTPRINT << ")";
+        cout << "Camel v" << VERSION << " (Debug " << camelBuildFootprint() << ")";
 #endif
         cout <<
 #include "ABOUT"
