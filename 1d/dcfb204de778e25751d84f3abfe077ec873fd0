@@ -1,0 +1,12 @@
+h310b — 把 h310 的降维布局改动按内容搬过来，并补上空张量守卫（分支 handover/h310b-reduce-layout，ab098b45a，基线 4674e78ed）
+
+崩溃守卫：modules/tensor/kernels/gradient.cpp 的 broadcastRuns 顶部 if (numel == 0) return std::nullopt;（写明了理由）。红/绿各一个提交，构建戳从 out/latest/build-info.json 读：红 41a1159cc（去掉守卫、同一基线）：index_semantics 4 过 1 红，[FAIL] declaration_evaluator，expected exit 0, got null；绿 ab098b45a（守卫在内）：5 过 0 红；基线 4674e78ed 也过。→ SIGFPE 是 h310 的，已修。替身：test/plans/feat/modules/index_semantics.plan.toml 的 declaration_evaluator，崩在 evaluator 的 EVAL 分支集，不在 QUERY show_max_pool2d 块；int64 的 0/0 落在 numel / (runs.outer * runs.inner)。
+
+A/B（两个提交，两边的二进制身份各自核验）：4674e78ed 对 ab098b45a，各自由 helper 从自己的干净检出构建，各自用 --version 的构建戳自证提交号。配对脚本 /tmp/h310b_pairs.py：同一组形状、探针循环里读一次钟、逐对交替两个二进制。仪器地板：同一二进制对自己在两侧得到 0.85/0.97/0.97/1.30/1.08/0.87/1.18（每行中位比）——这就是分辨率。读数：permute 1.116（9 对）/1.478（15 对）好于地板；transpose 1.084/1.147 好于地板；sum_to_trailing 1.005/1.003 中性；sum_to_leading 0.990/1.013 中性；sum_to_identity 1.089/1.034 中性；expand_axis 0.973/0.984 中性；sum_axis 0.958/1.139 未触碰的内核、噪声。
+钉子证据：reduce_layout.count 在 4674e78ed 与 ab098b45a 上带着同样的钉子通过，即两个提交打印同样的校验和——降维的顺序与累加类型没有在两者之间移动，也不需要 reassociate 或被排除在 #strict 之外。
+
+**撤回上一次报告的数字**：1.82×/1.41×/1.55× 是拿一个不存在的基线二进制量出来的（helper 旧的快路径跳过了检出与补丁，主机树还带着补丁，两边都带补丁）。上表取代它们：1.8× 的 sum_to_trailing 收益没了，在这一基线上它是中性的；permute 与 transpose 是真的但温和，不是 1.5×。
+
+拆分：gradient_avx2.cpp / gradient_generic.cpp / gradient_loops.inl 只含融合的 GELU 梯度；sumTo 与 broadcastTo 仍在 gradient.cpp，所以分解只属于一处，不必强行塞进两个后端。
+
+闸门：total 5705, pass 5691, fail 0, skip 14；step.count（每轮 299 次调用）、step.budget、reduce_layout.count、reduce_layout.ops 全过。建议：把仪器地板写进配对工具的输出（一个配对比值没有地板就没有意义）。未做：没有 push、没有跑 perf 全层。
