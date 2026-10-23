@@ -1,0 +1,19 @@
+# Fixture of test/tools/selftest/load-class/run.mjs. It is not under test/plans.
+#
+# 600 ms of work against a 300 ms CPU budget: the runner's CPU judgement must name the figure and
+# the budget. The timeout is 5 s, so this is not the liveness bound firing -- the test is fast, it
+# just costs more than it is allowed.
+id = "selftest.cpu_budget.over"
+order = 1
+tier = "fast"
+
+[[tests]]
+name = "cpu_budget_exceeded"
+desc = "600 ms of CPU work against a 300 ms CPU budget: the budget is crossed and the run must say so."
+kind = "behavior"
+tool = "node"
+case = "burn.mjs"
+args = ["${case}", "600"]
+expect_exit = 0
+timeout_ms = 5000
+cpu_budget_ms = 300

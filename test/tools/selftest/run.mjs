@@ -161,13 +161,14 @@ if (!fs.existsSync(matrixRoot)) problems.push(`the failed run removed its root: 
 fs.rmSync(matrixRoot, { recursive: true, force: true })
 
 // --- the plan schema: an unknown key or a bad type fails its own plan -------------------------
-// Three plan files share one directory: a misspelled key, a known key of the wrong type, and a
-// valid plan. The two invalid plans must fail with the file, the test and the key named; the
-// valid one must still run, so the error fails the plan and not the run.
+// Four plan files share one directory: a misspelled key, a known key of the wrong type, a CPU
+// budget with no liveness bound beside it, and a valid plan. The three invalid plans must fail
+// with the file, the test and the key named; the valid one must still run, so the error fails the
+// plan and not the run.
 const strictDir = path.join(here, 'strict')
 const strict = runRunner([strictDir])
 if (strict.status !== 1) problems.push(`strict: runner exit ${strict.status}, expected 1`)
-if (!strict.output.includes('[SUMMARY] total: 3, pass: 1, fail: 2')) {
+if (!strict.output.includes('[SUMMARY] total: 4, pass: 1, fail: 3')) {
     problems.push(`strict: unexpected summary (${summaryLine(strict.output)})`)
 }
 if (!strict.output.includes('[PASS] valid')) problems.push('strict: the valid plan did not run')
@@ -179,6 +180,9 @@ for (const text of [
         + "'expect_stdout_exactt'; did you mean 'expect_stdout_exact'?",
     "test/tools/selftest/strict/wrong_type.plan.toml: test 'wrong_type': "
         + 'expect_stdout_exact must be a string, got 42',
+    "test/tools/selftest/strict/cpu_budget_no_timeout.plan.toml: test "
+        + "'cpu_budget_without_timeout': cpu_budget_ms needs timeout_ms: the budget is the cost "
+        + 'bound and the timeout is the liveness bound (a hang, not a slow run)',
 ]) {
     if (!strict.output.includes(text)) problems.push(`strict: output lacks: ${text}`)
 }

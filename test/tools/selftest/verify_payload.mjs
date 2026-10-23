@@ -37,8 +37,14 @@ for (const key of [
     'output',
     'diagnostics',
     'benchmark',
+    'cpu_ms',
+    'cpu_budget_ms',
 ]) {
     assert.ok(Object.hasOwn(input, key), `payload lacks ${key}`)
 }
 assert.ok(Array.isArray(input.diagnostics))
 assert.equal(input.benchmark, null)
+// This plan declares no CPU budget, so the two cost fields are present and null: a script can tell
+// "this test is judged on its own CPU time" from the value, not from the key's absence.
+assert.equal(input.cpu_ms, null)
+assert.equal(input.cpu_budget_ms, null)

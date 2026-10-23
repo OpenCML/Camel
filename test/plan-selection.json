@@ -296,6 +296,11 @@
             "plans": ["feat/modules/naive_in_expert_out.plan.toml"]
         },
         {
+            "comment": "The MCTS showcase: showcase/d4-mcts/search.cml is pinned by a fast plan (the whole standard output of four searches on four back ends, the properties that move if the search is wrong, and three refusals), so an edit to the example runs it. The directory's perf case (compare.py, the Camel/Python comparison) stays where the perf layer keeps it, unselectable by an ordinary change; the other showcase directories remain on the rule-less allowlist, which is why `showcase/` is still listed there.",
+            "paths": ["showcase/d4-mcts/"],
+            "plans": ["feat/showcase_d4.plan.toml"]
+        },
+        {
             "comment": "Example programs and their recorded output.",
             "paths": ["examples/"],
             "plans": ["feat/examples"]

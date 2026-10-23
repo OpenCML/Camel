@@ -1,0 +1,216 @@
+id = "showcase_d4_mcts"
+order = 912
+tier = "fast"
+tags = ["feat", "showcase", "d4", "mcts", "search", "recursion"]
+
+# The MCTS showcase (showcase/d4-mcts, H13 D4).  The whole standard output is pinned at a stated
+# seed and playout count on the four back ends: the tree a search builds is a value, so every
+# visit count, every sum and the move it chose are reproducible numbers, and a search that
+# selected differently would print a different line.  The properties in the verify scripts are the
+# ones a reader can check by hand: a move that wins now is worth exactly 1, the only move that
+# does not lose is the one the search picks, and a search that examined nothing must fail.
+#
+# `guard.*` are the refusals: an unreachable position, a position that is already over, and a
+# search with no playouts.  Each exits 1 with its own message and never prints a chosen move.
+
+[[tests]]
+name = "search.win"
+desc = "`XX.OO....`: X to move with a line one place from completion. The search takes it (best=2), the child that wins is worth exactly 1.0 -- its position is over, so every playout through it is the game's result -- and no other move is worth 1.0."
+kind = "behavior"
+case = "../../../showcase/d4-mcts/search.cml"
+args = ["${case}", "--arg", "seed=42", "--arg", "playouts=2000", "--arg", "position=XX.OO....", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "d4 config seed=42 playouts=2000 position=XX.OO.... to_move=1\nd4 search root_visits=2000 nodes=72 children=5 best=2\nd4 child place=2 visits=1886 score=1886.000000 mean=1.000000\nd4 child place=5 visits=50 score=26.500000 mean=0.530000\nd4 child place=6 visits=22 score=5.500000 mean=0.250000\nd4 child place=7 visits=21 score=4.500000 mean=0.214286\nd4 child place=8 visits=21 score=4.500000 mean=0.214286\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+assert(input.normalized.stderr === '', `it must compile without a warning: ${input.normalized.stderr}`)
+const out = input.normalized.stdout
+const search = out.match(/d4 search root_visits=(\d+) nodes=(\d+) children=(\d+) best=(\d+)/)
+assert(search, 'no search line')
+assert(Number(search[1]) === 2000, `the root must count every playout, got ${search[1]}`)
+assert(Number(search[3]) === 5, `X has five moves here, got ${search[3]}`)
+assert(Number(search[4]) === 2, `the winning place is 2, got ${search[4]}`)
+const children = new Map()
+for (const m of out.matchAll(/d4 child place=(\d+) visits=(\d+) score=([0-9.]+) mean=([0-9.]+)/g)) {
+  children.set(Number(m[1]), { visits: Number(m[2]), mean: Number(m[4]) })
+}
+assert(children.size === 5, `expected five expanded children, got ${children.size}`)
+const winner = children.get(2)
+assert(winner.mean === 1, `the winning move must be worth exactly 1, got ${winner.mean}`)
+assert(winner.visits > 1800, `the search must spend its playouts on the win, got ${winner.visits}`)
+let visits = 0
+for (const [place, child] of children) {
+  visits += child.visits
+  if (place !== 2) assert(child.mean < 1, `place ${place} cannot be worth 1: ${child.mean}`)
+}
+assert(visits === 2000, `every playout must pass through one child, got ${visits}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "search.block"
+desc = "`.X..O.X.O`: O completes 0-4-8 on its next move and X cannot win first, so place 0 is the only move that does not lose. The search finds it: best=0, and every other move is far below it. This is the case a search that always returned the same node fails."
+kind = "behavior"
+case = "../../../showcase/d4-mcts/search.cml"
+args = ["${case}", "--arg", "seed=42", "--arg", "playouts=2000", "--arg", "position=.X..O.X.O", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "d4 config seed=42 playouts=2000 position=.X..O.X.O to_move=1\nd4 search root_visits=2000 nodes=89 children=5 best=0\nd4 child place=0 visits=1915 score=1853.000000 mean=0.967624\nd4 child place=2 visits=24 score=6.000000 mean=0.250000\nd4 child place=3 visits=24 score=6.000000 mean=0.250000\nd4 child place=5 visits=23 score=5.000000 mean=0.217391\nd4 child place=7 visits=14 score=0.000000 mean=0.000000\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+assert(input.normalized.stderr === '', `it must compile without a warning: ${input.normalized.stderr}`)
+const out = input.normalized.stdout
+const search = out.match(/d4 search root_visits=(\d+) nodes=(\d+) children=(\d+) best=(\d+)/)
+assert(search, 'no search line')
+assert(Number(search[4]) === 0, `the blocking place is 0, got ${search[4]}`)
+const children = new Map()
+for (const m of out.matchAll(/d4 child place=(\d+) visits=(\d+) score=([0-9.]+) mean=([0-9.]+)/g)) {
+  children.set(Number(m[1]), { visits: Number(m[2]), mean: Number(m[4]) })
+}
+assert(children.get(0).mean > 0.9, `blocking must be worth much more, got ${children.get(0).mean}`)
+let visits = 0
+for (const [place, child] of children) {
+  visits += child.visits
+  if (place !== 0) assert(child.mean < 0.3, `losing on purpose must be worth little at place ${place}: ${child.mean}`)
+}
+assert(visits === 2000, `every playout must pass through one child, got ${visits}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "search.fork"
+desc = "`X..OX...O`: X forks at 1 or 2 and both win by force. The search separates them from the rest (above 0.9 against below 0.8) and prefers 2. Their means are below 1.0 on purpose: the value of a move is the average of the playouts the tree ran through it, and the tree explores moves below the fork too."
+kind = "behavior"
+case = "../../../showcase/d4-mcts/search.cml"
+args = ["${case}", "--arg", "seed=42", "--arg", "playouts=2000", "--arg", "position=X..OX...O", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "d4 config seed=42 playouts=2000 position=X..OX...O to_move=1\nd4 search root_visits=2000 nodes=198 children=5 best=2\nd4 child place=1 visits=844 score=791.000000 mean=0.937204\nd4 child place=2 visits=933 score=881.500000 mean=0.944802\nd4 child place=5 visits=44 score=21.000000 mean=0.477273\nd4 child place=6 visits=55 score=30.000000 mean=0.545455\nd4 child place=7 visits=124 score=89.500000 mean=0.721774\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+assert(input.normalized.stderr === '', `it must compile without a warning: ${input.normalized.stderr}`)
+const out = input.normalized.stdout
+const search = out.match(/d4 search root_visits=(\d+) nodes=(\d+) children=(\d+) best=(\d+)/)
+assert(search, 'no search line')
+assert(Number(search[4]) === 2, `the search prefers the fork at 2, got ${search[4]}`)
+const children = new Map()
+for (const m of out.matchAll(/d4 child place=(\d+) visits=(\d+) score=([0-9.]+) mean=([0-9.]+)/g)) {
+  children.set(Number(m[1]), { visits: Number(m[2]), mean: Number(m[4]) })
+}
+for (const place of [1, 2]) {
+  assert(children.get(place).mean > 0.9, `the fork at ${place} wins, so it must be worth more: ${children.get(place).mean}`)
+}
+for (const place of [5, 6, 7]) {
+  assert(children.get(place).mean < 0.8, `place ${place} does not fork, so it must be worth less: ${children.get(place).mean}`)
+  assert(children.get(place).mean < children.get(1).mean, `place ${place} must lose to the fork`)
+}
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "search.empty"
+desc = "`.........`: the full search. 5000 playouts build 4937 nodes, the root counts all of them, and the centre (place 4) is the move the search values highest. This is the case that says the search is a search: the tree is built by the playouts, not by a heuristic."
+kind = "behavior"
+case = "../../../showcase/d4-mcts/search.cml"
+args = ["${case}", "--arg", "seed=7", "--arg", "playouts=5000", "--arg", "position=.........", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "d4 config seed=7 playouts=5000 position=......... to_move=1\nd4 search root_visits=5000 nodes=4937 children=9 best=4\nd4 child place=0 visits=651 score=415.500000 mean=0.638249\nd4 child place=1 visits=391 score=231.000000 mean=0.590793\nd4 child place=2 visits=599 score=378.000000 mean=0.631052\nd4 child place=3 visits=417 score=249.500000 mean=0.598321\nd4 child place=4 visits=934 score=621.500000 mean=0.665418\nd4 child place=5 visits=341 score=196.500000 mean=0.576246\nd4 child place=6 visits=693 score=447.000000 mean=0.645022\nd4 child place=7 visits=414 score=247.000000 mean=0.596618\nd4 child place=8 visits=560 score=350.500000 mean=0.625893\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+assert(input.normalized.stderr === '', `it must compile without a warning: ${input.normalized.stderr}`)
+const out = input.normalized.stdout
+const search = out.match(/d4 search root_visits=(\d+) nodes=(\d+) children=(\d+) best=(\d+)/)
+assert(search, 'no search line')
+assert(Number(search[1]) === 5000, `the root must count every playout, got ${search[1]}`)
+assert(Number(search[2]) > 4000, `5000 playouts must build a real tree, got ${search[2]} nodes`)
+assert(Number(search[3]) === 9, `the empty board offers nine moves, got ${search[3]}`)
+assert(Number(search[4]) === 4, `the search values the centre highest, got ${search[4]}`)
+const children = new Map()
+for (const m of out.matchAll(/d4 child place=(\d+) visits=(\d+) score=([0-9.]+) mean=([0-9.]+)/g)) {
+  children.set(Number(m[1]), { visits: Number(m[2]), mean: Number(m[4]) })
+}
+assert(children.size === 9, `expected nine expanded children, got ${children.size}`)
+let visits = 0
+for (const [place, child] of children) {
+  visits += child.visits
+  assert(child.mean <= children.get(4).mean, `place ${place} is valued above the centre: ${child.mean}`)
+}
+assert(visits === 5000, `every playout must pass through one child, got ${visits}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "guard.no_playouts"
+desc = "`--arg playouts=0` is the guard the example must not pass silently: the search examined nothing, so there is no move to report. The program prints `d4 no search` and exits 1 instead of naming the first place."
+kind = "behavior"
+case = "../../../showcase/d4-mcts/search.cml"
+args = ["${case}", "--arg", "seed=42", "--arg", "playouts=0", "--arg", "position=XX.OO....", "std::nvm"]
+expect_exit = 1
+expect_stdout_exact = "d4 config seed=42 playouts=0 position=XX.OO.... to_move=1\nd4 no search position=XX.OO.... playouts=0 root_visits=0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(input.exit_code === 1, `a search with no playouts must exit 1, got ${input.exit_code}`)
+assert(input.normalized.stderr === '', `it must compile without a warning: ${input.normalized.stderr}`)
+assert(!out.includes('d4 search '), 'a search that examined nothing must not report a move')
+assert(out.includes('d4 no search'), 'the guard must say that nothing was searched')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "guard.unreachable"
+desc = "`XXXX.....` has more X than O, which no game of tic-tac-toe reaches. The program refuses it and exits 1 rather than searching a position that cannot happen."
+kind = "behavior"
+case = "../../../showcase/d4-mcts/search.cml"
+args = ["${case}", "--arg", "seed=42", "--arg", "playouts=100", "--arg", "position=XXXX.....", "std::nvm"]
+expect_exit = 1
+expect_stdout_exact = "d4 config seed=42 playouts=100 position=XXXX..... to_move=2\nd4 invalid position=XXXX.....: X has 4 marks and O has 0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(input.exit_code === 1, `an unreachable position must exit 1, got ${input.exit_code}`)
+assert(!out.includes('d4 search '), 'a refused position must not be searched')
+assert(out.includes('has 4 marks and O has 0'), 'the refusal must say what is wrong')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "guard.finished"
+desc = "`XXXOO....` is over: X has completed 0-1-2. There is no move to search for, and the program says which line won and exits 1."
+kind = "behavior"
+case = "../../../showcase/d4-mcts/search.cml"
+args = ["${case}", "--arg", "seed=42", "--arg", "playouts=100", "--arg", "position=XXXOO....", "std::nvm"]
+expect_exit = 1
+expect_stdout_exact = "d4 config seed=42 playouts=100 position=XXXOO.... to_move=2\nd4 over position=XXXOO....: X has won\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(input.exit_code === 1, `a finished position must exit 1, got ${input.exit_code}`)
+assert(!out.includes('d4 search '), 'a finished position has no move to search for')
+assert(out.includes('has won'), 'the refusal must say the position is over')
+}
+"""
+timeout_ms = 60000

@@ -491,6 +491,18 @@ Every `[[tests]]` entry may use these common fields:
   bound on a quiet machine has no margin for a busy one and is fixed, not raised. A fast case
   with no reason for a special bound uses the runner default (`10000`): a 4 s bound is a speed
   assertion, and it is rejected as soon as the case takes a second on a loaded host.
+- `cpu_budget_ms`
+  Optional. The test's cost bound in milliseconds of **CPU time** (user + system) of the test's own
+  process tree, read by `test/tools/child-cpu.mjs`, which the runner runs the command under. A test
+  that declares it is judged on that figure and not on the wall clock: `timeout_ms` then states the
+  liveness bound (a hang, not a slow run), the `TIMEOUT_MARGIN` rule above is not applied to it, and
+  a reading that cannot be made is a failure, never a pass. The unit comes from the author's ruling
+  of 2026-10-23 (`docs/handover/reviews/questions-2026-10-23.md`, "declaration-cost-gate" (a)): the
+  wall clock on this shared host drifts with who else is running, while a process's own CPU time
+  barely moves, so a crossed CPU budget is the test's work growing and never "the host was busy". The
+  budget is declared together with a timeout (the runner refuses `cpu_budget_ms` without
+  `timeout_ms`), and, like `timeout_ms`, it states the measurement its number came from in a comment
+  next to the value.
 - `normalizers`
   Optional string array applied to captured output before assertions.
 - `envs`
@@ -766,6 +778,9 @@ Important payload fields:
 - `input.normalized.output`
 - `input.diagnostics`
 - `input.benchmark`
+- `input.cpu_ms`, `input.cpu_budget_ms` — the test's own CPU time (user + system) and the budget it
+  was judged against for a test that declared `cpu_budget_ms`, and `null` for every other test: the
+  payload of a test whose bound is CPU carries the numbers its verdict came from.
 - `input.case_path` — the resolved absolute path of the case: the plan's `case` resolved against
   the plan's directory, which is what the tool was invoked with. The output may repeat it (a
   graph dump names its source file), and it is absolute, so it differs between two checkouts of
@@ -1005,6 +1020,13 @@ CPU-time ceilings and `declaration.cost`'s per-declaration ceiling, absolute CPU
 structural assertion (the 30% compile-work share retired with the 2026-10-23 ruling), `perf.gc`
 asserts what must not grow with the length of the run, the showcases compare against PyTorch, and
 `docs/performance/graph-store-baseline.md` is a separate manual baseline of the graph store.
+
+A plan in any layer may carry the same unit on one test: `cpu_budget_ms` (above) makes the runner
+read the test's own CPU time through `test/tools/child-cpu.mjs` and fail the test when that figure
+crosses the budget, with `timeout_ms` left as the liveness bound. That is the form for a test whose
+wall clock is the host's, not the test's: `modules.autodiff/benchmark_gradients_vs_torch` reads
+943-979 s of its own CPU against 127-211 s of wall clock, and it used to be red on the runner's
+`TIMEOUT_MARGIN` for that reason alone.
 
 ## Variable Expansion
 

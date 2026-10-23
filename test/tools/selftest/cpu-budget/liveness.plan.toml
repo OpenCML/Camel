@@ -1,0 +1,20 @@
+# Fixture of test/tools/selftest/load-class/run.mjs. It is not under test/plans.
+#
+# A test that stops working: it waits 2.5 s while its CPU budget (100 s) stands still, against a
+# 1.2 s liveness bound. The CPU judgement cannot see this by construction, so the timeout must --
+# a CPU budget alone would let a hung test sit there forever.
+id = "selftest.cpu_budget.liveness"
+order = 1
+tier = "fast"
+
+[[tests]]
+name = "cpu_budget_liveness"
+desc = "2.5 s of waiting against a 1.2 s timeout and a 100 s CPU budget: the liveness bound kills it, the budget never fires."
+kind = "behavior"
+tool = "node"
+case = "../load-class/sleep.mjs"
+args = ["${case}", "2500"]
+expect_exit = 0
+timeout_ms = 1200
+cpu_budget_ms = 100000
+failure_note = "The child never finished: its CPU budget was never in question, its liveness bound was."
