@@ -43,38 +43,38 @@ export func argsort(keys: float[]): int[]
 export func argsort(keys: bool[]): int[]
 export func argsort(keys: string[]): int[]
 
-// The sorts are generic declarations over the element type, as the kernel is generic over it:
-// it reads the element type code and answers a fault of `OperandTypeUnsupported` for anything
-// that is not a number. Narrowing them to the four numeric types would refuse at compile time
-// what used to compile and fault at run time, which is a behaviour change.
+// The sorts are generic over the element type, as the kernel is: it reads the element type code
+// and faults with `OperandTypeUnsupported` for a type it does not order (i32, i64, f32, f64).
+// bf16 and f16 are numbers that kernel does not read, so their arrays are refused by name at run
+// time; narrowing to the four would move that refusal to compile time, a behaviour change.
 
 /// A sorted copy of xs (quicksort).
 /// @pure
-/// @fails fault `OperandTypeUnsupported` when the elements are not numbers
+/// @fails fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64
 /// @example sort([3, 1, 2])    // [1, 2, 3]
 export func sort::<T>(xs: T[]): T[]
 
 /// A sorted copy of xs, by insertion sort.
 /// @pure
-/// @fails fault `OperandTypeUnsupported` when the elements are not numbers
+/// @fails fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64
 /// @example insert_sort([3, 1, 2])    // [1, 2, 3]
 export func insert_sort::<T>(xs: T[]): T[]
 
 /// A sorted copy of xs, by quicksort.
 /// @pure
-/// @fails fault `OperandTypeUnsupported` when the elements are not numbers
+/// @fails fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64
 /// @example quick_sort([3, 1, 2])    // [1, 2, 3]
 export func quick_sort::<T>(xs: T[]): T[]
 
 /// A sorted copy of xs, by merge sort.
 /// @pure
-/// @fails fault `OperandTypeUnsupported` when the elements are not numbers
+/// @fails fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64
 /// @example merge_sort([3, 1, 2])    // [1, 2, 3]
 export func merge_sort::<T>(xs: T[]): T[]
 
 /// The sorted array made of the elements of two sorted arrays of numbers.
 /// @pure
-/// @fails fault `OperandTypeUnsupported` when the elements are not numbers
+/// @fails fault `OperandTypeUnsupported` when the elements are not i32, i64, f32 or f64
 /// @example merge_sorted_arrays([1, 4], [2, 3])    // [1, 2, 3, 4]
 export func merge_sorted_arrays::<T>(left: T[], right: T[]): T[]
 

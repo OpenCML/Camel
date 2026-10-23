@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-265 diagnostics: 246 errors, 19 warnings.
+266 diagnostics: 247 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -226,6 +226,7 @@ prints one entry.
 | `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error |
 | `0x030001D5` | [SemanticDiag::PrecisionChangeNotPermitted](#precisionchangenotpermitted) | Error |
 | `0x030001D6` | [SemanticDiag::ParamArgumentWrongType](#paramargumentwrongtype) | Error |
+| `0x030001D7` | [SemanticDiag::ReducedPrecisionUnsupported](#reducedprecisionunsupported) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -6233,6 +6234,36 @@ func main(): int sync {
 }
 ```
 
+### ReducedPrecisionUnsupported
+
+`0x030001D7` · Error · `SemanticDiag::ReducedPrecisionUnsupported`
+
+**Message**
+
+```text
+The call of '{0}' cannot take a value of the reduced-precision element type '{1}'.
+```
+
+**Help**
+
+```text
+bf16 and f16 are stored element types: the language has no bf16 or f16 literal, scalar operator or conversion, so a function that would add, compare or otherwise use one cannot compute with it. A bf16 or f16 tensor is computed by the tensor module, which widens every element to f32 and rounds once when it stores the result (design principles 7.3, H238); cast reads it back into f32 or f64 exactly. Write the reduction, comparison or arithmetic on the tensor, or on a value of a type that has the operation.
+```
+
+**Example** (`test/cases/modules/stdlib/reduced_sum_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sum_refused.cml`)
+
+```camel
+module stdlib_reduced_sum_refused
+
+import { sum } from array
+
+func main(): int sync {
+    let xs: bf16[] = []
+    println(sum(xs))
+    return 0
+}
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -7289,24 +7320,16 @@ A replacement field is a pair of braces, optionally holding a format specificati
 Convert the value to a supported type before the call.
 ```
 
-**Example** (`test/cases/modules/tensor/dtype/f32_only.cml`, run as `camel test/cases/modules/tensor/dtype/f32_only.cml`)
+**Example** (`test/cases/modules/stdlib/reduced_sort_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sort_refused.cml`)
 
 ```camel
-// `conv2d` computes in f32 only, and says so: an f64 tensor is refused at the call with a
-// diagnostic naming the operator, the argument's element type and the set the kernel takes.
-// It is never narrowed to f32 (design principles 5.1, 13.1).
-module tensor_dtype_f32_only
+module stdlib_reduced_sort_refused
 
-import { new, reshape, ones, sum } from tensor
-import { conv2d } from nn
+import { sort } from array
 
 func main(): int sync {
-    let values: f64[] = [1.0, 2.0, 3.0, 4.0]
-    let x = reshape(new(values), [1, 1, 2, 2])
-    let kernel = ones([1, 1, 1, 1])
-    let bias = ones([1])
-    let y = conv2d(x, kernel, bias, 1, 0)
-    println(sum(y))
+    let xs: f16[] = []
+    println(sort(xs))
     return 0
 }
 ```

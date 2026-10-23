@@ -2041,12 +2041,19 @@ functions: each one matches the type it is given with `match type` and returns a
 `func f::<T>(x: T) when is_numeric::<T>()` is applicable exactly where `T` is a number.
 
 `match type` compares a type's identity as well as its shape (design principles 5.5): the
-cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `c64`, `c128`,
-`string`, `bool`), and `case func` is the shape of every function type.
+cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,
+`c64`, `c128`, `string`, `bool`), and `case func` is the shape of every function type.
 
 A type is named once: the family predicates (`is_integer`, `is_float`, `is_complex`,
 `is_string`, `is_bool`) carry the identity cases, and `is_numeric` and `is_ordered` ask them
 instead of listing the types again, so a new integer width is added in one place.
+
+`bf16` and `f16` are floating-point types (design principles 7.3; handover H238): a tensor
+stores an element in one of them and every kernel computes in f32 and rounds once, so they
+belong to `is_float` and inherit `is_numeric` and `is_ordered` from it. They are element
+types: the language has no bf16 or f16 literal, scalar operator or conversion, so a generic
+function that combines two element values is refused where it is written rather than
+answered at a narrower width.
 
 #### `is_integer`
 
@@ -2066,10 +2073,12 @@ True when `T` is an integer type (`int` is 64-bit, `i32` is 32-bit).
 is_float: () => bool
 ```
 
-True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit).
+True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit, `bf16` and
+`f16` are the two-byte tensor element types).
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `is_float::<float>()` gives `true`
+- Example: `is_float::<bf16>()` gives `true`
 - Example: `is_float::<int>()` gives `false`
 
 #### `is_complex`
@@ -2199,7 +2208,7 @@ sort: (xs: T[]) => T[]
 A sorted copy of xs (quicksort).
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `insert_sort`
@@ -2211,7 +2220,7 @@ insert_sort: (xs: T[]) => T[]
 A sorted copy of xs, by insertion sort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `quick_sort`
@@ -2223,7 +2232,7 @@ quick_sort: (xs: T[]) => T[]
 A sorted copy of xs, by quicksort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `merge_sort`
@@ -2235,7 +2244,7 @@ merge_sort: (xs: T[]) => T[]
 A sorted copy of xs, by merge sort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `merge_sorted_arrays`
@@ -2247,7 +2256,7 @@ merge_sorted_arrays: (left: T[], right: T[]) => T[]
 The sorted array made of the elements of two sorted arrays of numbers.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Failure: fault `OperandTypeUnsupported` when the elements are not i32, i64, f32 or f64.
 - Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
 
 ### Rearranging

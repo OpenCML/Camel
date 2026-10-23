@@ -1,0 +1,64 @@
+id = "modules.stdlib_reduced"
+order = 376
+tier = "fast"
+tags = ["feat", "modules", "stdlib", "types", "tensor"]
+desc = "The standard library knows the two reduced-precision element types (handover H238, design principles 7.3): `is_float` names bf16 and f16 once, `is_numeric` and `is_ordered` inherit them, so a declaration guarded by either is applicable for them instead of being quietly excluded with WhenConditionUnmet. A function that would compute with an element value is refused where the computation is written, naming the instance and the element type; a tensor reduction computes, accumulating in a wider type and rounding once into the two-byte element type."
+
+# The predicates: the element types belong to the float family, and the composed predicates follow.
+
+[[tests]]
+name = "reduced_predicates"
+desc = "`is_float`, `is_numeric` and `is_ordered` answer true for bf16 and f16, and a generic function guarded by `is_numeric::<T>()` and one guarded by `is_ordered::<T>()` both accept an array of them. Before this change `is_float::<bf16>()` was false, `is_numeric::<bf16>()` was false, and both guarded calls failed with WhenConditionUnmet — the element types were excluded from every numeric declaration by silence."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/reduced_predicates.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "float\nfloat\nnumeric\nnumeric\nordered\nordered\n0\n0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 6000
+
+# The first refusal by name: an array reduction over bf16 cannot be computed, and says so.
+
+[[tests]]
+name = "reduced_sum_refused"
+desc = "`array::sum` over a `bf16[]` now passes its `when is_numeric::<T>()` and is refused at the addition it writes: SemanticDiag::ReducedPrecisionUnsupported names `operator +` and the element type bf16, and the instance note names `sum<bf16>`. With `is_numeric::<bf16>()` still false the call stopped earlier, at WhenConditionUnmet, so this case fails if the predicate change is undone."
+kind = "negative"
+case = "../../../cases/modules/stdlib/reduced_sum_refused.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReducedPrecisionUnsupported"
+expect_output_contains = ["The call of 'operator +' cannot take a value of the reduced-precision element type 'bf16'.", "in the instance 'sum<bf16>'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+# A reduction over a bf16 tensor computes: wider accumulator, one rounding, two bytes per element.
+
+[[tests]]
+name = "reduced_reduction_bytes"
+desc = "A `sum` over a Tensor<bf16> of shape [2, 3] along axis 1 gives two elements in four bytes: row [2^24, 1, -2^24] answers bf16 1.0 (0x3F80, bytes [128, 63]) because the accumulator is wider than f32 (an f32 accumulator answers 0), and row [3, 2^-7, 0] rounds the halfway 3.0078125 once, with ties to even, to bf16 3.0 (0x4040, bytes [64, 64])."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/reduced_reduction_bytes.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "4\n[128, 63, 64, 64]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# The array sequence functions that are not reductions: the sorts order four element types and
+# refuse a reduced one at run time, naming the function, the element type and the set it orders.
+
+[[tests]]
+name = "reduced_sort_refused"
+desc = "`sort` over an `f16[]` is refused at run time by the ordering kernel: RuntimeDiag::OperandTypeUnsupported names the algorithm and `f16[]`, and the supported set is written as the four element types the kernel orders, not as `numbers` — bf16 and f16 are numbers, so the old wording claimed to take what it refuses."
+kind = "negative"
+case = "../../../cases/modules/stdlib/reduced_sort_refused.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::OperandTypeUnsupported"
+expect_output_contains = ["does not support a value of type 'f16[]'", "an array of i32, i64, f32 or f64 values"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

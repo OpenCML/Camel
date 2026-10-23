@@ -1485,6 +1485,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ReducedPrecisionUnsupported,
+            {
+                "ReducedPrecisionUnsupported",
+                "The call of '{0}' cannot take a value of the reduced-precision element type '{1}'.",
+                "bf16 and f16 are stored element types: the language has no bf16 or f16 literal, scalar operator or conversion, so a function that would add, compare or otherwise use one cannot compute with it. A bf16 or f16 tensor is computed by the tensor module, which widens every element to f32 and rounds once when it stores the result (design principles 7.3, H238); cast reads it back into f32 or f64 exactly. Write the reduction, comparison or arithmetic on the tensor, or on a value of a type that has the operation.",
+            },
+        },
+        {
             SemanticDiag::VarParamInAsyncFunction,
             {
                 "VarParamInAsyncFunction",

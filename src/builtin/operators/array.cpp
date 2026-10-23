@@ -98,7 +98,7 @@ slot_t __array_argsort__(ArgsView &, ArgsView &norm, Context &) {
             RuntimeDiag::OperandTypeUnsupported,
             "array.argsort",
             typeCodeToString(code) + "[]",
-            "an array of numbers, strings or bools");
+            "an array of i32, i64, f32, f64, bool or string values");
     }
     Array *result = Array::create(mm::autoSpace(), ArrayType::create(Type::Int64()), n);
     for (size_t i = 0; i < n; ++i)
@@ -318,7 +318,7 @@ __doSortWithTypeCode__(Array *arr, const ArrayType *arrType, bool inPlace, std::
             RuntimeDiag::OperandTypeUnsupported,
             std::string(fname),
             typeCodeToString(code) + "[]",
-            "an array of numbers");
+            "an array of i32, i64, f32 or f64 values");
     }
     return result;
 }
@@ -393,7 +393,7 @@ slot_t __array_merge_sorted_arrays__(ArgsView &, ArgsView &norm, Context &) {
             RuntimeDiag::OperandTypeUnsupported,
             "array.merge_sorted_arrays",
             typeCodeToString(code) + "[]",
-            "two arrays of numbers");
+            "two arrays of i32, i64, f32 or f64 values");
     }
     return toSlot(merged);
 }
