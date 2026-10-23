@@ -14,8 +14,11 @@
  *   * no parameter declaration written as a string literal
  *     (`"safe_fp: bool = false, ..."`) outside `stdlib/`, where the declaration belongs;
  *   * every pass declared in `stdlib/std.cml` has exactly one kernel registered with
- *     `registerCoreKernel`, and every kernel is declared; the count is pinned so a pass that
- *     exists only in C++ fails here;
+ *     `registerCoreKernel`, and every kernel is declared: a bijection, stated as such rather than
+ *     as a count. A count moves with every pass the language gains while the property it was
+ *     meant to guard does not, which is why the ruling that wrote the declarations down asks for
+ *     the relation and not the number; what the two sets must not be is empty, and that lower
+ *     bound is asserted so a run that examined nothing fails here instead of passing.
  *   * every pass a module contributes is a pass-shaped declaration in `stdlib/<module>.cml`
  *     (`when is_function::<F>()`), and every declaration has a registration;
  *   * every alias resolves: a core alias names a declared pass, and a module alias names a pass
@@ -23,7 +26,9 @@
  *   * every C++ parameter list left is a test-only pass or the Camel pass whose declaration is
  *     its own `with` list; the list is pinned, so a new one cannot appear quietly.
  *
- *   node test/tools/check-pass-declarations.mjs
+ *   node test/tools/check-pass-declarations.mjs           check the declarations, kernels and aliases
+ *   node test/tools/check-pass-declarations.mjs --names   print the declared pass names, one per
+ *                                                         line, and decide nothing
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -127,23 +132,51 @@ const implementations = []
         implementations.push(match[1])
     }
 }
-const DECLARED_COUNT = 54
-if (declarations.length !== DECLARED_COUNT) {
+// The property is the bijection below: every declaration has one kernel and every kernel one
+// declaration. Two counts could only restate it, and a count of how many passes the language has
+// moves whenever a pass is added while the relation does not. What must not happen is a set that
+// came out empty — a parse that stopped matching would satisfy "every X is a Y" and a bijection
+// between two empty sets — so the populations are asserted non-empty here, and the run that
+// examined zero passes fails instead of reporting a pass.
+if (declarations.length === 0 || implementations.length === 0) {
     problems.push(
-        `stdlib/std.cml declares ${declarations.length} passes; the language declares ` +
-            `${DECLARED_COUNT}. A pass was added or removed without moving the count and the ` +
-            `guard with it.`
+        `the bijection was checked over ${declarations.length} declaration(s) and ` +
+            `${implementations.length} kernel(s): one side is empty, so nothing was compared`
     )
 }
 for (const name of declarations) {
-    if (!implementations.includes(name)) {
-        problems.push(`stdlib/std.cml declares '${name}' and no kernel implements it`)
+    if (implementations.filter((kernel) => kernel === name).length !== 1) {
+        const found = implementations.filter((kernel) => kernel === name).length
+        problems.push(
+            found === 0
+                ? `stdlib/std.cml declares '${name}' and no kernel implements it`
+                : `stdlib/std.cml declares '${name}' and ${found} kernels implement it`
+        )
     }
 }
 for (const name of implementations) {
-    if (!declarations.includes(name)) {
-        problems.push(`src/execute/pass.cpp implements '${name}' and no declaration names it`)
+    if (declarations.filter((declared) => declared === name).length !== 1) {
+        const found = declarations.filter((declared) => declared === name).length
+        problems.push(
+            found === 0
+                ? `src/execute/pass.cpp implements '${name}' and no declaration names it`
+                : `src/execute/pass.cpp implements '${name}' ${found} times`
+        )
     }
+}
+
+// The declared names, as the pipeline writes them (`std::`, and the declaration's namespaces
+// below it), for a check that compares a listing of the pipeline against them rather than against
+// a number: `--names` prints the set and decides nothing. A broken declaration set still fails
+// the mode, so the names a check reads are never a guess.
+if (process.argv.includes('--names')) {
+    if (problems.length > 0) {
+        for (const problem of problems) console.log(`FAIL ${problem}`)
+        console.log(`FAIL the declarations are not settled: ${problems.length} problem(s)`)
+        process.exit(1)
+    }
+    console.log(declarations.map((name) => `std::${name}`).sort().join('\n'))
+    process.exit(0)
 }
 
 // (4) A module's pass is a declaration in the module's `.cml` file, and every registration has
@@ -308,7 +341,9 @@ if (problems.length > 0) {
     process.exit(1)
 }
 console.log(
-    `PASS passes are declarations: ${declarations.length} in the core, ` +
-        `${moduleDeclarations.size} contributed by modules, each with one kernel, ` +
-        `${aliasCount} aliases resolved, no C++ pass registry and no parameter string`
+    `PASS passes are declarations: ${declarations.length} core declaration(s) and ` +
+        `${implementations.length} kernel(s), a bijection (each declared pass exactly one kernel ` +
+        `and each kernel exactly one declaration), ${moduleDeclarations.size} contributed by ` +
+        `modules, each with one registration, ${aliasCount} aliases resolved, no C++ pass ` +
+        `registry and no parameter string`
 )

@@ -323,31 +323,47 @@ expect_output_contains = ["std::opt", "growth_budget: int = 4096"]
 
 [[tests]]
 name = "declaration.guard_script"
-desc = "The pass declarations are the only registry: the guard refuses `registerPass`, a parameter string in C++, a pass that exists on one side only, a module pass with no declaration, and an alias that names no declaration; it lists every alias as resolved."
+desc = "The pass declarations are the only registry: the guard refuses `registerPass`, a parameter string in C++, a pass that exists on one side only, a module pass with no declaration, and an alias that names no declaration; it asserts the declarations and the kernels are a bijection, and lists every alias as resolved. The population is a lower bound here, not a count: a new pass moves no line of this test."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-pass-declarations.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["54 in the core", "contributed by modules", "aliases resolved", "no C++ pass registry"]
+expect_stdout_contains = ["declaration(s)", "kernel(s)", "a bijection", "contributed by modules", "aliases resolved", "no C++ pass registry"]
 timeout_ms = 60000
 
 [[tests]]
 name = "declaration.every_declaration_lists"
-desc = "The pipeline reads the standard library's declarations by module and name: the listing of an unknown pass is every declaration, all 54 of them, with the parameters and defaults they write."
+desc = "The pipeline reads the standard library's declarations by module and name, and the listing of an unknown pass is exactly that set: every declaration `check-pass-declarations.mjs --names` reads, with its parameters and defaults, and nothing else. The relation, not a count, is the assertion: a pass added to the standard library appears here without a line of this test moving, and a listing that drops or invents a pass fails."
 args = ["${case}", "std::zzz_unknown"]
 expect_exit = 1
-verify_script = '''
-({input,assert})=>{
- const err = input.normalized.stderr;
- assert(err.includes("Pass <std::zzz_unknown> not found, available passes are:"), "missing the listing header");
- const names = err.split(/\r?\n/).filter((line) => /^  std::[A-Za-z_][A-Za-z0-9_:]*$/.test(line));
- assert(names.length === 54, 'the listing has ' + names.length + ' declarations, not 54');
- for (const name of ['std::opt', 'std::fvm', 'std::nvm', 'std::opt::small', 'std::fastvm::jit_asm']) {
-  assert(names.includes('  ' + name), 'the listing omits ' + name);
- }
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const child = await import('child_process')
+const err = input.normalized.stderr
+assert(err.includes('Pass <std::zzz_unknown> not found, available passes are:'), 'missing the listing header')
+const names = err.split(/\r?\n/).filter((line) => /^  std::[A-Za-z_][A-Za-z0-9_:]*$/.test(line)).map((line) => line.trim())
+// The declaration set is read from the one place that owns it, in the mode that prints it and
+// decides nothing. A guard that cannot state its own declarations fails here instead of the
+// listing being compared against a number this test would have to keep moving.
+const guard = path.join(input.repo_root, 'test', 'tools', 'check-pass-declarations.mjs')
+assert(fs.existsSync(guard), 'the declaration guard is not where this test reads it: ' + guard)
+const run = child.spawnSync(process.execPath, [guard, '--names'], { cwd: input.repo_root, encoding: 'utf8' })
+assert(run.status === 0, 'check-pass-declarations.mjs --names failed: ' + ((run.stderr || '').trim() || 'exit ' + run.status))
+const declared = (run.stdout || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+// The bound is a lower bound, so a run that read no declaration cannot pass by listing nothing.
+assert(declared.length >= 20, 'the standard library declares only ' + declared.length + ' pass(es): the declaration set was not read')
+assert(names.length === declared.length, 'the listing has ' + names.length + ' entries and stdlib/std.cml declares ' + declared.length)
+for (const name of declared) {
+    assert(names.includes(name), 'the listing omits the declared pass ' + name)
 }
-'''
+for (const name of names) {
+    assert(declared.includes(name), 'the listing invents a pass no declaration names: ' + name)
+}
+}
+"""
 
 [[tests]]
 name = "declaration.missing_is_named"
@@ -361,12 +377,53 @@ expect_stdout_contains = ["pass declarations missing: PASS"]
 timeout_ms = 60000
 
 [[tests]]
+name = "docs.walk_recipe"
+desc = "The guard's walk is a property, not a list of names: the recipe plants one page inside a tree a run writes and the same page outside it, and requires the walk to count only the second. The planted tree is a temporary directory, so nothing of this checkout is written, and a skip narrower or wider than the runner's own answer (`isRunnerOutput`) fails here by name."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-doc-pass-forms.mjs"
+args = ["${case}", "--selftest"]
+expect_exit = 0
+expect_stdout_contains = ["the walk counted 1 of the 2", "the planted tree is gone"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.planted_page_is_red"
+desc = "The guard is not vacuous: a page the guard itself plants, carrying a spelling the command line refuses, turns it red and the red names the page. The plant is asked for by `CAMEL_DOC_FORM_PLANT_PAGE` and happens in the guard's own process, so the page is read by the ordinary page rule; it is removed however the run ends."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-doc-pass-forms.mjs"
+args = ["${case}"]
+envs = ["CAMEL_DOC_FORM_PLANT_PAGE=camel forward.cml std::opt(safe_fp=true)"]
+# The planted page is a file outside `${test_tmp}` that the other tests of this plan read:
+# `parallel = false` is the rule for sharing something outside the scratch, and without it a
+# neighbour could meet the planted page mid-walk.
+parallel = false
+expect_exit = 1
+expect_stdout_contains = ["planted-page-", "a pass name followed by '(' is the removed form", "the command line refuses"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.planted_page_passes_the_page_rule"
+desc = "The other side of the same mechanism: the same plant carrying a spelling the parser takes is read as an ordinary page and moves no verdict. It is the control for `docs.planted_page_is_red` — the plant is a page, not a special case, so a guard that excused everything planted would fail there."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-doc-pass-forms.mjs"
+args = ["${case}"]
+envs = ["CAMEL_DOC_FORM_PLANT_PAGE=camel forward.cml std::fvm"]
+# Same reason as the test above: the plant is a file this plan's neighbours would read.
+parallel = false
+expect_exit = 0
+expect_stdout_contains = ["doc pass forms:", "accepted by the real parser"]
+timeout_ms = 60000
+
+[[tests]]
 name = "docs.word_form_only"
-desc = "A page cannot teach a spelling the command line refuses. The guard reads every pass invocation the pages show the way the command line reads it (`splitPassList`, `groupPassWords` and `parseSpec`), and runs each distinct specification through the real parser followed by a pass name no build registers, so a spelling the parser rejects is refused before anything runs. Several specifications may share one invocation: the pipeline is resolved, and refused, before the first pass runs, so a batch whose refusal names the probe proves every specification in it, and any other batch is then decided one specification at a time. It prints the number of invocations it checked: that number is pinned here, so a rule that stops matching pages is red rather than silent. A page that adds or removes an invocation updates the pin. Two changes moved these counts in opposite directions, and both are in the numbers below: the route page dropped the deleted `std::tiles` (38 distinct to 37, and 36 of them reached the probe), and a `string` pass parameter now takes the word as written, which took `onnx::export out=model.onnx` back to the probe (36 to 37) and retired the two design-principles exemptions that excused that sentence (5 excused lines to 3). The guard walks the repository, so it must not walk the runner's own output: it did, and spent 76 s against a 75 s bound there, which the runner's 4x margin reads as a wall of 75 s — the bound was measuring the walk (51 GB of run records), not the test. Skipping those trees takes it to 0.96 s here, so the bound is 30 s: an order of magnitude of room for a larger tree or a slower host, and a wall of 7.5 s after the margin. The saturation pass and the one invocation that shows it (in `docs/cli.md` and in the pass's declaration) add four invocations of the same two specifications and one distinct specification, all of them reaching the probe: 246 to 250 invocations, 37 to 38 distinct."
+desc = "The property, not a count: every pass invocation the documentation shows is accepted by the command line. The guard reads each one the way the command line reads it (`splitPassList`, `groupPassWords`, `parseSpec`), runs every distinct specification through the real parser followed by a pass name no build registers, and refuses the run when any of them is rejected before it runs — so this test is red the moment a page teaches a spelling the parser does not take, whatever the population is. Several specifications may share one invocation: the pipeline is resolved, and refused, before the first pass runs, so a batch whose refusal names the probe proves every specification in it, and any other batch is decided one specification at a time. What makes the coverage real is stated by the guard itself and checked here: it walked pages it names (458 measured on this tree), it found invocations, and every distinct specification reached the probe. It also proves it is not vacuous from the other side: `docs.walk_recipe` plants a page inside a tree a run writes and the same page outside it, and `docs.planted_page_is_red` plants a page with a removed spelling and requires the red to name it, and `docs.planted_page_passes_the_page_rule` is its control. Not scanned, by design: `changes.log`, `docs/handover/`, the two generated pages, and a plan's own `desc` (its label, not a page). The count the guard prints is a measurement of the pages — 249 invocations and 38 distinct specifications here, each accepted by the real parser, with one invocation observed in a plan's label and not counted — and it is not an assertion of this test: a page added or removed under the ruling this change follows moves no line here. The guard walks the repository, so it must not walk the runner's own output: it did, and spent 76 s against a 75 s bound there, which the runner's 4x margin reads as a wall of 75 s — the bound was measuring the walk (51 GB of run records), not the test. Skipping the trees a run writes takes it to about 1 s here, so the bound is 30 s: an order of magnitude of room for a larger tree or a slower host, and a wall of 7.5 s after the margin."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-doc-pass-forms.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["doc pass forms: 250 pass invocation(s)", "38 distinct", "38 run through the real parser", "38 of them reached the probe"]
+expect_stdout_contains = ["doc pass forms:", "pass invocation(s) in", "page(s),", "accepted by the real parser", "plan's own desc are reported and not counted", "excused", "parser invocation(s) for"]
 timeout_ms = 30000
