@@ -1,0 +1,65 @@
+/**
+ * The library half of the pass cases of `#impl` (design principles 10.4). Every function here
+ * keeps its Camel body as the semantics and names a real native kernel of the standard library:
+ *
+ *   - `total`: the kernel is `tensor:sum` (`sum_kernel`), and the body is the argument itself,
+ *     so the two paths run different operators over the same input (the kernel's `ReduceSum`
+ *     against a reshape) and must still print the same value;
+ *   - `average`: the kernel is `tensor:mean` (`mean_kernel`) and the body calls `mean` on the
+ *     same argument. Both paths run the same operator here; the case exists to show that the tag
+ *     does not change which kernel runs, and the profile counts it once per call;
+ *   - `scale`: the kernel is `:op/mul_d` (`mul_kernel`) and the body multiplies by 2.0/2.0. The
+ *     two agree for the exact binary values of the cases, while the expression is not the
+ *     kernel's operator: a pass that reads the kernel and one that reads the body see different
+ *     graphs;
+ *   - `plus`: the kernel is the integer `:op/add_l` (`add_kernel`), whose body is `a - (0 - b)`;
+ *   - `curve`: the kernel is `math:sqrt` (`sqrt_kernel`, a kernel of a loaded module) and its
+ *     body is `x * x`. The two mean different functions, so `grad` of the two differs: that is
+ *     how a case shows the reverse pass read the kernel and not the body.
+ *
+ * A direct call is one OPER of the kernel; the body is reached only through the function value,
+ * which is the expansion every consumer that must look inside reads.
+ */
+module impl_pass_lib
+
+import { Tensor, mean, reshape } from tensor
+
+#op<'tensor:sum'>
+func sum_kernel(t: Tensor): Tensor
+
+#impl<sum_kernel>
+export func total(t: Tensor): Tensor {
+    return reshape(t, [4])
+}
+
+#op<'tensor:mean'>
+func mean_kernel(t: Tensor): Tensor
+
+#impl<mean_kernel>
+export func average(t: Tensor): Tensor {
+    return mean(t)
+}
+
+#op<':op/mul_d'>
+func mul_kernel(a: float, b: float): float
+
+#impl<mul_kernel>
+export func scale(a: float, b: float): float {
+    return (a * 2.0) / 2.0
+}
+
+#op<':op/add_l'>
+func add_kernel(a: int, b: int): int
+
+#impl<add_kernel>
+export func plus(a: int, b: int): int {
+    return a - (0 - b)
+}
+
+#op<'math:sqrt'>
+func sqrt_kernel(x: float): float
+
+#impl<sqrt_kernel>
+export func curve(x: float): float {
+    return x * x
+}

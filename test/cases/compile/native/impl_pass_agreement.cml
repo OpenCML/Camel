@@ -1,0 +1,36 @@
+/**
+ * The agreement case over real kernels: `impl_pass_lib` tags `total` (`tensor:sum`), `average`
+ * (`tensor:mean`) and `scale` (`:op/mul_d`), and this program takes both paths of each one — the
+ * direct call (one OPER of the kernel) and the call through the function value (the Camel body
+ * graph). Every pair takes the same inputs and must print the same value.
+ *
+ * `total`'s two paths run different operators (the kernel `tensor:sum` against the body's
+ * reshape), `average`'s run the same one, and `scale`'s run `:op/mul_d` against
+ * `:op/mul_d`/`:op/div_d`: a `diff` of zero for all three is the agreement, and the magnitudes
+ * show that each side is the value its own path computes. `impl_pass_disagreement.cml` is the same
+ * shape with a deliberately wrong kernel, so zero cannot come from printing a pair that never ran.
+ */
+module impl_pass_agreement
+
+import { Tensor, reshape } from tensor
+import { average, scale, total } from impl_pass_lib
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+
+    let by_body_total = total
+    let by_body_average = average
+    let by_body_scale = scale
+
+    let kt = total(x)
+    let bt = by_body_total(x)
+    let ka = average(x)
+    let ba = by_body_average(x)
+    let ks = scale(2.0, 3.0)
+    let bs = by_body_scale(2.0, 3.0)
+
+    'total kernel={} body={} diff={}'->format<kt, bt, kt - bt>->println
+    'average kernel={} body={} diff={}'->format<ka, ba, ka - ba>->println
+    'scale kernel={} body={} diff={}'->format<ks, bs, ks - bs>->println
+    return 0
+}

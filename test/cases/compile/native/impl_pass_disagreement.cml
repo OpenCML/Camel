@@ -1,0 +1,49 @@
+/**
+ * The same shape as `impl_pass_agreement.cml`, with the tag naming a deliberately wrong kernel:
+ * `wrong` says `a + b` and names `:op/sub_l`, `sign` says `x * x` and names `math:sqrt`.
+ *
+ * A direct call takes the kernel and a call through the function value takes the body, so the two
+ * paths disagree by 39 and by 38 (at x = 4.0, sqrt is 2.0 and x*x is 16.0). This is the
+ * observation that makes the agreement case a check rather than a tautology: a compiler that ran
+ * the body for a direct call would print equal pairs here.
+ */
+module impl_pass_disagreement
+
+import { grad } from autodiff
+
+#op<':op/sub_l'>
+func sub_kernel(a: int, b: int): int
+
+#impl<sub_kernel>
+func wrong(a: int, b: int): int {
+    return a + b
+}
+
+#op<'math:sqrt'>
+func sqrt_kernel(x: float): float
+
+#impl<sqrt_kernel>
+func sign(x: float): float {
+    return x * x
+}
+
+with <x: float>
+func via_body(): float {
+    return x * x
+}
+
+func main(): int sync {
+    let by_body_wrong = wrong
+    let k = wrong(19, 23)
+    let b = by_body_wrong(19, 23)
+
+    // The reverse pass reaches both paths of the tagged function: the direct call of `sign` is
+    // the `math:sqrt` operator, whose registered rule is used, while the same body reached
+    // through the function value is `x * x`. Two different functions, two different gradients.
+    let d_kernel = grad(sign)<4.0>()
+    let d_body = grad(via_body)<4.0>()
+
+    'wrong kernel={} body={} diff={}'->format<k, b, k - b>->println
+    'grad kernel={} body={} diff={}'->format<d_kernel, d_body, d_kernel - d_body>->println
+    return 0
+}

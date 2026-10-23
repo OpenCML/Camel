@@ -1,0 +1,35 @@
+/**
+ * The fusion pass meets the same tagged function twice. `sigmoid` is the kernel of `chain`'s
+ * operator, and `chain`'s Camel body is the `1/(1+exp(-x))` form the `rules::fusion` library
+ * rewrites into `sigmoid`.
+ *
+ * This program prints, for the kernel path (a direct call of the tagged `chain`, which is one
+ * OPER of `tensor:sigmoid`) and for the body path (the same body reached through the function
+ * value, which is four operators), the value difference between the two paths, once with no
+ * rewrite and once with `rules::fusion` in front of the scheduler. The kernel path needs no
+ * rewrite — it is already the fused operator — and the body path must produce the same bits
+ * before and after the rewrite, because the rewrite's target `sigmoid` is the operator whose
+ * kernel the tagged function names.
+ *
+ * `impl_pass_fusion_wrong.cml` is the wrong-kernel observation: the same comparison with the tag
+ * naming a kernel that is not the body's meaning, so a `0.0` here is not the only thing the
+ * comparison can say.
+ */
+module impl_pass_fusion
+
+import { Tensor, exp, reshape, sigmoid, sum } from tensor
+
+#impl<sigmoid>
+func chain(x: Tensor): Tensor {
+    return 1.0 / (1.0 + exp(-x))
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -0.5] as f32[], [2])
+    let by_body = chain
+
+    let k = chain(x)
+    let b = by_body(x)
+    'fusion kernel_sum={} body_sum={} diff={}'->format<sum(k), sum(b), sum(k - b)>->println
+    return 0
+}

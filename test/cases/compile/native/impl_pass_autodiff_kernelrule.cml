@@ -1,0 +1,27 @@
+/**
+ * The negative half of the autodiff finding: the tagged function's kernel carries no derivative
+ * rule (`math:sin_d` is a body-less kernel of the math module and is not in the derivative
+ * registry), while the Camel body it stands for uses only operations that do have rules.
+ *
+ * The reverse pass differentiates the OPER of the kernel that the direct call compiled to, so it
+ * refuses and names the kernel. The semantic body is never read: expanding it would have
+ * differentiated, which is what design principles 10.4 promises for a pass that needs to look
+ * inside ("differentiation, fusion, export ... expand it on demand"). Today no production pass
+ * expands it, so the refusal below is the observable state of that promise.
+ */
+module impl_pass_autodiff_kernelrule
+
+import { grad } from autodiff
+
+#op<'math:sin_d'>
+func sin_kernel(x: float): float
+
+#impl<sin_kernel>
+func damped(x: float): float {
+    return x * 1.0 + 0.0
+}
+
+func main(): int sync {
+    println(grad(damped)<2.0>())
+    return 0
+}

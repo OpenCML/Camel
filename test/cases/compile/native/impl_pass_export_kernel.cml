@@ -1,0 +1,32 @@
+/**
+ * The export path with a kernel the ONNX backend can lower: `tensor:sum` is a real body-less
+ * kernel of the tensor module and a lowering (`ReduceSum`) exists for it.
+ *
+ * The program runs the direct call (the kernel: one OPER of `tensor:sum`) and exports the same
+ * function. The exporter walks the graph the call site is in, so what it must translate is the
+ * kernel operator, not the Camel body — and a model is only faithful if the kernel it lowers is
+ * the kernel the run executes. The case checks both: the runtime value, and the ONNX operator the
+ * model carries.
+ */
+module impl_pass_export_kernel
+
+import { Tensor, reshape, sum } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+#op<'tensor:sum'>
+func sum_kernel(t: Tensor): Tensor
+
+#impl<sum_kernel>
+func total(t: Tensor): Tensor {
+    return sum(reshape(t, [4]))
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    let k = total(x)
+    'export kernel_sum={}'->format<k>->println
+    export_model(total, x, get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

@@ -1,0 +1,30 @@
+/**
+ * The autodiff pass meets the same tagged function, once with a kernel the reverse pass can
+ * differentiate and once with a kernel it cannot, and the two make the two halves of the finding.
+ *
+ * `curve` is tagged with `math:sqrt`, a body-less kernel of the math module that carries a
+ * derivative rule, while its Camel body says `x * x`. `std::macro` expands `grad` over the call's
+ * graph, where the direct call of `curve` is one OPER of `math:sqrt`: the kernel's rule gives
+ * 1/(2*sqrt(4.0)) = 0.25, and the same body reached through the function value gives 8.0. The two
+ * paths of one tagged function compute two functions, and each gradient is the gradient of the
+ * path that ran — the reverse pass reads the kernel, never the semantic body.
+ *
+ * `total` is tagged with `tensor:sum`, whose rule exists too; the refusal half of the finding is
+ * in `impl_pass_autodiff_kernelrule.cml`, where the kernel has no rule at all.
+ */
+module impl_pass_autodiff
+
+import { grad } from autodiff
+import { curve } from impl_pass_lib
+
+with <x: float>
+func via_body(): float {
+    return x * x
+}
+
+func main(): int sync {
+    let d_kernel = grad(curve)<4.0>()
+    let d_body = grad(via_body)<4.0>()
+    'grad kernel={} body={} diff={}'->format<d_kernel, d_body, d_kernel - d_body>->println
+    return 0
+}

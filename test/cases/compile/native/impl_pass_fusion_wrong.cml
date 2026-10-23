@@ -1,0 +1,31 @@
+/**
+ * The wrong-kernel observation for the fusion case: `chain` still says `1/(1+exp(-x))`, but the
+ * tag names `tensor:neg` as the kernel, so the direct call is one OPER of `tensor:neg` and the
+ * call through the function value is the body's four operators. With `rules::fusion` in front of
+ * the scheduler the body path is rewritten into `tensor:sigmoid` — the rule fires on the body,
+ * and the kernel path is untouched because it is one operator the rule's left side does not spell.
+ *
+ * The two paths must disagree (the kernel negates, the body computes a sigmoid), which is what
+ * the agreement case's `diff=0.0` is measured against.
+ */
+module impl_pass_fusion_wrong
+
+import { Tensor, exp, reshape, sum } from tensor
+
+#op<'tensor:neg'>
+func neg_kernel(t: Tensor): Tensor
+
+#impl<neg_kernel>
+func chain(x: Tensor): Tensor {
+    return 1.0 / (1.0 + exp(-x))
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -0.5] as f32[], [2])
+    let by_body = chain
+
+    let k = chain(x)
+    let b = by_body(x)
+    'fusion kernel_sum={} body_sum={} diff={}'->format<sum(k), sum(b), sum(k - b)>->println
+    return 0
+}
