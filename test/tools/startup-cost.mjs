@@ -56,9 +56,10 @@
 // The structural assertion is checked on every round: each (phase, module) among the pinned phases
 // appears exactly once, and a pair that appears twice names itself. The absolute total is the
 // declaration modules' parse + GCT + declare work of one run in milliseconds -- the number H177
-// ($5.3) proposed gating after the share stopped moving with the declaration path. The 30% share of
-// the compile work is deleted, not commented out: it was the load-invariant half of a pair whose
-// other half was the wall clock, and with CPU time there is nothing left for it to excuse.
+// ($5.3 of handover note ⟨83d6558⟩, which records the wall-clock ceilings and the 30% share this
+// ruling retired) proposed gating after the share stopped moving with the declaration path. The 30%
+// share of the compile work is deleted, not commented out: it was the load-invariant half of a pair
+// whose other half was the wall clock, and with CPU time there is nothing left for it to excuse.
 //
 // Why this measurement is CPU too, and not the wall time the report had carried since H152: the wall
 // clock of those same phases read 21 us per declaration on H177's quiet host and 75-104 us in the

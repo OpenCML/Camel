@@ -31,7 +31,8 @@
 # first two on the first sample. The wall-clock ceilings they replace were 40/45/100/90 ms and read
 # 13.0 ms for `--version`, which compiles nothing, at load 106-130 on 2026-10-23 -- the reading the
 # ruling answered. The older numbers and their spread are in handover notes ⟨c49da87⟩ (H142) and
-# ⟨83d6558⟩ (H177).
+# ⟨83d6558⟩ (H177); H177's note states the wall-clock ceilings and the 30% share this ruling
+# replaced, and stands as the record of that unit.
 #
 # `declarations=` is how many declarations the run compiles; it is printed for the record and moves
 # whenever a module is migrated. It is not asserted: the per-declaration ceiling and the absolute
@@ -54,7 +55,7 @@
 # busiest median measured here). The 30% share of the compile work is deleted, not commented out: it
 # was the load-invariant half of a pair whose other half was the wall clock, and with CPU time there
 # is nothing left for it to excuse. Its numbers stay in handover note ⟨83d6558⟩ (H177) and
-# docs/technical/50_pyplot_cpython_init.md §4.3 as the record of the口径 it belonged to.
+# docs/technical/50_pyplot_cpython_init.md §4.3 as the record of the unit and rule it belonged to.
 #
 # That measurement is CPU for the same reason as the four ceilings: the wall clock of those same
 # phases read 21 us per declaration on H177's quiet host and 75-104 us at load 106-112 on 2026-10-23,
