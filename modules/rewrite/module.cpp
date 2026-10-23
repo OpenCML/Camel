@@ -145,10 +145,15 @@ struct WhenCall {
 /// parameters of the `const` ones, which `node_of(c)` was rewritten to at build time (the ruling
 /// of 2026-10-23 on `rule_when_const_node`); a `const` parameter reaches its node only through
 /// them. A parameter the left side does not use names no node and faults when it is read.
-bool callWhen(const WhenCall &call, const RuleObject &rule, const camel::runtime::Match &match) {
-    const size_t arity = static_cast<size_t>(rule.when()->graph()->funcType()->normTypesCount());
-    const size_t own   = static_cast<size_t>(rule.lhs()->graph()->normPorts().size());
-    const uint64_t constParams = rule.constParams();
+bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
+    // The rule is read from the rooted handle, and the errors below read it again from there: a
+    // condition is Camel code, so making the argument handles below collects, and a RuleObject the
+    // engine held by address across one of those safepoints would be stale. The closure that calls
+    // this holds only the WhenCall, whose RootHandle the collector keeps up to date.
+    const RuleObject *rule = call.rule->getAs<RuleObject>();
+    const size_t arity = static_cast<size_t>(rule->when()->graph()->funcType()->normTypesCount());
+    const size_t own   = static_cast<size_t>(rule->lhs()->graph()->normPorts().size());
+    const uint64_t constParams = rule->constParams();
     camel::runtime::GraphDraft &draft = match.writings.draft();
     // One slot per parameter: a rooted Node handle for a node parameter, a rooted object for a
     // constant the collector can move, and nothing for a constant whose bits are copied below.
@@ -185,7 +190,7 @@ bool callWhen(const WhenCall &call, const RuleObject &rule, const camel::runtime
                     throw std::runtime_error(std::format(
                         "Rule '{}': parameter {} of its condition is `const`, and the left side "
                         "bound no constant there.",
-                        rule.name(),
+                        call.rule->getAs<RuleObject>()->name(),
                         i + 1));
                 }
                 roots.push_back(
@@ -217,7 +222,7 @@ bool callWhen(const WhenCall &call, const RuleObject &rule, const camel::runtime
             throw camel::runtime::RuleCompileError(std::format(
                 "Rule '{}': parameter {} of its condition is the node of a `const` parameter "
                 "(`node_of`), but the left side binds no node for it.",
-                rule.name(),
+                call.rule->getAs<RuleObject>()->name(),
                 i + 1));
         }
         const camel::runtime::gc_node_ref_t bound = match.vars[constParam];
@@ -225,7 +230,7 @@ bool callWhen(const WhenCall &call, const RuleObject &rule, const camel::runtime
             throw camel::runtime::RuleCompileError(std::format(
                 "Rule '{}': parameter {} of its condition is the node of a `const` parameter "
                 "(`node_of`), and the left side bound no node there.",
-                rule.name(),
+                call.rule->getAs<RuleObject>()->name(),
                 i + 1));
         }
         Handle *handle = Handle::createInDraft(draft, bound, mm::autoSpace());
@@ -239,7 +244,7 @@ bool callWhen(const WhenCall &call, const RuleObject &rule, const camel::runtime
     // Making a handle can collect: the arguments are read from the roots after the last one, so
     // each slot names where the collector put it, or the constant's bits.
     for (size_t i = 0; i < arity; ++i) {
-        if (i < own && i < 64 && ((rule.constParams() >> i) & 1) != 0) {
+        if (i < own && i < 64 && ((constParams >> i) & 1) != 0) {
             args.push_back(
                 roots[i] != nullptr ? toSlot(roots[i]->get()) : constantOf(i)->first);
             continue;
@@ -287,8 +292,10 @@ sourceOf(const RuleObject &rule, uint16_t id, const std::shared_ptr<WhenCall> &c
         // node parameters therefore begin where the sides' parameters end, whatever order the
         // `const` ones stand in.
         source.whenNodesStart = static_cast<uint32_t>(rule.lhs()->graph()->normPorts().size());
-        source.when = [call, &rule](const camel::runtime::Match &match) {
-            return callWhen(*call, rule, match);
+        // The closure keeps the rooted rule (`call`), never its address: the engine holds it across
+        // the safepoints of every condition the application evaluates, and the rule moves under it.
+        source.when = [call](const camel::runtime::Match &match) {
+            return callWhen(*call, match);
         };
     }
     return source;
