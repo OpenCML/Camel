@@ -103,8 +103,14 @@ void printScalar(std::ostream &os, slot_t data, const Type *type) {
     case TypeCode::Float64:
         os << camel::utils::floatText(fromSlot<Float64>(data));
         break;
-    // A bf16 or f16 prints by the float text rules of design principles 11.5, from the value
-    // its bits name (camel/core/rtdata/half.h): `0.1` is `0.1`, not its bit pattern.
+        // A bf16 or f16 prints by the float text rules of design principles 11.5, from the value
+        // its bits
+        // name (camel/core/rtdata/half.h): the element widens to f32 exactly, and the text is that
+        // f32's shortest `floatText`. So `f32(x)` and `x` print the same text for the same element,
+        // and reading the text back as bf16 gives the element again. Whether 7.7's "shortest" asks
+        // instead for the shortest text that reads back as the element type (`0.1` for bf16 0x3DCD,
+        // where this writes `0.100097656`) is with the language author:
+        // docs/handover/questions/reduced-precision-text.md.
     case TypeCode::BFloat16:
         os << camel::utils::floatText(halfToFloat<BFloat16>(data));
         break;
