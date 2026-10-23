@@ -1558,20 +1558,16 @@ DraftInlineResult inlineCallableInDraft(
     // The statements written directly after the call keep their place in the chain of the block
     // they are written in: the call is gone, so they follow what the call followed. They do not
     // follow the body's anchor instead -- that anchor is a node of the region the body was given,
-    // and a sync edge never leaves the region of its block -- and what the body ordered before them
-    // is carried as one order edge, order alone (docs/design/effects/edges.cn.md 1.5). The place in
-    // the chain, and the control edge that names the same pair beside it, are what closeChainOver
-    // writes; it runs here rather than inside eraseNode below because the users have to be known
-    // before the call's own edges go.
-    const std::vector<gc_node_ref_t> callSyncUsers(
-        draft.syncUsersOf(funcNodeId).begin(),
-        draft.syncUsersOf(funcNodeId).end());
+    // and a sync edge never leaves the region of its block. `closeChainOver` writes that place, and
+    // the control edge that names the same pair beside it; it runs here rather than inside eraseNode
+    // below because the users have to be known before the call's own edges go.
+    //
+    // What the body ordered before those statements used to be carried as one order edge into the
+    // body's anchor as well (7ca495665). It is gone: an order edge only orders something that has an
+    // order, and the following statement is a plain statement of the block, not an effect
+    // (docs/design/effects/edges.cn.md 1.5, 4.6). The ordering it named is what the body's region
+    // carries once it stands on the chain as one statement of the block.
     draft.closeChainOver(funcNodeId);
-    for (gc_node_ref_t user : callSyncUsers) {
-        if (draft.alive(user)) {
-            draft.appendOrderDependency(user, result.ctrlExit);
-        }
-    }
 
     draft.eraseNode(funcNodeId);
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice finished for draft node {}.", funcNodeId);
