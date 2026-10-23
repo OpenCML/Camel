@@ -185,9 +185,10 @@ RegionDraft extractRegion(const rt::GCGraph &source, const Region &region) {
             node->kind == rt::GCNodeKind::Oper || node->kind == rt::GCNodeKind::Loop ||
                 node->kind == rt::GCNodeKind::Accs,
             "unsupported region member");
-        require(
-            source.ctrlInputsOf(ref).empty() && source.ctrlOutputsOf(ref).empty(),
-            "control endpoint in region");
+        // A member may be a statement of its block (an operator written in an arm, or a loop
+        // written in the body). Its control edges order it and carry no value, so the extracted
+        // graph does not copy them: a region holds the code, not the place in a chain, and the
+        // call node the pass writes where the member was takes that place (plan.cn.md 2.5).
         require(
             node->kind == rt::GCNodeKind::Loop || source.withInputsOf(ref).empty(),
             "context arguments in region");

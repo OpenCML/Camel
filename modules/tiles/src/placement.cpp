@@ -267,4 +267,53 @@ std::string placementReport(const runtime::Program &program) {
     return out.str();
 }
 
+GpuScopes::GpuScopes(const runtime::Program &program) {
+    // A body tag makes the whole graph a device unit.
+    std::vector<const runtime::GCGraph *> scopes;
+    for (const runtime::GCGraph *graph : program.graphs()) {
+        if (bodyPlacementOf(*graph).placement == Placement::GpuRequired) {
+            scopeOf_.emplace(graph, graph);
+            scopes.push_back(graph);
+        }
+    }
+    // A call written in a device scope (a `#gpu` body or block) makes the callee one too, even
+    // when the code around the block is the host's: that call is still a device call.
+    const auto addCall = [&](const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
+        if (graph.node(id)->kind != runtime::GCNodeKind::Func)
+            return;
+        if (placementOf(graph, id).fact == "cpu")
+            return;
+        const runtime::GCGraph *callee = program.calleeOf(graph, id);
+        if (callee == nullptr || scopeOf_.contains(callee))
+            return;
+        const auto found = scopeOf_.find(&graph);
+        scopeOf_.emplace(callee, found == scopeOf_.end() ? &graph : found->second);
+        scopes.push_back(callee);
+    };
+    for (const runtime::GCGraph *graph : program.graphs())
+        for (runtime::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id)
+            if (placementOf(*graph, id).onDevice())
+                addCall(*graph, id);
+    // Transitive: a helper of a helper is called by the scope as well.
+    for (size_t next = 0; next < scopes.size(); ++next) {
+        const runtime::GCGraph *graph = scopes[next];
+        for (runtime::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id)
+            addCall(*graph, id);
+    }
+}
+
+bool GpuScopes::covers(const runtime::GCGraph &graph, runtime::gc_node_ref_t node) const {
+    const PlacementDecision decision = placementOf(graph, node);
+    // A fact of the node's own wins, in both directions: `#cpu` is the written way out of a
+    // scope, and a nested `#gpu` block is on the device.
+    if (decision.onDevice())
+        return true;
+    return decision.scope == PlacementScope::Default && scopeOf_.contains(&graph);
+}
+
+const runtime::GCGraph *GpuScopes::scopeOf(const runtime::GCGraph &graph) const {
+    const auto found = scopeOf_.find(&graph);
+    return found == scopeOf_.end() ? nullptr : found->second;
+}
+
 } // namespace camel::tiles

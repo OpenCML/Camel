@@ -18,11 +18,23 @@ class FactStore;
 } // namespace camel::runtime
 
 namespace camel::tiles {
+class GpuScopes;
 struct RegionNode {
+    // The value dependencies: the operands and the context arguments the node reads. These are
+    // the edges a region boundary is about, and the only ones it uploads or downloads.
     std::vector<size_t> inputs;
+    // The dependencies that only order the node in its block (its control edges). They carry no
+    // value, so a region that holds the node reads nothing through them, but they order it and
+    // keep it live exactly as any other edge does.
+    std::vector<size_t> order;
     bool eligible = false;
     bool output   = false;
     bool embedded = false; // Static values embedded into extracted functions.
+    // The control region the node runs in (`ControlRegions::controlOf`): 0 for the body, the Arm
+    // of a BRCH or a part of a LOOP otherwise. A region never spans two of them, because the code
+    // in an arm runs only when that arm is taken: each one is a segment of its own (plan.cn.md
+    // 2.5), and the node that owns it (BRCH, JOIN, LOOP) stays on the host.
+    uint32_t control = 0;
 };
 struct Region {
     std::vector<size_t> members; // In dependency order, independent of source node numbering.
@@ -59,9 +71,14 @@ struct RegionAnalysis {
     std::vector<std::string> exclusions;
     RegionTransfers transfers;
 };
+/// The regions of one graph, and why the nodes that are in none are in none. With `scopes`, a
+/// node the `#gpu` scope covers is not excluded for the control edge that orders it in its block
+/// (plan.cn.md 2.4, 2.5): the arm or the loop it is written in is where it runs, so it becomes a
+/// segment of that region. Without `scopes` — every graph outside a device scope — the analysis
+/// is the one the pass has always taken.
 RegionAnalysis analyzeRegions(
     const runtime::Program &program, const runtime::GCGraph &graph,
-    runtime::fact::FactStore &facts);
+    runtime::fact::FactStore &facts, const GpuScopes *scopes = nullptr);
 std::string loopEligibility(
     const runtime::Program &program, const runtime::GCGraph &graph, runtime::gc_node_ref_t node,
     runtime::fact::FactStore &facts);

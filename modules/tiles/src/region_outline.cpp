@@ -9,6 +9,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/runtime/control_regions.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
 #include "tiles/device.h"
@@ -88,66 +89,26 @@ const runtime::Program *outlineRegions(
     rt::RuntimeGraphDraftSession session(context.shared_from_this(), program, root);
     count             = 0;
     const auto graphs = session.collectReachableRuntimeGraphs();
+    // A `#gpu` scope promises that the device runs everything written in it, and (GPU design 2.3,
+    // 2.4) the functions it calls are part of that scope. Code written in an arm or a loop of a
+    // covered graph is that region's segment, not a reason to fall back to the host (2.5), so the
+    // scope map is built before the analysis and answers it.
+    const GpuScopes scopes(*program);
     std::unordered_map<rt::GCGraph *, RegionAnalysis> analyses;
     for (auto *graph : graphs) {
-        analyses.emplace(graph, analyzeRegions(*program, *graph, context.facts()));
-    }
-    // A `#gpu` scope promises that the device runs everything written in it, and (GPU design 2.3,
-    // 2.4) the functions it calls are part of that scope. Two answers follow, both compile-time
-    // errors and neither a host execution: an operator outside the device capability list is
-    // `GpuScopeUnsupported` (the module has no device implementation), and an operator the device
-    // compiler cannot build a program for at this use is `GpuScopeNoDeviceProgram`. The scope map
-    // names, for every graph the promise reaches, the graph whose tag made it part of the scope.
-    std::unordered_map<rt::GCGraph *, rt::GCGraph *> scopeOf;
-    if (refuseGpuScopes) {
-        std::vector<rt::GCGraph *> scopes;
-        // A body tag makes the whole graph a device unit.
-        for (auto *graph : graphs) {
-            if (bodyPlacementOf(*graph).placement == Placement::GpuRequired) {
-                scopeOf.emplace(graph, graph);
-                scopes.push_back(graph);
-            }
-        }
-        // A call written in a device scope (a `#gpu` body or block) makes the callee one too,
-        // even when the code around the block is the host's; that call is still a device call.
-        const auto addCall = [&](rt::GCGraph &graph, rt::gc_node_ref_t id) {
-            if (graph.node(id)->kind != rt::GCNodeKind::Func)
-                return;
-            if (placementOf(graph, id).fact == "cpu")
-                return;
-            auto *callee = program->calleeOf(graph, id);
-            if (!callee || scopeOf.contains(callee))
-                return;
-            const auto found = scopeOf.find(&graph);
-            scopeOf.emplace(callee, found == scopeOf.end() ? &graph : found->second);
-            scopes.push_back(callee);
-        };
-        for (auto *graph : graphs) {
-            for (rt::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
-                if (placementOf(*graph, id).onDevice())
-                    addCall(*graph, id);
-            }
-        }
-        // Transitive: a helper of a helper is called by the scope as well.
-        for (size_t next = 0; next < scopes.size(); ++next) {
-            auto *graph = scopes[next];
-            for (rt::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id)
-                addCall(*graph, id);
-        }
+        analyses.emplace(graph, analyzeRegions(*program, *graph, context.facts(), &scopes));
     }
     // Whether `id` is inside a `#gpu` scope: a device answer places it there directly, and a graph
     // the scope reaches places every node it did not explicitly tag for the host. A `#cpu` fact
     // is the host escape the design keeps, so it is never part of a device promise.
-    const auto nodeInScope =
-        [&](rt::GCGraph &graph, rt::gc_node_ref_t id, PlacementDecision &decision) {
-            decision = placementOf(graph, id);
-            if (decision.onDevice())
-                return true;
-            return decision.scope == PlacementScope::Default && scopeOf.contains(&graph);
-        };
+    const auto nodeInScope = [&](rt::GCGraph &graph, rt::gc_node_ref_t id,
+                                 PlacementDecision &decision) {
+        decision = placementOf(graph, id);
+        return scopes.covers(graph, id);
+    };
     const auto scopeNameOf = [&](rt::GCGraph &graph) {
-        const auto found = scopeOf.find(&graph);
-        return std::string((found == scopeOf.end() ? &graph : found->second)->name());
+        const auto *scope = scopes.scopeOf(graph);
+        return std::string((scope == nullptr ? &graph : scope)->name());
     };
     const auto regionInScope = [&](rt::GCGraph &graph, const Region &region) {
         if (!refuseGpuScopes)
@@ -231,9 +192,43 @@ const runtime::Program *outlineRegions(
             continue;
         auto &draft = session.edit(graph);
         std::unordered_map<size_t, rt::gc_node_ref_t> resident;
+        const rt::ControlRegions control(*graph);
+        // Where a segment runs: the control region of its members (plan.cn.md 2.5). An operator
+        // written in an arm runs only when that arm is taken, so its call, its uploads and its
+        // downloads are written there too; writing them in the body would run the untaken arm.
+        const auto whereOf = [&](const Region &region) {
+            return region.members.empty()
+                       ? 0u
+                       : control.controlOf(static_cast<rt::gc_node_ref_t>(region.members.front()));
+        };
+        // An upload is read by every region that takes that value as an input, so it is written in
+        // the innermost control region that encloses all of them: two arms of one branch share one
+        // upload in the body, because an arm may not read what another arm wrote.
+        std::unordered_map<size_t, uint32_t> uploadControl;
+        for (const auto &region : analysis.regions) {
+            const uint32_t where = whereOf(region);
+            for (auto value : region.inputs) {
+                if (std::find(
+                        analysis.transfers.uploads.begin(),
+                        analysis.transfers.uploads.end(),
+                        value) == analysis.transfers.uploads.end())
+                    continue;
+                const auto found = uploadControl.find(value);
+                if (found == uploadControl.end()) {
+                    uploadControl.emplace(value, where);
+                    continue;
+                }
+                uint32_t common = found->second;
+                while (common != 0 && !control.within(where, common))
+                    common = control.parentControl(common);
+                found->second = common;
+            }
+        }
         if (device) {
             for (auto value : analysis.transfers.uploads) {
                 const auto input  = static_cast<rt::gc_node_ref_t>(value);
+                const auto found  = uploadControl.find(value);
+                draft.setInsertRegion(found == uploadControl.end() ? 0 : found->second);
                 const auto upload = transferAggregate(
                     draft,
                     input,
@@ -242,6 +237,7 @@ const runtime::Program *outlineRegions(
                     device->upload,
                     device->uploadUri);
                 draft.setNodeOrigin(upload, graph->nodeOrigin(input));
+                draft.setInsertRegion(0);
                 resident.emplace(value, upload);
             }
         }
@@ -308,6 +304,9 @@ const runtime::Program *outlineRegions(
                 }
             }
             rt::gc_node_ref_t call;
+            // The call is written where its members were: in the region that holds them, so an
+            // arm's segment runs in the arm and a loop's segment runs where the loop runs.
+            draft.setInsertRegion(whereOf(region));
             if (run) {
                 const auto packed = args.size() == 1 ? args.front() : packGraphTuple(draft, args);
                 call              = draft.addOperNode(
@@ -321,6 +320,26 @@ const runtime::Program *outlineRegions(
                 draft.setNormInputs(call, args);
             }
             draft.setWithInputs(call, std::span(&fnNode, 1));
+            // The members were statements of a chain (an operator written in an arm, a loop
+            // written in the body). The call takes the place of the first of them that was the
+            // head of that chain, so the segment keeps its order against the host statements
+            // around it; erasing the members then closes the chain over it.
+            for (auto member : region.members) {
+                const auto ref   = static_cast<rt::gc_node_ref_t>(member);
+                const auto preds = graph->ctrlInputsOf(ref);
+                if (preds.empty())
+                    continue;
+                const bool head = std::none_of(
+                    preds.begin(), preds.end(), [&](rt::gc_node_ref_t pred) {
+                        return std::find(
+                                   region.members.begin(), region.members.end(),
+                                   static_cast<size_t>(pred)) != region.members.end();
+                    });
+                if (head) {
+                    draft.takeStatementPlace(ref, call);
+                    break;
+                }
+            }
             for (size_t i = 0; i < region.outputs.size(); ++i) {
                 const auto old   = static_cast<rt::gc_node_ref_t>(region.outputs[i]);
                 auto replacement = call;
@@ -355,6 +374,7 @@ const runtime::Program *outlineRegions(
                 }
                 replacements.emplace_back(old, replacement);
             }
+            draft.setInsertRegion(0);
         }
         // Host uses still refer to original IDs. Resident calls already use the
         // device map, so replacing host uses cannot route them through a download.
