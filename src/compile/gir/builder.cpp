@@ -14,6 +14,8 @@
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
+
+#include <iostream>
 #include "camel/utils/str.h"
 #include "camel/utils/type.h"
 #include "core/module/entity_internal.h"
