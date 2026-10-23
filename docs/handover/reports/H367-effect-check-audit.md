@@ -1,7 +1,19 @@
 # The anchored node: the engine's handover, and what the drop refusal actually covers
 
-Author: the H367 agent (the effect check and the anchor handover), 2026-10-24. Status: open —
-the handover half needs the coordinator's ruling; the audit half needs no decision.
+Author: the H367 agent (the effect check and the anchor handover), 2026-10-24. Status: settled —
+filed as a question, answered here from the ruling already in force, so nothing is asked of the
+language author; this file is the audit record.
+
+**The reading, decided 2026-10-24 by the coordinator under the author's ruling**
+(`rule-conditions-and-policy` item 3, `docs/handover/reviews/questions-2026-10-23.md`): the engine's
+**handover is normative** — "the engine moves the anchor onto the replacement, as the C++ pass's
+`replaceFoldResult` does" — and the C++ pass's `isReplaceable` refusal is the **reference mode's own
+restriction**, just as that ruling calls the old table's `relaxed()` policy its own deviation
+(`docs/technical/45_graph_module.md` documents the refusal as the reference mode's behaviour). So the
+two anchored corpus entries (`anchor_add`, `anchor_mul32`) **stay differences by design — 0 entries
+change sides** — and the corpus states both sides instead of calling the difference an unapplied
+check. The refusal guard was measured and rejected: it takes `rules.plan.toml` from 115/115 to
+47/115, because the rule library folds at a return node where the reference mode refuses to.
 
 The two rulings of 2026-10-23 this work reads
 (`docs/handover/reviews/questions-2026-10-23.md`):
@@ -54,11 +66,11 @@ graph's named node (the C++ pass's `isReplaceable`), while the rule engine retar
 two entries do not change sides under either reading**; what changes is whether the library reaches
 the port or the operation.
 
-The decision this leaves to the coordinator: keep the engine's handover and the corpus's two
-recorded differences (this work's reading, and the one the `rules` lane and item 3 both support),
-or apply the reference mode's refusal to the engine and update 68 `rules` entries plus the `check`
-machinery. This work does not make the second change on its own — it is a semantic change to the
-rule engine, it contradicts item 3's sentence, and 68 tests are the coordinator's budget to spend.
+**Settled, so there is nothing left to decide here**: keep the engine's handover and the corpus's two
+recorded differences. Applying the reference mode's refusal to the engine would contradict item 3's
+sentence, cost 68 `rules` entries and the `check` machinery, and make the library unable to fold a
+returned expression — it is not the reading the ruling states and not a change worth spending tests
+on. The audit below needs no decision either way.
 
 ## 2. What the drop refusal actually refuses (the audit, no decision needed)
 
@@ -103,3 +115,10 @@ an effect is "the region's result feeds an effect" is not examined on that route
 itself carries ordering (`carriesOrdering`), so the common shape is covered; a case where the branch
 is outside the dropped closure and only the region result is inside is the one shape a test would
 have to build.
+
+**Residual work, queued rather than done** (both small, neither blocking): that one region-result
+route needs a case, and the condition-by-condition cases the lane drafted
+(`test/cases/opt/effect_check/`, untracked and unused) were not landed — the audit above is proven by
+reading each refusal in `pureComputation` and by the corpus entry that pins the effect refusal
+(`algebra_rules.divergence.library_runs`, red before the check existed and green since), so the cases
+are a strengthening rather than the evidence.
