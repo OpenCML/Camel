@@ -5,10 +5,9 @@
 
 #include <concepts>
 #include <cstdint>
-#include <format>
 #include <functional>
+#include <iosfwd>
 #include <mutex>
-#include <ostream>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -16,6 +15,7 @@
 #include <vector>
 
 #include "camel/utils/debug.h"
+#include "camel/utils/log_format.h"
 
 #if defined(_WIN32) && !defined(CAMEL_DLL_EXPORTS)
 #define CAMEL_LOG_API __declspec(dllimport)
@@ -82,8 +82,8 @@ namespace camel::log {
 
 /// Runs \p fn only if a line at \p level would be emitted for \p scope. Use when the message is
 /// expensive to build (directory scans, large graphs). \p fn must return \c std::string (e.g.
-/// \c std::format inside the lambda). For plain \c std::format with cheap arguments, prefer
-/// \c CAMEL_LOG_*_S (those skip \c std::format until after \c ShouldEmit).
+/// \c camel::log::formatLog inside the lambda). For a plain \c CAMEL_LOG_*_S with cheap arguments,
+/// prefer the macro (it skips building the line until after \c ShouldEmit).
 template <typename F>
     requires std::invocable<F> && std::same_as<std::invoke_result_t<F>, std::string>
 inline void emit_lazy(LogLevel level, std::string_view scope, F &&fn) {
@@ -140,7 +140,7 @@ LogInfoPathList(std::string_view scope, F &&headline_fn, const std::vector<std::
         if (p.empty())
             continue;
         ++idx;
-        Logger::EmitLine(LogLevel::Info, scope, std::format("{:>4}. {}", idx, p));
+        Logger::EmitLine(LogLevel::Info, scope, camel::log::formatLog("{:>4}. {}", idx, p));
     }
 }
 
@@ -150,70 +150,46 @@ LogInfoPathList(std::string_view scope, F &&headline_fn, const std::vector<std::
     static constexpr const char *kCamelLogScope = (SCOPE_STR);                                     \
     }
 
-/// \c ShouldEmit is checked before \c std::format so format arguments are not evaluated when
-/// logging is disabled (or scope-filtered).
-#define CAMEL_LOG_FATAL(...)                                                                       \
-    do {                                                                                           \
-        if (!::Logger::ShouldEmit(::LogLevel::Fatal, kCamelLogScope))                              \
-            break;                                                                                 \
-        ::Logger::EmitLine(::LogLevel::Fatal, kCamelLogScope, std::format(__VA_ARGS__));           \
-    } while (0)
-#define CAMEL_LOG_WARN(...)                                                                        \
-    do {                                                                                           \
-        if (!::Logger::ShouldEmit(::LogLevel::Warn, kCamelLogScope))                               \
-            break;                                                                                 \
-        ::Logger::EmitLine(::LogLevel::Warn, kCamelLogScope, std::format(__VA_ARGS__));            \
-    } while (0)
-#define CAMEL_LOG_INFO(...)                                                                        \
-    do {                                                                                           \
-        if (!::Logger::ShouldEmit(::LogLevel::Info, kCamelLogScope))                               \
-            break;                                                                                 \
-        ::Logger::EmitLine(::LogLevel::Info, kCamelLogScope, std::format(__VA_ARGS__));            \
-    } while (0)
+/// \c ShouldEmit is checked before the line is built, so a format argument is not evaluated when
+/// logging is disabled (or scope-filtered). The macros without a scope use the one \c
+/// CAMEL_LOG_SCOPE declared.
+#define CAMEL_LOG_FATAL(...) CAMEL_LOG_FATAL_S(kCamelLogScope, __VA_ARGS__)
+#define CAMEL_LOG_WARN(...) CAMEL_LOG_WARN_S(kCamelLogScope, __VA_ARGS__)
+#define CAMEL_LOG_INFO(...) CAMEL_LOG_INFO_S(kCamelLogScope, __VA_ARGS__)
 
 #define CAMEL_LOG_FATAL_S(SCOPE, ...)                                                              \
     do {                                                                                           \
         if (!::Logger::ShouldEmit(::LogLevel::Fatal, (SCOPE)))                                     \
             break;                                                                                 \
-        ::Logger::EmitLine(::LogLevel::Fatal, (SCOPE), std::format(__VA_ARGS__));                  \
+        ::Logger::EmitLine(::LogLevel::Fatal, (SCOPE), ::camel::log::formatLog(__VA_ARGS__));      \
     } while (0)
 #define CAMEL_LOG_WARN_S(SCOPE, ...)                                                               \
     do {                                                                                           \
         if (!::Logger::ShouldEmit(::LogLevel::Warn, (SCOPE)))                                      \
             break;                                                                                 \
-        ::Logger::EmitLine(::LogLevel::Warn, (SCOPE), std::format(__VA_ARGS__));                   \
+        ::Logger::EmitLine(::LogLevel::Warn, (SCOPE), ::camel::log::formatLog(__VA_ARGS__));       \
     } while (0)
 #define CAMEL_LOG_INFO_S(SCOPE, ...)                                                               \
     do {                                                                                           \
         if (!::Logger::ShouldEmit(::LogLevel::Info, (SCOPE)))                                      \
             break;                                                                                 \
-        ::Logger::EmitLine(::LogLevel::Info, (SCOPE), std::format(__VA_ARGS__));                   \
+        ::Logger::EmitLine(::LogLevel::Info, (SCOPE), ::camel::log::formatLog(__VA_ARGS__));       \
     } while (0)
 
 #ifndef NDEBUG
-#define CAMEL_LOG_DEBUG(...)                                                                       \
-    do {                                                                                           \
-        if (!::Logger::ShouldEmit(::LogLevel::Debug, kCamelLogScope))                              \
-            break;                                                                                 \
-        ::Logger::EmitLine(::LogLevel::Debug, kCamelLogScope, std::format(__VA_ARGS__));           \
-    } while (0)
-#define CAMEL_LOG_TRACE(...)                                                                       \
-    do {                                                                                           \
-        if (!::Logger::ShouldEmit(::LogLevel::Trace, kCamelLogScope))                              \
-            break;                                                                                 \
-        ::Logger::EmitLine(::LogLevel::Trace, kCamelLogScope, std::format(__VA_ARGS__));           \
-    } while (0)
+#define CAMEL_LOG_DEBUG(...) CAMEL_LOG_DEBUG_S(kCamelLogScope, __VA_ARGS__)
+#define CAMEL_LOG_TRACE(...) CAMEL_LOG_TRACE_S(kCamelLogScope, __VA_ARGS__)
 #define CAMEL_LOG_DEBUG_S(SCOPE, ...)                                                              \
     do {                                                                                           \
         if (!::Logger::ShouldEmit(::LogLevel::Debug, (SCOPE)))                                     \
             break;                                                                                 \
-        ::Logger::EmitLine(::LogLevel::Debug, (SCOPE), std::format(__VA_ARGS__));                  \
+        ::Logger::EmitLine(::LogLevel::Debug, (SCOPE), ::camel::log::formatLog(__VA_ARGS__));      \
     } while (0)
 #define CAMEL_LOG_TRACE_S(SCOPE, ...)                                                              \
     do {                                                                                           \
         if (!::Logger::ShouldEmit(::LogLevel::Trace, (SCOPE)))                                     \
             break;                                                                                 \
-        ::Logger::EmitLine(::LogLevel::Trace, (SCOPE), std::format(__VA_ARGS__));                  \
+        ::Logger::EmitLine(::LogLevel::Trace, (SCOPE), ::camel::log::formatLog(__VA_ARGS__));      \
     } while (0)
 #else
 #define CAMEL_LOG_DEBUG(...) ((void)0)

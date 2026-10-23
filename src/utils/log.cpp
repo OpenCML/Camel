@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <iostream>
+#include <ostream>
 
 LogLevel Logger::globalThreshold_         = LogLevel::Fatal;
 LogCategoryPreset Logger::categoryPreset_ = LogCategoryPreset::None;
@@ -196,7 +197,7 @@ static std::string levelToPlain(LogLevel level) {
 
 void Logger::EmitLine(LogLevel level, std::string_view scope, const std::string &message) {
     std::string tag         = colorEnabled_ ? levelToTag(level) : levelToPlain(level);
-    std::string fullMessage = std::format("[{}] <{}> {}", tag, scope, message);
+    std::string fullMessage = camel::log::formatLog("[{}] <{}> {}", tag, scope, message);
 
     std::lock_guard<std::mutex> lock(logMutex_);
     for (const auto &e : outputStreams_) {
