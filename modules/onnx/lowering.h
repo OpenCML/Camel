@@ -68,6 +68,13 @@ class LowerContext {
     /// Camel static type of the call's result (e.g. int for :op/add_l).
     type::Type *resultType() const { return resultType_; }
 
+    /// The element type a tensor operator's arithmetic runs in: the result's when it is known,
+    /// else the first operand's, else f32 — the float element type the operators declare they
+    /// compute in, and the element type a bare `Tensor` model input is exported as. A scalar
+    /// operand takes this type (the runtime kernel's rule: a scalar meeting a tensor is computed
+    /// in the tensor's element type), so a graph never mixes a double scalar into float32 data.
+    std::optional<type::TypeCode> elementDtype() const;
+
     /// Operand name of argument `index`, converted to `dtype` when given.
     std::string input(size_t index, std::optional<type::TypeCode> dtype = std::nullopt) const;
 

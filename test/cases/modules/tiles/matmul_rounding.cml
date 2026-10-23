@@ -6,17 +6,17 @@ func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
     return a @ b
 }
 
-func ordered_term(i: int): float {
+func ordered_term(i: int): f32 {
     return if i == 0 then 16777216.0 else if i == 16 then 1.0
         else if i == 32 then -16777216.0 else if i == 33 then 1.0 else 0.0
 }
-func one(i: int): float { return 1.0 }
+func one(i: int): f32 { return 1.0 }
 
 func main(): int sync {
     // (1 + 2^-23) * (1 - 2^-23) rounds to 1 in f32 before adding -1.
     // The normative matmul FMA chain must retain the residual -2^-46.
-    let a = reshape([-1.0, 1.00000011920928955078125], [1, 2])
-    let b = reshape([1.0, 0.99999988079071044921875], [2, 1])
+    let a = reshape([-1.0, 1.00000011920928955078125] as f32[], [1, 2])
+    let b = reshape([1.0, 0.99999988079071044921875] as f32[], [2, 1])
     println(sum(download(run_preferred_resident<product>((a, b)))))
     // A continuous chain across two tile boundaries returns 1; independently
     // accumulated panels return 2. K=34 also exercises the masked final tile.

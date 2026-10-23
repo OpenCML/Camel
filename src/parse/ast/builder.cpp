@@ -796,9 +796,9 @@ Value Builder::visitFuncAnno(cst::FuncAnno context) {
     node_ptr_t annoNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
     setNodeTokenRangeByContext(annoNode, context);
     *annoNode << createNodeAs<RefDataLoad>(ref);
-    auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+    const ArgumentValues values = value_cast<ArgumentValues>(
         visitAngledValues(context->get<cst::AngledValues>()));
-    *annoNode << dataList << namedDataList;
+    *annoNode << values.data << values.named;
 
     LEAVE("FuncAnno");
     return annoNode;
@@ -1564,16 +1564,15 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
                 uses.push_back(use);
                 continue;
             }
-            auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
-                visitAngledValues(values));
-            if (namedDataList && namedDataList->size() > 0) {
+            const ArgumentValues args = value_cast<ArgumentValues>(visitAngledValues(values));
+            if (args.named && args.named->size() > 0) {
                 // A tag takes positional arguments only: it names its parameters where it is
                 // declared, and the pass that reads the tag matches them by position.
                 diags_->of(SemanticDiag::TagArgumentNamed)
                     .at(rangeOf(values->firstToken(), values->lastToken()))
-                    .commit(namedDataList->at(0)->load()->toString());
+                    .commit(args.named->at(0)->load()->toString());
             }
-            *use << dataList;
+            *use << args.data;
         }
         uses.push_back(use);
     }
@@ -2201,6 +2200,9 @@ Value Builder::visitIndexValues(cst::IndexValues context) {
 
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
+In a call's parentheses the list may also hold a positional argument written after a named one
+(handover H276): it is a StrayPositional, and the call refuses it. The named arguments are all
+this function returns.
 */
 Value Builder::visitPairedValues(cst::PairedValues context) {
     ENTER("PairedValues");
@@ -2211,6 +2213,19 @@ Value Builder::visitPairedValues(cst::PairedValues context) {
     }
     LEAVE("PairedValues");
     return rep;
+}
+
+/*
+strayPositional : indexValue ;
+*/
+Value Builder::visitStrayPositional(cst::StrayPositional context) {
+    ENTER("StrayPositional");
+    node_ptr_t value = nullptr;
+    if (context->expr()) {
+        value = any2node(visitExpr(context->expr()));
+    }
+    LEAVE("StrayPositional");
+    return value;
 }
 
 /*
@@ -2242,12 +2257,20 @@ Value Builder::visitArgumentList(cst::ArgumentList context) {
         dataList = any2node(visitIndexValues(context->get<cst::IndexValues>()));
     }
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+    node_ptr_t strayPositional = nullptr;
     if (context->get<cst::PairedValues>()) {
-        setNodeTokenRangeByContext(namedDataList, context->get<cst::PairedValues>());
-        namedDataList = any2node(visitPairedValues(context->get<cst::PairedValues>()));
+        const auto &paired = context->get<cst::PairedValues>();
+        setNodeTokenRangeByContext(namedDataList, paired);
+        namedDataList = any2node(visitPairedValues(paired));
+        for (const auto &stray : paired->all<cst::StrayPositional>()) {
+            // The first one is where the report points; more than one is the same refusal.
+            if (strayPositional == nullptr) {
+                strayPositional = any2node(visitStrayPositional(stray));
+            }
+        }
     }
     LEAVE("ArgumentList");
-    return make_pair(dataList, namedDataList);
+    return ArgumentValues{dataList, namedDataList, strayPositional};
 }
 
 /*
@@ -2323,14 +2346,16 @@ Value Builder::visitParentArgues(cst::ParentArgues context) {
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+    node_ptr_t strayPositional = nullptr;
     if (context->get<cst::ArgumentList>()) {
-        auto res = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+        ArgumentValues values = value_cast<ArgumentValues>(
             visitArgumentList(context->get<cst::ArgumentList>()));
-        dataList      = res.first;
-        namedDataList = res.second;
+        dataList          = values.data;
+        namedDataList     = values.named;
+        strayPositional   = values.positionalAfterNamed;
     }
     LEAVE("ParentArgues");
-    return make_pair(dataList, namedDataList);
+    return ArgumentValues{dataList, namedDataList, strayPositional};
 }
 
 /*
@@ -2356,14 +2381,16 @@ Value Builder::visitAngledValues(cst::AngledValues context) {
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+    node_ptr_t strayPositional = nullptr;
     if (context->get<cst::ArgumentList>()) {
-        auto res = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+        ArgumentValues values = value_cast<ArgumentValues>(
             visitArgumentList(context->get<cst::ArgumentList>()));
-        dataList      = res.first;
-        namedDataList = res.second;
+        dataList          = values.data;
+        namedDataList     = values.named;
+        strayPositional   = values.positionalAfterNamed;
     }
     LEAVE("AngledValues");
-    return make_pair(dataList, namedDataList);
+    return ArgumentValues{dataList, namedDataList, strayPositional};
 }
 
 /*
@@ -2637,6 +2664,9 @@ TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     if (text == "tuple") {
         return TypeCaseKind::Tuple;
     }
+    if (text == "func") {
+        return TypeCaseKind::Func;
+    }
     if (text == "#leaf") {
         return TypeCaseKind::Leaf;
     }
@@ -2651,9 +2681,18 @@ typeCase
 */
 Value Builder::visitTypeCase(cst::TypeCase context) {
     ENTER("TypeCase");
-    std::vector<TypeCaseKind> patterns;
+    std::vector<TypeCasePattern> patterns;
     for (const auto pattern : context->all<cst::TypeCasePattern>()) {
-        patterns.push_back(typeCaseKindOf(pattern));
+        TypeCasePattern entry;
+        // A pattern with a type child is an identity pattern (`case int`, `case T`); the
+        // shape words carry no type.
+        if (const auto typeNode = pattern.type()) {
+            entry.kind = TypeCaseKind::Identity;
+            entry.type = any2node(visitType(typeNode));
+        } else {
+            entry.kind = typeCaseKindOf(pattern);
+        }
+        patterns.push_back(std::move(entry));
     }
     node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(std::move(patterns));
     setNodeTokenRangeByContext(caseNode, context);
@@ -3456,6 +3495,10 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
             // applied to. The call keeps its callee and its named arguments.
             calleeNode    = rhsNode->at(0);
             namedDataList = rhsNode->at(2);
+            // The merged call stands for the one on the right: a positional argument written
+            // after a name there is still the same refusal (handover H276).
+            linkNode->loadAs<ReservedExprLoad>()->setPositionalAfterNamed(
+                rhsNode->loadAs<ReservedExprLoad>()->positionalAfterNamed());
             calleeNode->setParent(nullptr);
             namedDataList->setParent(nullptr);
             dataList = createNodeAs<RepeatedLoad>("Data");
@@ -3609,8 +3652,16 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             } else if (child.node().is(NK::ParentArgues)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
                 setNodeTokenRangeByContext(exprNode, cst::ParentArgues(child.node()));
-                auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+                const ArgumentValues values = value_cast<ArgumentValues>(
                     visitParentArgues(cst::ParentArgues(child.node())));
+                node_ptr_t dataList      = values.data;
+                node_ptr_t namedDataList = values.named;
+                if (values.positionalAfterNamed != nullptr) {
+                    // `f(a: 1, 2)`: the call refuses it, at the argument out of place
+                    // (design principles 4.4, handover H276).
+                    exprNode->loadAs<ReservedExprLoad>()->setPositionalAfterNamed(
+                        nodeOrigin(values.positionalAfterNamed));
+                }
                 *exprNode << lhsNode << dataList << namedDataList;
                 std::vector<camel::source::SemanticPart> parts = {
                     semanticPart(
@@ -3705,8 +3756,10 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             } else if (child.node().is(NK::AngledValues)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
                 setNodeTokenRangeByContext(exprNode, cst::AngledValues(child.node()));
-                auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+                const ArgumentValues values = value_cast<ArgumentValues>(
                     visitAngledValues(cst::AngledValues(child.node())));
+                node_ptr_t dataList      = values.data;
+                node_ptr_t namedDataList = values.named;
                 *exprNode << lhsNode << dataList << namedDataList;
                 std::vector<camel::source::SemanticPart> parts = {
                     semanticPart(

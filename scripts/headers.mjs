@@ -174,6 +174,9 @@ const NOT_SOURCE = new Set([
     '.md',
     '.txt',
     '.toml',
+    // The diagnostic registry is a table edited through the generator that owns its layout; like
+    // a plan file it is data in the repository, not source in a language this policy names.
+    '.tsv',
     '.json',
     '.jsonl',
     '.yml',

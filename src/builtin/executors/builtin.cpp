@@ -329,6 +329,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"tangent/add_arr", __tangent_add_arr__},
         {"tangent/zeros_arr", __tangent_zeros_arr__},
         {"tangent/scatter_add_arr", __tangent_scatter_add_arr__},
+        {"tangent/scatter_slice_arr", __tangent_scatter_slice_arr__},
         {"tangent/init_arr", __tangent_init_arr__},
         {"tangent/last_arr", __tangent_last_arr__},
 
@@ -410,6 +411,7 @@ void registerBuiltinOperatorTraits() {
         "tangent/add_arr",
         "tangent/zeros_arr",
         "tangent/scatter_add_arr",
+        "tangent/scatter_slice_arr",
         "tangent/init_arr",
         "tangent/last_arr",
     };

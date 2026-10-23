@@ -1,0 +1,19 @@
+/**
+ * A named `with` argument and a defaulted one mix in either order: one parameter is given by
+ * name and the other takes its default, which is the declaration's static constant, not a value
+ * the call evaluates (design principles 4.4).
+ */
+module with_default_named_and_default
+
+with <rounds: int = 8, label: string = 'x'>
+func show(x: int): string {
+    return label + ':' + string(x * rounds)
+}
+
+func main(): int sync {
+    println(show(2))
+    println(show<label: 'a'>(2))
+    println(show<rounds: 3>(2))
+    println(show<1, label: 'p'>(2))
+    return 0
+}

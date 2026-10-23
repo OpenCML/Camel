@@ -1,0 +1,39 @@
+/**
+ * The two halves of `concat`'s array part, in one program so the pair is visible.
+ *
+ *   skip:   y = concat([2.0, 3.0], w, 0)       loss = sum(y * [1, 0, 2, 3])  -> dw = [2, 3]
+ *   refuse: y = concat(xs, reshape([...]), 0)  with xs differentiated       -> refused there
+ *
+ * A constant array part carries no gradient to the differentiated parameter, so it is skipped:
+ * the first gradient is printed and checked before the second is built. An array part that
+ * depends on the parameter would have its gradient dropped, so the reverse pass refuses at that
+ * call, naming the operator at its own line — the two behaviours differ, and both are asserted
+ * here. `sum` = 5.0 and `sq` = 13.0 are the hand adjoint's own numbers: the zero tensor prints
+ * 0.0 twice, and a gradient shifted by the constant part changes both.
+ */
+module concat_array_part
+
+import { Tensor, concat, reshape, sum } from tensor
+import { grad } from autodiff
+
+with <w: Tensor>
+func skip_constant_array(): float {
+    let y = concat([2.0, 3.0], w, 0)
+    let c = reshape([1.0, 0.0, 2.0, 3.0], [4])
+    return sum(y * c)
+}
+
+with <xs: float[]>
+func refuse_active_array(): float {
+    let y = concat(xs, reshape([10.0, 20.0], [2]), 0)
+    return sum(y)
+}
+
+func main(): int sync {
+    let w = reshape([10.0, 20.0], [2])
+    let g = grad(skip_constant_array)<w>()
+    'concat_array_part sum={:.1f} sq={:.1f}'->format<sum(g), sum(g * g)>->println
+    let xs = [1.0, 2.0]
+    println(grad(refuse_active_array)<xs>())
+    return 0
+}

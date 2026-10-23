@@ -40,5 +40,8 @@ slot_t __tangent_add_arr__(ArgsView &with, ArgsView &norm, camel::core::context:
 slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __tangent_scatter_add_arr__(
     ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+// The reverse of a slice: the gradient placed back in the range the slice took, zeros elsewhere.
+slot_t __tangent_scatter_slice_arr__(
+    ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __tangent_init_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __tangent_last_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

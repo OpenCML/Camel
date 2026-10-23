@@ -7,9 +7,12 @@
 
 #include "vjp.h"
 
+#include "camel/core/error/runtime.h"
+
 #include "../type.h"
 #include "op_def.h"
 
+#include <array>
 #include <stdexcept>
 #include <string>
 
@@ -56,6 +59,30 @@ vjp_node_t staticBool(VjpBuilder &builder, bool value) {
     return builder.addStatic(camel::core::rtdata::toSlot<bool>(value), type::Type::Bool());
 }
 
+vjp_node_t floatGradientAtWidth(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient) {
+    const type::Type *valueType    = builder.nodeType(value);
+    const type::Type *gradientType = builder.nodeType(gradient);
+    if (valueType == nullptr || gradientType == nullptr) {
+        return gradient;
+    }
+    const type::TypeCode valueCode    = valueType->code();
+    const type::TypeCode gradientCode = gradientType->code();
+    if (valueCode == gradientCode) {
+        return gradient;
+    }
+    // The two conversions that exist: :op/dtof is float64 -> f32 (result f32), :op/ftod is
+    // f32 -> float64 (result float64). Both are differentiable themselves.
+    if (valueCode == type::TypeCode::Float32 && gradientCode == type::TypeCode::Float64) {
+        const std::array<vjp_node_t, 1> inputs{gradient};
+        return builder.addOper(type::Type::Float32(), ":op/dtof", inputs);
+    }
+    if (valueCode == type::TypeCode::Float64 && gradientCode == type::TypeCode::Float32) {
+        const std::array<vjp_node_t, 1> inputs{gradient};
+        return builder.addOper(type::Type::Float64(), ":op/ftod", inputs);
+    }
+    return gradient;
+}
+
 void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradient) {
     if (isTensorNode(builder, operand)) {
         builder.accumulateGradient(
@@ -65,7 +92,7 @@ void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradi
         const vjp_node_t total = isTensorNode(builder, gradient)
                                      ? addFloatOper(builder, "tensor:sum", {gradient})
                                      : gradient;
-        builder.accumulateGradient(operand, total);
+        builder.accumulateGradient(operand, floatGradientAtWidth(builder, operand, total));
     }
 }
 
@@ -92,6 +119,17 @@ void setVjp(std::vector<OpDef> &defs, std::string_view name, VjpFn rule) {
         }
     }
     throw std::logic_error("setVjp: no operator definition named " + std::string(name));
+}
+
+void refuseVjp(const VjpCall &call, std::string_view reason) {
+    throw camel::core::error::RuntimeFault(
+        camel::core::error::RuntimeDiag::RuntimeError,
+        {"autodiff: cannot differentiate operator '" + std::string(call.uri) + "': " +
+         std::string(reason)},
+        "",
+        nullptr,
+        camel::core::error::ExecutionSiteHint{
+            .cachedOrigin = static_cast<camel::source::origin_id_t>(call.origin)});
 }
 
 } // namespace camel::tensor::ops

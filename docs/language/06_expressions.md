@@ -387,21 +387,27 @@ func main(): int sync {
 
 ### 6.8.3 `match type`
 
-`match type` 按**类型的形状**选一条分支，用于泛型函数（[5.5](../design-principles.cn.md)）：`T` 在实例化时已经是具体类型，编译器只把选中的分支建进图里，其余分支不建图、不做类型检查（名字仍然解析）。
+`match type` 按**类型的形状或身份**选一条分支，用于泛型函数（[5.5](../design-principles.cn.md)）：`T` 在实例化时已经是具体类型，编译器只把选中的分支建进图里，其余分支不建图、不做类型检查（名字仍然解析）。
 
 ```
 match type 类型 {
     case struct => 分支
     case tuple  => 分支
+    case func   => 分支
     case #leaf  => 分支
+    case int    => 分支
+    case MyStruct => 分支
+    case T      => 分支
     case _      => 分支
 }
 ```
 
-- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
-- `_` 与 `#leaf` 一样匹配一切，只作为“兜底”写法；两者都必须是最后一个 case。`case struct | tuple` 用 `|` 合并几种形状。
-- `match type` 后面是类型位置：紧跟的 `(` 一律读作类型的开头，所以 `match type () { ... }` 匹配空元组类型；函数类型要再包一层括号，写成 `match type ((x: int) => int) { ... }`。
-- 没有 case 命中时是 `SemanticDiag::StaticMatchNotExhaustive`；`#leaf`/`_` 后面还有 case 是 `SemanticDiag::StaticMatchUnreachableCase`。`match type` 不比较具体类型名：`case int`、`case MyStruct` 不是这个构造的一部分，标量类型都走 `#leaf`。
+- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`func` 匹配函数类型；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
+- 类型位置写一个类型名就是**身份模式**：`case int`、`case Tensor<f32, [..]>`、`case MyStruct`、`case T`。身份是**精确**的：`case float` 不选 `int`（`float` 与 `f64` 是同一个类型，`int` 与 `i64` 也是；`int` 与 `i32` 不是）；`case f32` 不选 `f64`；`case MyStruct` 按声明的名字选，不选另一个字段形状相同的结构体；`case T` 在实例化时先代入 `T` 的绑定，所以它选的正是那个类型。形状与身份可以写在同一个 case 里（`case tuple | MyStruct`），按书写顺序判断：前面的 case 已经选中的类型，后面的同一身份是 `SemanticDiag::StaticMatchPatternCannotMatch`。
+- `_` 与 `#leaf` 一样匹配一切，只作为“兜底”写法；两者都必须是最后一个 case。`case struct | tuple` 用 `|` 合并几种形状。`case int` 写在 `case #leaf` 之前是正常的；写在 `#leaf`/`_` 之后是 `SemanticDiag::StaticMatchUnreachableCase`。
+- `match type` 后面是类型位置：紧跟的 `(` 一律读作类型的开头，所以 `match type () { ... }` 匹配空元组类型；函数类型要再包一层括号，写成 `match type ((x: int) => int) { ... }`。`case` 后面也是类型位置，同样的规则：`case (int, int)`、`case ()` 是元组，函数类型写成 `case ((x: int) => int)`。
+- 身份模式里的类型名在这里解析：未知的名字是 `SemanticDiag::UnresolvedTypeReference`；`void` 和 `typeof` 表达式的值不是一个类型身份，是 `SemanticDiag::StaticMatchPatternCannotMatch`。同一个 case 里写了两次同一个类型，也是 `StaticMatchPatternCannotMatch`。
+- 没有 case 命中时是 `SemanticDiag::StaticMatchNotExhaustive`；`#leaf`/`_` 后面还有 case 是 `SemanticDiag::StaticMatchUnreachableCase`。`match type` 比较具体类型名：`case int`、`case MyStruct` 是这个构造的一部分，标量类型不再只能走 `#leaf`。
 - 选中的分支直接成为当前位置的直线代码，运行时没有分支节点。分支的值就是整个 `match type` 的值；空分支的值为 `void`。
 - 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
 
@@ -424,7 +430,7 @@ func duplicate::<T>(t: T) {
 - `fields` 后面也是类型位置：紧跟的 `(` 一律读作类型的开头，所以空元组直接写 `fields ()`，不需要先 `type EmptyTuple = ()`；函数类型要再包一层括号，写成 `fields ((x: int) => int)`。
 - 字段按声明顺序展开，每个字段的块有独立的块作用域。空结构体或空元组展开零次，块一次也不建。
 - `static for` 作为语句时块的值总是被丢弃，整个构造的值是 `void`；需要值的位置写 comprehension 形式（见下）。
-- `t.[n]` 取结构体的字段或元组的元素，`n` 必须是编译期常量：字符串或整数字面量、外层 `static for` 的 `n`/`j`、绑定了常量的 `let` 名字（`let first = …; t.[first]`；`var` 不算，它可以在访问前改掉），或一个编译期能算出常量的表达式（如 `( static for (n, F) in fields S => n ).[0]`）。只有选中的那个字段建进图里（一个 `ACCS`），运行时不选择字段，所以运行期的值不能当键（`SemanticDiag::StaticAccessNotConstant`）。
+- `t.[n]` 取结构体的字段或元组的元素，`n` 必须是编译期常量：字符串或整数字面量、外层 `static for` 的 `n`/`j`、绑定了常量的 `let` 名字（`let first = …; t.[first]`；`var` 不算，它可以在访问前改掉）、一个编译期能算出常量的表达式（如 `( static for (n, F) in fields S => n ).[0]`），或者一个纯函数在所有实参都是编译期常量时的调用（`t.[first_field::<S>()]`），编译期把它折叠成那个值。函数体在编译期读不出来时按调用自己的名字拒绝（`SemanticDiag::FoldCallNotEvaluable`，其余 `FoldCall*` 诊断说明停在哪一步）。只有选中的那个字段建进图里（一个 `ACCS`），运行时不选择字段，所以运行期的值不能当键（`SemanticDiag::StaticAccessNotConstant`）。
 - 结构体没有这个字段报 `SemanticDiag::StaticAccessUnknownField`；元组的下标越界（或键不是下标）报 `SemanticDiag::StaticAccessIndexOutOfRange`；目标不是结构体或普通元组报 `SemanticDiag::StaticAccessNotInternal`。`t.["0"]` 与 `t.[0]` 对元组是同一个元素。
 - 字段的值被丢弃时（`t.[n];` 单独成句），只检查字段，不建 `ACCS`；目标表达式仍然求值，以保留它的副作用。
 

@@ -217,7 +217,8 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
 
         // ---- Layout: moves, no arithmetic ----
         t.emplace("to_bytes", layout("row-major payload bits encoded in little-endian byte order"));
-        for (const char *name : {"from_bytes_f32", "from_bytes_i64", "from_bytes_bool"}) {
+        for (const char *name : {"from_bytes_f32", "from_bytes_i64", "from_bytes_bool",
+                                 "from_bytes_bf16", "from_bytes_f16"}) {
             t.emplace(
                 name,
                 layout("little-endian payload bits decoded exactly into row-major storage"));

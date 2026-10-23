@@ -1177,10 +1177,10 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         }
         return false;
     };
-    const auto *withNames = GCT::Tree::of(gct)->withArgumentNamesOf(gct);
+    const auto *withNames = GCT::Tree::of(gct)->argumentNamesOf(gct);
     // A `with` argument may be written by name (`f<rounds: 8>`, design principles 4.4): the
     // name chooses the parameter the literal takes its type from, and is kept on the argument
-    // for the call to bind (bindWithArguments). A binding used as a value has no names to
+    // for the call to bind (bindArguments). A binding used as a value has no names to
     // resolve them with, and is refused there.
     const auto slotOf = [&](size_t written) -> size_t {
         if (withNames == nullptr || written >= withNames->size() || !(*withNames)[written]) {
@@ -1208,7 +1208,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             withNames != nullptr && i - 1 < withNames->size() ? (*withNames)[i - 1]
                                                               : std::nullopt;
         if (!restCall) {
-const GCT::NodeKind kind = gct->at(i)->type();
+            const GCT::NodeKind kind = gct->at(i)->type();
             // A literal whose type the signature still leaves open takes its type from the
             // position (`reduce<(a, b) => a + b, 0>`), and a lambda that writes no parameter
             // type needs the completed signature for it; both are built at the call, after the
@@ -1225,7 +1225,8 @@ const GCT::NodeKind kind = gct->at(i)->type();
                 containsTypeVar(wanted)) {
                 // Built at the call, where the ordinary arguments are typed and the signature's
                 // variables have their types (visitLinkNode). A lambda's parameters come from
-                // the parameter it is passed to (design principles 5.9).
+                // the parameter it is passed to (design principles 5.9). The name goes with it:
+                // the binding puts it at its parameter's place before the literal is built.
                 inputs.push_back({nullptr, gct->at(i), name});
                 continue;
             }

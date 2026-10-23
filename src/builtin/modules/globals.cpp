@@ -3,6 +3,7 @@
 
 #include "globals.h"
 #include "builtin/executors/builtin.h"
+#include "builtin/operators/array.h"
 #include "builtin/operators/collection.h"
 #include "builtin/operators/mem.h"
 #include "builtin/operators/derivative.h"
@@ -2249,6 +2250,15 @@ bool GlobalsBuiltinModule::load() {
     context_->registerExecutorFactory("", [ctx = context_]() {
         return BasicBuiltinExecutor::create(ctx);
     });
+    // The native operators of `array`, the library written in Camel (`stdlib/array.cml`). A
+    // module that has bodies cannot also be a `.cmo` module of the same name: the compiler
+    // would read `array.cml` as a declaration module and reject the bodies. So the kernels are
+    // built into libcamel (`builtin/operators/array.cpp`), and this module answers them on the
+    // `array` protocol; the body-less declarations in `array.cml` are their signatures.
+    context_->registerExecutorFactory("array", [ctx = context_]() {
+        return std::make_shared<Executor>(ctx, getArrayOpsMap());
+    });
+    declareArrayOperatorFacts();
     loaded_ = true;
     return true;
 }

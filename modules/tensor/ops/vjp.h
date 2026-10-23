@@ -50,10 +50,25 @@ vjp_node_t staticBool(VjpBuilder &builder, bool value);
 /// Operands of other kinds (numeric arrays, integers) take no gradient.
 void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradient);
 
+/// `gradient` converted to the float width of `value`: the rules here reduce at float64
+/// (`tensor:sum`), while an `f32` value's tangent is an `f32`. Handing the accumulator another
+/// width would store a float64 number in an f32 slot, and an integral gradient read back at f32's
+/// width is 0.0 -- a derivative that is not the derivative (design principles 9.9). The conversion
+/// belongs here, in the rule that produced the gradient, and not in the accumulator, which refuses
+/// a gradient of another element type instead of converting it.
+vjp_node_t floatGradientAtWidth(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient);
+
 /// Gradients of lhs @ rhs given the output gradient dy (batch dims and vectors included).
 void accumulateMatmulGradients(VjpBuilder &builder, vjp_node_t lhs, vjp_node_t rhs, vjp_node_t dy);
 /// dy masked by a relu output: dy * (y > 0).
 vjp_node_t reluGradient(VjpBuilder &builder, vjp_node_t output, vjp_node_t dy);
+
+/// Refuses the differentiation of `call`, with a diagnostic located at the operator and naming
+/// it. A rule calls it when its mathematics is known but this module has no operator with which
+/// to express the adjoint of this input: dropping the gradient instead would return a zero the
+/// caller never asked for. `reason` says which input and why (design principles 9.9: a
+/// continuous value that depends on a differentiated parameter is refused, never zeroed).
+[[noreturn]] void refuseVjp(const VjpCall &call, std::string_view reason);
 
 struct OpDef;
 /// Attaches `rule` to the definition named `name` in `defs` (throws if absent).

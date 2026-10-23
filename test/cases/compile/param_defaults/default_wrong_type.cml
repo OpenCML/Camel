@@ -1,0 +1,13 @@
+/**
+ * The default is a value of the parameter's type, as an argument at the call would be
+ * (design principles 4.4, handover H276).
+ */
+module param_default_wrong_type
+
+func f(a: int = "x"): int {
+    return a
+}
+
+func main(): int sync {
+    return f()
+}

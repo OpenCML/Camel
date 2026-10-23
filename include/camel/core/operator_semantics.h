@@ -109,6 +109,9 @@ enum Permission : uint16_t {
     kNoSignedZeros    = 1 << 6, //                   the sign of a zero does not matter
     kFlushSubnormals  = 1 << 7, //                   subnormal inputs and results may become zero
     kNonDeterministic = 1 << 8, // nondeterministic: the result may change with the schedule
+    kRefineAccuracy   = 1 << 9, // refine_accuracy:  replace a form with one whose error is not
+                                //                   larger; the bits may change (rewrite 8.10).
+                                //                   Default not granted; #strict revokes it.
 };
 
 /// A set of permissions: 0 when none is granted. Two bytes since `nondeterministic` (review of
@@ -236,7 +239,10 @@ struct NumericPolicy {
  *                      relative per step;
  *   finite_math        the check excludes the NaN, infinity, signed zero and subnormal samples
  *                      the assumptions rule out; the finite values keep the rounding bound;
- *   nondeterministic   no numeric bound exists, so the check cannot certify the rule.
+ *   nondeterministic   no numeric bound exists, so the check cannot certify the rule;
+ *   refine_accuracy    the two sides are compared by their error against a higher-precision
+ *                      reference, not by bits: the rewrite holds when its error is not larger
+ *                      on every sample (rewrite 8.10).
  */
 struct RewriteErrorBound {
     /// False when the permissions have no numeric contract (`nondeterministic`): the check can

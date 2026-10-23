@@ -38,7 +38,7 @@ func computed(h: Tensor): (float, float) {
 }
 
 func main(): int sync {
-    let ex = reshape([1.0, -2.0, 0.5, 1.5], [2, 2])
+    let ex = reshape([1.0, -2.0, 0.5, 1.5] as f32[], [2, 2])
     export_model((x: Tensor): (Tensor, Tensor) => twice(x), ex, 'twice.onnx')
     export_model((x: Tensor): (Run, Run) => repeated(x, 2), ex, 'repeated.onnx')
     export_model((x: Tensor): (float, float) => constants(x), ex, 'constants.onnx')

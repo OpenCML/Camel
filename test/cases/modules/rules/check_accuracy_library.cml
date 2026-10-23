@@ -1,0 +1,23 @@
+/**
+ * Every rule of `rules::accuracy` passes the error check (rewrite design 2 (second version)
+ * 8.10): each side is evaluated against a higher-precision reference over the sampled domain,
+ * including the near-zero log, overflow, underflow and denormal regions, and the worst error
+ * ratio is reported.
+ */
+module check_accuracy_library
+
+import { check } from rewrite
+import {
+        f32_expm1, f32_log1p, float_expm1, float_log1p, tensor_log_softmax_of_softmax
+} from rules
+
+func main(): int sync {
+    println(check([
+        float_log1p,
+        f32_log1p,
+        float_expm1,
+        f32_expm1,
+        tensor_log_softmax_of_softmax,
+    ], 100, 11))
+    return 0
+}

@@ -8,7 +8,7 @@
  * (ELF, Mach-O, PE) contains NUL bytes, so committing one in the fixture's place turns this case
  * red -- the loader-refusal case must not quietly start exercising a real module.
  *
- * Red direction: `cp out/latest/stdlib/algo.cmo test/cases/modules/pass_not_found/unloadable.cmo`
+ * Red direction: `cp out/latest/stdlib/statistics.cmo test/cases/modules/pass_not_found/unloadable.cmo`
  * fails here with "the file contains a NUL byte", before the plan can pass on a loadable file.
  */
 import fs from 'node:fs'

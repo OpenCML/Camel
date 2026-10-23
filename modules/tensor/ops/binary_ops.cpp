@@ -119,8 +119,15 @@ std::vector<OpDef> binaryOps() {
                 .traits = {}});
     };
     add("from_bytes_f32", TypeCode::Float32, fromBytesKernel<TypeCode::Float32>);
+    add("from_bytes_f64", TypeCode::Float64, fromBytesKernel<TypeCode::Float64>);
+    add("from_bytes_i32", TypeCode::Int32, fromBytesKernel<TypeCode::Int32>);
     add("from_bytes_i64", TypeCode::Int64, fromBytesKernel<TypeCode::Int64>);
     add("from_bytes_bool", TypeCode::Bool, fromBytesKernel<TypeCode::Bool>);
+    // The reduced-precision element types are read from their stored bits, exactly as written
+    // by `to_bytes`: no conversion, no rounding, so no change_precision permission. The value
+    // they hold was rounded when it was written (the `cast` that produced it).
+    add("from_bytes_bf16", TypeCode::BFloat16, fromBytesKernel<TypeCode::BFloat16>);
+    add("from_bytes_f16", TypeCode::Float16, fromBytesKernel<TypeCode::Float16>);
     return defs;
 }
 
@@ -129,8 +136,12 @@ oper_group_ptr_t fromBytesOperatorGroup() {
         "from_bytes",
         {
             {"tensor:from_bytes_f32", std::make_shared<FromBytesResolver>(TypeCode::Float32)},
+            {"tensor:from_bytes_f64", std::make_shared<FromBytesResolver>(TypeCode::Float64)},
+            {"tensor:from_bytes_i32", std::make_shared<FromBytesResolver>(TypeCode::Int32)},
             {"tensor:from_bytes_i64", std::make_shared<FromBytesResolver>(TypeCode::Int64)},
             {"tensor:from_bytes_bool", std::make_shared<FromBytesResolver>(TypeCode::Bool)},
+            {"tensor:from_bytes_bf16", std::make_shared<FromBytesResolver>(TypeCode::BFloat16)},
+            {"tensor:from_bytes_f16", std::make_shared<FromBytesResolver>(TypeCode::Float16)},
         });
 }
 } // namespace camel::tensor::ops

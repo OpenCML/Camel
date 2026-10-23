@@ -2,7 +2,7 @@ id = "consistency.new_values"
 order = 364
 tier = "fast"
 tags = ["feat", "consistency", "compile", "collections", "gc"]
-desc = "Library operators return new values and leave their arguments unchanged (design principles 11.3): `append`, `extend`, `apply`, `algo`'s `sort`; the rebinding `acc = acc->append<v>` and its in-place implementation, under collection stress with both collectors; a pure operation whose result is unused is a compile-time error that gives the rebinding as the fix."
+desc = "Library operators return new values and leave their arguments unchanged (design principles 11.3): `append`, `extend`, `apply`, `array`'s `sort`; the rebinding `acc = acc->append<v>` and its in-place implementation, under collection stress with both collectors; a pure operation whose result is unused is a compile-time error that gives the rebinding as the fix."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -338,7 +338,7 @@ kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["${case}", "std::rgir"]
 expect_exit = 0
-expect_stdout_contains = [":var/take", "algo:sort_in_place", "algo:merge_sort_in_place", "algo:insert_sort_in_place", ":op/assn_owned"]
+expect_stdout_contains = [":var/take", "array:sort_in_place", "array:merge_sort_in_place", "array:insert_sort_in_place", ":op/assn_owned"]
 
 [[tests]]
 name = "new_values.sort_rebinding.passes"

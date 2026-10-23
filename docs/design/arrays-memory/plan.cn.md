@@ -102,7 +102,7 @@ Array（GC 对象，可移动）                    mm::Block（非 GC 对象，
 
 - `Array::size()` 已经是第一维、`numel()` 是元素总数、`strides_` 已按行主序填好；运行时已经能创建 rank-n 数组。
 - 但类型说不了形状：`Tensor<f32>` 是模块类型，`f32[3]` 的语法不存在；`map`/`filter` 等的算子规则（`src/builtin/modules/globals.cpp`）按 `arrType->elemType()` 得出元素类型，对 rank-n 数组按第一维的语义还没有实现。
-- 原地写：`OperatorTable::setInPlaceForm` + `Builder::inPlaceRebindingOf` 把 `xs = xs->sort()` 改写成调用原地形式；今天注册的有 `modules/algo` 的排序家族、`:op/set_index` 与 `append`（`:struct/append_arr_in_place`）。`src/core/rtdata/array.cpp` 的 `reusableBlock`/`adoptBlock`/`canWriteInPlace` 是现成的积木。
+- 原地写：`OperatorTable::setInPlaceForm` + `Builder::inPlaceRebindingOf` 把 `xs = xs->sort()` 改写成调用原地形式；今天注册的有 `array` 的排序家族（`src/builtin/operators/array.cpp`）、`:op/set_index` 与 `append`（`:struct/append_arr_in_place`）。`src/core/rtdata/array.cpp` 的 `reusableBlock`/`adoptBlock`/`canWriteInPlace` 是现成的积木。
 
 ### 1.5 缺口清单
 
@@ -312,7 +312,7 @@ Tensor<f32>               // f32[..]
 ### 4.5 标准库与文档
 
 - `stdlib/signatures/globals.cml`：`map`/`filter`/`foreach`/`reduce` 的声明从 `T[]` 改为 `T[..]` 并在注释里写第一维规则（实际类型规则在 `globals.cpp`，见 P5）；`append`/`extend`/`slice`/`concat` 仍是 `T[]`（只对 rank 1 有意义）；`len` 从 `T[]` 改 `T[..]`。
-- `stdlib/signatures/algo.cml`：`sort` 家族与 `argsort` 改 `T[..]`；`sort_by` 等 `stdlib/array.cml` 的 Camel 实现保持 rank 1（H21 再泛化）。
+- `stdlib/array.cml`：`sort` 家族与 `argsort` 改 `T[..]`；`sort_by` 等 `stdlib/array.cml` 的 Camel 实现保持 rank 1（H21 再泛化）。
 - `docs/language/08_top_level_and_grammar.md` 与 `en/`（76–77、201–202 行）的 `arrayType` 产生式、`constas` 说明；`docs/language/03_data_model.md` 的类型表加 `T[dims]`、`?`、`..s`、`Tensor` 别名。
 - `docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 重新生成。
 
@@ -354,7 +354,7 @@ Tensor<f32>               // f32[..]
 
 ### 5.2 元素类型精确
 
-- 删除 `normalizeTensorDType`（`modules/tensor/dtype.cpp#normalizeTensorDType`）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
+- 删除 `normalizeTensorDType`（P4 已删；`TensorType::get` 只校验元素类型，`modules/tensor/type.cpp#TensorType::get` 起）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
 - 审计模块内核的 dtype 支持：elementwise 已支持 f32/f64/i32/i64（`modules/tensor/kernels/elementwise.cpp`）；conv/bn 的若干内核只接受 `const float*`（`kernels/conv.cpp` 283+、404+、572+）。这些算子的推断处要声明只支持 f32（今天没有声明，遇到 f64 会读错），遇到 f64 输入报运行时故障（而不是静默读错）。测试里没有 `Tensor<float>` 的用例（已核对），只有 `Tensor<int>` 出现在 `modules/nn` 的 checkpoint 用例里，`int` 就是 i64，与今天相同。
 - 删除 `TensorType::castSafetyFrom/castSlotFrom` 里的 dtype 归一化；`as` 的检查变成 `ArrayType::castSlotFrom` 的形状检查（P2）。
 
@@ -471,18 +471,18 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 - `filter`/`foreach`/`reduce`：循环 `size()`，传 `rowView(i)`/`rowCopy(i)`；结果按行追加（`appendRow`，见下）。
 - `Array::appendRow(const Array *row)`：紧凑数组按 `row->byteSize()` 拷贝并推进第一维（容量不足用 `reusableBlock` 增长）；槽数组逐槽 `setSlot` + 写屏障。
 - `filter` 的原地形式（P6）在最后收缩容量/维度（`setExtents({kept, d1...})`）。
-- `sort`/`argsort`：`modules/algo` 的 `__doSortSlots__` 已按元素宽度分派；rank ≥ 2 时按 `rowBytes` 交换行，比较用元素字典序。只接受数值元素（`canWriteInPlace` 与 dtype 检查）。`argsort` 的 `int[]` 结果与今天相同（rank 1 时）。
+- `sort`/`argsort`：`src/builtin/operators/array.cpp` 的 `__doSortSlots__` 已按元素宽度分派；rank ≥ 2 时按 `rowBytes` 交换行，比较用元素字典序。只接受数值元素（`canWriteInPlace` 与 dtype 检查）。`argsort` 的 `int[]` 结果与今天相同（rank 1 时）。
 - 四个后端必须一致：`feat/modules/tensor` 的用例在 nvm/fvm/jit 各跑一遍（计划里的 `backends` 字段）。
 
 ### 6.5 标准库
 
-`stdlib/signatures/globals.cml` 的 `map/filter/foreach/reduce` 文本在 P3 已改 `T[..]`；P5 补注释与用例。`stdlib/array.cml` 保持 rank 1（`sort_by`/`flat_map`/`zip`/`flatten` 不改）；`stdlib/signatures/algo.cml` 的 `sort`/`argsort` 已改 `T[..]`。
+`stdlib/signatures/globals.cml` 的 `map/filter/foreach/reduce` 文本在 P3 已改 `T[..]`；P5 补注释与用例。`stdlib/array.cml` 保持 rank 1（`sort_by`/`flat_map`/`zip`/`flatten` 不改）；`stdlib/array.cml` 的 `sort`/`argsort` 已改 `T[..]`。
 
 测试：`test/cases/compile/hof_multidim/*`（map 按行：rank 1 不变、rank 2 得 `U[d0]`、filter 行、foreach 行、reduce 行、sort 字典序、argsort、len、`int[m,n]` 与 `string[m,n]`、空维、1 行、1 列）、`test/plans/feat/compile/hof_multidim.plan.toml`；`feat/mm/hof_block_alloc` 加 rank 2 的分配计数。
 
 ### 6.6 P5 的文件与门禁
 
-改：`include/camel/core/rtdata/array.h`、`src/core/rtdata/array.cpp`（`rowView/rowCopy/appendRow/setExtents`）、`src/builtin/modules/globals.cpp`、`src/builtin/operators/higher_order.cpp`、三个调度器、`modules/algo/{operators,module}.cpp`、标准库签名、用例。
+改：`include/camel/core/rtdata/array.h`、`src/core/rtdata/array.cpp`（`rowView/rowCopy/appendRow/setExtents`）、`src/builtin/modules/globals.cpp`、`src/builtin/operators/higher_order.cpp`、三个调度器、`src/builtin/operators/array.cpp`、标准库签名、用例。
 
 门禁：`feat/compile/hof_multidim`、`feat/mm`、`feat/modules/tensor`、`feat/para`、`smoke`。P5 可与 P6 交换顺序；它们都不依赖对方。
 
@@ -514,7 +514,7 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 | `merge_sorted_arrays` | **是** | 从尾部合并进操作数 0 | — |
 | `filter` | **是** | 原地压缩，末尾收缩 | — |
 | `unique` | **是** | 原地压缩 | — |
-| `sort`/`insert_sort`/`quick_sort`/`merge_sort` | **是**（已落地） | `modules/algo` 的原地形式 | — |
+| `sort`/`insert_sort`/`quick_sort`/`merge_sort` | **是**（已落地） | `array` 的原地形式（`src/builtin/operators/array.cpp`） | — |
 | `set_index`（`xs[i] = v`） | **是**（已落地） | `:op/set_index_in_place` | — |
 | `tail` | 不分配（视图） | 返回 `rowView`/偏移视图 | 不是"原地写"，而是不分配 |
 | `head` | 不分配 | 返回元素 | — |
@@ -561,7 +561,7 @@ println(after - before);             // 期望 0
 
 ### 7.7 P6 的文件与门禁
 
-改：`src/builtin/operators/struct.cpp`、`src/builtin/executors/builtin.cpp`、`src/core/operator_table.cpp`（只读清单）、`modules/algo/{operators,module}.cpp`、`modules/tensor` 的注册与内核入口、用例与计划。
+改：`src/builtin/operators/struct.cpp`、`src/builtin/executors/builtin.cpp`、`src/core/operator_table.cpp`（只读清单）、`src/builtin/operators/array.cpp`、`modules/tensor` 的注册与内核入口、用例与计划。
 
 门禁：`feat/mm/dyn_in_place`、`feat/mm`、`feat/loops`、`feat/modules/tensor`、`feat/para`、`smoke`。P6 在 P5 之后做，避免行语义与原地压缩同时改。
 
@@ -790,13 +790,13 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 | `src/builtin/modules/globals.cpp` | HOF/`len` 的第一维类型规则 |
 | `src/builtin/operators/{higher_order,struct}.cpp` | 第一维实现；原地分支 |
 | `src/passes/sched/{nodevm,fastvm,taskflow}.cpp` | 同一套循环 |
-| `modules/algo/{operators,module}.cpp` | 行排序/argsort；原地注册 |
+| `src/builtin/operators/array.cpp` | 行排序/argsort；原地注册 |
 | `modules/tensor/type.{h,cpp}` | **删除** |
 | `modules/tensor/{module,tensor,interop,npy,binary,dtype}.{h,cpp}`、`ops/*`、`passes/index_eval.cpp` | 别名、精确 dtype、加载器 |
 | `modules/{nn,onnx,tiles,tree,autodiff}/**` | `asTensorType` → `asArrayType`/谓词 |
 | `src/execute/entry_args.{h,cpp}` | 加载器的"能否接"谓词 |
 | `src/builtin/executors/builtin.cpp`、`src/core/operator_table.cpp` | 原地注册与例外清单 |
-| `stdlib/signatures/{globals,algo}.cml`、`stdlib/array.cml`（注释） | 签名与第一维 |
+| `stdlib/signatures/globals.cml`、`stdlib/array.cml`（注释） | 签名与第一维 |
 | `docs/language/03_data_model.md`、`docs/language/08_top_level_and_grammar.md`（+`en/`）、`docs/diagnostics.md`、`docs/stdlib-reference.md`、`docs/performance/graph-store-baseline.md` | 文档 |
 | `test/tools/perfbaseline/baseline.py` | 张量程序 |
 | `test/plan-selection.json` | 新计划规则 |

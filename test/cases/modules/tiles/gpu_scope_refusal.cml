@@ -7,7 +7,7 @@ import { Tensor, reshape, tanh, sum } from tensor
 func activate(x: Tensor<f32>): Tensor<f32> { return tanh(x) }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(sum(activate(x)))
     return 0
 }

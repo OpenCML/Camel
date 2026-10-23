@@ -321,7 +321,7 @@ name = "stdlib.fault.zip_with"
 desc = "zip_with on arrays of different lengths: the fault of zip, located in the library."
 case = "../../../cases/modules/stdlib/fault_zip_with.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 167
+expect_diagnostic_line = 205
 
 [[tests]]
 name = "stdlib.fault.zip_with.opt"
@@ -330,4 +330,4 @@ case = "../../../cases/modules/stdlib/fault_zip_with.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 167
+expect_diagnostic_line = 205

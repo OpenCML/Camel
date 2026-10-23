@@ -49,7 +49,13 @@ InferFn reduceAxisInfer(k::ReduceOp op) {
         const bool keepDims           = ctx.has(2) ? ctx.constBool(2).value_or(false) : false;
         std::optional<TypeCode> dtype = in.dtype;
         if (op == k::ReduceOp::Mean) {
-            dtype = TypeCode::Float32;
+            // A mean of floats keeps the element type (f64 stays f64, bf16 and f16 stay
+            // themselves and round once when the mean is stored); a mean of integers and bools
+            // has always been f32.
+            dtype = (dtype == TypeCode::Float64 || dtype == TypeCode::BFloat16 ||
+                     dtype == TypeCode::Float16)
+                        ? dtype
+                        : std::optional(TypeCode::Float32);
         } else if (op == k::ReduceOp::ArgMax || op == k::ReduceOp::ArgMin) {
             dtype = TypeCode::Int64;
         } else if (op == k::ReduceOp::Sum && dtype == TypeCode::Bool) {
@@ -127,12 +133,16 @@ slot_t softmaxGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 std::optional<Type *> floatLikeFirst(const InferContext &ctx) {
-    return tensorOf(TypeCode::Float32, ctx.facts(0).shape);
+    const auto dtype = ctx.facts(0).dtype;
+    return tensorOf(dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
+                                               : std::optional(TypeCode::Float32),
+                    ctx.facts(0).shape);
 }
 
 /// softmax(t, axis = -1), log_softmax: the axis must exist.
 std::optional<Type *> softmaxInfer(const InferContext &ctx) {
     const auto shape = ctx.facts(0).shape;
+    const auto dtype = ctx.facts(0).dtype;
     const auto axis  = ctx.has(1) ? ctx.constInt(1) : std::optional<int64_t>(-1);
     if (shape && axis) {
         const auto rank = static_cast<int64_t>(shape->size());
@@ -144,7 +154,10 @@ std::optional<Type *> softmaxInfer(const InferContext &ctx) {
                 formatShape(*shape)));
         }
     }
-    return tensorOf(TypeCode::Float32, shape);
+    return tensorOf(
+        dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
+                                   : std::optional(TypeCode::Float32),
+        shape);
 }
 
 /// layer_norm(x, gamma, beta): gamma and beta cover the input's trailing dimensions.
@@ -168,7 +181,10 @@ std::optional<Type *> layerNormInfer(const InferContext &ctx) {
                 formatShape(*x)));
         }
     }
-    return tensorOf(TypeCode::Float32, x);
+    return tensorOf(
+        x && ctx.facts(0).dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
+                                                    : std::optional(TypeCode::Float32),
+        x);
 }
 
 slot_t layerNormKernel(ArgsView &, ArgsView &norm, context::Context &) {

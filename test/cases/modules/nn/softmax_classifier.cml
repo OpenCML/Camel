@@ -41,7 +41,7 @@ func model_loss(x: Tensor, target: Tensor): float {
 func init(): Classifier {
     return {
         head: {
-            weight: reshape([0.1, 0.1, 0.1, 0.1], [2, 2]),
+            weight: reshape([0.1, 0.1, 0.1, 0.1] as f32[], [2, 2]),
             bias: zeros([2])
         }
     }
@@ -53,8 +53,8 @@ func train(model: Classifier, x: Tensor, target: Tensor, steps: int): Classifier
 
 func main(): int sync {
     let model = init()
-    let x = reshape([1.0, 0.0, 0.0, 1.0], [2, 2])
-    let target = reshape([1.0, 0.0, 0.0, 1.0], [2, 2])
+    let x = reshape([1.0, 0.0, 0.0, 1.0] as f32[], [2, 2])
+    let target = reshape([1.0, 0.0, 0.0, 1.0] as f32[], [2, 2])
 
     let before = model_loss<model>(x, target)
     let vg = with_grad(model_loss)<model>(x, target)

@@ -1,0 +1,13 @@
+/**
+ * A call that leaves out a parameter with no default is reported (design principles 4.4,
+ * handover H276): `b` has no default, and the call gives `c` by name, so it cannot be `b`.
+ */
+module param_argument_missing
+
+func f(a: int, b: int, c: int = 3): int {
+    return a + b + c
+}
+
+func main(): int sync {
+    return f(1, c: 5)
+}

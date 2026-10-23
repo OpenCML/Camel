@@ -63,14 +63,45 @@ template <k::UnaryOp Op> slot_t unaryKernel(ArgsView &, ArgsView &norm, context:
     });
 }
 
+bool isTensorArg(const InferContext &ctx, size_t index) {
+    return asTensorType(ctx.type(index)) != nullptr;
+}
+
+/// The element type a binary operator's two operands are computed in, mirroring
+/// `kernels::operandType`: a scalar takes the tensor's element type (a float meeting an integer
+/// tensor computes in f32, as the operator always has), and two tensors promote only by
+/// widening. Unknown when an operand's element type is unknown.
+std::optional<TypeCode>
+operandType(const InferContext &ctx, const TensorFacts &lhs, const TensorFacts &rhs) {
+    if (isTensorArg(ctx, 0) != isTensorArg(ctx, 1)) {
+        const bool tensorFirst = isTensorArg(ctx, 0);
+        const TensorFacts &tensor = tensorFirst ? lhs : rhs;
+        const TypeCode scalar = tensorFirst ? ctx.type(1)->code() : ctx.type(0)->code();
+        if (!tensor.dtype) {
+            return std::nullopt;
+        }
+        if (isFloatingTensorType(*tensor.dtype)) {
+            return *tensor.dtype;
+        }
+        return isFloatingTensorType(scalar) ? std::optional(TypeCode::Float32) : tensor.dtype;
+    }
+    return promote(lhs.dtype, rhs.dtype);
+}
+
 InferFn binaryInfer(bool producesFloat) {
     return [producesFloat](const InferContext &ctx) -> std::optional<Type *> {
         if (!anyTensor(ctx, 2)) {
             return std::nullopt;
         }
         const TensorFacts lhs = ctx.facts(0), rhs = ctx.facts(1);
-        auto dtype =
-            producesFloat ? std::optional(TypeCode::Float32) : promote(lhs.dtype, rhs.dtype);
+        std::optional<TypeCode> dtype = operandType(ctx, lhs, rhs);
+        if (producesFloat && dtype && !isReducedFloatTensorType(*dtype)) {
+            // Div and Pow produce a float: f64 when a tensor operand is f64, f32 otherwise. A
+            // bf16 or f16 operand keeps its element type: the quotient is computed in f32 and
+            // rounded once when it is stored (the one arithmetic path of dtype.h).
+            dtype = *dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
+                                                : std::optional(TypeCode::Float32);
+        }
         return tensorOf(dtype, broadcast(lhs.shape, rhs.shape));
     };
 }
@@ -85,7 +116,15 @@ std::optional<Type *> compareInfer(const InferContext &ctx) {
 InferFn unaryInfer(bool producesFloat) {
     return [producesFloat](const InferContext &ctx) -> std::optional<Type *> {
         const TensorFacts in = ctx.facts(0);
-        return tensorOf(producesFloat ? std::optional(TypeCode::Float32) : in.dtype, in.shape);
+        std::optional<TypeCode> dtype = in.dtype;
+        if (producesFloat && in.dtype && !isReducedFloatTensorType(*in.dtype)) {
+            // A math function keeps f64: f64 in, f64 out. An f32 or integer input gives f32,
+            // the type these operators have always produced. A bf16 or f16 input keeps its
+            // element type and is rounded once when it is stored (dtype.h).
+            dtype = *in.dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
+                                                   : std::optional(TypeCode::Float32);
+        }
+        return tensorOf(dtype, in.shape);
     };
 }
 
@@ -152,29 +191,62 @@ slot_t whereKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 std::optional<Type *> whereInfer(const InferContext &ctx) {
     const TensorFacts c = ctx.facts(0), a = ctx.facts(1), b = ctx.facts(2);
-    return tensorOf(promote(a.dtype, b.dtype), broadcast(c.shape, broadcast(a.shape, b.shape)));
+    return tensorOf(
+        operandType(ctx, a, b), broadcast(c.shape, broadcast(a.shape, b.shape)));
 }
 
-/// Storage dtype named by a cast target string ("float32", "int64", "bool", or Camel scalar names).
+/// Element type named by a cast target string. The names follow the language: `float` is f64
+/// (it is another spelling of `f64`), `f32` is float32, `int` is i64. A cast is the explicit
+/// conversion the language offers; it converts the values, and the result type is the one
+/// named, never a storage type the name was quietly replaced with.
 TypeCode dtypeFromName(const std::string &name) {
-    if (name == "float32" || name == "float" || name == "double" || name == "float64") {
+    if (name == "float32" || name == "f32") {
         return TypeCode::Float32;
     }
-    if (name == "int64" || name == "int" || name == "long" || name == "int32") {
+    if (name == "float64" || name == "float" || name == "double" || name == "f64") {
+        return TypeCode::Float64;
+    }
+    if (name == "int32" || name == "i32") {
+        return TypeCode::Int32;
+    }
+    if (name == "int64" || name == "int" || name == "long" || name == "i64") {
         return TypeCode::Int64;
     }
     if (name == "bool") {
         return TypeCode::Bool;
+    }
+    if (name == "bfloat16" || name == "bf16") {
+        return TypeCode::BFloat16;
+    }
+    if (name == "float16" || name == "half" || name == "f16") {
+        return TypeCode::Float16;
     }
     throw std::invalid_argument("cast: unknown dtype '" + name + "'");
 }
 
 slot_t castKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("cast", [&] {
-        return wrap(k::cast(
-            tensorArg(norm, 0, true),
-            dtypeFromName(stringArg(norm, 1)),
-            resultAllocator()));
+        Array *input = tensorArg(norm, 0, true);
+        const TypeCode target = dtypeFromName(stringArg(norm, 1));
+        // A conversion into bf16 or f16 rounds, so the compiler checks it against
+        // `change_precision` where the call is written (design principles 7.3, H238). That
+        // check knows the target only when it is written at the call: a target chosen from a
+        // run-time string leaves the result's static element type unknown, and the conversion
+        // would round with no licence. The static result type is the evidence that the check
+        // ran, so a reduced target it does not name is refused here instead of narrowing
+        // silently.
+        if (isReducedFloatTensorType(target) && input->dtype() != target) {
+            const auto *declared = asTensorType(norm.resultType());
+            if (declared == nullptr || !declared->dtype() || *declared->dtype() != target) {
+                throw std::invalid_argument(
+                    "cast from '" + elementTypeSpelling(input->dtype()) + "' to '" +
+                    elementTypeSpelling(target) +
+                    "' rounds, but the target is chosen at run time, so the compiler cannot "
+                    "check the change_precision permission where the conversion is written. "
+                    "Write the element type at the call");
+            }
+        }
+        return wrap(k::cast(input, target, resultAllocator()));
     });
 }
 
@@ -365,10 +437,26 @@ void whereVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// cast(t, dtype): the gradient returns to t's dtype.
+// cast(t, dtype): the gradient returns to t's dtype. `cast` also accepts a numeric array, and a
+// float array is a continuous value with a tangent (design principles 9.9): its adjoint would be
+// the elements of dy in t's dtype, which no operator of this module builds from a tensor's
+// gradient, so an array that depends on a differentiated input is refused by name instead of being
+// dropped -- the refusal `new`, `reshape` and `concat` make for the same reason.
 void castVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 2);
-    if (auto dy = b.gradientOf(call.output); dy && isTensorNode(b, call.inputs[0])) {
+    if (!isTensorNode(b, call.inputs[0])) {
+        if (b.isActive(call.inputs[0])) {
+            refuseVjp(
+                call,
+                "its input is a numeric array of type '" + b.nodeType(call.inputs[0])->toString() +
+                    "', not a tensor, and this module has no operator that carries a tensor's "
+                    "gradient back into an array; the array's gradient would be dropped silently. "
+                    "Cast a differentiable tensor (a parameter, a slice of one) instead of an "
+                    "array");
+        }
+        return;
+    }
+    if (auto dy = b.gradientOf(call.output); dy) {
         b.accumulateGradient(
             call.inputs[0],
             addTensorOper(b, "tensor:cast_like", {*dy, call.inputs[0]}));

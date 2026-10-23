@@ -1,0 +1,31 @@
+/**
+ * The open-ended slice `x[3:]`: the end was not written, so the gradient cannot read it from the
+ * call — it is recovered as `dim(x, 0)`, the length of the parent along the sliced dimension.
+ *
+ *   s = x[3:] = [x3, x4]        loss = sum(s * w), w = [2, 3]
+ *   d/dx = [0, 0, 0, 2, 3]
+ *
+ * `dot = sum(g * c)` with c = [0, 0, 0, 1, 2] is 2 * 1 + 3 * 2 = 8.0: it is 0.0 if the rule
+ * returned the zero tensor and 0.0 again if the gradient landed one place to the left, so it
+ * fails both ways. `sq = sum(g * g)` is 4 + 9 = 13.0, and `sum`, 5.0, is the adjoint's own
+ * total.
+ */
+module slice_open_end
+
+import { Tensor, reshape, sum } from tensor
+import { grad } from autodiff
+
+with <x: Tensor>
+func open_end(): float {
+    let s = x[3:]
+    let w = reshape([2.0, 3.0] as f32[], [2])
+    return sum(s * w)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0] as f32[], [5])
+    let g = grad(open_end)<x>()
+    let c = reshape([0.0, 0.0, 0.0, 1.0, 2.0] as f32[], [5])
+    'slice_open_end dot={:.1f} sq={:.1f} sum={:.1f}'->format<sum(g * c), sum(g * g), sum(g)>->println
+    return 0
+}

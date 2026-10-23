@@ -41,10 +41,10 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
 | [tree](#tree) | `import { ... } from tree` | Camel |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
+| [types](#types) | `import { ... } from types` | Camel |
 | [array](#array) | `import { ... } from array` | Camel |
 | [math](#math) | `import { ... } from math` | C++ |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ |
-| [algo](#algo) | `import { ... } from algo` | C++ |
 | [random](#random) | `import { ... } from random` | C++ |
 | [time](#time) | `import { ... } from time` | C++ |
 | [fs](#fs) | `import { ... } from fs` | C++ |
@@ -71,10 +71,10 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` |  |
 | [tree](#tree) | `import { ... } from tree` |  |
 | [tensor](#tensor) | `import { ... } from tensor` |  |
+| [types](#types) | `import { ... } from types` |  |
 | [array](#array) | `import { ... } from array` |  |
 | [math](#math) | `import { ... } from math` |  |
 | [statistics](#statistics) | `import { ... } from statistics` |  |
-| [algo](#algo) | `import { ... } from algo` |  |
 | [random](#random) | `import { ... } from random` |  |
 | [time](#time) | `import { ... } from time` |  |
 | [fs](#fs) | `import { ... } from fs` |  |
@@ -1905,8 +1905,13 @@ cast: (t: Tensor | number[], dtype: string) => Tensor
 ```
 
 t converted to the element type the name gives: "float32", "float", "double" or "float64"
-for `f32`; "int64", "int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do
-not change.
+for `f32`; "bfloat16" or "bf16" for `bf16`; "float16", "half" or "f16" for `f16`; "int64",
+"int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do not change.
+
+A conversion into `bf16` or `f16` rounds (to nearest, ties to even) and needs the numeric
+permission `change_precision` where the call is written; `#strict` revokes it. Reading a
+`bf16` or `f16` tensor into a wider type is exact for every stored value and needs no
+permission.
 
 - Pure.
 - Failure: fault `RuntimeError` when the name is not one of those.
@@ -1934,7 +1939,9 @@ from_bytes: (bytes: Bytes, shape: int[]) => Tensor
 
 A tensor of the given shape made of little-endian elements. The element type is the explicit
 type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result; it
-is `f32`, `i64` or `bool`. A byte count that does not fit the shape is a fault.
+is `f32`, `f64`, `bf16`, `f16`, `i32`, `i64` or `bool`, exactly the type given. A byte count
+that does not fit the shape is a fault. The bits are copied: reading `bf16` or `f16` here
+passes the stored values through without rounding, so it needs no numeric permission.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type.
@@ -2025,14 +2032,109 @@ Reseeds the module's random generator, which `random` and `randn` draw from.
 - With effects: writes the random generator.
 - Example: `seed(42)`
 
+<a id="types"></a>
+
+## `types`: the properties of types
+
+The properties of types that an applicability condition asks about. These are ordinary Camel
+functions: each one matches the type it is given with `match type` and returns a constant, so
+`func f::<T>(x: T) when is_numeric::<T>()` is applicable exactly where `T` is a number.
+
+`match type` compares a type's identity as well as its shape (design principles 5.5): the
+cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `c64`, `c128`,
+`string`, `bool`), and `case func` is the shape of every function type.
+
+#### `is_numeric`
+
+```camel
+is_numeric: () => bool
+```
+
+True when `T` is a number: an integer, a float or a complex number.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_numeric::<int>()` gives `true`
+- Example: `is_numeric::<string>()` gives `false`
+
+#### `is_integer`
+
+```camel
+is_integer: () => bool
+```
+
+True when `T` is an integer type (`int` is 64-bit, `i32` is 32-bit).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_integer::<int>()` gives `true`
+- Example: `is_integer::<float>()` gives `false`
+
+#### `is_float`
+
+```camel
+is_float: () => bool
+```
+
+True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_float::<float>()` gives `true`
+- Example: `is_float::<int>()` gives `false`
+
+#### `is_ordered`
+
+```camel
+is_ordered: () => bool
+```
+
+True when `T` has a total order: the number types, `string` and `bool`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_ordered::<string>()` gives `true`
+- Example: `is_ordered::<bool>()` gives `true`
+
+#### `is_function`
+
+```camel
+is_function: () => bool
+```
+
+True when `T` is a function type, whatever its parameters and result.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_function::<(x: int) => int>()` gives `true`
+
+#### `is_string`
+
+```camel
+is_string: () => bool
+```
+
+True when `T` is `string`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_string::<string>()` gives `true`
+- Example: `is_string::<int>()` gives `false`
+
+#### `is_bool`
+
+```camel
+is_bool: () => bool
+```
+
+True when `T` is `bool`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_bool::<bool>()` gives `true`
+- Example: `is_bool::<int>()` gives `false`
+
 <a id="array"></a>
 
-## `array`: arrays and higher-order functions
+## `array`: arrays, sorting and higher-order functions
 
 Array functions and higher-order functions, written in Camel on top of the built-in
-operators (map, filter, reduce, range, zip, slice, len) and three primitives of this module
-(flatten, unique, argsort), whose kernels are the C++ module's. Every function returns a new
-value; none changes its argument.
+operators (map, filter, reduce, range, zip, slice, len) and a few native primitives of this
+module (the sorts, argsort, flatten, unique). Every function returns a new value; none changes
+its argument.
 
 - The array a function works on is its ordinary argument; a function or a value that
   configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
@@ -2043,9 +2145,11 @@ value; none changes its argument.
   (`find`, `index_of`, `any`, `all`) or, when a fast path is added under `#impl`, apply it to
   several elements at once; the result is the same either way, and no call observes another.
   A function with side effects belongs in `foreach` or `reduce`, which run in order.
-- These are generic functions: there is one instance per set of element types in the whole
-  program, whichever module calls it (one root graph, design principles 10.1). `group_by`
-  is not here: it needs the map type.
+- The functions written here are generic: there is one instance per set of element types in
+  the whole program, whichever module calls it (one root graph, design principles 10.1).
+  `group_by` is not here: it needs the map type.
+
+### Sorting
 
 #### `argsort`
 
@@ -2058,10 +2162,72 @@ argsort: (keys: bool[]) => int[]
 argsort: (keys: string[]) => int[]
 ```
 
-The indices that sort the keys ascending; equal keys keep their order (stable).
+The positions of the keys in ascending order of key; equal keys keep their order (a stable
+sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
+primitive behind `sort_by`.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `argsort([3, 1, 2])` gives `[1, 2, 0]`
+- A native operator of this module: an opaque node, pure.
+- Example: `argsort([30, 10, 20])` gives `[1, 2, 0]`
+
+#### `sort`
+
+```camel
+sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs (quicksort).
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `insert_sort`
+
+```camel
+insert_sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs, by insertion sort.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `quick_sort`
+
+```camel
+quick_sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs, by quicksort.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sort`
+
+```camel
+merge_sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs, by merge sort.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sorted_arrays`
+
+```camel
+merge_sorted_arrays: (left: T[], right: T[]) => T[]
+```
+
+The sorted array made of the elements of two sorted arrays of numbers.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
 
 ### Rearranging
 
@@ -2115,9 +2281,9 @@ Each element with its index.
 flatten: (xss: T[][]) => T[]
 ```
 
-The elements of the inner arrays, in order.
+The elements of the inner arrays, in order. The primitive behind `flat_map`.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
 
 #### `unique`
@@ -2126,9 +2292,10 @@ The elements of the inner arrays, in order.
 unique: (xs: T[]) => T[]
 ```
 
-The first occurrence of every value, in order; values are compared as `==` compares them.
+The first occurrence of every value, in order; values are compared as `==` compares them
+(a NaN equals nothing, so every NaN is kept).
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
 
 ### Searching
@@ -2204,7 +2371,7 @@ The sum of the elements, 0 for an empty array. Integers wrap around on overflow,
 #### `min`
 
 ```camel
-min: (xs: T[]) => T? when is_numeric::<T>()
+min: (xs: T[]) => T? when is_ordered::<T>()
 ```
 
 The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
@@ -2216,7 +2383,7 @@ The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and 
 #### `max`
 
 ```camel
-max: (xs: T[]) => T? when is_numeric::<T>()
+max: (xs: T[]) => T? when is_ordered::<T>()
 ```
 
 The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
@@ -2667,13 +2834,17 @@ min: (a: i32, b: i32) => i32
 min: (a: int, b: int) => int
 min: (a: f32, b: f32) => f32
 min: (a: float, b: float) => float
+min: (a: string, b: string) => string
+min: (a: bool, b: bool) => bool
 ```
 
-The smaller of two numbers of one type (IEEE 754 minimum). With a NaN on either side
-the result is NaN; -0 is below +0.
+The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
+NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
+prefix first), and false is below true.
 
 - Pure.
 - Example: `min(3, 5)` gives `3`
+- Example: `min('b', 'a')` gives `'a'`
 
 #### `max`
 
@@ -2682,13 +2853,17 @@ max: (a: i32, b: i32) => i32
 max: (a: int, b: int) => int
 max: (a: f32, b: f32) => f32
 max: (a: float, b: float) => float
+max: (a: string, b: string) => string
+max: (a: bool, b: bool) => bool
 ```
 
-The larger of two numbers of one type (IEEE 754 maximum). With a NaN on either side
-the result is NaN; -0 is below +0.
+The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
+NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
+prefix first), and false is below true.
 
 - Pure.
 - Example: `max(3, 5)` gives `5`
+- Example: `max('a', 'b')` gives `'b'`
 
 #### `clamp`
 
@@ -2972,119 +3147,6 @@ element is NaN.
 - Pure.
 - Failure: fault `InvalidArgument` when q is not between 0 and 1.
 - Example: `[1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25> ?? 0.0` gives `2`
-
-<a id="algo"></a>
-
-## `algo`: sorting and array primitives
-
-Sorting works on arrays of numbers (i32, int, f32, float) in ascending order. Every function
-returns a new array and leaves its argument unchanged (design principles 11.3); to sort a
-variable, bind it to the result: `xs = xs->sort`. That rebinding sorts the variable's own
-array in place when nothing else refers to it, an optimisation that does not change what the
-program means (11.3). To sort anything else, or by a key, use `sort_by` of the `array` module.
-
-#### `argsort`
-
-```camel
-argsort: (keys: i32[]) => int[]
-argsort: (keys: int[]) => int[]
-argsort: (keys: f32[]) => int[]
-argsort: (keys: float[]) => int[]
-argsort: (keys: bool[]) => int[]
-argsort: (keys: string[]) => int[]
-```
-
-The positions of the keys in ascending order of key; equal keys keep their order (a stable
-sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
-primitive behind `sort_by` of the `array` module.
-
-- Pure.
-- Example: `argsort([30, 10, 20])` gives `[1, 2, 0]`
-
-#### `sort`
-
-```camel
-sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs (quicksort).
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `insert_sort`
-
-```camel
-insert_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by insertion sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `quick_sort`
-
-```camel
-quick_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by quicksort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sort`
-
-```camel
-merge_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by merge sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sorted_arrays`
-
-```camel
-merge_sorted_arrays: (left: T[], right: T[]) => T[]
-```
-
-The sorted array made of the elements of two sorted arrays of numbers.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
-
-#### `flatten`
-
-```camel
-flatten: (xss: T[][]) => T[]
-```
-
-The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
-of the `array` module.
-
-- Pure.
-- Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
-
-#### `unique`
-
-```camel
-unique: (xs: T[]) => T[]
-```
-
-The first occurrence of every value, in order; values are compared as `==` compares them
-(a NaN equals nothing, so every NaN is kept). The primitive behind `unique` of the `array`
-module.
-
-- Pure.
-- Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
 
 <a id="random"></a>
 

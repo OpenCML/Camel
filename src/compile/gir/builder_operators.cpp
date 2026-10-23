@@ -1274,7 +1274,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         boundWithArgs_.erase(bound);
         boundWithCallee_.erase(targetNode);
     }
-
     // Call results take the callee's current exit type (a recursive callee's
     // exit type is only final after its body is built), unless the node was
     // deliberately widened as a `var` binding (see visitVariNode).
@@ -1322,10 +1321,31 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     const size_t restDeclaredCount     = restTemplate != nullptr
                                             ? restTemplate->funcType->normTypesCount()
                                             : 0;
+    // An ordinary argument may be written by name (`f(1, by: 2)`), and an ordinary parameter
+    // may have a default (design principles 4.4). The name selects the parameter the value is
+    // given to, so the expected type is that parameter's, not the position's: the written
+    // order is only the order the call was written in.
+    const auto *argumentNames = GCT::Tree::of(gct)->argumentNamesOf(gct);
+    const auto normSlotOf     = [&](size_t written) -> size_t {
+        if (argumentNames == nullptr || written >= argumentNames->size() ||
+            !(*argumentNames)[written]) {
+            return written;
+        }
+        if (argumentSignature != nullptr && argumentSignature->hasArgNames()) {
+            const std::string &name = *(*argumentNames)[written];
+            for (size_t i = 0; i < argumentSignature->normTypesCount(); ++i) {
+                if (name == argumentSignature->argNameAt(argumentSignature->withTypesCount() + i)) {
+                    return i;
+                }
+            }
+        }
+        return written;
+    };
     for (size_t i = 1; i < gct->size(); i++) {
-        Type *wanted = argumentSignature && i <= argumentSignature->normTypesCount()
-                           ? argumentSignature->normTypeAt(i - 1)
-                           : nullptr;
+        const size_t slot = normSlotOf(i - 1);
+        Type *wanted      = argumentSignature && slot < argumentSignature->normTypesCount()
+                                ? argumentSignature->normTypeAt(slot)
+                                : nullptr;
         if (restTemplate != nullptr) {
             // The declaration's own parameter, `constas` values included: a `constas` value is
             // written at its parameter's position like any other argument. The rest parameter
@@ -1362,13 +1382,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 gct);
             for (const node_handle_t &element : elements) {
                 normInputs.push_back({element, operand, std::nullopt});
-                normInputTypes.push_back(valueTypeOf(callableValueType(element)));
             }
             continue;
         }
         node_handle_t inputNode = visitOperand(gct->at(i), gct);
-        normInputs.push_back({inputNode, gct->at(i), std::nullopt});
-        normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
+        const std::optional<std::string> name =
+            argumentNames != nullptr && i - 1 < argumentNames->size() ? (*argumentNames)[i - 1]
+                                                                      : std::nullopt;
+        normInputs.push_back({inputNode, gct->at(i), name});
         if (isAssignment && i == 1) {
             Type *place = valueTypeOf(nodeTypeOf(inputNode));
             if (place != nullptr && place->code() == TypeCode::Function) {
@@ -1376,12 +1397,84 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         }
     }
+    // An ordinary argument may be written by name, and an ordinary parameter may have a
+    // default (design principles 4.4, handover H276): the same binding as the `with` arguments,
+    // on the other parameter list. From here on an index into `normInputs` is an ordinary
+    // parameter's index — the declaration's order, the one order everything below reads. A rest
+    // call is expanded instead of bound: its parameters are read by position.
+    if (restTemplate == nullptr) {
+        bindArguments(normInputs, targetNode, gct, argumentSignature, false);
+    } else if (argumentNames != nullptr) {
+        const auto first = std::find_if(
+            normInputs.begin(), normInputs.end(), [](const Argument &input) {
+                return input.name.has_value();
+            });
+        if (first != normInputs.end()) {
+            diags_->of(SemanticDiag::ParamArgumentCallee)
+                .atOrigin(first->expr->origin())
+                .commit(*first->name, gct->at(0)->toString());
+            throw BuildAbortException();
+        }
+    }
+    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+        // An operator that declares it takes the position of its call at this many arguments
+        // (CallSpec::callSiteAtArity; `error(kind, message)`: an error value records where it
+        // was made, design principles 3.9) gets that position as one more, constant argument.
+        const auto &drefTarget   = nodeGraphOf(targetNode)->drefTarget(targetNode);
+        const auto takesCallSite = [&] {
+            if (!std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
+                return false;
+            }
+            for (const auto &[uri, resolver] :
+                 std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
+                const auto *spec = camel::core::OperatorTable::instance().callSpec(uri);
+                if (spec != nullptr && spec->callSiteAtArity >= 0 &&
+                    static_cast<size_t>(spec->callSiteAtArity) + 1 == gct->size()) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        if (takesCallSite()) {
+            // The position the value records is the whole call expression: `error(k, m)`, and
+            // `x->error(m)` written as a pipeline, which is the same call (design principles
+            // 4.4, 3.9). The call node's own span is its argument list, so the callee and the
+            // arguments together are the expression.
+            const camel::source::origin_id_t where = expressionPositionOf(gct);
+            node_handle_t location                 = currGraph_->addStaticDataNode(
+                tt::as_shared<Data>(std::make_shared<StringData>(sourceLocationOf(where))));
+            registerNodeOrigin(context_, location, gct, "gir.data");
+            normInputs.push_back({location, gct, std::nullopt});
+        }
+    }
+    // The one place the ordinary argument types are built: from the bound nodes, in the
+    // declaration's order. A binding that fills a default puts the declaration's own static
+    // node there, so the type is the parameter's, and nothing here reads the written order.
+    {
+        normInputTypes.clear();
+        normInputTypes.reserve(normInputs.size());
+        for (const Argument &input : normInputs) {
+            normInputTypes.push_back(valueTypeOf(callableValueType(input.node)));
+        }
+    }
+    // A `with` argument may be written by name, and a `with` parameter may have a default
+    // (design principles 4.4). The binding puts the arguments in the declaration's order and
+    // fills the parameters the call leaves out, so that from here on an index into
+    // `withInputs` is a `with` parameter's index. That is the one order everything below
+    // reads: `parameterOf(i)` is the i-th `with` parameter, the deferred argument at `i` is
+    // typed by that parameter, and `withInputTypes` is built from the same list once, at its
+    // own place, after the deferred arguments have their nodes (the typing h245 defers to the
+    // call). A default is a static node the declaration already computed: it is in place
+    // here and is never deferred.
+    bindArguments(withInputs, targetNode, gct, argumentSignature, true);
+
     // A with-argument whose parameter still had type variables when the callee was visited was
     // left for this point (visitWithNode): the ordinary arguments are typed now, so the
     // signature's variables have their types. `reduce<(a, b) => a + b, 0>`: the element type
     // comes from the array and the accumulator type from the position the call stands at. A
     // variable that nothing binds stays open, and the argument is built without an expected
     // type, as it was before.
+
     bool hasDeferredWith = false;
     for (const Argument &input : withInputs) {
         hasDeferredWith = hasDeferredWith || input.node == nullptr;
@@ -1397,6 +1490,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 unifyTypeVars(argumentSignature->exitType(), expectedResult, bindings);
             }
         }
+        // `i` is a `with` parameter's index: the binding above put `withInputs` in the
+        // declaration's order, so the argument at `i` is the value for parameter `i`.
         const auto parameterOf = [&](size_t i) -> Type * {
             return argumentSignature != nullptr && i < argumentSignature->withTypesCount()
                        ? argumentSignature->withTypeAt(i)
@@ -1455,47 +1550,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         }
     }
+    // The one place the call's `with` types are built: from the nodes, in the declaration's
+    // order the binding put them in, after the deferred arguments above have theirs (h245).
     for (const Argument &input : withInputs) {
         withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
-    }
-    // A `with` argument may be written by name and a parameter may have a default (design
-    // principles 4.4): bind what the call writes to the callee's parameters, filling the
-    // parameters it leaves out. This happens once every argument is built (a deferred lambda is
-    // only a node now), and before the call is resolved, because it is the parameters, not the
-    // written order, that tell which argument is which. `bindWithArguments` replaces the types
-    // with the ones it ordered, so the loop above is only what a call with nothing to bind keeps.
-    bindWithArguments(withInputs, withInputTypes, targetNode, gct);
-    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
-        // An operator that declares it takes the position of its call at this many arguments
-        // (CallSpec::callSiteAtArity; `error(kind, message)`: an error value records where it
-        // was made, design principles 3.9) gets that position as one more, constant argument.
-        const auto &drefTarget   = nodeGraphOf(targetNode)->drefTarget(targetNode);
-        const auto takesCallSite = [&] {
-            if (!std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
-                return false;
-            }
-            for (const auto &[uri, resolver] :
-                 std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
-                const auto *spec = camel::core::OperatorTable::instance().callSpec(uri);
-                if (spec != nullptr && spec->callSiteAtArity >= 0 &&
-                    static_cast<size_t>(spec->callSiteAtArity) + 1 == gct->size()) {
-                    return true;
-                }
-            }
-            return false;
-        };
-        if (takesCallSite()) {
-            // The position the value records is the whole call expression: `error(k, m)`, and
-            // `x->error(m)` written as a pipeline, which is the same call (design principles
-            // 4.4, 3.9). The call node's own span is its argument list, so the callee and the
-            // arguments together are the expression.
-            const camel::source::origin_id_t where = expressionPositionOf(gct);
-            node_handle_t location                 = currGraph_->addStaticDataNode(
-                tt::as_shared<Data>(std::make_shared<StringData>(sourceLocationOf(where))));
-            registerNodeOrigin(context_, location, gct, "gir.data");
-            normInputs.push_back({location, gct, std::nullopt});
-            normInputTypes.push_back(Type::String());
-        }
     }
 
     // An argument that is still a name without a single function value (several overloads, or
@@ -1950,7 +2008,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             }
                         }
                         const WhenResult verdict = evaluateWhenCondition(
-                            when->second.condition, g->funcType(), {}, withValues);
+                            when->second.condition, g->funcType(), {}, withValues, nullptr,
+                            unitOfFunction(g));
                         if (verdict.fails()) {
                             unmetConditions.emplace_back(g->name(), when->second.text);
                             continue;
@@ -2395,6 +2454,27 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
             targetFuncType = targetOperator->funcType();
+            // A call that writes a value of another element type into a reduced-precision one
+            // (bf16 or f16) needs `change_precision` where it is written (design principles
+            // 7.3). The module that owns those element types declares how to recognise the
+            // narrowing; the permission is read from this node after stamping, so `#strict`
+            // revokes it exactly as it revokes every other permission.
+            if (const auto gate = camel::core::OperatorTable::instance().precisionGate()) {
+                if (auto narrowing =
+                        (*gate)(targetOperator->uri(), normInputTypes, withInputTypes,
+                                targetFuncType->exitType())) {
+                    const auto permissions = camel::core::tag::effectivePermissions(
+                        *nodeDraftOf(targetNode),
+                        nodeIdOf(targetNode),
+                        camel::core::sem::NumericPolicy::explicitOnly());
+                    if ((permissions & camel::core::sem::kChangePrecision) == 0) {
+                        diags_->of(SemanticDiag::PrecisionChangeNotPermitted)
+                            .atOrigin(gct->origin())
+                            .commit(narrowing->first, narrowing->second);
+                        throw BuildAbortException();
+                    }
+                }
+            }
             // A result that the argument types fix (the shape of a tensor whose type carries
             // it) is a constant for the operators it is passed to, as a literal would be.
             if (const auto *folder =

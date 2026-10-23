@@ -588,10 +588,17 @@ a
 - In the graph, a generic function is a **subgraph template**. Each time it is called with a set of concrete types, a subgraph whose types are all concrete is instantiated: the program above has the two subgraphs `first<int>` and `first<string>` (you can see them with `camel docs/tutorial/examples/08_generics.cml std::rgir`). The graph contains only concrete types, and no type information is needed at run time.
 - A generic function may also be passed wherever a function is expected (`apply(id, 3)`, `xss->map<reverse>`, `let f: (x: int) => int = id`): the compiler builds the instance once the position fixes its types. Where nothing does (`let g = id`), it is a compile-time error that says to write the type.
 
-A declaration can also say **where it applies**: `when` after the signature is a compile-time condition over the declaration's type parameters. `double_it` below applies to numbers and to nothing else; when no candidate of a call meets its condition, the error at the call site lists the condition each candidate wrote.
+A declaration can also say **where it applies**: `when` after the signature is a compile-time condition over the declaration's type parameters. `double_it` below applies to numbers and to nothing else; when no candidate of a call meets its condition, the error at the call site lists the condition each candidate wrote. `is_numeric` is not a name the compiler knows: it is an ordinary function written with `match type` (the standard library's seven type predicates live in `types`), and a condition calls a function the module can see, so the snippet writes it in the same module.
 
 ```cml
 module applicability
+
+func is_numeric::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 => true
+        case _ => false
+    }
+}
 
 func double_it::<T>(x: T): T when is_numeric::<T>() {
     return x + x
@@ -794,7 +801,7 @@ func main(): int sync {
 
 ### The standard library
 
-The modules that come with Camel are `str` (strings), `array` (arrays), `math`, `statistics`, `algo`, `random`, `time`, `fs`, `json`, `process`, `env`, `re`, `hash`, `para`, `this`, the tensor family `tensor`, `nn`, `autodiff`, `onnx`, and `python`, which embeds Python ([language reference 5.2.1](../language/en/05_modules.md#521-modules-provided-with-camel)). The [standard library reference](../stdlib-reference.md) lists the functions of the first fifteen modules one by one: signature, whether it is pure, behaviour on failure, examples. [`examples/12_stdlib.cml`](examples/12_stdlib.cml):
+The modules that come with Camel are `str` (strings), `array` (arrays), `math`, `statistics`, `random`, `time`, `fs`, `json`, `process`, `env`, `re`, `hash`, `para`, `this`, the tensor family `tensor`, `nn`, `autodiff`, `onnx`, and `python`, which embeds Python ([language reference 5.2.1](../language/en/05_modules.md#521-modules-provided-with-camel)). The [standard library reference](../stdlib-reference.md) lists the functions of the first fourteen modules one by one: signature, whether it is pure, behaviour on failure, examples. [`examples/12_stdlib.cml`](examples/12_stdlib.cml):
 
 ```cml
 module stdlib_demo

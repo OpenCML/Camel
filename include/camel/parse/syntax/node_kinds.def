@@ -59,7 +59,8 @@ CAMEL_NODE(KeyParamPair, Other)        // 'var'? identDef ':' typeExpr ('=' data
 CAMEL_NODE(DataList, Other)            // dataExpr (',' dataExpr)*
 CAMEL_NODE(IdentList, Other)           // identDef (',' identDef)*
 CAMEL_NODE(IndexValues, Other)         // indexValue (',' indexValue)*
-CAMEL_NODE(PairedValues, Other)        // keyValuePair (',' keyValuePair)*
+CAMEL_NODE(PairedValues, Other)        // keyValuePair (',' keyValuePair)*, and in a call's argument list a strayPositional after them
+CAMEL_NODE(StrayPositional, Other)     // indexValue (a positional written after a named argument; the call refuses it)
 CAMEL_NODE(PairedParams, Other)        // keyParamPair (',' keyParamPair)*
 CAMEL_NODE(ArgumentList, Other)        // indexValues (',' pairedValues)? | pairedValues
 CAMEL_NODE(Indices, Other)             // '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']'

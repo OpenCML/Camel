@@ -1,0 +1,21 @@
+/**
+ * Verifies that the length of an iterated array is a run-time property of its value: the reverse
+ * pass takes the zero array gradient from the array the forward loop walked, so the same function
+ * with n = 2 (xs = [w, 2w], f = 3w) and n = 4 (xs = [w, 2w, 3w, 4w], f = 10w) differentiates to 3
+ * and 10. Nothing about either call is in the type: only `float[]` is.
+ */
+module loop_grad_iterable_length
+
+import { grad } from autodiff
+
+with <w: float>
+func f(n: int): float {
+    let xs = loop xs = [w] while len(xs) < n do xs->append<w * float(len(xs) + 1)>
+    return loop acc = 0.0 for x in xs do acc + x
+}
+
+func main(): int sync {
+    'loop_grad_iterable_length n2={} n4={}'
+        ->format<grad(f)<2.0>(2), grad(f)<2.0>(4)>->println
+    return 0
+}

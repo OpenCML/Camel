@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include "camel/core/rtdata/half.h"
+
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -37,7 +39,11 @@ template <typename T> using FloatBits = std::conditional_t<sizeof(T) == 4, uint3
 
 /// IEEE 754-2019 maximum (see the file comment).
 template <typename T> inline T maximum(T a, T b) {
-    if constexpr (std::is_floating_point_v<T>) {
+    if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
+        // An f16 or bf16 maximum is the f32 maximum of two exactly converted operands,
+        // converted back: the result is one of the two values, so no rounding happens.
+        return T(maximum(a.toFloat(), b.toFloat()));
+    } else if constexpr (std::is_floating_point_v<T>) {
         using Bits = detail::FloatBits<T>;
         // Equal operands are identical except +0 and -0: the AND of the bits keeps the sign
         // bit only when both are -0, which picks +0 from a mixed pair.
@@ -51,7 +57,9 @@ template <typename T> inline T maximum(T a, T b) {
 
 /// IEEE 754-2019 minimum (see the file comment).
 template <typename T> inline T minimum(T a, T b) {
-    if constexpr (std::is_floating_point_v<T>) {
+    if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
+        return T(minimum(a.toFloat(), b.toFloat()));
+    } else if constexpr (std::is_floating_point_v<T>) {
         using Bits = detail::FloatBits<T>;
         // The OR of the bits of equal operands sets the sign bit when either is -0.
         const T equal = std::bit_cast<T>(std::bit_cast<Bits>(a) | std::bit_cast<Bits>(b));
@@ -70,7 +78,9 @@ template <typename T> inline T minimum(T a, T b) {
  * maximum (minimum) of the whole sequence, or of its first NaN.
  */
 template <bool Max, typename T> inline bool beyondExtreme(T v, T best) {
-    if constexpr (std::is_floating_point_v<T>) {
+    if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
+        return beyondExtreme<Max>(v.toFloat(), best.toFloat());
+    } else if constexpr (std::is_floating_point_v<T>) {
         if (best != best) {
             return false;
         }
@@ -92,7 +102,9 @@ template <typename T> inline T relu(T x) { return maximum(x, T{}); }
 /// The value a maximum reduction starts from: the identity of `maximum` (-inf for floats, so
 /// a single NaN element still becomes the canonical NaN), the lowest value otherwise.
 template <typename T> constexpr T maximumIdentity() {
-    if constexpr (std::is_floating_point_v<T>) {
+    if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
+        return T(-std::numeric_limits<float>::infinity());
+    } else if constexpr (std::is_floating_point_v<T>) {
         return -std::numeric_limits<T>::infinity();
     } else {
         return std::numeric_limits<T>::lowest();
@@ -101,7 +113,9 @@ template <typename T> constexpr T maximumIdentity() {
 
 /// The value a minimum reduction starts from: +inf for floats, the largest value otherwise.
 template <typename T> constexpr T minimumIdentity() {
-    if constexpr (std::is_floating_point_v<T>) {
+    if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
+        return T(std::numeric_limits<float>::infinity());
+    } else if constexpr (std::is_floating_point_v<T>) {
         return std::numeric_limits<T>::infinity();
     } else {
         return std::numeric_limits<T>::max();

@@ -1,0 +1,47 @@
+/**
+ * A gather's adjoint is of the tensor's own element type. `sum(w[labels])` on a `Tensor<f64>`
+ * selects rows 1 and 0 of a [2, 3] tensor and sums them, so each row enters the loss once and every
+ * element's adjoint is exactly 1.0: the gradient sums to 6.0 and each row to 3.0.
+ *
+ * The value this used to produce was six `f32` 1.0s in a buffer whose type said `f64` -- the scalar
+ * broadcast that starts the pullback (`tensor:broadcast_like`) filled f32 whatever the scalar's
+ * width. Read at f64 it sums to 3 * 2^-7 = 0.0234375: the first row came out as three doubles made
+ * of f32 pairs and the second as the bytes past the end of the gradient, no error at all.
+ *
+ * What it pins: the gradients of both the plain sum and the gather are 6.0, each gather row 3.0, on
+ * nvm and on fvm, and not 0.0234375 (the f32 fill) or a fault. The f32 gather in
+ * `gather_discrete_index_zero` stays at 6.0 beside it.
+ */
+module dtype_gather_grad_f64
+
+import { Tensor, cast, reshape, sum, take } from tensor
+import { with_grad } from autodiff
+
+type M = {
+    w: Tensor<f64>,
+    labels: Tensor<i64>,
+}
+
+with <m: M>
+func total(): float {
+    return sum(m.w)
+}
+
+with <m: M>
+func gather_loss(): float {
+    return sum(m.w[m.labels])
+}
+
+func main(): int sync {
+    let model = {
+        w: reshape([1.0, 2.0, 3.0, -4.0, 5.0, -6.0] as f64[], [2, 3]),
+        labels: cast([1, 0], 'int64'),
+    }
+    let (v1, g1) = with_grad(total)<model>()
+    'total={:.1f} grad_sum={:.1f}'->format<v1, sum(g1.w)>->println
+    let (v2, g2) = with_grad(gather_loss)<model>()
+    let row0 = sum(take(g2.w, cast([0], 'int64')))
+    let row1 = sum(take(g2.w, cast([1], 'int64')))
+    'gather={:.1f} grad_sum={:.1f} row0={:.1f} row1={:.1f}'->format<v2, sum(g2.w), row0, row1>->println
+    return 0
+}

@@ -588,10 +588,17 @@ a
 - 在图上，泛型函数是一张**子图模板**。每用一组具体类型调用，就实例化出一张类型全部具体的子图：上面的程序里有 `first<int>` 与 `first<string>` 两张子图（`camel docs/tutorial/examples/08_generics.cml std::rgir` 可以看到）。图上只有具体类型，运行时不需要类型信息。
 - 泛型函数也可以出现在任何期望一个函数的位置（`apply(id, 3)`、`xss->map<reverse>`、`let f: (x: int) => int = id`）：编译器在所在位置确定了类型之后才实例化它。什么都确定不了时（`let g = id`）是编译期错误，提示写出类型。
 
-声明还可以说明**自己在哪里适用**：签名后的 `when` 是对声明类型参数的编译期条件。下面的 `double_it` 只适用于数值；一次调用若所有候选的条件都不成立，调用处会报错，并列出每个候选写下的条件。
+声明还可以说明**自己在哪里适用**：签名后的 `when` 是对声明类型参数的编译期条件。下面的 `double_it` 只适用于数值；一次调用若所有候选的条件都不成立，调用处会报错，并列出每个候选写下的条件。`is_numeric` 不是编译器内建的名字，而是用 `match type` 写出来的普通函数（标准库的七个类型谓词在 `types` 里）；条件调用的是这个模块看得到的函数，所以片段把它写在同一个模块。
 
 ```cml
 module applicability
+
+func is_numeric::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 => true
+        case _ => false
+    }
+}
 
 func double_it::<T>(x: T): T when is_numeric::<T>() {
     return x + x
@@ -794,7 +801,7 @@ func main(): int sync {
 
 ### 标准库
 
-随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`algo`、`random`、`time`、`fs`、`json`、`process`、`env`、`re`、`hash`、`para`、`this`，张量一系的 `tensor`、`nn`、`autodiff`、`onnx`，以及嵌入 Python 的 `python`（[语言参考 5.2.1](../language/05_modules.md#521-随-camel-提供的模块)）。[标准库参考](../stdlib-reference.md)逐个列出前十五个模块的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](examples/12_stdlib.cml)：
+随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`random`、`time`、`fs`、`json`、`process`、`env`、`re`、`hash`、`para`、`this`，张量一系的 `tensor`、`nn`、`autodiff`、`onnx`，以及嵌入 Python 的 `python`（[语言参考 5.2.1](../language/05_modules.md#521-随-camel-提供的模块)）。[标准库参考](../stdlib-reference.md)逐个列出前十四个模块的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](examples/12_stdlib.cml)：
 
 ```cml
 module stdlib_demo

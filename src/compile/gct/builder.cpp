@@ -15,6 +15,7 @@
 #include "camel/core/type/collection.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
@@ -70,6 +71,15 @@ bool usesTypeVar(const node_ptr_t &node, const std::string &name) {
     case NodeKind::CAST:
         if (inType(node->targetType())) {
             return true;
+        }
+        break;
+    case NodeKind::TCASE:
+        // An identity pattern names its type in the payload, not as a child node, so the walk
+        // below does not reach it.
+        for (size_t i = 0; i < node->typeCaseTypeCount(); ++i) {
+            if (inType(node->typeCaseTypeAt(i))) {
+                return true;
+            }
         }
         break;
     default:
@@ -307,6 +317,11 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("float"), Type::Float64());
     typeScope_->insert(Reference("c64"), Type::Complex64());
     typeScope_->insert(Reference("c128"), Type::Complex128());
+    // Reduced-precision tensor element types (design principles 7.3, H238). They are names a
+    // program writes only as an argument of `Tensor<...>` and of `from_bytes::<...>`; no
+    // literal or scalar operator produces a value of either.
+    typeScope_->insert(Reference("bf16"), Type::BFloat16());
+    typeScope_->insert(Reference("f16"), Type::Float16());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("string"), Type::String());
     // The type of binary data (design principles 11.1), a built-in name like `string`.
@@ -581,11 +596,18 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 node_ptr_t declNode = tree_->makeDecl(node->name(), true);
                 node_ptr_t typeNode = node->at(0);
                 *declNode << tree_->clone(typeNode);
-                // The defaults of the declaration's `with` parameters are the declaration's, and
+                // The declaration record is the same declaration: a head type the signature
+                // never writes (`func is_numeric::<T>(): bool`) makes it a template there too,
+                // so the graph builder does not give the declaration an empty graph of its own.
+                if (const auto *head = tree_->headTypeParamsOf(node)) {
+                    tree_->setHeadTypeParams(declNode, *head);
+                }
+
+                // The defaults of the declaration's parameters are the declaration's, and
                 // the graph builder evaluates them when it sees the declaration (before any body
                 // is built, so that a call written above the definition finds them too).
-                if (const auto *defaults = tree_->withDefaultsOf(node)) {
-                    tree_->setWithDefaults(declNode, *defaults);
+                if (const auto *defaults = tree_->parameterDefaultsOf(node)) {
+                    tree_->setParameterDefaults(declNode, *defaults);
                 }
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
@@ -2681,6 +2703,28 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // Handle the "Call" operator
         const auto &argsNode   = ast->atAs<AST::RepeatedLoad>(1);
         const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
+        // A positional argument written after a named one is refused where the call is built:
+        // the parser keeps it apart (an argument list writes its positional arguments first),
+        // and the call names itself in the report (design principles 4.4).
+        if (const camel::source::origin_id_t stray = reservedExpr->positionalAfterNamed();
+            stray != camel::source::kInvalidOriginId) {
+            AST::node_ptr_t at = lhsASTNode;
+            while (at != nullptr && at->type() == AST::LoadType::Data &&
+                   at->loadAs<AST::DataLoad>()->dataType() == AST::DataType::ReservedExpr &&
+                   at->loadAs<AST::ReservedExprLoad>()->op() == AST::ReservedDataOp::Bind &&
+                   at->size() > 0) {
+                at = at->at(0);
+            }
+            const std::string name =
+                at != nullptr && at->type() == AST::LoadType::Data &&
+                        at->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Ref
+                    ? at->loadAs<AST::RefDataLoad>()->ref().toString()
+                    : std::string("the call");
+            diags_->of(SemanticDiag::ParamArgumentPositionalAfterNamed)
+                .atOrigin(stray)
+                .commit(name);
+            throw BuildAbortException();
+        }
         // `..(1, 2)` is the two arguments written out: a tuple literal is expanded here,
         // where its elements are still AST nodes. Any other `..e` keeps its marker for GIR,
         // which expands a `..ts` rest binding or a tuple comprehension.
@@ -2714,8 +2758,13 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // taken out of `x` under a reserved name (design principles 3.8).
         node_ptr_t passedNode        = nullptr;
         AST::node_ptr_t passOperator = nullptr;
+        // The name of each argument, aligned with the arguments in the order written: empty for
+        // a positional one. The name is not a child of the LINK; the call checks it against the
+        // callee when the call is resolved (design principles 4.4, handover H276).
+        std::vector<std::optional<std::string>> argNames;
         const auto appendArgument = [&](node_ptr_t gctArg) {
             *res << gctArg;
+            argNames.push_back(std::nullopt);
             mergedInputs.push_back(nodeOrigin(gctArg));
             parts.push_back(semanticPart(
                 camel::source::SemanticRole::Argument,
@@ -2761,7 +2810,16 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             } else {
                 gctArg = visitData(argNode);
             }
+            appendArgument(gctArg);
+        }
+        for (const auto &argNode : *kwargsNode) {
+            // `f(1, by: 2)`: an ordinary argument given by name (design principles 4.4). The
+            // value is an argument of the call like any other; the name is kept beside it and
+            // resolved against the callee's declaration when the call is built.
+            const auto &named = argNode->loadAs<AST::NamedDataLoad>();
+            node_ptr_t gctArg = visitData(argNode->at(0));
             *res << gctArg;
+            argNames.push_back(named->ref().ident());
             mergedInputs.push_back(nodeOrigin(gctArg));
             parts.push_back(semanticPart(
                 camel::source::SemanticRole::Argument,
@@ -2769,13 +2827,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 argSlot++,
                 "arg"));
         }
-        if (kwargsNode->size() > 0) {
-            // Keyword arguments are not supported
-            diags_->of(SemanticDiag::FeatureNotSupported)
-                .at(ast->load()->tokenRange())
-                .commit("kwargs");
-            throw BuildAbortException();
-        }
+        tree_->setArgumentNames(res, std::move(argNames));
         setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.call");
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
         if (passedNode != nullptr) {
@@ -2862,7 +2914,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 argSlot++,
                 "withArg"));
         }
-        tree_->setWithArgumentNames(res, std::move(argNames));
+        tree_->setArgumentNames(res, std::move(argNames));
         setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.bind");
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
     } break;
@@ -3330,10 +3382,55 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
     for (const auto &caseAst : *ast->atAs<AST::RepeatedLoad>(1)) {
         const auto &caseLoad = caseAst->loadAs<AST::TypeCaseLoad>();
         uint16_t patterns    = 0;
-        for (const AST::TypeCaseKind kind : caseLoad->patterns()) {
-            patterns |= typeCaseBit(static_cast<GCT::TypeCaseKind>(kind));
+        std::vector<Type *> identities;
+        bool catchAll         = false;
+        bool unreachableSeen  = false;
+        for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
+            const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
+            if (kind == GCT::TypeCaseKind::Identity) {
+                Type *patternType = visitType(pattern.type);
+                if (patternType == nullptr) {
+                    continue;
+                }
+                const std::string written = pattern.type->load()->geneCode();
+                if (patternType->code() == TypeCode::Void) {
+                    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                        .atOrigin(pattern.type->load()->origin())
+                        .commit(written, "'void' is not the type of a value");
+                    throw BuildAbortException();
+                }
+                if (patternType->code() == TypeCode::TypeOf) {
+                    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                        .atOrigin(pattern.type->load()->origin())
+                        .commit(written, "a 'typeof' expression is not a type identity");
+                    throw BuildAbortException();
+                }
+                for (Type *earlier : identities) {
+                    if (earlier == patternType || typeEquals(earlier, patternType)) {
+                        diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                            .atOrigin(pattern.type->load()->origin())
+                            .commit(
+                                written,
+                                "the same type is already written earlier in this case");
+                        throw BuildAbortException();
+                    }
+                }
+                if (catchAll && !unreachableSeen) {
+                    // `#leaf` and `_` select every type, so nothing after them can be selected.
+                    diags_->of(SemanticDiag::StaticMatchUnreachableCase)
+                        .at(caseAst->load()->tokenRange())
+                        .commit("this case");
+                    unreachableSeen = true;
+                }
+                identities.push_back(patternType);
+                continue;
+            }
+            patterns |= typeCaseBit(kind);
+            if (kind == GCT::TypeCaseKind::Leaf || kind == GCT::TypeCaseKind::Wildcard) {
+                catchAll = true;
+            }
         }
-        node_ptr_t caseNode = tree_->makeTypeCase(patterns);
+        node_ptr_t caseNode = tree_->makeTypeCase(patterns, identities);
         setOriginFromAst(
             context_, caseNode, caseAst, camel::source::OriginKind::GctNode, "gct.match.type.case");
         node_ptr_t bodyNode = visitStmtBlock(caseAst->atAs<AST::StmtBlockLoad>(0));
@@ -4503,9 +4600,9 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     signatureVisit_ = true;
     declSignature_  = isDecl;
     openSignature_  = true;
-std::vector<Tree::WithDefault> withDefaults;
+    Tree::ParameterDefaults defaults;
     FunctionType *funcType = tt::as_ptr<FunctionType>(
-        visitFuncType(ast->atAs<AST::FuncTypeLoad>(0), &withDefaults));
+        visitFuncType(ast->atAs<AST::FuncTypeLoad>(0), &defaults));
     // The head parameters the signature never wrote; the body may still use them (`match type
     // T`), so the warning waits until the body is built.
     const std::vector<std::string> unusedHeadVars = std::exchange(pendingUnusedHeadVars_, {});
@@ -4635,9 +4732,9 @@ std::vector<Tree::WithDefault> withDefaults;
                 funcNode,
                 {whenNode, funcData->whenText(), whenNode->origin()});
         }
-reportUnusedHead(nullptr, whenNode);
-        if (!withDefaults.empty()) {
-            tree_->setWithDefaults(funcNode, withDefaults);
+        reportUnusedHead(nullptr, whenNode);
+        if (!defaults.empty()) {
+            tree_->setParameterDefaults(funcNode, defaults);
         }
         *funcNode << typeNode;
         setOriginFromAst(
@@ -4675,8 +4772,8 @@ reportUnusedHead(nullptr, whenNode);
     if (whenNode != nullptr) {
         tree_->setWhen(funcNode, {whenNode, funcData->whenText(), whenNode->origin()});
     }
-    if (!withDefaults.empty()) {
-        tree_->setWithDefaults(funcNode, withDefaults);
+    if (!defaults.empty()) {
+        tree_->setParameterDefaults(funcNode, defaults);
     }
     if (!unwrittenParams.empty()) {
         tree_->setUnwrittenParams(funcNode, unwrittenParams);
@@ -5034,7 +5131,7 @@ the function type: it is lowered here, in the scope of the signature, and handed
 is, and fills the value into each call that leaves the parameter out (design principles 4.4).
 */
 Type *Builder::visitFuncType(
-    const AST::node_ptr_t &ast, std::vector<Tree::WithDefault> *defaultsOut) {
+    const AST::node_ptr_t &ast, Tree::ParameterDefaults *defaultsOut) {
     ENTER("FuncType");
     // Ensure the AST node is of the expected type (Type)
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for FuncType");
@@ -5147,7 +5244,7 @@ Type *Builder::visitFuncType(
     // Process "with" parameters (context parameters)
     // Their types use the type variables the head declares (design principles 5.5), like the
     // ordinary parameters below.
-    std::vector<Tree::WithDefault> defaults;
+    Tree::ParameterDefaults defaults;
     // The last `with` parameter that wrote a default: a later parameter without one is refused,
     // since a call that leaves the earlier ones out can then only give the others by name.
     std::string lastDefaultName;
@@ -5188,7 +5285,7 @@ Type *Builder::visitFuncType(
                 .commit(name, lastDefaultName);
             throw BuildAbortException();
         }
-        defaults.push_back(
+        defaults.with.push_back(
             {defaultExpr,
              dataNode ? dataNode->load()->origin() : camel::source::kInvalidOriginId});
 
@@ -5201,6 +5298,10 @@ Type *Builder::visitFuncType(
 
     // Process normal parameters
     const auto &normParams = *ast->atAs<AST::RepeatedLoad>(1);
+    // The last ordinary parameter that wrote a default. The rule is the same as for `with`
+    // parameters (design principles 4.4): a later one must write a default too, so that a call
+    // that leaves an earlier one out can still be read as giving the others by name.
+    std::string lastNormDefaultName;
     for (size_t pi = 0; pi < normParams.size(); ++pi) {
         const auto &paramPair = normParams[pi];
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
@@ -5213,6 +5314,9 @@ Type *Builder::visitFuncType(
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
+        // Every ordinary parameter takes a place in the defaults list, so that an index into it
+        // is a parameter's index: `constas` values and the rest parameter included.
+        defaults.norm.push_back({});
         if (paramLoad->isConstas()) {
             // Only a function declaration offers `constas` in its parameter list (the parser
             // admits it nowhere else). A declaration may have any number of them, in any
@@ -5284,25 +5388,24 @@ Type *Builder::visitFuncType(
             type            = paramTypeOf(paramPair, name);
             dimBindAllowed_ = false;
         }
-        data_ptr_t data = nullptr;
-
-        // Process optional default values for parameters
-        const auto &dataNode = paramPair->optAtAs<AST::DataLoad>(1);
+        // The default of an ordinary parameter (design principles 4.4, handover H235/H276):
+        // the same rule as for a `with` parameter. The expression is lowered here, in the
+        // scope of the signature; GIR evaluates it where the declaration is, once, when it
+        // builds the graph, and fills the value into each call that leaves the parameter out.
+        node_ptr_t defaultExpr = nullptr;
+        const auto &dataNode   = paramPair->optAtAs<AST::DataLoad>(1);
         if (dataNode) {
-            data = extractStaticDataFromNode(visitData(dataNode));
-            if (!data) {
-                // Default parameter values must be static
-                diags_->of(SemanticDiag::ParamDataMustBeStatic)
-                    .at(dataNode->load()->tokenRange())
-                    .commit(paramRef.toString());
-                throw BuildAbortException();
-            }
-            // Default parameter values are not supported
-            diags_->of(SemanticDiag::FeatureNotSupported)
-                .at(dataNode->load()->tokenRange())
-                .commit("default parameter values");
+            defaultExpr     = visitData(dataNode);
+            lastNormDefaultName = name;
+        } else if (!lastNormDefaultName.empty()) {
+            diags_->of(SemanticDiag::ParamAfterDefault)
+                .at(paramLoad->tokenRange())
+                .commit(name, lastNormDefaultName);
             throw BuildAbortException();
         }
+        defaults.norm.back() = {
+            defaultExpr,
+            dataNode ? dataNode->load()->origin() : camel::source::kInvalidOriginId};
 
         if (!paramNames.insert(name).second) {
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
@@ -5572,17 +5675,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
                 throw BuildAbortException();
             }
         }
-    }
-    // A type whose argument this build would store as another type (`Tensor<f64>` holds f32) is
-    // refused here, at the type expression: the alternative is a value that silently runs at the
-    // type it was replaced with (design/arrays-memory, P4 "element type exact").
-    std::string writtenArgument;
-    std::string storedArgument;
-    if (base->argumentStoredAs(arguments, writtenArgument, storedArgument)) {
-        diags_->of(SemanticDiag::TensorElementTypeNotStored)
-            .at(ast->load()->tokenRange())
-            .commit(writtenArgument, storedArgument);
-        throw BuildAbortException();
     }
     std::string error;
     // What the arguments denote is the type's answer (`Type::applyArguments`): the core array

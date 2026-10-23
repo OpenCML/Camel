@@ -82,8 +82,8 @@ TensorType *TensorType::get(std::optional<TypeCode> dtype, std::optional<StaticS
 TensorType *TensorType::get(
     std::optional<TypeCode> dtype, std::optional<StaticShape> shape,
     std::vector<ExtentForm> forms) {
-    if (dtype) {
-        dtype = normalizeTensorDType(*dtype);
+    if (dtype && !isSupportedTensorScalar(*dtype)) {
+        throw std::invalid_argument("Unsupported Tensor element type");
     }
     if (shape) {
         for (int64_t &extent : *shape) {
@@ -242,7 +242,7 @@ slot_t TensorType::castSlotFrom(slot_t value, Type *sourceType) const {
     if (tensor == nullptr) {
         refuse("the value is null");
     }
-    if (dtype_ && normalizeTensorDType(tensor->dtype()) != *dtype_) {
+    if (dtype_ && tensor->dtype() != *dtype_) {
         refuse("the tensor has element type " + std::string(dtypeName(tensor->dtype())));
     }
     if (shape_) {
@@ -293,24 +293,6 @@ OtherType *TensorType::cloneWithParams(std::span<Type *const> params) const {
     return get(params[0]->code(), std::nullopt);
 }
 
-bool TensorType::argumentStoredAs(
-    std::span<const type::TypeArgument> arguments, std::string &written,
-    std::string &stored) const {
-    for (const type::TypeArgument &argument : arguments) {
-        if (argument.type == nullptr) {
-            continue;
-        }
-        const std::optional<TypeCode> replacement = storedTensorDType(argument.type->code());
-        if (!replacement) {
-            continue;
-        }
-        written = elementTypeSpelling(argument.type->code());
-        stored  = elementTypeSpelling(*replacement);
-        return true;
-    }
-    return false;
-}
-
 OtherType *TensorType::cloneWithArguments(
     std::span<const type::TypeArgument> arguments, std::string &error) const {
     std::optional<TypeCode> dtype;
@@ -323,18 +305,17 @@ OtherType *TensorType::cloneWithArguments(
                         "Tensor<dtype, const [d0, d1, ...]>";
                 return nullptr;
             }
-            // The element type is a storage dtype of this module (dtype.h): anything else would
-            // reach the kernels, which dispatch on the three storage dtypes.
+            // The element type is a storage dtype of this module (dtype.h): exactly the type written,
+            // f32, f64, bf16, f16, i32, i64 or bool. Anything else would reach the kernels,
+            // which dispatch on these seven element types.
             const TypeCode code = argument.type->code();
             if (!isSupportedTensorScalar(code)) {
-                error = "the element type is f32, f64, i32, i64 or bool, not '" +
+                error = "the element type is f32, f64, bf16, f16, i32, i64 or bool, not '" +
                         type::typeCodeToString(code) + "'";
                 return nullptr;
             }
-            // As cloneWithParams: the type's code names the element type. A dtype this build
-            // stores as another one is refused earlier, at the type expression
-            // (argumentStoredAs); reaching this line means the type was built by C++ code, which
-            // keeps the storage dtype as its invariant.
+            // As cloneWithParams: the type's code names the element type, and the tensor stores
+            // exactly that type (no normalization: dtype.h).
             dtype = code;
             continue;
         }

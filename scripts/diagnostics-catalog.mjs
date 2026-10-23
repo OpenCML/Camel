@@ -1,55 +1,74 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The diagnostics catalog, read from the sources of the compiler.
+// The diagnostics registry, and the code tables it generates.
 //
-//   node scripts/diagnostics-catalog.mjs --check      consistency of the code tables (exit 1 on a defect)
-//   node scripts/diagnostics-catalog.mjs --write      regenerate docs/diagnostics.md
-//   node scripts/diagnostics-catalog.mjs --verify-doc docs/diagnostics.md is what --write would produce
-//   node scripts/diagnostics-catalog.mjs --coverage   list the codes no test mentions (report only)
+//   diagnostics/registry.tsv      the one place a diagnostic is declared: its section, name,
+//                                 severity, message and help text, and the number it was
+//                                 published with (empty until `--write` numbers it)
+//   include/.../messages/*.h      the enums the compiler uses, generated
+//   src/.../messages/*.cpp        the message tables, generated
+//   docs/diagnostics.md           the reference, generated
 //
-// The codes are the enumerators of include/camel/core/error/diagnostics/messages/*.h, and their
-// names, messages and suggestions are the tables of src/core/error/diagnostics/messages/*.cpp.
-// Both are read as text, so the check needs no build: two enumerators with one value compile
-// without complaint (and the table, a hash map, silently keeps one of them), which is how two
-// branches that each took "the next free number" collide unnoticed when they are merged. A
-// catalog of no code is refused (exit 1), whichever mode asked: agreeing with nothing is not a pass.
+//   node scripts/diagnostics-catalog.mjs --check       registry valid, emitted files agree
+//   node scripts/diagnostics-catalog.mjs --write       assign numbers, emit headers, tables, docs
+//   node scripts/diagnostics-catalog.mjs --generate    assign numbers, emit headers and tables
+//   node scripts/diagnostics-catalog.mjs --verify-doc  docs/diagnostics.md is what --write produces
+//   node scripts/diagnostics-catalog.mjs --coverage    list the codes no test mentions (report only)
+//   --root DIR                                        read and write under DIR (the proof cases)
+//
+// --check runs in two places, so a hand-edited number cannot reach a build or a test run: the
+// build (CMakeLists.txt makes it a dependency of libcamel_objects, before anything compiles
+// against the enums) and the compile.diag_catalog plan, which also runs the failure-path proof.
+// --generate is what `npm run build` runs first: it fills in the number of a declaration that
+// has none and emits the headers and tables. --write is --generate plus the reference page;
+// both refuse every defect named above before writing anything.
+//
+// A declaration is one line: section, name, number, severity, message, help. The number of an
+// existing diagnostic is its published value and never moves. A declaration with no number gets
+// the first free value after the last number of its section and severity (errors `0x000000` and
+// up, warnings `0x100000` and up), in the order the lines are written; `--write` then writes that
+// number into the line, so it is published from then on.
+//
+// What this refuses, and never repairs:
+//   - one value twice in a section;
+//   - a value outside its section's range for its severity;
+//   - a name twice (one C++ enumerator per diagnostic name, and -W names are bare);
+//   - an emitted file that differs from what the registry produces.
+// A generator that renumbers to get past a collision is worse than the collision; none of the
+// paths above writes anything.
 
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { parseTomlFile } from '../test/tools/toml-lite.mjs'
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const HEADER_DIR = path.join(REPO_ROOT, 'include', 'camel', 'core', 'error', 'diagnostics', 'messages')
-const TABLE_DIR = path.join(REPO_ROOT, 'src', 'core', 'error', 'diagnostics', 'messages')
-const BASE_HEADER = path.join(REPO_ROOT, 'include', 'camel', 'core', 'error', 'diagnostics', 'base.h')
-const DOC_PATH = path.join(REPO_ROOT, 'docs', 'diagnostics.md')
-const PLAN_DIR = path.join(REPO_ROOT, 'test', 'plans')
-const CASE_DIR = path.join(REPO_ROOT, 'test', 'cases')
+const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const REGISTRY_REL = 'diagnostics/registry.tsv'
+const DOC_REL = 'docs/diagnostics.md'
 
-const SEVERITIES = { 0: 'Error', 1: 'Warn', 2: 'Info', 3: 'Hint' }
-const TYPE_TITLES = {
-    InternalDiag: 'Internal',
-    LexicalDiag: 'Lexical',
-    SyntaxDiag: 'Syntax',
-    SemanticDiag: 'Semantic',
-    RuntimeDiag: 'Run time and passes',
-}
+// The sections, in the order the headers are included. `id` is also the stem of the two
+// generated files; the type byte of the printed code is read from DiagType in base.h, under the
+// name of the enum.
+const SECTIONS = [
+    { id: 'internal', enumName: 'InternalDiag', title: 'Internal' },
+    { id: 'lexical', enumName: 'LexicalDiag', title: 'Lexical' },
+    { id: 'syntax', enumName: 'SyntaxDiag', title: 'Syntax' },
+    { id: 'semantic', enumName: 'SemanticDiag', title: 'Semantic' },
+    { id: 'runtime', enumName: 'RuntimeDiag', title: 'Run time and passes' },
+]
+const SECTION_BY_ID = new Map(SECTIONS.map((s) => [s.id, s]))
 
-function stripComments(text) {
-    return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
-}
-
-function hex8(value) {
-    return '0x' + value.toString(16).toUpperCase().padStart(8, '0')
-}
-
-/** DiagType enumerators of base.h: name -> the 8-bit type value. */
-function readDiagTypes() {
-    const text = stripComments(fs.readFileSync(BASE_HEADER, 'utf8'))
+/** DiagType::<EnumName> -> the type byte of the printed code. */
+function readDiagTypes(root) {
+    const file = path.join(root, 'include/camel/core/error/diagnostics/base.h')
+    if (!fs.existsSync(file)) return null
+    const text = fs
+        .readFileSync(file, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/[^\n]*/g, '')
     const body = text.match(/enum class DiagType\s*:\s*uint8_t\s*\{([\s\S]*?)\}/)
-    if (!body) throw new Error('DiagType enum not found in base.h')
+    if (!body) return null
     const types = {}
     for (const m of body[1].matchAll(/(\w+)\s*=\s*(0x[0-9A-Fa-f]+|\d+)/g)) {
         types[m[1]] = Number(m[2])
@@ -57,164 +76,321 @@ function readDiagTypes() {
     return types
 }
 
-/** The enumerators of every `enum class <X>Diag : uint32_t` in the message headers. */
-function readEnums() {
-    const enums = []
-    for (const file of fs.readdirSync(HEADER_DIR).sort()) {
-        if (!file.endsWith('.h') || file === 'index.h') continue
-        const text = stripComments(fs.readFileSync(path.join(HEADER_DIR, file), 'utf8'))
-        for (const m of text.matchAll(/enum class (\w+Diag)\s*:\s*uint32_t\s*\{([\s\S]*?)\}/g)) {
-            const members = []
-            for (const e of m[2].matchAll(/(\w+)\s*=\s*(0x[0-9A-Fa-f]+|\d+)/g)) {
-                members.push({ name: e[1], value: Number(e[2]) })
-            }
-            enums.push({ type: m[1], file: `include/camel/core/error/diagnostics/messages/${file}`, members })
-        }
-    }
-    return enums
+// The range of a section is the range of its severity band: the low 20 bits are the number, and
+// the severity nibble sits just above them. `0x000000`..`0x0FFFFF` is an error, `0x100000`..
+// `0x1FFFFF` a warning; the section adds the type byte.
+const SEVERITIES = {
+    error: { id: 'error', label: 'Error', min: 0x000000, max: 0x0fffff },
+    warn: { id: 'warn', label: 'Warn', min: 0x100000, max: 0x1fffff },
 }
 
-/** Reads adjacent C++ string literals starting at `pos`; returns the joined value and the end. */
-function readStringLiterals(text, pos) {
-    let value = ''
-    let any = false
-    for (;;) {
-        while (pos < text.length && /\s/.test(text[pos])) pos++
-        if (text[pos] !== '"') break
-        any = true
-        pos++
-        while (pos < text.length && text[pos] !== '"') {
-            if (text[pos] === '\\') {
-                const next = text[pos + 1]
-                value += next === 'n' ? '\n' : next === 't' ? '\t' : next
-                pos += 2
-            } else {
-                value += text[pos++]
-            }
-        }
-        pos++
-    }
-    return any ? { value, pos } : null
+function hex6(value) {
+    return '0x' + value.toString(16).toUpperCase().padStart(6, '0')
 }
 
-/** The table entries `{ <Type>::<Name>, { "name", "message", "suggestion" } }` of one type. */
-function readTables() {
-    const tables = {}
-    for (const file of fs.readdirSync(TABLE_DIR).sort()) {
-        if (!file.endsWith('.cpp')) continue
-        const raw = fs.readFileSync(path.join(TABLE_DIR, file), 'utf8')
-        // Comments are removed outside string literals only where they start a line: the
-        // messages contain "//"-free text, but a URL in one must not be cut.
-        const text = raw.replace(/^\s*\/\/[^\n]*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')
-        for (const m of text.matchAll(/(\w+Diag)::(\w+)\s*,\s*\{/g)) {
-            let pos = m.index + m[0].length
-            const fields = []
-            for (let i = 0; i < 3; i++) {
-                const lit = readStringLiterals(text, pos)
-                if (!lit) break
-                fields.push(lit.value)
-                pos = lit.pos
-                while (pos < text.length && /\s/.test(text[pos])) pos++
-                if (text[pos] === ',') pos++
-            }
-            const list = (tables[m[1]] ||= [])
-            list.push({
-                enumerator: m[2],
-                name: fields[0],
-                message: fields[1],
-                suggestion: fields[2],
-                file: `src/core/error/diagnostics/messages/${file}`,
-            })
-        }
-    }
-    return tables
+function hex8(value) {
+    return '0x' + value.toString(16).toUpperCase().padStart(8, '0')
 }
 
-/** The catalog and the defects found while assembling it. */
-function loadCatalog() {
-    const types = readDiagTypes()
-    const enums = readEnums()
-    const tables = readTables()
+function fail(lines) {
+    console.log(`diagnostics registry: ${lines.length} problem(s)`)
+    for (const line of lines) console.log(`  - ${line}`)
+    process.exit(1)
+}
+
+function stripLineBreaks(text) {
+    return text.replace(/\r/g, '')
+}
+
+// ---- registry ---------------------------------------------------------------------------------
+
+/**
+ * Reads diagnostics/registry.tsv. Returns the declarations in file order, the layout comments
+ * grouped by the band of the declaration that follows them, the raw lines (so `--write` can fill
+ * in numbers without touching anything else) and every defect found.
+ */
+function readRegistry(root) {
+    const file = path.join(root, REGISTRY_REL)
+    if (!fs.existsSync(file)) {
+        return { problems: [`${REGISTRY_REL} does not exist`], records: [], lines: [] }
+    }
+    const text = stripLineBreaks(fs.readFileSync(file, 'utf8'))
+    const lines = text.split('\n')
+    const records = []
+    const layout = new Map()
     const problems = []
-    const entries = []
-    for (const en of enums) {
-        if (!(en.type in types)) {
-            problems.push(`${en.file}: enum ${en.type} has no DiagType of the same name in base.h`)
+    const namesInSection = new Map()
+    const valuesInSection = new Map()
+    const warningNames = new Map()
+    const namesAnywhere = new Map()
+    let pending = []
+    let lastBand = null
+    for (let i = 0; i < lines.length; i++) {
+        const raw = lines[i]
+        const where = `${REGISTRY_REL}:${i + 1}`
+        if (!raw.trim()) continue
+        if (raw.startsWith('#')) {
+            pending.push(raw.slice(1))
             continue
         }
-        const byValue = new Map()
-        for (const member of en.members) {
-            if (member.value > 0xffffff) {
-                problems.push(`${en.type}::${member.name} = ${hex8(member.value)} does not fit the 24 bits of a specific code`)
-            }
-            const severity = (member.value >> 20) & 0xf
-            if (!(severity in SEVERITIES)) {
-                problems.push(`${en.type}::${member.name} = ${hex8(member.value)} has severity bits ${severity}, which is no severity`)
-            }
-            if (byValue.has(member.value)) {
-                problems.push(
-                    `${en.type}: ${byValue.get(member.value)} and ${member.name} have the same value ${hex8(member.value)} (${en.file}); give one of them a free number`
-                )
-            } else {
-                byValue.set(member.value, member.name)
-            }
+        const fields = raw.split('\t')
+        if (fields.length < 5 || fields.length > 6) {
+            problems.push(
+                `${where}: expected section, name, number, severity, message and help separated by tabs`
+            )
+            continue
         }
-        const table = tables[en.type] || []
-        const seen = new Set()
-        for (const row of table) {
-            if (seen.has(row.enumerator)) {
-                problems.push(`${row.file}: ${en.type}::${row.enumerator} has two table entries`)
-            }
-            seen.add(row.enumerator)
-            if (!en.members.some((m) => m.name === row.enumerator)) {
-                problems.push(`${row.file}: table entry ${en.type}::${row.enumerator} is not an enumerator`)
-            }
+        const [sectionId, name, codeText, severityId, message] = fields
+        const suggestion = fields.length === 6 ? fields[5] : ''
+        const section = SECTION_BY_ID.get(sectionId)
+        const severity = SEVERITIES[severityId]
+        if (!section) {
+            problems.push(`${where}: '${sectionId}' is not a section (${[...SECTION_BY_ID.keys()].join(', ')})`)
+            continue
         }
-        const names = new Set()
-        for (const member of en.members) {
-            const row = table.find((r) => r.enumerator === member.name)
-            if (!row) {
-                problems.push(`${en.type}::${member.name} has no entry in the message table (no name, no message)`)
+        if (!severity) {
+            problems.push(`${where}: '${severityId}' is not a severity (error, warn)`)
+            continue
+        }
+        if (!/^[A-Za-z_]\w*$/.test(name)) {
+            problems.push(`${where}: '${name}' is not a C++ enumerator name`)
+            continue
+        }
+        let code = null
+        if (codeText !== '') {
+            if (!/^0x[0-9A-F]{6}$/.test(codeText)) {
+                problems.push(`${where}: '${codeText}' is not a number of six uppercase hex digits (0x1A2B3C)`)
                 continue
             }
-            if (!row.name) problems.push(`${en.type}::${member.name} has an empty name`)
-            if (row.name !== member.name) {
-                problems.push(`${en.type}::${member.name} is named '${row.name}' in the table; the name must be the enumerator`)
+            code = Number(codeText)
+            if (code < severity.min || code > severity.max) {
+                problems.push(
+                    `${sectionId}:${name} = ${hex6(code)} is outside the ${severityId} range ` +
+                        `${hex6(severity.min)}..${hex6(severity.max)} of section ${sectionId}`
+                )
             }
-            if (!row.message) problems.push(`${en.type}::${member.name} has an empty message`)
-            if (row.suggestion === undefined) problems.push(`${en.type}::${member.name} has no suggestion field`)
-            if (names.has(row.name)) problems.push(`${en.type}: the name '${row.name}' is used twice`)
-            names.add(row.name)
-            // The templates of every type but RuntimeDiag are std::format strings, where a
-            // literal brace is written twice; a run-time fault fills {0}, {1}, ... by index.
-            const literal = (t) => (en.type === 'RuntimeDiag' ? t : t.replaceAll('{{', '{').replaceAll('}}', '}'))
-            entries.push({
-                type: en.type,
-                name: row.name || member.name,
-                fullName: `${en.type}::${row.name || member.name}`,
-                code: ((types[en.type] << 24) | member.value) >>> 0,
-                severity: SEVERITIES[(member.value >> 20) & 0xf] || 'Unknown',
-                message: literal(row.message || ''),
-                suggestion: literal(row.suggestion || ''),
-            })
+        }
+        if (!message) problems.push(`${where}: ${sectionId}:${name} has an empty message`)
+        const key = `${sectionId}:${name}`
+        if (namesInSection.has(key)) {
+            problems.push(
+                `${sectionId}: the name '${name}' is already declared (${REGISTRY_REL}:${namesInSection.get(key)})`
+            )
+        } else {
+            namesInSection.set(key, i + 1)
+        }
+        if (namesAnywhere.has(name)) {
+            const other = namesAnywhere.get(name)
+            problems.push(
+                `the name '${name}' is already declared in ${other.section} (${REGISTRY_REL}:${other.line}); ` +
+                    `a diagnostic name is unique across the registry`
+            )
+        } else {
+            namesAnywhere.set(name, { section: sectionId, line: i + 1 })
+        }
+        if (code !== null) {
+            const vkey = `${sectionId}:${code}`
+            if (valuesInSection.has(vkey)) {
+                const other = valuesInSection.get(vkey)
+                problems.push(
+                    `${sectionId}: ${other.name} and ${name} have the same value ${hex6(code)}; ` +
+                        `give the new declaration no number and let --write assign the next free one`
+                )
+            } else {
+                valuesInSection.set(vkey, { name, line: i + 1 })
+            }
+        }
+        if (severityId === 'warn') {
+            const wkey = name.toLowerCase()
+            if (warningNames.has(wkey) && warningNames.get(wkey) !== sectionId) {
+                problems.push(
+                    `the warning name '${name}' exists in ${warningNames.get(wkey)} and ${sectionId}; ` +
+                        `-W options name warnings without the section`
+                )
+            }
+            warningNames.set(wkey, sectionId)
+        }
+        const record = { section, severity, name, code, message, suggestion, line: i + 1, index: i }
+        records.push(record)
+        const band = `${section.id}/${severity.id}`
+        if (!layout.has(band)) layout.set(band, [])
+        for (const comment of pending) layout.get(band).push({ kind: 'comment', text: comment })
+        pending = []
+        layout.get(band).push({ kind: 'entry', record })
+        lastBand = band
+    }
+    if (pending.length) {
+        if (!lastBand) {
+            problems.push(`${REGISTRY_REL}: comments but no declaration`)
+        } else {
+            for (const comment of pending) layout.get(lastBand).push({ kind: 'comment', text: comment })
         }
     }
-    // Warnings are switched by bare name on the command line (-Wno-<name>), so a warning's name
-    // must be unique across the types.
-    const warningNames = new Map()
-    for (const entry of entries) {
-        if (entry.severity !== 'Warn') continue
-        const key = entry.name.toLowerCase()
-        if (warningNames.has(key)) {
-            problems.push(`the warning name '${entry.name}' exists in ${warningNames.get(key)} and ${entry.type}; -W options name warnings without the type`)
-        }
-        warningNames.set(key, entry.type)
-    }
-    entries.sort((a, b) => a.code - b.code)
-    return { entries, problems }
+    return { problems, records, lines, layout }
 }
 
-// ---- Tests that mention a diagnostic ----
+/** Fills the number of every declaration that has none, at the end of its band. */
+function assignNumbers(records) {
+    const problems = []
+    const next = new Map()
+    for (const section of SECTIONS) {
+        for (const severity of Object.values(SEVERITIES)) {
+            const band = `${section.id}/${severity.id}`
+            const codes = records.filter((r) => r.section === section && r.severity === severity && r.code !== null)
+            next.set(band, codes.length ? Math.max(...codes.map((r) => r.code)) + 1 : severity.min)
+        }
+    }
+    for (const record of records) {
+        if (record.code !== null) continue
+        const band = `${record.section.id}/${record.severity.id}`
+        const value = next.get(band)
+        if (value > record.severity.max) {
+            problems.push(
+                `${record.section.id}: section ${record.section.id}/${record.severity.id} has no free ` +
+                    `number at or below ${hex6(record.severity.max)}`
+            )
+            continue
+        }
+        record.code = value
+        record.assigned = true
+        next.set(band, value + 1)
+    }
+    return problems
+}
+
+// ---- emitted files ----------------------------------------------------------------------------
+
+const HEADER_NOTE = [
+    '// Generated by scripts/diagnostics-catalog.mjs from diagnostics/registry.tsv. Do not edit:',
+    '// change the registry and run the script with --write.',
+]
+
+function layoutFor(layout, section, severity) {
+    return layout.get(`${section.id}/${severity.id}`) || []
+}
+
+function emitEnumBody(layout, section) {
+    const out = []
+    for (const severity of [SEVERITIES.error, SEVERITIES.warn]) {
+        const items = layoutFor(layout, section, severity)
+        let run = []
+        const flush = () => {
+            if (run.length === 0) return
+            const width = Math.max(...run.map((r) => r.name.length))
+            for (const r of run) out.push(`    ${r.name.padEnd(width)} = ${hex6(r.code)},`)
+            run = []
+        }
+        for (const item of items) {
+            if (item.kind === 'comment') {
+                flush()
+                out.push(item.text === '' ? '' : `    //${item.text}`)
+            } else {
+                run.push(item.record)
+            }
+        }
+        flush()
+    }
+    return out
+}
+
+function emitHeader(layout, section) {
+    return [
+        '// Copyright (c) the OpenCML Organization',
+        '// SPDX-License-Identifier: MIT',
+        '',
+        ...HEADER_NOTE,
+        '',
+        '// clang-format off',
+        '',
+        '#pragma once',
+        '',
+        '#include <cstdint>',
+        '#include <unordered_map>',
+        '',
+        '#include "../base.h"',
+        '',
+        'namespace camel::core::error {',
+        '',
+        `enum class ${section.enumName} : uint32_t {`,
+        ...emitEnumBody(layout, section),
+        '};',
+        '',
+        `constexpr DiagType diagTypeOf(${section.enumName}) { return DiagType::${section.enumName}; }`,
+        '',
+        `const std::unordered_map<${section.enumName}, DiagInfo> &get${section.id[0].toUpperCase()}${section.id.slice(1)}DiagInfoMap();`,
+        '',
+        '} // namespace camel::core::error',
+        '',
+    ].join('\n')
+}
+
+function cppString(text) {
+    return text
+        .replaceAll('\\', '\\\\')
+        .replaceAll('"', '\\"')
+        .replaceAll('\n', '\\n')
+        .replaceAll('\t', '\\t')
+        .replaceAll('\r', '\\r')
+        // A trigraph needs two `?` in a row; the compiler warns about `??'` and its siblings even
+        // though C++17 ignores them, and a one-line literal puts them next to each other. Escape
+        // the second `?` of such a pair: `?\?'` is the same string and no trigraph.
+        .replace(/\?\?([=/'()!<>-])/g, '?\\?$1')
+}
+
+function emitTable(layout, section) {
+    const out = [
+        '// Copyright (c) the OpenCML Organization',
+        '// SPDX-License-Identifier: MIT',
+        '',
+        ...HEADER_NOTE,
+        '',
+        '// clang-format off',
+        '',
+        `#include "camel/core/error/diagnostics/messages/${section.id}.h"`,
+        '',
+        'namespace camel::core::error {',
+        '',
+        `const std::unordered_map<${section.enumName}, DiagInfo> &get${section.id[0].toUpperCase()}${section.id.slice(1)}DiagInfoMap() {`,
+        `    static const std::unordered_map<${section.enumName}, DiagInfo> infoMap = {`,
+    ]
+    for (const severity of [SEVERITIES.error, SEVERITIES.warn]) {
+        for (const item of layoutFor(layout, section, severity)) {
+            if (item.kind !== 'entry') continue
+            const r = item.record
+            out.push('        {')
+            out.push(`            ${section.enumName}::${r.name},`)
+            out.push('            {')
+            out.push(`                ${JSON.stringify(r.name)},`)
+            out.push(`                "${cppString(r.message)}",`)
+            out.push(`                "${cppString(r.suggestion)}",`)
+            out.push('            },')
+            out.push('        },')
+        }
+    }
+    out.push('    };')
+    out.push('    return infoMap;')
+    out.push('}')
+    out.push('')
+    out.push('} // namespace camel::core::error')
+    out.push('')
+    return out.join('\n')
+}
+
+function headerRel(section) {
+    return `include/camel/core/error/diagnostics/messages/${section.id}.h`
+}
+
+function tableRel(section) {
+    return `src/core/error/diagnostics/messages/${section.id}.cpp`
+}
+
+// ---- document ---------------------------------------------------------------------------------
+
+function fence(text, lang = '') {
+    const ticks = text.includes('```') ? '````' : '```'
+    return `${ticks}${lang}\n${text}\n${ticks}`
+}
+
 function walk(dir, predicate, out = []) {
     if (!fs.existsSync(dir)) return out
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -225,86 +401,80 @@ function walk(dir, predicate, out = []) {
     return out
 }
 
-function loadTests() {
+function loadTests(root) {
     const tests = []
-    for (const planPath of walk(PLAN_DIR, (f) => f.endsWith('.plan.toml')).sort()) {
+    for (const planPath of walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml')).sort()) {
         let plan
         try {
             plan = parseTomlFile(planPath)
         } catch {
             continue
         }
-        for (const test of plan.tests || []) {
-            tests.push({ ...test, planPath })
-        }
+        for (const test of plan.tests || []) tests.push({ ...test, planPath })
     }
     return tests
-}
-
-function testText(test) {
-    return JSON.stringify(test)
-}
-
-/** The text every test asserts on: the plans, their golden files and the scripted cases. */
-function coverageCorpus() {
-    const files = [
-        ...walk(PLAN_DIR, () => true),
-        ...walk(CASE_DIR, (f) => /\.(mjs|js|py)$/.test(f)),
-        ...walk(path.join(REPO_ROOT, 'exemplars'), (f) => /\.(mjs|json|toml|md)$/.test(f)),
-    ]
-    return files.map((f) => fs.readFileSync(f, 'utf8')).join('\n')
-}
-
-function mentions(corpus, entry) {
-    return new RegExp(`\\b${entry.name}\\b`).test(corpus) || corpus.includes(hex8(entry.code))
 }
 
 function stripLeadingComment(source) {
     return source.replace(/^\s*\/\*[\s\S]*?\*\/\s*/, '')
 }
 
-/** A small program of the negative tests that raises `entry`, with the command that runs it. */
-function exampleFor(entry, tests) {
+function exampleFor(entry, tests, root) {
     const candidates = []
     for (const test of tests) {
         if (!test.case || (test.tool && test.tool !== 'camel')) continue
-        const exact = test.expect_diagnostic_name === entry.fullName || test.expect_diagnostic_code === hex8(entry.code)
-        const loose = !exact && new RegExp(`\\b${entry.name}\\b`).test(testText(test))
+        const exact =
+            test.expect_diagnostic_name === entry.fullName ||
+            test.expect_diagnostic_code === hex8(entry.code)
+        const loose = !exact && new RegExp(`\\b${entry.name}\\b`).test(JSON.stringify(test))
         if (!exact && !loose) continue
         const casePath = path.resolve(path.dirname(test.planPath), test.case)
         if (!casePath.endsWith('.cml') || !fs.existsSync(casePath)) continue
-        const source = stripLeadingComment(fs.readFileSync(casePath, 'utf8')).replace(/\r\n/g, '\n').trimEnd()
+        const source = stripLeadingComment(fs.readFileSync(casePath, 'utf8'))
+            .replace(/\r\n/g, '\n')
+            .trimEnd()
         const lines = source.split('\n').length
         candidates.push({ test, casePath, source, lines, exact })
     }
-    // The first test, in the order of the plans, that names the diagnostic outright and whose
-    // program is small enough to show; failing that, the first that mentions it. (Not the
-    // shortest: a new test would then replace the example of an old code, and the document
-    // would change with tests that have nothing to do with it.)
     const small = candidates.filter((c) => c.lines <= 40)
     const best = small.find((c) => c.exact) || small[0]
     if (!best) return null
-    const rel = path.relative(REPO_ROOT, best.casePath).replaceAll('\\', '/')
+    const rel = path.relative(root, best.casePath).replaceAll('\\', '/')
     const vars = { run_nvm: 'std::nvm', run_fvm: 'std::fvm', run_jit: 'std::jit', run_prl: 'std::prl' }
     const args = (best.test.args || [])
         .flat()
-        .map((a) => String(a).replace('${case}', rel).replace(/^\$\{(\w+)\}$/, (_, v) => vars[v] || `\${${v}}`))
+        .map((a) =>
+            String(a)
+                .replace('${case}', rel)
+                .replace(/^\$\{(\w+)\}$/, (_, v) => vars[v] || `\${${v}}`)
+        )
     const envs = (best.test.envs || []).map((e) => `${e} `).join('')
     return { rel, source: best.source, command: `${envs}camel ${args.join(' ')}` }
 }
 
-// ---- Document ----
-function fence(text, lang = '') {
-    const ticks = text.includes('```') ? '````' : '```'
-    return `${ticks}${lang}\n${text}\n${ticks}`
+function catalogEntries(records) {
+    return records
+        .map((r) => ({
+            type: r.section.enumName,
+            sectionId: r.section.id,
+            title: r.section.title,
+            name: r.name,
+            fullName: `${r.section.enumName}::${r.name}`,
+            code: ((r.section.type << 24) | r.code) >>> 0,
+            severity: r.severity.label,
+            message: r.section.id === 'runtime' ? r.message : r.message.replaceAll('{{', '{').replaceAll('}}', '}'),
+            suggestion: r.section.id === 'runtime' ? r.suggestion : r.suggestion.replaceAll('{{', '{').replaceAll('}}', '}'),
+        }))
+        .sort((a, b) => a.code - b.code)
 }
 
-function renderDoc(entries, tests) {
+function emitDoc(entries, tests, root) {
     const out = []
     out.push('# Diagnostics Reference')
     out.push('')
-    out.push('<!-- Generated by scripts/diagnostics-catalog.mjs --write. Do not edit: change the message tables')
-    out.push('     under src/core/error/diagnostics/messages/ (or the tests the examples come from) and run the script. -->')
+    out.push('<!-- Generated by scripts/diagnostics-catalog.mjs --write. Do not edit: the codes and')
+    out.push('     messages are declared in diagnostics/registry.tsv, and the examples come from the')
+    out.push('     tests. Add one line there and run the script. -->')
     out.push('')
     out.push('Every diagnostic the compiler, the passes and the runtime can report. `camel --explain <name or code>`')
     out.push('prints one entry.')
@@ -317,7 +487,10 @@ function renderDoc(entries, tests) {
     out.push('- **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.')
     out.push('- **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.')
     out.push('')
-    out.push(`${entries.length} diagnostics: ${entries.filter((e) => e.severity === 'Error').length} errors, ${entries.filter((e) => e.severity === 'Warn').length} warnings.`)
+    out.push(
+        `${entries.length} diagnostics: ${entries.filter((e) => e.severity === 'Error').length} errors, ` +
+            `${entries.filter((e) => e.severity === 'Warn').length} warnings.`
+    )
     out.push('')
     out.push('| Code | Name | Severity |')
     out.push('|------|------|----------|')
@@ -329,7 +502,7 @@ function renderDoc(entries, tests) {
     for (const entry of entries) {
         if (entry.type !== currentType) {
             currentType = entry.type
-            out.push(`## ${TYPE_TITLES[entry.type] || entry.type} (\`${entry.type}\`)`)
+            out.push(`## ${entry.title} (\`${entry.type}\`)`)
             out.push('')
         }
         out.push(`### ${entry.name}`)
@@ -346,7 +519,7 @@ function renderDoc(entries, tests) {
             out.push(fence(entry.suggestion, 'text'))
             out.push('')
         }
-        const example = exampleFor(entry, tests)
+        const example = exampleFor(entry, tests, root)
         if (example) {
             out.push(`**Example** (\`${example.rel}\`, run as \`${example.command}\`)`)
             out.push('')
@@ -357,52 +530,160 @@ function renderDoc(entries, tests) {
             out.push('')
         }
     }
-    return out.join('\n')
+    return out.join('\n') + '\n'
 }
 
-// ---- Entry ----
-const mode = process.argv[2] || '--check'
-const { entries, problems } = loadCatalog()
-// An empty catalog would agree with itself in every mode below; name it as the guard failure it
-// is (the message tables moved or their enumeration stopped matching).
-if (entries.length === 0) {
-    console.log('diagnostics catalog: no diagnostic code was read from the message tables; nothing was checked')
-    process.exit(1)
+// ---- files ------------------------------------------------------------------------------------
+
+function readFileOrEmpty(file) {
+    return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n') : ''
+}
+
+function verifyFile(root, rel, expected, problems) {
+    const actual = readFileOrEmpty(path.join(root, rel))
+    if (actual !== expected) {
+        problems.push(
+            `${rel} is not what diagnostics/registry.tsv produces; run ` +
+                `\`node scripts/diagnostics-catalog.mjs --write\``
+        )
+    }
+}
+
+function writeFile(root, rel, text) {
+    const file = path.join(root, rel)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    const current = readFileOrEmpty(file)
+    if (current === text) return false
+    fs.writeFileSync(file, text)
+    return true
+}
+
+function rewriteRegistry(root, records, lines) {
+    const byLine = new Map(records.map((r) => [r.index, r]))
+    const out = lines.map((raw, i) => {
+        const record = byLine.get(i)
+        if (!record || !record.assigned) return raw
+        const fields = raw.split('\t')
+        fields[2] = hex6(record.code)
+        return fields.join('\t')
+    })
+    const text = out.join('\n')
+    if (text === stripLineBreaks(readFileOrEmpty(path.join(root, REGISTRY_REL)))) return false
+    fs.writeFileSync(path.join(root, REGISTRY_REL), text)
+    return true
+}
+
+// ---- entry ------------------------------------------------------------------------------------
+
+const argv = process.argv.slice(2)
+let mode = '--check'
+let root = DEFAULT_ROOT
+for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--root') {
+        root = path.resolve(argv[++i] || '')
+    } else {
+        mode = argv[i]
+    }
+}
+if (!['--check', '--write', '--generate', '--verify-doc', '--coverage'].includes(mode)) {
+    console.log(
+        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage [--root DIR]'
+    )
+    process.exit(2)
+}
+
+const diagTypes = readDiagTypes(root)
+if (!diagTypes) {
+    fail([`include/camel/core/error/diagnostics/base.h: DiagType could not be read`])
+}
+for (const section of SECTIONS) {
+    if (!(section.enumName in diagTypes)) {
+        fail([`base.h: DiagType::${section.enumName} is missing for section ${section.id}`])
+    }
+    section.type = diagTypes[section.enumName]
+}
+
+const { problems, records, lines, layout } = readRegistry(root)
+if (records.length === 0) {
+    fail([...problems, 'no diagnostic was read from diagnostics/registry.tsv; nothing was checked'])
+}
+if (problems.length) fail(problems)
+
+if (mode === '--coverage') {
+    const entries = catalogEntries(records)
+    const corpus = [
+        ...walk(path.join(root, 'test', 'plans'), () => true),
+        ...walk(path.join(root, 'test', 'cases'), (f) => /\.(mjs|js|py)$/.test(f)),
+        ...walk(path.join(root, 'exemplars'), (f) => /\.(mjs|json|toml|md)$/.test(f)),
+    ]
+        .map((f) => fs.readFileSync(f, 'utf8'))
+        .join('\n')
+    const mentions = (entry) =>
+        new RegExp(`\\b${entry.name}\\b`).test(corpus) || corpus.includes(hex8(entry.code))
+    const missing = entries.filter((e) => !mentions(e))
+    console.log(`diagnostic codes mentioned by no test: ${missing.length} of ${entries.length}`)
+    for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+    process.exit(0)
+}
+
+if (mode === '--check' || mode === '--verify-doc') {
+    const unnumbered = records.filter((r) => r.code === null)
+    if (unnumbered.length) {
+        fail(
+            unnumbered.map(
+                (r) =>
+                    `${r.section.id}:${r.name} has no number yet; ` +
+                    `run \`node scripts/diagnostics-catalog.mjs --write\` to take the next free one`
+            )
+        )
+    }
+}
+
+if (mode === '--write' || mode === '--generate') {
+    const assignmentProblems = assignNumbers(records)
+    if (assignmentProblems.length) fail(assignmentProblems)
+}
+
+const emitted = []
+for (const section of SECTIONS) {
+    emitted.push([headerRel(section), emitHeader(layout, section)])
+    emitted.push([tableRel(section), emitTable(layout, section)])
 }
 
 if (mode === '--check') {
-    if (problems.length > 0) {
-        console.log(`diagnostics catalog: ${problems.length} problem(s)`)
-        for (const p of problems) console.log(`  - ${p}`)
-        process.exit(1)
-    }
-    console.log(`diagnostics catalog: ${entries.length} codes, every one with a name and a message, no value used twice`)
-} else if (mode === '--write' || mode === '--verify-doc') {
-    if (problems.length > 0) {
-        console.log('diagnostics catalog: run --check first; the tables are inconsistent')
-        for (const p of problems) console.log(`  - ${p}`)
-        process.exit(1)
-    }
-    const doc = renderDoc(entries, loadTests()) + '\n'
+    const verifyProblems = []
+    for (const [rel, text] of emitted) verifyFile(root, rel, text, verifyProblems)
+    if (verifyProblems.length) fail(verifyProblems)
+    console.log(
+        `diagnostics registry: ${records.length} codes, every one with a name and a message, ` +
+            `no value used twice, and the emitted headers agree`
+    )
+    process.exit(0)
+}
+
+if (mode === '--write' || mode === '--generate') {
+    const wroteRegistry = rewriteRegistry(root, records, lines)
+    let wrote = 0
+    for (const [rel, text] of emitted) if (writeFile(root, rel, text)) wrote++
     if (mode === '--write') {
-        fs.writeFileSync(DOC_PATH, doc)
-        console.log(`wrote ${path.relative(REPO_ROOT, DOC_PATH)} (${entries.length} diagnostics)`)
-    } else {
-        const current = fs.existsSync(DOC_PATH) ? fs.readFileSync(DOC_PATH, 'utf8').replace(/\r\n/g, '\n') : ''
-        if (current !== doc) {
-            console.log('docs/diagnostics.md is out of date: run `node scripts/diagnostics-catalog.mjs --write`')
-            process.exit(1)
-        }
-        console.log('docs/diagnostics.md is up to date')
+        const entries = catalogEntries(records)
+        const doc = emitDoc(entries, loadTests(root), root)
+        if (writeFile(root, DOC_REL, doc)) wrote++
     }
-} else if (mode === '--coverage') {
-    // A report, not a gate: it always exits 0. A code counts as covered when a plan, a golden
-    // file or a scripted case mentions its name or its number.
-    const corpus = coverageCorpus()
-    const missing = entries.filter((e) => !mentions(corpus, e))
-    console.log(`diagnostic codes mentioned by no test: ${missing.length} of ${entries.length}`)
-    for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
-} else {
-    console.log('usage: node scripts/diagnostics-catalog.mjs --check | --write | --verify-doc | --coverage')
-    process.exit(2)
+    const assigned = records.filter((r) => r.assigned).length
+    console.log(
+        `${mode === '--write' ? 'wrote' : 'generated'} diagnostics/registry.tsv${wroteRegistry ? '' : ' (unchanged)'} ` +
+            `and ${wrote} file(s); ${assigned} new number(s), ${records.length} codes`
+    )
+    process.exit(0)
+}
+
+if (mode === '--verify-doc') {
+    const entries = catalogEntries(records)
+    const expected = emitDoc(entries, loadTests(root), root)
+    const problems = []
+    verifyFile(root, DOC_REL, expected, problems)
+    if (problems.length) fail(problems)
+    console.log('docs/diagnostics.md is up to date')
+    process.exit(0)
 }

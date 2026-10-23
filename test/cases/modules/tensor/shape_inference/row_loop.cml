@@ -12,7 +12,7 @@ func twice(x: Tensor<f32, [?, 3]>, n: int): Tensor<f32, [?, 3]> {
     return concat(reshape(x, [n, 3]), x, 0)
 }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
     println(rows(x))
     println(sum(rows(twice(x, 2))))
     return 0

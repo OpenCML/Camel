@@ -204,6 +204,44 @@ struct TypedBuffer {
     std::unique_ptr<std::byte[]> owned;
 };
 
+/// The element type two operands are computed in.
+///
+/// A Camel scalar is a value, not a tensor of some element type: when it meets a tensor it
+/// takes that tensor's element type (design principles 5.1, a literal takes its context), so
+/// `x * 2.0` keeps an f32 tensor f32 and an f64 tensor f64. A float scalar meeting an integer
+/// tensor computes in f32, the way the operator has always returned a float. Two tensors keep
+/// their written element types and promote only by widening (`promoteTensorTypes`), so no
+/// tensor is converted to a type it was not written with.
+TypeCode operandType(const Operand &lhs, const Operand &rhs) {
+    if (lhs.scalar != rhs.scalar) {
+        const Operand &tensor = lhs.scalar ? rhs : lhs;
+        const Operand &scalar = lhs.scalar ? lhs : rhs;
+        if (isFloatingTensorType(tensor.dtype)) {
+            return tensor.dtype;
+        }
+        return isFloatingTensorType(scalar.dtype) ? TypeCode::Float32 : tensor.dtype;
+    }
+    return promoteTensorTypes(lhs.dtype, rhs.dtype);
+}
+
+/// Result type of a binary operator: `Div` and `Pow` produce a float, f64 when a tensor operand
+/// is f64, f32 otherwise (an integer tensor's division has always produced f32). A bf16 or f16
+/// tensor keeps its element type: the operator computes in f32 and the store rounds once.
+TypeCode binaryResultType(BinaryOp op, const Operand &lhs, const Operand &rhs) {
+    const TypeCode base = operandType(lhs, rhs);
+    if (!binaryProducesFloat(op)) {
+        return base;
+    }
+    if (isReducedFloatTensorType(base)) {
+        return base;
+    }
+    if ((!lhs.scalar && lhs.dtype == TypeCode::Float64) ||
+        (!rhs.scalar && rhs.dtype == TypeCode::Float64)) {
+        return TypeCode::Float64;
+    }
+    return TypeCode::Float32;
+}
+
 template <typename To> void convertBuffer(const Operand &src, To *dst) {
     const uint64_t count = numelOf(src.shape);
     dispatchDType(src.dtype, [&]<typename From>() {
@@ -211,6 +249,12 @@ template <typename To> void convertBuffer(const Operand &src, To *dst) {
         for (uint64_t i = 0; i < count; ++i) {
             if constexpr (std::is_same_v<To, bool_t>) {
                 dst[i] = in[i] != From{} ? 1 : 0;
+            } else if constexpr (
+                camel::core::rtdata::is_reduced_float_v<To> &&
+                camel::core::rtdata::is_reduced_float_v<From>) {
+                // bf16 to f16 (or back) goes through f32, the compute precision: the stored value
+                // widens exactly, then rounds once into the other type (dtype.h).
+                dst[i] = To(in[i].toFloat());
             } else {
                 dst[i] = static_cast<To>(in[i]);
             }
@@ -245,7 +289,13 @@ template <typename T> T applyBinary(BinaryOp op, T a, T b) {
     case BinaryOp::Div:
         return static_cast<T>(a / b);
     case BinaryOp::Pow:
-        return static_cast<T>(std::pow(a, b));
+        if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
+            // The power functions are computed in f32 and rounded once into the element type,
+            // the same path as + - * / (dtype.h).
+            return static_cast<T>(std::pow(static_cast<float>(a), static_cast<float>(b)));
+        } else {
+            return static_cast<T>(std::pow(a, b));
+        }
     case BinaryOp::Max:
         return maximum(a, b); // IEEE 754-2019 maximum (minmax.h)
     case BinaryOp::Min:
@@ -416,14 +466,67 @@ void runUnaryF32(UnaryOp op, const float *src, float *dst, int64_t count) {
     });
 }
 
+/// The f64 unary loops: the same definition as the f32 vector loops, computed in double. An
+/// f64 tensor keeps f64 here; the f32 loops are never asked to compute an f64 tensor.
+void runUnaryF64(UnaryOp op, const double *src, double *dst, int64_t count) {
+    parallelFor(count, unaryGrain(op), [&](int64_t begin, int64_t end) {
+        for (int64_t i = begin; i < end; ++i) {
+            const double x = src[i];
+            switch (op) {
+            case UnaryOp::Neg:
+                dst[i] = -x;
+                break;
+            case UnaryOp::Abs:
+                dst[i] = std::fabs(x);
+                break;
+            case UnaryOp::Exp:
+                dst[i] = std::exp(x);
+                break;
+            case UnaryOp::Log:
+                dst[i] = std::log(x);
+                break;
+            case UnaryOp::Sqrt:
+                dst[i] = std::sqrt(x);
+                break;
+            case UnaryOp::Rsqrt:
+                dst[i] = 1.0 / std::sqrt(x);
+                break;
+            case UnaryOp::Sigmoid:
+                dst[i] = 1.0 / (1.0 + std::exp(-x));
+                break;
+            case UnaryOp::Tanh:
+                dst[i] = std::tanh(x);
+                break;
+            case UnaryOp::Relu:
+                dst[i] = kernels::relu(x);
+                break;
+            case UnaryOp::Gelu: {
+                constexpr double kScale = 0.7978845608028654; // sqrt(2 / pi)
+                dst[i] = 0.5 * x * (1.0 + std::tanh(kScale * (x + 0.044715 * x * x * x)));
+                break;
+            }
+            case UnaryOp::Erf:
+                dst[i] = std::erf(x);
+                break;
+            }
+        }
+    });
+}
+
 } // namespace
 
 ScalarOperand ScalarOperand::fromSlot(TypeCode code, slot_t slot) {
     ScalarOperand scalar{};
-    scalar.dtype = normalizeTensorDType(code);
+    scalar.dtype = code;
     switch (scalar.dtype) {
     case TypeCode::Float32:
         scalar.value.f = static_cast<float>(scalarToDouble(code, slot));
+        break;
+    case TypeCode::Float64:
+        scalar.value.d = scalarToDouble(code, slot);
+        break;
+    case TypeCode::Int32:
+        scalar.value.i32 = static_cast<int32_t>(scalarToInt64(code, slot));
         break;
     case TypeCode::Int64:
         scalar.value.i = scalarToInt64(code, slot);
@@ -447,12 +550,42 @@ Shape broadcastShapes(std::span<const int64_t> lhs, std::span<const int64_t> rhs
 }
 
 Array *unary(UnaryOp op, const Array *input, mm::IAllocator &allocator) {
-    const TypeCode outType = unaryProducesFloat(op) ? TypeCode::Float32 : input->dtype();
+    // A bf16 or f16 input keeps its element type: the operator is computed by the f32 loops
+    // below and each result is rounded once when it is stored, the one arithmetic path of a
+    // reduced element type (dtype.h). Widening it to f32 here would change the type the program
+    // wrote.
+    const bool reduced = isReducedFloatTensorType(input->dtype());
+    const TypeCode outType =
+        (unaryProducesFloat(op) && !reduced)
+            ? (input->dtype() == TypeCode::Float64 ? TypeCode::Float64 : TypeCode::Float32)
+            : input->dtype();
     const TypedBuffer in   = asDType(Operand::of(input), outType);
     Array *out      = createTensor(outType, input->shapeSpan(), allocator);
     const auto count       = static_cast<int64_t>(input->numel());
+    if (reduced) {
+        if (count == 0) {
+            return out;
+        }
+        dispatchDType(outType, [&]<typename T>() {
+            const T *src = static_cast<const T *>(in.data);
+            std::vector<float> wide(static_cast<size_t>(count));
+            for (int64_t i = 0; i < count; ++i) {
+                wide[static_cast<size_t>(i)] = static_cast<float>(src[i]);
+            }
+            runUnaryF32(op, wide.data(), wide.data(), count);
+            T *dst = out->dataAs<T>();
+            for (int64_t i = 0; i < count; ++i) {
+                dst[i] = T(wide[static_cast<size_t>(i)]);
+            }
+        });
+        return out;
+    }
     if (outType == TypeCode::Float32) {
         runUnaryF32(op, static_cast<const float *>(in.data), out->dataAs<float>(), count);
+        return out;
+    }
+    if (outType == TypeCode::Float64) {
+        runUnaryF64(op, static_cast<const double *>(in.data), out->dataAs<double>(), count);
         return out;
     }
     dispatchDType(outType, [&]<typename T>() {
@@ -466,8 +599,7 @@ void unaryF32(UnaryOp op, const float *src, float *dst, int64_t count) {
 }
 
 Array *binary(BinaryOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator) {
-    const TypeCode outType =
-        binaryProducesFloat(op) ? TypeCode::Float32 : promoteTensorTypes(lhs.dtype, rhs.dtype);
+    const TypeCode outType = binaryResultType(op, lhs, rhs);
     const std::span<const int64_t> shapes[] = {lhs.shape, rhs.shape};
     const BroadcastPlan plan                = makePlan(shapes);
     const TypedBuffer a                     = asDType(lhs, outType);
@@ -485,7 +617,7 @@ Array *binary(BinaryOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator) 
 }
 
 Array *compare(CompareOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator) {
-    const TypeCode computeType              = promoteTensorTypes(lhs.dtype, rhs.dtype);
+    const TypeCode computeType              = operandType(lhs, rhs);
     const std::span<const int64_t> shapes[] = {lhs.shape, rhs.shape};
     const BroadcastPlan plan                = makePlan(shapes);
     const TypedBuffer a                     = asDType(lhs, computeType);
@@ -516,7 +648,7 @@ Array *compare(CompareOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator
 }
 
 Array *where(Operand cond, Operand lhs, Operand rhs, mm::IAllocator &allocator) {
-    const TypeCode outType                  = promoteTensorTypes(lhs.dtype, rhs.dtype);
+    const TypeCode outType                  = operandType(lhs, rhs);
     const std::span<const int64_t> shapes[] = {lhs.shape, rhs.shape, cond.shape};
     const BroadcastPlan plan                = makePlan(shapes);
     const TypedBuffer a                     = asDType(lhs, outType);
@@ -546,7 +678,9 @@ Array *where(Operand cond, Operand lhs, Operand rhs, mm::IAllocator &allocator) 
 }
 
 Array *cast(const Array *input, TypeCode dtype, mm::IAllocator &allocator) {
-    dtype             = normalizeTensorDType(dtype);
+    if (!isSupportedTensorScalar(dtype)) {
+        throw std::invalid_argument("Unsupported Tensor element type");
+    }
     Array *out = createTensor(dtype, input->shapeSpan(), allocator);
     if (dtype == input->dtype()) {
         if (input->byteSize() > 0) {

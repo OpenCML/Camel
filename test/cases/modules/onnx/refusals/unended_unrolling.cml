@@ -18,7 +18,10 @@ import { export_model } from onnx
 
 type P = { w: Tensor }
 
-func weights(): Tensor { return reshape([0.5, -0.25, 0.1, 0.3], [2, 2]) }
+func weights(): Tensor {
+    let w: f32[] = [0.5, -0.25, 0.1, 0.3]
+    return reshape(w, [2, 2])
+}
 
 with <m: P>
 func walk(h: Tensor, k: int): Tensor {
@@ -33,7 +36,8 @@ func model(x: Tensor): Tensor {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    let xs: f32[] = [1.0, 2.0, 3.0, 4.0]
+    let x = reshape(xs, [2, 2])
     export_model(model, x, 'tmp/test/onnx/refusal_unended_unrolling.onnx')
     return 0
 }

@@ -111,7 +111,22 @@ const MODULES = [
         declaration: true,
         computed: 'signatures/tensor.cml',
     },
-    { name: 'array', title: '`array`: arrays and higher-order functions', kind: 'camel' },
+    {
+        name: 'types',
+        title: '`types`: the properties of types',
+        kind: 'camel',
+        // The predicates are head-only generic functions whose `match type` cases name the
+        // types the language spells, so a `when` condition can ask a property of a type.
+    },
+    {
+        name: 'array',
+        title: '`array`: arrays, sorting and higher-order functions',
+        kind: 'camel',
+        // Most of the module is Camel; a body-less declaration is one of its native operators
+        // (the sorts, argsort, flatten, unique), and the page says so. Those declarations are
+        // checked against the registered operators like a C++ module's.
+        native: true,
+    },
     {
         name: 'math',
         title: '`math`: numbers and bits',
@@ -127,15 +142,6 @@ const MODULES = [
         kind: 'cpp',
         // The declarations, not a signature file: they are what the module compiles (H19).
         source: 'statistics.cml',
-        declaration: true,
-    },
-    {
-        name: 'algo',
-        title: '`algo`: sorting and array primitives',
-        kind: 'cpp',
-        // The declarations only: the seven names whose result type C++ computed from their array
-        // argument are generic declarations (handover H202).
-        source: 'algo.cml',
         declaration: true,
     },
     {
@@ -678,6 +684,10 @@ function readDeclarations(file, module) {
                 norm: splitParams(args.inner),
                 result,
                 inferred: result === '' && module.kind === 'camel',
+                // A body-less `export func` in a library module written in Camel declares one of
+                // the module's native operators (`array`'s sorts and primitives): there is no
+                // subgraph, and the kernel is the operator's.
+                native: module.kind === 'camel' && !declarationBody(after, lines, i),
                 doc: [],
                 purity: null,
                 effect: '',
@@ -696,7 +706,8 @@ function readDeclarations(file, module) {
                 else if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
                 else entry.doc.push(text)
             }
-            if (module.kind === 'cpp') {
+            // A native entry names its operator like a C++ module's declaration does.
+            if (module.kind === 'cpp' || entry.native) {
                 // `module:function`, or what the `#op` tag above says.
                 entry.uri = pendingUri || `${module.name}:${name}`
             }
@@ -896,6 +907,8 @@ out.push('Not in this reference: the profiler (`perf`).')
                 out.push('')
                 if (entry.value) {
                     out.push('- A value: written without parentheses, a constant where it is used.')
+                } else if (module.kind === 'camel' && entry.native) {
+                    out.push('- A native operator of this module: an opaque node, pure.')
                 } else if (module.kind === 'camel') {
                     out.push('- Written in Camel: a subgraph, pure when the functions passed to it are.')
                 } else if (entry.purity === 'pure') {
@@ -1342,7 +1355,7 @@ function verifyOps() {
     const registered = registeredOperators()
     const problems = []
     let checked = 0
-    for (const module of MODULES.filter((m) => m.kind === 'cpp')) {
+    for (const module of MODULES.filter((m) => m.kind === 'cpp' || m.native)) {
         const registeredName = module.registered || module.name
         const file = path.relative(REPO_ROOT, sourceOf(module)).replace(/\\/g, '/')
         // Every operator the module registers and a declaration may name. A type-qualified alias
@@ -1356,8 +1369,12 @@ function verifyOps() {
             problems.push(`${file}: the module '${registeredName}' registers no operator (is it imported by ${path.relative(REPO_ROOT, PROBE)}?)`)
             continue
         }
-        // Values are not operators: inspect --ops does not list them.
-        const entries = parseDeclarations(module).filter((e) => !e.value)
+        // Values are not operators: inspect --ops does not list them. A module written in Camel
+        // is verified only for its native declarations: its Camel functions are bodies, not
+        // operators.
+        const entries = parseDeclarations(module).filter(
+            (e) => !e.value && (module.kind === 'cpp' || e.native),
+        )
         const declaredNames = new Set(entries.filter((e) => e.file === file).map((e) => e.name))
         // A module may publish an operator under a type namespace too (`Tensor.shape`). That
         // name is C++'s, because a declaration cannot write it, and the compiler points it at

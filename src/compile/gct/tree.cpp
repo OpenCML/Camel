@@ -184,39 +184,39 @@ const std::vector<std::string> *Tree::headTypeParamsOf(const Node *func) const {
     return it == headTypeParams_.end() ? nullptr : &it->second;
 }
 
-void Tree::setWithDefaults(const Node *func, std::vector<WithDefault> defaults) {
+void Tree::setParameterDefaults(const Node *func, ParameterDefaults defaults) {
     if (func != nullptr && !defaults.empty()) {
-        withDefaults_[func] = std::move(defaults);
+        parameterDefaults_[func] = std::move(defaults);
     }
 }
 
-const std::vector<Tree::WithDefault> *Tree::withDefaultsOf(const Node *func) const {
+const Tree::ParameterDefaults *Tree::parameterDefaultsOf(const Node *func) const {
     if (func == nullptr) {
         return nullptr;
     }
-    const auto it = withDefaults_.find(func);
-    return it == withDefaults_.end() ? nullptr : &it->second;
+    const auto it = parameterDefaults_.find(func);
+    return it == parameterDefaults_.end() ? nullptr : &it->second;
 }
 
-void Tree::setWithArgumentNames(
-    const Node *with, std::vector<std::optional<std::string>> names) {
-    if (with == nullptr || names.empty()) {
+void Tree::setArgumentNames(
+    const Node *call, std::vector<std::optional<std::string>> names) {
+    if (call == nullptr || names.empty()) {
         return;
     }
     const bool named = std::any_of(
         names.begin(), names.end(), [](const auto &name) { return name.has_value(); });
     if (named) {
-        withArgumentNames_[with] = std::move(names);
+        argumentNames_[call] = std::move(names);
     }
 }
 
-const std::vector<std::optional<std::string>> *Tree::withArgumentNamesOf(
-    const Node *with) const {
-    if (with == nullptr) {
+const std::vector<std::optional<std::string>> *Tree::argumentNamesOf(
+    const Node *call) const {
+    if (call == nullptr) {
         return nullptr;
     }
-    const auto it = withArgumentNames_.find(with);
-    return it == withArgumentNames_.end() ? nullptr : &it->second;
+    const auto it = argumentNames_.find(call);
+    return it == argumentNames_.end() ? nullptr : &it->second;
 }
 
 Tree *Tree::of(const Node *node) {
@@ -390,9 +390,18 @@ node_ptr_t Tree::makeCase(CaseType type, const std::string &binding) {
 
 node_ptr_t Tree::makeTypeMatch() { return makeNode(NodeKind::TMTCH); }
 
-node_ptr_t Tree::makeTypeCase(uint16_t patterns) {
+node_ptr_t Tree::makeTypeCase(uint16_t patterns, const std::vector<Type *> &types) {
     Node *node = makeNode(NodeKind::TCASE);
     node->tag_ = patterns;
+    if (!types.empty()) {
+        auto *list =
+            static_cast<Node::TypeList *>(allocate(Node::TypeList::bytesFor(types.size())));
+        list->count = types.size();
+        for (size_t i = 0; i < types.size(); ++i) {
+            list->items[i] = types[i];
+        }
+        node->payload_.types = list;
+    }
     return node;
 }
 
@@ -578,6 +587,18 @@ node_ptr_t Tree::clone(const Node *node) {
             copy->payload_.name = intern(*node->payload_.name);
         }
         break;
+    case NodeKind::TCASE:
+        if (node->typeCaseTypeCount() > 0) {
+            const size_t count = node->typeCaseTypeCount();
+            auto *list =
+                static_cast<Node::TypeList *>(allocate(Node::TypeList::bytesFor(count)));
+            list->count = count;
+            for (size_t i = 0; i < count; ++i) {
+                list->items[i] = node->typeCaseTypeAt(i);
+            }
+            copy->payload_.types = list;
+        }
+        break;
     case NodeKind::EXPT:
     case NodeKind::LOOP:
     case NodeKind::SFOR:
@@ -612,19 +633,23 @@ node_ptr_t Tree::clone(const Node *node) {
         if (const auto *when = Tree::of(node)->whenOf(node)) {
             whenClauses_[copy] = WhenClause{clone(when->condition), when->text, when->origin};
         }
-if (const auto *head = Tree::of(node)->headTypeParamsOf(node)) {
+        if (const auto *head = Tree::of(node)->headTypeParamsOf(node)) {
             headTypeParams_[copy] = *head;
         }
-        // The defaults of the declaration's `with` parameters come with it too: the copy is
-        // called with the same rules.
-        if (const auto *defaults = Tree::of(node)->withDefaultsOf(node)) {
-            std::vector<WithDefault> copies;
-            copies.reserve(defaults->size());
-            for (const WithDefault &written : *defaults) {
-                copies.push_back(
-                    {written.expr != nullptr ? clone(written.expr) : nullptr, written.origin});
-            }
-            withDefaults_[copy] = std::move(copies);
+        // The defaults of the declaration's parameters come with it too: the copy is called
+        // with the same rules.
+        if (const auto *defaults = Tree::of(node)->parameterDefaultsOf(node)) {
+            const auto copyOf = [&](const std::vector<ParameterDefault> &written) {
+                std::vector<ParameterDefault> copies;
+                copies.reserve(written.size());
+                for (const ParameterDefault &one : written) {
+                    copies.push_back(
+                        {one.expr != nullptr ? clone(one.expr) : nullptr, one.origin});
+                }
+                return copies;
+            };
+            parameterDefaults_[copy] =
+                ParameterDefaults{copyOf(defaults->with), copyOf(defaults->norm)};
         }
     }
     return copy;
@@ -736,7 +761,7 @@ std::string Node::toString() const {
         std::string text = "TCASE: (";
         bool first       = true;
         for (const TypeCaseKind kind :
-             {TypeCaseKind::Struct, TypeCaseKind::Tuple, TypeCaseKind::Leaf,
+             {TypeCaseKind::Struct, TypeCaseKind::Tuple, TypeCaseKind::Func, TypeCaseKind::Leaf,
               TypeCaseKind::Wildcard}) {
             if ((typeCasePatterns() & typeCaseBit(kind)) == 0) {
                 continue;
@@ -750,13 +775,23 @@ std::string Node::toString() const {
             case TypeCaseKind::Tuple:
                 text += "tuple";
                 break;
+            case TypeCaseKind::Func:
+                text += "func";
+                break;
             case TypeCaseKind::Leaf:
                 text += "#leaf";
                 break;
             case TypeCaseKind::Wildcard:
                 text += "_";
                 break;
+            case TypeCaseKind::Identity:
+                break;
             }
+        }
+        for (size_t i = 0; i < typeCaseTypeCount(); ++i) {
+            text += first ? "" : " | ";
+            first = false;
+            text += typeCaseTypeAt(i)->toString();
         }
         return text + ")";
     }

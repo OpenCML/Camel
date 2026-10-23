@@ -47,8 +47,8 @@ func pooled(x: Tensor<f32, [1, 1, 4, 4]>): Tensor {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) as Tensor<f32, [2, 3]>
-    let b = reshape([0.5, -0.5, 1.5], [3]) as Tensor<f32, [3]>
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as Tensor<f32, [2, 3]>
+    let b = reshape([0.5, -0.5, 1.5] as f32[], [3]) as Tensor<f32, [3]>
     let w = ones([3, 4]) as Tensor<f32, [3, 4]>
     println(layers(x, b, w))
     println(rows(x, b))

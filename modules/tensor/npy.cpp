@@ -11,6 +11,7 @@
 
 #include "camel/utils/path.h"
 #include "binary.h"
+#include "dtype.h"
 
 #include <algorithm>
 #include <bit>
@@ -153,9 +154,13 @@ Array *loadNpy(const std::filesystem::path &path, mm::IAllocator &allocator) {
     const bool swap = fileLittle != hostLittle && h.itemSize > 1;
 
     TypeCode dtype;
-    if (h.kind == 'f' && (h.itemSize == 4 || h.itemSize == 8)) {
+    if (h.kind == 'f' && h.itemSize == 4) {
         dtype = TypeCode::Float32;
-    } else if (h.kind == 'i' && (h.itemSize == 4 || h.itemSize == 8)) {
+    } else if (h.kind == 'f' && h.itemSize == 8) {
+        dtype = TypeCode::Float64;
+    } else if (h.kind == 'i' && h.itemSize == 4) {
+        dtype = TypeCode::Int32;
+    } else if (h.kind == 'i' && h.itemSize == 8) {
         dtype = TypeCode::Int64;
     } else if (h.kind == 'b' && h.itemSize == 1) {
         dtype = TypeCode::Bool;
@@ -165,6 +170,8 @@ Array *loadNpy(const std::filesystem::path &path, mm::IAllocator &allocator) {
             std::string("unsupported element type '") + h.kind + std::to_string(h.itemSize) + "'");
     }
 
+    // The file's element type is the tensor's: `load_npy` never converts (design principles
+    // 5.1; design/arrays-memory plan 5.2). An f8 file is an f64 tensor, an i4 file an i32 one.
     Array *tensor = createTensor(dtype, h.shape, allocator);
     const uint64_t count = tensor->numel();
     std::vector<std::byte> raw(count * h.itemSize);
@@ -172,24 +179,12 @@ Array *loadNpy(const std::filesystem::path &path, mm::IAllocator &allocator) {
     if (static_cast<size_t>(in.gcount()) != raw.size()) {
         fail(path, "truncated data");
     }
-    for (uint64_t i = 0; i < count; ++i) {
-        const std::byte *src = raw.data() + i * h.itemSize;
-        switch (dtype) {
-        case TypeCode::Float32:
-            tensor->dataAs<float>()[i] = h.itemSize == 4
-                                             ? readElement<float>(src, swap)
-                                             : static_cast<float>(readElement<double>(src, swap));
-            break;
-        case TypeCode::Int64:
-            tensor->dataAs<int64_t>()[i] =
-                h.itemSize == 8 ? readElement<int64_t>(src, swap)
-                                : static_cast<int64_t>(readElement<int32_t>(src, swap));
-            break;
-        default:
-            tensor->dataAs<bool_t>()[i] = std::to_integer<uint8_t>(*src) != 0 ? 1 : 0;
-            break;
+    dispatchDType(dtype, [&]<typename T>() {
+        T *dst = tensor->dataAs<T>();
+        for (uint64_t i = 0; i < count; ++i) {
+            dst[i] = readElement<T>(raw.data() + i * h.itemSize, swap);
         }
-    }
+    });
     return tensor;
 }
 
@@ -201,6 +196,12 @@ std::string encodeNpy(TypeCode dtype, std::span<const int64_t> dims, std::string
     switch (dtype) {
     case TypeCode::Float32:
         descr = "<f4";
+        break;
+    case TypeCode::Float64:
+        descr = "<f8";
+        break;
+    case TypeCode::Int32:
+        descr = "<i4";
         break;
     case TypeCode::Int64:
         descr = "<i8";

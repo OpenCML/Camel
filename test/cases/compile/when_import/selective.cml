@@ -1,0 +1,18 @@
+/**
+ * The same through a selective import: `import { has_field }` brings the predicate by name,
+ * and its body folds `fields T` with a `static loop` and `==`, all at compile time.
+ */
+module when_import_selective
+
+import { has_field } from predicates
+
+type Point = { w: int, h: int }
+
+func width(x: Point): int when has_field::<Point>('w') {
+    return x.w
+}
+
+func main(): int sync {
+    println(width({ w: 3, h: 4 }))
+    return 0
+}

@@ -29,8 +29,8 @@ func fold2(v: Tensor, w: Tensor): Tensor {
 }
 
 func main(): int sync {
-    let w = reshape([0.5, -0.25, 0.1, 0.3], [2, 2])
-    let x = reshape([1.0, 2.0, 0.5, -1.0], [2, 2])
+    let w = reshape([0.5, -0.25, 0.1, 0.3] as f32[], [2, 2])
+    let x = reshape([1.0, 2.0, 0.5, -1.0] as f32[], [2, 2])
     export_model(
         (x: Tensor, w: Tensor): (Tensor, Tensor, Tensor) =>
             (pile(x), fold(0, int(sum(x * x) * 0.5), x, w), fold2(x, w)),

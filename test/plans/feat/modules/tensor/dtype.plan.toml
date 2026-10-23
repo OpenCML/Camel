@@ -2,34 +2,107 @@ id = "modules.tensor.dtype"
 order = 367
 tier = "fast"
 tags = ["feat", "modules", "tensor", "types"]
-desc = "A tensor's element type is the one the program writes (design/arrays-memory, P4 \"element type exact\"). This build stores f32, int64 and bool only, so a declaration that asks for f64 or i32 is refused at the type expression and names both types; it is never built as the element type it would have been replaced with. f32 keeps working, and its storage bytes do not move."
+desc = "A tensor's element type is the one the program writes (design/arrays-memory, P4 \"element type exact\"): Tensor<f64> holds f64, Tensor<i32> holds i32 and Tensor<bf16>/Tensor<f16> hold two bytes of their own reduced type end to end — creation, arithmetic, reduction, to_bytes/from_bytes — with no storage dtype a written type is replaced with. A conversion into bf16 or f16 rounds and needs the numeric permission change_precision where it is written; reading it back into a wider type is exact. A kernel that computes in f32 only refuses the other element types at the call, naming the operator, the argument type and the set it takes, instead of narrowing. f32 programs keep their bytes."
 
-# The substitution is refused where the type is written, with a diagnostic of its own: the
-# requested element type, the type it would have been replaced with, and the reason.
+# The element type is the one written, through every step of the value's life.
 
 [[tests]]
-name = "f64_refused"
-desc = "`Tensor<f64>` is refused at the type expression: the diagnostic names f64 as written, f32 as what the tensor would hold, and says tensors that keep their element type are not implemented yet. Before the diagnostic the cast compiled and the program ran in f32."
+name = "f64_exact"
+desc = "`Tensor<f64>` is f64 end to end: the sum of 16777217.0 (16777216.0 in f32), an f64 scalar product, an f64 mean, 8-byte elements in `to_bytes`, and a `from_bytes` round trip. Under f32 normalization the first line printed 16777216 and every element was four bytes."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/f64_exact.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "16777217.0\n33554434.0\n4194305.0\n8\n[0, 0, 0, 16, 0, 0, 112, 65]\n16777217.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "i32_exact"
+desc = "`Tensor<i32>` is i32 end to end: four-byte elements in `to_bytes`, int32 wrapping in arithmetic (`2147483647 * 2` is -2, so the products sum to -4; under int64 normalization they summed to 4294967296), and a `from_bytes` round trip that gives the four bytes back."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/i32_exact.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "2147483646.0\n16\n[255, 255, 255, 127, 1, 0, 0, 0, 254, 255, 255, 255, 0, 0, 0, 0]\n-4.0\n[254, 255, 255, 255, 2, 0, 0, 0, 252, 255, 255, 255, 0, 0, 0, 0]\n[255, 255, 255, 127, 1, 0, 0, 0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# The adjoint of an operator on an exact-typed tensor is of that element type too: a gradient is
+# read at the width its type names, so a kernel that fills at another width answers with a number
+# that is not the derivative.
+[[tests]]
+name = "gather_grad_f64"
+desc = "`sum(w[labels])` on a `Tensor<f64>` (w = [[1, 2, 3], [-4, 5, -6]], labels = [1, 0]) has adjoint 1.0 at every element: each row enters the loss once, so the gradient sums to 6.0 and each row to 3.0. The scalar broadcast that starts the pullback used to fill f32, so the same buffer read as f64 summed to 3 * 2^-7 = 0.0234375 (six f32 1.0s: one row as f32 pairs, one row from the bytes past its end), with no error. The plain sum's gradient is pinned beside it because both start from that broadcast."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/gather_grad_f64.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "total=1.0 grad_sum=6.0\ngather=1.0 grad_sum=6.0 row0=3.0 row1=3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# bf16 and f16 are stored element types of their own (H238): two bytes, a conversion into them
+# rounds and needs change_precision, and every kernel computes in f32 and rounds once.
+
+[[tests]]
+name = "bf16_storage"
+desc = "`Tensor<bf16>` and `Tensor<f16>` hold two bytes per element and their own rounding: 0.1 is bf16 0x3DCD ([205, 61]) and f16 0x2E66 ([102, 46]), reading either back into f32 is exact (0x3DCD0000 is [0, 0, 205, 61], not the f32 0.1, which is [205, 204, 204, 61]), a bf16 sum of [1, 2^-8] rounds the exact halfway 1 + 2^-8 to 1 (ties to even), and 3 * 1.0078125 rounds 3.0234375 to 3.03125 (ties to even). A bf16 tensor backed by f32 storage would be 4 bytes and would print the f32 0.1."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/bf16_storage.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "2\n[205, 61]\n[0, 0, 205, 61]\n[205, 204, 204, 61]\n2\n[102, 46]\n4\n[128, 63]\n2\n[66, 64]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "bf16_no_licence"
+desc = "A conversion from f32 into bf16 without `change_precision` is refused at the line that writes it, with PrecisionChangeNotPermitted naming both element types; it is not done silently."
 kind = "negative"
-case = "../../../../cases/modules/tensor/dtype/f64_refused.cml"
+case = "../../../../cases/modules/tensor/dtype/bf16_no_licence.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TensorElementTypeNotStored"
-expect_output_contains = ["'f64' is not stored as written", "a tensor of 'f64' holds 'f32' here", "would silently run with 'f32'", "Tensors that keep the element type they are written with are not implemented yet."]
+expect_diagnostic_name = "SemanticDiag::PrecisionChangeNotPermitted"
+expect_diagnostic_line = 12
+expect_output_contains = ["Converting 'Tensor<f32>' to 'Tensor<bf16>' needs the numeric permission 'change_precision'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]
-name = "i32_refused"
-desc = "`Tensor<i32, [4]>` is refused the same way: the diagnostic names i32 as written and i64 as what the tensor would hold. Before the diagnostic the cast compiled and the program ran with int64 storage."
+name = "bf16_strict_no_licence"
+desc = "`#strict` revokes `change_precision` even where the function also carries the tag (design principles 7.4), so the bf16 conversion is refused exactly as it is without the tag."
 kind = "negative"
-case = "../../../../cases/modules/tensor/dtype/i32_refused.cml"
+case = "../../../../cases/modules/tensor/dtype/bf16_strict_no_licence.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TensorElementTypeNotStored"
-expect_output_contains = ["'i32' is not stored as written", "a tensor of 'i32' holds 'i64' here", "would silently run with 'i64'"]
+expect_diagnostic_name = "SemanticDiag::PrecisionChangeNotPermitted"
+expect_diagnostic_line = 12
+expect_output_contains = ["Converting 'Tensor<f32>' to 'Tensor<bf16>' needs the numeric permission 'change_precision'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
+
+# A kernel whose declaration is f32 only says so where it is called: it never converts.
+
+[[tests]]
+name = "f32_only_kernel_refuses_f64"
+desc = "`conv2d` computes in f32 only; an f64 tensor is refused at the call with RuntimeDiag::OperandTypeUnsupported, naming the operator, the argument's element type and the supported set. Before, the kernel silently cast the tensor to f32 (design principles 5.1, 13.1)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/f32_only.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::OperandTypeUnsupported"
+expect_output_contains = ["'conv2d' does not support a value of type 'Tensor<f64>'", "it takes f32 tensors."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
 
 # An element type that is not a tensor element type at all is the type's own refusal, and it says
 # which ones it takes (it used to leave the constructor as an exception).
@@ -41,15 +114,15 @@ case = "../../../../cases/modules/tensor/dtype/string_refused.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
-expect_output_contains = ["the element type is f32, f64, i32, i64 or bool, not 'string'"]
+expect_output_contains = ["the element type is f32, f64, bf16, f16, i32, i64 or bool, not 'string'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
-# The storage dtype still works, on every backend: the same values, the same bits.
+# f32 keeps working, on every backend: the same values, the same bits.
 
 [[tests]]
 name = "f32_works"
-desc = "`Tensor<f32>` is accepted as a cast target and as a parameter type, and creation, arithmetic, reduction and `to_bytes` give the f32 values and IEEE-754 bytes on every backend."
+desc = "`Tensor<f32>` is accepted as a parameter type and as the element type of a literal, and creation, arithmetic, reduction and `to_bytes` give the f32 values and IEEE-754 bytes on every backend."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/f32_works.cml"
 args = ["${case}", "${backend}"]

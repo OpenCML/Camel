@@ -4,6 +4,13 @@
  */
 module when_not_applicable
 
+func is_float::<T>(): bool {
+    return match type T {
+        case float | f32 => true
+        case _ => false
+    }
+}
+
 /// The condition asks about int, so this overload never applies here.
 func needs_float(x: float): float when is_float::<int>() {
     return x

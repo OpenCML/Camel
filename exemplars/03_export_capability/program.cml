@@ -16,7 +16,7 @@ func counts(t: Tensor): Tensor {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
     println(counts(x))
     export_model(counts, x, get_env('ONNX_OUT_UNCHECKED'), [], 'none')
     println('written without the check')

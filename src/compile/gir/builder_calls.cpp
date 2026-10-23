@@ -732,28 +732,29 @@ void Builder::requireMutableArgument(const Argument &arg, const std::string &cal
     }
 }
 
-void Builder::evaluateWithDefaults(
+void Builder::evaluateDefaults(
     const GCT::node_ptr_t &decl, FunctionType *funcType, const void *owner,
     bool parametersInScope) {
-    if (withDefaults_.contains(owner)) {
+    if (defaults_.contains(owner)) {
         return;
     }
-    const auto *written = GCT::Tree::of(decl)->withDefaultsOf(decl);
+    const auto *written = GCT::Tree::of(decl)->parameterDefaultsOf(decl);
     if (written == nullptr || written->empty()) {
         return;
     }
-    const size_t count = funcType->withTypesCount();
-    std::vector<std::optional<WithDefaultValue>> values(count);
-    // A default that reads a `with` parameter of the same declaration is not a constant, and
-    // the parameter is only a name where the declaration's own scope is in force. Elsewhere
-    // the name is not looked up at all, so that a module-level value of the same name is not
-    // taken for it.
+    const size_t withCount = funcType->withTypesCount();
+    const size_t normCount = funcType->normTypesCount();
+    const size_t allCount  = withCount + normCount;
+    // A default that reads a parameter of the same declaration is not a constant, and the
+    // parameter is only a name where the declaration's own scope is in force. Elsewhere the
+    // name is not looked up at all, so that a module-level value of the same name is not taken
+    // for it. Both kinds of parameter are checked (design principles 4.4, handover H276).
     const auto readsParameter = [&](const GCT::node_ptr_t &node, const auto &self) -> bool {
         if (node == nullptr) {
             return false;
         }
         if (node->type() == GCT::NodeKind::DREF) {
-            for (size_t i = 0; i < count; ++i) {
+            for (size_t i = 0; i < allCount; ++i) {
                 if (node->name() == funcType->argNameAt(i)) {
                     return true;
                 }
@@ -766,63 +767,86 @@ void Builder::evaluateWithDefaults(
         }
         return false;
     };
-    for (size_t i = 0; i < count && i < written->size(); ++i) {
-        const GCT::Tree::WithDefault &defaultNode = (*written)[i];
-        if (defaultNode.expr == nullptr) {
-            continue;
-        }
-        const std::string name(funcType->argNameAt(i));
-        Type *paramType = funcType->withTypeAt(i);
-        if (!parametersInScope && readsParameter(defaultNode.expr, readsParameter)) {
-            diags_->of(SemanticDiag::WithDefaultNotConstant)
-                .atOrigin(defaultNode.expr->origin())
-                .commit(name, "it reads a 'with' parameter of the same declaration");
-            throw BuildAbortException();
-        }
-        // Evaluated here, where the declaration is, once: the value is remembered and filled
-        // into every call that leaves the parameter out (design principles 4.4).
-        node_handle_t value = visitInPosition(defaultNode.expr, paramType);
-        data_ptr_t data      = constantOfNode(value);
-        if (data == nullptr) {
-            const std::string text = sourceTextOf(defaultNode.expr);
-            diags_->of(SemanticDiag::WithDefaultNotConstant)
-                .atOrigin(defaultNode.expr->origin())
-                .commit(
-                    name,
-                    text.empty() ? std::string("the value is computed at run time")
-                                 : "the value of '" + text + "' is computed at run time");
-            throw BuildAbortException();
-        }
-        if (!paramType->assignableFrom(data->type())) {
-            data_ptr_t converted = data->convertTo(paramType);
-            if (converted == nullptr) {
-                diags_->of(SemanticDiag::WithDefaultWrongType)
+    // Evaluated here, where the declaration is, once: the value is remembered and filled into
+    // every call that leaves the parameter out (design principles 4.4). A `with` parameter and
+    // an ordinary one follow the same rule; only the diagnostic and the parameter list differ.
+    const auto evaluate = [&](const std::vector<GCT::Tree::ParameterDefault> &list,
+                              size_t count,
+                              bool isWith)
+        -> std::vector<std::optional<ParameterDefaultValue>> {
+        std::vector<std::optional<ParameterDefaultValue>> values(count);
+        for (size_t i = 0; i < count && i < list.size(); ++i) {
+            const GCT::Tree::ParameterDefault &defaultNode = list[i];
+            if (defaultNode.expr == nullptr) {
+                continue;
+            }
+            const std::string name(funcType->argNameAt(isWith ? i : withCount + i));
+            Type *paramType = isWith ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
+            if (!parametersInScope && readsParameter(defaultNode.expr, readsParameter)) {
+                diags_
+                    ->of(isWith ? SemanticDiag::WithDefaultNotConstant
+                                : SemanticDiag::ParamDefaultNotConstant)
                     .atOrigin(defaultNode.expr->origin())
-                    .commit(name, data->type()->toString(), paramType->toString());
+                    .commit(
+                        name,
+                        isWith ? "it reads a 'with' parameter of the same declaration"
+                               : "it reads a parameter of the same declaration");
                 throw BuildAbortException();
             }
-            data = converted;
+            node_handle_t value = visitInPosition(defaultNode.expr, paramType);
+            data_ptr_t data      = constantOfNode(value);
+            if (data == nullptr) {
+                const std::string text = sourceTextOf(defaultNode.expr);
+                diags_
+                    ->of(isWith ? SemanticDiag::WithDefaultNotConstant
+                                : SemanticDiag::ParamDefaultNotConstant)
+                    .atOrigin(defaultNode.expr->origin())
+                    .commit(
+                        name,
+                        text.empty() ? std::string("the value is computed at run time")
+                                     : "the value of '" + text + "' is computed at run time");
+                throw BuildAbortException();
+            }
+            if (!paramType->assignableFrom(data->type())) {
+                data_ptr_t converted = data->convertTo(paramType);
+                if (converted == nullptr) {
+                    diags_
+                        ->of(isWith ? SemanticDiag::WithDefaultWrongType
+                                    : SemanticDiag::ParamDefaultWrongType)
+                        .atOrigin(defaultNode.expr->origin())
+                        .commit(name, data->type()->toString(), paramType->toString());
+                    throw BuildAbortException();
+                }
+                data = converted;
+            }
+            values[i] = ParameterDefaultValue{data, defaultNode.expr};
         }
-        values[i] = WithDefaultValue{data, defaultNode.expr};
-    }
-    withDefaults_[owner] = std::move(values);
+        return values;
+    };
+    defaults_[owner] = DeclarationDefaults{
+        evaluate(written->with, withCount, true),
+        evaluate(written->norm, normCount, false)};
 }
 
-const std::vector<std::optional<Builder::WithDefaultValue>> *Builder::withDefaultsOfCallee(
-    node_handle_t callee) const {
+const std::vector<std::optional<Builder::ParameterDefaultValue>> *Builder::defaultsOfCallee(
+    node_handle_t callee, bool isWith) const {
     if (callee == nullptr) {
         return nullptr;
     }
     const auto defaultsOf = [&](const void *owner)
-        -> const std::vector<std::optional<WithDefaultValue>> * {
-        const auto it = withDefaults_.find(owner);
-        return it == withDefaults_.end() ? nullptr : &it->second;
+        -> const std::vector<std::optional<ParameterDefaultValue>> * {
+        const auto it = defaults_.find(owner);
+        if (it == defaults_.end()) {
+            return nullptr;
+        }
+        const auto &values = isWith ? it->second.with : it->second.norm;
+        return values.empty() ? nullptr : &values;
     };
     // A function value made by explicit type arguments, applied right away: it was instantiated
     // where it was written, and its defaults were kept under the value (visitTypeApplication).
-    if (const auto value = withDefaultsOfValue_.find(callee);
-        value != withDefaultsOfValue_.end()) {
-        return &value->second;
+    if (const auto value = defaultsOfValue_.find(callee); value != defaultsOfValue_.end()) {
+        const auto &values = isWith ? value->second.with : value->second.norm;
+        return values.empty() ? nullptr : &values;
     }
     // A generic function: its declaration is the template, and every instance takes the same
     // defaults.
@@ -834,21 +858,34 @@ const std::vector<std::optional<Builder::WithDefaultValue>> *Builder::withDefaul
     }
     const auto &target = nodeGraphOf(callee)->drefTarget(callee);
     if (!std::holds_alternative<graph_vec_ptr_t>(target)) {
-        // A body-less declaration of an operator: it has no graph, and its defaults are kept
-        // under the signature the declaration publishes (`declareNativeOperator`). The type the
-        // reference answers with is a signature built from the group, not that pointer, so the
-        // declaration's own resolver is what names it.
-        if (std::holds_alternative<oper_group_ptr_t>(target)) {
-            // Keyed by the operator's URI: the group's resolver may be a rebuilt one whose
-            // signature the declaration's pointer does not name.
-            for (const auto &rule : std::get<oper_group_ptr_t>(target)->resolvers()) {
-                const auto found = nativeWithDefaults_.find(rule.first);
-                if (found != nativeWithDefaults_.end()) {
-                    return &found->second;
-                }
+        // A native operator: its declaration's defaults are kept under the URI of the group's
+        // entry, and each entry is one declaration. A group whose fixed entries are not one
+        // signature says nothing about which declaration a call means, and gets none.
+        if (!std::holds_alternative<oper_group_ptr_t>(target)) {
+            return nullptr;
+        }
+        FunctionType *same = nullptr;
+        const std::string *uri = nullptr;
+        for (const auto &[entryUri, resolver] :
+             std::get<oper_group_ptr_t>(target)->resolvers()) {
+            FunctionType *fixed = resolver ? resolver->fixedSignature() : nullptr;
+            if (fixed == nullptr) {
+                continue;
+            }
+            if (same != nullptr && same != fixed) {
+                return nullptr;
+            }
+            same = fixed;
+            if (uri == nullptr && nativeDefaults_.contains(entryUri)) {
+                uri = &entryUri;
             }
         }
-        return nullptr;
+        if (uri == nullptr) {
+            return nullptr;
+        }
+        const auto &values = isWith ? nativeDefaults_.at(*uri).with
+                                    : nativeDefaults_.at(*uri).norm;
+        return values.empty() ? nullptr : &values;
     }
     const auto graphs = std::get<graph_vec_ptr_t>(target);
     // One declaration: an overload set has one signature per declaration, and a name is not
@@ -859,12 +896,13 @@ const std::vector<std::optional<Builder::WithDefaultValue>> *Builder::withDefaul
     return defaultsOf(graphs->front().get());
 }
 
-void Builder::bindWithArguments(
-    std::vector<Argument> &inputs, std::vector<Type *> &types, node_handle_t callee,
-    const GCT::node_ptr_t &call) {
+void Builder::bindArguments(
+    std::vector<Argument> &inputs, node_handle_t callee, const GCT::node_ptr_t &call,
+    FunctionType *signature, bool isWith) {
     const bool named = std::any_of(
         inputs.begin(), inputs.end(), [](const Argument &input) { return input.name.has_value(); });
-    FunctionType *signature = signatureForArgumentContext(callee);
+    // `signature` is the call's own reading of the callee (signatureForArgumentContext), so
+    // the names below are resolved against exactly the signature the call resolves against.
     std::string label;
     if (signature == nullptr) {
         if (!named) {
@@ -874,12 +912,14 @@ void Builder::bindWithArguments(
             *std::find_if(inputs.begin(), inputs.end(), [](const Argument &input) {
                 return input.name.has_value();
             });
-        diags_->of(SemanticDiag::WithArgumentCallee)
+        diags_
+            ->of(isWith ? SemanticDiag::WithArgumentCallee
+                        : SemanticDiag::ParamArgumentCallee)
             .atOrigin(first.expr->origin())
             .commit(*first.name, call->at(0)->toString());
         throw BuildAbortException();
     }
-    const size_t count = signature->withTypesCount();
+    const size_t count = isWith ? signature->withTypesCount() : signature->normTypesCount();
     if (!named) {
         // Only a call that leaves a parameter out, or gives too many, has anything to bind
         // here; the arguments of a complete positional call are already in place.
@@ -900,7 +940,25 @@ void Builder::bindWithArguments(
     if (label.empty()) {
         label = signature->toString();
     }
-    const auto *defaults = withDefaultsOfCallee(callee);
+    const auto *defaults = defaultsOfCallee(callee, isWith);
+    // The name of the i-th parameter of the declaration, whichever list it is in: `with`
+    // parameters first, then the ordinary ones, as the signature keeps them.
+    const auto nameAt = [&](size_t i) {
+        return std::string(signature->argNameAt(isWith ? i : signature->withTypesCount() + i));
+    };
+    if (named && !signature->hasArgNames()) {
+        // A signature without names is not one a call can give arguments by name to: the
+        // resolution reports the arguments instead.
+        const Argument &first =
+            *std::find_if(inputs.begin(), inputs.end(), [](const Argument &input) {
+                return input.name.has_value();
+            });
+        diags_
+            ->of(isWith ? SemanticDiag::WithArgumentCallee : SemanticDiag::ParamArgumentCallee)
+            .atOrigin(first.expr->origin())
+            .commit(*first.name, label);
+        throw BuildAbortException();
+    }
     std::vector<Argument> ordered(count);
     std::vector<bool> filled(count, false);
     size_t positional = 0;
@@ -909,20 +967,24 @@ void Builder::bindWithArguments(
         if (input.name) {
             bool found = false;
             for (size_t i = 0; i < count; ++i) {
-                if (*input.name == signature->argNameAt(i)) {
+                if (*input.name == nameAt(i)) {
                     index = i;
                     found = true;
                     break;
                 }
             }
             if (!found) {
-                diags_->of(SemanticDiag::WithArgumentUnknown)
+                diags_
+                    ->of(isWith ? SemanticDiag::WithArgumentUnknown
+                                : SemanticDiag::ParamArgumentUnknown)
                     .atOrigin(input.expr->origin())
                     .commit(*input.name, label);
                 throw BuildAbortException();
             }
             if (filled[index]) {
-                diags_->of(SemanticDiag::WithArgumentDuplicate)
+                diags_
+                    ->of(isWith ? SemanticDiag::WithArgumentDuplicate
+                                : SemanticDiag::ParamArgumentDuplicate)
                     .atOrigin(input.expr->origin())
                     .commit(*input.name, label);
                 throw BuildAbortException();
@@ -950,18 +1012,19 @@ void Builder::bindWithArguments(
                 // call reports below is the older, more precise report for it.
                 return;
             }
-            diags_->of(SemanticDiag::WithArgumentMissing)
+            diags_
+                ->of(isWith ? SemanticDiag::WithArgumentMissing
+                            : SemanticDiag::ParamArgumentMissing)
                 .atOrigin(call->origin())
-                .commit(std::string(signature->argNameAt(i)), label);
+                .commit(nameAt(i), label);
             throw BuildAbortException();
         }
         // The default is one constant of the declaration: the call gets a static node holding
         // it, and no expression is evaluated here (design principles 4.4). Two calls in one
         // graph that leave the same parameter out share that node: the value was computed once.
-        const WithDefaultValue &value = *(*defaults)[i];
+        const ParameterDefaultValue &value = *(*defaults)[i];
         node_handle_t dataNode{};
-        if (const auto graph = withDefaultNodes_.find(currGraph_.get());
-            graph != withDefaultNodes_.end()) {
+        if (const auto graph = defaultNodes_.find(currGraph_.get()); graph != defaultNodes_.end()) {
             if (const auto found = graph->second.find(value.expr);
                 found != graph->second.end()) {
                 dataNode = found->second;
@@ -970,17 +1033,16 @@ void Builder::bindWithArguments(
         if (dataNode == nullptr) {
             dataNode = currGraph_->addStaticDataNode(value.data);
             rememberConstant(dataNode, value.data);
-            registerNodeOrigin(context_, dataNode, value.expr, "gir.data.static.withdefault");
-            withDefaultNodes_[currGraph_.get()][value.expr] = dataNode;
+            registerNodeOrigin(context_, dataNode, value.expr, "gir.data.static.paramdefault");
+            defaultNodes_[currGraph_.get()][value.expr] = dataNode;
         }
         ordered[i] = Argument{dataNode, value.expr, std::nullopt};
         filled[i]  = true;
     }
     inputs = std::move(ordered);
-    types.clear();
-    for (const Argument &input : inputs) {
-        types.push_back(valueTypeOf(nodeTypeOf(input.node)));
-    }
+    // The call now reads its arguments by the declaration's parameter order, and the types are
+    // built from the nodes in that order by the caller, once every deferred argument has been
+    // built. Nothing here fills a type list: the two would diverge.
 }
 
 } // namespace camel::compile::gir

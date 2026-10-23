@@ -120,7 +120,9 @@ class Tree {
     node_ptr_t makeCase(CaseType type, const std::string &binding = {});
     /// `match type` (children: TYPE, TCASE...) and one of its cases (child: the body).
     node_ptr_t makeTypeMatch();
-    node_ptr_t makeTypeCase(uint16_t patterns);
+    /// `patterns` are the shapes the case selects; `types` its identity patterns (`case int`,
+    /// `case T`), in the order written after the shapes.
+    node_ptr_t makeTypeCase(uint16_t patterns, const std::vector<Type *> &types);
     /// `static for (n, F) in fields T` (children: TYPE, body) or `static for (j) in indices ts`
     /// (children: the operand value, body). `valueName` is `n` (or `j`), `typeName` is `F`
     /// (empty for `indices`); both are bound only while the body is built.
@@ -241,33 +243,42 @@ class Tree {
     void setWhen(const Node *func, WhenClause clause);
     const WhenClause *whenOf(const Node *func) const;
 
-/// The type parameters a declaration put at its head (`func f::<T, U>`), in order. They
+    /// The type parameters a declaration put at its head (`func f::<T, U>`), in order. They
     /// make the declaration generic even when its signature writes none of them: a predicate
     /// such as `func is_plain::<T>(): bool { match type T { ... } }` is instantiated by its
     /// explicit type arguments, and its body is where the names occur (design principles 5.5).
     void setHeadTypeParams(const Node *func, std::vector<std::string> names);
     const std::vector<std::string> *headTypeParamsOf(const Node *func) const;
 
-    /// The default of a `with` parameter (design principles 4.4, handover H235), as written:
-    /// the lowered default expression and where it is written. A default is not a child of the
-    /// FUNC and is not part of the function's type: it is evaluated once, where the declaration
-    /// is, and the value is filled into each call that leaves the parameter out. Null `expr`
-    /// stands for a parameter without a default; the vector is aligned with the `with`
-    /// parameters.
-    struct WithDefault {
+    /// The default of a parameter (design principles 4.4, handover H235/H276), as written: the
+    /// lowered default expression and where it is written. A default is not a child of the FUNC
+    /// and is not part of the function's type: it is evaluated once, where the declaration is,
+    /// and the value is filled into each call that leaves the parameter out. Null `expr` stands
+    /// for a parameter without a default; the vector is aligned with the parameters it belongs
+    /// to, `with` parameters or ordinary ones.
+    struct ParameterDefault {
         node_ptr_t expr                   = nullptr;
         camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
     };
 
-    void setWithDefaults(const Node *func, std::vector<WithDefault> defaults);
-    const std::vector<WithDefault> *withDefaultsOf(const Node *func) const;
+    /// The defaults written on a declaration's `with` parameters and on its ordinary ones. Both
+    /// vectors are aligned with their parameter lists; either may be empty.
+    struct ParameterDefaults {
+        std::vector<ParameterDefault> with;
+        std::vector<ParameterDefault> norm;
+        bool empty() const { return with.empty() && norm.empty(); }
+    };
 
-    /// The name each argument of a `with` binding was given, in the order written; an empty
-    /// optional is an argument given by position. Null when every argument is positional. A
-    /// name is not part of the call's node: the binding checks it against the callee when the
-    /// call is resolved (design principles 4.4).
-    void setWithArgumentNames(const Node *with, std::vector<std::optional<std::string>> names);
-    const std::vector<std::optional<std::string>> *withArgumentNamesOf(const Node *with) const;
+    void setParameterDefaults(const Node *func, ParameterDefaults defaults);
+    const ParameterDefaults *parameterDefaultsOf(const Node *func) const;
+
+    /// The name each argument of a call was given, in the order written; an empty optional is
+    /// an argument given by position. Null when every argument is positional. A name is not part
+    /// of the call's node: the binding checks it against the callee when the call is resolved
+    /// (design principles 4.4). Used by `with` bindings and by ordinary calls alike.
+    void setArgumentNames(const Node *call, std::vector<std::optional<std::string>> names);
+    const std::vector<std::optional<std::string>> *argumentNamesOf(const Node *call) const;
+
 
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
@@ -329,9 +340,10 @@ class Tree {
     std::unordered_map<const Node *, std::vector<UnwrittenParam>> unwrittenParams_;
     std::unordered_map<const Node *, std::vector<TupleParamBinding>> tupleParams_;
     std::unordered_map<const Node *, WhenClause> whenClauses_;
-std::unordered_map<const Node *, std::vector<std::string>> headTypeParams_;
-    std::unordered_map<const Node *, std::vector<WithDefault>> withDefaults_;
-    std::unordered_map<const Node *, std::vector<std::optional<std::string>>> withArgumentNames_;
+    std::unordered_map<const Node *, std::vector<std::string>> headTypeParams_;
+    std::unordered_map<const Node *, ParameterDefaults> parameterDefaults_;
+    std::unordered_map<const Node *, std::vector<std::optional<std::string>>> argumentNames_;
+
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.
     std::unordered_map<const camel::core::data::Data *, std::vector<LiteralElement>>

@@ -53,13 +53,16 @@
 #include <cstring>
 #include <deque>
 #include <format>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <ostream>
 #include <random>
+#include <set>
 #include <span>
+#include <stdexcept>
 #include <unordered_map>
 
 using namespace camel::core::context;
@@ -1095,16 +1098,621 @@ const Type *tensorElementType(TypeCode dtype) {
     }
 }
 
+// ---- the higher-precision reference of the check ------------------------------------------
+
+/// One value of the reference: a scalar or a row-major tensor, in long double. A rule that asks
+/// for `refine_accuracy` is judged by the error of each side against this, not by bits, so the
+/// reference must hold more precision than the element type being judged.
+struct RefTensor {
+    std::vector<int64_t> shape;
+    std::vector<long double> values;
+};
+
+struct RefValue {
+    bool tensor        = false;
+    long double scalar = 0.0L;
+    RefTensor t;
+
+    static RefValue ofScalar(long double value) {
+        RefValue out;
+        out.scalar = value;
+        return out;
+    }
+    static RefValue ofTensor(RefTensor value) {
+        RefValue out;
+        out.tensor = true;
+        out.t = std::move(value);
+        return out;
+    }
+};
+
+/// The row-major strides of a shape.
+std::vector<int64_t> refStrides(const std::vector<int64_t> &shape) {
+    std::vector<int64_t> strides(shape.size(), 1);
+    for (size_t i = shape.size(); i-- > 1;) {
+        strides[i - 1] = strides[i] * shape[i];
+    }
+    return strides;
+}
+
+/// `value` with `fn` applied to every scalar or every element.
+template <typename Fn> RefValue refMap(const RefValue &value, Fn &&fn) {
+    if (!value.tensor) {
+        return RefValue::ofScalar(fn(value.scalar));
+    }
+    RefTensor out;
+    out.shape = value.t.shape;
+    out.values.resize(value.t.values.size());
+    for (size_t i = 0; i < out.values.size(); ++i) {
+        out.values[i] = fn(value.t.values[i]);
+    }
+    return RefValue::ofTensor(std::move(out));
+}
+
+/// `fn(a, b)` with the same broadcasting the tensor operators give: a scalar applies to every
+/// element, and two tensors are aligned from the right.
+RefValue refBinary(
+    const RefValue &a, const RefValue &b,
+    const std::function<long double(long double, long double)> &fn) {
+    if (!a.tensor && !b.tensor) {
+        return RefValue::ofScalar(fn(a.scalar, b.scalar));
+    }
+    if (a.tensor && !b.tensor) {
+        return refMap(a, [&](long double x) { return fn(x, b.scalar); });
+    }
+    if (!a.tensor && b.tensor) {
+        return refMap(b, [&](long double y) { return fn(a.scalar, y); });
+    }
+    const size_t rank = std::max(a.t.shape.size(), b.t.shape.size());
+    std::vector<int64_t> aShape(rank, 1), bShape(rank, 1), outShape(rank, 1);
+    for (size_t i = 0; i < a.t.shape.size(); ++i) {
+        aShape[rank - a.t.shape.size() + i] = a.t.shape[i];
+    }
+    for (size_t i = 0; i < b.t.shape.size(); ++i) {
+        bShape[rank - b.t.shape.size() + i] = b.t.shape[i];
+    }
+    for (size_t i = 0; i < rank; ++i) {
+        if (aShape[i] != bShape[i] && aShape[i] != 1 && bShape[i] != 1) {
+            throw std::invalid_argument("the reference cannot broadcast the two shapes");
+        }
+        outShape[i] = std::max(aShape[i], bShape[i]);
+    }
+    const std::vector<int64_t> aStrides = refStrides(aShape);
+    const std::vector<int64_t> bStrides = refStrides(bShape);
+    RefTensor out;
+    out.shape = outShape;
+    int64_t count = 1;
+    for (int64_t extent : outShape) {
+        count *= extent;
+    }
+    out.values.resize(static_cast<size_t>(count));
+    std::vector<int64_t> coords(rank, 0);
+    for (int64_t flat = 0; flat < count; ++flat) {
+        int64_t rest = flat;
+        for (size_t d = rank; d-- > 0;) {
+            coords[d] = rest % outShape[d];
+            rest /= outShape[d];
+        }
+        int64_t ia = 0, ib = 0;
+        for (size_t d = 0; d < rank; ++d) {
+            ia += (aShape[d] == 1 ? 0 : coords[d]) * aStrides[d];
+            ib += (bShape[d] == 1 ? 0 : coords[d]) * bStrides[d];
+        }
+        out.values[static_cast<size_t>(flat)] =
+            fn(a.t.values[static_cast<size_t>(ia)], b.t.values[static_cast<size_t>(ib)]);
+    }
+    return RefValue::ofTensor(std::move(out));
+}
+
+/// The axis a reduction over `rank` dimensions names, as a 0-based index.
+size_t refAxis(int64_t axis, size_t rank) {
+    int64_t normalized = axis < 0 ? axis + static_cast<int64_t>(rank) : axis;
+    if (normalized < 0 || normalized >= static_cast<int64_t>(rank)) {
+        throw std::invalid_argument(
+            "axis " + std::to_string(axis) + " is out of range for a rank-" +
+            std::to_string(rank) + " tensor");
+    }
+    return static_cast<size_t>(normalized);
+}
+
+enum class RefReduce { Sum, Max, Min, Mean };
+
+/// The reduction of `x` over `axis`, keeping the reduced extent as 1 when `keep` is set.
+RefValue refReduce(const RefTensor &x, int64_t axisArg, bool keep, RefReduce kind) {
+    const size_t axis = refAxis(axisArg, x.shape.size());
+    int64_t outer = 1, inner = 1;
+    for (size_t d = 0; d < axis; ++d) {
+        outer *= x.shape[d];
+    }
+    for (size_t d = axis + 1; d < x.shape.size(); ++d) {
+        inner *= x.shape[d];
+    }
+    const int64_t extent = x.shape[axis];
+    std::vector<int64_t> outShape;
+    for (size_t d = 0; d < x.shape.size(); ++d) {
+        if (d == axis) {
+            if (keep) {
+                outShape.push_back(1);
+            }
+        } else {
+            outShape.push_back(x.shape[d]);
+        }
+    }
+    RefTensor out;
+    out.shape = outShape;
+    out.values.resize(static_cast<size_t>(outer * inner));
+    for (int64_t o = 0; o < outer; ++o) {
+        for (int64_t i = 0; i < inner; ++i) {
+            long double value = kind == RefReduce::Max   ? -std::numeric_limits<long double>::infinity()
+                : kind == RefReduce::Min                 ? std::numeric_limits<long double>::infinity()
+                                                         : 0.0L;
+            for (int64_t e = 0; e < extent; ++e) {
+                const long double element =
+                    x.values[static_cast<size_t>(o * extent * inner + e * inner + i)];
+                switch (kind) {
+                case RefReduce::Sum:
+                case RefReduce::Mean:
+                    value += element;
+                    break;
+                case RefReduce::Max:
+                    value = std::isnan(value) || std::isnan(element) ? std::numeric_limits<long double>::quiet_NaN()
+                                                            : std::max(value, element);
+                    break;
+                case RefReduce::Min:
+                    value = std::isnan(value) || std::isnan(element) ? std::numeric_limits<long double>::quiet_NaN()
+                                                            : std::min(value, element);
+                    break;
+                }
+            }
+            if (kind == RefReduce::Mean && extent != 0) {
+                value /= static_cast<long double>(extent);
+            }
+            out.values[static_cast<size_t>(o * inner + i)] = value;
+        }
+    }
+    return RefValue::ofTensor(std::move(out));
+}
+
+/// `softmax(x, axis)` or `log_softmax(x, axis)` in the reference's precision, computed as its
+/// definition: the maximum is subtracted first, then exp, sum and divide (or `(x - m) - log s`).
+RefValue refSoftmax(const RefTensor &x, int64_t axisArg, bool logarithm) {
+    const size_t axis = refAxis(axisArg, x.shape.size());
+    int64_t outer = 1, inner = 1;
+    for (size_t d = 0; d < axis; ++d) {
+        outer *= x.shape[d];
+    }
+    for (size_t d = axis + 1; d < x.shape.size(); ++d) {
+        inner *= x.shape[d];
+    }
+    const int64_t extent = x.shape[axis];
+    RefTensor out;
+    out.shape = x.shape;
+    out.values.resize(x.values.size());
+    for (int64_t o = 0; o < outer; ++o) {
+        for (int64_t i = 0; i < inner; ++i) {
+            long double maximum = -std::numeric_limits<long double>::infinity();
+            for (int64_t e = 0; e < extent; ++e) {
+                maximum = std::max(
+                    maximum,
+                    x.values[static_cast<size_t>(o * extent * inner + e * inner + i)]);
+            }
+            long double sum = 0.0L;
+            for (int64_t e = 0; e < extent; ++e) {
+                sum += std::exp(
+                    x.values[static_cast<size_t>(o * extent * inner + e * inner + i)] - maximum);
+            }
+            const long double logSum = std::log(sum);
+            for (int64_t e = 0; e < extent; ++e) {
+                const long double element =
+                    x.values[static_cast<size_t>(o * extent * inner + e * inner + i)];
+                out.values[static_cast<size_t>(o * extent * inner + e * inner + i)] =
+                    logarithm ? (element - maximum) - logSum : std::exp(element - maximum) / sum;
+            }
+        }
+    }
+    return RefValue::ofTensor(std::move(out));
+}
+
+/// The tensor of a sample as long double elements.
+RefTensor tensorOfSample(const TensorSample &sample) {
+    RefTensor out;
+    out.shape = sample.shape;
+    size_t count = 1;
+    for (int64_t extent : sample.shape) {
+        count *= static_cast<size_t>(extent < 0 ? 0 : extent);
+    }
+    out.values.resize(count);
+    switch (sample.dtype) {
+    case TypeCode::Float32:
+        for (size_t i = 0; i < count; ++i) {
+            float value = 0.0F;
+            std::memcpy(&value, sample.bytes.data() + i * sizeof(float), sizeof(float));
+            out.values[i] = static_cast<long double>(value);
+        }
+        break;
+    case TypeCode::Int64:
+        for (size_t i = 0; i < count; ++i) {
+            int64_t value = 0;
+            std::memcpy(&value, sample.bytes.data() + i * sizeof(int64_t), sizeof(int64_t));
+            out.values[i] = static_cast<long double>(value);
+        }
+        break;
+    default:
+        for (size_t i = 0; i < count; ++i) {
+            out.values[i] = sample.bytes[i] != 0 ? 1.0L : 0.0L;
+        }
+        break;
+    }
+    return out;
+}
+
+/**
+ * The higher-precision reference of one side of a rule: the side's expression evaluated over the
+ * same argument values in long double. It reads the operators the accuracy library uses, and
+ * refuses (rather than guesses) an operator it does not know, so a rule the check cannot examine
+ * fails the check instead of passing it silently.
+ */
+class RefEvaluator {
+  public:
+    RefEvaluator(const camel::runtime::GCGraph &graph, const std::vector<Sample> &args)
+        : graph_(graph), args_(args),
+          ports_(graph.normPorts().begin(), graph.normPorts().end()) {}
+
+    RefValue eval(camel::runtime::gc_node_ref_t ref) {
+        const auto found = memo_.find(ref);
+        if (found != memo_.end()) {
+            return found->second;
+        }
+        RefValue value = evalUncached(ref);
+        memo_.emplace(ref, value);
+        return value;
+    }
+
+  private:
+    RefValue evalUncached(camel::runtime::gc_node_ref_t ref) {
+        const camel::runtime::GCNode *node = graph_.node(ref);
+        if (node == nullptr || node->kind == camel::runtime::GCNodeKind::Dead) {
+            throw std::runtime_error("the reference reads a node that is not there");
+        }
+        switch (node->kind) {
+        case camel::runtime::GCNodeKind::Data:
+            return constant(*node);
+        case camel::runtime::GCNodeKind::Port:
+            return argument(ref);
+        case camel::runtime::GCNodeKind::Cast:
+        case camel::runtime::GCNodeKind::Copy: {
+            const auto inputs = graph_.normInputsOf(ref);
+            if (inputs.empty()) {
+                throw std::runtime_error("the reference reads a copy without an input");
+            }
+            return eval(inputs.front());
+        }
+        case camel::runtime::GCNodeKind::Oper:
+            return operate(ref);
+        default:
+            throw std::runtime_error("the reference cannot evaluate this kind of node");
+        }
+    }
+
+    RefValue constant(const camel::runtime::GCNode &node) {
+        if (node.dataIndex >= 0) {
+            throw std::runtime_error("the reference reads a value that is not a constant");
+        }
+        const size_t index = static_cast<size_t>(-node.dataIndex);
+        if (index >= graph_.staticSlots().size()) {
+            throw std::runtime_error("the reference reads a constant the graph does not have");
+        }
+        const Type *type = node.dataType();
+        if (type == nullptr) {
+            throw std::runtime_error("the reference reads a constant without a type");
+        }
+        const slot_t slot = graph_.staticSlots()[index];
+        if (const auto shape = camel::runtime::fact::shapeOfType(type)) {
+            const auto *array = fromSlot<Array *>(slot);
+            if (array == nullptr) {
+                throw std::runtime_error("the reference reads a tensor constant that is not an array");
+            }
+            TensorSample sample;
+            sample.dtype = array->dtype();
+            sample.shape.assign(array->shape(), array->shape() + array->rank());
+            const auto *bytes = array->dataAs<uint8_t>();
+            if (array->byteSize() != 0) {
+                sample.bytes.assign(bytes, bytes + array->byteSize());
+            }
+            return RefValue::ofTensor(tensorOfSample(sample));
+        }
+        switch (type->code()) {
+        case TypeCode::Float32:
+            return RefValue::ofScalar(static_cast<long double>(fromSlot<Float32>(slot)));
+        case TypeCode::Float64:
+            return RefValue::ofScalar(static_cast<long double>(fromSlot<Float64>(slot)));
+        case TypeCode::Int32:
+            return RefValue::ofScalar(static_cast<long double>(fromSlot<Int32>(slot)));
+        case TypeCode::Int64:
+            return RefValue::ofScalar(static_cast<long double>(fromSlot<Int64>(slot)));
+        case TypeCode::Bool:
+            return RefValue::ofScalar(fromSlot<Bool>(slot) ? 1.0L : 0.0L);
+        default:
+            throw std::runtime_error("the reference cannot read a constant of this type");
+        }
+    }
+
+    RefValue argument(camel::runtime::gc_node_ref_t ref) {
+        size_t index = 0;
+        for (; index < ports_.size(); ++index) {
+            if (ports_[index] == ref) {
+                break;
+            }
+        }
+        if (index >= ports_.size()) {
+            throw std::runtime_error("the reference reads a port that is not a parameter");
+        }
+        const Sample &sample = args_[index];
+        if (sample.tensor != nullptr) {
+            return RefValue::ofTensor(tensorOfSample(*sample.tensor));
+        }
+        return RefValue::ofScalar(static_cast<long double>(sample.asDouble));
+    }
+
+    RefValue operate(camel::runtime::gc_node_ref_t ref) {
+        if (!graph_.withInputsOf(ref).empty() || !graph_.ctrlInputsOf(ref).empty()) {
+            throw std::runtime_error("the reference cannot read an operator with a context argument");
+        }
+        const auto *body = graph_.nodeBodyAs<camel::runtime::GCOperBody>(ref);
+        std::vector<RefValue> in;
+        for (camel::runtime::gc_node_ref_t input : graph_.normInputsOf(ref)) {
+            in.push_back(eval(input));
+        }
+        const std::string uri(body->uri());
+        const auto unary = [&](auto &&fn) {
+            if (in.size() != 1) {
+                throw std::runtime_error("the reference reads an operator with the wrong number of inputs");
+            }
+            return refMap(in[0], fn);
+        };
+        const auto binary = [&](auto &&fn) {
+            if (in.size() != 2) {
+                throw std::runtime_error("the reference reads an operator with the wrong number of inputs");
+            }
+            return refBinary(
+                in[0],
+                in[1],
+                [&](long double a, long double b) { return fn(a, b); });
+        };
+        if (uri == ":op/add_f" || uri == ":op/add_d") {
+            return binary([](long double a, long double b) { return a + b; });
+        }
+        if (uri == ":op/sub_f" || uri == ":op/sub_d") {
+            return binary([](long double a, long double b) { return a - b; });
+        }
+        if (uri == ":op/mul_f" || uri == ":op/mul_d") {
+            return binary([](long double a, long double b) { return a * b; });
+        }
+        if (uri == ":op/div_f" || uri == ":op/div_d") {
+            return binary([](long double a, long double b) { return a / b; });
+        }
+        if (uri == ":op/neg_f" || uri == ":op/neg_d") {
+            return unary([](long double a) { return -a; });
+        }
+        if (uri == "math:sqrt") {
+            return unary([](long double a) { return std::sqrt(a); });
+        }
+        if (uri == "math:exp_f" || uri == "math:exp_d") {
+            return unary([](long double a) { return std::exp(a); });
+        }
+        if (uri == "math:log_f" || uri == "math:log_d") {
+            return unary([](long double a) { return std::log(a); });
+        }
+        if (uri == "math:log1p_f" || uri == "math:log1p_d") {
+            return unary([](long double a) { return std::log1p(a); });
+        }
+        if (uri == "math:expm1_f" || uri == "math:expm1_d") {
+            return unary([](long double a) { return std::expm1(a); });
+        }
+        if (uri == "math:abs_f" || uri == "math:abs_d") {
+            return unary([](long double a) { return std::fabs(a); });
+        }
+        if (uri == "tensor:add") {
+            return binary([](long double a, long double b) { return a + b; });
+        }
+        if (uri == "tensor:subtract") {
+            return binary([](long double a, long double b) { return a - b; });
+        }
+        if (uri == "tensor:multiply") {
+            return binary([](long double a, long double b) { return a * b; });
+        }
+        if (uri == "tensor:divide") {
+            return binary([](long double a, long double b) { return a / b; });
+        }
+        if (uri == "tensor:maximum") {
+            return binary([](long double a, long double b) { return std::max(a, b); });
+        }
+        if (uri == "tensor:minimum") {
+            return binary([](long double a, long double b) { return std::min(a, b); });
+        }
+        if (uri == "tensor:neg") {
+            return unary([](long double a) { return -a; });
+        }
+        if (uri == "tensor:abs") {
+            return unary([](long double a) { return std::fabs(a); });
+        }
+        if (uri == "tensor:exp") {
+            return unary([](long double a) { return std::exp(a); });
+        }
+        if (uri == "tensor:log") {
+            return unary([](long double a) { return std::log(a); });
+        }
+        if (uri == "tensor:sqrt") {
+            return unary([](long double a) { return std::sqrt(a); });
+        }
+        if (uri == "tensor:sum" && in.size() == 1) {
+            long double total = 0.0L;
+            for (long double value : in[0].t.values) {
+                total += value;
+            }
+            return RefValue::ofScalar(total);
+        }
+        if (uri == "tensor:sum_axis" || uri == "tensor:max_axis" || uri == "tensor:min_axis" ||
+            uri == "tensor:mean_axis") {
+            if (in.size() < 2 || !in[0].tensor || in[1].tensor) {
+                throw std::runtime_error("the reference reads a reduction without its axis");
+            }
+            const bool keep = in.size() > 2 && !in[2].tensor && in[2].scalar != 0.0L;
+            const auto kind = uri == "tensor:sum_axis"    ? RefReduce::Sum
+                : uri == "tensor:max_axis"                ? RefReduce::Max
+                : uri == "tensor:min_axis"                ? RefReduce::Min
+                                                          : RefReduce::Mean;
+            return refReduce(in[0].t, static_cast<int64_t>(in[1].scalar), keep, kind);
+        }
+        if (uri == "tensor:softmax" || uri == "tensor:log_softmax") {
+            if (in.empty() || !in[0].tensor) {
+                throw std::runtime_error("the reference reads a softmax without its tensor");
+            }
+            const int64_t axis = in.size() > 1 && !in[1].tensor ? static_cast<int64_t>(in[1].scalar) : -1;
+            return refSoftmax(in[0].t, axis, uri == "tensor:log_softmax");
+        }
+        throw std::runtime_error("the check has no higher-precision reference for operator '" + uri + "'");
+    }
+
+    const camel::runtime::GCGraph &graph_;
+    const std::vector<Sample> &args_;
+    std::vector<camel::runtime::gc_node_ref_t> ports_;
+    std::unordered_map<camel::runtime::gc_node_ref_t, RefValue> memo_;
+};
+
+/// The normalized error of a native value against the reference: the difference relative to the
+/// magnitude (absolutely when the value is small), with NaNs that agree and equal infinities
+/// treated as exact.
+long double refScalarError(long double native, long double reference) {
+    if (std::isnan(native) || std::isnan(reference)) {
+        return std::isnan(native) && std::isnan(reference)
+            ? 0.0L
+            : std::numeric_limits<long double>::infinity();
+    }
+    if (std::isinf(native) || std::isinf(reference)) {
+        return native == reference ? 0.0L : std::numeric_limits<long double>::infinity();
+    }
+    if (reference == 0.0L) {
+        return std::fabs(native);
+    }
+    // Relative error, not absolute: the benefit of `log1p` is its accuracy near zero, where an
+    // absolute bound would call the 100% error of `log(1 + x)` invisible.
+    return std::fabs(native - reference) / std::fabs(reference);
+}
+
+/// The largest normalized error of a sample against the reference of its side.
+long double refSampleError(const Sample &native, const RefValue &reference) {
+    if (native.tensor != nullptr) {
+        if (!reference.tensor || reference.t.shape != native.tensor->shape) {
+            return std::numeric_limits<long double>::infinity();
+        }
+        const RefTensor values = tensorOfSample(*native.tensor);
+        long double worst      = 0.0L;
+        for (size_t i = 0; i < values.values.size(); ++i) {
+            worst = std::max(worst, refScalarError(values.values[i], reference.t.values[i]));
+        }
+        return worst;
+    }
+    if (reference.tensor) {
+        return std::numeric_limits<long double>::infinity();
+    }
+    return refScalarError(static_cast<long double>(native.asDouble), reference.scalar);
+}
+
+/// The one rounding step the element type can make, the measurement noise of "not worse".
+double refTypeEpsilon(TypeCode code) {
+    return code == TypeCode::Float32 ? 1.1920928955078125e-7 : 2.220446049250313e-16;
+}
+
+/// Whether the right side's error is not larger than the left side's, allowing one rounding step
+/// of the element type so that the measurement itself does not make an accurate rule fail.
+bool refNotWorse(long double left, long double right, TypeCode code) {
+    if (std::isinf(left)) {
+        return true; // both sides missed the same special value; the rewrite adds nothing
+    }
+    return right <= left + 2.0L * static_cast<long double>(refTypeEpsilon(code));
+}
+
+/// The reported ratio of the right side's error to the left side's, with the element type's two
+/// ULP measurement floor so that an exact left side does not divide by zero.
+double refErrorRatio(long double left, long double right, TypeCode code) {
+    if (right == 0.0L) {
+        return 0.0;
+    }
+    const long double floor = 2.0L * static_cast<long double>(refTypeEpsilon(code));
+    return static_cast<double>(right / std::max(left, floor));
+}
+
+/// What the check reports for one sample of a rule that carries `refine_accuracy`.
+struct AccuracyResult {
+    bool ok = true;
+    bool referenceAvailable = true;
+    long double leftError = 0.0L;
+    long double rightError = 0.0L;
+    double ratio = 0.0;
+    std::string reason;
+};
+
+AccuracyResult compareAgainstReference(
+    const camel::runtime::GCGraph &lhsGraph, const camel::runtime::GCGraph &rhsGraph,
+    const std::vector<Sample> &values, const Sample &left, const Sample &right, TypeCode code) {
+    AccuracyResult result;
+    try {
+        RefEvaluator lhs(lhsGraph, values);
+        RefEvaluator rhs(rhsGraph, values);
+        const RefValue referenceLeft  = lhs.eval(lhsGraph.exitNodeRef());
+        const RefValue referenceRight = rhs.eval(rhsGraph.exitNodeRef());
+        result.leftError  = refSampleError(left, referenceLeft);
+        result.rightError = refSampleError(right, referenceRight);
+    } catch (const std::exception &e) {
+        result.ok               = false;
+        result.referenceAvailable = false;
+        result.reason           = e.what();
+        return result;
+    }
+    result.ratio = refErrorRatio(result.leftError, result.rightError, code);
+    result.ok = refNotWorse(result.leftError, result.rightError, code);
+    return result;
+}
+
+AccuracyResult compareBeforeAfter(
+    const camel::runtime::GCGraph &graph, const std::vector<Sample> &values,
+    const Sample &before, const Sample &after, TypeCode code) {
+    AccuracyResult result;
+    try {
+        RefEvaluator evaluator(graph, values);
+        const RefValue reference = evaluator.eval(graph.exitNodeRef());
+        result.leftError         = refSampleError(before, reference);
+        result.rightError        = refSampleError(after, reference);
+    } catch (const std::exception &e) {
+        result.ok                 = false;
+        result.referenceAvailable = false;
+        result.reason             = e.what();
+        return result;
+    }
+    result.ratio = refErrorRatio(result.leftError, result.rightError, code);
+    result.ok = refNotWorse(result.leftError, result.rightError, code);
+    return result;
+}
+
+/// The element type a sample's result is measured in.
+TypeCode elementCodeOf(const Sample &sample) {
+    return sample.tensor != nullptr ? sample.tensor->dtype : sample.code;
+}
+
 /// Random values of one parameter type (the scalar ones and the tensors the shape reader knows).
 /// Floats include the special values the permissions of the rule do not rule out.
 class Sampler {
   public:
     Sampler(uint64_t seed, camel::core::sem::PermissionMask needs) : rng_(seed), needs_(needs) {}
 
-    Sample value(const Type *type, bool constant) {
+    /// A scalar or tensor sample of `type`. `rankHint` is used only when the type does not carry
+    /// its rank: the caller derives it from the axis operands of the rule, so a reduction over
+    /// axis 2 is given a rank-3 tensor instead of the old fixed rank-1 vector.
+    Sample value(const Type *type, bool constant, size_t rankHint = 1) {
         const auto shape = camel::runtime::fact::shapeOfType(type);
         if (shape) {
-            return tensor(*shape, constant);
+            return tensor(*shape, constant, rankHint);
         }
         switch (type->code()) {
         case TypeCode::Int64: {
@@ -1130,6 +1738,18 @@ class Sampler {
         default:
             throw std::invalid_argument("a parameter of a rule has a type the check cannot make");
         }
+    }
+
+    /// A fixed integer sample, for an operand the sampler must choose (an axis) rather than draw.
+    Sample fixedInt(const Type *type, int64_t value) {
+        if (type->code() == TypeCode::Int32) {
+            return {
+                TypeCode::Int32,
+                toSlot<Int32>(static_cast<int32_t>(value)),
+                static_cast<double>(value),
+                nullptr};
+        }
+        return {TypeCode::Int64, toSlot<Int64>(value), static_cast<double>(value), nullptr};
     }
 
     /// The sample as an argument slot. A scalar keeps its slot; a tensor is an Array made now,
@@ -1161,7 +1781,8 @@ class Sampler {
     /// rank is a vector of three and an unknown extent is two. A type with a large known shape is
     /// sampled in the same rank at two elements per extent (elementwise laws do not depend on
     /// the extents, and the check stays small).
-    Sample tensor(const camel::runtime::fact::TensorShape &shape, bool constant) {
+    Sample tensor(
+        const camel::runtime::fact::TensorShape &shape, bool constant, size_t rankHint) {
         auto sample  = std::make_shared<TensorSample>();
         sample->dtype = shape.dtype.value_or(TypeCode::Float32);
         const TypeCode dtype = sample->dtype;
@@ -1174,7 +1795,16 @@ class Sampler {
         if (shape.dims) {
             dims = *shape.dims;
         } else {
-            dims = {3};
+            // The rank comes from the operator's operands (an axis), and rotates through 1, 2 and
+            // 3 so that every rule sees a vector, a matrix and a rank-3 tensor in one check.
+            const size_t rank = std::clamp<size_t>(rankHint, 1, 4);
+            if (rank == 1) {
+                dims = {3};
+            } else if (rank == 2) {
+                dims = {2, 3};
+            } else {
+                dims = std::vector<int64_t>(rank, 2);
+            }
         }
         int64_t elements = 1;
         for (int64_t &extent : dims) {
@@ -1200,6 +1830,17 @@ class Sampler {
             std::vector<float> values(static_cast<size_t>(elements));
             for (float &value : values) {
                 value = static_cast<float>(pickFloat(false, TypeCode::Float32));
+            }
+            // The measured counterexample for the stable softmax: a vector whose maximum is far
+            // from one element. The stable form's `x - max` is then about -27, and rounding the
+            // difference (and exp's argument scaling) makes its relative error about 1.9e-6,
+            // while the naive form exponentiates values near zero and stays near 7.8e-8. The
+            // first rank-1 accuracy tensor is this vector so the rejection is reproducible; the
+            // rest of the domain is sampled as before.
+            if (!usedFarApartProbe_ && needs_ == camel::core::sem::kRefineAccuracy &&
+                values.size() == 3) {
+                values = {-1e-16f, 27.004f, -33.563f};
+                usedFarApartProbe_ = true;
             }
             sample->bytes.resize(values.size() * sizeof(float));
             std::memcpy(sample->bytes.data(), values.data(), sample->bytes.size());
@@ -1262,14 +1903,42 @@ class Sampler {
         // A special has to be a value of the parameter's own type: 1e300 is finite as a float64
         // and an infinity as a float32, which would smuggle an infinity past `no_infs` and make
         // every float32 rule that assumes finiteness fail its own check.
+        // The accuracy rules are the ones that promise a smaller error over the whole interesting
+        // domain, so their sampler includes the overflow, underflow, denormal and near-zero
+        // regions. The other rules keep the narrower set: a law like
+        // `(x * c) + (y * c) => (x + y) * c` is exact on finite values but not at an overflow, and
+        // it does not claim to be.
+        const bool accuracy = (needs_ & camel::core::sem::kRefineAccuracy) != 0;
         if (code == TypeCode::Float32) {
             specials.push_back(1e-30);
             specials.push_back(1e30);
             specials.push_back(1e-40); // subnormal
+            if (accuracy) {
+                specials.push_back(1e-45); // smallest subnormal
+                specials.push_back(3.4e38); // near overflow
+                specials.push_back(100.0);  // exp overflows f32 here (e^100 = 2.7e43)
+                specials.push_back(-100.0);
+                specials.push_back(1000.0);
+                specials.push_back(-1000.0);
+                specials.push_back(1e-8); // the log(1 + x) near-zero region
+                specials.push_back(-1e-8);
+                specials.push_back(1e-16);
+                specials.push_back(-1e-16);
+            }
         } else {
             specials.push_back(1e-300);
             specials.push_back(1e300);
             specials.push_back(1e-310); // subnormal
+            if (accuracy) {
+                specials.push_back(1e-320); // smallest subnormal
+                specials.push_back(1.7e308); // near overflow
+                specials.push_back(1000.0);
+                specials.push_back(-1000.0);
+                specials.push_back(1e-16); // the log(1 + x) near-zero region
+                specials.push_back(-1e-16);
+                specials.push_back(1e-300);
+                specials.push_back(-1e-300);
+            }
         }
         if (!noZeros) {
             specials.push_back(-0.0);
@@ -1296,6 +1965,7 @@ class Sampler {
     }
 
     std::mt19937_64 rng_;
+    bool usedFarApartProbe_ = false;
     camel::core::sem::PermissionMask needs_;
 };
 
@@ -1485,8 +2155,74 @@ double declaredUlpsOf(const camel::runtime::GCGraph &graph) {
     return ulps;
 }
 
+/// The index of `ref` among the graph's form ports, the function's parameters.
+std::optional<size_t> portIndexIn(
+    const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
+    const auto ports = graph.normPorts();
+    for (size_t i = 0; i < ports.size(); ++i) {
+        if (ports[i] == ref) {
+            return i;
+        }
+    }
+    return std::nullopt;
+}
+
+/// Whether the operator takes an axis operand at index 1 (2 for the gradient form). The check
+/// reads the operator's own declaration, not the rule's parameter names, so it knows which
+/// integer operand is an axis and can give the tensor a rank the axis fits.
+bool takesAxisAt(std::string_view uri, size_t &index) {
+    if (uri == "tensor:sum_axis" || uri == "tensor:mean_axis" || uri == "tensor:max_axis" ||
+        uri == "tensor:min_axis" || uri == "tensor:argmax_axis" ||
+        uri == "tensor:argmin_axis" || uri == "tensor:softmax" || uri == "tensor:log_softmax") {
+        index = 1;
+        return true;
+    }
+    if (uri == "tensor:softmax_grad") {
+        index = 2;
+        return true;
+    }
+    return false;
+}
+
+/// Marks the parameters the rule's own operators use as an axis. An axis parameter is sampled
+/// from the valid range of its tensor's rank, and the tensor's rank is `axis + 1` at least.
+std::vector<uint8_t> axisPortsOf(const camel::runtime::GCGraph &graph) {
+    std::vector<uint8_t> marks(graph.normPorts().size(), 0);
+    for (camel::runtime::gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
+        const camel::runtime::GCNode *node = graph.node(ref);
+        if (node->kind != camel::runtime::GCNodeKind::Oper || !node->hasPayload()) {
+            continue;
+        }
+        const std::string_view uri =
+            graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
+        size_t index = 0;
+        if (!takesAxisAt(uri, index)) {
+            continue;
+        }
+        const auto inputs = graph.normInputsOf(ref);
+        if (index >= inputs.size()) {
+            continue;
+        }
+        if (const auto port = portIndexIn(graph, inputs[index])) {
+            marks[*port] = 1;
+        }
+    }
+    return marks;
+}
+
+/// The smallest rank a tensor parameter carries in its type, if the type states one.
+std::optional<size_t> knownRankOf(const Type *type) {
+    const auto shape = camel::runtime::fact::shapeOfType(type);
+    if (!shape || !shape->dims) {
+        return std::nullopt;
+    }
+    return shape->dims->size();
+}
+
 /// `check(rules, samples, seed)`: for every rule, `samples` random instances (random constants
 /// for the const parameters, random values for the others) of its two sides, which must agree.
+/// A rule that asks for `refine_accuracy` is compared by its error against a higher-precision
+/// reference instead, sample by sample, and the worst error ratio is reported.
 /// Returns the report; a line starting with FAIL is a rule that does not hold.
 slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const int64_t samples = std::max<int64_t>(1, norm.get<Int64>(1));
@@ -1531,9 +2267,58 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         // with the operators' declarations (not one uniform rounding bound).
         const camel::core::sem::RewriteErrorBound bound =
             camel::core::sem::rewriteErrorBound(needs, steps, declaredUlps);
+        const bool accuracy = (needs & camel::core::sem::kRefineAccuracy) != 0;
+        // The rule's own operators say which integer parameters are axes. The rank of an
+        // otherwise unshaped tensor follows the axis it is reduced over, and rotates through 1,
+        // 2 and 3 so that a vector, a matrix and a rank-3 tensor are all sampled.
+        std::vector<uint8_t> axisPorts = axisPortsOf(*lhsGraph);
+        const std::vector<uint8_t> rhsAxisPorts = axisPortsOf(*program->graph(rhsId));
+        for (size_t i = 0; i < axisPorts.size() && i < rhsAxisPorts.size(); ++i) {
+            axisPorts[i] = static_cast<uint8_t>(axisPorts[i] | rhsAxisPorts[i]);
+        }
+        std::optional<size_t> knownRank;
+        for (size_t i = 0; i < params; ++i) {
+            if (const auto rank = knownRankOf(lhsType->normTypeAt(i))) {
+                knownRank = knownRank ? std::min(*knownRank, *rank) : *rank;
+            }
+        }
         Sampler sampler(seed * 1000003u + index, needs);
+        const auto drawValues = [&](int64_t sampleIndex) {
+            std::vector<Sample> drawn(params);
+            int64_t maxAxis = -1;
+            for (size_t i = 0; i < params; ++i) {
+                if (i >= axisPorts.size() || axisPorts[i] == 0) {
+                    continue;
+                }
+                // The axis is an operand, not a free constant: cycle through the axes the rule's
+                // shapes need (rank 1, a matrix, a rank-3 reduction) and the last axis.
+                static constexpr int64_t kAxisCycle[] = {0, 1, 2, -1};
+                int64_t axis = kAxisCycle[sampleIndex % 4];
+                if (knownRank && *knownRank > 0) {
+                    axis = std::min<int64_t>(axis, static_cast<int64_t>(*knownRank) - 1);
+                }
+                drawn[i] = sampler.fixedInt(lhsType->normTypeAt(i), axis);
+                if (axis >= 0) {
+                    maxAxis = std::max(maxAxis, axis);
+                }
+            }
+            const size_t rankHint = std::max<size_t>(
+                static_cast<size_t>(1 + (sampleIndex % 3)),
+                maxAxis >= 0 ? static_cast<size_t>(maxAxis + 1) : 0);
+            for (size_t i = 0; i < params; ++i) {
+                if (i < axisPorts.size() && axisPorts[i] != 0) {
+                    continue;
+                }
+                const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
+                drawn[i] = sampler.value(lhsType->normTypeAt(i), isConst, rankHint);
+            }
+            return drawn;
+        };
         NodeVMSchedPass vm(ctx.shared_from_this());
         std::string failure;
+        double worstRatio = 0.0;
+        std::set<std::vector<int64_t>> shapesSeen;
+        std::set<int64_t> axesSeen;
         if (!bound.checkable) {
             // `nondeterministic` has no numeric contract: there is nothing to compare against,
             // and reporting `ok` would say the rule was checked. It was not.
@@ -1545,13 +2330,17 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         // condition rejects, and the tool cannot ask the condition about sampled values. Such a
         // rule is checked by the engine path below only.
         for (int64_t sample = 0; !conditional && sample < samples && failure.empty(); ++sample) {
-            std::vector<Sample> values;
+            std::vector<Sample> values = drawValues(sample);
             std::vector<slot_t> args;
             double scale = 1.0;
-            for (size_t i = 0; i < params; ++i) {
-                const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
-                values.push_back(sampler.value(lhsType->normTypeAt(i), isConst));
-                scale = std::max(scale, std::abs(values.back().asDouble) + 1.0);
+            for (size_t i = 0; i < values.size(); ++i) {
+                scale = std::max(scale, std::abs(values[i].asDouble) + 1.0);
+                if (values[i].tensor != nullptr) {
+                    shapesSeen.insert(values[i].tensor->shape);
+                }
+                if (i < axisPorts.size() && axisPorts[i] != 0) {
+                    axesSeen.insert(static_cast<int64_t>(values[i].asDouble));
+                }
             }
             // A tensor argument is an Array: it is made right before the call that reads it, so no
             // allocation can move it in between (and the call below is a safepoint).
@@ -1567,7 +2356,36 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             fillArgs();
             const Sample right =
                 resultOf(vm.callGraph(program, program->graph(rhsId), args), resultType);
-            if (!agree(left, right, bound, std::min(scale * scale, std::numeric_limits<double>::max()))) {
+            if (accuracy) {
+                const AccuracyResult checked = compareAgainstReference(
+                    *lhsGraph,
+                    *program->graph(rhsId),
+                    values,
+                    left,
+                    right,
+                    elementCodeOf(left));
+                worstRatio = std::max(worstRatio, checked.ratio);
+                if (!checked.ok) {
+                    std::string at;
+                    for (size_t i = 0; i < values.size(); ++i) {
+                        at += (i == 0 ? "" : ", ") + sampleText(values[i]);
+                    }
+                    failure = checked.referenceAvailable
+                        ? std::format(
+                              "FAIL {}: the right side is worse at ({}): its error {:.6g} exceeds "
+                              "the left side's {:.6g} (ratio {:.6g})",
+                              name,
+                              at,
+                              static_cast<double>(checked.rightError),
+                              static_cast<double>(checked.leftError),
+                              checked.ratio)
+                        : std::format(
+                              "FAIL {}: the check cannot examine this rule at ({}): {}",
+                              name,
+                              at,
+                              checked.reason);
+                }
+            } else if (!agree(left, right, bound, std::min(scale * scale, std::numeric_limits<double>::max()))) {
                 std::string at;
                 for (size_t i = 0; i < values.size(); ++i) {
                     at += (i == 0 ? "" : ", ") + sampleText(values[i]);
@@ -1606,16 +2424,14 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                     draft.normPorts().begin(),
                     draft.normPorts().end());
                 std::vector<slot_t> args;
-                std::vector<Sample> values;
-                double scale = 1.0;
+                std::vector<Sample> values = drawValues(instance);
+                double scale               = 1.0;
                 for (size_t i = 0; i < params; ++i) {
                     const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
                     Type *type         = lhsType->normTypeAt(i);
-                    Sample value       = sampler.value(type, isConst);
-                    values.push_back(value);
-                    scale = std::max(scale, std::abs(value.asDouble) + 1.0);
+                    scale = std::max(scale, std::abs(values[i].asDouble) + 1.0);
                     if (isConst) {
-                        const auto constant = draft.materializeStaticValue(value.slot, type);
+                        const auto constant = draft.materializeStaticValue(values[i].slot, type);
                         draft.replaceAllValueUses(ports[i], constant);
                     }
                 }
@@ -1638,7 +2454,31 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                 fillArgs();
                 const Sample after =
                     resultOf(vm.callGraph(rewritten, rewritten->graph(lhsId), args), resultType);
-                if (!agree(before, after, bound, std::min(scale * scale, std::numeric_limits<double>::max()))) {
+                if (accuracy) {
+                    const AccuracyResult checked = compareBeforeAfter(
+                        *lhsGraph, values, before, after, elementCodeOf(before));
+                    worstRatio = std::max(worstRatio, checked.ratio);
+                    if (!checked.ok) {
+                        std::string at;
+                        for (const Sample &value : values) {
+                            at += (at.empty() ? "" : ", ") + sampleText(value);
+                        }
+                        failure = checked.referenceAvailable
+                            ? std::format(
+                                  "FAIL {}: the rewritten left side is less accurate at ({}): its "
+                                  "error {:.6g} exceeds the original's {:.6g} (ratio {:.6g})",
+                                  name,
+                                  at,
+                                  static_cast<double>(checked.rightError),
+                                  static_cast<double>(checked.leftError),
+                                  checked.ratio)
+                            : std::format(
+                                  "FAIL {}: the check cannot examine the rewritten side at ({}): {}",
+                                  name,
+                                  at,
+                                  checked.reason);
+                    }
+                } else if (!agree(before, after, bound, std::min(scale * scale, std::numeric_limits<double>::max()))) {
                     std::string at;
                     for (const Sample &value : values) {
                         at += (at.empty() ? "" : ", ") + sampleText(value);
@@ -1662,21 +2502,46 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                     tried);
             }
         }
-        report +=
-            failure.empty()
-                ? (conditional ? std::format(
-                                     "ok {}: the condition selects the instances, fired {} of "
-                                     "{}\n",
-                                     name,
-                                     fired,
-                                     tried)
-                               : std::format(
-                                     "ok {}: {} samples agree, fired {} of {}\n",
-                                     name,
-                                     samples,
-                                     fired,
-                                     tried))
-                : failure + "\n";
+        if (!failure.empty()) {
+            report += failure + "\n";
+        } else if (accuracy) {
+            std::string shapesText;
+            for (const auto &shape : shapesSeen) {
+                shapesText += shapesText.empty() ? "" : " ";
+                shapesText += "[";
+                for (size_t i = 0; i < shape.size(); ++i) {
+                    shapesText += (i == 0 ? "" : ", ") + std::to_string(shape[i]);
+                }
+                shapesText += "]";
+            }
+            std::string axesText;
+            for (int64_t axis : axesSeen) {
+                axesText += axesText.empty() ? "" : " ";
+                axesText += std::to_string(axis);
+            }
+            const std::string ratio =
+                std::isinf(worstRatio) ? "inf" : std::format("{:.3g}", worstRatio);
+            report += std::format(
+                "ok {}: {} samples, worst error ratio {}, fired {} of {}",
+                name,
+                samples,
+                ratio,
+                fired,
+                tried);
+            if (!shapesText.empty()) {
+                report += ", shapes " + shapesText;
+            }
+            if (!axesText.empty()) {
+                report += ", axes " + axesText;
+            }
+            report += "\n";
+        } else if (conditional) {
+            report += std::format(
+                "ok {}: the condition selects the instances, fired {} of {}\n", name, fired, tried);
+        } else {
+            report += std::format(
+                "ok {}: {} samples agree, fired {} of {}\n", name, samples, fired, tried);
+        }
     }
     return toSlot(String::from(report, mm::autoSpace()));
 }

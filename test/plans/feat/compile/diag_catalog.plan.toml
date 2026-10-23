@@ -5,19 +5,31 @@ tags = ["feat", "compile", "diagnostics"]
 
 [[tests]]
 name = "catalog.check"
-desc = "Every diagnostic code has a name (the enumerator) and a message, and no value is used twice within a type. Two branches that each took the next free number collide here when they are merged."
+desc = "diagnostics/registry.tsv is valid and the generated headers and message tables are what it produces: no value twice in a section, no name twice, every number inside its section's range. A collision fails here before it can be published."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/diagnostics-catalog.mjs"
 args = ["${case}", "--check"]
 expect_exit = 0
-expect_stdout_contains = ["every one with a name and a message, no value used twice"]
+expect_stdout_contains = ["every one with a name and a message, no value used twice, and the emitted headers agree"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
 [[tests]]
+name = "catalog.failure_paths"
+desc = "The registry's failure paths on a scratch copy: a duplicate number, a number outside its section's range, a duplicate name, a generated header that disagrees with the registry and an empty registry all exit 1; one appended line takes the next free number and changes only the registry and that section's generated files."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/cases/diagnostics/registry_proof.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["diagnostics registry proof:", "checks passed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
 name = "catalog.doc_is_generated"
-desc = "docs/diagnostics.md is what scripts/diagnostics-catalog.mjs --write produces from the tables and the tests: it is generated, not edited."
+desc = "docs/diagnostics.md is what scripts/diagnostics-catalog.mjs --write produces from the registry and the tests: it is generated, not edited."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/diagnostics-catalog.mjs"

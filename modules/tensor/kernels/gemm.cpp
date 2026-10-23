@@ -75,11 +75,28 @@ const BuiltinBackend &builtinBackend() {
     return backend;
 }
 
-/// Integer matmul for int64 (and promoted bool) operands; not performance critical.
-void integerGemm(int64_t M, int64_t N, int64_t K, const int64_t *A, const int64_t *B, int64_t *C) {
+/// Integer matmul for int32 and int64 (and promoted bool) operands; not performance critical.
+/// The accumulator is the element type, so int32 products and sums wrap the way int32
+/// arithmetic does (design principles 5.1, 7.7).
+template <typename T>
+void integerGemm(int64_t M, int64_t N, int64_t K, const T *A, const T *B, T *C) {
     for (int64_t i = 0; i < M; ++i) {
         for (int64_t j = 0; j < N; ++j) {
-            int64_t acc = 0;
+            T acc = 0;
+            for (int64_t k = 0; k < K; ++k) {
+                acc = static_cast<T>(acc + static_cast<T>(A[i * K + k] * B[k * N + j]));
+            }
+            C[i * N + j] = acc;
+        }
+    }
+}
+
+/// f64 matmul: the same summation order as sgemm (ascending k), in double. A separate loop
+/// rather than the f32 kernel: an f64 tensor is computed in f64, never narrowed to f32.
+void dgemm(int64_t M, int64_t N, int64_t K, const double *A, const double *B, double *C) {
+    for (int64_t i = 0; i < M; ++i) {
+        for (int64_t j = 0; j < N; ++j) {
+            double acc = 0.0;
             for (int64_t k = 0; k < K; ++k) {
                 acc += A[i * K + k] * B[k * N + j];
             }
@@ -193,6 +210,17 @@ Array *matmul(
     const auto gemm = library ? &sgemmLibrary : &sgemm;
     const MatmulPlan plan  = planMatmul(lhs->shapeSpan(), rhs->shapeSpan());
     const TypeCode outType = promoteTensorTypes(lhs->dtype(), rhs->dtype());
+    // A bf16 or f16 matmul is the f32 multiplication of the exactly widened operands, rounded
+    // once into the element type when the result is stored: the same one arithmetic path as
+    // the elementwise operators (dtype.h), with f32 as the accumulator the declaration states.
+    // The result type stays the element type the program wrote.
+    if (outType == TypeCode::BFloat16 || outType == TypeCode::Float16) {
+        Array *wideLhs = lhs->dtype() == TypeCode::Float32 ? const_cast<Array *>(lhs)
+                                                           : cast(lhs, TypeCode::Float32, allocator);
+        Array *wideRhs = rhs->dtype() == TypeCode::Float32 ? const_cast<Array *>(rhs)
+                                                           : cast(rhs, TypeCode::Float32, allocator);
+        return cast(matmul(wideLhs, wideRhs, allocator, library), outType, allocator);
+    }
     const TypeCode compute = outType == TypeCode::Bool ? TypeCode::Int64 : outType;
     const Array *a  = lhs->dtype() == compute ? lhs : cast(lhs, compute, allocator);
     const Array *b  = rhs->dtype() == compute ? rhs : cast(rhs, compute, allocator);
@@ -220,8 +248,24 @@ Array *matmul(
                     0.0f,
                     out->dataAs<float>() + batch * cSize,
                     plan.N);
+            } else if (compute == TypeCode::Float64) {
+                dgemm(
+                    plan.M,
+                    plan.N,
+                    plan.K,
+                    a->dataAs<double>() + aOff,
+                    b->dataAs<double>() + bOff,
+                    out->dataAs<double>() + batch * cSize);
+            } else if (compute == TypeCode::Int32) {
+                integerGemm<int32_t>(
+                    plan.M,
+                    plan.N,
+                    plan.K,
+                    a->dataAs<int32_t>() + aOff,
+                    b->dataAs<int32_t>() + bOff,
+                    out->dataAs<int32_t>() + batch * cSize);
             } else {
-                integerGemm(
+                integerGemm<int64_t>(
                     plan.M,
                     plan.N,
                     plan.K,
