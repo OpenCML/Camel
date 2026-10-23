@@ -358,8 +358,11 @@ verify_script = '''
 timeout_ms = 20000
 
 # The precise limit of the reference mode, and the reason the C++ file is not deleted (H160): it
-# keeps the graph's named node (the C++ pass's isReplaceable), while the rule engine retargets it.
-# Both facts are pinned here so that neither can drift silently.
+# keeps the graph's named node (the C++ pass's isReplaceable), while the rule engine rewrites it and
+# moves the anchor onto what the rule's right side wrote -- the handover the ruling of 2026-10-23
+# makes the engine's job and not a rule condition
+# (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy` item 3). Both facts
+# are pinned here so that neither can drift silently.
 
 [[tests]]
 name = "neutral_mode_keeps_the_named_node"
@@ -382,7 +385,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "the_rule_engine_retargets_the_named_node"
-desc = "rules::simplify rewrites the same add and moves the graph's return to the port."
+desc = "rules::simplify rewrites the same add and moves the graph's return to the port: the rule engine's job is the handover, not the refusal the C++ pass's isReplaceable applies (the 2026-10-23 ruling, `rule-conditions-and-policy` item 3)."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_target.cml"
 args = ["${case}", "rules::simplify", "std::jgir"]
