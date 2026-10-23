@@ -309,6 +309,12 @@ def format_check(patterns, allow_empty):
         print("format: the tool reported no comment examined; a check on zero comments is not a "
               "pass (comments=0 or no comments= in the FMTCHECK summary)")
         return 1
+    # `dropped=0` and `unplaced=0` are asserted by the plan; this refuses a summary that carries no
+    # verdict on them, so a tool too old to report one cannot pass by saying nothing.
+    if re.search(r"dropped=(\d+)", text) is None or re.search(r"unplaced=(\d+)", text) is None:
+        print("format: the FMTCHECK summary reports no dropped= or no unplaced= count; refusing to "
+              "read a verdict the tool did not state")
+        return 1
     return code
 
 

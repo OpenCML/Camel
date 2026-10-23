@@ -25,6 +25,10 @@ struct ParseOutcome {
     /// is not a node of the AST, so comparing two trees cannot see one that formatting dropped;
     /// this is what fmtcheck compares against `formatted`.
     std::vector<std::string> comments;
+    /// The comments that formatting kept but could not place: it wrote them at the end of the file
+    /// rather than lose them. Zero is the shape the tree is in; anything else is a shape no visitor
+    /// reached, which fmtcheck reports and refuses.
+    size_t unplaced = 0;
 };
 
 std::string readFile(const std::string &path);

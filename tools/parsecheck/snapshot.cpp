@@ -109,7 +109,7 @@ int runFormatCheck(const std::vector<std::string> &files) {
         return 2;
     }
     size_t checked = 0, skipped = 0, changed = 0, unstable = 0, broken = 0, comments = 0,
-           dropped = 0;
+           dropped = 0, unplaced = 0;
     for (const std::string &path : files) {
         try {
             const ParseOutcome original = parseText(path, readFile(path));
@@ -131,6 +131,10 @@ int runFormatCheck(const std::vector<std::string> &files) {
                 }
             }
             const ParseOutcome again = parseText(path, original.formatted);
+            if (original.unplaced > 0) {
+                unplaced += original.unplaced;
+                std::cout << "UNPLACED " << path << " " << original.unplaced << "\n";
+            }
             if (!again.accepted ||
                 withSortedImports(again.structure) != withSortedImports(original.structure)) {
                 ++changed;
@@ -153,10 +157,12 @@ int runFormatCheck(const std::vector<std::string> &files) {
     std::cout << "FMTCHECK files=" << files.size() << " checked=" << checked
               << " skipped(not accepted)=" << skipped << " changed=" << changed
               << " unstable=" << unstable << " broken=" << broken << " comments=" << comments
-              << " dropped=" << dropped << "\n";
+              << " dropped=" << dropped << " unplaced=" << unplaced << "\n";
     // `comments` is reported but not gated here: the floor that refuses a run which examined no
     // comment is in check.py, which can count the tree's corpus (as it does for the file list).
-    return changed == 0 && dropped == 0 && broken == 0 ? 0 : 1;
+    // `unplaced` is gated: a comment written at the end of the file instead of where it stood is a
+    // shape no visitor reached, and a gate that accepts it stops asking why it happened.
+    return changed == 0 && dropped == 0 && unplaced == 0 && broken == 0 ? 0 : 1;
 }
 
 } // namespace parsecheck
