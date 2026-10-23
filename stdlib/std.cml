@@ -43,7 +43,11 @@ export func rgir_regions::<F>(f: F): F! when is_function::<F>()
 /// Prints the versioned JSON GIR of the graph and consumes it.
 with <
     /// Write the JSON with its keys in a canonical order, so two runs compare byte for byte.
-    canonical: bool = false
+    canonical: bool = false,
+    /// Write the document in the shape `egraph-serialize` reads instead of the display document:
+    /// the classes are the egraph's e-classes and every writing is one of its nodes, so the
+    /// community's interactive viewers open it (H225).
+    egraph: bool = false
 >
 export func jgir::<F>(f: F): F! when is_function::<F>()
 
@@ -272,6 +276,20 @@ with <
     cost: string = "weighted"
 >
 export func extract::<F>(f: F): F! when is_function::<F>()
+
+/// Saturates the standard rules library (stdlib/rules.cml) and leaves the program in the state
+/// where a value has several writings; nothing is extracted (H225). The dumps that accept that
+/// state draw it: `camel f.cml std::opt::saturate std::gir`.
+with <
+    /// Rounds of saturation: every round finds all matches of the rules and applies them, and the
+    /// rounds go on while a round adds a writing. 0 applies no rule at all, so the program keeps
+    /// exactly the writings it had.
+    rounds: int = 6,
+    /// Keep the rules to the ones that hold bit for bit, as `safe_fp=true` does for
+    /// `std::opt` (design principles 7.4).
+    strict: bool = false
+>
+export func saturate::<F>(f: F): F! when is_function::<F>()
 
 /// Common subexpression elimination.
 export func cse::<F>(f: F): F! when is_function::<F>()

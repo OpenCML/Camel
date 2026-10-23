@@ -247,3 +247,93 @@ expect_exit = 0
 expect_stdout_contains = ["RULES refused: Rule 'add_swap_both' holds both ways (<=>): rewriting applies a rule one way, saturation uses both.", "RULES integer_coefficients rounds=2 applied=1 erased=5 fixpoint=1", "RULES integer_chain rounds=2 applied=2 erased=6 fixpoint=1", "RULES doubled rounds=2 applied=1 erased=5 fixpoint=1", "RULES fault_case rounds=1 applied=0 erased=0 fixpoint=1", "RULES integer_coefficients add=0 mul=1 div=0", "RULES integer_chain add=0 mul=1 div=0", "RULES doubled add=0 mul=1 div=0", "RULES fault_case add=0 mul=0 div=1", "56 42 42"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+# The drawing of the state where a value has several writings (H225). Each case runs the same
+# program — `x + x` and `x * 2` are two writings of one value — through one pipeline and checks
+# the drawing as a property of what came out, never as a count of lines: a check that examined no
+# class at all fails, and `draw_classes.guard` shows the same check refusing a dump of the program
+# without the saturation, naming the case file and the dump line of the writing that stands alone.
+
+[[tests]]
+name = "draw_classes.gir"
+desc = "`std::opt::saturate` leaves the program in the state with several writings and `std::gir` draws it: every class is one dashed cluster with one class node and two or more writings inside, all of them naming that class and all of one type; exactly one writing of a class is marked `chosen=\"true\"`, and for the class that holds `x + x` and `x * 2` it is the add — the writing the cost model the pipeline itself extracts by likes (an add costs 1.0 and reads its value twice at 0.1, a product 3.0 and reads it once plus a constant, so 1.2 against 3.2), and the dump says which model chose (`writings_cost=\"weighted\"`); the value the graph returns is read from its class node and not from a writing."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/feat/mm/writings/draw_classes.mjs"
+args = ["${case}", "gir"]
+expect_exit = 0
+expect_stdout_contains = ["draw classes gir: PASS", "DRAW gir classes=", "pair=add+mul", "marked=1", "cost=weighted"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000
+
+[[tests]]
+name = "draw_classes.rgir"
+desc = "The styled dump of the same state draws the class dashed and gives the writing extraction would take a heavier border: the same properties as `draw_classes.gir`, plus `style=dashed` on the class and `penwidth=2` on the marked writing."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/feat/mm/writings/draw_classes.mjs"
+args = ["${case}", "rgir"]
+expect_exit = 0
+expect_stdout_contains = ["draw classes rgir: PASS", "pair=add+mul", "dashed=1", "heavy=1"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000
+
+[[tests]]
+name = "draw_classes.jgir"
+desc = "`std::jgir` carries the classes too: each is an entry with its id, its writings and the one extraction would take among them, and a cost; the class that holds `x + x` and `x * 2` is one entry and its chosen writing is the add, as in the DOT dumps. A graph with one writing per value gains no `classes` key, so no existing reader changes."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/feat/mm/writings/draw_classes.mjs"
+args = ["${case}", "jgir"]
+expect_exit = 0
+expect_stdout_contains = ["draw classes jgir: PASS", "pair=add+mul", "chosen=add"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000
+
+[[tests]]
+name = "draw_classes.egraph"
+desc = "`std::jgir egraph=true` writes the document `egraph-serialize` reads instead of the display document: exactly `nodes`, `root_eclasses` and `class_data`; every child of a node is an e-class of the document and every root is one; every class says what computing its value costs; and the two writings `x + x` and `x * 2` are one e-class, which is what makes the export worth opening in the community's viewer."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/feat/mm/writings/draw_classes.mjs"
+args = ["${case}", "egraph"]
+expect_exit = 0
+expect_stdout_contains = ["draw classes egraph: PASS", "pair=one-eclass", "roots="]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000
+
+[[tests]]
+name = "draw_classes.guard"
+desc = "The drawing check is not vacuous: run on a dump of the same program without `std::opt::saturate` — one writing per value, so no class can exist — it refuses, naming the case file and the dump line of the writing that stands alone (asserted to be the node line it read), and run on the dump the saturation produces it accepts. Examining zero classes is a failure in both directions, and the check is the same code in both."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/feat/mm/writings/draw_classes.mjs"
+args = ["${case}", "guard"]
+expect_exit = 0
+expect_stdout_contains = ["draw classes guard: PASS", "DRAW guard red=test/cases/feat/mm/writings/saturate_draw.cml:", "DRAW guard green classes="]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000
+
+[[tests]]
+name = "draw_classes.params"
+desc = "The pass declares `rounds: int = 6` and `strict: bool = false` in stdlib/std.cml, and a parameter written after the pass name reaches it: `rounds=0` applies no rule, so the program keeps the writing it had and the check of `draw_classes.guard` refuses that dump; `rounds=1` already leaves `x + x` and `x * 2` in one class; `strict=true` keeps the pair, because the integer rules hold bit for bit; `rounds=1+1` is read as an int; and `rounds=true` is refused at the call, naming the declaration's type (`The argument 'rounds' of 'std::opt::saturate' has type 'bool', not 'int'`), before anything runs."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/feat/mm/writings/draw_classes.mjs"
+args = ["${case}", "params"]
+expect_exit = 0
+expect_stdout_contains = ["draw classes params: PASS", "DRAW params rounds0=no-class", "strict=one-class", "wrongtype=refused"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000
+
+[[tests]]
+name = "draw_classes.extract"
+desc = "The pass extracts nothing: the program it leaves is in the state with several writings, a pass that consumes it (`std::nvm`) is given one writing per value by the driver and prints 42, `std::opt::extract` before it does the same, and a rewrite pass that does not declare that it accepts the state (`std::opt::fold`) is still refused with `PassNeedsExtraction` — the new rule is about a pass that asked for the state, not about every pass."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/feat/mm/writings/draw_classes.mjs"
+args = ["${case}", "extract"]
+expect_exit = 0
+expect_stdout_contains = ["draw classes extract: PASS", "DRAW extract printed=42 refused_fold=1"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000

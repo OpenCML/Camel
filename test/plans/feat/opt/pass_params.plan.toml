@@ -329,12 +329,12 @@ tool = "node"
 case = "../../../../test/tools/check-pass-declarations.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["53 in the core", "contributed by modules", "aliases resolved", "no C++ pass registry"]
+expect_stdout_contains = ["54 in the core", "contributed by modules", "aliases resolved", "no C++ pass registry"]
 timeout_ms = 60000
 
 [[tests]]
 name = "declaration.every_declaration_lists"
-desc = "The pipeline reads the standard library's declarations by module and name: the listing of an unknown pass is every declaration, all 53 of them, with the parameters and defaults they write."
+desc = "The pipeline reads the standard library's declarations by module and name: the listing of an unknown pass is every declaration, all 54 of them, with the parameters and defaults they write."
 args = ["${case}", "std::zzz_unknown"]
 expect_exit = 1
 verify_script = '''
@@ -342,7 +342,7 @@ verify_script = '''
  const err = input.normalized.stderr;
  assert(err.includes("Pass <std::zzz_unknown> not found, available passes are:"), "missing the listing header");
  const names = err.split(/\r?\n/).filter((line) => /^  std::[A-Za-z_][A-Za-z0-9_:]*$/.test(line));
- assert(names.length === 53, 'the listing has ' + names.length + ' declarations, not 53');
+ assert(names.length === 54, 'the listing has ' + names.length + ' declarations, not 54');
  for (const name of ['std::opt', 'std::fvm', 'std::nvm', 'std::opt::small', 'std::fastvm::jit_asm']) {
   assert(names.includes('  ' + name), 'the listing omits ' + name);
  }
@@ -362,11 +362,11 @@ timeout_ms = 60000
 
 [[tests]]
 name = "docs.word_form_only"
-desc = "A page cannot teach a spelling the command line refuses. The guard reads every pass invocation the pages show the way the command line reads it (`splitPassList`, `groupPassWords` and `parseSpec`), and runs each distinct specification through the real parser followed by a pass name no build registers, so a spelling the parser rejects is refused before anything runs. Several specifications may share one invocation: the pipeline is resolved, and refused, before the first pass runs, so a batch whose refusal names the probe proves every specification in it, and any other batch is then decided one specification at a time. It prints the number of invocations it checked: that number is pinned here, so a rule that stops matching pages is red rather than silent. A page that adds or removes an invocation updates the pin. Two changes moved these counts in opposite directions, and both are in the numbers below: the route page dropped the deleted `std::tiles` (38 distinct to 37, and 36 of them reached the probe), and a `string` pass parameter now takes the word as written, which took `onnx::export out=model.onnx` back to the probe (36 to 37) and retired the two design-principles exemptions that excused that sentence (5 excused lines to 3). The guard walks the repository, so it must not walk the runner's own output: it did, and spent 76 s against a 75 s bound there, which the runner's 4x margin reads as a wall of 75 s — the bound was measuring the walk (51 GB of run records), not the test. Skipping those trees takes it to 0.96 s here, so the bound is 30 s: an order of magnitude of room for a larger tree or a slower host, and a wall of 7.5 s after the margin."
+desc = "A page cannot teach a spelling the command line refuses. The guard reads every pass invocation the pages show the way the command line reads it (`splitPassList`, `groupPassWords` and `parseSpec`), and runs each distinct specification through the real parser followed by a pass name no build registers, so a spelling the parser rejects is refused before anything runs. Several specifications may share one invocation: the pipeline is resolved, and refused, before the first pass runs, so a batch whose refusal names the probe proves every specification in it, and any other batch is then decided one specification at a time. It prints the number of invocations it checked: that number is pinned here, so a rule that stops matching pages is red rather than silent. A page that adds or removes an invocation updates the pin. Two changes moved these counts in opposite directions, and both are in the numbers below: the route page dropped the deleted `std::tiles` (38 distinct to 37, and 36 of them reached the probe), and a `string` pass parameter now takes the word as written, which took `onnx::export out=model.onnx` back to the probe (36 to 37) and retired the two design-principles exemptions that excused that sentence (5 excused lines to 3). The guard walks the repository, so it must not walk the runner's own output: it did, and spent 76 s against a 75 s bound there, which the runner's 4x margin reads as a wall of 75 s — the bound was measuring the walk (51 GB of run records), not the test. Skipping those trees takes it to 0.96 s here, so the bound is 30 s: an order of magnitude of room for a larger tree or a slower host, and a wall of 7.5 s after the margin. The saturation pass and the one invocation that shows it (in `docs/cli.md` and in the pass's declaration) add four invocations of the same two specifications and one distinct specification, all of them reaching the probe: 246 to 250 invocations, 37 to 38 distinct."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-doc-pass-forms.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["doc pass forms: 246 pass invocation(s)", "37 distinct", "37 run through the real parser", "37 of them reached the probe"]
+expect_stdout_contains = ["doc pass forms: 250 pass invocation(s)", "38 distinct", "38 run through the real parser", "38 of them reached the probe"]
 timeout_ms = 30000

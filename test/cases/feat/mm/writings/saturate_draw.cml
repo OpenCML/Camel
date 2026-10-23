@@ -1,0 +1,18 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// One value with two writings, `x + x` and `x * 2` (stdlib/rules.cml, `int_add_self`): the value
+// `twice` returns is the class, and the two writings stand in it together. `std::opt::saturate`
+// leaves the program in that state; `std::gir`, `std::rgir` and `std::jgir` draw it; a pass that
+// consumes the program extracts one writing per value, so every pipeline prints 42.
+module saturate_draw
+
+func twice(x: int): int {
+    return x + x
+}
+
+func main(): int sync {
+    let v = twice(21)
+    println(v)
+    return 0
+}
