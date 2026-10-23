@@ -101,3 +101,7 @@ develop 上这一批有一半提交没有 Conventional Commits 前缀，有的�
 
 1. **`catalog.coverage_zero` 钉了诊断码的个数**（255），描述里还逐次记着"257→256→254→255 因为某裁定删了/加了哪条"。这正是"测试断言性质，不钉计数"要去掉的形态，而且描述成了变更日志。改为：检查本身就是性质——**注册表里的每个码都被至少一个测试提到，每个被提到的码都在注册表里**（双射）；`expect_stdout_contains` 只断言"没有遗漏"那一行，不含数字；描述一句话说它检查什么，删掉全部历史。加码、删码不再需要碰这个计划。
 2. **规则用例的注释在讲历史**：`parts_order.cml` 等写着"Before the ruling it looked for…""this test is red exactly that way"。注释陈述现在的事实——这个用例检查什么、为什么这个输入能检出它——不写裁定之前的行为与红绿经过（`agents/refactor.md` 的标准）。`test/cases/modules/rules/` 下五个文件一并清理；引用裁定的地方改为引用设计原则或规则语言设计稿的条目。
+
+## prefix-bang-precedence（负责人已裁定）
+
+选 A：一元 `-` `!` `~` 比 `->` 结合得松，`!x->contains<1>` 是 `!(x->contains<1>)`。对 `-` 同样适用（规则统一）：`-1->abs` 是 `-(1->abs)`，先取负写 `(-1)->abs`。语言参考已改，实施见交接说明 H243 第 1 条。

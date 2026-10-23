@@ -556,6 +556,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 ### 9.7 Graph rewriting and effects
 
 - **How side-effect tracking is preserved beneath the passes**: effects are a summary on the graph (whether the exit of the graph depends on effects, which captured variables it writes), recomputed from the nodes and verified at every commit; a pass cannot commit a graph whose summary does not match its content. Whether a pass is right to delete or move an effect remains the pass's own responsibility (9.5).
+- **A rewrite does not change which effects run** (the author, 2026-10-23): the program's meaning is defined on the source program, and optimisation must preserve it. If a rule's right-hand side drops part of what its left-hand side matched, the rule applies only when the dropped part is pure; the rule engine checks this once for every rule, so rule authors need not. Example: `x * 0 => 0` does not apply to `println(5) * 0`: in the source the multiplication uses `println(5)`, so it runs, and it must still run after the rewrite. Simplification of pure computation is unaffected.
 
 ### 9.8 Entry and export
 
