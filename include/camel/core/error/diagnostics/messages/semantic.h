@@ -334,7 +334,6 @@ enum class SemanticDiag : uint32_t {
     ParamAfterDefault = 0x0001D4,
     /// An argument at a call has a type the parameter it fills does not take.
     ParamArgumentWrongType      = 0x0001D6,
-    PrecisionChangeNotPermitted = 0x0001D5,
     ReducedPrecisionUnsupported = 0x0001D7,
     // #impl<f> (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder

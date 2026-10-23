@@ -229,24 +229,6 @@ slot_t castKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("cast", [&] {
         Array *input = tensorArg(norm, 0, true);
         const TypeCode target = dtypeFromName(stringArg(norm, 1));
-        // A conversion into bf16 or f16 rounds, so the compiler checks it against
-        // `change_precision` where the call is written (design principles 7.3, H238). That
-        // check knows the target only when it is written at the call: a target chosen from a
-        // run-time string leaves the result's static element type unknown, and the conversion
-        // would round with no licence. The static result type is the evidence that the check
-        // ran, so a reduced target it does not name is refused here instead of narrowing
-        // silently.
-        if (isReducedFloatTensorType(target) && input->dtype() != target) {
-            const auto *declared = asTensorType(norm.resultType());
-            if (declared == nullptr || !declared->dtype() || *declared->dtype() != target) {
-                throw std::invalid_argument(
-                    "cast from '" + elementTypeSpelling(input->dtype()) + "' to '" +
-                    elementTypeSpelling(target) +
-                    "' rounds, but the target is chosen at run time, so the compiler cannot "
-                    "check the change_precision permission where the conversion is written. "
-                    "Write the element type at the call");
-            }
-        }
         return wrap(k::cast(input, target, resultAllocator()));
     });
 }

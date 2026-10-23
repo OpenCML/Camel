@@ -2509,27 +2509,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
             targetFuncType = targetOperator->funcType();
-            // A call that writes a value of another element type into a reduced-precision one
-            // (bf16 or f16) needs `change_precision` where it is written (design principles
-            // 7.3). The module that owns those element types declares how to recognise the
-            // narrowing; the permission is read from this node after stamping, so `#strict`
-            // revokes it exactly as it revokes every other permission.
-            if (const auto gate = camel::core::OperatorTable::instance().precisionGate()) {
-                if (auto narrowing =
-                        (*gate)(targetOperator->uri(), normInputTypes, withInputTypes,
-                                targetFuncType->exitType())) {
-                    const auto permissions = camel::core::tag::effectivePermissions(
-                        *nodeDraftOf(targetNode),
-                        nodeIdOf(targetNode),
-                        camel::core::sem::NumericPolicy::explicitOnly());
-                    if ((permissions & camel::core::sem::kChangePrecision) == 0) {
-                        diags_->of(SemanticDiag::PrecisionChangeNotPermitted)
-                            .atOrigin(gct->origin())
-                            .commit(narrowing->first, narrowing->second);
-                        throw BuildAbortException();
-                    }
-                }
-            }
             // A result that the argument types fix (the shape of a tensor whose type carries
             // it) is a constant for the operators it is passed to, as a literal would be.
             if (const auto *folder =

@@ -1908,10 +1908,10 @@ t converted to the element type the name gives: "float32", "float", "double" or 
 for `f32`; "bfloat16" or "bf16" for `bf16`; "float16", "half" or "f16" for `f16`; "int64",
 "int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do not change.
 
-A conversion into `bf16` or `f16` rounds (to nearest, ties to even) and needs the numeric
-permission `change_precision` where the call is written; `#strict` revokes it. Reading a
-`bf16` or `f16` tensor into a wider type is exact for every stored value and needs no
-permission.
+A conversion into `bf16` or `f16` rounds (to nearest, ties to even). Writing the conversion
+asks for that precision, so it needs no numeric permission: `change_precision` governs a
+computation the compiler moves to lower precision (design principles 7.2-7.3). Reading a
+`bf16` or `f16` tensor into a wider type is exact for every stored value.
 
 - Pure.
 - Failure: fault `RuntimeError` when the name is not one of those.

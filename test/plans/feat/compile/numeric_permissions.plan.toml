@@ -358,3 +358,61 @@ verify_script = """
 }
 """
 timeout_ms = 30000
+
+# A conversion the program writes needs no permission, but a precision the compiler introduces
+# still does: the tiles scheduler takes the BF16 matrix product only for a graph that carries
+# `change_precision` (design principles 7.2-7.3; modules/tiles/src/schedule.cpp). This reads the
+# decision from the plan, where the permission column of the node and the implementation it chose
+# are one thing, not from a runtime result that could hide either.
+[[tests]]
+name = "bf16.compiler_introduced.is_gated"
+desc = "`change_precision` still gates the low precision the compiler introduces: of three identical f32 matrix products, only the one whose function writes `reassociate, change_precision, finite_math` is scheduled as `cublas_bf16`; the one marked `#strict` beside the same three tags is not, because 7.4 makes it carry no permission at all, and neither is the one that writes nothing. The node the bf16 stage belongs to carries those three bits, and no node of the other two plans carries `change_precision`. The written conversion the deleted check gated the same way is a different thing and needs no tag."
+kind = "behavior"
+case = "../../../cases/compile/numeric/bf16_permission_gate.cml"
+args = ["--devices", "cpu", "${case}", "std::macro", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  // The case prints a label line and then the plan JSON that tiles::inspect returns for it.
+  const lines = input.normalized.stdout.trim().split('\n')
+  const plans = {}
+  for (let i = 0; i < lines.length; ++i) {
+    if (!lines[i].startsWith('{')) continue
+    const label = lines[i - 1]
+    assert(['granted', 'revoked', 'canonical'].includes(label), `a plan without its label: ${lines[i]}`)
+    plans[label] = JSON.parse(lines[i])
+  }
+
+  // The bits of the permissions the choice is made from (camel/core/operator_semantics.h).
+  const REASSOCIATE = 1, CHANGE_PRECISION = 8, FINITE_MATH = 16 | 32 | 64 | 128
+  const MIXED = REASSOCIATE | CHANGE_PRECISION | FINITE_MATH
+  const implementations = (plan) => plan.stages.map((stage) => stage.implementation)
+  const inBf16 = (plan) => implementations(plan).filter((name) => name === 'cublas_bf16')
+
+  for (const label of ['granted', 'revoked', 'canonical']) {
+    assert(plans[label], `no plan for the ${label} function`)
+    assert(Array.isArray(plans[label].stages) && plans[label].stages.length > 0,
+           `the ${label} plan has no stage`)
+  }
+
+  // Where the permission is written, the compiler computes the product in BF16, and the node the
+  // stage belongs to carries all three bits: the permission column is what decided.
+  assert(inBf16(plans.granted).length === 1,
+         `the function that wrote change_precision took ${inBf16(plans.granted).length} bf16 stages, not 1`)
+  const stage = plans.granted.stages.find((s) => s.implementation === 'cublas_bf16')
+  const mask = plans.granted.numeric_permissions[stage.output]
+  assert((mask & MIXED) === MIXED,
+         `the bf16 stage is on a node with permissions ${mask}, not reassociate|change_precision|finite_math`)
+
+  // Without it the compiler must not introduce the lower precision: `#strict` revokes every
+  // permission and the third function writes none.
+  for (const label of ['revoked', 'canonical']) {
+    assert(inBf16(plans[label]).length === 0,
+           `the ${label} function has no change_precision and must not compute in bf16`)
+    const granted = plans[label].numeric_permissions.filter((node) => (node & CHANGE_PRECISION) !== 0)
+    assert(granted.length === 0, `the ${label} plan has ${granted.length} node(s) carrying change_precision`)
+  }
+}
+'''
+timeout_ms = 20000

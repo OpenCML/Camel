@@ -1,0 +1,27 @@
+/**
+ * `#strict` makes the marked function use no numeric permission at all (design principles 7.4),
+ * and a conversion the program writes needs none (7.2-7.3): the cast below is accepted and
+ * rounds exactly as it does without the tag, storing the nearest bf16 of 0.1, 0x3DCD
+ * (bytes [205, 61]).
+ *
+ * The previous revision refused this function, because it read the written conversion as a
+ * precision change the compiler makes and `#strict` revokes every permission. `#strict` still
+ * revokes `change_precision` where the compiler would introduce low precision; there is nothing
+ * for it to revoke in a conversion written here.
+ */
+module tensor_dtype_bf16_cast_under_strict
+
+import { Tensor, new, cast, to_bytes } from tensor
+import { to_array } from bytes
+
+#[strict, change_precision]
+func shrink(x: Tensor<f32>): Tensor<bf16> {
+    return cast(x, 'bf16')
+}
+
+func main(): int sync {
+    let values: f32[] = [0.1]
+    let narrowed = shrink(new(values))
+    println(to_array(to_bytes(narrowed)))
+    return 0
+}

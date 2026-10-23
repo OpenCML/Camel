@@ -12,8 +12,9 @@
  * type is replaced with.
  *
  * bf16 and f16 are stored as two bytes (camel/core/rtdata/half.h) and are written only by a
- * conversion that rounds into them, which needs `change_precision` (design principles 7.3,
- * H238); the compiler checks that at the call where the conversion is written. Every kernel
+ * conversion that rounds into them. A conversion the program writes (`cast`) is the precision it
+ * asked for and needs no permission: `change_precision` governs a computation the compiler moves
+ * to lower precision (design principles 7.2-7.3). Every kernel
  * computes a bf16 or f16 element in f32 and rounds it once when it stores it: the same one
  * arithmetic path for every elementwise operator, stated in `elementwise.cpp` and pinned by the
  * dtype test plan.

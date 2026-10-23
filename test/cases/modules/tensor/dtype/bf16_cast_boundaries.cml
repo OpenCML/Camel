@@ -1,0 +1,72 @@
+/**
+ * A conversion into bf16 or f16 that the program writes needs no numeric permission, and it
+ * rounds once, to nearest, ties to even, through the normal and the overflow case (design
+ * principles 7.2-7.3; the conversions of camel/core/rtdata/half.h). Every probe below is written
+ * with no tag at all, and each line is the little-endian bytes of the stored two-byte element, or
+ * of the f32 the stored element widens to:
+ *
+ *   0.1                      bf16 [205, 61]                0x3DCD, the nearest representable
+ *   1.00390625 = 1 + 2^-8    bf16 [128, 63]                0x3F80: exactly between 1 and 1+2^-7,
+ *                                                          the tie goes to the even neighbour
+ *   that element in f32      bf16 [0, 0, 128, 63]          0x3F800000: widening is exact
+ *   3.3895314e38             bf16 [127, 127]               0x7F7F, the largest finite bf16
+ *   3.4e38                   bf16 [128, 127]               0x7F80, +infinity: above the halfway
+ *                                                          point between the largest finite
+ *                                                          value and 2^128
+ *   that element in f32      bf16 [0, 0, 128, 127]         0x7F800000, +infinity
+ *   0.1                      f16  [102, 46]                0x2E66
+ *   1.00048828125 = 1+2^-11  f16  [0, 60]                  0x3C00: the same tie to even, ten
+ *                                                          significand bits
+ *   that element in f32      f16  [0, 0, 128, 63]          0x3F800000
+ *   65504.0                  f16  [255, 123]               0x7BFF, the largest finite f16
+ *   65520.0                  f16  [0, 124]                 0x7C00, +infinity: the halfway point
+ *                                                          between 65504 and 2^16
+ *   that element in f32      f16  [0, 0, 128, 127]         0x7F800000, +infinity
+ *
+ * A conversion that broke ties away from zero would store 1+2^-7 and 1+2^-10 above; one that
+ * flushed an overflowing value to the largest finite value would store 0x7F7F and 0x7BFF; one
+ * that stored f32 bits would print four bytes.
+ */
+module tensor_dtype_bf16_cast_boundaries
+
+import { Tensor, new, cast, to_bytes } from tensor
+import { to_array } from bytes
+
+func narrowed(x: Tensor<f32>): Tensor<bf16> { return cast(x, 'bf16') }
+
+func halved(x: Tensor<f32>): Tensor<f16> { return cast(x, 'f16') }
+
+func main(): int sync {
+    let tenth: f32[] = [0.1]
+    println(to_array(to_bytes(narrowed(new(tenth)))))
+
+    let bf16Tie: f32[] = [1.00390625]
+    let tiedBf16 = narrowed(new(bf16Tie))
+    println(to_array(to_bytes(tiedBf16)))
+    println(to_array(to_bytes(cast(tiedBf16, 'f32'))))
+
+    let bf16Max: f32[] = [3.3895314e38]
+    println(to_array(to_bytes(narrowed(new(bf16Max)))))
+
+    let bf16Over: f32[] = [3.4e38]
+    let overBf16 = narrowed(new(bf16Over))
+    println(to_array(to_bytes(overBf16)))
+    println(to_array(to_bytes(cast(overBf16, 'f32'))))
+
+    let halfTenth: f32[] = [0.1]
+    println(to_array(to_bytes(halved(new(halfTenth)))))
+
+    let f16Tie: f32[] = [1.00048828125]
+    let tiedF16 = halved(new(f16Tie))
+    println(to_array(to_bytes(tiedF16)))
+    println(to_array(to_bytes(cast(tiedF16, 'f32'))))
+
+    let f16Max: f32[] = [65504.0]
+    println(to_array(to_bytes(halved(new(f16Max)))))
+
+    let f16Over: f32[] = [65520.0]
+    let overF16 = halved(new(f16Over))
+    println(to_array(to_bytes(overF16)))
+    println(to_array(to_bytes(cast(overF16, 'f32'))))
+    return 0
+}
