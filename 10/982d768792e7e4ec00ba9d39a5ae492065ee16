@@ -1,0 +1,9 @@
+H225 / h324 — opt::saturate，以及画出多写状态的 dump（分支 handover/h324-equivalent-graph，5fd391fae，8 提交）
+
+1) std::opt::saturate：stdlib/std.cml 里声明（rounds: int = 6、strict: bool = false），kernel OptimizeSaturatePass → Camel 层 rules::saturate_only(p, rounds, strict)，acceptsWritings()=true（与 std::opt::algebra → rules::simplify 同路）。驱动器规则一般化：hasWritings(*) && !pass->acceptsWritings() 才抽取，抽取日志报 weighted 模型。
+2) 多写状态可视化：GraphVizDumpPass 全家族每类一个 subgraph cluster_class_<ident>（dashed），类节点 type="CLASS"，类内每个 writing 一个节点带 class="c<root>"，抽取会选的那个 chosen="true"（rich 版加 penwidth=2）；成员输入边从类的 ident 出发（方向与 egg 的 dot 相反，已在文档写明）。std::jgir 文档多出 classes:[{id,writings,chosen,cost}]；没有类的图不多任何键 → 现有 golden 逐字节不变。
+3) egraph-serialize 导出：用 std::jgir 的 egraph=true 参数。caveat：本机无网，形状按 crate 文档记忆写，需要真的 egraph-visualizer 打开一次才能最终确认。
+4) 钉子移动（实测）：check-pass-declarations DECLARED_COUNT 53→54；pass_params.plan.toml "53 in the core"→54、names.length 53→54、doc-form 246/37/37/37 → 250/38/38/38（250 = 两页各 2 个规格；distinct/run/probe 38；excused 仍 3）。
+5) 会咬别人的一条：合并后的 doc-form guard 把任何页面里反引号包的 camel … 片段都算 invocation，包括 test/plans/**/*.toml 里测试自己的 desc——第一次写 desc 时引用那条命令就凭空多 2 个 invocation（252 而非 250）。→ 已另派任务（h339）。
+
+闸门（含 BUILD_EXIT=0）：[SUMMARY] total: 5701, pass: 5687, fail: 0, skip: 14，7 个新测试全绿。未做：docs/cli.cn.md 未同步（无双语同步规则，加同一条会再动钉数）；std::jgir canonical=true 与 gir_canonical.cpp 故意不带 classes；perf/**、showcase/**、tools/lang-server/server.cpp 未碰。
