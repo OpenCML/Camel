@@ -230,10 +230,10 @@ verify_script = """
 
 [[tests]]
 name = "library_gemm.tolerance.safe"
-desc = "In safe mode tensor::fuse(safe_fp=true) withholds the library GEMM from every matmul (7.4), so the two products of the same program are bit-identical: the fallback is the canonical algorithm, not an approximation of it."
+desc = "In safe mode tensor::fuse safe_fp=true withholds the library GEMM from every matmul (7.4), so the two products of the same program are bit-identical: the fallback is the canonical algorithm, not an approximation of it."
 kind = "behavior"
 case = "../../../cases/compile/numeric/gemm_library.cml"
-args = ["${case}", "tensor::fuse(safe_fp=true)"]
+args = ["${case}", "tensor::fuse safe_fp=true"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -270,10 +270,10 @@ timeout_ms = 30000
 
 [[tests]]
 name = "grad_library.safe"
-desc = "tensor::fuse(safe_fp=true) withholds the library from the forward linear, so the VJP carries the canonical choice to matmul_grad_lhs/rhs too: the default and #strict gradients are bit-identical (7.4)."
+desc = "tensor::fuse safe_fp=true withholds the library from the forward linear, so the VJP carries the canonical choice to matmul_grad_lhs/rhs too: the default and #strict gradients are bit-identical (7.4)."
 kind = "behavior"
 case = "../../../cases/compile/numeric/grad_library.cml"
-args = ["${case}", "tensor::fuse(safe_fp=true)"]
+args = ["${case}", "tensor::fuse safe_fp=true"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {

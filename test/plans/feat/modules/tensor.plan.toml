@@ -512,10 +512,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "gemm_canonical.fused"
-desc = "In safe mode (tensor::fuse(safe_fp=true)) every matmul is withheld from the library GEMM (7.4), so the fused expression is bit-identical to the unfused one: K exceeds one cache block, which is where an accumulation order could show."
+desc = "In safe mode (tensor::fuse safe_fp=true) every matmul is withheld from the library GEMM (7.4), so the fused expression is bit-identical to the unfused one: K exceeds one cache block, which is where an accumulation order could show."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical.cml"
-args = ["${case}", "tensor::fuse(safe_fp=true)"]
+args = ["${case}", "tensor::fuse safe_fp=true"]
 expect_exit = 0
 expect_stdout_exact = "gemm product_sum=425.47250219917623\ngemm affine_sum=424.9194541722536 relu_sum=3375.5932369083166\ngemm linear_diff=0.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -554,7 +554,7 @@ name = "gemm_canonical.generic_unit"
 desc = "The portable GEMM unit (CAMEL_TENSOR_ISA=generic hides AVX2/AVX-512) gives the same bits as the vector units: it writes each fused multiply-add explicitly (on an x86-64 processor without FMA it used to round twice)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical.cml"
-args = ["${case}", "tensor::fuse(safe_fp=true)"]
+args = ["${case}", "tensor::fuse safe_fp=true"]
 envs = ["CAMEL_TENSOR_ISA=generic"]
 expect_exit = 0
 expect_stdout_exact = "gemm product_sum=425.47250219917623\ngemm affine_sum=424.9194541722536 relu_sum=3375.5932369083166\ngemm linear_diff=0.0\n"
