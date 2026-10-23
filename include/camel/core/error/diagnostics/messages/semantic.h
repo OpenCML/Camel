@@ -324,11 +324,11 @@ enum class SemanticDiag : uint32_t {
     // Defaults of ordinary parameters and ordinary arguments given by name (design principles
     // 4.4, handover H276). 0x1CD and up, after the constant-folding codes of h271. The `with`
     // parameter's forms are 0x1B7-0x1BE.
-    /// A name in a call's argument list names no ordinary parameter of the callee.
+    /// A name in a call's argument list names no parameter of the callee.
     ParamArgumentUnknown = 0x0001CD,
-    /// An ordinary parameter is given twice, once by position and once by name.
+    /// A parameter is given twice, once by position and once by name.
     ParamArgumentDuplicate = 0x0001CE,
-    /// A call gives no value for an ordinary parameter that has no default.
+    /// A call gives no value for a parameter that has no default.
     ParamArgumentMissing = 0x0001CF,
     /// An ordinary argument is given by name where the callee's signature is not known.
     ParamArgumentCallee = 0x0001D0,
@@ -339,7 +339,9 @@ enum class SemanticDiag : uint32_t {
     /// The default of an ordinary parameter has a type that does not fit the parameter.
     ParamDefaultWrongType = 0x0001D3,
     /// An ordinary parameter without a default follows one that has a default.
-    ParamAfterDefault           = 0x0001D4,
+    ParamAfterDefault = 0x0001D4,
+    /// An argument at a call has a type the parameter it fills does not take.
+    ParamArgumentWrongType      = 0x0001D6,
     PrecisionChangeNotPermitted = 0x0001D5,
 
     // Warnings

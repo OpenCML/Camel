@@ -10,6 +10,7 @@
 #include "camel/utils/token.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <format>
 #include <set>
@@ -377,10 +378,205 @@ std::string trimmed(const std::string &s) {
 } // namespace
 
 // -----------------------------------------------------------------------------
+// declarePassParams
+// -----------------------------------------------------------------------------
+
+namespace {
+
+std::atomic<size_t> g_defaultEvaluations{0};
+
+PassParamType declarationType(const std::string &written, const std::string &parameter) {
+    if (written == "bool") {
+        return PassParamType::Bool;
+    }
+    if (written == "int" || written == "i32" || written == "i64" || written == "int32" ||
+        written == "int64") {
+        return PassParamType::Int;
+    }
+    if (written == "float" || written == "f32" || written == "f64" || written == "float32" ||
+        written == "float64") {
+        return PassParamType::Float;
+    }
+    if (written == "string" || written == "str") {
+        return PassParamType::String;
+    }
+    throw std::runtime_error(std::format(
+        "pass declaration: the parameter '{}' has the type '{}'; a pass parameter is bool, int, "
+        "float or string",
+        parameter,
+        written));
+}
+
+PassParamValue zeroValue(PassParamType type) {
+    switch (type) {
+    case PassParamType::Bool:
+        return false;
+    case PassParamType::Int:
+        return int64_t{0};
+    case PassParamType::Float:
+        return 0.0;
+    case PassParamType::String:
+        return std::string();
+    }
+    return false;
+}
+
+bool fits(PassParamType type, const PassParamValue &value) {
+    switch (type) {
+    case PassParamType::Bool:
+        return std::holds_alternative<bool>(value);
+    case PassParamType::Int:
+        return std::holds_alternative<int64_t>(value);
+    case PassParamType::Float:
+        return std::holds_alternative<double>(value);
+    case PassParamType::String:
+        return std::holds_alternative<std::string>(value);
+    }
+    return false;
+}
+
+/// The parameters of a declaration are the NamedPair children of its function type, in order.
+void collectParamPairs(const ast::node_ptr_t &node, std::vector<ast::node_ptr_t> &out) {
+    if (node->type() == ast::LoadType::NamedPair) {
+        out.push_back(node);
+        return;
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        collectParamPairs(node->at(i), out);
+    }
+}
+
+std::string firstParseError(
+    const std::shared_ptr<camel::core::error::Diagnostics> &diags, std::string prefix) {
+    const auto errors = diags->errors();
+    if (errors.empty()) {
+        return prefix;
+    }
+    std::string why = prefix + ": " + errors.front()->message;
+    while (!why.empty() && why.back() == '.') {
+        why.pop_back();
+    }
+    return why;
+}
+
+} // namespace
+
+std::vector<PassParam> declarePassParams(
+    std::string_view declaration,
+    std::initializer_list<std::pair<std::string_view, std::string_view>> docs) {
+    const std::string source =
+        "func __pass(" + std::string(declaration) + "): int { return 0 }\n";
+    auto sources = std::make_shared<camel::source::SourceContext>();
+    auto diags   = std::make_shared<camel::core::error::Diagnostics>(
+        "pass", "<pass declaration>", sources);
+    camel::parse::CamelParser parser(diags);
+    parser.setSourceContext(sources);
+    std::istringstream is(source);
+    if (!parser.parse(is) || diags->hasErrors() || !parser.ast()) {
+        throw std::runtime_error(std::format(
+            "'{}': {}",
+            declaration,
+            firstParseError(diags, "the declaration is not valid Camel syntax")));
+    }
+
+    std::vector<PassParam> declared;
+    try {
+        // Module -> Stmts -> FuncDecl -> FuncData -> FuncType -> NamedPair*
+        auto funcType = parser.ast()->at(2)->at(0)->at(0)->at(0);
+        std::vector<ast::node_ptr_t> pairs;
+        collectParamPairs(funcType, pairs);
+        bool sawDefault = false;
+        std::string defaulted;
+        for (const auto &pair : pairs) {
+            const auto named = pair->loadAs<ast::NamedPairLoad>();
+            if (named->isRest() || named->isVar() || named->isConst() || named->isConstas() ||
+                named->isTupleParam()) {
+                throw std::runtime_error(std::format(
+                    "pass declaration: the parameter '{}' is not an ordinary parameter",
+                    named->getRef().toString()));
+            }
+            const std::string name = named->getRef().toString();
+            if (pair->size() == 0 || pair->at(0)->type() != ast::LoadType::Type) {
+                throw std::runtime_error(std::format(
+                    "pass declaration: the parameter '{}' has no type", name));
+            }
+            const auto typeLoad =
+                std::dynamic_pointer_cast<ast::TypeLoad>(pair->at(0)->load());
+            if (!typeLoad || typeLoad->typeType() != ast::TypeType::Ref) {
+                throw std::runtime_error(std::format(
+                    "pass declaration: the parameter '{}' has a type that is not a pass "
+                    "parameter type",
+                    name));
+            }
+            PassParam param;
+            param.name = name;
+            param.type = declarationType(
+                pair->at(0)->loadAs<ast::RefTypeLoad>()->ref().toString(), name);
+            if (pair->size() > 1 && pair->at(1)->size() > 0) {
+                const auto &expr = pair->at(1)->at(0);
+                PassParamValue value;
+                try {
+                    value = evalNode(expr);
+                } catch (const EvalError &e) {
+                    throw std::runtime_error(std::format(
+                        "pass declaration: the default of '{}' is not a constant: {}",
+                        name,
+                        e.message));
+                }
+                if (param.type == PassParamType::Float &&
+                    std::holds_alternative<int64_t>(value)) {
+                    value = static_cast<double>(std::get<int64_t>(value));
+                }
+                if (!fits(param.type, value)) {
+                    throw std::runtime_error(std::format(
+                        "pass declaration: the default of '{}' is {}, not {}",
+                        name,
+                        withArticle(kindOf(value)),
+                        withArticle(passParamTypeName(param.type))));
+                }
+                param.defaultValue = std::move(value);
+                param.required     = false;
+                ++g_defaultEvaluations;
+                sawDefault = true;
+                defaulted  = name;
+            } else {
+                if (sawDefault) {
+                    throw std::runtime_error(std::format(
+                        "pass declaration: the parameter '{}' has no default and follows '{}', "
+                        "which has one",
+                        name,
+                        defaulted));
+                }
+                param.defaultValue = zeroValue(param.type);
+                param.required     = true;
+            }
+            declared.push_back(std::move(param));
+        }
+    } catch (const std::out_of_range &) {
+        throw std::runtime_error(
+            std::format("'{}': the declaration could not be read", declaration));
+    }
+
+    for (const auto &[name, doc] : docs) {
+        const auto it = std::find_if(declared.begin(), declared.end(), [&](const PassParam &p) {
+            return p.name == name;
+        });
+        if (it == declared.end()) {
+            throw std::runtime_error(std::format(
+                "pass declaration: there is no parameter '{}' to document", name));
+        }
+        it->doc = doc;
+    }
+    return declared;
+}
+
+size_t passParamDefaultEvaluations() { return g_defaultEvaluations.load(); }
+
+// -----------------------------------------------------------------------------
 // parseSpec
 // -----------------------------------------------------------------------------
 
-std::optional<std::string>
+std::optional<ParamProblem>
 camel::execute::detail::parseSpec(const std::string &spec, ParsedSpec &out) {
     out               = {};
     const size_t open = spec.find('(');
@@ -390,8 +586,8 @@ camel::execute::detail::parseSpec(const std::string &spec, ParsedSpec &out) {
     }
     out.name           = trimmed(spec.substr(0, open));
     const size_t close = spec.find_last_not_of(" \t\r\n");
-    if (spec[close] != ')') {
-        return std::format("column {}: missing ')' after the parameters", spec.size() + 1);
+    if (close == std::string::npos || spec[close] != ')') {
+        return ParamProblem{ParamProblemKind::Syntax, "missing ')' after the parameters"};
     }
     const std::string argText = spec.substr(open + 1, close - open - 1);
     if (trimmed(argText).empty()) {
@@ -406,63 +602,103 @@ camel::execute::detail::parseSpec(const std::string &spec, ParsedSpec &out) {
     camel::parse::CamelParser parser(diags);
     parser.setSourceContext(sources);
     std::istringstream is(source);
-    if (!parser.parse(is) || !parser.ast()) {
-        std::string why   = "the parameters are not valid Camel syntax";
-        const auto errors = diags->errors();
-        if (!errors.empty()) {
-            why += ": " + errors.front()->message;
-            while (!why.empty() && why.back() == '.')
-                why.pop_back();
-        }
-        return why;
+    if (!parser.parse(is) || diags->hasErrors() || !parser.ast()) {
+        ParamProblem problem;
+        problem.kind   = ParamProblemKind::Syntax;
+        problem.text   = firstParseError(diags, "the parameters are not valid Camel syntax");
+        problem.column = open + 1;
+        problem.length = close - open - 1;
+        return problem;
     }
-    // Module -> Stmts -> DataDecl -> Data -> call -> arguments
+    // Module -> Stmts -> DataDecl -> Data -> call; the call holds its positional arguments and,
+    // separately, the named ones (`x: 1`). A written `x=1` is a positional argument whose value
+    // is an assignment, the spelling the pipeline has always accepted.
     try {
-        auto node        = parser.ast();
-        node             = node->at(2)->at(0); // DataDecl
-        node             = node->at(1)->at(0); // the call
-        const auto &args = node->at(1);
-        size_t cursor    = open + 1;
-        for (size_t i = 0; i < args->size(); ++i) {
-            const auto &arg = args->at(i);
-            const bool assign =
-                arg->type() == ast::LoadType::Data &&
-                std::dynamic_pointer_cast<ast::BinaryExprLoad>(arg->load()) &&
-                arg->loadAs<ast::BinaryExprLoad>()->op() == ast::BinaryDataOp::Assign &&
-                std::dynamic_pointer_cast<ast::RefDataLoad>(arg->at(0)->load());
-            if (!assign) {
-                return std::format(
-                    "parameter {} is not written key=value (a pass takes named parameters only)",
-                    i + 1);
+        auto decl              = parser.ast()->at(2)->at(0); // DataDecl
+        const auto &call       = decl->at(1)->at(0);         // the call
+        const auto &positional = call->at(1);
+        size_t cursor          = open + 1;
+        const auto add         = [&](const ast::node_ptr_t &arg,
+                             bool named) -> std::optional<ParamProblem> {
+            std::string key;
+            ast::node_ptr_t value;
+            if (named) {
+                key   = arg->loadAs<ast::NamedDataLoad>()->ref().toString();
+                value = arg->at(0);
+            } else {
+                const bool assign =
+                    arg->type() == ast::LoadType::Data &&
+                    std::dynamic_pointer_cast<ast::BinaryExprLoad>(arg->load()) &&
+                    arg->loadAs<ast::BinaryExprLoad>()->op() == ast::BinaryDataOp::Assign &&
+                    std::dynamic_pointer_cast<ast::RefDataLoad>(arg->at(0)->load());
+                if (!assign) {
+                    ParamProblem problem;
+                    problem.kind   = ParamProblemKind::Syntax;
+                    problem.text   = std::format(
+                        "parameter {} is not written name=value (a pass takes named parameters "
+                        "only)",
+                        out.params.size() + 1);
+                    problem.column = open + 1;
+                    problem.length = close - open - 1;
+                    return problem;
+                }
+                key   = arg->at(0)->loadAs<ast::RefDataLoad>()->ref().toString();
+                value = arg->at(1);
             }
             WrittenParam param;
-            param.key = arg->at(0)->loadAs<ast::RefDataLoad>()->ref().toString();
-            // The column of the key: the next occurrence as a whole word.
+            param.key = key;
+            // The column of the key: the next occurrence as a whole word whose next
+            // non-blank character is `=` or `:`.
             size_t at = cursor;
             while ((at = spec.find(param.key, at)) != std::string::npos) {
                 const bool left  = at == 0 || !isIdentifierChar(spec[at - 1]);
-                const size_t end = at + param.key.size();
-                const bool right = end >= spec.size() || !isIdentifierChar(spec[end]);
-                if (left && right)
+                size_t next      = at + param.key.size();
+                while (next < spec.size() && (spec[next] == ' ' || spec[next] == '\t')) {
+                    ++next;
+                }
+                const bool right =
+                    left && next < spec.size() && (spec[next] == '=' || spec[next] == ':');
+                if (right)
                     break;
                 ++at;
             }
-            param.column = at == std::string::npos ? open + 2 : at + 1;
+            param.column = at == std::string::npos ? open + 1 : at;
             if (at != std::string::npos)
                 cursor = at + param.key.size();
             try {
-                param.value = evalNode(arg->at(1));
+                param.value = evalNode(value);
             } catch (const EvalError &e) {
-                return std::format(
-                    "column {}: parameter '{}': {}",
-                    param.column,
-                    param.key,
-                    e.message);
+                ParamProblem problem;
+                problem.kind   = ParamProblemKind::Syntax;
+                problem.text   = std::format("parameter '{}': {}", param.key, e.message);
+                problem.name   = param.key;
+                problem.column = param.column;
+                problem.length = param.key.size();
+                return problem;
             }
             out.params.push_back(std::move(param));
+            return std::nullopt;
+        };
+        for (size_t i = 0; i < positional->size(); ++i) {
+            if (auto problem = add(positional->at(i), false)) {
+                return problem;
+            }
+        }
+        if (call->size() > 2) {
+            const auto &named = call->at(2);
+            for (size_t i = 0; i < named->size(); ++i) {
+                if (auto problem = add(named->at(i), true)) {
+                    return problem;
+                }
+            }
         }
     } catch (const std::out_of_range &) {
-        return "the parameters could not be read";
+        ParamProblem problem;
+        problem.kind   = ParamProblemKind::Syntax;
+        problem.text   = "the parameters could not be read";
+        problem.column = open + 1;
+        problem.length = close - open - 1;
+        return problem;
     }
     return std::nullopt;
 }
@@ -493,7 +729,7 @@ std::string camel::execute::detail::describeParams(const std::vector<PassParam> 
     return text;
 }
 
-std::optional<std::string> camel::execute::detail::bindArgs(
+std::optional<ParamProblem> camel::execute::detail::bindArgs(
     const std::string &passName, const std::vector<PassParam> &declared, const ParsedSpec &parsed,
     PassArgs &args) {
     for (const auto &p : declared) {
@@ -505,52 +741,44 @@ std::optional<std::string> camel::execute::detail::bindArgs(
             return p.name == w.key;
         });
         if (it == declared.end()) {
-            return std::format(
-                "column {}: '{}' has no parameter '{}' (it takes: {})",
-                w.column,
-                passName,
-                w.key,
-                describeParams(declared));
+            ParamProblem problem;
+            problem.kind   = ParamProblemKind::Unknown;
+            problem.name   = w.key;
+            problem.column = w.column;
+            problem.length = w.key.size();
+            return problem;
         }
         if (!seen.insert(w.key).second) {
-            return std::format("column {}: parameter '{}' is written twice", w.column, w.key);
+            ParamProblem problem;
+            problem.kind   = ParamProblemKind::Duplicate;
+            problem.name   = w.key;
+            problem.column = w.column;
+            problem.length = w.key.size();
+            return problem;
         }
         PassParamValue value = w.value;
         if (it->type == PassParamType::Float && std::holds_alternative<int64_t>(value)) {
             value = static_cast<double>(std::get<int64_t>(value));
         }
-        bool ok = false;
-        switch (it->type) {
-        case PassParamType::Bool:
-            ok = std::holds_alternative<bool>(value);
-            break;
-        case PassParamType::Int:
-            ok = std::holds_alternative<int64_t>(value);
-            break;
-        case PassParamType::Float:
-            ok = std::holds_alternative<double>(value);
-            break;
-        case PassParamType::String:
-            ok = std::holds_alternative<std::string>(value);
-            break;
-        }
-        if (!ok) {
-            return std::format(
-                "column {}: parameter '{}' is {}, not {}",
-                w.column,
-                w.key,
-                withArticle(kindOf(value)),
-                withArticle(passParamTypeName(it->type)));
+        if (!fits(it->type, value)) {
+            ParamProblem problem;
+            problem.kind     = ParamProblemKind::WrongType;
+            problem.name     = w.key;
+            problem.found    = kindOf(value);
+            problem.expected = passParamTypeName(it->type);
+            problem.column   = w.column;
+            problem.length   = w.key.size();
+            return problem;
         }
         args.set(w.key, std::move(value), true);
     }
     // A parameter without a default has to be written: the pass has no value to fall back to.
     for (const auto &p : declared) {
         if (p.required && !seen.contains(p.name)) {
-            return std::format(
-                "parameter '{}' is not written and has no default (the pass declares: {})",
-                p.name,
-                describeParams(declared));
+            ParamProblem problem;
+            problem.kind = ParamProblemKind::Missing;
+            problem.name = p.name;
+            return problem;
         }
     }
     return std::nullopt;

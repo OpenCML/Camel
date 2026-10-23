@@ -2387,13 +2387,9 @@ class CmlPrinter {
 PassDescriptor cmlDescriptor() {
     PassDescriptor descriptor;
     descriptor.doc = "print the program as Camel source (branches, loops, closures, with/var)";
-    descriptor.params.push_back(
-        PassParam{
-            "max_literal_bytes",
-            PassParamType::Int,
-            int64_t(64 * 1024),
-            "the largest constant the printer writes as a literal",
-        });
+    descriptor.params = declarePassParams(
+        "max_literal_bytes: int = 64 * 1024",
+        {{"max_literal_bytes", "the largest constant the printer writes as a literal"}});
     descriptor.make = [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         CmlOptions options;
         const int64_t limit      = args.getInt("max_literal_bytes");
