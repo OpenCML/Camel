@@ -1,0 +1,13 @@
+h342（收窄后）— eval 与用 Camel 写的 opt::fold（分支 handover/h342-graph-ops，3 提交，基线 8058cce8b；合入 a19aae8d0）
+
+落地：167884c3d `eval`（stdlib/graph.cml 声明、modules/graph/txn.cpp 的 evalKernel / StaticArgsView / 静态槽物化、module.cpp 的纯度、45_graph_module.md 一段、重生成的 stdlib-reference.md）；8ac47329d 把一个**假守卫**读成一行而不是"路径里任何 42"；260ca8adc 用 Camel 写的 `opt::fold`（stdlib/opt.cml、fold_subject.{cml,mjs}、fold_property.mjs、fold_fault.{cml}、fold_fault_subject.mjs、fold_fault_property.mjs、两个在主机上生成的 golden、graph_equal.mjs、计划 41 条、文档页其余部分）。
+
+**断言的是性质而不是 golden**：fold.same_text 与 fold_fault.same_text 把 opt::fold 的 std::jgir 与 std::opt::fold 的对比，只归一化 origins/paths——逐字符相同，span 保留；故障语料还比 stderr_normalized：两个遍都在同一位置用同样的话警告 ConstantExpressionFaults 并原样留下，所以有没有这个遍都在它说的地方出错（3.9）。fold.is_a_fixpoint 与 fold.program_still_runs（四个后端）补足。红前绿后逐条给出，例如 graph_equal.mjs:38 "edge count mismatch: actual=34, expected=28"、fold_property.mjs:53 "the graph 'chain' still holds an operation over constants: ':op/add_l' (g2n2)"。一轮循环修复的 A/B 压进 fold 提交（正文留证据：没人读的值里的 `1 / 0` 修前跑到 25 s 超时 exit 124，修后 exit 0 加一条警告）。
+
+**ctrl 半按裁决全部丢弃**：unlink_input/link_control（声明、内核、注册、include）、纯度条目、opt::ctrl 与辅助、ctrl_subject.cml、ctrl_subject.mjs、ctrl_property.mjs、六个计划条目、ctrl 的 GOLDENS 条目。stdlib/opt.cml 里 opt::ctrl 的 bullet 与文档页 ctrl 两行**原样留给后续改名**（std::opt::order）。
+
+**重构需要什么（测出来的）**：① 事务上的"加/删一条边"正是 std::opt::order 与 std::opt::dce values_only=false 所需要的东西；② 一个**移动锚点**的操作——std::opt::fold 折叠被返回的常量表达式时重新指向 exit/output/return（isFoldable 在返回节点没有控制输入时放行，replaceFoldResult 移动锚点），而事务的 replace 拒绝它。这是唯一测出来的分歧：`func product(): int { let x=2; let y=3; return x*y }` 在 std::opt::fold 下 dump 出 `N02 … "6" DATA`，在 opt::fold 下保留 :op/mul_l。已记为差距行；它的语料避开了这一情形。eval 本身不读任何边类型。
+
+**与边设计无关的发现（在报告里，不在树里）**：`!` 比 `->` 松（已单独立项问作者）；两个静默空操作陷阱（写在 match/if 臂里的效应根本不跑；臂里的 return 不离开函数）；只从目标值输入播种的约简走查会在真被约简的图上报"无可约简"（假绿）；std::opt::fold 连常量分支一起折叠（`let a = 2 < 3; let b = 3 < 2; a && b` → false），opt::fold 留下它；假守卫那条：json_data_of_a_pass_module_that_cannot_be_loaded 的守卫是假的（加载器消息带模块绝对路径，而该工作树名含 "42"），已在 8ac47329d 修好，旧守卫红、新守卫在同一份 992 字节 stdout 上绿，且仍会被 `42\n`/`42\r\n`/`[\n{}\n]\n42\n` 触发；C++ fold 的规则值得抄：它对常量上的每个纯 OPER 都求值**无论它是否可替换**（src/passes/opt/generic/generic.cpp:613–677），只在 `if (!foldable) continue;` 之后替换。
+
+闸门：分支上 5756/5742/0/14。**合入后协调者重跑：total 5816, pass 5802, fail 0, skip 14。**
