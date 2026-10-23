@@ -25,6 +25,9 @@ enum class LinkType {
     Norm,
     With,
     Ctrl,
+    /// Orders and nothing else (docs/design-principles.cn.md 3.1): the two ends run in this
+    /// order when both of them run, and neither end runs because of it.
+    Order,
 };
 
 std::string to_string(LinkType type);

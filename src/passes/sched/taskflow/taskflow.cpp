@@ -2286,16 +2286,19 @@ void TaskflowExecSchedPass::connectRuntimeDependencies(
     std::vector<uint8_t> &taskBuilt) {
     (void)flowLike;
     (void)frame;
+    auto addEdge = [&](gc_node_ref_t inputRef, tf::Task task) {
+        if (inputRef >= taskBuilt.size() || taskBuilt[inputRef] == 0) {
+            return;
+        }
+        if (inputRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[inputRef] != 0 &&
+            requireNode(graph, inputRef)->kind != GCNodeKind::Join) {
+            return;
+        }
+        taskMap[inputRef].precede(task);
+    };
     auto addEdges = [&](std::span<const gc_node_ref_t> inputs, tf::Task task) {
         for (gc_node_ref_t inputRef : inputs) {
-            if (inputRef >= taskBuilt.size() || taskBuilt[inputRef] == 0) {
-                continue;
-            }
-            if (inputRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[inputRef] != 0 &&
-                requireNode(graph, inputRef)->kind != GCNodeKind::Join) {
-                continue;
-            }
-            taskMap[inputRef].precede(task);
+            addEdge(inputRef, task);
         }
     };
 
@@ -2313,6 +2316,11 @@ void TaskflowExecSchedPass::connectRuntimeDependencies(
         addEdges(graph->normInputsOf(nodeRef), taskMap[nodeRef]);
         addEdges(graph->withInputsOf(nodeRef), taskMap[nodeRef]);
         addEdges(graph->ctrlInputsOf(nodeRef), taskMap[nodeRef]);
+        // An order edge is a precedence between two tasks that both run; a predecessor that has
+        // no task of its own is skipped by addEdge, so the order never creates work.
+        for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(nodeRef)) {
+            addEdge(edge.pred, taskMap[nodeRef]);
+        }
     }
 }
 

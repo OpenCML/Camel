@@ -11,6 +11,7 @@
 
 #include "camel/core/rtdata/base.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/exec_plan.h"
 
 #include <exception>
 
@@ -73,6 +74,132 @@ EdgesTypeTestPass::apply(const camel::runtime::Program *program, std::ostream &o
 const camel::runtime::Program *
 EdgesOkTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     return commitEdit(context_, program, os, Edit::Ok);
+}
+
+// The order edge the design adds (docs/design/effects/edges.cn.md 1.5): it is not a port and not
+// a control input, it survives the commit as an edge of the frozen graph, and the seal check
+// refuses one whose user is a pure node (4.6).
+const camel::runtime::Program *
+EdgesOrderOkTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    const GraphId rootId = program->root()->id();
+    RuntimeGraphDraftSession session(context_, program);
+    GraphDraft &draft = session.edit(program->root());
+    const gc_node_ref_t first  = draft.addSyncNode();
+    const gc_node_ref_t second = draft.addSyncNode();
+    os << "ORDER wrote=" << (draft.appendOrderDependency(second, first) ? 1 : 0)
+       << " twice=" << (draft.appendOrderDependency(second, first) ? 1 : 0) << "\n";
+    os << "ORDER preds=" << draft.orderInputsOf(second).size()
+       << " users=" << draft.orderUsersOf(first).size() << "\n";
+    try {
+        const Program *next = session.commit();
+        const GCGraph *root = next->graph(rootId);
+        os << "EDGES accepted\n";
+        // The graph holds the edge in its own array, and the per-node reader (the one every
+        // scheduler and pass uses) agrees with that array node for node.
+        size_t seen = 0;
+        size_t ordered = 0;
+        for (auto it = root->nodes().begin(); it != root->nodes().end(); ++it) {
+            const auto preds = root->orderPredsOf(it.ref());
+            seen += preds.size();
+            ordered += preds.empty() ? 0 : 1;
+        }
+        os << "ORDER frozen_agrees=" << (seen == root->orderEdges().size() ? 1 : 0)
+           << " some_node_ordered=" << (ordered != 0 ? 1 : 0) << "\n";
+        return next;
+    } catch (const std::exception &error) {
+        os << "EDGES refused: " << error.what() << "\n";
+        return program;
+    }
+}
+
+const camel::runtime::Program *
+EdgesOrderPureTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    RuntimeGraphDraftSession session(context_, program);
+    GraphDraft &draft = session.edit(program->root());
+    const gc_node_ref_t anchor = draft.addSyncNode();
+    // A constant is a pure node: nothing about it can be ordered.
+    const gc_node_ref_t constant = draft.materializeStaticValue(
+        camel::core::rtdata::toSlot<float>(1.0f),
+        camel::core::type::Type::Float32());
+    os << "ORDER wrote=" << (draft.appendOrderDependency(constant, anchor) ? 1 : 0) << "\n";
+    try {
+        session.commit();
+        os << "EDGES accepted\n";
+        return program;
+    } catch (const std::exception &error) {
+        os << "EDGES refused: " << error.what() << "\n";
+        return program;
+    }
+}
+
+const camel::runtime::Program *
+EdgesOrderScheduleTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    const GraphId rootId = program->root()->id();
+    RuntimeGraphDraftSession session(context_, program);
+    GraphDraft &draft = session.edit(program->root());
+    const gc_node_ref_t exit = draft.exitNode();
+    if (exit == kInvalidNodeRef) {
+        os << "ORDER no_exit=1\n";
+        return program;
+    }
+    // Three anchors: two the exit waits for, so both run and neither reaches the other, and one
+    // nothing waits for, so it does not run at all.
+    const gc_node_ref_t first  = draft.addSyncNode();
+    const gc_node_ref_t second = draft.addSyncNode();
+    const gc_node_ref_t never  = draft.addSyncNode();
+    const gc_node_ref_t late   = draft.addSyncNode();
+    draft.appendInput(DraftEdgeKind::Ctrl, exit, first);
+    draft.appendInput(DraftEdgeKind::Ctrl, exit, second);
+    draft.appendInput(DraftEdgeKind::Ctrl, exit, late);
+    // `second` orders `first` after it: the layout must put `second` first even though the exit
+    // lists `first` first. `never` orders the exit after itself and must not enter the layout.
+    const bool wroteOrdered = draft.appendOrderDependency(first, second);
+    const bool wroteNever   = draft.appendOrderDependency(exit, never);
+    os << "ORDER wrote=" << (wroteOrdered ? 1 : 0) << (wroteNever ? 1 : 0) << "\n";
+    try {
+        const Program *next = session.commit();
+        const GCGraph *root = next->graph(rootId);
+        os << "EDGES accepted\n";
+        const auto &topo    = root->execPlan().topo;
+        const auto position = [&](gc_node_ref_t ref) {
+            const auto found = std::ranges::find(topo, ref);
+            return found == topo.end() ? topo.size() : static_cast<size_t>(found - topo.begin());
+        };
+        // The single order edge between two nodes the layout holds: did the order move `first`
+        // behind `second`? (It is listed as the exit's first control input, so without the order
+        // edge it comes first.)
+        size_t orderedPairs = 0;
+        size_t orderedOk    = 0;
+        size_t droppedAbsent = 0;
+        for (const GCGraphOrderEdge &edge : root->orderEdges()) {
+            const bool userRuns = position(edge.user) != topo.size();
+            const bool predRuns = position(edge.pred) != topo.size();
+            if (userRuns && predRuns) {
+                ++orderedPairs;
+                orderedOk += position(edge.pred) < position(edge.user) ? 1 : 0;
+            } else if (userRuns && !predRuns) {
+                ++droppedAbsent;
+            }
+        }
+        os << "ORDER ordered_pairs=" << orderedPairs << " obeyed=" << orderedOk << "\n";
+        os << "ORDER unexecuted_pred_absent=" << droppedAbsent << "\n";
+        return next;
+    } catch (const std::exception &error) {
+        os << "EDGES refused: " << error.what() << "\n";
+        return program;
+    }
 }
 
 const camel::runtime::Program *
