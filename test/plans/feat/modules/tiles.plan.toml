@@ -763,3 +763,93 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["placement hash differs:"]
 timeout_ms = 30000
+
+# H371: a literal operand beside a tensor takes the tensor's element type (design principles 5.1),
+# so `x * 2.0` leaves no f64 operand on the graph. Before this the graph carried one, and the
+# device program builder excluded the operator as a `scalar_tensor_operand` (no f64 scalar
+# lowering), so every `#gpu` scope that scaled by a constant was refused.
+
+[[tests]]
+name = "literal.tensor_element_type_is_a_segment"
+desc = "`x * 2.0`, `1.0 - x` and `x / 0.0` over an `f32` tensor form one device region each, with the literal as a region input and no `scalar_tensor_operand` exclusion; the results are the ordinary ones. The `bf16` tensor's operator is no longer excluded for that reason either."
+kind = "behavior"
+case = "../../../cases/gpu/nofallback/scalar_literal.cml"
+args = ["--devices", "cpu", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const plans = input.stdout.split(/\r?\n/).filter((line) => line.startsWith('{')).map(JSON.parse)
+assert(plans.length === 4, `expected four graph region analyses, got ${plans.length}`)
+const names = ['scale', 'shift', 'divide', 'bf16_scale']
+plans.forEach((plan, i) => {
+  const excluded = plan.excluded.map((e) => e.reason)
+  assert(!excluded.includes('scalar_tensor_operand'),
+    `${names[i]} must not be excluded as a scalar-tensor operand: ${JSON.stringify(plan.excluded)}`)
+})
+// The scale/shift/divide graphs: the literal is a region input, the operator is the one member.
+plans.slice(0, 3).forEach((plan, i) => {
+  assert(plan.regions.length === 1, `${names[i]} must form one region: ${JSON.stringify(plan)}`)
+  assert(plan.regions[0].members.length === 1, `${names[i]} region members: ${plan.regions[0].members.length}`)
+  assert(plan.regions[0].inputs.length === 2, `${names[i]} region inputs: ${plan.regions[0].inputs.length}`)
+  assert(plan.transfers.uploads.length === 1 && plan.transfers.downloads.length === 1,
+    `${names[i]} transfers: ${JSON.stringify(plan.transfers)}`)
+})
+assert(input.stdout.includes('12.0'), input.stdout)
+assert(input.stdout.includes('-3.0'), input.stdout)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "literal.tensor_element_type_gpu_scope_compiles"
+desc = "The `#gpu` scopes of the same program compile: no device program is refused, `tiles::compile` accepts every tagged function as a device unit, and the host still computes the values (no CUDA device here). Before H371 the run stopped at `#gpu` scope 'scale' with `operator 'tensor:multiply' has no device program`."
+kind = "behavior"
+case = "../../../cases/gpu/nofallback/scalar_literal.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_output_not_contains = ["has no device program", "cannot run on the device", "GpuScope"]
+verify_script = """
+({ input, assert }) => {
+const rows = input.stdout.split(/\r?\n/).filter((line) => line.startsWith('TILES_PLACEMENT '))
+  .map((line) => JSON.parse(line.slice('TILES_PLACEMENT '.length)))
+const byName = new Map(rows.map((row) => [row.graph, row]))
+for (const name of ['scale', 'shift', 'divide', 'bf16_scale']) {
+  const row = byName.get(name)
+  assert(row, `no placement line for ${name}`)
+  assert(row.body === 'gpu-required' && row.body_fact === 'gpu' && row.gpu_required === 3,
+    `${name} must be a device unit: ${JSON.stringify(row)}`)
+}
+assert(byName.get('main').body === 'host', JSON.stringify(byName.get('main')))
+assert(input.stdout.includes('12.0') && input.stdout.includes('-3.0'), input.stdout)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "literal.type_is_the_element_type"
+desc = "The graph itself: the literal operand of a tensor operator is built in the tensor's element type (`f32` beside an `f32` tensor, `bf16` beside a `bf16` one, and the tensor parameter of the `f64` spelling stays `float`). Printed as GIR, where every DATA node states its value type."
+kind = "behavior"
+case = "../../../cases/gpu/nofallback/scalar_literal.cml"
+args = ["--devices", "cpu", "${case}", "std::gir"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const data = (label) => input.stdout.split(/\r?\n/).filter((line) =>
+  line.includes(`[label="${label}", type="DATA"`))
+assert(data('2.0').length === 2, `two 2.0 literals expected: ${data('2.0').length}`)
+for (const line of data('2.0')) {
+  assert(/value_type="(f32|bf16)"/.test(line), `2.0 must be an element type, not f64: ${line}`)
+  assert(!/value_type="float"/.test(line), `2.0 must not stay a float: ${line}`)
+}
+const byElement = data('2.0').map((line) => /value_type="([^"]+)"/.exec(line)[1]).sort()
+assert(byElement.join(',') === 'bf16,f32', `one f32 and one bf16 literal expected: ${byElement}`)
+for (const label of ['1.0', '0.0']) {
+  assert(data(label).length === 1, `${label}: ${data(label).length}`)
+  assert(/value_type="f32"/.test(data(label)[0]), `${label} must be f32: ${data(label)[0]}`)
+}
+}
+"""
+timeout_ms = 30000

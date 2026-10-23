@@ -684,3 +684,36 @@ expect_output_contains = ["This value has type 'c128', which is not the declared
 expect_output_not_contains = ["LiteralNotRepresentable", "cannot be represented"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# The other operand of a binary operator may be a tensor: the value the operation is about is an
+# element of it, so the literal takes the tensor's element type (design principles 5.1). Before
+# H371 it kept its own type (f64 for a decimal form), which no device program can take, and the
+# element type was applied by narrowing the value instead.
+
+[[tests]]
+name = "context.tensor_literal_element_type"
+desc = "A literal operand beside a tensor takes the tensor's element type: `x * 1.0e40` with an `f32` tensor is a literal the element type cannot hold, an error at the expression (before H371 the f64 literal was narrowed into every element and the product read as `inf`)."
+kind = "negative"
+case = "../../../cases/compile/literals/tensor_literal_out_of_range.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 16
+expect_output_contains = ["The literal '1.0e40' cannot be represented as type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.tensor_scalar_mismatch"
+desc = "A scalar whose type is its own keeps it: `x * a` with `x` an `f32` tensor and `a` a `float` is refused, naming the two types and the conversion to write - the same rule as `f32 * f64` between two scalars. Before H371 the call was accepted and every element was computed from a narrowed scalar."
+kind = "negative"
+case = "../../../cases/compile/literals/tensor_scalar_mismatch.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 16
+expect_output_contains = ["Invalid call to '__mul__'", "(Tensor<float32, [3]>, float)", "the scalar operand has type 'float', but the tensor's element type is 'f32'", "write the conversion, f32(value)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
