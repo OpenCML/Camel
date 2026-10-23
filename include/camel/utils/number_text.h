@@ -7,7 +7,9 @@
  * same ones.
  *
  *   text -> number   the whole string must be one number: no blanks, nothing after it.
- *   float -> text    one rule: the shortest text that reads back as the same number.
+ *   float -> text    one rule: the shortest text that reads back as the same number, where "the
+ *                    same number" is an element of the value's own type -- so a bf16 or an f16
+ *                    is measured against its own rounding, not against f32 (halfText).
  *   number -> number a value that does not fit the target type is a fault
  *                    (camel/core/numeric_convert.h raises it; here are the range tests).
  */
@@ -28,6 +30,14 @@
 #include <type_traits>
 
 namespace camel::utils {
+
+/// True for the two reduced-precision floating types (bf16, f16). Their text is found by the same
+/// rule as any other float's -- the shortest that reads back as the same value -- but "the same
+/// value" is an element of their own type, so the shortest digits are found against that type's
+/// rounding (camel/core/rtdata/half.h). The declaration lives here and its specializations come
+/// with the two types, so that this file needs nothing from the runtime's half types.
+template <typename T> struct IsHalfFloat : std::false_type {};
+template <typename T> inline constexpr bool is_half_float_v = IsHalfFloat<T>::value;
 
 /// Reading a text as a number: it is one number of the language's grammar and the type holds
 /// it, or it is not a number at all, or it is a number the type cannot hold (overflow or
@@ -451,52 +461,77 @@ template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_v
     return number_text_detail::realValue(text, negative, out);
 }
 
-/// The text of a floating-point number: the shortest digits that read back as the same number
-/// (design principles 7.7), laid out so that the text is always recognisable as a float.
-///
-///   - a number whose decimal exponent is from -4 to 15 is written without an exponent, with
-///     at least one digit after the point: `2.0`, `100000.0`, `0.1`, `0.0001`;
-///   - any other is written with one: `1e+16`, `1.5e-07` (a sign and at least two digits);
-///   - the zeros are `0.0` and `-0.0`, the infinities `inf` and `-inf`;
-///   - every NaN is `nan`, never `-nan`: the sign of a NaN says nothing about a value.
-///
-/// The text of a `f32` is the shortest that reads back as that `f32` (`0.1`, not
-/// `0.10000000149011612`). parseWholeFloat reads every text this writes.
-template <std::floating_point T> std::string floatText(T value) {
-    if (std::isnan(value)) {
-        return "nan";
-    }
-    if (std::isinf(value)) {
-        return value < 0 ? "-inf" : "inf";
-    }
-    // Shortest round-trip digits in scientific form: [-]d[.ddd]e[+-]dd
-    char buffer[64];
+/// Whether `f32` reads the digits of `scientific` back as the f32 they were written from, by
+/// parsing them and comparing the bits: the test the text of a reduced-precision type is held to
+/// after its own rounding (below). The digits are correctly rounded by `to_chars`, so a text
+/// inside the rounding interval of the value parses to exactly that value; a text outside it
+/// parses to a neighbour and the bits differ.
+inline bool scientificParsesBack(std::string_view scientific, float &parsed) {
     const auto [end, ec] =
-        std::to_chars(buffer, buffer + sizeof(buffer), value, std::chars_format::scientific);
-    if (ec != std::errc()) {
-        return "nan";
-    }
-    std::string_view sci(buffer, static_cast<size_t>(end - buffer));
-    const bool negative = !sci.empty() && sci.front() == '-';
-    if (negative) {
-        sci.remove_prefix(1);
-    }
-    const size_t ePos = sci.find('e');
-    std::string digits;
-    for (const char c : sci.substr(0, ePos)) {
-        if (c != '.') {
-            digits.push_back(c);
-        }
-    }
-    int exponent = 0;
-    {
-        std::string_view expText = sci.substr(ePos + 1);
-        if (!expText.empty() && expText.front() == '+') {
-            expText.remove_prefix(1);
-        }
-        std::from_chars(expText.data(), expText.data() + expText.size(), exponent);
-    }
+        std::from_chars(scientific.data(), scientific.data() + scientific.size(), parsed);
+    return ec == std::errc() && end == scientific.data() + scientific.size();
+}
 
+/// The shortest scientific text -- `[-]d[.ddd]e[+-]dd`, correctly rounded by `to_chars` -- whose
+/// digits read back under `roundsBack` as the value they came from, for a value that is an
+/// element of a type narrower than f32 (a bf16 or an f16; design principles 7.7, the ruling of
+/// 2026-10-23, "reduced-precision-text"). `value` is the exact f32 widening of the element, so
+/// its own digits are a fallback that always reads back, and the loop only takes fewer of them.
+/// `roundsBack(token)` says whether one candidate is the same element of the narrow type.
+template <typename RoundsBack>
+std::string_view shortestHalfDigits(float value, RoundsBack roundsBack, std::string &storage) {
+    char buffer[64];
+    // Each count is rounded to that many significant decimal digits, so every candidate is the
+    // nearest text of its length and the first length that reads back is the shortest one.
+    for (int digitCount = 1; digitCount < 9; ++digitCount) {
+        const auto [end, ec] = std::to_chars(
+            buffer,
+            buffer + sizeof(buffer),
+            value,
+            std::chars_format::scientific,
+            digitCount);
+        if (ec != std::errc()) {
+            break;
+        }
+        const std::string_view candidate(buffer, static_cast<size_t>(end - buffer));
+        if (roundsBack(candidate)) {
+            // `to_chars` writes exactly `digitCount` significant digits, so a value that needs
+            // fewer than that round-trips with a trailing zero -- `0.1 as bf16` reads back from
+            // "1.0e-01" at one digit. Dropping those zeros is what makes the text shortest; the
+            // exponent of the leading digit does not move, because only the last digit can be a
+            // zero here.
+            const size_t ePos = candidate.find('e');
+            std::string_view mantissa = candidate.substr(0, ePos);
+            size_t keep              = mantissa.size();
+            while (keep > 1 && mantissa[keep - 1] == '0') {
+                --keep;
+            }
+            if (keep > 1 && mantissa[keep - 1] == '.') {
+                --keep;
+            }
+            if (keep == mantissa.size()) {
+                return candidate;
+            }
+            storage.assign(mantissa.substr(0, keep));
+            storage += candidate.substr(ePos);
+            return storage;
+        }
+    }
+    // No fewer digits read back; the widest form of the exact value does (it is the f32's own,
+    // and the element widens to f32 without loss).
+    const auto [end, ec] = std::to_chars(
+        buffer,
+        buffer + sizeof(buffer),
+        value,
+        std::chars_format::scientific,
+        9);
+    storage.assign(buffer, static_cast<size_t>(end - buffer));
+    return storage;
+}
+
+/// One decimal text laid out as the language writes a float (below), from its digits and its
+/// decimal exponent: the one layout, whatever the type the digits were found for.
+inline std::string layoutFloatText(std::string_view digits, int exponent, bool negative) {
     std::string text = negative ? "-" : "";
     if (exponent >= -4 && exponent < 16) {
         if (exponent < 0) {
@@ -530,6 +565,101 @@ template <std::floating_point T> std::string floatText(T value) {
     }
     text += std::to_string(magnitude);
     return text;
+}
+
+/// The text of a reduced-precision floating value, bf16 or f16: the same rule as for every other
+/// float -- the shortest digits that read back as the same value (design principles 7.7) -- with
+/// "the same value" an element of the value's own type. The element widens to f32 exactly, so the
+/// digits are searched against that f32 and each candidate is held to the store rounding of the
+/// type (round to nearest, ties to even: `roundsBack`); `0.1 as bf16` prints `0.1`, where the
+/// f32 text of the same bits would print `0.100097656` (ruling 2026-10-23, "reduced-precision-text").
+template <typename Half, typename RoundsBack>
+std::string halfText(Half value, RoundsBack roundsBack) {
+    const float widened = value.toFloat();
+    if (std::isnan(widened)) {
+        return "nan";
+    }
+    if (std::isinf(widened)) {
+        return widened < 0 ? "-inf" : "inf";
+    }
+    if (widened == 0) {
+        return std::signbit(widened) ? "-0.0" : "0.0";
+    }
+    std::string storage;
+    std::string_view scientific = shortestHalfDigits(widened, roundsBack, storage);
+    const bool negative         = scientific.front() == '-';
+    if (negative) {
+        scientific.remove_prefix(1);
+    }
+    const size_t ePos = scientific.find('e');
+    std::string digits;
+    for (const char c : scientific.substr(0, ePos)) {
+        if (c != '.') {
+            digits.push_back(c);
+        }
+    }
+    int exponent = 0;
+    {
+        std::string_view expText = scientific.substr(ePos + 1);
+        if (!expText.empty() && expText.front() == '+') {
+            expText.remove_prefix(1);
+        }
+        std::from_chars(expText.data(), expText.data() + expText.size(), exponent);
+    }
+    return layoutFloatText(digits, exponent, negative);
+}
+
+/// The text of a floating-point number: the shortest digits that read back as the same number
+/// (design principles 7.7), laid out so that the text is always recognisable as a float.
+///
+///   - a number whose decimal exponent is from -4 to 15 is written without an exponent, with
+///     at least one digit after the point: `2.0`, `100000.0`, `0.1`, `0.0001`;
+///   - any other is written with one: `1e+16`, `1.5e-07` (a sign and at least two digits);
+///   - the zeros are `0.0` and `-0.0`, the infinities `inf` and `-inf`;
+///   - every NaN is `nan`, never `-nan`: the sign of a NaN says nothing about a value.
+///
+/// The text of an `f32` is the shortest that reads back as that `f32` (`0.1`, not
+/// `0.10000000149011612`); a bf16 or an f16 is the shortest that reads back as that element of
+/// its own type, which is the same function with the digits measured against the narrower
+/// rounding (`halfText` above; between f32 and f64 "the same number" is already the type's own).
+/// parseWholeFloat reads every text this writes.
+template <std::floating_point T>
+    requires(!is_half_float_v<T>)
+std::string floatText(T value) {
+    if (std::isnan(value)) {
+        return "nan";
+    }
+    if (std::isinf(value)) {
+        return value < 0 ? "-inf" : "inf";
+    }
+    // Shortest round-trip digits in scientific form: [-]d[.ddd]e[+-]dd
+    char buffer[64];
+    const auto [end, ec] =
+        std::to_chars(buffer, buffer + sizeof(buffer), value, std::chars_format::scientific);
+    if (ec != std::errc()) {
+        return "nan";
+    }
+    std::string_view sci(buffer, static_cast<size_t>(end - buffer));
+    const bool negative = !sci.empty() && sci.front() == '-';
+    if (negative) {
+        sci.remove_prefix(1);
+    }
+    const size_t ePos = sci.find('e');
+    std::string digits;
+    for (const char c : sci.substr(0, ePos)) {
+        if (c != '.') {
+            digits.push_back(c);
+        }
+    }
+    int exponent = 0;
+    {
+        std::string_view expText = sci.substr(ePos + 1);
+        if (!expText.empty() && expText.front() == '+') {
+            expText.remove_prefix(1);
+        }
+        std::from_chars(expText.data(), expText.data() + expText.size(), exponent);
+    }
+    return layoutFloatText(digits, exponent, negative);
 }
 
 /// The value to hand to a text formatter: a NaN becomes the standard quiet NaN, which has no
