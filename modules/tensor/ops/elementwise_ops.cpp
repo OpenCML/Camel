@@ -11,6 +11,7 @@
  * builtin scalar operators.
  */
 
+#include "../attrs.h"
 #include "../kernels/elementwise.h"
 #include "catalog.h"
 #include "support.h"
@@ -296,7 +297,21 @@ void divideVjp(VjpBuilder &b, const VjpCall &call) {
         const vjp_node_t dlhs = addTensorOper(b, "tensor:divide", {*dy, rhs});
         accumulateOperand(b, lhs, dlhs);
         const vjp_node_t scaled = addTensorOper(b, "tensor:multiply", {dlhs, call.output});
-        accumulateOperand(b, rhs, addTensorOper(b, "tensor:neg", {scaled}));
+        const vjp_node_t neg    = addTensorOper(b, "tensor:neg", {scaled});
+        accumulateOperand(b, rhs, neg);
+        // The three operators are one chain a backend may run in one pass over the buffers: each
+        // element is divided, multiplied and negated in that order, so a backend that keeps the
+        // roundings of the operators (7.3) produces the same bits (7.4). The group is recorded
+        // where the chain is built; a node another node reads makes the chain unobservable to a
+        // backend, which then runs the operators one by one (camel/execute/fusion_group.h).
+        //
+        // Only when the denominator is differentiated is the chain reachable at all (the neg is
+        // what carries the gradient back to `rhs`); otherwise the three nodes are dropped as
+        // dead and the attribute would name nodes that are not a group.
+        if (b.isActive(rhs)) {
+            const vjp_node_t members[] = {dlhs, scaled, neg};
+            b.markFusionGroup(fusionAttrKey(), kDivideMulNegFusion, members);
+        }
     }
 }
 

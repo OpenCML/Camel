@@ -1,0 +1,59 @@
+/**
+ * The cost of one division VJP chain, fused and declined, with no other work in the step.
+ *
+ * `fused_chain` divides data by a learned per-column scale: the chain's members have one reader
+ * each, so `std::nvm` computes the tail in one pass (`tensor.fusion = "vjp_div_neg"`).
+ * `declined_chain` divides one parameter by another, so the gradient struct reads the divide's
+ * result and the three operators run one by one; it does the same arithmetic and the same number
+ * of passes as the unfused chain.
+ *
+ * Usage (one thread, min of several runs):
+ *   camel fusion_chain.cml --arg steps=50 --arg rows=512 --arg d=2048 --arg fused=1 std::nvm
+ */
+
+module perf_fusion_chain
+
+import { Tensor, sum, zeros } from tensor
+import { with_grad } from autodiff
+import { now } from time
+
+type W = { w: Tensor }
+
+with <m: W>
+func fused_chain(x: Tensor): float {
+    return sum(x / m.w)
+}
+
+type AB = { a: Tensor, w: Tensor }
+
+with <m: AB>
+func declined_chain(): float {
+    return sum(m.a / m.w)
+}
+
+func main(steps: int, rows: int, d: int, fused: int): int sync {
+    let x = zeros([rows, d]) + 1.5
+    let a = zeros([rows, d]) + 1.5
+    let w = zeros([d]) + 3.0
+    let g = with_grad(fused_chain)
+    let h = with_grad(declined_chain)
+    'perf chain rows={} d={} steps={} fused={}'->format<rows, d, steps, fused>->println
+    let started = now()
+    let (acc, done) = loop acc = 0.0, step = 0
+        while step < steps
+        do {
+            let v = if fused != 0 then {
+                let (value, gradient) = g<{w: w}>(x)
+                return value + sum(gradient.w)
+            } else {
+                let (value, gradient) = h<{a: a, w: w}>()
+                return value + sum(gradient.w)
+            }
+            return (acc + v, step + 1)
+        }
+    let elapsed = now() - started
+    'perf chain ms_per_step={:.3f} acc={}'
+    ->format<elapsed * 1000.0 / float(done), acc>
+    ->println
+    return 0
+}

@@ -25,6 +25,7 @@
 #include "camel/runtime/node_roles.h"
 #include "camel/utils/path.h"
 #include "dtype.h"
+#include "fusion_group.h"
 #include "kernels/parallel.h"
 #include "npy.h"
 #include "ops/binary_ops.h"
@@ -114,6 +115,7 @@ camel::core::OperatorTable::ReducedPrecisionNarrowing narrowingIntoReducedType(
 
 TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     camel::tensor::registerTensorAttrKeys();
+    camel::tensor::registerDivideMulNegFusion();
     camel::tensor::ops::registerTensorOps();
     camel::tensor::passes::registerTensorPasses();
     exportType(Reference("Tensor"), camel::tensor::TensorType::Default());

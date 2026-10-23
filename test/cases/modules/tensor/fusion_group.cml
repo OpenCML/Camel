@@ -1,0 +1,62 @@
+/**
+ * The `tensor.fusion = "vjp_div_neg"` group (a division's VJP: divide -> multiply -> neg).
+ *
+ * `private_chain` differentiates only the denominator: the divide's result has one reader (the
+ * multiply), so the group's earlier members are unobservable and the node VM computes the tail in
+ * one pass. `shared_chain` differentiates the numerator too: the divide's result is the
+ * numerator's gradient and the gradient struct reads it, so the backend declines and runs the
+ * three operators one by one. Both are marked (design principles 9.6); only the first is fused,
+ * and both print the bits of the gradient.
+ *
+ * The fused kernel keeps the operators' three roundings in the operators' order, so its bytes
+ * are the unfused bytes under the default policy and under `#strict` (7.3, 7.4); `std::fvm` has
+ * no kernel for the group and runs the nodes one by one, which the plan uses as the reference.
+ */
+module fusion_group
+
+import { Tensor, reshape, sum, to_bytes } from tensor
+import { with_grad } from autodiff
+import { to_array } from bytes
+
+type W = { w: Tensor }
+
+with <m: W>
+func private_chain(x: Tensor): float {
+    return sum(x / m.w)
+}
+
+with <m: W>
+func strict_chain(x: Tensor): float {
+    #strict {
+        return sum(x / m.w)
+    }
+}
+
+type AB = { a: Tensor, w: Tensor }
+
+with <m: AB>
+func shared_chain(): float {
+    return sum(m.a / m.w)
+}
+
+func main(): int sync {
+    let x = reshape([1.5, -2.25, 3.0, 0.1, -7.0, 1e-8] as f32[], [2, 3])
+    let w = reshape([3.0, 7.0, 0.1, -3.0, 1e-8, 1234567.0] as f32[], [2, 3])
+
+    let g = with_grad(private_chain)
+    let (value, gradient) = g<{w: w}>(x)
+    'private value={} sum={}'->format<value, sum(gradient.w)>->println
+    println(to_array(to_bytes(gradient.w)))
+
+    let s = with_grad(strict_chain)
+    let (tight, tight_gradient) = s<{w: w}>(x)
+    'strict value={} sum={}'->format<tight, sum(tight_gradient.w)>->println
+    println(to_array(to_bytes(tight_gradient.w)))
+
+    let h = with_grad(shared_chain)
+    let (shared, shared_gradient) = h<{a: x, w: w}>()
+    'shared value={} sum={}'->format<shared, sum(shared_gradient.a)>->println
+    println(to_array(to_bytes(shared_gradient.a)))
+    'shared sum_w={}'->format<sum(shared_gradient.w)>->println
+    return 0
+}
