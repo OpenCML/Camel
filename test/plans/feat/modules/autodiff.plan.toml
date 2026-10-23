@@ -1550,14 +1550,16 @@ timeout_ms = 8000
 # JSON, and what is asserted is the array gradient's own machinery rather than a graph size:
 # `:tangent/zeros_arr` (the zero array a round's element gradient is scattered into) and
 # `:tangent/scatter_add_arr` (the scatter itself) must be absent for the literal and present for
-# the parameter-built array. No count is pinned, so a CSE or an inlining decision that moves node
-# numbers leaves these assertions alone; dropping the reach test from the loop rule adds exactly
-# those two operators to the literal twin and fails its assertion, which prints the labels it
-# found. The first entry of each pair asserts the shape, the second the printed value.
+# the parameter-built array. The parameter's scatter takes its gradient base from a `float[]` port
+# and its zero array from the captured forward array; those ports are what a literal cannot have.
+# No count is pinned, so a CSE or an inlining decision that moves node numbers leaves these
+# assertions alone; dropping the reach test from the loop rule adds those two operators to the
+# literal twin and fails its assertion, which prints the labels it found. The first entry of each
+# pair asserts the shape, the second the printed value.
 
 [[tests]]
 name = "loop_grad_literal_array.shape"
-desc = "A differentiated loop over an array literal: no port reaches the array, so its reverse loop carries no array gradient and no tangent-space operator of the array kind (`:tangent/zeros_arr`, `:tangent/scatter_add_arr`) appears anywhere in the graphs std::jgir prints after std::macro. The reverse loop itself is there, so the absence is the rule's, not a missing transformation. The parameter-built twin has both operators."
+desc = "A differentiated loop over an array literal: no port reaches the array, so its reverse loop carries no array gradient and neither array-gradient operator appears in it (`:tangent/zeros_arr`, `:tangent/scatter_add_arr`). The loop still iterates a `float[]` data node and the reverse loop is there, so the absence is the rule's, not a missing transformation or a folded-away literal. The parameter-built twin has both operators, the scatter reading its gradient base from a `float[]` port."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_literal_array.cml"
 args = ["${case}", "std::macro", "std::jgir"]
@@ -1568,9 +1570,11 @@ verify_script = """
 const doc = JSON.parse(input.normalized.stdout)
 const graphs = doc.graphs.map((g) => g.name)
 assert(graphs.some((name) => name.endsWith('.tape.reverse')), `no reverse loop to inspect: ${JSON.stringify(graphs)}`)
-const labels = doc.graphs.flatMap((g) => g.nodes).filter((n) => n.kind === 'OPER').map((n) => n.label)
-const tangents = labels.filter((label) => label.startsWith(':tangent/'))
-assert(tangents.length === 0, `the literal array's gradient is carried: ${JSON.stringify(tangents)}`)
+const forward = doc.graphs.filter((g) => !g.name.includes('.tape.'))
+assert(forward.some((g) => g.nodes.some((n) => n.kind === 'LOOP') && g.nodes.some((n) => n.kind === 'DATA' && n.outputType === 'float[]')), 'the loop must still iterate an array literal')
+const reverse = doc.graphs.find((g) => g.name.endsWith('.tape.reverse'))
+const carried = reverse.nodes.filter((n) => n.kind === 'OPER' && (n.label === ':tangent/zeros_arr' || n.label === ':tangent/scatter_add_arr'))
+assert(carried.length === 0, `the literal array's gradient is carried: ${JSON.stringify(carried.map((n) => n.label))}`)
 }
 """
 timeout_ms = 8000
@@ -1588,7 +1592,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loop_grad_parameter_array.shape"
-desc = "The twin over an array built from the parameter: the array takes part in the gradient, so the reverse loop carries it and both tangent operators are in the graphs: `:tangent/zeros_arr`, the zero array whose length is the forward value's, and `:tangent/scatter_add_arr`, each round's element gradient scattered at its index."
+desc = "The twin over an array built from the parameter: the array takes part in the gradient, so the reverse loop carries it and both array-gradient operators are there: `:tangent/scatter_add_arr`, whose gradient base is a `float[]` port, and `:tangent/zeros_arr`, whose zero array is the forward array read from a capture port."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_parameter_array.cml"
 args = ["${case}", "std::macro", "std::jgir"]
@@ -1599,9 +1603,17 @@ verify_script = """
 const doc = JSON.parse(input.normalized.stdout)
 const graphs = doc.graphs.map((g) => g.name)
 assert(graphs.some((name) => name.endsWith('.tape.reverse')), `no reverse loop to inspect: ${JSON.stringify(graphs)}`)
-const labels = doc.graphs.flatMap((g) => g.nodes).filter((n) => n.kind === 'OPER').map((n) => n.label)
-assert(labels.includes(':tangent/zeros_arr'), `no zero array for the iterated array: ${JSON.stringify(labels)}`)
-assert(labels.includes(':tangent/scatter_add_arr'), `no scatter into the array's gradient: ${JSON.stringify(labels)}`)
+const reverse = doc.graphs.find((g) => g.name.endsWith('.tape.reverse'))
+const nodes = new Map(reverse.nodes.map((n) => [n.id, n]))
+const inputs = (id) => reverse.edges.filter((e) => e.target === id).sort((a, b) => a.targetIndex - b.targetIndex).map((e) => nodes.get(e.source))
+const scatter = reverse.nodes.find((n) => n.kind === 'OPER' && n.label === ':tangent/scatter_add_arr')
+assert(scatter, `no scatter into the array's gradient: ${JSON.stringify(reverse.nodes.filter((n) => n.kind === 'OPER').map((n) => n.label))}`)
+const base = inputs(scatter.id)[0]
+assert(base && base.kind === 'PORT' && base.outputType === 'float[]', `the scatter's gradient base is not a float[] port: ${JSON.stringify(base)}`)
+const zeros = reverse.nodes.find((n) => n.kind === 'OPER' && n.label === ':tangent/zeros_arr')
+assert(zeros, 'no zero array for the iterated array')
+const zeroBase = inputs(zeros.id)[0]
+assert(zeroBase && zeroBase.kind === 'PORT' && zeroBase.parameter.kind === 'capture' && zeroBase.outputType === 'float[]', `the zero array does not read the forward array from a capture port: ${JSON.stringify(zeroBase)}`)
 }
 """
 timeout_ms = 8000
