@@ -262,7 +262,8 @@ FusionGroupAction divideMulNegKernel(
     const FusionGroupView &view,
     gc_node_ref_t node,
     std::span<const gc_node_ref_t> deferred,
-    std::vector<gc_node_ref_t> &members) {
+    std::vector<gc_node_ref_t> &members,
+    camel::execute::FusionGroupRef &group) {
     const ChainOperators &ops = chainOperators();
     if (view.operOf(node) == ops.divide && view.memberOf(node)) {
         gc_node_ref_t middle = camel::runtime::kInvalidNodeRef;
@@ -274,6 +275,7 @@ FusionGroupAction divideMulNegKernel(
         // value; the head is skipped now, the middle when the plan reaches it.
         members.push_back(node);
         members.push_back(middle);
+        group.tail = tail;
         return FusionGroupAction::Deferred;
     }
     if (view.operOf(node) != ops.neg || !view.memberOf(node)) {
@@ -301,6 +303,10 @@ FusionGroupAction divideMulNegKernel(
     if (!among(deferred, head) || !among(deferred, middle)) {
         return FusionGroupAction::None;
     }
+    // The nodes computed here, for the reports that say what the group stood for (profile.h).
+    members.push_back(head);
+    members.push_back(middle);
+    group.tail = node;
     Array *result = runChain(view, head, middle, node);
     view.setValueOf(node, ops::wrap(result));
     return FusionGroupAction::Ran;

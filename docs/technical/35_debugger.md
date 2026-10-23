@@ -59,6 +59,22 @@ The relation between lines and nodes is many to many, and the debugger never hid
 | A node whose source is in another function (after `std::opt::inline`) | The frame is the graph that runs; the location is the source it came from, and the frame says "inlined" (5.3) |
 | A line with code but no node | The code is not executed: nothing depends on it, or a pass removed it. A breakpoint there is unverified and says which (3.2) |
 | A node without a line | Reached by node steps only |
+| A node a fusion group runs | The group's earlier members do not execute; the stop is at the tail and says which group ran (below) |
+
+**Fusion groups.** A back end may run a marked group of nodes as one pass at the group's last node
+(`camel/execute/fusion_group.h`; design principles 9.6 keeps the operators on the graph). The
+members before the tail do not execute, so they are never stopped at, by a breakpoint or by a node
+step: a stop is *before a node runs*, and they do not run. The stop that is the group's is at the
+tail; it carries `fusion` with the group's name, its members' operators in execution order and one
+sentence, which the debug console also prints:
+
+> fusion group `vjp_div_neg` runs here: it computes tensor:divide, tensor:multiply, tensor:neg in
+> one pass; those nodes do not execute separately.
+
+A member that has no origin cannot be named by a source breakpoint at all (the VJP's nodes have
+none today); a node step is how execution reaches the group, and it steps over the members to the
+tail. The profile says the same thing in its own words: the group has one row, its members have
+none (`include/camel/profile/profile.h`).
 
 **What each view shows.** The source view: the location of the top frame, the call stack with
 a location per frame, the variables of the selected frame by their source names. The graph

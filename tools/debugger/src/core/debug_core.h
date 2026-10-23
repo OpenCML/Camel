@@ -101,7 +101,8 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     void activationLeft() override;
     void beforeNode(
         camel::runtime::GCGraph *graph, camel::core::context::Frame *frame,
-        camel::runtime::gc_node_ref_t node) override;
+        camel::runtime::gc_node_ref_t node,
+        const camel::execute::FusionGroupSite *group) override;
     void tailCall() override;
     void beforeInstruction(const camel::execute::InstructionSite &site) override;
     void faultRaised(const camel::core::error::RuntimeFault &fault, bool isolated) override;
@@ -201,6 +202,9 @@ class DebugCore final : public camel::execute::ExecutionObserver {
         const SourceLoc *loc = nullptr;
         int function         = -1;
         bool executes        = false;
+        /// The fusion group this node runs, when it is a group's tail (fusion_group.h). The
+        /// members before it did not run; the stop reports them (35_debugger.md, 2).
+        const camel::execute::FusionGroupSite *group = nullptr;
     };
 
     struct Handle {
@@ -245,6 +249,9 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     /// The frame of a tail call, in the place of the top frame.
     ShadowFrame &replaceTop(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
     void firstNodeOfRun(camel::runtime::GCGraph *root);
+    /// What a stop at a group's tail says about the group: its name, its members' operators in
+    /// execution order and the one sentence a console prints (2).
+    json fusionDetails(const ShadowFrame &frame, const camel::execute::FusionGroupSite &site);
     void arrive(ShadowFrame &frame, const Arrival &arrival);
     bool stepReached(const ShadowFrame &frame, const Arrival &arrival) const;
     void refreshConfig();

@@ -450,6 +450,15 @@ class Adapter {
                     output("console", line.value("text", "") + "\n");
                 }
             }
+            // A stop at a fusion group's tail: the group ran there and its members did not
+            // execute separately. Said in the debug console before the stop is shown, like the
+            // lines a step went past.
+            if (auto fusion = e.find("fusion"); fusion != e.end() && fusion->is_object()) {
+                const std::string message = fusion->value("message", std::string());
+                if (!message.empty()) {
+                    output("console", message + "\n");
+                }
+            }
             // A function breakpoint has a reason of its own in DAP.
             const bool atFunction = reason == "breakpoint" && e.contains("function");
             json body{
@@ -487,6 +496,9 @@ class Adapter {
             }
             if (auto skipped = e.find("skipped"); skipped != e.end()) {
                 camel["skipped"] = *skipped;
+            }
+            if (auto fusion = e.find("fusion"); fusion != e.end()) {
+                camel["fusion"] = *fusion;
             }
             event("camel/stopped", std::move(camel));
             event("stopped", std::move(body));

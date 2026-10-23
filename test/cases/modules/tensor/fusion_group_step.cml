@@ -1,0 +1,40 @@
+/**
+ * A training step whose only division is a data tensor over a learned scale: the VJP chain
+ * (divide -> multiply -> neg) is private, so `std::nvm` runs it as one `vjp_div_neg` group once per
+ * round. The loop makes the group's count and its cost per step checkable, and the same program on
+ * `std::fvm` (which has no group kernel) runs the three operators one by one: the reference the
+ * profile's operator executions are compared with.
+ */
+
+module fusion_group_step
+
+import { Tensor, sum, zeros } from tensor
+import { with_grad } from autodiff
+
+type Model = {
+    w: Tensor
+}
+
+with <m: Model>
+func loss(x: Tensor): float {
+    return sum(x / m.w)
+}
+
+func main(steps: int): int sync {
+    let x = zeros([16]) + 0.5
+    let model: Model = {
+        w: zeros([16]) + 2.0
+    }
+    let grad = with_grad(loss)
+    let (trained, done) = loop m = model, step = 0
+        while step < steps
+        do {
+            let (value, gradient) = grad<m>(x)
+            let next = {
+                w: m.w - 0.01 * gradient.w
+            }
+            (next, step + 1)
+        }
+    'step steps={} w={}'->format<done, sum(trained.w)>->println
+    return 0
+}

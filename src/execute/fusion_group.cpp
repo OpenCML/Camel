@@ -10,8 +10,10 @@
 #include "camel/execute/fusion_group.h"
 
 #include "camel/core/rtdata/base.h"
+#include "camel/profile/profile.h"
 
 #include <algorithm>
+#include <chrono>
 #include <mutex>
 #include <shared_mutex>
 
@@ -102,7 +104,8 @@ void registerFusionGroup(attr::AttrKey key, std::string_view name, FusionGroupKe
 FusionGroupAction runFusionGroup(
     const camel::runtime::GCGraph &graph, camel::core::context::Frame &frame,
     const camel::runtime::ExecPlan &plan, gc_node_ref_t node,
-    std::span<const gc_node_ref_t> deferred, std::vector<gc_node_ref_t> &members) {
+    std::span<const gc_node_ref_t> deferred, std::vector<gc_node_ref_t> &members,
+    FusionGroupRef &group) {
     const attr::AttrSetId attrs = graph.nodeAttrs(node);
     if (attrs == attr::kNoAttrs) {
         return FusionGroupAction::None;
@@ -131,7 +134,40 @@ FusionGroupAction runFusionGroup(
     const attr::AttrValueId value = attr::valueOf(attrs, match.key);
     const FusionGroupView view(graph, frame, plan, match.key, value);
     members.clear();
-    return match.kernel(view, node, deferred, members);
+    group = FusionGroupRef{match.key, match.name, camel::runtime::kInvalidNodeRef};
+
+    // The group's time is measured here, around the kernel call, and recorded as the group's
+    // own row: it is not inside any operator call, so no operator row can carry it and no member
+    // row can be added for it (profile.h). Off unless the session is recording.
+    const bool recording = camel::profile::enabledInline();
+    const auto started   = recording ? std::chrono::steady_clock::now()
+                                     : std::chrono::steady_clock::time_point{};
+    const FusionGroupAction action = match.kernel(view, node, deferred, members, group);
+
+    if (action == FusionGroupAction::Ran && recording) {
+        const uint64_t ns = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                      std::chrono::steady_clock::now() - started)
+                                                      .count());
+        // The operators the group computed, in execution order: the members the kernel reported
+        // and the tail it ran them at. A thread-local scratch keeps the recording allocation-free
+        // after the first group of a program.
+        static thread_local std::vector<std::string_view> operators;
+        operators.clear();
+        operators.reserve(members.size() + 1);
+        const auto push = [&](gc_node_ref_t member) {
+            if (const auto *body = graph.nodeBodyAs<camel::runtime::GCOperBody>(member);
+                body != nullptr) {
+                operators.push_back(body->uri());
+            }
+        };
+        for (const gc_node_ref_t member : members) {
+            push(member);
+        }
+        push(node);
+        camel::profile::fusionGroup(
+            attr::keyName(group.key), group.name, operators, ns);
+    }
+    return action;
 }
 
 } // namespace camel::execute

@@ -13,9 +13,17 @@
  *
  * The shape of a group is the graph's. A back end asks at each node that carries attributes;
  * the module's kernel establishes the members from the node and its users and tells the back end
- * which members it will compute later. A group runs at its last node (its tail), where every
- * operand the members read has a value; the members before it are only deferred when nothing
- * outside the group observes them (`FusionGroupView::isPrivateTo`), so no value is missing.
+ * which members it will compute later, and which node runs the group. A group runs at its last
+ * node (its tail), where every operand the members read has a value; the members before it are
+ * only deferred when nothing outside the group observes them (`FusionGroupView::isPrivateTo`), so
+ * no value is missing.
+ *
+ * A deferred member's operator does not run, so a tool must not report it as one: the node VM
+ * never asks the debugger to stop at it (the group's tail is where the execution is), and the
+ * group run is recorded in the profile as a group, its members counted once (design principles
+ * 7.3: a measurement must not change what it measures, and must not show work that did not
+ * happen). `FusionGroupRef::tail` and the `members` of a `Ran` result are what those reports
+ * read.
  *
  * Numeric contract: a group kernel runs the definition graphs of its members. It may only
  * produce the bits those operators produce under the permissions in force (7.3): for a `#strict`
@@ -104,14 +112,26 @@ class FusionGroupView {
     camel::core::attr::AttrValueId value_;
 };
 
+/// A group as a back end reports it after asking the registry: the attribute that names it and
+/// the node it runs at. `name` is the attribute's value (the name the module registered the
+/// kernel under); an empty `name` means no kernel owns the node.
+struct FusionGroupRef {
+    camel::core::attr::AttrKey key = camel::core::attr::kNoKey;
+    std::string_view name;
+    /// The node the group runs at (its tail): the last member, where every operand has a value.
+    camel::runtime::gc_node_ref_t tail = camel::runtime::kInvalidNodeRef;
+};
+
 /// A module's group kernel. It decides what `node` is and, at the group's tail, runs it: returns
 /// `Deferred` and fills `members` with the nodes the back end must not execute from now on (the
-/// ones the group's tail computes), `Ran` when it computed `node`'s value here, or `None` when
-/// this is not a group it can run (the back end then runs `node`'s operator).
+/// ones the group's tail computes) and `group.tail` with that tail; `Ran` when it computed
+/// `node`'s value here (filling `members` with the nodes it computed, the tail excluded, and
+/// `group.tail` with `node`); or `None` when this is not a group it can run (the back end then
+/// runs `node`'s operator).
 using FusionGroupKernel = FusionGroupAction (*)(
     const FusionGroupView &view, camel::runtime::gc_node_ref_t node,
     std::span<const camel::runtime::gc_node_ref_t> deferred,
-    std::vector<camel::runtime::gc_node_ref_t> &members);
+    std::vector<camel::runtime::gc_node_ref_t> &members, FusionGroupRef &group);
 
 /// Registers the kernel of the group `name` (the attribute's Symbol value) under `key`, when the
 /// module loads. A name registered again replaces its kernel.
@@ -120,11 +140,16 @@ void registerFusionGroup(
 
 /// Asks the registered kernels about `node`, a node that carries attributes. `deferred` are the
 /// nodes this back end already deferred in the current execution of `graph`. Returns `None` when
-/// no kernel owns the node; the back end then runs its operator.
+/// no kernel owns the node; the back end then runs its operator. On a group, `group` names it and
+/// its tail, and `members` is filled as the kernel reports it.
+///
+/// `Ran` is only returned at the tail a previous `Deferred` named: a group runs when its earlier
+/// members were deferred to it, so a back end that must report the group before it runs (to a
+/// debugger) knows the tail first and calls this again there.
 FusionGroupAction runFusionGroup(
     const camel::runtime::GCGraph &graph, camel::core::context::Frame &frame,
     const camel::runtime::ExecPlan &plan, camel::runtime::gc_node_ref_t node,
     std::span<const camel::runtime::gc_node_ref_t> deferred,
-    std::vector<camel::runtime::gc_node_ref_t> &members);
+    std::vector<camel::runtime::gc_node_ref_t> &members, FusionGroupRef &group);
 
 } // namespace camel::execute

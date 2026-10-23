@@ -1,0 +1,27 @@
+// A private `x / w` chain: the division's VJP emits divide -> multiply -> neg as one
+// `vjp_div_neg` group, and std::nvm runs it at the tail. A node step must not stop at the members
+// (they do not execute) and must stop at the tail, where the group runs (35_debugger.md, 2).
+module fusion_group_fixture
+
+import { Tensor, sum, zeros } from tensor
+import { with_grad } from autodiff
+
+type Model = {
+    w: Tensor
+}
+
+with <m: Model>
+func loss(x: Tensor): float {
+    return sum(x / m.w)
+}
+
+func main(): int sync {
+    let x = zeros([8]) + 0.5
+    let model: Model = {
+        w: zeros([8]) + 2.0
+    }
+    let grad = with_grad(loss)
+    let (value, gradient) = grad<{w: model.w}>(x)
+    'value={} gradient={}'->format<value, sum(gradient.w)>->println
+    return 0
+}
