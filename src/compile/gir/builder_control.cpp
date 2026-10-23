@@ -132,11 +132,11 @@ bool isSplittableAggregate(const Type *type) {
     }
     if (type->code() == TypeCode::Struct) {
         const auto *strct = tt::as_ptr<const StructType>(type);
-        return strct->resolved();
+        return strct->resolved() && strct->size() > 0;
     }
     if (type->code() == TypeCode::Tuple) {
         const auto *tuple = tt::as_ptr<const TupleType>(type);
-        return tuple->resolved() && !tuple->isCell() && !tuple->isTagged();
+        return tuple->resolved() && tuple->size() > 0 && !tuple->isCell() && !tuple->isTagged();
     }
     return false;
 }
