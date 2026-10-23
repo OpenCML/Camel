@@ -182,24 +182,24 @@ export func count::<T>(xs: T[]): int {
 /// @example sum([1, 2, 3])    // 6
 export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
     return match type T {
-        // The accumulator is T itself: integers wrap around in T exactly as `+` does, and a
-        // complex value is not a floating-point element type, so the f64 rule is not the one
-        // for it. Only this arm is built for such a T.
+        // The accumulator of the integer and complex arms is T itself: integers wrap around in T
+        // exactly as `+` does, and a complex value is not a floating-point element type, so the
+        // f64 rule is not the one for it. Only the selected arm of the `match type` is built.
         case int | i32 | c64 | c128 => xs->reduce<(a, b) => a + b, 0>
-        // A floating-point T whose conversion into the element type the language declares today:
-        // the additions happen in `sumF64` (f64, from +0, in order) and the single conversion
-        // back into the element type is the only rounding of the whole reduction.
-        case float => float(sumF64(xs))
-        case f32 => f32(sumF64(xs))
-        // bf16 and f16 are floating-point element types of the same kind (design principles 7.3),
-        // and their two arms belong here, written the same way: `bf16(sumF64(xs))` and
+        // A floating-point T accumulates in f64 (`sumF64`, from +0 in order) and converts once
+        // into the element type, and that conversion is the only rounding of the whole reduction.
+        // The conversions for `float` and `f32` are the two the language declares today. bf16 and
+        // f16 are floating-point element types of the same kind (design principles 7.3), and
+        // their arms belong in this `match type`, written the same way: `bf16(sumF64(xs))` and
         // `f16(sumF64(xs))`. They are not written yet because the language still declares no
         // conversion into the two reduced-precision element types (ruling reduced-precision.md
-        // item (c), which another change owns): naming `bf16(...)` or `f16(...)` here does not
-        // resolve, and every arm of a `match type` is resolved even when its case is not
-        // selected. Until that conversion exists, a sum over a bf16 or f16 array is refused
-        // where this `match type` looks for its case — loudly, naming the instance — instead of
-        // being answered at the element type's own width.
+        // item (c)): naming `bf16(...)` or `f16(...)` does not resolve, and every arm of a
+        // `match type` is resolved even when its case is not selected. Until that conversion
+        // exists, a sum over a bf16 or f16 array is refused where this `match type` looks for its
+        // case — loudly, naming the instance — instead of being answered at the element type's
+        // own width.
+        case float => float(sumF64(xs))
+        case f32 => f32(sumF64(xs))
     }
 }
 
