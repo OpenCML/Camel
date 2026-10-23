@@ -1,3 +1,5 @@
+[0.2.29]
+
 [0.2.28]
 Changes:
 - 遍成为标准库声明：核心的在 `stdlib/std.cml`、模块的在 `stdlib/<模块>.cml`，无函数体的 `export func` 就是遍，`registerModulePass` 只绑它的内核；编译器不为这种声明建图或算子组。模块遍改名：`onnx::export` 现在是 `onnx::export_model` 的短别名。
