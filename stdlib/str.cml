@@ -9,8 +9,8 @@
  * so calls chain: `s->trim->split<','>`.
  */
 
-// The declarations of the operators of the C++ module `modules/str` (design principles 6.4;
-// handover H19, step 10). This file is the one source of their signatures; the C++ side keeps the
+// The declarations of the operators of the C++ module `modules/str` (design principles 6.4).
+// This file is the one source of their signatures; the C++ side keeps the
 // kernels, the executor and the operator traits. A declaration names `str:<function>` by
 // convention, so no `#op` tag is needed.
 

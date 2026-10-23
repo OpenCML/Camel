@@ -9,9 +9,9 @@
  */
 
 // The declarations of the operators of the C++ module `math` (`modules/math`). This file is the
-// one source of their signatures (design principles 6.4; handover H19, step 10): the C++ side
+// one source of their signatures (design principles 6.4): the C++ side
 // keeps the kernels, the executor, the operator traits, the numeric semantics and the constants.
-// Every operator is declared here and no computed signature is left (handover H202): `sqrt` and
+// Every operator is declared here and no computed signature is left: `sqrt` and
 // the two shifts, whose result type C++ computes from the argument, are written out per spelling
 // (`i32`/`int` for `sqrt`, both integer types for a shift count), which is the whole accept set
 // of the old resolvers. One entry is not a declaration:

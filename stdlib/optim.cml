@@ -292,10 +292,9 @@ func adam_leaf::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
 }
 
 // One `adam` leaf whose element type the program does not write. The element type of the value
-// decides (docs/handover/reviews/questions-2026-10-23.md, section `f64-tensor-leaf`: "unstated" only
-// means the type does not say it, so narrowing it would be an unlicensed loss of precision), and
-// the two element types are two writings of the formula: an f32 leaf is computed in double and
-// rounded once on the store, which is the pass the fused kernel takes for it
+// decides: "unstated" only means the type does not say it, so narrowing it would be an unlicensed
+// loss of precision. The two element types are two writings of the formula: an f32 leaf is computed
+// in double and rounded once on the store, which is the pass the fused kernel takes for it
 // (modules/tensor/kernels/update.h), and an f64 leaf keeps the double result. The type states no
 // element type, so there is no arm to dispatch on, and no operator names a tensor's element type at
 // run time; the value answers for itself, with the width of one element read from its own bytes.

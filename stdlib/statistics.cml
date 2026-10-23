@@ -9,7 +9,7 @@
  */
 
 // The declarations of the operators of the C++ module `statistics` (`modules/statistics`). This
-// file is the one source of their signatures (design principles 6.4; handover H19, step 10): the
+// file is the one source of their signatures (design principles 6.4): the
 // C++ side keeps the kernels, the executor and the operator traits.
 //
 // None of them has a computed result type: the answer is `float` (or `float?`) whatever the

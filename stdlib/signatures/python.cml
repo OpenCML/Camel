@@ -11,7 +11,7 @@
  *   - `py_print` and `py_println` accept any number of `PyObject` arguments;
  *   - `py_wrap` and `py_unwrap` move a type through the module type `PyObject<T>`, and a type
  *     variable cannot be an argument of a module type in a declaration
- *     (`SemanticDiag::InvalidTypeArgument`, handover H166).
+ *     (`SemanticDiag::InvalidTypeArgument`).
  * The `DynamicFuncTypeResolver` of modules/python is the one source of these signatures, and the
  * `python` module keeps `PyObject` as its own type (exported by C++, named here for the reference
  * text). Each entry below writes one instance of its rule.
