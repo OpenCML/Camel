@@ -151,8 +151,36 @@
     "timed_step_median_ms": 3337.2,
     "canonical_timed_step_median_ms": 3145.2,
     "step_delta_ms": 192.0,
-    "detail": "forward tensor:matmul 929.8 ms vs 806.4 canonical (+123.4 ms, 15%); the grad rows are unchanged in code and their -72 ms here is run-to-run load, not the library. The pass marks tensor:matmul only; autodiff creates matmul_grad_lhs/rhs after the pass, so those 2016.7 ms stay on the canonical kernel.",
-    "note": "The library GEMM is not a step-level win at this shape: the timed median is 3337 ms against 3145 ms canonical (+6%), and OpenBLAS is slower on the model's many batched forward products. It never sees the backward matmuls."
+    "detail": "forward tensor:matmul 929.8 ms vs 806.4 canonical (+123.4 ms, 15%) in this run; the pass marks tensor:matmul, and autodiff creates matmul_grad_lhs/rhs after the pass, so in this run those 2016.7 ms stayed on the canonical kernel.  42f54954d later carried the shape choice into the VJP chain: the gradient rows now take the library path too, and the re-measurement in results/2026-10-23-cpu-scale-scan.json puts tensor:matmul at 4 395 against 3 036 ms a step, grad_lhs 3 273 against 2 001 and grad_rhs 3 297 against 1 988, library over canonical.",
+    "note": "At the time of this run the library GEMM was not a step-level win at this shape: the timed median is 3337 ms against 3145 ms canonical (+6%), and OpenBLAS was slower on the model's many batched forward products, and it never saw the backward matmuls.  Both halves of that changed with 42f54954d and the later fusion commits: the re-measured one-thread CPU step is 2 656.9 ms on the default path against 2 780.3 ms with tensor::fuse removed, a 4.4% win, not the 21% the paired row saw when the shape step landed.",
+    "correction": {
+      "when": "2026-10-23, when the system CBLAS became the default path",
+      "measured_at": "results/2026-10-23-cpu-scale-scan.json, 2026-10-23 11:44-12:52 +08:00, build 102dbc5d1 group (fingerprint a39d2d4c570a)",
+      "what_changed": "42f54954d carries the shape choice into the VJP chain, so the two gradient matmuls now take the library path as well. Neither of the two strings below was re-measured; they are corrected to what the run uses now, and the original text is kept under this key.",
+      "original": {
+        "detail": "forward tensor:matmul 929.8 ms vs 806.4 canonical (+123.4 ms, 15%); the grad rows are unchanged in code and their -72 ms here is run-to-run load, not the library. The pass marks tensor:matmul only; autodiff creates matmul_grad_lhs/rhs after the pass, so those 2016.7 ms stay on the canonical kernel.",
+        "note": "The library GEMM is not a step-level win at this shape: the timed median is 3337 ms against 3145 ms canonical (+6%), and OpenBLAS is slower on the model's many batched forward products. It never sees the backward matmuls."
+      },
+      "measured_now": {
+        "tensor:matmul_ns_per_step": {
+          "library": 4395270,
+          "canonical": 3036020
+        },
+        "tensor:matmul_grad_lhs_ns_per_step": {
+          "library": 3273120,
+          "canonical": 2001230
+        },
+        "tensor:matmul_grad_rhs_ns_per_step": {
+          "library": 3297330,
+          "canonical": 1988110
+        },
+        "note": "profiled rows divided by the profile's own round count, same program text both sides; rows sum to 1.22x the profiled round mean, so these are upper bounds",
+        "cpu_ms_per_step_one_thread": {
+          "camel_library": 2656.9,
+          "camel_canonical": 2780.3
+        }
+      }
+    }
   },
   "gap": {
     "old_sweep_camel_ms": 3186.2,
