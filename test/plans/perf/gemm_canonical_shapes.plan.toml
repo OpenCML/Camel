@@ -1,0 +1,67 @@
+id = "perf.gemm_canonical_shapes"
+order = 422
+tier = "slow"
+tags = ["perf", "tensor", "gemm"]
+
+# The canonical GEMM's rate at the d=256 step's shapes, one thread, printed per shape and per round
+# (design principles 7.6: one configuration, one result; and the packer/hand-off costs the band-major
+# change of H296 moved are only visible in a rate at these extents).
+#
+# What this case holds is not a wall-clock budget: the reference host is shared, and the numbers in
+# the comments below were taken at load average 100. What it holds is that every shape was measured,
+# that each rate is a finite positive number, and that the canonical kernel stays several times
+# faster than the unblocked broadcast-multiply-and-reduce formulation of the same product, a ratio
+# taken in the same round and therefore insensitive to the neighbours.
+#
+# Recorded from one process on the reference host (AMD EPYC 7343, one core) at load average 113,
+# three rounds, GFLOP/s per round: 256x64x256 28-75, 256x256x64 27-60, 512x256x512 38-88,
+# 512x768x256 39-91, 512x512x256 46-53, 32x32x16 3.8-13.5, reference 0.41-0.69. Taking the best
+# round of each (the round least preempted), canonical over reference is 78-133x at the block
+# shapes and 19x at 32x32x16; the floor below is half of the smallest block-shape ratio. The
+# absolute rate is recorded next to the sweep, not asserted here: on this host a wall-clock budget
+# measures the neighbours.
+
+[[tests]]
+name = "shapes"
+desc = "One process measures the canonical GEMM at six shapes and the unblocked broadcast formulation at 128x128x128: every shape prints a finite rate, and the canonical kernel is at least 5x the reference."
+kind = "behavior"
+case = "../../cases/perf/gemm_canonical_shapes.cml"
+args = ["${case}", "--arg", "rounds=3", "--arg", "reps=1", "tensor::fuse", "std::jit"]
+expect_exit = 0
+timeout_ms = 300000
+verify_script = """
+({ input, assert }) => {
+  // One line per point: "gemm_canonical_shapes round=0 shape=256x64x256 ms=0.1 gflops=78.4 checksum=1".
+  // Fields are read with plain string operations: no regular expression needs escaping through TOML.
+  const field = (line, key) => {
+    const at = line.indexOf(' ' + key + '=')
+    if (at < 0) return null
+    const rest = line.slice(at + key.length + 2)
+    const end = rest.indexOf(' ')
+    return end < 0 ? rest : rest.slice(0, end)
+  }
+  const lines = input.normalized.stdout.split('\n').filter((l) => l.includes(' gflops=') && !l.includes('reference='))
+  const reference = input.normalized.stdout.split('\n').filter((l) => l.includes(' reference='))
+  const shapes = ['256x64x256', '256x256x64', '512x256x512', '512x768x256', '512x512x256', '32x32x16']
+  assert(reference.length === 3, `expected 3 reference rounds, got ${reference.length}`)
+  assert(lines.length === shapes.length * 3, `expected ${shapes.length * 3} points, got ${lines.length}`)
+  const best = new Map()
+  for (const line of lines) {
+    const shape = field(line, 'shape')
+    const gflops = Number(field(line, 'gflops'))
+    assert(shapes.includes(shape), `unexpected shape in a point: ${line}`)
+    assert(Number.isFinite(gflops) && gflops > 0, `a point without a rate: ${line}`)
+    if (!best.has(shape) || gflops > best.get(shape)) best.set(shape, gflops)
+  }
+  for (const shape of shapes) assert(best.has(shape), `no point at ${shape}`)
+  const referenceBest = Math.max(...reference.map((l) => Number(field(l, 'gflops'))))
+  assert(Number.isFinite(referenceBest) && referenceBest > 0, 'the reference has no rate')
+  // The attention product is 32x32x16 in one call: its per-call overhead keeps it near 10-20x the
+  // unblocked formulation rather than the block shapes' 80-130x, so the floor applies to the
+  // block shapes and the attention shape only has to beat the reference.
+  const blocks = shapes.filter((s) => s !== '32x32x16')
+  const worstBlock = Math.min(...blocks.map((s) => best.get(s)))
+  assert(worstBlock >= 5 * referenceBest, `canonical ${worstBlock.toFixed(1)} GFLOP/s is not 5x the unblocked reference ${referenceBest.toFixed(1)}`)
+  assert(best.get('32x32x16') > referenceBest, `the attention product ${best.get('32x32x16').toFixed(1)} GFLOP/s is not faster than the unblocked reference ${referenceBest.toFixed(1)}`)
+}
+"""
