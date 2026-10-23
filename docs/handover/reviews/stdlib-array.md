@@ -48,3 +48,10 @@ with <f: (a: T, b: U) => V> export func zip_with(xs: T[], ys: U[]): V[] { return
 3. **`import algo` 已不再使用**：删去（`algo` 并入 `array` 后，`algo` 模块本身也应删除）。
 4. **`xs[:: -1]` 中间多一个空格**：这是格式化器的输出问题，修格式化器，打印为 `xs[::-1]`。
 5. **适用条件**：H234 落地后，`sum` 加 `when is_numeric::<T>()`，`min`/`max` 加 `when is_ordered::<T>()`。
+
+## 第三轮（决策者 2026-10-22）
+
+通过：推断缺口修好后 `sum` 是一行 `xs->reduce<(a, b) => a + b, 0>`、`zip_with` 是一行；原生函数直接导出；格式化器打印 `xs[::-1]`；`when` 用上了。两处收尾：
+
+1. `min`/`max` 的条件写成了 `is_numeric`，但它们原本也接受字符串（按字节比较）——应当是 `is_ordered::<T>()`。`math::min`/`max` 对字符串若没有定义，补上（字符串按字节的全序），不要因此收窄 `array::min` 的适用范围。
+2. `import algo` 若已无 `algo::` 的使用就删去；`algo` 模块本身随 H19 第 5 步删除。
