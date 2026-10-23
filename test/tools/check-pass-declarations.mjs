@@ -127,7 +127,7 @@ const implementations = []
         implementations.push(match[1])
     }
 }
-const DECLARED_COUNT = 53
+const DECLARED_COUNT = 54
 if (declarations.length !== DECLARED_COUNT) {
     problems.push(
         `stdlib/std.cml declares ${declarations.length} passes; the language declares ` +
