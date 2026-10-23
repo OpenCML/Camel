@@ -28,26 +28,52 @@
 看板 `docs/handover/README.cn.md` 第 229、491 行仍写「S2 放置属性在跑」「API 面仍是旧的 `@gpu` 偏好」——与树不符：
 S1–S4 与 H218 的删除都已在 `origin/develop` 上。**按树，不按看板。**
 
+### 1.1 本日实测（设备无关，探针不随分支提交）
+
+| 事实 | 怎么得到的 | 对下面步骤的影响 |
+|---|---|---|
+| 静态形状的 `#gpu` 函数里 `x * 2.0` **编译期被拒**（`GpuScopeNoDeviceProgram` `0x040001A7`，点名 `tensor:multiply`，"no device program for this shape"）；原因是区域分析给该节点的理由 `scalar_tensor_operand`（操作数是 f64 字面量）。开放形状 `Tensor<f32>` 不拒（先撞 `unresolved_type`，留给运行期按实参重试）。 | `--devices cpu` + `CUDA_VISIBLE_DEVICES=-1`，`tiles::compile` | **新增 M0**（挡在验收前面）；决定不归施工方，见 `docs/handover/questions/gpu-scalar-operand.md` |
+| 一条 `#gpu` 作用域里两个算子都留不住时，**只打出一条诊断**（只报 `tensor:tanh`，`tensor:multiply` 那条没出现），而 `plan.cn.md` §2.4 要的是"一条诊断列全部"；`NoDeviceProgram` 的消息里 "operator" 出现两次（`operator 'operator 'tensor:multiply''`）。 | 同上，一个作用域里同时写 `tanh(x)` 与 `x * 2.0` | 加一步 M10（诊断），小且设备无关 |
+| 分支里的算子**不是"被混进跨分支的段"，而是根本不成为段**：`choose` 的段表是 `regions:[{members:[2]}]`，else 臂的 `add` 以 `control_edge` 排除。也就是说，`#gpu` 作用域里**写在条件里的纯张量算子在主机上静默执行**，`gpuRefusal` 对结构原因（`control_edge`）明确不报。 | `regions<choose>()` 的输出 + `TILES_PLACEMENT` | **改写 M1**：不是"禁止跨控制区域收缩"，而是"臂与循环体要各自成为段" |
+| 分支程序（`x*x`，无字面量）在 `--devices cpu` 下给出正确结果（91.0），段表里身体的 `multiply` 成段、有 upload/download。 | 同上 | M1 的守卫可以设备无关：断言"臂里的算子成为自己的段" |
+
+**主机 GPU 现状（2026-10-24，88zjwei，8×RTX 3090 共享）**：`test/plans/gpu` 全层 **134 项 10 通过 / 121 失败 / 3 跳过**，
+失败都是 `tiles: retain CUDA context: CUDA_ERROR_OUT_OF_MEMORY` 或 `CUDA_ERROR_UNKNOWN`——**创建 CUDA 上下文就失败**，
+与本分支的改动无关。所以在主机恢复之前：**GPU 执行类的用例不能作为落地门禁的读数**，能用的是设备无关的
+编译期与段表证据。同一时刻 `smoke + feat`（fast 层）是 **5885 项 5870 通过 / 1 失败 / 14 跳过**，那 1 项失败是
+runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项无关。
+
 ---
 
 ## 2. 步骤（按依赖顺序；一步一提交，每步自己窄门禁绿）
 
-### M1 段边界：一段不得跨控制区域，臂与循环体各自成段
-- **改什么**：`analyzeRegions` 今天把一张图的算子摊平后按数据依赖收缩，只把循环体节点排除（`inside_loop`）。
-  分支的臂只在循环那条路径上被"看穿"；臂里的算子与臂外的算子属于同一张图、同一张 `RegionNode` 表，
-  收缩规则（节点自身与输入都可执行）不区分它们属于哪个控制区域。M1 给每个节点取
-  `rt::ControlRegions::controlOf`（看穿 `Inline`/`Block`，只认 Arm/LoopCond/LoopBody），规定**一段的成员同属
-  一个控制区域**；臂、循环条件、循环体各自成段，`BRCH`/`JOIN`/`LOOP` 留主机。段的落地位置用
-  `draft.setInsertRegion(region)`（`include/camel/runtime/draft.h`），不是一律插到函数体。
-- **文件**：`modules/tiles/src/graph_regions.cpp`（`RegionNode` 加控制区域字段；收缩前置"同区域"），
-  `modules/tiles/include/tiles/internal/regions.h`，`modules/tiles/src/regions.cpp`（`partitionRegions` 的收缩条件），
-  `modules/tiles/src/region_outline.cpp`（按成员所在区域插入调用节点与传输）。
-- **证据**：新 `test/cases/gpu/nofallback/branch.cml` 与 `loop.cml` + `test/plans/gpu/tiles.plan.toml` 两条；断言
-  （a）结果与去掉 `#gpu` 的同一程序逐位相同；（b）**未选中臂不被计算**——未选中臂里放一次除零，程序不得报
-  `DivisionByZero`；（c）段表（`tiles regions` 的 `regions[].members`）里没有一段的成员跨两个控制区域，
-  否则打印失败的那一段；（d）循环每轮传输次数与设计稿 §2.5、plan.cn.md §3.2 一致（今天没有这条守卫，
-  所以它先红）。
-- **依赖**：S1–S4（已落地）。**今天的状态**：区域分析不看控制区域，段表里臂与体混在一起——守卫先红。
+### M0 设备上的标量操作数（常量一类）：`x * 2.0`
+- **改什么**：静态形状的 `#gpu` 作用域里，张量算子的 f64 标量操作数（今天只出现在字面量）不再以
+  `scalar_tensor_operand` 拒绝，而是建构成标量输入（`shape={}`、`dtype=F64`、`scalarBits`，`compiler.cpp:223`
+  已有的形式），由点式/归约核当广播标量用；运行期才知道的 f64 标量（`let a = 2.0; x * a`）先保持拒绝，
+  并在诊断里说清是"运行期标量"而不是"形状"。
+- **文件**：`modules/tiles/src/graph_regions.cpp`（`eligibility` 的算子表），`modules/tiles/src/kernel_ir.cpp` /
+  `index_expr.cpp`（标量一侧的索引与广播），`modules/tiles/src/compiler.cpp`（f64 标量输入的构造）。
+- **证据**：新 `test/cases/gpu/nofallback/scalar_operand.cml`：静态形状的 `#gpu` 函数里 `x * 2.0`、`y + 1.0`、
+  `1.0 - y`；`tiles::compile` 退出 0，`--devices cpu` 下数值与去掉 `#gpu` 的同一程序逐位相同，且段表里该算子成段；
+  设备可见时 `std::profile` 的 `operator_rows[].device` 是 `cuda`（主机恢复后补测）。守卫**先红**：今天的现象见 §1.1。
+- **依赖**：`docs/handover/questions/gpu-scalar-operand.md` 的裁定（补设备侧支持，还是让类型系统在张量算子的
+  位置把字面量定成 f32）。**这一条不裁定就不能落地**。
+
+### M1 段边界：臂与循环体各自成为段，`BRCH`/`JOIN`/`LOOP` 留主机
+- **改什么**（按 §1.1 的实测改写）：臂与循环体里的纯张量算子今天被 `control_edge` 排除，**既不成段也不报**——
+  `#gpu` 里写在条件里的计算在主机上静默执行，正是设计稿第 1 节要消灭的那类回退。修法是让"控制区域内部的算子"
+  按它所在的区域自成一段（收缩只在同一控制区域内进行，`rt::ControlRegions::controlOf`），控制端点
+  （`BRCH`/`JOIN`/`LOOP` 自身）继续留主机；段的调用节点必须插在**成员所在的控制区域**（`draft.setInsertRegion`），
+  不能一律插到函数体（否则臂里的计算被提到分支之外，未选中臂也会执行）。
+- **文件**：`modules/tiles/src/graph_regions.cpp`（`RegionNode` 带控制区域；`eligibility` 不再把区域内部的
+  `control_edge` 当排除理由），`modules/tiles/include/tiles/internal/regions.h`，`modules/tiles/src/regions.cpp`
+  （收缩限同一控制区域），`modules/tiles/src/region_outline.cpp`（按成员区域插入调用与传输）。
+- **证据**：新 `test/cases/gpu/nofallback/branch.cml` 与 `loop.cml` + `test/plans/gpu/tiles.plan.toml` 两条：
+  （a）段表里 else 臂的算子是**自己的段**（今天 `regions:[]`/排除理由是 `control_edge`，先红）；（b）未选中臂
+  不被计算——未选中臂里放一次除零，程序不得报 `DivisionByZero`；（c）结果与去掉 `#gpu` 的同一程序逐位相同；
+  （d）循环体每轮一次传输。设备可见时再断言 `operator_rows[].device` 全是 `cuda`（主机恢复后补）。
+- **依赖**：S1–S4（已落地）。
 
 ### M2 形状签名：整段编译按实际形状特化、按签名缓存
 - **改什么**：`#gpu` 作用域里静态类型没定住 extent 的算子今天不进任何段（`eligibility` 的
@@ -127,6 +153,16 @@ S1–S4 与 H218 的删除都已在 `origin/develop` 上。**按树，不按看�
   都是未知。
 - **依赖**：M3、M7；`vjp.cpp` 的一半需要 §6 的协调。
 
+### M10 拒绝的诊断：一条列全部，消息不重词
+- **改什么**：`region_outline.cpp` 的拒绝走查已经为每个留不住的算子 commit 一条诊断，但实测只打出一条（§1.1）。
+  按 `plan.cn.md` §2.4 改成**一个作用域一条诊断、列出全部留不住的算子及其原因**（按错误码分组，避免改动既有
+  用例对码的期望），并把出路写成 `#cpu`（复核 2026-10-22 第 3 条）；同时去掉 `NoDeviceProgram` 消息里重复的
+  "operator"。
+- **文件**：`modules/tiles/src/region_outline.cpp`。
+- **证据**：新 `test/cases/gpu/nofallback/two_refusals.cml`（一个作用域里 `tanh(x)` 与 `x * 2.0`）+ plan 用例断言
+  两条算子名与两条原因都在输出里；既有 `nofallback.*` 的期望不变。守卫先红：今天只出现 `tensor:tanh` 一条。
+- **依赖**：无（设备无关）。M0 落地后第二个算子的原因会变，届时同步该用例。
+
 ---
 
 ## 3. 验收
@@ -172,8 +208,9 @@ S1–S4 与 H218 的删除都已在 `origin/develop` 上。**按树，不按看�
 
 ## 7. 风险
 
-- **M1 会动区域分段的既有期望**：`tiles.plan.toml` 的 `regions.*`、`tiles_regions.plan.toml` 断言成员数与段数。
-  收缩条件收紧后若有期望变化，先查是"段被正确地切开"还是"少了融合"，期望只在能引用设计稿条款时改，
-  否则当作回归。
+- **M1 会动区域分段的既有期望**：`tiles.plan.toml` 的 `regions.*`、`tiles_regions.plan.toml` 断言成员数与段数；
+  让控制区域内部的算子成段之后，这些用例里若有期望变化，先查是"段被正确地切开"还是"少了融合"，
+  期望只在能引用设计稿条款时改，否则当作回归。另外段的调用节点落在臂/循环体内是这一步最危险的一处
+  （插错位置等于把条件里的计算提到外面），必须有"未选中臂不计算"的守卫同时落地。
 - **M2 的缓存命中容易假绿**：计数必须来自编译器，不是用例自己数的调用次数。
 - **M3 的"逐字节不变"要用 jgir golden**，用结果比会漏掉类型与形状的变化。
