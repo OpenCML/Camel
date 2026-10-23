@@ -1,0 +1,41 @@
+/**
+ * The matcher checks the declared type of a `const` parameter (rewrite design 2, second version,
+ * 1: "形参的类型由匹配器检查：`const c: T` 只匹配类型为 `T` 的常量"; reviews/stdlib-rules.md item 2:
+ * "`isI32` 一类的辅助函数随之删除"). The tensor laws are where this shows: the tensor operators
+ * share one id across element types, and a tensor coefficient is a plain number (f64) even when
+ * the elements are f32 (stdlib/rules.cml), so only a rule declared for an f64 coefficient may
+ * read `x * 3.0`.
+ *
+ * Both rules replace the product by its first factor, so the sum the program prints says which of
+ * them ran: 18.0 before the pass, 6.0 when a rule dropped the product.
+ */
+module const_type
+
+import { Tensor, reshape, sum } from tensor
+import { Program } from graph
+import { rewrite } from rewrite
+
+type Vec = Tensor<f32, [3]>
+
+/// The coefficient of `scaled` is an f64 constant, so this rule must not read it: the declared f32
+/// does not accept the constant's type.
+rule takes_f32(x: Vec, const c: f32) { x * c => x }
+
+/// The same rule with the coefficient's own type: it reads it, so the pair tells the two apart.
+rule takes_f64(x: Vec, const c: float) { x * c => x }
+
+export func by_f32(p: Program): Program! {
+    return rewrite(p, [takes_f32])
+}
+
+export func by_f64(p: Program): Program! {
+    return rewrite(p, [takes_f64])
+}
+
+/// `x * 3.0`: 18 in all, 6 when the coefficient's own rule drops the product.
+func scaled(x: Vec): Vec { return x * 3.0 }
+
+func main(): int sync {
+    println(sum(scaled(reshape([1.0, 2.0, 3.0] as f32[], [3]))))
+    return 0
+}

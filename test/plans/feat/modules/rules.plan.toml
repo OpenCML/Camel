@@ -107,7 +107,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/check_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int32_add_zero: 200 samples agree, fired 8 of 8", "ok int32_combine: the condition selects the instances", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float_mul_comm: 200 samples agree, fired 8 of 8", "ok float32_mul_one: 200 samples agree, fired 8 of 8", "ok float32_combine: the condition selects the instances", "ok float32_double: the condition selects the instances", "ok float_combine: the condition selects the instances", "ok float_fold: the condition selects the instances", "ok float_double: the condition selects the instances"]
+expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int32_add_zero: 200 samples agree, fired 8 of 8", "ok int32_combine: 200 samples agree, fired 8 of 8", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float_mul_comm: 200 samples agree, fired 8 of 8", "ok float32_mul_one: 200 samples agree, fired 8 of 8", "ok float32_combine: the condition selects the instances", "ok float32_double: the condition selects the instances", "ok float_combine: the condition selects the instances", "ok float_fold: the condition selects the instances", "ok float_double: the condition selects the instances"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
@@ -324,7 +324,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.analysis_reads_a_fact_in_when"
-desc = "An `analysis` (rewrite design 4) compiles to functions and a fact kind: `depth` counts the additions a value is under (initial 0, a constant 1, an addition one more than the deepest operand, any other operator the join of its operands) and `sign` is the value of a constant. `report` reads `depth` of the frozen graphs of the target (sum 3, mixed 2) and counts products; the rule `mul_one` reads `sign(c)` in its `when`, so it rewrites x * 1 but not x * 2; the second report shows the rewritten program."
+desc = "An `analysis` (rewrite design 4) compiles to functions and a fact kind: `depth` counts the additions a value is under (initial 0, a constant 1, an addition one more than the deepest operand, any other operator the join of its operands) and `sign` is the value of a constant. `report` reads `depth` of the frozen graphs of the target (sum 3, mixed 2) and counts products; the rule `mul_one` reads `sign(y)` in its `when`, where `y` is a pattern variable and so a node of the draft (a `const` parameter is the constant's value in a condition, rewrite design 2 (second version) 1), so it rewrites x * 1 but not x * 2; the second report shows the rewritten program."
 kind = "behavior"
 case = "../../../cases/modules/rules/analysis_target.cml"
 args = ["${case}", "analysis_lib::report", "analysis_lib::apply", "analysis_lib::report", "std::nvm"]
@@ -334,7 +334,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.analysis_takes_the_parts_of_a_compound"
-desc = "A declaration with parameters (`analysis mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the pattern variables, and the fact is the one of the compound whose parts they are. `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, c)` reads `sign(c) == 1` through the `x * y` clause; `x * 2` keeps its product because the query answers false. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
+desc = "A declaration with parameters (`analysis mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the pattern variables, and the fact is the one of the compound whose parts they are. `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, y)` reads `sign(y) == 1` through the `x * y` clause; `x * 2` keeps its product because the query answers false. A parts query reads the parts in the order the pattern binds them, so the condition pins that order by shape (`isConst(y)`): a `const` parameter is the constant's value in a condition (rewrite design 2 (second version) 1), and the commuted pairing of a two-variable pattern would otherwise ask the query with the parts exchanged, where no value has them. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
 kind = "behavior"
 case = "../../../cases/modules/rules/analysis_parts.cml"
 args = ["${case}", "analysis_parts::report", "analysis_parts::apply", "analysis_parts::report", "std::nvm"]
@@ -1001,6 +1001,39 @@ expect_stdout_contains = ["ok float_log1p: 100 samples, worst error ratio", "ok 
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "rules.const_parameter_is_a_value_in_when"
+desc = "A `const` parameter is the constant's value inside `when` (rewrite design 2 (second version) 1; reviews/stdlib-rules.md item 5: the guard is written on the value, typed by the parameter's declaration, with no `constant(node, sample)` lookup and no `match … case null`). The law of the case drops the product when the coefficient is positive: `positive_case` (x * 3.0) prints 5.0 and `negative_case` (x * -3.0) keeps its product and prints -15.0."
+kind = "behavior"
+case = "../../../cases/modules/rules/when_values.cml"
+args = ["${case}", "when_values::apply", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["5.0 -15.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.const_parameter_type_refuses_another_type"
+desc = "The matcher checks a `const` parameter's declared type (rewrite design 2 (second version) 1: `const c: T` matches only a constant of type `T`; reviews/stdlib-rules.md item 2: the `isI32`-style helpers are deleted). A tensor coefficient is an f64 constant even under an f32 element type, so the rule declared for an f32 coefficient must not read `x * 3.0`: the product stays and the sum is 18.0."
+kind = "behavior"
+case = "../../../cases/modules/rules/const_type.cml"
+args = ["${case}", "const_type::by_f32", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["18.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.const_parameter_type_reads_its_own_type"
+desc = "The other half of the same pair: the rule whose `const` parameter is declared f64 does read the f64 coefficient of `x * 3.0`, so the product is replaced and the sum is 6.0. Without it, `rules.const_parameter_type_refuses_another_type` would pass for a rule that never fires at all."
+kind = "behavior"
+case = "../../../cases/modules/rules/const_type.cml"
+args = ["${case}", "const_type::by_f64", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["6.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
 
 [[tests]]
 name = "rules.accuracy_licence_gates_simplify"

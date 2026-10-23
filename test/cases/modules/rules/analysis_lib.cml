@@ -4,9 +4,14 @@
  *
  * `depth` counts how many additions a value is under: a constant is 1, an addition is one more
  * than the deepest operand, and any other operator (a product) joins its operands. `sign` is the
- * value of a constant. The rule `mul_one` reads `sign` in its `when`, so it rewrites `x * c` to
+ * value of a constant. The rule `mul_one` reads `sign` in its `when`, so it rewrites `x * y` to
  * `x` only when the constant is 1: a permission-free rule whose condition is a fact, not a shape
  * test, and one that would be wrong for every other constant.
+ *
+ * The fact is read on `y`, a pattern variable, and so a node of the draft: a `const` parameter of
+ * a rule is the constant's *value* in a condition (rewrite design 2 (second version) 1;
+ * reviews/stdlib-rules.md item 5), and reaching the node of one needs a `node_of` the language
+ * does not have yet.
  *
  * `report` reads `depth` of the frozen graphs of the target functions (`sum`, `mixed`), which is
  * the evaluation over a published program (and stores the fact of each node under the kind
@@ -31,7 +36,7 @@ analysis sign: int {
     on (const c: int) => c
 }
 
-rule mul_one(const c: int, x: int) { x * c => x } when sign(c) == 1
+rule mul_one(y: int, x: int) { x * y => x } when sign(y) == 1
 
 func opText(n: Node): string {
     return match op(n) {

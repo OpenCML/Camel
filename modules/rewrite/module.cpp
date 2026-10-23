@@ -138,18 +138,47 @@ struct WhenCall {
     std::shared_ptr<NodeVMSchedPass> vm;
 };
 
-/// Whether a rule's condition holds at this match. Its parameters are Node handles of the draft
-/// being rewritten, one per parameter of the rule; a parameter the left side does not use names
-/// no node and faults when it is read.
+/// Whether a rule's condition holds at this match (rewrite design 2 (second version) 1). A `const`
+/// parameter is the constant's value, of the type the parameter is declared with, so the guard is
+/// written on the value (`c > 0.0`) instead of reading it out of a node; any other parameter is a
+/// Node handle of the draft being rewritten, and a parameter the left side does not use names no
+/// node and faults when it is read.
 bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
-    const size_t arity = static_cast<size_t>(
-        call.rule->getAs<RuleObject>()->when()->graph()->funcType()->normTypesCount());
+    const RuleObject *rule = call.rule->getAs<RuleObject>();
+    const size_t arity = static_cast<size_t>(rule->when()->graph()->funcType()->normTypesCount());
+    const uint64_t constParams = rule->constParams();
     camel::runtime::GraphDraft &draft = match.writings.draft();
+    // One slot per parameter: a rooted Node handle for a node parameter, a rooted object for a
+    // constant the collector can move, and nothing for a constant whose bits are copied below.
     std::vector<std::unique_ptr<mm::RootHandle>> roots;
     std::vector<slot_t> args;
     roots.reserve(arity);
     args.reserve(arity);
+    const auto constantOf = [&](size_t i) {
+        return i < match.vars.size()
+                   ? match.constant(static_cast<uint32_t>(i))
+                   : std::optional<std::pair<slot_t, camel::core::type::Type *>>{};
+    };
     for (size_t i = 0; i < arity; ++i) {
+        if (i < 64 && ((constParams >> i) & 1) != 0) {
+            const auto found = constantOf(i);
+            if (!found) {
+                throw std::runtime_error(std::format(
+                    "Rule '{}': parameter {} of its condition is `const`, and the left side bound "
+                    "no constant there.",
+                    rule->name(),
+                    i + 1));
+            }
+            roots.push_back(
+                found->second != nullptr && found->second->isGCTraced()
+                    ? std::make_unique<mm::RootHandle>(
+                          mm::autoSpace(),
+                          rtdata::fromSlot<rtdata::Object *>(found->first),
+                          found->second,
+                          "rewrite.whenConst")
+                    : nullptr);
+            continue;
+        }
         const camel::runtime::gc_node_ref_t ref =
             i < match.vars.size() ? match.vars[i] : camel::runtime::kInvalidNodeRef;
         Handle *handle = Handle::createInDraft(draft, ref, mm::autoSpace());
@@ -161,9 +190,14 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
                 "rewrite.whenArg"));
     }
     // Making a handle can collect: the arguments are read from the roots after the last one, so
-    // each slot names the handle where the collector put it.
-    for (const auto &root : roots) {
-        args.push_back(toSlot(root->getAs<Handle>()));
+    // each slot names where the collector put it, or the constant's bits.
+    for (size_t i = 0; i < arity; ++i) {
+        if (i < 64 && ((constParams >> i) & 1) != 0) {
+            args.push_back(
+                roots[i] != nullptr ? toSlot(roots[i]->get()) : constantOf(i)->first);
+            continue;
+        }
+        args.push_back(toSlot(roots[i]->getAs<Handle>()));
     }
     // A call can move the objects: the condition is read from the rooted rule after the last
     // allocation and immediately before the call.

@@ -1064,8 +1064,8 @@ Pattern patVar(uint32_t var, camel::core::type::Type *type) {
     return p;
 }
 
-Pattern patConst(uint32_t var) {
-    Pattern p   = patVar(var);
+Pattern patConst(uint32_t var, camel::core::type::Type *type) {
+    Pattern p   = patVar(var, type);
     p.constOnly = true;
     return p;
 }
