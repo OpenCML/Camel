@@ -1,0 +1,9 @@
+h343 — bf16/f16 的 min/max/abs，以及 array 上的折叠因此能算（分支 handover/h343-half-math，1 提交 a28164d29）
+
+**读法（提交里写明，按裁定的要求）**：`min`/`max`/`abs` 是"把每个操作数拓宽后的那个值上做的精确逐元素运算"，**不是累加**。每个 bf16/f16 恰好是一个 f32 值，所以任何比较都在两个 f32 之间，绝不比较两个 16 位模式；IEEE 754-2019 的 minimum/maximum 返回两个操作数之一（或规范 quiet NaN），而那个操作数是元素类型能精确表示的，所以唯一一次存回舍入不产生变化（min/max）；`abs` 清符号位（-0 → +0），是三者里唯一结果能不同于操作数自身模式的一个。全程没有累加器、没有累加宽度，所以同一条裁定里的 f64 累加规则（讲的是 `sum` 这类归约、是加法）不决定它们。比较现在只陈述一次：`minOf`/`maxOf` 从 numeric.cpp 移进 modules/math/minmax.h，f32/f64 重载、bf16/f16 重载与张量内核的 min/max 是同一份陈述。新重载注册为 `min_bf/max_bf/min_f6/max_f6`（`_f6` 因为 `b` 是 bool），`abs_bf/abs_f6`；语义声明为"该类型的精确、对 finite_math 敏感"的运算，`compute` 就是元素类型本身而不是 f32（即"没有在 f32 里算完再舍回来"）。
+
+**红前绿后（四个后端）**：基线 87774235e 上同样三个调用被拒，而且 `array::min` 在 bf16 上**根本编译不过**——`stdlib/array.cml:217:54: 'math::min' is used as a value here, but it names an operator with 6 signatures […], not one function. [in the instance 'min<bf16>']`（一条 arity 消息，真实原因是缺元素类型）。修后 reduced_minmax.{nvm,fvm,jit,prl} 通过且 backends_agree；用例里每一对字节都是"换个读法就会动"的：零的符号（0 128 / 0 0）决定 math::min/max 的调用与 [0.0, -0.0] 的折叠、饱和或二次舍入的 f16 会移动 65504.0 那行（255 123）、保留符号或用 max(x,-x) 写的 abs 会移动 -0 那行、f32 累加器会移动 [2^24, 1, -2^24] 的 sum 行。NaN 的规范位**有意不钉**（两种类型都没有 NaN 字面量的拼法），用例在读者会找的地方写明了。declared_math_numeric_semantics 的期望表加了六个新 URI（那行之前红、之后绿）。
+
+**闸门**：整层 fast total 5760, pass 5746, fail 0, skip 14；合入后协调者重跑：**total 5778, pass 5764, fail 0, skip 14**。
+
+**Job 2（ruling 的 kernel 形式）停手，理由硬**：`array` 的内核只能命名 `array` 自己的算子（src/compile/gir/builder_modules.cpp:498-507 以 SemanticDiag::NativeDeclarationForeignOperator 拒绝别的模块的协议），而 min/max/sum 的执行器只有另一模块里的 `math:min_bf`/`math:max_bf` 等；`array` 只有一个执行器组且里面没有这样的算子（src/builtin/operators/array.cpp:405-423，协议在 globals.cpp:2488），于是这样的内核**对任何类型都解析不到执行器**——每个实例都会跑函数体，`std::profile` 显示不出第二条路径。缺的是 C++ 的原生 `array:min/max/sum` 内核，而那会是同一份比较的**第三份陈述**（摆在两个 minmax.h 旁边）。它没有猜，Job 1 独立成立。已按渠道提问（array-kernel-executors.md）。
