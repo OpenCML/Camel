@@ -158,7 +158,7 @@ struct PassRunResult {
     bool changed                           = false;
 };
 
-/// Runs the pass `spec` (as the pipeline writes it: `name` or `name(k=v, ...)`) on `program`,
+/// Runs the pass `spec` (as the pipeline writes it: `name key=value ...`) on `program`,
 /// importing the module that contributes a `<module>::<pass>` name. This is the same resolution
 /// and stage handling the pipeline uses, without the pipeline's own bookkeeping: a rewrite pass
 /// that itself names another pass uses it. Returns {nullptr, true} when the pass failed (the

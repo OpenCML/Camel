@@ -100,3 +100,13 @@ export func gemm_threads(): int
 /// @example seed(42)
 export func seed(seed: int): void
 export func seed(seed: i32): void
+
+// -----------------------------------------------------------------------------
+// Passes: functions the pipeline applies to the program
+// -----------------------------------------------------------------------------
+
+/// Writes the implementation choices of the tensor operators as node attributes, changing no
+/// operator (design principles 9.3). `safe_fp` keeps a matmul on the canonical algorithm (design
+/// principles 7.4); the default lets a matmul the 7.3 rule permits use the library GEMM.
+with <safe_fp: bool = false>
+export func fuse::<F>(f: F): F! when is_function::<F>()

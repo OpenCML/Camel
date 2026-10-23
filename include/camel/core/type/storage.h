@@ -25,7 +25,7 @@
 
 namespace camel::core::type {
 
-/// What a block of type storage holds. One counter each in the `std::profile(type_stats)`
+/// What a block of type storage holds. One counter each in the `std::profile type_stats=true`
 /// report.
 enum class TypeStorageKind : unsigned {
     Primitive,  // Type objects of the built-in scalar and auxiliary types

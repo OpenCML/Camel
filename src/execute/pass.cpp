@@ -475,86 +475,92 @@ PassMaker taskflowPass() {
     };
 }
 
-/// The implementations of the core's passes, by the declaration name in stdlib/std.cml. A
-/// declaration with no entry here is a pass the language declares and the core does not
-/// implement; the pipeline refuses it, and the test that resolves every declaration catches it.
-const std::map<std::string, PassMaker> &corePasses() {
-    static const std::map<std::string, PassMaker> map = [] {
-        std::map<std::string, PassMaker> implementations = {
-            {"nop", makePass<NullGraphIRPass>()},
-            {"macro", makePass<MacroRewritePass>()},
-            {"gir", makeGraphVizPass({})},
-            {"rgir", makeGraphVizPass(GraphVizDumpConfig{.rich = true})},
-            {"gir_regions", makeGraphVizPass(GraphVizDumpConfig{.regions = true})},
-            {"rgir_regions",
-             makeGraphVizPass(GraphVizDumpConfig{.rich = true, .regions = true})},
-            {"jgir", jgirPass()},
-            {"cml", cmlPass()},
-            {"agir", makeGraphVizPass(GraphVizDumpConfig{.annotateRoles = true})},
-            {"argir", makeGraphVizPass(
-                          GraphVizDumpConfig{.rich = true, .annotateRoles = true})},
-            {"stats", makePass<GraphStatsPass>()},
-            {"profile", profilePass()},
-            {"cpp", makePass<CppDumpPass>()},
-            {"cpp::module_file", makePass<CppModuleDumpPass>()},
-            {"cpp::inspect", makePass<CppInspectDumpPass>()},
-            {"topo_node_seq", makePass<TopoNodeSeqDumpPass>()},
-            {"tfdump", makePass<TfDumpPass>()},
-            {"arraytype", makePass<ArrayTypeSelfTestPass>()},
-            {"gc::snapshot", makePass<GcSnapshotPass>()},
-            {"gc::verify", makePass<GcVerifyPass>()},
-            {"gc::minor", makePass<GcMinorPass>()},
-            {"gc::major", makePass<GcMajorPass>()},
-            {"gc::config", makePass<GcConfigPass>()},
-            {"gc::summary", makePass<GcSummaryPass>()},
-            {"gc::blocks", makePass<GcBlocksPass>()},
-            {"gc::views", makePass<GcViewsPass>()},
-            {"gc::views_escape", makePass<GcViewsEscapePass>()},
-            {"gc::remembered_set", makePass<GcRememberedSetPass>()},
-            {"gc::foreign_resource", makePass<GcForeignResourcePass>()},
-            {"gc::poison", makePass<GcPoisonPass>()},
-            {"nvm", makePass<NodeVMSchedPass>()},
-            {"fvm", fastVmPass(false)},
-            {"fastvm::bytecode", makePass<BytecodeDumpPass>()},
-            {"fastvm::linked_bytecode", makePass<LinkedBytecodeDumpPass>()},
-            {"fastvm::jit", fastVmPass(true)},
-            {"fastvm::jit_asm", makePass<JitAsmDumpPass>()},
-            {"fastvm::jit_bin", makePass<JitBinaryDumpPass>()},
-            {"fastvm::jit_rmir", makePass<JitRmirDumpPass>()},
-            {"fastvm::jit_mir", makePass<JitMirDumpPass>()},
-            {"taskflow", taskflowPass()},
-            {"opt", optimizePass()},
-            {"opt::inline", inlinePass(std::nullopt, "std::opt::inline")},
-            {"opt::small", inlinePass(InlineTargetStrategy::Small, "std::opt::inline::small")},
-            {"opt::arm", inlinePass(InlineTargetStrategy::Arm, "std::opt::inline::arm")},
-            {"opt::hybrid", inlinePass(InlineTargetStrategy::Hybrid, "std::opt::inline::hybrid")},
-            {"opt::devirtualize", devirtualizePass()},
-            {"opt::specialize", specializePass()},
-            {"opt::fold", makePass<ConstantFoldPass>()},
-            {"opt::algebra", algebraPass()},
-            {"opt::extract", extractPass()},
-            {"opt::cse", makePass<CommonSubexpressionPass>()},
-            {"opt::dce", dcePass()},
-            {"opt::ctrl", makePass<ControlReductionPass>()},
-        };
-        // The core passes that read tag facts: the dumps show a node's attributes and numeric
-        // permissions, and std::opt keeps them across rewrites (CSE combines by their merge
-        // rules). A tag's `read_by` names one of these (or a module's pass that registers
-        // itself).
-        for (const char *reader :
-             {"std::gir",
-              "std::rgir",
-              "std::gir_regions",
-              "std::rgir_regions",
-              "std::jgir",
-              "std::agir",
-              "std::argir",
-              "std::opt"}) {
-            camel::core::tag::declareReader(reader);
-        }
-        return implementations;
-    }();
-    return map;
+/// Binds the kernel of one core pass to the module and name its declaration in stdlib/std.cml
+/// gives it. Nothing here declares a pass: the name belongs to the declaration, the parameters
+/// belong to the declaration, and this is only the function that implements it (design
+/// principles 9.3).
+void registerCoreKernel(const char *name, PassMaker make, bool readsTags = false) {
+    PassDescriptor descriptor;
+    descriptor.make      = std::move(make);
+    descriptor.readsTags = readsTags;
+    registerModulePass(std::string("std::") + name, std::move(descriptor));
+}
+
+/// The core's kernels, one per declaration in stdlib/std.cml. A declaration with no kernel is a
+/// pass the language declares and the core does not implement; the pipeline refuses it, and the
+/// guard that resolves every declaration catches it.
+void registerCoreKernels() {
+    registerCoreKernel("nop", makePass<NullGraphIRPass>());
+    registerCoreKernel("macro", makePass<MacroRewritePass>());
+    registerCoreKernel("gir", makeGraphVizPass({}));
+    registerCoreKernel("rgir", makeGraphVizPass(GraphVizDumpConfig{.rich = true}));
+    registerCoreKernel("gir_regions", makeGraphVizPass(GraphVizDumpConfig{.regions = true}));
+    registerCoreKernel(
+        "rgir_regions", makeGraphVizPass(GraphVizDumpConfig{.rich = true, .regions = true}));
+    registerCoreKernel("jgir", jgirPass());
+    registerCoreKernel("cml", cmlPass());
+    registerCoreKernel("agir", makeGraphVizPass(GraphVizDumpConfig{.annotateRoles = true}));
+    registerCoreKernel(
+        "argir", makeGraphVizPass(GraphVizDumpConfig{.rich = true, .annotateRoles = true}));
+    registerCoreKernel("stats", makePass<GraphStatsPass>());
+    registerCoreKernel("profile", profilePass());
+    registerCoreKernel("cpp", makePass<CppDumpPass>());
+    registerCoreKernel("cpp::module_file", makePass<CppModuleDumpPass>());
+    registerCoreKernel("cpp::inspect", makePass<CppInspectDumpPass>());
+    registerCoreKernel("topo_node_seq", makePass<TopoNodeSeqDumpPass>());
+    registerCoreKernel("tfdump", makePass<TfDumpPass>());
+    registerCoreKernel("arraytype", makePass<ArrayTypeSelfTestPass>());
+    registerCoreKernel("gc::snapshot", makePass<GcSnapshotPass>());
+    registerCoreKernel("gc::verify", makePass<GcVerifyPass>());
+    registerCoreKernel("gc::minor", makePass<GcMinorPass>());
+    registerCoreKernel("gc::major", makePass<GcMajorPass>());
+    registerCoreKernel("gc::config", makePass<GcConfigPass>());
+    registerCoreKernel("gc::summary", makePass<GcSummaryPass>());
+    registerCoreKernel("gc::blocks", makePass<GcBlocksPass>());
+    registerCoreKernel("gc::views", makePass<GcViewsPass>());
+    registerCoreKernel("gc::views_escape", makePass<GcViewsEscapePass>());
+    registerCoreKernel("gc::remembered_set", makePass<GcRememberedSetPass>());
+    registerCoreKernel("gc::foreign_resource", makePass<GcForeignResourcePass>());
+    registerCoreKernel("gc::poison", makePass<GcPoisonPass>());
+    registerCoreKernel("nvm", makePass<NodeVMSchedPass>());
+    registerCoreKernel("fvm", fastVmPass(false));
+    registerCoreKernel("fastvm::bytecode", makePass<BytecodeDumpPass>());
+    registerCoreKernel("fastvm::linked_bytecode", makePass<LinkedBytecodeDumpPass>());
+    registerCoreKernel("fastvm::jit", fastVmPass(true));
+    registerCoreKernel("fastvm::jit_asm", makePass<JitAsmDumpPass>());
+    registerCoreKernel("fastvm::jit_bin", makePass<JitBinaryDumpPass>());
+    registerCoreKernel("fastvm::jit_rmir", makePass<JitRmirDumpPass>());
+    registerCoreKernel("fastvm::jit_mir", makePass<JitMirDumpPass>());
+    registerCoreKernel("taskflow", taskflowPass());
+    registerCoreKernel("opt", optimizePass());
+    registerCoreKernel("opt::inline", inlinePass(std::nullopt, "std::opt::inline"));
+    registerCoreKernel(
+        "opt::small", inlinePass(InlineTargetStrategy::Small, "std::opt::inline::small"));
+    registerCoreKernel("opt::arm", inlinePass(InlineTargetStrategy::Arm, "std::opt::inline::arm"));
+    registerCoreKernel(
+        "opt::hybrid", inlinePass(InlineTargetStrategy::Hybrid, "std::opt::inline::hybrid"));
+    registerCoreKernel("opt::devirtualize", devirtualizePass());
+    registerCoreKernel("opt::specialize", specializePass());
+    registerCoreKernel("opt::fold", makePass<ConstantFoldPass>());
+    registerCoreKernel("opt::algebra", algebraPass());
+    registerCoreKernel("opt::extract", extractPass());
+    registerCoreKernel("opt::cse", makePass<CommonSubexpressionPass>());
+    registerCoreKernel("opt::dce", dcePass());
+    registerCoreKernel("opt::ctrl", makePass<ControlReductionPass>());
+    // The core passes that read tag facts: the dumps show a node's attributes and numeric
+    // permissions, and std::opt keeps them across rewrites (CSE combines by their merge rules).
+    // A tag's `read_by` names one of these (or a module's pass that registers itself).
+    for (const char *reader :
+         {"std::gir",
+          "std::rgir",
+          "std::gir_regions",
+          "std::rgir_regions",
+          "std::jgir",
+          "std::agir",
+          "std::argir",
+          "std::opt"}) {
+        camel::core::tag::declareReader(reader);
+    }
 }
 
 const std::map<std::string, std::string> passAliases = {
@@ -612,22 +618,13 @@ const std::map<std::string, std::string> passAliases = {
     {"std::tfg", "std::tfdump"},
     {"std::prof", "std::profile"},
 };
-std::optional<PassMaker> findCorePass(const std::string &name) {
-    const auto &implementations = corePasses();
-    const auto it               = implementations.find(name);
-    if (it == implementations.end()) {
-        return std::nullopt;
-    }
-    return it->second;
-}
-
-struct ModulePassRegistry {
+struct PassImplementationRegistry {
     std::mutex mutex;
     std::map<std::string, PassDescriptor> passes; // ordered for the "available passes" listing
 };
 
-ModulePassRegistry &modulePasses() {
-    static ModulePassRegistry registry;
+PassImplementationRegistry &passImplementations() {
+    static PassImplementationRegistry registry;
     return registry;
 }
 
@@ -641,8 +638,19 @@ ModuleAliasRegistry &moduleAliases() {
     return registry;
 }
 
-std::optional<PassDescriptor> findModulePass(const std::string &path) {
-    auto &registry = modulePasses();
+/// Binds every kernel of the core to its declaration. Called on first resolution, so a run that
+/// never looks a pass up pays nothing; the registry it fills holds implementations only.
+void ensureCorePasses() {
+    static std::once_flag once;
+    std::call_once(once, registerCoreKernels);
+}
+
+/// The implementation bound to the function `module::function`, whichever side of the core it
+/// belongs to. The name, documentation and parameters are the declaration's; this answers only
+/// which function implements it.
+std::optional<PassDescriptor> findImplementation(const std::string &path) {
+    ensureCorePasses();
+    auto &registry = passImplementations();
     std::lock_guard lock(registry.mutex);
     auto it = registry.passes.find(path);
     if (it == registry.passes.end())
@@ -787,7 +795,7 @@ void setPassWarningHandler(PassWarningHandler handler, void *userData) {
 
 void registerModulePass(const std::string &path, PassDescriptor descriptor) {
     const bool readsTags = descriptor.readsTags;
-    auto &registry = modulePasses();
+    auto &registry = passImplementations();
     {
         std::lock_guard lock(registry.mutex);
         registry.passes.insert_or_assign(path, std::move(descriptor));
@@ -970,85 +978,81 @@ struct FoundPass {
     std::string inapplicable;
 };
 
-/// Resolves a pass name to its declaration and implementation. `ctx` locates the standard
-/// library and the pass modules; a name without one is a name the pipeline cannot resolve.
+/// Resolves a pass name to its declaration and implementation. Every pass is resolved the same
+/// way, by the module it belongs to and the name of the function its declaration gives: the
+/// declaration supplies the name, documentation, parameters and applicability; the registry
+/// supplies only the kernel. `ctx` locates the standard library and the pass modules; a name
+/// without one is a name the pipeline cannot resolve.
 std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::string &name) {
-    // The core's passes: their declarations are stdlib/std.cml, their implementations the
-    // table of kernels keyed by the same name. The name as written is tried first, so a module
-    // alias can never shadow a declaration of the core.
-    const auto coreFound = [&](const std::string &candidate) -> std::optional<FoundPass> {
-        std::string coreName;
-        if (candidate.rfind("std::", 0) == 0) {
-            coreName = candidate.substr(5);
-        } else if (candidate.find("::") == std::string::npos) {
-            coreName = candidate;
+    // The name as written is tried first, so a module alias can never shadow a declaration.
+    const auto candidateFor = [&](const std::string &written) -> std::optional<FoundPass> {
+        std::string module;
+        std::string function;
+        if (written.rfind("std::", 0) == 0) {
+            module   = "std";
+            function = written.substr(5);
+        } else if (const size_t separator = written.find("::"); separator != std::string::npos) {
+            module   = written.substr(0, separator);
+            function = written.substr(separator + 2);
         } else {
+            // A bare name is the core's: `camel m.cml opt` is `std::opt`.
+            module   = "std";
+            function = written;
+        }
+        if (function.empty()) {
             return std::nullopt;
         }
-        if (coreName.empty()) {
-            return std::nullopt;
-        }
-        const auto declaration =
-            camel::execute::detail::findPassDeclaration("std", coreName, ctx);
-        if (!declaration) {
-            return std::nullopt;
-        }
+        const std::string path = module + "::" + function;
+        const auto implementation = findImplementation(path);
+        const auto *declaration =
+            camel::execute::detail::findPassDeclaration(module, function, ctx);
         FoundPass found;
-        found.params = declaration->params;
-        if (!passDeclarationApplies(*declaration, found.inapplicable)) {
-            found.inapplicable = "std::" + coreName + ": " + found.inapplicable;
+        if (!declaration) {
+            // A pass with no declaration in a `.cml` file: a test-only pass, or a pass written in
+            // Camel, whose declaration is the `with` list of the function itself. Its parameters
+            // are the registration's.
+            if (!implementation) {
+                return std::nullopt;
+            }
+            found.descriptor = *implementation;
+            found.params     = implementation->params;
             return found;
         }
-        const auto maker = findCorePass(coreName);
-        if (!maker) {
+        found.params = declaration->params;
+        if (!passDeclarationApplies(*declaration, found.inapplicable)) {
+            found.inapplicable = path + ": " + found.inapplicable;
+            return found;
+        }
+        // A declaration with no kernel is a pass the language declares and nothing implements;
+        // the unknown-pass answer is the right one, and the guard keeps the two in step.
+        if (!implementation) {
             return std::nullopt;
         }
-        found.descriptor.make = *maker;
+        found.descriptor = *implementation;
         return found;
     };
-    if (auto written = coreFound(name)) {
+    if (auto written = candidateFor(name)) {
         return written;
     }
     const std::string resolved = resolveAlias(name);
     if (resolved != name) {
-        if (auto aliased = coreFound(resolved)) {
-            return aliased;
-        }
+        return candidateFor(resolved);
     }
-    if (resolved.find("::") == std::string::npos) {
-        // A bare name that is not a declaration is not a pass: the module passes are named by
-        // their module, and the test passes by `test::`.
-        return std::nullopt;
-    }
-    // A pass contributed by a module: its implementation is registered under `<module>::<name>`,
-    // and its declaration is the module's `.cml` file.
-    const size_t separator       = resolved.find("::");
-    const std::string module     = resolved.substr(0, separator);
-    const std::string function   = resolved.substr(separator + 2);
-    if (const auto descriptor = findModulePass(resolved)) {
-        FoundPass found;
-        found.descriptor       = *descriptor;
-        found.params           = descriptor->params;
-        if (const auto declaration =
-                camel::execute::detail::findPassDeclaration(module, function, ctx)) {
-            found.params = declaration->params;
-            if (!passDeclarationApplies(*declaration, found.inapplicable)) {
-                found.inapplicable = resolved + ": " + found.inapplicable;
-                return found;
-            }
-        }
-        return found;
-    }
+    return std::nullopt;
+}
 
-    // Test-only passes. They are reachable by name and by nothing else; no pipeline adds them.
-    if (resolved == "test::params") {
+/// Test-only passes: they exist only to be named by a test's pipeline and are in no default
+/// pipeline, so naming one is the whole switch (H81 removed the variable that used to gate
+/// them).
+std::optional<FoundPass> findTestPass(const std::string &name) {
+    if (name == "test::params") {
         FoundPass found;
         found.descriptor = passParamsTestDescriptor();
         found.params     = found.descriptor.params;
         return found;
     }
     for (const auto &[testName, factory] : testPasses()) {
-        if (resolved == testName) {
+        if (name == testName) {
             FoundPass found;
             found.descriptor = passWithoutParameters(factory);
             return found;
@@ -1093,7 +1097,7 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
         const std::string resolvedName = resolveAlias(parsed.name);
         if (resolvedName.rfind("std::", 0) == 0) {
             const std::string bare = resolvedName.substr(5);
-            if (findCorePass(bare) &&
+            if (findImplementation(resolvedName) &&
                 camel::execute::detail::findPassDeclaration("std", bare, ctx) == nullptr) {
                 result.known = true;
                 const std::string path =
@@ -1117,7 +1121,12 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
             }
         }
     }
-    const auto descriptor = findDescriptor(ctx, parsed.name);
+    const auto descriptor = [&]() -> std::optional<FoundPass> {
+        if (auto declared = findDescriptor(ctx, parsed.name)) {
+            return declared;
+        }
+        return findTestPass(resolveAlias(parsed.name));
+    }();
     if (!descriptor) {
         return result;
     }
@@ -1207,6 +1216,7 @@ void printPass(
 /// Lists the available passes on stderr. The listing is help text for the command line:
 /// stdout stays reserved for program output and the diagnostics array.
 void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
+    ensureCorePasses();
     std::ostream &help = std::cerr;
     help << std::format("Pass <{}> not found, available passes are:\n", name);
     for (const auto &declaration :
@@ -1215,22 +1225,29 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
             help, "std::" + declaration.name, declaration.doc, declaration.params);
     }
     {
-        auto &registry = modulePasses();
+        auto &registry = passImplementations();
         std::lock_guard lock(registry.mutex);
-        if (!registry.passes.empty()) {
-            help << std::format("Passes contributed by loaded modules:\n");
-            for (const auto &[path, descriptor] : registry.passes) {
-                const size_t separator     = path.find("::");
-                const std::string module   = path.substr(0, separator);
-                const std::string function = path.substr(separator + 2);
-                const auto declaration = camel::execute::detail::findPassDeclaration(
-                    module, function, ctx);
-                printPass(
-                    help,
-                    path,
-                    declaration ? declaration->doc : std::string(),
-                    declaration ? declaration->params : descriptor.params);
+        bool listed = false;
+        for (const auto &[path, descriptor] : registry.passes) {
+            // The core's kernels are listed from their declarations above; this section is the
+            // passes a module contributed.
+            if (path.rfind("std::", 0) == 0) {
+                continue;
             }
+            if (!listed) {
+                help << std::format("Passes contributed by loaded modules:\n");
+                listed = true;
+            }
+            const size_t separator     = path.find("::");
+            const std::string module   = path.substr(0, separator);
+            const std::string function = path.substr(separator + 2);
+            const auto declaration = camel::execute::detail::findPassDeclaration(
+                module, function, ctx);
+            printPass(
+                help,
+                path,
+                declaration ? declaration->doc : std::string(),
+                declaration ? declaration->params : descriptor.params);
         }
     }
     help << std::format("Passes that exist for the tests only:\n");
@@ -1597,9 +1614,9 @@ std::vector<Diagnostic> tagsNeverReadWarnings(
         return warnings;
     }
     // The registry says which of the core's passes read tag facts, and it is built on first
-    // use (a descriptor reads its declaration through the parser). A run whose pipeline never
-    // looks a pass up would otherwise find no core reader at all.
-    (void)corePasses();
+    // use. A run whose pipeline never looks a pass up would otherwise find no core reader at
+    // all.
+    ensureCorePasses();
     // The names in the pipeline, as written and as they resolve (an alias strips to the pass's
     // own name): a tag's `read_by` may name either.
     std::vector<std::string> inPipeline;
