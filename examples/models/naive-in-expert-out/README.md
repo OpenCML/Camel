@@ -188,6 +188,34 @@ file and are **not** usable: the worker threads spin under the load, so 16-threa
 preemption as work, and the two kernels come out within 2% of each other there while the one-thread
 pair separates them by 4.4%. A 16-thread CPU figure needs an idle host and a run of its own.
 
+**The d=64 CPU-time gap is the host, not a regression.** The paragraph above leaves 2.612–2.701
+CPU ms/step next to the 2.085 wall ms of the sweep table, and the question that leaves is whether
+the current build grew. It is decided in retired instructions — `perf stat -e instructions:u`, the
+slope against step count over 64 and 512 steps so start-up, JIT warm-up and the parameter save
+cancel — because that counter measures the same work whatever the neighbours do. Both builds ran the
+same generated program in one window at load 87–112, with `std::jit` and no `tensor::fuse`, so both
+are on the canonical kernels: the recorded one (fingerprint `808a7e445efc`, rebuilt from
+`539ad3808`, the tree the sweep table was measured on) and the current one (`0ad92b961`, fingerprint
+`2ad1ad1d1e0e`).
+
+| slope, one thread | recorded build | current build | ratio |
+| --- | ---: | ---: | ---: |
+| d=64 instructions/step | 23 446 507 | 20 430 096 | 0.871 |
+| d=256 instructions/step | 718 900 802 | 620 906 080 | 0.864 |
+| d=64 CPU ms/step (task-clock) | 2.477 | 2.363 | 0.954 |
+| d=256 CPU ms/step (task-clock) | 65.46 | 63.02 | 0.963 |
+
+The current build retires **12.9% fewer** instructions a step at d=64 and 13.6% fewer at d=256: the
+opposite direction from a regression, and thousands of times the counter's own scatter (three
+repeats of one slope agree to 0.005% at d=64 and 0.0001% at d=256). The 25% is the window: the
+recorded d=64 cell ran at load 15.6–20.3, and the same tree measures 2.477 CPU ms/step here at load
+87–112. Adding 96 spinners (load 87–112 → 136–138) left the instruction slope at 1.000000 of its
+ambient value, while task-clock went from 2.363 to 2.321, inside the 1–4% scatter of its own repeats
+(11% across the recorded build's three). A control on the same tree, built with and without the
+system CBLAS, moves the count by 0.002%, so the option is not a confound. **No recorded number was
+changed.** Both build pairs, the load pair and the control are in
+[`results/2026-10-24-d64-instruction-counts.json`](results/2026-10-24-d64-instruction-counts.json).
+
 **The d=1024 gap against `torch.compile`, and why it no longer divides.** On the same CPU basis,
 `torch.compile(naive)` costs 2 645.0 ms a step (CPU seconds 80.71 at 24 steps and 165.35 at 56, its
 `torchtrace.py` profile under the same two-length slope), against the library path's 2 656.9 — 0.4%
