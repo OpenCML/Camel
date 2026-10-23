@@ -32,7 +32,7 @@ struct RegionNode {
     bool embedded = false; // Static values embedded into extracted functions.
     // The control region the node runs in (`ControlRegions::controlOf`): 0 for the body, the Arm
     // of a BRCH or a part of a LOOP otherwise. A region never spans two of them, because the code
-    // in an arm runs only when that arm is taken: each one is a segment of its own (plan.cn.md
+    // in an arm runs only when that arm is taken: each one is a segment of its own (docs/design/gpu/plan.cn.md
     // 2.5), and the node that owns it (BRCH, JOIN, LOOP) stays on the host.
     uint32_t control = 0;
 };
@@ -73,7 +73,7 @@ struct RegionAnalysis {
 };
 /// The regions of one graph, and why the nodes that are in none are in none. With `scopes`, a
 /// node the `#gpu` scope covers is not excluded for the control edge that orders it in its block
-/// (plan.cn.md 2.4, 2.5): the arm or the loop it is written in is where it runs, so it becomes a
+/// (docs/design/gpu/plan.cn.md 2.4, 2.5): the arm or the loop it is written in is where it runs, so it becomes a
 /// segment of that region. Without `scopes` — every graph outside a device scope — the analysis
 /// is the one the pass has always taken.
 RegionAnalysis analyzeRegions(

@@ -72,7 +72,7 @@ std::string eligibility(
     const auto *node = graph.node(id);
     // Whether the node is a statement of a block, ordered by control edges. Inside a device
     // scope that ordering is where the node runs, not a reason to leave it on the host: the arm
-    // or the block the node is written in is the segment that holds it (plan.cn.md 2.5).
+    // or the block the node is written in is the segment that holds it (docs/design/gpu/plan.cn.md 2.5).
     const bool ordered = !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty();
     if (node->kind == rt::GCNodeKind::Loop) {
         if (ordered && !device)
@@ -222,7 +222,7 @@ RegionAnalysis analyzeRegions(
     const GpuScopes *scopes) {
     std::vector<RegionNode> nodes(graph.nodeCount());
     std::vector<std::string> reasons(nodes.size());
-    // Where each node runs (plan.cn.md 2.5): the body, an arm of a BRCH, or a part of a LOOP.
+    // Where each node runs (docs/design/gpu/plan.cn.md 2.5): the body, an arm of a BRCH, or a part of a LOOP.
     const rt::ControlRegions control(graph);
     // The nodes of the condition and of the body of a loop are the loop's: a region that holds
     // the LOOP node holds them, and what they read from outside is read by the LOOP node.
@@ -264,7 +264,7 @@ RegionAnalysis analyzeRegions(
                 nodes[id].inputs.insert(nodes[id].inputs.end(), edges.begin(), edges.end());
         }
         // The control edges order the node in the block it is written in; they are not values,
-        // so a region that holds the node reads nothing through them (plan.cn.md 2.5).
+        // so a region that holds the node reads nothing through them (docs/design/gpu/plan.cn.md 2.5).
         for (auto edges : {graph.ctrlInputsOf(id)})
             nodes[id].order.insert(nodes[id].order.end(), edges.begin(), edges.end());
         nodes[id].output = id == graph.outputNodeRef() || id == graph.exitNodeRef();
@@ -303,7 +303,7 @@ RegionAnalysis analyzeRegions(
 std::string
 inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts) {
     // The table is the compiler's view of the program, so it says the same thing the pass would:
-    // code written in a `#gpu` scope's arm or loop is a segment of that region (plan.cn.md 2.5).
+    // code written in a `#gpu` scope's arm or loop is a segment of that region (docs/design/gpu/plan.cn.md 2.5).
     const GpuScopes scopes(graphs);
     const auto analysis = analyzeRegions(graphs, graph, facts, &scopes);
     const auto &regions = analysis.regions;

@@ -236,7 +236,7 @@ const runtime::Program *outlineRegions(
         auto &draft = session.edit(graph);
         std::unordered_map<size_t, rt::gc_node_ref_t> resident;
         const rt::ControlRegions control(*graph);
-        // Where a segment runs: the control region of its members (plan.cn.md 2.5). An operator
+        // Where a segment runs: the control region of its members (docs/design/gpu/plan.cn.md 2.5). An operator
         // written in an arm runs only when that arm is taken, so its call, its uploads and its
         // downloads are written there too; writing them in the body would run the untaken arm.
         const auto whereOf = [&](const Region &region) {
