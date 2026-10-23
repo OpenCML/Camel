@@ -36,6 +36,13 @@ class EntityAccess {
     static const std::shared_ptr<void> &genericTemplate(const Entity &entity) {
         return std::get<Entity::generic_payload_t>(entity.storage_).tmpl;
     }
+    /// The same payload as the GIR builder reads it: one generic function, or the whole list of
+    /// them when the name is declared as several generic overloads (`makeGenericTemplates`).
+    using generic_template_list_t = std::vector<std::shared_ptr<void>>;
+    static Entity makeGenericTemplates(const generic_template_list_t &tmpls) {
+        return Entity(
+            Entity::generic_payload_t{std::make_shared<generic_template_list_t>(tmpls)});
+    }
 
     static bool isNode(const Entity &entity) {
         return std::holds_alternative<node_handle_t>(entity.storage_);

@@ -782,7 +782,7 @@ class GctConstantEvaluator {
 class Builder::ConditionContext {
   public:
     ConditionContext(
-        Builder &builder, const template_ptr_t &declaring, const ModuleUnit *contextUnit)
+        Builder &builder, const generic_template_ptr_t &declaring, const ModuleUnit *contextUnit)
         : self_(builder), module_(builder.module_), unit_(builder.unit_),
           nodeScope_(builder.nodeScope_), graphScope_(builder.graphScope_),
           decoratedScope_(builder.decoratedScope_), templateScope_(builder.templateScope_),
@@ -871,7 +871,7 @@ bool Builder::whenPredicateAmbiguous(const std::string &written, WhenResult &pro
         return false;
     }
     using camel::core::module::detail::EntityAccess;
-    const auto templateOf = [](const camel::core::module::entity &ent) -> template_ptr_t {
+    const auto templateOf = [](const camel::core::module::entity &ent) -> generic_template_ptr_t {
         if (!EntityAccess::isGenericTemplate(ent)) {
             return nullptr;
         }
@@ -881,7 +881,7 @@ bool Builder::whenPredicateAmbiguous(const std::string &written, WhenResult &pro
         if (ref.toString() != written) {
             continue;
         }
-        std::vector<template_ptr_t> predicates;
+        std::vector<generic_template_ptr_t> predicates;
         std::vector<std::string> modules;
         bool ordinary = false;
         for (const auto &import : imports) {
@@ -889,7 +889,7 @@ bool Builder::whenPredicateAmbiguous(const std::string &written, WhenResult &pro
             if (!entity.has_value()) {
                 continue;
             }
-            if (const template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
+            if (const generic_template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
                 if (std::ranges::find(predicates, tmpl) == predicates.end()) {
                     predicates.push_back(tmpl);
                     modules.push_back(shownModuleName(*import.mod));
@@ -918,9 +918,9 @@ bool Builder::whenPredicateAmbiguous(const std::string &written, WhenResult &pro
 
 auto Builder::whenPredicateNamed(
     const std::string &written, const GCT::node_ptr_t &at, WhenResult &problem)
-    -> std::optional<template_ptr_t> {
+    -> std::optional<generic_template_ptr_t> {
     using camel::core::module::detail::EntityAccess;
-    const auto templateOf = [](const camel::core::module::entity &ent) -> template_ptr_t {
+    const auto templateOf = [](const camel::core::module::entity &ent) -> generic_template_ptr_t {
         if (!EntityAccess::isGenericTemplate(ent)) {
             return nullptr;
         }
@@ -930,7 +930,7 @@ auto Builder::whenPredicateNamed(
     // as a prefix (design principles 10.2, layers 1 and 2).
     const std::string own = moduleLevelName(written);
     if (const auto tmpl = templateScope_->get(own); tmpl.has_value()) {
-        return *tmpl;
+        return tmpl.value().one();
     }
     // The module declares the name itself, as something that is not a generic function: the
     // name is resolved, and the ordinary report says why a condition cannot call it.
@@ -951,7 +951,7 @@ auto Builder::whenPredicateNamed(
             problem.detail  = "the import brings no name of that spelling";
             return std::nullopt;
         }
-        if (const template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
+        if (const generic_template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
             return tmpl;
         }
         problem.outcome = WhenOutcome::NotCompileTime;
@@ -970,7 +970,7 @@ auto Builder::whenPredicateNamed(
     if (const auto match = throughUsing(written, at); match.has_value()) {
         if (!match->ownName.empty()) {
             if (const auto tmpl = templateScope_->get(match->ownName); tmpl.has_value()) {
-                return *tmpl;
+                return tmpl.value().one();
             }
             problem.outcome = WhenOutcome::NotCompileTime;
             problem.subject = written;
@@ -980,7 +980,7 @@ auto Builder::whenPredicateNamed(
         if (!match->entity.has_value()) {
             return std::nullopt;
         }
-        if (const template_ptr_t tmpl = templateOf(*match->entity); tmpl != nullptr) {
+        if (const generic_template_ptr_t tmpl = templateOf(*match->entity); tmpl != nullptr) {
             return tmpl;
         }
         problem.outcome = WhenOutcome::NotCompileTime;
@@ -993,7 +993,7 @@ auto Builder::whenPredicateNamed(
     if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
         const auto entity = importedEntity(written, ImportLayer::Ambient);
         if (entity.has_value()) {
-            if (const template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
+            if (const generic_template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
                 return tmpl;
             }
             problem.outcome = WhenOutcome::NotCompileTime;
@@ -1031,7 +1031,7 @@ WhenResult Builder::evaluateWhenCondition(
     const GCT::node_ptr_t &condition, FunctionType *signature,
     const type_bindings_t &bindings,
     const std::unordered_map<std::string, data_ptr_t> &withValues,
-    const template_ptr_t &declaring, const ModuleUnit *contextUnit) {
+    const generic_template_ptr_t &declaring, const ModuleUnit *contextUnit) {
     WhenResult result;
     if (condition == nullptr) {
         result.outcome = WhenOutcome::NotEvaluable;
@@ -1163,12 +1163,12 @@ const std::string written = callee->at(0)->name();
                 // imports bring by name (selectively, through a module prefix or an alias),
                 // then the prelude.
                 WhenResult problem;
-                const std::optional<template_ptr_t> resolved =
+                const std::optional<generic_template_ptr_t> resolved =
                     whenPredicateNamed(written, callee->at(0), problem);
                 if (!resolved.has_value() && problem.outcome != WhenOutcome::NotEvaluable) {
                     return problem;
                 }
-                const template_ptr_t tmpl = resolved.value_or(nullptr);
+                const generic_template_ptr_t tmpl = resolved.value_or(nullptr);
                 if (tmpl == nullptr) {
                     // Not found by the declaration's own names: name the module that declares
                     // it without being imported, rather than call the name unknown.
@@ -1324,7 +1324,7 @@ const std::string written = callee->at(0)->name();
                 // A generic predicate written without its type arguments is named as such.
                 if (!isOperatorName(written)) {
                     WhenResult problem;
-                    const std::optional<template_ptr_t> resolved =
+                    const std::optional<generic_template_ptr_t> resolved =
                         whenPredicateNamed(written, callee, problem);
                     if (resolved.has_value()) {
                         local.outcome = WhenOutcome::NotEvaluable;
@@ -1554,8 +1554,8 @@ Builder::FoldedCall Builder::evaluateCallAtBuildTime(
     std::vector<std::string> parameters;
 
     const auto templateFound = templateScope_->get(name);
-    if (templateFound.has_value() && *templateFound != nullptr) {
-        const template_ptr_t &tmpl = *templateFound;
+    if (templateFound.has_value() && templateFound.value().one() != nullptr) {
+        const generic_template_ptr_t tmpl = templateFound.value().one();
         parameters                 = typeParameterNames(tmpl);
         bindings                   = tmpl->outerBindings;
         if (tmpl->funcType == nullptr || tmpl->funcType->hasRest()) {
