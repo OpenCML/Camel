@@ -15,11 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-<<<<<<< HEAD
-254 diagnostics: 235 errors, 19 warnings.
-=======
-257 diagnostics: 238 errors, 19 warnings.
->>>>>>> handover/h337-node-of
+255 diagnostics: 236 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -225,11 +221,7 @@ prints one entry.
 | `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error |
 | `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error |
 | `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error |
-<<<<<<< HEAD
-=======
-| `0x030001DD` | [SemanticDiag::ImplOnGenericFunction](#implongenericfunction) | Error |
 | `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error |
->>>>>>> handover/h337-node-of
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -6378,42 +6370,6 @@ func main(): int sync {
 }
 ```
 
-<<<<<<< HEAD
-=======
-### ImplOnGenericFunction
-
-`0x030001DD` · Error · `SemanticDiag::ImplOnGenericFunction`
-
-**Message**
-
-```text
-The '#impl' tag of '{0}' is on a generic function.
-```
-
-**Help**
-
-```text
-A generic function's instances have signatures of their own, so one kernel cannot be the implementation of all of them. Write each instance as an ordinary function and give it its own '#impl', or remove the tag.
-```
-
-**Example** (`test/cases/compile/native/impl_generic.cml`, run as `camel test/cases/compile/native/impl_generic.cml`)
-
-```camel
-module impl_generic
-
-#op<':op/idx_arr'>
-func idx_kernel::<T>(xs: T[], i: int): T
-
-#impl<idx_kernel>
-func at::<T>(xs: T[], i: int): T {
-    return xs[i]
-}
-
-func main(): int sync {
-    return at([1, 2, 3], 0)
-}
-```
-
 ### NodeOfNotAParameter
 
 `0x030001DE` · Error · `SemanticDiag::NodeOfNotAParameter`
@@ -6452,7 +6408,6 @@ func main(): int sync {
 }
 ```
 
->>>>>>> handover/h337-node-of
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
