@@ -9,47 +9,32 @@ expect_exit = 0
 timeout_ms = 8000
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
+# The graph entries assert the property, not the totals: the graph's branches must be exactly the
+# source's three conditional expressions, each still over the one runtime `env:get_env` comparison
+# (the branch structure and its condition are the property; the BRCH and JOIN totals follow from the
+# classification and are no longer asserted on their own). `equal_branch_shape.mjs` states the whole
+# comparison, including what the pipeline does to the first branch's value in each mode.
+
 [[tests]]
 name = "equal_branch.graph.inline"
+desc = "std::inline replaces the calls but keeps the source's arithmetic: the graph's branches are the source's three conditional expressions, each over the one runtime `env:get_env` comparison, the two arm effects are still controlled by their branch, and the equal-armed branch's value is its product with itself. The branch comparison is the assertion; no BRCH, JOIN or multiply total is pinned."
 case = "../../../cases/opt/generic/equal_branch_values.cml"
 args = ["${case}","std::inline","std::jgir"]
-verify_script = '''
-({ input, assert }) => {
- const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
- const count = label => g.nodes.filter(n => n.label === label).length
- assert(count(':op/mul_d') === 3, 'wrong remaining scalar arithmetic')
- assert(count('JOIN') === 3 && count('BRCH') === 3, 'branch structure lost')
- assert(count('env:get_env') === 1, 'runtime condition lost')
-}
-'''
+verify_script_path = "../../../cases/opt/generic/equal_branch_shape.mjs"
 
 [[tests]]
 name = "equal_branch.graph.fold"
+desc = "std::opt folds the equal arms' product to the constant 4.0 and keeps it ordered after the branch whose prints still run; the branch whose arms differ (2.0, 3.0) keeps its product and the branch of signed zeros passes through the neutral law of `* 1.0`. The branches are still the source's three conditional expressions over the one runtime `env:get_env` comparison: folding removes arithmetic, never a branch or its condition."
 case = "../../../cases/opt/generic/equal_branch_values.cml"
 args = ["${case}","std::opt","std::jgir"]
-verify_script = '''
-({ input, assert }) => {
- const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
- const count = label => g.nodes.filter(n => n.label === label).length
- assert(count(':op/mul_d') === 1, 'wrong remaining scalar arithmetic')
- assert(count('JOIN') === 3 && count('BRCH') === 3, 'branch structure lost')
- assert(count('env:get_env') === 1, 'runtime condition lost')
-}
-'''
+verify_script_path = "../../../cases/opt/generic/equal_branch_shape.mjs"
 
 [[tests]]
 name = "equal_branch.graph.cse"
+desc = "std::opt::cse after std::inline leaves the branch structure as std::inline does: common subexpression elimination may share the values a branch joins, but the branches stay the source's three conditional expressions over the one runtime `env:get_env` comparison and the equal-armed branch value stays the source's product."
 case = "../../../cases/opt/generic/equal_branch_values.cml"
 args = ["${case}","std::inline","std::opt::cse","std::jgir"]
-verify_script = '''
-({ input, assert }) => {
- const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
- const count = label => g.nodes.filter(n => n.label === label).length
- assert(count(':op/mul_d') === 3, 'wrong remaining scalar arithmetic')
- assert(count('JOIN') === 3 && count('BRCH') === 3, 'branch structure lost')
- assert(count('env:get_env') === 1, 'runtime condition lost')
-}
-'''
+verify_script_path = "../../../cases/opt/generic/equal_branch_shape.mjs"
 
 [[tests]]
 name = "equal_branch.known_gradient"

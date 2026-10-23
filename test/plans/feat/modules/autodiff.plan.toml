@@ -428,22 +428,51 @@ timeout_ms = 6000
 
 [[tests]]
 name = "fused_grad_check.fused"
-desc = "The functions checked by fused_grad_check are indeed the marked groups: tensor::fuse leaves matmul, add and relu in them and writes tensor.fusion on every node of each group."
+desc = "The functions checked by fused_grad_check are indeed the marked groups: tensor::fuse leaves matmul, add and relu in them and writes tensor.fusion on every node of each group. The property, not a total: the graphs that carry a mark are exactly the case's six checked functions (lin_* the matmul-plus-bias ones, mlp_* the ones whose chain ends in relu, which is why their mark is linear_relu), every mark sits on a private chain — the matmul's only normal reader is the add, and for linear_relu the add's only normal reader is the relu — and no matmul or relu of the program is left outside a group."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/fused_grad_check.cml"
-args = ["${case}", "tensor::fuse", "std::gir"]
+args = ["${case}", "tensor::fuse", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout
-const count = (text) => out.split(text).length - 1
-const q = String.fromCharCode(92) + '"'
-assert(count('label="tensor:matmul"') === 6, `expected six matmul nodes, got ${count('label="tensor:matmul"')}`)
-assert(count('label="tensor:relu"') === 3, `expected three relu nodes, got ${count('label="tensor:relu"')}`)
-assert(count('tensor.fusion=') === 15, `expected 15 grouped nodes, got ${count('tensor.fusion=')}`)
-assert(count('tensor.fusion=' + q + 'linear_relu' + q) === 9, `expected three linear_relu groups, got ${count('tensor.fusion=' + q + 'linear_relu' + q)}`)
-assert(count('matmul_add') === 0, 'no fused operator may appear')
+const doc = JSON.parse(input.normalized.stdout)
+const graphs = doc.graphs
+const marksOf = (g) => g.nodes.filter((n) => n.attrs && n.attrs['tensor.fusion'])
+const markOf = (n) => (n.attrs && n.attrs['tensor.fusion']) || null
+// The nodes a node's normal readers/producers, deduplicated: one reader counted once even when it
+// reads the same value in two slots.
+const readers = (g, id) => [...new Set(g.edges.filter((e) => e.source === id && e.kind === 'normal').map((e) => e.target))].map((at) => g.nodes.find((n) => n.id === at))
+const makers = (g, id) => g.edges.filter((e) => e.target === id && e.kind === 'normal').map((e) => g.nodes.find((n) => n.id === e.source))
+const relus = []
+const matmuls = []
+for (const g of graphs) for (const n of g.nodes) {
+    if (n.label === 'tensor:matmul') matmuls.push({ g, n })
+    if (n.label === 'tensor:relu') relus.push({ g, n })
+}
+assert(matmuls.length > 0 && relus.length > 0, 'the program has no matmul or no relu to group')
+// The groups are the case's checked functions and nothing else.
+const grouped = graphs.filter((g) => marksOf(g).length > 0).map((g) => g.name).sort()
+assert(JSON.stringify(grouped) === JSON.stringify(['lin_b', 'lin_w', 'lin_x', 'mlp_b', 'mlp_w', 'mlp_x']), `the marked groups are not the checked functions: ${JSON.stringify(grouped)}`)
+// Each mark is a private matmul -> add (+ relu) chain, and the name of the mark says which.
+for (const { g, n } of matmuls) {
+    const mark = markOf(n)
+    assert(mark, `a matmul outside every group: ${g.name}`)
+    const adds = readers(g, n.id)
+    assert(adds.length === 1 && adds[0].label === 'tensor:add', `the matmul is not private to its add: ${g.name} -> ${JSON.stringify(adds.map((x) => x.label))}`)
+    assert(markOf(adds[0]) === mark, `the add of the group carries another mark: ${g.name}`)
+    const after = readers(g, adds[0].id)
+    if (mark === 'linear_relu') assert(after.length === 1 && after[0].label === 'tensor:relu', `a relu group whose add is not private to the relu: ${g.name}`)
+    else assert(mark === 'linear' && !after.some((x) => x.label === 'tensor:relu'), `a matmul-plus-bias group its add extends with a relu: ${g.name} (${mark})`)
+    assert(mark === (g.name.startsWith('mlp_') ? 'linear_relu' : 'linear'), `the mark does not say which check this group is: ${g.name} (${mark})`)
+}
+for (const { g, n } of relus) {
+    assert(markOf(n) === 'linear_relu', `a relu outside every group: ${g.name}`)
+    const add = makers(g, n.id)
+    assert(add.length === 1 && add[0].label === 'tensor:add' && markOf(add[0]) === 'linear_relu', `the relu of a group has no marked add: ${g.name}`)
+}
+const fused = graphs.flatMap((g) => g.nodes).map((n) => n.label).filter((label) => label.startsWith('matmul_'))
+assert(fused.length === 0, `no fused operator may appear: ${JSON.stringify(fused)}`)
 }
 """
 timeout_ms = 6000
