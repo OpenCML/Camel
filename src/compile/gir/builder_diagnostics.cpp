@@ -290,6 +290,8 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
                  {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
                 work.insert(work.end(), inputs.begin(), inputs.end());
             }
+            // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5).
+            work.insert(work.end(), draft.syncInputsOf(id).begin(), draft.syncInputsOf(id).end());
         }
         return false;
     }
@@ -322,7 +324,7 @@ void Builder::reportDroppedEffectsOfBodies() {
 
 void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report) {
     auto &draft = graph->draft();
-    // What the exit depends on, through data and control edges.
+    // What the exit depends on, through data, control and sync edges.
     std::unordered_set<draft_node_ref_t> needed;
     std::vector<draft_node_ref_t> work;
     for (draft_node_ref_t root : {draft.outputNode(), draft.exitNode(), draft.returnNode()}) {
@@ -342,6 +344,13 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
                 if (needed.insert(input).second) {
                     work.push_back(input);
                 }
+            }
+        }
+        // A statement of a `sync` block is used by the one written after it (and the block's
+        // value by its chain tail): liveness follows a sync edge as it follows a data input.
+        for (draft_node_ref_t input : draft.syncInputsOf(id)) {
+            if (needed.insert(input).second) {
+                work.push_back(input);
             }
         }
     }
@@ -372,7 +381,8 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             const draft_node_ref_t id = stack.back();
             stack.pop_back();
             for (auto users :
-                 {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id)}) {
+                 {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id),
+                  draft.syncUsersOf(id)}) {
                 for (draft_node_ref_t user : users) {
                     if (!seen.insert(user).second) {
                         continue;
@@ -494,7 +504,10 @@ void Builder::reportUnusedFallibleValues() {
             default:
                 continue; // not the result of an evaluation
             }
-            const bool ordered = !draft.ctrlUsersOf(id).empty();
+            // "Ordered" here means a statement of a `sync` block: the edge that says so is a
+            // sync edge, and the old control edge still carries it where one is left.
+            const bool ordered =
+                !draft.ctrlUsersOf(id).empty() || !draft.syncUsersOf(id).empty();
             if (nodeIsKind(node, runtime::GCNodeKind::Join) &&
                 isVoidGraphExitType(nodeTypeOf(node)) && (ordered || isExit(id))) {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is

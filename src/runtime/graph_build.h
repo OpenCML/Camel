@@ -61,6 +61,8 @@ struct GCGraphPayloadShape {
     gc_cnt_t writingCount = 0;
     // The order edges of the graph (GCGraph::orderPredsOf); 0 when it has none.
     gc_cnt_t orderEdgeCount = 0;
+    // The sync edges of the graph (GCGraph::syncPredsOf); 0 when it has none.
+    gc_cnt_t syncEdgeCount = 0;
     // The graph the draft was decoded from: a chunk of the new graph that has all the content of
     // the same chunk of this one is that chunk (GCNodeChunk::shares). nullptr: none.
     const GCGraph *base = nullptr;
@@ -91,6 +93,9 @@ struct GCGraphPayloadArena {
     // The order edges, sorted by (user, pred), already offset-free (NodeIds of this graph).
     GCGraphOrderEdge *orderEdges = nullptr;
     gc_cnt_t orderEdgeCount      = 0;
+    // The sync edges, sorted by (user, pred), already offset-free (NodeIds of this graph).
+    GCGraphSyncEdge *syncEdges = nullptr;
+    gc_cnt_t syncEdgeCount     = 0;
 
     gc_cnt_t nodeCount        = 0;
     gc_cnt_t edgeCount        = 0;

@@ -811,6 +811,52 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                     i);
             }
         }
+
+        // An order edge and a sync edge are not ports, so they are drawn from the graph's own
+        // arrays rather than from an input run (docs/design/effects/edges.cn.md 1.5). They are
+        // drawn apart from the port edges and from each other: an order edge only orders (dotted,
+        // no arrowhead filled in), a sync edge orders *and* is used (solid, diamond arrowhead).
+        for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(nodeIndex)) {
+            if (!graph->containsNodeRef(edge.pred)) {
+                continue;
+            }
+            if (!config_.rich) {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"ORDER\", type=\"ORDER\"];\n",
+                    baseIndent_,
+                    indent_,
+                    edgeSource(edge.pred),
+                    nodeIdent(node));
+            } else {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"ORDER\", type=\"ORDER\", style=dotted];\n",
+                    baseIndent_,
+                    indent_,
+                    edgeSource(edge.pred),
+                    nodeIdent(node));
+            }
+        }
+        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(nodeIndex)) {
+            if (!graph->containsNodeRef(edge.pred)) {
+                continue;
+            }
+            if (!config_.rich) {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"SYNC\", type=\"SYNC\"];\n",
+                    baseIndent_,
+                    indent_,
+                    edgeSource(edge.pred),
+                    nodeIdent(node));
+            } else {
+                res += std::format(
+                    "{}{}{} -> {} [label=\"SYNC\", type=\"SYNC\", style=solid, "
+                    "arrowhead=diamond];\n",
+                    baseIndent_,
+                    indent_,
+                    edgeSource(edge.pred),
+                    nodeIdent(node));
+            }
+        }
     }
 
     if (depth_ == 0 && config_.annotateRoles && !rolesSeen_.empty()) {

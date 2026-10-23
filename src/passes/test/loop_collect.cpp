@@ -30,6 +30,7 @@ using camel::core::type::FunctionType;
 using camel::core::type::TupleType;
 using camel::core::type::Type;
 using camel::runtime::DraftEdgeKind;
+using camel::runtime::PortRole;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCGraph;
 using camel::runtime::GraphDraft;
@@ -201,10 +202,10 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
             ownerDraft.setNodeOrigin(summary, origin);
 
             for (gc_node_ref_t user : normUsers) {
-                ownerDraft.replaceInput(DraftEdgeKind::Norm, user, draftId, summary);
+                ownerDraft.replaceInput(DraftEdgeKind::Data, user, draftId, summary);
             }
             for (gc_node_ref_t user : withUsers) {
-                ownerDraft.replaceInput(DraftEdgeKind::With, user, draftId, summary);
+                ownerDraft.replaceInput(DraftEdgeKind::Data, user, draftId, summary, PortRole::Context);
             }
             if (isOutput) {
                 ownerDraft.setOutputNode(summary);
