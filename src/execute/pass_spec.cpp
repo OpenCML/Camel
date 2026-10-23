@@ -667,7 +667,16 @@ camel::execute::detail::parseSpec(const std::string &spec, ParsedSpec &out) {
         }
 
         // The value is a Camel constant expression, read by the language's parser as the value
-        // of one named argument.
+        // of one named argument. Whether it has to be one is the declaration's business: a bool,
+        // int or float parameter takes a constant of its type, while a string parameter takes the
+        // word as written (design principles 9.3). The declaration is not known here, so a value
+        // that does not read as a constant keeps its text and the reason, and `bindArgs` asks for
+        // the one the declared type needs.
+        WrittenParam param;
+        param.key    = key;
+        param.raw    = value;
+        param.column = wordStart;
+        param.length = word.size();
         const std::string source = "let v = f(" + key + ": " + value + ");\n";
         auto sources             = std::make_shared<camel::source::SourceContext>();
         auto diags               = std::make_shared<camel::core::error::Diagnostics>(
@@ -676,38 +685,21 @@ camel::execute::detail::parseSpec(const std::string &spec, ParsedSpec &out) {
         parser.setSourceContext(sources);
         std::istringstream is(source);
         if (!parser.parse(is) || diags->hasErrors() || !parser.ast()) {
-            ParamProblem problem;
-            problem.kind   = ParamProblemKind::Syntax;
-            problem.text   = firstParseError(
+            param.constantProblem = firstParseError(
                 diags, std::format("the value of '{}' is not a constant", key));
-            problem.name   = key;
-            problem.column = wordStart;
-            problem.length = word.size();
-            return problem;
+            out.params.push_back(std::move(param));
+            continue;
         }
-        WrittenParam param;
-        param.key   = key;
-        param.column = wordStart;
         try {
-            const auto &call   = parser.ast()->at(2)->at(0)->at(1)->at(0);
-            const auto &named  = call->at(2)->at(0);
-            param.value        = evalNode(named->at(0));
+            const auto &call  = parser.ast()->at(2)->at(0)->at(1)->at(0);
+            const auto &named = call->at(2)->at(0);
+            param.value       = evalNode(named->at(0));
+            param.isConstant  = true;
         } catch (const std::out_of_range &) {
-            ParamProblem problem;
-            problem.kind   = ParamProblemKind::Syntax;
-            problem.text   = std::format("the value of '{}' could not be read", key);
-            problem.name   = key;
-            problem.column = wordStart;
-            problem.length = word.size();
-            return problem;
+            param.constantProblem = std::format("the value of '{}' could not be read", key);
         } catch (const EvalError &e) {
-            ParamProblem problem;
-            problem.kind   = ParamProblemKind::Syntax;
-            problem.text   = std::format("the value of '{}' is not a constant: {}", key, e.message);
-            problem.name   = key;
-            problem.column = wordStart;
-            problem.length = word.size();
-            return problem;
+            param.constantProblem =
+                std::format("the value of '{}' is not a constant: {}", key, e.message);
         }
         out.params.push_back(std::move(param));
     }
@@ -767,7 +759,28 @@ std::optional<ParamProblem> camel::execute::detail::bindArgs(
             problem.length = w.key.size();
             return problem;
         }
-        PassParamValue value = w.value;
+        // How the word is read is the declared type's business, not the text's (design
+        // principles 9.3): a string parameter takes the word as written, so `out=model.onnx` names
+        // that file, while a bool, int or float parameter takes a constant of its type and refuses
+        // a bare word. A value the language read as a string constant keeps that reading, which is
+        // how a quoted value with a space (`out="a b.onnx"`) arrives whole.
+        PassParamValue value;
+        if (it->type == PassParamType::String) {
+            value = (w.isConstant && std::holds_alternative<std::string>(w.value)) ? w.value
+                                                                                 : w.raw;
+            args.set(w.key, std::move(value), true);
+            continue;
+        }
+        if (!w.isConstant) {
+            ParamProblem problem;
+            problem.kind   = ParamProblemKind::Syntax;
+            problem.text   = w.constantProblem;
+            problem.name   = w.key;
+            problem.column = w.column;
+            problem.length = w.length;
+            return problem;
+        }
+        value = w.value;
         if (it->type == PassParamType::Float && std::holds_alternative<int64_t>(value)) {
             value = static_cast<double>(std::get<int64_t>(value));
         }

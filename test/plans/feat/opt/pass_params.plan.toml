@@ -49,6 +49,43 @@ expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 
 [[tests]]
+name = "string.word_as_written"
+desc = "The declared type decides how a value is read, not its text (design principles 9.3): `onnx::export` declares `out: string`, so the word is taken as written even though it is no constant expression, and the model is written to the path the word names."
+case = "../../../cases/modules/onnx/entry/forward.cml"
+args = ["${case}", "std::macro", "std::opt", "onnx::export out=${test_tmp}/word_as_written.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/word_as_written.onnx"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const written = path.join(input.test_tmp, 'word_as_written.onnx')
+assert(fs.existsSync(written), `no model at the path the word names: ${written}`)
+assert(fs.statSync(written).size > 0, 'the model file is empty')
+const models = fs.readdirSync(input.test_tmp).filter((name) => name.endsWith('.onnx'))
+assert(models.length === 1, `one model expected, got ${models}`)
+assert(models[0] === 'word_as_written.onnx', `the name is not the word as written: ${models[0]}`)
+}
+"""
+
+[[tests]]
+name = "string.quoted_value_with_a_space"
+desc = "A value with a space is quoted, and a string parameter takes the quoted value whole: the file is named with the space in it, so neither the quotes nor the space split the word."
+case = "../../../cases/modules/onnx/entry/forward.cml"
+args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/a b.onnx"']
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/a b.onnx"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const written = path.join(input.test_tmp, 'a b.onnx')
+assert(fs.existsSync(written), `no model at the quoted value: ${written}`)
+assert(fs.statSync(written).size > 0, 'the model file is empty')
+}
+"""
+
+[[tests]]
 name = "error.unknown_parameter"
 desc = "An unknown parameter is a semantic diagnostic at the call, on the pass's own line; nothing runs."
 args = ["${case}", "std::fvm", "std::opt safe_fpp=true"]
@@ -82,6 +119,14 @@ desc = "A name is not a constant."
 args = ["${case}", "std::opt safe_fp=x", "std::fvm"]
 expect_exit = 1
 expect_output_contains = ["InvalidPassParameter", "'x' is not a constant"]
+
+[[tests]]
+name = "error.bare_word_where_an_int_is_declared"
+desc = "The declared type decides, not the text: the word that is a file name where `out: string` is declared is refused here, because `growth_budget: int` takes a constant expression (design principles 9.3), and nothing runs."
+args = ["${case}", "std::opt growth_budget=model.onnx", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "the value of 'growth_budget' is not a constant"]
+expect_output_not_contains = ["camel-ran-marker"]
 
 [[tests]]
 name = "error.written_twice"

@@ -35,8 +35,20 @@ struct ParamProblem {
 
 struct WrittenParam {
     std::string key;
+    /// The value as written: the text after `=` in the word, exactly as it reached the command
+    /// line. A string parameter takes this text, because the shell has already removed the quotes
+    /// a user typed (design principles 9.3: the value is read by the declared type, a string as
+    /// written), so `out=model.onnx` is the word the pass is given.
+    std::string raw;
+    /// The value read as a Camel constant expression, when it is one. A bool, int or float
+    /// parameter takes this and nothing else.
     PassParamValue value;
+    bool isConstant = false;
+    /// Why the value is not a constant. It is the refusal a bool, int or float parameter gets; a
+    /// string parameter takes `raw` instead, so it never sees this message.
+    std::string constantProblem;
     size_t column = 0; // 0-based column of the key in the specification
+    size_t length = 0; // the whole `key=value` word, for a refusal the declared type decides
 };
 
 struct ParsedSpec {

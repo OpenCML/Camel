@@ -143,7 +143,7 @@
 
 ### 遍的参数
 
-遍是标准库里的函数（设计原则 9.3）：它的名字、说明和参数是模块 `.cml` 文件里的一条声明——核心的遍在 `stdlib/std.cml`，模块的遍在 `stdlib/<module>.cml`——流水线从那里读取。参数写作遍名之后的 `key=value` **词，不带括号**：`camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm`。值是 Camel 的常量表达式：布尔、整数、浮点、字符串字面量，以及作用在它们上的运算符（`n=2*8`、`growth_budget=2*8+1`）；值必须是一个词，带空格的表达式省掉空格写，带空格的字符串由 shell 加引号。声明就是函数自己的 `with` 列表，所以遵守函数的规则（设计原则 4.4）：名字、`:`、类型（`bool`、`int`、`float`、`string`）、默认值写 `= 值`；没有默认值的参数是必需参数，必需参数不能跟在有默认值的参数后面。**默认值是在声明处求值一次的常量表达式**，不在每次调用时重算：帮助列表显示值本身（`top: int = 24`，不是 `top=8*3`）。`when` 子句是遍的适用条件：流水线认的是 `is_function::<F>()`，别的条件会被拒绝而不是假定成立。括号形式（`std::opt(safe_fp=true)`）、命令行上的冒号写法（`safe_fp: true`）和位置参数都已删除，均报告 `RuntimeDiag::InvalidPassParameter`（`0x04000060`），消息说明应该怎么写。声明在流水线解析时按模块搜索路径读取；找不到模块的 `.cml` 文件，或文件里没有声明这个遍，流水线拒绝这个遍，而不是拿声明从未给过的默认值去跑内核：消息写明模块和读到的文件（或找过的那些路径），所以缺少标准库的安装会直接说出来，而不是把遍报成不存在。
+遍是标准库里的函数（设计原则 9.3）：它的名字、说明和参数是模块 `.cml` 文件里的一条声明——核心的遍在 `stdlib/std.cml`，模块的遍在 `stdlib/<module>.cml`——流水线从那里读取。参数写作遍名之后的 `key=value` **词，不带括号**：`camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm`。值是一个词，按声明给这个参数的类型读（设计原则 9.3）：`bool`、`int`、`float` 参数取 Camel 的常量表达式——布尔、整数、浮点、字符串字面量，以及作用在它们上的运算符（`n=2*8`、`growth_budget=2*8+1`）——值必须是一个词，带空格的表达式省掉空格写；`string` 参数取那个词的原文，不需要引号（`onnx::export out=model.onnx` 写出的文件就叫 `model.onnx`），值里有空格时用 shell 的引号，与任何命令行工具一样；引号必须作为那个词的一部分到达命令行，所以整条遍写法要一起引起来（`'onnx::export out="a b.onnx"'`）。声明就是函数自己的 `with` 列表，所以遵守函数的规则（设计原则 4.4）：名字、`:`、类型（`bool`、`int`、`float`、`string`）、默认值写 `= 值`；没有默认值的参数是必需参数，必需参数不能跟在有默认值的参数后面。**默认值是在声明处求值一次的常量表达式**，不在每次调用时重算：帮助列表显示值本身（`top: int = 24`，不是 `top=8*3`）。`when` 子句是遍的适用条件：流水线认的是 `is_function::<F>()`，别的条件会被拒绝而不是假定成立。括号形式（`std::opt(safe_fp=true)`）、命令行上的冒号写法（`safe_fp: true`）和位置参数都已删除，均报告 `RuntimeDiag::InvalidPassParameter`（`0x04000060`），消息说明应该怎么写。声明在流水线解析时按模块搜索路径读取；找不到模块的 `.cml` 文件，或文件里没有声明这个遍，流水线拒绝这个遍，而不是拿声明从未给过的默认值去跑内核：消息写明模块和读到的文件（或找过的那些路径），所以缺少标准库的安装会直接说出来，而不是把遍报成不存在。
 
 遍的设置是参数，不再是环境变量：
 
@@ -206,7 +206,7 @@
 
 ### 以遍的形式导出 ONNX（`onnx::export`）
 
-    camel m.cml std::macro std::opt 'onnx::export out="model.onnx"'
+    camel m.cml std::macro std::opt onnx::export out=model.onnx
 
 `onnx::export` 是 `onnx` 模块贡献的翻译遍。作为流水线的最后一个遍，它写出一个 ONNX 模型并消耗图：程序不执行。
 
@@ -217,8 +217,8 @@
 
 **没有 `export_model` 调用的程序：`main` 就是模型。** 只做计算的程序用同样的遍组合导出，程序里不必为导出写任何东西（连 `import onnx` 也不必：写出遍的名字就会加载模块）：
 
-    camel model.cml std::macro std::opt 'onnx::export out="model.onnx"'
-    camel model.cml --arg p=weights std::macro std::opt 'onnx::export out="model.onnx"'
+    camel model.cml std::macro std::opt onnx::export out=model.onnx
+    camel model.cml --arg p=weights std::macro std::opt onnx::export out=model.onnx
 
 当程序里任何地方都没有 `export_model` 调用时，这个遍翻译入口图本身，也就是 `main` 的计算：
 
