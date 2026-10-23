@@ -158,6 +158,24 @@ not only the host. The 16-thread cells are in
 Camel is 1146.6 against compiled 369.4 at d=1024, because the library pool is capped at four
 threads and the canonical kernels take the rest of the run.
 
+**Where the d=256 gap is not: allocation.** `std::profile` now separates the allocator from the
+operator that called it: every operator row carries the time spent inside the Camel value
+allocators, the allocator calls, the data blocks among them and their payload bytes, and the step
+block gives the same per round. Measured 2026-10-23, one thread, the same generated step: at d=256
+one round allocates 362 block payloads (1,499 allocator calls, 137.9 MiB) and spends 0.68 ms in
+the allocators — 0.40% of the step and 0.37% of the operator time. The three matmul rows spend
+0.075% of their time there and allocate exactly one block per call, the output, so they allocate
+no packing buffer either. At d=1024 it is 1.34 ms of a 6.27 s step (0.02%). The host carried load
+60 on 32 threads and the absolute times are inflated (171 ms here against the 66 ms of the table
+above); the shares are ratios from the same run and do not depend on that. A 34% gap on 66.1 ms
+is about 22 ms, roughly 33 times the allocator time of a whole step, so the d=256 gap is kernel
+time, not allocation. What this still cannot split is a `memcpy` inside a kernel, a BLAS
+library's own `malloc`-ed packing buffer, and the page faults of first touching a newly reserved
+segment; the file is
+[`results/2026-10-23-d256-d1024-alloc-profile.json`](results/2026-10-23-d256-d1024-alloc-profile.json)
+and the instrument is described in
+[`docs/technical/54_profiler_allocations.md`](../../../docs/technical/54_profiler_allocations.md).
+
 **The crossover.** In the before table above, with one thread Camel is the sole fastest implementation at d=64 (2.085 ms,
 with `torch.compile(naive)` at 2.938) and it is not at d=256: `torch.compile(naive)` takes 49.8
 against Camel's 61.0, a gap of 11 ms wider than both round ranges, while Camel, PyTorch naive and
@@ -227,8 +245,9 @@ runtime's default 2 GiB block space the 2,048-token cell does not run at all (th
 33.5 MB tensor is refused with 1,911 MB in use), so `measure.py` passes `--block-limit 8192` to
 every cell to keep them comparable. Peak RSS is recorded per cell — at d=1024 it is 2.8 GiB for
 Camel and PyTorch naive, 2.5 for the expert form, 2.8 for `torch.compile` and 4.3 for the float64
-reference — but nothing charts the allocator, finds where a cell stops fitting, or measures the
-cost of the 2 GiB limit as a limit. The effect of the rules pipeline is not covered because it is
+reference — but nothing finds where a cell stops fitting, or measures the cost of the 2 GiB limit
+as a limit; the allocator column of `std::profile` (above) measures what a step allocates, not
+what a cell holds. The effect of the rules pipeline is not covered because it is
 not usable end to end yet: `rules::accuracy` and `rules::fusion` exist as libraries with their own
 tests, but the naive source is not rewritten into the expert form, so the "Camel + rules" row the
 ruling asks for cannot be measured. The GPU is not covered; that is H49.

@@ -12,6 +12,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/mm/deferred.h"
 #include "camel/core/slot.h"
+#include "camel/profile/allocation.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
@@ -68,7 +69,11 @@ Block *Block::create(size_t bytes) {
     const size_t blockLen = usable + kBlockAlignment;
     // These bytes are live values: let the collector pace them and enforce the heap limit.
     autoSpace().checkBlockBytes(bytes);
-    void *block = blockSpace().alloc(blockLen, alignof(slot_t));
+    void *block = nullptr;
+    {
+        const camel::profile::AllocationScope allocation(bytes, true);
+        block = blockSpace().alloc(blockLen, alignof(slot_t));
+    }
     ASSERT(block != nullptr, "The block space never returns null");
     std::byte *data = alignUp(static_cast<std::byte *>(block));
 
@@ -133,7 +138,11 @@ void Block::grow(size_t newBytes) {
     const size_t grown    = std::max({newBytes, capacity_ * 2, size_t{64}});
     const size_t blockLen = grown + kBlockAlignment;
     autoSpace().checkBlockBytes(grown > capacity_ ? grown - capacity_ : 0);
-    void *block = blockSpace().alloc(blockLen, alignof(slot_t));
+    void *block = nullptr;
+    {
+        const camel::profile::AllocationScope allocation(grown, true);
+        block = blockSpace().alloc(blockLen, alignof(slot_t));
+    }
     ASSERT(block != nullptr, "The block space never returns null");
     std::byte *data = alignUp(static_cast<std::byte *>(block));
     if (bytes_ > 0 && data_ != nullptr) {

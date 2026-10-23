@@ -305,15 +305,23 @@ What the report holds:
 
 - **Operators.** One row per operator that ran: the device it belongs to (`cpu`, or the device
   when a `tiles:` operator drives one), the calls, the total time, what the first call cost and
-  the mean of the calls after it, and the share of the operator time. The first call is printed
-  apart because it pays one-time setup (a thread pool, a region compiled by NVRTC); a mean that
-  mixes it in says nothing about a step.
+  the mean of the calls after it, the share of the operator time, and the allocation part of the
+  row (see below). The first call is printed apart because it pays one-time setup (a thread pool,
+  a region compiled by NVRTC); a mean that mixes it in says nothing about a step.
+- **Allocations.** The same rows carry what the Camel allocators did during the call: the time
+  spent inside them (and its share of the row), the number of allocation calls, how many of them
+  were data blocks, and the payload bytes those blocks asked for. An aggregate row above the
+  steps gives the totals for the run and the part inside operator calls; the step block gives the
+  allocations of one round. This is what separates an operator's arithmetic from the allocation
+  and packing it does: a boundary timer alone cannot. The allocators counted are the block space
+  (`mm::Block::create` / `grow`), the collected heap (`mm::autoSpace()`) and the permanent space
+  (`mm::permSpace()`); see "What the allocation row does not see" below.
 - **Steps.** A step is one round of a loop of the program: every back end reports the rounds of a
   loop from the same place (`include/camel/execute/loop_frame.h`). The report picks the loop that
   carries the most operators per round as the step loop (the training loop of a training step) and
-  gives the operators, kernels, transfers and waits of one round, with the wall time as the median
-  of the rounds (a mean is at the mercy of whatever else the machine was doing). A program with no
-  loop reports the whole run as one step.
+  gives the operators, kernels, transfers, waits and allocations of one round, with the wall time
+  as the median of the rounds (a mean is at the mercy of whatever else the machine was doing). A
+  program with no loop reports the whole run as one step.
 - **The device.** Kernel launches, bytes host->device and device->host, synchronisations, and the
   time the module spent compiling device code at run time (NVRTC). A module that drives a device
   reports these itself (the Tiles module does, through `modules/tiles/include/tiles/internal/
@@ -329,8 +337,23 @@ What the report holds:
 
 The recording is always compiled in and costs one flag check where it is off: an operator call
 costs a timestamp pair (the report prints what that costs on the machine it ran on), a loop round
-costs a few counter reads. Nothing is measured under `--timeit`, whose own report replaces the
-program's output.
+costs a few counter reads, and an allocation in one of the three value spaces above costs one flag
+check too (a timestamp pair and a few relaxed atomic adds when the session is on). The allocation
+time is charged inside the operator's own wall time, so a row measured with the session on is very
+slightly slower than the same row with it off; the report states the pair cost and the row's
+allocation time separately, so the arithmetic and the instrument can be told apart. Nothing is
+measured under `--timeit`, whose own report replaces the program's output.
+
+**What the allocation row does not see.** The instrument counts calls the Camel allocators serve,
+not every allocation the C++ program makes. A `malloc` behind `new` (the `Block` header itself,
+a `std::vector`'s buffer), a BLAS library's own packing buffers, and a `memcpy` the kernel runs
+over memory it already owns are invisible: the report calls the remainder "kernel time" and
+cannot split it further. The free side is not timed either: the report times allocations, not
+the free-list push or the collection that reclaims a block, so the column is a lower bound on
+the allocator's cost. A first touch of a newly reserved segment is charged to the kernel that
+writes the memory, not to the allocator. And the row is per operator URI, not per graph node: two
+nodes of the same operator share a row. A parallel operator's allocations on worker threads are
+counted as outside operator calls, because the attribution is per thread.
 
 A run of a training step, short:
 
@@ -339,15 +362,19 @@ A run of a training step, short:
       device               cpu
       run                  820.66 ms
       operator calls       1082 (time inside them: 817.28 ms, 99.6% of the run)
-      measurement overhead 50 ns per operator call (one timestamp pair)
+      measurement overhead 50 ns per operator call or allocation (one timestamp pair)
+      allocations          5432 calls (2311 block payloads), 44.31 MiB requested, 1.93 ms inside the allocators
+                           inside operator calls: 5401 calls (2311 block payloads, 44.31 MiB), 1.91 ms; the rows below
 
     steps - the loop at test/cases/perf/mlp_step.cml:51:33: 50 rounds (49 measured)
       operators per step   21 (min 21, max 21)
+      allocations per step 108.2 calls (46.2 block payloads, 908.0 KiB payload, 39.0 µs in the allocators)
       wall per step        median 16.22 ms, mean 16.25 ms, min 5.30 ms, max 56.16 ms
 
-    operators (device, calls, total, first call, mean after the first, share of operator time)
-      cpu  tensor:matmul                       100    291.43 ms      2.17 ms      2.92 ms   35.7%
-      cpu  nn:adam                              50     40.46 ms      1.23 ms     800.6 µs    5.0%
+    operators (device, calls, total, first call, mean after the first, share of operator time,
+               allocation: time (share of the row), allocator calls, block payloads, payload bytes)
+      cpu  tensor:matmul                       100    291.43 ms      2.17 ms      2.92 ms   35.7%   1.21 ms (0.4%)       100         100   12.40 MiB
+      cpu  nn:adam                              50     40.46 ms      1.23 ms     800.6 µs    5.0%   0.42 ms (1.0%)       300         300    7.80 MiB
       ...
 
 ### ONNX export as a pass (`onnx::export`)
