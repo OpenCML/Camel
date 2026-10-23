@@ -9,47 +9,25 @@ expect_exit = 0
 timeout_ms = 10000
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
+# The two graph entries assert the property, not the totals: each function's graph must hold exactly
+# the operators of its rewritten expression, each rendered as its own subexpression, so a folded
+# coefficient, a product that should not have combined and a stray operator are all visible. An
+# `:op/add_*` / `:op/mul_*` total cannot tell `x*3.0 + x*5.0` from `x*2.0 + x*6.0`. The expected
+# shapes are stated, with the mode that produces them, in `algebra_shapes.mjs`.
+
 [[tests]]
 name = "graph.default"
+desc = "Without safe_fp the laws rewrite every function of algebra.cml to its expected expression shape: `t + t` doubles the coefficient (`x*6.0`, `x*0.2`), the coefficient law combines `x*3.0 + x*5.0` into `x*8.0`, `((x + 0) * 3) * 2` becomes `x*6`, `mixed_permissions` keeps its two products because the annotations differ, and `shared_product` keeps the product its print reads beside the folded one it returns. The shapes of the operators are the assertion; no addition or multiplication total is pinned."
 case = "../../../cases/opt/generic/algebra.cml"
 args = ["${case}","std::opt::fold","std::opt::algebra","std::jgir"]
-verify_script = '''
-({input,assert})=>{
- const d=JSON.parse(input.normalized.stdout), safe=false;
- const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
- const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label.startsWith(':op/add_')).length,m=g(name).nodes.filter(n=>n.label.startsWith(':op/mul_')).length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
- for(const name of ['strict','strict32','integer_coefficients','integer32','integer_chain'])counts(name,0,1);
- counts('underflow_sensitive',safe?1:0,1);
- for(const name of ['strict_coefficients','relaxed_coefficients'])counts(name,safe?1:0,safe?2:1);
- counts('mixed_permissions',1,2);counts('shared_product',safe?1:0,safe?1:2);
- const mul=g('strict').nodes.find(n=>n.label===':op/mul_d');
- assert(g('strict').nodes.some(n=>n.label==='6.0'),'coefficient six missing');
- assert(mul.origin&&mul.source,'consumer source lost');
- const relaxed=g('relaxed_coefficients').nodes.filter(n=>n.kind==='OPER');
- assert(relaxed.every(n=>n.numeric==='reassociate'),'permissions changed');
-}
-'''
+verify_script_path = "../../../cases/opt/generic/algebra_shapes.mjs"
 
 [[tests]]
 name = "graph.safe"
+desc = "With safe_fp=true the same functions keep the shapes strict floating point allows: the doubling of `x*0.1` stays a product of that product by 2.0, and the coefficient law declines to combine the two products of `x*3.0 + x*5.0`, while the exact cases (`x*6.0`, `x*8`, `x*6`) are rewritten as in the default mode. The shapes of the operators are the assertion; no addition or multiplication total is pinned."
 case = "../../../cases/opt/generic/algebra.cml"
 args = ["${case}","std::opt::fold","std::opt::algebra safe_fp=true","std::jgir"]
-verify_script = '''
-({input,assert})=>{
- const d=JSON.parse(input.normalized.stdout), safe=true;
- const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
- const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label.startsWith(':op/add_')).length,m=g(name).nodes.filter(n=>n.label.startsWith(':op/mul_')).length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
- for(const name of ['strict','strict32','integer_coefficients','integer32','integer_chain'])counts(name,0,1);
- counts('underflow_sensitive',0,2);
- for(const name of ['strict_coefficients','relaxed_coefficients'])counts(name,safe?1:0,safe?2:1);
- counts('mixed_permissions',1,2);counts('shared_product',0,2);
- const mul=g('strict').nodes.find(n=>n.label===':op/mul_d');
- assert(g('strict').nodes.some(n=>n.label==='6.0'),'coefficient six missing');
- assert(mul.origin&&mul.source,'consumer source lost');
- const relaxed=g('relaxed_coefficients').nodes.filter(n=>n.kind==='OPER');
- assert(relaxed.every(n=>n.numeric==='reassociate'),'permissions changed');
-}
-'''
+verify_script_path = "../../../cases/opt/generic/algebra_shapes.mjs"
 
 [[tests]]
 name = "commutative.graph"

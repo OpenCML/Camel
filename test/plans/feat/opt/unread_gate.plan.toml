@@ -9,19 +9,32 @@ expect_exit = 0
 timeout_ms = 10000
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
+# The graph entries below assert the effect count, and that count is the property, deliberately:
+# `unread_gate.cml` writes five prints, and `effect_value` (three prints in two inlined calls) — the
+# eight `:io/println` operators of the inlined main graph are exactly the program's effects, so the
+# number moves only when an effect is dropped or duplicated, never when an unrelated pass moves nodes
+# or changes the graph's shape. It is kept as a number with this reason written down, not by
+# oversight; `unread_gate.before` asserts the property that makes the case a regression at all (an
+# unread gate exists, and the caller's return anchor is still there) instead of its gate total.
+
 [[tests]]
 name = "unread_gate.before"
+desc = "The setup the dce entries are a regression against: after std::inline the graph carries a gate whose value has no reader (a discarded call's return) and the caller's return anchor. The gate total is not asserted; what makes the rewrite worth testing is that an unread gate exists to drop and that the exit anchor is still there to keep."
 case = "../../../cases/opt/generic/unread_gate.cml"
 args = ["${case}","std::inline","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
- assert(g.nodes.filter(n=>n.kind==='GATE').length===4,'regression setup changed');
+ const gates=g.nodes.filter(n=>n.kind==='GATE');
+ const unread=gates.filter(n=>n.id!==g.exit&&g.edges.every(e=>e.source!==n.id||e.kind!=='normal'));
+ assert(unread.length>0,'no unread gate is left, so the setup no longer exercises the rewrite');
+ assert(gates.some(n=>n.id===g.exit),'the caller return anchor is missing');
 }
 '''
 
 [[tests]]
 name = "unread_gate.graph.inline_dce"
+desc = "One dce pass: only the caller's return anchor is left, and all eight of the program's effects survive (the effect count is the property, see the note above the entries)."
 case = "../../../cases/opt/generic/unread_gate.cml"
 args = ["${case}","std::inline","std::opt::dce","std::jgir"]
 verify_script = '''
@@ -35,6 +48,7 @@ verify_script = '''
 
 [[tests]]
 name = "unread_gate.graph.inline_dce_twice"
+desc = "dce is idempotent: the second pass leaves the same one anchor gate and the same eight effects (the effect count is the property, see the note above the entries)."
 case = "../../../cases/opt/generic/unread_gate.cml"
 args = ["${case}","std::inline","std::opt::dce","std::opt::dce","std::jgir"]
 verify_script = '''
@@ -48,6 +62,7 @@ verify_script = '''
 
 [[tests]]
 name = "unread_gate.graph.opt"
+desc = "The integrated std::opt pipeline does the same as dce here: one anchor gate and the program's eight effects (the effect count is the property, see the note above the entries)."
 case = "../../../cases/opt/generic/unread_gate.cml"
 args = ["${case}","std::opt","std::jgir"]
 verify_script = '''
@@ -61,6 +76,7 @@ verify_script = '''
 
 [[tests]]
 name = "unread_gate.graph.opt_dce"
+desc = "std::opt followed by dce leaves one anchor gate and the program's eight effects: the second removal finds nothing to drop (the effect count is the property, see the note above the entries)."
 case = "../../../cases/opt/generic/unread_gate.cml"
 args = ["${case}","std::opt","std::opt::dce","std::jgir"]
 verify_script = '''
