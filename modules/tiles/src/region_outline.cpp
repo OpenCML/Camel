@@ -19,6 +19,7 @@
 #include "tiles/internal/regions.h"
 #include <algorithm>
 #include <mutex>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -101,9 +102,7 @@ const runtime::Program *outlineRegions(
     // Whether `id` is inside a `#gpu` scope: a device answer places it there directly, and a graph
     // the scope reaches places every node it did not explicitly tag for the host. A `#cpu` fact
     // is the host escape the design keeps, so it is never part of a device promise.
-    const auto nodeInScope = [&](rt::GCGraph &graph, rt::gc_node_ref_t id,
-                                 PlacementDecision &decision) {
-        decision = placementOf(graph, id);
+    const auto nodeInScope = [&](rt::GCGraph &graph, rt::gc_node_ref_t id) {
         return scopes.covers(graph, id);
     };
     const auto scopeNameOf = [&](rt::GCGraph &graph) {
@@ -114,75 +113,119 @@ const runtime::Program *outlineRegions(
         if (!refuseGpuScopes)
             return false;
         for (const auto member : region.members) {
-            PlacementDecision decision;
-            if (nodeInScope(graph, static_cast<rt::gc_node_ref_t>(member), decision))
+            if (nodeInScope(graph, static_cast<rt::gc_node_ref_t>(member)))
                 return true;
         }
         return false;
     };
-    const auto reportRefusal = [&](rt::GCGraph &graph,
-                                   rt::gc_node_ref_t id,
-                                   core::error::RuntimeDiag code,
-                                   const std::string &detail) {
-        auto diag         = context.rtmDiags()->of(code);
-        const auto origin = graph.nodeOrigin(id);
-        if (origin != camel::source::kInvalidOriginId)
-            diag.atOrigin(origin);
-        const std::string name(
-            core::OperatorTable::instance().uri(graph.nodeBodyAs<rt::GCOperBody>(id)->oper));
-        // `GpuScopeNoDeviceProgram` writes the operator in quotes itself (「operator '{1}'」), so
-        // it takes the bare name; `GpuScopeUnsupported` takes a reason phrase, where naming the
-        // operator is part of the sentence.
-        const bool bareName = code == core::error::RuntimeDiag::GpuScopeNoDeviceProgram;
-        diag.commit(scopeNameOf(graph), bareName ? name : "operator '" + name + "'", detail);
-    };
     if (refuseGpuScopes) {
+        // One diagnostic per scope and code, naming every operator it cannot run and why each one
+        // cannot (GPU design 2.4). Reporting per node would stop at the first: a scope is one
+        // promise, and the compiler answers for it once.
+        //
+        // The two codes stay apart, because they are two defects: an operator no module lowers
+        // for the device at all (`GpuScopeUnsupported`), and an operator that has a device
+        // implementation the device compiler still refuses at this use (`GpuScopeNoDeviceProgram`).
+        struct Refusal {
+            std::string name;   // The operator's URI, as the diagnostic writes it.
+            std::string reason; // Why this use cannot run on the device.
+            camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+        };
+        struct ScopeRefusals {
+            std::vector<Refusal> unsupported;
+            std::vector<Refusal> noProgram;
+        };
+        std::vector<std::pair<rt::GCGraph *, ScopeRefusals>> refusals;
+        const auto groupOf = [&](rt::GCGraph &graph) -> ScopeRefusals & {
+            for (auto &entry : refusals)
+                if (entry.first == &graph)
+                    return entry.second;
+            refusals.emplace_back(&graph, ScopeRefusals{});
+            return refusals.back().second;
+        };
         // Report every node the promise cannot keep and leave the graphs alone; the pass fails on
         // the diagnostics rather than running part of the program somewhere else.
-        bool refused = false;
         for (auto *graph : graphs) {
             const auto &analysis = analyses.at(graph);
             for (rt::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
                 if (graph->node(id)->kind != rt::GCNodeKind::Oper)
                     continue;
-                PlacementDecision decision;
-                if (!nodeInScope(*graph, id, decision))
+                if (!nodeInScope(*graph, id))
                     continue;
                 const auto oper = graph->nodeBodyAs<rt::GCOperBody>(id)->oper;
+                const std::string name(
+                    core::OperatorTable::instance().uri(oper));
+                const auto origin = graph->nodeOrigin(id);
                 if (!deviceCapable(oper)) {
                     // A device answer on the node itself is the operator having no device
                     // implementation; an untagged graph the scope reaches adds this operator to a
                     // device unit, and the module that provides it has no device program.
-                    if (decision.onDevice())
-                        reportRefusal(
-                            *graph,
-                            id,
-                            core::error::RuntimeDiag::GpuScopeUnsupported,
-                            "no device implementation");
-                    else
-                        reportRefusal(
-                            *graph,
-                            id,
-                            core::error::RuntimeDiag::GpuScopeNoDeviceProgram,
-                            "the module provides none");
-                    refused = true;
+                    const bool own = placementOf(*graph, id).onDevice();
+                    auto &group    = groupOf(*graph);
+                    (own ? group.unsupported : group.noProgram)
+                        .push_back({name,
+                                    own ? "no device implementation" : "the module provides none",
+                                    origin});
                     continue;
                 }
                 // A lowering exists; the use may still have no program (a shape or element type
                 // the back end refuses). An unresolved type or index instance is not a refusal:
                 // the run specializes it from the actual arguments before it decides (h251).
                 const char *reason = gpuRefusal(*graph, analysis, id);
-                if (reason && *reason) {
-                    reportRefusal(
-                        *graph,
-                        id,
-                        core::error::RuntimeDiag::GpuScopeNoDeviceProgram,
-                        reason);
-                    refused = true;
-                }
+                if (reason && *reason)
+                    groupOf(*graph).noProgram.push_back({name, reason, origin});
             }
         }
-        if (refused)
+        const auto list = [](const std::vector<Refusal> &entries, bool predicateInName) {
+            // `GpuScopeUnsupported` writes "operator 'x' cannot run on the device ({2})" and takes
+            // the operator as its {1}; `GpuScopeNoDeviceProgram` takes the whole predicate, so the
+            // one-operator wording is the one the diagnostic has always had.
+            std::string names;
+            if (entries.size() == 1) {
+                names = "operator '" + entries[0].name + "'";
+            } else {
+                names = "operators ";
+                for (size_t i = 0; i < entries.size(); ++i) {
+                    if (i != 0)
+                        names += ", ";
+                    names += "'" + entries[i].name + "'";
+                }
+            }
+            if (predicateInName)
+                names +=
+                    entries.size() == 1 ? " has no device program" : " have no device program";
+            std::set<std::string> distinct;
+            for (const auto &entry : entries)
+                distinct.insert(entry.reason);
+            if (distinct.size() == 1)
+                return std::pair{names, entries.front().reason};
+            // Several reasons: each one names the operator it belongs to, so the list of reasons
+            // is readable on its own.
+            std::string reasons;
+            for (size_t i = 0; i < entries.size(); ++i) {
+                if (i != 0)
+                    reasons += "; ";
+                reasons += entries[i].name + ": " + entries[i].reason;
+            }
+            return std::pair{names, reasons};
+        };
+        for (auto &[graph, scope] : refusals) {
+            const auto report = [&](const std::vector<Refusal> &entries,
+                                    core::error::RuntimeDiag code,
+                                    bool predicateInName) {
+                if (entries.empty())
+                    return;
+                auto diag         = context.rtmDiags()->of(code);
+                const auto origin = entries.front().origin;
+                if (origin != camel::source::kInvalidOriginId)
+                    diag.atOrigin(origin);
+                const auto text = list(entries, predicateInName);
+                diag.commit(scopeNameOf(*graph), text.first, text.second);
+            };
+            report(scope.unsupported, core::error::RuntimeDiag::GpuScopeUnsupported, false);
+            report(scope.noProgram, core::error::RuntimeDiag::GpuScopeNoDeviceProgram, true);
+        }
+        if (!refusals.empty())
             return program;
     }
     bool regionRefused = false;
@@ -272,10 +315,11 @@ const runtime::Program *outlineRegions(
                         diag.atOrigin(origin);
                     const bool shape =
                         e.oper().empty() || e.reason() == UnsupportedComputation::Reason::Shape;
+                    const std::string who = e.oper().empty() ? std::string("<region>") : e.oper();
                     diag.commit(
                         scopeNameOf(*graph),
-                        // The message writes the operator in quotes itself; the name is passed bare.
-                        e.oper().empty() ? std::string("<region>") : e.oper(),
+                        // The message takes the whole predicate, as the grouped report does.
+                        "operator '" + who + "' has no device program",
                         shape ? "no device program for this shape"
                               : "no device program for this operator");
                     regionRefused = true;

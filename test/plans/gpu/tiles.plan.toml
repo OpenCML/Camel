@@ -1443,3 +1443,27 @@ assert(sums.join(',') === '24.0,24.0', JSON.stringify(sums))
 }
 """
 timeout_ms = 30000
+
+[[tests]]
+name = "nofallback.one_diagnostic_lists_every_refused_operator"
+kind = "negative"
+case = "../../cases/gpu/nofallback/two_refusals.cml"
+# Two operators the scope cannot run, for two different reasons: `tanh` has no device
+# implementation in any module, and `a @ b` has one that refuses this rank. One diagnostic names
+# both and says why each one cannot run (GPU design 2.4), instead of stopping at the first.
+args = ["${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GpuScopeNoDeviceProgram"
+expect_output_contains = ["`#gpu` scope 'step'", "'tensor:tanh'", "'tensor:matmul'"]
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const lines = (input.normalized.stdout + input.normalized.stderr).split(NL).filter(Boolean)
+const both = lines.filter((l) => l.includes('tensor:tanh') && l.includes('tensor:matmul'))
+assert(both.length === 1, `one diagnostic names both: ${JSON.stringify(lines)}`)
+assert(both[0].includes('the module provides none'), both[0])
+assert(both[0].includes('no device program for this shape'), both[0])
+}
+"""
+timeout_ms = 30000
