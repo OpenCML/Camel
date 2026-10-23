@@ -136,3 +136,22 @@
   于是 `tangentElementType` 从「元素是 `Void` 的数组」取元素类型，报
   `GradientElementTypeMismatch`（200 例）。现在规则用**原值的类型**声明梯度（`addTensorOperFor`），
   `tangentElementType` 对 `Void` 元素返回 `nullptr`，这一类已经清零。
+### 秩 0 的收口（2026-10-24 实测）
+
+`tensorArg` 把标量装箱、`wrap` 把秩 0 的结果取出元素：都在本 lane 的
+`modules/tensor/ops/support.cpp` 两个函数里，**内核一行都不用改**——每个内核都经 `wrap`
+返回（57 处 `runKernel(`，没有任何一处自己 `toSlot`），所以「结果没有维度就交元素」一处即可。
+
+实测（同一目标、同一机器，先前已带上面的克隆修法）：`Expected Tensor argument` 的出现次数
+253 → **0**，500 红 → 489 红（总数 5899 → 5900 是因为多了 `entry_args.tensor_npy_values`）。
+**0 个转绿**，6 个原本绿的转红：`library_gemm.tolerance{,.safe,.eight_threads,.safe.eight_threads}`
+（脚本断言「程序打印各自的 sum、difference 和 bound」）、`binary_roundtrip` 与
+`poison:modules.tensor:binary_roundtrip`（脚本断言「float bits、inference 或 typed function
+value 变了」）。六个全是**期望文本**层：秩 0 的值现在按元素打印、秩 0 结果的类型化值现在是
+float——正是裁决要的，所以要等期望那一刀跟着改才可能转绿；没有一个崩溃，也没有静默误读。
+
+顺带回答「并行抖动」那一问：`poison:modules.optim:optim.trajectory_matches_native.nvm`、
+`poison:modules.tensor.compound_assign:tensor.compound_assign.nvm`、
+`poison:modules.tiles:compiled_region_invalidation_and_ownership` 在本分支的**每一次**运行里
+都红（带修法、不带修法、带秩 0 收口都一样），不是这次改动抖出来的；这次改动唯一动到的
+poison 例是 `poison:modules.tensor:binary_roundtrip`（原因同上，期望文本）。

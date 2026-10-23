@@ -7,7 +7,9 @@
 
 #include "support.h"
 
+#include "../dtype.h"
 #include "../interop.h"
+#include "../tensor.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/string.h"
@@ -34,6 +36,20 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
     }
     if (allowArray && argType->code() == TypeCode::Array) {
         return tensorFromArray(args.slot(index), argType, resultAllocator());
+    }
+    // Rank zero is the element type itself (the rank-zero ruling,
+    // docs/handover/reviews/questions-2026-10-23.md): the value of a rank-0 tensor is a scalar
+    // slot, and the type says so — `Tensor<f32, []>` is `f32`, not an array. A kernel that reads
+    // the tensor reads an array of no dimension, so the scalar is boxed here; wrap() takes the
+    // same value back out of a kernel's result. Without this a gradient handed to `tensor:sum_to`
+    // or a broadcast reached the kernel as the scalar it is and was refused as "not a Tensor".
+    if (isSupportedTensorScalar(argType->code())) {
+        Array *box = createTensor(argType->code(), std::span<const int64_t>{}, resultAllocator());
+        box->setSlot(
+            0,
+            args.slot(index),
+            ArrayType::create(Type::create(argType->code()), std::span<const int64_t>{}));
+        return box;
     }
     throwRuntimeFault(RuntimeDiag::RuntimeError, "Expected Tensor argument");
 }
@@ -68,6 +84,13 @@ Shape shapeArg(ArgsView &args, size_t index) {
 }
 
 slot_t wrap(Array *tensor) {
+    // A result with no dimension is the element itself (the rank-zero ruling): the type of a
+    // rank-0 tensor is its element type, so what the kernel hands on is the element slot and not
+    // an array of no dimension, which is the representation the type would contradict. tensorArg
+    // boxes it again for the next kernel that reads the tensor.
+    if (tensor != nullptr && tensor->rank() == 0 && tensor->numel() == 1) {
+        return tensor->getSlot(0);
+    }
     return camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Object *>(tensor));
 }
 
