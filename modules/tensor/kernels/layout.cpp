@@ -133,6 +133,18 @@ permute(const Array *input, std::span<const int64_t> perm, mm::IAllocator &alloc
     }
     const int64_t inner = outShape.back();
     const int64_t rows  = static_cast<int64_t>(out->numel()) / std::max<int64_t>(inner, 1);
+    // The run an output row gathers from the input: `inner` elements `stride` apart, so a
+    // permutation that leaves the last axis in place copies a contiguous run, and one that moves it
+    // walks a strided one.
+    const int64_t stride = src[rank - 1];
+    // A row is at `sum(action[d] * src[d])`, so consecutive rows differ by the strides of the axes
+    // whose counters moved. The counter walk below carries that sum instead of decoding each row
+    // index with `rank - 1` divisions -- 8192 rows of rank 4 are 24576 divisions to place 131072
+    // elements. The carry rewrites the base by subtraction, so it needs no division at all; both
+    // routes give the same address (the row's own index decomposed in `outShape`), and the walk
+    // only stands in for the decode while its counter stays exact. A rank-1 output has no outer
+    // axis to walk, and the general decode is what runs there.
+    const bool counterFits = rank > 1;
     dispatchDType(input->dtype(), [&]<typename T>() {
         const T *in = input->dataAs<T>();
         T *dst      = out->dataAs<T>();
@@ -140,17 +152,45 @@ permute(const Array *input, std::span<const int64_t> perm, mm::IAllocator &alloc
             rows,
             std::max<int64_t>(1, grainForWork(kNsPerFloat * 2.0) / std::max<int64_t>(inner, 1)),
             [&](int64_t begin, int64_t end) {
-                for (int64_t row = begin; row < end; ++row) {
-                    // decode the outer index of this row
-                    int64_t rem = row, base = 0;
-                    for (size_t d = rank - 1; d-- > 0;) {
-                        base += (rem % outShape[d]) * src[d];
-                        rem /= outShape[d];
+                std::vector<int64_t> counter(counterFits ? rank - 1 : 0, 0);
+                int64_t base = 0;
+                if (counterFits) {
+                    // The chunk's first row, decoded once: the same sum the per-row decode made,
+                    // and the counter it left behind.
+                    for (int64_t rem = begin, d = static_cast<int64_t>(rank) - 1; d-- > 0;) {
+                        const int64_t digit = rem % outShape[static_cast<size_t>(d)];
+                        counter[static_cast<size_t>(d)] = digit;
+                        base += digit * src[static_cast<size_t>(d)];
+                        rem /= outShape[static_cast<size_t>(d)];
                     }
-                    T *outRow            = dst + row * inner;
-                    const int64_t stride = src[rank - 1];
-                    for (int64_t i = 0; i < inner; ++i) {
-                        outRow[i] = in[base + i * stride];
+                }
+                for (int64_t row = begin; row < end; ++row) {
+                    if (!counterFits) {
+                        int64_t rem = row;
+                        base        = 0;
+                        for (size_t d = rank - 1; d-- > 0;) {
+                            base += (rem % outShape[d]) * src[d];
+                            rem /= outShape[d];
+                        }
+                    }
+                    T *outRow = dst + row * inner;
+                    if (stride == 1) {
+                        std::memcpy(outRow, in + base, sizeof(T) * static_cast<size_t>(inner));
+                    } else {
+                        for (int64_t i = 0; i < inner; ++i) {
+                            outRow[i] = in[base + i * stride];
+                        }
+                    }
+                    if (!counterFits) {
+                        continue;
+                    }
+                    for (size_t d = rank - 1; d-- > 0;) {
+                        if (++counter[d] < outShape[d]) {
+                            base += src[d];
+                            break;
+                        }
+                        base -= src[d] * (outShape[d] - 1);
+                        counter[d] = 0;
                     }
                 }
             });
