@@ -403,6 +403,29 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
             os << "\n";
         }
     }
+    // An effect outside the program that names no resource at all: the node carries the global
+    // identity, and the pair with the named resource beside it is a pair of resources, in the order
+    // the graph gives (design principles 3.3; without the identity the node is bare `external` and
+    // two such effects are pairs whatever they touch).
+    {
+        const rt::GCGraph *graph = byName("synth:unnamed-global");
+        for (rt::gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            const rt::NodeResources r = rt::resourcesOf(synthetic, *graph, ref);
+            if (r.none()) {
+                continue;
+            }
+            os << "RESOURCES synth node unnamed-global " << ref << " "
+               << label(synthetic, *graph, ref) << ": " << rt::toString(r) << "\n";
+        }
+        for (const rt::RequiredOrdering &o : rt::requiredOrderings(synthetic, *graph)) {
+            os << "RESOURCES synth order unnamed-global " << o.first << " " << o.second << " "
+               << rt::conflictKindName(o.why) << " " << (o.ordered ? "ordered" : "unordered");
+            if (o.ordered) {
+                os << " by " << (o.byData ? "data" : "control");
+            }
+            os << "\n";
+        }
+    }
 }
 
 } // namespace

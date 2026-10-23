@@ -132,9 +132,12 @@ const unused = out.split('\n').find((l) => l.includes('FUNC synth:typed-unused:'
 assert(unused && unused.endsWith(': none'), `unused var argument: ${unused}`)
 // An effect that names no resource at all: the conservative global, which meets every effect
 // (design principles 3.3). It is an access of unknown class the node gets from the resolver, so
-// the pair with the cell write is there and says `resource`.
+// the pair with the cell write is there and says `resource`; the named resource beside it is not
+// turned into a pair of external effects.
+line('RESOURCES synth node unnamed-global 1 semtest:cell_write: write variable (node 0)')
+line('RESOURCES synth node unnamed-global 2 semtest:unnamed: rmw unknown (any); external')
 const unnamed = order('unnamed-global')
-assert(unnamed.length === 1 && unnamed[0].endsWith('resource ordered by control'), `unnamed-global: ${unnamed}`)
+assert(unnamed.length === 1 && unnamed[0].endsWith(' 1 2 resource ordered by control'), `unnamed-global: ${unnamed}`)
 }
 """
 
