@@ -18,6 +18,7 @@ camel_add_tool_objects(camel-debugger_objects
     src/command/dispatcher.cpp
     src/command/commands.cpp
     src/core/debug_core.cpp
+    src/core/explain.cpp
     src/core/memory.cpp
     src/core/pipeline.cpp
     src/core/frames.cpp
@@ -30,6 +31,7 @@ target_include_directories(camel-debugger_objects PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/modules/rewrite
 )
 target_link_libraries(camel-debugger_objects PRIVATE httplib::httplib nlohmann_json::nlohmann_json)
 set_target_properties(camel-debugger PROPERTIES RUNTIME_OUTPUT_NAME camel-db)

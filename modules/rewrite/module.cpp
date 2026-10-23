@@ -17,6 +17,7 @@
  * callable Camel name, so they stay exported from here.
  */
 
+#include "proof.h"
 #include "rule.h"
 
 #include "analysis.h"
@@ -73,6 +74,10 @@ using namespace camel::core::rtdata;
 using camel::graphmod::Handle;
 using camel::graphmod::HandleKind;
 using camel::graphmod::HandleType;
+using camel::rewritemod::linkAfter;
+using camel::rewritemod::linkBefore;
+using camel::rewritemod::ProofObject;
+using camel::rewritemod::RewriteRecord;
 using camel::rewritemod::RuleObject;
 using camel::rewritemod::RuleType;
 
@@ -228,10 +233,6 @@ bool isRuleSide(const camel::runtime::GCGraph &graph) {
 
 // ---------------------------------------------------------------------- the proof
 
-std::string countedText(size_t n, const char *one, const char *many) {
-    return std::to_string(n) + " " + (n == 1 ? one : many);
-}
-
 /// `Proof`, the opaque type of `explain` and `explain_all` (rewrite design 8.7). A proof holds a
 /// copy of the run's record: the steps are values, not references into a graph that may be gone.
 class ProofType final : public OtherType {
@@ -255,81 +256,11 @@ class ProofType final : public OtherType {
 /// the runtime node id every live draft node took in the program the run produced. A step names
 /// its nodes by draft id, the identity that chains one step to the next; the map is what lets a
 /// `Node` of the produced program find the rewrite it stands in.
-struct RewriteRecord {
-    camel::runtime::RewriteLog steps;
-    std::unordered_map<camel::runtime::GraphId, std::vector<camel::runtime::gc_node_ref_t>>
-        nodeRefsByGraph;
-    /// The numeric policy the run applied the rules with: `why_not` matches under the same one,
-    /// so a permission the run did not grant is not granted to its answer either.
-    bool strict = false;
-    /// The program the run started from. A decoded draft keeps each node's runtime id as its draft
-    /// id (draft.cpp, GraphDraft::decode), so a node handle into this program names a step of the
-    /// record by its own id; a node of the program the run produced is found through the map
-    /// above instead. Kept as a traced reference by `Proof`.
-    const camel::runtime::Program *input = nullptr;
-};
-
-/// `Proof`: what `explain` and `explain_all` answer (rewrite design 8.7). It owns a copy of the
-/// run's record, so it stays readable after the `Run` it came from is gone. A proof is either the
-/// full derivation (`explain_all`: a header, then one step per rewrite naming the rule, the round
-/// and the graph, the nodes that matched, the node that was produced and the nodes that were
-/// erased) or one targeted chain (`explain`: the shortest chain between two values, printed as
-/// `a = ... = b`, with every equally short chain in the order the rewrites were made).
-class ProofObject final : public rtdata::Object {
-  public:
-    /// One step of a chain and the direction it is read in. The rule was made from its left side
-    /// to its right; a chain may read it backwards, because a rewrite is an equality.
-    struct Link {
-        size_t step  = 0;
-        bool reverse = false;
-    };
-    using ChainPath = std::vector<Link>;
-    /// A targeted chain. `same` is set when both values are one node (no rewrite is needed);
-    /// `none`, when set, says why no chain connects them. Otherwise `paths` holds every shortest
-    /// chain, in schedule order.
-    struct Chain {
-        std::string from;
-        std::string to;
-        bool same = false;
-        std::string none;
-        std::vector<ChainPath> paths;
-    };
-
-    static ProofObject *create(
-        const RewriteRecord &record, const camel::runtime::RewriteStats &stats,
-        mm::IAllocator &allocator);
-    static ProofObject *createChain(
-        const RewriteRecord &record, const camel::runtime::RewriteStats &stats, Chain chain,
-        mm::IAllocator &allocator);
-
-    const RewriteRecord &record() const { return *record_; }
-    const camel::runtime::RewriteStats &stats() const { return stats_; }
-    /// The program the run started from, or null when it is no longer reachable.
-    const camel::runtime::Program *input() const { return input_; }
-
-    /// Turns a fresh proof into a targeted one. Set once, by the factory, before the proof is
-    /// handed out: a proof never changes after that.
-    void setChain(Chain chain) { chain_ = std::move(chain); }
-
-    bool equals(const rtdata::Object *other, const Type *type, bool deep = false) const override;
-    rtdata::Object *
-    clone(mm::IAllocator &allocator, const Type *type, bool deep = false) const override;
-    void print(std::ostream &os, const Type *type) const override;
-    void onMoved() override {}
-    void updateRefs(const rtdata::Object::RefRelocator &relocate, const Type *type) override;
-    void finalize() noexcept override;
-
-    ProofObject(RewriteRecord *record, const camel::runtime::RewriteStats &stats)
-        : record_(record), stats_(stats), input_(record != nullptr ? record->input : nullptr) {}
-
-  private:
-    RewriteRecord *record_;
-    camel::runtime::RewriteStats stats_;
-    /// Traced: the proof keeps the program the run started from alive as long as a chain may name
-    /// one of its nodes. Relocated in updateRefs like any other reference into the graph space.
-    const camel::runtime::Program *input_ = nullptr;
-    std::optional<Chain> chain_;
-};
+///
+/// The definition is in proof.h: the debugger reads a proof's record from the proof the module
+/// hands it, so the format has one owner, not a second copy in the tool.
+/// `Proof`: what `explain` and `explain_all` answer (rewrite design 8.7), declared in proof.h for
+/// the same reason. This file builds and prints it (proof.cpp holds those methods).
 
 ProofType *ProofType::get() {
     static ProofType *instance = nullptr;
@@ -359,161 +290,6 @@ bool ProofType::assignableFrom(Type *source) const { return is(source); }
 
 OtherType *ProofType::cloneWithParams(std::span<Type *const>) const { return get(); }
 
-namespace {
-ProofObject *allocateProof(
-    const RewriteRecord &record, const camel::runtime::RewriteStats &stats,
-    std::optional<ProofObject::Chain> chain, mm::IAllocator &allocator) {
-    auto *copy = new RewriteRecord(record);
-    void *mem  = allocator.alloc(sizeof(ProofObject), alignof(ProofObject));
-    if (mem == nullptr) {
-        delete copy;
-        throw std::bad_alloc();
-    }
-    auto *proof = new (mem) ProofObject(copy, stats);
-    if (chain) {
-        proof->setChain(std::move(*chain));
-    }
-    // The collector does not look at dead young objects one by one; it must be told which ones
-    // own memory it has to release (the same contract as `Foreign` and `Array`).
-    allocator.noteFinalizable(proof);
-    return proof;
-}
-} // namespace
-
-ProofObject *ProofObject::create(
-    const RewriteRecord &record, const camel::runtime::RewriteStats &stats,
-    mm::IAllocator &allocator) {
-    return allocateProof(record, stats, std::nullopt, allocator);
-}
-
-ProofObject *ProofObject::createChain(
-    const RewriteRecord &record, const camel::runtime::RewriteStats &stats, Chain chain,
-    mm::IAllocator &allocator) {
-    return allocateProof(record, stats, std::move(chain), allocator);
-}
-
-bool ProofObject::equals(const rtdata::Object *other, const Type *, bool) const {
-    return this == other;
-}
-
-rtdata::Object *
-ProofObject::clone(mm::IAllocator &allocator, const Type *, bool) const {
-    return chain_ ? createChain(*record_, stats_, *chain_, allocator)
-                  : create(*record_, stats_, allocator);
-}
-
-namespace {
-/// The text a link starts from and the text it reaches. A step was made from the node it matched
-/// to the node it produced; a chain may read it the other way round, because a rewrite is an
-/// equality, and then the produced text is the one it starts from.
-std::string linkBefore(const camel::runtime::RewriteStep &step, bool reverse) {
-    if (reverse) {
-        return step.producedText;
-    }
-    return step.matchedText.empty() ? std::string("%?") : step.matchedText.front();
-}
-
-std::string linkAfter(const camel::runtime::RewriteStep &step, bool reverse) {
-    return reverse ? linkBefore(step, false) : step.producedText;
-}
-
-/// One chain as `a = ... = b`: the first value, then a line per rewrite naming the value it
-/// reaches, the rule, and whether the step was made the other way round.
-void printChain(
-    std::ostream &os, const camel::runtime::RewriteLog &log, const ProofObject::Chain &chain,
-    const ProofObject::ChainPath &path, const std::string &indent) {
-    os << indent << chain.from << "\n";
-    for (const ProofObject::Link &link : path) {
-        const camel::runtime::RewriteStep &step = log[link.step];
-        os << indent << "  = " << linkAfter(step, link.reverse) << "  by " << step.rule;
-        if (link.reverse) {
-            os << "  (backwards)";
-        }
-        os << "  (round " << step.round << ", graph " << step.graph << ")\n";
-    }
-}
-} // namespace
-
-void ProofObject::print(std::ostream &os, const Type *) const {
-    if (chain_) {
-        const Chain &chain = *chain_;
-        if (chain.same) {
-            os << "the same value: " << chain.from
-               << " is one node, so no rewrite is needed to connect it to itself";
-            return;
-        }
-        if (!chain.none.empty()) {
-            os << chain.none;
-            return;
-        }
-        const size_t count = chain.paths.size();
-        if (count == 1) {
-            os << "chain " << chain.from << " = " << chain.to << ": "
-               << countedText(chain.paths.front().size(), "rewrite", "rewrites") << "\n";
-            printChain(os, record_->steps, chain, chain.paths.front(), "  ");
-            return;
-        }
-        os << countedText(count, "chain", "chains") << " of the same length from " << chain.from
-           << " to " << chain.to << ", in the order the rewrites were made\n";
-        for (size_t i = 0; i < count; ++i) {
-            os << "  " << (i + 1) << ". ";
-            printChain(os, record_->steps, chain, chain.paths[i], "     ");
-        }
-        return;
-    }
-    const auto &log = record_->steps;
-    if (log.empty()) {
-        os << "no rewrite matched in " << countedText(stats_.rounds, "round", "rounds")
-           << ": the program is unchanged";
-        return;
-    }
-    os << countedText(log.size(), "rewrite", "rewrites") << " in "
-       << countedText(stats_.rounds, "round", "rounds") << ", " << stats_.visited
-       << " nodes visited\n";
-    for (const camel::runtime::RewriteStep &step : log) {
-        const std::string before =
-            step.matchedText.empty() ? std::string("%?") : step.matchedText.front();
-        os << "  " << step.graph << " round " << step.round << ": " << before << "\n";
-        os << "  = " << step.producedText << "  by " << step.rule << "\n";
-        os << "    matched";
-        for (const std::string &text : step.matchedText) {
-            os << " " << text << ";";
-        }
-        os << "\n";
-        if (!step.erasedText.empty()) {
-            os << "    erased";
-            for (const std::string &text : step.erasedText) {
-                os << " " << text << ";";
-            }
-            os << "\n";
-        }
-    }
-}
-
-void ProofObject::finalize() noexcept {
-    chain_.reset();
-    delete record_;
-    record_ = nullptr;
-}
-
-void ProofObject::updateRefs(const rtdata::Object::RefRelocator &relocate, const Type *type) {
-    // A proof's steps are text and node ids, not GC values; the one reference it holds is the
-    // program the run started from, which a chain may still name nodes of.
-    if (input_ == nullptr ||
-        !mm::graphSpace().isAllocated(const_cast<camel::runtime::Program *>(input_))) {
-        input_ = nullptr;
-        return;
-    }
-    input_ = static_cast<const camel::runtime::Program *>(relocate(
-        const_cast<camel::runtime::Program *>(input_), nullptr,
-        rtdata::RefTraceInfo{
-            .owner     = this,
-            .ownerType = type,
-            .slotType  = nullptr,
-            .ownerKind = "Proof",
-            .slotName  = "input",
-        }));
-}
 
 /// One application of rules: the program it produced and what the engine counted while applying
 /// them (the rewrites and the nodes are summed over the graphs; the rounds are the rounds the

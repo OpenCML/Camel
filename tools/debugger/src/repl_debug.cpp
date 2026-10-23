@@ -27,6 +27,7 @@
 #include <httplib.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <iostream>
@@ -348,6 +349,54 @@ void print(const std::string &expression) {
     }
 }
 
+std::vector<std::string> words(const std::string &arg) {
+    std::vector<std::string> out;
+    for (size_t i = 0; i < arg.size();) {
+        while (i < arg.size() && std::isspace(static_cast<unsigned char>(arg[i]))) {
+            ++i;
+        }
+        const size_t start = i;
+        while (i < arg.size() && !std::isspace(static_cast<unsigned char>(arg[i]))) {
+            ++i;
+        }
+        if (i > start) {
+            out.push_back(arg.substr(start, i - start));
+        }
+    }
+    return out;
+}
+
+/// `explain <run> [<a> <b>]`: the run's record, or the shortest chain between two values. The
+/// answer is the module's, read from the proof it made; the debugger only shows the record.
+void explain(const std::string &arg) {
+    const std::vector<std::string> parts = words(arg);
+    if (parts.empty() || parts.size() == 2 || parts.size() > 3) {
+        std::cout << "Usage: explain <run> | explain <run> <value> <value>" << std::endl;
+        return;
+    }
+    json args{{"frame", 0}, {"run", parts[0]}};
+    if (parts.size() == 3) {
+        args["a"] = parts[1];
+        args["b"] = parts[2];
+    }
+    if (auto answer = core("explain", args)) {
+        std::cout << answer->value("text", std::string()) << std::endl;
+    }
+}
+
+/// `why_not <run> <rule> <value>`: why the rule did not fire at the value, as the module answers.
+void whyNot(const std::string &arg) {
+    const std::vector<std::string> parts = words(arg);
+    if (parts.size() != 3) {
+        std::cout << "Usage: why_not <run> <rule> <value>" << std::endl;
+        return;
+    }
+    json args{{"frame", 0}, {"run", parts[0]}, {"rule", parts[1]}, {"value", parts[2]}};
+    if (auto answer = core("why_not", args)) {
+        std::cout << answer->value("text", std::string()) << std::endl;
+    }
+}
+
 void frames(const std::string &arg) {
     if (arg.empty()) {
         if (auto status = core("status")) {
@@ -383,6 +432,10 @@ void printDebugReplHelp(std::ostream &os) {
   bt                (backtrace, where)  The call stack
   locals [n]        The variables of frame n of bt (default: the top frame)
   print <name>      (p)  The value of a name, with member accesses (p.x, t.0, xs[2])
+  explain <run> [<a> <b>]  The rewrites the run recorded (or the shortest chain between two
+                    values): the rule, the round, the graph and both node positions
+  why_not <run> <rule> <value>  Why the rule did not fire at the value: the first mismatch,
+                    the missing permission, the false condition, or the rule that did fire
   frames [functions|subgraphs]  Show the arms of branches folded into the frame of their
                     function (default) or as the subgraphs they are
 )";
@@ -441,6 +494,10 @@ bool handleDebugReplCommand(const std::string &cmd, const std::string &rawArg) {
         locals(arg);
     } else if (cmd == "print" || cmd == "p") {
         print(arg);
+    } else if (cmd == "explain") {
+        explain(arg);
+    } else if (cmd == "why_not" || cmd == "why-not") {
+        whyNot(arg);
     } else if (cmd == "frames") {
         frames(arg);
     } else {
