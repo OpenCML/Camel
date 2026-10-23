@@ -157,9 +157,21 @@ enum class GCFillKind : uint8_t {
     FunctionClosure = 3,
 };
 
+/// The role of a data port (docs/design/effects/edges.cn.md 1.5): the ordinary argument of the
+/// callee's signature, or the context (`with`) argument. The role is a property of the port, not a
+/// second edge kind: there is one data edge kind, and each of its ports carries one of these.
+enum class PortRole : uint8_t {
+    Normal,
+    Context,
+};
+
 enum GCNodeFlag : uint8_t {
     kGCNodeFlagMacro    = 1 << 0,
     kGCNodeFlagConstant = 1 << 1,
+    /// The node is a statement written directly in one `sync` block, or the block's value: the
+    /// only nodes a sync edge may join (docs/design/effects/edges.cn.md 4.6). The seal check reads
+    /// it; nothing at run time does, and a `sync` block that is inlined into another graph keeps it.
+    kGCNodeFlagSyncStatement = 1 << 2,
 };
 
 /// Properties a graph has besides its nodes (GCGraph::flags).
@@ -218,6 +230,19 @@ struct GCGraphOrderEdge {
     bool operator==(const GCGraphOrderEdge &) const = default;
 };
 static_assert(std::is_trivially_copyable_v<GCGraphOrderEdge>);
+
+/// One sync edge of a graph (docs/design/effects/edges.cn.md section 1): `pred` is the statement
+/// written before `user` in one `sync` block, and `pred` is therefore *used*: liveness follows a
+/// sync edge backwards, as it follows a data port. A sync edge is not data, so it is not in a
+/// node's input port list, and it is not an order edge either (an order edge carries no "used").
+/// Like an order edge it lives in its own array of the graph, sorted by user, so that the sync
+/// predecessors of a node are one run of it.
+struct GCGraphSyncEdge {
+    gc_node_ref_t user = kInvalidNodeRef;
+    gc_node_ref_t pred = kInvalidNodeRef;
+    bool operator==(const GCGraphSyncEdge &) const = default;
+};
+static_assert(std::is_trivially_copyable_v<GCGraphSyncEdge>);
 
 /// One node of a frozen graph: a fixed 28-byte record (docs/design/graph-model, 4.1). Its inputs
 /// and its payload are found through the graph (GCGraph::normInputsOf, nodeBodyAs).
@@ -470,6 +495,10 @@ struct GCGraphNativePayload {
     // the nodes' input runs: an order edge is not a port (GCGraph::orderPredsOf).
     GCGraphOrderEdge *orderEdges = nullptr;
     gc_cnt_t orderEdgeCount      = 0;
+    // The sync edges of the graph, sorted by (user, pred); null when the graph has none. Not in
+    // the nodes' input runs either (GCGraph::syncPredsOf).
+    GCGraphSyncEdge *syncEdges = nullptr;
+    gc_cnt_t syncEdgeCount     = 0;
     gc_cnt_t nodeCount         = 0;
     gc_cnt_t edgeCount         = 0;
     gc_cnt_t payloadWordCount  = 0;
@@ -730,24 +759,32 @@ class GCGraph : public camel::core::rtdata::Object {
         return inputRun(ref, n->ctrlBegin, end);
     }
 
+    /// The ports of the one data edge kind, in port order: every normal-role port, then the
+    /// context-role ones (docs/design/effects/edges.cn.md 1.5). The run is one piece of the input
+    /// table -- `inBegin .. withBegin` are the normal ports and `withBegin .. ctrlBegin` the
+    /// context ones -- so the whole list is `inBegin .. ctrlBegin`.
+    std::span<const gc_node_ref_t> dataPortsOf(gc_node_ref_t ref) const {
+        const GCNode *n = node(ref);
+        if (!n) {
+            return {};
+        }
+        return inputRun(ref, n->inBegin, n->ctrlBegin);
+    }
+    /// The role of the port at `port` of `dataPortsOf(ref)`.
+    PortRole portRoleOf(gc_node_ref_t ref, size_t port) const {
+        const GCNode *n = node(ref);
+        if (!n) {
+            return PortRole::Normal;
+        }
+        const size_t normalPorts = static_cast<size_t>(n->withBegin - n->inBegin);
+        return port < normalPorts ? PortRole::Normal : PortRole::Context;
+    }
+
     /// The order predecessors of `ref`, in the order they are stored (the source order they were
     /// written in): the nodes that must run before it when both run, along an edge that carries no
     /// "used" (GCGraphOrderEdge). Empty for a node with none.
     std::span<const GCGraphOrderEdge> orderPredsOf(gc_node_ref_t ref) const {
-        if (nativePayload_.orderEdgeCount == 0 || !containsNodeRef(ref)) {
-            return {};
-        }
-        const GCGraphOrderEdge *begin = nativePayload_.orderEdges;
-        const GCGraphOrderEdge *end   = begin + nativePayload_.orderEdgeCount;
-        const auto lower              = std::lower_bound(
-            begin, end, ref, [](const GCGraphOrderEdge &edge, gc_node_ref_t user) {
-                return edge.user < user;
-            });
-        const auto upper = std::lower_bound(
-            lower, end, ref, [](const GCGraphOrderEdge &edge, gc_node_ref_t user) {
-                return edge.user <= user;
-            });
-        return {lower, static_cast<size_t>(upper - lower)};
+        return sideRunOf(nativePayload_.orderEdges, nativePayload_.orderEdgeCount, ref);
     }
     /// Every order edge of the graph, sorted by (user, pred).
     std::span<const GCGraphOrderEdge> orderEdges() const {
@@ -755,6 +792,18 @@ class GCGraph : public camel::core::rtdata::Object {
     }
     /// True when some node of the graph is ordered by an order edge.
     bool hasOrderEdges() const { return nativePayload_.orderEdgeCount != 0; }
+
+    /// The sync predecessors of `ref`, in the order they are stored (the written order of the
+    /// sync block): the statements before it, whose "used" reaches it. Empty for a node with none.
+    std::span<const GCGraphSyncEdge> syncPredsOf(gc_node_ref_t ref) const {
+        return sideRunOf(nativePayload_.syncEdges, nativePayload_.syncEdgeCount, ref);
+    }
+    /// Every sync edge of the graph, sorted by (user, pred).
+    std::span<const GCGraphSyncEdge> syncEdges() const {
+        return {nativePayload_.syncEdges, nativePayload_.syncEdgeCount};
+    }
+    /// True when some node of the graph is a statement of a `sync` block after the first.
+    bool hasSyncEdges() const { return nativePayload_.syncEdgeCount != 0; }
 
     /// The users of every node, built the first time it is asked for and kept with the graph
     /// (the frozen block stores each edge once, as an input). Thread-safe.
@@ -835,6 +884,22 @@ class GCGraph : public camel::core::rtdata::Object {
 
     /// Gives up this graph's share of each node chunk (the graph is being freed).
     void releaseNodeChunks();
+
+    /// The entries of a side array (order edges, sync edges) whose user is `ref`: the array is
+    /// sorted by (user, pred), so they are one run of it.
+    template <typename Edge>
+    static std::span<const Edge> sideRunOf(const Edge *edges, gc_cnt_t count, gc_node_ref_t ref) {
+        if (count == 0 || edges == nullptr) {
+            return {};
+        }
+        const Edge *begin = edges;
+        const Edge *end   = begin + count;
+        const auto lower  = std::lower_bound(
+            begin, end, ref, [](const Edge &edge, gc_node_ref_t user) { return edge.user < user; });
+        const auto upper = std::lower_bound(
+            lower, end, ref, [](const Edge &edge, gc_node_ref_t user) { return edge.user <= user; });
+        return {lower, static_cast<size_t>(upper - lower)};
+    }
 
     GCGraph(
         GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord,

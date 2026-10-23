@@ -42,6 +42,7 @@ class EdgeChecker {
     std::vector<std::string> run() {
         checkWritings();
         checkOrderEdges();
+        checkSyncEdges();
         findCycle();
         for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
             checkNode(it.ref(), **it);
@@ -50,11 +51,56 @@ class EdgeChecker {
     }
 
   private:
-    /// The structural rule the design has the seal check enforce (docs/design/effects/edges.cn.md
-    /// 4.6): an order edge only orders, and only something that has an order can carry one. A
-    /// pure node has no resource and no write of its own, so an order edge on it is a graph the
-    /// builder must not have produced; a node the graph does not have, and an edge from a node to
-    /// itself, are the same defect written another way.
+    /// The other half of the structural rule of 4.6: a sync edge joins two statements one `sync`
+    /// block writes directly -- or the block's chain tail to the block's value -- and nothing else.
+    /// The builder records that fact on each node it chains (kGCNodeFlagSyncStatement), so the
+    /// check is: both ends are such a node, they are not the same node and not a node a rewrite
+    /// removed, and one statement is written directly after one other (the tail that reaches the
+    /// block's value is the one node that two sync edges leave).
+    void checkSyncEdges() {
+        if (!graph_.hasSyncEdges()) {
+            return;
+        }
+        for (const GCGraphSyncEdge &edge : graph_.syncEdges()) {
+            const auto bad = [&](const std::string &what) {
+                violations_.push_back(
+                    std::format(
+                        "graph '{}': sync edge {} -> {} {}",
+                        graph_.name(),
+                        edge.pred,
+                        edge.user,
+                        what));
+            };
+            if (!graph_.containsNodeRef(edge.user) || !graph_.containsNodeRef(edge.pred)) {
+                bad("names a node the graph does not have");
+                continue;
+            }
+            const GCNode *user = graph_.node(edge.user);
+            const GCNode *pred = graph_.node(edge.pred);
+            if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
+                bad("names a node a rewrite removed");
+                continue;
+            }
+            if (edge.user == edge.pred) {
+                bad("chains a node to itself");
+                continue;
+            }
+            if ((user->flags & kGCNodeFlagSyncStatement) == 0) {
+                bad("ends on a node no `sync` block wrote");
+                continue;
+            }
+            if ((pred->flags & kGCNodeFlagSyncStatement) == 0) {
+                bad("starts at a node no `sync` block wrote");
+                continue;
+            }
+            if (graph_.syncPredsOf(edge.user).size() > 1) {
+                bad("is the second predecessor of one statement");
+            }
+        }
+    }
+
+    /// The rule the design has the seal check enforce (docs/design/effects/edges.cn.md 4.6): an
+    /// order edge only orders, and only something that has an order can carry one.
     void checkOrderEdges() {
         if (!graph_.hasOrderEdges()) {
             return;

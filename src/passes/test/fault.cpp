@@ -18,7 +18,7 @@ DropCallArgumentTestPass::apply(const camel::runtime::Program *program, std::ost
             }
             // The FUNC now passes one argument fewer than its callee has parameters.
             draft.unlinkInput(
-                camel::runtime::DraftEdgeKind::Norm,
+                camel::runtime::DraftEdgeKind::Data,
                 id,
                 draft.normInputsOf(id).back());
             return session.commit();

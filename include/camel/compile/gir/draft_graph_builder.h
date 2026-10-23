@@ -117,8 +117,12 @@ class DraftGraphBuilder {
     runtime::DraftNodeRef addSyncNode();
     runtime::DraftNodeRef addGateNode(camel::core::type::Type *type);
     runtime::DraftNodeRef addDrefNode(DrefTarget target);
-    void link(runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to);
-    bool unlink(runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to);
+    void link(
+        runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to,
+        runtime::PortRole role = runtime::PortRole::Normal);
+    bool unlink(
+        runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to,
+        runtime::PortRole role = runtime::PortRole::Normal);
     void addDependencyGraph(const graph_ptr_t &graph);
     void eraseDependencyGraph(const graph_ptr_t &graph);
     void addSubGraph(const graph_ptr_t &graph);

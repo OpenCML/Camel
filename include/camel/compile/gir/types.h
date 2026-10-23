@@ -28,6 +28,10 @@ enum class LinkType {
     /// Orders and nothing else (docs/design-principles.cn.md 3.1): the two ends run in this
     /// order when both of them run, and neither end runs because of it.
     Order,
+    /// The statement written directly before this one in the same `sync` block
+    /// (docs/design/effects/edges.cn.md 1.5): it orders like an order edge and it is *used* like
+    /// a data port, so both ends run.
+    Sync,
 };
 
 std::string to_string(LinkType type);
