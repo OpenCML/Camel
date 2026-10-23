@@ -1,0 +1,14 @@
+h354 — 声明的成本按测试自己的 CPU 时间判（分支 handover/h354-autodiff-margin，1 提交 910aad83c，基线 102dbc5d1；合入 07e81237f）
+
+**应用的裁定**（reviews 的 `declaration-cost-gate` (a)）："改量 CPU 时间，不量墙钟……进程的 CPU 时间（用户态 + 内核态）基本不随负载变"。
+
+**现在谁判什么**：计划里的测试可以声明 `cpu_budget_ms`；runner 把该测试的命令放在 `test/tools/child-cpu.mjs` 下跑，这个包装**只收割该测试自己的进程树**，把内核记账的用户态+内核态 CPU 写到 fd 3（需要包装的理由：Node 唯一能读的子进程 CPU 是 `/proc/self/stat` 的 cutime+cstime 差值，而 runner 自己从同一个进程收割所有测试的子进程——包装让读数在 `-Jobs 8` 下也精确）。跨过预算就失败并同时报出两个数；`timeout_ms` 成为它的存活界限，`TIMEOUT_MARGIN` 不再读这类测试的墙钟（墙钟不再被声称为它的界限）；**读数缺失算失败、绝不算通过**；只给 `cpu_budget_ms` 不给 `timeout_ms` 是 schema 错误；数字进 `meta.json` 与 verify 载荷。应用对象：`benchmark_gradients_vs_torch`，`cpu_budget_ms = 1600000`、`timeout_ms = 900000`。
+
+**数字**（Linux 主机 32 线程；从未安静过，每次读数的 1 分钟负载在 67–128）：
+- 改前：total 1 / pass 0 / fail 1——`finished in 127203 ms against a 300000 ms timeout, below the 4x margin: the bound is today's wall time, not a bound`，而内容是绿的（312 行梯度全 ok、`gradient check: PASS`）。
+- 改后：`[PASS] benchmark_gradients_vs_torch 970.29 s cpu of 1600.00 s budget, 148.70 s wall`，total 1 / pass 1。四次读数 **943.31 / 967.15 / 970.29 / 979.37 s CPU** 对 **127.5–165.5 s 墙钟**——负载变化 2 倍时 CPU 只散 3.8%、墙钟散 30%。预算 = 最高读数的 1.63 倍。
+- 植入（把同一个检查在一个测试树里做两遍、内容仍绿）：`[FAIL] … 1910.29 s cpu of 1600.00 s budget` 并给出 `used 1910.29 s of CPU against a cpu_budget_ms of 1600.00 s: the test's own work grew (its wall clock read 308.45 s, which is not the bound on this host)`——**这就是抓住真实放慢的那一行**，而单纯的负载到不了它。
+- 存活：`test/tools/selftest/cpu-budget/{room,over,liveness}.plan.toml` 廉价地覆盖两个方向与"卡住"；存活夹具以 `killed at its 1.20 s liveness bound after …` 失败，且不按 CPU 判。
+
+闸门：整层跑两遍、第二遍在提交上：5830/5816/0/14，exit 0；`modules/autodiff` 整份 199/199；runner 自检整份 PASS；`load_class` 3/3。**合入后协调者重跑整层：5853/5839/0/14。**
+**留给决策者的两个决定**（`docs/handover/questions/autodiff-cost-bound.md`）：① 它选择"有 CPU 预算的测试不再读墙钟余量规则"（若保留 CPU 形式的余量，计划里那个数只有真实界限的四分之一；建议 (a)）；② 同一计划里四个 resnet 条目仍按墙钟读（`relu_kinks` 289.03 s、`bn_relu_kinks` 547.90 s 对 900 s 余量界限）——建议照样测量并给 `cpu_budget_ms`，已另派 h363。
