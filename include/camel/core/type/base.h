@@ -87,12 +87,11 @@ enum class TypeCode : uint32_t {
     // ask instead of `isPrimitive`.
     Complex64  = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x011),
     Complex128 = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x012),
-    // Reduced-precision floating element types (design principles 7.3, H238): the storage of
-    // `Tensor<bf16>` and `Tensor<f16>`, two bytes per element, with the conversions of
-    // camel/core/rtdata/half.h. They are element types only: no value of either fits in a slot,
-    // no literal has one; a conversion from another element type is the precision the program
-    // wrote and needs no permission (design principles 7.2-7.3: `change_precision` governs a
-    // computation the compiler moves to lower precision).
+    // Reduced-precision floating types (design principles 7.3, H238): `bf16` and `f16`, the
+    // element types of `Tensor<bf16>` and `Tensor<f16>` and scalar types of the language as
+    // well — a literal has one, and it has the written conversion, the arithmetic and the
+    // comparisons of any other float (camel/core/rtdata/half.h). A value of one fits in a slot
+    // as its two-byte pattern in the low half, computed on as f32 and rounded once on store.
     // The bit patterns are not the low 16 bits of their type code, so a consumer that indexes a
     // table by `code & 0xF` must handle them first (castSafetyFrom does).
     BFloat16 = makeTypeCode(TypeFlag::Primitive, 0x014),
@@ -242,7 +241,8 @@ class Type {
      * when nothing was bound. A type that loses its last dimension this way (a bare pack
      * `T[..rest]` bound to no dimensions) denotes its element type, which is a scalar.
      */
-    virtual const Type *withExtentValues(const ExtentValues &values, const ExtentPacks &packs) const;
+    virtual const Type *
+    withExtentValues(const ExtentValues &values, const ExtentPacks &packs) const;
     /**
      * `Name<args...>`: the type these arguments denote. The default refuses every argument
      * (`this type takes no arguments`). A type whose arguments carry meaning overrides it.

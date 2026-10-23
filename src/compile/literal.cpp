@@ -3,6 +3,7 @@
 
 #include "camel/compile/literal.h"
 
+#include "camel/core/rtdata/half.h"
 #include "camel/utils/number_text.h"
 
 #include <algorithm>
@@ -722,9 +723,7 @@ std::optional<Value> Value::fromImaginaryText(std::string_view text) {
     return Value(Kind::Imaginary, std::make_shared<const Rep>(std::move(rep)));
 }
 
-bool Value::hasImaginaryPart() const {
-    return kind_ == Kind::Imaginary || kind_ == Kind::Complex;
-}
+bool Value::hasImaginaryPart() const { return kind_ == Kind::Imaginary || kind_ == Kind::Complex; }
 
 std::optional<Value> Value::fromIntegerText(std::string_view text) {
     bool negative = false;
@@ -885,8 +884,8 @@ std::string Value::toString() const {
         if (imaginaryNegative) {
             magnitude.num = magnitude.num.negated();
         }
-        return rationalText(rep_->rational, rep_->negativeZero) +
-               (imaginaryNegative ? "-" : "+") + rationalText(magnitude, false) + "i";
+        return rationalText(rep_->rational, rep_->negativeZero) + (imaginaryNegative ? "-" : "+") +
+               rationalText(magnitude, false) + "i";
     }
     return rationalText(rep_->rational, rep_->negativeZero);
 }
@@ -924,6 +923,40 @@ template <typename T> std::optional<T> toFloating(const Rational &value, bool ne
                                                         : std::nullopt;
 }
 
+/// The bf16 or f16 nearest the written value, which is the value a literal of either type is
+/// (design principles 5.1, 7.3): one rounding of the exact rational, never two. The value is
+/// brought to f32 first, which loses nothing that can change the answer: a rounding to 8
+/// significand bits (bf16) or 11 (f16) through 24 bits is the same as rounding the exact value
+/// directly. Nothing when the type has no value to give it: an f32 overflow or underflow (the
+/// same refusal an f32 literal gets), or an infinite result for a finite written value.
+template <typename Half>
+std::optional<camel::core::data::data_ptr_t>
+toHalfData(const Rational &value, bool negativeZero, camel::core::type::Type *type) {
+    const auto asFloat = toFloating<float>(value, negativeZero);
+    if (!asFloat.has_value()) {
+        return std::nullopt;
+    }
+    const slot_t rounded = camel::core::rtdata::halfFromFloat<Half>(*asFloat);
+    if (camel::core::rtdata::halfOverflows<Half>(*asFloat)) {
+        return std::nullopt;
+    }
+    return std::make_shared<camel::core::data::HalfData>(
+        camel::core::rtdata::halfBitsOfSlot(rounded),
+        type);
+}
+
+/// Whether the bf16 or f16 nearest the written value is zero while the written value is not:
+/// the underflow of the reduced type, asked by the boundary that rounds to zero, so that no
+/// third rounding of the exact value is involved.
+template <typename Half> bool halfUnderflows(const Rational &value) {
+    const auto asFloat = toFloating<float>(value, false);
+    if (!asFloat.has_value() || *asFloat == 0.0f) {
+        return false;
+    }
+    return camel::core::rtdata::halfToFloat<Half>(
+               camel::core::rtdata::halfFromFloat<Half>(*asFloat)) == 0.0f;
+}
+
 } // namespace
 
 std::optional<camel::core::data::data_ptr_t> Value::toData(camel::core::type::Type *type) const {
@@ -940,7 +973,9 @@ std::optional<camel::core::data::data_ptr_t> Value::toData(camel::core::type::Ty
                 return std::nullopt;
             }
             return std::make_shared<camel::core::data::ComplexData>(
-                static_cast<double>(*real), static_cast<double>(*imaginary), type);
+                static_cast<double>(*real),
+                static_cast<double>(*imaginary),
+                type);
         }
         const auto real      = toFloating<double>(rep_->rational, rep_->negativeZero);
         const auto imaginary = toFloating<double>(rep_->imaginary, rep_->imaginaryNegativeZero);
@@ -983,6 +1018,10 @@ std::optional<camel::core::data::data_ptr_t> Value::toData(camel::core::type::Ty
         }
         return std::make_shared<camel::core::data::DoubleData>(*value);
     }
+    case TypeCode::BFloat16:
+        return toHalfData<camel::core::rtdata::BFloat16>(rep_->rational, rep_->negativeZero, type);
+    case TypeCode::Float16:
+        return toHalfData<camel::core::rtdata::Float16>(rep_->rational, rep_->negativeZero, type);
     default:
         return std::nullopt;
     }
@@ -1014,6 +1053,10 @@ bool Value::underflows(camel::core::type::Type *type) const {
         return !hasImaginaryPart() && partUnderflows<float>(rep_->rational);
     case TypeCode::Float64:
         return !hasImaginaryPart() && partUnderflows<double>(rep_->rational);
+    case TypeCode::BFloat16:
+        return !hasImaginaryPart() && halfUnderflows<camel::core::rtdata::BFloat16>(rep_->rational);
+    case TypeCode::Float16:
+        return !hasImaginaryPart() && halfUnderflows<camel::core::rtdata::Float16>(rep_->rational);
     case TypeCode::Complex64:
         return partUnderflows<float>(rep_->rational) || partUnderflows<float>(rep_->imaginary);
     case TypeCode::Complex128:
@@ -1034,7 +1077,7 @@ Kind foldedKind(const Value &left, const Value &right, bool complex) {
         return Kind::Complex;
     }
     return left.kind() == Kind::Integer && right.kind() == Kind::Integer ? Kind::Integer
-                                                                        : Kind::Float;
+                                                                         : Kind::Float;
 }
 
 std::shared_ptr<const Value::Rep> complexRep(Rational real, Rational imaginary) {
@@ -1046,7 +1089,7 @@ std::shared_ptr<const Value::Rep> complexRep(Rational real, Rational imaginary) 
 
 std::optional<Value> Value::add(const Value &left, const Value &right) {
     const bool complex = hasImaginary(left) || hasImaginary(right);
-    Rational real = rationalAdd(left.rep_->rational, right.rep_->rational);
+    Rational real      = rationalAdd(left.rep_->rational, right.rep_->rational);
     Rational imaginary = rationalAdd(left.rep_->imaginary, right.rep_->imaginary);
     if (!complex) {
         return Value(foldedKind(left, right, false), std::make_shared<const Rep>(Rep{real}));
@@ -1056,7 +1099,7 @@ std::optional<Value> Value::add(const Value &left, const Value &right) {
 
 std::optional<Value> Value::sub(const Value &left, const Value &right) {
     const bool complex = hasImaginary(left) || hasImaginary(right);
-    Rational real = rationalSub(left.rep_->rational, right.rep_->rational);
+    Rational real      = rationalSub(left.rep_->rational, right.rep_->rational);
     Rational imaginary = rationalSub(left.rep_->imaginary, right.rep_->imaginary);
     if (!complex) {
         return Value(foldedKind(left, right, false), std::make_shared<const Rep>(Rep{real}));
@@ -1086,10 +1129,10 @@ std::optional<Value> Value::mul(const Value &left, const Value &right) {
 }
 
 std::optional<Value> Value::div(const Value &left, const Value &right) {
-    const Rational &a = left.rep_->rational;
-    const Rational &b = right.rep_->rational;
-    const Rational &c = left.rep_->imaginary;
-    const Rational &d = right.rep_->imaginary;
+    const Rational &a  = left.rep_->rational;
+    const Rational &b  = right.rep_->rational;
+    const Rational &c  = left.rep_->imaginary;
+    const Rational &d  = right.rep_->imaginary;
     const bool complex = hasImaginary(left) || hasImaginary(right);
     if (!complex) {
         if (b.num.isZero()) {
@@ -1111,8 +1154,7 @@ std::optional<Value> Value::div(const Value &left, const Value &right) {
     if (denominator.num.isZero()) {
         return std::nullopt;
     }
-    const auto real =
-        rationalDiv(rationalAdd(rationalMul(a, b), rationalMul(c, d)), denominator);
+    const auto real = rationalDiv(rationalAdd(rationalMul(a, b), rationalMul(c, d)), denominator);
     const auto imaginary =
         rationalDiv(rationalSub(rationalMul(c, b), rationalMul(a, d)), denominator);
     if (!real.has_value() || !imaginary.has_value()) {
@@ -1183,8 +1225,8 @@ std::optional<Value> Value::pow(const Value &base, const Value &exponent) {
 
 std::optional<Value> Value::negate(const Value &value) {
     if (value.hasImaginaryPart()) {
-        Rational real = value.rep_->rational;
-        Rational imaginary = value.rep_->imaginary;
+        Rational real              = value.rep_->rational;
+        Rational imaginary         = value.rep_->imaginary;
         bool imaginaryNegativeZero = value.rep_->imaginaryNegativeZero;
         if (imaginary.num.isZero()) {
             imaginaryNegativeZero = !imaginaryNegativeZero;
@@ -1199,8 +1241,11 @@ std::optional<Value> Value::negate(const Value &value) {
         }
         return Value(
             value.kind_,
-            std::make_shared<const Rep>(Rep{
-                std::move(real), realNegativeZero, std::move(imaginary), imaginaryNegativeZero}));
+            std::make_shared<const Rep>(
+                Rep{std::move(real),
+                    realNegativeZero,
+                    std::move(imaginary),
+                    imaginaryNegativeZero}));
     }
     Rational result = value.rep_->rational;
     if (result.num.isZero()) {
@@ -1249,6 +1294,12 @@ bool kindEnters(const Value &value, camel::core::type::Type *type) {
     case TypeCode::Float32:
     case TypeCode::Float64:
         return true;
+    // A bf16 or f16 is a floating type with a range and a precision of its own: `let x: bf16 =
+    // 0.1` is legal and takes the nearest bf16, and a value the type cannot hold is refused with
+    // that type's range (design principles 5.1, 7.3).
+    case TypeCode::BFloat16:
+    case TypeCode::Float16:
+        return true;
     default:
         return false;
     }
@@ -1268,6 +1319,10 @@ std::string rangeText(camel::core::type::Type *type) {
         return std::string(camel::utils::floatRangeText<float>());
     case TypeCode::Float64:
         return std::string(camel::utils::floatRangeText<double>());
+    case TypeCode::BFloat16:
+        return std::string(camel::utils::halfRangeText(true));
+    case TypeCode::Float16:
+        return std::string(camel::utils::halfRangeText(false));
     case TypeCode::Complex64:
         return camel::utils::complexRangeText<float>();
     case TypeCode::Complex128:
