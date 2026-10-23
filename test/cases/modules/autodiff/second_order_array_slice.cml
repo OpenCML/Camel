@@ -1,0 +1,57 @@
+// Second order through a slice whose bound is computed from the parameter.
+//
+// xs = [w, 2w, 3w, 4w]; k = int(w) = 2 at w = 2; s = xs[0:k] = [w, 2w]
+//   f(w) = s[0]^2 + s[1]^2 = w^2 + 4w^2 = 5w^2
+//   f'(w) = 10w  -> f'(2) = 20
+//   f''(w) = 10  -> f''(2) = 10
+//
+// The slice's gradient is a range scatter back into the parent (`tangent/scatter_slice_arr`),
+// and differentiating that graph needs the operator's rule: the gradient of the sliced part is
+// the same slice of the upstream gradient. The bound is discrete (design principles 9.9), so it
+// contributes exactly zero to both derivatives; `bound_only` makes that zero visible -- a
+// function of w that reads only the length of a slice has derivative 0.0 and second derivative
+// 0.0 -- beside the real 20 and 10, which a pass that returned nothing would not print. Without
+// the rule the build refuses with "no derivative rule for operator
+// ':tangent/scatter_slice_arr'" (exit 1).
+module second_order_array_slice
+
+import { grad } from autodiff
+
+with <w: float>
+func f(): float {
+    let xs = [w, w * 2.0, w * 3.0, w * 4.0]
+    let k = int(w)
+    let s = xs[0:k]
+    return s[0] * s[0] + s[1] * s[1]
+}
+
+// Depends on w only through a discrete bound: the length of the slice. Exactly zero, both orders.
+with <w: float>
+func bound_only(): float {
+    let xs = [10.0, 20.0, 30.0, 40.0]
+    let s = xs[0:int(w)]
+    return float(len(s))
+}
+
+with <v: float>
+func df(): float {
+    return grad(f)<v>()
+}
+
+with <v: float>
+func dbound(): float {
+    return grad(bound_only)<v>()
+}
+
+func main(): int sync {
+    let g = grad(f)<2.0>()
+    let h = grad(df)<2.0>()
+    let b = grad(bound_only)<2.0>()
+    let b2 = grad(dbound)<2.0>()
+    'second_order_array_slice d={:.1f} d2={:.1f} bound={:.1f} bound2={:.1f}'->format<
+        g,
+        h,
+        b,
+        b2>->println
+    return 0
+}

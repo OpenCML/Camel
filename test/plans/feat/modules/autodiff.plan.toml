@@ -2762,3 +2762,69 @@ expect_exit = 0
 expect_stdout_exact = "gather_discrete_index_zero value=1.0 weights_grad=6.0 index_grad=0.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# ---- Second order through the array kind ----
+#
+# The tangent of an array is the array of its elements' tangents (design principles 9.9), so a
+# first-order gradient of an array expression is built from the `:tangent/*` operators. Taking a
+# gradient of that graph needs a rule per tangent operator; four have one now, and two
+# (`tangent/init_arr`, `tangent/last_arr`) stay blocked because their adjoints need an append or
+# a pad that takes a computed element as an ordinary input. Each case below fails when its own
+# rule is removed: the outer pass then refuses with "no derivative rule for operator ':tangent/...'".
+# The numbers are hand-computed in the desc, not read back from the code.
+
+[[tests]]
+name = "second_order_array_add.runtime.nvm"
+desc = "Second order through an array whose gradient accumulates from two paths: the two reads of xs[0] each scatter a range back into the parameter's gradient, so the gradient graph adds two tangent arrays with `:tangent/add_arr`. f(xs)=xs0^3+xs1^2+xs0^2 at [2,3,0]: f'=[3*xs0^2+2*xs0, 2*xs1, 0]=[16,6,0]; d/dxs0(3*xs0^2+2*xs0)=6*xs0+2=14 and d/dxs1(2*xs1)=2. The case prints 14 and 0.0; without the rule the outer pass refuses with no derivative rule for ':tangent/add_arr' and prints no number."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_array_add.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_array_add d0=16.0 d1=6.0 d2=0.0 dd0=14.0 dd1=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "second_order_array_zeros.runtime.nvm"
+desc = "Second order through a gather of an array parameter, the case that pins the zero array's rule: the gather's gradient is a zero array of the parameter's length (`:tangent/zeros_arr`) with the element's gradient scattered into it. f(xs)=xs0^3 at [2,3,0]: f'=[3*xs0^2, 0, 0]=[12,0,0]; d/dxs0(3*xs0^2)=6*xs0=12, and the other components are exactly 0. The zero array's values are the zero tangents of the elements of an array it takes only a length from, so its rule passes on no gradient (9.9) and must not add anything to the 12. Without the rule the outer pass refuses with no derivative rule for ':tangent/zeros_arr'."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_array_zeros.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_array_zeros d0=12.0 d1=0.0 dd0=12.0 dd1=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "second_order_array_scatter.runtime.nvm"
+desc = "Second order through a gather at a runtime index: the gather's gradient is a zero array with the element's gradient scattered into it (`:tangent/scatter_add_arr`). xs=[w,2w,3w], i=int(w), f(w)=xs[i]^3; at w=2 the index is 2, the element is 3w, so f=(3w)^3=27w^3, f'(w)=81w^2=324 and f''(w)=162w=324. The scatter's rule must send the upstream gradient back to the scattered element (a gather of it, not of the base); the wrong base read would make the second derivative 0.0. The index is discrete (9.9), so it contributes exactly zero while the real 324 survives both orders. Without the rule the outer pass refuses with no derivative rule for ':tangent/scatter_add_arr'."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_array_scatter.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_array_scatter value=216.0 d=324.0 d2=324.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "second_order_array_slice.runtime.nvm"
+desc = "Second order through a slice whose bound is computed from the parameter: the slice's gradient is a range scatter (`:tangent/scatter_slice_arr`), and its rule hands the sliced part the same slice of the upstream gradient. xs=[w,2w,3w,4w], k=int(w)=2, s=xs[0:k], f(w)=s0^2+s1^2=w^2+4w^2=5w^2, so f'(w)=10w=20 and f''(w)=10. The bound is discrete (9.9): bound_only(w)=float(len(xs[0:int(w)])) has derivative exactly 0.0 and second derivative 0.0, printed beside the real 20 and 10, so a pass that returned zeros for everything fails on the real numbers. Without the rule the outer pass refuses with no derivative rule for ':tangent/scatter_slice_arr'."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_array_slice.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_array_slice d=20.0 d2=10.0 bound=0.0 bound2=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "second_order_array_append_init_blocked"
+desc = "The block, pinned: the second derivative of `append` on the side of its array. append's adjoint splits the appended array's gradient into `:tangent/init_arr` (the parent's gradient) and `:tangent/last_arr` (the appended value's). The adjoint of init_arr would pad the upstream gradient with the zero tangent at the end, which needs an operator that grows a tangent array with a computed element as an ordinary input; the array library's append and extend take their value as a `with` input and a rule can emit only ordinary inputs. The first derivative is the real [6, 2] (f(xs)=ys0^2+ys1*ys2 at [3,4] gives ys=[3,4,2] and f'=[2*ys0, 2]); the second refuses by name at ':tangent/init_arr' with no derivative rule, rather than printing a zero for a derivative nobody computed. The value half (`:tangent/last_arr`) is in the same gradient graph and is blocked for the same reason; the backward order meets init_arr first here. No rule is written for either half."
+kind = "negative"
+case = "../../../cases/modules/autodiff/second_order_array_append_init_blocked.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_stdout_contains = ["second_order_array_append_init d0=6.0 d1=2.0"]
+expect_output_contains = ["no derivative rule for operator ':tangent/init_arr'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

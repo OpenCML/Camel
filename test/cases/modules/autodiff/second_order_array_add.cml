@@ -1,0 +1,36 @@
+// Second order through an array whose gradient accumulates from two paths.
+//
+// f(xs) = xs[0]^3 + xs[1]^2 + xs[0]^2, at xs = [2, 3, 0]:
+//   f'(xs) = [3*xs0^2 + 2*xs0, 2*xs1, 0] = [16, 6, 0]
+//   d/dxs0 (3*xs0^2 + 2*xs0) = 6*xs0 + 2 = 14
+//
+// The two reads of xs[0] each send a range scatter back into the parameter's gradient, so the
+// gradient graph accumulates them with `tangent/add_arr`. Differentiating that graph is what
+// needs the rule: with it the outer pass reads 14; without it the build refuses with
+// "no derivative rule for operator ':tangent/add_arr'" (exit 1) instead of dropping a gradient.
+import { grad } from autodiff
+
+with <xs: float[]>
+func f(): float {
+    return xs[0] * xs[0] * xs[0] + xs[1] * xs[1] + xs[0] * xs[0]
+}
+
+// The first component of f's gradient: a scalar function of the parameter array.
+with <v: float[]>
+func df0(): float {
+    let g = grad(f)<v>()
+    return g[0]
+}
+
+func main(): int sync {
+    let xs = [2.0, 3.0, 0.0]
+    let g = grad(f)<xs>()
+    let h = grad(df0)<xs>()
+    'second_order_array_add d0={:.1f} d1={:.1f} d2={:.1f} dd0={:.1f} dd1={:.1f}'->format<
+        g[0],
+        g[1],
+        g[2],
+        h[0],
+        h[1]>->println
+    return 0
+}
