@@ -5,12 +5,12 @@
 #include "builtin/executors/builtin.h"
 #include "builtin/operators/array.h"
 #include "builtin/operators/collection.h"
-#include "builtin/operators/mem.h"
 #include "builtin/operators/derivative.h"
 #include "builtin/operators/enum.h"
+#include "builtin/operators/mem.h"
 #include "builtin/operators/ops.h"
-#include "builtin/operators/tagged.h"
 #include "builtin/operators/set_value.h"
+#include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/enum.h"
@@ -38,9 +38,7 @@ bool isConcreteValueType(Type *type) {
 }
 
 /// A type parameter of a signature: `binder` at its first occurrence, a use at every later one.
-Type *typeParameter(const char *name, bool binder) {
-    return TypeVarType::create(name, binder);
-}
+Type *typeParameter(const char *name, bool binder) { return TypeVarType::create(name, binder); }
 
 /// The signature of `map`'s rule as a type: `<f: (item: T) => U> (collect: T[]) => U[]`. The
 /// rule reports that declaration as spelling for reports; this is the same declaration with its
@@ -84,6 +82,53 @@ resolver_ptr_t withFixedSignature(resolver_ptr_t resolver, FunctionType *signatu
     return resolver;
 }
 
+/// The overloads of a binary operator over the two reduced-precision floating types: both
+/// operands are one of them and so is the result (`bf16 + bf16` is a bf16), or a bool for the
+/// comparing operators (design principles 7.3). The `f32` and `f64` overloads of these groups
+/// say the same shape; this writes it once for both types.
+std::vector<std::pair<std::string, resolver_ptr_t>>
+halfBinaryOverloads(const std::string &stem, bool returnsBool = false) {
+    std::vector<std::pair<std::string, resolver_ptr_t>> entries;
+    for (const auto &[suffix, type] :
+         {std::pair<std::string, Type *(*)()>{"bf", &Type::BFloat16},
+          std::pair<std::string, Type *(*)()>{"f6", &Type::Float16}}) {
+        entries.push_back(
+            {":op/" + stem + suffix,
+             StaticFuncTypeResolver::create(
+                 {},
+                 {{type(), false}, {type(), false}},
+                 returnsBool ? Type::Bool() : type())});
+    }
+    return entries;
+}
+
+/// The overloads of a compound assignment over the two reduced-precision floating types: the
+/// target cell is one of them and keeps its type (`acc += x`).
+std::vector<std::pair<std::string, resolver_ptr_t>> halfAssignOverloads(const std::string &stem) {
+    std::vector<std::pair<std::string, resolver_ptr_t>> entries;
+    for (const auto &[suffix, type] :
+         {std::pair<std::string, Type *(*)()>{"bf", &Type::BFloat16},
+          std::pair<std::string, Type *(*)()>{"f6", &Type::Float16}}) {
+        entries.push_back(
+            {":op/" + stem + suffix,
+             StaticFuncTypeResolver::create({}, {{type(), true}, {type(), false}}, type())});
+    }
+    return entries;
+}
+
+/// The overloads of a unary operator over the two reduced-precision floating types (`-x`).
+std::vector<std::pair<std::string, resolver_ptr_t>> halfUnaryOverloads(const std::string &stem) {
+    std::vector<std::pair<std::string, resolver_ptr_t>> entries;
+    for (const auto &[suffix, type] :
+         {std::pair<std::string, Type *(*)()>{"bf", &Type::BFloat16},
+          std::pair<std::string, Type *(*)()>{"f6", &Type::Float16}}) {
+        entries.push_back(
+            {":op/" + stem + suffix,
+             StaticFuncTypeResolver::create({}, {{type(), false}}, type())});
+    }
+    return entries;
+}
+
 } // namespace
 
 module_ptr_t GlobalsBuiltinModule::create(context_ptr_t ctx) {
@@ -116,6 +161,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/stoi",
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Int32()),
                 },
+                {
+                    ":op/bftoi",
+                    StaticFuncTypeResolver::create({}, {{Type::BFloat16(), false}}, Type::Int32()),
+                },
+                {
+                    ":op/f6toi",
+                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Int32()),
+                },
             }),
         OperatorGroup::create(
             "i64",
@@ -139,6 +192,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/stol",
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Int64()),
+                },
+                {
+                    ":op/bftol",
+                    StaticFuncTypeResolver::create({}, {{Type::BFloat16(), false}}, Type::Int64()),
+                },
+                {
+                    ":op/f6tol",
+                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Int64()),
                 },
             }),
         OperatorGroup::create(
@@ -164,6 +225,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/stol",
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Int64()),
                 },
+                {
+                    ":op/bftol",
+                    StaticFuncTypeResolver::create({}, {{Type::BFloat16(), false}}, Type::Int64()),
+                },
+                {
+                    ":op/f6tol",
+                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Int64()),
+                },
             }),
         OperatorGroup::create(
             "f32",
@@ -187,6 +256,17 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/stof",
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Float32()),
+                },
+                {
+                    ":op/bftof",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::BFloat16(), false}},
+                        Type::Float32()),
+                },
+                {
+                    ":op/f6tof",
+                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float32()),
                 },
             }),
         OperatorGroup::create(
@@ -212,6 +292,17 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/stod",
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Float64()),
                 },
+                {
+                    ":op/bftod",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::BFloat16(), false}},
+                        Type::Float64()),
+                },
+                {
+                    ":op/f6tod",
+                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float64()),
+                },
             }),
         OperatorGroup::create(
             "float",
@@ -236,6 +327,87 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/stod",
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Float64()),
                 },
+                {
+                    ":op/bftod",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::BFloat16(), false}},
+                        Type::Float64()),
+                },
+                {
+                    ":op/f6tod",
+                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float64()),
+                },
+            }),
+        // bf16 and f16 are floating types a program writes and converts like f32 (design
+        // principles 7.3): `bf16(x)` and `f16(x)` take every numeric type and a text, and round
+        // to nearest with ties to even once. Writing the conversion is asking for that
+        // precision, so no numeric permission is involved; `change_precision` governs a
+        // computation the compiler moves to lower precision.
+        OperatorGroup::create(
+            "bf16",
+            {
+                {
+                    ":op/itobf",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::BFloat16()),
+                },
+                {
+                    ":op/ltobf",
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::BFloat16()),
+                },
+                {
+                    ":op/ftobf",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), false}},
+                        Type::BFloat16()),
+                },
+                {
+                    ":op/dtobf",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), false}},
+                        Type::BFloat16()),
+                },
+                {
+                    ":op/bftobf",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::BFloat16(), false}},
+                        Type::BFloat16()),
+                },
+                {
+                    ":op/stobf",
+                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::BFloat16()),
+                },
+            }),
+        OperatorGroup::create(
+            "f16",
+            {
+                {
+                    ":op/itof6",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Float16()),
+                },
+                {
+                    ":op/ltof6",
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Float16()),
+                },
+                {
+                    ":op/ftof6",
+                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float16()),
+                },
+                {
+                    ":op/dtof6",
+                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float16()),
+                },
+                {
+                    ":op/f6tof6",
+                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float16()),
+                },
+                {
+                    ":op/stof6",
+                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Float16()),
+                },
             }),
         OperatorGroup::create(
             "c64",
@@ -251,22 +423,30 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/ftoc",
                     StaticFuncTypeResolver::create(
-                        {}, {{Type::Float32(), false}}, Type::Complex64()),
+                        {},
+                        {{Type::Float32(), false}},
+                        Type::Complex64()),
                 },
                 {
                     ":op/dtoc",
                     StaticFuncTypeResolver::create(
-                        {}, {{Type::Float64(), false}}, Type::Complex64()),
+                        {},
+                        {{Type::Float64(), false}},
+                        Type::Complex64()),
                 },
                 {
                     ":op/ctoc",
                     StaticFuncTypeResolver::create(
-                        {}, {{Type::Complex64(), false}}, Type::Complex64()),
+                        {},
+                        {{Type::Complex64(), false}},
+                        Type::Complex64()),
                 },
                 {
                     ":op/ztoc",
                     StaticFuncTypeResolver::create(
-                        {}, {{Type::Complex128(), false}}, Type::Complex64()),
+                        {},
+                        {{Type::Complex128(), false}},
+                        Type::Complex64()),
                 },
             }),
         OperatorGroup::create(
@@ -274,31 +454,45 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             {
                 {
                     ":op/itoz",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Complex128()),
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), false}},
+                        Type::Complex128()),
                 },
                 {
                     ":op/ltoz",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Complex128()),
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), false}},
+                        Type::Complex128()),
                 },
                 {
                     ":op/ftoz",
                     StaticFuncTypeResolver::create(
-                        {}, {{Type::Float32(), false}}, Type::Complex128()),
+                        {},
+                        {{Type::Float32(), false}},
+                        Type::Complex128()),
                 },
                 {
                     ":op/dtoz",
                     StaticFuncTypeResolver::create(
-                        {}, {{Type::Float64(), false}}, Type::Complex128()),
+                        {},
+                        {{Type::Float64(), false}},
+                        Type::Complex128()),
                 },
                 {
                     ":op/ctoz",
                     StaticFuncTypeResolver::create(
-                        {}, {{Type::Complex64(), false}}, Type::Complex128()),
+                        {},
+                        {{Type::Complex64(), false}},
+                        Type::Complex128()),
                 },
                 {
                     ":op/ztoz",
                     StaticFuncTypeResolver::create(
-                        {}, {{Type::Complex128(), false}}, Type::Complex128()),
+                        {},
+                        {{Type::Complex128(), false}},
+                        Type::Complex128()),
                 },
             }),
         OperatorGroup::create(
@@ -327,12 +521,16 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/ctos",
                     StaticFuncTypeResolver::create(
-                        {}, {{Type::Complex64(), false}}, Type::String()),
+                        {},
+                        {{Type::Complex64(), false}},
+                        Type::String()),
                 },
                 {
                     ":op/ztos",
                     StaticFuncTypeResolver::create(
-                        {}, {{Type::Complex128(), false}}, Type::String()),
+                        {},
+                        {{Type::Complex128(), false}},
+                        Type::String()),
                 },
                 {
                     // Every other type: the text println writes for the value. A type rule,
@@ -556,6 +754,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
+                // bf16 and f16: `acc += x` on one of them (design principles 7.3).
+                halfAssignOverloads("assn_add"),
             }),
         OperatorGroup::create(
             "__assn_sub__",
@@ -602,6 +802,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
+                halfAssignOverloads("assn_sub"),
             }),
         OperatorGroup::create(
             "__assn_mul__",
@@ -648,6 +849,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
+                halfAssignOverloads("assn_mul"),
             }),
         OperatorGroup::create(
             "__assn_div__",
@@ -694,6 +896,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
+                halfAssignOverloads("assn_div"),
             }),
         OperatorGroup::create(
             "__assn_mod__",
@@ -788,6 +991,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), true}, {Type::Int64(), false}},
                         Type::Complex128()),
                 },
+                halfAssignOverloads("assn_pow"),
             }),
         OperatorGroup::create(
             "__assn_and__",
@@ -920,6 +1124,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             return Type::Bool();
                         }),
                 },
+                halfBinaryOverloads("eq", true),
             }),
         OperatorGroup::create(
             "__neq__",
@@ -1006,6 +1211,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             return Type::Bool();
                         }),
                 },
+                halfBinaryOverloads("ne", true),
             }),
         // `===` and `!==` are not supported for now (design principles 4.2): the front end
         // refuses them, so there is no operator behind them.
@@ -1048,6 +1254,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
+                halfBinaryOverloads("lt", true),
             }),
         OperatorGroup::create(
             "__le__",
@@ -1087,6 +1294,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
+                halfBinaryOverloads("le", true),
             }),
         OperatorGroup::create(
             "__gt__",
@@ -1126,6 +1334,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
+                halfBinaryOverloads("gt", true),
             }),
         OperatorGroup::create(
             "__ge__",
@@ -1165,6 +1374,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
+                halfBinaryOverloads("ge", true),
             }),
         // ======= Arithmetic operators =======
         OperatorGroup::create(
@@ -1219,6 +1429,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), false}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
+                halfBinaryOverloads("add"),
             }),
         OperatorGroup::create(
             "__sub__",
@@ -1265,6 +1476,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), false}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
+                halfBinaryOverloads("sub"),
             }),
         OperatorGroup::create(
             "__mul__",
@@ -1311,6 +1523,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), false}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
+                halfBinaryOverloads("mul"),
             }),
         OperatorGroup::create(
             "__div__",
@@ -1357,6 +1570,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), false}, {Type::Complex128(), false}},
                         Type::Complex128()),
                 },
+                halfBinaryOverloads("div"),
             }),
         OperatorGroup::create(
             "__mod__",
@@ -1452,6 +1666,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Complex128(), false}, {Type::Int64(), false}},
                         Type::Complex128()),
                 },
+                halfBinaryOverloads("pow"),
             }),
         OperatorGroup::create("__mat__", {}),
         OperatorGroup::create(
@@ -1532,13 +1747,19 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
                 {
                     ":op/neg_c",
-                    StaticFuncTypeResolver::create({}, {{Type::Complex64(), false}}, Type::Complex64()),
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}},
+                        Type::Complex64()),
                 },
                 {
                     ":op/neg_z",
                     StaticFuncTypeResolver::create(
-                        {}, {{Type::Complex128(), false}}, Type::Complex128()),
+                        {},
+                        {{Type::Complex128(), false}},
+                        Type::Complex128()),
                 },
+                halfUnaryOverloads("neg"),
             }),
         OperatorGroup::create(
             "__inv__",
@@ -2026,24 +2247,24 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":mark/map_arr",
                     withFixedSignature(
                         DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<f: (item: T) => U> (collect: T[]) => U[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType  = tt::as_ptr<ArrayType>(norm[0]);
-                            const auto &elemType = arrType->elemType();
-                            if (with[0]->code() != TypeCode::Function)
-                                return nullopt;
-                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                            if (funcType->normTypesCount() != 1)
-                                return nullopt;
-                            if (!funcType->normTypeAt(0)->equals(elemType))
-                                return nullopt;
-                            ASSERT(funcType->hasExitType(), "Function must have exit type");
-                            return ArrayType::create(funcType->exitType());
-                        }),
+                            {{1, {false}}, {1, {false}}},
+                            "<f: (item: T) => U> (collect: T[]) => U[]",
+                            [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                                -> optional<Type *> {
+                                if (norm[0]->code() != TypeCode::Array)
+                                    return nullopt;
+                                const auto &arrType  = tt::as_ptr<ArrayType>(norm[0]);
+                                const auto &elemType = arrType->elemType();
+                                if (with[0]->code() != TypeCode::Function)
+                                    return nullopt;
+                                const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
+                                if (funcType->normTypesCount() != 1)
+                                    return nullopt;
+                                if (!funcType->normTypeAt(0)->equals(elemType))
+                                    return nullopt;
+                                ASSERT(funcType->hasExitType(), "Function must have exit type");
+                                return ArrayType::create(funcType->exitType());
+                            }),
                         mapRuleSignature()),
                 },
             }),
@@ -2110,33 +2331,33 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":mark/reduce_arr",
                     withFixedSignature(
                         DynamicFuncTypeResolver::create(
-                        {{2, {false, false}}, {1, {false}}},
-                        "<f: (acc: U, item: T) => U, initial: U> (collect: T[]) => U",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            if (with[0]->code() != TypeCode::Function)
-                                return nullopt;
-                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                            if (funcType->normTypesCount() < 2)
-                                return nullopt;
-                            // The accumulator's parameter type is the result type, and the
-                            // elements, the initial value and the callback's result must all be
-                            // values of it. An unnamed struct value whose fields are that
-                            // type's fields in the same order is one (design principles 5.2);
-                            // the call converts it, as `enterStructParameters` does for the
-                            // initial value.
-                            Type *acc = funcType->normTypeAt(0);
-                            if (!funcType->normTypeAt(1)->assignableFrom(arrType->elemType()))
-                                return nullopt;
-                            if (!acc->assignableFrom(with[1]))
-                                return nullopt;
-                            if (!acc->assignableFrom(funcType->exitType()))
-                                return nullopt;
-                            return acc;
-                        }),
+                            {{2, {false, false}}, {1, {false}}},
+                            "<f: (acc: U, item: T) => U, initial: U> (collect: T[]) => U",
+                            [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                                -> optional<Type *> {
+                                if (norm[0]->code() != TypeCode::Array)
+                                    return nullopt;
+                                const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
+                                if (with[0]->code() != TypeCode::Function)
+                                    return nullopt;
+                                const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
+                                if (funcType->normTypesCount() < 2)
+                                    return nullopt;
+                                // The accumulator's parameter type is the result type, and the
+                                // elements, the initial value and the callback's result must all be
+                                // values of it. An unnamed struct value whose fields are that
+                                // type's fields in the same order is one (design principles 5.2);
+                                // the call converts it, as `enterStructParameters` does for the
+                                // initial value.
+                                Type *acc = funcType->normTypeAt(0);
+                                if (!funcType->normTypeAt(1)->assignableFrom(arrType->elemType()))
+                                    return nullopt;
+                                if (!acc->assignableFrom(with[1]))
+                                    return nullopt;
+                                if (!acc->assignableFrom(funcType->exitType()))
+                                    return nullopt;
+                                return acc;
+                            }),
                         reduceRuleSignature()),
                 },
             }),

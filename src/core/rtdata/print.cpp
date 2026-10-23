@@ -22,6 +22,7 @@
 
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/collection.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
@@ -101,6 +102,14 @@ void printScalar(std::ostream &os, slot_t data, const Type *type) {
         break;
     case TypeCode::Float64:
         os << camel::utils::floatText(fromSlot<Float64>(data));
+        break;
+    // A bf16 or f16 prints by the float text rules of design principles 11.5, from the value
+    // its bits name (camel/core/rtdata/half.h): `0.1` is `0.1`, not its bit pattern.
+    case TypeCode::BFloat16:
+        os << camel::utils::floatText(halfToFloat<BFloat16>(data));
+        break;
+    case TypeCode::Float16:
+        os << camel::utils::floatText(halfToFloat<Float16>(data));
         break;
     case TypeCode::Bool:
         os << (fromSlot<Bool>(data) ? "true" : "false");
@@ -195,9 +204,8 @@ void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit
             if (array->size() > arrayLimit) {
                 // Type, address and length: enough to identify the collection without the
                 // element-by-element text a log line must not pay for (H31).
-                os << "<" << t->toString() << " at 0x" << std::hex
-                   << static_cast<uint64_t>(v) << std::dec << ", " << array->size()
-                   << " elements>";
+                os << "<" << t->toString() << " at 0x" << std::hex << static_cast<uint64_t>(v)
+                   << std::dec << ", " << array->size() << " elements>";
                 continue;
             }
             pushText(stack, "]");
@@ -263,7 +271,7 @@ void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit
         }
 
         if (const CollectionType *collType = asCollectionType(t)) {
-            const auto *table = fromSlot<const Table *>(v);
+            const auto *table     = fromSlot<const Table *>(v);
             const Type *keyType   = collType->keyType();
             const Type *valueType = collType->valueType();
             const bool isMap      = collType->isMap();
@@ -290,7 +298,7 @@ void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit
         }
 
         if (const EnumType *enumType = asEnumType(t)) {
-            const auto *variantValue = fromSlot<const Variant *>(v);
+            const auto *variantValue   = fromSlot<const Variant *>(v);
             const EnumVariant &variant = enumType->variant(variantValue->tag());
             switch (variant.shape) {
             case VariantShape::Unit:
