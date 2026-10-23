@@ -210,7 +210,8 @@ function checkTechnicalIndex() {
 // the files listed above are read, and in code only a comment line is (a string literal that names
 // an output is not a citation). The records (docs/handover, docs/reviews, changes.log) are history
 // and are not scanned. EXTERNAL_CITATIONS names files of other repositories: TSE2027 is the paper
-// repository, docs/debugger-migration.md is in OpenCML-Ext.
+// repository, ECOOP2027 is that same repository under the name its rulings file now lives in, and
+// docs/debugger-migration.md is in OpenCML-Ext.
 const RECORD_DIRS = new Set(['docs/handover', 'docs/reviews'])
 // Gitignored output of a local test run: a developer tree can hold hundreds of thousands of files
 // here, which is why it is skipped by path and why the walkers collect one file at a time instead of
@@ -221,7 +222,7 @@ const HASH_COMMENT = new Set(['.py', '.sh', '.ps1'])
 const SCANNED = new Set(['.md', '.toml', ...C_LIKE, ...HASH_COMMENT])
 const CITATION_EXT = 'c|cc|cpp|cxx|h|hpp|inl|cml|mjs|js|ts|py|sh|ps1|cmake|toml|json|yml|yaml'
 
-const EXTERNAL_CITATIONS = ['TSE2027/', 'docs/debugger-migration.md']
+const EXTERNAL_CITATIONS = ['TSE2027/', 'ECOOP2027/', 'docs/debugger-migration.md']
 // Names the measurement harness writes at run time; they are outputs, not files of the tree.
 const RUN_OUTPUTS = new Set([
     'CLASSIFIER-RULES.md', 'HARNESS-CHANGES.md', 'HARNESS-CHANGES-2.md', 'RESULTS.md', 'perf-baseline.md',
