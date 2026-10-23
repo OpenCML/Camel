@@ -249,7 +249,17 @@ bool callWhen(const WhenCall &call, const RuleObject &rule, const camel::runtime
     // A call can move the objects: the condition is read from the rooted rule after the last
     // allocation and immediately before the call.
     ::Function *when    = call.rule->getAs<RuleObject>()->when();
-    const slot_t result = call.vm->callGraph(when->program(), when->graph(), args);
+    const slot_t result = [&]() -> slot_t {
+        try {
+            return call.vm->callGraph(when->program(), when->graph(), args);
+        } catch (const camel::core::error::FactQueryNoValue &) {
+            // A fact query inside the condition named parts that are no value's operands: the
+            // condition is false -- this rule does not apply here -- and not a failure of the pass
+            // (the ruling of 2026-10-23 on `rule_when_const_node`: "条件里的事实查询找不到时，条件为假
+            // （这条规则在此不适用），而不是遍失败——条件本来就是"适用与否"的判断").
+            return toSlot<rtdata::Bool>(false);
+        }
+    }();
     return fromSlot<rtdata::Bool>(result);
 }
 

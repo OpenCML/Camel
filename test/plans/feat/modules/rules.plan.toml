@@ -378,24 +378,24 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.parts_query_ignores_the_order_of_a_commutative_operator"
-desc = "A rule whose coefficient is a `const` parameter asks a parameterized fact query with the parts in the order its match bound them, and the engine's pairing of a commutative operator can bind them the other way from the one the product holds: `drop_by_one` matches `1 * a` with `x` on the constant, so the condition is asked `mul_by_one(node_of(c), x)` while the product holds `(x, c)`. The ruling of 2026-10-23 makes the parts of a declared-commutative operator unordered (\"对声明了交换律的算子，部件查询不看顺序\"), so the query answers for that order and the product goes; before it the query found no value and the whole pass failed (`the analysis 'mul_by_one' has no value whose operands are these 2 nodes`), which is why a `const` parameter and a parts query could not be written together. The counts are one product in each function before the pass, none in `swapped` after it, one in `kept` (the coefficient is not one, so the query answers false) and one in `plain` before the value guard drops it; the values are `1 14 3.0`."
+desc = "A rule whose coefficient is a `const` parameter asks a parameterized fact query (`mul_by_one(x, node_of(c))`), and the query's two parts reach it in the order the rule's own match bound them -- the pairing which the declaration of a commutative operator may exchange (`swapped` is `1 * a` against the pattern `x * c`, where only the exchange binds the constant to `c`). The ruling of 2026-10-23 makes the parts of a declared-commutative operator unordered (\"对声明了交换律的算子，部件查询不看顺序\"), so the query answers with the operands in either order and the product goes: `swapped` loses its product and keeps the factor as its value (`1`). `kept` (`a * 2`), whose coefficient is not one, keeps its product and the value `14`, and `plain`, whose guard is on the value, loses its product in the same pass -- so the pass is neither failing nor quietly idle. The counts are one product in each function before the pass and none in `swapped` and `plain` after it."
 kind = "behavior"
 case = "../../../cases/modules/rules/parts_order.cml"
 args = ["${case}", "parts_order::report", "parts_order::apply", "parts_order::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["swapped 1\nkept 1\nplain 1\nswapped 0\nkept 1\nplain 0\n1 14 3.0\n"]
+expect_stdout_contains = ["swapped 1\nkept 1\nplain 1\nswapped 0\nkept 1\nplain 0\n7 14 3.0\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "rules.fact_query_that_finds_nothing_leaves_the_rule_out"
-desc = "A fact query inside a condition that finds no value whose parts it was given makes the condition false -- this rule does not apply here -- and not a failure of the pass (the ruling of 2026-10-23: \"条件里的事实查询找不到时，条件为假（这条规则在此不适用），而不是遍失败\"). `kept` is the product `2 * a`, the same parts as `swapped` with a coefficient that is not one, so `mul_by_one` answers no value for it: the rule leaves the product and the value `14` alone, while the same pass still drops the product of `plain` with its guard on the value (`0` in the second report), which is the pass's other work and what a pass that quietly did nothing would fail to show."
+desc = "A fact query inside a condition that finds no value whose parts it was given makes the condition false -- this rule does not apply here -- and not a failure of the pass (the ruling of 2026-10-23: \"条件里的事实查询找不到时，条件为假（这条规则在此不适用），而不是遍失败\"). `sub(a, b)` is the fact of a subtraction, whose two operands are not interchangeable, and the condition of `drop_by_one` asks `sub(x, node_of(c))` with the parts of `kept` (`a * 2`): no subtraction of the draft has those two nodes, so the query answers false, the rule leaves the product and the value `14` alone, and the pass goes on to drop the product of `plain` with its guard on the value (`0` in the second report) -- the pass's other work, which a pass that quietly did nothing would fail to show. Before the ruling the query failed the whole pass (`the analysis 'sub' has no value whose operands are these 2 nodes`)."
 kind = "behavior"
-case = "../../../cases/modules/rules/parts_order.cml"
-args = ["${case}", "parts_order::apply", "${backend}"]
+case = "../../../cases/modules/rules/no_value.cml"
+args = ["${case}", "no_value::report", "no_value::apply", "no_value::report", "${backend}"]
 backends = ["nvm", "fvm"]
 expect_exit = 0
-expect_stdout_contains = ["1 14 3.0\n"]
+expect_stdout_contains = ["kept 1\nplain 1\nkept 1\nplain 0\n14 3.0\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

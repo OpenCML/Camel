@@ -19,6 +19,17 @@
  * clauses matching it. This is how a condition reads the fact of the compound it is rewriting
  * without a syntax naming the whole match (`node_of` is how it names the node of a `const`
  * parameter).
+ *
+ * The operands of a commutative operator are not an order: a rule's match may have paired them the
+ * other way (`const c` pins which operand it is, so the matcher tries the exchange), and the parts
+ * then arrive in the other order from the one the product holds them in. A query matches such an
+ * operator with either order of its two operands; an operator that does not declare commutativity
+ * is read in the order the program wrote, as the matcher reads it.
+ *
+ * A query that finds no value with these parts throws `FactQueryNoValue`, which is not a fault of
+ * the program: a condition is the test of whether a rule applies here, so the ruling of 2026-10-23
+ * on `rule_when_const_node` makes it false ("条件里的事实查询找不到时，条件为假（这条规则在此不适用），
+ * 而不是遍失败——条件本来就是"适用与否"的判断"), and whoever evaluates the condition catches it.
  */
 
 #include "analysis.h"
@@ -441,8 +452,13 @@ bool matchesParts(
 /// The fact a query answers, and the value it is the fact of: the queried value itself, or the
 /// value the parts belong to. A multi-parameter query looks at the values that read the first
 /// part, takes the clauses in the order they are written and the values in node order, so the
-/// answer does not depend on the order of a user list; naming parts that no value of the graph
-/// has is an error, not an `initial` fact.
+/// answer does not depend on the order of a user list.
+///
+/// Naming parts that no value has is not an error of the program: a condition is the test of
+/// whether a rule applies here (the ruling of 2026-10-23 on `rule_when_const_node`: "条件本来就是
+/// "适用与否"的判断"), so the query says so by throwing `FactQueryNoValue`, which whoever evaluates
+/// the condition reads as `false`. A pass that let it through failed the whole rewrite over one
+/// rule that simply does not apply.
 slot_t evaluateQuery(
     Frame &frame, std::span<const gc_node_ref_t> parts, gc_node_ref_t &anchor) {
     if (parts.size() == 1) {
@@ -451,10 +467,10 @@ slot_t evaluateQuery(
     }
     for (gc_node_ref_t part : parts) {
         if (part == camel::runtime::kInvalidNodeRef) {
-            err::throwRuntimeFault(
-                err::RuntimeDiag::InvalidArgument,
-                "analysis",
-                "a query names a pattern variable the left side does not bind to a node");
+            throw err::FactQueryNoValue(std::format(
+                "the analysis '{}' is asked about a pattern variable the left side does not bind "
+                "to a node",
+                frame.definition->name));
         }
     }
     std::vector<gc_node_ref_t> candidates(
@@ -469,13 +485,10 @@ slot_t evaluateQuery(
             }
         }
     }
-    err::throwRuntimeFault(
-        err::RuntimeDiag::InvalidArgument,
-        "analysis",
-        std::format(
-            "the analysis '{}' has no value whose operands are these {} nodes",
-            frame.definition->name,
-            parts.size()));
+    throw err::FactQueryNoValue(std::format(
+        "the analysis '{}' has no value whose operands are these {} nodes",
+        frame.definition->name,
+        parts.size()));
 }
 
 NodePattern compilePattern(
