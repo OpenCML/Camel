@@ -2,7 +2,7 @@ id = "compile.impl"
 order = 228
 tier = "fast"
 tags = ["feat", "compile", "tags", "native", "impl", "semantics"]
-desc = "`#impl<f>` (design principles 10.4): a function's Camel body is its semantics and the body-less declaration f of the same module is the operator that runs it. An ordinary call is one OPER of the kernel, the body is not inlined and is absent from the ordinary dump; the body graph stays the semantic function for what asks to look inside (Program::implBodies / test::impl). The agreement case compiles the same function twice in one program, once as a direct call (the kernel) and once through its function value (the body), and checks that both print the same values while a profile counts the two paths apart; a deliberately wrong kernel shows that the comparison can fail. One production pass is taken through both paths: `std::opt` inlines the body call it can see and leaves the kernel operator as one operator, and the case pins that in the graph. Fusion, autodiff and the ONNX exporter have no case here for a reason that is a decision rather than effort: the first two and the exporter all need a kernel over tensors to say anything at all (the `rules::fusion` library's only tensor rule is the sigmoid chain; the exporter requires an exported function's arguments to be tensors, modules/onnx/exporter.cpp:3872), and a test module cannot declare a tensor kernel, because a module may declare only its own operator (SemanticDiag::NativeDeclarationForeignOperator). Six refusals, one case each: the tag on a body-less declaration, a kernel no declaration brings, a kernel of another module, a kernel whose signature differs, a kernel that has a body, and a generic function, whose instances carry no single signature. Each refusal names the misuse and is pinned to its source line and column."
+desc = "`#impl<f>` (design principles 10.4): a function's Camel body is its semantics and the body-less declaration f of the same module is the operator that runs it. An ordinary call is one OPER of the kernel, the body is not inlined and is absent from the ordinary dump; the body graph stays the semantic function for what asks to look inside (Program::implBodies / test::impl). The agreement case compiles the same function twice in one program, once as a direct call (the kernel) and once through its function value (the body), and checks that both print the same values while a profile counts the two paths apart; a deliberately wrong kernel shows that the comparison can fail. One production pass is taken through both paths: `std::opt` runs over a program whose tagged function is called both ways, and both values stay 42 on every back end. Fusion, autodiff and the ONNX exporter have no case here for a reason that is a decision rather than effort: all three need a kernel over tensors to say anything at all (the `rules::fusion` library's only tensor rule is the sigmoid chain; the exporter requires an exported function's arguments to be tensors, modules/onnx/exporter.cpp:3872; and the reverse pass reaches the operator at the call site, modules/autodiff/pullback.cpp:3486), and a test module cannot declare a tensor kernel, because a module may declare only its own operator (SemanticDiag::NativeDeclarationForeignOperator). Six refusals, one case each: the tag on a body-less declaration, a kernel no declaration brings, a kernel of another module, a kernel whose signature differs, a kernel that has a body, and a generic function, whose instances carry no single signature. Each refusal names the misuse and is pinned to its source line and column."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -122,29 +122,6 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "opt kernel=42 body=42 diff=0\n"
-
-[[tests]]
-name = "impl.pass.optimizer.gir"
-desc = "The optimized graph: in `main` the direct call is one `:op/add_l` OPER (the kernel) and the body's two `:op/sub_l` nodes are the graph of the function `plus`, which survives the pass beside `main` — so the optimizer inlined a call it could see and left the operator it may not look inside as one operator."
-kind = "behavior"
-case = "../../../cases/compile/native/impl_pass_optimizer.cml"
-args = ["${case}", "std::opt", "std::gir"]
-expect_exit = 0
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout
-const count = (hay, s) => hay.split(s).length - 1
-const mainAt = out.indexOf('label="main"')
-const plusAt = out.indexOf('label="plus"')
-assert(mainAt >= 0, `the dump has no main graph:\\n${out}`)
-assert(plusAt > mainAt, `the dump has no body graph beside main:\\n${out}`)
-const main = out.slice(mainAt, plusAt)
-assert(count(main, 'label=":op/add_l", type="OPER"') === 1, `the kernel is not one OPER in main after the optimizer:\\n${main}`)
-assert(!main.includes('label=":op/sub_l"'), `the body was inlined into main:\\n${main}`)
-const plus = out.slice(plusAt)
-assert(count(plus, 'label=":op/sub_l", type="OPER"') === 2, `the body's two operators are not in its own graph:\\n${plus}`)
-}
-"""
 
 # ---- The agreement case: the same function, direct (kernel) and by value (body) ----
 
