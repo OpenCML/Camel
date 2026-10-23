@@ -383,10 +383,7 @@ Type *TupleType::widened() const {
 
 namespace {
 
-bool isEmptyArrayLiteralType(Type *type) {
-    return type != nullptr && type->code() == TypeCode::Array &&
-           static_cast<ArrayType *>(type)->elemType()->code() == TypeCode::Void;
-}
+bool isEmptyArrayLiteralType(Type *type) { return isUntypedArrayType(type); }
 
 } // namespace
 

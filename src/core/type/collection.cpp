@@ -222,8 +222,7 @@ slot_t CollectionType::castSlotFrom(slot_t value, Type *sourceType) const {
         return value;
     }
     const auto *array = rtdata::fromSlot<Array *>(value);
-    if (static_cast<ArrayType *>(sourceType)->elemType()->code() == TypeCode::Void &&
-        array != nullptr && array->size() != 0) {
+    if (isUntypedArrayType(sourceType) && array != nullptr && array->size() != 0) {
         error::throwRuntimeFault(
             error::RuntimeDiag::InvalidArgument,
             "as " + toString(),

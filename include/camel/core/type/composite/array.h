@@ -213,4 +213,11 @@ const ArrayType *asArrayType(const Type *type);
 /// (`f32[][]`) is an array of arrays, not one numeric array, and is not one of these.
 bool isNumericArrayType(const Type *type);
 
+/// True for the type of an array literal written with no element type at all (`[]`): its element
+/// type is `Void` — and nobody wrote one, so every position it stands in fixes it. The
+/// numeric-unknown array's element type is `Void` as well (that it is numeric is the marker, and
+/// it is what the alias `Tensor` hands out), and it is a complete type of its own: it is not one
+/// of these (design principles 5.1, 5.2).
+bool isUntypedArrayType(const Type *type);
+
 } // namespace camel::core::type
