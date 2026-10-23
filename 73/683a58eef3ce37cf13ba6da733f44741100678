@@ -1,0 +1,10 @@
+H241 第 4、5 项 / h335 — 冲突只按资源判断；同步块不向内继承（分支 handover/h335-resource-conflict，4 提交，基线 b50f4b8fd）
+
+提交：de699280a runtime（conflictWith 不再在两个都有外部效应的节点上返回 ConflictKind::External——它此前根本没看 access；该枚举成员随它唯一的生产者一起删除。没有具名资源的外部效应在 Resolver::node 里得到保守的 "global" 身份：一个未知类别的 access、anyValue、RMW，于是它仍然会见每一个效应，而两个具名资源之间互不相关）；1d5e49245 tests（合成的无名资源图被真的问过，而不只是造出来——它此前被造出来但没有任何打印循环点到它，于是一行都没产生，正是"检查了零个东西"）；7376233f4 + 05f0b4ff6 docs（F17 措辞，中英）。
+
+见证类型：**结构性的**，必须这么说。resourceConflict/requiredOrderings 在测试遍之外没有消费者，计划生成器里没有资源相关代码，所以没有任何运行时观测能不同，并行调度器自己的证据从测试里也观测不到；这个守卫就是查询自己的回答。等计划生成器开始消费它（第 1–3 项的地盘），才可能出现"观测到并发"的见证。
+红（旧规则 + 新守卫）：total 6, pass 4, fail 2——core "a conflict is judged by resource alone: every pair says resource"；conflict_per_resource "the generator and the file system are a pair: RESOURCES order main 1 3 external ordered by control"；合成节点只打印 semtest:unnamed: external、没有配对行。绿（最终提交树）：total 5713, pass 5699, fail 0, skip 14，含 core、conflict_per_resource、poison:modules.resources:core、docs.snippets_compile、docs.links.*、docs.headers.canonical。钉子对 "23 24 external ordered by control" 被它现在陈述的性质取代，裁定原文抄在旁边；修与那次替换同一个提交（只有修的话旧断言就红，任何绿的提交都不可能只带一个）。
+
+第 5 项更正的页面（只改措辞与例子，未动实现）：docs/language/04_execution_model.md 4.3.1 + 表 + 原则里的 func f 例子（含 en 镜像）、docs/language/07_statements.md 7.8（含 en 镜像）、docs/tutorial/tutorial.cn.md 与 tutorial.en.md 首处与 6.2（同一例子与 if c then sync { … } 的补救）、docs/tutorial/examples/06_sync_block.cml 注释、docs/technical/00_language_reference.md 4.4、docs/technical/18_sync_control_semantics.md 2.1-2.3、docs/design/effects/plan.cn.md 第 8 步、docs/design/io-concurrency-streams/README.cn.md、docs/README.cn.md、docs/debugging.cn.md 3.2。查过并有意留下的：06_expressions.md 已说循环体与臂各自决定；cli/exit_status.cml 与 tty/snake.cml 已经写 then sync；39_loops.md、25_tensor_stack_and_onnx_export.md 说的是遍、不是 F17；op-semantics 的注解小节是另一个特性（@numeric/#independent）。
+
+交给负责人的两件（未改，作者正文）：docs/design-principles.cn.md:143（3.4 首句）仍写"块内一切……都按书写顺序"，与两行之下的 F17 冲突（已按渠道提问并新建 docs/handover/questions/design-principles-3.4-order.md）；docs/technical/18_sync_control_semantics.md 2.5 的未决问题按 F1 决定，属于第 1–3 项（已转给 h334）。
