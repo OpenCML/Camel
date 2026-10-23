@@ -154,32 +154,22 @@ inline generic_ref_t::generic_ref_t(generic_template_ptr_t one)
 /// The group a scope entry holds, in one expression: the entry is always a group.
 inline GenericGroup *genericGroupOf(const generic_ref_t &ref) { return ref.group().get(); }
 
-/// The generic functions an imported name brings: the payload of the module entity is one
-/// template, or the whole list of them when the name is declared as several generic overloads
-/// (`makeGenericTemplates`). A call of the name picks among them exactly as it does for a name
-/// of this module (design principles 4.4, 5.5).
+/// The generic functions an imported name brings: the payload of the module entity is the list of
+/// the templates of that name, one of them for a name declared once and all of them when the name
+/// is declared as several generic overloads (`makeGenericTemplates`). A call of the name picks
+/// among them exactly as it does for a name of this module (design principles 4.4, 5.5).
 inline std::vector<generic_template_ptr_t>
 genericTemplatesOfEntity(const camel::core::module::Entity &entity) {
     if (!camel::core::module::detail::EntityAccess::isGenericTemplate(entity)) {
         return {};
     }
-    const std::shared_ptr<void> &payload =
-        camel::core::module::detail::EntityAccess::genericTemplate(entity);
-    // The payload is written by the exporter of the module the name comes from: a list of
-    // templates for a name with generic overloads, one template otherwise.
-    if (auto group = std::static_pointer_cast<
-            camel::core::module::detail::EntityAccess::generic_template_list_t>(payload)) {
-        std::vector<generic_template_ptr_t> templates;
-        templates.reserve(group->size());
-        for (const std::shared_ptr<void> &one : *group) {
-            templates.push_back(std::static_pointer_cast<GenericTemplate>(one));
-        }
-        return templates;
+    const auto &tmpls = camel::core::module::detail::EntityAccess::genericTemplates(entity);
+    std::vector<generic_template_ptr_t> templates;
+    templates.reserve(tmpls.size());
+    for (const std::shared_ptr<void> &one : tmpls) {
+        templates.push_back(std::static_pointer_cast<GenericTemplate>(one));
     }
-    if (payload != nullptr) {
-        return {std::static_pointer_cast<GenericTemplate>(payload)};
-    }
-    return {};
+    return templates;
 }
 
 /// The payload a module exports for a name with generic functions: every template of the group,

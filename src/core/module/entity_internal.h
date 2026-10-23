@@ -27,21 +27,33 @@ class EntityAccess {
     /// camel/core/tags.h.
     static Entity makeTag(uint32_t tag) { return Entity(tag); }
 
+    /// The generic functions a name declares, as the GIR builder hands them to the module that
+    /// imports the name: one template for a name declared once, all of them when the name is
+    /// declared as several generic overloads (design principles 4.4). The payload is always the
+    /// list, so every producer and every reader of it agree on one representation
+    /// (DESIGN-QUESTION(generic-export)).
+    using generic_template_list_t = std::vector<std::shared_ptr<void>>;
     static Entity makeGenericTemplate(std::shared_ptr<void> tmpl) {
-        return Entity(Entity::generic_payload_t{std::move(tmpl)});
+        return makeGenericTemplates(generic_template_list_t{std::move(tmpl)});
+    }
+    static Entity makeGenericTemplates(const generic_template_list_t &tmpls) {
+        return Entity(
+            Entity::generic_payload_t{std::make_shared<generic_template_list_t>(tmpls)});
     }
     static bool isGenericTemplate(const Entity &entity) {
         return std::holds_alternative<Entity::generic_payload_t>(entity.storage_);
     }
-    static const std::shared_ptr<void> &genericTemplate(const Entity &entity) {
-        return std::get<Entity::generic_payload_t>(entity.storage_).tmpl;
+    /// The templates the entity carries, in declaration order.
+    static const generic_template_list_t &genericTemplates(const Entity &entity) {
+        return *std::static_pointer_cast<generic_template_list_t>(
+            std::get<Entity::generic_payload_t>(entity.storage_).tmpls);
     }
-    /// The same payload as the GIR builder reads it: one generic function, or the whole list of
-    /// them when the name is declared as several generic overloads (`makeGenericTemplates`).
-    using generic_template_list_t = std::vector<std::shared_ptr<void>>;
-    static Entity makeGenericTemplates(const generic_template_list_t &tmpls) {
-        return Entity(
-            Entity::generic_payload_t{std::make_shared<generic_template_list_t>(tmpls)});
+    /// The first template the entity carries: the one reader that names a single generic function
+    /// of a name is a `when` condition's predicate, and a name with generic overloads answers it
+    /// from its first declaration.
+    static std::shared_ptr<void> genericTemplate(const Entity &entity) {
+        const generic_template_list_t &tmpls = genericTemplates(entity);
+        return tmpls.empty() ? nullptr : tmpls.front();
     }
 
     static bool isNode(const Entity &entity) {
