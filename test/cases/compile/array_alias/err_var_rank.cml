@@ -1,0 +1,12 @@
+// The other half of Q5: the widening keeps the rank, so a rank-1 value does not enter the
+// rank-2 binding a `var` established, and the program is refused where it is written.
+module array_alias_err_var_rank
+
+import { Tensor, ones } from tensor
+
+func main(): int sync {
+    var w = ones([2, 3])
+    w = ones([5])
+    println(len(w))
+    return 0
+}
