@@ -86,3 +86,11 @@ export func log_softmax::<T>(x: Tensor<T>, axis: int? = null): Tensor<T> when is
 ## 顺带：提交信息
 
 develop 上这一批有一半提交没有 Conventional Commits 前缀，有的写成过程（"Record … in the generic-instance report"）。公开仓库设计稿第 5 节已经要求现在开始执行：`type(scope): what and why`，不写报告、记录这类过程。合入 develop 前由协调者把关。
+
+## prefix-bang-precedence（待负责人裁定）
+
+`!a->f` 读作 `(!a)->f` 是语言参考 6.12 第 11a 级写明的规则，不是实现缺陷；改它要负责人决定，已提给负责人。问题文件留着，裁定后再答。在此之前不改解析器。
+
+## 顺带：develop 上的临时提交
+
+这一批里有 "A/B (temporary)" 一类提交（先改红、再改回）进了 develop。A/B 实验在分支上做，合入 develop 前压成一个说明结果的提交；develop 上只留成品。
