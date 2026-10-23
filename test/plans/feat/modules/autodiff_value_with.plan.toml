@@ -1,0 +1,165 @@
+id = "modules.autodiff_value_with"
+order = 372
+tier = "fast"
+tags = ["feat", "modules", "autodiff", "value-with"]
+
+# A value that reaches an operator through a `with` parameter. The backward pass must visit the
+# operator when that value is differentiated, even though the operator's ordinary input is a
+# constant; otherwise the contribution is absent with no error and no zero.
+
+[[tests]]
+name = "value_with.appended.repro"
+desc = "xs is a constant array and w reaches append through its with parameter. f(w) = (xs->append<w>)[2] * 3; at w = 2 the value is 6.0 and the gradient is 3.0. Before the gate fix the gradient was 0.0: the backward pass looked only at ordinary inputs."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/value_with_grad.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = """value_with_grad appended value=6.0 grad=3.0
+value_with_grad extended grad=2.0,5.0
+value_with_grad sliced value=50.0 grad=0.0
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "value_with.extended"
+desc = "extend takes the appended array as a with parameter. xs is constant and w = [2, 3] is differentiated: ys = [10, 20, 2, 3] and f = 2*ys[2] + 5*ys[3], so the gradient is (2, 5). The rule splits the upstream gradient at len(xs) with two slices. Without a rule the value was silently 0.0, 0.0 (and with only the gate fix it would refuse)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/value_with_grad.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["value_with_grad extended grad=2.0,5.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "value_with.configuration_zero"
+desc = "The bound of slice is a configuration with input: an int has no tangent, so it is not a value and its contribution is exactly 0.0 even though the operator is inside a differentiated function. f is the first element of a constant prefix (50.0); the fix must not turn the bound into a differentiable input."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/value_with_grad.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["value_with_grad sliced value=50.0 grad=0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "value_with.refused_named"
+desc = "get_or's default is a value in a with parameter and the operator has no derivative rule: the pass refuses at the get_or call (line 14), naming the operator, the with parameter and its type, rather than returning 0.0 for a derivative that is 3.0."
+kind = "negative"
+case = "../../../cases/modules/autodiff/value_with_refusal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::ValueWithNoDerivativeRule"
+expect_diagnostic_line = 14
+expect_output_contains = [":coll/map_get_or", "with parameter 2 (counting from 1)", "of type 'float'", "no derivative rule is registered for it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "value_with.reduce_initial"
+desc = "reduce takes its initial accumulator as a with parameter and it is differentiable. The builder keeps the operator, so it has no derivative rule: the pass refuses at the reduce call (line 14), naming the operator and the parameter, rather than returning 0.0 for a derivative of 2.0."
+kind = "negative"
+case = "../../../cases/modules/autodiff/value_with_reduce.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::ValueWithNoDerivativeRule"
+expect_diagnostic_line = 14
+expect_output_contains = [":mark/reduce_arr", "with parameter 2 (counting from 1)", "of type 'float'", "no derivative rule is registered for it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+# The class, not the instance. `inspect --ops` lists every registered operator with its declared
+# signature; this test picks out the ones whose `with` parameters can carry a value (a type
+# variable T/U/V/W, a float, an array of those, a tensor or a record) and requires each to be
+# classified below. A new operator with a value `with` input is listed the moment it is
+# registered, so the test fails until its author says what the backward pass does with it: a
+# rule that sends the gradient back, a rule that refuses by name, or a value whose result has no
+# gradient at all. Nothing is silently unclassified.
+[[tests]]
+name = "value_with.registry"
+desc = "Every operator whose with parameter can carry a value is classified: visited by a rule, refused by name, or no gradient channel. A new operator with a value with input makes this fail even before a program uses it, so the gate cannot regress to a silent omission."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/registry_all.cml"
+args = ["inspect", "--ops", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
+// The `with` list at the head of a signature, e.g. "<value: T>" or "<key: K, default: V>".
+// Nested brackets and the '>' of '=>' are tracked so a function type stays one parameter.
+function withParams(sig) {
+  if (!sig || sig[0] !== '<') return []
+  const parts = []
+  let current = '', depth = 0, parens = 0
+  for (let i = 0; i < sig.length; i++) {
+    const c = sig[i]
+    if (c === '<' && sig[i + 1] !== '=') {
+      depth++
+      if (depth === 1) continue
+    } else if (c === '>' && sig[i - 1] !== '=') {
+      if (depth === 1) { parts.push(current); break }
+      depth--
+    } else if (c === '(') { parens++ }
+    else if (c === ')') { parens-- }
+    else if (c === ',' && depth === 1 && parens === 0) { parts.push(current); current = ''; continue }
+    if (depth >= 1) current += c
+  }
+  return parts.map((part) => {
+    let d = 0, par = 0
+    for (let i = 0; i < part.length; i++) {
+      const c = part[i]
+      if (c === '<' && part[i + 1] !== '=') d++
+      else if (c === '>' && part[i - 1] !== '=') d--
+      else if (c === '(') par++
+      else if (c === ')') par--
+      else if (c === ':' && d === 0 && par === 0) {
+        return { name: part.slice(0, i).trim(), type: part.slice(i + 1).trim() }
+      }
+    }
+    return { name: '', type: part.trim() }
+  })
+}
+// A value is a type that can have a tangent: a number, an array of numbers, a tensor, a record
+// of those. T/U/V/W are the type variables of such positions; K is a collection key (discrete).
+function isValueType(raw) {
+  const t = raw.replace(/\?$/, '').trim()
+  if (/^(T|U|V|W)$/.test(t) || /^(T|U|V|W)\[\]$/.test(t)) return true
+  if (/^(float|f32|f64|number)$/.test(t) || /^(float|f32|f64)\[\]$/.test(t)) return true
+  if (/^Tensor(?:<.*>)?$/.test(t)) return true
+  if (/^\{.*\}$/.test(t) && /\b(T|U|V|W|float|f32|f64)\b/.test(t)) return true
+  return false
+}
+const valueWith = ops.filter((o) => o.with !== 0).map((o) => ({
+  uri: o.uri,
+  params: withParams(o.signature).filter((p) => isValueType(p.type)),
+})).filter((o) => o.params.length > 0)
+// How each operator's value `with` parameter is handled. 'rule' sends the gradient back;
+// 'refused' has no rule and the backward pass refuses at the operator, naming the parameter;
+// 'no-channel' has a result with no tangent (a bool, a collection), so nothing can be lost;
+// 'type-argument' is a type witness, not a value read from the graph.
+const handled = {
+  ':struct/append_arr': 'rule',
+  ':struct/append_arr_owned': 'rule',
+  ':struct/extend_arr': 'rule',
+  ':struct/contains_arr': 'no-channel',
+  ':mark/reduce_arr': 'refused',
+  ':mark/unordered_reduce_arr': 'refused',
+  ':coll/map_get_or': 'refused',
+  ':coll/map_put': 'refused-at-construction',
+  ':coll/set_add': 'refused-at-construction',
+  ':coll/set_contains': 'no-channel',
+  'statistics:quantile': 'refused',
+  'json:decode_as': 'type-argument',
+}
+const known = new Set(Object.keys(handled))
+const missing = valueWith.filter((o) => !known.has(o.uri)).map((o) => o.uri + ' <' + o.params.map((p) => p.name + ': ' + p.type).join(', ') + '>')
+assert(missing.length === 0, 'unclassified value with operator(s): ' + missing.join('; '))
+const listed = new Set(valueWith.map((o) => o.uri))
+const stale = Object.keys(handled).filter((uri) => !listed.has(uri))
+assert(stale.length === 0, 'classified operators not listed by inspect --ops (stale entry): ' + stale.join(', '))
+const unexpected = Object.entries(handled).filter(([, how]) => !['rule', 'refused', 'refused-at-construction', 'no-channel', 'type-argument'].includes(how))
+assert(unexpected.length === 0, 'unknown classification: ' + JSON.stringify(unexpected))
+}
+"""
+timeout_ms = 12000
