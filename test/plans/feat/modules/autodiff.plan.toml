@@ -2294,7 +2294,36 @@ skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["== transformer_big (camel_opt_nvm)", "gradient check: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 300000
+# The cost bound is this check's own CPU time (user + system), and the timeout is its liveness
+# bound, by the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+# "declaration-cost-gate" (a)):
+#
+#   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移，这正是 40/45/100/90 ms 在负载 106–130
+#    下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（H167 的判定已经用 CPU 中位数）。
+#    四条命令的天花板改为按 CPU 时间、取安静主机中位数加余量；"负载下红不算回归"的口径因此不需要。"
+#
+# The wall clock this check reads is the host's and not its own: 127.2 s in the slow layer at
+# -Jobs 8 on 2026-10-23, against 210.8 s for the same work earlier the same day while the host was
+# at load 135 with other agents' camel, python and qemu running. Judged on that wall clock it was
+# red with every one of its 312 gradient lines `ok` and `gradient check: PASS` at the end: the 4x
+# margin was reading the neighbours. The CPU figures behind the budget below, measured on the Linux
+# host (32 threads, never quiet that evening: the 1-minute load read 67-98 beside the runs):
+#
+#   943.31 s of CPU / 127.5 s wall   (2026-10-23, load probe beside it: 67-98)
+#   979.37 s of CPU / 165.5 s wall   (2026-10-23, the same commit, -Jobs 8)
+#
+# A 3.8% spread across two runs at different loads, where the wall clocks differ by 30%. The budget
+# is 1600 s: 1.63x the higher reading, which leaves the tick of the reading (10 ms) and a third of
+# the budget as room, and still fails a run whose work has grown by two thirds. Validated in that
+# direction on 2026-10-23 by running this same check twice over inside one test's process tree: its
+# content stayed green (650 output lines, every gradient `ok`, `gradient check: PASS`) and the run
+# failed with `used 1910.29 s of CPU against a cpu_budget_ms of 1600.00 s` (`[SUMMARY] total: 1,
+# pass: 0, fail: 1`). test/tools/selftest/cpu-budget/ keeps the cheap form of both directions.
+cpu_budget_ms = 1600000
+# Fires on a hang, not on a slow run: 15 min is 7x the 127.2 s the check takes on this host, and
+# the check bounds its own work (each `camel` run inside it is capped at 600 s,
+# benchmarks/train.py: run_camel_full), so nothing but a wedged process reaches this.
+timeout_ms = 900000
 
 [[tests]]
 name = "resnet_gradient_smooth_vs_torch64"

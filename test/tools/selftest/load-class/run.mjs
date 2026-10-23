@@ -9,7 +9,14 @@
 //   * the runner's margin rule (TIMEOUT_MARGIN in test/tools/run-tests.mjs) must fail a test
 //     that uses a quarter of its timeout or more (margin/tight.plan.toml: 400 ms against
 //     1000 ms) and pass the same work with room (margin/room.plan.toml: 400 ms against 120 s,
-//     which no amount of load on a working machine turns into 30 s).
+//     which no amount of load on a working machine turns into 30 s);
+//   * a test that declares `cpu_budget_ms` is judged on its own CPU time instead of the wall
+//     clock (the author's ruling of 2026-10-23, quoted in run-tests.mjs and
+//     docs/test-plans.md): the same waiting that margin/tight.plan.toml fails passes when the
+//     bound is CPU (cpu-budget/room.plan.toml), CPU work over the budget is failed and named
+//     (cpu-budget/over.plan.toml), and a test that stops working is still killed by its
+//     liveness bound (cpu-budget/liveness.plan.toml). A CPU budget with nothing on the other
+//     side of it would be a bound that examined nothing.
 //
 //   node test/tools/selftest/load-class/run.mjs
 import path from 'node:path'
@@ -86,6 +93,53 @@ function expect(name, condition, detail) {
     expect('room run passes', room.output.includes('[PASS] room_to_spare'), room.output)
 }
 
+// (3) A test whose bound is its own CPU time is judged on CPU and not on the wall clock.
+{
+    const room = run(process.execPath, [
+        runner,
+        path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'room.plan.toml'),
+        '--jobs',
+        '1',
+    ])
+    expect('cpu-budget room exits 0', room.status === 0, `exit ${room.status}: ${room.output}`)
+    expect(
+        'cpu-budget room passes with the wall clock over the margin',
+        room.output.includes('[PASS] cpu_budget_load_room') && room.output.includes('cpu of'),
+        room.output
+    )
+}
+{
+    const over = run(process.execPath, [
+        runner,
+        path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'over.plan.toml'),
+        '--jobs',
+        '1',
+    ])
+    expect('cpu-budget over exits 1', over.status === 1, `exit ${over.status}: ${over.output}`)
+    expect(
+        'cpu-budget over names the CPU figure and the budget',
+        over.output.includes('[FAIL] cpu_budget_exceeded') &&
+            over.output.includes('of CPU against a cpu_budget_ms'),
+        over.output
+    )
+}
+{
+    const liveness = run(process.execPath, [
+        runner,
+        path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'liveness.plan.toml'),
+        '--jobs',
+        '1',
+    ])
+    expect('cpu-budget liveness exits 1', liveness.status === 1, `exit ${liveness.status}: ${liveness.output}`)
+    expect(
+        'cpu-budget liveness is killed by the timeout, not failed on CPU',
+        liveness.output.includes('[FAIL] cpu_budget_liveness') &&
+            liveness.output.includes('liveness bound') &&
+            !liveness.output.includes('of CPU against a cpu_budget_ms'),
+        liveness.output
+    )
+}
+
 // The fixture run writes a log directory under test/results like any other run; the outer
 // runner keeps its own. Nothing here deletes a path the caller owns.
 if (problems.length > 0) {
@@ -94,5 +148,6 @@ if (problems.length > 0) {
 }
 console.log(
     'load-class self-test ok: 3 shared-place rules fire on a bad plan, none on a good one, ' +
-        'and the runner refuses a timeout with no margin'
+        'the runner refuses a timeout with no margin, and a CPU budget passes what the wall ' +
+        'clock fails, fails work over it, and leaves the liveness bound to catch a test that waits'
 )

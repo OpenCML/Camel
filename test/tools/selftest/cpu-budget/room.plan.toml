@@ -1,0 +1,21 @@
+# Fixture of test/tools/selftest/load-class/run.mjs. It is not under test/plans.
+#
+# The same 600 ms of waiting as margin/tight.plan.toml, which the wall-clock margin rule fails.
+# This one declares its bound as its own CPU time instead, so it must pass: the wait costs the
+# process no CPU, and the wall clock is not what this test is judged on. 3 s of liveness is more
+# than the ~0.7 s the fixture takes even on a busy host, so the run is not killed either -- and the
+# wall figure is still over a quarter of it, which is exactly what the old rule read.
+id = "selftest.cpu_budget.room"
+order = 1
+tier = "fast"
+
+[[tests]]
+name = "cpu_budget_load_room"
+desc = "600 ms of waiting against a 3 s timeout and a 20 s CPU budget: the wall clock is over the 4x margin, the CPU is not, and the CPU is the bound."
+kind = "behavior"
+tool = "node"
+case = "../load-class/sleep.mjs"
+args = ["${case}", "600"]
+expect_exit = 0
+timeout_ms = 3000
+cpu_budget_ms = 20000

@@ -1,0 +1,14 @@
+# Fixture of test/tools/selftest/run.mjs: a CPU budget is a test's cost bound and its timeout is
+# the liveness bound, so one without the other is refused where the file and the test are named.
+id = "selftest.strict.cpu_budget_no_timeout"
+order = 9
+tier = "fast"
+
+[[tests]]
+name = "cpu_budget_without_timeout"
+desc = "A cpu_budget_ms with no timeout_ms: the runner's 10 s default would kill the test long before its own work could reach the budget, so the plan would assert a bound nothing gets to."
+kind = "behavior"
+tool = "node"
+case = "../backend_echo.mjs"
+args = ["${case}", "same", "std::nvm"]
+cpu_budget_ms = 60000
