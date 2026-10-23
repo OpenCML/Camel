@@ -1,0 +1,17 @@
+h352 切片 1 — 空数组字面量按它填入的位置取类型；数组类型开始回答 `Tensor`（分支 handover/h352-tensor-alias 的 4 个提交，tip e14e1612f；合入 8b7ac648e）
+
+这是 H17 第 2 项 P4（`Tensor<T,S>` 变成 `ArrayType` 的别名、删掉 `TensorType`）的**分步落地**——秩 0 裁定（"秩 0 就是元素类型本身"）与"分步做可以、每步在分支上全绿后再合入"之后，把一个原子大改拆成连续的绿切片。每个提交单独也是绿的。
+
+**① 上下文取类型的真缺陷已修**（76068cb0e）：结构体字面量里的 `[]`，当**兄弟字段的值是程序算出来的**（如命名结构体类型的变量）时，得到 `void[]` 而被拒：
+```
+named_sibling.cml:23:5: [Error]: This value has type '{ state: State, children: void[] }', which is not the declared type ...
+named_sibling.cml:26:5: [Error]: This value has type '{ value: int, children: void[] }', which is not the declared type ...
+```
+根因：`[]` 由 `compositeDataInType` 从上下文取类型，而它工作在**字面量降成的常量**上；某字段是程序算出来的值时，该字面量走不到那条路径，于是逐字段转换（builder_control.cpp 的 `convertStructValue`）把源类型的 `void[]` 抄了过去并拒绝。修法是**把规则扩展到位置**而不是另立一条：字段本就是有期望类型的位置，未定型的 `[]` 字段由常量路径已经走到的那同一个 `coerceTo` 调用定型。证据在 `test/plans/feat/compile/contextual_empty_array.plan.toml` 三条用例：复现（红前只出现 4 行期望中的 2 行，那次运行仅有的两个失败就是它和它的 poison 重跑）、全字面量拼法锁定为不变、以及"另一类型的字段仍被拒"。
+
+**② 切片 1——别名读自己的实参**（e14e1612f，惰性、不改变任何程序的语义）：`ArrayType::applyArguments` 是 `Name<args...>` 唯一到达的入口，于是核心数组类型现在回答 `Tensor<f32>` = `f32[..]`、`Tensor<f32, [2,3]>` = `f32[2,3]`、`Tensor<[3]>` = 该形状的数值未知数组、`Tensor<[n,784]>` 保留维度名、`const [2,3]` 保持旧读法；**`Tensor<f32, []>` = `f32`**（按秩 0 裁定：去掉全部维度就是元素类型本身，没有空的定长 ArrayType，也不需要特例）。拒绝项：非数值元素类型、两个元素类型、两个形状、形状之后还有元素、`Tensor<[]>`（拒绝信息里指出有意义的那个拼法）。证据是 `std::type::array`（`test/plans/feat/compile/type_array.plan.toml`）新增的 137 行：每个拼法按**同一性**与相应的数组拼法比对、保留的维度名及其不参与相等、以及每一条拒绝。
+**下一片已命名**（未做）：(a) `isTensorType` → `isNumericArrayType` 并给 `tensorFactsOf` 加平坦分支；(b) 把 `Tensor` 导出为 `ArrayType::numericUnknown()`，refiner、`.npy` 载入器与保存判定移到数组表示上，载入器拒绝非数值或未知秩的声明数组；(c) 删 `TensorType`/`Default()`/`spelling()` 与仍留在 `asTensorType` 上的 8 处；(d) `iterInfer` 在秩 1 返回元素类型、`reshape(x, [])` 给 `T`，撤销原先提议的 `ArgumentsRejected` 拒绝，`loops.err_tensor_rank0` 仍是 `LoopSequenceNotIterable`；(e) 打印统一（删 `printTensor`/`tensor(`）与约 150 行期望、72 行 `Tensor<` 期望、若干计划、`plan-selection.json`；(f) 让 8 个 `known_fail` 标记在"使它们通过"的那一片里摘掉，并把 P4 计划移入 `test/plans/feat/compile/`（若移动则同一次提交里用脚本重新生成 `docs/diagnostics.md`）。
+
+**它顺手测出的 develop 侧缺陷**：`test/plans/feat/tools/load_class.plan.toml` 的 `shared_place` 现在**不稳定**（同样内容 3 次里失败 2 次、单独失败）：`test/tools/selftest/load-class/run.mjs` 断言 CPU 预算**失败**文本，而 runner 在有预算未跨过时合法地打印 `[PASS] cpu_budget_exceeded 200.00 ms cpu of 300.00 ms budget`——即夹具靠环境负载制造失败，而被测的东西现在已经与负载无关（这是 h354 那次改动的余波，已交回其作者，要求夹具改为烧掉确定的 CPU 而不是靠环境负载）。另：`check-doc-links.mjs --citations` 在**被引用的 `*.md` 路径跨两行注释断开**时会误报（按路径尾部读），已修。
+
+闸门：分支上 `smoke+feat(fast)+array_shape+tensor+dtype` → 5857/5843/0/14，每个提交单独也绿；**合入后协调者重跑整层：5861/5847/0/14**。
