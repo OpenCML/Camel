@@ -1229,19 +1229,6 @@ std::string valueKind(const Value &leaf) {
     return "a value that is neither a tensor nor a scalar";
 }
 
-/// What prevents `v` from being carried, named by its first offending leaf (a struct that holds
-/// an array is refused for the array, not for the struct).
-std::string carriedKind(const Value &v) {
-    std::vector<Value> leaves;
-    flattenValue(v, leaves);
-    for (const Value &leaf : leaves) {
-        if (!isCarriable(leaf)) {
-            return valueKind(leaf);
-        }
-    }
-    return valueKind(v);
-}
-
 /// A symbolic value named `name` with the form, dtype and shape of `like`.
 Value placeholderLike(const Value &like, std::string name) {
     if (type::Type *scalar = scalarCamelTypeOf(like)) {
@@ -1281,10 +1268,19 @@ std::string partName(type::Type *ty, size_t index) {
 
 /// The paths of the leaves `flattenValue` yields, in the same order: "w", "deep_h", "0". A Loop's
 /// state input is named after the path it rebuilds, so the emitted graph reads like the struct.
-void leafPaths(const Value &v, std::string path, std::vector<std::string> &out) {
+/// A diagnostic names them the way the programme writes them, with `separator` of ".": the path
+/// convention of include/camel/core/type/tree.h.
+void leafPaths(const Value &v,
+               std::string path,
+               std::vector<std::string> &out,
+               std::string_view separator = "_") {
     if (v.isAggregate()) {
         for (size_t i = 0; i < v.fields.size(); ++i) {
-            leafPaths(v.fields[i], path + "_" + partName(v.camelType, i), out);
+            leafPaths(
+                v.fields[i],
+                path + std::string(separator) + partName(v.camelType, i),
+                out,
+                separator);
         }
         return;
     }
@@ -1292,11 +1288,82 @@ void leafPaths(const Value &v, std::string path, std::vector<std::string> &out) 
         (v.ty->code() == TypeCode::Tuple || v.ty->code() == TypeCode::Struct)) {
         const std::vector<Value> fields = elementsOf(v.slot, v.ty);
         for (size_t i = 0; i < fields.size(); ++i) {
-            leafPaths(fields[i], path + "_" + partName(v.ty, i), out);
+            leafPaths(
+                fields[i],
+                path + std::string(separator) + partName(v.ty, i),
+                out,
+                separator);
         }
         return;
     }
     out.push_back(std::move(path));
+}
+
+/// Whether the leaf a Loop cannot carry is an array: a carried state with an array field is what
+/// the ruling of 2026-10-23 keeps refused until native multi-dimensional arrays settle the shapes
+/// of fixed-size arrays (H17 items 2 and 4).
+bool isArrayLeaf(const Value &leaf) {
+    if (leaf.isSymbolic()) {
+        return leaf.form == Value::Form::IntArray;
+    }
+    return leaf.ty != nullptr && leaf.ty->code() == TypeCode::Array;
+}
+
+/// One leaf, spelled for a diagnostic: what it is, and where it sits in the carried value when
+/// it is not the value itself (`the leaf 'xs', a value of type 'int[]'`).
+std::string spelledLeaf(const Value &leaf, const std::string &place) {
+    if (place.empty()) {
+        return valueKind(leaf);
+    }
+    return std::format("the leaf '{}', {}", place, valueKind(leaf));
+}
+
+/// What the refusal of that leaf waits on, for the diagnostic to say what is missing rather than
+/// speak in generalities. Empty for a leaf that is not an array.
+std::string arrayReason(const Value &leaf) {
+    if (!isArrayLeaf(leaf)) {
+        return {};
+    }
+    return ", and a carried state with an array field is refused until native multi-dimensional "
+           "arrays settle the shapes of fixed-size arrays (H17 items 2 and 4)";
+}
+
+/// The index of the first leaf `flattenValue` gives that `isCarriable` refuses, with its place in
+/// `places` (the same order); `size_t(-1)` when every leaf is carriable.
+size_t refusedLeafAt(const std::vector<Value> &leaves,
+                     const std::vector<std::string> &places,
+                     std::string &place) {
+    for (size_t i = 0; i < leaves.size(); ++i) {
+        if (!isCarriable(leaves[i])) {
+            place = i < places.size() ? places[i] : std::string();
+            return i;
+        }
+    }
+    return size_t(-1);
+}
+
+/// What prevents `v` from being carried, named by its first offending leaf (a struct that holds
+/// an array is refused for the array, not for the struct), with the leaf's place in `v`.
+std::string carriedKind(const Value &v) {
+    std::vector<Value> leaves;
+    std::vector<std::string> places;
+    flattenValue(v, leaves);
+    leafPaths(v, "", places, ".");
+    std::string place;
+    const size_t at = refusedLeafAt(leaves, places, place);
+    return at == size_t(-1) ? valueKind(v) : spelledLeaf(leaves[at], place);
+}
+
+/// The same for the reason: what the first offending leaf leaves missing, or empty when that leaf
+/// is not an array.
+std::string carriedArrayReason(const Value &v) {
+    std::vector<Value> leaves;
+    std::vector<std::string> places;
+    flattenValue(v, leaves);
+    leafPaths(v, "", places, ".");
+    std::string place;
+    const size_t at = refusedLeafAt(leaves, places, place);
+    return at == size_t(-1) ? std::string() : arrayReason(leaves[at]);
 }
 
 /// `like`, rebuilt from placeholders named after `hint` in `carriableLeaves`' order: one
@@ -1521,21 +1588,26 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
                     "different number of values on the two paths of a branch",
                     k + 1));
         }
+        std::vector<std::string> places;
+        leafPaths(a.next[k], "", places, ".");
         std::vector<std::optional<size_t>> at(la.size());
         for (size_t j = 0; j < la.size(); ++j) {
             if (sameValue(la[j], lb[j])) {
                 continue;
             }
             if (!isCarriable(la[j]) || !isCarriable(lb[j])) {
+                const Value &bad        = isCarriable(la[j]) ? lb[j] : la[j];
+                const std::string place = j < places.size() ? places[j] : std::string();
                 unsupported(
                     act,
                     std::format(
                         "a recursive call changes argument {} of a recursion whose depth "
                         "depends on the model input (counting from 1, `with` parameters first), "
                         "which is {}; a loop carries tensors and scalars and tuples and structs "
-                        "of them",
+                        "of them{}",
                         k + 1,
-                        valueKind(isCarriable(la[j]) ? lb[j] : la[j])));
+                        spelledLeaf(bad, place),
+                        arrayReason(bad)));
             }
             at[j] = request(la[j], lb[j]);
         }
@@ -1828,9 +1900,10 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
                             "a recursive call changes argument {} of a recursion whose depth "
                             "depends on the model input (counting from 1, `with` parameters "
                             "first), which is {}; a loop carries tensors and scalars and tuples "
-                            "and structs of them",
+                            "and structs of them{}",
                             k + 1,
-                            carriedKind(args[k])));
+                            carriedKind(args[k]),
+                            carriedArrayReason(args[k])));
                 }
                 carried[k] = loop.changed[k];
             }
