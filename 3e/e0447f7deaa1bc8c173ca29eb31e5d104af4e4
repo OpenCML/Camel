@@ -1,0 +1,13 @@
+h337 — `node_of(c)`、交换律下的部件查询、查不到的事实让条件为假（分支 handover/h337-node-of，5 提交，基线 1ddcfb204）
+
+闸门：total 5722, pass 5708, fail 0, skip 14；diagnostics-catalog / headers / check-std-includes 都 exit 0（255 码）。
+
+裁定 1（3df4fa9a1）：条件按规则自己的 `const` 参数各取一个隐藏节点参数，追加在规则参数之后；`node_of(c)` 在建图时就是它；不引入新类型。表面只有 `node_of(c)`，且只认这条规则自己的参数名，其余一律 SemanticDiag::NodeOfNotAParameter（0x0001DE），报在名字上并附规则。裁定里的「或 `fact` 的 `case`」一半在语言里不存在，所以写成"不适用"而不是自己发明。analysis_parts.cml 改回 `const c` + `mul_by_one(x, node_of(c))`。用例：node_of.cml（nvm + nvm/fvm/prl）、node_of_misuse.cml。踩到的坑：诊断的 hint 本身也按模式做替换，而 `{` 是保留字符，所以提示里含 `{ x * c => x }` 会让每次构建都报 malformed field in a diagnostic message；提示改成不带花括号。另一个：whenNodesStart 必须是两侧参数**个数**而不是第一个 `const` 的下标，否则任何 `const` 参数不在末尾的规则都被误拒（当时红了 33 个 stdlib 测试）。
+
+裁定 2（两处缺陷，各有红前绿后）：(1) 401e6413f：matchesParts 先按给定顺序问，只有当这个二元算子在**该元素类型**上声明的语义带 commutative 时才再换序问一次（读的是与匹配器同一处声明，runtime/writings.cpp）。红/绿：parts_order.cml + rules.parts_query_ignores_the_order_of_a_commutative_operator——规则 drop_by_one(x: int, const c: int) { x * c => x } when mul_by_one(x, node_of(c))，`swapped`（`a * 1`）修前 `swapped 1`（查询找不到值并抛）、修后 `swapped 0`，同一次遍里 `kept`（系数 2）仍保留乘积、`plain` 仍丢掉它守卫的乘积。(2) 533496f1c：evaluateQuery 抛新的 FactQueryNoValue（不是引擎已捕获类型的基类），callWhen 把它答成 false。红/绿：no_value.cml + rules.fact_query_that_finds_nothing_leaves_the_rule_out（nvm/fvm）——`sub(a, b)` 是**非交换**事实，所以对 `kept` 的部件问 `sub(x, node_of(c))` 是真的无值查询；修前 `the analysis 'sub' has no value whose operands are these 2 nodes` + GraphPassFailed，修后 kept 1 … plain 0、值 `14 3.0`，遍的其他工作照做。
+
+施工方给的诚实保留（未声称看板行）：交换律路径是保守的——只可能给"本来查不到"的查询补一个答案，且只对声明为合法的换序——它找不到能把这条与上一处修复分离的规则形状；把 inOrder 强制关掉后 `swapped` 仍是 1。两条路径都在，用例断言的是裁定的结果，没有声称交换那半可独立观测。
+
+其它：dfba2c9a2 把 catalog.coverage_zero 的钉子 256→257 并把两条规则计划描述改对；analysis_lib.cml 有意保留模式变量（它的目标图里是**算出来的**和，`const c` 规则在那里不显然等价）。
+
+合入时的解决（协调者）：与 h336 的删除撞在同一批文件（registry.tsv、semantic.h/.cpp、docs/diagnostics.md、diag_catalog.plan.toml）。按内容合并——保留 h336 的两处删除、保留 h337 的新码；计数合成为 255（257→256→254→255），desc 里两个故事接成一段；生成文件用 `node scripts/diagnostics-catalog.mjs --write` 重生成而不是手合（它同时修正了 semantic.h 的对齐）。合入后全层：total 5774, pass 5760, fail 0, skip 14。
