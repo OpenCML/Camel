@@ -62,6 +62,7 @@ Not in this reference: the profiler (`perf`).
 | [pyplot](#pyplot) | `import { ... } from pyplot` | C++ |
 | [python](#python) | `import { ... } from python` | C++ |
 | [nn](#nn) | `import { ... } from nn` | C++ |
+| [optim](#optim) | `import { ... } from optim` | Camel |
 | [autodiff](#autodiff) | `import { ... } from autodiff` | C++ |
 | [sim](#sim) | `import { ... } from sim` | C++ |
 | [onnx](#onnx) | `import { ... } from onnx` | C++ |
@@ -92,6 +93,7 @@ Not in this reference: the profiler (`perf`).
 | [pyplot](#pyplot) | `import { ... } from pyplot` |  |
 | [python](#python) | `import { ... } from python` |  |
 | [nn](#nn) | `import { ... } from nn` |  |
+| [optim](#optim) | `import { ... } from optim` |  |
 | [autodiff](#autodiff) | `import { ... } from autodiff` |  |
 | [sim](#sim) | `import { ... } from sim` |  |
 | [onnx](#onnx) | `import { ... } from onnx` |  |
@@ -5337,6 +5339,153 @@ created when missing.
 - Failure: fault `RuntimeError` when the directory cannot be created or a leaf cannot be written.
 - Example (a fragment, not compiled): `save_params({ w: new([1.0, 2.0]), b: new([0.0]) }, 'checkpoints/step-1')`
 - Why it is not compiled: the example builds its tensors with `new` from the `tensor` module, which this page does not import
+
+<a id="optim"></a>
+
+## `optim`: optimizers written in Camel over `tree`
+
+The optimizers, written in Camel over `tree` (design/stdlib: `optim` is the Optax-shaped
+module -- `init` and `update` are the two pure functions, `sgd`, `adam` and `adamw` are values,
+and so is a learning-rate schedule). The design keeps it in the standard library's layout and
+also lists it among the official extension libraries that ship separately
+(docs/design/stdlib/README.cn.md, sections 3 and 5); today it is `stdlib/optim.cml`, next to
+the `tree` it is built on.
+
+A schedule is a function `(step: int) => float`: `constant(rate)`, `linear_decay(peak, total,
+floor)` and `cosine_decay(peak, total, floor)` build one, and the rate the update of step `n`
+uses is `schedule(n)`, with `n` numbered from one. An optimization is a value too, so a
+training loop reads:
+
+    let opt = adam(cosine_decay(0.001, steps, 0.0001));
+    let state = init(opt, model);
+    let (model, state) = update(opt, model, gradient, state);
+
+`params` is a tree of nested structs and tuples whose leaves are numbers and tensors, and
+`grads` is the gradient of that tree -- the value `with_grad` or `grad` gives for the same
+parameters. `nn`'s optimizers insist on that: a tree that merely has the same type as the
+parameters is refused when the call is compiled, which is why the tests here hand both sides the
+gradient autodiff answers. `update` answers `(params, state)`.
+
+The state holds the two moment trees, shaped like the parameters, and the number of updates
+made, which is the step a schedule reads. Its type is one type for every optimizer because a
+module cannot declare `init` once per optimizer (the language declares a name once:
+`SemanticDiag::Redeclaration`), so `sgd` carries two zero trees it never reads.
+
+The arithmetic of one leaf is the arithmetic of the native optimizers `nn` carried, and the
+values H64 pinned in test/cases/modules/nn/adam_update_bits.cml: computed in double and rounded
+once, when it is stored. A tensor leaf of `adam` is widened to f64, updated there and narrowed
+once, so a trajectory written here is the trajectory `modules/tensor/kernels/update.h` defines,
+bit for bit -- which test/cases/modules/optim/agreement.cml asserts step by step, the schedule
+included, against `nn` itself.
+
+What the port cannot do yet: `update` walks the parameter tree and reads one gradient leaf per
+parameter leaf, and a generic walk cannot ask whether a field exists, so the gradient must have
+exactly the parameters' shape -- every leaf must be trainable. A member with no tangent (an
+`int` counter, a `string`) has no gradient leaf, and pairing such a tree with its gradient fails
+the walk with `SemanticDiag` "the struct ... has no field ..."; an array of structs, which the
+native walk enters element by element (design principles 9.9), is one leaf here. A leaf whose
+written element type is f64 keeps f64 where the native path silently narrows it to f32.
+docs/technical/optim.md records each of them, with what the native path does, what is missing,
+and what a program sees today.
+
+#### `constant`
+
+```camel
+constant: (rate: float) => (step: int) => float
+```
+
+The same rate at every step.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `constant(0.1)(3)` gives `0.1`
+
+#### `linear_decay`
+
+```camel
+linear_decay: (peak: float, total: int, floor: float) => (step: int) => float
+```
+
+A rate that falls from `peak` to `floor` in a straight line: `peak * (1 - step / total)` below
+step `total`, and exactly `floor` from there on. `total` is at least one.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `linear_decay(0.1, 4, 0.0)(2)` gives `0.05`
+
+#### `cosine_decay`
+
+```camel
+cosine_decay: (peak: float, total: int, floor: float) => (step: int) => float
+```
+
+A rate that falls from `peak` to `floor` along a cosine: `floor + (peak - floor) *
+(1 + cos(pi * step / total)) / 2` below step `total`, and exactly `floor` from there on.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `cosine_decay(0.1, 4, 0.0)(1)` gives `0.08535533905932738`
+
+#### `sgd`
+
+```camel
+sgd: (schedule: (step: int) => float) => Sgd
+```
+
+Plain stochastic gradient descent: `p - rate * g` at every leaf, the rate of the step taken.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `sgd(constant(0.1))`
+
+#### `adam`
+
+```camel
+adam: (schedule: (step: int) => float) => Adam
+adam: (schedule: (step: int) => float, beta1: float, beta2: float, eps: float) => Adam
+```
+
+Adam with the constants the reference kernel's callers use (beta1 0.9, beta2 0.999, eps 1e-8).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `adam(constant(0.001))`
+
+#### `adamw`
+
+```camel
+adamw: (schedule: (step: int) => float) => Adamw
+adamw: (schedule: (step: int) => float, beta1: float, beta2: float, eps: float, decay: float) => Adamw
+```
+
+AdamW with the same constants and a weight decay of 0.01.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `adamw(constant(0.001))`
+
+#### `init`
+
+```camel
+init: (opt: O, params: P) => { m: P, v: P, step: int }
+```
+
+The state of an optimization: a tree of zeros for each moment and the number of updates made.
+The moments have the shape of the parameters. A module cannot declare `init` once per
+optimizer (the language has no overloading of a function with a body), so the state of every
+optimizer has one type and `sgd` pays for two zero trees it never reads; the step is what a
+schedule reads.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `init(adam(constant(0.1)), { w: 1.0 })` gives `{ m: { w: 0.0 }, v: { w: 0.0 }, step: 0 }`
+
+#### `update`
+
+```camel
+update: (opt: O, params: P, grads: G, state: { m: P, v: P, step: int }) => (P, { m: P, v: P, step: int })
+```
+
+One update of any of the three optimizations: `(params, state)`, with the step advanced by one
+and the rate taken from `opt.schedule` at the step this update takes, numbered from one. `sgd`
+moves the parameters by the rate alone; `adam` and `adamw` run the adaptive update, `adamw`
+moving the parameters by the decoupled weight decay first.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `update(adam(constant(0.1)), { w: 1.0 }, { w: 0.5 }, init(adam(constant(0.1)), { w: 1.0 }))`
 
 <a id="autodiff"></a>
 

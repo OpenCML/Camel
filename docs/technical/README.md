@@ -54,6 +54,7 @@
 | [ddpm-primitives.md](ddpm-primitives.md) | DDPM 实验暴露的运行时与 GPU 原语：`math:sqrt` 的 VJP、`fs.write_text` 的字节长度、Tiles 的 `numel` / `shape` / `permute_inverse` / 矩阵乘 lowering、BF16 cuBLAS 的选择，以及检查它们的计划 |
 | [gir-interchange.md](gir-interchange.md) | GIR 导出：`std::gir` / `rgir` / `jgir` / `agir` / `argir` 的格式与分工，以及供编辑器消费的 JSON 版本 1 |
 | [nn-autograd.md](nn-autograd.md) | `nn` 没有自己的自动求导：求导是 `modules/autodiff` 的图重写（`grad` / `with_grad`），见 26 与设计原则 9.9 |
+| [optim.md](optim.md) | 模块 `optim`：用 Camel 写在 `tree` 上的优化器（`sgd` / `adam` / `adamw` / 学习率表，纯函数 `init` / `update`），一步的逐叶算术与原生路径逐位一致，与 `nn` 的对照测试，以及挡住删除 C++ 优化器的缺口 |
 | [jit/README.md](jit/README.md) | FastVM JIT 实现级注解的目录索引 |
 | [jit/bytecode-to-asm.md](jit/bytecode-to-asm.md) | JIT 字节码到机器码翻译注解：槽模型、调用约定、逐条字节码经 MIR（V* 虚拟寄存器）与寄存器分配生成 x64 汇编 |
 | [jit/optimization-architecture.md](jit/optimization-architecture.md) | JIT 基础优化与架构改进方案：发射时状态、发射缓冲（MIR）与优化 pass、完整 MIR 三层方案 |

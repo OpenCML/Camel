@@ -1,0 +1,360 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The optimizers, written in Camel over `tree` (design/stdlib: `optim` is the Optax-shaped
+ * module -- `init` and `update` are the two pure functions, `sgd`, `adam` and `adamw` are values,
+ * and so is a learning-rate schedule). The design keeps it in the standard library's layout and
+ * also lists it among the official extension libraries that ship separately
+ * (docs/design/stdlib/README.cn.md, sections 3 and 5); today it is `stdlib/optim.cml`, next to
+ * the `tree` it is built on.
+ *
+ * A schedule is a function `(step: int) => float`: `constant(rate)`, `linear_decay(peak, total,
+ * floor)` and `cosine_decay(peak, total, floor)` build one, and the rate the update of step `n`
+ * uses is `schedule(n)`, with `n` numbered from one. An optimization is a value too, so a
+ * training loop reads:
+ *
+ *     let opt = adam(cosine_decay(0.001, steps, 0.0001));
+ *     let state = init(opt, model);
+ *     let (model, state) = update(opt, model, gradient, state);
+ *
+ * `params` is a tree of nested structs and tuples whose leaves are numbers and tensors, and
+ * `grads` is the gradient of that tree -- the value `with_grad` or `grad` gives for the same
+ * parameters. `nn`'s optimizers insist on that: a tree that merely has the same type as the
+ * parameters is refused when the call is compiled, which is why the tests here hand both sides the
+ * gradient autodiff answers. `update` answers `(params, state)`.
+ *
+ * The state holds the two moment trees, shaped like the parameters, and the number of updates
+ * made, which is the step a schedule reads. Its type is one type for every optimizer because a
+ * module cannot declare `init` once per optimizer (the language declares a name once:
+ * `SemanticDiag::Redeclaration`), so `sgd` carries two zero trees it never reads.
+ *
+ * The arithmetic of one leaf is the arithmetic of the native optimizers `nn` carried, and the
+ * values H64 pinned in test/cases/modules/nn/adam_update_bits.cml: computed in double and rounded
+ * once, when it is stored. A tensor leaf of `adam` is widened to f64, updated there and narrowed
+ * once, so a trajectory written here is the trajectory `modules/tensor/kernels/update.h` defines,
+ * bit for bit -- which test/cases/modules/optim/agreement.cml asserts step by step, the schedule
+ * included, against `nn` itself.
+ *
+ * What the port cannot do yet: `update` walks the parameter tree and reads one gradient leaf per
+ * parameter leaf, and a generic walk cannot ask whether a field exists, so the gradient must have
+ * exactly the parameters' shape -- every leaf must be trainable. A member with no tangent (an
+ * `int` counter, a `string`) has no gradient leaf, and pairing such a tree with its gradient fails
+ * the walk with `SemanticDiag` "the struct ... has no field ..."; an array of structs, which the
+ * native walk enters element by element (design principles 9.9), is one leaf here. A leaf whose
+ * written element type is f64 keeps f64 where the native path silently narrows it to f32.
+ * docs/technical/optim.md records each of them, with what the native path does, what is missing,
+ * and what a program sees today.
+ */
+module optim
+
+import math
+import { Tensor, cast, sqrt, zeros_like } from tensor
+import { tree_unzip } from tree
+
+// A schedule is a function value `(step: int) => float`, written out at every signature: the rate
+// of the update at step `n` is `schedule(n)`, and `n` counts from one.
+
+/// The same rate at every step.
+/// @pure
+/// @example constant(0.1)(3)    // 0.1
+export func constant(rate: float): (step: int) => float {
+    return (step: int) => rate
+}
+
+/// A rate that falls from `peak` to `floor` in a straight line: `peak * (1 - step / total)` below
+/// step `total`, and exactly `floor` from there on. `total` is at least one.
+/// @pure
+/// @example linear_decay(0.1, 4, 0.0)(2)    // 0.05
+export func linear_decay(peak: float, total: int, floor: float): (step: int) => float {
+    return (step: int) => linear_rate(peak, total, floor, step)
+}
+
+// The rate of one step of the ramp above, as a function of the step alone.
+func linear_rate(peak: float, total: int, floor: float, step: int): float {
+    return if step >= total then floor else peak * (1.0 - float(step) / float(total))
+}
+
+/// A rate that falls from `peak` to `floor` along a cosine: `floor + (peak - floor) *
+/// (1 + cos(pi * step / total)) / 2` below step `total`, and exactly `floor` from there on.
+/// @pure
+/// @example cosine_decay(0.1, 4, 0.0)(1)    // 0.08535533905932738
+export func cosine_decay(peak: float, total: int, floor: float): (step: int) => float {
+    return (step: int) => cosine_rate(peak, total, floor, step)
+}
+
+// The rate of one step of the cosine above. The double nearest pi is written out here: the module
+// imports `math` for `cos`, and `pi` is one number, not a parameter.
+func cosine_rate(peak: float, total: int, floor: float, step: int): float {
+    return if step >= total then floor else floor + (peak - floor) * (1.0 + math::cos(3.141592653589793 * float(step) / float(total))) * 0.5
+}
+
+/// The optimization `sgd`: a rate schedule, and nothing else. Its state is the step count.
+export type Sgd = { schedule: (step: int) => float }
+
+/// The optimization `adam`: a rate schedule and the three constants of the update.
+export type Adam = {
+    schedule: (step: int) => float,
+    beta1: float,
+    beta2: float,
+    eps: float
+}
+
+// `adamw` is `adam` with one more constant: the decoupled weight decay.
+
+/// The optimization `adamw`: `adam` with a decoupled weight decay. The parameter is first moved
+/// by `rate * decay` of itself, and the adaptive update then works on the moved parameter; the
+/// moments see the gradient alone, which is what makes the decay decoupled.
+export type Adamw = {
+    schedule: (step: int) => float,
+    beta1: float,
+    beta2: float,
+    eps: float,
+    decay: float
+}
+
+/// Plain stochastic gradient descent: `p - rate * g` at every leaf, the rate of the step taken.
+/// @pure
+/// @example sgd(constant(0.1))
+export func sgd(schedule: (step: int) => float): Sgd {
+    return { schedule: schedule }
+}
+
+/// Adam with the constants the reference kernel's callers use (beta1 0.9, beta2 0.999, eps 1e-8).
+/// @pure
+/// @example adam(constant(0.001))
+export func adam(schedule: (step: int) => float): Adam {
+    return adam(schedule, 0.9, 0.999, 0.00000001)
+}
+
+// The same with the three constants given.
+// @pure
+export func adam(schedule: (step: int) => float, beta1: float, beta2: float, eps: float): Adam {
+    return { schedule: schedule, beta1: beta1, beta2: beta2, eps: eps }
+}
+
+/// AdamW with the same constants and a weight decay of 0.01.
+/// @pure
+/// @example adamw(constant(0.001))
+export func adamw(schedule: (step: int) => float): Adamw {
+    return adamw(schedule, 0.9, 0.999, 0.00000001, 0.01)
+}
+
+// The same with the constants and the weight decay given.
+// @pure
+export func adamw(schedule: (step: int) => float, beta1: float, beta2: float, eps: float, decay: float): Adamw {
+    return { schedule: schedule, beta1: beta1, beta2: beta2, eps: eps, decay: decay }
+}
+
+/// The state of an optimization: a tree of zeros for each moment and the number of updates made.
+/// The moments have the shape of the parameters. A module cannot declare `init` once per
+/// optimizer (the language has no overloading of a function with a body), so the state of every
+/// optimizer has one type and `sgd` pays for two zero trees it never reads; the step is what a
+/// schedule reads.
+/// @pure
+/// @example init(adam(constant(0.1)), { w: 1.0 })    // { m: { w: 0.0 }, v: { w: 0.0 }, step: 0 }
+export func init::<O, P>(opt: O, params: P): { m: P, v: P, step: int } {
+    return moments(params)
+}
+
+/// One update of any of the three optimizations: `(params, state)`, with the step advanced by one
+/// and the rate taken from `opt.schedule` at the step this update takes, numbered from one. `sgd`
+/// moves the parameters by the rate alone; `adam` and `adamw` run the adaptive update, `adamw`
+/// moving the parameters by the decoupled weight decay first.
+/// @pure
+/// @example update(adam(constant(0.1)), { w: 1.0 }, { w: 0.5 }, init(adam(constant(0.1)), { w: 1.0 }))
+export func update::<O, P, G>(opt: O, params: P, grads: G, state: { m: P, v: P, step: int }): (P, { m: P, v: P, step: int }) {
+    return match type O {
+        case Sgd => (
+            sgd_tree(params, grads, opt.schedule(state.step + 1)),
+            { m: state.m, v: state.v, step: state.step + 1 }
+        )
+        case Adam => adam_update(opt.schedule, opt.beta1, opt.beta2, opt.eps, 0.0, params, grads, state)
+        case Adamw => adam_update(opt.schedule, opt.beta1, opt.beta2, opt.eps, opt.decay, params, grads, state)
+        case _ => adam_update(opt.schedule, 0.9, 0.999, 0.00000001, 0.0, params, grads, state)
+    }
+}
+
+// The numbers one update uses: the rate of this step, the two decay rates, `eps`, and the bias
+// corrections `1 - beta1^step` and `1 - beta2^step`, which the native path computes with `pow`
+// (modules/nn/optim.cpp). `step` is one-based, as it is there.
+type Rates = {
+    rate: float,
+    beta1: float,
+    beta2: float,
+    eps: float,
+    correct1: float,
+    correct2: float
+}
+
+// The numbers of one step, from the schedule's rate at it.
+func rates(rate: float, beta1: float, beta2: float, eps: float, step: int): Rates {
+    return {
+        rate: rate,
+        beta1: beta1,
+        beta2: beta2,
+        eps: eps,
+        correct1: 1.0 - math::pow(beta1, float(step)),
+        correct2: 1.0 - math::pow(beta2, float(step))
+    }
+}
+
+// The two moment trees of a fresh state and the step: the moments start at zero, at every leaf.
+func moments::<P>(params: P) {
+    return { m: zeros_tree(params), v: zeros_tree(params), step: 0 }
+}
+
+// A tree of zeros of the same shape as `t`, with the same leaf types.
+func zeros_tree::<P>(t: P) {
+    return match type P {
+        case struct | tuple => P { static for (n, _) in fields P => zeros_tree(t.[n]) }
+        case _ => zero_leaf(t)
+    }
+}
+
+// A zero of the leaf's own type: an f32 number stays f32, and a tensor becomes a tensor of zeros
+// of the element type the program wrote, which is what the native `adam_state` builds
+// (modules/nn/optim.cpp, `zerosLeaf`). The element type has to come back written: a state whose
+// leaves change type after one update cannot be a loop state (the state's type is the initial
+// value's type, docs/language/06_expressions.md, "状态").
+func zero_leaf::<L>(x: L) {
+    return match type L {
+        case float => 0.0
+        case f32 => f32(0.0)
+        case Tensor<f32, [?]> => cast(zeros_like(x), 'float32')
+        case Tensor<f64, [?]> => cast(zeros_like(x), 'float64')
+        case _ => zeros_like(x)
+    }
+}
+
+// One `sgd` step of a whole tree: `p - rate * g` at every leaf.
+func sgd_tree::<P, G>(p: P, g: G, rate: float) {
+    return match type P {
+        case struct | tuple => P { static for (n, _) in fields P => sgd_tree(p.[n], g.[n], rate) }
+        case _ => sgd_leaf(p, g, rate)
+    }
+}
+
+// One leaf of `sgd`. A number is updated in double and rounded once on the store, as the native
+// leaf does (`floatSlot`); a tensor leaf is updated at its own element type with the rate rounded
+// to it first, and a leaf whose element type the program does not write is narrowed to f32 before
+// the arithmetic -- which is exactly what the native path does (`floatTensor` converts both the
+// parameter and the gradient, then `pn[i] = pp[i] - float(lr) * pg[i]` is float arithmetic).
+func sgd_leaf::<P, G>(p: P, g: G, rate: float) {
+    return match type P {
+        case f32 => f32(float(p) - rate * float(g))
+        case float => p - rate * g
+        case Tensor<f32, [?]> => p - f32(rate) * g
+        case Tensor<f64, [?]> => p - rate * g
+        case _ => cast(p, 'float32') - f32(rate) * cast(g, 'float32')
+    }
+}
+
+// One `adam` (or `adamw`) step of a whole tree, from a state. The walk answers one triple per
+// leaf -- the new parameter and the two new moments -- and `tree_unzip` turns the tree of triples
+// into the three trees. `state.m` and `state.v` are shaped like `grads`, so the walk can read
+// them leaf by leaf.
+func adam_update::<P, G>(
+    schedule: (step: int) => float, beta1: float, beta2: float, eps: float, decay: float,
+    params: P, grads: G, state: { m: P, v: P, step: int }
+) {
+    let step = state.step + 1
+    let c = rates(schedule(step), beta1, beta2, eps, step)
+    let moved = decay_tree(params, c.rate * decay)
+    let parts = tree_unzip(adam_tree(moved, grads, state.m, state.v, c), params)
+    return (parts.0, { m: parts.1, v: parts.2, step: step })
+}
+
+// The whole parameter tree moved by one decoupled weight decay, before the adaptive update
+// (`decay` is zero for plain Adam, and `p * (1 - 0)` is `p` exactly, so `adamw` with a zero decay
+// is `adam`).
+func decay_tree::<P>(p: P, rate_decay: float) {
+    return match type P {
+        case struct | tuple => P { static for (n, _) in fields P => decay_tree(p.[n], rate_decay) }
+        case _ => decay_leaf(p, rate_decay)
+    }
+}
+
+// One leaf of the decay: `p * (1 - rate * decay)`, the expression `torch.optim.AdamW` computes
+// (`param.mul_(1 - lr * weight_decay)`), at the leaf's own element type: a tensor leaf keeps its
+// element type, because a tensor operator takes the wider of its two element types and a `float`
+// rate would otherwise widen an f32 leaf to f64 (design principles 7.4). A number written as f32
+// is computed in double and rounded once, like every other f32 number here, and a leaf whose
+// element type the program does not write follows the native path and becomes f32.
+func decay_leaf::<L>(x: L, rate_decay: float) {
+    return match type L {
+        case f32 => f32(float(x) * (1.0 - rate_decay))
+        case float => x * (1.0 - rate_decay)
+        case Tensor<f32, [?]> => x * f32(1.0 - rate_decay)
+        case Tensor<f64, [?]> => x * (1.0 - rate_decay)
+        case _ => cast(x, 'float32') * f32(1.0 - rate_decay)
+    }
+}
+
+// One `adam` step of a whole tree: a tree of leaf triples, in the shape of the parameter tree.
+func adam_tree::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
+    return match type P {
+        case struct | tuple =>
+            P { static for (n, _) in fields P => adam_tree(p.[n], g.[n], m.[n], v.[n], c) }
+        case _ => adam_leaf(p, g, m, v, c)
+    }
+}
+
+// One leaf of `adam`, as a triple of the new parameter and the two new moments. A number is
+// updated in double and stored once into its own type; a tensor leaf whose element type is
+// written as f64 stays f64; a tensor leaf whose element type is written as f32 keeps f32, and one
+// whose element type the program does not write is narrowed to f32 first, exactly as the native
+// path does (`floatTensor` converts the parameter and the gradient, `zerosLeaf` builds f32
+// moments), then updated in double and stored once.
+func adam_leaf::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
+    return match type P {
+        case f32 => narrow_numbers(adam_number(float(p), float(g), float(m), float(v), c))
+        case float => adam_number(p, g, m, v, c)
+        case Tensor<f32, [?]> => narrow_tensors(adam_wide(p, g, m, v, c))
+        case Tensor<f64, [?]> => adam_wide(p, g, m, v, c)
+        case _ => narrow_tensors(adam_wide(
+            cast(p, 'float32'), cast(g, 'float32'), cast(m, 'float32'), cast(v, 'float32'), c))
+    }
+}
+
+// The Adam formula of one number, in double, in the order the reference kernel writes it
+// (modules/tensor/kernels/update.h, `adaptiveUpdateOne`): `m` and `v` are the stored moments and
+// `correct1`/`correct2` the bias corrections of this step.
+func adam_number(p: float, g: float, m: float, v: float, c: Rates): (float, float, float) {
+    let nm = c.beta1 * m + (1.0 - c.beta1) * g
+    let nv = c.beta2 * v + (1.0 - c.beta2) * g * g
+    let np = p - c.rate * (nm / c.correct1) / (math::sqrt(nv / c.correct2) + c.eps)
+    return (np, nm, nv)
+}
+
+// The same formula on whole tensors, from leaves widened to f64, left in f64: the caller stores
+// the result back. Every operator is one pass over the buffer, and a pass over f64 keeps the
+// double result exactly, so the three double divisions and the square root of the fused kernel
+// come out the same numbers.
+//
+// This function and the one above are the seam a kernel attaches to: the fused pass
+// (modules/tensor/kernels/update.h) computes the same triple per element in one traversal, and
+// the ruling in docs/handover/reviews/questions-2026-10-23.md (section `impl-kernel-site`) is
+// what lets a generic function carry the kernel -- it defers attaching Adam's until this module
+// has landed. Until then the leaves above are one operator pass each, which is the cost H51's
+// fifth item takes up.
+func adam_wide::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
+    let p64 = cast(p, 'float64')
+    let g64 = cast(g, 'float64')
+    let m64 = cast(m, 'float64')
+    let v64 = cast(v, 'float64')
+    let nm = c.beta1 * m64 + (1.0 - c.beta1) * g64
+    let nv = c.beta2 * v64 + (1.0 - c.beta2) * g64 * g64
+    let np = p64 - c.rate * (nm / c.correct1) / (sqrt(nv / c.correct2) + c.eps)
+    return (np, nm, nv)
+}
+
+// The three numbers of one leaf stored once each into f32.
+func narrow_numbers(t: (float, float, float)): (f32, f32, f32) {
+    return (f32(t.0), f32(t.1), f32(t.2))
+}
+
+// The three tensors of one leaf stored once each into f32, with the shape they have.
+func narrow_tensors::<A, B, C>(t: (A, B, C)) {
+    return (cast(t.0, 'float32'), cast(t.1, 'float32'), cast(t.2, 'float32'))
+}
