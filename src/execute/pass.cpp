@@ -394,6 +394,16 @@ PassMaker extractPass() {
     };
 }
 
+/// The saturation of the rules library, under the core's name (H225). Like `std::opt::algebra`,
+/// the laws are the library's (`rules::saturate_only`); unlike it, the extraction is not made, so
+/// the program stops in the state where a value has several writings.
+PassMaker saturatePass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<OptimizeSaturatePass>(
+            ctx, args.getInt("rounds"), args.getBool("strict"));
+    };
+}
+
 PassMaker dcePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<DeadCodePass>(ctx, args.getBool("values_only"));
@@ -543,6 +553,7 @@ void registerCoreKernels() {
     registerCoreKernel("opt::specialize", specializePass());
     registerCoreKernel("opt::fold", makePass<ConstantFoldPass>());
     registerCoreKernel("opt::algebra", algebraPass());
+    registerCoreKernel("opt::saturate", saturatePass());
     registerCoreKernel("opt::extract", extractPass());
     registerCoreKernel("opt::cse", makePass<CommonSubexpressionPass>());
     registerCoreKernel("opt::dce", dcePass());
@@ -1741,20 +1752,25 @@ PassApplyResult applyPassesDetailed(
             }
             // A program with graphs that have several writings per value: a pass that consumes
             // it (a back end, an exporter) gets one writing per value, picked by the default
-            // cost; a pass that does not know the state does not get the program.
-            if (camel::runtime::hasWritings(*program)) {
+            // cost; a pass that does not know the state does not get the program. A consuming
+            // pass that declares it reads the state (a dump drawing the classes, H225) is given
+            // the program as it is.
+            if (camel::runtime::hasWritings(*program) && !pass->acceptsWritings()) {
                 const bool consumes = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ||
                                       dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr;
                 if (consumes) {
                     CAMEL_LOG_INFO_S(
                         "Pass",
                         "run | passes | extract before {}: one writing per value, cost model "
-                        "'weighted'",
-                        p);
+                        "'{}'",
+                        p,
+                        camel::runtime::kWritingsCostModel);
                     program = camel::runtime::extractWritings(
-                        ctx, program, *camel::runtime::findCostModel("weighted"));
+                        ctx,
+                        program,
+                        *camel::runtime::findCostModel(camel::runtime::kWritingsCostModel));
                     ctx->settleRuntimeGraphs(program);
-                } else if (!pass->acceptsWritings()) {
+                } else {
                     setPipelineStage("pass:" + specName(p));
                     ctx->rtmDiags()->of(RuntimeDiag::PassNeedsExtraction).commit(p);
                     return {nullptr, PassApplyStatus::Failed};

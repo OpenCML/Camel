@@ -12,9 +12,11 @@
 #include "camel/passes/trans/gir_metadata.h"
 #include "camel/runtime/node_roles.h"
 #include "camel/runtime/reachable.h"
+#include "camel/runtime/writings.h"
 #include <algorithm>
 #include <format>
 #include <nlohmann/json.hpp>
+#include <stdexcept>
 #include <unordered_map>
 using nlohmann::json;
 
@@ -70,6 +72,81 @@ json attrSetJson(uint32_t set) {
 using namespace camel::runtime;
 using namespace camel::passes::gir;
 
+namespace {
+
+/// The class id of a value in an `egraph-serialize` document: the value's root writing, named
+/// after the graph it belongs to (the ids of the display document are not reused by accident).
+std::string egraphClassId(const std::string &graphId, gc_node_ref_t root) {
+    return std::format("{}c{}", graphId, root);
+}
+
+/// The document `egraph-serialize` reads (H225, §5.04 item 3): `nodes` maps every writing to its
+/// operator, to the classes of the values it reads and to the class it is a writing of;
+/// `root_eclasses` names the value each graph returns; `class_data` says what the cost model
+/// makes of computing a value. The shape is the crate's and nothing else is added to it: a tool
+/// that opens it (`egraph-visualizer`) is what the export is for. A control input orders a node
+/// rather than being a value (design principles 3.3), so it is not a child.
+std::string dumpEgraphRuntimeGraph(
+    const Program &program, GCGraph *root, const camel::core::context::context_ptr_t &ctx) {
+    const auto graphs = collectReachableGraphs(program, root);
+    std::shared_ptr<const CostModel> model = findCostModel(kWritingsCostModel);
+    if (!model) {
+        throw std::runtime_error(
+            std::format("There is no cost model '{}'.", kWritingsCostModel));
+    }
+    std::unordered_map<const GCGraph *, std::string> ids;
+    std::unordered_map<const GCGraph *, GraphWritings> classes;
+    for (size_t i = 0; i < graphs.size(); ++i) {
+        ids[graphs[i]]       = std::format("g{}", i);
+        classes[graphs[i]] = graphWritings(program, graphs[i], *model, ctx.get());
+    }
+    // The class of the value a node is a writing of: the node itself when its value has one
+    // writing, the root of its class otherwise.
+    const auto classId = [&](GCGraph *g, gc_node_ref_t node) {
+        const auto &view = classes.at(g);
+        const auto at    = view.nodes.find(node);
+        return egraphClassId(ids.at(g), at == view.nodes.end() ? node : at->second.root);
+    };
+    json nodes     = json::object();
+    json classData = json::object();
+    json roots     = json::array();
+    for (auto *g : graphs) {
+        for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+            const auto ref   = it.ref();
+            const auto *node = *it;
+            if (node == nullptr) {
+                continue;
+            }
+            json children = json::array();
+            for (auto list : {g->normInputsOf(ref), g->withInputsOf(ref)}) {
+                for (gc_node_ref_t input : list) {
+                    children.push_back(classId(g, input));
+                }
+            }
+            json entry{
+                {"op", recordLabel(program, g, ref, *node)},
+                {"children", std::move(children)},
+                {"eclass", classId(g, ref)}};
+            if (const auto at = classes.at(g).nodes.find(ref); at != classes.at(g).nodes.end()) {
+                entry["cost"]           = at->second.own;
+                classData[classId(g, ref)] = json{{"cost", at->second.value}};
+            }
+            nodes[std::format("{}n{}", ids.at(g), ref)] = std::move(entry);
+        }
+        // A graph hands one value to its caller: that value's class is a root of the term graph.
+        if (const gc_node_ref_t exit = g->exitNodeRef(); exit != kInvalidNodeRef) {
+            roots.push_back(classId(g, exit));
+        }
+    }
+    json document{
+        {"nodes", std::move(nodes)},
+        {"root_eclasses", std::move(roots)},
+        {"class_data", std::move(classData)}};
+    return document.dump(2);
+}
+
+} // namespace
+
 std::string dumpJsonRuntimeGraph(
     GCGraph *root, const camel::core::context::context_ptr_t &ctx, const JsonGirOptions &options) {
     if (!root || !root->hasNodePayload())
@@ -85,6 +162,8 @@ std::string dumpJsonRuntimeGraph(
         return {};
     // The canonical document is a separate shape, not a variation of the display document: the
     // version 1 body below is untouched so that every existing reader keeps the exact bytes.
+    if (options.egraph)
+        return dumpEgraphRuntimeGraph(program, root, ctx);
     if (options.canonical)
         return dumpCanonicalRuntimeGraph(program, root);
     const auto graphs = collectReachableGraphs(program, root);
@@ -163,6 +242,29 @@ std::string dumpJsonRuntimeGraph(
                 regions.push_back(std::move(entry));
             }
             graph["regions"] = std::move(regions);
+        }
+        // The values with several writings (H225): their classes, the writings of each and the
+        // one extraction would take by the cost model the pipeline itself uses. A graph with one
+        // writing per value prints no `classes` key, so every existing reader keeps its bytes.
+        if (!g->executable()) {
+            std::shared_ptr<const CostModel> model = findCostModel(kWritingsCostModel);
+            if (model) {
+                const GraphWritings classes = graphWritings(program, g, *model, ctx.get());
+                if (!classes.empty()) {
+                    json list = json::array();
+                    for (const auto &value : classes.values) {
+                        json writings = json::array();
+                        for (gc_node_ref_t member : value.writings)
+                            writings.push_back(nodeId(g, member));
+                        list.push_back(json{
+                            {"id", std::format("{}c{}", ids.at(g), value.root)},
+                            {"writings", std::move(writings)},
+                            {"chosen", nodeId(g, value.chosen)},
+                            {"cost", value.cost}});
+                    }
+                    graph["classes"] = std::move(list);
+                }
+            }
         }
         for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
             const auto ref   = it.ref();
@@ -282,6 +384,8 @@ JsonGirDumpPass::apply(const camel::runtime::Program *program, std::ostream &out
 PassMaker jgirPass() {
     return [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<JsonGirDumpPass>(
-            ctx, JsonGirOptions{.canonical = args.getBool("canonical")});
+            ctx,
+            JsonGirOptions{
+                .canonical = args.getBool("canonical"), .egraph = args.getBool("egraph")});
     };
 }

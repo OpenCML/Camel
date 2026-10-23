@@ -14,6 +14,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/node_roles.h"
 #include "camel/runtime/reachable.h"
+#include "camel/runtime/writings.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/type.h"
 
@@ -234,6 +235,47 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
 
     auto nodeIdent = [&](const camel::runtime::GCNode *record) { return pointerToIdent(record); };
 
+    // The classes of a graph whose values have several writings (H225): every class is drawn as a
+    // dashed cluster of its writings, the writing extraction would take is marked, and an input
+    // edge of a writing leaves the class of the value it reads. A graph with one writing per
+    // value (the executable state) has none of this and is dumped exactly as before.
+    const auto graphClasses = [&]() {
+        const auto model = camel::runtime::findCostModel(kWritingsCostModel);
+        if (!model || graph->executable()) {
+            return camel::runtime::GraphWritings{};
+        }
+        return camel::runtime::graphWritings(*program_, graph, *model, context_.get());
+    }();
+    // The class a node is a writing of, or nullptr when its value has one writing only.
+    const auto classOf = [&](camel::runtime::gc_node_ref_t node) -> const camel::runtime::GraphWritings::Value * {
+        const auto at = graphClasses.valueOf.find(node);
+        return at == graphClasses.valueOf.end() ? nullptr : &graphClasses.values.at(at->second);
+    };
+    // The name of the class of a class: `c<smallest writing>`, and the DOT name of its class node.
+    const auto classLabel = [](camel::runtime::gc_node_ref_t root) {
+        return std::format("c{}", root);
+    };
+    const auto classIdent = [&](camel::runtime::gc_node_ref_t root) {
+        const camel::runtime::GCNode *record = graph->node(root);
+        return record != nullptr ? pointerToIdent(record, "C") : std::format("C{}", root);
+    };
+    /// The node an input edge leaves: the class node of the value when the value has several
+    /// writings (the input end of an edge names a value, not one of its writings), the writing
+    /// itself otherwise. A class node stands for one value and has one output, so the source-side
+    /// index of such an edge is 0 (`readsAClass` tells the caller, which then need not look for
+    /// the consumer in the writing's outputs).
+    const auto edgeSource = [&](camel::runtime::gc_node_ref_t input) -> std::string {
+        if (const auto *value = classOf(input); value != nullptr) {
+            return classIdent(value->root);
+        }
+        const auto *record = lookupRecord(graph, input);
+        ASSERT(record != nullptr, "Runtime input record is missing.");
+        return nodeIdent(record);
+    };
+    const auto readsAClass = [&](camel::runtime::gc_node_ref_t input) {
+        return classOf(input) != nullptr;
+    };
+
     string funcId   = pointerToIdent(graph, "F");
     string exitId   = pointerToIdent(graph, "O");
     string funcName = graph->name();
@@ -306,6 +348,16 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 record.parent,
                 escape(camel::core::attr::text(record.attrs)));
         }
+    }
+
+    // Which cost model marks the writing extraction would take: the model the pipeline itself
+    // extracts by (H225). A graph with one writing per value prints nothing here.
+    if (!graphClasses.empty()) {
+        res += std::format(
+            "{}{}writings_cost=\"{}\";\n",
+            baseIndent_,
+            indent_,
+            camel::runtime::kWritingsCostModel);
     }
 
     program_->traceGraphs(*graph, [&](camel::runtime::GCGraph *dep) {
@@ -386,12 +438,11 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     for (auto ref : graph->closureNodes())
         emitPort(ref, "CLOSURE_PORT");
 
-    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-        const auto nodeRef = it.ref();
-        const auto *node   = *it;
-        if (!node || node->kind == camel::runtime::GCNodeKind::Port) {
-            continue;
-        }
+    /// One node of the graph: its line, and the cluster of the region it is in. A node whose value
+    /// has several writings carries the class it is a writing of, and the writing extraction would
+    /// take says so (H225).
+    const auto emitNode = [&](camel::runtime::gc_node_ref_t nodeRef,
+                              const camel::runtime::GCNode *node) {
         string label   = recordLabel(*program_, graph, nodeRef, *node);
         string tooltip = recordTooltip(graph, *node);
         string shape   = recordShape(*node);
@@ -440,20 +491,31 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
             }
         }
         const size_t lineStart = res.size();
+        // The class of the value this node is a writing of, when the value has several: the
+        // writing names its class, and the one extraction would take is marked (a heavier border
+        // in the styled dump). H225.
+        string classAttr;
+        if (const auto *value = classOf(nodeRef); value != nullptr) {
+            classAttr = std::format(", class=\"{}\"", classLabel(value->root));
+            if (value->chosen == nodeRef) {
+                classAttr += config_.rich ? ", chosen=\"true\", penwidth=2" : ", chosen=\"true\"";
+            }
+        }
         if (!config_.rich) {
             res += std::format(
-                "{}{}{} [label=\"{}\", type=\"{}\"{}{}];\n",
+                "{}{}{} [label=\"{}\", type=\"{}\"{}{}{}];\n",
                 baseIndent_,
                 indent_,
                 nodeIdent(node),
                 escape(label),
                 type,
                 roleAttr.empty() ? "" : std::format(", role=\"{}\"", roleAttr),
-                debugOriginAttr(graph, nodeRef) + valueAttr);
+                debugOriginAttr(graph, nodeRef) + valueAttr,
+                classAttr);
         } else {
             string tooltip = recordTooltip(graph, *node);
             res += std::format(
-                "{}{}{} [label=\"{}\", type=\"{}\", shape={}, style={}{}{}, tooltip=\"{}\"];\n",
+                "{}{}{} [label=\"{}\", type=\"{}\", shape={}, style={}{}{}, tooltip=\"{}\"{}];\n",
                 baseIndent_,
                 indent_,
                 nodeIdent(node),
@@ -465,7 +527,8 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 roleFill.empty()
                     ? ""
                     : std::format(", fillcolor=\"{}\", role=\"{}\"", roleFill, roleAttr),
-                std::format("{}\\n{}{}", escape(label), escape(tooltip), roleTooltip));
+                std::format("{}\\n{}{}", escape(label), escape(tooltip), roleTooltip),
+                classAttr);
         }
         // A node in a region stands in the cluster of the region, inside those of the regions
         // it is in; dot merges the clusters of one name.
@@ -520,6 +583,53 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 res += baseIndent_ + indent_ + "}\n";
             }
         }
+    };
+
+    // The values with several writings, each as a dashed cluster: the class node stands for the
+    // value, every writing of it is a node inside, and the writing extraction would take is
+    // marked. A graph in the executable state has no class here and its dump is unchanged.
+    for (const auto &value : graphClasses.values) {
+        const string ident   = classIdent(value.root);
+        const string label   = classLabel(value.root);
+        res += std::format("{}{}subgraph cluster_class_{} {{\n", baseIndent_, indent_, ident);
+        res += std::format("{}{}label=\"class {}\";\n", baseIndent_, indent_, label);
+        res += std::format("{}{}style=dashed;\n", baseIndent_, indent_);
+        if (!config_.rich) {
+            res += std::format(
+                "{}{}{} [label=\"class {}\", type=\"CLASS\"];\n",
+                baseIndent_,
+                indent_,
+                ident,
+                label);
+        } else {
+            res += std::format(
+                "{}{}{} [label=\"class {}\", type=\"CLASS\", shape=box, style=dashed, "
+                "fixedsize=false];\n",
+                baseIndent_,
+                indent_,
+                ident,
+                label);
+        }
+        pushIndent();
+        for (camel::runtime::gc_node_ref_t member : value.writings) {
+            if (const camel::runtime::GCNode *record = graph->node(member); record != nullptr) {
+                emitNode(member, record);
+            }
+        }
+        popIndent();
+        res += baseIndent_ + indent_ + "}\n";
+    }
+
+    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+        const auto nodeRef = it.ref();
+        const auto *node   = *it;
+        if (!node || node->kind == camel::runtime::GCNodeKind::Port) {
+            continue;
+        }
+        if (classOf(nodeRef) != nullptr) {
+            continue; // written in the cluster of its class, above
+        }
+        emitNode(nodeRef, node);
     }
 
     for (size_t i = 0; i < graph->withPorts().size(); ++i) {
@@ -570,12 +680,14 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
 
     const auto *exitRecord = graph->exitNode();
     ASSERT(exitRecord != nullptr, "Runtime graph exit node is missing.");
+    // The graph's result is a value: the edge leaves its class when it has several writings.
+    const std::string exitSource = edgeSource(graph->nodeRef(exitRecord));
     if (!config_.rich) {
         res += std::format(
             "{}{}{} -> {} [label=\"{}\", type=\"{}\"];\n",
             baseIndent_,
             indent_,
-            nodeIdent(exitRecord),
+            exitSource,
             exitId,
             0,
             "EXIT");
@@ -584,7 +696,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
             "{}{}{} -> {} [label=\"{}\", type=\"EXIT\", style=solid];\n",
             baseIndent_,
             indent_,
-            nodeIdent(exitRecord),
+            exitSource,
             exitId,
             0);
     }
@@ -599,18 +711,22 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
             const auto *input = lookupRecord(graph, inputIndex);
             ASSERT(input != nullptr, "Runtime with-input record is missing.");
             size_t outIdx = 0;
-            for (auto outIndex : graph->withOutputsOf(inputIndex)) {
-                if (outIndex == nodeIndex) {
-                    break;
+            // The input end names a value: a value with several writings is read through its
+            // class node, which has one output, so no output slot has to be found (H225).
+            if (!readsAClass(inputIndex)) {
+                for (auto outIndex : graph->withOutputsOf(inputIndex)) {
+                    if (outIndex == nodeIndex) {
+                        break;
+                    }
+                    outIdx++;
                 }
-                outIdx++;
             }
             if (!config_.rich) {
                 res += std::format(
                     "{}{}{} -> {} [label=\"{}|{}\", type=\"{}\"];\n",
                     baseIndent_,
                     indent_,
-                    nodeIdent(input),
+                    edgeSource(inputIndex),
                     nodeIdent(node),
                     outIdx,
                     i,
@@ -620,7 +736,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                     "{}{}{} -> {} [label=\"{}|{}\", type=\"WITH\", style=dashed];\n",
                     baseIndent_,
                     indent_,
-                    nodeIdent(input),
+                    edgeSource(inputIndex),
                     nodeIdent(node),
                     outIdx,
                     i);
@@ -632,18 +748,20 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
             const auto *input = lookupRecord(graph, inputIndex);
             ASSERT(input != nullptr, "Runtime norm-input record is missing.");
             size_t outIdx = 0;
-            for (auto outIndex : graph->normOutputsOf(inputIndex)) {
-                if (outIndex == nodeIndex) {
-                    break;
+            if (!readsAClass(inputIndex)) {
+                for (auto outIndex : graph->normOutputsOf(inputIndex)) {
+                    if (outIndex == nodeIndex) {
+                        break;
+                    }
+                    outIdx++;
                 }
-                outIdx++;
             }
             if (!config_.rich) {
                 res += std::format(
                     "{}{}{} -> {} [label=\"{}|{}\", type=\"{}\"];\n",
                     baseIndent_,
                     indent_,
-                    nodeIdent(input),
+                    edgeSource(inputIndex),
                     nodeIdent(node),
                     outIdx,
                     i,
@@ -653,7 +771,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                     "{}{}{} -> {} [label=\"{}|{}\", type=\"NORM\"];\n",
                     baseIndent_,
                     indent_,
-                    nodeIdent(input),
+                    edgeSource(inputIndex),
                     nodeIdent(node),
                     outIdx,
                     i);
