@@ -528,7 +528,9 @@ export function copyBuildArtifacts(config) {
 export const BUILD_INFO_FILE = 'build-info.json'
 
 /** Bumped when the recorded shape changes so an old stamp is refused instead of misread. */
-export const BUILD_INFO_SCHEMA = 1
+// 2: the build footprint the configure compiled in (H309) is recorded beside the fingerprint, so
+// `camel --version` can be compared with what the build stamped.
+export const BUILD_INFO_SCHEMA = 2
 
 /** Bumped when the fingerprint algorithm or `BUILD_INFO_ROOTS` changes. */
 export const FINGERPRINT_VERSION = 1
@@ -582,6 +584,24 @@ function fingerprintFileList(root) {
         }
     }
     return files
+}
+
+/**
+ * The footprint the last configure compiled in (`build/footprint.json`). `writeBuildInfo` records
+ * it in the install's stamp so a run can compare what `camel --version` prints with what the
+ * build actually configured; it is null when the build tree has no pin (a direct cmake configure,
+ * or a checkout a build has not run in yet).
+ *
+ * @param {string} [root] - repository root; defaults to this checkout
+ * @returns {string|null}
+ */
+export function readFootprintPin(root = BASEDIR) {
+    try {
+        const pin = JSON.parse(fs.readFileSync(path.join(root, 'build', 'footprint.json'), 'utf-8'))
+        return typeof pin.footprint === 'string' && pin.footprint ? pin.footprint : null
+    } catch {
+        return null
+    }
 }
 
 /**
@@ -688,6 +708,9 @@ export function writeBuildInfo(config, tag = 'latest', root = BASEDIR) {
         schema: BUILD_INFO_SCHEMA,
         config,
         tag,
+        // The value compiled into the binary; the version-stamp guard compares it with
+        // `camel --version`. Null only when no configure pinned one.
+        footprint: readFootprintPin(root),
         builtAt: new Date().toISOString(),
         revision: git.revision,
         dirty: git.dirty,
