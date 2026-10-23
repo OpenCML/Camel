@@ -368,6 +368,24 @@ accesses (`p.x`, `t.0`, `xs[2]`); a name may be qualified (`lib::Config::limit`,
 other expressions: evaluating one would mean building and running a graph in the stopped
 program.
 
+**Attribution** (REPL `explain <run> [<a> <b>]`, `why_not <run> <rule> <value>`): the rewrite
+module records, when a `run` asks for `explain: true`, what every rewrite did. The debugger reads
+that record instead of re-running the rewrite: it reads the values of the stopped frame, calls
+the module's own `rewrite::explain`, `rewrite::explain_all` or `rewrite::why_not` through the
+run-time operator dispatch the scheduler uses, roots the proof it answers, and shows the steps
+(rule, round, graph, matched and produced node) from the proof's record. `why_not` is the
+module's answer too, so its condition run and its reasoning are the same as the program's.
+`explain` on a run made without attribution shows the module's `NoAttribution` error, not an
+empty chain; an argument that has no value, or a call the operator's type rule refuses, is a
+located diagnostic and leaves the session stopped and usable. A nested graph the call may run
+(a `when` condition) is not the program: observation is paused for its duration (H150).
+
+The record is the authority. The debugger never recomputes a chain or a reason; it formats the
+`Proof` the module made. Where the two could differ — a value the frame no longer holds, a rule
+the frame does not name, a proof whose nodes were collected — the library's answer is right and
+the debugger's text is the defect. The `explain` test pins this by comparing the rule and both
+node positions the debugger reports with the library's own print of the same record.
+
 All reads happen on the thread of the stopped program, while it waits in the hook: nothing
 runs concurrently with them, no collection can start, and no pointer to a Camel object is kept
 after the answer has been formatted (the handle rule of 23/24). References handed to the
@@ -618,7 +636,8 @@ been run since), macOS, and the VS Code user interface (the tests speak DAP to t
 | Full names (5.5): frames, captured values of modules, evaluate, function breakpoints | implemented, tested |
 | Variables: locals, captured, `var` cells, structured values, not evaluated, not in the graph | implemented, tested |
 | Evaluate: names with member accesses, qualified names | implemented, tested |
-| REPL: breakpoints, steps, stack, variables, frames (7.4) | implemented, tested on both back ends |
+| Attribution: `explain`, `explain_all`, `why_not` on a stopped run's proof (8.7) | implemented, tested in the REPL |
+| REPL: breakpoints, steps, stack, variables, frames, attribution (7.4) | implemented, tested on both back ends |
 | Faults: stop with the diagnostic, isolated faults by filter | implemented, tested on both back ends |
 | DAP adapter (7.3) | implemented, tested |
 | `std::jit`, `std::prl` | run as `std::fvm` with a notice; tested |
@@ -631,8 +650,9 @@ been run since), macOS, and the VS Code user interface (the tests speak DAP to t
 
 **Tests** (`test/plans/feat/tools/debugger.plan.toml`, in the default set): `http_gateway` (the
 retained HTTP API), `dap_session`, `dap_stepping`, `dap_frames` (folded arms, the switch, lines that
-did not execute, full names, function breakpoints), `dap_faults`, `dap_protocol`, and
-`cli_session` (the REPL, through its standard input). The DAP tests start
+did not execute, full names, function breakpoints), `dap_faults`, `dap_protocol`, `explain`
+(the attribution commands against the library's own print), and `cli_session` (the REPL, through
+its standard input). The DAP tests start
 `camel-db --dap` and speak the protocol on its pipes (`test/tools/debugger/client.mjs`); every
 wait is on an event or a response with a 60 s limit, none on time, and each process a test
 starts is ended by `disconnect` and then by its pid. `test/tools/debugger/dap_session.mjs` runs

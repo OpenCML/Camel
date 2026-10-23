@@ -4,6 +4,7 @@ add_camel_module(
   SOURCES
     analysis.cpp
     module.cpp
+    proof.cpp
     rule.cpp
   EXTRA_LIBS
     graph_cmo

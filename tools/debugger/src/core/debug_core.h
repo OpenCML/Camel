@@ -47,6 +47,10 @@
 #include <thread>
 #include <vector>
 
+namespace camel::rewritemod {
+class ProofObject;
+}
+
 namespace debugger::core {
 
 /// Thrown out of a hook to end the run when the debugger was asked to (terminate, restart).
@@ -212,6 +216,28 @@ class DebugCore final : public camel::execute::ExecutionObserver {
         ValueView view;
     };
 
+    /// A value expression resolved in a frame: the name it starts from, and the value the member
+    /// accesses reach. `evaluated` is false when the name's node has not run yet; `view` is then
+    /// the name's own (unevaluated) value and `hasPath` says whether accesses followed it.
+    struct ResolvedValue {
+        Variable variable;
+        ValueView view;
+        bool evaluated = false;
+        bool hasPath = false;
+    };
+
+    /// The answer of one call of a native operator from a stopped frame. `ok` is false when the
+    /// call could not be made at all (an argument has no value, the operator is unknown, its type
+    /// rule refuses the arguments); `fallibleError` is a `T!` the call itself answered with.
+    struct CallAnswer {
+        bool ok = false;
+        slot_t slot = 0;
+        camel::core::type::Type *type = nullptr;
+        std::string diagnostic; // a located message when !ok
+        bool fallibleError = false;
+        std::string errorText; // the `error <kind>: <message>` the call answered with
+    };
+
     // program thread
     ShadowFrame &pushFrame(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
     /// The frame of a call, above the caller's.
@@ -256,6 +282,24 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     json scopesJson(uint64_t frameId);
     json handleJson(int reference);
     json evaluateJson(uint64_t frameId, const std::string &expression);
+    /// Resolves a name with member accesses in `f` (the one grammar `evaluate` accepts).
+    bool resolveValueAt(
+        ShadowFrame &f, const std::string &expression, ResolvedValue &out, std::string &why);
+    /// Calls a native operator at the stopped frame, through the run-time dispatch the scheduler
+    /// uses, with the arguments read from the frame. Never lets a fault leave: it comes back as a
+    /// located diagnostic.
+    CallAnswer
+    callAtFrame(ShadowFrame &f, const std::string &uri, const std::vector<std::string> &arguments);
+    /// `{"ok": false, "error": ..., "diagnostic": {...}}` for a value a command could not read.
+    json evaluationFailure(const ShadowFrame &f, const std::string &why);
+    /// `message` prefixed with the source position of `f`, when it has one.
+    std::string locatedDiagnostic(const ShadowFrame &f, const std::string &message);
+    /// The proof a successful `explain` call returned, or why the value is not a proof.
+    const camel::rewritemod::ProofObject *proofOf(const CallAnswer &answer, std::string &why);
+    /// `explain <run> [<a> <b>]`: the run's record, or the shortest chain between two values.
+    json explainJson(const json &args);
+    /// `why_not <run> <rule> <value>`: the module's answer, which is the record's answer.
+    json whyNotJson(const json &args);
     json graphJson(uint64_t frameId);
     json memoryCommand(const std::string &name, const json &args);
     int newHandle(Handle handle);

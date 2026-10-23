@@ -88,3 +88,9 @@ case = "../../../cases/tools/debugger/dap_memory.test.mjs"
 name = "debugger.dap_node_breakpoints"
 desc = "GIR origins set at compiler entry hit the transformed runtime node on NodeVM/FastVM; paused origin/source, actual GIR, clear and resume."
 case = "../../../cases/tools/debugger/dap_node_breakpoints.test.mjs"
+
+[[tests]]
+name = "debugger.explain"
+desc = "The attribution commands of camel-db (rewrite design 8.7) on a run made by the program itself: `explain` reports the same rule and the same two node positions as the library's own print of the same record, `explain` without two values reads the whole record, `why_not` names the rule and the reason, and a value the frame does not have and an argument of the wrong type are located diagnostics that leave the session stopped and usable."
+case = "../../../cases/tools/debugger/explain.test.mjs"
+timeout_ms = 300000
