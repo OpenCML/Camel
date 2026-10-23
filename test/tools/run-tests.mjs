@@ -696,6 +696,23 @@ function printRunSummary(summary) {
 }
 
 /**
+ * The gate's three numbers, one line. A run that names the build it just paid for (the remote
+ * helper exports CAMEL_GATE_BUILD_SECONDS) prints build + test = total; a run that built nothing
+ * (a local plan run, or the -NoBuild path, which exports 0) prints build 0.0 s. The format is
+ * pinned by test/tools/selftest/run.mjs, so a regression in the split is red, not a missing line.
+ */
+function gateSplit(testWallMs) {
+    const raw = Number(process.env.CAMEL_GATE_BUILD_SECONDS || 0)
+    const buildSeconds = Number.isFinite(raw) && raw > 0 ? raw : 0
+    const testSeconds = testWallMs / 1000
+    return { buildSeconds, testSeconds, totalSeconds: buildSeconds + testSeconds }
+}
+
+function formatGateSplit(split) {
+    return `${COLORS.cyan}[SPLIT]${COLORS.reset} build ${split.buildSeconds.toFixed(1)} s, test ${split.testSeconds.toFixed(1)} s, total ${split.totalSeconds.toFixed(1)} s`
+}
+
+/**
  * A test's precondition: `skip_unless` is a command (same variable expansion as `args`) run from
  * the repository root before the test. A non-zero exit skips the test, reporting the command's
  * output as the reason; the test is then neither passed nor failed. Use it only for conditions
@@ -1835,6 +1852,7 @@ async function main() {
         fs.rmSync(TEST_SCRATCH_RUN, { recursive: true, force: true })
     }
 
+    const split = gateSplit(outcome.wallMs)
     fs.writeFileSync(
         path.join(logDir, 'summary.json'),
         JSON.stringify(
@@ -1846,6 +1864,9 @@ async function main() {
                 tier: options.tier,
                 jobs: options.jobs,
                 wall_ms: outcome.wallMs,
+                build_seconds: split.buildSeconds,
+                test_seconds: split.testSeconds,
+                total_seconds: split.totalSeconds,
                 test_root: TEST_SCRATCH_RUN,
                 test_root_kept: testRootKept,
                 summary: outcome.summary,
@@ -1859,6 +1880,7 @@ async function main() {
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} wall: ${(outcome.wallMs / 1000).toFixed(1)} s, jobs: ${options.jobs}, tier: ${options.tier}`
     )
+    console.log(formatGateSplit(split))
 
     const exitCode = outcome.summary.fail > 0 ? 1 : 0
     process.exit(exitCode)

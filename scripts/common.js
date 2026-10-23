@@ -323,6 +323,52 @@ export function getGitVersion() {
 }
 
 /**
+ * `BUILD_FOOTPRINT` names the build in `camel --version`. It used to be the wall clock of every
+ * configure, and because tools/camel-cli and tools/debugger compile it into a generated header,
+ * every reconfigure recompiled config.cpp (17 s) and repl.cpp (15 s) even when not one byte of the
+ * tree had moved: a gate re-run on an unchanged tree paid 43 s of rebuild for a new timestamp.
+ *
+ * Pin it to what actually produces the binary -- the source content, the configuration and the
+ * option flags -- in `build/footprint.json`. A rebuild of the same tree keeps the same stamp (no
+ * recompile); a changed tree, configuration or option set gets a new one, so two different builds
+ * still print different stamps. Deleting `build/` drops the pin and stamps afresh.
+ */
+function pinnedFootprint(config, cmakeOptionFlags, gitVersion) {
+    const pinPath = path.join(BASEDIR, 'build', 'footprint.json')
+    const fingerprint = sourceFingerprint(BASEDIR)
+    const key = createHash('sha256')
+        .update(config)
+        .update('\0')
+        .update(cmakeOptionFlags)
+        .update('\0')
+        .update(fingerprint.hash)
+        .digest('hex')
+    try {
+        const pin = JSON.parse(fs.readFileSync(pinPath, 'utf-8'))
+        if (pin.key === key && typeof pin.footprint === 'string' && pin.footprint) {
+            logStep(`Footprint ${pin.footprint} reused: sources, configuration and options unchanged`)
+            return pin.footprint
+        }
+    } catch {
+        // No pin yet (first configure, or build/ was removed): stamp afresh below.
+    }
+    const footprint =
+        new Date().toISOString().replace(/[-:]/g, '').replace(/[T]/g, '_').slice(2, 15) +
+        (gitVersion ? `_${gitVersion}` : '')
+    fs.mkdirSync(path.dirname(pinPath), { recursive: true })
+    fs.writeFileSync(
+        pinPath,
+        JSON.stringify(
+            { key, footprint, fingerprint: fingerprint.hash, writtenAt: new Date().toISOString() },
+            null,
+            2
+        ) + '\n'
+    )
+    logStep(`Footprint ${footprint} stamped: sources, configuration or options changed`)
+    return footprint
+}
+
+/**
  * 执行 Conan 检查、CMake 配置与构建。
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
  * @param {string} cmakeOptionFlags - 来自 getCmakeOptionFlags() 的 -D 参数
@@ -343,14 +389,16 @@ export function runCmakeBuild(config, cmakeOptionFlags) {
     process.chdir(buildDir)
 
     const gitVersion = getGitVersion()
-    const BUILD_FOOTPRINT =
-        new Date().toISOString().replace(/[-:]/g, '').replace(/[T]/g, '_').slice(2, 15) +
-        (gitVersion ? `_${gitVersion}` : '')
-
-    logStep(`Building ${config}... (${BUILD_FOOTPRINT})`)
     const cmakeEnv = getCmakeEnv()
     const clangFlags = getCmakeClangFlags()
     const ccacheFlags = getCmakeCcacheFlags()
+    const BUILD_FOOTPRINT = pinnedFootprint(
+        config,
+        `${cmakeOptionFlags} ${clangFlags} ${ccacheFlags} ${process.env.CAMEL_USE_CCACHE || ''}`,
+        gitVersion
+    )
+
+    logStep(`Building ${config}... (${BUILD_FOOTPRINT})`)
     runCommand(
         `cmake .. -G "Ninja Multi-Config" -DBUILD_FOOTPRINT="${BUILD_FOOTPRINT}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake ${clangFlags} ${ccacheFlags} ${cmakeOptionFlags}`,
         cmakeEnv ? { env: cmakeEnv } : {}
