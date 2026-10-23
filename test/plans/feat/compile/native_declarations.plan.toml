@@ -417,11 +417,11 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "9\n"
 
-# ---- A `.cml` beside a `.cmo` is that module's declarations, and has no bodies ----
+# ---- A `.cml` beside a `.cmo` is that module's declarations and its Camel definitions ----
 
 [[tests]]
-name = "native.declaration_module_has_no_body"
-desc = "A `bytes.cml` written beside a `bytes.cmo` declares that module's operators; a body in it is a diagnostic located at the function, not a function silently dropped."
+name = "native.declaration_module_may_have_body"
+desc = "The author's ruling of 2026-10-23 on the impl-kernel site (`docs/handover/reviews/questions-2026-10-23.md`, 「## impl-kernel-site」) removed the wall this entry used to pin: 「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」. A `bytes.cml` written beside a `bytes.cmo` declares that module's operators and holds the definitions the module writes in Camel: a definition added to the module's own `.cml` compiles, runs over an operator the same file declares, and is used by an importer."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/native/declaration_module_body.mjs"

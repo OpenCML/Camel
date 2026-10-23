@@ -7,6 +7,7 @@
 
 #include "interop.h"
 
+#include "camel/core/rtdata/half.h"
 #include "camel/core/type/composite/array.h"
 
 #include <cstring>
@@ -66,8 +67,7 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
     return ArrayInference{valueType->code(), {}};
 }
 
-void flattenArray(
-    const Array *array, type::Type *valueType, Array *tensor, uint64_t &offset) {
+void flattenArray(const Array *array, type::Type *valueType, Array *tensor, uint64_t &offset) {
     auto *arrayType      = static_cast<type::ArrayType *>(valueType);
     type::Type *elemType = arrayType->elemType();
     for (size_t i = 0; i < array->size(); ++i) {
@@ -112,6 +112,13 @@ double scalarToDouble(type::TypeCode code, slot_t value) {
         return static_cast<double>(rtdata::fromSlot<rtdata::Float32>(value));
     case type::TypeCode::Float64:
         return rtdata::fromSlot<rtdata::Float64>(value);
+    // The element types the tensor module stores as doubles: a bf16 or f16 scalar is read as the
+    // f32 it widens to, exactly, so an array of one becomes a tensor of it with no second rounding
+    // (`new(bf16_array)`; design principles 7.3, camel/core/rtdata/half.h).
+    case type::TypeCode::BFloat16:
+        return static_cast<double>(rtdata::halfToFloat<rtdata::BFloat16>(value));
+    case type::TypeCode::Float16:
+        return static_cast<double>(rtdata::halfToFloat<rtdata::Float16>(value));
     case type::TypeCode::Bool:
         return rtdata::fromSlot<rtdata::Bool>(value) ? 1.0 : 0.0;
     default:
@@ -129,6 +136,10 @@ int64_t scalarToInt64(type::TypeCode code, slot_t value) {
         return static_cast<int64_t>(rtdata::fromSlot<rtdata::Float32>(value));
     case type::TypeCode::Float64:
         return static_cast<int64_t>(rtdata::fromSlot<rtdata::Float64>(value));
+    case type::TypeCode::BFloat16:
+        return static_cast<int64_t>(rtdata::halfToFloat<rtdata::BFloat16>(value));
+    case type::TypeCode::Float16:
+        return static_cast<int64_t>(rtdata::halfToFloat<rtdata::Float16>(value));
     case type::TypeCode::Bool:
         return rtdata::fromSlot<rtdata::Bool>(value) ? 1 : 0;
     default:
@@ -148,6 +159,10 @@ bool scalarToBool(type::TypeCode code, slot_t value) {
         return rtdata::fromSlot<rtdata::Float32>(value) != 0.0f;
     case type::TypeCode::Float64:
         return rtdata::fromSlot<rtdata::Float64>(value) != 0.0;
+    case type::TypeCode::BFloat16:
+        return rtdata::halfToFloat<rtdata::BFloat16>(value) != 0.0f;
+    case type::TypeCode::Float16:
+        return rtdata::halfToFloat<rtdata::Float16>(value) != 0.0f;
     default:
         throw std::invalid_argument("Unsupported scalar type for Tensor operation");
     }
@@ -185,8 +200,8 @@ Shape parseShapeArray(const Array *shapeArray, const type::Type *shapeType) {
 }
 
 Array *makeShapeArray(const Array *tensor, mm::IAllocator &allocator) {
-    Array *shape = Array::create(
-        allocator, type::ArrayType::create(type::Type::Int64()), tensor->rank());
+    Array *shape =
+        Array::create(allocator, type::ArrayType::create(type::Type::Int64()), tensor->rank());
     for (size_t i = 0; i < tensor->rank(); ++i) {
         shape->set(i, static_cast<rtdata::Int64>(tensor->dim(i)));
     }
@@ -198,9 +213,9 @@ Array *tensorFromArray(slot_t slot, type::Type *valueType, mm::IAllocator &alloc
         throw std::invalid_argument("Only array values can be converted to Tensor");
     }
     ArrayInference inferred = inferArrayType(slot, valueType);
-    Array *tensor = createTensor(inferred.dtype, inferred.shape, allocator, false);
-    auto *array          = rtdata::fromSlot<Array *>(slot);
-    uint64_t index       = 0;
+    Array *tensor           = createTensor(inferred.dtype, inferred.shape, allocator, false);
+    auto *array             = rtdata::fromSlot<Array *>(slot);
+    uint64_t index          = 0;
     flattenArray(array, valueType, tensor, index);
     return tensor;
 }

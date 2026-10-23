@@ -2,25 +2,32 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The two reduced-precision floating element types of a tensor (design principles 7.3):
+ * The two reduced-precision floating types of the language (design principles 7.3):
  *
  *   bf16  1 sign bit, 8 exponent bits (bias 127), 7 significand bits. It is the top half of an
  *         f32, so every bf16 value is an f32 value exactly: the range of f32 with an 8-bit
  *         significand.
  *   f16   1 sign bit, 5 exponent bits (bias 15), 10 significand bits: IEEE 754-2019 binary16.
  *
- * Both are stored in two bytes and are element types of a tensor only; the language has no
- * bf16 or f16 literal or scalar operation. The conversions are the only operations on the bit
- * patterns:
+ * Both are floating-point types of the language on the same footing as f32 and float (design
+ * principles 7.3, "permissions govern what the compiler changes, not what the program writes"):
+ * each has literals, a written conversion (`bf16(x)`, `f16(x)`, `x as bf16`), scalar arithmetic
+ * and comparison, and a place in an array. Every scalar operation is computed in f32 on values
+ * widened to f32 and rounded once back into the element type, which is the one arithmetic path
+ * the tensor kernels use as well (modules/tensor/dtype.h). A slot holds a bf16 or f16 as its
+ * two-byte pattern in the low half, zero-extended: the same bytes an element occupies in a
+ * compact array, so an element read out of an array and a scalar constant are the same slot.
+ *
+ * The conversions are the only operations on the bit patterns:
  *
  *   to the wider type     exact for every stored value, including subnormals, infinities and
  *                         NaNs (a bf16 or f16 NaN is an f32 NaN with the same sign);
  *   from the wider type   round to nearest, ties to even, once. The three paths are the three
  *                         cases of IEEE 754: a normal result, a subnormal result (a value below
- *                         the least normal exponent, rounded to a multiple of 2^-24 for f16),
- *                         and overflow (a value at or above the halfway point between the
- *                         largest finite value and 2^16 becomes an infinity). A NaN stays a NaN;
- *                         its payload is not preserved.
+ *                         the least normal exponent, rounded to a multiple of the format's least
+ *                         subnormal), and overflow (a magnitude at or above the halfway point
+ *                         between the largest finite value and the next power of two becomes an
+ *                         infinity). A NaN stays a NaN; its payload is not preserved.
  *
  * The arithmetic of a kernel is computed in f32 on values converted to f32 and rounded once
  * into the element type when it is stored (see modules/tensor/dtype.h); these types define only
@@ -30,9 +37,15 @@
 
 #pragma once
 
+#include "camel/core/slot.h"
+#include "camel/utils/assert.h"
+#include "camel/utils/number_text.h"
+
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <string_view>
 #include <type_traits>
 
 namespace camel::core::rtdata {
@@ -53,14 +66,12 @@ inline uint16_t bfloat16FromFloat(float value) {
 }
 
 /// The f32 value of a bf16: the bf16 bits are the top half, so this is exact for every pattern.
-inline uint32_t bfloat16ToFloatBits(uint16_t bits) {
-    return static_cast<uint32_t>(bits) << 16;
-}
+inline uint32_t bfloat16ToFloatBits(uint16_t bits) { return static_cast<uint32_t>(bits) << 16; }
 
 /// The bits of an f16: round to nearest, ties to even, once, through all three IEEE cases.
 inline uint16_t float16FromFloat(float value) {
-    const uint32_t bits = std::bit_cast<uint32_t>(value);
-    const uint16_t sign = static_cast<uint16_t>((bits >> 16) & 0x8000u);
+    const uint32_t bits      = std::bit_cast<uint32_t>(value);
+    const uint16_t sign      = static_cast<uint16_t>((bits >> 16) & 0x8000u);
     const uint32_t magnitude = bits & 0x7FFFFFFFu;
     if (magnitude > 0x7F800000u) { // NaN
         uint16_t payload = static_cast<uint16_t>((magnitude >> 13) & 0x03FFu);
@@ -81,8 +92,8 @@ inline uint16_t float16FromFloat(float value) {
     if (value64 < 6.103515625e-05) { // below the least normal f16, 2^-14
         // The value in units of 2^-24, rounded to nearest with ties to even. A double holds the
         // f32 and the scaled value exactly, so this is the IEEE rounding, not an approximation.
-        const double scaled = std::ldexp(value64, 24);
-        double units         = std::floor(scaled);
+        const double scaled   = std::ldexp(value64, 24);
+        double units          = std::floor(scaled);
         const double fraction = scaled - units;
         if (fraction > 0.5 || (fraction == 0.5 && std::fmod(units, 2.0) != 0.0)) {
             units += 1.0;
@@ -92,9 +103,9 @@ inline uint16_t float16FromFloat(float value) {
     // A normal f16: the f32 exponent is in [1, 30] after rebasing, and the 23 significand bits
     // round to 10. Every f32 subnormal is below 2^-14, so the branch above took it and the biased
     // exponent read here is never zero: the subtraction cannot wrap.
-    uint32_t exponent = (magnitude >> 23) - 127u + 15u;
-    uint32_t significand = magnitude & 0x007FFFFFu;
-    uint32_t rounded     = significand >> 13;
+    uint32_t exponent        = (magnitude >> 23) - 127u + 15u;
+    uint32_t significand     = magnitude & 0x007FFFFFu;
+    uint32_t rounded         = significand >> 13;
     const uint32_t remainder = significand & 0x1FFFu;
     if (remainder > 0x1000u || (remainder == 0x1000u && (rounded & 1u) != 0)) {
         ++rounded;
@@ -111,8 +122,8 @@ inline uint16_t float16FromFloat(float value) {
 
 /// The f32 value of an f16, exact for every pattern (an f16 subnormal is an f32 normal).
 inline uint32_t float16ToFloatBits(uint16_t bits) {
-    const uint32_t sign = static_cast<uint32_t>(bits & 0x8000u) << 16;
-    const uint32_t exponent = (bits >> 10) & 0x1Fu;
+    const uint32_t sign        = static_cast<uint32_t>(bits & 0x8000u) << 16;
+    const uint32_t exponent    = (bits >> 10) & 0x1Fu;
     const uint32_t significand = bits & 0x03FFu;
     if (exponent == 0) {
         if (significand == 0) {
@@ -203,18 +214,10 @@ struct Float16 {
         return static_cast<T>(toFloat());
     }
 
-    friend Float16 operator+(Float16 a, Float16 b) {
-        return Float16(a.toFloat() + b.toFloat());
-    }
-    friend Float16 operator-(Float16 a, Float16 b) {
-        return Float16(a.toFloat() - b.toFloat());
-    }
-    friend Float16 operator*(Float16 a, Float16 b) {
-        return Float16(a.toFloat() * b.toFloat());
-    }
-    friend Float16 operator/(Float16 a, Float16 b) {
-        return Float16(a.toFloat() / b.toFloat());
-    }
+    friend Float16 operator+(Float16 a, Float16 b) { return Float16(a.toFloat() + b.toFloat()); }
+    friend Float16 operator-(Float16 a, Float16 b) { return Float16(a.toFloat() - b.toFloat()); }
+    friend Float16 operator*(Float16 a, Float16 b) { return Float16(a.toFloat() * b.toFloat()); }
+    friend Float16 operator/(Float16 a, Float16 b) { return Float16(a.toFloat() / b.toFloat()); }
     friend Float16 operator-(Float16 a) { return Float16(-a.toFloat()); }
     friend bool operator==(Float16 a, Float16 b) { return a.toFloat() == b.toFloat(); }
     friend bool operator!=(Float16 a, Float16 b) { return a.toFloat() != b.toFloat(); }
@@ -234,5 +237,65 @@ template <typename T> inline constexpr bool is_reduced_float_v = IsReducedFloat<
 /// f16. A kernel asks this where it must accumulate in a wider type and order NaNs and zeros.
 template <typename T>
 inline constexpr bool is_ieee_float_v = std::is_floating_point_v<T> || is_reduced_float_v<T>;
+
+/*
+ * The slot form of a bf16 or an f16 (the two bytes of the format in the low half, zero-extended)
+ * and the conversions between that form and the types a slot can hold. One implementation is
+ * shared by the language's written conversions (`bf16(x)`, `f16(x)`, `x as bf16`), by a scalar
+ * constant of either type (core/data), and by the scalar arithmetic of every back end, so a
+ * conversion rounds the same way wherever it is met.
+ */
+
+/// The 16-bit pattern a bf16 or an f16 slot holds.
+inline uint16_t halfBitsOfSlot(slot_t slot) {
+    uint16_t bits = 0;
+    std::memcpy(&bits, &slot, sizeof(bits));
+    return bits;
+}
+
+/// The slot of a 16-bit pattern (the type is the caller's: bf16 or f16).
+inline slot_t halfSlotOfBits(uint16_t bits) {
+    slot_t slot{};
+    std::memcpy(&slot, &bits, sizeof(bits));
+    return slot;
+}
+
+/// A bf16 or f16 as the f32 it widens to, exactly, for every pattern.
+template <typename Half> inline float halfToFloat(slot_t slot) {
+    const uint16_t bits = halfBitsOfSlot(slot);
+    if constexpr (std::is_same_v<Half, BFloat16>) {
+        return std::bit_cast<float>(bfloat16ToFloatBits(bits));
+    } else {
+        return std::bit_cast<float>(float16ToFloatBits(bits));
+    }
+}
+
+/// The nearest bf16 or f16 of an f32, round to nearest, ties to even, once.
+template <typename Half> inline slot_t halfFromFloat(float value) {
+    if constexpr (std::is_same_v<Half, BFloat16>) {
+        return halfSlotOfBits(bfloat16FromFloat(value));
+    } else {
+        return halfSlotOfBits(float16FromFloat(value));
+    }
+}
+
+/// The same store rounding from a wider value of any arithmetic type: the value is brought to
+/// f32 first, which is the compute precision of the element type, and rounded once into it.
+template <typename Half, typename T> inline slot_t halfFromValue(const T &value) {
+    return halfFromFloat<Half>(static_cast<float>(value));
+}
+
+/// Whether a written value is beyond what one of the two types can hold: a finite value whose
+/// nearest bf16 or f16 is an infinity. The boundary is the halfway point between the largest
+/// finite value and the next power of two (2^128 for bf16, 2^16 for f16), which is where IEEE
+/// rounding overflows; a written value at or above it is the overflow a written conversion
+/// reports, the same way an f32 conversion reports a value beyond the range of f32. A value that
+/// rounds to zero is not an overflow: zero is a value of the type (H15i calls it an underflow).
+template <typename Half> inline bool halfOverflows(float value) {
+    if (!std::isfinite(value)) {
+        return false;
+    }
+    return std::isinf(halfToFloat<Half>(halfFromFloat<Half>(value)));
+}
 
 } // namespace camel::core::rtdata

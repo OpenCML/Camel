@@ -12,7 +12,9 @@
  * `RuntimeDiag::InvalidPassParameter`.
  *
  *   node test/tools/check-doc-pass-forms.mjs
- *   node test/tools/check-doc-pass-forms.mjs --list    print every invocation with its page
+ *   node test/tools/check-doc-pass-forms.mjs --list      print every invocation with its page
+ *   node test/tools/check-doc-pass-forms.mjs --selftest  plant a tree and check the walk itself
+ *                                                        (no camel binary and no pages needed)
  *
  * What it checks, and where each rule comes from:
  *
@@ -61,8 +63,10 @@
  *   * A specification written in Camel source (`f->std::opt<safe_fp: true>`) is the source
  *     spelling of a named argument, which the ruling kept; only the command line changed.
  *   * `changes.log` and the record directories are history: an entry states the release it
- *     belongs to, and `docs/handover/` and `docs/reviews/` quote the old spelling to say what
- *     happened. They are not scanned.
+ *     belongs to, and `docs/handover/` quotes the old spelling to say what happened. They are not
+ *     scanned, and every entry of that list is asserted to still be in the tree, so a class cannot
+ *     keep excusing pages it no longer describes. (`docs/reviews/` was an entry until the
+ *     directory was removed with the ledgers it held; the assertion found it.)
  *
  * A line the guard would report is excused when it says why it is not a defect: the removed form
  * is written there in order to be called removed. The exceptions are listed in EXCUSED with their
@@ -71,33 +75,61 @@
  * two that excused design principles 9.3 (`out=model.onnx` as a string value written as it is)
  * were deleted when the parser took a `string` parameter as written, and that was found by the
  * check that every exception still matches a line, not by reading the pages.
- * `args` in a test plan are pins, not pages: a refusal test must contain the spelling it pins
- * (`error.positional` in `test/plans/feat/opt/pass_params.plan.toml`), so test plans contribute
- * their `desc` strings to the pass-name rule and nothing to the invocation rule.
+ * A test plan's `args` and `envs` are pins, not pages: a refusal test must contain the spelling it
+ * pins (`error.positional` in `test/plans/feat/opt/pass_params.plan.toml`), and a test that has a
+ * guard plant a page must name the spelling in the environment it passes. Their lines, and the
+ * executable fixtures `verify_script` / `verify_script_path` / `verify_js`, are not read for the
+ * removed form; every other line of a plan, comments included, is.
  *
- * A check of nothing is refused (exit 2), and the number of invocations checked, the number of
- * distinct specifications and the number that reached the probe are printed and pinned by
- * `test/plans/feat/opt/pass_params.plan.toml`, so a rule that stops matching is red rather than
- * silent.
+ * A test plan's `desc` is not a page of the documentation: it is the plan's own label, read in a
+ * plan listing and not by a reader looking for a command to copy. What a plan does teach is the
+ * rest of the file — the comments that say what it pins and the `args` it pins — and that is read
+ * as a page. A `camel …` command quoted inside a `desc` is therefore observed and not counted:
+ * the guard reports how many of them the labels showed, so the definition cannot go quietly
+ * blind, and an invocation there moves no population and no pin. A plan's description that
+ * quoted a command was what moved the count by one invocation with nothing in the reader's world
+ * changing; the number is a measurement of the pages, and a label is not one.
+ *
+ * A check of nothing is refused (exit 2), and the property a green run states is that every
+ * distinct specification was read by the parser and accepted by it: the guard fails when the number
+ * that reached the probe is not the number of distinct specifications, so a batch whose answer
+ * never arrived is red. The numbers — pages walked, invocations found, distinct specifications —
+ * are printed as a measurement of the pages; `test/plans/feat/opt/pass_params.plan.toml` checks
+ * the shape of that line and the property behind it, and a page added or removed moves no
+ * assertion.
  *
  * What it costs, and what it does not read:
  *
- *   * The walk skips the trees a run writes into. `test/results` holds a copy of every plan and
- *     case the runner has run and `tmp/test` the per-test scratch, so a page found there is a
- *     copy a run made, not a page of the tree. Walking them was also the whole cost of this guard
- *     on a checkout that has run the gate many times: the integration checkout held 6.77 M
- *     entries and 51 GB under those two trees, and walking them measured 70 s against 0.4 s for
- *     the same walk in a checkout that has run the gate once, while the parser work is 0.7 s.
- *     That put the guard at the runner's margin — a passing test is red above a quarter of its
- *     `timeout_ms` (`TIMEOUT_MARGIN` in `test/tools/run-tests.mjs`) — so it went red on a busy
- *     host while every check of it passed, which is a red that says nothing about the pages.
- *     (That checkout has since been pruned to 6.65 GB and 0.86 M entries, where the guard as it
- *     was costs 10.4 s and passes: the pruning hides the cost, the skip removes it.)
- *     No page can be lost by the skip, and that is measured rather than argued: under those two
- *     trees in that checkout there is no `.md` file at all, a `.cml` there is a case copy (a page
- *     is only `stdlib/*.cml`) and a `.toml` there is a plan copy (a page is only `test/plans/**`),
- *     and the guard reports the same 453 pages and 246 invocations there after the skip as before
- *     it.
+ *   * The walk skips the trees a run writes into, and asks the one definition of which trees
+ *     those are: `isRunnerOutput` (`test/tools/runner-output.mjs`), the module that sits beside
+ *     the runner's retention bound and answers the same question for `check-no-algo.mjs`,
+ *     `scripts/check-doc-links.mjs`, `scripts/headers.mjs --root` and `scripts/clean.js`. A guard
+ *     that hard-codes `test/results` is one more place the next tree has to be remembered.
+ *   * What a run directory holds is the run's own record and nothing of the checkout: `run.json`
+ *     at the run root, and per test its captured output and a `meta.json` naming `plan_path` and
+ *     `case_path`. The plan and the case used to be copied into it, one copy of the same plan
+ *     file per test, and that copy was 87% of a run directory's bytes; the runner stopped writing
+ *     it, so no `.md` and no plan of the checkout is there to be skipped. No page of the
+ *     documentation can be lost by the skip, and that is asserted rather than argued: the walk
+ *     yields every tracked `*.md` and every tracked plan file (checked against `git ls-files`),
+ *     and the `--selftest` recipe plants one page inside the runner's tree and the same page
+ *     outside it and requires the walk to count only the second. A tree that is not the runner's
+ *     (`tmp` is the repository's gitignored scratch root; the runner's own scratch is `tmp/test`,
+ *     one `run-<pid>` per run) is skipped by the guard's own deliberate choice, and the recipe
+ *     asserts that difference too, so a narrowed skip is red here rather than silent.
+ *   * Skipping them is also the whole cost of this guard on a checkout that has run the gate many
+ *     times: the integration checkout held 6.8 M entries and 51 GB under those two trees, and a
+ *     bare walk of it measured 41.4 s against 0.42 s in a checkout that had run the gate once
+ *     (the runner's own accounting, `docs/test-plans.md`, "Runner Output"), while the parser work
+ *     is a fraction of a second. That put the guard past the runner's margin — a passing test is
+ *     red above a quarter of its `timeout_ms` (`TIMEOUT_MARGIN` in `test/tools/run-tests.mjs`) —
+ *     so it went red on a busy host while every check of it passed, which is a red that says
+ *     nothing about the pages. (That checkout has since been pruned to 6.65 GB and 0.86 M entries,
+ *     where the guard as it was costs 10.4 s and passes: the pruning hides the cost, the skip
+ *     removes it.)
+ *     `tmp` is skipped as a whole rather than as `tmp/test` alone, which is the narrower tree the
+ *     runner owns: both are gitignored, `tmp` holds no tracked file at all (asserted), and a page
+ *     written into either one is a run's scratch, not a page of the tree.
  *   * One parser invocation decides several specifications: `requireKnownPasses`
  *     (`src/execute/pass.cpp`) resolves every name of a pipeline, and refuses the pipeline,
  *     before the first pass runs, so a pipeline of specifications followed by the probe reads
@@ -125,13 +157,20 @@
  *                              specification is decided in tens of milliseconds, so only a wedged
  *                              parser or a broken install reaches it
  *   CAMEL_DOC_FORM_REPORT_ALL  1 prints every problem instead of the first three
+ *   CAMEL_DOC_FORM_PLANT_PAGE  a `camel …` invocation to plant as a page in this process before
+ *                              the walk, so a check can require this guard to go red on a page it
+ *                              wrote (the page is removed however the run ends); a check has to ask
+ *                              for it here because a verification script cannot read back a guard
+ *                              it starts itself
  */
 
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { isRunnerOutput } from './runner-output.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(HERE, '..', '..')
@@ -157,20 +196,37 @@ const PROBE = 'std::doc_form_probe'
 // specification written before it resolved: the pass listing an unknown name prints.
 const PROBE_REFUSED = new RegExp(`Pass <${PROBE}> not found`)
 
-// Not pages: a release log states the release it belongs to, and the record directories quote
-// the old spelling to say what happened.
-const NOT_A_PAGE = ['changes.log', 'docs/handover/', 'docs/reviews/']
+// Not pages: a release log states the release it belongs to, and the handover directory quotes the
+// old spelling to say what happened. The list is asserted, not assumed: an entry that is not in
+// the tree any more is reported, so a class cannot keep excusing pages it no longer describes.
+// (`docs/reviews/` was a third entry until the directory was removed with the ledgers it held.)
+const NOT_A_PAGE = ['changes.log', 'docs/handover/']
 // Written by a script, never by hand: their text comes from the pages and the sources scanned
 // here, so a hit in them is fixed where it is written.
 const GENERATED = ['docs/diagnostics.md', 'docs/stdlib-reference.md']
 const SKIP_DIRS = new Set(['.git', 'out', 'build', 'node_modules', 'third_party', 'sdks'])
-const VCS_DIR = '.git'
-// Trees a run writes into, relative to the repository root. `test/results` holds the runner's
-// record of every test it ran — a copy of the plan, a copy of the case, the captured output — and
-// `tmp` its scratch, which holds the plan copies too. A `.md` or a `.toml` found there was
-// written by a run, so it is not a page and must not decide the next run's verdict; walking them
-// is also what made this guard slow on a checkout with a long gate history (see the header).
-const NOT_WALKED = ['test/results', 'tmp']
+
+// The trees a run writes into are the runner's own question, and it answers it in one place:
+// `isRunnerOutput` (`test/tools/runner-output.mjs`), beside the retention bound that prunes the
+// same trees and asked by every other tool that walks the checkout. `tmp` is not that tree — the
+// runner's scratch is `tmp/test`, one `run-<pid>` per run — and it is skipped anyway: it is the
+// repository's gitignored scratch root, it holds no tracked file at all (asserted below), and a
+// page written there is a run's scratch rather than a page of the tree. `tmp` is the guard's own
+// deliberate choice; `test/results` and `tmp/test` are the runner's, and both facts are asserted
+// by the `--selftest` recipe so a narrower or wider skip is red here instead of silent.
+const DELIBERATE_SKIP = ['tmp']
+
+// A text file that is a page of the documentation a reader is meant to read. `desc` in a test
+// plan is not one of them: it is the plan's own label (see the header).
+function isPage(rel) {
+    if (NOT_A_PAGE.some((entry) => rel === entry.replace(/\/$/, '') || rel.startsWith(entry))) return false
+    if (GENERATED.includes(rel)) return false
+    return (
+        rel.endsWith('.md') ||
+        (rel.startsWith('stdlib/') && rel.endsWith('.cml')) ||
+        (rel.startsWith('test/plans/') && rel.endsWith('.toml'))
+    )
+}
 
 // A line the guard does not report, with the words that make it an exception. Every entry is
 // checked to still match a line, so an exception cannot outlive what it was written for.
@@ -201,6 +257,10 @@ const EXCUSED = [
 const problems = []
 const excusedUsed = new Map()
 const invocations = []
+// The commands a plan's `desc` shows: observed, reported, and not part of the population (see
+// the header). Their count is printed with the pass and pinned by the plan beside its siblings,
+// so the definition cannot go blind.
+const labels = []
 const pageLines = new Map()
 
 // Report a problem against a page line, unless that line says why it is not one.
@@ -220,11 +280,15 @@ function read(file) {
     return fs.readFileSync(path.join(REPO_ROOT, file), 'utf8')
 }
 
+function rel_exists(rel) {
+    return fs.existsSync(path.join(REPO_ROOT, ...rel.split('/')))
+}
+
 function relative(abs) {
     return path.relative(REPO_ROOT, abs).replace(/\\/g, '/')
 }
 
-function* walk(dir, rel) {
+function* walk(root, dir = root, rel = '') {
     let entries
     try {
         entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -232,14 +296,137 @@ function* walk(dir, rel) {
         return
     }
     for (const entry of entries) {
-        if (entry.name === VCS_DIR || SKIP_DIRS.has(entry.name)) continue
+        if (SKIP_DIRS.has(entry.name)) continue
         const child = rel === '' ? entry.name : `${rel}/${entry.name}`
-        if (NOT_WALKED.some((skip) => child === skip || child.startsWith(`${skip}/`))) continue
+        if (DELIBERATE_SKIP.some((skip) => child === skip || child.startsWith(`${skip}/`))) continue
         const full = path.join(dir, entry.name)
-        if (entry.isDirectory()) yield* walk(full, child)
+        // The runner's trees are wherever a run writes, not wherever this guard remembers they
+        // were: the question is the module's, and this is the one place that asks it.
+        if (isRunnerOutput(full, root)) continue
+        if (entry.isDirectory()) yield* walk(root, full, child)
         else yield full
     }
 }
+
+/**
+ * The pages of one checkout, in path order: the files a reader is meant to read, with the trees a
+ * run writes into and the guard's own scratch skip left out. `root` is a checkout root, which is
+ * what makes the rule testable over a planted tree as well as over this one.
+ */
+function discoverPages(root) {
+    return [...walk(root)]
+        .map((abs) => path.relative(root, abs).replace(/\\/g, '/'))
+        .filter(isPage)
+        .sort()
+}
+
+/** Everything under `dir`, counted one entry at a time, so a planted tree can be compared. */
+function countFiles(dir) {
+    let count = 0
+    const stack = [dir]
+    while (stack.length > 0) {
+        const current = stack.pop()
+        let children
+        try {
+            children = fs.readdirSync(current, { withFileTypes: true })
+        } catch {
+            continue
+        }
+        for (const child of children) {
+            if (child.isDirectory()) stack.push(path.join(current, child.name))
+            else count++
+        }
+    }
+    return count
+}
+
+// ---- The walk's own recipe, over a planted tree ------------------------------------------------
+// The skip is asserted, not argued: the same page planted inside the runner's tree and outside it
+// must be counted once. The tree is planted outside the checkout (in `CAMEL_TEST_TMPDIR` when a run
+// gives one, else in the OS temporary directory) and removed here; nothing of this checkout is
+// written. Every run fails if a page inside a runner tree is counted, or if the page outside it is
+// not, so the narrower skip this guard had (two hand-kept names) cannot come back unnoticed.
+function selftest() {
+    const parent = process.env.CAMEL_TEST_TMPDIR || fs.mkdtempSync(path.join(os.tmpdir(), 'doc-form-walk-'))
+    const root = path.join(parent, `doc-form-walk-${process.pid}`)
+    const planted = [
+        'docs/planted-page.md',
+        'test/plans/planted.plan.toml',
+        'test/results/log/planted-run/pass/planted.plan/planted.test/planted-page.md',
+        'tmp/test/run-planted/planted.plan/planted.test/planted-page.md',
+    ]
+    const expected = ['docs/planted-page.md', 'test/plans/planted.plan.toml']
+    const failures = []
+    try {
+        for (const rel of planted) {
+            const full = path.join(root, ...rel.split('/'))
+            fs.mkdirSync(path.dirname(full), { recursive: true })
+            fs.writeFileSync(full, '# a planted page\n')
+        }
+        const found = discoverPages(root)
+        if (found.join(',') !== expected.join(',')) {
+            failures.push(
+                `the walk of a planted checkout found ${found.length} page(s): ${found.join(', ') || 'none'}; ` +
+                    `expected ${expected.join(', ')}`
+            )
+        }
+        if (!isRunnerOutput(path.join(root, 'test', 'results'), root)) {
+            failures.push('the runner tree `test/results` of the planted checkout does not read as one')
+        }
+        if (!isRunnerOutput(path.join(root, 'tmp', 'test'), root)) {
+            failures.push("the runner's scratch `tmp/test` does not read as a tree a run writes")
+        }
+        if (isRunnerOutput(path.join(root, 'tmp'), root)) {
+            failures.push(
+                'the guard skips `tmp`, and `tmp` is no tree the runner writes: the deliberate ' +
+                    'skip and the runner\'s own tree are different names, and the header says which'
+            )
+        }
+        if (countFiles(path.join(root, 'test', 'results')) === 0) {
+            failures.push('the planted runner tree holds no file, so the recipe could not tell a skip from an empty tree')
+        }
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+    }
+    if (failures.length > 0) {
+        for (const failure of failures) console.log(`FAIL ${failure}`)
+        console.log(`FAIL the walk counts a page it must not, or misses one it must: ${failures.length} check(s)`)
+        process.exit(1)
+    }
+    console.log(
+        `PASS doc pass forms walk: one page planted inside the runner's tree and the same page ` +
+            `outside it; the walk counted 1 of the 2, and the planted tree is gone`
+    )
+}
+
+if (process.argv.includes('--selftest')) {
+    selftest()
+    process.exit(0)
+}
+
+// ---- A planted page, when a check asks for one ------------------------------------------------
+// The check that the guard is not vacuous cannot plant the page itself: it would have to start a
+// second guard, and a verification script on this host cannot capture the output of the process it
+// starts (the runner starts this guard, and a guard started from a verification script cannot be
+// read back). So the ask travels as an environment variable and the plant happens in this process,
+// before the walk, and is removed however the run ends. A planted page is a page, so it is read by
+// the same rule as any other: this changes what is on disk, never what the guard counts.
+const PLANT_PAGE = process.env.CAMEL_DOC_FORM_PLANT_PAGE
+// The name is unique per run, not per process: two of these runs can be told the same pid — an
+// earlier run's guard can still be reading its page when this one starts — and a name that
+// collided would have one run removing the other's page mid-walk.
+const PLANTED_PAGE = PLANT_PAGE
+    ? path.join(
+          REPO_ROOT,
+          `planted-page-${process.pid}-${crypto.randomUUID().slice(0, 8)}.md`
+      )
+    : null
+if (PLANTED_PAGE) fs.writeFileSync(PLANTED_PAGE, `# a page a check planted\n\n\`${PLANT_PAGE}\`\n`)
+process.on('exit', () => {
+    // Only the file this run created, by its whole path: a `force` removal of a path another run
+    // owns is exactly the collision above.
+    if (PLANTED_PAGE) fs.rmSync(PLANTED_PAGE, { force: true })
+})
 
 // ---- The pass names the command line knows ------------------------------------------------
 
@@ -555,42 +742,124 @@ function specsOfCommand(text) {
 
 // ---- Scanning the pages --------------------------------------------------------------------
 
-const files = []
-for (const abs of walk(REPO_ROOT, '')) {
-    const rel = relative(abs)
-    if (NOT_A_PAGE.some((entry) => rel === entry.replace(/\/$/, '') || rel.startsWith(entry))) continue
-    if (GENERATED.includes(rel)) continue
-    const page =
-        rel.endsWith('.md') ||
-        (rel.startsWith('stdlib/') && rel.endsWith('.cml')) ||
-        (rel.startsWith('test/plans/') && rel.endsWith('.toml'))
-    if (page) files.push(rel)
-}
-files.sort()
+const files = discoverPages(REPO_ROOT)
 
 if (files.length === 0) {
     console.log('no reader-facing page in the tree: nothing was checked')
     process.exit(2)
 }
 
-// In a test plan `args` is a pin, not a page: a refusal test has to contain the spelling it
-// pins. The lines of an `args` array are therefore not read for the removed form.
+// The walk counts every page of the checkout and nothing else. Both halves are stated here
+// because a page silently lost is a rule that stopped matching: every tracked `*.md` that is
+// meant to be read must be in the population — the ones left out are exactly the two classes
+// above, and each is named — and the trees a run writes must hold no tracked file the skip could
+// lose.
+{
+    const listed = spawnSync('git', ['ls-files', '*.md'], { cwd: REPO_ROOT, encoding: 'utf8' })
+    const trackedPages = (listed.stdout || '').split(/\r?\n/).filter(Boolean)
+    // The same two rules the walk applies, so "left out" means the class and not the walk.
+    const meantToBeRead = (rel) =>
+        !NOT_A_PAGE.some((entry) => rel === entry.replace(/\/$/, '') || rel.startsWith(entry)) &&
+        !GENERATED.includes(rel)
+    const missing = trackedPages.filter((rel) => meantToBeRead(rel) && !files.includes(rel))
+    const leftOut = trackedPages.filter((rel) => !meantToBeRead(rel))
+    if (!listed.error && missing.length > 0) {
+        problems.push(
+            `the walk left ${missing.length} tracked page(s) behind: ${missing.slice(0, 3).join(', ')}` +
+                `${missing.length > 3 ? ', ...' : ''}`
+        )
+    }
+    for (const entry of [...NOT_A_PAGE, ...GENERATED]) {
+        const base = entry.replace(/\/$/, '')
+        // An exclusion is a directory or a single page. A directory still holding a page is the
+        // only shape `NOT_A_PAGE` and `GENERATED` have; a name that is not there would make its
+        // class look applied when the walk is skipping nothing.
+        const known = entry.endsWith('/')
+            ? trackedPages.some((rel) => rel.startsWith(entry))
+            : rel_exists(base)
+        if (!listed.error && !known) {
+            problems.push(
+                `'${entry}' is excluded from the pages and the tree holds nothing of that name: ` +
+                    `the exclusion outlived what it was written for`
+            )
+        }
+    }
+    if (!listed.error && !rel_exists('changes.log')) {
+        problems.push('changes.log is excluded from the pages and is not in the tree any more')
+    }
+    if (!listed.error && trackedPages.length === 0) {
+        problems.push('the tree has no tracked page at all: the walk was checked over nothing')
+    }
+    if (!listed.error) {
+        if (leftOut.length === 0) {
+            problems.push('every tracked page was read, so the exclusions above excuse nothing')
+        }
+    }
+    const scratch = ['test/results', 'tmp']
+    for (const rel of scratch) {
+        const listed = spawnSync('git', ['ls-files', '--', rel], { cwd: REPO_ROOT, encoding: 'utf8' })
+        const entries = (listed.stdout || '').split(/\r?\n/).filter(Boolean)
+        if (!listed.error && entries.length > 0) {
+            problems.push(
+                `'${rel}' is skipped by the walk and holds ${entries.length} tracked file(s): ` +
+                    `${entries.slice(0, 3).join(', ')}; it is no longer scratch`
+            )
+        }
+    }
+}
+
+// A test plan is read for what a reader would take from it, and four of its keys are executable
+// fixtures rather than prose: `args` is the pin a refusal test must contain, `envs` is the same
+// pin for a test that drives a tool through the environment (a guard is told to plant a page that
+// spells the removed form), and `verify_script` / `verify_script_path` / the older `verify_js` are
+// a check's own code. Their lines are therefore not read for the removed form; every other line of
+// a plan, comments included, is.
 function pinnedLines(lines) {
     const pinned = new Set()
-    let inArgs = false
+    const KEYS = ['args', 'envs', 'verify_script', 'verify_script_path', 'verify_js']
+    let open = null
     lines.forEach((line, index) => {
-        if (!inArgs && /^\s*args\s*=/.test(line)) {
-            inArgs = true
+        if (open === null) {
+            const key = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*/)
+            if (!key || !KEYS.includes(key[1])) return
+            const rest = line.slice(key[0].length)
+            const block = rest.match(/^("""|''')/)
+            if (block) {
+                pinned.add(index)
+                // A `"""` block may open and close on one line, and then it is pinned whole.
+                open = rest.slice(3).includes(block[1]) ? null : block[1]
+                return
+            }
+            if (!['args', 'envs'].includes(key[1])) return
             pinned.add(index)
-            if (/\]/.test(line.replace(/^\s*args\s*=/, ''))) inArgs = false
+            if (!/\]/.test(rest)) open = ']'
             return
         }
-        if (inArgs) {
-            pinned.add(index)
-            if (/^\s*\]/.test(line)) inArgs = false
-        }
+        pinned.add(index)
+        if (open === ']' ? /^\s*\]/.test(line) : line.includes(open)) open = null
     })
     return pinned
+}
+
+// A plan's `desc` is its own label, not a page (the header says why): a line of it is observed
+// and not counted. Both spellings a plan uses are read — the one-line string and the `"""` block
+// — because a rule that matches one of them would count some labels and not others.
+function labelLines(lines) {
+    const labels = new Set()
+    for (let index = 0; index < lines.length; index++) {
+        const opened = lines[index].match(/^\s*desc\s*=\s*(.*)$/)
+        if (!opened) continue
+        labels.add(index)
+        const rest = opened[1]
+        const block = rest.match(/^("""|''')/)
+        if (!block) continue
+        let closed = rest.slice(3).includes(block[1])
+        for (let cursor = index + 1; cursor < lines.length && !closed; cursor++) {
+            labels.add(cursor)
+            if (lines[cursor].includes(block[1])) closed = true
+        }
+    }
+    return labels
 }
 
 for (const rel of files) {
@@ -598,6 +867,7 @@ for (const rel of files) {
     const lines = text.split(/\r?\n/)
     pageLines.set(rel, lines)
     const pinned = rel.startsWith('test/plans/') ? pinnedLines(lines) : new Set()
+    const inLabel = rel.startsWith('test/plans/') ? labelLines(lines) : new Set()
 
     // A pass name immediately followed by `(` is the deleted spelling wherever it is written.
     lines.forEach((line, index) => {
@@ -615,12 +885,18 @@ for (const rel of files) {
     // reported when it is unmistakably a parameter: `key:` is the colon spelling and a bare
     // literal is a positional parameter. A word that is neither (`<file>`, `2>/dev/null`) is
     // left alone: it cannot be told apart from a placeholder or a redirection.
+    //
+    // A command line inside a plan's `desc` is the plan's own label and not a page: it is counted
+    // in its own bucket, reported, and left out of the population. Every rule above still applies
+    // to it, so a label that teaches a spelling the parser refuses is still red.
     for (const command of commandLines(text)) {
+        const label = inLabel.has(command.line - 1)
         let afterAPass = false
         for (const spec of specsOfCommand(command.text)) {
             const name = shellSplit(spec)[0] ?? ''
             if (isInvocationName(name)) {
-                invocations.push({ rel, line: command.line, spec })
+                if (label) labels.push({ rel, line: command.line, spec })
+                else invocations.push({ rel, line: command.line, spec })
                 afterAPass = true
                 continue
             }
@@ -644,7 +920,9 @@ for (const rel of files) {
     }
 }
 
-// The parser's own rule, applied to every invocation the pages show.
+// The parser's own rule, applied to every invocation the pages show. A plan's label is read by
+// the same rule even though it is not counted: a label that teaches a spelling the parser refuses
+// is a defect of the command it names, whatever a reader does with it.
 const seen = new Map()
 for (const { rel, line, spec } of invocations) {
     const refusal = readSpec(spec)
@@ -652,6 +930,11 @@ for (const { rel, line, spec } of invocations) {
     if (!seen.has(spec)) seen.set(spec, [])
     seen.get(spec).push({ rel, line })
     if (LIST) console.log(`invocation ${rel}:${line}: ${spec}`)
+}
+for (const { rel, line, spec } of labels) {
+    const refusal = readSpec(spec)
+    if (refusal) report(rel, line, `the plan's label shows '${spec}' and ${refusal}`)
+    if (LIST) console.log(`label ${rel}:${line}: ${spec}`)
 }
 const distinct = [...seen.entries()].map(([spec, occurrences]) => ({ spec, occurrences }))
 
@@ -871,6 +1154,13 @@ if (invocations.length === 0) {
     )
     process.exit(2)
 }
+if (distinct.length === 0) {
+    console.log(
+        `the ${invocations.length} invocation(s) of ${files.length} page(s) yielded no pass ` +
+            `specification: the split stopped matching the command lines`
+    )
+    process.exit(2)
+}
 
 // An install that cannot run the parser at all is not a page: every specification was refused by
 // the same broken invocation, so no page is blamed and the pass is not reported.
@@ -903,11 +1193,23 @@ if (problems.length > 0) {
     )
     process.exit(1)
 }
+// The property, not the count: a green run has read every distinct specification through the real
+// parser and heard it reach the probe. A specification the parser refused is reported, so this is
+// the statement that nothing was decided by a batch that never resolved it.
+if (parsed !== distinct.length) {
+    console.log(
+        `FAIL the parser decided ${parsed} of ${distinct.length} specification(s): ` +
+            `${distinct.length - parsed} were neither refused nor read through the probe`
+    )
+    process.exit(1)
+}
+
 console.log(
     `PASS doc pass forms: ${invocations.length} pass invocation(s) in ${files.length} page(s), ` +
-        `${distinct.length} distinct, each read by the parser's own rule; ${distinct.length} run ` +
-        `through the real parser, ${parsed} of them reached the probe, and ${excused} page line(s) ` +
-        `are excused (the form is said to be removed, or a decision and the parser disagree); ` +
+        `${distinct.length} distinct, each read by the parser's own rule and each accepted by the ` +
+        `real parser (${parsed} reached the probe); ${labels.length} invocation(s) in a plan's own ` +
+        `desc are reported and not counted; ${excused} page line(s) are excused (the form is said ` +
+        `to be removed, or a decision and the parser disagree); ` +
         `${invocationsRun} parser invocation(s) for ${distinct.length} specification(s), ` +
         `${((Date.now() - STARTED_AT) / 1000).toFixed(1)} s`
 )

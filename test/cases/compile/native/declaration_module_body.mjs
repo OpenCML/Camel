@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /**
- * A `.cml` beside a `.cmo` of the same name is the declaration module of that C++ module: its
- * top-level functions are declarations, so a body written there is reported at the function
- * instead of being dropped. The pair is made in the test's own scratch directory out of the
- * stdlib `bytes` module, because the repository has no C++ module still written twice.
+ * A `.cml` beside a `.cmo` of the same name is the declaration module of that C++ module, and it
+ * may hold Camel definitions as well as the declarations of the C++ operators (ruling
+ * impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody` 删除"; H94: the
+ * pair is one module; design principles 10.4: everything else is defined in Camel). The pair is
+ * made in the test's own scratch directory out of the stdlib `bytes` module: the module's own
+ * `.cml` gains one definition, which the program uses together with the C++ operators the same
+ * file declares.
  *
  * Usage: node declaration_module_body.mjs
  */
@@ -23,15 +26,17 @@ const env = { ...process.env, CAMEL_HOME: HOME }
 
 fs.mkdirSync(SCRATCH, { recursive: true })
 fs.copyFileSync(path.join(HOME, 'stdlib', 'bytes.cmo'), path.join(SCRATCH, 'bytes.cmo'))
-// A declaration module with a body in it: the one mistake the rule forbids.
+// The module's own declarations, with a Camel definition beside them: one module is the two
+// files, and what the module adds in Camel belongs in this one.
+const declarations = fs.readFileSync(path.join(REPO_ROOT, 'stdlib', 'bytes.cml'), 'utf8')
 fs.writeFileSync(
     path.join(SCRATCH, 'bytes.cml'),
-    `module bytes
-
-export func encode(text: string): Bytes
-
-export func size(content: Bytes): int {
-    return 0
+    declarations +
+        `
+/// Twice the number of bytes in the binary value, written in Camel over the operator this same
+/// file declares, size, which the C++ module implements.
+export func twice(content: Bytes): int {
+    return size(content) + size(content)
 }
 `,
 )
@@ -39,8 +44,10 @@ fs.writeFileSync(
     path.join(SCRATCH, 'main.cml'),
     `import bytes
 
-func main(): int {
-    return bytes::size(bytes::encode('abc'))
+func main(): int sync {
+    let text = bytes::encode('abc')
+    bytes::twice(text)->println
+    return 0
 }
 `,
 )
@@ -58,26 +65,16 @@ function check(label, ok, detail) {
     if (!ok) failed = true
 }
 
-let diagnostics = []
-try {
-    diagnostics = JSON.parse(proc.stdout)
-} catch {
-    check('the run prints a diagnostics array', false, `${proc.stdout} ${proc.stderr}`)
-}
-
-const found = diagnostics.find((d) => d.data && d.data.name === 'SemanticDiag::DeclarationModuleHasBody')
-check('the body in the declaration module is a diagnostic', Boolean(found), JSON.stringify(diagnostics.map((d) => d.data && d.data.name)))
-if (found) {
-    check('exit code is 1', proc.status === 1, String(proc.status))
-    check('code is the catalog code', found.code === '0x0300017D', String(found.code))
-    check(
-        'the diagnostic is located in the declaration module',
-        path.basename(found.data.modulePath || '') === 'bytes.cml',
-        String(found.data.modulePath),
-    )
-    check('the message names the module and the function', found.message.includes("'bytes'") && found.message.includes('size'), found.message)
-    check('the diagnostic is located at the signature of the function', found.range && found.range.start.line === 4, JSON.stringify(found.range))
-}
+// No diagnostic means the compiler prints nothing but what the program prints: a run that
+// reports anything at all answers with the diagnostics array instead.
+const out = proc.stdout.trim()
+check('exit code is 0', proc.status === 0, `${proc.status}: ${proc.stdout} ${proc.stderr}`)
+check('the declaration module is used with no diagnostic', !out.startsWith('['), out)
+check(
+    'the definition runs, over the operator the same file declares',
+    out === '6',
+    out,
+)
 
 console.log(failed ? 'FAIL' : 'PASS')
 process.exit(failed ? 1 : 0)

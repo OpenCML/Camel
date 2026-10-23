@@ -10,9 +10,9 @@
 #include "camel/runtime/reachable.h"
 
 #include "camel/core/node_attrs.h"
-#include "camel/core/tags.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/base.h"
 
 #include <ostream>
@@ -34,6 +34,10 @@ bool isPlainScalar(type::Type *t) {
     case type::TypeCode::Float32:
     case type::TypeCode::Float64:
     case type::TypeCode::Bool:
+    // A bf16 or f16 value is a scalar of the language like an f32 (design principles 7.3), and
+    // its slot holds its two-byte pattern: a constant of one of them inlines the same way.
+    case type::TypeCode::BFloat16:
+    case type::TypeCode::Float16:
         return true;
     default:
         return false;

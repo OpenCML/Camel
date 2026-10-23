@@ -4,6 +4,7 @@
 #pragma once
 
 #include "camel/core/data/base.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/number_text.h"
 
@@ -92,6 +93,61 @@ using FloatData  = PrimaryData<float>;
 using DoubleData = PrimaryData<double>;
 using BoolData   = PrimaryData<bool>;
 
+/// The data of a `bf16` or `f16` literal: the two bytes of the format, already rounded. The value
+/// is not held as an f32, because an f32 cannot represent a bf16 exactly in two bytes and a
+/// literal of the type must be an exact member of it (design principles 5.1). `toFloat` gives the
+/// f32 it widens to, which is the whole of its value. The slot form is the same 16 bits in the
+/// low half (camel/core/rtdata/half.h).
+class HalfData : public Data {
+  public:
+    HalfData() = delete;
+    /// `bits` is the stored pattern; the type it is given says which of the two formats it is in.
+    HalfData(uint16_t bits, type::Type *type) : Data(type), bits_(bits) {
+        ASSERT(
+            type != nullptr && (type->code() == type::TypeCode::BFloat16 ||
+                                type->code() == type::TypeCode::Float16),
+            "HalfData needs bf16 or f16");
+    }
+
+    uint16_t bits() const { return bits_; }
+    float toFloat() const {
+        return type_->code() == type::TypeCode::BFloat16
+                   ? camel::core::rtdata::BFloat16::fromBits(bits_).toFloat()
+                   : camel::core::rtdata::Float16::fromBits(bits_).toFloat();
+    }
+
+    virtual bool equals(const data_ptr_t &other) const override {
+        const auto value = std::dynamic_pointer_cast<HalfData>(other);
+        return value && type_->code() == value->type_->code() && bits_ == value->bits_;
+    }
+
+    virtual data_ptr_t clone(bool deep = false) const override {
+        (void)deep;
+        return std::make_shared<HalfData>(bits_, type_);
+    }
+
+    /// The float text of the value it holds, as every float of the language prints (11.5).
+    virtual const std::string toString() const override {
+        return camel::utils::floatText(toFloat());
+    }
+
+    /// A bf16 or f16 value becomes the other of the two only by rounding through a wider type,
+    /// which the language writes (`bf16(f16(x))` is a conversion of a conversion): the value here
+    /// is already the exact member of its own type, so only its own type takes it.
+    virtual data_ptr_t convertTo(type::Type *type) override {
+        if (type != nullptr && type->equals(type_)) {
+            return shared_from_this();
+        }
+        return nullptr;
+    }
+
+  private:
+    uint16_t bits_ = 0;
+};
+
+using BFloat16Data = HalfData;
+using Float16Data  = HalfData;
+
 // Whether the value of a literal can be held by the narrower primitive type `to`: an int64 in
 // an i32, a finite double in an f32. A double too large for an f32 would become an infinity
 // and one too small would become zero; neither is an f32 value, so neither fits (H15i).
@@ -123,9 +179,7 @@ class ComplexData : public Data {
   public:
     ComplexData() = delete;
     ComplexData(double real, double imaginary, type::Type *type) : Data(type) {
-        ASSERT(
-            camel::core::type::isComplex(type->code()),
-            "ComplexData needs a complex type");
+        ASSERT(camel::core::type::isComplex(type->code()), "ComplexData needs a complex type");
         if (type->code() == type::TypeCode::Complex64) {
             real      = static_cast<float>(real);
             imaginary = static_cast<float>(imaginary);
@@ -151,7 +205,8 @@ class ComplexData : public Data {
     virtual const std::string toString() const override {
         return type_->code() == type::TypeCode::Complex64
                    ? camel::utils::complexText(
-                         static_cast<float>(real_), static_cast<float>(imaginary_))
+                         static_cast<float>(real_),
+                         static_cast<float>(imaginary_))
                    : camel::utils::complexText(real_, imaginary_);
     }
 
@@ -247,8 +302,7 @@ template <typename T> data_ptr_t PrimaryData<T>::convertTo(type::Type *type) {
     if (camel::core::type::isComplex(type->code())) {
         // A real literal takes a complex type by widening: `let z: c64 = 2` is the value 2+0i.
         if constexpr (
-            std::is_floating_point_v<T> ||
-            (std::is_integral_v<T> && !std::is_same_v<T, bool>)) {
+            std::is_floating_point_v<T> || (std::is_integral_v<T> && !std::is_same_v<T, bool>)) {
             return std::make_shared<ComplexData>(static_cast<double>(data_), 0.0, type);
         } else {
             return nullptr;

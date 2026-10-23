@@ -177,8 +177,8 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
 // types. Anonymous types (no declaration), builtin types and aliases of them (no declaration of
 // their own) have no declaring module and are left to the lexical scope and the built-ins.
 
-std::vector<std::pair<std::string, std::string>> Builder::declaringModulesOf(
-    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+std::vector<std::pair<std::string, std::string>>
+Builder::declaringModulesOf(const type_vec_t &withTypes, const type_vec_t &normTypes) {
     std::vector<std::pair<std::string, std::string>> found;
     const auto add = [&](Type *type) {
         type = valueTypeOf(type);
@@ -304,8 +304,8 @@ bool Builder::hasDeclaringModuleOperator(
     return false;
 }
 
-std::string Builder::operatorSearchScopeText(
-    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+std::string
+Builder::operatorSearchScopeText(const type_vec_t &withTypes, const type_vec_t &normTypes) {
     if (instantiationDepth_ == 0) {
         return {};
     }
@@ -726,11 +726,10 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     FunctionType *type = factory.build();
 
     compile_graph_ptr_t graph = enterScope(type);
-    const bool macroOperator =
-        camel::core::OperatorTable::instance().isMacro(op->uri());
+    const bool macroOperator  = camel::core::OperatorTable::instance().isMacro(op->uri());
     if (macroOperator) {
-        graph->draft().setFlags(static_cast<uint8_t>(
-            graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+        graph->draft().setFlags(
+            static_cast<uint8_t>(graph->draft().flags() | camel::runtime::kGraphFlagMacro));
     }
     try {
         bodyStates_[graph.get()] = BodyState::Open;
@@ -1001,11 +1000,13 @@ namespace {
 /// the element type of an array — or nullopt when none does. A tensor argument is not one: its
 /// type is not an `ArrayType`, and a bf16 or f16 tensor is computed by the tensor module, which
 /// widens every element to f32 and rounds once when it stores the result (modules/tensor/dtype.h,
-/// design principles 7.3, H238). A bf16 or f16 scalar or array has no operation in the language:
-/// there is no literal, no operator and no conversion for one, so a call that needs to add,
-/// compare or otherwise use it is reported as such instead of as "no matching function".
-std::optional<TypeCode> reducedPrecisionArgumentOf(
-    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+/// design principles 7.3, H238). A bf16 or f16 scalar or array has a literal, the written
+/// conversions and the scalar arithmetic, comparison and reduction of the language, but not every
+/// operation: `%` is an integer operation, and a function that takes a fixed set of types has no
+/// overload for the element type. Such a call is reported as asking for an operation the type does
+/// not have, rather than as "no matching function" over overloads it could never match.
+std::optional<TypeCode>
+reducedPrecisionArgumentOf(const type_vec_t &withTypes, const type_vec_t &normTypes) {
     const auto reducedCode = [](const Type *type) -> std::optional<TypeCode> {
         if (type == nullptr) {
             return std::nullopt;
@@ -1032,12 +1033,12 @@ std::optional<TypeCode> reducedPrecisionArgumentOf(
 
 /// One place a path assignment writes: a field (`v.f`, `v.0`) or an element (`v[i]`).
 struct PathStep {
-    GCT::node_ptr_t node;   // the ACCS or __idx__ node, as written
-    bool isIndex = false;   // a field of a struct or tuple, or an element of an array
-    size_t field = 0;       // the position of the field
-    std::string selector;   // the name of the index value of an element
-    std::string base;       // the name of the value the step is applied to
-    std::string value;      // the name of the value the step reads
+    GCT::node_ptr_t node; // the ACCS or __idx__ node, as written
+    bool isIndex = false; // a field of a struct or tuple, or an element of an array
+    size_t field = 0;     // the position of the field
+    std::string selector; // the name of the index value of an element
+    std::string base;     // the name of the value the step is applied to
+    std::string value;    // the name of the value the step reads
 };
 
 } // namespace
@@ -1206,9 +1207,7 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
             GCT::node_ptr_t applied = nullptr;
             if (outermost && inPlace) {
                 applied = make(tree_->makeLink(1), step.node->at(1));
-                *applied << make(
-                                internalOperatorDref(camel::core::oper::VarTake),
-                                step.node->at(1))
+                *applied << make(internalOperatorDref(camel::core::oper::VarTake), step.node->at(1))
                          << tree_->clone(root);
                 inPlaceCalls_.insert(call);
             } else {
@@ -1231,9 +1230,9 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     // `__assn__` is a group of one overload per type, chosen by the operand types (an
     // assignment the program may also write as `=`): it has no single id and stays by name.
     *rebinding << make(
-                   inPlace ? internalOperatorDref(camel::core::oper::AssnOwned)
-                           : tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn__"),
-                   gct->at(0))
+                      inPlace ? internalOperatorDref(camel::core::oper::AssnOwned)
+                              : tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn__"),
+                      gct->at(0))
                << tree_->clone(root) << value;
     return visitLinkNode(rebinding);
 }
@@ -1281,14 +1280,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         LEAVE("LINK");
         return folded;
     }
-    genericCalleeAllowed_ = gct->at(0)->type() == GCT::NodeKind::DREF ||
-                            gct->at(0)->type() == GCT::NodeKind::WITH ||
-                            gct->at(0)->type() == GCT::NodeKind::TAPP;
+    genericCalleeAllowed_          = gct->at(0)->type() == GCT::NodeKind::DREF ||
+                                     gct->at(0)->type() == GCT::NodeKind::WITH ||
+                                     gct->at(0)->type() == GCT::NodeKind::TAPP;
     const bool outerWithArgsOfCall = withArgsOfCall_;
-    withArgsOfCall_ = gct->at(0)->type() == GCT::NodeKind::WITH;
-    any targetNodeRes     = visit(gct->at(0));
-    withArgsOfCall_       = outerWithArgsOfCall;
-    genericCalleeAllowed_ = false;
+    withArgsOfCall_                = gct->at(0)->type() == GCT::NodeKind::WITH;
+    any targetNodeRes              = visit(gct->at(0));
+    withArgsOfCall_                = outerWithArgsOfCall;
+    genericCalleeAllowed_          = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
     // `v ?-> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
     // function value of that graph. (The graph was cast to a node: `bad any_cast`, bare.)
@@ -1339,21 +1338,20 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // 5.9). Any other type leaves the value as it was.
     const bool isAssignment = gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
                               gct->at(0)->name() == "__assn__";
-    Type *assignedType = nullptr;
+    Type *assignedType      = nullptr;
     // The declaration of a rest function, when this call names one: its arguments are expanded
     // into a body in place of the call, and no instance is made (inlineRestCall).
     template_ptr_t restTemplate;
-    if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end() &&
-                                                       generic->second->funcType->hasRest()) {
+    if (auto generic = genericDrefs_.find(targetNode);
+        generic != genericDrefs_.end() && generic->second->funcType->hasRest()) {
         restTemplate = generic->second;
     }
-    const size_t restFixedCount        = restTemplate != nullptr
-                                            ? restTemplate->funcType->normTypesCount() - 1 -
-                                                  restTemplate->funcType->constasCount()
-                                            : 0;
-    const size_t restDeclaredCount     = restTemplate != nullptr
-                                            ? restTemplate->funcType->normTypesCount()
-                                            : 0;
+    const size_t restFixedCount =
+        restTemplate != nullptr
+            ? restTemplate->funcType->normTypesCount() - 1 - restTemplate->funcType->constasCount()
+            : 0;
+    const size_t restDeclaredCount =
+        restTemplate != nullptr ? restTemplate->funcType->normTypesCount() : 0;
     // An ordinary argument may be written by name (`f(1, by: 2)`), and an ordinary parameter
     // may have a default (design principles 4.4). The name selects the parameter the value is
     // given to, so the expected type is that parameter's, not the position's: the written
@@ -1384,10 +1382,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // written at its parameter's position like any other argument. The rest parameter
             // takes every argument after the fixed ones and gives them no expected type.
             const size_t at = i - 1;
-            wanted          = at < restDeclaredCount &&
+            wanted = at < restDeclaredCount &&
                              (restTemplate->funcType->normIsConstasAt(at) || at < restFixedCount)
-                                  ? restTemplate->funcType->normTypeAt(at)
-                                  : nullptr;
+                         ? restTemplate->funcType->normTypeAt(at)
+                         : nullptr;
         }
         if (isAssignment && i == 2 && assignedType != nullptr) {
             wanted = assignedType;
@@ -1407,7 +1405,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                                                                : std::string("expression"));
                 throw BuildAbortException();
             }
-            const GCT::node_ptr_t operand = gct->at(i)->at(0);
+            const GCT::node_ptr_t operand       = gct->at(i)->at(0);
             std::vector<node_handle_t> elements = expandRestArgument(
                 operand,
                 operand->type() == GCT::NodeKind::DREF ? operand->name()
@@ -1438,8 +1436,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (restTemplate == nullptr) {
         bindArguments(normInputs, targetNode, gct, argumentSignature, false);
     } else if (argumentNames != nullptr) {
-        const auto first = std::find_if(
-            normInputs.begin(), normInputs.end(), [](const Argument &input) {
+        const auto first =
+            std::find_if(normInputs.begin(), normInputs.end(), [](const Argument &input) {
                 return input.name.has_value();
             });
         if (first != normInputs.end()) {
@@ -1515,8 +1513,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (hasDeferredWith) {
         type_bindings_t bindings;
         if (argumentSignature != nullptr) {
-            for (size_t i = 0;
-                 i < normInputTypes.size() && i < argumentSignature->normTypesCount(); ++i) {
+            for (size_t i = 0; i < normInputTypes.size() && i < argumentSignature->normTypesCount();
+                 ++i) {
                 unifyTypeVars(argumentSignature->normTypeAt(i), normInputTypes[i], bindings);
             }
             if (expectedResult != nullptr && argumentSignature->hasExitType()) {
@@ -1569,16 +1567,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 if (isFunction != functionsPass) {
                     continue;
                 }
-                const bool usable = usableExpected(wanted);
-                withInputs[i].node =
-                    visitInPosition(withInputs[i].expr, usable ? wanted : nullptr);
+                const bool usable  = usableExpected(wanted);
+                withInputs[i].node = visitInPosition(withInputs[i].expr, usable ? wanted : nullptr);
                 if (!usable && pattern != nullptr) {
                     // The value's own type is what this position gives the variables: an `int`
                     // literal makes the accumulator an `int`, and the lambda takes that type.
-                    unifyTypeVars(
-                        pattern,
-                        valueTypeOf(nodeTypeOf(withInputs[i].node)),
-                        bindings);
+                    unifyTypeVars(pattern, valueTypeOf(nodeTypeOf(withInputs[i].node)), bindings);
                 }
             }
         }
@@ -1926,8 +1920,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
         if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             const auto &ops = std::get<oper_group_ptr_t>(drefTarget);
-            addDeclaringModuleOverloads(
-                targetNode, ops->name(), withInputTypes, normInputTypes);
+            addDeclaringModuleOverloads(targetNode, ops->name(), withInputTypes, normInputTypes);
         }
     }
 
@@ -1974,9 +1967,39 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 .commit(targetGraph->name(), targetGraph->funcType()->toString());
             throw BuildAbortException();
         }
-        currGraph_->addDependencyGraph(targetGraph);
-        targetNode     = createFuncDataNode(targetGraph, false, true);
-        targetFuncType = targetGraph->funcType();
+        // An instance of a generic `#impl` function whose type an executor was found for: a
+        // direct call is one OPER of the kernel, exactly as for a non-generic `#impl` function
+        // (design principles 10.4; ruling impl-kernel-site). The instance's body stays the
+        // semantics, and an instance whose type has no executor falls through to the call of
+        // the body, which is what it runs.
+        if (std::optional<ImplKernel> kernel = implKernelOfGraph(targetGraph);
+            kernel.has_value() && !insideImplBody()) {
+            std::vector<StaticArg> kernelStatics;
+            kernelStatics.reserve(normInputs.size());
+            for (const Argument &input : normInputs) {
+                kernelStatics.push_back(staticArgOf(input.node));
+            }
+            if (const auto resolved = kernel->group->resolveForCall(
+                    {},
+                    expectedResult,
+                    withInputTypes,
+                    normInputTypes,
+                    kernelStatics,
+                    Modifier::None);
+                resolved.has_value()) {
+                targetOperator = *resolved;
+                targetNode     = currGraph_->addOperNode(targetOperator, 0);
+                stampPermissions(targetNode);
+                registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
+                targetFuncType = targetOperator->funcType();
+                targetGraph    = nullptr;
+            }
+        }
+        if (targetGraph != nullptr) {
+            currGraph_->addDependencyGraph(targetGraph);
+            targetNode     = createFuncDataNode(targetGraph, false, true);
+            targetFuncType = targetGraph->funcType();
+        }
     } else if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
         if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {
@@ -2036,12 +2059,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                              ++i) {
                             data_ptr_t value = constantOfNode(withInputs[i].node);
                             if (value != nullptr) {
-                                withValues.emplace(
-                                    std::string(g->funcType()->argNameAt(i)), value);
+                                withValues.emplace(std::string(g->funcType()->argNameAt(i)), value);
                             }
                         }
                         const WhenResult verdict = evaluateWhenCondition(
-                            when->second.condition, g->funcType(), {}, withValues, nullptr,
+                            when->second.condition,
+                            g->funcType(),
+                            {},
+                            withValues,
+                            nullptr,
                             unitOfFunction(g));
                         if (verdict.fails()) {
                             unmetConditions.emplace_back(g->name(), when->second.text);
@@ -2065,8 +2091,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     for (const auto &g : fitted) {
                         candidates.push_back(signatureOf(g));
                     }
-                    rejectAmbiguousCall(
-                        graphs->front()->name(), argumentTypes, candidates, gct);
+                    rejectAmbiguousCall(graphs->front()->name(), argumentTypes, candidates, gct);
                 }
                 const compile_graph_ptr_t &g = fitted.front();
                 FunctionType *funcType       = signatureOf(g);
@@ -2097,8 +2122,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     }
                     std::string conditions;
                     for (const auto &[name, text] : listed) {
-                        conditions +=
-                            (conditions.empty() ? "" : "; ") + name + " — when " + text;
+                        conditions += (conditions.empty() ? "" : "; ") + name + " — when " + text;
                     }
                     diags_->of(SemanticDiag::WhenConditionUnmet)
                         .atOrigin(gct->origin())
@@ -2246,10 +2270,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
             if (!res.has_value()) {
-                // A bf16 or f16 operand (or an array of one): the language defines no operation
-                // on a value of the element type, so no overload can compute with it however it
-                // is parameterised. Say that, rather than print an overload set the call could
-                // never match (design principles 7.3, H238).
+                // A bf16 or f16 operand (or an array of one) that no overload can take: the
+                // operation is one the element type does not have (`%` is an integer operation,
+                // and a function with a fixed set of parameter types has no overload for it).
+                // Say that, rather than print an overload set the call could never match
+                // (design principles 7.3, H238).
                 if (const auto reduced =
                         reducedPrecisionArgumentOf(withInputTypes, normInputTypes)) {
                     diags_->of(SemanticDiag::ReducedPrecisionUnsupported)
@@ -2762,10 +2787,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 hasNames |= form.hasNames();
             }
             Type *actualExit = valueTypeOf(nodeTypeOf(targetNode));
-            Type *refined    = hasNames
-                                   ? const_cast<Type *>(
-                                         namedExit->withExtentValues(dimValues, dimPacks))
-                                   : nullptr;
+            Type *refined =
+                hasNames ? const_cast<Type *>(namedExit->withExtentValues(dimValues, dimPacks))
+                         : nullptr;
             if (refined != nullptr && refined != namedExit && actualExit != nullptr &&
                 !refined->equals(actualExit) &&
                 refined->castSafetyFrom(actualExit) != CastSafety::Forbidden) {

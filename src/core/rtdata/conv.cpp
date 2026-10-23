@@ -9,6 +9,7 @@
 #include "camel/core/data/composite/tuple.h"
 #include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -53,6 +54,19 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
         slot_t result;
         std::memcpy(&result, &d, sizeof(double));
         return result;
+    }
+
+    case TypeCode::BFloat16: {
+        auto halfData = tt::as_shared<camel::core::data::HalfData>(data);
+        // A bf16 or f16 value occupies the low two bytes of the slot, the 16-bit pattern of the
+        // value zero-extended, which is the same two bytes a compact array of the type holds
+        // (src/core/rtdata/array.cpp, readLeafSlow/writeLeafSlow).
+        return halfSlotOfBits(halfData->bits());
+    }
+
+    case TypeCode::Float16: {
+        auto halfData = tt::as_shared<camel::core::data::HalfData>(data);
+        return halfSlotOfBits(halfData->bits());
     }
 
     case TypeCode::Bool: {

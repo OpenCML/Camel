@@ -7,8 +7,8 @@
  */
 
 #include "builder.h"
-#include "builder_support.h"
 #include "builder_helpers.h"
+#include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/numeric_convert.h"
@@ -24,6 +24,7 @@
 #include "core/module/entity_internal.h"
 
 #include "camel/core/operator_traits.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
 
@@ -258,7 +259,8 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         // The branch is an effect when what an arm gives depends on one inside the arm.
         const runtime::GraphDraft &draft = graph->draft();
         const draft_node_ref_t join      = nodeIdOf(node);
-        const auto *body = reinterpret_cast<const runtime::GCJoinBody *>(draft.payloadOf(join).data());
+        const auto *body =
+            reinterpret_cast<const runtime::GCJoinBody *>(draft.payloadOf(join).data());
         std::vector<uint32_t> arms;
         for (size_t k = 0; k < draft.withInputsOf(join).size(); ++k) {
             if (const uint32_t region = draft.armRegionOf(body->brch, k); region != 0) {
@@ -272,7 +274,9 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
                    });
         };
         std::unordered_set<draft_node_ref_t> seen;
-        std::vector<draft_node_ref_t> work(draft.withInputsOf(join).begin(), draft.withInputsOf(join).end());
+        std::vector<draft_node_ref_t> work(
+            draft.withInputsOf(join).begin(),
+            draft.withInputsOf(join).end());
         while (!work.empty()) {
             const draft_node_ref_t id = work.back();
             work.pop_back();
@@ -282,7 +286,8 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
             if (isEffectNode(graph, draft.ref(id))) {
                 return true;
             }
-            for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+            for (auto inputs :
+                 {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
                 work.insert(work.end(), inputs.begin(), inputs.end());
             }
         }
@@ -656,8 +661,7 @@ void Builder::markNonRetainingReads() {
             continue;
         }
         node_handle_t cell = draft->ref(normInputsOf(read).front());
-        const auto peek =
-            peekGroup->resolve({}, {nodeTypeOf(cell)}, statics, Modifier::None);
+        const auto peek    = peekGroup->resolve({}, {nodeTypeOf(cell)}, statics, Modifier::None);
         ASSERT(peek.has_value(), "__var_peek__ rejected a variable.");
         nodeGraphOf(read)->retargetOperNode(read, *peek);
     }
@@ -739,25 +743,34 @@ using rtdata::Int64;
 /// `x as int` share their arithmetic but not their legality (design principles 5.1), so a
 /// literal argument is checked here by the conversion function's rule.
 void checkLiteralNumericConversion(TypeCode from, TypeCode to, slot_t value) {
+    // A bf16 or f16 source is the f32 it widens to, exactly, so `bf16(6.0)` as an int is checked
+    // as `f32(6.0)` is (design principles 7.3). A target of either type is not checked here: the
+    // conversion into it is the written one, and its rule (`halfFromText`,
+    // camel/core/numeric_convert_half.h) is the one the call reports at run time.
+    const bool fromHalf = from == TypeCode::BFloat16 || from == TypeCode::Float16;
+    const float fromValue =
+        !fromHalf ? 0.0f
+                  : (from == TypeCode::BFloat16 ? rtdata::halfToFloat<rtdata::BFloat16>(value)
+                                                : rtdata::halfToFloat<rtdata::Float16>(value));
     switch (to) {
     case TypeCode::Int32:
         if (from == TypeCode::Int64) {
             (void)camel::core::checkedNarrow<Int32>(rtdata::fromSlot<Int64>(value), "i32");
+        } else if (fromHalf) {
+            (void)camel::core::checkedTruncate<Int32>(fromValue, "i32");
         } else if (from == TypeCode::Float32) {
-            (void)camel::core::checkedTruncate<Int32>(
-                rtdata::fromSlot<Float32>(value), "i32");
+            (void)camel::core::checkedTruncate<Int32>(rtdata::fromSlot<Float32>(value), "i32");
         } else if (from == TypeCode::Float64) {
-            (void)camel::core::checkedTruncate<Int32>(
-                rtdata::fromSlot<Float64>(value), "i32");
+            (void)camel::core::checkedTruncate<Int32>(rtdata::fromSlot<Float64>(value), "i32");
         }
         break;
     case TypeCode::Int64:
-        if (from == TypeCode::Float32) {
-            (void)camel::core::checkedTruncate<Int64>(
-                rtdata::fromSlot<Float32>(value), "int");
+        if (fromHalf) {
+            (void)camel::core::checkedTruncate<Int64>(fromValue, "int");
+        } else if (from == TypeCode::Float32) {
+            (void)camel::core::checkedTruncate<Int64>(rtdata::fromSlot<Float32>(value), "int");
         } else if (from == TypeCode::Float64) {
-            (void)camel::core::checkedTruncate<Int64>(
-                rtdata::fromSlot<Float64>(value), "int");
+            (void)camel::core::checkedTruncate<Int64>(rtdata::fromSlot<Float64>(value), "int");
         }
         break;
     default:
@@ -849,10 +862,9 @@ void Builder::rejectAmbiguousCallAt(
     ASSERT(!candidates.empty(), "An ambiguity has candidates.");
     diags_->of(SemanticDiag::AmbiguousCall)
         .atOrigin(origin)
-        .commit(
-            name,
-            argumentTypes,
-            strutil::join(candidates, "; ", [](const std::string &s) { return s; }));
+        .commit(name, argumentTypes, strutil::join(candidates, "; ", [](const std::string &s) {
+                    return s;
+                }));
     throw BuildAbortException();
 }
 
@@ -884,7 +896,7 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
     // Where the whole binding is: the `f<w>` expression (boundWithOrigin_), otherwise the position
     // the caller gives. The expression is the union of the node's own span with its operands
     // (design principles 5.1), as for a call; the destructive pass below runs after it is made.
-    const auto originIt = boundWithOrigin_.find(node);
+    const auto originIt         = boundWithOrigin_.find(node);
     const GCT::node_ptr_t where = originIt != boundWithOrigin_.end() ? originIt->second : origin;
     const auto exprSpan         = callExpressionSpan(context_, where);
     const auto exprOrigin       = deriveGirOrigin(
@@ -950,9 +962,7 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
     boundWithArgs_.erase(node);
     boundWithCallee_.erase(node);
     boundWithOrigin_.erase(node);
-    diags_->of(SemanticDiag::PartialApplicationRefused)
-        .atOrigin(at)
-        .commit(given, name, why);
+    diags_->of(SemanticDiag::PartialApplicationRefused).atOrigin(at).commit(given, name, why);
     throw BuildAbortException();
 }
 
@@ -1086,7 +1096,7 @@ bool isWholeNumber(const data_ptr_t &data) {
 
 void Builder::rejectLiteralValue(
     const literal::Value &value, Type *type, const GCT::node_ptr_t &expr) {
-    const bool folded = expr != nullptr && expr->type() != GCT::NodeKind::DATA;
+    const bool folded   = expr != nullptr && expr->type() != GCT::NodeKind::DATA;
     std::string written = sourceTextOf(expr);
     if (written.empty()) {
         written = value.toString();

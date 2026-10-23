@@ -1229,14 +1229,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::DeclarationModuleHasBody,
-            {
-                "DeclarationModuleHasBody",
-                "The declaration module '{0}' has a body in function '{1}'.",
-                "A Camel module found beside a C++ module of the same name declares that module's operators and has no bodies. Put the implementation in a module that has no `.cmo`, or remove the `.cmo`.",
-            },
-        },
-        {
             SemanticDiag::NativeDeclarationOverlap,
             {
                 "NativeDeclarationOverlap",
@@ -1417,7 +1409,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ReducedPrecisionUnsupported",
                 "The call of '{0}' cannot take a value of the reduced-precision element type '{1}'.",
-                "bf16 and f16 are stored element types: the language has no bf16 or f16 literal, scalar operator or conversion, so a function that would add, compare or otherwise use one cannot compute with it. A bf16 or f16 tensor is computed by the tensor module, which widens every element to f32 and rounds once when it stores the result (design principles 7.3, H238); cast reads it back into f32 or f64 exactly. Write the reduction, comparison or arithmetic on the tensor, or on a value of a type that has the operation.",
+                "bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3, H238). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).",
             },
         },
         {
@@ -1458,14 +1450,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ImplKernelNotBodyless",
                 "The '#impl' tag of '{0}' names '{1}', which has a body.",
                 "The kernel is the body-less declaration of the C++ operator that runs the function's semantics. A function that already has a body is the semantics itself, so there is nothing for the tag to do: name a body-less declaration, or remove the tag.",
-            },
-        },
-        {
-            SemanticDiag::ImplOnGenericFunction,
-            {
-                "ImplOnGenericFunction",
-                "The '#impl' tag of '{0}' is on a generic function.",
-                "A generic function's instances have signatures of their own, so one kernel cannot be the implementation of all of them. Write each instance as an ordinary function and give it its own '#impl', or remove the tag.",
             },
         },
         {

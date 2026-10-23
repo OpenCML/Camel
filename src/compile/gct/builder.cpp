@@ -1176,9 +1176,9 @@ void Builder::visitTagDecl(const AST::node_ptr_t &ast) {
     camel::core::tag::Decl tag;
     tag.module = module_->name();
     tag.ident  = decl->ref().toString();
-    // A program may not declare a tag with the name of a core permission or of `strict`: `#reassociate`
-    // in the program would still mean the core's permission, so the declaration would never be read
-    // (design principles 6.2, 7.4, log 2026-10-21).
+    // A program may not declare a tag with the name of a core permission or of `strict`:
+    // `#reassociate` in the program would still mean the core's permission, so the declaration
+    // would never be read (design principles 6.2, 7.4, log 2026-10-21).
     if (tag.ident == "finite_math" || tag.ident == "strict" ||
         camel::core::sem::parsePermission(tag.ident).has_value()) {
         diags_->of(SemanticDiag::TagShadowsPermission)
@@ -1186,7 +1186,7 @@ void Builder::visitTagDecl(const AST::node_ptr_t &ast) {
             .commit(tag.ident);
     }
     tag.name = tag.module.empty() ? tag.ident : tag.module + "::" + tag.ident;
-    tag.on     = static_cast<camel::core::tag::Positions>(decl->on());
+    tag.on   = static_cast<camel::core::tag::Positions>(decl->on());
     for (const auto &param : decl->params()) {
         tag.params.push_back({param.name, param.type});
     }
@@ -1225,9 +1225,7 @@ node_ptr_t Builder::visitResourceDecl(const AST::node_ptr_t &ast) {
     const std::string name = decl->ref().toString();
     if (module_->resource(decl->ref()) != nullptr) {
         // One name, one resource (design principles 10.2: a name is declared once in a scope).
-        diags_->of(SemanticDiag::Redeclaration)
-            .at(ast->load()->tokenRange())
-            .commit(name);
+        diags_->of(SemanticDiag::Redeclaration).at(ast->load()->tokenRange()).commit(name);
         throw BuildAbortException();
     }
     module_->declareResource(decl->ref(), std::move(resource));
@@ -1248,8 +1246,7 @@ void Builder::checkResourceGroups() {
         std::vector<std::string> expanded;
         std::vector<std::string> active;
         std::string failed;
-        if (!resolveAmbientResource(
-                module_, Reference(name), expanded, active, &failed, ast)) {
+        if (!resolveAmbientResource(module_, Reference(name), expanded, active, &failed, ast)) {
             diags_->of(SemanticDiag::UnknownResource)
                 .at(ast->load()->tokenRange())
                 .commit(failed, name);
@@ -1263,7 +1260,7 @@ bool Builder::resolveAmbientResource(
     std::vector<std::string> &out, std::vector<std::string> &active, std::string *failed,
     const AST::node_ptr_t &where) {
     const std::string written = name.toString();
-    const std::string key   = (in ? in->name() : std::string()) + "::" + written;
+    const std::string key     = (in ? in->name() : std::string()) + "::" + written;
     if (std::find(active.begin(), active.end(), key) != active.end()) {
         diags_->of(SemanticDiag::ResourceGroupCycle)
             .at(where->load()->tokenRange())
@@ -1302,14 +1299,25 @@ bool Builder::resolveAmbientResource(
     if (in) {
         // A name imported by name (`import { r } from m`), then a module prefix (`m::r`).
         if (auto source = in->importedSource(name)) {
-            return resolveAmbientResource(source->first, source->second, out, active, failed, where);
+            return resolveAmbientResource(
+                source->first,
+                source->second,
+                out,
+                active,
+                failed,
+                where);
         }
         for (const auto &[prefix, mod] : in->importedNamespaces()) {
             if (written.size() > prefix.size() + 2 &&
                 written.compare(0, prefix.size(), prefix) == 0 &&
                 written.compare(prefix.size(), 2, "::") == 0) {
                 return resolveAmbientResource(
-                    mod, Reference(written.substr(prefix.size() + 2)), out, active, failed, where);
+                    mod,
+                    Reference(written.substr(prefix.size() + 2)),
+                    out,
+                    active,
+                    failed,
+                    where);
             }
         }
     }
@@ -1325,8 +1333,7 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
     const AST::ResourceClauseLoad *clause = nullptr;
     if (funcTypeAst != nullptr && funcTypeAst->size() > 3) {
         const AST::node_ptr_t &clauseNode = funcTypeAst->at(3);
-        if (clauseNode != nullptr &&
-            clauseNode->load()->type() == AST::LoadType::ResourceClause) {
+        if (clauseNode != nullptr && clauseNode->load()->type() == AST::LoadType::ResourceClause) {
             clause = clauseNode->loadAs<AST::ResourceClauseLoad>().get();
         }
     }
@@ -1336,9 +1343,7 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
     }
     signature.mode = sem::ResourceSignature::Mode::Concrete;
     if (clause->pure() && !clause->uses().empty()) {
-        diags_->of(SemanticDiag::PureAndUses)
-            .at(clause->tokenRange())
-            .commit(built->toString());
+        diags_->of(SemanticDiag::PureAndUses).at(clause->tokenRange()).commit(built->toString());
         throw BuildAbortException();
     }
     if (clause->pure()) {
@@ -1350,8 +1355,8 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
     struct Parameter {
         std::string name;
         uint8_t index = 0;
-        Type *type     = nullptr;
-        bool isVar     = false;
+        Type *type    = nullptr;
+        bool isVar    = false;
     };
     std::vector<Parameter> parameters;
     const size_t withCount = built->withTypesCount();
@@ -1374,8 +1379,8 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
     std::string failed;
     for (const Reference &use : clause->uses()) {
         const std::string written = use.toString();
-        const auto param = std::find_if(
-            parameters.begin(), parameters.end(), [&](const Parameter &candidate) {
+        const auto param =
+            std::find_if(parameters.begin(), parameters.end(), [&](const Parameter &candidate) {
                 return use.plain() && candidate.name == use.ident();
             });
         if (param != parameters.end()) {
@@ -1391,7 +1396,8 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
                 paramUse.cls = sem::ResourceClass::Object;
             }
             const bool known = std::any_of(
-                signature.params.begin(), signature.params.end(),
+                signature.params.begin(),
+                signature.params.end(),
                 [&](const auto &other) { return other.index == paramUse.index; });
             if (known) {
                 // One parameter is one resource: `uses x, x` says nothing twice.
@@ -1400,10 +1406,10 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
             signature.params.push_back(std::move(paramUse));
             continue;
         }
-        if (use.plain() && std::any_of(parameters.begin(), parameters.end(),
-                                       [&](const Parameter &candidate) {
-                                           return candidate.name == use.ident();
-                                       })) {
+        if (use.plain() &&
+            std::any_of(parameters.begin(), parameters.end(), [&](const Parameter &candidate) {
+                return candidate.name == use.ident();
+            })) {
             continue;
         }
         if (!resolveAmbientResource(module_, use, ambient, active, &failed, funcTypeAst)) {
@@ -1421,7 +1427,8 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
     for (std::string &name : ambient) {
         signature.ambient.push_back(
             sem::ResourceSignature::AmbientUse{
-                .name = std::move(name), .mode = sem::AccessMode::ReadModifyWrite});
+                .name = std::move(name),
+                .mode = sem::AccessMode::ReadModifyWrite});
     }
     if (clause->pure()) {
         signature.params.clear();
@@ -1629,9 +1636,11 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
                 if (mention.viaOtherCollection) {
                     diags_->of(SemanticDiag::FeatureNotSupported)
                         .at(ast->load()->tokenRange())
-                        .commit(std::format(
-                            "a type that mentions itself through a map, a set or an enum ('{}')",
-                            name));
+                        .commit(
+                            std::format(
+                                "a type that mentions itself through a map, a set or an enum "
+                                "('{}')",
+                                name));
                     throw BuildAbortException();
                 }
                 // Through an array: declareStructType puts the name in scope before the fields
@@ -1782,10 +1791,10 @@ std::vector<Type *> Builder::bindTypeParameters(
 }
 
 Type *Builder::declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl) {
-    const string name                    = decl->ref().toString();
-    const auto enumLoad                  = ast->loadAs<AST::EnumTypeLoad>();
-    EnumDecl *declaration                = EnumDecl::create(
-        name, decl->params(), module_ ? module_->name() : std::string());
+    const string name   = decl->ref().toString();
+    const auto enumLoad = ast->loadAs<AST::EnumTypeLoad>();
+    EnumDecl *declaration =
+        EnumDecl::create(name, decl->params(), module_ ? module_->name() : std::string());
     const bool generic                   = !decl->params().empty();
     scope_ptr_t<Reference, Type *> outer = typeScope_;
     if (generic) {
@@ -1821,10 +1830,10 @@ Type *Builder::declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLo
 }
 
 Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl) {
-    const string name                    = decl->ref().toString();
-    const bool generic                   = !decl->params().empty();
-    StructDecl *declaration              = StructDecl::create(
-        name, decl->params(), module_ ? module_->name() : std::string());
+    const string name  = decl->ref().toString();
+    const bool generic = !decl->params().empty();
+    StructDecl *declaration =
+        StructDecl::create(name, decl->params(), module_ ? module_->name() : std::string());
     scope_ptr_t<Reference, Type *> outer = typeScope_;
     std::vector<Type *> parameters;
     if (generic) {
@@ -1871,7 +1880,9 @@ Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDecl
         // instance keeps it (design principles 5.2).
         Type *fieldType = visitType(child->atAs<AST::TypeLoad>(0));
         if (generic && !fieldNames.insert(fieldName).second) {
-            diags_->of(SemanticDiag::DuplicateDictKey).at(namedType->tokenRange()).commit(fieldName);
+            diags_->of(SemanticDiag::DuplicateDictKey)
+                .at(namedType->tokenRange())
+                .commit(fieldName);
             throw BuildAbortException();
         }
         fields.emplace_back(fieldName, fieldType);
@@ -1889,7 +1900,7 @@ Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDecl
         StructType *body = StructType::get(declaration, parameters);
         Type *function   = TypeFunctionType::create(name, decl->params(), body);
         typeScope_->insert(decl->ref(), function);
-        result = function;
+        result     = function;
         typeScope_ = outer;
     }
     return result;
@@ -2092,9 +2103,9 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for StmtBlock");
     // The block's children after the statement list are its decorators (`FuncAnno`) and the
     // tags written before it (`#tag { ... }`); only a decorator list makes it decorated.
-    const bool decorated =
-        decorators && ast->size() > 1 && ast->at(1)->type() == AST::LoadType::Repeated &&
-        ast->at(1)->loadAs<AST::RepeatedLoad>()->nodeName() == "FuncAnno";
+    const bool decorated = decorators && ast->size() > 1 &&
+                           ast->at(1)->type() == AST::LoadType::Repeated &&
+                           ast->at(1)->loadAs<AST::RepeatedLoad>()->nodeName() == "FuncAnno";
     if (decorated) {
         LEAVE("StmtBlock");
         return visitDecoratedBlock(ast);
@@ -2933,8 +2944,8 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             context_->importModule("")->nativeOperatorGroup(camel::core::oper::MacroCmp);
         ASSERT(cmpGroup != nullptr, "The built-in __cmp__ is missing.");
         node_ptr_t opNode  = tree_->makeDRef(camel::core::oper::MacroCmp, cmpGroup->name());
-        res                    = tree_->makeLink(2);
-        auto compAstBundle     = astSemantic(context_, ast);
+        res                = tree_->makeLink(2);
+        auto compAstBundle = astSemantic(context_, ast);
         setOriginFromOrigin(
             context_,
             opNode,
@@ -2989,7 +3000,12 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             const auto &data = dataNode->data();
             if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
                 reportLiteralCastFailure(
-                    diags_, ast->load()->tokenRange(), data, dstType, {}, /*explicitCast=*/true);
+                    diags_,
+                    ast->load()->tokenRange(),
+                    data,
+                    dstType,
+                    {},
+                    /*explicitCast=*/true);
                 throw BuildAbortException();
             }
             auto convertedData = data->convertTo(dstType);
@@ -2997,7 +3013,12 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 res = tree_->makeData(convertedData);
             } else {
                 reportLiteralCastFailure(
-                    diags_, ast->load()->tokenRange(), data, dstType, {}, /*explicitCast=*/true);
+                    diags_,
+                    ast->load()->tokenRange(),
+                    data,
+                    dstType,
+                    {},
+                    /*explicitCast=*/true);
                 throw BuildAbortException();
             }
         } else {
@@ -3376,21 +3397,30 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
     ENTER("MatchType");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchType");
     node_ptr_t matchNode = tree_->makeTypeMatch();
-    setOriginFromAst(context_, matchNode, ast, camel::source::OriginKind::GctNode, "gct.match.type");
-
-    const auto &typeAst    = ast->atAs<AST::TypeLoad>(0);
-    Type *subject          = visitType(typeAst);
-    node_ptr_t typeNode    = tree_->makeType(subject);
     setOriginFromAst(
-        context_, typeNode, typeAst, camel::source::OriginKind::GctNode, "gct.match.type.subject");
+        context_,
+        matchNode,
+        ast,
+        camel::source::OriginKind::GctNode,
+        "gct.match.type");
+
+    const auto &typeAst = ast->atAs<AST::TypeLoad>(0);
+    Type *subject       = visitType(typeAst);
+    node_ptr_t typeNode = tree_->makeType(subject);
+    setOriginFromAst(
+        context_,
+        typeNode,
+        typeAst,
+        camel::source::OriginKind::GctNode,
+        "gct.match.type.subject");
     *matchNode << typeNode;
 
     for (const auto &caseAst : *ast->atAs<AST::RepeatedLoad>(1)) {
         const auto &caseLoad = caseAst->loadAs<AST::TypeCaseLoad>();
         uint16_t patterns    = 0;
         std::vector<Type *> identities;
-        bool catchAll         = false;
-        bool unreachableSeen  = false;
+        bool catchAll        = false;
+        bool unreachableSeen = false;
         for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
             const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
             if (kind == GCT::TypeCaseKind::Identity) {
@@ -3438,7 +3468,11 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
         }
         node_ptr_t caseNode = tree_->makeTypeCase(patterns, identities);
         setOriginFromAst(
-            context_, caseNode, caseAst, camel::source::OriginKind::GctNode, "gct.match.type.case");
+            context_,
+            caseNode,
+            caseAst,
+            camel::source::OriginKind::GctNode,
+            "gct.match.type.case");
         node_ptr_t bodyNode = visitStmtBlock(caseAst->atAs<AST::StmtBlockLoad>(0));
         *caseNode << bodyNode;
         *matchNode << caseNode;
@@ -3463,8 +3497,7 @@ node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
 
     node_ptr_t forNode =
         tree_->makeStaticFor(load->valueName(), load->typeName(), load->byIndices());
-    setOriginFromAst(
-        context_, forNode, ast, camel::source::OriginKind::GctNode, "gct.static.for");
+    setOriginFromAst(context_, forNode, ast, camel::source::OriginKind::GctNode, "gct.static.for");
 
     if (load->byIndices()) {
         // `indices ts` walks a tuple value: the operand is an ordinary expression whose type is
@@ -3475,7 +3508,10 @@ node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
         Type *subject       = visitType(typeAst);
         node_ptr_t typeNode = tree_->makeType(subject);
         setOriginFromAst(
-            context_, typeNode, typeAst, camel::source::OriginKind::GctNode,
+            context_,
+            typeNode,
+            typeAst,
+            camel::source::OriginKind::GctNode,
             "gct.static.for.type");
         *forNode << typeNode;
     }
@@ -3485,7 +3521,8 @@ node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
     pushScope();
     if (!load->byIndices()) {
         typeScope_->insert(
-            Reference(load->typeName()), TypeVarType::create(load->typeName(), false));
+            Reference(load->typeName()),
+            TypeVarType::create(load->typeName(), false));
     }
     node_ptr_t bodyNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     popScope();
@@ -3515,7 +3552,12 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     }
     node_ptr_t loopNode =
         tree_->makeStaticLoop(state, load->valueName(), load->typeName(), load->byIndices());
-    setOriginFromAst(context_, loopNode, ast, camel::source::OriginKind::GctNode, "gct.static.loop");
+    setOriginFromAst(
+        context_,
+        loopNode,
+        ast,
+        camel::source::OriginKind::GctNode,
+        "gct.static.loop");
 
     const ValueUseScope valueUseScope(*this);
     valueUse_ = {};
@@ -3527,7 +3569,10 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
         Type *subject       = visitType(typeAst);
         node_ptr_t typeNode = tree_->makeType(subject);
         setOriginFromAst(
-            context_, typeNode, typeAst, camel::source::OriginKind::GctNode,
+            context_,
+            typeNode,
+            typeAst,
+            camel::source::OriginKind::GctNode,
             "gct.static.loop.type");
         *loopNode << typeNode;
     }
@@ -3541,7 +3586,8 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     pushScope();
     if (!load->byIndices()) {
         typeScope_->insert(
-            Reference(load->typeName()), TypeVarType::create(load->typeName(), false));
+            Reference(load->typeName()),
+            TypeVarType::create(load->typeName(), false));
     }
     node_ptr_t bodyNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(2));
     popScope();
@@ -3557,7 +3603,11 @@ node_ptr_t Builder::visitStaticAccess(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticAccess");
     node_ptr_t accessNode = tree_->makeStaticAccess();
     setOriginFromAst(
-        context_, accessNode, ast, camel::source::OriginKind::GctNode, "gct.static.access");
+        context_,
+        accessNode,
+        ast,
+        camel::source::OriginKind::GctNode,
+        "gct.static.access");
     node_ptr_t targetNode = visitData(ast->at(0));
     node_ptr_t keyNode    = visitData(ast->at(1));
     *accessNode << targetNode << keyNode;
@@ -3575,7 +3625,11 @@ node_ptr_t Builder::visitStaticComprehension(const AST::node_ptr_t &ast, bool is
     ENTER("StaticComprehension");
     node_ptr_t compNode = tree_->makeComprehension(isStruct);
     setOriginFromAst(
-        context_, compNode, ast, camel::source::OriginKind::GctNode, "gct.static.comprehension");
+        context_,
+        compNode,
+        ast,
+        camel::source::OriginKind::GctNode,
+        "gct.static.comprehension");
     ASSERT(ast->size() == 1, "A static comprehension has its generator as its only child.");
     *compNode << visitStaticFor(ast->at(0));
     LEAVE("StaticComprehension");
@@ -3708,8 +3762,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         case camel::utils::NumberTextStatus::OutOfRangeInteger:
             diags_->of(SemanticDiag::LiteralNotRepresentable)
                 .at(ast->load()->tokenRange())
-                .commit(
-                    str, "int", "out of range (-9223372036854775808 to 9223372036854775807)");
+                .commit(str, "int", "out of range (-9223372036854775808 to 9223372036854775807)");
             throw BuildAbortException();
         default:
             diags_->of(SemanticDiag::InvalidLiteral)
@@ -3874,8 +3927,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     // other number to c128, the default complex type.
     bool hasInteger = false, hasReal = false, hasImaginary = false;
     for (const auto &item : *items) {
-        if (const std::optional<literal::Kind> kind = writtenNumberKind(item);
-            kind.has_value()) {
+        if (const std::optional<literal::Kind> kind = writtenNumberKind(item); kind.has_value()) {
             hasInteger |= *kind == literal::Kind::Integer;
             hasReal |= *kind == literal::Kind::Float;
             hasImaginary |= *kind == literal::Kind::Imaginary;
@@ -4010,16 +4062,14 @@ std::string sourceTextAt(
     const auto *record = sourceContext != nullptr && origin != camel::source::kInvalidOriginId
                              ? sourceContext->origin(origin)
                              : nullptr;
-    const auto *span = record != nullptr ? sourceContext->span(record->primarySpan) : nullptr;
-    const auto *file = span != nullptr && span->valid()
-                           ? sourceContext->sourceFile(span->fileId)
-                           : nullptr;
+    const auto *span   = record != nullptr ? sourceContext->span(record->primarySpan) : nullptr;
+    const auto *file =
+        span != nullptr && span->valid() ? sourceContext->sourceFile(span->fileId) : nullptr;
     if (file == nullptr || span->endOffset < span->startOffset ||
         span->endOffset > file->content.size()) {
         return {};
     }
-    std::string text =
-        file->content.substr(span->startOffset, span->endOffset - span->startOffset);
+    std::string text = file->content.substr(span->startOffset, span->endOffset - span->startOffset);
     if (text.size() > 60 || text.find('\n') != std::string::npos) {
         return {};
     }
@@ -4028,7 +4078,8 @@ std::string sourceTextAt(
 
 } // namespace
 
-bool Builder::rejectTextInLiteral(const data_ptr_t &data, Type *type, camel::source::origin_id_t where) {
+bool Builder::rejectTextInLiteral(
+    const data_ptr_t &data, Type *type, camel::source::origin_id_t where) {
     if (data == nullptr || type == nullptr || type->assignableFrom(data->type())) {
         return false;
     }
@@ -4045,7 +4096,7 @@ bool Builder::rejectTextInLiteral(const data_ptr_t &data, Type *type, camel::sou
     if (!isComposite(data->type()->code())) {
         return false;
     }
-    const auto *written = tree_->literalElementsOf(data);
+    const auto *written  = tree_->literalElementsOf(data);
     const auto elementAt = [&](size_t index, camel::source::origin_id_t fallback) {
         const Tree::LiteralElement *element =
             written != nullptr && index < written->size() ? &(*written)[index] : nullptr;
@@ -4054,7 +4105,7 @@ bool Builder::rejectTextInLiteral(const data_ptr_t &data, Type *type, camel::sou
                    : fallback;
     };
     if (type->code() == TypeCode::Struct && data->type()->code() == TypeCode::Struct) {
-        auto *structType = tt::as_ptr<StructType>(type);
+        auto *structType  = tt::as_ptr<StructType>(type);
         const auto object = std::dynamic_pointer_cast<StructData>(data);
         if (structType == nullptr || object == nullptr ||
             object->raw().size() != structType->size()) {
@@ -4075,30 +4126,31 @@ bool Builder::rejectTextInLiteral(const data_ptr_t &data, Type *type, camel::sou
         return false;
     }
     if (type->code() == TypeCode::Tuple && data->type()->code() == TypeCode::Tuple) {
-        auto *tupleType    = tt::as_ptr<TupleType>(type);
-        const auto object  = std::dynamic_pointer_cast<TupleData>(data);
+        auto *tupleType   = tt::as_ptr<TupleType>(type);
+        const auto object = std::dynamic_pointer_cast<TupleData>(data);
         if (tupleType == nullptr || object == nullptr ||
             object->raw().size() != tupleType->size()) {
             return false;
         }
         for (size_t index = 0; index < object->raw().size(); ++index) {
             if (rejectTextInLiteral(
-                    object->raw()[index], tupleType->typeAt(index), elementAt(index, where))) {
+                    object->raw()[index],
+                    tupleType->typeAt(index),
+                    elementAt(index, where))) {
                 return true;
             }
         }
         return false;
     }
     if (type->code() == TypeCode::Array && data->type()->code() == TypeCode::Array) {
-        auto *arrayType      = tt::as_ptr<ArrayType>(type);
-        const auto object    = std::dynamic_pointer_cast<ArrayData>(data);
-        Type *elementType    = arrayType != nullptr ? arrayType->elemType() : nullptr;
+        auto *arrayType   = tt::as_ptr<ArrayType>(type);
+        const auto object = std::dynamic_pointer_cast<ArrayData>(data);
+        Type *elementType = arrayType != nullptr ? arrayType->elemType() : nullptr;
         if (elementType == nullptr || object == nullptr) {
             return false;
         }
         for (size_t index = 0; index < object->raw().size(); ++index) {
-            if (rejectTextInLiteral(
-                    object->raw()[index], elementType, elementAt(index, where))) {
+            if (rejectTextInLiteral(object->raw()[index], elementType, elementAt(index, where))) {
                 return true;
             }
         }
@@ -4116,10 +4168,8 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
         // 0.1` is the f32 nearest to one tenth, not the same double rounded twice, and `let x:
         // float = 1` is 1.0 (an integer literal takes the float type its context asks for).
         if (const literal::Value *exact = Tree::of(value)->literalValueOf(value);
-            exact != nullptr &&
-            (type->isPrimitive() || camel::core::type::isComplex(type->code())) &&
-            (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64 ||
-             type->code() == TypeCode::Float32 || type->code() == TypeCode::Float64 ||
+            exact != nullptr && type->isPrimitive() &&
+            (camel::core::type::isNumericScalar(type->code()) ||
              camel::core::type::isComplex(type->code()))) {
             if (auto converted = exact->toData(type); converted.has_value()) {
                 return tree_->makeData(*converted);
@@ -4136,7 +4186,8 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
                 diags_->of(SemanticDiag::LiteralNotRepresentable)
                     .at(ast->load()->tokenRange())
                     .commit(
-                        written, type->toString(),
+                        written,
+                        type->toString(),
                         "a complex value does not become a real one; use re() or im()");
                 throw BuildAbortException();
             }
@@ -4151,7 +4202,7 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
             std::string written = sourceTextAt(sourceContext, value->origin());
             if (written.empty()) {
                 written = exact->kind() == literal::Kind::Float ? exact->toFloatText()
-                                                               : exact->toString();
+                                                                : exact->toString();
             }
             diags_->of(SemanticDiag::LiteralNotRepresentable)
                 .at(ast->load()->tokenRange())
@@ -4263,8 +4314,8 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
     return execNode;
 }
 
-node_ptr_t Builder::literalNodeInType(
-    const node_ptr_t &node, Type *type, const AST::node_ptr_t &at) {
+node_ptr_t
+Builder::literalNodeInType(const node_ptr_t &node, Type *type, const AST::node_ptr_t &at) {
     if (node == nullptr || type == nullptr || node->type() != NodeKind::DATA) {
         return node;
     }
@@ -4339,7 +4390,7 @@ node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, 
     if (!dangling) {
         tree_->setLiteralElements(built, std::move(literalElements));
     }
-    node_ptr_t res         = tree_->makeData(built);
+    node_ptr_t res = tree_->makeData(built);
     // The literal is the value of the type asked for when the two types are the same. When
     // they are not (a named struct type, say), the caller still applies the declared value or
     // the annotation CAST, which attaches that type as it does for any value.
@@ -4414,9 +4465,8 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
         if (fieldDangling) {
             dangling = true;
         }
-        if (!fieldDangling &&
-            (data == nullptr || data->type() == nullptr ||
-             !fieldType->assignableFrom(data->type()))) {
+        if (!fieldDangling && (data == nullptr || data->type() == nullptr ||
+                               !fieldType->assignableFrom(data->type()))) {
             // A field written as a variable keeps its own type (design principles 5.1): the
             // literal is of an unnamed struct type whose field is of another type, and the
             // conversion at the position it is written in reports it, as it would without
@@ -4532,7 +4582,7 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
         literalElements.push_back(writtenElement(dataNode));
-        auto [data, _]      = extractData(dataNode, execNode, dangling);
+        auto [data, _] = extractData(dataNode, execNode, dangling);
         factory.add(data);
     }
 
@@ -4592,12 +4642,13 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
             self.writtenHeadVars_  = std::move(outerWritten);
             self.signatureVisit_   = outerSignatureVisit;
         }
-    } typeScopeGuard{*this,
-                     typeScope_,
-                     std::exchange(declaredTypeVars_, {}),
-                     std::move(headTypeVarTypes_),
-                     std::move(writtenHeadVars_),
-                     signatureVisit_};
+    } typeScopeGuard{
+        *this,
+        typeScope_,
+        std::exchange(declaredTypeVars_, {}),
+        std::move(headTypeVarTypes_),
+        std::move(writtenHeadVars_),
+        signatureVisit_};
     pushScope();
     // The declaration's head names (`func first::<T>(...)`) are the occurrence of each type
     // variable in this signature; visitFuncType puts them into the scope it just pushed.
@@ -4607,8 +4658,8 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     declSignature_  = isDecl;
     openSignature_  = true;
     Tree::ParameterDefaults defaults;
-    FunctionType *funcType = tt::as_ptr<FunctionType>(
-        visitFuncType(ast->atAs<AST::FuncTypeLoad>(0), &defaults));
+    FunctionType *funcType =
+        tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0), &defaults));
     // The head parameters the signature never wrote; the body may still use them (`match type
     // T`), so the warning waits until the body is built.
     const std::vector<std::string> unusedHeadVars = std::exchange(pendingUnusedHeadVars_, {});
@@ -4664,10 +4715,11 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
                 std::find(surviving.begin(), surviving.end(), name) == surviving.end()) {
                 diags_->of(SemanticDiag::TypeVariableNotBindable)
                     .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
-                    .commit(name,
-                            funcData->ref().toString(),
-                            "it is written only where type construction drops it, as the argument "
-                            "of a type function that does not use it");
+                    .commit(
+                        name,
+                        funcData->ref().toString(),
+                        "it is written only where type construction drops it, as the argument "
+                        "of a type function that does not use it");
                 throw BuildAbortException();
             }
         }
@@ -4711,18 +4763,11 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // (handover H19, step 1) -- unless its condition is the pass applicability, in which case it
     // declares a pass and the pipeline reads it (design principles 9.3).
     const bool nativeDeclaration = ast->size() < 2;
-    if (!nativeDeclaration) {
-        // A module found beside a `.cmo` is that C++ module's declaration module: the C++
-        // module implements the functions, so a body written there is in the wrong file
-        // (design principles 6.4; handover H19, step 1).
-        auto declaredModule = std::dynamic_pointer_cast<UserDefinedModule>(module_);
-        if (declaredModule && declaredModule->declarationModule()) {
-            diags_->of(SemanticDiag::DeclarationModuleHasBody)
-                .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
-                .commit(module_->name(), funcData->ref().toString());
-            throw BuildAbortException();
-        }
-    }
+    // A `.cml` found beside a `.cmo` of the same name is that C++ module's *declaration*
+    // module, in which the C++ operators are declared; it may also hold Camel definitions
+    // (ruling impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody`
+    // 删除"). One module is the pair: declarations and Camel definitions in the `.cml`, the
+    // native kernels they name in the `.cmo` (H94; design principles 10.4).
     if (nativeDeclaration) {
         if (!funcType->hasExitType()) {
             diags_->of(SemanticDiag::NativeDeclarationIncomplete)
@@ -4733,11 +4778,10 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
         funcNode->setNativeDeclaration();
         tree_->setHeadTypeParams(
-            funcNode, ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
+            funcNode,
+            ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
         if (whenNode != nullptr) {
-            tree_->setWhen(
-                funcNode,
-                {whenNode, funcData->whenText(), whenNode->origin()});
+            tree_->setWhen(funcNode, {whenNode, funcData->whenText(), whenNode->origin()});
         }
         reportUnusedHead(nullptr, whenNode);
         if (!defaults.empty()) {
@@ -4745,7 +4789,11 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         }
         *funcNode << typeNode;
         setOriginFromAst(
-            context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
+            context_,
+            typeNode,
+            ast,
+            camel::source::OriginKind::GctNode,
+            "gct.func.type");
         setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.func");
         registerGctSemantic(
             context_,
@@ -4760,7 +4808,10 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
                     -1,
                     funcData->ref().toString()),
                 semanticPart(
-                    camel::source::SemanticRole::ReturnType, nodeOrigin(typeNode), -1, "type"),
+                    camel::source::SemanticRole::ReturnType,
+                    nodeOrigin(typeNode),
+                    -1,
+                    "type"),
             },
             {nodeOrigin(typeNode)});
         LEAVE("FuncData");
@@ -4772,9 +4823,10 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     valueUse_            = {};
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     reportUnusedHead(stmtsNode, whenNode);
-    node_ptr_t funcNode  = tree_->makeFunc(funcData->ref().toString());
+    node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
     tree_->setHeadTypeParams(
-        funcNode, ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
+        funcNode,
+        ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
     *funcNode << typeNode << stmtsNode;
     if (whenNode != nullptr) {
         tree_->setWhen(funcNode, {whenNode, funcData->whenText(), whenNode->origin()});
@@ -5064,7 +5116,9 @@ Type *Builder::visitArrayType(const AST::node_ptr_t &ast) {
             }
         } catch (const std::invalid_argument &) {
             // A negative extent is not a dimension; `?` is the unknown extent.
-            diags_->of(SemanticDiag::InvalidExtentExpression).at(ast->load()->tokenRange()).commit();
+            diags_->of(SemanticDiag::InvalidExtentExpression)
+                .at(ast->load()->tokenRange())
+                .commit();
             throw BuildAbortException();
         }
     }
@@ -5093,8 +5147,9 @@ Type *Builder::visitStructType(const AST::node_ptr_t &ast) {
             tree_->addFieldTagUses(owner, index, tagUsesOf(child));
         } else {
             for (const auto &use : tagUsesOf(child)) {
-                diags_->of(SemanticDiag::TagOnUnnamedField).atOrigin(use.origin).commit(
-                    namedType->getRef().toString());
+                diags_->of(SemanticDiag::TagOnUnnamedField)
+                    .atOrigin(use.origin)
+                    .commit(namedType->getRef().toString());
             }
         }
         ++index;
@@ -5137,8 +5192,7 @@ the function type: it is lowered here, in the scope of the signature, and handed
 (visitFuncData keeps it on the FUNC node) so that GIR evaluates it once, where the declaration
 is, and fills the value into each call that leaves the parameter out (design principles 4.4).
 */
-Type *Builder::visitFuncType(
-    const AST::node_ptr_t &ast, Tree::ParameterDefaults *defaultsOut) {
+Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults *defaultsOut) {
     ENTER("FuncType");
     // Ensure the AST node is of the expected type (Type)
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for FuncType");
@@ -5225,14 +5279,12 @@ Type *Builder::visitFuncType(
     // of the pair go to the FUNC node, and GIR, which alone knows the function type the lambda
     // stands in, fills the type or reports the parameter.
     std::vector<Tree::UnwrittenParam> unwrittenParams;
-    size_t paramIndex = 0;
-    const auto paramTypeOf = [&](const AST::node_ptr_t &paramPair,
-                                 const string &name) -> Type * {
+    size_t paramIndex      = 0;
+    const auto paramTypeOf = [&](const AST::node_ptr_t &paramPair, const string &name) -> Type * {
         const size_t index              = paramIndex++;
         const AST::node_ptr_t &typeNode = paramPair->at(0);
-        const bool omitted =
-            typeNode->type() == AST::LoadType::Type &&
-            typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Infer;
+        const bool omitted = typeNode->type() == AST::LoadType::Type &&
+                             typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Infer;
         if (!omitted) {
             return visitType(typeNode);
         }
@@ -5263,8 +5315,8 @@ Type *Builder::visitFuncType(
             diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
         }
         const Reference &paramRef = paramLoad->getRef();
-        const string &name = paramRef.ident();
-        Type *type         = nullptr;
+        const string &name        = paramRef.ident();
+        Type *type                = nullptr;
         {
             dimBindAllowed_ = signature;
             type            = paramTypeOf(paramPair, name);
@@ -5277,7 +5329,7 @@ Type *Builder::visitFuncType(
         node_ptr_t defaultExpr = nullptr;
         const auto &dataNode   = paramPair->optAtAs<AST::DataLoad>(1);
         if (dataNode) {
-            defaultExpr = visitData(dataNode);
+            defaultExpr     = visitData(dataNode);
             lastDefaultName = name;
         } else if (!lastDefaultName.empty()) {
             diags_->of(SemanticDiag::WithParameterAfterDefault)
@@ -5286,8 +5338,7 @@ Type *Builder::visitFuncType(
             throw BuildAbortException();
         }
         defaults.with.push_back(
-            {defaultExpr,
-             dataNode ? dataNode->load()->origin() : camel::source::kInvalidOriginId});
+            {defaultExpr, dataNode ? dataNode->load()->origin() : camel::source::kInvalidOriginId});
 
         if (!paramNames.insert(name).second) {
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
@@ -5303,10 +5354,10 @@ Type *Builder::visitFuncType(
     // that leaves an earlier one out can still be read as giving the others by name.
     std::string lastNormDefaultName;
     for (size_t pi = 0; pi < normParams.size(); ++pi) {
-        const auto &paramPair = normParams[pi];
-        const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+        const auto &paramPair     = normParams[pi];
+        const auto &paramLoad     = paramPair->loadAs<AST::NamedPairLoad>();
         const Reference &paramRef = paramLoad->getRef();
-        const string &name = paramRef.ident();
+        const string &name        = paramRef.ident();
         // Every ordinary parameter takes a place in the defaults list, so that an index into it
         // is a parameter's index: `constas` values and the rest parameter included.
         defaults.norm.push_back({});
@@ -5388,7 +5439,7 @@ Type *Builder::visitFuncType(
         node_ptr_t defaultExpr = nullptr;
         const auto &dataNode   = paramPair->optAtAs<AST::DataLoad>(1);
         if (dataNode) {
-            defaultExpr     = visitData(dataNode);
+            defaultExpr         = visitData(dataNode);
             lastNormDefaultName = name;
         } else if (!lastNormDefaultName.empty()) {
             diags_->of(SemanticDiag::ParamAfterDefault)
@@ -5418,8 +5469,7 @@ Type *Builder::visitFuncType(
     if (!unwrittenParams.empty()) {
         pendingUnwrittenParams_ = std::move(unwrittenParams);
     }
-    FunctionType *built = open ? static_cast<FunctionType *>(factory.buildOpen())
-                               : factory.build();
+    FunctionType *built = open ? static_cast<FunctionType *>(factory.buildOpen()) : factory.build();
     // A type parameter declared at the head and written nowhere in the signature is a name the
     // declaration never uses: no argument could give it a type, and the function could never be
     // instantiated (design principles 5.5).
@@ -5643,8 +5693,8 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         std::string fieldLabel;
         if (std::string problem = collectionKeyProblem(keyType, &fieldOrigin, &fieldLabel);
             !problem.empty()) {
-            auto diag = diags_->of(SemanticDiag::CollectionKeyNotAllowed)
-                            .at(ast->load()->tokenRange());
+            auto diag =
+                diags_->of(SemanticDiag::CollectionKeyNotAllowed).at(ast->load()->tokenRange());
             if (fieldOrigin != camel::source::kInvalidOriginId) {
                 // The enum is a key for what its fields are: say where the field that is not
                 // one is declared.
@@ -5980,8 +6030,7 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     // beside a `.cmo` is that C++ module's declaration module, so what the C++ module exports
     // is directly visible here, as if it were written at the top of this file (design
     // principles 6.4; handover H94, ruling 1).
-    if (const auto exported = module_->getExportedType(Reference(own));
-        exported.has_value()) {
+    if (const auto exported = module_->getExportedType(Reference(own)); exported.has_value()) {
         return exported.value();
     }
     // Layer 3: imported by name, or through a module or namespace prefix.
@@ -6065,4 +6114,3 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     throw BuildAbortException();
 }
 } // namespace camel::compile::gct
-
