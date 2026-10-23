@@ -638,6 +638,99 @@ std::optional<Builder::ImplKernel> Builder::implKernelOf(const graph_set_ptr_t &
     return found->second;
 }
 
+std::optional<Builder::ImplKernel> Builder::implKernelOfGraph(
+    const compile_graph_ptr_t &graph) const {
+    if (graph == nullptr) {
+        return std::nullopt;
+    }
+    const auto found = implKernels_.find(graph.get());
+    if (found == implKernels_.end()) {
+        return std::nullopt;
+    }
+    return found->second;
+}
+
+bool Builder::sameImplSignature(FunctionType *function, FunctionType *kernel) {
+    if (function == nullptr || kernel == nullptr ||
+        function->withTypesCount() != kernel->withTypesCount() ||
+        function->normTypesCount() != kernel->normTypesCount() ||
+        function->hasConstas() != kernel->hasConstas() ||
+        function->hasExitType() != kernel->hasExitType()) {
+        return false;
+    }
+    for (size_t i = 0; i < function->withTypesCount(); ++i) {
+        if (function->withIsVarAt(i) != kernel->withIsVarAt(i) ||
+            !function->withTypeAt(i)->equals(kernel->withTypeAt(i))) {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < function->normTypesCount(); ++i) {
+        if (function->normIsVarAt(i) != kernel->normIsVarAt(i) ||
+            !function->normTypeAt(i)->equals(kernel->normTypeAt(i))) {
+            return false;
+        }
+    }
+    return !function->hasExitType() || function->exitType()->equals(kernel->exitType());
+}
+
+void Builder::adoptImplKernel(
+    const template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType) {
+    if (tmpl == nullptr || graph == nullptr || funcType == nullptr) {
+        return;
+    }
+    const auto declared = implTemplateKernels_.find(tmpl.get());
+    if (declared == implTemplateKernels_.end()) {
+        return;
+    }
+    const ImplTemplateKernel &kernel = declared->second;
+    // Which rule of the declaration is this instance's executor (H228: one operator, per-type
+    // executors). A rule with a fixed signature answers for the signature it names; a rule
+    // declared with the function's own type parameters is asked with the instance's parameter
+    // types, and its own result type is what a call of the instance gets.
+    const type_vec_t withTypes(funcType->withTypesSpan().begin(), funcType->withTypesSpan().end());
+    const type_vec_t normTypes(funcType->normTypesSpan().begin(), funcType->normTypesSpan().end());
+    std::string uri;
+    camel::core::type::resolver_ptr_t executor;
+    for (const auto &[ruleUri, resolver] : kernel.group->resolvers()) {
+        if (FunctionType *fixed = resolver->fixedSignature(); fixed != nullptr) {
+            if (sameImplSignature(funcType, fixed)) {
+                uri      = ruleUri;
+                executor = resolver;
+                break;
+            }
+            continue;
+        }
+        if (executor != nullptr) {
+            continue;
+        }
+        if (resolver->resolve(withTypes, normTypes, Modifier::None)
+                .has_value()) {
+            uri      = ruleUri;
+            executor = resolver;
+        }
+    }
+    // The instance is a semantic body of its `#impl` function whether or not an executor was
+    // found for it: the body it holds is the semantics, and a consumer that asks to look inside
+    // (autodiff, fusion, export, a rule) reads it rather than the kernel's own rule.
+    graph->draft().setFlags(
+        static_cast<uint8_t>(graph->draft().flags() | camel::runtime::kGraphFlagImplBody));
+    graph->draft().setImplKernelUri(std::string(uri.empty() ? kernel.uri : uri));
+    if (executor == nullptr) {
+        // No executor for these types: this instance runs the body, which is the semantics and
+        // gives the same result, and no direct call of it is a call of a kernel. `std::profile`
+        // then shows the body's own operators and none of the kernel's.
+        return;
+    }
+    ImplKernel adopted;
+    adopted.name  = kernel.name;
+    adopted.uri   = uri;
+    adopted.group = OperatorGroup::create(
+        kernel.group->name(),
+        std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
+            {uri, executor}});
+    implKernels_[graph.get()] = std::move(adopted);
+}
+
 bool Builder::insideImplBody() const {
     for (DraftGraphBuilder *graph = currGraph_.get(); graph != nullptr;) {
         if (implKernels_.find(graph) != implKernels_.end()) {
@@ -658,26 +751,7 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
     // type. A `constas` parameter has no counterpart in a body-less declaration (design
     // principles 5.4), so a function that takes one cannot have a kernel.
     const auto sameSignature = [](FunctionType *function, FunctionType *kernel) {
-        if (function == nullptr || kernel == nullptr ||
-            function->withTypesCount() != kernel->withTypesCount() ||
-            function->normTypesCount() != kernel->normTypesCount() ||
-            function->hasConstas() != kernel->hasConstas() ||
-            function->hasExitType() != kernel->hasExitType()) {
-            return false;
-        }
-        for (size_t i = 0; i < function->withTypesCount(); ++i) {
-            if (function->withIsVarAt(i) != kernel->withIsVarAt(i) ||
-                !function->withTypeAt(i)->equals(kernel->withTypeAt(i))) {
-                return false;
-            }
-        }
-        for (size_t i = 0; i < function->normTypesCount(); ++i) {
-            if (function->normIsVarAt(i) != kernel->normIsVarAt(i) ||
-                !function->normTypeAt(i)->equals(kernel->normTypeAt(i))) {
-                return false;
-            }
-        }
-        return !function->hasExitType() || function->exitType()->equals(kernel->exitType());
+        return sameImplSignature(function, kernel);
     };
     // The name of the kernel as a name of this module: a program may write it qualified with
     // the module it is declared in (`impl_demo::add_kernel`), which means the same name here.
@@ -720,12 +794,32 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 throw BuildAbortException();
             }
             FunctionType *funcType = tt::as_ptr<FunctionType>(child->at(0)->dataType());
-            if (isGenericHere(funcType)) {
-                // Each instance has a signature of its own; one kernel cannot be all of them.
-                diags_->of(SemanticDiag::ImplOnGenericFunction)
-                    .atOrigin(tag->origin)
-                    .commit(functionName);
-                throw BuildAbortException();
+            // A generic function may carry `#impl` (ruling impl-kernel-site): its kernel is a
+            // body-less declaration of this module whose type parameters are its own, and which
+            // rule of it runs an instance is decided at instantiation, when that instance's
+            // types are known (adoptImplKernel; H228: one operator, per-type executors). An
+            // instance no rule accepts has no executor and runs the body, which is the
+            // semantics, so the result is the same.
+            const bool generic = isGenericHere(funcType);
+            template_ptr_t genericTemplate;
+            if (generic) {
+                if (templateScope_ == nullptr) {
+                    continue;
+                }
+                std::optional<template_ptr_t> declaredTemplate =
+                    templateScope_->get(functionName);
+                if (!declaredTemplate.has_value()) {
+                    // The function of a namespace: its template is registered under the name
+                    // the reference ends with (registerGenericTemplates).
+                    const std::string tail = Reference(functionName).ident();
+                    if (tail != functionName) {
+                        declaredTemplate = templateScope_->get(tail);
+                    }
+                }
+                if (!declaredTemplate.has_value()) {
+                    continue; // its declaration was refused, and that error is reported
+                }
+                genericTemplate = declaredTemplate.value();
             }
             const std::string kernelName = localName(tag->kernel);
             const auto declared          = unit_->nativeOperatorGroups.find(kernelName);
@@ -775,6 +869,22 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                     uri    = ruleUri;
                     kernel = resolver;
                 }
+            }
+            if (generic) {
+                // Which rule runs an instance is decided at instantiation, not here: the
+                // declaration is remembered whole, and every rule it has may be the executor of
+                // some instance. A fixed rule is an executor for the types it names; a rule
+                // with no fixed signature (the kernel declared with the function's own type
+                // parameters) is asked with the instance's types there.
+                if (group->resolvers().empty()) {
+                    continue; // an operator with no rule can implement nothing
+                }
+                ImplTemplateKernel adopted;
+                adopted.name  = tag->kernel;
+                adopted.uri   = group->resolvers().front().first;
+                adopted.group = group;
+                implTemplateKernels_[genericTemplate.get()] = std::move(adopted);
+                continue;
             }
             if (funcType->hasConstas()) {
                 // A `constas` parameter is bound at the call, and a body-less declaration

@@ -1349,6 +1349,11 @@ compile_graph_ptr_t Builder::instantiateGeneric(
                 declaring != units_.end() ? declaring->second.get() : unit_;
         }
         tmpl->instances.push_back({bindings, constas, extents, graph, false});
+        // A generic `#impl` function's executor is chosen here, at instantiation, because this
+        // is where the instance's types are known (ruling impl-kernel-site; H228). An instance
+        // whose type has no executor keeps the body and runs it: the body is the semantics, so
+        // the result is the same, and `std::profile` tells the two paths apart.
+        adoptImplKernel(tmpl, graph, funcType);
         // The instance takes the declaration's parameter defaults as they are: they are
         // constants, the same for every instance, and a call of the instance fills them.
         if (const auto found = defaults_.find(tmpl.get()); found != defaults_.end()) {

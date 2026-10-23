@@ -1974,9 +1974,39 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 .commit(targetGraph->name(), targetGraph->funcType()->toString());
             throw BuildAbortException();
         }
-        currGraph_->addDependencyGraph(targetGraph);
-        targetNode     = createFuncDataNode(targetGraph, false, true);
-        targetFuncType = targetGraph->funcType();
+        // An instance of a generic `#impl` function whose type an executor was found for: a
+        // direct call is one OPER of the kernel, exactly as for a non-generic `#impl` function
+        // (design principles 10.4; ruling impl-kernel-site). The instance's body stays the
+        // semantics, and an instance whose type has no executor falls through to the call of
+        // the body, which is what it runs.
+        if (std::optional<ImplKernel> kernel = implKernelOfGraph(targetGraph);
+            kernel.has_value() && !insideImplBody()) {
+            std::vector<StaticArg> kernelStatics;
+            kernelStatics.reserve(normInputs.size());
+            for (const Argument &input : normInputs) {
+                kernelStatics.push_back(staticArgOf(input.node));
+            }
+            if (const auto resolved = kernel->group->resolveForCall(
+                    {},
+                    expectedResult,
+                    withInputTypes,
+                    normInputTypes,
+                    kernelStatics,
+                    Modifier::None);
+                resolved.has_value()) {
+                targetOperator = *resolved;
+                targetNode     = currGraph_->addOperNode(targetOperator, 0);
+                stampPermissions(targetNode);
+                registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
+                targetFuncType = targetOperator->funcType();
+                targetGraph    = nullptr;
+            }
+        }
+        if (targetGraph != nullptr) {
+            currGraph_->addDependencyGraph(targetGraph);
+            targetNode     = createFuncDataNode(targetGraph, false, true);
+            targetFuncType = targetGraph->funcType();
+        }
     } else if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
         if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {

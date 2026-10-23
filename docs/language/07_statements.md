@@ -562,7 +562,8 @@ export func add(a: int, b: int): int {
 ```
 
 - 语法是 `#impl<内核名>`：一个参数，取名字而不是值，因为无体声明没有函数值可传。
-- `f` 必须是**同一模块**的无体声明。按设计它是这个模块的私有声明（不导出：内核是实现细节，不是模块接口），写在函数同一个模块里。别的模块的声明（`SemanticDiag::ImplKernelForeign`）、没有声明的名字（`ImplKernelUnknown`）、带函数体的函数（`ImplKernelNotBodyless`）、以及写在无体声明自己身上的 `#impl`（`ImplOnBodylessDeclaration`）都被拒绝；泛型函数也不行（`ImplOnGenericFunction`：每个实例有自己的签名，一个内核配不上所有实例），`#impl` 也不能写在 lambda、类型、字段或块上（标签位置错误）。
+- `f` 必须是**同一模块**的无体声明。按设计它是这个模块的私有声明（不导出：内核是实现细节，不是模块接口），写在函数同一个模块里。别的模块的声明（`SemanticDiag::ImplKernelForeign`）、没有声明的名字（`ImplKernelUnknown`）、带函数体的函数（`ImplKernelNotBodyless`）、以及写在无体声明自己身上的 `#impl`（`ImplOnBodylessDeclaration`）都被拒绝，`#impl` 也不能写在 lambda、类型、字段或块上（标签位置错误）。拥有 `.cmo` 的模块（`stdlib/tensor.cml` 之于 `tensor.cmo`）同样可以声明内核并写下定义：`.cml` 与同名 `.cmo` 是**同一个模块**（H94），声明模块可以有函数体（语言作者的裁定，2026-10-23，`docs/handover/reviews/questions-2026-10-23.md`「## impl-kernel-site」：「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」）。
+- **泛型函数可以带 `#impl`**：内核是一条同样带类型参数的无体声明（`sum_kernel::<T>`），按 H228「一个算子、按类型的执行器」在实例化时选执行器——声明里的固定规则按签名匹配，带类型参数的规则用该实例的类型求解。某个 `T` 没有执行器时，这个实例就执行函数体：函数体本来就是语义，结果相同；`std::profile` 标出它走的是哪条路（`docs/handover/reviews/questions-2026-10-23.md`「## impl-kernel-site」：「泛型函数可以带 `#impl`」）。
 - **签名必须一致**：`with` 与普通参数的个数、类型和 `var` 标记相同，结果类型相同，内核没有 `constas` 参数；不一致报 `ImplSignatureMismatch`。
 - **默认不展开**：普通调用直接调用内核算子（图上是一个 `OPER`，标签是内核的 URI）。普通遍与执行器到不了函数体，函数体也不会内联进调用者；编译与执行的代价与直接调用一个原子算子相同。语义图照样建出来并保留着，只是不在普通程序可达的图里。
 - **按需展开**：需要看内部的消费者取标签留下的语义图。函数值（`let g = add`、`grad(add)`）就是语义图；运行期还可以从 `Program::implBodies` 取到带 `kGraphFlagImplBody` 的图。目前还没有生产遍去展开 `#impl` 函数体，标签把这件事留给自动微分、融合、导出与规则按需去做；`test::impl` 测试遍是这条路径的演示：它从 `Program::implBodies` 读语义体、展开被标函数的体，并与去掉标签的同一段 Camel 体逐节点比较。差分测试保证内核路径与函数体路径的结果一致（有容差时在测试里写明）。

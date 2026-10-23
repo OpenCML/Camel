@@ -4711,18 +4711,11 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // (handover H19, step 1) -- unless its condition is the pass applicability, in which case it
     // declares a pass and the pipeline reads it (design principles 9.3).
     const bool nativeDeclaration = ast->size() < 2;
-    if (!nativeDeclaration) {
-        // A module found beside a `.cmo` is that C++ module's declaration module: the C++
-        // module implements the functions, so a body written there is in the wrong file
-        // (design principles 6.4; handover H19, step 1).
-        auto declaredModule = std::dynamic_pointer_cast<UserDefinedModule>(module_);
-        if (declaredModule && declaredModule->declarationModule()) {
-            diags_->of(SemanticDiag::DeclarationModuleHasBody)
-                .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
-                .commit(module_->name(), funcData->ref().toString());
-            throw BuildAbortException();
-        }
-    }
+    // A `.cml` found beside a `.cmo` of the same name is that C++ module's *declaration*
+    // module, in which the C++ operators are declared; it may also hold Camel definitions
+    // (ruling impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody`
+    // 删除"). One module is the pair: declarations and Camel definitions in the `.cml`, the
+    // native kernels they name in the `.cmo` (H94; design principles 10.4).
     if (nativeDeclaration) {
         if (!funcType->hasExitType()) {
             diags_->of(SemanticDiag::NativeDeclarationIncomplete)

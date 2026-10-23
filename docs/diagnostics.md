@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-256 diagnostics: 237 errors, 19 warnings.
+254 diagnostics: 235 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -155,7 +155,6 @@ prints one entry.
 | `0x0300017A` | [SemanticDiag::StaticComprehensionVoidElement](#staticcomprehensionvoidelement) | Error |
 | `0x0300017B` | [SemanticDiag::NativeDeclarationIncomplete](#nativedeclarationincomplete) | Error |
 | `0x0300017C` | [SemanticDiag::NativeDeclarationNotLoaded](#nativedeclarationnotloaded) | Error |
-| `0x0300017D` | [SemanticDiag::DeclarationModuleHasBody](#declarationmodulehasbody) | Error |
 | `0x0300017E` | [SemanticDiag::LambdaParameterWithoutType](#lambdaparameterwithouttype) | Error |
 | `0x03000180` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
 | `0x03000181` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
@@ -222,7 +221,6 @@ prints one entry.
 | `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error |
 | `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error |
 | `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error |
-| `0x030001DD` | [SemanticDiag::ImplOnGenericFunction](#implongenericfunction) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -4323,24 +4321,6 @@ func main(): int {
 }
 ```
 
-### DeclarationModuleHasBody
-
-`0x0300017D` · Error · `SemanticDiag::DeclarationModuleHasBody`
-
-**Message**
-
-```text
-The declaration module '{0}' has a body in function '{1}'.
-```
-
-**Help**
-
-```text
-A Camel module found beside a C++ module of the same name declares that module's operators and has no bodies. Put the implementation in a module that has no `.cmo`, or remove the `.cmo`.
-```
-
-*No example: no test small enough to show raises it.*
-
 ### LambdaParameterWithoutType
 
 `0x0300017E` · Error · `SemanticDiag::LambdaParameterWithoutType`
@@ -6386,40 +6366,6 @@ func add(a: int, b: int): int {
 
 func main(): int sync {
     return add(1, 2)
-}
-```
-
-### ImplOnGenericFunction
-
-`0x030001DD` · Error · `SemanticDiag::ImplOnGenericFunction`
-
-**Message**
-
-```text
-The '#impl' tag of '{0}' is on a generic function.
-```
-
-**Help**
-
-```text
-A generic function's instances have signatures of their own, so one kernel cannot be the implementation of all of them. Write each instance as an ordinary function and give it its own '#impl', or remove the tag.
-```
-
-**Example** (`test/cases/compile/native/impl_generic.cml`, run as `camel test/cases/compile/native/impl_generic.cml`)
-
-```camel
-module impl_generic
-
-#op<':op/idx_arr'>
-func idx_kernel::<T>(xs: T[], i: int): T
-
-#impl<idx_kernel>
-func at::<T>(xs: T[], i: int): T {
-    return xs[i]
-}
-
-func main(): int sync {
-    return at([1, 2, 3], 0)
 }
 ```
 

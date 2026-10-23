@@ -1229,14 +1229,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::DeclarationModuleHasBody,
-            {
-                "DeclarationModuleHasBody",
-                "The declaration module '{0}' has a body in function '{1}'.",
-                "A Camel module found beside a C++ module of the same name declares that module's operators and has no bodies. Put the implementation in a module that has no `.cmo`, or remove the `.cmo`.",
-            },
-        },
-        {
             SemanticDiag::NativeDeclarationOverlap,
             {
                 "NativeDeclarationOverlap",
@@ -1458,14 +1450,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ImplKernelNotBodyless",
                 "The '#impl' tag of '{0}' names '{1}', which has a body.",
                 "The kernel is the body-less declaration of the C++ operator that runs the function's semantics. A function that already has a body is the semantics itself, so there is nothing for the tag to do: name a body-less declaration, or remove the tag.",
-            },
-        },
-        {
-            SemanticDiag::ImplOnGenericFunction,
-            {
-                "ImplOnGenericFunction",
-                "The '#impl' tag of '{0}' is on a generic function.",
-                "A generic function's instances have signatures of their own, so one kernel cannot be the implementation of all of them. Write each instance as an ordinary function and give it its own '#impl', or remove the tag.",
             },
         },
         {
