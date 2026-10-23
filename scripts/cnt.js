@@ -26,7 +26,16 @@ function runTokeiJson(inputDirs = []) {
     for (const e of EXCLUDES) args.push('--exclude', e)
     args.push('-o', 'json')
     if (inputDirs.length > 0) args.push(...inputDirs)
-    const r = spawnSync('tokei', args, { cwd: rootDir, encoding: 'utf-8', shell: true })
+    // tokei writes one JSON object per file, so its output grows with the tree and passed
+    // Node's 1 MiB default buffer, which aborts the run as ENOBUFS rather than as a count.
+    // The cap is a limit, not a target: 256 MiB is far more than the tree produces today and
+    // still bounded, so a runaway listing fails instead of exhausting memory.
+    const r = spawnSync('tokei', args, {
+        cwd: rootDir,
+        encoding: 'utf-8',
+        shell: true,
+        maxBuffer: 256 * 1024 * 1024
+    })
     if (r.error) throw r.error
     if (r.status !== 0) throw new Error(`tokei exited ${r.status}: ${r.stderr}`)
     const out = r.stdout
