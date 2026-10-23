@@ -41,7 +41,8 @@ export const REPO_ROOT = path.resolve(HERE, '..', '..')
 /** The trees a run writes into, as repository-relative paths with `/` separators. */
 export const RESULTS_DIR = 'test/results'
 /** The run directories: one per run, `<timestamp>_<pid>`, holding `pass/`, `fail/`, `xfail/`. */
-export const LOG_DIR = `${RESULTS_DIR}/log`
+const LOG_DIR_NAME = 'log'
+export const LOG_DIR = `${RESULTS_DIR}/${LOG_DIR_NAME}`
 /** The per-test scratch roots, one `run-<pid>` per runner process. */
 export const SCRATCH_DIR = 'tmp/test'
 export const RUNNER_OUTPUT_DIRS = [RESULTS_DIR, SCRATCH_DIR]
@@ -177,9 +178,11 @@ function remove(full, report) {
  *     `scratchKeepMs`, so the root of the run that just failed is still there to read.
  *
  * `currentRunDir` and `currentScratchRoot` name this process's own directories; they are protected
- * even before they exist (the runner prunes first, then creates them). Everything removed is
- * counted while it is removed, so the run prints what the bound cost the tree rather than a number
- * someone has to look up.
+ * even before they exist (the runner prunes first, then creates them). `resultsRoot` is the record
+ * tree this run writes into -- `test/results` unless `CAMEL_TEST_RESULTS_ROOT` moved it out of the
+ * checkout -- so a run that writes elsewhere prunes what it is about to add a directory to, and not
+ * the checkout's own tree. Everything removed is counted while it is removed, so the run prints what
+ * the bound cost the tree rather than a number someone has to look up.
  */
 export function pruneRunnerOutput(options = {}) {
     const repoRoot = options.repoRoot || REPO_ROOT
@@ -190,7 +193,8 @@ export function pruneRunnerOutput(options = {}) {
     const scratchKeepMs = options.scratchKeepMs === undefined ? SCRATCH_ROOT_KEEP_MS : options.scratchKeepMs
     const now = options.now === undefined ? Date.now() : options.now
     const isAlive = options.isAlive || processAlive
-    const logRoot = runnerOutputPath(LOG_DIR, repoRoot)
+    const resultsRoot = options.resultsRoot ? path.resolve(options.resultsRoot) : runnerOutputPath(RESULTS_DIR, repoRoot)
+    const logRoot = path.join(resultsRoot, LOG_DIR_NAME)
     const scratchRoot = runnerOutputPath(SCRATCH_DIR, repoRoot)
     const own = new Set(
         [options.currentRunDir, options.currentScratchRoot]

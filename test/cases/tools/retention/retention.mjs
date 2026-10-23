@@ -38,7 +38,7 @@ import os from 'node:os'
 import path from 'node:path'
 import url from 'node:url'
 import { spawnSync } from 'node:child_process'
-import { LOG_DIR, SCRATCH_DIR, pruneRunnerOutput, processAlive, runnerOutputPath } from '../../../tools/runner-output.mjs'
+import { LOG_DIR, RESULTS_DIR, SCRATCH_DIR, pruneRunnerOutput, processAlive, runnerOutputPath } from '../../../tools/runner-output.mjs'
 
 const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..', '..')
@@ -243,12 +243,44 @@ function policyMode() {
         check(fs.existsSync(path.join(control.logRoot, name)), `the control lost a run directory: ${name}`)
     }
 
+    // The bound follows the tree the run writes. `CAMEL_TEST_RESULTS_ROOT` moves the record out of
+    // the checkout, and a prune that went on pruning `test/results` would leave the tree the run is
+    // actually writing to without a bound (and prune a tree nothing is writing to).
+    const redirected = buildFixture(path.join(SCRATCH, 'policy-redirected'))
+    const movedRoot = path.join(redirected.root, 'redirected')
+    fs.renameSync(runnerOutputPath(RESULTS_DIR, redirected.root), movedRoot)
+    const moved = pruneRunnerOutput({
+        repoRoot: redirected.root,
+        resultsRoot: movedRoot,
+        keep: 2,
+        currentScratchRoot: redirected.ownedScratchRoot,
+    })
+    check(
+        moved.run_dirs.scanned === redirected.planted.length && moved.run_dirs.removed === removedExpected.length,
+        `a redirected record is what the bound must prune: scanned ${moved.run_dirs.scanned} of `
+            + `${redirected.planted.length}, removed ${moved.run_dirs.removed} of ${removedExpected.length}`
+    )
+    for (const name of keptExpected) {
+        check(fs.existsSync(path.join(movedRoot, 'log', name)), `a run directory the bound keeps was removed: ${name}`)
+    }
+
     summary = `PASS retention.policy: a bound of 2 removed ${report.run_dirs.removed} of ${report.run_dirs.scanned} run directories `
         + `(${report.run_dirs.entries_removed} entries, ${report.run_dirs.bytes_removed} bytes), kept the newest two, the live run's `
         + `and the foreign one; the same tree under a bound of ${control.planted.length + 1} lost nothing`
 }
 
 // --- two real runs ------------------------------------------------------------------------------
+// The plan's third test (`scratch.other_run_untouched`) needs a file another run keeps under
+// `tmp/test`, outside every `run-<pid>` root: that is the selftest's `SELFTEST_MARKER` fixture, and a
+// run started from here needs it for the same reason the selftest writes one.
+const MARKER = path.join(runnerOutputPath(SCRATCH_DIR, REPO_ROOT), `marker-from-another-run-${process.pid}.txt`)
+
+/** The lines of a nested run worth putting in a failure report, rather than its last 400 bytes. */
+function nestedReport(run, attempt) {
+    const interesting = run.output.split('\n').filter((line) => /^\[(SUMMARY|RETAIN|FAIL|ERROR)\]|^FAIL /.test(line))
+    return `nested run ${attempt} exited ${run.status}${run.error ? ` (${run.error.message})` : ''}\n${interesting.join('\n')}`
+}
+
 function runnerMode() {
     const resultsRoot = path.join(SCRATCH, 'results')
     const logRoot = path.join(resultsRoot, 'log')
@@ -257,6 +289,8 @@ function runnerMode() {
     RUN_DIR_NAMES.dead.forEach((name, index) => plantRunDir(logRoot, name, BASE_MS + index * MINUTE_MS))
     plantRunDir(logRoot, RUN_DIR_NAMES.live, BASE_MS - MINUTE_MS)
     plantRunDir(logRoot, RUN_DIR_NAMES.foreign, BASE_MS - 2 * MINUTE_MS)
+    fs.mkdirSync(path.dirname(MARKER), { recursive: true })
+    fs.writeFileSync(MARKER, 'a file another run keeps\n')
 
     const nested = []
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -265,14 +299,18 @@ function runnerMode() {
             encoding: 'utf8',
             windowsHide: true,
             timeout: 120000,
-            env: { ...process.env, CAMEL_TEST_RESULTS_ROOT: resultsRoot, CAMEL_TEST_RUN_DIRS_KEEP: '1' },
+            env: {
+                ...process.env,
+                CAMEL_TEST_RESULTS_ROOT: resultsRoot,
+                CAMEL_TEST_RUN_DIRS_KEEP: '1',
+                SELFTEST_MARKER: MARKER,
+            },
         })
         const output = `${proc.stdout || ''}${proc.stderr || ''}`.replace(/\x1b\[[0-9;]*m/g, '')
         nested.push({ pid: proc.pid, status: proc.status, output })
         check(
             proc.status === 0 && output.includes('[SUMMARY] total: 3, pass: 3, fail: 0'),
-            `nested run ${attempt + 1} did not pass its plan (exit ${proc.status}${proc.error ? `, ${proc.error.message}` : ''}): `
-                + output.slice(-400)
+            `nested run ${attempt + 1} did not pass its plan: ${nestedReport({ status: proc.status, output, error: proc.error }, attempt + 1)}`
         )
     }
     // The runner enforces the bound itself: the first nested run must report what it pruned.
@@ -309,6 +347,12 @@ function runnerMode() {
                 typeof manifest.revision === 'string' && /^[0-9a-f]{40}$/.test(manifest.revision),
                 `the manifest does not name the revision it ran at: ${JSON.stringify(manifest.revision)}`
             )
+            // The bound follows the tree the run writes, not the name of the tree in the checkout:
+            // the manifest says which tree this run's own record went into.
+            check(
+                manifest.results_root === resultsRoot,
+                `the run wrote its record somewhere else: ${JSON.stringify(manifest.results_root)} instead of ${resultsRoot}`
+            )
         }
         // Nothing of the checkout is copied into the record, and the two paths a reader needs are in
         // the test's own meta.json.
@@ -335,6 +379,9 @@ function runnerMode() {
     summary = `PASS retention.runner: two runs with a bound of 1 kept their own two directories and the live run's, `
         + `removed all ${RUN_DIR_NAMES.dead.length} directories whose runs were gone, left the foreign one, `
         + `and recorded ${recorded} files, none of them a copy of the checkout`
+    // The marker is this case's own file under the checkout's scratch tree; a run leaves it alone, so
+    // this case removes it rather than leaving it behind for the next one.
+    fs.rmSync(MARKER, { force: true })
 }
 
 if (MODE === '--policy') {

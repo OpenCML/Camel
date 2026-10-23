@@ -825,7 +825,9 @@ end compiles) says `sweep = false` with a comment.
 - `CAMEL_TEST_RESULTS_ROOT=<dir>` writes the run's record into `<dir>` instead of `test/results`, and
   `CAMEL_TEST_RUN_DIRS_KEEP=<n>` lowers the retention bound for that run ("Runner Output"). Both are
   knobs a check uses: the retention check runs two real runs into a scratch tree with a bound of one,
-  so the pruning is watched over runs that really happened rather than over a fixture alone.
+  so the pruning is watched over runs that really happened rather than over a fixture alone. The bound
+  follows the record: a run whose record was moved prunes the tree it is writing to, not the checkout's
+  `test/results`, which nothing in that run is adding to.
 - The timeouts above apply to one test; a parallel run does not relax them, and a test whose
   time depends on the machine's load belongs alone (`parallel = false`) or in the slow layer.
 

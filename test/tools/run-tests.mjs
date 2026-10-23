@@ -2470,6 +2470,7 @@ async function main() {
     // runner did not write. The current run's directory is named here, before it exists, so the
     // policy protects it by identity as well.
     const retention = pruneRunnerOutput({
+        resultsRoot: RESULTS_ROOT,
         keep: resultsKeep(),
         currentRunDir: logDir,
         currentScratchRoot: TEST_SCRATCH_RUN,
