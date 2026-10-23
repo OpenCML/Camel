@@ -163,9 +163,13 @@ parameter is written as a `key=value` **word after the pass name, with no parent
 camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm
 ```
 
-The value is one word. It is a Camel constant expression: bool, int, float and string literals and
-the operators on them (`n=2*8`, `safe_fp=!false`). An expression with spaces is written without
-them (`growth_budget=2*8+1`); a string with spaces is quoted by the shell (`out="a b.onnx"`).
+The value is one word, read by the type the declaration gives the parameter (design principles
+9.3). A `bool`, `int` or `float` parameter takes a Camel constant expression: literals and the
+operators on them (`n=2*8`, `safe_fp=!false`), an expression with spaces written without them
+(`growth_budget=2*8+1`). A `string` parameter takes the word as written and needs no quotes, so
+`onnx::export out=model.onnx` names the file `model.onnx`; a value with spaces is quoted by the
+shell, as with any command-line tool, and the quoting must arrive as part of the word, so the pass
+word is quoted whole (`'onnx::export out="a b.onnx"'`).
 Between a pass name and its parameters, and between two parameters, nothing but whitespace is
 allowed. The parenthesised form (`std::opt(safe_fp=true)`), the colon spelling on the command line
 (`safe_fp: true`) and positional parameters are gone: they are refused as
@@ -380,7 +384,7 @@ A run of a training step, short:
 
 ### ONNX export as a pass (`onnx::export`)
 
-    camel m.cml std::macro std::opt 'onnx::export out="model.onnx"'
+    camel m.cml std::macro std::opt onnx::export out=model.onnx
 
 `onnx::export` is a translation pass contributed by the `onnx` module. As the last pass of a pipeline it writes an ONNX model and consumes the graph: the program is not executed.
 
@@ -391,8 +395,8 @@ A run of a training step, short:
 
 **A program without an `export_model` call: `main` is the model.** A program that only computes is exported by the same pass composition, with nothing written for the export in the program (not even `import onnx`: naming the pass loads the module):
 
-    camel model.cml std::macro std::opt 'onnx::export out="model.onnx"'
-    camel model.cml --arg p=weights std::macro std::opt 'onnx::export out="model.onnx"'
+    camel model.cml std::macro std::opt onnx::export out=model.onnx
+    camel model.cml --arg p=weights std::macro std::opt onnx::export out=model.onnx
 
 When no `export_model` call exists anywhere in the program, the pass translates the entry graph itself, that is the computation of `main`:
 
