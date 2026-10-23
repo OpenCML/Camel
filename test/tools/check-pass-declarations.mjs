@@ -20,7 +20,10 @@
  *     the relation and not the number; what the two sets must not be is empty, and that lower
  *     bound is asserted so a run that examined nothing fails here instead of passing.
  *   * every pass a module contributes is a pass-shaped declaration in `stdlib/<module>.cml`
- *     (`when is_function::<F>()`), and every declaration has a registration;
+ *     (`when is_function::<F>()`), and every declaration has a registration — the same relation
+ *     one level up, over the modules themselves, with each side asserted non-empty for the same
+ *     reason: a module that contributes no pass (`ckpt` registers operators and resources only)
+ *     declares none, and that is the bijection's empty case, not a module to skip;
  *   * every alias resolves: a core alias names a declared pass, and a module alias names a pass
  *     the same module registered;
  *   * every C++ parameter list left is a test-only pass or the Camel pass whose declaration is
@@ -275,6 +278,38 @@ const isTestOnly = (path) => {
     const separator = path.indexOf('::')
     const funcName = path.slice(separator + 2)
     return path.slice(0, separator) === 'test' || funcName.startsWith('test_')
+}
+// The module-level bijection, stated once as the relation the ruling asks for and not as a count:
+// every registered pass is a pass-shaped declaration of its module's `.cml` and every such
+// declaration is registered. What must not happen is a side that came out empty — a walk that
+// stopped matching would satisfy "every X is a Y" and a bijection between two empty sets, and the
+// diagnostic that says what a module provides would then read a declaration file nothing read
+// here. So the two modules sets are asserted non-empty, and the run that examined zero modules
+// fails instead of reporting a pass.
+const registeredModules = new Set(
+    [...registrations]
+        .filter((path) => !path.startsWith('std::') && !isTestOnly(path))
+        .map((path) => path.slice(0, path.indexOf('::')))
+)
+const declaringModules = new Set(
+    [...moduleDeclarations].map((path) => path.slice(0, path.indexOf('::')))
+)
+if (declaringModules.size === 0 || registeredModules.size === 0) {
+    problems.push(
+        `the module-level bijection was checked over ${declaringModules.size} declaring module(s) ` +
+            `and ${registeredModules.size} module(s) contributing a pass: one side is empty, so ` +
+            `nothing was compared`
+    )
+}
+for (const module of registeredModules) {
+    if (!declaringModules.has(module)) {
+        problems.push(`the module '${module}' contributes a pass and no declaration of it was read`)
+    }
+}
+for (const module of declaringModules) {
+    if (!registeredModules.has(module)) {
+        problems.push(`the module '${module}' declares a pass and no registration implements it`)
+    }
 }
 for (const path of registrations) {
     if (path.startsWith('std::') || isTestOnly(path)) {
