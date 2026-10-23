@@ -155,7 +155,8 @@ The passes given on the command line run in the order written. Each pass transfo
 ### Pass parameters
 
 A pass is a function of the standard library (design principles 9.3): its name, documentation and
-parameters are one declaration in `stdlib/std.cml`, and the pipeline reads them from there. A
+parameters are one declaration in a module `.cml` file — the core's in `stdlib/std.cml`, a
+module's in `stdlib/<module>.cml` — and the pipeline reads them from there. A
 parameter is written as a `key=value` **word after the pass name, with no parentheses**:
 
 ```
@@ -170,10 +171,10 @@ allowed. The parenthesised form (`std::opt(safe_fp=true)`), the colon spelling o
 (`safe_fp: true`) and positional parameters are gone: they are refused as
 `RuntimeDiag::InvalidPassParameter`, and the message says how to write the parameter.
 
-The declarations are read when the pipeline is resolved, from the module search paths. If
-`stdlib/std.cml` cannot be found or does not declare the pass, the pass is refused rather than run
-on defaults the declaration never gave it: the message names module `std` and the file the pipeline
-read (or the `std.cml` paths it looked at), so an install without its standard library says so
+The declarations are read when the pipeline is resolved, from the module search paths. If the
+module's `.cml` file cannot be found or does not declare the pass, the pass is refused rather
+than run on defaults the declaration never gave it: the message names the module and the file the
+pipeline read (or the paths it looked at), so an install without its standard library says so
 instead of reporting the pass as unknown.
 
 The declaration is the function's own `with` list, so it has a function's rules (design
@@ -243,9 +244,9 @@ What stays in the environment is the environment of the process, not of a pass: 
 
 ### Passes of modules
 
-The `std::` prefix belongs to the passes of the core. A pass of a module is named by the module: `tiles::compile`, `tensor::fuse`, `onnx::export`. A module may register aliases for its passes (`registerPassAlias`); the core does not know the names of modules.
+The `std::` prefix belongs to the passes of the core. A pass of a module is named by the module: `tiles::compile`, `tensor::fuse`, `onnx::export_model` (short alias `onnx::export`). Every pass, core or module, is a body-less declaration of the module's `.cml` file — `export func fuse::<F>(f: F): F! when is_function::<F>()` — and `registerModulePass` binds only its kernel. The compiler builds neither a graph nor an operator group for such a declaration. A module may register aliases for its passes (`registerPassAlias`); the core does not know the names of modules.
 
-A module may register passes of its own (`registerModulePass`, plus short aliases with `registerPassAlias`). They run only where the pipeline writes them: the pipeline is composed explicitly, so importing a module never adds a pass. A library whose pass is needed (autodiff needs `std::macro` before it) diagnoses the missing pass and says which one to add, and a tag whose reading pass is absent draws a warning.
+A module's passes run only where the pipeline writes them: the pipeline is composed explicitly, so importing a module never adds a pass. A library whose pass is needed (autodiff needs `std::macro` before it) diagnoses the missing pass and says which one to add, and a tag whose reading pass is absent draws a warning. The parameters of a module's pass are its declaration's `with` list, checked like the core's.
 
 A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) declares its parameters as the `with` parameters of that function: `with <label: string, n: int> export func report(p: Program): Program!` is run as `mymod::report label="x" n=21`. The names, order and types of the `with` parameters are the pass's parameters (design principles 4.4 and 9.3); bool, int, float and string are the types a pass parameter may have. A `with` parameter has no default in source, so each one is required: leaving one out is `SemanticDiag::ParamArgumentMissing` at the call in the pipeline, and the message names the parameter.
 

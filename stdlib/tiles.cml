@@ -44,3 +44,11 @@ export func available(): bool
 /// @fails fault `RuntimeError` when this build or this machine has no CUDA device; fault `DeviceUnavailable` when `--devices` names a device that is not there
 /// @example println(device())
 export func device(): string
+
+// -----------------------------------------------------------------------------
+// Passes: functions the pipeline applies to the program
+// -----------------------------------------------------------------------------
+
+/// Outlines the regions the device can run, compiles them and executes the program; the card is
+/// chosen at run time with `--devices`, never by a pass parameter.
+export func compile::<F>(f: F): F! when is_function::<F>()

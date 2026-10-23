@@ -36,6 +36,11 @@ STEP = HERE / "fusion_group_step.cml"
 NONE = HERE / "fusion_group_none.cml"
 GOLDEN_TEXT = HERE / "fusion_group_none.profile.golden.txt"
 GOLDEN_JSON = HERE / "fusion_group_none.profile.golden.json"
+# The goldens were captured from the base commit (b43dd5c68). `origin` in the JSON is the
+# internal node-origin id, not a source position: it moved when stdlib/tensor.cml gained its
+# pass declaration (design principles 9.3), which adds nodes to the module's declaration, and
+# the golden records the id this tree produces. The source positions the text report prints are
+# unchanged and are checked there.
 
 # The measured numbers a report prints: durations, shares and byte counts. Everything else in the
 # report is a count or a name, and must not change.

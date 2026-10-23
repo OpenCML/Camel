@@ -618,6 +618,12 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                     if (const auto *uses = tree_->tagUsesOf(node); uses != nullptr) {
                         tree_->addTagUses(declNode, *uses);
                     }
+                    // Its condition goes with it too: a body-less declaration with the pass
+                    // applicability is a pass, not an operator, and the graph builder tells them
+                    // apart by this condition (design principles 9.3).
+                    if (const auto *when = tree_->whenOf(node); when != nullptr) {
+                        tree_->setWhen(declNode, *when);
+                    }
                 }
                 setOriginFromAst(
                     context_,
@@ -4702,7 +4708,8 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // A declaration without a body declares an operator of a C++ module (design principles 6.4):
     // it has a signature and nothing to build, so the FUNC carries its type alone and is marked
     // as a declaration. The graph builder turns it into an operator group instead of a graph
-    // (handover H19, step 1).
+    // (handover H19, step 1) -- unless its condition is the pass applicability, in which case it
+    // declares a pass and the pipeline reads it (design principles 9.3).
     const bool nativeDeclaration = ast->size() < 2;
     if (!nativeDeclaration) {
         // A module found beside a `.cmo` is that C++ module's declaration module: the C++

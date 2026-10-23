@@ -133,6 +133,15 @@ expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
 expect_output_contains = ["The argument 'n' of 'tensor::test_echo' has type 'float', not 'int'."]
 
 [[tests]]
+name = "module.declared_parameter"
+desc = "A module pass's parameters are its module's `.cml` declaration, checked by the same machinery as a core pass: `tensor::fuse` declares `safe_fp: bool = false` in stdlib/tensor.cml, so an int is refused at the call before the pass runs."
+args = ["${case}", "tensor::fuse safe_fp=1", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
+expect_output_contains = ["The argument 'safe_fp' of 'tensor::fuse' has type 'int', not 'bool'."]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
 name = "module_pass.written_explicitly"
 desc = "A pass a module contributes runs where the user writes it, not twice, also under its alias."
 args = ["${case}", "tensor::echo label=\"mine\"", "std::fvm"]
@@ -225,6 +234,36 @@ expect_output_contains = ["InvalidPassParameter", "key=value on the command line
 expect_output_not_contains = ["camel-ran-marker"]
 
 [[tests]]
+name = "removed.parenthesised_form_in_passes"
+desc = "`--passes` is not an escape from the spelling: a comma-separated list whose entry is the removed parenthesised form is refused, not split inside the parentheses."
+args = ["${case}", "--passes", "std::opt(safe_fp=true),std::fvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "not in parentheses"]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "declaration.parameter_changes_behaviour"
+desc = "A parameter written as a key=value word after the pass name reaches the pass: `std::fvm stats=<file>` writes the run's statistics there, and the same pipeline without the word writes nothing. An effect, not a parse."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/cases/tools/cli/pass_param_effect.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["pass parameter effect: PASS"]
+timeout_ms = 120000
+
+[[tests]]
+name = "declaration.same_machinery_as_a_call"
+desc = "A pass's `with` parameters are checked by the call machinery: the same SemanticDiag codes and the same message text as a function's named arguments (unknown, duplicate, missing), located at the call."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/cases/tools/cli/pass_params_family.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["pass parameters match calls: PASS"]
+timeout_ms = 120000
+
+[[tests]]
 name = "declaration.resolves_by_module_and_name"
 desc = "A pass is a declaration of stdlib/std.cml; the pipeline finds it by module and name and runs its kernel. `std::inline` is the short spelling of the same declaration, resolved as an alias."
 args = ["${case}", "std::inline", "std::fvm"]
@@ -239,12 +278,13 @@ expect_output_contains = ["std::opt", "growth_budget: int = 4096"]
 
 [[tests]]
 name = "declaration.guard_script"
-desc = "The pass declarations are the only registry: the guard refuses `registerPass`, a parameter string in C++, and any pass that exists on one side only."
+desc = "The pass declarations are the only registry: the guard refuses `registerPass`, a parameter string in C++, a pass that exists on one side only, a module pass with no declaration, and an alias that names no declaration; it lists every alias as resolved."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-pass-declarations.mjs"
 args = ["${case}"]
 expect_exit = 0
+expect_stdout_contains = ["53 in the core", "contributed by modules", "aliases resolved", "no C++ pass registry"]
 timeout_ms = 60000
 
 [[tests]]

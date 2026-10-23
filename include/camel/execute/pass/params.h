@@ -70,9 +70,10 @@ using PassMaker = std::function<std::unique_ptr<GraphIRPass>(
 /// parameters are the standard library's declaration, not a second declaration in C++.
 struct PassDescriptor {
     PassMaker make;
-    /// The parameters a module pass has when the module has no `.cml` declaration to read them
-    /// from (test passes, and a pass a C++ module registers without a declaration). A declared
-    /// pass's parameters are its declaration's `with` list.
+    /// The parameters of a pass with no `.cml` declaration to read them from: a test-only pass, or a
+    /// pass written in Camel, whose declaration is the `with` list of the function itself. A
+    /// built-in pass's parameters are its declaration's `with` list, and the pipeline never reads
+    /// this field for one.
     std::vector<PassParam> params;
     /// The pass reads tag facts (node attributes, numeric permissions, `read_by`); a tag's
     /// `read_by` names it. `registerModulePass` registers such a pass in the tag reader
@@ -83,9 +84,11 @@ struct PassDescriptor {
 /// Wraps a factory of a pass without parameters.
 PassDescriptor passWithoutParameters(PassFactory factory);
 
-/// Registers the implementation of a pass contributed by a module under `path`
-/// (`<module>::<pass>`). The declaration of the pass, with its documentation and parameters,
-/// is the module's `.cml` file.
+/// Registers the implementation of a pass under its function path (`<module>::<pass>`): the
+/// core's kernels under `std::`, a module's under its own name. The declaration of the pass, with
+/// its documentation and parameters, is the module's `.cml` file; the core registers its kernels
+/// through the same path, so there is one registry of implementations and no separate pass
+/// registry.
 void registerModulePass(const std::string &path, PassDescriptor descriptor);
 
 /// Registers a short name for a pass, normally of the module's own: `registerPassAlias("tiles",

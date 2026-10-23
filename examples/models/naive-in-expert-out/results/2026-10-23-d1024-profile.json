@@ -24,7 +24,7 @@
     "steps": 16,
     "warmup": 3
   },
-  "method": "Camel: std::profile(report=true,json=...,top=0) on the generated train_step.cml; operator rows of the 16-step run minus the same run's steps=0 pre/post; mean per step. The layout/copy row is only operators whose whole job is a layout change or an allocation; copies and allocations inside a matmul or elementwise kernel are inside that operator's row and are not separable with today's operator-boundary timer. PyTorch: torch.profiler FunctionEvent self time over 3 steps, grouped by the same categories; the Adam section is kept whole under optimizer because eager Adam is a chain of elementwise kernels. The two profilers add different overhead (Camel step wall 3484 ms vs timed 3145 ms, +11%; naive +22%, compiled +11%), so compare shares and the excess, not absolute totals across tools.",
+  "method": "Camel: std::profile report=true json=... top=0 on the generated train_step.cml; operator rows of the 16-step run minus the same run's steps=0 pre/post; mean per step. The layout/copy row is only operators whose whole job is a layout change or an allocation; copies and allocations inside a matmul or elementwise kernel are inside that operator's row and are not separable with today's operator-boundary timer. PyTorch: torch.profiler FunctionEvent self time over 3 steps, grouped by the same categories; the Adam section is kept whole under optimizer because eager Adam is a chain of elementwise kernels. The two profilers add different overhead (Camel step wall 3484 ms vs timed 3145 ms, +11%; naive +22%, compiled +11%), so compare shares and the excess, not absolute totals across tools.",
   "build": {
     "revision": "04416a77b8",
     "canonical_fingerprint": "8d3a616b7faa",
@@ -33,8 +33,8 @@
   },
   "commands": {
     "generate": "python examples/models/naive-in-expert-out/measure.py --d-model 1024 --threads 1 --steps 16 --warmup 3",
-    "camel_canonical": "camel -t 1 --block-limit 8192 train_step.cml 'std::profile(report=true,json=\"/tmp/prof.json\",top=0)' std::jit --arg bench=true --arg init_dir=<init> --arg final_dir=",
-    "camel_library": "camel -t 1 --block-limit 8192 train_step.cml tensor::fuse 'std::profile(report=true,json=\"/tmp/prof.json\",top=0)' std::jit --arg bench=true --arg init_dir=<init> --arg final_dir=",
+    "camel_canonical": "camel -t 1 --block-limit 8192 train_step.cml 'std::profile report=true json=\"/tmp/prof.json\" top=0' std::jit --arg bench=true --arg init_dir=<init> --arg final_dir=",
+    "camel_library": "camel -t 1 --block-limit 8192 train_step.cml tensor::fuse 'std::profile report=true json=\"/tmp/prof.json\" top=0' std::jit --arg bench=true --arg init_dir=<init> --arg final_dir=",
     "torch": "python examples/models/naive-in-expert-out/torch_impl.py --variant naive|compiled --init <init> --steps 3 --warmup 1 --threads 1 --batch 32 --sequence 64 --d-model 1024 --n-heads 64 --d-ff 2048 --vocab 32"
   },
   "camel": {
