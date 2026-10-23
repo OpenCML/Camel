@@ -1,0 +1,12 @@
+h339 — 断言页面与双射，不锁计数；并且问 runner 哪些树是它写的（分支 handover/h339-docform-guard，b6f096732，3 文件）
+
+提交里抄了裁定的理由：断言性质——每条遍声明恰好一个内核、每个内核恰好一条声明（双射）；文档里每个遍调用都能被解析器接受；数量不进断言，也不进计划的描述。
+
+1) 走查改问 runner：NOT_WALKED=['test/results','tmp'] 删除，walk() 改问 test/tools/runner-output.mjs 的 isRunnerOutput。谁是谁写进了头部与提交：test/results 与 tmp/test 是 runner 的（记录 + 每测试草稿），tmp **不是**——runner 从不写 tmp，它里面没有受跟踪的文件，守卫跳过它是自己的有意选择。新的 --selftest 配方植入一棵树：runner 树里一页、树外同一页、tmp（但在 tmp/test 之外）一页，要求只数到树外那页，并断言 isRunnerOutput(tmp) 为假。同一检出上前后实测：提交态与新守卫的页面总体**完全一致**（都数到树外那页、都没数树里那页），所以这一条删掉的是"将来多一棵树要记两处"这件事，不是一个数。修前的红是闸门超时（旧常量要改就得动被禁的文件），头部那 41.4 s 裸走 680 万条目的代价事实已更正为实测值。
+2) 头部那句假话变成断言：运行目录里是 run.json + 每测试的 meta.json（plan_path、case_path），副本停掉是因为它占一个运行目录 87% 的字节。结论被检查而不是被论证：走查必须覆盖**每个受跟踪的 *.md**（对着 git ls-files 比），而且"不是页面"清单里的每一条都还必须真的匹配到东西——**立刻抓出 docs/reviews/**，一条活得比它那个目录久的排除项（已删）。
+3) 计划的 desc 不是页面：同一棵树上提交态与新守卫对比，提交态把 test/plans/feat/modules/onnx.plan.toml:2060 的 desc 里的 onnx::export 算作一次调用；新守卫把它报成 label、计零次。**250 → 249 次调用，458 页，distinct 都是 38**；唯一离开总体的是那一行 desc，没有新成员进来，另外六处 onnx::export 都在真页面里、仍然计数。desc 里写一个被拒的拼法仍然会红。
+4) 计数钉子变成性质：DECLARED_COUNT=54 与 "54 in the core" 删除，改成两侧都带非空下界的双射；计划里的 "all 54 of them"/names.length===54 改成对 --names 的双向集合相等。植入一个遍实测：旧工具两次都因计数 exit 1；新工具在只有声明时 exit 1 并**点名缺哪个内核**，声明加内核都在时 exit 0——"55 core declaration(s) and 55 kernel(s), a bijection"。
+5) 文档侧：docs.word_form_only 不再钉 250/38，改钉形状与性质（每个 distinct 规格都到达了探针）。新用例 docs.walk_recipe（--selftest）、docs.planted_page_is_red（植入被拒的拼法，exit 1）、docs.planted_page_passes_the_page_rule（同样机制、可接受拼法，exit 0）。植入必须放进守卫自己的进程里，因为验证脚本读不回它启动的守卫（已记录的 piped-stdio/EPERM 边界）。该计划现在 41 个测试。
+
+证据（主机，都在提交态上）：pass_params 计划 41/41；守卫 PASS 行"249 pass invocation(s) in 458 page(s), 38 distinct …（38 到达探针）；1 invocation(s) 在计划自己的 desc 里、报告但不计数；3 行页面被豁免"；整层 fast：total 5741, pass 5727, fail 0, skip 14, wall 113.5 s。
+第 4 项的同类排查：守卫工具里没有别的无界生成树走查——headers.mjs、check-doc-links.mjs、check-no-algo.mjs 都问 isRunnerOutput；clean.js 经 runner-output.mjs 命名它的树；check-source-artifacts.mjs 只走源码目录；diagnostics-catalog.mjs 只走 test/plans 与 docs。按名字报告，未改。
