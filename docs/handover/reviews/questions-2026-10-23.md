@@ -178,3 +178,9 @@ develop 上这一批有一半提交没有 Conventional Commits 前缀，有的�
 2. **四个 resnet 条目一样处理**：顺带各量一次、给出 `cpu_budget_ms`，不单独立项。之后凡是 CPU 密集的慢测试都用 CPU 预算，墙钟只作存活界——规则统一，不再逐个讨论。
 
 另：这类测试设施的问题按 5.00 的价值判据处理即可，协调者可以自己按已有裁定决定，不必再走问题通道。力量放在第一梯队的四条：H242、H232 核心三步、H49 计划、H240 测量。
+
+## 抽查：`Tensor` 成为数组别名的前几步
+
+分步做得清楚（张量类型经一组事实读取、数组类型读自己别名的实参、空数组字面量从字段取元素类型），方向对。一处结构问题，排进公开仓库重组（H216 第 I4 步），不必现在停下来：
+
+- **C++ 自测编进了发布的编译器**：`src/core/type/array_type_selftest.cpp`、`src/core/array/block_selftest.cpp`、`src/core/rtdata/view_selftest.cpp`，以及 `mm/gen.cpp`、`mm/foreign_handle.cpp` 里的 `debugRun*SelfTest`，经 `src/execute/pass.cpp` 的遍调用。单元测试属于 `tests/`：建一个链接 `libcamel` 的 C++ 单元测试可执行文件（`tests/unit/`），这些自测移过去，发布的 `camel` 里不再有自测代码与对应的遍。之后新的 C++ 单元测试一律写在那里，不再往 `src/` 加 `*_selftest.cpp`。
