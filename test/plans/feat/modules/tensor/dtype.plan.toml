@@ -125,7 +125,9 @@ verify_script = '''
   }
 
   const f32 = (bytes) => new DataView(new Uint8Array([...bytes].reverse()).buffer).getFloat32(0, false)
-  const bf16 = (bytes) => new DataView(new Uint8Array([0, 0, bytes[1], bytes[0]]).buffer).getFloat32(0, false)
+  // A bf16 element is the top two bytes of an f32, so its two little-endian bytes come first in
+  // big-endian order; an f16 element is the 16 bits themselves.
+  const bf16 = (bytes) => new DataView(new Uint8Array([bytes[1], bytes[0], 0, 0]).buffer).getFloat32(0, false)
   const f16 = (bytes) => {
     const bits = bytes[0] | (bytes[1] << 8)
     const sign = (bits & 0x8000) ? -1 : 1
