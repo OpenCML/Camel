@@ -190,6 +190,7 @@
    - **类型泛型规则与值语义**（设计稿第 1 节）：`rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }`，一条覆盖所有满足条件的类型；`const` 参数是常量的值。
    - **`fact` 语法取代 `analysis`**（设计稿 7.5）：`fact range::<T>(v: T): Interval match v { case … } join f meet g widen h narrow k`；`analysis` 关键字删除（不计兼容），测试用例改写。
    - **算子性质与结合交换匹配**（设计稿第 2、6 节）：`+`、`*` 等的交换、结合性质来自算子声明；`x + 0` 一条同时匹配 `0 + x`；库里的交换、结合规则与按操作数顺序重复的规则删除。
+   - **改写不丢效应的引擎检查与锚点移交**（H243 第 2 项提前，见 reviews/questions-2026-10-23.md 的 rule-drops-effect、rule-conditions-and-policy）：现在就做。
    - **验收**：`stdlib/rules.cml` 按新写法重写——同一条代数律只写一次（不再有 `int_add_zero`/`int_zero_add`/`float_add_zero` 这样的重复）；`check` 全过；H226 的对照负载上不变慢；写法按 `stdlib-conventions`，作为规则写法的范本。结构性选择（AC 匹配的规范形）先交一页计划，写好即合入、不等批复。
 0b. **H49 GPU G1–G3（见下第 1 条）**：今天没有进展，必须开始——先交计划（`modules/` 与 Tiles、CUDA 路径，与上两条不重叠）。
 0c. **H240 CBLAS 之后的 CPU 重新测量**：测量与报告，不改语言。
