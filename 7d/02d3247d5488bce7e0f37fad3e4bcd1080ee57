@@ -1,0 +1,19 @@
+h345 — 并行基准的便宜用例按"同一次运行里的加速比"进闸门（分支 handover/h345-perf-para-gate，2 提交，基线 0f926de11）
+
+裁定原句抄在提交里：「选 B：把已量过的便宜子集（monte_carlo_pi.prl，约 1.6 s）立成可进闸门的计划。度量取同一次运行里并行对串行的加速比（与绝对墙钟相比对负载不那么敏感），并记 CPU 时间；整条 perf.para 仍在发布前跑。」
+
+**是计划而不是层**：裁定里"便宜"的那一侧是并行侧（4.4–4.8 s），但"同一次运行"的要求把同一个用例的串行侧也拉进来（63.5–77.2 s），于是一次运行 63.6–112.7 s——对快层太贵，对发布又太轻。test/plans/perf/para_speedup.plan.toml（tier slow）靠**点名计划文件**运行（点名文件的目标无论 --tier 都整份跑）；perf.para 未动，仍是发布前的那份。test/tools/para-speedup.mjs 在一次运行里背靠背跑 `camel --timeit std::nvm/1 <case> std::nvm` 与 `camel --timeit std::prl/1 <case> std::prl`——正是 perf.para 配对的两侧，一轮，不带 -t。
+
+**断言的是性质而不是基线**：(a) 加速比 = 该次运行里串行侧 pass 窗口 / 并行侧 pass 窗口，下界 1.5；(b) cores = 每侧子进程 CPU 时间（user+system，读 /proc 的 cutime+cstime）除以其自己的进程墙钟——并行下界 1.5、串行上界 1.25，即裁定的"并行必须用到一个以上的核、而串行侧不用"；(c) 程序自己的回执（Running N times / Samples per simulation / Total hits）两侧必须完全相同，这样两个不同的程序不能被拿来对比。
+
+**实测**（tangshan88，32 个可用核，两侧同一次运行）：串行 std::nvm 77,178.6 ms 墙钟 / 31,660.0 ms CPU / 0.41 核；并行 std::prl 4,768.8 ms / 32,040.0 ms / 6.66 核；加速比 **16.18**（在负载 58.6/72.1/79.3 下 14.33）；两侧 hits 都是 3926996777；观测时负载 94.5/80.6/80.0。**CPU 时间两侧都打印、但哪一侧都不设门槛**——CPU 天花板正是裁定要替换掉的那种"存下来的基线"。墙钟**只**当作同一次运行两侧之间的比值用，绝不当作绝对数。
+
+**余量**：负载 94.5 时核数线读到 6.66 对 1.5（4.4 倍）、加速比 16.18 对 1.5（10.8 倍）。一轮的噪声**直接量过**是 8%——植入的红把同一条命令跑了两遍（73,126.2 / 67,448.1 ms，负载 87，比值 1.08）——所以一轮够用，主机要再忙 4.4 倍才能把核数线弄红。
+
+**核少的时候**：--min-cores 4（4 核还有 2.7 倍余量，2 核就没有）。低于它，计划的 skip_unless 打印 `[SKIP]` 并附原因和"本来会读到的数"——**绝不当作 pass**；工具自己也拒绝（exit 2，"examined nothing"），test 2 用 --min-cores 9999 钉住这个拒绝。
+
+**红前绿后**：植入的"只有串行"运行（并行侧也跑 std::nvm，于是两侧跑的是同一条命令）exit 1，被 `speedup=1.08 floor=1.5` 与 `parallel_concurrency=0.47 floor=1.5`（"it did not use more than one core"）抓住；核数线正是更快的单线程后端骗不过的那条。绿：`speedup=16.18 … serial_concurrency=0.41 … parallel_concurrency=6.66 … result=PASS`。没有弱化任何既有用例；植入没有被提交（只写在提交正文里，history 里没有 A/B 提交）。
+
+**闸门**（提交态，-NoBuild -Jobs 8）：整层 fast total 5756, pass 5742, fail 0, skip 14；自己的计划 2/2（守卫 63.56 s，超时 900 s，最坏观测 112.67 s）。合入后协调者重跑：**整层 fast + 该计划整份 → total 5776, pass 5762, fail 0, skip 14**。
+
+**任务外、未修的发现**：① `-t/--threads` 在 `--timeit` 下根本到不了 pass——`tools/camel-cli/timeit.cpp` 构造 EntryConfig 时没有 `.maxThreads`（`tools/camel-cli/main.cpp` 设了），所以任何带 -t 的 --timeit 计划量的是机器整宽；已按"用户可见缺陷"另派任务。② `scripts/perf-gate.mjs --list` 对 PLANS 从未归类的四个计划仍然 exit 2（gemm_canonical_shapes、gemm_threads、reduce_layout、step_budget）——HEAD 里就有；它只给新计划归了类（refusal kind `in-run`）。③ 分支基点其实是 0f926de11（当时 origin/develop 的跟踪引用），比预期落后 11 个提交；**没有 rebase**，合入时是普通 merge，合入后整层重跑绿。④ docs/test-plans.md 仍写"The ten plans under test/plans/perf/"而现在有 15 份（既有漂移）。⑤ 提交 1 的正文写"68.1-82.2 s"，而计划文件记的最坏观测是 112.7 s（正文先写、最后一轮测量后加的）；改它会让 helper 的暂存 push 变成非快进，故按原样保留并在报告里点明——**教训：范围数字只在最后一轮测量之后写**。①②④ 合并成下一个任务的清单。
