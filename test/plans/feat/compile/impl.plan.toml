@@ -110,6 +110,17 @@ expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
 # core's scalar operators. Closing fusion and export needs either a stock `#impl` in `stdlib/`
 # beside the operators, or a test-scoped way to declare another module's operator; both are the
 # language author's call.
+#
+# The ruling of 2026-10-23 (`docs/handover/reviews/H141-H213.md`, Q2) chose the first of the two:
+# the standard library gets its first `#impl` kernels, each beside the function whose semantics it
+# implements. For a tensor operator that file does not exist: the module that owns
+# `tensor:log_softmax` is the tensor module, whose `stdlib/tensor.cml` is the declaration module of
+# `tensor.cmo` and may hold no body (`SemanticDiag::DeclarationModuleHasBody`), while no other
+# module may declare that operator (`SemanticDiag::NativeDeclarationForeignOperator`). `array` is
+# the standard library module with both halves, because libcamel registers its operators and
+# `stdlib/array.cml` has therefore no `.cmo` of its own name. Adam, the ruling's other item, is
+# generic over the parameter tree, and a generic function carries no kernel
+# (`SemanticDiag::ImplOnGenericFunction`). `impl.kernel_site` states what both items are missing.
 
 # ---- The optimizer: a direct call is not a call to inline ----
 
@@ -435,6 +446,19 @@ expect_diagnostic_code = "0x030001DD"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 2
 expect_output_contains = ["The '#impl' tag of 'at' is on a generic function."]
+
+# ---- The declaration site a standard library kernel would need ----
+
+[[tests]]
+name = "impl.kernel_site"
+desc = "Where a kernel can be declared, and why the ruling's two items (Adam in `optim`, a composite tensor operation) have no site yet: `#op<'tensor:log_softmax'>` outside the tensor module is refused as another module's operator, not as an operator no module implements; `#op<'nn:adam'>` is refused the same way, and `#impl` on a generic function as such; and a copy of the tensor module's own `.cml` beside its `.cmo` may declare the kernel but not hold the definition's body."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/native/impl_kernel_site.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+timeout_ms = 300000
 
 [[tests]]
 name = "impl.syntax_arguments"
