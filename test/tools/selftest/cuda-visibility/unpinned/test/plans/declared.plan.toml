@@ -1,0 +1,22 @@
+# The other half of the fixture: a plan tagged `gpu` whose Python test declares that it wants the
+# cards, which is what the guard requires of that layer and what the runner honours. Its presence
+# also keeps the fixture's device-layer population from being empty, so the two problems the
+# self-test expects are the two named below and nothing else.
+#
+# It uses the same case as the unpinned plan on purpose: what the guard reads is the declaration,
+# not the imports.
+id = "selftest.cuda_visibility.declared"
+desc = "A device-layer plan that says what it wants"
+tier = "fast"
+tags = ["gpu", "selftest"]
+
+[defaults]
+cuda_devices = true
+
+[[tests]]
+name = "declared.python"
+kind = "behavior"
+tool = "python"
+case = "../cases/cuda_case.py"
+args = ["${case}"]
+expect_exit = 0

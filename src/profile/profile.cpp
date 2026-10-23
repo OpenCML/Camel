@@ -15,6 +15,7 @@
 
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/profile/allocation.h"
 #include "camel/profile/operators.h"
 #include "camel/utils/path.h"
 #include "camel/utils/phase_timer.h"
@@ -54,13 +55,42 @@ uint64_t nowNs() {
 
 std::thread::id gThread;
 
-/// The counters a step boundary reads: what the run has done so far.
+/// The timed operator whose call is running on this thread, or kNoOperator. The timing thunk
+/// sets it around the operator call; the allocator hooks read it to attribute an allocation to
+/// the call that caused it. A thread-local rather than a global, because a scheduler runs
+/// operators on its workers too and two workers are inside different operators at once.
+constexpr size_t kNoOperator    = static_cast<size_t>(-1);
+thread_local size_t tlsOperator = kNoOperator;
+
+/// Sets tlsOperator for the duration of one operator call, and restores the previous one (an
+/// operator that itself calls a timed operator): the innermost call owns the allocation, so no
+/// allocation is counted in two rows.
+struct OperatorCallScope {
+    explicit OperatorCallScope(size_t index) noexcept : previous_(tlsOperator) {
+        tlsOperator = index;
+    }
+    ~OperatorCallScope() noexcept { tlsOperator = previous_; }
+    OperatorCallScope(const OperatorCallScope &)            = delete;
+    OperatorCallScope &operator=(const OperatorCallScope &) = delete;
+    size_t previous_;
+};
+
+/// The counters a step boundary reads: what the run has done so far. The allocation counters
+/// are the part inside operator calls, which is what the step's operator rows attribute.
 struct Totals {
     uint64_t operators = 0;
     uint64_t kernels   = 0;
     uint64_t toDevice  = 0; // bytes
     uint64_t toHost    = 0; // bytes
     uint64_t syncs     = 0;
+    uint64_t allocCalls = 0;
+    uint64_t allocBlocks = 0;
+    uint64_t allocBytes  = 0;
+    uint64_t allocNs     = 0;
+    /// The fusion groups' part: how many times a group ran and how many operator executions it
+    /// stood for (its members plus its tail). Read with `operators`, never in its place.
+    uint64_t fusionRuns      = 0;
+    uint64_t fusionOperators = 0;
 };
 
 std::atomic<uint64_t> gOperators{0};
@@ -75,6 +105,66 @@ std::atomic<uint64_t> gSyncNs{0};
 std::atomic<uint64_t> gDeviceCompiles{0};
 std::atomic<uint64_t> gDeviceCompileNs{0};
 std::atomic<uint64_t> gUntimedCalls{0};
+
+/// The fusion groups the run executed (camel/execute/fusion_group.h): one entry per (key, value),
+/// with the operators of its members in execution order. `kMaxFusionGroups` is a bound like the
+/// operator table's; a program with more groups says so in the report instead of hiding them.
+constexpr size_t kMaxFusionGroups = 32;
+struct FusionGroupStat {
+    std::string key;
+    std::string name;
+    std::vector<std::string> members;
+    std::atomic<uint64_t> runs{0};
+    std::atomic<uint64_t> ns{0};
+    std::atomic<uint64_t> firstNs{0};
+};
+std::array<FusionGroupStat, kMaxFusionGroups> gFusionGroups;
+std::atomic<size_t> gFusionCount{0};
+std::atomic<uint64_t> gFusionRuns{0};
+std::atomic<uint64_t> gFusionOperators{0};
+std::atomic<uint64_t> gFusionNs{0};
+std::atomic<uint64_t> gFusionOverflowGroups{0};
+std::mutex gFusionMutex;
+
+/// The index of a group in `gFusionGroups`, adding it on first sight. `kMaxFusionGroups` when the
+/// table is full. The table is written under `gFusionMutex`; the counters are atomics.
+size_t fusionGroupIndex(
+    std::string_view key, std::string_view name, std::span<const std::string_view> members) {
+    std::lock_guard lock(gFusionMutex);
+    const size_t count = gFusionCount.load(std::memory_order_relaxed);
+    for (size_t i = 0; i < count; ++i) {
+        if (std::string_view(gFusionGroups[i].key) == key &&
+            std::string_view(gFusionGroups[i].name) == name) {
+            return i;
+        }
+    }
+    if (count == kMaxFusionGroups) {
+        gFusionOverflowGroups.fetch_add(1, std::memory_order_relaxed);
+        return kMaxFusionGroups;
+    }
+    FusionGroupStat &entry = gFusionGroups[count];
+    entry.key              = std::string(key);
+    entry.name             = std::string(name);
+    entry.members.reserve(members.size());
+    for (const std::string_view member : members) {
+        entry.members.emplace_back(member);
+    }
+    gFusionCount.store(count + 1, std::memory_order_release);
+    return count;
+}
+
+/// The allocator's own numbers, all calls the Camel value allocators served while recording:
+/// `gAllocCalls` counts every one, `gAllocBlocks` the ones that were a data block's payload and
+/// `gAllocBytes` the payload bytes those blocks asked for. `inside` is the part made during an
+/// operator call (what the operator rows show); the rest happens before or between calls.
+std::atomic<uint64_t> gAllocCalls{0};
+std::atomic<uint64_t> gAllocBlocks{0};
+std::atomic<uint64_t> gAllocBytes{0};
+std::atomic<uint64_t> gAllocNs{0};
+std::atomic<uint64_t> gAllocCallsInside{0};
+std::atomic<uint64_t> gAllocBlocksInside{0};
+std::atomic<uint64_t> gAllocBytesInside{0};
+std::atomic<uint64_t> gAllocNsInside{0};
 
 std::mutex gMutex;
 std::string gBackend;
@@ -91,6 +181,12 @@ Totals totalsNow() {
     totals.toDevice  = gToDeviceBytes.load(std::memory_order_relaxed);
     totals.toHost    = gToHostBytes.load(std::memory_order_relaxed);
     totals.syncs     = gSyncs.load(std::memory_order_relaxed);
+    totals.allocCalls  = gAllocCallsInside.load(std::memory_order_relaxed);
+    totals.allocBlocks = gAllocBlocksInside.load(std::memory_order_relaxed);
+    totals.allocBytes  = gAllocBytesInside.load(std::memory_order_relaxed);
+    totals.allocNs     = gAllocNsInside.load(std::memory_order_relaxed);
+    totals.fusionRuns      = gFusionRuns.load(std::memory_order_relaxed);
+    totals.fusionOperators = gFusionOperators.load(std::memory_order_relaxed);
     return totals;
 }
 
@@ -110,6 +206,12 @@ struct LoopStat {
     uint64_t toDeviceSum = 0, toDeviceMax = 0;
     uint64_t toHostSum = 0, toHostMax = 0;
     uint64_t syncsSum = 0, syncsMax = 0;
+    uint64_t allocCallsSum = 0, allocCallsMax = 0;
+    uint64_t allocBlocksSum = 0, allocBlocksMax = 0;
+    uint64_t allocBytesSum = 0, allocBytesMax = 0;
+    uint64_t allocNsSum = 0, allocNsMax = 0;
+    uint64_t fusionRunsSum = 0;
+    uint64_t fusionOpsSum = 0;
     uint64_t wallSumNs = 0, wallMinNs = UINT64_MAX, wallMaxNs = 0;
     /// Every round's wall time, up to kMaxRoundSamples: the median of them is what a step costs
     /// on a machine that is doing something else too.
@@ -135,6 +237,12 @@ struct LoopStat {
             const uint64_t toDevice = now.toDevice - last.toDevice;
             const uint64_t toHost = now.toHost - last.toHost;
             const uint64_t syncs = now.syncs - last.syncs;
+            const uint64_t allocCalls  = now.allocCalls - last.allocCalls;
+            const uint64_t allocBlocks = now.allocBlocks - last.allocBlocks;
+            const uint64_t allocBytes  = now.allocBytes - last.allocBytes;
+            const uint64_t allocNs     = now.allocNs - last.allocNs;
+            const uint64_t fusionRuns  = now.fusionRuns - last.fusionRuns;
+            const uint64_t fusionOps   = now.fusionOperators - last.fusionOperators;
             // The round lasted from the previous boundary to this one.
             const uint64_t wallNs = boundaryNs > lastBoundaryNs ? boundaryNs - lastBoundaryNs : 0;
             ++samples;
@@ -150,6 +258,16 @@ struct LoopStat {
             toHostMax  = std::max(toHostMax, toHost);
             syncsSum += syncs;
             syncsMax  = std::max(syncsMax, syncs);
+            allocCallsSum += allocCalls;
+            allocCallsMax  = std::max(allocCallsMax, allocCalls);
+            allocBlocksSum += allocBlocks;
+            allocBlocksMax  = std::max(allocBlocksMax, allocBlocks);
+            allocBytesSum += allocBytes;
+            allocBytesMax  = std::max(allocBytesMax, allocBytes);
+            allocNsSum += allocNs;
+            allocNsMax  = std::max(allocNsMax, allocNs);
+            fusionRunsSum += fusionRuns;
+            fusionOpsSum += fusionOps;
             wallSumNs += wallNs;
             wallMinNs = std::min(wallMinNs, wallNs);
             wallMaxNs = std::max(wallMaxNs, wallNs);
@@ -214,6 +332,13 @@ struct TimedOperator {
     /// What the first call cost: it pays the one-time setup of the operator (a thread pool, a
     /// lazily compiled kernel), which the mean of the rest does not dilute.
     std::atomic<uint64_t> firstNs{0};
+    /// Of the calls' wall time, what was inside the Camel allocators: the counters the new row
+    /// reports. `allocBytes` is the payload bytes of the block allocations (a block space call
+    /// also rounds up and adds a header, which is the allocator's business, not the value's).
+    std::atomic<uint64_t> allocCalls{0};
+    std::atomic<uint64_t> allocNs{0};
+    std::atomic<uint64_t> allocBlocks{0};
+    std::atomic<uint64_t> allocBytes{0};
 };
 
 std::array<TimedOperator, kMaxTimedOperators> gTimed;
@@ -230,6 +355,7 @@ slot_t timedThunk(
     ArgsView &with, ArgsView &norm, camel::core::context::Context &context) {
     TimedOperator &entry = gTimed[I];
     const auto start     = Clock::now();
+    const OperatorCallScope call(I);
     slot_t result        = entry.op(with, norm, context);
     const uint64_t ns    = nsBetween(start);
     if (entry.calls.fetch_add(1, std::memory_order_relaxed) == 0) {
@@ -308,6 +434,10 @@ struct Row {
     uint64_t calls  = 0;
     uint64_t ns     = 0;
     uint64_t firstNs = 0;
+    uint64_t allocCalls = 0;
+    uint64_t allocNs    = 0;
+    uint64_t allocBlocks = 0;
+    uint64_t allocBytes  = 0;
 };
 
 /// The device an operator ran on. An operator is CPU code: it runs on the host even when it
@@ -329,7 +459,11 @@ std::vector<Row> operatorRows() {
             deviceOf(entry.uri),
             calls,
             entry.ns.load(std::memory_order_relaxed),
-            entry.firstNs.load(std::memory_order_relaxed)});
+            entry.firstNs.load(std::memory_order_relaxed),
+            entry.allocCalls.load(std::memory_order_relaxed),
+            entry.allocNs.load(std::memory_order_relaxed),
+            entry.allocBlocks.load(std::memory_order_relaxed),
+            entry.allocBytes.load(std::memory_order_relaxed)});
     }
     std::sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) {
         if (a.ns != b.ns) {
@@ -370,9 +504,38 @@ void reset() {
     gDeviceCompiles.store(0);
     gDeviceCompileNs.store(0);
     gUntimedCalls.store(0);
+    gFusionRuns.store(0);
+    gFusionOperators.store(0);
+    gFusionNs.store(0);
+    gFusionOverflowGroups.store(0);
+    {
+        std::lock_guard lock(gFusionMutex);
+        for (size_t i = 0; i < gFusionCount.load(std::memory_order_relaxed); ++i) {
+            FusionGroupStat &entry = gFusionGroups[i];
+            entry.key.clear();
+            entry.name.clear();
+            entry.members.clear();
+            entry.runs.store(0, std::memory_order_relaxed);
+            entry.ns.store(0, std::memory_order_relaxed);
+            entry.firstNs.store(0, std::memory_order_relaxed);
+        }
+        gFusionCount.store(0, std::memory_order_release);
+    }
+    gAllocCalls.store(0);
+    gAllocBlocks.store(0);
+    gAllocBytes.store(0);
+    gAllocNs.store(0);
+    gAllocCallsInside.store(0);
+    gAllocBlocksInside.store(0);
+    gAllocBytesInside.store(0);
+    gAllocNsInside.store(0);
     for (size_t i = 0; i < gTimedCount; ++i) {
         gTimed[i].calls.store(0);
         gTimed[i].ns.store(0);
+        gTimed[i].allocCalls.store(0);
+        gTimed[i].allocNs.store(0);
+        gTimed[i].allocBlocks.store(0);
+        gTimed[i].allocBytes.store(0);
     }
     gLoops.clear();
     gLoopIndex.clear();
@@ -412,6 +575,23 @@ void loopRound(uint64_t origin) noexcept {
         gHasLastLoop    = true;
     }
     gLoops[index].takeRound(totalsNow(), nowNs());
+}
+
+void fusionGroup(
+    std::string_view key, std::string_view name, std::span<const std::string_view> members,
+    uint64_t ns) {
+    const size_t index = fusionGroupIndex(key, name, members);
+    gFusionRuns.fetch_add(1, std::memory_order_relaxed);
+    gFusionOperators.fetch_add(members.size(), std::memory_order_relaxed);
+    gFusionNs.fetch_add(ns, std::memory_order_relaxed);
+    if (index == kMaxFusionGroups) {
+        return;
+    }
+    FusionGroupStat &entry = gFusionGroups[index];
+    if (entry.runs.fetch_add(1, std::memory_order_relaxed) == 0) {
+        entry.firstNs.store(ns, std::memory_order_relaxed);
+    }
+    entry.ns.fetch_add(ns, std::memory_order_relaxed);
 }
 
 void kernelLaunch(std::string_view label, uint64_t ns) {
@@ -487,6 +667,36 @@ std::string jsonPath() {
 double measurementOverheadNs() {
     measureOverhead();
     return gOverheadNs;
+}
+
+void noteAllocation(uint64_t ns, uint64_t bytes, bool block) noexcept {
+    // The scope already checked the flag; a session that stopped between the two reads (the
+    // report is written while nothing runs) must not record into it.
+    if (!detail::enabledFlag.load(std::memory_order_relaxed)) {
+        return;
+    }
+    gAllocCalls.fetch_add(1, std::memory_order_relaxed);
+    gAllocNs.fetch_add(ns, std::memory_order_relaxed);
+    if (block) {
+        gAllocBlocks.fetch_add(1, std::memory_order_relaxed);
+        gAllocBytes.fetch_add(bytes, std::memory_order_relaxed);
+    }
+    if (tlsOperator == kNoOperator) {
+        return;
+    }
+    TimedOperator &entry = gTimed[tlsOperator];
+    entry.allocCalls.fetch_add(1, std::memory_order_relaxed);
+    entry.allocNs.fetch_add(ns, std::memory_order_relaxed);
+    if (block) {
+        entry.allocBlocks.fetch_add(1, std::memory_order_relaxed);
+        entry.allocBytes.fetch_add(bytes, std::memory_order_relaxed);
+    }
+    gAllocCallsInside.fetch_add(1, std::memory_order_relaxed);
+    gAllocNsInside.fetch_add(ns, std::memory_order_relaxed);
+    if (block) {
+        gAllocBlocksInside.fetch_add(1, std::memory_order_relaxed);
+        gAllocBytesInside.fetch_add(bytes, std::memory_order_relaxed);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -591,6 +801,62 @@ std::string deviceOf(const std::string &uri) {
     return "cpu";
 }
 
+/// The fusion groups that ran, as a report reads them: the attribute that names each, the
+/// operators of its members in execution order (the tail last), and its executions. The rows are
+/// what the report prints; the recording itself is in `gFusionGroups`.
+struct FusionRow {
+    std::string key;
+    std::string name;
+    std::vector<std::string> members;
+    uint64_t runs = 0;
+    uint64_t ns = 0;
+    uint64_t firstNs = 0;
+};
+
+std::vector<FusionRow> fusionGroupRows() {
+    std::vector<FusionRow> rows;
+    std::lock_guard lock(gFusionMutex);
+    const size_t count = gFusionCount.load(std::memory_order_acquire);
+    rows.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        const FusionGroupStat &entry = gFusionGroups[i];
+        const uint64_t runs          = entry.runs.load(std::memory_order_relaxed);
+        if (runs == 0) {
+            continue;
+        }
+        rows.push_back(FusionRow{
+            entry.key,
+            entry.name,
+            entry.members,
+            runs,
+            entry.ns.load(std::memory_order_relaxed),
+            entry.firstNs.load(std::memory_order_relaxed)});
+    }
+    std::sort(rows.begin(), rows.end(), [](const FusionRow &a, const FusionRow &b) {
+        if (a.ns != b.ns) {
+            return a.ns > b.ns;
+        }
+        if (a.runs != b.runs) {
+            return a.runs > b.runs;
+        }
+        return a.name < b.name;
+    });
+    return rows;
+}
+
+/// The members' operators as one line: the first `limit` of them.
+std::string joinedMembers(const std::vector<std::string> &members, size_t limit = 8) {
+    std::string out;
+    for (size_t i = 0; i < members.size(); ++i) {
+        if (i == limit) {
+            out += std::format(", ... {} more", members.size() - limit);
+            break;
+        }
+        out += (i == 0 ? "" : ", ") + members[i];
+    }
+    return out;
+}
+
 } // namespace
 
 void reportText(std::ostream &os, const ReportOptions &options) {
@@ -607,6 +873,18 @@ void reportText(std::ostream &os, const ReportOptions &options) {
     const uint64_t deviceCompiles = gDeviceCompiles.load(std::memory_order_relaxed);
     const uint64_t deviceCompileNs = gDeviceCompileNs.load(std::memory_order_relaxed);
     const uint64_t untimed        = gUntimedCalls.load(std::memory_order_relaxed);
+    const uint64_t allocCalls     = gAllocCalls.load(std::memory_order_relaxed);
+    const uint64_t allocBlocks    = gAllocBlocks.load(std::memory_order_relaxed);
+    const uint64_t allocBytes     = gAllocBytes.load(std::memory_order_relaxed);
+    const uint64_t allocNs        = gAllocNs.load(std::memory_order_relaxed);
+    const uint64_t allocInside    = gAllocCallsInside.load(std::memory_order_relaxed);
+    const uint64_t allocBlocksIn  = gAllocBlocksInside.load(std::memory_order_relaxed);
+    const uint64_t allocBytesIn   = gAllocBytesInside.load(std::memory_order_relaxed);
+    const uint64_t allocNsIn      = gAllocNsInside.load(std::memory_order_relaxed);
+    const uint64_t fusionRuns     = gFusionRuns.load(std::memory_order_relaxed);
+    const uint64_t fusionOps      = gFusionOperators.load(std::memory_order_relaxed);
+    const uint64_t fusionNs       = gFusionNs.load(std::memory_order_relaxed);
+    const std::vector<FusionRow> groupRows = fusionGroupRows();
 
     os << "PROFILE camel\n";
     os << std::format("  backend              {}\n", backendText());
@@ -617,14 +895,40 @@ void reportText(std::ostream &os, const ReportOptions &options) {
         operators,
         formatDuration(operatorNs),
         percentOf(operatorNs, runNs));
+    if (fusionRuns != 0) {
+        // A group's kernel is not an operator call: its time is not in the line above, and its
+        // members have no operator row. The row of each group follows the operator table.
+        os << std::format(
+            "  fusion groups        {} in {} ({} operator executions), {} ({} of the run)\n",
+            fusionRuns == 1 ? "1 run" : std::format("{} runs", fusionRuns),
+            groupRows.size() == 1 ? "1 group" : std::format("{} groups", groupRows.size()),
+            fusionOps,
+            formatDuration(fusionNs),
+            percentOf(fusionNs, runNs));
+    }
     os << std::format(
-        "  measurement overhead {:.0f} ns per operator call (one timestamp pair)\n", gOverheadNs);
+        "  measurement overhead {:.0f} ns per operator call or allocation (one timestamp pair)\n",
+        gOverheadNs);
     if (untimed != 0) {
         os << std::format(
             "  untimed calls        {} (more than {} distinct operators ran)\n",
             untimed,
             kMaxTimedOperators);
     }
+    os << std::format(
+        "  allocations          {} calls ({} block payloads), {} requested, {} inside the "
+        "allocators\n",
+        allocCalls,
+        allocBlocks,
+        formatBytes(allocBytes),
+        formatDuration(allocNs));
+    os << std::format(
+        "                       inside operator calls: {} calls ({} block payloads, {}), {}; the "
+        "rows below\n",
+        allocInside,
+        allocBlocksIn,
+        formatBytes(allocBytesIn),
+        formatDuration(allocNsIn));
     os << std::format(
         "  device kernels       {}{}\n",
         kernels,
@@ -653,6 +957,22 @@ void reportText(std::ostream &os, const ReportOptions &options) {
             perRoundOps,
             step->opsMin == UINT64_MAX ? 0 : step->opsMin,
             step->opsMax);
+        if (step->fusionRunsSum != 0) {
+            // A step's operator executions are the calls of the operator rows plus what its
+            // groups stood for; the first line counts only the calls.
+            const double fusionPerRound = step->samples == 0
+                                              ? 0.0
+                                              : static_cast<double>(step->fusionOpsSum) / step->samples;
+            os << std::format(
+                "  operator executions per step {:.0f} ({:.0f} calls, {:.0f} in fusion groups, "
+                "{:.2f} group runs)\n",
+                perRoundOps + fusionPerRound,
+                perRoundOps,
+                fusionPerRound,
+                step->samples == 0
+                    ? 0.0
+                    : static_cast<double>(step->fusionRunsSum) / static_cast<double>(step->samples));
+        }
         os << std::format(
             "  kernels per step     {:.2f} (max {})\n",
             step->samples == 0 ? 0.0
@@ -670,6 +990,16 @@ void reportText(std::ostream &os, const ReportOptions &options) {
             "  syncs per step       {:.2f} (max {})\n",
             step->samples == 0 ? 0.0 : static_cast<double>(step->syncsSum) / step->samples,
             step->syncsMax);
+        os << std::format(
+            "  allocations per step {:.1f} calls ({:.1f} block payloads, {} payload, {} in the "
+            "allocators)\n",
+            step->samples == 0 ? 0.0
+                               : static_cast<double>(step->allocCallsSum) / step->samples,
+            step->samples == 0 ? 0.0
+                               : static_cast<double>(step->allocBlocksSum) / step->samples,
+            step->samples == 0 ? std::string("0 B") : formatBytes(step->allocBytesSum / step->samples),
+            step->samples == 0 ? std::string("0 ns")
+                               : formatDuration(step->allocNsSum / step->samples));
         if (step->samples != 0) {
             os << std::format(
                 "  wall per step        median {}, mean {}, min {}, max {}\n",
@@ -700,24 +1030,63 @@ void reportText(std::ostream &os, const ReportOptions &options) {
 
     const std::vector<Row> rows = operatorRows();
     os << "\noperators (device, calls, total, first call, mean after the first, share of operator "
-          "time)\n";
+          "time,\n"
+          "           allocation: time (share of the row), allocator calls, block payloads, "
+          "payload bytes)\n";
     const size_t shown = options.top == 0 ? rows.size() : std::min(rows.size(), options.top);
     for (size_t i = 0; i < shown; ++i) {
         const Row &row         = rows[i];
         const uint64_t repeats = row.calls > 1 ? row.calls - 1 : 0;
         const uint64_t rest    = row.ns > row.firstNs ? row.ns - row.firstNs : 0;
+        const std::string allocTime =
+            std::format("{} ({})", formatDuration(row.allocNs), percentOf(row.allocNs, row.ns));
         os << std::format(
-            "  {:<4} {:<28} {:>10} {:>12} {:>12} {:>12} {:>7}\n",
+            "  {:<4} {:<28} {:>10} {:>12} {:>12} {:>12} {:>7} {:>18} {:>10} {:>10} {:>12}\n",
             row.device,
             row.uri,
             row.calls,
             formatDuration(row.ns),
             formatDuration(row.firstNs),
             repeats == 0 ? std::string("-") : formatDuration(rest / repeats),
-            percentOf(row.ns, operatorNs));
+            percentOf(row.ns, operatorNs),
+            allocTime,
+            row.allocCalls,
+            row.allocBlocks,
+            formatBytes(row.allocBytes));
     }
     if (shown < rows.size()) {
         os << std::format("  ... {} more operator(s)\n", rows.size() - shown);
+    }
+
+    if (!groupRows.empty()) {
+        // A group is not an operator: this table says what its kernel cost and what it stood for,
+        // where the operator table cannot (profile.h). Its members' rows would claim calls that
+        // never happened, so there are none.
+        os << "\nfusion groups (one pass each; its members' operators did not run as calls)\n";
+        for (const FusionRow &group : groupRows) {
+            const uint64_t executions = group.runs * group.members.size();
+            os << std::format(
+                "  {}=\"{}\"  {} member{} ({})\n",
+                group.key,
+                group.name,
+                group.members.size(),
+                group.members.size() == 1 ? "" : "s",
+                joinedMembers(group.members));
+            os << std::format(
+                "    {} ({} operator executions), {} ({} of the run, first {})\n",
+                group.runs == 1 ? "1 run" : std::format("{} runs", group.runs),
+                executions,
+                formatDuration(group.ns),
+                percentOf(group.ns, runNs),
+                formatDuration(group.firstNs));
+        }
+        if (const uint64_t overflow = gFusionOverflowGroups.load(std::memory_order_relaxed);
+            overflow != 0) {
+            // The table has a bound like the operator table's: say what it could not list rather
+            // than let the rows look complete.
+            os << std::format(
+                "  ... {} group run(s) of groups beyond the first {}\n", overflow, kMaxFusionGroups);
+        }
     }
 
     if (options.hints) {
@@ -793,6 +1162,30 @@ std::string reportJson(const ReportOptions &options) {
         gOperatorNs.load(),
         gOverheadNs,
         gUntimedCalls.load());
+    if (const uint64_t fusionRuns = gFusionRuns.load(std::memory_order_relaxed);
+        fusionRuns != 0) {
+        // A group run is an operator execution, not an operator call: `calls` keeps counting the
+        // calls of the operator rows, and `executions` adds the work the groups stood for. The
+        // group's own time is `fusion_ns`; it is not inside `ns`.
+        json += std::format(
+            ",\"operator_executions\":{{\"calls\":{},\"fusion_runs\":{},\"fusion_operators\":{},"
+            "\"executions\":{}}}",
+            gOperators.load(),
+            fusionRuns,
+            gFusionOperators.load(),
+            gOperators.load() + gFusionOperators.load());
+    }
+    json += std::format(
+        ",\"allocations\":{{\"calls\":{},\"blocks\":{},\"bytes\":{},\"ns\":{},"
+        "\"inside_calls\":{},\"inside_blocks\":{},\"inside_bytes\":{},\"inside_ns\":{}}}",
+        gAllocCalls.load(),
+        gAllocBlocks.load(),
+        gAllocBytes.load(),
+        gAllocNs.load(),
+        gAllocCallsInside.load(),
+        gAllocBlocksInside.load(),
+        gAllocBytesInside.load(),
+        gAllocNsInside.load());
     json += std::format(
         ",\"device_work\":{{\"kernels\":{},\"kernel_ns\":{},\"to_device_bytes\":{},"
         "\"to_host_bytes\":{},\"transfers\":{},\"syncs\":{},\"compiles\":{},\"compile_ns\":{}}}",
@@ -808,7 +1201,8 @@ std::string reportJson(const ReportOptions &options) {
         json += std::format(
             ",\"step\":{{\"origin\":{},\"rounds\":{},\"samples\":{},\"operators_per_round\":{:.3f},"
             "\"kernels_per_round\":{:.3f},\"transfers_per_round\":{:.3f},\"syncs_per_round\":{:.3f},"
-            "\"wall_per_round_ns\":{}}}",
+            "\"wall_per_round_ns\":{},\"allocations_per_round\":{{\"calls\":{:.3f},"
+            "\"blocks\":{:.3f},\"bytes\":{:.3f},\"ns\":{:.3f}}}}}",
             step->origin,
             step->rounds,
             step->samples,
@@ -818,7 +1212,22 @@ std::string reportJson(const ReportOptions &options) {
                 ? 0.0
                 : static_cast<double>(step->toDeviceSum + step->toHostSum) / step->samples,
             step->samples == 0 ? 0.0 : static_cast<double>(step->syncsSum) / step->samples,
-            step->samples == 0 ? 0 : step->wallSumNs / step->samples);
+            step->samples == 0 ? 0 : step->wallSumNs / step->samples,
+            step->samples == 0 ? 0.0 : static_cast<double>(step->allocCallsSum) / step->samples,
+            step->samples == 0 ? 0.0 : static_cast<double>(step->allocBlocksSum) / step->samples,
+            step->samples == 0 ? 0.0 : static_cast<double>(step->allocBytesSum) / step->samples,
+            step->samples == 0 ? 0.0 : static_cast<double>(step->allocNsSum) / step->samples);
+        if (step->fusionRunsSum != 0) {
+            // The step's operator executions: the operator calls' part (`operators_per_round`,
+            // printed above) and the part the groups stood for. A step with no group is exactly
+            // the object it was before.
+            json += std::format(
+                ",\"step_fusion\":{{\"runs_per_round\":{:.3f},\"operators_per_round\":{:.3f},"
+                "\"executions_per_round\":{:.3f}}}",
+                static_cast<double>(step->fusionRunsSum) / step->samples,
+                static_cast<double>(step->fusionOpsSum) / step->samples,
+                static_cast<double>(step->opsSum + step->fusionOpsSum) / step->samples);
+        }
     }
     json += ",\"loops\":[";
     for (size_t i = 0; i < gLoops.size(); ++i) {
@@ -836,12 +1245,39 @@ std::string reportJson(const ReportOptions &options) {
     const size_t shown = options.top == 0 ? rows.size() : std::min(rows.size(), options.top);
     for (size_t i = 0; i < shown; ++i) {
         json += std::format(
-            "{}{{\"uri\":\"{}\",\"device\":\"{}\",\"calls\":{},\"ns\":{}}}",
+            "{}{{\"uri\":\"{}\",\"device\":\"{}\",\"calls\":{},\"ns\":{},"
+            "\"alloc_ns\":{},\"alloc_calls\":{},\"alloc_blocks\":{},\"alloc_bytes\":{}}}",
             i == 0 ? "" : ",",
             rows[i].uri,
             rows[i].device,
             rows[i].calls,
-            rows[i].ns);
+            rows[i].ns,
+            rows[i].allocNs,
+            rows[i].allocCalls,
+            rows[i].allocBlocks,
+            rows[i].allocBytes);
+    }
+    const std::vector<FusionRow> groups = fusionGroupRows();
+    if (!groups.empty()) {
+        // Only when a group ran: a program without groups has exactly the JSON it had before.
+        json += "],\"fusion_groups\":[";
+        for (size_t i = 0; i < groups.size(); ++i) {
+            json += std::format(
+                "{}{{\"key\":\"{}\",\"value\":\"{}\",\"members\":[",
+                i == 0 ? "" : ",",
+                groups[i].key,
+                groups[i].name);
+            for (size_t j = 0; j < groups[i].members.size(); ++j) {
+                json += std::format(
+                    "{}\"{}\"", j == 0 ? "" : ",", groups[i].members[j]);
+            }
+            json += std::format(
+                "],\"runs\":{},\"ns\":{},\"first_ns\":{},\"operator_executions\":{}}}",
+                groups[i].runs,
+                groups[i].ns,
+                groups[i].firstNs,
+                groups[i].runs * groups[i].members.size());
+        }
     }
     json += "],\"hints\":[";
     const std::vector<HostLoopHint> loopHints = hints();

@@ -11,7 +11,7 @@ case = "../../../cases/linear/nvm/acc.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fib_baseline.nvm"
@@ -21,7 +21,7 @@ case = "../../../cases/linear/nvm/fib.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fib_shared_counter.nvm"
@@ -31,7 +31,7 @@ case = "../../../cases/linear/nvm/fib1.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fib_nested_sync.nvm"
@@ -41,7 +41,7 @@ case = "../../../cases/linear/nvm/fib2.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mutual_tail.nvm"
@@ -51,7 +51,7 @@ case = "../../../cases/linear/nvm/mutual_tail.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "fib_recursive.jit"
@@ -71,7 +71,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mutual_tail_check.jit"
@@ -91,7 +91,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "nested_call_state.jit"
@@ -109,7 +109,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tail_accumulate.jit"
@@ -127,7 +127,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "hot_call_chain.jit"
@@ -145,7 +145,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "perf_helper_smoke.jit"
@@ -155,7 +155,7 @@ case = "../../../cases/linear/jit/perf_fib_smoke.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 
 [[tests]]

@@ -23,7 +23,11 @@
  * paired measurements put the library's advantage only above that size, and a
  * batched attention product must not pay a per-call overhead it cannot repay.
  * The operator stays `matmul` (design principles 9.6). `libraryGemmName()`
- * reports what sgemmLibrary calls.
+ * reports what sgemmLibrary calls. The library runs one thread per call: a
+ * product that is the whole work splits its output rows over the tensor pool
+ * (rows only, so every output element's sum stays inside one call), and each
+ * chunk's library call is one thread. Its own worker pool is the second pool
+ * the tensor pool would compete with (H288, H303).
  *
  * `matmul` follows NumPy semantics: rank-1 operands are promoted to a row or
  * column vector and the promoted dimension is removed from the result; leading
@@ -50,11 +54,23 @@ void sgemmLibrary(
 std::string_view gemmBackendName();
 std::string_view libraryGemmName();
 
-/// Caps the library GEMM's own pool at the run's thread budget and at the measured knee (four
-/// threads on the reference host, where 1024^3 is 458 ms canonical, 404 ms via the library at one
-/// thread, 142 ms at four and 693 ms at 32). The cap keeps a batch loop from multiplying pools. A
-/// build without a library does nothing.
+/// Sets the library GEMM's own pool to one thread: the run's budget belongs to the tensor pool,
+/// and a second pool beside it competes for the same cores (the measured curve is in `gemm.cpp`
+/// and docs/technical/25_tensor_stack_and_onnx_export.md). The argument is the run's budget, not
+/// applied to the library. A build without a library does nothing, and `libraryGemmName()` then
+/// reports the builtin kernel.
 void setGemmThreads(int threads);
+
+/// The thread count the GEMM path had for its most recent call: the tensor-pool chunks that split
+/// a whole-work library product (the pool's width for a canonical call, or 1 inside a region), and
+/// 1 for a library call inside a batch chunk. What a program sees as the tensor module's
+/// `gemm_threads()`.
+int gemmThreadsUsed();
+
+/// The library's own thread count for the most recent call: 1 when a library call ran (each
+/// chunk's call is one thread), 0 when the canonical kernel did. What a program sees as the
+/// tensor module's `gemm_library_threads()`.
+int gemmLibraryThreadsUsed();
 
 /// Result shape of matmul(lhs, rhs). Throws std::invalid_argument when inner extents differ.
 Shape matmulShape(std::span<const int64_t> lhs, std::span<const int64_t> rhs);

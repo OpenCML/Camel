@@ -7,6 +7,8 @@
 
 #include "camel/core/mm/alloc/growable.h"
 
+#include "camel/profile/allocation.h"
+
 #include <algorithm>
 #include <format>
 
@@ -292,6 +294,7 @@ void *GrowableBumpAllocator::alloc(size_t size, size_t align) {
 #ifndef NDEBUG
     AllocationDebugScope debugScope;
 #endif
+    const camel::profile::AllocationScope allocation(size, false);
     const size_t count = segmentCount_.load(std::memory_order_acquire);
     if (LIKELY(count != 0)) {
         // Only the newest segment is asked: the tail an older one has left is given up, which

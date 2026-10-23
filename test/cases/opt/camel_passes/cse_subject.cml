@@ -1,0 +1,43 @@
+module cse_subject
+
+// The corpus of the common-subexpression comparison (H227): the same value written twice, an
+// expression over two separately written literals, a value read twice with a write between the
+// reads, and a function that shares nothing.
+//
+//   shared     `x * 7` written twice: identical once the two 7 literals are one value
+//   literals   `3 + 4` written twice: the two sums are one expression once the literals are one
+//   written    two reads of a cell with a write between them: two values, so the two products
+//              must stay two nodes, whatever the 3 literals do
+//   apart      `x + 1` and `x + 2`: two constants of different value, no expression to merge
+
+func shared(x: int): int {
+    let a = x * 7
+    let b = x * 7
+    return a + b
+}
+
+func literals(): int {
+    let a = 3 + 4
+    let b = 3 + 4
+    return a * b
+}
+
+func written(x: int): int sync {
+    var cell = x
+    let a = cell * 3
+    cell = cell + 1
+    let b = cell * 3
+    return a + b
+}
+
+func apart(x: int): int {
+    return (x + 1) * (x + 2)
+}
+
+func main(): int sync {
+    println(shared(3))
+    println(literals())
+    println(written(4))
+    println(apart(5))
+    return 0
+}

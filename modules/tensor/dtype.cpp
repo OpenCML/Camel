@@ -66,7 +66,8 @@ TypeCode promoteTensorTypes(TypeCode lhs, TypeCode rhs) {
     // never meets the other reduced type or an integer: neither type holds every value of the
     // other (bf16 has f32's range with 8 significand bits, f16 has 11; an i64 has 63), so a
     // promotion would have to invent a result type or narrow silently. The program casts one
-    // operand, and that conversion needs `change_precision`.
+    // operand; that written conversion is the precision it asked for, so no numeric permission is
+    // involved (design principles 7.2-7.3).
     if (isReducedFloatTensorType(lhs) || isReducedFloatTensorType(rhs)) {
         if (lhs == rhs) {
             return lhs;

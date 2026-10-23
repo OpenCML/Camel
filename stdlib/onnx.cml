@@ -31,3 +31,14 @@ module onnx
 /// @effect reports the lowering table of the backend
 /// @example let uris = supported_operators()
 export func supported_operators(): string[]
+
+// -----------------------------------------------------------------------------
+// Passes: functions the pipeline applies to the program
+// -----------------------------------------------------------------------------
+
+/// Writes the model of the program's `main` (or of the one `export_model` call it makes) as an
+/// ONNX file, translating the function `main` refers to itself. `out` overrides the path
+/// argument of `export_model` (then exactly one call is allowed) and names the file when the
+/// program makes no request.
+with <out: string = "">
+export func export_model::<F>(f: F): F! when is_function::<F>()

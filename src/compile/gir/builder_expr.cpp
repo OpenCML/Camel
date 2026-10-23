@@ -515,8 +515,11 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return built;
         }
     }
-    const string name     = moduleLevelName(written);
-    genericCalleeAllowed_ = false;
+    const string name = moduleLevelName(written);
+    // The position the name is read in, kept before the flag is cleared: in the callee position
+    // a call of an `#impl` function is a call of its kernel, anywhere else the name is the
+    // function value, which is the semantic body (design principles 10.4).
+    const bool calleePosition = std::exchange(genericCalleeAllowed_, false);
     refOrigin_            = gct->origin();
     if (camel::core::isOverloadableOperatorGroup(written)) {
         // An operator (`a + b` is `__add__(a, b)`): its overloads from every layer are one
@@ -614,6 +617,22 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (optGraphs.has_value()) {
         auto graphs = optGraphs.value();
         if (!graphs->empty()) {
+            // An `#impl` function called directly is a call of its kernel (design principles
+            // 10.4): the operator path makes one OPER node, and the body stays the semantic
+            // function for whatever asks to look inside. Anywhere but the callee position the
+            // name is the function value, which is the body graph (a pass differentiating,
+            // fusing or exporting sees the semantics, not the kernel).
+            if (calleePosition && !insideImplBody()) {
+                if (std::optional<ImplKernel> kernel = implKernelOf(graphs);
+                    kernel.has_value()) {
+                    node_handle_t drefNode{graph->addDrefNode(
+                        std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
+                            kernel->group})};
+                    registerNodeOrigin(context_, drefNode, gct, "gir.dref.impl");
+                    LEAVE("DREF");
+                    return drefNode;
+                }
+            }
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{graphs})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
@@ -755,6 +774,20 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         } else if (camel::core::module::detail::EntityAccess::isGraphSet(e)) {
             auto graphs = asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(e));
+            // A direct call of an imported `#impl` function is a call of its kernel too (the
+            // kernels are the same compile graphs in this program): the exported function is
+            // the kernel's name for callers, while its value stays the semantic body.
+            if (calleePosition && !insideImplBody()) {
+                if (std::optional<ImplKernel> kernel = implKernelOf(graphs);
+                    kernel.has_value()) {
+                    node_handle_t drefNode{graph->addDrefNode(
+                        std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
+                            kernel->group})};
+                    registerNodeOrigin(context_, drefNode, gct, "gir.dref.impl");
+                    LEAVE("DREF");
+                    return drefNode;
+                }
+            }
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{graphs})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");

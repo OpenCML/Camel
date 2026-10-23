@@ -8,6 +8,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/function_call.h"
+#include "camel/execute/fusion_group.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/loop_frame.h"
@@ -282,10 +283,16 @@ slot_t NodeVMSchedPass::call(
         std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
         // The loops of the graph that are running, the innermost last.
         uint32_t resumedLoop = camel::execute::kNoLoop;
+        // Members of a fusion group this round defers to the group's tail (see
+        // camel/execute/fusion_group.h). Only a round-local fact: the tail follows the head in
+        // the plan, so the list is dropped when a round starts, a loop goes back, or a tail call
+        // rebinds the graph.
+        std::vector<gc_node_ref_t> groupDeferred;
 
         // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
     loop_start: {
         gcSafepoint("nodevm graph boundary");
+        groupDeferred.clear();
         const size_t nodesSize = currNodes.size();
         const bool hasLoops    = !currPlan->loops.empty();
         resumedLoop = camel::execute::kNoLoop;
@@ -329,6 +336,7 @@ slot_t NodeVMSchedPass::call(
                     camel::execute::loopRoundSafepoint(
                         [&] { gcSafepoint("nodevm loop round"); }));
                 if (resume != camel::execute::kNoLoopJump) {
+                    groupDeferred.clear();
                     i = resume - 1;
                     continue;
                 }
@@ -355,6 +363,59 @@ slot_t NodeVMSchedPass::call(
             // reads the tuple, and the loop takes the components themselves (ExecPlan::elidedAt).
             if (hasLoops && !currPlan->elidedAt.empty() && currPlan->elidedAt[i]) [[unlikely]] {
                 continue;
+            }
+
+            // A fusion group a module registered (camel/execute/fusion_group.h): the members
+            // before the group's tail are computed by the tail, so they are skipped, and the
+            // tail runs the group in place of its operator. A node no kernel owns runs as the
+            // program says: that is the fallback of a group a backend cannot run.
+            //
+            // A skipped member is not reported to the observer: it does not run, and a stop at a
+            // node that does not run would claim an execution the profile says never happened
+            // (docs/technical/35_debugger.md, 2). The tail is reported with the group, before
+            // its kernel runs, so a breakpoint or a step still stops where the work happens.
+            if (n->kind == GCNodeKind::Oper &&
+                (currRuntimeGraph->nodeAttrs(nodeRef) != camel::core::attr::kNoAttrs ||
+                 !groupDeferred.empty())) {
+                if (std::find(groupDeferred.begin(), groupDeferred.end(), nodeRef) !=
+                    groupDeferred.end()) {
+                    // Kept until the round ends: the group's tail checks that its earlier
+                    // members were deferred to it.
+                    continue;
+                }
+                std::vector<gc_node_ref_t> groupMembers;
+                camel::execute::FusionGroupRef group;
+                const camel::execute::FusionGroupAction groupAction =
+                    camel::execute::runFusionGroup(
+                        *currRuntimeGraph,
+                        *currFrame,
+                        *currPlan,
+                        nodeRef,
+                        groupDeferred,
+                        groupMembers,
+                        group);
+                if (groupAction == camel::execute::FusionGroupAction::Deferred) {
+                    groupDeferred.insert(
+                        groupDeferred.end(), groupMembers.begin(), groupMembers.end());
+                    continue;
+                }
+                if (groupAction == camel::execute::FusionGroupAction::Ran) {
+                    // The tail is the node the group ran at; the members the kernel reported
+                    // precede it in execution order.
+                    groupMembers.push_back(nodeRef);
+                    const camel::execute::FusionGroupSite site{group.name, groupMembers};
+                    if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+                        observer->beforeNode(currRuntimeGraph, currFrame, nodeRef, &site);
+                    }
+                    // The group's members are done for this round; a later round defers them
+                    // again from the head.
+                    for (const gc_node_ref_t member : groupMembers) {
+                        if (member != nodeRef) {
+                            std::erase(groupDeferred, member);
+                        }
+                    }
+                    goto node_done;
+                }
             }
 
             // Debugger hook: live in release builds, one load of a pointer when no observer
@@ -634,6 +695,9 @@ slot_t NodeVMSchedPass::call(
             } break;
             }
 
+            // A group's tail computed this node's value in one pass (the switch above is the
+            // operator's own execution, which the group replaced).
+        node_done:;
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                 "NodeVM",
                 "Executed node [{}/{}]: ref={}",

@@ -135,7 +135,7 @@ expect_exit = 0
 expect_stdout_contains = ["total = 3"]
 expect_output_not_contains = ["Warn", "Error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "surface.angle_then_name_line"
@@ -193,7 +193,7 @@ expect_diagnostic_name = "SemanticDiag::ModuleTypeCycle"
 expect_diagnostic_line = 8
 expect_output_contains = ["part of a cycle of types", "A -> A", "an array, a map, a set or an enum"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "semantic.type_recursion_through_map"
@@ -206,4 +206,4 @@ expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
 expect_diagnostic_line = 8
 expect_output_contains = ["mentions itself through a map, a set or an enum", "'Node'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000

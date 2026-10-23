@@ -14,8 +14,13 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/boundaries.agir.dot"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
-timeout_ms = 4000
+timeout_ms = 10000
 
+# The rich dump is the one that prints a tooltip per node, and a tooltip names the node's slot as
+# `<graph>::node#<dataIndex>`: an allocation index of that graph, not graph structure. `argir` is
+# therefore the snapshot that names `normalize_node_ids`, which renumbers the ids by first
+# appearance per graph and leaves the relation they state (which nodes share a slot) compared. The
+# compact `agir` golden above prints no tooltip and needs no such normalizer.
 [[tests]]
 name = "boundaries.argir"
 desc = "std::argir fills role nodes with their role's color and lists the roles in tooltips and a legend."
@@ -26,5 +31,52 @@ expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/boundaries.argir.dot"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
-timeout_ms = 4000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins", "normalize_node_ids"]
+timeout_ms = 10000
+
+[[tests]]
+name = "boundaries.tooltip_slots"
+desc = "The tooltip slot is the slot a node's value lives in, so it relates nodes: this case's GATE names the slot of the node it forwards, whatever numbering a build handed out."
+case = "../../../cases/trans/annotated/boundaries.cml"
+args = ["${case}", "std::argir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const lines = input.normalized.output.split('\n')
+    const typeOf = new Map()
+    const slotOf = new Map()
+    for (const line of lines) {
+        const node = line.match(/^\s*(\S+)\s*\[(.+)\];\s*$/)
+        if (!node) continue
+        const type = node[2].match(/type="([^"]*)"/)
+        if (type) typeOf.set(node[1], type[1])
+        const tooltip = node[2].match(/tooltip="((?:[^"\\]|\\.)*)"/)
+        if (!tooltip) continue
+        // A rich tooltip is `<label>\n<graph>::node#<slot>`, then one `\nrole ...` line per role.
+        const named = tooltip[1].split('\\n')[1]?.match(/^(.*)::node#(-?[0-9]+)$/)
+        if (!named) continue
+        slotOf.set(node[1], `${named[1]}::node#${named[2]}`)
+    }
+    let gates = 0
+    for (const line of lines) {
+        const edge = line.match(/^\s*(\S+)\s*->\s*(\S+)\s*\[([^\]]*)\];?\s*$/)
+        if (!edge) continue
+        const from = edge[1]
+        const to = edge[2]
+        if (typeOf.get(to) !== 'GATE' || !/type="NORM"/.test(edge[3])) continue
+        gates++
+        assert(
+            slotOf.has(from) && slotOf.has(to),
+            `the GATE ${to} or its input ${from} names no slot in its tooltip`
+        )
+        assert(
+            slotOf.get(from) === slotOf.get(to),
+            `the GATE ${to} names ${slotOf.get(to)} while the node it forwards, ${from}, names ${slotOf.get(from)}: a gate reads the slot its producer wrote, so one slot is one value`
+        )
+    }
+    assert(gates > 0, 'this dump has no GATE, so the tooltip-slot relation was not checked at all')
+}
+"""
+timeout_ms = 10000

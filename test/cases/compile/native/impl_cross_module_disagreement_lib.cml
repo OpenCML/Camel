@@ -1,0 +1,15 @@
+/**
+ * The imported half of the cross-module disagreement case, the same shape as
+ * `impl_disagreement.cml`: the Camel body `a + b` is the semantics of `add`, but the tag names
+ * the real `:op/sub_l` kernel. The tag checks the signature, not the semantics, so the builder
+ * accepts it; only a differential comparison can see that the two paths differ.
+ */
+module impl_cross_module_disagreement_lib
+
+#op<':op/sub_l'>
+func sub_kernel(a: int, b: int): int
+
+#impl<sub_kernel>
+export func add(a: int, b: int): int {
+    return a + b
+}

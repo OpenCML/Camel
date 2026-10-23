@@ -90,6 +90,11 @@ desc = "GIR origins set at compiler entry hit the transformed runtime node on No
 case = "../../../cases/tools/debugger/dap_node_breakpoints.test.mjs"
 
 [[tests]]
+name = "debugger.dap_fusion_group"
+desc = "A node step walks the program through a private `vjp_div_neg` group: it stops at the group's tail (the node that runs the group) and never at the members, which do not execute. The stop carries the group's name, its members' operators in execution order and their refs, and the debug console prints one exact sentence saying the members did not execute separately. A fixture that stops having a group fails the guard."
+case = "../../../cases/tools/debugger/dap_fusion_group.test.mjs"
+
+[[tests]]
 name = "debugger.explain"
 desc = "The attribution commands of camel-db (rewrite design 8.7) on a run made by the program itself: `explain` reports the same rule and the same two node positions as the library's own print of the same record, `explain` without two values reads the whole record, `why_not` names the rule and the reason, and a value the frame does not have and an argument of the wrong type are located diagnostics that leave the session stopped and usable."
 case = "../../../cases/tools/debugger/explain.test.mjs"

@@ -18,7 +18,7 @@
 // nlohmann MUST be before any header that pulls in ANTLR (EOF conflict)
 #include "nlohmann/json.hpp"
 
-#include "build_config.h"
+#include "build_stamp.h"
 #include "command/dispatcher.h"
 #include "repl.h"
 #include "state.h"
@@ -233,7 +233,7 @@ void printVersion() {
 #else
     const char *buildType = "Debug";
 #endif
-    std::cout << "Camel Debugger v" << VERSION << " (" << buildType << " " << BUILD_FOOTPRINT << ")"
+    std::cout << "Camel Debugger v" << VERSION << " (" << buildType << " " << buildFootprint() << ")"
               << std::endl;
 }
 

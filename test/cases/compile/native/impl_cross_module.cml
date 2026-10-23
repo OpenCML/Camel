@@ -1,0 +1,19 @@
+/**
+ * The cross-module `#impl` case (design principles 10.4). `add` is declared and tagged in
+ * `impl_cross_module_lib` with the Camel body `a - (0 - b)`, and this module only ever calls it
+ * directly: `add(19, 23)` is one OPER of the `:op/add_l` kernel, and nothing here takes the
+ * function's value.
+ *
+ * The body is still the semantics of `add`, so `test::impl` must list it through
+ * `Program::implBodies`. The check is on the body graph by name, so an `IMPL bodies` count that
+ * happens to include some other graph does not make the test pass.
+ */
+module impl_cross_module
+
+import { add } from impl_cross_module_lib
+
+func main(): int sync {
+    let k = add(19, 23)
+    'kernel={}'->format<k>->println
+    return 0
+}

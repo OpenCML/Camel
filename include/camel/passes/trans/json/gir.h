@@ -14,6 +14,10 @@
 /// what graph equivalence is defined on.
 struct JsonGirOptions {
     bool canonical = false;
+    /// Write the document in the shape `egraph-serialize` reads (the classes as the egraph's
+    /// e-classes, every writing as one of its nodes) instead of the display document: what the
+    /// community's `egraph-visualizer` opens (H225, §5.04 item 3).
+    bool egraph = false;
 };
 
 std::string dumpJsonRuntimeGraph(
@@ -38,6 +42,10 @@ class JsonGirDumpPass : public RuntimeGraphTranslatePass {
         const camel::core::context::context_ptr_t &ctx, JsonGirOptions options = {})
         : RuntimeGraphTranslatePass(ctx), options_(options) {}
     const camel::runtime::Program *apply(const camel::runtime::Program *, std::ostream &) override;
+
+    /// A graph with values that have several writings is written as it is: the document carries
+    /// the classes, so a reader never sees an extraction it did not ask for (H225).
+    bool acceptsWritings() const override { return true; }
 
   private:
     JsonGirOptions options_;

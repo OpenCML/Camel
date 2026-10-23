@@ -162,9 +162,27 @@ slot_t numThreadsKernel(ArgsView &, ArgsView &, context::Context &) {
     return camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Int64>(k::numThreads()));
 }
 
+/// The thread count the GEMM path had for its most recent call: the pool chunks that split a
+/// whole-work library product, the pool's width for a canonical call, 1 inside a region (gemm.h).
+slot_t gemmThreadsKernel(ArgsView &, ArgsView &, context::Context &) {
+    return camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Int64>(k::gemmThreadsUsed()));
+}
+
+/// The library's own thread count for the most recent call: 1 when a library call ran, 0 when
+/// the canonical kernel did (gemm.h).
+slot_t gemmLibraryThreadsKernel(ArgsView &, ArgsView &, context::Context &) {
+    return camel::core::rtdata::toSlot(
+        static_cast<camel::core::rtdata::Int64>(k::gemmLibraryThreadsUsed()));
+}
+
 slot_t backendKernel(ArgsView &, ArgsView &, context::Context &) {
     return camel::core::rtdata::toSlot(
         ::String::from(std::string(k::gemmBackendName()), mm::autoSpace()));
+}
+
+slot_t libraryKernel(ArgsView &, ArgsView &, context::Context &) {
+    return camel::core::rtdata::toSlot(
+        ::String::from(std::string(k::libraryGemmName()), mm::autoSpace()));
 }
 
 } // namespace
@@ -257,12 +275,39 @@ std::vector<OpDef> utilityOps() {
             .traits = impure});
     defs.push_back(
         OpDef{
+            .name      = "gemm_threads",
+            .exports   = {"gemm_threads"},
+            .params    = {},
+            .resultDoc = "int",
+            .infer  = [](const InferContext &) -> std::optional<Type *> { return Type::Int64(); },
+            .kernel = &gemmThreadsKernel,
+            .traits = impure});
+    defs.push_back(
+        OpDef{
+            .name      = "gemm_library_threads",
+            .exports   = {"gemm_library_threads"},
+            .params    = {},
+            .resultDoc = "int",
+            .infer  = [](const InferContext &) -> std::optional<Type *> { return Type::Int64(); },
+            .kernel = &gemmLibraryThreadsKernel,
+            .traits = impure});
+    defs.push_back(
+        OpDef{
             .name      = "gemm_backend",
             .exports   = {"gemm_backend"},
             .params    = {},
             .resultDoc = "string",
             .infer  = [](const InferContext &) -> std::optional<Type *> { return Type::String(); },
             .kernel = &backendKernel,
+            .traits = {}});
+    defs.push_back(
+        OpDef{
+            .name      = "gemm_library",
+            .exports   = {"gemm_library"},
+            .params    = {},
+            .resultDoc = "string",
+            .infer  = [](const InferContext &) -> std::optional<Type *> { return Type::String(); },
+            .kernel = &libraryKernel,
             .traits = {}});
     return defs;
 }

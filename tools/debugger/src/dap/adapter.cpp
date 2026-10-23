@@ -19,6 +19,7 @@
 
 #include "adapter.h"
 
+#include "../state.h"
 #include "child_process.h"
 #include "nlohmann/json.hpp"
 
@@ -243,6 +244,56 @@ class Adapter {
         }
     }
 
+    /// Removes the worker's event markers (see state.h) from its stdout. They are a channel
+    /// between the worker and the debugger, not text the debugged program printed, so they
+    /// never reach the client. Everything else is forwarded in the order it was written: the
+    /// chunk is held only from a byte that may begin a marker until that marker ends (or until
+    /// the held text is too long to be one, in which case it is program output after all).
+    std::string withoutLogMarks(std::string_view chunk) {
+        const std::string prefix(kTaskLogMarkPrefix);
+        constexpr size_t kMaxPending = 4096;
+        stdoutPending_.append(chunk);
+        std::string out;
+        for (;;) {
+            const size_t begin = stdoutPending_.find(prefix);
+            if (begin == std::string::npos) {
+                // Keep a suffix that may still be the beginning of the marker.
+                size_t keep = 0;
+                const size_t maxKeep = std::min(prefix.size() - 1, stdoutPending_.size());
+                for (size_t k = maxKeep; k > 0; --k) {
+                    if (stdoutPending_.compare(stdoutPending_.size() - k, k, prefix, 0, k) == 0) {
+                        keep = k;
+                        break;
+                    }
+                }
+                out.append(stdoutPending_, 0, stdoutPending_.size() - keep);
+                stdoutPending_.erase(0, stdoutPending_.size() - keep);
+                return out;
+            }
+            if (begin > 0) {
+                out.append(stdoutPending_, 0, begin);
+                stdoutPending_.erase(0, begin);
+            }
+            const size_t end = stdoutPending_.find(kTaskLogMarkEnd, prefix.size());
+            if (end == std::string::npos || stdoutPending_.find('\n', end) == std::string::npos) {
+                if (stdoutPending_.size() > kMaxPending) {
+                    out += stdoutPending_; // not a marker after all
+                    stdoutPending_.clear();
+                }
+                return out;
+            }
+            stdoutPending_.erase(0, stdoutPending_.find('\n', end) + 1);
+        }
+    }
+    std::string flushStdoutPending() {
+        std::string out;
+        if (stdoutPending_.find(kTaskLogMarkPrefix) != 0) {
+            out.swap(stdoutPending_);
+        }
+        stdoutPending_.clear();
+        return out;
+    }
+
     // ---- the worker -----------------------------------------------------------------------
 
     /// One command of the worker's debug core. A worker that cannot be reached answers
@@ -376,6 +427,7 @@ class Adapter {
     }
 
     void onWorkerExit(int exitCode, int signal) {
+        output("stdout", stdoutText_.feed(flushStdoutPending()));
         output("stdout", stdoutText_.flush());
         output("stderr", stderrText_.flush());
         workerGone_.store(true);
@@ -450,6 +502,15 @@ class Adapter {
                     output("console", line.value("text", "") + "\n");
                 }
             }
+            // A stop at a fusion group's tail: the group ran there and its members did not
+            // execute separately. Said in the debug console before the stop is shown, like the
+            // lines a step went past.
+            if (auto fusion = e.find("fusion"); fusion != e.end() && fusion->is_object()) {
+                const std::string message = fusion->value("message", std::string());
+                if (!message.empty()) {
+                    output("console", message + "\n");
+                }
+            }
             // A function breakpoint has a reason of its own in DAP.
             const bool atFunction = reason == "breakpoint" && e.contains("function");
             json body{
@@ -487,6 +548,9 @@ class Adapter {
             }
             if (auto skipped = e.find("skipped"); skipped != e.end()) {
                 camel["skipped"] = *skipped;
+            }
+            if (auto fusion = e.find("fusion"); fusion != e.end()) {
+                camel["fusion"] = *fusion;
             }
             event("camel/stopped", std::move(camel));
             event("stopped", std::move(body));
@@ -1077,7 +1141,7 @@ class Adapter {
         }
         ProcessCallbacks callbacks;
         callbacks.onStdout = [this](std::string_view chunk) {
-            output("stdout", stdoutText_.feed(chunk));
+            output("stdout", stdoutText_.feed(withoutLogMarks(chunk)));
         };
         callbacks.onStderr = [this](std::string_view chunk) {
             output("stderr", stderrText_.feed(chunk));
@@ -1197,6 +1261,7 @@ class Adapter {
     std::thread pump_;
     std::thread terminator_; // ends a program that does not end by itself after terminate
     Utf8Stream stdoutText_;
+    std::string stdoutPending_; /// held only while it may be part of an event marker
     Utf8Stream stderrText_;
 };
 

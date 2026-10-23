@@ -392,7 +392,7 @@ inline void ensureInitialized() {
     });
 }
 
-// Lets Python code import modules beside the entry script (e.g. test/run/nn/mnist_loader.py).
+// Lets Python code import modules beside the entry script (e.g. test/cases/modules/std/python/).
 // The interpreter can predate the script's context (another module created it), so a module syncs
 // its own entry directory at its first use.
 inline void ensureContextPathsInPath(camel::core::context::Context &ctx) {

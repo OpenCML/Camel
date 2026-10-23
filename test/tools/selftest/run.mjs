@@ -43,6 +43,7 @@ import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { changedBase, plansForChanges, resolvedSelection } from '../../runner.mjs'
 import { overSelectionProblems } from './over-selection.mjs'
+import { cudaVisibilityAudit } from '../check-cuda-visibility.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..', '..')
@@ -836,6 +837,78 @@ if (!/RuntimeDiag::DivisionByZero/.test(bench.output)) {
 }
 if (!/\[SUMMARY\].*fail: 1/.test(bench.output)) {
     problems.push(`benchmark failure: ${summaryLine(bench.output)}`)
+}
+
+// --- the gate split line -----------------------------------------------------------------------
+// The gate's wall time is build + test, and the next person has to be able to see a regression in
+// it. The remote helper exports the build's own clock as CAMEL_GATE_BUILD_SECONDS; the runner
+// prints `[SPLIT] build <b> s, test <t> s, total <b+t> s`. Both the format and the arithmetic are
+// pinned here, on the real runner, with a value the runner could not have guessed. Without the
+// variable the runner built nothing in this invocation, and says so (0.0), which is also the
+// -NoBuild path's value.
+const splitPlan = path.join(here, 'scratch.plan.toml')
+const splitWithBuild = runRunner([splitPlan, '--jobs', '1'], { CAMEL_GATE_BUILD_SECONDS: '12.5' })
+const splitMatch = splitWithBuild.output.match(/^\[SPLIT\] build ([\d.]+) s, test ([\d.]+) s, total ([\d.]+) s$/m)
+if (!splitMatch) {
+    problems.push(`gate split: the runner printed no [SPLIT] line:\n${splitWithBuild.output}`)
+} else {
+    const [build, test, total] = splitMatch.slice(1).map(Number)
+    if (build !== 12.5) problems.push(`gate split: build ${build}, expected 12.5 (CAMEL_GATE_BUILD_SECONDS)`)
+    if (Math.abs(total - (build + test)) > 0.05) {
+        problems.push(`gate split: total ${total} is not build ${build} + test ${test}`)
+    }
+}
+const splitNoBuild = runRunner([splitPlan, '--jobs', '1'], { CAMEL_GATE_BUILD_SECONDS: '' })
+if (!/^\[SPLIT\] build 0\.0 s, test [\d.]+ s, total [\d.]+ s$/m.test(splitNoBuild.output)) {
+    problems.push(`gate split: a run that built nothing did not print build 0.0 s:\n${splitNoBuild.output}`)
+}
+
+// --- CUDA visibility ---------------------------------------------------------------------------
+// A CPU-only Python program that imports a CUDA-aware library reaches a card without naming one
+// (`torch.optim.Adam(...).step()` retains every card's primary context), so it dies with
+// `CUDA_ERROR_UNKNOWN` while another tenant holds a card: the same test is green or red by what
+// the rest of the host is running. The runner therefore hides the machine's devices from every
+// Python child that did not declare `cuda_devices = true` (docs/test-plans.md, "CUDA visibility").
+//
+// `cuda-visibility/visibility.plan.toml` pins what that means, test by test: the untouched node
+// reference, the hidden Python default, the `skip_unless` precondition that gets the same value
+// (a skip there would lose a test silently), the declared opt-in that must see exactly what the
+// node child saw, and a test whose own `envs` win. `cuda-visibility/unpinned/` is the plan the
+// guard must refuse, and the guard must pass on this tree with a pinned population: a guard that
+// examined nothing would otherwise pass by finding nothing.
+const visibilityPlan = path.join(here, 'cuda-visibility', 'visibility.plan.toml')
+const visibility = runRunner([visibilityPlan])
+for (const name of ['reference.node', 'hidden.python', 'hidden.precondition', 'declared.python', 'pinned.python']) {
+    if (!new RegExp(`^\\[PASS\\] ${name.replace('.', '\\.')}\\b`, 'm').test(visibility.output)) {
+        problems.push(`cuda visibility: '${name}' did not pass (${summaryLine(visibility.output)})`)
+    }
+}
+if (!/\[SUMMARY\] total: 5, pass: 5, fail: 0\b/.test(visibility.output) || /\[SKIP\]/.test(visibility.output)) {
+    problems.push(
+        `cuda visibility: the hidden default, its precondition, the opt-in and a test's own value ` +
+            `were not all exercised: ${summaryLine(visibility.output)}`
+    )
+}
+const treeAudit = cudaVisibilityAudit(repoRoot)
+for (const problem of treeAudit.problems) problems.push(`cuda visibility: ${problem}`)
+const unpinnedAudit = cudaVisibilityAudit(path.join(here, 'cuda-visibility', 'unpinned'), false)
+const unpinnedProblems = unpinnedAudit.problems.join('\n')
+for (const [name, reason] of [
+    ['unpinned.harness', 'reaches Python outside'],
+    ['unpinned.names_a_card', 'sets CUDA_VISIBLE_DEVICES=0'],
+]) {
+    if (!unpinnedProblems.includes(name) || !unpinnedProblems.includes(reason)) {
+        problems.push(
+            `cuda visibility: the guard did not refuse '${name}' for '${reason}':\n` +
+                `${unpinnedProblems || '<it found no problem at all>'}`
+        )
+    }
+}
+if (unpinnedAudit.problems.length !== 2) {
+    problems.push(
+        `cuda visibility: the deliberately unpinned fixture has ${unpinnedAudit.problems.length} ` +
+            `problem(s), expected 2, so the guard is refusing something else as well or missing one:\n${unpinnedProblems}`
+    )
 }
 
 if (problems.length > 0) {

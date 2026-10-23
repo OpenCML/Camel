@@ -26,11 +26,28 @@ Formatter::Formatter(const syn::Tree &tree, Options options) : tree(tree) {
         tokens.push_back(
             FmtToken{channel, buffer.lineOf(token.begin), std::string(buffer.text(token))});
     }
+    writtenComments.assign(tokens.size(), false);
     configure(options);
 }
 
 std::string Formatter::format() {
-    return any_cast<string>(visitProgram(cst::Program(tree.root())));
+    std::string result = any_cast<string>(visitProgram(cst::Program(tree.root())));
+    // No comment of the input may be left unwritten: a comment is source text, and a formatter that
+    // loses one rewrites the source silently. A comment that no range and no visitor reached is
+    // written at the end of the file, one per line. `unplacedComments` counts them, and the format
+    // gate refuses a run where the count is not zero: a comment written here is kept, but it is not
+    // kept where it stood.
+    for (size_t i = 0; i < tokens.size(); i++) {
+        if (tokens[i].channel > 1 && !commentWritten(i)) {
+            ++unplacedComments;
+            result += lineEnd();
+            writeCommentText(result, i);
+        }
+    }
+    if (unplacedComments > 0) {
+        result += lineEnd();
+    }
+    return result;
 }
 
 void Formatter::configure(const Options &options) {
@@ -100,16 +117,29 @@ inline bool hasTrailingComma(syn::Node context) {
     return context->child(context->childCount() - 2)->text() == ",";
 }
 
-void Formatter::insertComment(const FmtToken &comment, string &result) {
-    size_t tokChannel = comment.channel;
+void Formatter::insertComment(size_t index, string &result) {
+    const FmtToken &comment = tokens[index];
+    size_t tokChannel       = comment.channel;
     if (tokChannel == 0 || tokChannel > 4) {
         return;
     }
+    if (commentWritten(index)) {
+        // Written already: a range that grew over a comment another range had covered writes it
+        // once.
+        return;
+    }
+    markCommentWritten(index);
     const auto &commentText = comment.text();
     result += commentText;
     if (tokChannel == 4) {
-        // block comment
-        result += " ";
+        // A block comment is followed by a space when the code after it is on the same line: the
+        // space separates the two. When the comment ends its line - the usual case for one written
+        // on a line of its own, and for a trailing comment - that space was trailing whitespace
+        // that every pass then had to strip again.
+        if (index + 1 < tokens.size() &&
+            tokens[index + 1].line() == comment.line() + countLines(commentText)) {
+            result += " ";
+        }
     }
 };
 
@@ -160,7 +190,15 @@ any Formatter::visitProgram(cst::Program context) {
             }
             headTokenRanges.push_back(after);
         }
-        headTokenRanges.push_back(declTokenRanges[headWithIndex[0].second]);
+        // The last range is the one before the first printed import. The imports are printed in
+        // name order but the comments above them are the comments above the first one in the file:
+        // taking the range from the first import of the printed order dropped the comment of the
+        // first import whenever the two were not the same declaration.
+        size_t firstInFile = headWithIndex[0].second;
+        for (const auto &pair : headWithIndex) {
+            firstInFile = std::min(firstInFile, pair.second);
+        }
+        headTokenRanges.push_back(declTokenRanges[firstInFile]);
     }
     if (!tailWithIndex.empty()) {
         for (const auto &pair : tailWithIndex) {
@@ -184,6 +222,9 @@ any Formatter::visitProgram(cst::Program context) {
                     headStr += lineEnd();
                 }
                 headStr += tokens[i].text() + lineEnd();
+                // Written here, and marked as written: the node below the comments asks which of
+                // them are still unwritten, and a comment it reads again is written twice.
+                markCommentWritten(i);
                 previousEnd = line + std::count(tokens[i].text().begin(), tokens[i].text().end(), '\n');
             }
         }
@@ -325,7 +366,37 @@ any Formatter::visitStmtBlock(cst::StmtBlock context) {
     const auto &stmtList = context->get<cst::StmtList>();
     string result        = context->tok(TK::KwSync) ? "sync " : "";
     if (stmtList) {
-        return result + "{" + any_cast<string>(visitStmtList(stmtList)) + "}";
+        // The comments between the last statement of the block and its closing brace belong to the
+        // block: the statement list writes comments up to its last statement and no further, and
+        // they used to be dropped - `// mark:` after the last statement of a body, say. They are
+        // written where they stood: on the statement's line if they were on it, which is where
+        // every statement but the last one keeps such a comment. The brace keeps its own line.
+        const size_t lastStmt = stmtList->lastToken()->index();
+        const size_t brace    = context->lastToken()->index();
+        std::string inner     = any_cast<string>(visitStmtList(stmtList));
+        std::string comments;
+        pushIndent();
+        size_t lastStopLine =
+            tokens[lastStmt].line() + countLines(tokens[lastStmt].text());
+        for (size_t i = lastStmt + 1; i < brace; i++) {
+            if (tokens[i].channel <= 1 || commentWritten(i)) {
+                continue;
+            }
+            const long skips = static_cast<long>(tokens[i].line()) - static_cast<long>(lastStopLine);
+            comments += skips <= 0 ? " " : lineEnd();
+            writeCommentText(comments, i);
+            lastStopLine = tokens[i].line() + countLines(tokens[i].text());
+        }
+        popIndent();
+        if (comments.empty()) {
+            return result + "{" + inner + "}";
+        }
+        const std::string listEnd = lineEnd();
+        if (inner.size() >= listEnd.size() &&
+            inner.compare(inner.size() - listEnd.size(), listEnd.size(), listEnd) == 0) {
+            inner.resize(inner.size() - listEnd.size());
+        }
+        return result + "{" + inner + comments + listEnd + "}";
     } else {
         result += "{";
         const size_t firstTokIdx = context->firstToken()->index();
@@ -335,7 +406,7 @@ any Formatter::visitStmtBlock(cst::StmtBlock context) {
         for (size_t i = firstTokIdx + 1; i < lastTokIdx; i++) {
             if (tokens[i].channel > 1) {
                 result += lineEnd();
-                insertComment(tokens[i], result);
+                insertComment(i, result);
                 foundComment = true;
             }
         }
@@ -1227,10 +1298,27 @@ any Formatter::visitCtrlExpr(syn::Node context) {
     {
         string condition = any_cast<string>(visitExpr(context->expr()));
         string thenBlock = any_cast<string>(visitBlockExpr(context->child(3).node()));
-        string result    = "if " + condition + " then " + thenBlock;
+        string result    = "if " + condition;
+        // A comment between the condition and `then`, or between the branch and `else`, stands in
+        // no gap a list looks at: the branch of a block-less `if` is an expression, not a list,
+        // and the keyword after it belongs to this visitor alone.
+        const auto &thenTok = context->tok(TK::KwThen);
+        writeInlineComments(
+            result,
+            context->expr()->lastToken()->index(),
+            thenTok.index(),
+            context->expr()->lastToken()->endLine());
+        result += " then " + thenBlock;
         if (context->tok(TK::KwElse)) {
+            const auto &elseTok       = context->tok(TK::KwElse);
+            const size_t branchEnd    = context->child(3).node()->lastToken()->index();
+            const bool branchLineEnds = writeInlineComments(
+                result,
+                branchEnd,
+                elseTok.index(),
+                context->child(3).node()->lastToken()->endLine());
             string elseBlock = any_cast<string>(visitBlockExpr(context->child(5).node()));
-            if (elseBlock.starts_with("if ") && !thenBlock.ends_with("}")) {
+            if (branchLineEnds || (elseBlock.starts_with("if ") && !thenBlock.ends_with("}"))) {
                 // else if
                 result += lineEnd() + "else ";
             } else {
@@ -1876,6 +1964,19 @@ any Formatter::visitIdentRef(cst::IdentRef context) { return context->text(); }
 // ---- Dispatch on the kind of a node ----
 
 any Formatter::visit(syn::Node context) {
+    // A comment between two tokens the node writes itself - a parameter and its type, say - is in
+    // no gap any list looks at, and the node writes those tokens without it. Write it here, at the
+    // token it stands before: the next pass finds it in the same gap and writes it in the same
+    // place, so the text settles instead of moving on every pass.
+    std::string above = commentsBefore(context);
+    std::any body     = dispatch(context);
+    if (above.empty()) {
+        return body;
+    }
+    return above + any_cast<string>(body);
+}
+
+any Formatter::dispatch(syn::Node context) {
     switch (context.kind()) {
 #define CAMEL_FORMAT(name)                                                                         \
     case NK::name:                                                                                 \

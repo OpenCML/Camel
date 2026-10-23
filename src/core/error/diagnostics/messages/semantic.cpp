@@ -1229,14 +1229,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::DeclarationModuleHasBody,
-            {
-                "DeclarationModuleHasBody",
-                "The declaration module '{0}' has a body in function '{1}'.",
-                "A Camel module found beside a C++ module of the same name declares that module's operators and has no bodies. Put the implementation in a module that has no `.cmo`, or remove the `.cmo`.",
-            },
-        },
-        {
             SemanticDiag::NativeDeclarationOverlap,
             {
                 "NativeDeclarationOverlap",
@@ -1413,19 +1405,51 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::PrecisionChangeNotPermitted,
-            {
-                "PrecisionChangeNotPermitted",
-                "Converting '{0}' to '{1}' needs the numeric permission 'change_precision'.",
-                "Write #[change_precision] on the function or the block that does the conversion, or convert from a type that already holds the values the reduced element type can hold exactly. Reading a bf16 or f16 value into a wider type never needs the permission.",
-            },
-        },
-        {
             SemanticDiag::ReducedPrecisionUnsupported,
             {
                 "ReducedPrecisionUnsupported",
                 "The call of '{0}' cannot take a value of the reduced-precision element type '{1}'.",
-                "bf16 and f16 are stored element types: the language has no bf16 or f16 literal, scalar operator or conversion, so a function that would add, compare or otherwise use one cannot compute with it. A bf16 or f16 tensor is computed by the tensor module, which widens every element to f32 and rounds once when it stores the result (design principles 7.3, H238); cast reads it back into f32 or f64 exactly. Write the reduction, comparison or arithmetic on the tensor, or on a value of a type that has the operation.",
+                "bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3, H238). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).",
+            },
+        },
+        {
+            SemanticDiag::ImplOnBodylessDeclaration,
+            {
+                "ImplOnBodylessDeclaration",
+                "The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body.",
+                "'#impl<f>' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.",
+            },
+        },
+        {
+            SemanticDiag::ImplKernelUnknown,
+            {
+                "ImplKernelUnknown",
+                "The '#impl' tag of '{0}' names '{1}', which is no body-less declaration.",
+                "The kernel of a '#impl' function is a body-less declaration of the same module ('func k(...): T'). Declare the operator, and write its name in the tag.",
+            },
+        },
+        {
+            SemanticDiag::ImplKernelForeign,
+            {
+                "ImplKernelForeign",
+                "The '#impl' tag of '{0}' names '{1}', which another module declares.",
+                "A kernel is the implementation detail of the function that keeps it: declare the body-less declaration in the same module as the function, private to that module (not exported), and name it there.",
+            },
+        },
+        {
+            SemanticDiag::ImplSignatureMismatch,
+            {
+                "ImplSignatureMismatch",
+                "The kernel '{0}' of the '#impl' function '{1}' has the signature {2}, but the function has {3}.",
+                "The kernel is another implementation of the very same function: same 'with' and normal parameters (types and 'var' marks), same result type, and no 'constas' parameter (a body-less declaration cannot carry one).",
+            },
+        },
+        {
+            SemanticDiag::ImplKernelNotBodyless,
+            {
+                "ImplKernelNotBodyless",
+                "The '#impl' tag of '{0}' names '{1}', which has a body.",
+                "The kernel is the body-less declaration of the C++ operator that runs the function's semantics. A function that already has a body is the semantics itself, so there is nothing for the tag to do: name a body-less declaration, or remove the tag.",
             },
         },
         {

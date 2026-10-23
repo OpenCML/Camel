@@ -119,10 +119,21 @@ class Program final : public camel::core::rtdata::Object {
     std::vector<GCGraph *> ruleGraphs(const GCGraph &graph) const {
         return resolve(graph.ruleGraphs());
     }
-    /// Calls `visitor` for every graph of the reference table of `graph`.
+    /// Calls `visitor` for every graph of the reference table of `graph`. The semantic body of an
+    /// `#impl` function is not part of the ordinary program (design principles 10.4): a nested
+    /// entry that leads to one is skipped, so an ordinary pass or a dump does not reach the
+    /// body. A graph that takes the function's value still reaches it (a static or callee
+    /// entry), and Program::implBodies lists the bodies for a consumer that expands on demand.
     template <typename Visitor> void traceGraphs(const GCGraph &graph, Visitor &&visitor) const {
-        for (GraphId id : graph.refs()) {
-            if (GCGraph *found = this->graph(id)) {
+        const auto refs = graph.refs();
+        for (size_t i = 0; i < refs.size(); ++i) {
+            if ((graph.refRoles(i) & camel::runtime::kGraphRefNested) != 0) {
+                const GCGraph *target = this->graph(refs[i]);
+                if (target != nullptr && target->isImplBody()) {
+                    continue;
+                }
+            }
+            if (GCGraph *found = this->graph(refs[i])) {
                 visitor(found);
             }
         }
@@ -147,6 +158,19 @@ class Program final : public camel::core::rtdata::Object {
         return graphs;
     }
     size_t size() const { return count_; }
+    /// The semantic bodies of the program's `#impl` functions (GCGraph::isImplBody): the graphs
+    /// an expansion reads, in the order of their ids. An ordinary call of such a function is a
+    /// call of its kernel operator, so these graphs are usually not reachable from the root and
+    /// a dump of the root does not show them (design principles 10.4).
+    std::vector<GCGraph *> implBodies() const {
+        std::vector<GCGraph *> bodies;
+        for (GCGraph *graph : byId_) {
+            if (graph != nullptr && graph->isImplBody()) {
+                bodies.push_back(graph);
+            }
+        }
+        return bodies;
+    }
     /// One more than the largest id the table has room for.
     size_t tableSize() const { return byId_.size(); }
     /// Advances with every bind: equal versions of one program mean the same table.

@@ -1,27 +1,20 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
+/*
+ * The assertion an internal invariant is written against.
+ *
+ * The failure path lives in `src/utils/assert.cpp`: printing it needs `<iostream>` (and, with the
+ * standard library this project builds against, `<format>` behind it), and this header is included
+ * by every translation unit -- so the printing stays in the one place that can fail instead of
+ * being parsed by each of them. `ASSERT` compiles to nothing under `NDEBUG`.
+ */
+
 #pragma once
 
-#include <cstdlib>
-#include <iostream>
 #include <source_location>
 #include <stdexcept>
 #include <string>
-
-#ifdef _WIN32
-#include <crtdbg.h>
-#include <stacktrace>
-#define HAS_STACKTRACE 1
-inline void disable_windows_abort_dialogs() {
-    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
-    _CrtSetReportMode(_CRT_ASSERT, 0);
-    _CrtSetReportMode(_CRT_ERROR, 0);
-    _CrtSetReportMode(_CRT_WARN, 0);
-}
-#else
-#define HAS_STACKTRACE 0
-#endif
 
 namespace cml {
 
@@ -64,42 +57,11 @@ inline AssertHandlerFn &get_assert_handler_ref() {
 inline void set_assert_handler(AssertHandlerFn h) { get_assert_handler_ref() = h; }
 inline AssertHandlerFn get_assert_handler() { return get_assert_handler_ref(); }
 
-inline void handle_assert_failure(
+/// Reports the failed assertion to the handler, or to `stderr` with the stack trace when no
+/// handler is installed, then aborts. Defined in `src/utils/assert.cpp`.
+[[noreturn]] void handle_assert_failure(
     const std::string &expression, const std::string &suggestion,
-    const std::source_location location = std::source_location::current()) {
-    AssertHandlerFn handler = get_assert_handler();
-    if (handler) {
-        handler(expression, suggestion, location);
-        std::abort();
-    }
-    std::cerr << "\n\033[1;31mCamel Debug Assertion Failed:\033[0m\n"
-              << "\033[1;32m    Location   : \033[0m" << location.file_name() << "("
-              << location.line() << ")\n"
-              << "\033[1;32m    Function   : \033[0m" << location.function_name() << "\n"
-              << "\033[1;32m    Expression : \033[0m" << expression << "\n"
-              << "\033[1;32m    Suggestion : \033[0m" << suggestion << "\n";
-
-#if HAS_STACKTRACE
-    disable_windows_abort_dialogs();
-
-    std::cerr << "\n\033[1;31mStack Trace:\033[0m\n";
-    auto trace                  = std::stacktrace::current(); // std-includes: ignore
-    constexpr size_t skip_front = 1;
-
-    const size_t frame_count = trace.size();
-    if (frame_count <= skip_front) {
-        std::cerr << "(stack trace too short)\n";
-    } else {
-        for (size_t i = skip_front; i < frame_count; ++i) {
-            std::cerr << "<\033[1;36m" << i << "\033[0m> " << trace[i] << "\n";
-        }
-    }
-#else
-    std::cerr << "\n\033[1;31mStack Trace:\033[0m (not available on this platform)\n";
-#endif
-
-    std::abort();
-}
+    const std::source_location location = std::source_location::current());
 
 } // namespace cml
 

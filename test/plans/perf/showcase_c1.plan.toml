@@ -6,7 +6,9 @@ tags = ["showcase", "slow", "c1", "linear", "logistic"]
 # The small configuration of showcase/c1-linear-logistic (H13): deterministic synthetic data,
 # 200 steps of SGD for linear regression and 200 for logistic regression, both implementations
 # of each.  It runs in seconds and fails when the two disagree beyond the tolerances, so the
-# example cannot rot silently.
+# example cannot rot silently.  The data and the report go under ${test_tmp}, this run's own
+# scratch directory: a literal `tmp/...` is one place two runs (or two plans, side by side)
+# would write, and a run would read what the other one left.
 
 [[tests]]
 name = "small"
@@ -14,7 +16,7 @@ desc = "C1 small configuration: compare.py runs the Camel program and its PyTorc
 kind = "behavior"
 tool = "python"
 case = "../../../showcase/c1-linear-logistic/compare.py"
-args = ["${case}", "--profile", "small", "--data", "tmp/c1-showcase-small", "--results", "tmp/c1-showcase-small/RESULTS.md"]
+args = ["${case}", "--profile", "small", "--data", "${test_tmp}/c1-showcase-small", "--results", "${test_tmp}/c1-showcase-small/RESULTS.md"]
 skip_unless = ["${python}", "-c", "import numpy, torch, psutil"]
 expect_exit = 0
 expect_stdout_contains = ["c1 compare: PASS"]

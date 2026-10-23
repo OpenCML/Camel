@@ -87,10 +87,11 @@ enum class TypeCode : uint32_t {
     // ask instead of `isPrimitive`.
     Complex64  = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x011),
     Complex128 = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x012),
-    // Reduced-precision floating element types (design principles 7.3, H238): the storage of
-    // `Tensor<bf16>` and `Tensor<f16>`, two bytes per element, with the conversions of
-    // camel/core/rtdata/half.h. They are element types only: no value of either fits in a slot,
-    // no literal has one, and a conversion from another element type needs `change_precision`.
+    // Reduced-precision floating types (design principles 7.3, H238): `bf16` and `f16`, the
+    // element types of `Tensor<bf16>` and `Tensor<f16>` and scalar types of the language as
+    // well — a literal has one, and it has the written conversion, the arithmetic and the
+    // comparisons of any other float (camel/core/rtdata/half.h). A value of one fits in a slot
+    // as its two-byte pattern in the low half, computed on as f32 and rounded once on store.
     // The bit patterns are not the low 16 bits of their type code, so a consumer that indexes a
     // table by `code & 0xF` must handle them first (castSafetyFrom does).
     BFloat16 = makeTypeCode(TypeFlag::Primitive, 0x014),
@@ -130,6 +131,22 @@ template <typename T> inline constexpr bool isAuxiliary(T code) {
 /// asks this.
 template <typename T> inline constexpr bool isComplex(T code) {
     return code == TypeCode::Complex64 || code == TypeCode::Complex128;
+}
+
+/// A floating-point scalar type: `f32`, `float`, and the two reduced-precision floating types
+/// `bf16` and `f16`, which are floating types of the language with a range and a precision of
+/// their own (design principles 7.3). Every test that asks "is this floating point" asks this,
+/// not `code == Float32 || code == Float64`: a question about a family must name the family, or
+/// the next member of it is silently left out of the answer.
+template <typename T> inline constexpr bool isFloatingScalar(T code) {
+    return code == TypeCode::Float32 || code == TypeCode::Float64 || code == TypeCode::BFloat16 ||
+           code == TypeCode::Float16;
+}
+
+/// A numeric scalar type: an integer or a floating-point one (`isFloatingScalar`), the complex
+/// numbers excluded as `isComplex` excludes them everywhere else.
+template <typename T> inline constexpr bool isNumericScalar(T code) {
+    return code == TypeCode::Int32 || code == TypeCode::Int64 || isFloatingScalar(code);
 }
 
 enum class CastSafety {
@@ -240,7 +257,8 @@ class Type {
      * when nothing was bound. A type that loses its last dimension this way (a bare pack
      * `T[..rest]` bound to no dimensions) denotes its element type, which is a scalar.
      */
-    virtual const Type *withExtentValues(const ExtentValues &values, const ExtentPacks &packs) const;
+    virtual const Type *
+    withExtentValues(const ExtentValues &values, const ExtentPacks &packs) const;
     /**
      * `Name<args...>`: the type these arguments denote. The default refuses every argument
      * (`this type takes no arguments`). A type whose arguments carry meaning overrides it.

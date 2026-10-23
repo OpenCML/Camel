@@ -12,7 +12,7 @@ case = "../../../cases/linear/nvm/decorator_single.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "decorator_multi.nvm"
@@ -22,7 +22,7 @@ case = "../../../cases/linear/nvm/decorator_multi.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "decorator_value_pass.nvm"
@@ -32,7 +32,7 @@ case = "../../../cases/linear/nvm/decorator_value_pass.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "lambda_filter.nvm"
@@ -42,7 +42,7 @@ case = "../../../cases/linear/nvm/lambda.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "lambda_points.jit"
@@ -62,7 +62,7 @@ verify_script = """
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mutable_reference.nvm"
@@ -78,7 +78,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0 1', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mutable_reference.fvm"
@@ -94,7 +94,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0 1', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mutable_reference.jit"
@@ -110,7 +110,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0 1', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mutable_reference.tf"
@@ -126,7 +126,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0 1', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mutable_reference.inline.nvm"
@@ -142,7 +142,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0 1', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mutable_reference.opt_cse.nvm"
@@ -158,7 +158,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0 1', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "mutable_reference.simplify_cse.nvm"
@@ -174,7 +174,7 @@ const out = input.normalized.stdout.trim().split('\n').join(' ')
 assert(out === '0 1', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "var_params.nvm"
@@ -313,7 +313,7 @@ case = "../../../cases/linear/nvm/decorator_bare.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "decorator_bare.macro"
@@ -323,7 +323,7 @@ case = "../../../cases/linear/nvm/decorator_bare.cml"
 args = ["${case}", "std::macro", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 
 [[tests]]

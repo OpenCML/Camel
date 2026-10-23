@@ -1,0 +1,225 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The optimizations of the standard library written in Camel: the reference implementation of
+ * what the C++ pass does, held to it by `test/plans/feat/opt/camel_passes.plan.toml`. A pass here
+ * is a function `(p: Program) => Program!` exported by this module, so the pipeline names it
+ * `opt::cse` and `opt::dce` and `test/tools/check-pass-declarations.mjs` reads it as one.
+ *
+ * What a pass can do today is a transaction over the snapshot the `graph` module hands out: read
+ * a node, `replace` it by another, `erase` one nobody reads, `commit`, and read the next round
+ * from the new snapshot. Two of the four passes of handover H227's first layer are here and two
+ * are not, and both times the reason is a missing operation rather than a missing idea:
+ *
+ *   `opt::cse`   here. Constants of a type whose `==` is the equality of the graph's values
+ *                (int, i32, bool) are one value, and pure operations with the same operator,
+ *                type, inputs, region and permissions are one node; each set of equal nodes
+ *                keeps its first node. A value that may be written in place, and an operation
+ *                that reads such a value, is left alone. Rounds repeat until none is left,
+ *                because merging two constants can make the operations over them equal.
+ *   `opt::dce`   here, as the value-only half of `std::opt::dce values_only=true`: a constant, a
+ *                conversion, a copy, an access, a fill or a pure operation that no node reads is
+ *                erased, until none is left. The gates and the syncs stay: bypassing a forwarding
+ *                gate moves its waits to its consumers, which is edge surgery a transaction
+ *                cannot write.
+ *   `opt::fold`  not here. It evaluates a pure operation whose inputs are all constants, and the
+ *                `graph` module exposes no way to evaluate an operator on values.
+ *   `opt::ctrl`  not here. It removes a control edge that a mandatory data or control path
+ *                already implies, and a transaction can only replace or erase a whole node; it
+ *                has no way to drop one edge and no way to add one.
+ *
+ * Two more gaps, both recorded in `docs/technical/45_graph_module.md`, are worked around rather
+ * than closed. The bits of a scalar are not readable from Camel (`bytes` encodes arrays and
+ * tensors, `math` has no `signbit`), so `0.0` and `-0.0` are equal by `==` and distinct in the
+ * graph, and no float constant is merged here although the C++ pass merges one. A node's
+ * attributes are readable as text (`tags`) but not writable, so two nodes whose attributes differ
+ * are kept apart, where the C++ pass merges the attributes of the nodes it merges.
+ */
+module opt
+
+import { flatten, all, any } from array
+import { Program, Node, Graph, Txn, NodeKind, graphs, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, is_anchor, is_written_slot, is_constant, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, commit } from graph
+
+// ---- reading a node as the key of a comparison ----
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => ''
+        case t => type_name(t)
+    }
+}
+
+func allNodes(p: Program): Node[] {
+    return flatten(graphs(p)->map<(g: Graph): Node[] => nodes(g)>)
+}
+
+// ---- common subexpressions ----
+
+/// The types whose `==` in Camel is the equality of the graph's values too. A float is left out
+/// on purpose: Camel cannot read the bits of a scalar, so `0.0 == -0.0` holds while the two
+/// constants are different values of the graph, and merging them would change the program.
+func bitEqualType(ty: string): bool {
+    return ty == 'int' || ty == 'i32' || ty == 'bool'
+}
+
+func sameIntValue(b: Node, x: int): bool {
+    return match constant(b, 0) {
+        case null => false
+        case y => x == y
+    }
+}
+
+func sameI32Value(b: Node, x: i32): bool {
+    let zero: i32 = 0
+    return match constant(b, zero) {
+        case null => false
+        case y => x == y
+    }
+}
+
+func sameBoolValue(b: Node, x: bool): bool {
+    return match constant(b, false) {
+        case null => false
+        case y => x == y
+    }
+}
+
+/// Whether the two nodes are constants of the same type and the same value.
+func sameConstant(a: Node, b: Node, ty: string): bool {
+    return if ty == 'int' then sameIntConstant(a, b) else if ty == 'i32' then sameI32Constant(a, b) else sameBoolConstant(a, b)
+}
+
+func sameIntConstant(a: Node, b: Node): bool {
+    return match constant(a, 0) {
+        case null => false
+        case x => sameIntValue(b, x)
+    }
+}
+
+func sameI32Constant(a: Node, b: Node): bool {
+    let zero: i32 = 0
+    return match constant(a, zero) {
+        case null => false
+        case x => sameI32Value(b, x)
+    }
+}
+
+func sameBoolConstant(a: Node, b: Node): bool {
+    return match constant(a, false) {
+        case null => false
+        case x => sameBoolValue(b, x)
+    }
+}
+
+/// A constant the sweep may merge: a static value of a type whose `==` is bit equality, which no
+/// node may write in place.
+func mergeableConstant(n: Node): bool {
+    return kind(n) == NodeKind::Data && is_constant(n) && bitEqualType(typeText(n)) && !is_written_slot(n)
+}
+
+/// Whether the two lists name the same nodes in the same order.
+func sameNodes(xs: Node[], ys: Node[]): bool {
+    return len(xs) == len(ys) && range(0, len(xs))->all<(i: int): bool => xs[i] == ys[i]>
+}
+
+/// Whether one of the nodes may be written in place. An operation over such a value is not one
+/// value: the two times it is written are two results.
+func anyWritten(ns: Node[]): bool {
+    return ns->any<is_written_slot>
+}
+
+/// A pure operation the sweep may merge: reading no value that may be written in place, and not
+/// one itself.
+func mergeableOperation(n: Node): bool {
+    return kind(n) == NodeKind::Oper && is_pure(n) && opText(n) != '' && !is_written_slot(n) && !anyWritten(inputs(n)) && !anyWritten(with_inputs(n))
+}
+
+/// Whether the two operations are the same computation: the same operator on values of the same
+/// type, the same operands in the same order, in the same region, with the same permissions and
+/// the same attributes.
+func sameOperation(a: Node, b: Node): bool {
+    return opText(a) == opText(b) && typeText(a) == typeText(b) && permissions(a) == permissions(b) && tags(a) == tags(b) && region_of(a) == region_of(b) && sameNodes(inputs(a), inputs(b)) && sameNodes(with_inputs(a), with_inputs(b))
+}
+
+/// Whether one node may stand for the other in a graph: as a constant of the same value, or as
+/// the same operation.
+func sameValue(a: Node, b: Node): bool {
+    return (mergeableConstant(a) && mergeableConstant(b) && sameConstant(a, b, typeText(a))) || (mergeableOperation(a) && mergeableOperation(b) && sameOperation(a, b))
+}
+
+/// The node `n` is replaced by: the first node of its graph that has the same value, or `n`
+/// itself when it is the first. That first node is never a node the same round merges away,
+/// which is what makes one transaction enough for a round.
+func keepOf(ns: Node[], n: Node): Node {
+    let earlier = ns->filter<(m: Node): bool => id(m) < id(n) && sameValue(n, m)>
+    return if len(earlier) == 0 then n else earlier[0]
+}
+
+func isHit(ns: Node[], n: Node): bool {
+    return keepOf(ns, n) != n
+}
+
+func graphHasHit(g: Graph): bool {
+    let ns = nodes(g)
+    return ns->any<(n: Node): bool => isHit(ns, n)>
+}
+
+func hasHit(p: Program): bool {
+    return graphs(p)->any<graphHasHit>
+}
+
+func mergeHitsOf(t: Txn, g: Graph): void {
+    let ns = nodes(g)
+    ns->filter<(n: Node): bool => isHit(ns, n)>->foreach<(n: Node) => replace(t, n, keepOf(ns, n))>
+}
+
+func mergeHits(p: Program): Program! sync {
+    let t = open(p)
+    graphs(p)->foreach<(g: Graph) => mergeHitsOf(t, g)>
+    return commit(t)
+}
+
+/// Equal values written twice are one node, until none is left.
+export func cse(p: Program): Program! {
+    return if hasHit(p) then mergeHits(p) ?-> cse else p
+}
+
+// ---- dead values ----
+
+/// Whether the node computes a value: a constant, a conversion, a copy, an access, a fill or a
+/// pure operation. This is `isValueOnly` of the C++ pass, which the `graph` module reads as the
+/// kinds of a node and the declarations of its operator.
+func valueOnly(n: Node): bool {
+    let k = kind(n)
+    return (k == NodeKind::Data && is_constant(n)) || k == NodeKind::Cast || k == NodeKind::Copy || k == NodeKind::Accs || k == NodeKind::Fill || (k == NodeKind::Oper && is_pure(n))
+}
+
+/// Whether the node computes a value no node reads. A node that anchors its graph is not one:
+/// a transaction refuses to erase it, and the graph would lose its exit.
+func deadValue(n: Node): bool {
+    return valueOnly(n) && len(value_users(n)) == 0 && !is_anchor(n)
+}
+
+func eraseHits(p: Program, hits: Node[]): Program! sync {
+    let t = open(p)
+    hits->foreach<(n: Node) => erase(t, n)>
+    return commit(t)
+}
+
+func deadValues(p: Program): Program! sync {
+    let hits = allNodes(p)->filter<deadValue>
+    return if len(hits) == 0 then p else eraseHits(p, hits) ?-> deadValues
+}
+
+/// Values nobody reads are erased, until none is left: the value half of `std::opt::dce`.
+export func dce(p: Program): Program! {
+    return deadValues(p)
+}

@@ -15,6 +15,7 @@ camel_add_tool_objects(camel-debugger_objects
     src/worker.cpp
     src/repl.cpp
     src/repl_debug.cpp
+    src/build_stamp.cpp
     src/command/dispatcher.cpp
     src/command/commands.cpp
     src/core/debug_core.cpp

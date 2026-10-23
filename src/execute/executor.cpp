@@ -61,7 +61,7 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
         return std::nullopt;
     }
     const std::string protocol = uri.substr(0, pos);
-    // With a trace file set by std::profile(effect_trace="..."), effectful operators are handed
+    // With a trace file set by std::profile effect_trace="...", effectful operators are handed
     // out behind a logging trampoline (camel/core/effect_trace.h); otherwise wrap() returns the
     // operator unchanged.
     auto traced = [&uri](std::optional<operator_t> op) -> std::optional<operator_t> {

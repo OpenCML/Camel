@@ -54,7 +54,7 @@ Hello, Camel!
 
 - 一个 `.cml` 文件是一个模块，`module hello` 给它起名（可以省略）。
 - 程序从 `main` 开始。`main` 返回的 `int` 是进程的退出码。
-- 返回类型后面的 **`sync`** 表示函数体是同步块：里面的语句按书写顺序执行。现在先记住“要打印的函数，函数体前写 `sync`”，第 6 节解释为什么。
+- 返回类型后面的 **`sync`** 表示函数体是同步块：它直接写着的语句按书写顺序执行（同步块不向内继承，见第 6 节）。现在先记住“要打印的函数，函数体前写 `sync`”，第 6 节解释为什么。
 - 语句之间换行即可，不需要分号。
 
 ## 2. 值与类型
@@ -377,7 +377,7 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 
 ### 6.2 同步块
 
-写在块前的 `sync` 使它成为同步块：块里的表达式按书写顺序执行，相当于编译器在相邻的表达式之间加了控制边。[`examples/06_sync_block.cml`](examples/06_sync_block.cml) 只把 `greet` 的函数体改成同步块：
+写在块前的 `sync` 使它成为同步块：**它自己直接写着的**语句按书写顺序执行，相当于编译器在相邻的语句之间加了控制边。[`examples/06_sync_block.cml`](examples/06_sync_block.cml) 只把 `greet` 的函数体改成同步块：
 
 <!-- camel-snippet: compile-only: the fence is the changed function only; the text block is the output of examples/06_sync_block.cml -->
 
@@ -394,6 +394,17 @@ hello from greet
 ```
 
 在同步块里调用什么、有没有副作用都无所谓，因为已经有顺序了。输入输出就写在同步块里。
+
+**同步块不向内继承。** 它只管自己直接写着的语句：写在里面的分支臂、循环体与嵌套块按它们自己的写法执行，要同步就在那里写 `sync`（[设计原则 3.4](../design-principles.cn.md#34-sync-块)）。这和上一节“函数的行为由它自己决定”是同一条规则，只是往内一层：
+
+```cml
+func f(c: bool): int sync {
+    if c then { println(1); println(2) }   // 臂不是同步块：只有 println(2) 执行
+    return 0
+}
+```
+
+`if` 本身在同步链上，臂不在：臂按依赖求值，`println(1)` 的值没有人用，所以不执行；`println(2)` 是臂的值、也就是 `if` 的值，所以执行。要两句都打印，把 `sync` 写在臂上：`if c then sync { println(1); println(2) }`。
 
 ### 6.3 函数的行为由它自己决定
 

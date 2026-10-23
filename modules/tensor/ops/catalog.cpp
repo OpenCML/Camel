@@ -40,6 +40,7 @@ void declareResourcesAndDefinitions() {
             {"save_npy", externalAmbient("fs", AccessMode::ReadModifyWrite)},
             {"set_num_threads", externalAmbient("tensor:threads", AccessMode::Write)},
             {"num_threads", externalAmbient("tensor:threads", AccessMode::Read)},
+            {"gemm_threads", externalAmbient("tensor:threads", AccessMode::Read)},
         });
     const auto operand = [](uint8_t index,
                             std::optional<DefinitionDefault> fallback = std::nullopt) {

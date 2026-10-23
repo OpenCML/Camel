@@ -158,14 +158,60 @@ export func count::<T>(xs: T[]): int {
 
 // ---- aggregating ----
 
-/// The sum of the elements, 0 for an empty array. Integers wrap around on overflow, as `+` does.
+// A reduction of floating-point elements follows a rule of the language, not a choice of this
+// module: it returns the element type and accumulates in f64, rounding once at the end (design
+// principles 7.3: "浮点数组的归约在 f64 中累加、舍入一次，返回元素类型（与张量归约一致）"; ruling
+// docs/handover/reviews/reduced-precision.md item (d), which states the same rule for an f32
+// array). Writing the f64 accumulator and the single conversion back into the element type is
+// what makes it a definition rather than a precision the compiler chose: the additions the
+// source asks for are f64 additions, so nothing here is an f32 accumulation that the compiler
+// raised, and `change_precision` (7.2, which governs what the compiler changes) is neither
+// needed nor consumed by this module. The addition order is unchanged too: ascending from +0,
+// as it was.
+
+/// The sum of the elements, 0 for an empty array.
+///
+/// A floating-point element type accumulates in f64 and rounds once into the element type at the
+/// end: the additions are f64 additions and the result is one conversion of their sum, not a
+/// rounding after every addition (an f32 accumulator rounds at every step and answers
+/// differently). This is the same rule the tensor axis `sum` follows (modules/tensor/kernels/
+/// reduce.cpp: a double accumulator, one rounding when the element is stored), so the two paths
+/// agree bit for bit on the same elements. An integer element type accumulates in itself and
+/// wraps around on overflow, as `+` does on it; a complex element type accumulates in itself as
+/// well, the f64 rule being stated for the floating-point element types.
 /// @example sum([1, 2, 3])    // 6
 export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
-    return xs->reduce<(a, b) => a + b, 0>
+    return match type T {
+        // The accumulator of the integer and complex arms is T itself: integers wrap around in T
+        // exactly as `+` does, and a complex value is not a floating-point element type, so the
+        // f64 rule is not the one for it. Only the selected arm of the `match type` is built.
+        case int | i32 | c64 | c128 => xs->reduce<(a, b) => a + b, 0>
+        // A floating-point T accumulates in f64 (`sumF64`, from +0 in order) and converts once
+        // into the element type, and that conversion is the only rounding of the whole reduction.
+        // bf16 and f16 are floating-point element types of the same kind (design principles 7.3),
+        // and their arms are written the same way.
+        case float => float(sumF64(xs))
+        case f32 => f32(sumF64(xs))
+        case bf16 => bf16(sumF64(xs))
+        case f16 => f16(sumF64(xs))
+    }
+}
+
+/// The f64 sum of the elements, from +0 in ascending order: the accumulator of `sum` for every
+/// floating-point element type (design principles 7.3, ruling reduced-precision.md item (d)).
+/// `float(x)` reads each element into the f64 accumulator, so no addition is done at a narrower
+/// width; the caller converts the result into the element type, once.
+func sumF64::<T>(xs: T[]): float {
+    return xs->reduce<(acc: float, x: T): float => acc + float(x), 0.0 as float>
 }
 
 /// The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
 /// +0), or null for an empty array.
+///
+/// No accumulator and no accumulation width take part in this fold: it carries an element of T
+/// and combines it with `math::min`, which is IEEE 754 minimum — exactly associative and
+/// commutative (design principles 7.7) — so the order does not change the bits and there is
+/// nothing to round.
 /// @example min([3, 9, 2]) ?? 0    // 2
 export func min::<T>(xs: T[]): T? when is_ordered::<T>() {
     return if len(xs) == 0 then null else xs->reduce<math::min, xs[0]>
@@ -173,6 +219,9 @@ export func min::<T>(xs: T[]): T? when is_ordered::<T>() {
 
 /// The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
 /// -0), or null for an empty array.
+///
+/// As `min`: the fold carries an element of T, and `math::max` is IEEE 754 maximum, exactly
+/// associative and commutative (design principles 7.7), so no accumulator type enters.
 /// @example max([3, 9, 2]) ?? 0    // 9
 export func max::<T>(xs: T[]): T? when is_ordered::<T>() {
     return if len(xs) == 0 then null else xs->reduce<math::max, xs[0]>

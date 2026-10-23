@@ -14,6 +14,8 @@
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
+
+#include <iostream>
 #include "camel/utils/str.h"
 #include "camel/utils/type.h"
 #include "core/module/entity_internal.h"
@@ -23,6 +25,7 @@
 #include "camel/core/type/other.h"
 #include "camel/core/type/typevar.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #define DEBUG_LEVEL -1
@@ -446,13 +449,54 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
     return nullptr;
 }
 
+bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
+    if (!gct->nativeDeclaration()) {
+        return false;
+    }
+    const auto *when = GCT::Tree::of(gct)->whenOf(gct);
+    if (when == nullptr) {
+        return false;
+    }
+    // The text the pipeline reads, normalized the same way: `is_function::<T>()` with any
+    // identifier for the type parameter (pass_declarations.cpp, passDeclarationApplies). A
+    // body-less declaration without that condition declares an operator, as before.
+    std::string text;
+    for (const char c : when->text) {
+        if (!std::isspace(static_cast<unsigned char>(c))) {
+            text += c;
+        }
+    }
+    const std::string prefix = "is_function::<";
+    if (text.rfind(prefix, 0) != 0 || text.size() <= prefix.size() + 3 ||
+        text.compare(text.size() - 3, 3, ">()") != 0) {
+        return false;
+    }
+    const std::string parameter =
+        text.substr(prefix.size(), text.size() - prefix.size() - 3);
+    return !parameter.empty() && std::all_of(
+                                     parameter.begin(), parameter.end(), [](char c) {
+                                         return std::isalnum(static_cast<unsigned char>(c)) ||
+                                                c == '_';
+                                     });
+}
+
 void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     ENTER("DECL");
     if (gct->nativeDeclaration()) {
+        if (isPassDeclaration(gct)) {
+            // A pass is a function the pipeline applies to the program, not an operator of the
+            // module: it has no executor, no signature to publish and nothing to export. The
+            // declaration is the pipeline's (design principles 9.3); this records the name so
+            // the export list does not look for an entity that will not exist.
+            unit_->passDeclarations.insert(gct->name());
+            LEAVE("DECL");
+            return nullptr;
+        }
         // A body-less declaration declares an operator of a C++ module (design principles 6.4):
         // it is checked and kept as an operator rule, not as a graph (handover H19, step 1).
         // A `constas` parameter belongs to the declaration's compile-time identity, which the
-        // native declaration mechanism does not carry (design principles 5.4).
+        // native declaration mechanism does not carry (design principles 5.4). A pass-shaped
+        // declaration is not an operator; it was handled above.
         FunctionType *funcType = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
         if (funcType->hasConstas()) {
             diags_->of(SemanticDiag::ConstasInNativeDeclaration)

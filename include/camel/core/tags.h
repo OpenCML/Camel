@@ -109,10 +109,14 @@ struct Decl {
     /// function or a block grants the permission to the code written there. `finite_math` is a
     /// group of the four assumptions and has 0 here; its members carry their bits.
     sem::PermissionMask permission = 0;
-    /// The tag's arguments are tag names, not values (`#reads<reassociate, contract>`): the AST
+    /// The tag's arguments are names, not values (`#reads<reassociate, contract>`): the AST
     /// builder reads each as a symbol instead of an expression. Used by the standard tag
     /// `reads`, whose value is the tuple of the names.
     bool names = false;
+    /// A name of a `names` tag is itself a tag name, so a name no tag declares is a typo
+    /// (`#reads<reassocate>`). False when the names are plain names of the program: `#impl<f>`
+    /// carries the name of a body-less declaration, which is not a tag.
+    bool namesAreTags = true;
     /// The number of arguments is not the number of parameters: any number, at least one. The
     /// value is always a tuple (one argument still makes a one-item tuple), so a key of kind
     /// tuple holds every use.

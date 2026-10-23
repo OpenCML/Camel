@@ -156,6 +156,12 @@ export function parseTomlString(content) {
             throw new Error(`unsupported TOML line: ${rawLine}`)
         }
         const [, key, value] = match
+        // A repeated key in one table is not TOML, and silently keeping the last value makes a
+        // plan say one thing in its comment and another to the runner (a second timeout_ms
+        // hid behind a raised one). Name the file and line instead.
+        if (Object.hasOwn(current, key)) {
+            throw new Error(`duplicate key '${key}' (line ${i + 1})`)
+        }
         const trimmedValue = value.trim()
         if (trimmedValue.startsWith('"""') || trimmedValue.startsWith("'''")) {
             const parsed = parseMultilineString(lines, i, trimmedValue)

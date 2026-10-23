@@ -1,0 +1,18 @@
+/**
+ * The imported half of the cross-module `#impl` case (design principles 10.4): `add` keeps
+ * its Camel body `a - (0 - b)` as the semantics and names the native `:op/add_l` kernel
+ * `add_kernel` as its implementation. It is exported, because another module calls it.
+ *
+ * The body must survive as the semantic graph even when the only thing the program does with
+ * `add` is call it directly: a direct cross-module call is the kernel operator, so no node
+ * reachable from `main` names this graph.
+ */
+module impl_cross_module_lib
+
+#op<':op/add_l'>
+func add_kernel(a: int, b: int): int
+
+#impl<add_kernel>
+export func add(a: int, b: int): int {
+    return a - (0 - b)
+}

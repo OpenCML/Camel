@@ -39,6 +39,25 @@ Array *expandAxis(
 /// dy * gelu'(x) for the tanh approximation.
 Array *geluGrad(const Array *x, const Array *dy, mm::IAllocator &allocator);
 
+namespace detail {
+
+/// One range of `dy * gelu'(x)`, element for element (gradient_loops.inl).
+using GeluGradFn = void (*)(const float *x, const float *dy, float *out, int64_t count);
+
+/// The portable unit, and the AVX2 one when the build has it. An element of this gradient is
+/// independent of its neighbours and the gradient contains no sum, so which unit runs, and how the
+/// range is split across threads, changes no bit: the polynomial and the slope are rounded as
+/// written in both units (gradient_loops.inl). The tangent inside them is `vmath::tanh`, the
+/// function the unary kernel inlines, which carries the unary units' contraction opt-in -- the
+/// project's one declared instruction-set-dependent rounding, inside that function's error bound
+/// (modules/tensor/CMakeLists.txt; design principles 7.1 on transcendentals).
+void geluGradGeneric(const float *x, const float *dy, float *out, int64_t count);
+#if defined(CAMEL_TENSOR_HAS_AVX2_UNIT)
+void geluGradAvx2(const float *x, const float *dy, float *out, int64_t count);
+#endif
+
+} // namespace detail
+
 /// dy * erf'(x).
 Array *erfGrad(const Array *x, const Array *dy, mm::IAllocator &allocator);
 

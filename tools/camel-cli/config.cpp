@@ -12,7 +12,7 @@
 #include <string_view>
 #include <vector>
 
-#include "build_config.h"
+#include "build_stamp.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/execute/devices.h"
@@ -27,10 +27,6 @@
 #include "opencmlrc.h"
 
 #include <filesystem>
-
-#ifndef BUILD_FOOTPRINT
-#define BUILD_FOOTPRINT "%y%m%d_%H%M%S"
-#endif
 
 using namespace clipp;
 using namespace std;
@@ -354,6 +350,7 @@ bool dumpOps       = false; // Whether to dump the operators of the imported mod
 bool dumpInstances = false; // Whether to dump the index semantics of every operator node
 bool dumpFacts     = false; // Whether to compute and dump the graph facts of the program
 bool dumpTags      = false; // Whether to dump the tags the program declares
+bool dumpAttrs     = false; // Whether to dump the attribute-fate table and check its coverage
 bool geneCode      = false; // Whether to generate code from GIR
 int passUntil      = -1;    // Pass until the given pass
 } // namespace Inspect
@@ -746,6 +743,10 @@ bool parseArgs(int argc, char *argv[]) {
              "compute the graph facts of every kind the core and the loaded modules register "
              "(tensor shapes, index instances, effect summaries, ...) and print each with its "
              "stamp",
+         option("--attrs").set(dumpAttrs) %
+             "print every node attribute the tree can write with its fate in the interpreter, "
+             "the dumps, the ONNX export and Tiles, then fail if a loaded module interned an "
+             "attribute key the table does not classify",
          option("--gen", "--gene-code").set(geneCode) % "generate code from AST",
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) %
              "pass until the given pass",
@@ -799,9 +800,9 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showVersion) {
 #ifdef NDEBUG
-        cout << "Camel v" << VERSION << " (Build " << BUILD_FOOTPRINT << ")" << endl;
+        cout << "Camel v" << VERSION << " (Build " << camelBuildFootprint() << ")" << endl;
 #else
-        cout << "Camel v" << VERSION << " (Debug " << BUILD_FOOTPRINT << ")" << endl;
+        cout << "Camel v" << VERSION << " (Debug " << camelBuildFootprint() << ")" << endl;
 #endif
     }
 
@@ -817,9 +818,9 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showAbout) {
 #ifdef NDEBUG
-        cout << "Camel v" << VERSION << " (Build " << BUILD_FOOTPRINT << ")";
+        cout << "Camel v" << VERSION << " (Build " << camelBuildFootprint() << ")";
 #else
-        cout << "Camel v" << VERSION << " (Debug " << BUILD_FOOTPRINT << ")";
+        cout << "Camel v" << VERSION << " (Debug " << camelBuildFootprint() << ")";
 #endif
         cout <<
 #include "ABOUT"

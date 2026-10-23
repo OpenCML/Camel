@@ -1,0 +1,29 @@
+# Fixture of test/tools/selftest/load-class/run.mjs: three ways a plan shares a writable place.
+# It is not under test/plans because every test here breaks a rule on purpose.
+id = "selftest.load_class.bad"
+order = 1
+tier = "fast"
+
+[[tests]]
+name = "writer.one"
+kind = "behavior"
+tool = "node"
+case = "../cases/case.mjs"
+args = ["${case}", "out=tmp/selftest-shared.out"]
+expect_exit = 0
+
+[[tests]]
+name = "writer.two"
+kind = "behavior"
+tool = "node"
+case = "../cases/case.mjs"
+args = ["${case}", "out=tmp/selftest-shared.out"]
+expect_exit = 0
+
+[[tests]]
+name = "listener.fixed_port"
+kind = "behavior"
+tool = "node"
+case = "../cases/case.mjs"
+args = ["${case}", "--port", "8765"]
+expect_exit = 0

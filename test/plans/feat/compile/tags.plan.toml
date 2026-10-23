@@ -324,14 +324,30 @@ value(9, 'tiles.placement="gpu"')
 value(14, 'tiles.placement="cpu"')
 value(23, 'tiles.placement="gpu"')
 value(25, 'tiles.placement="cpu"')
-// The compact view prints a tagged region's fact without drawing a cluster: the outer block
-// is region 1, the inner one region 2.
+// The compact view prints a tagged region's fact without drawing a cluster. The number in
+// `region #N` is the region's index in the graph's region table, and the builder hands those out
+// in allocation order: an unrelated construct written earlier in this function that allocates a
+// region of its own (an arm, a loop part) moves it while the facts and the nest stay what they
+// were. Compare the identity each line carries, not the counter beside it: which region has which
+// fact, and that the inner block's parent is the outer block's id, whatever that id is.
 const regionLines = lines.filter((l) => l.includes('region #') && l.includes('attrs='))
 assert(regionLines.length === 2, regionLines.join('\n'))
-assert(regionLines[0].includes('region #1 block parent=0'), regionLines[0])
-assert(regionLines[0].includes('attrs="tiles.placement=\\"gpu\\""'), regionLines[0])
-assert(regionLines[1].includes('region #2 block parent=1'), regionLines[1])
-assert(regionLines[1].includes('attrs="tiles.placement=\\"cpu\\""'), regionLines[1])
+const withFact = (fact) => {
+  const found = regionLines.filter((l) => l.includes(`attrs="tiles.placement=\\"${fact}\\""`))
+  assert(found.length === 1, `no single ${fact} region in: ${regionLines.join('\n')}`)
+  return found[0]
+}
+const idOf = (line) => {
+  const found = line.match(/region #(\d+) /)
+  assert(found, `no region id in: ${line}`)
+  return found[1]
+}
+const outer = withFact('gpu')
+const inner = withFact('cpu')
+assert(outer.includes('block'), outer)
+assert(inner.includes('block'), inner)
+assert(outer.includes('parent=0'), `the outer block is not written in the body: ${outer}`)
+assert(inner.includes(`parent=${idOf(outer)}`), `the inner block's parent is not the outer block: ${inner}`)
 assert(label('main') && !lines[at('main') + 1].includes('body_attrs'), 'main has no body tag')
 }
 """
@@ -346,16 +362,40 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-const gpu = out.indexOf('region_attrs="tiles.placement=\\"gpu\\""')
-const cpu = out.indexOf('region_attrs="tiles.placement=\\"cpu\\""')
-assert(gpu >= 0, 'no gpu block region')
-assert(cpu > gpu, 'the cpu block is not inside the gpu block')
-for (const line of [
-  'subgraph cluster_F01_r1 { label="block";',
-  'subgraph cluster_F01_r2 { label="block";',
-]) assert(out.includes(line), `missing ${line}`)
-assert(out.indexOf('subgraph cluster_F01_r1') < out.indexOf('subgraph cluster_F01_r2'),
-  'the outer block cluster is not written before the inner one')
+const lines = out.split('\n')
+// A cluster's name is a dot identifier whose job is to merge the nodes of one region, and its
+// `_rN` is that region's index in the region table -- the same allocation-order number the
+// compact view prints, so it moves for the same reason and is not what the fact says. Compare
+// the two clusters as identities: two Block regions, the inner one's cluster written inside the
+// outer one's.
+const clusterOf = (fact) => {
+  const at = lines.findIndex((l) => l.includes(`region_attrs="tiles.placement=\\"${fact}\\""`))
+  assert(at >= 0, `no ${fact} block region`)
+  // A node in a region is drawn inside one cluster per region it is in, outermost first, each
+  // opened by a line of its own: the line above a region's own fact is that region's cluster.
+  const chain = []
+  for (let i = at - 1; i >= 0; i--) {
+    const line = lines[i].trim()
+    if (line.startsWith('subgraph cluster_')) {
+      const found = line.match(/^subgraph cluster_([^\s{]+)/)
+      assert(found, line)
+      chain.unshift({ name: found[1], line })
+      continue
+    }
+    if (line.startsWith('region_attrs=')) continue
+    break
+  }
+  assert(chain.length > 0, `the ${fact} region is drawn in no cluster: ${lines[at]}`)
+  const own = chain[chain.length - 1]
+  assert(own.line.includes('label="block";'), `the ${fact} cluster is not a block: ${own.line}`)
+  return { at, name: own.name, chain: chain.map((entry) => entry.name) }
+}
+const outer = clusterOf('gpu')
+const inner = clusterOf('cpu')
+assert(outer.at < inner.at, 'the cpu block region is not written after the gpu block region')
+assert(outer.name !== inner.name, `both blocks are drawn in one cluster: ${outer.name}`)
+assert(outer.chain.every((name, i) => inner.chain[i] === name) && inner.chain.length > outer.chain.length,
+  `the cpu block is not drawn inside the gpu block: ${inner.chain.join(' < ')} vs ${outer.chain.join(' < ')}`)
 }
 """
 

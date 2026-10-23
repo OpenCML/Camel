@@ -18,6 +18,7 @@
 #include "camel/parse/parse.h"
 #include "server.h"
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -125,5 +126,22 @@ void setForegroundTaskId(const std::string &id);
 void appendTaskLogLine(int port, const std::string &line);
 /// 父进程专用：按 offset 分页读取某任务的日志行；nextOffset 为下次请求应使用的 offset。
 void getTaskLogLines(int port, size_t offset, std::vector<std::string> &lines, size_t &nextOffset);
+
+/// 事件与程序输出走两条通道：事件走 HTTP，输出走子进程的 stdout 管道。父进程读到事件时，
+/// 管道里的输出可能还没被读线程处理完，只按到达顺序打印就会把输出排到事件之后。
+/// 子进程在把事件交给 HTTP 之前，先把这一行写到 stdout；父进程见到编号不小于事件的标记，
+/// 才知道该事件之前的输出已经全部进入任务日志。
+constexpr const char *kTaskLogMarkPrefix = "\x1e" "camel-db-event:";
+constexpr char kTaskLogMarkEnd          = '\x1f';
+
+/// 标记行的完整文本（不含换行）。
+std::string taskLogMark(uint64_t seq);
+/// 解析一行；是标记时返回 true 并写回 seq。
+bool parseTaskLogMark(const std::string &line, uint64_t &seq);
+/// 父进程专用：读线程处理到标记时记下编号；同一任务只前进，不后退。
+void noteTaskLogMark(int port, uint64_t seq);
+uint64_t getTaskLogMark(int port);
+/// 父进程专用：同一端口换了新的 worker（restart）时把标记归零，旧的编号不能替新的事件作证。
+void resetTaskLogMark(int port);
 
 } // namespace debugger

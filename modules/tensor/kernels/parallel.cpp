@@ -268,6 +268,8 @@ bool parallelWouldSplit(int64_t count, int64_t grain) noexcept {
     return maxChunks >= 2 && configuredThreadCount() > 1;
 }
 
+bool insideParallelRegion() noexcept { return tInsideRegion; }
+
 void runParallelChunks(int64_t count, int64_t grain, const RangeFn &fn) {
     pool().run(count, grain, fn);
 }
@@ -280,8 +282,10 @@ void setNumThreads(int threads) {
     if (WorkerPool *created = poolSlot()) {
         created->resize(threads);
     }
-    // A library GEMM has its own pool; it must not multiply this one (the batch loop already
-    // runs on it). setGemmThreads caps it and is a no-op without a library.
+    // The run's thread budget is the tensor pool's. The library GEMM's own pool is one thread
+    // whatever this number is (gemm.cpp, H303): a second pool beside this one competed for the
+    // same cores, and one library thread is what the measured cells support. setGemmThreads is a
+    // no-op without a library.
     setGemmThreads(threads);
 }
 

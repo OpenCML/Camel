@@ -1,0 +1,14 @@
+/**
+ * `#impl<nope>` names no body-less declaration of this module and no import brings it
+ * (ImplKernelUnknown), reported at the tag.
+ */
+module impl_unknown
+
+#impl<nope>
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    return add(1, 2)
+}

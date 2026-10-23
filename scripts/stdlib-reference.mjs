@@ -673,6 +673,17 @@ function readDeclarations(file, module) {
             const name = rest.slice(0, rest.indexOf('(')).replace(/::<.*>$/, '')
             const args = bracketed(rest, rest.indexOf('('))
             const after = rest.slice(args.end + 1)
+            // A pass declaration (design principles 9.3): a body-less function whose condition
+            // is the pass applicability. A pass is a function the pipeline applies to the
+            // program, not an operator the module registers; it is documented in docs/cli.md,
+            // and its parameters are the declaration's `with` list.
+            if (!declarationBody(after, lines, i) &&
+                /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(after)) {
+                doc = []
+                withText = ''
+                pendingUri = null
+                continue
+            }
             const result = after.replace(/^\s*:\s*/, '').replace(/\s*(sync\s*)?\{\s*$/, '').trim()
             const entry = {
                 module: module.name,

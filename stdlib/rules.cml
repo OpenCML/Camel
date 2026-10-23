@@ -18,7 +18,7 @@
  * answers the program and what the application cost.
  */
 module rules
-import { Program, Node, constant } from graph
+import { Program } from graph
 import { abs, exp as math_exp, expm1, log as math_log, log1p, trunc } from math
 import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
 import { Tensor, exp, log, log_softmax, sigmoid, softmax, sum } from tensor
@@ -62,17 +62,11 @@ export rule int_distribute(a: int, b: int, c: int) { a * (b + c) <=> a * b + a *
 // commutation and distribution are all exact. Only the constant-folded coefficients differ: the
 // rule's `c1 + c2` (or `c1 * c2`) is an i32 operation and wraps exactly as the program does.
 //
-// A coefficient the rule reads must be an i32 too. `constant` compares type codes, so a constant
-// of another type reads as null; the guards below keep a malformed graph (an `add_i` with an
-// `int` constant) from matching, mirroring algebra.cpp's typed scalar constant lookup.
-
-/// Whether the matched constant has the i32 element type.
-func isI32(c: Node): bool {
-    return match constant(c, i32(0)) {
-        case null => false
-        case _ => true
-    }
-}
+// A coefficient the rule reads must be an i32 too, and the matcher is what says so: `const c: i32`
+// matches only a constant whose type the i32 pattern accepts, so a malformed graph (an `add_i`
+// with an `int` constant, the case algebra.cpp's typed scalar lookup also refuses) matches
+// nothing here (rewrite design 2 (second version) 1; reviews/stdlib-rules.md item 2: the `isI32`
+// helpers a rule used to guard itself with are deleted).
 
 export rule int32_add_zero(x: i32) { x + 0 => x }
 export rule int32_zero_add(x: i32) { 0 + x => x }
@@ -87,13 +81,13 @@ export rule int32_sub_self(x: i32) { x - x => i32(0) }
 export rule int32_add_self(x: i32) { x + x => x * 2 }
 export rule int32_combine(x: i32, const c1: i32, const c2: i32) {
     x * c1 + x * c2 => x * (c1 + c2)
-} when isI32(c1) && isI32(c2)
+}
 export rule int32_fold(x: i32, const c1: i32, const c2: i32) {
     (x * c1) * c2 => x * (c1 * c2)
-} when isI32(c1) && isI32(c2)
+}
 export rule int32_fold_add(x: i32, const c1: i32, const c2: i32) {
     (x + c1) + c2 => x + (c1 + c2)
-} when isI32(c1) && isI32(c2)
+}
 
 /// The bare operand laws, as `int_combine_one` explains. The coefficient is read as an i32 (the
 /// pattern is typed by the i32 operators), and `c + 1` wraps in i32 exactly as the program would.
@@ -127,8 +121,10 @@ export rule float_mul_comm(a: float, b: float) { a * b <=> b * a }
 //
 // A rule that changes the rounding path needs the permission for it, and the check compares its
 // two sides with the error bound of that permission (camel/core/operator_semantics.h,
-// rewriteErrorBound). The conditions read the matched constants from the draft: the coefficients
-// decide which permission the law really needs.
+// rewriteErrorBound). The conditions are functions of the matched constants' values: a `const`
+// parameter of a rule is the constant itself, of its declared type (rewrite design 2 (second
+// version) 1; reviews/stdlib-rules.md item 5), so a guard is arithmetic on that value and needs
+// neither `constant(node, sample)` nor a `match … case null` around every read.
 
 /// Whether a value is finite: NaN and the infinities are the only values that are not equal to
 /// themselves after a subtraction.
@@ -146,55 +142,33 @@ func exactIn32(v: float): bool {
 
 /// `x*c1 + x*c2 => x*(c1+c2)` with two finite, nonzero coefficients of the same sign: the
 /// reassociation changes rounding only, so the default `reassociate` grant suffices.
-func combineSameSign(c1: Node, c2: Node): bool {
-    return match constant(c1, 0.0) {
-        case null => false
-        case a => match constant(c2, 0.0) {
-            case null => false
-            case b => finiteValue(a) && finiteValue(b) && a != 0.0 && b != 0.0 &&
-                          (a > 0.0) == (b > 0.0) && finiteValue(a + b)
-        }
-    }
+func combineSameSign(c1: float, c2: float): bool {
+    return finiteValue(c1) && finiteValue(c2) && c1 != 0.0 && c2 != 0.0 &&
+           (c1 > 0.0) == (c2 > 0.0) && finiteValue(c1 + c2)
 }
 
 /// The opposite-sign case: cancellation can turn an infinity into a finite value or lose the
 /// sign of a zero, so the rule also needs the assumptions that rule those out. A sum of zero
 /// (the coefficients cancel) is left alone: the rewrite would only change the sign of the zero.
-func combineMixedSign(c1: Node, c2: Node): bool {
-    return match constant(c1, 0.0) {
-        case null => false
-        case a => match constant(c2, 0.0) {
-            case null => false
-            case b => finiteValue(a) && finiteValue(b) && a != 0.0 && b != 0.0 &&
-                          (a > 0.0) != (b > 0.0) && a + b != 0.0
-        }
-    }
+func combineMixedSign(c1: float, c2: float): bool {
+    return finiteValue(c1) && finiteValue(c2) && c1 != 0.0 && c2 != 0.0 &&
+           (c1 > 0.0) != (c2 > 0.0) && c1 + c2 != 0.0
 }
 
 /// `(x*c1)*c2 => x*(c1*c2)`: both coefficients finite and nonzero, and their product finite and
 /// nonzero. The product is the new coefficient: an overflowing product would become an infinity
 /// (the rewrite then computes `x*inf`), and one that underflows to zero would erase the term.
 /// Removing the intermediate product may remove an overflow, which `no_infs` allows.
-func foldCoefficients(c1: Node, c2: Node): bool {
-    return match constant(c1, 0.0) {
-        case null => false
-        case a => match constant(c2, 0.0) {
-            case null => false
-            case b => finiteValue(a) && finiteValue(b) && a != 0.0 && b != 0.0 &&
-                          finiteValue(a * b) && a * b != 0.0
-        }
-    }
+func foldCoefficients(c1: float, c2: float): bool {
+    return finiteValue(c1) && finiteValue(c2) && c1 != 0.0 && c2 != 0.0 &&
+           finiteValue(c1 * c2) && c1 * c2 != 0.0
 }
 
 /// `x*c + x*c => x*(2c)` is exact when `c` is a finite integer with `1 <= |c| <= 2^52`: doubling
 /// a rounded product commutes with rounding there, and `2c` is exactly representable. The rule
 /// therefore needs no permission at all; the condition is what makes that true.
-func exactDoubling(c: Node): bool {
-    return match constant(c, 0.0) {
-        case null => false
-        case v => finiteValue(v) && abs(v) >= 1.0 && trunc(v) == v &&
-                      abs(v) <= 4503599627370496.0
-    }
+func exactDoubling(c: float): bool {
+    return finiteValue(c) && abs(c) >= 1.0 && trunc(c) == c && abs(c) <= 4503599627370496.0
 }
 
 /// The bare term in `x*c + x => x*(c+1)`: the same two conditions as `combineSameSign` and
@@ -202,18 +176,12 @@ func exactDoubling(c: Node): bool {
 /// opposite sign means `c < 0`, and `c == -1` (the coefficients cancel) stays as it is. The
 /// doubled rounding of the sum and of `c + 1` is the same reassociation the two-product law
 /// makes, so the permission set does not change.
-func combineOneSameSign(c: Node): bool {
-    return match constant(c, 0.0) {
-        case null => false
-        case a => finiteValue(a) && a != 0.0 && a > 0.0 && finiteValue(a + 1.0)
-    }
+func combineOneSameSign(c: float): bool {
+    return finiteValue(c) && c != 0.0 && c > 0.0 && finiteValue(c + 1.0)
 }
 
-func combineOneMixedSign(c: Node): bool {
-    return match constant(c, 0.0) {
-        case null => false
-        case a => finiteValue(a) && a != 0.0 && a < 0.0 && a + 1.0 != 0.0
-    }
+func combineOneMixedSign(c: float): bool {
+    return finiteValue(c) && c != 0.0 && c < 0.0 && c + 1.0 != 0.0
 }
 
 #requires<reassociate>
@@ -261,70 +229,44 @@ export rule float_one_combine_mixed(x: float, const c: float) {
 //
 // The same laws as the float ones, and the same distinction: the exact ones need no permission,
 // the ones that change rounding need the numeric permission that allows it. The guards are
-// separate functions because `constant` compares type codes: reading an f32 constant with the
-// float sample `0.0` returns null and the rule would silently never fire.
+// separate functions because the arithmetic in them is f32 arithmetic: their coefficient
+// parameters are declared `f32`, and the matcher checks the constant's type against that, so
+// `c1 + c2` here rounds the way the rule's f32 kernel will.
 
 func finite32(x: f32): bool {
     return x - x == 0.0
 }
 
-func combineSameSign32(c1: Node, c2: Node): bool {
-    return match constant(c1, f32(0.0)) {
-        case null => false
-        case a => match constant(c2, f32(0.0)) {
-            case null => false
-            case b => finite32(a) && finite32(b) && a != 0.0 && b != 0.0 &&
-                          (a > 0.0) == (b > 0.0) && finite32(a + b)
-        }
-    }
+func combineSameSign32(c1: f32, c2: f32): bool {
+    return finite32(c1) && finite32(c2) && c1 != 0.0 && c2 != 0.0 &&
+           (c1 > 0.0) == (c2 > 0.0) && finite32(c1 + c2)
 }
 
-func combineMixedSign32(c1: Node, c2: Node): bool {
-    return match constant(c1, f32(0.0)) {
-        case null => false
-        case a => match constant(c2, f32(0.0)) {
-            case null => false
-            case b => finite32(a) && finite32(b) && a != 0.0 && b != 0.0 &&
-                          (a > 0.0) != (b > 0.0) && a + b != 0.0
-        }
-    }
+func combineMixedSign32(c1: f32, c2: f32): bool {
+    return finite32(c1) && finite32(c2) && c1 != 0.0 && c2 != 0.0 &&
+           (c1 > 0.0) != (c2 > 0.0) && c1 + c2 != 0.0
 }
 
-func foldCoefficients32(c1: Node, c2: Node): bool {
-    return match constant(c1, f32(0.0)) {
-        case null => false
-        case a => match constant(c2, f32(0.0)) {
-            case null => false
-            case b => finite32(a) && finite32(b) && a != 0.0 && b != 0.0 &&
-                          finite32(a * b) && a * b != 0.0
-        }
-    }
+func foldCoefficients32(c1: f32, c2: f32): bool {
+    return finite32(c1) && finite32(c2) && c1 != 0.0 && c2 != 0.0 &&
+           finite32(c1 * c2) && c1 * c2 != 0.0
 }
 
 /// `x*c + x*c => x*(2c)` is exact when `c` is a finite integer with `1 <= |c| <= 2^23`: doubling
 /// a rounded product commutes with rounding there, and `2c` is exactly representable.
-func exactDoubling32(c: Node): bool {
-    return match constant(c, f32(0.0)) {
-        case null => false
-        case v => finite32(v) && abs(v) >= 1.0 && trunc(v) == v && abs(v) <= 8388608.0
-    }
+func exactDoubling32(c: f32): bool {
+    return finite32(c) && abs(c) >= 1.0 && trunc(c) == c && abs(c) <= 8388608.0
 }
 
 /// The bare term at 32 bits, as `combineOneSameSign` explains. The sum `c + 1` rounds in f32,
 /// which is what `finite32` reads; no exactness beyond `finite32` is needed, exactly as in
 /// `float32_combine`.
-func combineOneSameSign32(c: Node): bool {
-    return match constant(c, f32(0.0)) {
-        case null => false
-        case a => finite32(a) && a != 0.0 && a > 0.0 && finite32(a + 1.0)
-    }
+func combineOneSameSign32(c: f32): bool {
+    return finite32(c) && c != 0.0 && c > 0.0 && finite32(c + 1.0)
 }
 
-func combineOneMixedSign32(c: Node): bool {
-    return match constant(c, f32(0.0)) {
-        case null => false
-        case a => finite32(a) && a != 0.0 && a < 0.0 && a + 1.0 != 0.0
-    }
+func combineOneMixedSign32(c: f32): bool {
+    return finite32(c) && c != 0.0 && c < 0.0 && c + 1.0 != 0.0
 }
 
 export rule float32_mul_one(x: f32) { x * 1.0 => x }
@@ -395,10 +337,11 @@ export rule float32_one_combine_mixed(x: f32, const c: f32) {
 //    still matches: a less informed type is assignable from a more informed one.
 // 2. **The coefficients are plain numbers, not f32.** The tensor operators take any numeric
 //    scalar (registry.cpp, `ParamKind::TensorOrScalar`), so `x * 3.0` has an f64 constant, while
-//    the element type is f32. Each guard reads that constant with the `float` sample and requires
-//    it to be *exactly representable in f32* (`exactIn32`): reading a coefficient that f32 rounds
-//    would rewrite `x * 0.1` as if its coefficient were f32(0.1), which is the bug `algebra.cpp`
-//    avoids with its `exactIn<float>` lookup. The rule's own coefficient arithmetic (`c1 + c2`,
+//    the element type is f32. A tensor rule's coefficient parameter is therefore declared `float`
+//    (the type the matcher checks the constant against), and each guard requires the value to be
+//    *exactly representable in f32* (`exactIn32`): reading a coefficient that f32 rounds would
+//    rewrite `x * 0.1` as if its coefficient were f32(0.1), which is the bug `algebra.cpp` avoids
+//    with its `exactIn<float>` lookup. The rule's own coefficient arithmetic (`c1 + c2`,
 //    `c1 * c2`, `c + 1`) runs in f64 and the kernel converts the result to f32 once; the f64
 //    result of a sum/product of two f32-exact values is exact, so that one conversion is the
 //    correctly rounded f32 operation the program would perform (Gosper: 53 >= 2*24 + 2 bits).
@@ -414,59 +357,31 @@ export rule float32_one_combine_mixed(x: f32, const c: f32) {
 /// `x*c1 + x*c2 => x*(c1+c2)` for f32 elements: both coefficients exactly f32, finite, nonzero,
 /// the same sign, and the f32 sum finite. The sum is computed in f64 and rounded to f32 by the
 /// kernel, which is the same value f32 addition gives.
-func tensorCombineSameSign(c1: Node, c2: Node): bool {
-    return match constant(c1, 0.0) {
-        case null => false
-        case a => match constant(c2, 0.0) {
-            case null => false
-            case b => exactIn32(a) && exactIn32(b) && a != 0.0 && b != 0.0 &&
-                          (a > 0.0) == (b > 0.0) && finite32(f32(a + b))
-        }
-    }
+func tensorCombineSameSign(c1: float, c2: float): bool {
+    return exactIn32(c1) && exactIn32(c2) && c1 != 0.0 && c2 != 0.0 &&
+           (c1 > 0.0) == (c2 > 0.0) && finite32(f32(c1 + c2))
 }
 
-func tensorCombineMixedSign(c1: Node, c2: Node): bool {
-    return match constant(c1, 0.0) {
-        case null => false
-        case a => match constant(c2, 0.0) {
-            case null => false
-            case b => exactIn32(a) && exactIn32(b) && a != 0.0 && b != 0.0 &&
-                          (a > 0.0) != (b > 0.0) && a + b != 0.0 && finite32(f32(a + b))
-        }
-    }
+func tensorCombineMixedSign(c1: float, c2: float): bool {
+    return exactIn32(c1) && exactIn32(c2) && c1 != 0.0 && c2 != 0.0 &&
+           (c1 > 0.0) != (c2 > 0.0) && c1 + c2 != 0.0 && finite32(f32(c1 + c2))
 }
 
-func tensorFoldCoefficients(c1: Node, c2: Node): bool {
-    return match constant(c1, 0.0) {
-        case null => false
-        case a => match constant(c2, 0.0) {
-            case null => false
-            case b => exactIn32(a) && exactIn32(b) && a != 0.0 && b != 0.0 &&
-                          finite32(f32(a * b)) && f32(a * b) != 0.0
-        }
-    }
+func tensorFoldCoefficients(c1: float, c2: float): bool {
+    return exactIn32(c1) && exactIn32(c2) && c1 != 0.0 && c2 != 0.0 &&
+           finite32(f32(c1 * c2)) && f32(c1 * c2) != 0.0
 }
 
-func tensorExactDoubling(c: Node): bool {
-    return match constant(c, 0.0) {
-        case null => false
-        case v => exactIn32(v) && abs(v) >= 1.0 && trunc(v) == v && abs(v) <= 8388608.0
-    }
+func tensorExactDoubling(c: float): bool {
+    return exactIn32(c) && abs(c) >= 1.0 && trunc(c) == c && abs(c) <= 8388608.0
 }
 
-func tensorCombineOneSameSign(c: Node): bool {
-    return match constant(c, 0.0) {
-        case null => false
-        case a => exactIn32(a) && a != 0.0 && a > 0.0 && finite32(f32(a + 1.0))
-    }
+func tensorCombineOneSameSign(c: float): bool {
+    return exactIn32(c) && c != 0.0 && c > 0.0 && finite32(f32(c + 1.0))
 }
 
-func tensorCombineOneMixedSign(c: Node): bool {
-    return match constant(c, 0.0) {
-        case null => false
-        case a => exactIn32(a) && a != 0.0 && a < 0.0 && a + 1.0 != 0.0 &&
-                      finite32(f32(a + 1.0))
-    }
+func tensorCombineOneMixedSign(c: float): bool {
+    return exactIn32(c) && c != 0.0 && c < 0.0 && c + 1.0 != 0.0 && finite32(f32(c + 1.0))
 }
 
 export rule tensor_f32_mul_one(x: Tensor<f32>) { x * 1.0 => x }
@@ -566,7 +481,7 @@ export func simplify(p: Program): Program! {
 }
 
 /// The same laws under the strict numeric policy (design principles 7.4, 7.5): the pass grants no
-/// permission, as `std::opt(safe_fp=true)` does, so only the laws that need none fire.
+/// permission, as `std::opt safe_fp=true` does, so only the laws that need none fire.
 export func simplify_strict(p: Program): Program! {
     return simplifyWith(p, true)
 }
@@ -574,7 +489,34 @@ export func simplify_strict(p: Program): Program! {
 /// Every rule, both ways where it holds both ways; the smallest writing of each value, under the
 /// numeric policy of the pass.
 func saturateWith(p: Program, strict: bool): Program! {
-    let tabled = saturate(p, [
+    let tabled = saturateList(p, 6, strict)
+    return match tabled {
+        case error e => tabled
+        case q => extract(q, 'nodes')
+    }
+}
+
+/// Every rule of the library applied both ways to the writings of every value, for at most
+/// `rounds` rounds, with no extraction: the program keeps every writing the saturation found.
+/// `std::opt::saturate` is this pass under the core's name (H225); `saturate_all` adds the
+/// extraction, so a caller that wants the classes as they are uses this one.
+/// @effect runs the rules' functions
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @example saturate_only(p)    // the program with several writings per value
+with <
+    /// Rounds of saturation; 0 applies no rule at all, so the program keeps its writings.
+    rounds: int = 6,
+    /// Keep the rules to the ones that hold bit for bit (design principles 7.4).
+    strict: bool = false
+>
+export func saturate_only(p: Program): Program! {
+    return saturateList(p, rounds, strict)
+}
+
+// The one list of rules the saturation applies, so `saturate_only` and `saturate_all` cannot
+// drift apart: the same rules, in the same order.
+func saturateList(p: Program, rounds: int, strict: bool): Program! {
+    return saturate(p, [
         int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero,
         int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold,
         int_fold_add, int_add_self, int_combine_one, int_one_combine, int_add_comm,
@@ -598,11 +540,7 @@ func saturateWith(p: Program, strict: bool): Program! {
         tensor_f32_combine_mixed, tensor_f32_fold, tensor_f32_double, tensor_f32_combine_one,
         tensor_f32_combine_one_mixed, tensor_f32_one_combine, tensor_f32_one_combine_mixed,
         tensor_i64_distribute,
-    ], 6, strict)
-    return match tabled {
-        case error e => tabled
-        case q => extract(q, 'nodes')
-    }
+    ], rounds, strict)
 }
 
 export func saturate_all(p: Program): Program! {

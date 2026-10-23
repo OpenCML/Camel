@@ -41,6 +41,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { isRunnerOutput } from '../test/tools/runner-output.mjs'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..')
@@ -611,7 +612,10 @@ function collectTracked(root) {
     return raw.split('\u0000').filter(Boolean).sort()
 }
 
-// `--root` walks the tree, so a fixture that was never added to an index can be checked too.
+// `--root` walks the tree, so a fixture that was never added to an index can be checked too. It
+// never walks a tree a run writes: those are not part of a checkout, and with `--root .` on a used
+// worktree they are hundreds of thousands of files (test/tools/runner-output.mjs is the one
+// definition of which trees those are).
 function collectWalked(root) {
     const files = []
     const skipped = new Set(['.git', 'node_modules', 'out', 'build'])
@@ -619,7 +623,7 @@ function collectWalked(root) {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
             const full = path.join(dir, entry.name)
             if (entry.isDirectory()) {
-                if (skipped.has(entry.name)) continue
+                if (skipped.has(entry.name) || isRunnerOutput(full, root)) continue
                 visit(full)
             } else if (entry.isFile()) {
                 files.push(path.relative(root, full).split(path.sep).join('/'))

@@ -131,9 +131,17 @@ class CostModel {
 void registerCostModel(std::string name, std::shared_ptr<const CostModel> model);
 std::shared_ptr<const CostModel> findCostModel(const std::string &name);
 
+/// The cost model the pipeline extracts by when a pass that consumes a program does not accept
+/// the state with several writings (`src/execute/pass.cpp`), and the one the dumps mark the
+/// chosen writing by: one name, so a picture shows the choice the pipeline would itself make.
+inline constexpr const char *kWritingsCostModel = "weighted";
+
 /// A term of a rule (rewrite design 2.2, 2.3). On the left it is matched against the writings
 /// of the values; on the right it is built. A variable stands for a value (the same variable
-/// twice: the same value); `constOnly` ones only match a value that has a constant writing.
+/// twice: the same value); `constOnly` ones only match a value that has a constant writing, and
+/// `type` is the type the parameter was declared with, so a `const c: T` reads only a constant
+/// the type of the pattern accepts (rewrite design 2 (second version) 1: the matcher checks the
+/// declared type, and no rule guards `isI32`-style).
 struct Pattern {
     enum class Kind : uint8_t { Var, Constant, Op, Compute };
     Kind kind        = Kind::Var;
@@ -150,7 +158,7 @@ struct Pattern {
     std::function<slot_t(std::span<const slot_t>)> compute;
 };
 Pattern patVar(uint32_t var, camel::core::type::Type *type = nullptr);
-Pattern patConst(uint32_t var);
+Pattern patConst(uint32_t var, camel::core::type::Type *type = nullptr);
 Pattern patLiteral(slot_t value, camel::core::type::Type *type);
 Pattern patOp(camel::core::OperId oper, std::vector<Pattern> args, camel::core::type::Type *type = nullptr);
 Pattern patCompute(
@@ -158,6 +166,64 @@ Pattern patCompute(
     std::vector<Pattern> args);
 
 class DraftWritings;
+
+/// The classes of a graph in the state with several writings, and the writing extraction would
+/// take for each of them: what a dump draws (H225). Everything here is read, never written: the
+/// classes come from a decoded copy of the graph, which is dropped again, and the choice comes
+/// from the one cost fixed point `extract` applies, so a dump never guesses what extraction does.
+struct GraphWritings {
+    /// One entry per value that has more than one writing, by ascending smallest writing.
+    struct Value {
+        /// The smallest writing of the value (the class's root).
+        gc_node_ref_t root = kInvalidNodeRef;
+        /// Every writing of the value, ascending.
+        std::vector<gc_node_ref_t> writings;
+        /// The writing extraction would take, and what computing the value that way costs.
+        gc_node_ref_t chosen = kInvalidNodeRef;
+        double cost          = 0.0;
+    };
+    std::vector<Value> values;
+    /// For a node that is a writing of one of `values`, its index in `values`.
+    std::unordered_map<gc_node_ref_t, size_t> valueOf;
+    /// Every node of the graph (the values with one writing too): the smallest writing of the
+    /// value it is a writing of, the model's cost of that writing itself, and the cost of
+    /// computing the value the cheapest way.
+    struct Node {
+        gc_node_ref_t root = kInvalidNodeRef;
+        double own         = 0.0;
+        double value       = 0.0;
+    };
+    std::unordered_map<gc_node_ref_t, Node> nodes;
+    bool empty() const { return values.empty(); }
+};
+
+/// The classes of `graph` (a graph of `program` in the state with several writings) under the
+/// cost model `model`, read without editing the program: an executable graph, or a graph whose
+/// draft cannot be decoded, has no classes and gives an empty result.
+GraphWritings graphWritings(
+    const Program &program, const GCGraph *graph, const CostModel &model,
+    camel::core::context::Context *context = nullptr);
+
+/// What a cost model makes of the writings of a draft: which value every living node is a writing
+/// of, and which writing the extraction would take for it (graph store design 3.6). This is the
+/// fixed point `extract` applies — the cost of a writing is its own plus the cost of the values it
+/// reads, repeated until nothing gets cheaper, the smallest node winning a tie — so what
+/// extraction would choose is read from one place, never guessed a second time (a dump that marks
+/// the chosen writing, H225).
+struct WritingChoice {
+    /// Per node slot, the root of the class the node is a writing of (kInvalidNodeRef: no such
+    /// node alive).
+    std::vector<gc_node_ref_t> classOf;
+    /// Per node slot, 1 when the value of the node has more than one writing.
+    std::vector<uint8_t> multi;
+    /// Per node slot, the writing chosen for the class of the node (kInvalidNodeRef: no writing
+    /// of that value is known to finish, e.g. every one of them reads the value itself).
+    std::vector<gc_node_ref_t> chosen;
+    /// Per node slot, the cost of computing the value that way (infinity when none is known).
+    std::vector<double> cost;
+    /// Per node slot, the model's cost of the writing itself, apart from what it reads.
+    std::vector<double> own;
+};
 
 /// Thrown by a computed constant of a rule that cannot be computed (the operator faults): the
 /// rule is not applied at that match.
@@ -366,6 +432,12 @@ class DraftWritings : private WritingObserver {
     /// writings are erased, the equivalences are dropped. Throws when a value that is read has
     /// no writing that does not read itself.
     ExtractStats extract(const CostModel &model, camel::core::context::Context *context = nullptr);
+    /// The classes of the draft and the writing the cost model would choose for every value: the
+    /// same fixed point `extract` picks its writings by, read without changing anything (a dump
+    /// marks the writing extraction would take, H225). The classes are closed over congruence
+    /// first, so this counts on the store being up to date.
+    WritingChoice
+    choiceByCost(const CostModel &model, camel::core::context::Context *context = nullptr);
     /// How many merges congruence closure made.
     size_t congruentMerges() const { return congruentMerges_; }
 

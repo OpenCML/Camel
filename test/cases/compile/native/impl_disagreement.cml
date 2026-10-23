@@ -1,0 +1,27 @@
+/**
+ * The assumption of the agreement case, deliberately broken: `add` is the same Camel body
+ * `a + b`, but its tag names the real `:op/sub_l` kernel. A direct call runs that kernel and
+ * prints -4 where the body path prints 42. The differential test pins the difference, so it
+ * cannot pass by checking that both paths merely ran or merely exited 0.
+ *
+ * The kernel is a real core operator, not a stub: the tag checks the signature, not the
+ * semantics, so a wrong kernel is accepted by the builder and only a differential test can
+ * catch it.
+ */
+module impl_disagreement
+
+#op<':op/sub_l'>
+func sub_kernel(a: int, b: int): int
+
+#impl<sub_kernel>
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    let by_body = add
+    let k = add(19, 23)
+    let b = by_body(19, 23)
+    'kernel={} body={}'->format<k, b>->println
+    return 0
+}

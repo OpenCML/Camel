@@ -806,34 +806,31 @@ std::shared_ptr<const CostModel> findCostModel(const std::string &name) {
     return found == costModels().end() ? nullptr : found->second;
 }
 
-ExtractStats
-DraftWritings::extract(const CostModel &model, camel::core::context::Context *context) {
-    GraphDraft::WritingScope scope(draft_);
+WritingChoice
+DraftWritings::choiceByCost(const CostModel &model, camel::core::context::Context *context) {
     rebuild();
-    ExtractStats stats;
     const size_t slots = draft_.nodeSlotCount();
     const CostContext costContext{draft_, context};
     constexpr double kInfinite = std::numeric_limits<double>::infinity();
 
     // The value each node is a writing of, and how many writings the value has.
-    std::vector<gc_node_ref_t> classOf(slots, kInvalidNodeRef);
-    std::vector<uint8_t> multi(slots, 0);
+    WritingChoice choice;
+    choice.classOf.assign(slots, kInvalidNodeRef);
+    choice.multi.assign(slots, 0);
+    choice.chosen.assign(slots, kInvalidNodeRef);
+    choice.cost.assign(slots, kInfinite);
+    choice.own.assign(slots, 0.0);
     std::vector<double> own(slots, 0.0);
     for (gc_node_ref_t node = 0; node < slots; ++node) {
         if (!draft_.alive(node)) {
             continue;
         }
-        const camel::core::sem::PermissionMask context = contextOf(node);
-        classOf[node]         = store_.canon(context, node);
-        multi[node]           = store_.members(context, node).empty() ? 0 : 1;
-        own[node]             = model.nodeCost(costContext, node);
+        const camel::core::sem::PermissionMask perms = contextOf(node);
+        choice.classOf[node] = store_.canon(perms, node);
+        choice.multi[node]   = store_.members(perms, node).empty() ? 0 : 1;
+        own[node]            = model.nodeCost(costContext, node);
         if (!(own[node] > 0.0)) {
             throw std::logic_error("A cost model gives every node a positive cost.");
-        }
-    }
-    for (gc_node_ref_t node = 0; node < slots; ++node) {
-        if (draft_.alive(node) && multi[node] && classOf[node] == node) {
-            ++stats.classes;
         }
     }
 
@@ -860,20 +857,53 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
             double total = own[node];
             bool known   = true;
             for (gc_node_ref_t input : inputsOf(node)) {
-                const double cost = best[classOf[input]];
+                const double cost = best[choice.classOf[input]];
                 if (cost == kInfinite) {
                     known = false;
                     break;
                 }
                 total += cost;
             }
-            if (known && total < best[classOf[node]]) {
-                best[classOf[node]]   = total;
-                chosen[classOf[node]] = node;
-                changed               = true;
+            if (known && total < best[choice.classOf[node]]) {
+                best[choice.classOf[node]]   = total;
+                chosen[choice.classOf[node]] = node;
+                changed                      = true;
             }
         }
     }
+    for (gc_node_ref_t node = 0; node < slots; ++node) {
+        if (!draft_.alive(node)) {
+            continue;
+        }
+        choice.chosen[node] = chosen[choice.classOf[node]];
+        choice.cost[node]   = best[choice.classOf[node]];
+        choice.own[node]    = own[node];
+    }
+    return choice;
+}
+
+ExtractStats
+DraftWritings::extract(const CostModel &model, camel::core::context::Context *context) {
+    GraphDraft::WritingScope scope(draft_);
+    ExtractStats stats;
+    const size_t slots = draft_.nodeSlotCount();
+    const WritingChoice choice = choiceByCost(model, context);
+    const std::vector<gc_node_ref_t> &classOf = choice.classOf;
+    const std::vector<uint8_t> &multi         = choice.multi;
+    const std::vector<gc_node_ref_t> &chosen  = choice.chosen;
+    for (gc_node_ref_t node = 0; node < slots; ++node) {
+        if (draft_.alive(node) && multi[node] && classOf[node] == node) {
+            ++stats.classes;
+        }
+    }
+    const auto inputsOf = [&](gc_node_ref_t node) {
+        std::vector<gc_node_ref_t> all;
+        for (auto part :
+             {draft_.normInputsOf(node), draft_.withInputsOf(node), draft_.ctrlInputsOf(node)}) {
+            all.insert(all.end(), part.begin(), part.end());
+        }
+        return all;
+    };
 
     // What stays: what the graph names (its ports, entry, exit, result), the nodes extraction
     // does not trim, and the writing chosen for every value that is read.
@@ -1054,6 +1084,52 @@ std::span<const gc_node_ref_t> DraftWritings::writingsOf(gc_node_ref_t node) {
     return store_.members(contextOf(node), node);
 }
 
+GraphWritings graphWritings(
+    const Program &program, const GCGraph *graph, const CostModel &model,
+    camel::core::context::Context *context) {
+    GraphWritings classes;
+    // The executable state has one writing per value by definition: a dump of such a graph draws
+    // no class, and does not pay for a decode of it.
+    if (graph == nullptr || graph->executable()) {
+        return classes;
+    }
+    const std::unique_ptr<GraphDraft> draft = GraphDraft::decode(program, graph);
+    if (draft == nullptr) {
+        return classes;
+    }
+    // The same policy the driver's extraction uses (`extractWritings`), so the classes and the
+    // choice the dump shows are the ones the pipeline would act on.
+    DraftWritings writings(*draft);
+    writings.build();
+    const WritingChoice choice = writings.choiceByCost(model, context);
+    for (gc_node_ref_t node = 0; node < draft->nodeSlotCount(); ++node) {
+        if (!draft->alive(node)) {
+            continue;
+        }
+        classes.nodes[node] = GraphWritings::Node{
+            .root = choice.classOf[node], .own = choice.own[node], .value = choice.cost[node]};
+        // One entry per value, at its root (the smallest writing); the members are ascending.
+        if (!choice.multi[node] || choice.classOf[node] != node) {
+            continue;
+        }
+        const auto members = writings.writingsOf(node);
+        if (members.size() < 2) {
+            continue;
+        }
+        GraphWritings::Value value;
+        value.root     = node;
+        value.writings.assign(members.begin(), members.end());
+        value.chosen = choice.chosen[node];
+        value.cost   = choice.cost[node];
+        classes.valueOf[node] = classes.values.size();
+        for (gc_node_ref_t member : value.writings) {
+            classes.valueOf[member] = classes.values.size();
+        }
+        classes.values.push_back(std::move(value));
+    }
+    return classes;
+}
+
 // ---------------------------------------------------------------- rules
 
 Pattern patVar(uint32_t var, camel::core::type::Type *type) {
@@ -1064,8 +1140,8 @@ Pattern patVar(uint32_t var, camel::core::type::Type *type) {
     return p;
 }
 
-Pattern patConst(uint32_t var) {
-    Pattern p   = patVar(var);
+Pattern patConst(uint32_t var, camel::core::type::Type *type) {
+    Pattern p   = patVar(var, type);
     p.constOnly = true;
     return p;
 }

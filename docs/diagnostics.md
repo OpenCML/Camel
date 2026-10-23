@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-251 diagnostics: 232 errors, 19 warnings.
+254 diagnostics: 235 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -155,7 +155,6 @@ prints one entry.
 | `0x0300017A` | [SemanticDiag::StaticComprehensionVoidElement](#staticcomprehensionvoidelement) | Error |
 | `0x0300017B` | [SemanticDiag::NativeDeclarationIncomplete](#nativedeclarationincomplete) | Error |
 | `0x0300017C` | [SemanticDiag::NativeDeclarationNotLoaded](#nativedeclarationnotloaded) | Error |
-| `0x0300017D` | [SemanticDiag::DeclarationModuleHasBody](#declarationmodulehasbody) | Error |
 | `0x0300017E` | [SemanticDiag::LambdaParameterWithoutType](#lambdaparameterwithouttype) | Error |
 | `0x03000180` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
 | `0x03000181` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
@@ -215,9 +214,13 @@ prints one entry.
 | `0x030001D2` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error |
 | `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error |
 | `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error |
-| `0x030001D5` | [SemanticDiag::PrecisionChangeNotPermitted](#precisionchangenotpermitted) | Error |
 | `0x030001D6` | [SemanticDiag::ParamArgumentWrongType](#paramargumentwrongtype) | Error |
 | `0x030001D7` | [SemanticDiag::ReducedPrecisionUnsupported](#reducedprecisionunsupported) | Error |
+| `0x030001D8` | [SemanticDiag::ImplOnBodylessDeclaration](#implonbodylessdeclaration) | Error |
+| `0x030001D9` | [SemanticDiag::ImplKernelUnknown](#implkernelunknown) | Error |
+| `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error |
+| `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error |
+| `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -3667,18 +3670,19 @@ The tag '{0}' takes {1} parameter(s), but {2} argument(s) are written.
 Write one argument for each parameter of the tag, in the order of the declaration.
 ```
 
-**Example** (`test/cases/compile/tags/err_arity.cml`, run as `camel test/cases/compile/tags/err_arity.cml`)
+**Example** (`test/cases/compile/native/impl_syntax_args.cml`, run as `camel test/cases/compile/native/impl_syntax_args.cml`)
 
 ```camel
-/// A tag written with the wrong number of arguments.
-module err_arity
+module impl_syntax_args
 
-export tag width<w: int> on type
+func add(a: int, b: int): int {
+    return a + b
+}
 
-#width
-type T = { a: int }
-
-func main(): int { return 0 }
+#impl<>
+func add_with_kernel(a: int, b: int): int {
+    return a + b
+}
 ```
 
 ### TagArgumentNotConstant
@@ -4316,24 +4320,6 @@ func main(): int {
     return absent(1)
 }
 ```
-
-### DeclarationModuleHasBody
-
-`0x0300017D` · Error · `SemanticDiag::DeclarationModuleHasBody`
-
-**Message**
-
-```text
-The declaration module '{0}' has a body in function '{1}'.
-```
-
-**Help**
-
-```text
-A Camel module found beside a C++ module of the same name declares that module's operators and has no bodies. Put the implementation in a module that has no `.cmo`, or remove the `.cmo`.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### LambdaParameterWithoutType
 
@@ -6166,41 +6152,6 @@ func main(): int sync {
 }
 ```
 
-### PrecisionChangeNotPermitted
-
-`0x030001D5` · Error · `SemanticDiag::PrecisionChangeNotPermitted`
-
-**Message**
-
-```text
-Converting '{0}' to '{1}' needs the numeric permission 'change_precision'.
-```
-
-**Help**
-
-```text
-Write #[change_precision] on the function or the block that does the conversion, or convert from a type that already holds the values the reduced element type can hold exactly. Reading a bf16 or f16 value into a wider type never needs the permission.
-```
-
-**Example** (`test/cases/modules/tensor/dtype/bf16_no_licence.cml`, run as `camel test/cases/modules/tensor/dtype/bf16_no_licence.cml`)
-
-```camel
-module tensor_dtype_bf16_no_licence
-
-import { Tensor, new, cast } from tensor
-
-func shrink(x: Tensor<f32>): Tensor<bf16> {
-    return cast(x, 'bf16')
-}
-
-func main(): int sync {
-    let values: f32[] = [0.1]
-    let t = shrink(new(values))
-    println('unreachable')
-    return 0
-}
-```
-
 ### ParamArgumentWrongType
 
 `0x030001D6` · Error · `SemanticDiag::ParamArgumentWrongType`
@@ -6240,20 +6191,181 @@ The call of '{0}' cannot take a value of the reduced-precision element type '{1}
 **Help**
 
 ```text
-bf16 and f16 are stored element types: the language has no bf16 or f16 literal, scalar operator or conversion, so a function that would add, compare or otherwise use one cannot compute with it. A bf16 or f16 tensor is computed by the tensor module, which widens every element to f32 and rounds once when it stores the result (design principles 7.3, H238); cast reads it back into f32 or f64 exactly. Write the reduction, comparison or arithmetic on the tensor, or on a value of a type that has the operation.
+bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3, H238). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).
 ```
 
-**Example** (`test/cases/modules/stdlib/reduced_sum_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sum_refused.cml`)
+**Example** (`test/cases/modules/stdlib/reduced_arithmetic_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_arithmetic_refused.cml`)
 
 ```camel
-module stdlib_reduced_sum_refused
-
-import { sum } from array
+module stdlib_reduced_arithmetic_refused
 
 func main(): int sync {
     let xs: bf16[] = []
-    println(sum(xs))
+    println(xs[0] % xs[0])
     return 0
+}
+```
+
+### ImplOnBodylessDeclaration
+
+`0x030001D8` · Error · `SemanticDiag::ImplOnBodylessDeclaration`
+
+**Message**
+
+```text
+The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body.
+```
+
+**Help**
+
+```text
+'#impl<f>' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.
+```
+
+**Example** (`test/cases/compile/native/impl_on_bodyless.cml`, run as `camel test/cases/compile/native/impl_on_bodyless.cml`)
+
+```camel
+module impl_on_bodyless
+
+#op<':op/add_l'>
+#impl<add_kernel>
+func add_kernel(a: int, b: int): int
+
+func main(): int sync {
+    return 0
+}
+```
+
+### ImplKernelUnknown
+
+`0x030001D9` · Error · `SemanticDiag::ImplKernelUnknown`
+
+**Message**
+
+```text
+The '#impl' tag of '{0}' names '{1}', which is no body-less declaration.
+```
+
+**Help**
+
+```text
+The kernel of a '#impl' function is a body-less declaration of the same module ('func k(...): T'). Declare the operator, and write its name in the tag.
+```
+
+**Example** (`test/cases/compile/native/impl_unknown.cml`, run as `camel test/cases/compile/native/impl_unknown.cml`)
+
+```camel
+module impl_unknown
+
+#impl<nope>
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    return add(1, 2)
+}
+```
+
+### ImplKernelForeign
+
+`0x030001DA` · Error · `SemanticDiag::ImplKernelForeign`
+
+**Message**
+
+```text
+The '#impl' tag of '{0}' names '{1}', which another module declares.
+```
+
+**Help**
+
+```text
+A kernel is the implementation detail of the function that keeps it: declare the body-less declaration in the same module as the function, private to that module (not exported), and name it there.
+```
+
+**Example** (`test/cases/compile/native/impl_foreign.cml`, run as `camel test/cases/compile/native/impl_foreign.cml`)
+
+```camel
+module impl_foreign
+
+import { at } from generic_module
+
+#impl<at>
+func first(xs: int[], i: int): int {
+    return xs[i]
+}
+
+func main(): int sync {
+    return first([1, 2, 3], 0)
+}
+```
+
+### ImplSignatureMismatch
+
+`0x030001DB` · Error · `SemanticDiag::ImplSignatureMismatch`
+
+**Message**
+
+```text
+The kernel '{0}' of the '#impl' function '{1}' has the signature {2}, but the function has {3}.
+```
+
+**Help**
+
+```text
+The kernel is another implementation of the very same function: same 'with' and normal parameters (types and 'var' marks), same result type, and no 'constas' parameter (a body-less declaration cannot carry one).
+```
+
+**Example** (`test/cases/compile/native/impl_signature.cml`, run as `camel test/cases/compile/native/impl_signature.cml`)
+
+```camel
+module impl_signature
+
+#op<':op/add_l'>
+func add_kernel(a: int, b: int): int
+
+#impl<add_kernel>
+func add(a: float, b: float): float {
+    return a + b
+}
+
+func main(): int sync {
+    return 0
+}
+```
+
+### ImplKernelNotBodyless
+
+`0x030001DC` · Error · `SemanticDiag::ImplKernelNotBodyless`
+
+**Message**
+
+```text
+The '#impl' tag of '{0}' names '{1}', which has a body.
+```
+
+**Help**
+
+```text
+The kernel is the body-less declaration of the C++ operator that runs the function's semantics. A function that already has a body is the semantics itself, so there is nothing for the tag to do: name a body-less declaration, or remove the tag.
+```
+
+**Example** (`test/cases/compile/native/impl_kernel_has_body.cml`, run as `camel test/cases/compile/native/impl_kernel_has_body.cml`)
+
+```camel
+module impl_kernel_has_body
+
+func helper(a: int, b: int): int {
+    return a + b
+}
+
+#impl<helper>
+func add(a: int, b: int): int {
+    return a - (0 - b)
+}
+
+func main(): int sync {
+    return add(1, 2)
 }
 ```
 

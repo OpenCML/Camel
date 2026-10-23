@@ -23,6 +23,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
+#include <string_view>
 
 namespace camel::core::context {
 class Frame;
@@ -51,6 +53,15 @@ struct InstructionSite {
     InstructionEffect effect = InstructionEffect::None;
 };
 
+/// A fusion group the back end is about to run at the node it is reporting (camel/execute/
+/// fusion_group.h). The group runs at its tail, which is the node being reported and the last of
+/// `members`; the members before it were deferred and do not execute, so they are never reported
+/// on their own: a debugger must not stop at a node that does not run (35_debugger.md, 2).
+struct FusionGroupSite {
+    std::string_view name;
+    std::span<const runtime::gc_node_ref_t> members;
+};
+
 class ExecutionObserver {
   public:
     virtual ~ExecutionObserver() = default;
@@ -63,9 +74,12 @@ class ExecutionObserver {
     /// The activation ends, by return or by an exception passing through it.
     virtual void activationLeft() = 0;
 
-    /// std::nvm is about to run `node` of `graph` on `frame`.
+    /// std::nvm is about to run `node` of `graph` on `frame`. `group` is the fusion group it runs
+    /// here, when `node` is that group's tail; the members before the tail do not run and are not
+    /// reported. A back end reports a group at its tail and only there (fusion_group.h).
     virtual void beforeNode(
-        runtime::GCGraph *graph, core::context::Frame *frame, runtime::gc_node_ref_t node) = 0;
+        runtime::GCGraph *graph, core::context::Frame *frame, runtime::gc_node_ref_t node,
+        const FusionGroupSite *group = nullptr) = 0;
     /// std::nvm is about to replace the frame of the running activation by a tail call: the
     /// next node reported belongs to the callee, which took the caller's place.
     virtual void tailCall() = 0;

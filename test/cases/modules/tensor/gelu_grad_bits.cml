@@ -1,0 +1,47 @@
+/**
+ * The storage bits of `gelu`'s gradient, the kernel `tensor:gelu_grad`.
+ *
+ * The gradient is `dy * gelu'(x)` with the tanh approximation, and the kernel computes it in one
+ * loop where the operator chain that defines it writes three passes (`x + 0.044715 x^3`, its
+ * `tanh`, then the slope and the product with `dy`). The one loop has to produce the chain's bits:
+ * the polynomial and the slope rounded as written, and the tangent the function the unary kernel
+ * inlines (`vmath::tanh`). `modules/tensor/kernels/gradient_loops.inl` is the loop and
+ * `modules/tensor/CMakeLists.txt` says which rounding setting the two carry.
+ *
+ * Each gradient is reduced to the sha256 of its storage bits, so one changed bit anywhere changes
+ * the printed digest. `modules/tensor/CMakeLists.txt` says which rounding each unit carries: the
+ * polynomial and the slope are rounded as written in both, and the tangent is `vmath::tanh`, whose
+ * expansion `vmath::exp` is contracted in a unit that has FMA and cannot be in one that has not —
+ * the unary units' already declared instruction-set-dependent rounding, and the only place the two
+ * units can part. Measured over the range this case feeds, that changes 0.062% of elements by at
+ * most 1.2e-7, inside `vmath.h`'s declared error for `tanh` — so the plan pins the digests of each
+ * unit, and the two sets differ in the large shape only.
+ *
+ * These are also, shape for shape, the three-pass chain's digests: replacing the chain with the one
+ * loop moves no bit in either unit.
+ *
+ * The shapes are the step's own GELU width ([16, 32, 512], the FFN of the d=256 cell), a length
+ * that is not a whole number of vectors (1155 elements: a tail the unit has to finish scalar), and
+ * one element.
+ */
+module gelu_grad_bits
+
+import { Tensor, gelu, random, seed, sum, to_bytes } from tensor
+import { grad } from autodiff
+import { sha256 } from hash
+
+with <x: Tensor>
+func loss(): float {
+    return sum(gelu(x))
+}
+
+func main(): int sync {
+    seed(29)
+    let ffn = random([16, 32, 512], -8.0, 8.0)
+    'gelu_grad_bits ffn={}'->format<sha256(to_bytes(grad(loss)<ffn>()))>->println
+    let tail = random([7, 33, 5], -8.0, 8.0)
+    'gelu_grad_bits tail={}'->format<sha256(to_bytes(grad(loss)<tail>()))>->println
+    let single = random([1], -8.0, 8.0)
+    'gelu_grad_bits single={}'->format<sha256(to_bytes(grad(loss)<single>()))>->println
+    return 0
+}

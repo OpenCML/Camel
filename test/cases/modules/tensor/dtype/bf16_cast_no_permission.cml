@@ -1,0 +1,28 @@
+/**
+ * A conversion into bf16 is the precision the program wrote, not a precision the compiler
+ * introduces, so it needs no numeric permission (design principles 7.2-7.3): the call below
+ * carries no tag at all and is accepted, and the value it stores is 0.1 rounded to the nearest
+ * bf16, 0x3DCD (bytes [205, 61]). Reading that element back into f32 is exact and shows
+ * 0x3DCD0000 ([0, 0, 205, 61]), which is not the f32 0.1.
+ *
+ * This is the case the previous revision refused at the line of the call with
+ * SemanticDiag::PrecisionChangeNotPermitted. `change_precision` governs a computation the
+ * compiler moves to lower precision (a f32 matrix product done in BF16), not this.
+ */
+module tensor_dtype_bf16_cast_no_permission
+
+import { Tensor, new, cast, to_bytes } from tensor
+import { to_array } from bytes
+
+func shrink(x: Tensor<f32>): Tensor<bf16> {
+    return cast(x, 'bf16')
+}
+
+func main(): int sync {
+    let values: f32[] = [0.1]
+    let narrowed = shrink(new(values))
+    println(to_array(to_bytes(narrowed)))
+    let wide: Tensor<f32> = cast(narrowed, 'f32')
+    println(to_array(to_bytes(wide)))
+    return 0
+}

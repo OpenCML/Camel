@@ -77,6 +77,15 @@ one definition.
 - `parallel_for(range, grain, fn)` is the only threading primitive kernels use.
   It is backed by one process-wide Taskflow executor (Taskflow is already a
   build dependency).
+- The run's thread count is one budget, `-t` (or the hardware concurrency
+  without it), and it is spent in one place at a time: the pool for elementwise
+  ranges, reductions and the canonical GEMM's row blocks, and the library's own
+  pool for a library GEMM that is the whole work. A library call inside a
+  parallel region, or inside a batch loop that splits over the pool, takes one
+  thread, because the pool already spends the budget there. The two numbers
+  `num_threads()` and `gemm_threads()` say which of the two a product got, and
+  the curve behind the split is in section 6, "The library GEMM's thread
+  budget".
 - GEMM is a single interface, `gemm<T>(transA, transB, M, N, K, alpha, A, lda,
   B, ldb, beta, C, ldc)`, with two backends:
   - `builtin`: cache-blocked, packed, compiler-vectorized, parallel over row
@@ -380,6 +389,35 @@ Every node evaluates to either a constant or a symbolic tensor:
 - `LoweringRegistry::supported(opset)` lists what the backend can express at an
   opset, and `onnx.supported_operators()` exposes it to Camel programs. That
   per-operator capability table is what the paper's ORT_007 exemplar needs.
+- Node attributes are choices (design principles 9.6), so the export carries
+  each one or refuses it -- it never drops one. ONNX has no node attribute a
+  target would read, so `ModelProto.metadata_props` holds them: one
+  `camel.node.<n>` entry per node that carries anything, naming the graph, node,
+  operator, `attrs="..."` (the node attribute set) and `numeric="..."` (its
+  permission column), with the source position. The fates
+  (`camel/core/node_attrs.h`) are:
+  - carried: `tensor.kernel=library`, `tensor.fusion=linear|linear_relu`,
+    `tiles.placement=cpu|gpu`, `independent`, and every numeric permission;
+  - refused, naming the attribute, the node and the reason in the diagnostic:
+    `tensor.kernel=canonical` (what `tensor::fuse safe_fp=true` records) and
+    `strict`; also any key the table does not classify.
+  The licence is why the first group is allowed and the second is not: a
+  `library` kernel is permitted to reassociate (design principles 7.3 grants
+  `reassociate` by default), and the export's MatMul -- whose kernel the target
+  picks -- stays inside that licence; a `canonical` choice is a promise about
+  the accumulation order that an ONNX model cannot keep, and `strict` promises
+  canonical arithmetic with no permission at all (7.4), so the export refuses
+  instead of producing a model that computes something else. `tensor.fusion`
+  records a group ONNX has no marker for: the operators stay the program's and
+  the target may fuse them. `tiles.placement` is a request the session's
+  execution providers decide on, not a guarantee.
+- The same table classifies each attribute for the interpreter, both dumps and
+  Tiles. `camel inspect --attrs` prints it and exits 1 when a loaded module
+  interns a key with no row; the exporter and the Tiles compiler refuse an
+  unclassified attribute by name, and Tiles reads the effective permission set
+  (`effectivePermissions`), so `#strict` revokes the defaults there too. This is
+  the class guard: an attribute a pass writes cannot reach a consumer that
+  silently ignores it.
 
 Export covers inference graphs. Training steps produced by `apply_gradients` are
 not exported.
@@ -453,8 +491,12 @@ Decisions recorded here because they change semantics outside the module:
   programs. A matmul runs on the library when its node's
   `tensor.kernel` attribute says so, which `tensor::fuse` writes under the 7.3
   rule (default mode; safe mode withholds it). The operator is still `matmul`.
-  The library's own pool is capped at the run's `-t` and at four threads, so it
-  does not multiply the tensor pool of a batch loop. The pass marks
+  The library's own pool is one thread per call, and the tensor pool spends the
+  run's budget in one place: a product that is the whole work splits its output
+  rows over the pool (one library call per chunk), while a library call inside a
+  batch loop that already splits over the pool takes one thread, so the budget is
+  never multiplied (section 6, "The library GEMM's thread budget", has the
+  measured curve). The pass marks
   `tensor:matmul` and `tensor:linear`; the VJP carries that choice to
   `matmul_grad_lhs` / `matmul_grad_rhs` when autodiff creates them, so backward
   matmuls take the same path. Below 2^30 multiply-adds per call the library path
@@ -540,6 +582,223 @@ rejection reason. That resolver extension is part of step 2.
   The container is shared (load average ~2.5 on 4 cores), so sub-millisecond
   results vary by up to 1.7x between runs; paper numbers need a quiet machine
   and repeated trials.
+
+### The library GEMM's thread budget
+
+The run names one thread count (`-t`, or the hardware concurrency when it says
+nothing), and one pool spends it: the tensor pool. The library GEMM's own pool is
+one thread per call:
+
+- a product that is the whole work (one matmul, as every large 2-D product of a
+  training step is) splits its output rows into one block per tensor-pool chunk,
+  and each block is one library call on one thread. The pool does the splitting;
+  the library owns no pool. Rows only, never K: every output element's
+  accumulation stays inside one call, in the library's own order for that call;
+- a library call inside a parallel region, or inside a batch loop that splits
+  over the pool, is one thread too, and the pool spends the budget over the
+  chunks;
+- the canonical kernel splits its output tiles over the same pool, and runs
+  serially inside a region, so it reports the pool's width (1 inside a region).
+
+The operator is still `matmul` and the choice is still `tensor.kernel`
+(sections 3.1 and 6). `gemm_threads()` reports the pool chunks that ran: the
+run's number for a whole-work product (`-t`, or 1 when the pool has one thread),
+the pool's width for a canonical call, 1 inside a region and for a library call
+inside a batch chunk. `gemm_library_threads()` reports the library's own count for
+the same call: 1 when the library ran, 0 when the canonical kernel did.
+`test/plans/feat/modules/threads.plan.toml` pins `plain == -t` and
+`plain_lib == 1` at 1, 4, 8 and 16 threads, and pins the process's own thread
+count within `-t` (`process.thread_count()`), so a second pool is red.
+
+**Why the second pool had to go (H303).** OpenBLAS creates its worker pool in a
+constructor when the library is loaded, at the machine's thread count, before any
+`openblas_set_num_threads` call can reach it. Measured on this host with
+`strace -f -e trace=clone` (exact thread creations, not sampling): before the
+seed, a program that only imports `tensor` creates 31 worker threads at `-t 1`
+and at `-t 16`; `LD_PRELOAD` of the library with a program that imports nothing
+creates the same 31. Setting the count later leaves them alive and unused, which
+is why `-t 1` still had 32 threads. The only point before the constructor is
+process start, so `camel::initialize()` seeds `OPENBLAS_NUM_THREADS=1` (and
+`MKL_NUM_THREADS=1`) **when the variable is unset**; a value the user set is left
+alone, and setting either variable re-introduces the second pool, so the
+single-pool promise is conditional on them being unset. The GEMM path then runs
+every library call one thread (`setGemmThreads` applies one, `LibraryThreads`
+holds one); a value above one is not honoured by it, and the pool's width is the
+only parallelism.
+
+Threads the process has, before and after (caller included; `strace` for the
+count, the same cells as the curve):
+
+| cell | before (92f18af9c) | after |
+|---|---|---|
+| import `tensor`, `-t 1` | 32 (31 library) | 1 |
+| 1024^3 library product, `-t 16` | 32 (31 library) | 16 (the tensor pool) |
+| 1024^3 canonical product, `-t 16` | 47 (31 library + 15 tensor) | 16 |
+| 4x1024^3 batched product, `-t 16` | 47 (31 library + 15 tensor) | 16 |
+| canonical product, `-t 1` | 32 (31 library) | 1 |
+
+Before the change, the 31 threads were created when the module loaded and lived
+until the process exited (the pool is not joined by
+`openblas_set_num_threads`); the tensor pool's 15 are created lazily on the first
+split and joined on resize or at exit. After, the library has none: the whole-work
+library product is one of the tensor pool's 16 threads, not a second set.
+Resident memory does not follow: importing `tensor` at `-t 1` peaks at 20,992 kB
+before and 20,224 kB after (median of three `/usr/bin/time -v` runs; the ranges
+20,480-20,992 against 19,968-20,224, and the row-split build measures
+20,224-20,736). The 31 threads cost about 1 MB, the touched page of each stack
+and bookkeeping, not the 8 MB each stack reserves: what they spend is cores.
+
+**How the number used to be chosen.** Commit `e11a4e64c`, which introduced the
+system-CBLAS path, capped the library's pool at `min(-t, 4)` from three points
+measured in one process at 1024^3: 404 ms at one thread, 142 ms at four, 693 ms
+at 32. Two and eight threads were never measured, and the 32-thread point was
+taken on this shared host under other agents' load, where a pool as wide as the
+logical-thread count is the worst case. There was no correctness reason for the
+cap: the licence bound of section 3.1 (`K^2 * eps * max|a| * max|b|`) holds for
+every summation order, so the thread count never had to be bounded for the
+numbers to stay inside it; `#strict` and `safe_fp` withhold the library
+entirely, which is what keeps the canonical path's bits.
+
+**The curve it is read from.** `test/cases/perf/gemm_threads_curve.cml`
+measures both implementations in one process at six thread counts over the
+shapes of the naive-in-expert-out sweep, twelve interleaved rounds per point,
+`sum` inside the timed region so the product is forced. Milliseconds, median and
+best of the twelve (the host is shared: the median is what a run costs, the best
+is what the hardware can do):
+
+| shape | t | library | canonical |
+|---|---|---|---|
+| 1024x1024x1024 | 1 | 36.1 / 20.8 | 31.2 / 22.8 |
+| | 4 | 30.0 / 6.8 | 15.3 / 6.8 |
+| | 8 | 36.2 / 5.1 | 14.1 / 4.6 |
+| | 16 | 35.4 / 4.8 | 10.2 / 5.3 |
+| | 32 | 50.3 / 7.8 | 10.4 / 4.3 |
+| 2048x1024x1024 | 1 | 46.1 / 40.8 | 52.1 / 46.0 |
+| | 4 | 39.4 / 14.3 | 31.3 / 14.8 |
+| | 8 | 34.1 / 9.8 | 22.1 / 9.7 |
+| | 16 | 38.8 / 7.2 | 21.0 / 8.5 |
+| | 32 | 50.8 / 14.1 | 16.0 / 10.8 |
+| 2048x1024x2048 | 1 | 96.3 / 85.6 | 110.8 / 99.4 |
+| | 16 | 49.1 / 15.7 | 42.5 / 19.9 |
+| 4x1024x1024x1024 | 1 | 92.5 / 80.4 | 107.0 / 102.0 |
+| | 16 | 61.4 / 29.5 | 77.1 / 27.1 |
+| 512x256x512 (d=256) | 1 | 1.8 / 1.6 | 1.6 / 1.6 |
+| | 16 | 1.7 / 0.5 | 1.9 / 0.6 |
+
+This is the H288 window, with the budget at `-t`: the library's best case keeps
+improving to sixteen threads, the physical core count of this host, and gets
+worse again at 32, the logical count. Its *typical* case is worse than the
+canonical kernel's from four threads up, because the library's pool is a second
+pool that spins between calls and competes with the tensor pool and with the
+neighbours; the gap between the median and the best of the same point is that
+competition, not arithmetic. That reading is what H303 acted on: the second pool
+is removed, not capped.
+
+**The same cells with one pool and the rows split (H303).** Two copies of the
+base build and two of the row-split build, ten interleaved rounds, order rotated
+each round, `test/cases/perf/gemm_threads_curve.cml`; loads 79-160. Milliseconds,
+median of the ten rounds per build; the two copies of the same build are the null
+control, and the last column is the largest per-cell distance between those two
+copies (the host's resolution floor). A cell is only read when the before/after
+distance is above that floor.
+
+| cell | t | path | before | after | change | null | read |
+|---|---|---|---|---|---|---|---|
+| 1024x1024x1024 | 1 | library | 47.7 | 48.4 | +1.5% | 6% | no |
+| 1024x1024x1024 | 4 | library | 33.1 | 18.5 | -44% | 6% | yes |
+| 1024x1024x1024 | 8 | library | 48.5 | 16.7 | -66% | 14% | yes |
+| 1024x1024x1024 | 16 | library | 52.6 | 13.5 | -74% | 10% | yes |
+| 2048x1024x1024 | 4 | library | 46.2 | 39.4 | -15% | 18% | no |
+| 2048x1024x1024 | 8 | library | 43.7 | 28.5 | -35% | 33% | yes |
+| 2048x1024x1024 | 16 | library | 45.1 | 20.7 | -54% | 22% | yes |
+| 2048x1024x2048 | 16 | library | 67.2 | 43.3 | -36% | 8% | yes |
+| 2048x1024x2048 | 32 | library | 87.2 | 41.5 | -52% | 39% | yes |
+| 1024x2048x1024 | 4 | library | 61.7 | 39.9 | -35% | 23% | yes |
+| 1024x2048x1024 | 8 | library | 64.6 | 27.6 | -57% | 16% | yes |
+| 1024x2048x1024 | 16 | library | 86.3 | 20.4 | -76% | 43% | yes |
+| 2048x1024x2048 | 16 | canonical | 48.4 | 35.6 | -26% | 24% | yes |
+| 2048x1024x2048 | 32 | canonical | 42.8 | 30.7 | -28% | 15% | yes |
+| 4x1024x1024x1024 | 16 | library | 80.6 | 81.2 | +0.7% | 22% | no |
+| 4x1024x1024x1024 | 4 | canonical | 74.6 | 82.8 | +11% | 8% | yes |
+| 4x1024x1024x1024 | 8 | canonical | 65.0 | 75.3 | +16% | 10% | yes |
+
+The cells A lost are the ones this measures: 2048x1024x1024 library is -35% at
+`-t 8` and -54% at `-t 16`, 2048x1024x2048 -36% at `-t 16` and -52% at `-t 32`,
+1024x2048x1024 -35% to -76% from `-t 4` up, 1024^3 -44% to -74% from `-t 4` up.
+At `-t 1` nothing changes: the product is one block, the old one call. The batched
+product does not move either (the batch loop already spread it over the pool:
+within 3% at every `-t`), which is what one pool is supposed to look like. The
+canonical kernel is the same code in both builds; its reads split both ways
+(2048x1024x2048 -26%/-28% at 16/32 threads, 4x1024^3 +11%/+16% at 4/8), and they
+are the seed removing 31 idle library threads on some cells and the host on
+others, not a kernel change. The JSON lists all 84 cells with their nulls.
+
+**The licence.** Row blocks only, and K is never split, so each output element's
+accumulation is one library call. The canonical kernel's bits are unchanged:
+every one of its 42 cells (six thread counts, seven shapes) carries the same
+checksum as the base, and `#strict`/`safe_fp` withhold the library, so the path
+that promises a fixed order never sees a library call. The library's bits moved,
+and not merely once: 22 of its 42 cells equal the one-thread one-call bits, and
+the other 20 differ by at most 3.8e-8 relative (a few 1-ulp elements in a
+1M-element f32 tensor), while the result again depends on `-t` -- six checksums
+per whole-work shape across `t` = 1, 2, 4, 8, 16, 32, as the base had and as A
+had removed. The cause is the library's own grouping: OpenBLAS picks its
+blocking from the call's M, so a 64-row block and a 1024-row call round a few
+elements differently. No row split can be bit-identical to one call for this
+library, and the evidence says so rather than claiming otherwise. The library
+path already runs under the default reassociation licence (section 7.3), which
+covers this regrouping; the row split adds no Camel-level order, and the seed in
+`camel::initialize()` never touches a sum. A user who sets
+`OPENBLAS_NUM_THREADS` or `MKL_NUM_THREADS` above one keeps that pool: at `-t 1`
+with the variable at 8 the process has 8 live threads (7 library workers and the
+caller) during a spin after the product, because `openblas_set_num_threads(1)`
+does not join the constructor's pool; the GEMM still runs one thread per call, so
+those workers are idle. The one-pool promise is conditional on those variables
+being unset, as the note in `camel::initialize()` says.
+
+**The training step, H288 window.** Same window, the library and the canonical
+path interleaved in one loop, median of thirteen timed steps, d=1024,
+`tensor::fuse` versus no pass:
+
+| window | t=16 library | t=16 canonical | load |
+|---|---|---|---|
+| cap (4 library threads) | 2650, 2751 | 2552 | 45-67 |
+| uncapped (16 library threads) | 3947, 4299 | 2518, 2619 | 72-81 |
+| t=1, uncapped | 3921, 5635 | 7260, 7814 | 56-73 |
+
+Uncapping made this step slower, not faster, on this host at these loads: the
+library at sixteen threads is 1.5x the canonical path, while at four threads it
+was at parity. The recorded `2026-10-23-sweep-linux-shape.json` cell (1146 ms,
+load 34-76) against torch.compile (369 ms) cannot be reproduced today -- the same
+program measures 2518-4299 ms here, and torch compiled measures 5999 ms at one
+thread and 14448 ms at sixteen in the window after these cells -- so that 3.1x
+gap is not explained by the cap, and it cannot be re-measured until the host is
+quiet. `examples/models/naive-in-expert-out/results/2026-10-23-gemm-thread-budget-linux.json`
+holds the curve, every cell with the load it was measured at, and this reading.
+d=256 is unaffected either way: every product in that cell is below the 2^30
+shape threshold, so the library never runs there.
+
+**The training step with the rows split.** The same step, two copies of each
+build, three rounds, `-t 16`, loads 98-175, d=1024 and d=256, median of the four
+timed steps. d=1024: library 5,076 ms before and 2,969 ms after (-41.5%, null
+15.5%) -- the change the curve predicts, and the before copies span 4.6-8.8 s
+against 2.0-2.7 s after. Canonical is the same kernel in both builds and moves
++2.4% (null 0.6%), while at d=256 canonical reads -28.0% (null 20.6%) and its
+library arm -- below the 2^30 threshold, so canonical too -- reads -2.0% (null
+31.2%). Two opposite reads on unchanged code say this window's null understates
+the host; the arm the change touches is the d=1024 library one, and it reads with
+the change's size. `2026-10-23-one-pool-rows-linux.json` holds the 84 curve
+cells, the step, the pools and this reading; `2026-10-23-one-pool-linux.json` is
+the one-thread attempt (A) it replaces.
+
+**What is still open.** The one-pool accounting and the library's parallelism now
+coexist, and the price is the library's determinism: its result again depends on
+`-t`, because the library's grouping depends on the call's M. If fixed library
+bits across `-t` are required, this design is not the one -- the options are A
+(one thread, one checksum per shape, 1.6-2.9x slower on wide whole-work products)
+or the canonical kernel. If one pool and the library's throughput both are, this
+is the design, and the licence covers its regrouping. What remains unmeasured is
+the step at a quiet load: the nulls above are the host's, not the change's.
 
 ## 7. Delivery Order
 

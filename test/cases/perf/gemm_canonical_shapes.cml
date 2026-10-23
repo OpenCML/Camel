@@ -1,0 +1,88 @@
+/**
+ * The canonical GEMM's rate at the shapes the d=256 training step issues, one thread, in one
+ * process.
+ *
+ * Every product goes through `#strict`, so the library GEMM is withheld and the blocked canonical
+ * kernel runs. The shapes are the two projections of the task's list, the attention score product
+ * of a d=256 block (16 batches x 16 heads of 32x32x16, one call), and the three largest forward
+ * projections of the step; the reference is the same 128x128x128 product written as
+ * broadcast-multiply-and-reduce, which has no blocking and no packing. Canonical over that
+ * reference is a ratio of two measurements on the same host in the same round, so it survives a
+ * loaded machine; the absolute GFLOP/s column records what the kernel did on the day, with the
+ * load average printed next to it.
+ *
+ * `ms` is a mean over `reps` calls inside the round, not a best-of; the plan reads the maximum
+ * GFLOP/s over the rounds, and the JSON recorded next to the model holds the medians.
+ *
+ *   camel -t 1 --arg rounds=3 --arg reps=1 test/cases/perf/gemm_canonical_shapes.cml tensor::fuse std::jit
+ */
+module gemm_canonical_shapes
+
+import { Tensor, seed, sum, unsqueeze, zeros, set_num_threads } from tensor
+import { now } from time
+
+/// The canonical algorithm: `#strict` withholds every permission, the library GEMM included.
+#strict
+func exact(a: Tensor, b: Tensor): Tensor {
+    return a @ b
+}
+
+func bench(round: int, label: string, m: int, n: int, k: int, a: Tensor, b: Tensor, reps: int): void sync {
+    let warm = sum(exact(a, b))
+    let started = now()
+    let measured = loop i = 0, s = 0.0 while i < reps do {
+        let product = exact(a, b)
+        return (i + 1, s + sum(product))
+    }
+    let ms = (now() - started) * 1000.0 / float(reps)
+    let gflops = 2.0 * float(m) * float(n) * float(k) / (ms / 1000.0) / 1000000000.0
+    'gemm_canonical_shapes round={} shape={} ms={} gflops={} checksum={}'->format<
+        round, label, ms, gflops, measured.1>->println
+}
+
+/// The same product as broadcast-multiply-and-reduce: a temporary of m x k x n floats and a
+/// reduction, with none of the canonical kernel's blocking or packing.
+func bench_reference(round: int, m: int, n: int, k: int, a: Tensor, b: Tensor, reps: int): void sync {
+    let warm = sum(unsqueeze(a, 2) * unsqueeze(b, 0), 1)
+    let started = now()
+    let measured = loop i = 0, s = 0.0 while i < reps do {
+        let product = sum(unsqueeze(a, 2) * unsqueeze(b, 0), 1)
+        return (i + 1, s + sum(product))
+    }
+    let ms = (now() - started) * 1000.0 / float(reps)
+    let gflops = 2.0 * float(m) * float(n) * float(k) / (ms / 1000.0) / 1000000000.0
+    'gemm_canonical_shapes round={} reference=naive_sum shape={} ms={} gflops={} checksum={}'->format<
+        round, '128x128x128', ms, gflops, measured.1>->println
+}
+
+func main(rounds: int, reps: int): int sync {
+    // One thread: the d=256 step's configuration, and the only one where a rate is a property of
+    // the kernel rather than of the pool.
+    set_num_threads(1)
+    seed(7)
+    let a1 = zeros([256, 256]) + 0.001
+    let b1 = zeros([256, 64]) + 0.001
+    let a2 = zeros([256, 64]) + 0.001
+    let b2 = zeros([64, 256]) + 0.001
+    let a3 = zeros([512, 256]) + 0.001
+    let b3 = zeros([256, 512]) + 0.001
+    let a4 = zeros([512, 256]) + 0.001
+    let b4 = zeros([256, 768]) + 0.001
+    let a5 = zeros([512, 512]) + 0.001
+    let b5 = zeros([512, 256]) + 0.001
+    let a6 = zeros([32, 32]) + 0.001
+    let b6 = zeros([32, 16]) + 0.001
+    let reference = zeros([128, 128]) + 0.001
+    let done = loop round = 0 while round < rounds do sync {
+        bench(round, '256x64x256', 256, 64, 256, a1, b1, 40 * reps)
+        bench(round, '256x256x64', 256, 256, 64, a2, b2, 40 * reps)
+        bench(round, '512x256x512', 512, 256, 512, a3, b3, 12 * reps)
+        bench(round, '512x768x256', 512, 768, 256, a4, b4, 8 * reps)
+        bench(round, '512x512x256', 512, 512, 256, a5, b5, 8 * reps)
+        bench(round, '32x32x16', 32, 32, 16, a6, b6, 500 * reps)
+        bench_reference(round, 128, 128, 128, reference, reference, 3 * reps)
+        return round + 1
+    }
+    'gemm_canonical_shapes rounds={} reps={}'->format<done, reps>->println
+    return 0
+}

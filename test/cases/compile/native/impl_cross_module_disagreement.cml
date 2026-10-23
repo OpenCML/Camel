@@ -1,0 +1,20 @@
+/**
+ * The cross-module disagreement case. `add` is tagged in
+ * `impl_cross_module_disagreement_lib` with a deliberately wrong kernel: the direct call
+ * `add(19, 23)` runs `:op/sub_l` and prints -4, while the call through the function value
+ * `by_body = add` runs the Camel body `a + b` and prints 42.
+ *
+ * The two paths disagree, so the agreement case cannot pass by checking that both paths merely
+ * ran; and the direct call through an import still takes the kernel, not the body.
+ */
+module impl_cross_module_disagreement
+
+import { add } from impl_cross_module_disagreement_lib
+
+func main(): int sync {
+    let by_body = add
+    let k = add(19, 23)
+    let b = by_body(19, 23)
+    'kernel={} body={}'->format<k, b>->println
+    return 0
+}

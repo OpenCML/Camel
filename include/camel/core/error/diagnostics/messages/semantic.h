@@ -274,7 +274,6 @@ enum class SemanticDiag : uint32_t {
     // 6.4; handover H19, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,
     NativeDeclarationNotLoaded  = 0x00017C,
-    DeclarationModuleHasBody    = 0x00017D,
     // Handover H94 (the author's rulings on body-less declarations): 0x17E and up.
     /// Two generic declarations of one name can take the same call (ruling 2).
     NativeDeclarationOverlap = 0x000180,
@@ -334,8 +333,15 @@ enum class SemanticDiag : uint32_t {
     ParamAfterDefault = 0x0001D4,
     /// An argument at a call has a type the parameter it fills does not take.
     ParamArgumentWrongType      = 0x0001D6,
-    PrecisionChangeNotPermitted = 0x0001D5,
     ReducedPrecisionUnsupported = 0x0001D7,
+    // #impl<f> (design principles 10.4): the Camel body of the function is its semantics and the
+    // body-less declaration f of the same module is the operator that runs it. The graph builder
+    // resolves the tag when it declares the module, so no pass reads it and it names no reader.
+    ImplOnBodylessDeclaration = 0x0001D8,
+    ImplKernelUnknown         = 0x0001D9,
+    ImplKernelForeign         = 0x0001DA,
+    ImplSignatureMismatch     = 0x0001DB,
+    ImplKernelNotBodyless     = 0x0001DC,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

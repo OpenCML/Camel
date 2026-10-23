@@ -15,12 +15,23 @@
  *
  *   - operators: the CPU time inside an operator call, per operator, through the timing thunks
  *     of profile/operators.h (a scheduler hands out a thunk in place of the operator it resolved
- *     while the session is on). One entry per URI, with its calls and its total time.
+ *     while the session is on). One entry per URI, with its calls and its total time. The same
+ *     row says how much of that time was inside the Camel allocators, how many allocations the
+ *     call made, how many were data blocks and how many payload bytes they asked for
+ *     (profile/allocation.h): an operator boundary alone cannot separate a kernel's arithmetic
+ *     from the allocation and packing it does, and this column does the allocation part.
  *   - steps: a step is one round of a loop of the program (`loopRound`), which every back end
  *     reports from camel/execute/loop_frame.h: nvm, fvm, jit and the macro evaluator share
  *     `loopEnd`. The report reads the numbers per round of every loop that ran, and picks the
  *     loop that carries the most operators per round as the step loop of the program (the
- *     training loop of a training step; a loop nested in it has fewer operators per round).
+ *     training loop of a training step; a loop nested in it has fewer operators per round). The
+ *     step also says how many allocations one round made and what they cost.
+ *   - fusion groups: the one pass a back end ran for a group of nodes (camel/execute/
+ *     fusion_group.h) is not an operator call, so it gets a row of its own: the attribute that
+ *     names the group, its members' operators in execution order, how many times it ran and what
+ *     its kernel cost. Its members ran no operator, so they have no operator row; the row says
+ *     how many operator executions each run stood for. The group row's executions plus the
+ *     operator rows' calls are the program's operator executions: each one is counted once.
  *   - devices: one kernel launch, one host/device transfer and one synchronisation, recorded
  *     by the module that does them (tiles today: measures/kernels, uploads/downloads, waits).
  *   - compilation: the phase recorder of camel/utils/phase_timer.h (parse, GCT, GIR, every pass,
@@ -39,6 +50,7 @@
 #include <cstdint>
 #include <iosfwd>
 #include <ostream>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -74,6 +86,19 @@ void reset();
 /// Records one round of the loop written at `origin` (one step of a program whose step loop is
 /// that loop). Called by camel/execute/loop_frame.h from every back end.
 void loopRound(uint64_t origin) noexcept;
+
+/// Records one execution of a fusion group (camel/execute/fusion_group.h): `key` is the
+/// attribute that names it and `name` its value (the name the module registered), `members` the
+/// operators of the nodes it computed in execution order (the tail last), and `ns` what its
+/// kernel cost. Called once per run of a group by the registry that ran it.
+///
+/// A group's name identifies one kernel and one shape: the first execution fixes the member list
+/// a row shows, and later executions pass the same list. Its members ran no operator, so they get
+/// no operator row; `runs * members.size()` is how many operator executions the group stood for,
+/// and the report counts them exactly once.
+void fusionGroup(
+    std::string_view key, std::string_view name,
+    std::span<const std::string_view> members, uint64_t ns);
 
 /// One device kernel ran: `label` names it (the module's own label, "launch"), `ns` is what the
 /// device spent on it when the caller measured that (0 otherwise).

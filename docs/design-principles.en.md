@@ -97,8 +97,15 @@ By default evaluation is driven by dependency, and there is no fixed order of ex
 
 - **A call with side effects outside a synchronous block, whose result is not used, does not execute.** This is a natural result of evaluation by dependency, a legal and expected behaviour, not an error, and no error needs to be reported. When the compiler is smart enough it may give a warning.
 - A resource decides only the order among the parties that execute, not whether anything executes (3.3).
-- **Effect functions also return a value.** `println(x)` returns `x`, so an effect can be threaded into the data flow: if its return value is used, it is certain to be executed and ordered before the use.
-
+- **Effect functions also return a value.** `println(x)` returns `x`, so that debugging code such as `x->println->f` shows the data at each stage; it is not the mechanism that makes an effect run (when the value is used, it runs anyway). If its return value is used, it is certain to be executed and ordered before the use.
+- **A node runs if and only if this run uses it** (the author's ruling, formal F1). A node used only by one arm runs only when that arm is taken; a node used only inside a loop body does not run when there are zero rounds. An implementation may run a fixed plan, but the plan must agree: a node read by only one arm sinks into that arm, a node read by several arms is copied into each (one copy runs each time), and a pure node that cannot fault may stay outside.
+- **Order does not decide whether something runs** (formal F2): the order on one resource or within a sync block constrains only effects that run anyway; it never makes an effect run because it is ordered before another.
+- **The graph has three kinds of edge** (settled 2026-10-23, see [Edges of the graph](design/effects/edges.cn.md)):
+  - **data edges**: where a value comes from. A node's inputs are an ordered list of ports, each with a **role**, ordinary or context (`with`), taken from the callee's signature; the edge itself is of one kind. Passes that do not care about roles (dead code, common subexpressions, scheduling, structural rule matching) see one kind of edge; passes that do (partial application, differentiation, specialisation, export) read the port's role.
+  - **sync edges**: between adjacent statements of a sync block; the later comes after the earlier, and the earlier is used because of it.
+  - **order edges**: order only — when both ends run, the first runs before the second; they do not pass on "used". They come from effects on one resource and from writes to one `var`.
+  - **Pure computation has no order edges**; outside sync blocks it has data edges only (a pure statement written in a sync block is on the sync chain, see 3.4); there is no "control edge" kind.
+- **The execution rule**: the nodes reachable from the program's result along data or sync edges run; order edges take no part; among the nodes that run, the order respects all three kinds. "Runs if used" and "order does not decide whether something runs" are consequences of this rule.
 ### 3.2 A function's behaviour is decided by the function itself
 
 A function, once compiled, yields its own subgraph. An outside call merely arranges this subgraph node in a larger graph and does not change its own structure.
@@ -135,14 +142,14 @@ The body of `main` is a synchronous block, so the two calls to `log` execute in 
 - **Handle types (per-object resources)**: for a type tagged `#resource`, each value is a resource of its own; operations write `uses parameter` in their signatures (such as `func next(s: Stream<T>): T? uses s`), as `var` parameters do. Operations on the same handle follow the written order, different handles constrain nothing; the compiler infers at the call which value is used. Used for streams, sessions, file handles and the like.
 - **Concurrency needs no `async`/`await`**: independent computations and effects on unordered or different resources may run at the same time; while an effect waits (network, disk, subprocess, a model call), the runtime runs other ready nodes of the graph. This is implementation; the meaning equals executing one by one in some valid order, and `std::nvm` may block one at a time.
 - **Cancellation**: only effects on resources or operators declared `cancellable` can be cancelled, leaving no inconsistent state (the library's responsibility); others complete and their results are discarded. The standard `first_of(a, b, …)` takes the result of the first to succeed and cancels the rest; its result depends on completion order, a nondeterminism stated in its declaration.
-
+- **Different resources do not affect each other** (the author's ruling, formal F9): "Effects on the same kind of resource are ordered naturally through the `uses` resource system; different kinds do not affect each other unless a sync block is written." Conflict is judged by resource only; effects on different resources have no order, and an order needs a sync block.
 ### 3.4 `sync` blocks
 
-A `sync` written before a block (including the postfix form on a function body, `func f(): T sync { ... }`, and a standalone `sync { ... }`) means this is a synchronous block: all expressions in it execute in written order, which can be understood as the compiler automatically inserting control edges between each adjacent pair.
+A `sync` written before a block (including the postfix form on a function body, `func f(): T sync { ... }`, and a standalone `sync { ... }`) means this is a synchronous block: **the statements it writes directly** execute in written order, which can be understood as the compiler inserting sync edges between adjacent statements; arms, loop bodies and nested blocks written inside it are not governed by it (see "a sync block does not reach inward" in this section).
 
-- The side effects inside the block certainly execute, and everything inside the block (across resources, pure computations) is in written order. It serves "I want it to happen" and "order across resources and across pure computations" (such as timing). It is not extended into synchronization by category.
+- The side effects of the statements the block writes directly certainly execute, and those statements (across resources, pure computations) are in written order. It serves "I want it to happen" and "order across resources and across pure computations" (such as timing). It is not extended into synchronization by category.
 - Inside a synchronous block it does not matter what is called or whether it has side effects, because there is already an order. Side effects need to be considered only under the premise of the default out-of-order execution, because they limit the order from being shuffled freely.
-
+- **A sync block does not reach inward** (the author's ruling, formal F17): a sync block governs only the statements it writes directly; arms, loop bodies and nested blocks written inside it run as they are written, and to synchronise them write `sync` there. A block's meaning does not change with where it is written. Example: in `func f(c: bool): int sync { if c then { println(1); println(2) }; return 0 }` the `if` is on the sync chain and its value is `println(2)`, so `println(2)` runs and `println(1)` does not; to print both, write `if c then sync { … }`.
 ### 3.5 References, `var` and `let`
 
 - Everything in Camel is a reference by default. A closure's capture of a variable is also a reference.
@@ -156,7 +163,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **A top-level `var` of a module read and written directly by a function** (such as the top-level `cnt` in `fib1.cml`): not fully implemented; leave it alone unless it becomes necessary.
 - **Known shortcomings.** Camel still has deficiencies in the management and tracking of side effects, which need further study. Problems that appear when captured references, the tracking of side effects and the passes interact should be recorded faithfully as findings to be studied, with a minimal reproduction; only clear implementation errors should be fixed, and ad hoc rules should not be used to cover up.
 - **A path rooted in a `var` can be assigned**: `v.f = e`, `v[i] = e`, `v[i].f = e`, `v[i] += e` and so on mean "replace `v` as a whole by the updated value" (equivalent to `v = set(v, i, set(v[i], f, e))`); value semantics is unchanged: after `let a = v`, changing `v` leaves `a` alone. When nothing else shares the value, the update is in place (the guarantee of 10.5). An index out of bounds on the path is a fault (3.9).
-
+- **Reading a `var` uses the nearest write before it** (formal F3), which therefore runs; writes are only ordered among themselves: in `x = 1; x = 2; return x` the first write is not used and does not run.
 ### 3.6 Higher-order operators and parallelism
 
 - **There is no execution order among the elements of `map` and `filter`**: a synchronous block does not affect the execution order inside `map`; a parallel scheduler may execute the elements concurrently, and the results are arranged by element position; this is exactly where the speed-up from parallelism comes from (see `test/cases/para/core/monte_carlo_pi.cml`). `foreach` and `reduce` execute in element order; their unordered parallel versions are `unordered_foreach` and `unordered_reduce` of the `para` module. There is no `ordered_map` or `unordered_map` operator in the repository. The order of side effects inside the element function is not guaranteed under a parallel `map` and is the user's responsibility.
@@ -452,6 +459,8 @@ Keywords are kept only for modifiers that change semantics (such as `sync`, `exp
 | `finite_math` | not allowed; granted by a tag | Assuming there is no NaN, infinity, negative zero or subnormal |
 | `nondeterministic` | not allowed; granted by a tag | Allowing practices whose result varies with scheduling |
 
+- **Permissions govern what the compiler changes, not what the user wrote.** A type or conversion the user writes (`bf16(x)`, `f32(y)`, a tensor `cast`) is the precision asked for and needs no permission; `change_precision` governs the compiler computing below the written precision (a f32 matrix product done in BF16, a narrower accumulator). `bf16`/`f16` are floating types on a par with `f32`: they have literals, scalar arithmetic, comparisons and conversions, and arithmetic runs in f32 and rounds once. A reduction over a floating array accumulates in f64 and rounds once, returning the element type (as tensor reductions do).
+
 - The default relaxation applies to element-wise tensor operations, the same as to scalars.
 - Algebraic optimization does not automatically assume there is no NaN, infinity, negative zero or subnormal; a rule must still preserve the behaviour of these special values, or check the relevant explicit permission.
 - An f32 matrix multiplication implemented by a library on the CPU is available by default just as on the GPU, on the condition that the result is reproducible (7.6; in safe mode the canonical algorithm is used); rounding the multiply and the add separately counts as a change of the accumulation manner and falls under what is allowed by default; BF16 computation needs only `change_precision`.
@@ -697,7 +706,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 
 - `Device<T>` is kept, and for structs and tuples it allocates by field: `Device<{ a: A }>` and `{ a: Device<A> }` are the same type. Moving data is an ordinary operation with side effects; it can be written explicitly in code, inserted by a transformation function written in Camel acting on a function value ("a pass is a function"), or done automatically by an optimization pass.
 - Asynchrony does not enter the semantics: order is decided by data dependencies and `sync`; streams, events and overlapped execution are implementation matters of the back end.
-- The upload, region execution and download of `std::tiles` are pure computations, and device memory is an unobservable allocation; identical region calls can be merged.
+- The upload, region execution and download of `tiles::compile` are pure computations, and device memory is an unobservable allocation; identical region calls can be merged.
 
 ### 13.4 Distribution
 

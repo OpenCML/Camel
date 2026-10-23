@@ -125,11 +125,19 @@ struct OpsetImport {
     int64_t version = 1;
 };
 
+// A ModelProto.metadata_props entry (StringStringEntryProto): where the exporter records what
+// the Camel graph carried, since ONNX has no node attribute for a library's choice.
+struct MetadataEntry {
+    std::string key;
+    std::string value;
+};
+
 struct Model {
     Graph graph;
     int64_t irVersion = kDefaultIrVersion;
     int64_t opset     = kDefaultOpset; // version for the default domain ""
     std::vector<OpsetImport> extraOpsets;
+    std::vector<MetadataEntry> metadata;
     std::string producer = "camel";
     std::string producerVersion;
 };

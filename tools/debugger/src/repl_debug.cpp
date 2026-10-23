@@ -140,12 +140,29 @@ size_t logEnd(int port) {
     return next;
 }
 
+/// Waits until the worker's stdout marker for `seq` has been read, i.e. until every line the
+/// program printed before that event is in the task log. The waiting is for data the worker
+/// has already written, not for time to pass: on a quiet machine the first check succeeds.
+bool waitForLogMark(int port, uint64_t seq) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (getTaskLogMark(port) < seq) {
+        if (std::chrono::steady_clock::now() >= deadline)
+            return false; // the worker died or is not one of ours: print the event anyway
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return true;
+}
+
 void printStop(const json &stop) {
     const json frame = stop.value("frame", json::object());
     std::cout << "Stopped (" << stop.value("reason", std::string()) << ") in " << frameLine(frame)
               << std::endl;
     if (auto ex = stop.find("exception"); ex != stop.end()) {
         std::cout << ex->value("text", ex->value("message", std::string())) << std::endl;
+    }
+    // A stop at a fusion group's tail: the group ran there, its members did not (2).
+    if (auto fusion = stop.find("fusion"); fusion != stop.end() && fusion->is_object()) {
+        std::cout << fusion->value("message", std::string()) << std::endl;
     }
     // The lines the step went past that did not execute, and why (4.2).
     for (const json &line : stop.value("skipped", json::array())) {
@@ -165,8 +182,8 @@ void waitForStop(int port, uint64_t after, size_t logOffset) {
         client.set_connection_timeout(2, 0);
         client.set_read_timeout(5, 0);
         auto r = client.Get("/api/debug/events?timeout=300&after=" + std::to_string(after));
-        printLog(port, logOffset);
         if (!r) {
+            printLog(port, logOffset);
             std::cout << "The program's process has ended." << std::endl;
             return;
         }
@@ -175,8 +192,13 @@ void waitForStop(int port, uint64_t after, size_t logOffset) {
             continue;
         }
         for (const json &e : answer.value("events", json::array())) {
-            after                  = std::max(after, e.value("seq", uint64_t{0}));
+            const uint64_t seq      = e.value("seq", uint64_t{0});
             const std::string type = e.value("type", "");
+            // Drain up to this event before printing it: the marker the worker wrote before
+            // queuing the event is what makes that order the program's, not the scheduler's.
+            waitForLogMark(port, seq);
+            printLog(port, logOffset);
+            after = std::max(after, seq);
             if (type == "breakpoint") {
                 std::cout << breakpointLine(e.value("breakpoint", json::object())) << std::endl;
             } else if (type == "note") {
@@ -189,9 +211,6 @@ void waitForStop(int port, uint64_t after, size_t logOffset) {
                 printStop(e);
                 return;
             } else if (type == "finished") {
-                // The output reaches the log through a pipe: give it a moment to arrive.
-                std::this_thread::sleep_for(std::chrono::milliseconds(150));
-                printLog(port, logOffset);
                 std::cout << "Program finished: " << e.value("outcome", std::string());
                 if (e.contains("exitCode") && e["exitCode"].is_number_integer()) {
                     std::cout << " (exit code " << e["exitCode"].get<int>() << ")";
@@ -200,6 +219,10 @@ void waitForStop(int port, uint64_t after, size_t logOffset) {
                 return;
             }
         }
+        // Nothing is pending: show what the program printed while we waited. (When an event is
+        // pending, its mark decided the cut above, so printing here first could show output
+        // that belongs after the event.)
+        printLog(port, logOffset);
     }
 }
 

@@ -1,0 +1,15 @@
+/**
+ * `#impl` takes exactly one kernel name: the form carries a one-item tuple of names, so an empty
+ * argument list is reported with the count when the tag is read, before any kernel is looked up
+ * (language reference 7.6; design principles 10.4).
+ */
+module impl_syntax_args
+
+func add(a: int, b: int): int {
+    return a + b
+}
+
+#impl<>
+func add_with_kernel(a: int, b: int): int {
+    return a + b
+}

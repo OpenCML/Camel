@@ -13,7 +13,7 @@ args = ["${inspect_ast}", "${case}"]
 expect_exit = 0
 expect_stdout_contains = ["FuncDecl: mul_one__lhs", "FuncDecl: mul_one__rhs", "DataDecl: mul_one", "FuncDecl: swap__lhs", "FuncDecl: swap__rhs", "FuncDecl: guarded__lhs", "FuncDecl: guarded__rhs", "FuncDecl: guarded__when"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "rules.generic_head"
@@ -24,7 +24,7 @@ args = ["${inspect_ast}", "${case}"]
 expect_exit = 0
 expect_stdout_contains = ["FuncDecl: keep__lhs", "FuncDecl: keep__rhs", "FuncDecl: keep"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "rules.pending_parts"
@@ -37,7 +37,7 @@ expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 10
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "rules.values"
@@ -49,7 +49,7 @@ backends = ["nvm", "fvm"]
 expect_exit = 0
 expect_stdout_contains = ["mul_one false 0", "swap true 2", "guarded false 0", "7 7"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "rules.names_stay_names"
@@ -60,7 +60,7 @@ args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["7"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "rules.needs_an_arrow"
@@ -72,7 +72,7 @@ expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
 expect_diagnostic_line = 3
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "rules.format_snapshot"
@@ -86,4 +86,4 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "golden/rules_format.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000

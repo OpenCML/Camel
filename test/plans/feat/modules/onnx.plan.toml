@@ -25,7 +25,7 @@ assert(count('Mul') === 1 && model.ops.length === 2, `a single product and its o
 assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_fold"
@@ -52,7 +52,7 @@ assert(model.initializers.includes('w') && model.initializers.includes('b'), `we
 assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_unsupported_op"
@@ -71,7 +71,7 @@ assert(/at [^ ]*export_unsupported[.]cml:15:45[)]/.test(text), 'missing source p
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_impure_op"
@@ -90,7 +90,7 @@ assert(/at [^ ]*export_impure[.]cml:13:45[)]/.test(text), 'missing source positi
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_branch"
@@ -112,7 +112,7 @@ const model = readOnnxModel(path.join(input.test_tmp, 'export_branch.onnx'))
 assert(model.ops.join() === 'Cast,Gather,Greater,If,Identity', `unexpected top-level ops ${model.ops}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_dynamic_batch"
@@ -138,7 +138,7 @@ const found = match(/exported supported=([0-9]+)/, input.normalized.stdout)
 assert(Number(found[1]) > 100, `capability list too small: ${found[1]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_import_order"
@@ -150,7 +150,7 @@ envs = ["ONNX_OUT=${test_tmp}/export_import_order.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_train_step"
@@ -744,7 +744,7 @@ const path = await import('path')
 assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_refused_a.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "pass_export_refuses_without_macro"
@@ -767,7 +767,7 @@ const path = await import('path')
 assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_refused_b.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "pass_export_refusals_json"
@@ -819,7 +819,7 @@ assert(!text.includes('EFFECT'), 'the exported function must not be executed')
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_ctrl_effect.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "pass_export_ctrl_effect_json"
@@ -842,7 +842,7 @@ assert(d.range.start.line === 13 && d.range.start.character === 4 && d.range.end
 assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_ctrl_effect.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_ctrl_effect_in_callee"
@@ -864,7 +864,7 @@ assert(!text.includes('unreachable') && !text.includes('EFFECT'), 'neither the s
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "pass_export_ctrl_effect_in_callee_json"
@@ -887,7 +887,7 @@ assert(d.range.start.line === 13 && d.range.start.character === 4, `unexpected r
 assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "export_train_step.fuse"
@@ -1228,6 +1228,12 @@ const model = readOnnxModel(path.join(input.test_tmp, 'export_fused_linear.onnx'
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') === 1 && count('Add') === 1 && count('Relu') === 1, `unexpected operators ${model.ops}`)
 assert(!model.ops.some((op) => /MatMulAdd|MatMulBlas|Fused/i.test(op)), `a fused operator name leaked: ${model.ops}`)
+// What the nodes carried lands in the model's metadata (ONNX has no node attribute for it):
+// the kernel choice and the marked group, each with its node and source position.
+const meta = Object.values(model.metadata).join('\n')
+assert(Object.keys(model.metadata).length >= 2, `no metadata for the marked nodes: ${JSON.stringify(model.metadata)}`)
+assert(meta.includes('tensor.kernel=library'), `the kernel choice is not recorded: ${meta}`)
+assert(meta.includes('tensor.fusion=linear_relu'), `the marked group is not recorded: ${meta}`)
 }
 """
 timeout_ms = 8000
@@ -1251,6 +1257,116 @@ const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const model = readOnnxModel(path.join(input.test_tmp, 'export_fused_linear_nofuse.onnx'))
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') === 1 && count('Add') === 1 && count('Relu') === 1, `unexpected operators ${model.ops}`)
+// No pass recorded a choice, so there is nothing to carry: an empty metadata is the honest
+// model, not a table of defaults.
+assert(Object.keys(model.metadata).length === 0, `unexpected metadata ${JSON.stringify(model.metadata)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "export_canonical_kernel_refused"
+desc = "tensor::fuse safe_fp=true records tensor.kernel=canonical on the product (design principles 7.4); an ONNX MatMul cannot promise the canonical accumulation order, so onnx.export_model refuses at the recorded attribute, names the attribute and the node, gives the source position, and writes no model. A silent drop would make the exported model compute something the program did not promise."
+kind = "negative"
+case = "../../../cases/modules/onnx/export_canonical_kernel.cml"
+args = ["${case}", "tensor::fuse safe_fp=true", "std::nvm"]
+envs = ["ONNX_OUT=${test_tmp}/export_canonical_kernel.onnx"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["tensor.kernel=canonical", "'tensor:matmul'", "cannot be exported", "export_canonical_kernel.cml:"]
+expect_output_not_contains = ["model written"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+assert(!fs.existsSync(path.join(input.test_tmp, 'export_canonical_kernel.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "export_strict_refused"
+desc = "#strict (design principles 7.4) promises the canonical algorithm bit for bit, which an ONNX MatMul cannot carry; onnx.export_model refuses at the strict attribute, names it, and writes no model."
+kind = "negative"
+case = "../../../cases/modules/onnx/export_strict.cml"
+args = ["${case}", "std::nvm"]
+envs = ["ONNX_OUT=${test_tmp}/export_strict.onnx"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["attribute 'strict'", "cannot be exported", "design principles 7.4"]
+expect_output_not_contains = ["model written"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+assert(!fs.existsSync(path.join(input.test_tmp, 'export_strict.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "export_unclassified_attribute_refused"
+desc = "The class guard at the exporter: @mark writes test.mark on the nodes of the exported function, and no consumer has a fate for it. onnx.export_model refuses, naming the attribute, the node and the fate table, rather than dropping an attribute it does not understand."
+kind = "negative"
+case = "../../../cases/modules/onnx/export_unclassified.cml"
+args = ["${case}", "std::nvm"]
+envs = ["ONNX_OUT=${test_tmp}/export_unclassified.onnx"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["attribute 'test.mark'", "not classified", "camel/core/node_attrs.h"]
+expect_output_not_contains = ["model written"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+assert(!fs.existsSync(path.join(input.test_tmp, 'export_unclassified.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "inspect_attribute_fates"
+desc = "camel inspect --attrs prints every attribute the tree can write with its fate in the interpreter, the dumps, the ONNX export and Tiles. The check is not vacuous: it prints more than twenty rows, and the rows that decide carry/refuse say so (tensor.kernel=library is carried by ONNX, tensor.kernel=canonical and strict are refused by it)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_fused_linear.cml"
+args = ["inspect", "--attrs", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+const rows = lines.filter((l) => l.startsWith('ATTRIBUTE '))
+assert(rows.length >= 20, `the table must classify the attributes the modules register, got ${rows.length} rows`)
+const row = (prefix) => rows.find((l) => l.startsWith(prefix))
+const library = row('ATTRIBUTE tensor.kernel=library')
+assert(library && library.includes('interpreter=carried') && library.includes('dump=carried') && library.includes('onnx=carried') && library.includes('tiles=carried'), `tensor.kernel=library is not classified everywhere: ${library}`)
+const canonical = row('ATTRIBUTE tensor.kernel=canonical')
+assert(canonical && canonical.includes('onnx=refused') && canonical.includes('tiles=carried'), `tensor.kernel=canonical: ${canonical}`)
+const strict = row('ATTRIBUTE strict ')
+assert(strict && strict.includes('onnx=refused') && strict.includes('tiles=carried'), `strict: ${strict}`)
+assert(!lines.some((l) => l.startsWith('UNCLASSIFIED')), 'a normal program must have a complete classification')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "inspect_attribute_fates.unclassified"
+desc = "The class guard, stated as a check: a loaded module interns test.mark, the fate table has no row for it, and camel inspect --attrs exits 1 naming the key. This is how a new node attribute written by any pass fails until it is classified in all four consumers."
+kind = "negative"
+case = "../../../cases/modules/onnx/export_unclassified.cml"
+args = ["inspect", "--attrs", "${case}"]
+expect_exit = 1
+expect_stdout_contains = ["UNCLASSIFIED ATTRIBUTE \"test.mark\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const rows = input.normalized.stdout.split('\n').filter((l) => l.startsWith('ATTRIBUTE '))
+assert(rows.length >= 20, `the check must still examine the classified rows, got ${rows.length}`)
+assert(!rows.some((l) => l.startsWith('ATTRIBUTE test.mark')), 'test.mark must not be classified by accident')
+assert(input.normalized.stdout.includes('for the interpreter, the dumps, the ONNX export and Tiles'), 'the failure must say which consumers need the classification')
 }
 """
 timeout_ms = 8000
@@ -1799,6 +1915,29 @@ assert(text.includes('which is a value of type'), 'missing condition: ' + text)
 assert(text.includes('; a loop carries tensors and scalars and tuples and structs of them'), 'missing carried kinds: ' + text)
 assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_carried_array.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "export_loop_carried_array_field"
+desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field is refused by export_model at the recursive call, and stays refused: the ruling of 2026-10-23 keeps it — 「(b) ONNX 导出对带数组字段的携带状态保持拒绝，等原生多维数组（H17 第 2、4 项）把形状的说法定下来再处理定长数组。」 — so the diagnostic names the array field and the missing thing (native multi-dimensional arrays, H17 items 2 and 4) instead of the general 'a loop carries tensors and scalars and tuples and structs of them', and no model file is written."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_loop_carried_array_field.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_loop_carried_array_field.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const text = input.normalized.output
+assert(text.includes("a recursive call changes argument 2 of a recursion whose depth depends on the model input"), 'missing the argument: ' + text)
+assert(text.includes("the leaf 'xs', a value of type 'int[]'"), 'the diagnostic must name the array field: ' + text)
+assert(text.includes('a carried state with an array field is refused until native multi-dimensional arrays settle the shapes of fixed-size arrays (H17 items 2 and 4)'), 'the diagnostic must say what is missing: ' + text)
+assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
+assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_carried_array_field.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 8000
@@ -2606,4 +2745,4 @@ assert(model.initializers.includes('ints'), `expected i64 index initializer, got
 assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000

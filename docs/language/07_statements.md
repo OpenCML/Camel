@@ -549,6 +549,25 @@ func main(): int {
 
 形参类型还可以是 `func`：这时实参是一个函数名，标签的事实是那个函数的**图引用**（`attr::graphRef`），不是函数值。GIR 构建器把该图记进函数图的引用表（`kGraphRefRule`），于是冻结后的图直接指向这个函数，运行期不必再按名字解析，也不需要闭包捕获；因此 `func` 实参只能是程序里的静态函数，载不了捕获了外围值的闭包。自动微分模块就是这样声明 `export tag vjp<rule: func> on func` 的：`#vjp<rule>` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。`@vjp<rule>` 在标注处报 `SemanticDiag::InvalidAnnotation`，应写 `#vjp<rule>`。
 
+**`#impl<f>`：Camel 函数体是语义，原生内核是执行**（设计原则 10.4）。它写在带函数体的函数声明之前：
+
+```cml
+#op<':op/add_l'>
+func add_kernel(a: int, b: int): int          // 本模块的无体声明，内核
+
+#impl<add_kernel>
+export func add(a: int, b: int): int {
+    return a - (0 - b)                        // 语义（Camel 定义）
+}
+```
+
+- 语法是 `#impl<内核名>`：一个参数，取名字而不是值，因为无体声明没有函数值可传。
+- `f` 必须是**同一模块**的无体声明。按设计它是这个模块的私有声明（不导出：内核是实现细节，不是模块接口），写在函数同一个模块里。别的模块的声明（`SemanticDiag::ImplKernelForeign`）、没有声明的名字（`ImplKernelUnknown`）、带函数体的函数（`ImplKernelNotBodyless`）、以及写在无体声明自己身上的 `#impl`（`ImplOnBodylessDeclaration`）都被拒绝，`#impl` 也不能写在 lambda、类型、字段或块上（标签位置错误）。拥有 `.cmo` 的模块（`stdlib/tensor.cml` 之于 `tensor.cmo`）同样可以声明内核并写下定义：`.cml` 与同名 `.cmo` 是**同一个模块**（H94），声明模块可以有函数体（语言作者的裁定，2026-10-23，`docs/handover/reviews/questions-2026-10-23.md`「## impl-kernel-site」：「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」）。
+- **泛型函数可以带 `#impl`**：内核是一条同样带类型参数的无体声明（`sum_kernel::<T>`），按 H228「一个算子、按类型的执行器」在实例化时选执行器——声明里的固定规则按签名匹配，带类型参数的规则用该实例的类型求解。某个 `T` 没有执行器时，这个实例就执行函数体：函数体本来就是语义，结果相同；`std::profile` 标出它走的是哪条路（`docs/handover/reviews/questions-2026-10-23.md`「## impl-kernel-site」：「泛型函数可以带 `#impl`」）。
+- **签名必须一致**：`with` 与普通参数的个数、类型和 `var` 标记相同，结果类型相同，内核没有 `constas` 参数；不一致报 `ImplSignatureMismatch`。
+- **默认不展开**：普通调用直接调用内核算子（图上是一个 `OPER`，标签是内核的 URI）。普通遍与执行器到不了函数体，函数体也不会内联进调用者；编译与执行的代价与直接调用一个原子算子相同。语义图照样建出来并保留着，只是不在普通程序可达的图里。
+- **按需展开**：需要看内部的消费者取标签留下的语义图。函数值（`let g = add`、`grad(add)`）就是语义图；运行期还可以从 `Program::implBodies` 取到带 `kGraphFlagImplBody` 的图。目前还没有生产遍去展开 `#impl` 函数体，标签把这件事留给自动微分、融合、导出与规则按需去做；`test::impl` 测试遍是这条路径的演示：它从 `Program::implBodies` 读语义体、展开被标函数的体，并与去掉标签的同一段 Camel 体逐节点比较。差分测试保证内核路径与函数体路径的结果一致（有容差时在测试里写明）。
+
 `@名字(实参)` 不是标签的写法：它按标注报告，并指出应写 `#名字`。
 
 ## 7.7 类型声明
@@ -607,7 +626,7 @@ id
 sync? { 语句 ... }
 ```
 
-块是表达式：它的值由块里的 `return` 给出，没有 `return` 时没有值。块引入一个作用域。带 `sync` 的块按书写顺序执行其中的语句（[4.3.1](04_execution_model.md#431-同步块块修饰符)）；不带 `sync` 的块按依赖求值。
+块是表达式：它的值由块里的 `return` 给出，没有 `return` 时没有值。块引入一个作用域。带 `sync` 的块按书写顺序执行**它自己直接写着的**语句（[4.3.1](04_execution_model.md#431-同步块块修饰符)）；里面的分支臂、循环体与嵌套块按它们自己的写法执行（同步块不向内继承，[设计原则 3.4](../design-principles.cn.md#34-sync-块)）。不带 `sync` 的块按依赖求值。
 
 块用作函数体、分支臂、lambda 体，也可以单独作语句。
 

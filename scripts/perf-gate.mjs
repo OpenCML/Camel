@@ -74,8 +74,9 @@ const DEFAULT_WARMUP = 1
 const DEFAULT_THRESHOLD_PCT = 15
 const CHILD_TIMEOUT_MS = 900000
 // The cheap cases of perf.startup are milliseconds: their spread is the whole verdict, so they take
-// at least this many samples even when --reps is small (21 is what test/tools/startup-cost.mjs
-// uses). Four commands x 21 runs cost about two seconds.
+// at least this many samples even when --reps is small (test/tools/startup-cost.mjs reads the same
+// four commands in CPU time and takes five samples of twelve runs each). Four commands x 21 runs cost
+// about two seconds.
 const MIN_REPS_WALL_CASE = 21
 
 const REGISTRY_ALL = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
@@ -105,8 +106,10 @@ const PLANS = [
             'program, inspect --ops over the whole standard library, and the same imports on the run path',
         cost: 'a few seconds per repetition: the whole plan is 2.1 s (H167)',
         own:
-            'yes: four ceilings (H142) and declaration.cost, whose share of the compile work is ' +
-            'load-invariant (H152)',
+            'yes: four CPU-time ceilings (H142; the 2026-10-23 ruling changed their unit from the ' +
+            'wall clock) and declaration.cost -- per declaration, absolute CPU total and the ' +
+            'structural assertion that no (phase, module) repeats in a round (H152, H177); the ' +
+            'compile-work share retired with that ruling',
         cases: [
             {
                 name: 'startup.version',

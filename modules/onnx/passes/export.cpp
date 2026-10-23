@@ -218,7 +218,7 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out
             std::format(
                 "the output path of onnx.export_model is {}, not a constant of the graph; "
                 "name the model file with the parameter out of the pass "
-                "(onnx::export(out=\"model.onnx\")), or write the path as a string literal",
+                "(onnx::export out=\"model.onnx\"), or write the path as a string literal",
                 describeNode(g, args[2]))};
     }
     if (args.size() > 3) {
@@ -669,7 +669,7 @@ void exportEntry(
             std::format(
                 "the program contains no onnx.export_model(fn, example, path) call, so "
                 "onnx::export translates 'main' itself, and the model file is not named: give "
-                "it as the parameter out, onnx::export(out=\"model.onnx\")")};
+                "it as the parameter out, onnx::export out=\"model.onnx\"")};
     }
     for (GCGraph *g : camel::runtime::collectReachableGraphs(*program, root)) {
         if (g != nullptr) {
@@ -757,14 +757,8 @@ OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) 
 
 void registerOnnxPasses() {
     PassDescriptor descriptor;
-    // The pass's documentation and its name are its module declaration's; the parameters are
-    // `out` alone, and the exporter's own signature carries the rest.
-    descriptor.params = {PassParam{
-        "out",
-        PassParamType::String,
-        std::string(),
-        "the model file; overrides the path argument of onnx.export_model (then exactly one "
-        "call is allowed) and names the file when the program makes no request"}};
+    // The pass, its documentation and its parameter `out` are the declaration in
+    // stdlib/onnx.cml; the exporter's own signature carries the rest.
     descriptor.make = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<OnnxExportPass>(ctx, args.getString("out"));
     };

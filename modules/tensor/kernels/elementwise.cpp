@@ -387,9 +387,26 @@ void binaryTyped(BinaryOp op, const BroadcastPlan &plan, const T *a, const T *b,
     case BinaryOp::Mul:
         run([](T x, T y) { return static_cast<T>(x * y); });
         break;
-    default:
-        run([op](T x, T y) { return applyBinary(op, x, y); });
+    // Every operator gets its own loop, with the operator a compile-time constant inside it, so
+    // the element loop vectorizes.  Handing the runtime `op` to the loop instead (the former
+    // `default:` alone) leaves a switch in the innermost loop and a scalar division per element:
+    // `x / y` over [512, 256] measured 215 us that way and 63 us with it, against torch's 51 and
+    // 46 us in the same two windows (examples/models/naive-in-expert-out/README.md).
+    case BinaryOp::Div:
+        run([](T x, T y) { return applyBinary(BinaryOp::Div, x, y); });
         break;
+    case BinaryOp::Pow:
+        run([](T x, T y) { return applyBinary(BinaryOp::Pow, x, y); });
+        break;
+    case BinaryOp::Max:
+        run([](T x, T y) { return applyBinary(BinaryOp::Max, x, y); });
+        break;
+    case BinaryOp::Min:
+        run([](T x, T y) { return applyBinary(BinaryOp::Min, x, y); });
+        break;
+    default:
+        // A new operator adds its loop above rather than falling back to the runtime switch.
+        throw std::logic_error("binary operator without a hoisted row loop");
     }
 }
 

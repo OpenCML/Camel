@@ -65,6 +65,34 @@ export function applyNormalizers(text, names) {
             output = output
                 .replace(/"origin": "[0-9]+"/g, '"origin": "<ORIGIN>"')
                 .replace(/\borigin=[0-9]+/g, 'origin=<ORIGIN>')
+        } else if (name === 'normalize_node_ids') {
+            // A rich DOT dump names each node in its tooltip as `<graph>::node#<dataIndex>`: the
+            // frame slot (positive) or static slot (negative) the node's value lives in. That
+            // index is the allocator's numbering of one graph, not graph structure: it moves when
+            // a lowering change allocates one temporary more or materializes a constant earlier,
+            // while the graph the dump describes is the same. What the tooltip is *for* is the
+            // relation it states between nodes -- two nodes that name one slot are one value, a
+            // GATE names its producer's slot, unrelated nodes must not collide -- so renumber
+            // each distinct id by first appearance within its graph (`n0`, `n1`, ...) and compare
+            // that relation. Renumbering per graph is what the ids mean: a static slot 1 of `main`
+            // and a static slot 1 of `gate` are different slots, and the graph name is printed
+            // beside the label. The golden keeps the absolute ids as the record of what the tree
+            // emitted when it was recorded; a real structural change still moves the *order* the
+            // distinct ids first appear in, or the set of nodes that share one, and stays red.
+            const idsByGraph = new Map()
+            output = output.replace(/([^\s"\\]+)::node#(-?\d+)/g, (_whole, graph, id) => {
+                let ids = idsByGraph.get(graph)
+                if (!ids) {
+                    ids = new Map()
+                    idsByGraph.set(graph, ids)
+                }
+                let label = ids.get(id)
+                if (label === undefined) {
+                    label = `n${ids.size}`
+                    ids.set(id, label)
+                }
+                return `${graph}::node#${label}`
+            })
         } else if (name === 'normalize_duration_seconds') {
             output = output.replace(/computed in [0-9]+\.[0-9]+ seconds/g, 'computed in <TIME> seconds')
         }

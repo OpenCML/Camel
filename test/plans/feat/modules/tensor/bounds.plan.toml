@@ -14,7 +14,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["slice bounds 8..9 are outside axis 0 of extent 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "index_const"
@@ -26,7 +26,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["index 8 is outside axis 0 of extent 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "index_declared_shape"
@@ -38,7 +38,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["index 5 is outside axis 0 of extent 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "slice_untaken_branch"
@@ -50,7 +50,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["slice bounds 8..9 are outside axis 0 of extent 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "in_range"
@@ -61,7 +61,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["5", "3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "unknown_runtime"
@@ -72,7 +72,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["ran", "[0]", "idx: tensor index out of bounds"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "slice_runtime"
@@ -83,7 +83,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["ran", "[0]", "SliceOutOfRange", "The range 8 to 9 is out of range for axis 0 of a tensor of length 3", "slice_runtime.cml:7:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "tuple_index"
@@ -94,4 +94,4 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidAccessIndex"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000

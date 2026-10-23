@@ -33,3 +33,15 @@ expect_exit = 0
 expect_stdout_contains = ["PASS"]
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 120000
+
+[[tests]]
+name = "cli.version_stamp"
+desc = "`camel --version` prints the footprint the build recorded in out/<tag>/build-info.json, in the pinned stamp's shape (a timestamp plus an optional git-describe suffix), and with the build type that install was configured with."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/cli/version_stamp.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000

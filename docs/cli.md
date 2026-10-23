@@ -42,7 +42,7 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `--passes <list>`: Comma-separated pass list (e.g. `--passes std::gir,other`). Each pass is followed by its parameters as `key=value` words; a comma separates passes, not parameters. If omitted, first positional is file, rest are passes. A pass may take parameters: `std::opt safe_fp=true` (see "Pass parameters")  
 - `--timeit <pass>/<N>`: Measure one pass `N` times from a fresh graph; text mode prints samples plus a compact summary table, while `--output-format json` emits structured benchmark data. A run that fails names the 1-based number of the iteration that failed: text mode prints it in a `[timeit] i/N ... failed` line, and JSON mode writes one timeit object with `"iteration"`, the diagnostics (or a `"failure"` sentence when there are none) and the samples that completed before the failure. A program that did not compile is a failed run in the same way: the diagnostics are reported, no elapsed time is recorded for that iteration, no summary is printed, and the exit code is 1.
 - `--dump-after-each-pass <dir>`: Write the graph before the first pass (`00_input`) and after each pass that returns a graph (`NN_<pass>`, `::` written as `.`) into `<dir>`: a readable DOT (`.rgir.dot`, the `std::rgir` format with `origin`/`span`/`srcfile` per node) and the `std::stats` counters (`.stats.json`). Scheduling and translation passes consume the graph and leave no snapshot. Compare two snapshots with `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
-- `--time-phases`, `--time-phases=<file>`: Write the wall-clock time of each phase of the run (start-up, parse, GCT, GIR, each pass, teardown; one entry per module and per pass) as one JSON object to standard error, or to `<file>` (the file is joined to the option with `=`, so that the program after it is never taken for the file). With the counting allocator shim preloaded (`test/tools/allocshim`), each phase also carries its heap allocations. The environment variable `CAMEL_TIME_PHASES=<file>` does the same for every command. Off by default and free when off; each entry names the phase and carries its wall-clock time, and with the counting allocator also its allocations, bytes and peak.
+- `--time-phases`, `--time-phases=<file>`: Write the wall-clock time of each phase of the run (start-up, parse, GCT, GIR, each pass, teardown; one entry per module and per pass) as one JSON object to standard error, or to `<file>` (the file is joined to the option with `=`, so that the program after it is never taken for the file). With the counting allocator shim preloaded (`test/tools/allocshim`), each phase also carries its heap allocations. The environment variable `CAMEL_TIME_PHASES=<file>` does the same for every command. Off by default and free when off; each entry names the phase and carries its wall-clock time and its CPU time (user + system, `cpu_ns`; `-1` where the platform has no such accounting — the wall clock follows the host's load, the CPU time does not), and with the counting allocator also its allocations, bytes and peak.
 - `--arg <name>=<value>`: Value of a parameter of `main` (repeatable; see "Programs whose `main` takes parameters")  
 - `-o`, `--output <file>`: Where the value `main` returns is written (default: standard output; same section)  
 - `-P`, `--profile`: Record time spent in each stage and write trace files to `profile_reports/`. Effective in debug builds only; a release build accepts the option and produces no report  
@@ -155,25 +155,30 @@ The passes given on the command line run in the order written. Each pass transfo
 ### Pass parameters
 
 A pass is a function of the standard library (design principles 9.3): its name, documentation and
-parameters are one declaration in `stdlib/std.cml`, and the pipeline reads them from there. A
+parameters are one declaration in a module `.cml` file — the core's in `stdlib/std.cml`, a
+module's in `stdlib/<module>.cml` — and the pipeline reads them from there. A
 parameter is written as a `key=value` **word after the pass name, with no parentheses**:
 
 ```
 camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm
 ```
 
-The value is one word. It is a Camel constant expression: bool, int, float and string literals and
-the operators on them (`n=2*8`, `safe_fp=!false`). An expression with spaces is written without
-them (`growth_budget=2*8+1`); a string with spaces is quoted by the shell (`out="a b.onnx"`).
+The value is one word, read by the type the declaration gives the parameter (design principles
+9.3). A `bool`, `int` or `float` parameter takes a Camel constant expression: literals and the
+operators on them (`n=2*8`, `safe_fp=!false`), an expression with spaces written without them
+(`growth_budget=2*8+1`). A `string` parameter takes the word as written and needs no quotes, so
+`onnx::export out=model.onnx` names the file `model.onnx`; a value with spaces is quoted by the
+shell, as with any command-line tool, and the quoting must arrive as part of the word, so the pass
+word is quoted whole (`'onnx::export out="a b.onnx"'`).
 Between a pass name and its parameters, and between two parameters, nothing but whitespace is
 allowed. The parenthesised form (`std::opt(safe_fp=true)`), the colon spelling on the command line
 (`safe_fp: true`) and positional parameters are gone: they are refused as
 `RuntimeDiag::InvalidPassParameter`, and the message says how to write the parameter.
 
-The declarations are read when the pipeline is resolved, from the module search paths. If
-`stdlib/std.cml` cannot be found or does not declare the pass, the pass is refused rather than run
-on defaults the declaration never gave it: the message names module `std` and the file the pipeline
-read (or the `std.cml` paths it looked at), so an install without its standard library says so
+The declarations are read when the pipeline is resolved, from the module search paths. If the
+module's `.cml` file cannot be found or does not declare the pass, the pass is refused rather
+than run on defaults the declaration never gave it: the message names the module and the file the
+pipeline read (or the paths it looked at), so an install without its standard library says so
 instead of reporting the pass as unknown.
 
 The declaration is the function's own `with` list, so it has a function's rules (design
@@ -238,14 +243,16 @@ Settings of a pass are parameters, no longer environment variables:
 | `std::tf`, `std::prl` | `linear: bool = false` (evaluate node by node), `fanout_all: bool = false` (fan every unordered higher-order call out), `diag: bool = false` (print the decision for every graph), `bytecode: bool = true` (hand serial graphs to the bytecode interpreter), `gc_stats: int = 0` (1: statistics at the end of the run; 2: also one line per collection) |
 | `std::profile` | `top: int = 24` (rows of the operator table; 0 writes every operator that ran), `hints: bool = true` (report the element-wise loops that run on the host, and why they did not go to a device), `json: string = ""` (also write the report as one JSON object to this file), `report: bool = true` (write the text report; false turns on only the diagnostics below), `gc_stats: int = 0` (the allocator's statistics at exit: 1 one line, 2 also one line per collection), `type_stats: bool = false` (the type storage's statistics at exit), `effect_trace: string = ""` (append one JSON line per executed effectful operator to this file; see "Effect trace") |
 | `onnx::export` | `out: string = ""` (the model file; see below) |
+| `std::opt::saturate` | `rounds: int = 6` (rounds of saturation of the standard rules library), `strict: bool = false` (keep the rules that hold bit for bit, as `safe_fp=true` does for `std::opt`) |
+| `std::jgir` | `canonical: bool = false` (keys in a canonical order, so two runs compare byte for byte), `egraph: bool = false` (write the document `egraph-serialize` reads, whose e-classes are the classes of a program with several writings; the community's `egraph-visualizer` opens it) |
 
 What stays in the environment is the environment of the process, not of a pass: `CAMEL_HOME`, `CAMEL_STD_LIB`, `CAMEL_PACKAGES`, the logging and diagnostics-format variables, the resource limits (`CAMEL_*_SPACE_*`, and the environment spelling of `--max-recursion-depth`, `--max-macro-depth` and `--max-macro-rounds`), the collector's diagnostic and pacing variables (`CAMEL_GC_HEAP_LIMIT_MB`, `CAMEL_GC_GROWTH_PERCENT`, `CAMEL_GC_PROMOTION_AGE`, `CAMEL_GC_POISON`, `CAMEL_GC_VERIFY`, `CAMEL_GC_STRESS_*`), and `CAMEL_STARTUP_PROFILE`. The growth budget of the rewrite engine is the `growth_budget` parameter of the passes above; it is not read from the environment. The switches that used to be environment variables are options and pass parameters: `--gc`, `--block-limit`, `--graph-gc-mb`, `--native-stack-guard`, `--profile-mode`, and the `gc_stats`, `type_stats` and `effect_trace` parameters of `std::profile`; a test-only pass is named in the pipeline.
 
 ### Passes of modules
 
-The `std::` prefix belongs to the passes of the core. A pass of a module is named by the module: `tiles::compile`, `tensor::fuse`, `onnx::export`. A module may register aliases for its passes (`registerPassAlias`); the core does not know the names of modules.
+The `std::` prefix belongs to the passes of the core. A pass of a module is named by the module: `tiles::compile`, `tensor::fuse`, `onnx::export_model` (short alias `onnx::export`). Every pass, core or module, is a body-less declaration of the module's `.cml` file — `export func fuse::<F>(f: F): F! when is_function::<F>()` — and `registerModulePass` binds only its kernel. The compiler builds neither a graph nor an operator group for such a declaration. A module may register aliases for its passes (`registerPassAlias`); the core does not know the names of modules.
 
-A module may register passes of its own (`registerModulePass`, plus short aliases with `registerPassAlias`). They run only where the pipeline writes them: the pipeline is composed explicitly, so importing a module never adds a pass. A library whose pass is needed (autodiff needs `std::macro` before it) diagnoses the missing pass and says which one to add, and a tag whose reading pass is absent draws a warning.
+A module's passes run only where the pipeline writes them: the pipeline is composed explicitly, so importing a module never adds a pass. A library whose pass is needed (autodiff needs `std::macro` before it) diagnoses the missing pass and says which one to add, and a tag whose reading pass is absent draws a warning. The parameters of a module's pass are its declaration's `with` list, checked like the core's.
 
 A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) declares its parameters as the `with` parameters of that function: `with <label: string, n: int> export func report(p: Program): Program!` is run as `mymod::report label="x" n=21`. The names, order and types of the `with` parameters are the pass's parameters (design principles 4.4 and 9.3); bool, int, float and string are the types a pass parameter may have. A `with` parameter has no default in source, so each one is required: leaving one out is `SemanticDiag::ParamArgumentMissing` at the call in the pipeline, and the message names the parameter.
 
@@ -264,6 +271,7 @@ A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) d
 - `std::fvm`: high-performance bytecode VM scheduler
 - `std::jit`: JIT-enabled bytecode VM scheduler. The JIT generates code for x86-64 only. In a build for another processor (arm64 macOS; `ENABLE_FASTVM_JIT` off) `std::jit` is accepted and runs the program on the bytecode interpreter, as `std::fvm` does, with the same results; the build says so once in its log (`-v`: `std::jit: this build has no native code generator ...`). It is a log line and not a warning, so the same command line runs on every platform, also under `-Werror`
 - `std::gir`: dump the current graph IR and stop
+- `std::opt::saturate`: saturate the standard rules library (`stdlib/rules.cml`) and stop there, leaving the program in the state where a value has several writings — the state the extractors read, and nothing else is changed: no writing is extracted, so every equivalent writing is still in the graph. `rounds: int = 6` bounds the rounds of saturation, `strict: bool = false` keeps the rules that hold bit for bit (design principles 7.4). The dumps of that state draw each class as a dashed cluster of its writings, mark the writing extraction would take by the cost model the pipeline itself uses (`weighted`), and make an input edge leave the class of the value it reads: `camel f.cml std::opt::saturate std::gir` (`std::rgir` styles it, `std::jgir` carries the classes and `std::jgir egraph=true` writes the document `egraph-serialize` reads; the `_regions` and the role-annotated variants of the DOT dumps draw it too). Any pass that consumes a program — `std::fvm`, `std::jit`, `std::tf`, `std::cpp`, `onnx::export` — is given one writing per value, extracted by that same cost model, so the pipeline after `std::opt::saturate` runs the extracted program.
 - `std::profile`: profile the run and print a report when it ends (see "Profiling a run: `std::profile`")
 - `tensor::fuse`, `onnx::export`: passes contributed by modules. Writing `<module>::<pass>` on the command line loads the module `<module>` when the program has not imported it, so a program need not import a module only to be translated by its pass. A module that cannot be found, or that has no such pass, leaves the name unknown (`RuntimeDiag::UnrecognizedGraphPass`)
 
@@ -305,15 +313,23 @@ What the report holds:
 
 - **Operators.** One row per operator that ran: the device it belongs to (`cpu`, or the device
   when a `tiles:` operator drives one), the calls, the total time, what the first call cost and
-  the mean of the calls after it, and the share of the operator time. The first call is printed
-  apart because it pays one-time setup (a thread pool, a region compiled by NVRTC); a mean that
-  mixes it in says nothing about a step.
+  the mean of the calls after it, the share of the operator time, and the allocation part of the
+  row (see below). The first call is printed apart because it pays one-time setup (a thread pool,
+  a region compiled by NVRTC); a mean that mixes it in says nothing about a step.
+- **Allocations.** The same rows carry what the Camel allocators did during the call: the time
+  spent inside them (and its share of the row), the number of allocation calls, how many of them
+  were data blocks, and the payload bytes those blocks asked for. An aggregate row above the
+  steps gives the totals for the run and the part inside operator calls; the step block gives the
+  allocations of one round. This is what separates an operator's arithmetic from the allocation
+  and packing it does: a boundary timer alone cannot. The allocators counted are the block space
+  (`mm::Block::create` / `grow`), the collected heap (`mm::autoSpace()`) and the permanent space
+  (`mm::permSpace()`); see "What the allocation row does not see" below.
 - **Steps.** A step is one round of a loop of the program: every back end reports the rounds of a
   loop from the same place (`include/camel/execute/loop_frame.h`). The report picks the loop that
   carries the most operators per round as the step loop (the training loop of a training step) and
-  gives the operators, kernels, transfers and waits of one round, with the wall time as the median
-  of the rounds (a mean is at the mercy of whatever else the machine was doing). A program with no
-  loop reports the whole run as one step.
+  gives the operators, kernels, transfers, waits and allocations of one round, with the wall time
+  as the median of the rounds (a mean is at the mercy of whatever else the machine was doing). A
+  program with no loop reports the whole run as one step.
 - **The device.** Kernel launches, bytes host->device and device->host, synchronisations, and the
   time the module spent compiling device code at run time (NVRTC). A module that drives a device
   reports these itself (the Tiles module does, through `modules/tiles/include/tiles/internal/
@@ -329,8 +345,23 @@ What the report holds:
 
 The recording is always compiled in and costs one flag check where it is off: an operator call
 costs a timestamp pair (the report prints what that costs on the machine it ran on), a loop round
-costs a few counter reads. Nothing is measured under `--timeit`, whose own report replaces the
-program's output.
+costs a few counter reads, and an allocation in one of the three value spaces above costs one flag
+check too (a timestamp pair and a few relaxed atomic adds when the session is on). The allocation
+time is charged inside the operator's own wall time, so a row measured with the session on is very
+slightly slower than the same row with it off; the report states the pair cost and the row's
+allocation time separately, so the arithmetic and the instrument can be told apart. Nothing is
+measured under `--timeit`, whose own report replaces the program's output.
+
+**What the allocation row does not see.** The instrument counts calls the Camel allocators serve,
+not every allocation the C++ program makes. A `malloc` behind `new` (the `Block` header itself,
+a `std::vector`'s buffer), a BLAS library's own packing buffers, and a `memcpy` the kernel runs
+over memory it already owns are invisible: the report calls the remainder "kernel time" and
+cannot split it further. The free side is not timed either: the report times allocations, not
+the free-list push or the collection that reclaims a block, so the column is a lower bound on
+the allocator's cost. A first touch of a newly reserved segment is charged to the kernel that
+writes the memory, not to the allocator. And the row is per operator URI, not per graph node: two
+nodes of the same operator share a row. A parallel operator's allocations on worker threads are
+counted as outside operator calls, because the attribution is per thread.
 
 A run of a training step, short:
 
@@ -339,20 +370,24 @@ A run of a training step, short:
       device               cpu
       run                  820.66 ms
       operator calls       1082 (time inside them: 817.28 ms, 99.6% of the run)
-      measurement overhead 50 ns per operator call (one timestamp pair)
+      measurement overhead 50 ns per operator call or allocation (one timestamp pair)
+      allocations          5432 calls (2311 block payloads), 44.31 MiB requested, 1.93 ms inside the allocators
+                           inside operator calls: 5401 calls (2311 block payloads, 44.31 MiB), 1.91 ms; the rows below
 
     steps - the loop at test/cases/perf/mlp_step.cml:51:33: 50 rounds (49 measured)
       operators per step   21 (min 21, max 21)
+      allocations per step 108.2 calls (46.2 block payloads, 908.0 KiB payload, 39.0 µs in the allocators)
       wall per step        median 16.22 ms, mean 16.25 ms, min 5.30 ms, max 56.16 ms
 
-    operators (device, calls, total, first call, mean after the first, share of operator time)
-      cpu  tensor:matmul                       100    291.43 ms      2.17 ms      2.92 ms   35.7%
-      cpu  nn:adam                              50     40.46 ms      1.23 ms     800.6 µs    5.0%
+    operators (device, calls, total, first call, mean after the first, share of operator time,
+               allocation: time (share of the row), allocator calls, block payloads, payload bytes)
+      cpu  tensor:matmul                       100    291.43 ms      2.17 ms      2.92 ms   35.7%   1.21 ms (0.4%)       100         100   12.40 MiB
+      cpu  nn:adam                              50     40.46 ms      1.23 ms     800.6 µs    5.0%   0.42 ms (1.0%)       300         300    7.80 MiB
       ...
 
 ### ONNX export as a pass (`onnx::export`)
 
-    camel m.cml std::macro std::opt 'onnx::export out="model.onnx"'
+    camel m.cml std::macro std::opt onnx::export out=model.onnx
 
 `onnx::export` is a translation pass contributed by the `onnx` module. As the last pass of a pipeline it writes an ONNX model and consumes the graph: the program is not executed.
 
@@ -363,8 +398,8 @@ A run of a training step, short:
 
 **A program without an `export_model` call: `main` is the model.** A program that only computes is exported by the same pass composition, with nothing written for the export in the program (not even `import onnx`: naming the pass loads the module):
 
-    camel model.cml std::macro std::opt 'onnx::export out="model.onnx"'
-    camel model.cml --arg p=weights std::macro std::opt 'onnx::export out="model.onnx"'
+    camel model.cml std::macro std::opt onnx::export out=model.onnx
+    camel model.cml --arg p=weights std::macro std::opt onnx::export out=model.onnx
 
 When no `export_model` call exists anywhere in the program, the pass translates the entry graph itself, that is the computation of `main`:
 

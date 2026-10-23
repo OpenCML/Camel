@@ -440,8 +440,11 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
 expect_diagnostic_code = "0x04000070"
 expect_output_contains = ["CUDA device 63 was named by --devices but is not available"]
+# 60 s: 2.7 s at -Jobs 8, and the same test ran into the 10 s default at -Jobs 12 (the device
+# probe is startup work that queues behind other tests). A command that must fail still fails
+# at once; this bound only decides how long a starved start may take.
+timeout_ms = 60000
 expect_stdout_not_contains = ["false"]
-timeout_ms = 10000
 
 [[tests]]
 name = "device_startup.missing_zero"

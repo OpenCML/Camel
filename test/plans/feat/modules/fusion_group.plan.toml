@@ -1,0 +1,245 @@
+id = "modules.fusion_group"
+order = 366
+tier = "fast"
+tags = ["feat","modules","tensor","autodiff","opt","profile"]
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 12000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "fusion_group.attributes"
+desc = "A division's VJP records its chain as one `tensor.fusion` group on the nodes (design principles 9.6). Three loss functions are differentiated. In the two whose numerator is data the divide's result is private: the three nodes carry `vjp_div_neg`. In the one whose numerator is a parameter the gradient struct reads the divide's result, so the chain's head is not private and the two private nodes carry `vjp_mul_neg` instead. The operators are still tensor:divide / tensor:multiply / tensor:neg: no operator was added or renamed. The forward graphs carry no attribute. The guard counts the groups, so it fails if none is marked."
+case = "../../../cases/modules/tensor/fusion_group.cml"
+args = ["${case}", "std::macro", "std::gir"]
+verify_script = '''
+({ input, assert }) => {
+ const out = input.normalized.stdout
+ const q = String.fromCharCode(92) + '"'
+ const count = (text) => out.split(text).length - 1
+ const marked = (label) => out.split('\n').filter(l => l.includes('label="' + label + '"') && l.includes('tensor.fusion=')).length
+ assert(count('label="grad(') === 3, `expected three gradient graphs, got ${count('label="grad(')}`)
+ assert(count('tensor.fusion=') === 8, `expected eight marked nodes, got ${count('tensor.fusion=')}`)
+ assert(count('tensor.fusion=' + q + 'vjp_div_neg' + q) === 6, 'the private chains are vjp_div_neg groups')
+ assert(count('tensor.fusion=' + q + 'vjp_mul_neg' + q) === 2, 'the declined chain is a vjp_mul_neg pair')
+ for (const label of ['tensor:multiply', 'tensor:neg']) {
+  assert(marked(label) === 3, `expected three marked ${label} nodes, got ${marked(label)}`)
+ }
+ assert(marked('tensor:divide') === 2, 'only a private chain marks its divide')
+ assert(count('label="tensor:multiply"') === 3 && count('label="tensor:neg"') === 3, 'a group must not add operators')
+ assert(count('label="tensor:divide"') === 9, 'every division is still a tensor:divide')
+ assert(out.split('\n').filter(l => /label="[^"]*fused/.test(l)).length === 0, 'no operator may be named for the fusion')
+}
+'''
+
+[[tests]]
+name = "fusion_group.bits"
+desc = "The fused kernel does the operators' three roundings in the operators' order, so the bytes of the private chain and of the #strict chain are the bytes of running divide, multiply and neg one by one: the node VM fuses, the bytecode VM has no kernel for the group and runs the nodes, and both print the same bytes (7.3, 7.4)."
+case = "../../../cases/modules/tensor/fusion_group.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ const lines = input.normalized.stdout.trim().split('\n')
+ assert(/^private value=\S+ sum=\S+$/.test(lines[0]), lines[0])
+ assert(/^strict value=\S+ sum=\S+$/.test(lines[2]), lines[2])
+ assert(/^shared value=\S+ sum=\S+$/.test(lines[4]), lines[4])
+ assert(lines[1].startsWith('[') && lines[3].startsWith('['), 'the gradient bytes are printed')
+ assert(lines[1] === lines[3], 'the #strict chain must print the same bytes as the plain chain')
+}
+'''
+
+[[tests]]
+name = "fusion_group.bits.safe"
+desc = "Under the safe mode (`std::opt safe_fp=true`, 7.4) the group still runs and its bytes are still the bytes of the three operators: the fused kernel consumes no numeric permission, so no permission has to be withheld."
+case = "../../../cases/modules/tensor/fusion_group.cml"
+args = ["${case}", "std::opt safe_fp=true", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ const lines = input.normalized.stdout.trim().split('\n')
+ assert(lines.length === 7, `expected seven lines, got ${lines.length}`)
+ assert(lines[1] === lines[3], 'safe mode keeps the plain and the #strict chain bit-identical')
+}
+'''
+
+[[tests]]
+name = "fusion_group.profile.fused"
+desc = "The node VM ran the group as one pass: the operator table has the forward divide and neither the multiply nor the neg of the chain (they are computed inside the group kernel). A backend that declined would show a multiply and a neg row. The group itself is reported by `fusion groups`, which names its members (fusion_group.profile.group checks that row)."
+case = "../../../cases/modules/tensor/fusion_group_profile.cml"
+args = ["${case}", "--arg", "fused=1", "std::profile", "std::nvm"]
+verify_script = '''
+({ input, assert }) => {
+ const out = input.normalized.stdout
+ assert(out.includes('profile fused'), out)
+ // The operator table, not the whole text: the group's row names its members' operators.
+ const table = out.split('\n').filter(l => /^  (cpu|cuda)\s+\S/.test(l))
+ const calls = (uri) => {
+  const row = table.find(l => l.trim().split(/\s+/)[1] === uri)
+  return row ? Number(row.trim().split(/\s+/)[2]) : 0
+ }
+ assert(calls('tensor:multiply') === 0, `the fused chain must not run the multiply operator, got ${calls('tensor:multiply')} calls`)
+ assert(calls('tensor:neg') === 0, `the fused chain must not run the neg operator, got ${calls('tensor:neg')} calls`)
+ assert(calls('tensor:divide') === 1, `expected one divide call (the forward one), got ${calls('tensor:divide')}`)
+}
+'''
+
+[[tests]]
+name = "fusion_group.profile.safe"
+desc = "The fused kernel keeps the operators' roundings, so it consumes no numeric permission and runs under the safe mode too (7.4): the operator table still shows the forward divide and no multiply and no neg."
+case = "../../../cases/modules/tensor/fusion_group_profile.cml"
+args = ["${case}", "--arg", "fused=1", "std::opt", "safe_fp=true", "std::profile", "std::nvm"]
+verify_script = '''
+({ input, assert }) => {
+ const out = input.normalized.stdout
+ assert(out.includes('profile fused'), out)
+ // The operator table, not the whole text: the group's row names its members' operators.
+ const table = out.split('\n').filter(l => /^  (cpu|cuda)\s+\S/.test(l))
+ const calls = (uri) => {
+  const row = table.find(l => l.trim().split(/\s+/)[1] === uri)
+  return row ? Number(row.trim().split(/\s+/)[2]) : 0
+ }
+ assert(calls('tensor:multiply') === 0, `safe mode must not change the group, got ${calls('tensor:multiply')} multiply calls`)
+ assert(calls('tensor:neg') === 0, `safe mode must not change the group, got ${calls('tensor:neg')} neg calls`)
+ assert(calls('tensor:divide') === 1, `expected one divide call (the forward one), got ${calls('tensor:divide')}`)
+}
+'''
+
+[[tests]]
+name = "fusion_group.profile.shared"
+desc = "When the numerator is differentiated the three-node group declines (the gradient struct reads the divide's result) but the two private nodes still fuse: the operator table has the forward divide and the chain's divide, and neither the multiply nor the neg. The guard is a count of operator runs, not a time."
+case = "../../../cases/modules/tensor/fusion_group_profile.cml"
+args = ["${case}", "--arg", "fused=0", "std::profile", "std::nvm"]
+verify_script = '''
+({ input, assert }) => {
+ const out = input.normalized.stdout
+ assert(out.includes('profile shared'), out)
+ const calls = (uri) => {
+  const row = out.split('\n').find(l => l.trim().split(/\s+/)[1] === uri)
+  return row ? Number(row.trim().split(/\s+/)[2]) : 0
+ }
+ assert(calls('tensor:divide') === 2, `expected the forward divide and the chain divide, got ${calls('tensor:divide')}`)
+ assert(calls('tensor:multiply') === 0, `the fused pair must not run the multiply operator, got ${calls('tensor:multiply')}`)
+ assert(calls('tensor:neg') === 0, `the fused pair must not run the neg operator, got ${calls('tensor:neg')}`)
+}
+'''
+
+[[tests]]
+name = "fusion_group.profile.shared.fallback"
+desc = "The bytecode VM has no kernel for the group, so the same declared nodes run as the program says: the operator table shows the two divides, the multiply and the neg. That is the fallback a backend without the kernel takes (design principles 9.6)."
+case = "../../../cases/modules/tensor/fusion_group_profile.cml"
+args = ["${case}", "--arg", "fused=0", "std::profile", "std::fvm"]
+verify_script = '''
+({ input, assert }) => {
+ const out = input.normalized.stdout
+ assert(out.includes('profile shared'), out)
+ const calls = (uri) => {
+  const row = out.split('\n').find(l => l.trim().split(/\s+/)[1] === uri)
+  return row ? Number(row.trim().split(/\s+/)[2]) : 0
+ }
+ assert(calls('tensor:divide') === 2, `expected two divides, got ${calls('tensor:divide')}`)
+ assert(calls('tensor:multiply') === 1, `expected the multiply to run, got ${calls('tensor:multiply')}`)
+ assert(calls('tensor:neg') === 1, `expected the neg to run, got ${calls('tensor:neg')}`)
+}
+'''
+
+[[tests]]
+name = "fusion_group.mul_neg.attributes"
+desc = "The pair is marked on exactly the multiply and the neg, with `vjp_mul_neg`, and the operators are unchanged: the divide keeps no group, because the numerator's gradient reads its result. Two gradient graphs, four marked nodes, no `vjp_div_neg`."
+case = "../../../cases/modules/tensor/fusion_group_mul_neg.cml"
+args = ["${case}", "std::macro", "std::gir"]
+verify_script = '''
+({ input, assert }) => {
+ const out = input.normalized.stdout
+ const q = String.fromCharCode(92) + '"'
+ const count = (text) => out.split(text).length - 1
+ const marked = (label) => out.split('\n').filter(l => l.includes('label="' + label + '"') && l.includes('tensor.fusion=')).length
+ assert(count('label="grad(') === 2, `expected two gradient graphs, got ${count('label="grad(')}`)
+ assert(count('tensor.fusion=') === 4, `expected four marked nodes, got ${count('tensor.fusion=')}`)
+ assert(count('tensor.fusion=' + q + 'vjp_mul_neg' + q) === 4, 'the pair is named vjp_mul_neg')
+ assert(count('tensor.fusion=' + q + 'vjp_div_neg' + q) === 0, 'the declined chain must not claim vjp_div_neg')
+ assert(marked('tensor:divide') === 0, 'the divide is not a member of the pair')
+ assert(marked('tensor:multiply') === 2 && marked('tensor:neg') === 2, 'one multiply and one neg per graph')
+ assert(count('label="tensor:multiply"') === 2 && count('label="tensor:neg"') === 2, 'a group must not add operators')
+}
+'''
+
+[[tests]]
+name = "fusion_group.mul_neg.bits"
+desc = "The pair keeps the multiply's one rounding and the neg's sign flip, so the node VM's fused bytes are the bytecode VM's bytes for the two operators (it has no kernel for the group and runs them one by one), and the `#strict` pair prints the same bytes as the default one (7.3, 7.4)."
+case = "../../../cases/modules/tensor/fusion_group_mul_neg.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ const lines = input.normalized.stdout.trim().split('\n')
+ assert(lines.length === 4, `expected four lines, got ${lines.length}`)
+ assert(/^shared value=\S+ sum_w=\S+ sum_a=\S+$/.test(lines[0]), lines[0])
+ assert(lines[1].startsWith('[') && lines[3].startsWith('['), 'the pair bytes are printed')
+ assert(/^strict value=\S+ sum_w=\S+ sum_a=\S+$/.test(lines[2]), lines[2])
+ assert(lines[1] === lines[3], 'the #strict pair must print the same bytes as the plain pair')
+}
+'''
+
+[[tests]]
+name = "fusion_group.mul_neg.bits.safe"
+desc = "Under the safe mode (`std::opt safe_fp=true`, 7.4) the pair still runs and its bytes are still the two operators' bytes: it consumes no numeric permission, like the three-node group."
+case = "../../../cases/modules/tensor/fusion_group_mul_neg.cml"
+args = ["${case}", "std::opt", "safe_fp=true", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ const lines = input.normalized.stdout.trim().split('\n')
+ assert(lines.length === 4, `expected four lines, got ${lines.length}`)
+ assert(lines[1] === lines[3], 'safe mode keeps the plain and the #strict pair bit-identical')
+}
+'''
+
+[[tests]]
+name = "fusion_group.mul_neg.profile"
+desc = "The node VM ran both pairs in the case as one pass each: the operator table has the forward divides and the chains' divides, and no multiply and no neg. Two programs, so four divides and no pair operators."
+case = "../../../cases/modules/tensor/fusion_group_mul_neg.cml"
+args = ["${case}", "std::profile", "std::nvm"]
+verify_script = '''
+({ input, assert }) => {
+ const out = input.normalized.stdout
+ const row = (uri) => out.split('\n').find(l => l.trim().split(/\s+/)[1] === uri)
+ const calls = (uri) => {
+  const line = row(uri)
+  return line ? Number(line.trim().split(/\s+/)[2]) : 0
+ }
+ assert(!row('tensor:multiply') || calls('tensor:multiply') === 0, `the fused pairs must not run the multiply operator, got ${calls('tensor:multiply')}`)
+ assert(!row('tensor:neg') || calls('tensor:neg') === 0, `the fused pairs must not run the neg operator, got ${calls('tensor:neg')}`)
+ assert(calls('tensor:divide') === 4, `expected four divides (two forward, two chains), got ${calls('tensor:divide')}`)
+}
+'''
+
+[[tests]]
+name = "fusion_group.profile.group"
+desc = "A private chain in a three-round training step on std::nvm: the profile reports exactly one `fusion groups` row, naming `tensor.fusion=\"vjp_div_neg\"`, its three members in execution order, three runs and nine operator executions, with a time of its own. The members' operators have no operator row; the rows plus the group equal the reported operator executions (each counted once, not twice and not zero); the step accounts for the group once per round; and the same program on std::fvm, which has no kernel, calls the three operators exactly nine more times: the executions the group claims are the calls the reference backend made. A run with no group fails the first check, not a message."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/tensor/fusion_group_profile.py"
+args = ["${case}", "group"]
+expect_exit = 0
+expect_stdout_contains = ["fusion group profile: PASS"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000
+
+[[tests]]
+name = "fusion_group.profile.none"
+desc = "A program with no division therefore no group: its profile report must be the report of the base commit (commit b43dd5c68), byte for byte after every measured duration, share and byte count is replaced by a placeholder and the time-sorted operator rows are put in a stable order; the JSON must have no fusion key, and `report=false` must print exactly what no pass prints. The golden was captured from the base binary with the same command line (no scheduling pass named, so the default back end runs), so a new line on this path, or a changed count, fails."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/tensor/fusion_group_profile.py"
+args = ["${case}", "none"]
+expect_exit = 0
+expect_stdout_contains = ["fusion group profile: PASS"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000

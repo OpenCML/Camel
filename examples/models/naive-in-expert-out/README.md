@@ -158,6 +158,136 @@ not only the host. The 16-thread cells are in
 Camel is 1146.6 against compiled 369.4 at d=1024, because the library pool is capped at four
 threads and the canonical kernels take the rest of the run.
 
+**Where the d=256 gap is not: allocation.** `std::profile` now separates the allocator from the
+operator that called it: every operator row carries the time spent inside the Camel value
+allocators, the allocator calls, the data blocks among them and their payload bytes, and the step
+block gives the same per round. Measured 2026-10-23, one thread, the same generated step: at d=256
+one round allocates 362 block payloads (1,499 allocator calls, 137.9 MiB) and spends 0.68 ms in
+the allocators — 0.40% of the step and 0.37% of the operator time (362 includes the four blocks the
+`gelu_grad` kernel has since stopped allocating; the budget file below counts 358). The three matmul
+rows spend
+0.075% of their time there and allocate exactly one block per call, the output, so they allocate
+no packing buffer either. At d=1024 it is 1.34 ms of a 6.27 s step (0.02%). The host carried load
+60 on 32 threads and the absolute times are inflated (171 ms here against the 66 ms of the table
+above); the shares are ratios from the same run and do not depend on that. A 34% gap on 66.1 ms
+is about 22 ms, roughly 33 times the allocator time of a whole step, so the d=256 gap is kernel
+time, not allocation. What this still cannot split is a `memcpy` inside a kernel, a BLAS
+library's own `malloc`-ed packing buffer, and the page faults of first touching a newly reserved
+segment; the file is
+[`results/2026-10-23-d256-d1024-alloc-profile.json`](results/2026-10-23-d256-d1024-alloc-profile.json)
+and the instrument is described in
+[`docs/technical/54_profiler_allocations.md`](../../../docs/technical/54_profiler_allocations.md).
+
+**Where one d=256 step goes.** The paragraph above says the d=256 gap is not the allocator. This one
+says which rows it is, with each row measured rather than attributed by subtraction:
+[`test/cases/perf/step_budget.py`](../../../test/cases/perf/step_budget.py), `measure` mode, results
+in [`results/2026-10-23-d256-step-budget.json`](results/2026-10-23-d256-step-budget.json).
+
+The host makes the naive method fail first. `std::profile` times operators with `steady_clock`, and
+the same 60 ms step reports 75 to 148 ms of wall time in a round depending on who else is building
+here, so a row's wall milliseconds measure the neighbours too. The budget therefore takes the step's
+CPU time as the slope of a run's CPU seconds against its step count (32 and 128 steps, three runs
+each, median — start-up cancels), and gives each row its share of one profiled run of the same
+program times that CPU step. One row does not come from the profiler: `test/tools/gemmprobe`
+measures every projection shape of the step on its own, one thread, in CPU time, which is also the
+one independent check on the normalisation — its sum lands 2.9% from the profiler's three matmul
+rows. One step, 60.2 ms of CPU time:
+
+| row | ms | share |
+| --- | ---: | ---: |
+| matmul, projections (39 calls, per-shape probe CPU time) | 33.52 | 55.7% |
+| matmul, attention products (3072 micro products of 32x32x16) | 4.61 | 7.7% |
+| elementwise, backward (multiply 3.58, add 1.63, neg 1.23, divide 1.18, gelu_grad 0.83) | 8.45 | 14.0% |
+| elementwise, forward (add 1.01, multiply 0.94, exp 0.72, gelu 0.62, divide 0.56, log 0.02, sqrt 0.01) | 3.88 | 6.4% |
+| reductions (sum_to 3.20, mean_axis 0.38, sum 0.29, sum_axis 0.24) | 4.11 | 6.8% |
+| layout (expand_axis 1.29, permute 1.08, permute_inverse 0.70, transpose 0.30) | 3.39 | 5.6% |
+| optimizer (nn:adam) | 1.87 | 3.1% |
+| gradient assembly (scatter_add_arr 1.13, zeros_arr 0.10) | 1.23 | 2.0% |
+| allocation (inside every row above; reported once here) | 0.23 | 0.4% |
+| residual | -1.07 | -1.8% |
+
+The JSON has the 36 operator rows it measured, their shares, the per-shape probe rates and the three
+phase profiles; the rows sum to 99.9% of the profiled round mean and the residual is -1.8% of the
+step. The largest term in it is nameable: that same 2.9% between the probe's by-shape matmul and
+the profiler's three matmul rows once both are carried onto the CPU step, and the allocator counted
+once as a row of its own (0.4%) beside the operator calls that made it. Dispatch has no row of its
+own: the same graph at 1x1 tokens runs a round of 6 to 17 ms depending on the host, and its operator
+rows account for all of it in both cases (6.0 of 6.0, 17.2 of 16.9), so the interpreter's time
+between operator calls is inside that noise rather than a fifth of the step. The step's CPU time is
+60.2 ms here against 64.9 in the file this one replaces, and the rows are read against the step in
+their own file: the difference is the host, not a change in the step.
+
+**What is not fixable.** The matmul row is two thirds of the step and it is at parity: at the
+projection shapes the canonical kernel runs at 0.94-1.01 of OpenBLAS's rate in the same process, on
+the same core, at the same thread count (`vs_blas` in the JSON, recorded per shape). The attention
+products (4.61 ms) are 12 batched calls a step — four forward, eight backward — each 256 micro
+products of 32x32x16 at 22 GFLOP/s; the cost is per micro product (1.45 us for 16K MACs), not per
+call, so this is a small-GEMM question, not a dispatch one, and batching the calls further is
+already done. OpenBLAS gets 28 GFLOP/s at the same shape, so the shape, not the kernel's author, is
+what binds.
+
+**The one change: `tensor:divide` ran a switch per element.** In
+[`modules/tensor/kernels/elementwise.cpp`](../../../modules/tensor/kernels/elementwise.cpp)
+`binaryTyped` gave `+`, `-` and `*` their own row loop and sent every other operator through one
+`default:` that handed the runtime `op` to the inner loop, so `x / y` ran a switch and a scalar
+division per element while the comment above the function promised the operator was hoisted out.
+Each operator now gets its own loop with the operator a compile-time constant. Against the same
+torch call, in the same window, one thread, [512, 256] (`measure --torch`; the torch side is the same
+operator on the same shape and thread count): 215 us before, 63 us after, with torch at
+51 and 46 us in those two windows — from 4.2x slower than torch to 1.2-1.4x. Inside the step the
+divide row went from 4.22 to 2.11 ms (its ratio to the matmul row, which is the in-run anchor,
+halved), 3.3% of the step. The step's own CPU time (64.1 ms before, 64.9 ms after, and one run of
+the after code at 59.6 ms) does not resolve a 2 ms change on this host; the row and the per-call
+measurement do.
+
+**The other change: `tensor:gelu_grad` wrote three tensors a call.** The gradient of `gelu` is
+`dy * gelu'(x)`, and the kernel computed it the way the operator chain that defines it writes it:
+the polynomial `x + 0.044715 x^3` into one temporary, its `tanh` into a second through a `unary`
+pass, then the slope and the product. At the step's own width — two calls of 262,144 elements a
+step — that was three allocator blocks of 1,048,576 bytes a call, and four traversals of the
+inputs and the two temporaries. It is one loop now that reads `x` and `dy` once and writes the
+output once. The exact part of this is a count, and it is in the file above: one round of the step
+allocates 362 block payloads before and 358 after, in the full and in the forward+backward build,
+and 85 in both forward-only builds, which run no `gelu_grad` — two calls times the two temporaries
+that are gone. `step.elementwise` asserts it as a property, not a duration: every element-wise
+operator of the step allocates exactly one block per call, its output, and it fails on the kernel
+this one replaces (3 blocks and 3,145,728 bytes a call against 1 and 1,048,576).
+
+**How much time that is, this host cannot say.** Three attempts, all on the same machine: the
+`gelu_grad` row of the same program's profile read 1,081 us a call before and 1,005 after, with the
+row's own repeat agreeing to 0.2% and 2.6%, but the rows the change did not touch repeated 25% and
+40% apart across the two sessions, so the pair is a few percent at best; the whole
+`grad(loss)<x>()` call from the slope of CPU seconds against round count — the one instrument here
+that the load does not enter — read 937 us a round before and 977 after against its own repeat
+spread of 2 to 12%, and it carries the unchanged forward pass and the graph, which is why it cannot
+see a few percent of one row; and the two JSONs' normalised rows (1.22 and 0.83 ms) are not a
+before/after pair at all, because their CPU steps differ by 7% and every row in each file is read
+against its own. What the change removes is exact — two blocks of 1,048,576 bytes and about 5 MB of
+traffic a call, 4 blocks and 10 MB a step — and what it buys in time is a tenth of a millisecond at
+most, under 0.2% of the step, below what this host resolves.
+
+**The change moves no bits.** The fused gradient's storage bits, over 1,155 to 262,144 elements, are
+the three-pass chain's shape for shape, in the default unit and under `CAMEL_TENSOR_ISA=generic`:
+the plan pins them (`gelu_grad.bits`, `gelu_grad.bits.generic_unit`). That is why the loop is
+compiled per instruction set (`gradient_loops.inl` included by `gradient_generic.cpp` and
+`gradient_avx2.cpp`, the shape `update_*` already has) rather than written once in
+`gradient.cpp`: the tangent is `vmath::tanh`, the function the unary kernel inlines, which the
+unary units compile with contraction on, while `gradient.cpp` carries the project's
+`-ffp-contract=off` and the baseline target, so the same expression cannot contract there — a
+single portable unit would move the tangent's bits and run it four wide. The two units are not identical to each other on the large shape: the
+tangent's contraction differs on 0.062% of elements, by at most 1.2e-7 over 20M inputs from the
+range the harness feeds, which is inside `vmath.h`'s declared error for `tanh` and is the
+declaration the unary units already carry. Hence two pinned digest sets and not one.
+
+**What could not be measured.** Absolute wall times: this file's table was taken at load average
+63-76 on 32 hardware threads, and the profiled round mean of the same step moved between 78 and
+148 ms from one run to the next. The attention
+product's cost on the step's own data: the probe runs the shape in isolation, its operands warm, so
+its 22 GFLOP/s is an upper bound for the step's interleaved calls. The `memcpy` inside a kernel, and
+the page faults of first touching a reserved segment, are inside the rows but below the instrument.
+The allocator count has no counterpart in torch (its allocator is not instrumented), so no
+like-for-like is claimed for it.
+
 **The crossover.** In the before table above, with one thread Camel is the sole fastest implementation at d=64 (2.085 ms,
 with `torch.compile(naive)` at 2.938) and it is not at d=256: `torch.compile(naive)` takes 49.8
 against Camel's 61.0, a gap of 11 ms wider than both round ranges, while Camel, PyTorch naive and
@@ -227,8 +357,9 @@ runtime's default 2 GiB block space the 2,048-token cell does not run at all (th
 33.5 MB tensor is refused with 1,911 MB in use), so `measure.py` passes `--block-limit 8192` to
 every cell to keep them comparable. Peak RSS is recorded per cell — at d=1024 it is 2.8 GiB for
 Camel and PyTorch naive, 2.5 for the expert form, 2.8 for `torch.compile` and 4.3 for the float64
-reference — but nothing charts the allocator, finds where a cell stops fitting, or measures the
-cost of the 2 GiB limit as a limit. The effect of the rules pipeline is not covered because it is
+reference — but nothing finds where a cell stops fitting, or measures the cost of the 2 GiB limit
+as a limit; the allocator column of `std::profile` (above) measures what a step allocates, not
+what a cell holds. The effect of the rules pipeline is not covered because it is
 not usable end to end yet: `rules::accuracy` and `rules::fusion` exist as libraries with their own
 tests, but the naive source is not rewritten into the expert form, so the "Camel + rules" row the
 ruling asks for cannot be measured. The GPU is not covered; that is H49.

@@ -526,6 +526,13 @@ function readDeclarations(file, moduleName) {
         }
         const declaration = trimmed.match(/^(?:export\s+)?func\s+([A-Za-z_]\w*)\s*(?:::<[^>]*>)?\s*\(/)
         if (declaration) {
+            // A pass declaration (design principles 9.3): a body-less function whose condition is
+            // the pass applicability. It is a function the pipeline applies to the program, not
+            // an operator of the module, so it has no registered operator to agree with.
+            if (/\bwhen\s+is_function::<\w+>\(\)\s*$/.test(trimmed)) {
+                pendingUri = null
+                continue
+            }
             declarations.push({
                 name: declaration[1],
                 uri: pendingUri || `${moduleName}:${declaration[1]}`,

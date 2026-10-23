@@ -24,14 +24,20 @@
 
 #include "debug_core.h"
 
+#include "../state.h"
+
 #include "camel/core/context/frame.h"
 #include "camel/core/error/runtime.h"
 #include "camel/passes/trans/json/gir.h"
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <iostream>
 #include <sstream>
+#include <string>
 
 namespace debugger::core {
 
@@ -102,6 +108,17 @@ void DebugCore::pushEvent(json event) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         event["seq"] = nextEventSeq_++;
+        // 父进程通过另一条通道（stdout 管道）读程序输出，读到事件时输出可能还在管道里。
+        // 先把带编号的标记写进 stdout，父进程见到它才处理事件，输出与事件的先后就由数据
+        // 决定，而不是由调度决定。以 CAMEL_DB_WORKER_PORT 为界：只有 worker 的 stdout 被
+        // 父进程当作任务日志读取，网关自己跑程序时标记会混进输出。
+        if (const char *workerPort = std::getenv("CAMEL_DB_WORKER_PORT");
+            workerPort != nullptr && *workerPort != '\0') {
+            std::cout.flush();
+            const std::string mark = taskLogMark(event["seq"].get<uint64_t>()) + "\n";
+            std::fwrite(mark.data(), 1, mark.size(), stdout);
+            std::fflush(stdout);
+        }
         events_.push_back(std::move(event));
         while (events_.size() > kMaxEvents) {
             events_.pop_front();
@@ -521,7 +538,9 @@ DebugCore::ShadowFrame &DebugCore::replaceTop(GCGraph *graph, Frame *frame) {
     return f;
 }
 
-void DebugCore::beforeNode(GCGraph *graph, Frame *frame, gc_node_ref_t node) {
+void DebugCore::beforeNode(
+    GCGraph *graph, Frame *frame, gc_node_ref_t node,
+    const camel::execute::FusionGroupSite *group) {
     // A pass may run graphs of its own for its work (`std::opt`'s rules library, the function of
     // a macro). The program being debugged runs only in a scheduling pass; indexing or keeping
     // a frame of that other execution would describe the session as that program and report
@@ -553,6 +572,7 @@ void DebugCore::beforeNode(GCGraph *graph, Frame *frame, gc_node_ref_t node) {
     } else {
         f.pendingNode = -1;
     }
+    arrival.group = group;
     arrive(f, arrival);
 }
 
@@ -753,6 +773,12 @@ void DebugCore::arrive(ShadowFrame &f, const Arrival &a) {
         f.activationLine = LinePosition{f.loc.file, f.loc.line, a.function};
     }
     if (!reason.empty()) {
+        // A node that runs a fusion group is the group's tail: the members before it were
+        // deferred and did not execute, so the stop says what the group stood for (2). The text
+        // is also printed to the debug console by the adapter, which reads `message`.
+        if (a.group != nullptr) {
+            details["fusion"] = fusionDetails(f, *a.group);
+        }
         if (auto ids = details.find("breakpointIds"); ids != details.end()) {
             for (const auto &id : *ids) {
                 hitBreakpoints_.insert(id.get<int>());
@@ -760,6 +786,33 @@ void DebugCore::arrive(ShadowFrame &f, const Arrival &a) {
         }
         stop(reason, std::move(details));
     }
+}
+
+json DebugCore::fusionDetails(
+    const ShadowFrame &f, const camel::execute::FusionGroupSite &site) {
+    json members = json::array();
+    json refs    = json::array();
+    std::string list;
+    for (const camel::runtime::gc_node_ref_t ref : site.members) {
+        std::string label = "?";
+        if (auto it = f.info->byRef.find(ref); it != f.info->byRef.end()) {
+            label = f.info->nodes[it->second].label;
+        }
+        if (!list.empty()) {
+            list += ", ";
+        }
+        list += label;
+        members.push_back(label);
+        refs.push_back(ref);
+    }
+    const std::string name(site.name);
+    return json{
+        {"name", name},
+        {"members", std::move(members)},
+        {"refs", std::move(refs)},
+        {"message",
+         "fusion group `" + name + "` runs here: it computes " + list +
+             " in one pass; those nodes do not execute separately."}};
 }
 
 void DebugCore::faultRaised(const camel::core::error::RuntimeFault &fault, bool isolated) {

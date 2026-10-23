@@ -178,6 +178,11 @@ enum GCGraphFlag : uint8_t {
     /// a graph is not in the executable state: it has no execution plan and no back end or
     /// exporter takes it; extraction brings it back.
     kGraphFlagHasWritings = 1 << 2,
+    /// The graph is the semantic body of an `#impl` function (design principles 10.4): an
+    /// ordinary call of the function runs its kernel operator instead, and a consumer that must
+    /// see inside (autodiff, fusion, export, a rule) reads this graph. `Program::implBodies`
+    /// lists the graphs that carry it.
+    kGraphFlagImplBody = 1 << 3,
 };
 
 /// kWritingDerived: congruence closure found the equivalence, it need not be stored.
@@ -560,6 +565,16 @@ class GCGraph : public camel::core::rtdata::Object {
     bool hasFrameLayout() const;
     size_t frameSize() const;
     bool isMacro() const;
+    /// The semantic body of an `#impl` function (kGraphFlagImplBody): an ordinary call of the
+    /// function is a call of its kernel operator, and this graph is what an expansion reads
+    /// (design principles 10.4).
+    bool isImplBody() const { return (flags_ & kGraphFlagImplBody) != 0; }
+    /// The kernel the semantic body of an `#impl` function implements (design principles 10.4):
+    /// the operator URI a direct call of the function is compiled to, empty for every other
+    /// graph. A consumer that must see inside the function (autodiff, fusion, export, a rule)
+    /// finds the body from the OPER at a call site through it, instead of the kernel's own
+    /// derivative or lowering rule, which is execution and not meaning.
+    const std::string &implKernelUri() const;
     /// The graph this one is written in, invalid for a root graph.
     GraphId outerGraphId() const { return outerGraphId_; }
     /// The graph's revision (graph facts, camel/runtime/facts.h): a process-wide number. A

@@ -160,7 +160,7 @@ Commands and counts from this worktree (`out/latest`, Windows, clang 20):
 |---|---|
 | `node scripts/test.js test/plans/feat/modules/random.plan.toml --tier all --jobs 2` | 11/11 pass (four schedulers, generator independence, negative length, `std::cpp` agreement) |
 | `node scripts/test.js test/plans/feat/modules/tensor.plan.toml --jobs 6` | 50/50 pass, including the five new `take`/`one_hot` tests (the runtime and fault tests run on all four schedulers) |
-| `node scripts/test.js test/plans/feat/modules/nn.plan.toml --jobs 4` | 64/67 pass; the 3 failures are `mnist_py*`, which need the Python module's DLL (`python.cmo` loads but `python313.dll` is absent in this worktree), unrelated to H20; the two labels tests pass on all four schedulers |
+| `node scripts/test.js test/plans/feat/modules/nn.plan.toml --jobs 4` | 64/67 pass; the 3 failures are `mnist_py*`, which need the Python module's DLL (`python.cmo` loads but `python313.dll` is absent in this worktree), unrelated to H20; the two labels tests pass on all four schedulers (the three `mnist_py` cases were deleted on 2026-10-23: an early example that needed a network download for its data set and skipped silently when it could not get one) |
 | `node scripts/test.js test/plans/feat/modules/onnx.plan.toml --jobs 4` | 102 pass, 0 fail, 19 skipped (no `onnx`/`onnxruntime`/`torch` Python packages) — `export_take` passes and checks one `Gather` + i64 initializer |
 | `node scripts/test.js test/plans/feat/modules/stdlib_registry.plan.toml --jobs 2` | 4/4 pass (purity, signatures, generated reference) |
 

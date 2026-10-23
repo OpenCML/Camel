@@ -1,0 +1,35 @@
+/**
+ * The differential test of `#impl`: `add_via_kernel` is the function whose body is the
+ * semantics and whose direct call is the kernel operator (`:op/add_l`), `add_via_body` has the
+ * same body and no tag, so its call runs the Camel body. Both compute the same values, including
+ * the case where the body uses `:op/sub_l` and `:op/neg_l` instead of `:op/add_l`.
+ *
+ * The tolerance is zero: the two paths must agree bit for bit for these integer values, and
+ * `diff` prints the observed difference (0 for every pair).
+ */
+module impl_differential
+
+#op<':op/add_l'>
+func add_kernel(a: int, b: int): int
+
+#impl<add_kernel>
+func add_via_kernel(a: int, b: int): int {
+    return a - (0 - b)
+}
+
+func add_via_body(a: int, b: int): int {
+    return a - (0 - b)
+}
+
+func main(): int sync {
+    let k1 = add_via_kernel(19, 23)
+    let b1 = add_via_body(19, 23)
+    let k2 = add_via_kernel(-5, 7)
+    let b2 = add_via_body(-5, 7)
+    let k3 = add_via_kernel(0, 0)
+    let b3 = add_via_body(0, 0)
+    let k4 = add_via_kernel(1000000, -999999)
+    let b4 = add_via_body(1000000, -999999)
+    'kernel={},{},{},{} body={},{},{},{} diff={},{},{},{}'->format<k1, k2, k3, k4, b1, b2, b3, b4, k1 - b1, k2 - b2, k3 - b3, k4 - b4>->println
+    return (k1 - b1) + (k2 - b2) + (k3 - b3) + (k4 - b4)
+}

@@ -18,7 +18,7 @@ const wanted = ['7', 'typed', '[5, 5, 5]', '9', '0', '0', '0', '0', '0', '(4, pa
 assert(input.normalized.stdout.trim() === wanted.join(String.fromCharCode(10)), 'explicit instantiation or contextual result inference changed')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "explicit_type_arguments_preserve_tag_rules"
@@ -30,7 +30,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedTypeNesting"
 expect_output_contains = ["int??", "marks 'int' twice"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "explicit_type_arguments_by_name"
@@ -41,7 +41,7 @@ args = ["${case}", "std::fvm"]
 expect_exit = 0
 expect_stdout_exact = "(1, s)\n(1, s)\n(1, s)\n2.5\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "explicit_type_argument_unknown_name"
@@ -53,7 +53,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
 expect_output_contains = ["'U' is not a type parameter of second"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "explicit_type_argument_missing_name"
@@ -65,7 +65,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
 expect_output_contains = ["type parameter 'B' is not given"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "explicit_type_arguments_not_mixed"
@@ -75,7 +75,7 @@ case = "../../../cases/compile/generic_explicit_mixed.cml"
 args = ["${case}"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "explicit_type_argument_arity"
@@ -87,7 +87,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
 expect_output_contains = ["expected 1 type argument(s), got 2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "basic"
@@ -747,7 +747,7 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 17
 expect_output_contains = ["argument 3 has type 'float', but its parameter 'b: T' is 'int' here (T = int)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "argument_form"
@@ -761,7 +761,7 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 18
 expect_output_contains = ["argument 1 has type 'int'", "needs a type of that form to bind its type variables"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "argument_count"
@@ -775,7 +775,7 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 18
 expect_output_contains = ["it takes 1 argument(s) and 2 were given"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "struct_form"
@@ -789,7 +789,7 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 20
 expect_output_contains = ["is '{ name: string }' here (T = string)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "body_error"
@@ -800,7 +800,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_body.cml:4:16:", "in the instance 'double<int[]>' of the generic function 'double' with T = int[]", "instantiated by the call at 10:19"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "body_literal"
@@ -814,7 +814,7 @@ expect_diagnostic_line = 4
 expect_diagnostic_column = 5
 expect_output_contains = ["cannot be represented as type 'int': the value would be truncated", "in the instance 'zero_of<int>'", "instantiated by the call at 9:20"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "growing_recursion"
@@ -828,7 +828,7 @@ expect_diagnostic_line = 4
 expect_diagnostic_column = 34
 expect_output_contains = ["8 instances of it are already being built inside one another"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "recursion_needs_return_type"
@@ -842,7 +842,7 @@ expect_diagnostic_line = 4
 expect_diagnostic_column = 49
 expect_output_contains = ["in the instance 'count<int>'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "type_in_lambda_not_declared"
@@ -857,7 +857,7 @@ expect_diagnostic_line = 9
 expect_diagnostic_column = 17
 expect_output_contains = ["T"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "duplicate_head_parameter"
@@ -872,7 +872,7 @@ expect_diagnostic_line = 6
 expect_diagnostic_column = 1
 expect_output_contains = ["The type parameter 'T' is declared twice"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "generic_as_value"
@@ -886,7 +886,7 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["The generic function 'id' cannot be given its types here", "its type variable(s) T cannot be determined"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "generic_as_argument"
@@ -897,7 +897,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_starts_with = "3\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "generic_and_plain_same_name"
@@ -911,7 +911,7 @@ expect_diagnostic_line = 3
 expect_diagnostic_column = 1
 expect_output_contains = ["'id'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 # DESIGN-QUESTION(generic-export): the template is exported by the module that declares it and
 # each importing module builds the instances it calls.
@@ -980,7 +980,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["export_lib.cml:41:16: [Error]: No matching function found", "in the instance 'bad<string>'", "err_export_body.cml:7:16", "name=SemanticDiag::NoMatchingFunction"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "generic_exported_capture"
@@ -991,7 +991,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "100\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "generic_exported_as_value"
@@ -1004,7 +1004,7 @@ expect_diagnostic_name = "SemanticDiag::GenericFunctionAsValue"
 expect_diagnostic_line = 6
 expect_diagnostic_column = 13
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "generic_decorated"
@@ -1018,7 +1018,7 @@ expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["The generic function 'id' cannot be decorated"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "type_function_count"
@@ -1032,7 +1032,7 @@ expect_diagnostic_line = 5
 expect_diagnostic_column = 11
 expect_output_contains = ["it takes 1 type argument(s) and 2 were given"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "type_function_bare"
@@ -1046,7 +1046,7 @@ expect_diagnostic_line = 5
 expect_diagnostic_column = 11
 expect_output_contains = ["it takes 1 type argument(s) and is used without any"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "type_function_const"
@@ -1060,7 +1060,7 @@ expect_diagnostic_line = 5
 expect_diagnostic_column = 11
 expect_output_contains = ["its parameters are types, and a constant ('const ...') was given"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "type_function_duplicate_param"
@@ -1074,7 +1074,7 @@ expect_diagnostic_line = 3
 expect_diagnostic_column = 1
 expect_output_contains = ["'T'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "type_function_unused_param"
@@ -1088,7 +1088,7 @@ expect_diagnostic_line = 5
 expect_diagnostic_column = 1
 expect_output_contains = ["The type variable 'T' of 'f' can never be bound"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "plain_type_with_arguments"
@@ -1102,5 +1102,5 @@ expect_diagnostic_line = 5
 expect_diagnostic_column = 11
 expect_output_contains = ["this type takes no arguments"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 

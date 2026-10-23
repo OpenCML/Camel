@@ -5,6 +5,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/core/type/intern.h"
@@ -190,8 +191,7 @@ std::string_view Type::packName() const { return {}; }
 
 bool Type::openRank() const { return false; }
 
-const Type *
-Type::withExtentValues(const ExtentValues &values, const ExtentPacks &packs) const {
+const Type *Type::withExtentValues(const ExtentValues &values, const ExtentPacks &packs) const {
     (void)values;
     (void)packs;
     return this;
@@ -203,8 +203,6 @@ Type::applyArguments(std::span<const TypeArgument> arguments, std::string &error
     error = "this type takes no arguments";
     return nullptr;
 }
-
-
 
 ExtentBinding bindExtents(
     const Type *parameter, const Type *actual, ExtentValues &values, ExtentPacks &packs,
@@ -283,18 +281,36 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
     }
 
     // After excluding auxiliary types, only the slot-sized primitive types remain, plus the two
-    // reduced-precision element types, whose codes do not index this matrix (a bf16 or f16 is
-    // stored in a compact tensor buffer, never in a slot, and a conversion between them and a
-    // scalar is not a scalar cast: it is a tensor operator that needs `change_precision`).
-    // The matrix is [from][to], i.e. [sourceIndex][targetIndex].
+    // reduced-precision floating types. bf16 and f16 are floating types a program may write and
+    // convert (design principles 7.3): a conversion between them and a wider number is the
+    // precision the program asked for, it rounds once (to nearest, ties to even) into the
+    // narrower type and is exact into a wider one, and it needs no numeric permission. Their
+    // codes do not index the matrix below, so they are decided here, with the same safety as the
+    // f32 conversions of that matrix: a widening and a same-type conversion are Safe, a
+    // narrowing is refused as `as` between primitives always is (`bf16(x)` is the written
+    // conversion, `x as bf16` is a dynamic cast).
+    const auto isHalf = [](TypeCode code) {
+        return code == TypeCode::BFloat16 || code == TypeCode::Float16;
+    };
+    if (isHalf(code_) || isHalf(sourceType->code())) {
+        const TypeCode from = sourceType->code();
+        const TypeCode to   = code_;
+        if (from == to) {
+            return CastSafety::Safe;
+        }
+        if (to == TypeCode::Float32 || to == TypeCode::Float64) {
+            // Widening out of one of them is exact for every stored value.
+            return isHalf(from) ? CastSafety::Safe : CastSafety::Forbidden;
+        }
+        return CastSafety::Forbidden;
+    }
+    // The matrix is [from][to], i.e. [sourceIndex][targetIndex]. Its two axes are the six types
+    // whose codes index it; a bf16 or f16 returned above, so both sides here are one of those.
     if (camel::core::type::isPrimitive(code_) &&
         camel::core::type::isPrimitive(sourceType->code())) {
         const int sourceIndex = static_cast<int>(sourceType->code()) & 0b1111;
         const int targetIndex = static_cast<int>(code_) & 0b1111;
-        if ((code_ == TypeCode::BFloat16 || code_ == TypeCode::Float16 ||
-             sourceType->code() == TypeCode::BFloat16 ||
-             sourceType->code() == TypeCode::Float16) ||
-            sourceIndex >= 6 || targetIndex >= 6) {
+        if (sourceIndex >= 6 || targetIndex >= 6) {
             return CastSafety::Forbidden;
         }
         return static_cast<CastSafety>(primitiveTypeConvMatrix[sourceIndex][targetIndex]);
@@ -328,6 +344,25 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     // Same type
     if (from == to)
         return value;
+
+    // A bf16 or f16 widens exactly: its slot holds the two-byte pattern in the low half
+    // (camel/core/rtdata/half.h). Widening is the only conversion of one of these types that
+    // castSafetyFrom accepts (`as` refuses the narrowing into them, which is the written
+    // conversion `bf16(x)` / `f16(x)` instead).
+    if (from == TypeCode::BFloat16 || from == TypeCode::Float16) {
+        const bool bf16 = from == TypeCode::BFloat16;
+        const float widened =
+            bf16 ? camel::core::rtdata::halfToFloat<camel::core::rtdata::BFloat16>(value)
+                 : camel::core::rtdata::halfToFloat<camel::core::rtdata::Float16>(value);
+        switch (to) {
+        case TypeCode::Float32:
+            return toSlot(widened);
+        case TypeCode::Float64:
+            return toSlot(static_cast<Float64>(widened));
+        default:
+            ASSERT(false, "castSlotFrom bf16/f16->unsupported target");
+        }
+    }
 
     switch (from) {
     case TypeCode::Int32: {

@@ -7,6 +7,7 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/complex.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
@@ -18,6 +19,8 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/int_div.h"
 #include "camel/utils/utf8.h"
+
+#include "half_ops.h"
 
 #include <cmath>
 #include <complex>
@@ -81,26 +84,31 @@ std::complex<T> complexCompute(const Complex *left, const Complex *right, Comple
     return {};
 }
 
-template <typename T>
-slot_t complexBinary(ArgsView &norm, TypeCode code, ComplexOp op) {
-    const auto result = complexCompute<T>(
-        norm.get<Complex *>(0), norm.get<Complex *>(1), op);
-    return toSlot(Complex::create(
-        static_cast<double>(result.real()), static_cast<double>(result.imag()),
-        code, mm::autoSpace()));
+template <typename T> slot_t complexBinary(ArgsView &norm, TypeCode code, ComplexOp op) {
+    const auto result = complexCompute<T>(norm.get<Complex *>(0), norm.get<Complex *>(1), op);
+    return toSlot(
+        Complex::create(
+            static_cast<double>(result.real()),
+            static_cast<double>(result.imag()),
+            code,
+            mm::autoSpace()));
 }
 
 template <typename T> slot_t complexNegate(ArgsView &norm, TypeCode code) {
     const std::complex<T> value = asComplex<T>(norm.get<Complex *>(0));
-    return toSlot(Complex::create(
-        static_cast<double>(-value.real()), static_cast<double>(-value.imag()),
-        code, mm::autoSpace()));
+    return toSlot(
+        Complex::create(
+            static_cast<double>(-value.real()),
+            static_cast<double>(-value.imag()),
+            code,
+            mm::autoSpace()));
 }
 
 // `z ^ n` with an integer n: repeated squaring, so `z ^ 2` is exactly `z * z` and every step
 // is one of the language's multiplications. A negative n is the reciprocal of the positive
 // power; the zero base gives an infinity, as `0.0 ^ -1` does for the real types (no fault).
-template <typename T> std::complex<T> integerPower(const std::complex<T> &base, long long exponent) {
+template <typename T>
+std::complex<T> integerPower(const std::complex<T> &base, long long exponent) {
     const bool negative     = exponent < 0;
     unsigned long long rest = negative ? 0ULL - static_cast<unsigned long long>(exponent)
                                        : static_cast<unsigned long long>(exponent);
@@ -128,8 +136,7 @@ template <typename T>
 std::complex<T> complexPower(const std::complex<T> &base, const std::complex<T> &exponent) {
     const T real = exponent.imag() == T{0} ? exponent.real() : std::numeric_limits<T>::quiet_NaN();
     if (std::isfinite(real) && std::trunc(real) == real &&
-        real >= static_cast<T>(-9007199254740992.0) &&
-        real <= static_cast<T>(9007199254740992.0)) {
+        real >= static_cast<T>(-9007199254740992.0) && real <= static_cast<T>(9007199254740992.0)) {
         return integerPower<T>(base, static_cast<long long>(real));
     }
     return std::pow(base, exponent);
@@ -140,15 +147,13 @@ std::complex<T> powerOperand(const Complex *base, ArgsView &norm, size_t index) 
     if (norm.code(index) == TypeCode::Complex64 || norm.code(index) == TypeCode::Complex128) {
         return complexPower<T>(asComplex<T>(base), asComplex<T>(norm.get<Complex *>(index)));
     }
-    const long long exponent =
-        norm.code(index) == TypeCode::Int32
-            ? static_cast<long long>(norm.get<Int32>(index))
-            : static_cast<long long>(norm.get<Int64>(index));
+    const long long exponent = norm.code(index) == TypeCode::Int32
+                                   ? static_cast<long long>(norm.get<Int32>(index))
+                                   : static_cast<long long>(norm.get<Int64>(index));
     return integerPower<T>(asComplex<T>(base), exponent);
 }
 
-template <typename T>
-slot_t complexPowBinary(ArgsView &norm, TypeCode code, bool assign) {
+template <typename T> slot_t complexPowBinary(ArgsView &norm, TypeCode code, bool assign) {
     Complex *base = nullptr;
     if (assign) {
         Tuple *cell = variableOf(norm);
@@ -157,9 +162,12 @@ slot_t complexPowBinary(ArgsView &norm, TypeCode code, bool assign) {
         base = norm.get<Complex *>(0);
     }
     const std::complex<T> result = powerOperand<T>(base, norm, 1);
-    const slot_t slot            = toSlot(Complex::create(
-        static_cast<double>(result.real()), static_cast<double>(result.imag()),
-        code, mm::autoSpace()));
+    const slot_t slot            = toSlot(
+        Complex::create(
+            static_cast<double>(result.real()),
+            static_cast<double>(result.imag()),
+            code,
+            mm::autoSpace()));
     if (assign) {
         Tuple *cell = variableOf(norm);
         cell->set<slot_t>(0, slot, static_cast<TupleType *>(norm.type(0)));
@@ -167,15 +175,17 @@ slot_t complexPowBinary(ArgsView &norm, TypeCode code, bool assign) {
     return slot;
 }
 
-template <typename T>
-slot_t complexAssign(ArgsView &norm, TypeCode code, ComplexOp op) {
-    Tuple *cell                = variableOf(norm);
-    const Complex *left        = cell->get<Complex *>(0);
-    const Complex *right       = norm.get<Complex *>(1);
+template <typename T> slot_t complexAssign(ArgsView &norm, TypeCode code, ComplexOp op) {
+    Tuple *cell                  = variableOf(norm);
+    const Complex *left          = cell->get<Complex *>(0);
+    const Complex *right         = norm.get<Complex *>(1);
     const std::complex<T> result = complexCompute<T>(left, right, op);
-    const slot_t slot          = toSlot(Complex::create(
-        static_cast<double>(result.real()), static_cast<double>(result.imag()),
-        code, mm::autoSpace()));
+    const slot_t slot            = toSlot(
+        Complex::create(
+            static_cast<double>(result.real()),
+            static_cast<double>(result.imag()),
+            code,
+            mm::autoSpace()));
     cell->set<slot_t>(0, slot, static_cast<TupleType *>(norm.type(0)));
     return slot;
 }
@@ -873,6 +883,14 @@ slot_t __builtin__neg__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     case TypeCode::Complex128:
         return complexNegate<double>(norm, TypeCode::Complex128);
+
+    // The two reduced-precision floating types (design principles 7.3): negation is exact for
+    // them, so it flips the sign bit of the value itself, computed in f32 and rounded once.
+    case TypeCode::BFloat16:
+        return __builtin__neg_bf__(with, norm, ctx);
+
+    case TypeCode::Float16:
+        return __builtin__neg_f6__(with, norm, ctx);
 
     default:
         throwRuntimeFault(

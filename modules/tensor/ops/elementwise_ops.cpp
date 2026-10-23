@@ -11,6 +11,7 @@
  * builtin scalar operators.
  */
 
+#include "../attrs.h"
 #include "../kernels/elementwise.h"
 #include "catalog.h"
 #include "support.h"
@@ -228,24 +229,6 @@ slot_t castKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("cast", [&] {
         Array *input = tensorArg(norm, 0, true);
         const TypeCode target = dtypeFromName(stringArg(norm, 1));
-        // A conversion into bf16 or f16 rounds, so the compiler checks it against
-        // `change_precision` where the call is written (design principles 7.3, H238). That
-        // check knows the target only when it is written at the call: a target chosen from a
-        // run-time string leaves the result's static element type unknown, and the conversion
-        // would round with no licence. The static result type is the evidence that the check
-        // ran, so a reduced target it does not name is refused here instead of narrowing
-        // silently.
-        if (isReducedFloatTensorType(target) && input->dtype() != target) {
-            const auto *declared = asTensorType(norm.resultType());
-            if (declared == nullptr || !declared->dtype() || *declared->dtype() != target) {
-                throw std::invalid_argument(
-                    "cast from '" + elementTypeSpelling(input->dtype()) + "' to '" +
-                    elementTypeSpelling(target) +
-                    "' rounds, but the target is chosen at run time, so the compiler cannot "
-                    "check the change_precision permission where the conversion is written. "
-                    "Write the element type at the call");
-            }
-        }
         return wrap(k::cast(input, target, resultAllocator()));
     });
 }
@@ -296,7 +279,34 @@ void divideVjp(VjpBuilder &b, const VjpCall &call) {
         const vjp_node_t dlhs = addTensorOper(b, "tensor:divide", {*dy, rhs});
         accumulateOperand(b, lhs, dlhs);
         const vjp_node_t scaled = addTensorOper(b, "tensor:multiply", {dlhs, call.output});
-        accumulateOperand(b, rhs, addTensorOper(b, "tensor:neg", {scaled}));
+        const vjp_node_t neg    = addTensorOper(b, "tensor:neg", {scaled});
+        accumulateOperand(b, rhs, neg);
+        // The three operators are one chain a backend may run in one pass over the buffers: each
+        // element is divided, multiplied and negated in that order, so a backend that keeps the
+        // roundings of the operators (7.3) produces the same bits (7.4). The group is recorded
+        // where the chain is built; a node another node reads makes the chain unobservable to a
+        // backend, which then runs the operators one by one (camel/execute/fusion_group.h).
+        //
+        // Only when the denominator is differentiated is the chain reachable at all (the neg is
+        // what carries the gradient back to `rhs`); otherwise the three nodes are dropped as
+        // dead and the attribute would name nodes that are not a group.
+        if (b.isActive(rhs)) {
+            // The largest group that can run. When the numerator is not differentiated the
+            // divide's result has one reader (the multiply), so the three nodes are private and
+            // the chain runs as one pass. When it is, the divide's result is also the numerator's
+            // gradient: the gradient struct reads it, the chain's head is not private, and the
+            // backend declines the three-node group. The multiply and the neg are still private,
+            // so the pair is marked instead and runs at the neg off the stored divide's value.
+            // One key holds one value per node (camel/core/node_attrs.h): the two groups never
+            // share a node, so a node names the group its shape allows.
+            if (b.isActive(lhs)) {
+                const vjp_node_t pair[] = {scaled, neg};
+                b.markFusionGroup(fusionAttrKey(), kMulNegFusion, pair);
+            } else {
+                const vjp_node_t chain[] = {dlhs, scaled, neg};
+                b.markFusionGroup(fusionAttrKey(), kDivideMulNegFusion, chain);
+            }
+        }
     }
 }
 

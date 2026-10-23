@@ -1,0 +1,36 @@
+/**
+ * The agreement case of `#impl` (design principles 10.4): one function `add`, whose Camel
+ * body `a - (0 - b)` is the semantics, and whose direct call is the native `:op/add_l` kernel
+ * `add_kernel`. The same function is compiled into both paths of one program:
+ *
+ *   - `add(19, 23)` is a direct call, so it is one OPER of `:op/add_l` (the kernel);
+ *   - `by_body(19, 23)` is a call through the function value `by_body = add`, which is the
+ *     semantic body graph, so it runs the body's `:op/sub_l` nodes.
+ *
+ * The two paths take the same inputs and print the same values. `std::profile` shows that the
+ * kernel's operator ran four times and the body's two operators ran eight times in this run,
+ * so the equality is not the equality of two runs of the same path.
+ */
+module impl_agreement
+
+#op<':op/add_l'>
+func add_kernel(a: int, b: int): int
+
+#impl<add_kernel>
+func add(a: int, b: int): int {
+    return a - (0 - b)
+}
+
+func main(): int sync {
+    let by_body = add
+    let k1 = add(19, 23)
+    let b1 = by_body(19, 23)
+    let k2 = add(-5, 7)
+    let b2 = by_body(-5, 7)
+    let k3 = add(0, 0)
+    let b3 = by_body(0, 0)
+    let k4 = add(1000000, -999999)
+    let b4 = by_body(1000000, -999999)
+    'kernel={},{},{},{} body={},{},{},{}'->format<k1, k2, k3, k4, b1, b2, b3, b4>->println
+    return 0
+}

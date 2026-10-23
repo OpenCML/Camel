@@ -26,6 +26,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isRunnerOutput } from '../test/tools/runner-output.mjs'
 
 const args = process.argv.slice(2)
 const rootFlag = args.indexOf('--root')
@@ -65,6 +66,13 @@ function markdownFiles(entry) {
     const out = []
     for (const name of fs.readdirSync(abs)) {
         if (SKIP_DIRS.has(name)) continue
+        const child = path.join(abs, name)
+        // A tree a run writes is not part of the checkout: `isRunnerOutput` is the one answer to
+        // which trees those are (test/tools/runner-output.mjs). A developer tree can hold hundreds
+        // of thousands of files there, which is also why the walkers collect one file at a time
+        // instead of spreading a directory's whole subtree into one push (that overflowed the stack
+        // on such a tree).
+        if (fs.statSync(child).isDirectory() && isRunnerOutput(child, root)) continue
         out.push(...markdownFiles(path.join(abs, name)))
     }
     return out
@@ -210,18 +218,15 @@ function checkTechnicalIndex() {
 // the files listed above are read, and in code only a comment line is (a string literal that names
 // an output is not a citation). The records (docs/handover, docs/reviews, changes.log) are history
 // and are not scanned. EXTERNAL_CITATIONS names files of other repositories: TSE2027 is the paper
-// repository, docs/debugger-migration.md is in OpenCML-Ext.
+// repository, ECOOP2027 is that same repository under the name its rulings file now lives in, and
+// docs/debugger-migration.md is in OpenCML-Ext.
 const RECORD_DIRS = new Set(['docs/handover', 'docs/reviews'])
-// Gitignored output of a local test run: a developer tree can hold hundreds of thousands of files
-// here, which is why it is skipped by path and why the walkers collect one file at a time instead of
-// spreading a directory's whole subtree into one push (that overflowed the stack on such a tree).
-const GENERATED_DIRS = new Set(['test/results'])
 const C_LIKE = new Set(['.c', '.cc', '.cpp', '.h', '.hpp', '.cml', '.js', '.mjs', '.ts'])
 const HASH_COMMENT = new Set(['.py', '.sh', '.ps1'])
 const SCANNED = new Set(['.md', '.toml', ...C_LIKE, ...HASH_COMMENT])
 const CITATION_EXT = 'c|cc|cpp|cxx|h|hpp|inl|cml|mjs|js|ts|py|sh|ps1|cmake|toml|json|yml|yaml'
 
-const EXTERNAL_CITATIONS = ['TSE2027/', 'docs/debugger-migration.md']
+const EXTERNAL_CITATIONS = ['TSE2027/', 'ECOOP2027/', 'docs/debugger-migration.md']
 // Names the measurement harness writes at run time; they are outputs, not files of the tree.
 const RUN_OUTPUTS = new Set([
     'CLASSIFIER-RULES.md', 'HARNESS-CHANGES.md', 'HARNESS-CHANGES-2.md', 'RESULTS.md', 'perf-baseline.md',
@@ -233,7 +238,7 @@ function allFiles(directory = root) {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
         const full = path.join(directory, entry.name)
         if (entry.isDirectory()) {
-            if (SKIP_DIRS.has(entry.name) || GENERATED_DIRS.has(path.relative(root, full).replace(/\\/g, '/'))) continue
+            if (SKIP_DIRS.has(entry.name) || isRunnerOutput(full, root)) continue
             for (const file of allFiles(full)) out.push(file)
         } else if (entry.isFile()) {
             out.push(full)
@@ -248,7 +253,7 @@ function scannedFiles(directory = root) {
         const full = path.join(directory, entry.name)
         const rel = path.relative(root, full).replace(/\\/g, '/')
         if (entry.isDirectory()) {
-            if (SKIP_DIRS.has(entry.name) || RECORD_DIRS.has(rel) || GENERATED_DIRS.has(rel)) continue
+            if (SKIP_DIRS.has(entry.name) || RECORD_DIRS.has(rel) || isRunnerOutput(full, root)) continue
             for (const file of scannedFiles(full)) out.push(file)
         } else if (entry.isFile() && rel !== 'changes.log' && SCANNED.has(path.extname(entry.name).toLowerCase())) {
             out.push(full)

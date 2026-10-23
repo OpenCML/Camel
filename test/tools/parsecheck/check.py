@@ -26,7 +26,9 @@ snapshot  Every .cml case of the parse corpus (test/cases/parse) and every probe
           never shrink the record (H199).
           --only GLOB restricts what is re-hashed, not what the record must cover; without it
           the whole corpus is refreshed.
-format    Formatting every accepted file of the repository gives a text with the same AST.
+format    Formatting every accepted file of the repository gives a text with the same AST, keeps
+          every comment of the input, and is a fixed point (the text formats to itself). A file
+          that loses a comment, or whose second pass differs, is named and fails the check.
 fuzz      Mutated programs of the repository: the parser returns a lossless tree for each
           (camel-parsecheck fuzz).
 
@@ -297,6 +299,22 @@ def format_check(patterns, allow_empty):
     if examined != len(files):
         print(f"format: the list names {len(files)} file(s) but the tool examined {examined}; "
               f"refusing a run that checked less than the corpus")
+        return 1
+    # The comment verdict is a property of the formatter, and a run that read no comment cannot
+    # state it: the same rule as the corpus floor above, for the other thing this check counts.
+    # `dropped=0` is asserted by the plan (test/plans/feat/parse/frontend.plan.toml); this refuses
+    # the run in which the count would be a statement about nothing.
+    found = re.search(r"comments=(\d+)", text)
+    if found is None or int(found.group(1)) == 0:
+        print("format: the tool reported no comment examined; a check on zero comments is not a "
+              "pass (comments=0 or no comments= in the FMTCHECK summary)")
+        return 1
+    # `dropped=0`, `duplicated=0` and `unplaced=0` are asserted by the plan; this refuses a summary
+    # that carries no verdict on them, so a tool too old to report one cannot pass by saying nothing.
+    if (re.search(r"dropped=(\d+)", text) is None or re.search(r"duplicated=(\d+)", text) is None
+            or re.search(r"unplaced=(\d+)", text) is None):
+        print("format: the FMTCHECK summary reports no dropped=, no duplicated= or no unplaced= "
+              "count; refusing to read a verdict the tool did not state")
         return 1
     return code
 

@@ -1,0 +1,43 @@
+id = "tools.load_class"
+order = 745
+tier = "fast"
+tags = ["feat", "tools"]
+
+# The guard against the class of test that fails only when the machine is busy. Each case below
+# is a selftest of one half of it: a shared writable place or a fixed port (check-load-class),
+# and a wall-clock bound with no margin (the runner's TIMEOUT_MARGIN).
+
+[[tests]]
+name = "load_class.shared_place"
+desc = "Two tests that write one path, a literal port, or a fixed temporary path in a case are reported; the same plan written under ${test_tmp} passes."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/selftest/load-class/run.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["load-class self-test ok"]
+timeout_ms = 120000
+
+[[tests]]
+name = "load_class.tree"
+desc = "The checked-in plans name no writable path two tests share and no fixed port."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/check-load-class.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS every test writes"]
+timeout_ms = 120000
+
+[[tests]]
+name = "load_class.explain_under_load"
+desc = "The debugger case that failed only when the machine was busy (a segfault while the gateway exited: its worker's reader thread was still appending to the task log as the process tore down its statics) runs green in every round while CPU-bound children keep the run queues full."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/debugger/race-harness.mjs"
+args = ["${case}", "--test", "explain", "--rounds", "8", "--load", "8"]
+expect_exit = 0
+# The harness prints how many load children it started and how many are in state R: the load is
+# measured, not assumed, and a load that did not start exits 3 instead of passing.
+expect_stdout_contains = ["8 busy loop(s)", "0 red of 8"]
+timeout_ms = 300000

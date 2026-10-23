@@ -68,6 +68,20 @@ class VjpBuilder {
         (void)attrs;
         return addOper(type, uri, normInputs);
     }
+    /// Marks `members` as one fusion group named `name` under the library's attribute `key`
+    /// (design principles 9.6: the group is an attribute of the nodes, the operators stay the
+    /// program's). A rule calls it after it emitted a chain of operators that one kernel can run
+    /// in a single pass, so the graph records the chain where it was built. The default does
+    /// nothing: an engine without a place for groups still differentiates, and the nodes run one
+    /// by one.
+    virtual void markFusionGroup(
+        camel::core::attr::AttrKey key,
+        std::string_view name,
+        std::span<const vjp_node_t> members) {
+        (void)key;
+        (void)name;
+        (void)members;
+    }
     /// Element `index` of an aggregate (tuple or struct) node. Rules for operators returning
     /// several values use it to read the gradient of one result and to hand one gradient of a
     /// multi-result gradient operator to each input.

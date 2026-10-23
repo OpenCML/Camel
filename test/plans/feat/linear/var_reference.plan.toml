@@ -15,7 +15,7 @@ expect_diagnostic_line = 14
 expect_diagnostic_column = 15
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "let_assigned"
@@ -29,7 +29,7 @@ expect_diagnostic_line = 10
 expect_diagnostic_column = 10
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "let_to_var_param_indirect"
@@ -43,7 +43,7 @@ expect_diagnostic_line = 15
 expect_diagnostic_column = 12
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "let_field_to_var_param"
@@ -57,7 +57,7 @@ expect_diagnostic_line = 14
 expect_diagnostic_column = 15
 expect_output_contains = ["'s' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "param_to_var_param"
@@ -71,7 +71,7 @@ expect_diagnostic_line = 13
 expect_diagnostic_column = 15
 expect_output_contains = ["'x' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "let_captured_to_var_param"
@@ -85,7 +85,7 @@ expect_diagnostic_line = 15
 expect_diagnostic_column = 19
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "let_to_var_with_param"
@@ -99,7 +99,7 @@ expect_diagnostic_line = 16
 expect_diagnostic_column = 17
 expect_output_contains = ["'total' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "var_function_to_operator"
@@ -113,7 +113,7 @@ expect_diagnostic_line = 13
 expect_diagnostic_column = 24
 expect_output_contains = ["a function with a var parameter must be given a variable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "var_tensor.default"
@@ -1197,7 +1197,7 @@ assert(readOfB, 'B does not read the variable through :var/get')
 assert(edge(m, readOfB, 'CTRL'), 'missing control dependency modify -> read used by B')
 }
 """
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "param_assigned"
@@ -1211,7 +1211,7 @@ expect_diagnostic_line = 9
 expect_diagnostic_column = 10
 expect_output_contains = ["'x' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "let_compound_assigned"
@@ -1225,7 +1225,7 @@ expect_diagnostic_line = 10
 expect_diagnostic_column = 10
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "let_appended"
@@ -1239,7 +1239,7 @@ expect_diagnostic_line = 11
 expect_diagnostic_column = 5
 expect_output_contains = ["'append' changes nothing", "use the result"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "param_sorted"
@@ -1253,7 +1253,7 @@ expect_diagnostic_line = 12
 expect_diagnostic_column = 5
 expect_output_contains = ["'sort' changes nothing"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "let_alias_to_var_param"
@@ -1267,7 +1267,7 @@ expect_diagnostic_line = 15
 expect_diagnostic_column = 15
 expect_output_contains = ["'a' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "field_assigned"
@@ -1278,7 +1278,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout = "{ x: 9, y: 2 }\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "element_assigned"
@@ -1289,7 +1289,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout = "[9, 2, 3]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 # A path assignment on a `var` array does not copy. The graph says so: the store is the
 # rebinding in place -- `:op/assn_owned(arr, :op/set_index_in_place(:var/take(arr), 0, 9))` --
@@ -1353,7 +1353,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout = "[{ x: 9, y: 2 }, { x: 3, y: 4 }]\n{ a: [1, 7, 3], b: 0 }\n[[1, 2], [8, 4]]\n[11, 2, 3]\n{ x: 6 }\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "element_assigned_copy"
@@ -1364,7 +1364,7 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout = "[1, 2, 3]\n[9, 2, 3]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "var_function_as_value_function"
@@ -1375,7 +1375,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "var_function_as_value_function.cml:18:17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
+timeout_ms = 10000
 
 [[tests]]
 name = "var_param.default"

@@ -18,10 +18,11 @@
  * Chunk bodies run on worker threads, so they must not allocate GC objects or
  * otherwise touch the runtime; kernels allocate outputs before the region.
  *
- * The worker count defaults to the hardware concurrency. A run's `-t` sets it for every pool,
- * and the tensor module installs that number once when it loads (setNumThreads); a program can
- * change it later with `setNumThreads` / `Tensor.set_num_threads`. No environment variable takes
- * part: a setting is not an environment variable (design principles 9.3).
+ * The worker count defaults to the hardware concurrency. A run's `-t` sets this pool, and the
+ * tensor module installs that number once when it loads (setNumThreads); a program can change it
+ * later with `setNumThreads` / `Tensor.set_num_threads`. The GEMM's library pool is not a second
+ * pool sized by `-t`: it is one thread (gemm.cpp, H303). No environment variable takes part: a
+ * setting is not an environment variable (design principles 9.3).
  */
 
 #pragma once
@@ -89,6 +90,14 @@ constexpr inline int64_t grainForWork(double nsPerUnit) {
  * thread, and the caller is not already inside a region. Creates nothing.
  */
 bool parallelWouldSplit(int64_t count, int64_t grain) noexcept;
+
+/**
+ * True while the calling thread runs a chunk of a parallel region. A kernel that
+ * has a thread pool of its own (the library GEMM) asks this before taking
+ * threads: inside a region the pool already owns the run's thread budget, so a
+ * second pool would multiply it.
+ */
+bool insideParallelRegion() noexcept;
 
 /// Publishes one region to the pool. Called only when `parallelWouldSplit` was true.
 void runParallelChunks(int64_t count, int64_t grain, const RangeFn &fn);

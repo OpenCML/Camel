@@ -5,6 +5,7 @@ add_camel_module(
     attrs.cpp
     binary.cpp
     dtype.cpp
+    fusion_group.cpp
     interop.cpp
     npy.cpp
     module.cpp
@@ -14,6 +15,7 @@ add_camel_module(
     kernels/cpu.cpp
     kernels/elementwise.cpp
     kernels/gradient.cpp
+    kernels/gradient_generic.cpp
     kernels/gemm.cpp
     kernels/gemm_generic.cpp
     kernels/layout.cpp
@@ -53,12 +55,18 @@ add_camel_module(
 # (neg, abs, sqrt, rsqrt, relu) contain no multiply-add to contract.
 set_source_files_properties(kernels/unary_generic.cpp
   PROPERTIES COMPILE_OPTIONS "-ffp-contract=on")
+# The fused GELU gradient follows the same rule: its tangent is the unary unit's tangent, so the
+# units carry the unary units' contraction opt-in, and the polynomial and the slope around it opt
+# back out with a pragma in gradient_loops.inl (their products are the operator chain's, which ran
+# with the project's -ffp-contract=off).
+set_source_files_properties(kernels/gradient_generic.cpp
+  PROPERTIES COMPILE_OPTIONS "-ffp-contract=on")
 
 # x86-64: add AVX2+FMA and AVX-512F GEMM and unary units, selected at runtime after a CPU check.
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|X86_64")
   target_sources(tensor_cmo_objects PRIVATE
     kernels/gemm_avx2.cpp kernels/gemm_avx512.cpp kernels/unary_avx2.cpp kernels/unary_avx512.cpp
-    kernels/update_avx2.cpp)
+    kernels/update_avx2.cpp kernels/gradient_avx2.cpp)
   set_source_files_properties(kernels/gemm_avx2.cpp
     PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
   set_source_files_properties(kernels/unary_avx2.cpp
@@ -72,6 +80,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|X86_64")
   # -ffp-contract=off, not with the unary units' opt-in.
   set_source_files_properties(kernels/update_avx2.cpp
     PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
+  # The fused GELU gradient is compiled with the unary units' contraction opt-in, because the
+  # tangent inside it is the unary unit's tangent; the polynomial and the slope opt back out with
+  # a pragma in gradient_loops.inl, so their products stay rounded as written.
+  set_source_files_properties(kernels/gradient_avx2.cpp
+    PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma;-ffp-contract=on")
   target_compile_definitions(tensor_cmo_objects PRIVATE CAMEL_TENSOR_HAS_AVX2_UNIT=1)
 endif()
 

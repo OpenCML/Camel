@@ -225,7 +225,7 @@ struct PlanMismatch {
 
 namespace {
 
-// std::tf(gc_stats=2): one line per collection, and per time the collector gave up. Set by the
+// std::tf gc_stats=2: one line per collection, and per time the collector gave up. Set by the
 // run in progress; the collector's gate is one per process.
 std::atomic<bool> &gcTraceFlag() {
     static std::atomic<bool> flag{false};

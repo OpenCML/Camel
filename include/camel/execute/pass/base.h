@@ -30,7 +30,9 @@ class GraphIRPass {
 
     // A pass that reads or rewrites graphs with several writings (writings.h). The pass driver
     // extracts one writing per value before a pass that consumes the program (a back end, an
-    // exporter), and refuses the others.
+    // exporter), and refuses the others; a pass that declares it reads the state is given the
+    // program with its equivalences instead, whether it consumes it (the dumps: `std::gir`,
+    // `std::rgir`, `std::jgir` draw the classes, H225) or rewrites it (the rules library).
     virtual bool acceptsWritings() const { return false; }
 };
 
@@ -158,7 +160,7 @@ struct PassRunResult {
     bool changed                           = false;
 };
 
-/// Runs the pass `spec` (as the pipeline writes it: `name` or `name(k=v, ...)`) on `program`,
+/// Runs the pass `spec` (as the pipeline writes it: `name key=value ...`) on `program`,
 /// importing the module that contributes a `<module>::<pass>` name. This is the same resolution
 /// and stage handling the pipeline uses, without the pipeline's own bookkeeping: a rewrite pass
 /// that itself names another pass uses it. Returns {nullptr, true} when the pass failed (the
