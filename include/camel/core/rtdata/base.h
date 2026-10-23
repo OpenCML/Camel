@@ -5,6 +5,7 @@
 
 #include "camel/utils/number_text.h"
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/slot.h"
 #include "camel/core/type.h"
 #include "camel/utils/brpred.h"
@@ -182,6 +183,27 @@ using Float64 = double;
 using Float   = Float64;
 using Bool    = bool;
 
+/// The text of a bf16 or an f16 slot, by the one float text rule (camel/core/rtdata/half.h,
+/// `halfText`): the shortest text that reads back as the same element of the type. The slot holds
+/// the type's 16-bit pattern in the low half; `code` says which of the two types it is. A path
+/// that has a slot and its type calls this rather than widening to f32 first, or the value would
+/// print by f32's rule (`0.100097656` for bf16 `0.1`; ruling 2026-10-23, "reduced-precision-text").
+inline std::string halfValueText(slot_t data, camel::core::type::TypeCode code) {
+    const uint16_t bits = camel::core::rtdata::halfBitsOfSlot(data);
+    return code == camel::core::type::TypeCode::BFloat16
+               ? camel::core::rtdata::halfText(camel::core::rtdata::BFloat16::fromBits(bits))
+               : camel::core::rtdata::halfText(camel::core::rtdata::Float16::fromBits(bits));
+}
+
+/// The f32 a bf16 or an f16 slot widens to, exactly. A path that formats the value through a
+/// library (`format` hands floats to fmt) widens here and keeps `code` to say whose text a plain
+/// placeholder writes (src/builtin/operators/float_format.h).
+inline float halfValueFloat(slot_t data, camel::core::type::TypeCode code) {
+    return code == camel::core::type::TypeCode::Float16
+               ? camel::core::rtdata::halfToFloat<camel::core::rtdata::Float16>(data)
+               : camel::core::rtdata::halfToFloat<camel::core::rtdata::BFloat16>(data);
+}
+
 /** Safe slot printing without dereferencing Object*; used by debug_trace and similar paths that
  * may
  * observe uninitialized values. */
@@ -207,6 +229,12 @@ inline void printSlotSafe(std::ostream &os, const slot_t data, camel::core::type
         break;
     case camel::core::type::TypeCode::Float64:
         os << camel::utils::floatText(fromSlot<Float64>(data));
+        break;
+    case camel::core::type::TypeCode::BFloat16:
+    case camel::core::type::TypeCode::Float16:
+        // The same text `printSlot` writes for the element (camel/core/rtdata/half.h): this path
+        // must agree with it, or a frame log would print a value two ways.
+        os << halfValueText(data, t->code());
         break;
     case camel::core::type::TypeCode::Bool:
         os << (fromSlot<Bool>(data) ? "true" : "false");
@@ -237,7 +265,8 @@ void printSlotCapped(
 
 /// The text of a value as `println`, `string(x)` and a `{}` of `format` write it. A float has one
 /// text, the shortest that reads back as the same number (camel::utils::floatText; design
-/// principles 7.7), also as an element of an array, a tuple, a struct, a map or a set.
+/// principles 7.7), also as an element of an array, a tuple, a struct, a map or a set; for a bf16
+/// or an f16 "the same number" is an element of that type (`halfValueText`, half.h).
 inline void printSlot(std::ostream &os, const slot_t data, camel::core::type::Type *t) {
     printValue(os, data, t);
 }

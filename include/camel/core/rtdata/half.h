@@ -298,4 +298,52 @@ template <typename Half> inline bool halfOverflows(float value) {
     return std::isinf(halfToFloat<Half>(halfFromFloat<Half>(value)));
 }
 
+/*
+ * The text of a bf16 or an f16, and the one rule it follows. Design principles 7.7 says a float
+ * becomes text as the shortest text that reads back as the same value; the ruling of 2026-10-23
+ * ("reduced-precision-text") says "the same value" is an element of the value's own type, so a
+ * bf16 or an f16 is measured against its own rounding: `0.1 as bf16` prints `0.1`, where the text
+ * of the f32 it widens to would print `0.100097656`. The digits are found by
+ * camel::utils::halfText -- the one float text rule, parameterised by the format -- and every
+ * path that turns one of these values into text goes through `halfText` below.
+ */
+
+/// The text of a bf16 or an f16: the shortest digits that read back as the same element of its
+/// own type. A candidate reads back when parsing it and applying the type's store rounding gives
+/// the same pattern: the widened f32 of the value is exact, and every pattern rounds to itself,
+/// so the text a value prints always reads back as that value. This overload is the one
+/// `floatText` of a half value resolves to; the generic camel::utils::floatText never takes these
+/// types, because its digits come from std::to_chars, which has no overload for them.
+template <typename Half> std::string halfText(Half value) {
+    return camel::utils::halfText(value, [value](std::string_view scientific) {
+        float parsed = 0.0f;
+        if (!camel::utils::scientificParsesBack(scientific, parsed)) {
+            return false;
+        }
+        return halfFromFloat<Half>(parsed) == halfSlotOfBits(value.bits);
+    });
+}
+
+/// `floatText` of a bf16 or an f16, as the language's own name for that text (the printer and the
+/// constant text both write it through `halfText`; this overload exists so a caller that holds a
+/// value of the type can write `camel::core::rtdata::floatText(value)` and get the type's own
+/// rule rather than a silently widened one). `IsHalfFloat` is specialized below, so
+/// camel::utils::floatText refuses these values and the two names never collide.
+template <typename Half>
+    requires IsReducedFloat<Half>::value
+std::string floatText(Half value) {
+    return halfText(value);
+}
+
 } // namespace camel::core::rtdata
+
+namespace camel::utils {
+
+/// Marks the two types so that camel::utils::floatText refuses them: a bf16 or an f16 never takes
+/// the f32 rule. Its text is camel::core::rtdata::halfText above, which the printer, the constant
+/// text and the `format` path all write; the specializations must be here, in the namespace the
+/// template is declared in.
+template <> struct IsHalfFloat<camel::core::rtdata::BFloat16> : std::true_type {};
+template <> struct IsHalfFloat<camel::core::rtdata::Float16> : std::true_type {};
+
+} // namespace camel::utils

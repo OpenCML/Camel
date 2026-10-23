@@ -84,7 +84,22 @@ slot_t writeArguments(ArgsView &with, ArgsView &norm, std::ostringstream &out, b
             store.push_back(camel::builtin::LanguageFloat<Float32>{norm.get<Float32>(i)});
             break;
         case TypeCode::Float64:
-            store.push_back(camel::builtin::LanguageFloat<Float64>{norm.get<Float64>(i)});
+            store.push_back(
+                camel::builtin::LanguageFloat<Float64>{
+                    norm.get<Float64>(i), camel::builtin::FloatTextFormat::Float64});
+            break;
+        case TypeCode::BFloat16:
+            // A bf16 or an f16 in a format is printed by its own type's text (7.7, the ruling of
+            // 2026-10-23): the value widens to f32 exactly, and the format says whose text a
+            // plain `{}` writes.
+            store.push_back(camel::builtin::LanguageFloat<Float32>{
+                rtdata::halfValueFloat(norm.slot(i), code),
+                camel::builtin::FloatTextFormat::BFloat16});
+            break;
+        case TypeCode::Float16:
+            store.push_back(camel::builtin::LanguageFloat<Float32>{
+                rtdata::halfValueFloat(norm.slot(i), code),
+                camel::builtin::FloatTextFormat::Float16});
             break;
         case TypeCode::Complex64: {
             const Complex *value = norm.get<Complex *>(i);
