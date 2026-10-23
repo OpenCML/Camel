@@ -104,7 +104,7 @@ By default evaluation is driven by dependency, and there is no fixed order of ex
   - **data edges**: where a value comes from. A node's inputs are an ordered list of ports, each with a **role**, ordinary or context (`with`), taken from the callee's signature; the edge itself is of one kind. Passes that do not care about roles (dead code, common subexpressions, scheduling, structural rule matching) see one kind of edge; passes that do (partial application, differentiation, specialisation, export) read the port's role.
   - **sync edges**: between adjacent statements of a sync block; the later comes after the earlier, and the earlier is used because of it.
   - **order edges**: order only — when both ends run, the first runs before the second; they do not pass on "used". They come from effects on one resource and from writes to one `var`.
-  - **Pure computation has data edges only**; there is no "control edge" kind.
+  - **Pure computation has no order edges**; outside sync blocks it has data edges only (a pure statement written in a sync block is on the sync chain, see 3.4); there is no "control edge" kind.
 - **The execution rule**: the nodes reachable from the program's result along data or sync edges run; order edges take no part; among the nodes that run, the order respects all three kinds. "Runs if used" and "order does not decide whether something runs" are consequences of this rule.
 ### 3.2 A function's behaviour is decided by the function itself
 
