@@ -9,48 +9,56 @@ and "precision-diagnostic-removal". Branch handover/h338-cpu-ceilings, base 1ddc
             structural assertion added and the 30% share deleted (test/tools/startup-cost.mjs,
             test/plans/perf/startup.plan.toml, docs/test-plans.md,
             docs/technical/50_pyplot_cpython_init.md 4.3, scripts/perf-gate.mjs)
- dc14b7441  tiles: the mixed GEMM refusal names the permission the node is missing
+ dc14b7441  tiles: the mixed GEMM refusal names the missing permission
             (modules/tiles/src/schedule.cpp, test/cases/modules/tiles/kernel_ir_check.cpp)
  fc0dceecf  docs(perf): the note reference points at the ruling that replaced the note's rule
 
-1. The four ceilings are CPU time (user + system), the quiet median plus a margin. Medians of
-   five samples of twelve fresh processes, in six windows at load 92.9, 94.1, 75.2, 72.6, 68.7
-   (and H177's load-21.4 window, which read the same CPU time):
+1. The four ceilings are CPU time (user + system), quiet median plus margin. Medians of five
+   samples of twelve fresh processes, in six windows at load 68.7-94.1, with H177's load-21.4
+   window (the same CPU reading) as the quiet column:
+     version 4.2-5.8 / quiet 4.89 / ceiling 12;  imports_nothing 7.5-10.8 / 7.01 / ceiling 18
+     inspect_ops 39.2-45.0 / 37.97 / 95;         imports_all 40.0-42.5 / 36.19 / 90
+   The wall ceilings were 40/45/100/90 and at load 106-130 `--version`, which compiles nothing,
+   read 13.0 ms. The load average is printed beside the numbers as provenance, and no "red under
+   load is not a regression" reading remains: a crossed CPU ceiling is a regression.
 
-     version          4.2-5.8 ms (quiet 4.89)   ceiling 12
-     imports_nothing  7.5-10.8 ms (quiet 7.01)  ceiling 18
-     inspect_ops     39.2-45.0 ms (quiet 37.97) ceiling 95
-     imports_all     40.0-42.5 ms (quiet 36.19) ceiling 90
+2. declaration.cost: the per-declaration ceiling (60 us, the number unchanged) now read in CPU
+   (27.5-29.1 us per declaration at load 68-94), the absolute total the ruling chose (12 ms:
+   H177 5.3's candidate, the quiet total plus the 4.6 ms regression it was meant to name), and
+   the structural assertion that each (phase, module) appears exactly once per round (5.3's
+   candidate 3). The 30% share is deleted, not commented out.
 
-   The wall-clock ceilings were 40/45/100/90 ms; at load 106-130 `--version`, which compiles
-   nothing, read 13.0 ms and `imports_all` went red at 92.8/101.4 ms. The load average is still
-   printed beside the numbers as provenance, and no "red under load is not a regression" reading
-   remains. A crossed CPU ceiling is a regression.
+3. The phase report had no CPU field, and the wall clock of those same phases read 75-104 us per
+   declaration at load 106-112 (81.6 us at load 92.9) against 27.5-29.1 us of CPU, with a
+   same-window wall/cpu of 1.57 at load 94. Commit 46e837240 is that instrument: `cpu_ns` beside
+   `wall_ns` (CLOCK_PROCESS_CPUTIME_ID / GetProcessTimes, -1 where neither exists), and a
+   platform without a process CPU clock makes the line report an error, not read the wall clock.
 
-2. declaration.cost keeps the per-declaration ceiling (60 us, the number unchanged, read in CPU:
-   27.5-28.5 us in every window at load 68-94), gains the absolute total the ruling chose
-   (12 ms: H177 5.3's candidate, quiet total plus the 4.6 ms regression it was meant to name),
-   and asserts on every round that each (phase, module) among parse, GCT and declare appears
-   exactly once (H177 5.3's candidate 3). The 30% share is deleted, not commented out.
+4. Every guard of the tool shown red by injection on the final commit, with CAMEL_EXE pointing
+   at a /tmp stand-in whose `inspect --ops` path emits a canned phase report: a 20 ms CPU burn
+   per process reds version (21.2 > 12) and imports_nothing (25.0 > 18) while both full-import
+   ceilings stay green; a repeated (declare, module) pair reds the structural assertion and
+   names it; a dropped module row, a report with no pinned phase, and no report at all are each
+   named; a report six times the honest one reds both declaration ceilings (86.5 us, 30.0 ms).
+   The honest canned report passes (14.4 us, 5.0 ms), so the guards reject the defect and not
+   the report.
 
-   The phase report had no CPU field, and the wall reading of those same phases was 75-104 us
-   per declaration at load 106-112 against 27.5-28.5 us of CPU (same-window wall/cpu 1.57 at
-   load 94). Commit 46e837240 is that instrument: `cpu_ns` beside `wall_ns`
-   (CLOCK_PROCESS_CPUTIME_ID / GetProcessTimes, -1 where neither exists), and the line reports
-   an error on such a platform instead of falling back to the wall clock.
+5. The tiles refusal now reads "invalid tiles plan: cublas_bf16 needs reassociate,
+   change_precision, finite_math on the matmul node and is missing change_precision". Red
+   before: with the guard and the old message, feat.modules.tiles plan_validation FAILED (stderr
+   "invalid tiles plan: mixed GEMM permissions"). Green after: plan_validation PASS. One
+   producer only, nothing else pinned the message, no new diagnostic code -- 0x0001D5 stays
+   deleted.
 
-3. The refusal now reads "invalid tiles plan: cublas_bf16 needs reassociate, change_precision,
-   finite_math on the matmul node and is missing change_precision"; a cublas_bf16 stage that is
-   not a matmul node says that. Red before: with the guard and the old message, feat.modules.tiles
-   plan_validation FAILED (stderr "invalid tiles plan: mixed GEMM permissions"). Green after:
-   plan_validation PASS. One producer only (modules/tiles/src/schedule.cpp), nothing else pinned
-   the message, no new diagnostic code -- 0x0001D5 stays deleted.
+6. Gate on the final commit fc0dceecf: the whole fast layer (smoke,test/plans/feat -Tier fast
+   -Jobs 8, 5715 tests) plus test/plans/perf/startup.plan.toml in full -- total 5715, pass 5701,
+   fail 0, skip 14; startup.cost PASS in 15.78 s. Host checks green: diagnostics-catalog --check
+   (256 codes), headers --check (1329 files), check-std-includes (1062 files),
+   stdlib-declarations --check (25 declaration modules, 0 problems).
 
-4. Gate on the final commit fc0dceecf: the whole fast layer
-   (`-Plan smoke,test/plans/feat -Tier fast -Jobs 8`, 5715 tests) plus the changed slow plan
-   test/plans/perf/startup.plan.toml in full -- total 5715, pass 5701, fail 0, skip 14;
-   startup.cost PASS in 15.78 s. Host checks green: diagnostics-catalog --check (256 codes),
-   headers --check (1329 files), check-std-includes (1062 files), stdlib-declarations --check
-   (25 declaration modules, 0 problems).
-
-5. Limits. The 12 ms total prices this tree's 347 declarations and is re-baselined on a migration (the per-declaration ceiling is not); it is 1.2x the busiest median measured here and 1.6x the quiet estimate of 7.6 ms. The four ceilings and the declaration line report ERROR on a Windows developer machine (no child CPU accounting), by design. H177's note (83d6558) still states the wall-clock rule: it is a note, not a tree file, and is left as the record of the unit the ruling replaced.
+7. Limits. The 12 ms total prices this tree's 347 declarations and is re-baselined on a
+   migration (the per-declaration ceiling is not); it is 1.2x the busiest median measured here
+   and 1.6x the quiet estimate of 7.6 ms. The four ceilings and the declaration line report
+   ERROR on a Windows developer machine (no child CPU accounting), by design. H177's note
+   (83d6558) still states the wall-clock rule: it is a note, not a tree file, and is left as the
+   record of the unit the ruling replaced.
