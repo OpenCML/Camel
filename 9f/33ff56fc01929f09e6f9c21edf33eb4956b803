@@ -1,0 +1,13 @@
+h242a — 顺序边成为独立的一类，图按它排布（分支 handover/h242a-edges，2 提交，基线 ddcdffb6e；合入 9f33ff56f）
+
+表示（H242 第 1–3 项的起步）：DraftEdgeKind::Order 与 Norm/With/Ctrl 并列；每节点尾部 [payload][Norm][With][Ctrl][Order]；DraftUserLists.places[4]；setOrderInputs / appendOrderDependency / replaceAllOrderUses / orderInputsOf / orderUsersOf。GCNode 必须保持 28 字节、三个 begin 偏移，所以顺序前驱放在图级的 GCGraphOrderEdge{user,pred} 数组里、按 user 排序（沿用 writings 的先例），由 orderPredsOf()（二分）、orderEdges()、hasOrderEdges() 读；decode 在一趟后处理里重建顺序 user，nodeContentHash 把它混进去。顺序表的合法性是**整表性质**（设计 5.6）：编辑以整表为单位。
+
+6.4 封存时的结构校验（设计 4.6）：EdgeChecker::checkOrderEdges()（src/runtime/graph_edges.cpp:58，从 run() 在 :44 调用）拒绝指向缺失/Dead 节点的顺序边、自边，以及 isPureNode() 的 user（即"纯节点上没有顺序边"这半）。findCycle 把顺序前驱当第四组走（:215），所以顺序环由提交拒绝，而不是由某个后端拒绝。
+
+守卫（红前绿后，各自点名抓住它的那一行）：order_edge_on_a_pure_node_is_refused（把 checkOrderEdges() 注释掉 → total 7/pass 6/fail 1；抓住于 graph_edges.cpp:86）；order_edge_survives_the_commit（边能穿过一次提交：ORDER wrote=1 twice=0，preds=1 users=1，frozen_agrees=1）；order_edge_orders_the_nodes_that_run（排布改动前 ordered_pairs=1 obeyed=0，之后 obeyed=1；抓住于 src/passes/test/edges.cpp:191，打印在 :196；使它与之后通过的是 graph_runtime_support.cpp:379 的活顺序前驱访问与 taskflow.cpp:2321 的优先级）。
+
+验收：新增 test/cases/linear/runtime/order_edges.cml + test/plans/feat/linear/order_edges.plan.toml（4 测试）——不被使用的效应即使写在被使用的效应之后也不打印（`let a = println(1); let b = println(2); return b` 只打印 2）、读用到的写会执行、同步块直接写着的每条语句都执行；nvm/fvm/jit/prl -t 4 打印同样七行，4/4。opt/edges.plan.toml 新增 3 测试，8/8；四个受影响计划合计 65/65。
+
+**未做、已提问**（两个文件，各一主题）：h242a-var-initializer-write.md（F3 的"第一次写没人读、不执行"对 var 的初始化式不成立——它是 cell 的 :var/new 数据输入，所以其效应无论如何都跑）；h242a-capture-order-edge.md（设计想要的"同一 var 的写与写之间"的顺序边今天还不能来自 Builder::orderAfterLastWriter——那一条链接同时是 F3 需要的读后写边；当顺序边用，用例给出 0|20|320|40 而不是 10|10|100|10，20 个快层用例变红，所以它仍是控制输入）。因此 4.6 的"同步块之外纯计算上没有非数据边"**尚未强制**：今天的 :var/get 带 CTRL 输入，该检查会拒绝编译器自己的输出。删除 Ctrl 与 GATE/SYNC 留给后续阶段；本阶段加 Order，Ctrl 继续承载分支结构、同步链与调用实参。
+
+闸门：分支上 5774/5759/1（那 1 个是别人的脆弱断言：pass_not_found 的守卫断言 !stdout.includes('42')，而消息里带绝对路径，该工作树名含 "42"）。**合入后协调者重跑整层：total 5786, pass 5772, fail 0, skip 14。** 该脆弱断言由 h342 在同一晚单独修掉（8ac47329d）。
