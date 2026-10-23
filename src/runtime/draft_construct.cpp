@@ -347,10 +347,10 @@ void GraphDraft::appendInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_r
     // Value inputs are positional and may legitimately repeat, e.g. `(x, x)`, `[x, x]`, or
     // `x + x`; `with` inputs carry ordered payloads for FILL/JOIN/CALL. The runtime graph must
     // preserve that multiplicity instead of collapsing repeated edges into a set. A control
-    // input is a dependency, which is stated once.
-    if (kind == DraftEdgeKind::Ctrl) {
-        const auto present = ctrlInputsOf(userId);
-        const auto users   = ctrlUsersOf(inputId);
+    // input and an order input are dependencies, each stated once.
+    if (kind == DraftEdgeKind::Ctrl || kind == DraftEdgeKind::Order) {
+        const auto present = kind == DraftEdgeKind::Ctrl ? ctrlInputsOf(userId) : orderInputsOf(userId);
+        const auto users   = kind == DraftEdgeKind::Ctrl ? ctrlUsersOf(inputId) : orderUsersOf(inputId);
         const bool already = present.size() <= users.size()
                                  ? std::find(present.begin(), present.end(), inputId) !=
                                        present.end()
@@ -365,7 +365,8 @@ void GraphDraft::appendInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_r
         userId,
         kind == DraftEdgeKind::Norm,
         kind == DraftEdgeKind::With,
-        kind == DraftEdgeKind::Ctrl);
+        kind == DraftEdgeKind::Ctrl,
+        kind == DraftEdgeKind::Order);
 }
 
 bool GraphDraft::unlinkInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId) {
@@ -381,12 +382,14 @@ bool GraphDraft::unlinkInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_r
     }
     DraftNodeHeader &h = draftNode->header;
     auto *base         = reinterpret_cast<gc_node_ref_t *>(draftNode->tail + h.payloadBytes);
-    const size_t total = static_cast<size_t>(h.normInputCount) + h.withInputCount + h.ctrlInputCount;
+    const size_t total = static_cast<size_t>(h.normInputCount) + h.withInputCount + h.ctrlInputCount +
+                         h.orderInputCount;
     const size_t at    = static_cast<size_t>(&*it - base);
     std::memmove(base + at, base + at + 1, (total - at - 1) * sizeof(gc_node_ref_t));
     (kind == DraftEdgeKind::Norm   ? h.normInputCount
      : kind == DraftEdgeKind::With ? h.withInputCount
-                                   : h.ctrlInputCount)--;
+     : kind == DraftEdgeKind::Ctrl ? h.ctrlInputCount
+                                   : h.orderInputCount)--;
     // The user stays a user of `inputId` while another entry of the group names it.
     group = mutableInputs(draftNode, kind);
     if (std::find(group.begin(), group.end(), inputId) == group.end()) {
@@ -395,7 +398,8 @@ bool GraphDraft::unlinkInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_r
             userId,
             kind == DraftEdgeKind::Norm,
             kind == DraftEdgeKind::With,
-            kind == DraftEdgeKind::Ctrl);
+            kind == DraftEdgeKind::Ctrl,
+            kind == DraftEdgeKind::Order);
     }
     return true;
 }
@@ -423,6 +427,12 @@ void GraphDraft::replaceInput(
         const auto inputs =
             mutatedInputs(ctrlInputsOf(userId), oldInputId, false, true, newInputId);
         setCtrlInputs(userId, inputs);
+        break;
+    }
+    case DraftEdgeKind::Order: {
+        const auto inputs =
+            mutatedInputs(orderInputsOf(userId), oldInputId, false, true, newInputId);
+        setOrderInputs(userId, inputs);
         break;
     }
     }
@@ -476,6 +486,9 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     const std::vector<gc_node_ref_t> oldCtrlInputs(
         DraftNodeView::ctrlInputs(draftNode).begin(),
         DraftNodeView::ctrlInputs(draftNode).end());
+    const std::vector<gc_node_ref_t> oldOrderInputs(
+        DraftNodeView::orderInputs(draftNode).begin(),
+        DraftNodeView::orderInputs(draftNode).end());
 
     for (gc_node_ref_t oldInput : oldNormInputs) {
         removeUserRef(oldInput, id, true, false, false);
@@ -485,6 +498,9 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     }
     for (gc_node_ref_t oldInput : oldCtrlInputs) {
         removeUserRef(oldInput, id, false, false, true);
+    }
+    for (gc_node_ref_t oldInput : oldOrderInputs) {
+        removeUserRef(oldInput, id, false, false, false, true);
     }
 
     // A rewritten node keeps its source origin, its numeric permissions, its attributes and
@@ -528,6 +544,7 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     const auto newNormInputs = copy(DraftNodeView::normInputs(rebuilt));
     const auto newWithInputs = copy(DraftNodeView::withInputs(rebuilt));
     const auto newCtrlInputs = copy(DraftNodeView::ctrlInputs(rebuilt));
+    const auto newOrderInputs = copy(DraftNodeView::orderInputs(rebuilt));
     for (gc_node_ref_t input : newNormInputs) {
         appendUserRef(input, id, true, false, false);
     }
@@ -536,6 +553,9 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     }
     for (gc_node_ref_t input : newCtrlInputs) {
         appendUserRef(input, id, false, false, true);
+    }
+    for (gc_node_ref_t input : newOrderInputs) {
+        appendUserRef(input, id, false, false, false, true);
     }
 }
 

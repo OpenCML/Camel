@@ -44,6 +44,7 @@
 #include "camel/core/type/intern.h"
 #include "camel/runtime/graph_id.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -204,6 +205,19 @@ static_assert(std::is_trivially_copyable_v<WritingUnion>);
 
 /// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
 inline constexpr gc_off_t kNoPayload = static_cast<gc_off_t>(-1);
+
+/// One order edge of a graph (docs/design/effects/edges.cn.md section 1.5): `pred` runs before
+/// `user` when both run, and nothing travels along it. Order edges are not data, so they are not
+/// in a node's input port list, and they are not control inputs either: liveness does not follow
+/// them. They live in their own array of the graph, sorted by user, so that the preds of a node
+/// are one run of it. The same-resource order between two effects and the order between two
+/// writes of one `var` are what a graph stores here.
+struct GCGraphOrderEdge {
+    gc_node_ref_t user = kInvalidNodeRef;
+    gc_node_ref_t pred = kInvalidNodeRef;
+    bool operator==(const GCGraphOrderEdge &) const = default;
+};
+static_assert(std::is_trivially_copyable_v<GCGraphOrderEdge>);
 
 /// One node of a frozen graph: a fixed 28-byte record (docs/design/graph-model, 4.1). Its inputs
 /// and its payload are found through the graph (GCGraph::normInputsOf, nodeBodyAs).
@@ -452,6 +466,10 @@ struct GCGraphNativePayload {
     gc_node_ref_t *normPorts   = nullptr;
     gc_node_ref_t *withPorts   = nullptr;
     gc_node_ref_t *closure     = nullptr;
+    // The order edges of the graph, sorted by (user, pred); null when the graph has none. Not in
+    // the nodes' input runs: an order edge is not a port (GCGraph::orderPredsOf).
+    GCGraphOrderEdge *orderEdges = nullptr;
+    gc_cnt_t orderEdgeCount      = 0;
     gc_cnt_t nodeCount         = 0;
     gc_cnt_t edgeCount         = 0;
     gc_cnt_t payloadWordCount  = 0;
@@ -711,6 +729,32 @@ class GCGraph : public camel::core::rtdata::Object {
                                                                                  : chunk.edgeCount;
         return inputRun(ref, n->ctrlBegin, end);
     }
+
+    /// The order predecessors of `ref`, in the order they are stored (the source order they were
+    /// written in): the nodes that must run before it when both run, along an edge that carries no
+    /// "used" (GCGraphOrderEdge). Empty for a node with none.
+    std::span<const GCGraphOrderEdge> orderPredsOf(gc_node_ref_t ref) const {
+        if (nativePayload_.orderEdgeCount == 0 || !containsNodeRef(ref)) {
+            return {};
+        }
+        const GCGraphOrderEdge *begin = nativePayload_.orderEdges;
+        const GCGraphOrderEdge *end   = begin + nativePayload_.orderEdgeCount;
+        const auto lower              = std::lower_bound(
+            begin, end, ref, [](const GCGraphOrderEdge &edge, gc_node_ref_t user) {
+                return edge.user < user;
+            });
+        const auto upper = std::lower_bound(
+            lower, end, ref, [](const GCGraphOrderEdge &edge, gc_node_ref_t user) {
+                return edge.user <= user;
+            });
+        return {lower, static_cast<size_t>(upper - lower)};
+    }
+    /// Every order edge of the graph, sorted by (user, pred).
+    std::span<const GCGraphOrderEdge> orderEdges() const {
+        return {nativePayload_.orderEdges, nativePayload_.orderEdgeCount};
+    }
+    /// True when some node of the graph is ordered by an order edge.
+    bool hasOrderEdges() const { return nativePayload_.orderEdgeCount != 0; }
 
     /// The users of every node, built the first time it is asked for and kept with the graph
     /// (the frozen block stores each edge once, as an input). Thread-safe.

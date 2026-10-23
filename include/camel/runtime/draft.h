@@ -42,10 +42,20 @@
 
 namespace camel::runtime {
 
+/// The kinds of edge a node can have, in the draft's storage order (docs/design/effects/edges.cn.md
+/// section 1.5): a data port (Norm or With, one edge kind whose ports carry a role), a control
+/// input, and an order input.
+///
+/// Ctrl and Order are both predecessors that only order; they differ in whether "used" travels
+/// along them. Liveness follows data ports and sync edges; a control input of the old model also
+/// carries the "used" of the front end's branch structure, while an order edge is the design's
+/// "only orders" edge (`DraftEdgeKind::Order`): the same-resource order between two effects and
+/// the order between two writes of one `var`.
 enum class DraftEdgeKind : uint8_t {
     Norm,
     With,
     Ctrl,
+    Order,
 };
 
 enum class DraftNodeStorageClass : uint8_t {
@@ -72,6 +82,9 @@ struct DraftNodeHeader {
     gc_cnt_t normInputCount = 0;
     gc_cnt_t withInputCount = 0;
     gc_cnt_t ctrlInputCount = 0;
+    /// Order inputs (DraftEdgeKind::Order): predecessors that only order. Stored after the
+    /// control run in the tail, so adding them moves no existing offset.
+    gc_cnt_t orderInputCount = 0;
 
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
@@ -101,7 +114,7 @@ struct DraftNodeHeader {
     constexpr size_t usedBytes() const {
         return static_cast<size_t>(payloadBytes) +
                (static_cast<size_t>(normInputCount) + static_cast<size_t>(withInputCount) +
-                static_cast<size_t>(ctrlInputCount)) *
+                static_cast<size_t>(ctrlInputCount) + static_cast<size_t>(orderInputCount)) *
                    sizeof(gc_node_ref_t);
     }
 };
@@ -125,6 +138,7 @@ struct DraftNodeInit {
     std::span<const gc_node_ref_t> normInputs{};
     std::span<const gc_node_ref_t> withInputs{};
     std::span<const gc_node_ref_t> ctrlInputs{};
+    std::span<const gc_node_ref_t> orderInputs{};
 };
 
 class DraftNodeView {
@@ -138,6 +152,8 @@ class DraftNodeView {
     static std::span<const gc_node_ref_t> withInputs(const DraftNode *node);
     static std::span<gc_node_ref_t> ctrlInputs(DraftNode *node);
     static std::span<const gc_node_ref_t> ctrlInputs(const DraftNode *node);
+    static std::span<gc_node_ref_t> orderInputs(DraftNode *node);
+    static std::span<const gc_node_ref_t> orderInputs(const DraftNode *node);
 
     template <typename Body> static Body *payloadAs(DraftNode *node) {
         auto bytes = payload(node);
@@ -197,13 +213,20 @@ struct DraftUserLists {
     std::vector<gc_node_ref_t> norm;
     std::vector<gc_node_ref_t> with;
     std::vector<gc_node_ref_t> ctrl;
-    std::unique_ptr<std::unordered_map<gc_node_ref_t, uint32_t>> places[3];
+    std::vector<gc_node_ref_t> order;
+    std::unique_ptr<std::unordered_map<gc_node_ref_t, uint32_t>> places[4];
 
     std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) {
-        return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
+        return kind == DraftEdgeKind::Norm    ? norm
+               : kind == DraftEdgeKind::With  ? with
+               : kind == DraftEdgeKind::Ctrl  ? ctrl
+                                              : order;
     }
     const std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) const {
-        return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
+        return kind == DraftEdgeKind::Norm    ? norm
+               : kind == DraftEdgeKind::With  ? with
+               : kind == DraftEdgeKind::Ctrl  ? ctrl
+                                              : order;
     }
     /// The index of the `kind` list, built when the list is long enough to want one.
     std::unordered_map<gc_node_ref_t, uint32_t> *index(DraftEdgeKind kind) {
@@ -371,12 +394,17 @@ class GraphDraft {
     std::span<const gc_node_ref_t> withInputsOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> ctrlInputsOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> ctrlInputsOf(const DraftNode *node) const;
+    /// Order inputs: predecessors that only order (DraftEdgeKind::Order).
+    std::span<const gc_node_ref_t> orderInputsOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> orderInputsOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> normUsersOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> normUsersOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> withUsersOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> withUsersOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> ctrlUsersOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> ctrlUsersOf(const DraftNode *node) const;
+    std::span<const gc_node_ref_t> orderUsersOf(gc_node_ref_t id) const;
+    std::span<const gc_node_ref_t> orderUsersOf(const DraftNode *node) const;
     bool isControlAnchor(gc_node_ref_t id) const;
     bool isControlAnchor(const DraftNode *node) const;
     gc_node_ref_t resolveForwardedValueRef(gc_node_ref_t id) const;
@@ -465,6 +493,20 @@ class GraphDraft {
     void setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
     void setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
     void setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
+    /// The edit surface of a node's port list (docs/design/effects/edges.cn.md 1.5): the ports of
+    /// a node are one ordered list whose `withStart` first port has the context role, so the only
+    /// edit that can express "insert or replace port 2" is the whole list. Value-based edits
+    /// (replaceInput, unlinkInput) stay for a rewrite that only swaps or drops one producer.
+    void setPorts(
+        gc_node_ref_t id, std::span<const gc_node_ref_t> ports,
+        std::span<const gc_node_ref_t> withPorts);
+    /// Order predecessors as a whole list (DraftEdgeKind::Order). One whole-list edit rather than
+    /// add/remove-one, because validity is a property of the list: it is the resource order the
+    /// node executes in, and a half-edited list is a state the seal check forbids.
+    void setOrderInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs);
+    /// The next order predecessor of `id`, in the order it is written (`predecessor` before
+    /// `id`); refuses a self edge and one the node already has.
+    bool appendOrderDependency(gc_node_ref_t id, gc_node_ref_t predecessor);
     void appendInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId);
     bool unlinkInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId);
     void replaceInput(
@@ -473,6 +515,7 @@ class GraphDraft {
     void replaceAllNormUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId);
+    void replaceAllOrderUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     /// Removes GATEs that wait on nothing (no control input): such a gate only forwards its value,
     /// so its users read the value directly. Rewrites that remove what a gate waited on (a pruned
@@ -626,8 +669,10 @@ class GraphDraft {
         const std::vector<gc_node_ref_t> &sourceToDraft);
     DraftNode *rebuildNode(gc_node_ref_t id, const DraftNodeInit &init);
     void replaceNodeStorage(gc_node_ref_t id, DraftNode *node);
-    void removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
-    void appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
+    void removeUserRef(
+        gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl, bool order = false);
+    void appendUserRef(
+        gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl, bool order = false);
     /// A node that reads a node of a control region (an arm, a loop part) is in that region, or in
     /// one inside it: it cannot run before what it reads. A JOIN reads the results of its arms and
     /// a LOOP those of its parts; they stay where the branch or the loop is.
@@ -642,7 +687,7 @@ class GraphDraft {
     void replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceUsesInList(
         gc_node_ref_t ownerId, std::span<const gc_node_ref_t> users, gc_node_ref_t oldId,
-        gc_node_ref_t newId, bool norm, bool with, bool ctrl);
+        gc_node_ref_t newId, bool norm, bool with, bool ctrl, bool order = false);
     GraphId payloadGraphAt(uint32_t index) const;
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
     /// Records node `id` in the list of its kind when that kind has one (see gateIds_).

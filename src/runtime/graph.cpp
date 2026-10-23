@@ -128,6 +128,7 @@ struct GraphArenaLayout {
     size_t regionBytes      = 0; // the region table
     size_t regionPortBytes  = 0; // the form ports of the regions
     size_t writingBytes     = 0; // the equivalences between nodes
+    size_t orderEdgeBytes   = 0; // the order edges between nodes
     size_t normPortBytes    = 0;
     size_t withPortBytes    = 0;
     size_t closureBytes     = 0;
@@ -164,6 +165,9 @@ GraphArenaLayout planGraphArenaLayout(
         .writingBytes = camel::core::mm::alignUp(
             bytesForArray<WritingUnion>(payload.writingCount),
             alignof(WritingUnion)),
+        .orderEdgeBytes = camel::core::mm::alignUp(
+            bytesForArray<GCGraphOrderEdge>(payload.orderEdgeCount),
+            alignof(GCGraphOrderEdge)),
         .normPortBytes = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.normPortCount),
             alignof(gc_node_ref_t)),
@@ -176,7 +180,7 @@ GraphArenaLayout planGraphArenaLayout(
     };
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
-        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.writingBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes;
+        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.writingBytes + layout.orderEdgeBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes;
     // The frame layout comes last. The arrays before it may end at any 4-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
     if (frameSlots) {
@@ -552,6 +556,7 @@ struct DraftPayloadPlan {
     std::vector<PlannedDraftNode> nodes;
     std::vector<gc_node_ref_t> runtimeRefsByDraftId;
     gc_cnt_t edgeCount        = 0;
+    gc_cnt_t orderEdgeCount   = 0;
     gc_cnt_t payloadWordCount = 0;
 };
 
@@ -613,6 +618,7 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     // Live nodes keep their draft order and take dense NodeIds.
     size_t nodeCount      = 0;
     size_t edgeCount      = 0;
+    size_t orderEdgeCount = 0;
     size_t payloadWords   = 0;
     const bool keepIds = draft.keepsNodeIds();
     for (gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
@@ -640,6 +646,9 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
             requireAlive(draftId, ref, "ctrl-input");
         }
+        for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
+            requireAlive(draftId, ref, "order-input");
+        }
         const size_t words = draftPayloadWords(*header);
         // The NodeId kInvalidNodeRef and the payload offset kNoPayload are reserved.
         ASSERT(
@@ -657,6 +666,7 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         payloadWords += words;
         edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
                      draft.ctrlInputsOf(draftId).size();
+        orderEdgeCount += draft.orderInputsOf(draftId).size();
     }
 
     for (gc_node_ref_t ref : draft.normPorts()) {
@@ -674,6 +684,7 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     requireAlive(kInvalidNodeRef, draft.returnNode(), "return");
 
     plan.edgeCount        = static_cast<gc_cnt_t>(edgeCount);
+    plan.orderEdgeCount   = static_cast<gc_cnt_t>(orderEdgeCount);
     plan.payloadWordCount = static_cast<gc_cnt_t>(payloadWords);
     return plan;
 }
@@ -701,6 +712,7 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
         .regionCount     = static_cast<gc_cnt_t>(draft.regionCount()),
         .regionPortCount = static_cast<gc_cnt_t>(draft.regionPortCount()),
         .writingCount    = static_cast<gc_cnt_t>(draft.writings().size()),
+        .orderEdgeCount  = plan.orderEdgeCount,
         .base = draft.baseGraph(),
     };
 }
@@ -887,6 +899,31 @@ void emitDraftPayload(
         .ctrlBegin = static_cast<gc_off_t>(inputCursor),
     };
 
+    // The order edges (docs/design/effects/edges.cn.md 1.5): they are not ports and not control
+    // inputs, so they are written to the graph's own array, in the node order the records have.
+    if (payload.orderEdgeCount != 0) {
+        size_t at = 0;
+        for (const PlannedDraftNode &planned : plan.nodes) {
+            if (planned.dead) {
+                continue;
+            }
+            for (gc_node_ref_t pred : draft.orderInputsOf(planned.draftId)) {
+                ASSERT(
+                    at < payload.orderEdgeCount,
+                    "Draft order-edge emission wrote past the planned order edges.");
+                ASSERT(
+                    pred < plan.runtimeRefsByDraftId.size(),
+                    "Draft order-edge emission encountered a node outside the payload plan.");
+                const gc_node_ref_t runtimePred = plan.runtimeRefsByDraftId[pred];
+                ASSERT(
+                    runtimePred != kInvalidNodeRef,
+                    "Draft order-edge emission encountered a dead node.");
+                payload.orderEdges[at++] = GCGraphOrderEdge{planned.ref, runtimePred};
+            }
+        }
+        ASSERT(at == payload.orderEdgeCount, "Draft order-edge emission wrote the wrong count.");
+    }
+
     for (size_t i = 0; i < draft.normPorts().size(); ++i) {
         payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];
     }
@@ -1044,6 +1081,8 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
     payload.regionPortCount = shape.regionPortCount;
     payload.writings        = arenaAllocArray<WritingUnion>(arena, shape.writingCount);
     payload.writingCount    = shape.writingCount;
+    payload.orderEdges      = arenaAllocArray<GCGraphOrderEdge>(arena, shape.orderEdgeCount);
+    payload.orderEdgeCount  = shape.orderEdgeCount;
     payload.normPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.normPortCount);
     payload.withPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.withPortCount);
     payload.closure          = arenaAllocArray<gc_node_ref_t>(arena, shape.closureCount);
@@ -1081,6 +1120,8 @@ GCGraphPayloadArena makePayloadArenaView(GCGraphNativePayload &payload, PayloadS
         .regionPortCount  = payload.regionPortCount,
         .writings         = payload.writings,
         .writingCount     = payload.writingCount,
+        .orderEdges       = payload.orderEdges,
+        .orderEdgeCount   = payload.orderEdgeCount,
         .inputs           = staging.inputs.data(),
         .payload          = staging.payload.data(),
         .normPorts        = payload.normPorts,
@@ -1806,6 +1847,13 @@ uint64_t GCGraph::nodeContentHash(gc_node_ref_t ref) const {
     mixInputs(normInputsOf(ref));
     mixInputs(withInputsOf(ref));
     mixInputs(ctrlInputsOf(ref));
+    // The order predecessors: part of what the node is, so two nodes that differ only in their
+    // resource order are not the same node (they live in the graph's own array, not in the run).
+    const auto orderEdges = orderPredsOf(ref);
+    mixValue(static_cast<uint64_t>(orderEdges.size()));
+    for (const GCGraphOrderEdge &edge : orderEdges) {
+        mixValue(edge.pred);
+    }
     const std::span<const std::byte> payload = nodePayloadBytes(ref);
     mixValue(static_cast<uint64_t>(payload.size()));
     mix(payload.data(), payload.size());

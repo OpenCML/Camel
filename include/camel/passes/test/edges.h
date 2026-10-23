@@ -11,6 +11,8 @@ inline constexpr const char *kEdgesTypeTestPass  = "test::edges_type";
 inline constexpr const char *kEdgesOkTestPass    = "test::edges_ok";
 inline constexpr const char *kCommitConflictTestPass = "test::commit_conflict";
 inline constexpr const char *kCommitMergeTestPass    = "test::commit_merge";
+inline constexpr const char *kEdgesOrderOkTestPass   = "test::edges_order_ok";
+inline constexpr const char *kEdgesOrderPureTestPass = "test::edges_order_pure";
 
 // Each adds nodes to the root graph, commits, and prints "EDGES accepted" or
 // "EDGES refused: <the commit's message>".
@@ -47,6 +49,22 @@ class CommitConflictTestPass : public RuntimeGraphRewritePass {
 // the first did not: the second's commit meets no conflict and merges into the program the first
 // published instead of forking (design 4.3.1). Prints what the merged program holds.
 class CommitMergeTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+// The order edge (docs/design/effects/edges.cn.md 1.5, 4.6). The first writes a valid one between
+// two anchor nodes, commits, and prints what the graph the commit made holds; the second writes
+// one whose user is a pure node, which the seal check refuses.
+class EdgesOrderOkTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+class EdgesOrderPureTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *

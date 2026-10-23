@@ -4,8 +4,9 @@ tier = "fast"
 tags = ["feat", "opt", "validation"]
 
 # A commit enforces the edge invariants of a graph (docs/design/graph-store 5.4): no cycle of
-# inputs, and the types agree along the edges. The test passes edit the root graph through the
-# draft API in ways a pass could and commit; the commit refuses the broken ones.
+# inputs, the types agree along the edges, and no order edge on a pure node (docs/design/effects/
+# edges.cn.md 4.6). The test passes edit the root graph through the draft API in ways a pass could
+# and commit; the commit refuses the broken ones.
 
 [defaults]
 kind = "behavior"
@@ -32,6 +33,20 @@ name = "copy_type_mismatch_is_refused"
 desc = "A COPY typed i32 of an f32 value: the types disagree along the edge."
 args = ["${case}", "test::edges_type"]
 expect_stdout_contains = ["EDGES refused", "copies a f32 as a i32"]
+
+[[tests]]
+name = "order_edge_survives_the_commit"
+desc = "An order edge is not a port and not a control input: it is written once, it is kept out of the node's input runs, and the graph the commit makes holds it in its own array, from which it is read back by the user's predecessors (docs/design/effects/edges.cn.md 1.5, 5)."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_order_ok"]
+expect_stdout_contains = ["ORDER wrote=1 twice=0", "ORDER preds=1 users=1", "EDGES accepted", "ORDER frozen_agrees=1 some_node_ordered=1"]
+
+[[tests]]
+name = "order_edge_on_a_pure_node_is_refused"
+desc = "Nothing orders a pure node: a constant computes a value from nothing a resource owns, so an order edge on it is a graph the builder must not have produced, and the seal check names it (docs/design/effects/edges.cn.md 4.6)."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_order_pure"]
+expect_stdout_contains = ["ORDER wrote=1", "EDGES refused", "is on a pure node"]
 
 [[tests]]
 name = "commit_conflict_is_detected"
