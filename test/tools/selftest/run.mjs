@@ -838,6 +838,30 @@ if (!/\[SUMMARY\].*fail: 1/.test(bench.output)) {
     problems.push(`benchmark failure: ${summaryLine(bench.output)}`)
 }
 
+// --- the gate split line -----------------------------------------------------------------------
+// The gate's wall time is build + test, and the next person has to be able to see a regression in
+// it. The remote helper exports the build's own clock as CAMEL_GATE_BUILD_SECONDS; the runner
+// prints `[SPLIT] build <b> s, test <t> s, total <b+t> s`. Both the format and the arithmetic are
+// pinned here, on the real runner, with a value the runner could not have guessed. Without the
+// variable the runner built nothing in this invocation, and says so (0.0), which is also the
+// -NoBuild path's value.
+const splitPlan = path.join(here, 'scratch.plan.toml')
+const splitWithBuild = runRunner([splitPlan, '--jobs', '1'], { CAMEL_GATE_BUILD_SECONDS: '12.5' })
+const splitMatch = splitWithBuild.output.match(/^\[SPLIT\] build ([\d.]+) s, test ([\d.]+) s, total ([\d.]+) s$/m)
+if (!splitMatch) {
+    problems.push(`gate split: the runner printed no [SPLIT] line:\n${splitWithBuild.output}`)
+} else {
+    const [build, test, total] = splitMatch.slice(1).map(Number)
+    if (build !== 12.5) problems.push(`gate split: build ${build}, expected 12.5 (CAMEL_GATE_BUILD_SECONDS)`)
+    if (Math.abs(total - (build + test)) > 0.05) {
+        problems.push(`gate split: total ${total} is not build ${build} + test ${test}`)
+    }
+}
+const splitNoBuild = runRunner([splitPlan, '--jobs', '1'], { CAMEL_GATE_BUILD_SECONDS: '' })
+if (!/^\[SPLIT\] build 0\.0 s, test [\d.]+ s, total [\d.]+ s$/m.test(splitNoBuild.output)) {
+    problems.push(`gate split: a run that built nothing did not print build 0.0 s:\n${splitNoBuild.output}`)
+}
+
 if (problems.length > 0) {
     console.error(problems.join('\n'))
     console.error('--- runner output ---')
