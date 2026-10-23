@@ -954,9 +954,11 @@ The case must emit the expected JSON benchmark payload format used by the runner
 
 ## Performance Measurement
 
-The ten plans under `test/plans/perf/` are measured on purpose, never by a gate. They are not in
+The plans under `test/plans/perf/` -- one plan file per benchmark, every one of them carrying the
+`slow` tier -- are measured on purpose, never by a gate. They are not in
 `npm run test` (which runs `--tier fast`), editing one of them does not select it from `--changed`
-(see "Selecting Plans From A Change"), and no CI job runs them. That is the policy, not an
+(see "Selecting Plans From A Change"), and no CI job runs them: the only tooling that runs them is
+the plan runner, with the plan file named as its target. That is the policy, not an
 oversight: `agents/test.md` treats the perf/timeit plans as heavy -- they saturate every core for
 minutes and are worth running only at a milestone, by a maintainer, on a quiet machine -- and the
 performance notes record what running the whole layer on a shared host would cost. The price of
@@ -964,17 +966,21 @@ the exclusion is that nothing notices a performance regression, so the
 measurement has one manual entry point:
 
 ```bash
-node scripts/perf-gate.mjs --list        # the ten plans, what each measures, and why it is in or out
+node scripts/perf-gate.mjs --list        # every plan of the directory, what each measures, and why it is in or out
 node scripts/perf-gate.mjs               # measure the gateable subset and compare with the baseline
 node scripts/perf-gate.mjs --update      # reseed test/perf-baseline.json on the host that measured it
 node scripts/perf-gate.mjs --reps 9 --threshold 20
 ```
 
-It measures only the two plans whose commands can be repeated: `perf.startup` (a few seconds per
-repetition) and `perf.fib` (about 11 s). `perf.para` is refused as too expensive per repetition;
-`perf.gc`, `perf.collections_fuzz`, `perf.training_steps` and the four showcase plans are refused
-by name, with the policy quoted. Running one of those stays a milestone decision: name the plan
-file to the runner yourself.
+`--list` prints the classification of every plan in that directory and the kind of each refusal
+(a repetition that costs minutes, a measurement that only means anything inside its own run, or the
+policy `agents/test.md` quotes), and the classification is checked against the directory itself, so
+a plan added under `test/plans/perf/` cannot go unclassified or be classified twice.
+
+`node scripts/perf-gate.mjs` measures only the plans whose commands can be repeated often enough:
+today `perf.startup` (a few seconds per repetition) and `perf.fib` (about 11 s); every other plan is
+refused by name with the kind `--list` prints. Running one of those stays a milestone decision: name
+the plan file to the runner yourself.
 
 How the numbers are read:
 
@@ -993,7 +999,7 @@ How the numbers are read:
 `test/perf-baseline.json` is data, not a ceiling: the medians, both spreads, the exact command of
 every case, the commit, the build's own stamp, the repetition count and the host load. Seed it on
 the host whose numbers it records; a baseline from another machine is not comparable. The
-performance notes have the cost of each of the ten plans and the evidence for the
+performance notes have the cost of each plan and the evidence for the
 split. The plans left out keep the measurement they already have: `perf.startup` carries its own
 CPU-time ceilings and `declaration.cost`'s per-declaration ceiling, absolute CPU total and
 structural assertion (the 30% compile-work share retired with the 2026-10-23 ruling), `perf.gc`
