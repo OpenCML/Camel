@@ -40,7 +40,7 @@ import url from 'node:url'
 import { spawnSync } from 'node:child_process'
 
 const HERE = path.dirname(url.fileURLToPath(import.meta.url))
-const REPO_ROOT = path.resolve(HERE, '..', '..', '..', '..')
+const REPO_ROOT = path.resolve(HERE, '..', '..', '..', '..', '..')
 const HOME = process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
 const CAMEL = path.join(HOME, 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
 const PROGRAM = path.join(HERE, 'saturate_draw.cml')
