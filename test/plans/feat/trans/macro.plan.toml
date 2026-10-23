@@ -10,7 +10,6 @@ kind = "behavior"
 case = "../../../cases/trans/macro/basic.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -21,7 +20,6 @@ kind = "behavior"
 case = "../../../cases/trans/macro/branch_chain.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -32,7 +30,6 @@ kind = "behavior"
 case = "../../../cases/trans/macro/chain.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -43,7 +40,6 @@ kind = "behavior"
 case = "../../../cases/trans/macro/deep_chain.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -54,7 +50,6 @@ kind = "behavior"
 case = "../../../cases/trans/macro/function_arg.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -72,7 +67,6 @@ verify_script = """
     assert(Number(found[1]) === 42, `expected value=42, got ${found[1]}`)
 }
 """
-failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -91,7 +85,6 @@ verify_script = """
     assert(Number(found[2]) === 25, `expected rhs=25, got ${found[2]}`)
 }
 """
-failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -102,7 +95,6 @@ kind = "behavior"
 case = "../../../cases/trans/macro/functor.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -113,7 +105,6 @@ kind = "behavior"
 case = "../../../cases/trans/macro/pipeline.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -131,7 +122,6 @@ verify_script = """
     assert(Number(found[1]) === 42, `expected value=42, got ${found[1]}`)
 }
 """
-failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -149,7 +139,6 @@ verify_script = """
     assert(Number(found[1]) === 42, `expected value=42, got ${found[1]}`)
 }
 """
-failure_note = "Macro runtime execution is currently unstable under std::macro on this build."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
