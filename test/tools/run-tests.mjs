@@ -11,13 +11,19 @@ import { parseTomlFile } from './toml-lite.mjs'
 import { compareGirDotIsomorphic } from './gir-dot.mjs'
 import { applyNormalizers } from './normalizers.mjs'
 import { CUDA_HIDDEN, CUDA_VISIBLE_DEVICES, hidesCudaDevices, pythonEntryPoints } from './cuda-visibility.mjs'
+import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
 const TEST_ROOT = path.dirname(TOOLS_ROOT)
 const PLANS_ROOT = path.join(TEST_ROOT, 'plans')
 const VARS_PATH = path.join(TEST_ROOT, 'vars.toml')
-const RESULTS_ROOT = path.join(TEST_ROOT, 'results')
+// Where a run's record goes. `test/results` unless CAMEL_TEST_RESULTS_ROOT names another tree: a
+// check that has to assert what the retention kept drives two real runs into a scratch tree
+// (test/cases/tools/retention/retention.mjs), and the tree it prunes is the one it writes.
+const RESULTS_ROOT = process.env.CAMEL_TEST_RESULTS_ROOT
+    ? path.resolve(process.env.CAMEL_TEST_RESULTS_ROOT)
+    : path.join(TEST_ROOT, 'results')
 const LOG_ROOT = path.join(RESULTS_ROOT, 'log')
 const REPO_ROOT = path.dirname(TEST_ROOT)
 const IS_WINDOWS = process.platform === 'win32'
@@ -205,7 +211,7 @@ const COLORS = {
 // The per-test directory is removed after the test. The run removes its own root when the run
 // succeeded and keeps it (and prints the path) when a test failed, so the files are there to
 // read. It never removes another run's root: two runners can run at the same time.
-const TEST_SCRATCH_ROOT = path.join(REPO_ROOT, 'tmp', 'test')
+const TEST_SCRATCH_ROOT = runnerOutputPath(SCRATCH_DIR, REPO_ROOT)
 const TEST_SCRATCH_RUN = path.join(TEST_SCRATCH_ROOT, `run-${process.pid}`)
 
 function timestamp() {
@@ -216,6 +222,60 @@ function timestamp() {
 
 function ensureDir(dir) {
     fs.mkdirSync(dir, { recursive: true })
+}
+
+// CAMEL_TEST_RUN_DIRS_KEEP=<n> lowers the retention bound for one run. The default and its reason
+// live beside the policy (test/tools/runner-output.mjs); this is the one number a check sets small
+// to watch the bound hold across two real runs (docs/test-plans.md, "Runner output").
+function resultsKeep() {
+    const raw = process.env.CAMEL_TEST_RUN_DIRS_KEEP
+    if (raw === undefined || raw === '') return RUN_DIRS_KEPT
+    const parsed = Number(raw)
+    if (!Number.isInteger(parsed) || parsed < 0) {
+        throw new Error(`CAMEL_TEST_RUN_DIRS_KEEP needs a non-negative integer, got '${raw}'`)
+    }
+    return parsed
+}
+
+/** One git command's trimmed stdout, or null when git is unavailable or refuses. */
+function gitOutput(args) {
+    const proc = spawnSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8', windowsHide: true, timeout: 30000 })
+    if (proc.error || proc.status !== 0) return null
+    return proc.stdout.trim()
+}
+
+/**
+ * What this run was, written before its first test: the revision, the build and tier, and every
+ * plan it selected. This is the manifest that replaces the copy of each plan and of each case the
+ * runner used to write into every test's status directory -- a copy nothing ever read back, made
+ * once per test, so a 5,667-test gate rewrote the same plan file 5,667 times (see writeLogFiles).
+ * With it, a run directory says which plan, at which revision, produced it without carrying a copy
+ * of the checkout's own files.
+ */
+function writeRunManifest(logDir, options, plans) {
+    const revision = gitOutput(['rev-parse', 'HEAD'])
+    const status = gitOutput(['status', '--porcelain', '--untracked-files=no'])
+    fs.writeFileSync(
+        path.join(logDir, 'run.json'),
+        JSON.stringify(
+            {
+                started_at: new Date().toISOString(),
+                build: options.build,
+                tier: options.tier,
+                jobs: options.jobs,
+                update_golden: options.updateGolden,
+                results_root: RESULTS_ROOT,
+                // null, not false: git unavailable means the provenance is unknown, and a manifest
+                // that claimed the tree was clean would be worse than one that shrugs.
+                revision,
+                dirty: status === null ? null : status.length > 0,
+                targets: options.targets.map((target) => planLabel(target)),
+                plans: plans.map((plan) => planLabel(plan.__planPath)),
+            },
+            null,
+            2
+        )
+    )
 }
 
 // CAMEL_TEST_TIMEOUT_SCALE=<n> multiplies every test and verification timeout. For running
@@ -1372,14 +1432,18 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     return { ...result, failures, status }
 }
 
+/**
+ * One test's record. The plan and the case are deliberately not copied in: they used to be, once
+ * per test, and nothing read either copy back. `run.json` at the run root carries the revision and
+ * the list of plans this run selected, and this test's own `meta.json` carries `plan_path` and
+ * `case_path`, so what produced this output is recorded by name rather than by a duplicate of a
+ * file the checkout still holds. The copies were also the bulk of a run directory: the same plan
+ * file was rewritten once for every test in it. See test/tools/runner-output.mjs, and
+ * docs/test-plans.md, "Runner Output".
+ */
 function writeLogFiles(plan, test, result, status, logDir) {
     const statusDir = path.join(logDir, status, sanitizeSegment(plan.id), sanitizeSegment(test.name))
     ensureDir(statusDir)
-    const planCopyPath = path.join(statusDir, 'plan.toml')
-    fs.copyFileSync(test.__planPath, planCopyPath)
-    if (fs.existsSync(result.casePath)) {
-        fs.copyFileSync(result.casePath, path.join(statusDir, path.basename(result.casePath)))
-    }
     fs.writeFileSync(path.join(statusDir, 'stdout.txt'), result.stdout)
     fs.writeFileSync(path.join(statusDir, 'stderr.txt'), result.stderr)
     fs.writeFileSync(path.join(statusDir, 'output.txt'), result.output)
@@ -2397,11 +2461,26 @@ async function main() {
         }
     })
     const plans = loadPlans(options.targets, options.tier, options.layeredPlans)
-    ensureDir(LOG_ROOT)
     // The pid keeps two runs started in the same second (the self-test does this) out of one
     // directory, whose logs and summary.json would otherwise overwrite each other.
     const logDir = path.join(LOG_ROOT, `${timestamp()}_${process.pid}`)
+    // Retention before the record. The tree this run is about to add a directory to is the one that
+    // grew without bound (test/tools/runner-output.mjs has the policy and the evidence): it keeps
+    // the newest RUN_DIRS_KEPT run directories, never one a live run owns, and never one this
+    // runner did not write. The current run's directory is named here, before it exists, so the
+    // policy protects it by identity as well.
+    const retention = pruneRunnerOutput({
+        resultsRoot: RESULTS_ROOT,
+        keep: resultsKeep(),
+        currentRunDir: logDir,
+        currentScratchRoot: TEST_SCRATCH_RUN,
+    })
+    ensureDir(LOG_ROOT)
+    // A directory left by an earlier process whose pid this run reused is not this run's log, the
+    // same rule the scratch root follows below: its files must not be read as this run's.
+    fs.rmSync(logDir, { recursive: true, force: true })
     ensureDir(logDir)
+    writeRunManifest(logDir, options, plans)
     const testCount = plans.reduce((count, plan) => count + plan.tests.length, 0)
 
     console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable (${options.build}): ${toolExecutable('camel', options.build)}`)
@@ -2409,6 +2488,7 @@ async function main() {
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
     )
+    console.log(`${COLORS.cyan}[RETAIN]${COLORS.reset} ${formatRetention(retention)}`)
     if (options.layeredPlans.size > 0 && options.tier !== 'all') {
         // `--changed` marked these plans `layer: true`: naming them is not "run the whole file",
         // it is "run the cases of this layer", so the slow cases that must not run from an

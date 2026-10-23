@@ -44,11 +44,11 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { BASEDIR } from './common.js'
 import { scanSourceArtifacts } from './check-source-artifacts.mjs'
+import { LOG_DIR, SCRATCH_DIR, runnerOutputPath } from '../test/tools/runner-output.mjs'
 
 const THIS_FILE = fileURLToPath(import.meta.url)
 const TIERS = ['build', 'out', 'tmp', 'source']
 const TRACKED_FIXTURE = 'test/cases/modules/pass_not_found/unloadable.cmo'
-const RESULTS_LOG = 'test/results/log'
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 
 function usage(message) {
@@ -204,7 +204,7 @@ function outCandidates(root) {
 
 function tmpCandidates(root) {
     const rels = []
-    const runRoot = path.join(root, 'tmp', 'test')
+    const runRoot = runnerOutputPath(SCRATCH_DIR, root)
     if (fs.existsSync(runRoot)) {
         let entries = []
         try {
@@ -214,12 +214,15 @@ function tmpCandidates(root) {
         }
         for (const entry of entries) {
             if (entry.name.startsWith('run-') && (entry.isDirectory() || entry.isSymbolicLink())) {
-                rels.push(`tmp/test/${entry.name}`)
+                rels.push(`${SCRATCH_DIR}/${entry.name}`)
             }
         }
     }
-    if (fs.existsSync(path.join(root, RESULTS_LOG))) {
-        rels.push(RESULTS_LOG)
+    // The run's record is one tree: the retention keeps the newest run directories in it, this tier
+    // removes the tree. Both name it through test/tools/runner-output.mjs, which is the one
+    // definition of the paths a run writes.
+    if (fs.existsSync(runnerOutputPath(LOG_DIR, root))) {
+        rels.push(LOG_DIR)
     }
     return rels.sort()
 }
