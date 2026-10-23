@@ -1087,3 +1087,15 @@ expect_output_not_contains = ["internal error", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+
+[[tests]]
+name = "entry_args.tensor_npy_values"
+desc = "A .npy argument keeps the file's own shape and element count through the entry graph: the static value is cloned with its own extents, not with the rank-1 shape the size overload gives it (a (2, 3) file read back as [2] with 2 elements, and a matmul of two such values then failed with 'inner dimensions differ: 2 vs 3')."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/npy_values.cml"
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy"]
+expect_exit = 0
+expect_stdout_contains = ["[2, 3] 6 [3, 4] 12"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

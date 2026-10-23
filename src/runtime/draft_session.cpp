@@ -243,11 +243,16 @@ slot_t cloneStaticSlot(
         return toSlot<Object *>(clonedTuple);
     }
     case TypeCode::Array: {
-        auto *array       = fromSlot<::Array *>(slot);
-        auto *arrayType   = static_cast<ArrayType *>(type);
-        auto *clonedArray = ::Array::create(mm::autoSpace(), arrayType, array->size());
+        auto *array     = fromSlot<::Array *>(slot);
+        auto *arrayType = static_cast<ArrayType *>(type);
+        // The clone has the value's own extents and element count. The size overload is the
+        // rank-1 convenience (include/camel/core/rtdata/array.h): a multi-dimensional value that
+        // went through it came out rank 1 with its first extent's worth of elements, so a (2, 3)
+        // file bound to a parameter read back as [2] with two elements and a matmul of two such
+        // values failed with "inner dimensions differ: 2 vs 3".
+        auto *clonedArray = ::Array::create(mm::autoSpace(), arrayType, array->shapeSpan());
         objectCache.emplace(object, clonedArray);
-        for (size_t i = 0; i < array->size(); ++i) {
+        for (uint64_t i = 0; i < array->numel(); ++i) {
             clonedArray->set<slot_t>(
                 i,
                 shouldTraverseStaticSlotType(arrayType->elemType()) ? cloneStaticSlot(
