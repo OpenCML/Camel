@@ -1,0 +1,41 @@
+module order_edges
+
+// The graph's edges are data, sync and order (docs/design/effects/edges.cn.md; design
+// principles 3.1). An order edge only orders: it does not make either end execute. So an
+// effect whose value nothing uses does not run, even when another effect on the same
+// resource is written after it (formal F2, H242 item 7).
+
+// `println(x)` returns `x`, so `b`'s effect is used by `return b` and `a`'s is not.
+func first_dropped(): int {
+    let a = println(1)
+    let b = println(2)
+    return b
+}
+
+// The positive half of F3 (design principles 3.5): the read uses the write nearest before it,
+// so that write executes. Here the nearest write is the second one, and it prints 2.
+//
+// The other half -- `var x = println(1); x = println(2); return x`, where the initializer's
+// write is read by nothing and must not run -- does not hold yet: the cell (`:var/new`) takes
+// the initializer's value as a data input, so the initializer's effect is reachable from the
+// read whatever the writes do. That is a defect of the `var` representation, not of the edges;
+// it is recorded with both repros in docs/handover/questions/h242a-var-initializer-write.md.
+func write_used(): int {
+    var x = 1
+    x = println(2)
+    return x
+}
+
+// The statements a sync block writes directly are a chain of sync edges: each one is used by
+// the one after it (and the tail by the block's value), so all of them run, in writing order.
+func both_kept(): int sync {
+    let a = println(1)
+    return println(2)
+}
+
+func main(): int sync {
+    println(first_dropped())
+    println(write_used())
+    println(both_kept())
+    return 0
+}

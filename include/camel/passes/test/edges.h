@@ -13,6 +13,7 @@ inline constexpr const char *kCommitConflictTestPass = "test::commit_conflict";
 inline constexpr const char *kCommitMergeTestPass    = "test::commit_merge";
 inline constexpr const char *kEdgesOrderOkTestPass   = "test::edges_order_ok";
 inline constexpr const char *kEdgesOrderPureTestPass = "test::edges_order_pure";
+inline constexpr const char *kEdgesOrderScheduleTestPass = "test::edges_order_schedule";
 
 // Each adds nodes to the root graph, commits, and prints "EDGES accepted" or
 // "EDGES refused: <the commit's message>".
@@ -65,6 +66,17 @@ class EdgesOrderOkTestPass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 class EdgesOrderPureTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+// What the schedulers make of an order edge: it orders two nodes that both run, and it does not
+// make a node run. Two anchors are made live by giving the exit a control input of each, then one
+// anchor is ordered after the other; a third anchor is ordered before the exit and stays out of
+// the layout. Prints what the execution plan of the graph the commit made holds.
+class EdgesOrderScheduleTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *

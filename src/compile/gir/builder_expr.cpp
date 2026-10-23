@@ -431,6 +431,12 @@ void Builder::recordWrite(
 }
 
 void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
+    // A control input, and it has to stay one: for a call that reads a captured `var` this is
+    // the edge that makes the write the read uses execute (design principles 3.5, F3), and an
+    // order edge would leave the read with the value from before it. The write-after-write
+    // ordering the design wants here as an order edge is recorded as a follow-up in
+    // docs/handover/questions/h242a-capture-order-edge.md: the two uses of this helper are one
+    // link today, and telling them apart needs the data edge the design implies for the read.
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
             linkNodes(LinkType::Ctrl, *modifier, node);

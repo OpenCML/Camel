@@ -186,11 +186,14 @@ class EdgeChecker {
                 what));
     }
 
-    /// Depth-first over the inputs with an explicit stack; a node reached while it is open is
-    /// on a cycle.
+    /// Depth-first over the edges with an explicit stack; a node reached while it is open is on a
+    /// cycle. An order edge takes part: it constrains the order the back ends lay the graph out
+    /// in, so a cycle of them is a graph no scheduler can run (docs/design/effects/edges.cn.md
+    /// 1.5, 2).
     void findCycle() {
         const size_t count = graph_.nodeCount();
         std::vector<uint8_t> state(count, 0); // 0 new, 1 open, 2 done
+        std::vector<gc_node_ref_t> orderPreds;
         struct Frame {
             gc_node_ref_t node;
             uint8_t group;
@@ -206,17 +209,25 @@ class EdgeChecker {
             while (!stack.empty()) {
                 Frame &top = stack.back();
                 std::span<const gc_node_ref_t> inputs;
-                while (top.group < 3) {
-                    inputs = top.group == 0   ? graph_.normInputsOf(top.node)
-                             : top.group == 1 ? graph_.withInputsOf(top.node)
-                                              : graph_.ctrlInputsOf(top.node);
+                while (top.group < 4) {
+                    if (top.group == 3) {
+                        orderPreds.clear();
+                        for (const GCGraphOrderEdge &edge : graph_.orderPredsOf(top.node)) {
+                            orderPreds.push_back(edge.pred);
+                        }
+                        inputs = std::span<const gc_node_ref_t>(orderPreds);
+                    } else {
+                        inputs = top.group == 0   ? graph_.normInputsOf(top.node)
+                                 : top.group == 1 ? graph_.withInputsOf(top.node)
+                                                  : graph_.ctrlInputsOf(top.node);
+                    }
                     if (top.next < inputs.size()) {
                         break;
                     }
                     ++top.group;
                     top.next = 0;
                 }
-                if (top.group == 3) {
+                if (top.group == 4) {
                     state[top.node] = 2;
                     stack.pop_back();
                     continue;
