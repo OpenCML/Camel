@@ -176,6 +176,74 @@ segment; the file is
 and the instrument is described in
 [`docs/technical/54_profiler_allocations.md`](../../../docs/technical/54_profiler_allocations.md).
 
+**Where one d=256 step goes.** The paragraph above says the d=256 gap is not the allocator. This one
+says which rows it is, with each row measured rather than attributed by subtraction:
+[`test/cases/perf/step_budget.py`](../../../test/cases/perf/step_budget.py), `measure` mode, results
+in [`results/2026-10-23-d256-step-budget.json`](results/2026-10-23-d256-step-budget.json).
+
+The host makes the naive method fail first. `std::profile` times operators with `steady_clock`, and
+the same 60 ms step reports 75 to 148 ms of wall time in a round depending on who else is building
+here, so a row's wall milliseconds measure the neighbours too. The budget therefore takes the step's
+CPU time as the slope of a run's CPU seconds against its step count (32 and 128 steps, three runs
+each, median — start-up cancels), and gives each row its share of one profiled run of the same
+program times that CPU step. One row does not come from the profiler: `test/tools/gemmprobe`
+measures every projection shape of the step on its own, one thread, in CPU time, which is also the
+one independent check on the normalisation — its sum lands 1.2% from the profiler's three matmul
+rows. One step, 64.9 ms of CPU time:
+
+| row | ms | share |
+| --- | ---: | ---: |
+| matmul, projections (39 calls, per-shape probe CPU time) | 33.63 | 51.8% |
+| matmul, attention products (3072 micro products of 32x32x16) | 4.45 | 6.9% |
+| elementwise, backward (multiply 3.57, add 1.61, divide 1.43, gelu_grad 1.22, neg 0.91) | 8.73 | 13.5% |
+| elementwise, forward (add 0.99, exp 0.97, multiply 0.94, gelu 0.86, divide 0.68) | 4.44 | 6.8% |
+| reductions (sum_to 3.71, mean_axis 0.48, sum 0.39, sum_axis 0.32) | 4.90 | 7.5% |
+| layout (expand_axis 1.38, permute 0.94, permute_inverse 0.84, transpose 0.35) | 3.54 | 5.5% |
+| optimizer (nn:adam) | 2.58 | 4.0% |
+| gradient assembly (scatter_add_arr 1.11, zeros_arr 0.25) | 1.36 | 2.1% |
+| allocation (inside every row above; reported once here) | 0.31 | 0.5% |
+| residual | 0.92 | 1.4% |
+
+The JSON has the 36 operator rows it measured, their shares, the per-shape probe rates and the three
+phase profiles; the rows sum to 99.3% of the profiled round mean. The residual is 1.4% and it is
+nameable: the probe's by-shape matmul against the profiler's matmul rows carried onto the CPU step
+(2%), and the allocator counted once (0.5%) instead of inside the 354 operator calls that made it.
+Dispatch has no row of its own: the same graph at 1x1 tokens runs a round of 6 to 17 ms depending on
+the host, and its operator rows account for all of it in both cases (6.0 of 6.0, 17.2 of 16.9), so
+the interpreter's time between operator calls is inside that noise rather than a fifth of the step.
+
+**What is not fixable.** The matmul row is two thirds of the step and it is at parity: at the
+projection shapes the canonical kernel runs at 0.94-1.01 of OpenBLAS's rate in the same process, on
+the same core, at the same thread count (`vs_blas` in the JSON, recorded per shape). The attention
+products (4.45 ms) are 12 batched calls a step — four forward, eight backward — each 256 micro
+products of 32x32x16 at 22 GFLOP/s; the cost is per micro product (1.45 us for 16K MACs), not per
+call, so this is a small-GEMM question, not a dispatch one, and batching the calls further is
+already done. OpenBLAS gets 28 GFLOP/s at the same shape, so the shape, not the kernel's author, is
+what binds.
+
+**The one change: `tensor:divide` ran a switch per element.** In
+[`modules/tensor/kernels/elementwise.cpp`](../../../modules/tensor/kernels/elementwise.cpp)
+`binaryTyped` gave `+`, `-` and `*` their own row loop and sent every other operator through one
+`default:` that handed the runtime `op` to the inner loop, so `x / y` ran a switch and a scalar
+division per element while the comment above the function promised the operator was hoisted out.
+Each operator now gets its own loop with the operator a compile-time constant. Against the same
+torch call, in the same window, one thread, [512, 256] (`measure --torch`; the torch side is the same
+operator on the same shape and thread count): 215 us before, 63 us after, with torch at
+51 and 46 us in those two windows — from 4.2x slower than torch to 1.2-1.4x. Inside the step the
+divide row went from 4.22 to 2.11 ms (its ratio to the matmul row, which is the in-run anchor,
+halved), 3.3% of the step. The step's own CPU time (64.1 ms before, 64.9 ms after, and one run of
+the after code at 59.6 ms) does not resolve a 2 ms change on this host; the row and the per-call
+measurement do.
+
+**What could not be measured.** Absolute wall times: this file's table was taken at load average
+63-76 on 32 hardware threads, and the profiled round mean of the same step moved between 78 and
+148 ms from one run to the next. The attention
+product's cost on the step's own data: the probe runs the shape in isolation, its operands warm, so
+its 22 GFLOP/s is an upper bound for the step's interleaved calls. The `memcpy` inside a kernel, and
+the page faults of first touching a reserved segment, are inside the rows but below the instrument.
+The allocator count has no counterpart in torch (its allocator is not instrumented), so no
+like-for-like is claimed for it.
+
 **The crossover.** In the before table above, with one thread Camel is the sole fastest implementation at d=64 (2.085 ms,
 with `torch.compile(naive)` at 2.938) and it is not at d=256: `torch.compile(naive)` takes 49.8
 against Camel's 61.0, a gap of 11 ms wider than both round ranges, while Camel, PyTorch naive and

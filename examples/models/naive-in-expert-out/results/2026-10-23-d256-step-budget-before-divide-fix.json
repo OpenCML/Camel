@@ -1,0 +1,660 @@
+{
+  "schema": 1,
+  "cell": {
+    "batch": 16,
+    "sequence": 32,
+    "d_model": 256,
+    "heads": 16,
+    "d_head": 16,
+    "d_ff": 512,
+    "vocab": 32,
+    "blocks": 2
+  },
+  "steps": 32,
+  "warmup": 3,
+  "load_average": {
+    "before": 66.55,
+    "after": 69.44
+  },
+  "generated": {
+    "full": {
+      "phase": "full",
+      "prints": true,
+      "sha256": "b34a056823b56109273d8fa8a8ffa8fb14eb8f10ea61d530b11466464a294a86"
+    },
+    "full-quiet": {
+      "phase": "full",
+      "prints": false,
+      "sha256": "2eb1fb7ec8840745d36a79d520bb7a14ebc90c9053733ef365906e7857abea74"
+    },
+    "forward-backward-quiet": {
+      "phase": "forward-backward",
+      "prints": false,
+      "sha256": "21d433f6a433ed08042136f1b71b7c691e191d1b7955abb3ee6810592c1f51d7"
+    },
+    "forward-quiet": {
+      "phase": "forward",
+      "prints": false,
+      "sha256": "5277fc32bc58aae5dfe2fe1cde5599d86a7abb6f2dbe1eb0153e7428298ff60b"
+    },
+    "tiny": {
+      "phase": "full",
+      "prints": false,
+      "sha256": "ab107529da299fd68d31e9c1cd5f761c4288b1ecf70d49fc53ea77e18d8340e6"
+    }
+  },
+  "timed": {
+    "short": {
+      "cpu_seconds": 2.62,
+      "median_ms": 112.905741,
+      "steps": 32,
+      "cpu_samples": [
+        3.31,
+        2.5100000000000002,
+        2.62
+      ]
+    },
+    "long": {
+      "cpu_seconds": 8.77,
+      "median_ms": 72.855949,
+      "steps": 128,
+      "cpu_samples": [
+        9.07,
+        8.77,
+        8.35
+      ]
+    }
+  },
+  "step_cpu_ms": 64.0625,
+  "step_wall_median_ms": 72.855949,
+  "profile": {
+    "full-quiet": {
+      "rounds": 32,
+      "round_mean_ms": 95.110465,
+      "row_sum_ms": 97.720008625,
+      "bench_median_ms": null,
+      "operator_calls": 11340,
+      "untimed_calls": 0,
+      "overhead_ns": 49,
+      "allocator_ns_per_step": 491760.194,
+      "allocator_blocks_per_step": 362.0
+    },
+    "forward-backward-quiet": {
+      "rounds": 32,
+      "round_mean_ms": 104.242664,
+      "row_sum_ms": 106.15650646875,
+      "bench_median_ms": null,
+      "operator_calls": 11308,
+      "untimed_calls": 0,
+      "overhead_ns": 50,
+      "allocator_ns_per_step": 415748.161,
+      "allocator_blocks_per_step": 296.0
+    },
+    "forward-quiet": {
+      "rounds": 32,
+      "round_mean_ms": 20.707009,
+      "row_sum_ms": 20.943151125,
+      "bench_median_ms": null,
+      "operator_calls": 3276,
+      "untimed_calls": 0,
+      "overhead_ns": 49,
+      "allocator_ns_per_step": 36643.71,
+      "allocator_blocks_per_step": 85.0
+    },
+    "tiny": {
+      "rounds": 32,
+      "round_mean_ms": 6.007462,
+      "row_sum_ms": 6.05993709375,
+      "bench_median_ms": null,
+      "operator_calls": 11340,
+      "untimed_calls": 0,
+      "overhead_ns": 49,
+      "allocator_ns_per_step": 135465.355,
+      "allocator_blocks_per_step": 277.0
+    }
+  },
+  "probe": {
+    "command": "sh test/tools/gemmprobe/run.sh --threads 1 --reps 7",
+    "shapes": {
+      "256x64x256": {
+        "cpu_ms": 0.0997,
+        "gflops": 84.12
+      },
+      "256x256x64": {
+        "cpu_ms": 0.1019,
+        "gflops": 82.35
+      },
+      "32x32x16": {
+        "cpu_ms": 0.0015,
+        "gflops": 21.96
+      },
+      "512x768x256": {
+        "cpu_ms": 2.0355,
+        "gflops": 98.91
+      },
+      "512x256x256": {
+        "cpu_ms": 0.6759,
+        "gflops": 99.29
+      },
+      "512x512x256": {
+        "cpu_ms": 1.3529,
+        "gflops": 99.21
+      },
+      "512x256x512": {
+        "cpu_ms": 1.3556,
+        "gflops": 99.01
+      },
+      "512x256x768tA": {
+        "cpu_ms": 2.0706,
+        "gflops": 97.23
+      },
+      "256x768x512tB": {
+        "cpu_ms": 2.1584,
+        "gflops": 93.27
+      },
+      "512x256x512tA": {
+        "cpu_ms": 1.3722,
+        "gflops": 97.82
+      },
+      "512x256x512tB": {
+        "cpu_ms": 1.377,
+        "gflops": 97.47
+      },
+      "512x256x256tA": {
+        "cpu_ms": 0.6865,
+        "gflops": 97.75
+      },
+      "256x256x512tB": {
+        "cpu_ms": 0.7115,
+        "gflops": 94.32
+      },
+      "512x256x256tB": {
+        "cpu_ms": 0.6909,
+        "gflops": 97.13
+      },
+      "256x256x512tA": {
+        "cpu_ms": 0.6896,
+        "gflops": 97.32
+      },
+      "256x512x512tA": {
+        "cpu_ms": 1.4037,
+        "gflops": 95.61
+      },
+      "512x512x256tB": {
+        "cpu_ms": 1.3851,
+        "gflops": 96.9
+      },
+      "512x256x32tB": {
+        "cpu_ms": 0.1262,
+        "gflops": 66.48
+      },
+      "256x32x512tA": {
+        "cpu_ms": 0.1275,
+        "gflops": 65.77
+      },
+      "512x32x256": {
+        "cpu_ms": 0.1172,
+        "gflops": 71.56
+      },
+      "32x16x32": {
+        "cpu_ms": 0.0014,
+        "gflops": 23.03
+      },
+      "1024x1024x1024": {
+        "cpu_ms": 22.0779,
+        "gflops": 97.27
+      }
+    },
+    "header": [
+      "clock tsc_ns_per_tick=0.313093 tsc_ghz=3.194 load=71.6",
+      "machine cpu=\"AMD EPYC 7343\" cores=16 threads=32 peak12_gflops=120.66 peak8_gflops=111.66 micro_ceiling_gflops=118.35 load=71.6 blas=loaded"
+    ]
+  },
+  "products": {
+    "512x256x256": {
+      "cpu_ms": 0.6759,
+      "gflops": 99.29,
+      "calls": 8
+    },
+    "512x256x256tB": {
+      "cpu_ms": 0.6909,
+      "gflops": 97.13,
+      "calls": 8
+    },
+    "256x256x512tA": {
+      "cpu_ms": 0.6896,
+      "gflops": 97.32,
+      "calls": 8
+    },
+    "512x256x512": {
+      "cpu_ms": 1.3556,
+      "gflops": 99.01,
+      "calls": 2
+    },
+    "512x256x512tB": {
+      "cpu_ms": 1.377,
+      "gflops": 97.47,
+      "calls": 2
+    },
+    "256x512x512tA": {
+      "cpu_ms": 1.4037,
+      "gflops": 95.61,
+      "calls": 2
+    },
+    "512x512x256": {
+      "cpu_ms": 1.3529,
+      "gflops": 99.21,
+      "calls": 2
+    },
+    "512x512x256tB": {
+      "cpu_ms": 1.3851,
+      "gflops": 96.9,
+      "calls": 2
+    },
+    "512x256x512tA": {
+      "cpu_ms": 1.3722,
+      "gflops": 97.82,
+      "calls": 2
+    },
+    "512x32x256": {
+      "cpu_ms": 0.1172,
+      "gflops": 71.56,
+      "calls": 1
+    },
+    "512x256x32tB": {
+      "cpu_ms": 0.1262,
+      "gflops": 66.48,
+      "calls": 1
+    },
+    "256x32x512tA": {
+      "cpu_ms": 0.1275,
+      "gflops": 65.77,
+      "calls": 1
+    },
+    "32x32x16": {
+      "cpu_ms": 0.0015,
+      "gflops": 21.96,
+      "micro_calls": {
+        "forward": 512,
+        "backward": 1024
+      }
+    },
+    "32x16x32": {
+      "cpu_ms": 0.0014,
+      "gflops": 23.03,
+      "micro_calls": {
+        "forward": 512,
+        "backward": 1024
+      }
+    }
+  },
+  "matmul_measured_ms": 37.769499999999994,
+  "rows_ns_per_step": {
+    "tensor:matmul": 23218165.09375,
+    "tensor:matmul_grad_rhs": 18518942.59375,
+    "tensor:matmul_grad_lhs": 17456637.1875,
+    "tensor:divide": 6349189.59375,
+    "tensor:multiply": 5951177.84375,
+    "tensor:sum_to": 4765364.4375,
+    "tensor:add": 4168038.5625,
+    "nn:adam": 2969948.6875,
+    "tensor:expand_axis": 2727877.9375,
+    "tensor:gelu_grad": 1768900.75,
+    ":tangent/scatter_add_arr": 1486706.5625,
+    "tensor:neg": 1394257.875,
+    "tensor:exp": 1390449.3125,
+    "tensor:gelu": 1286336.53125,
+    "tensor:permute": 1050179.25,
+    "tensor:permute_inverse": 808015.90625,
+    "tensor:sum": 619050.84375,
+    "tensor:mean_axis": 602542.40625,
+    "tensor:transpose": 581949.5625,
+    "tensor:sum_axis": 315192.15625,
+    ":tangent/zeros_arr": 157427.3125,
+    "tensor:log": 63318.8125,
+    "tensor:one_hot": 29401.8125,
+    "tensor:sqrt": 16311.0,
+    "tensor:reshape": 15230.4375,
+    "tensor:broadcast_like": 3203.0,
+    "time:now": 1582.28125,
+    "tensor:mean": 1200.96875,
+    "tensor:dim": 963.9375,
+    ":op/ltod": 918.1875,
+    ":op/neg_d": 621.4375,
+    "tensor:numel": 471.09375,
+    ":struct/len_arr": 435.25
+  },
+  "forward_fraction": {
+    "tensor:matmul": 1.0,
+    "tensor:matmul_grad_rhs": 0.0,
+    "tensor:matmul_grad_lhs": 0.0,
+    "tensor:divide": 0.3225806451612903,
+    "tensor:multiply": 0.20754716981132076,
+    "tensor:sum_to": 0.0,
+    "tensor:add": 0.38235294117647056,
+    "nn:adam": 0.0,
+    "tensor:expand_axis": 0.0,
+    "tensor:gelu_grad": 0.0,
+    ":tangent/scatter_add_arr": 0.0,
+    "tensor:neg": 0.0,
+    "tensor:exp": 1.0,
+    "tensor:gelu": 1.0,
+    "tensor:permute": 1.0,
+    "tensor:permute_inverse": 0.0,
+    "tensor:sum": 0.0,
+    "tensor:mean_axis": 1.0,
+    "tensor:transpose": 0.5,
+    "tensor:sum_axis": 1.0,
+    ":tangent/zeros_arr": 0.0,
+    "tensor:log": 1.0,
+    "tensor:one_hot": 1.0,
+    "tensor:sqrt": 1.0,
+    "tensor:reshape": 0.5555555555555556,
+    "tensor:broadcast_like": 0.0,
+    "time:now": 1.0,
+    "tensor:mean": 1.0,
+    "tensor:dim": 0.0,
+    ":op/ltod": 0.0,
+    ":op/neg_d": 0.5,
+    "tensor:numel": 0.0,
+    ":struct/len_arr": 0.0
+  },
+  "table": [
+    {
+      "row": "allocation (the allocator calls inside every row below)",
+      "ms": 0.3788546106213837,
+      "share": 0.005913828068236234,
+      "detail": "362.0 block payloads per step"
+    },
+    {
+      "row": "matmul, projections (per shape, probe CPU time)",
+      "ms": 33.315099999999994,
+      "share": 0.5200405853658535,
+      "detail": "39 calls per step"
+    },
+    {
+      "row": "matmul, attention products (per call at 32x32x16)",
+      "ms": 4.454400000000001,
+      "share": 0.06953209756097561,
+      "detail": "3072 micro products per step, 4 batched calls forward and 8 backward"
+    },
+    {
+      "row": "elementwise, forward: tensor:divide",
+      "ms": 1.3603988362938604,
+      "share": 0.021235494029952943,
+      "detail": ""
+    },
+    {
+      "row": "elementwise, backward: tensor:divide",
+      "ms": 2.856837556217107,
+      "share": 0.044594537462901186,
+      "detail": ""
+    },
+    {
+      "row": "elementwise, forward: tensor:multiply",
+      "ms": 0.821803596289725,
+      "share": 0.012828153698181074,
+      "detail": ""
+    },
+    {
+      "row": "elementwise, backward: tensor:multiply",
+      "ms": 3.137795549469859,
+      "share": 0.04898022321123682,
+      "detail": ""
+    },
+    {
+      "row": "reduction: tensor:sum_to",
+      "ms": 3.2036274749379574,
+      "share": 0.050007843511226654,
+      "detail": ""
+    },
+    {
+      "row": "elementwise, forward: tensor:add",
+      "ms": 1.059661992958951,
+      "share": 0.016541065255944603,
+      "detail": ""
+    },
+    {
+      "row": "elementwise, backward: tensor:add",
+      "ms": 1.7117616809336902,
+      "share": 0.026720182336525896,
+      "detail": ""
+    },
+    {
+      "row": "optimizer: nn:adam",
+      "ms": 1.9782075848511387,
+      "share": 0.03087933790987143,
+      "detail": ""
+    },
+    {
+      "row": "layout: tensor:expand_axis",
+      "ms": 1.8280180111242883,
+      "share": 0.028534915295598647,
+      "detail": ""
+    },
+    {
+      "row": "elementwise, backward: tensor:gelu_grad",
+      "ms": 1.1779366399112863,
+      "share": 0.01838730364739569,
+      "detail": ""
+    },
+    {
+      "row": "other: :tangent/scatter_add_arr",
+      "ms": 0.9884653638337799,
+      "share": 0.015429703240332174,
+      "detail": ""
+    },
+    {
+      "row": "elementwise, backward: tensor:neg",
+      "ms": 0.9324233059840931,
+      "share": 0.01455490038609316,
+      "detail": ""
+    },
+    {
+      "row": "elementwise, forward: tensor:exp",
+      "ms": 0.9291381277023512,
+      "share": 0.014503619554378164,
+      "detail": ""
+    },
+    {
+      "row": "elementwise, forward: tensor:gelu",
+      "ms": 0.8640664234600457,
+      "share": 0.013487866122303153,
+      "detail": ""
+    },
+    {
+      "row": "layout: tensor:permute",
+      "ms": 0.7005654315229993,
+      "share": 0.010935655516456574,
+      "detail": ""
+    },
+    {
+      "row": "layout: tensor:permute_inverse",
+      "ms": 0.5398036562833806,
+      "share": 0.008426203415155209,
+      "detail": ""
+    },
+    {
+      "row": "reduction: tensor:sum",
+      "ms": 0.4169672041634364,
+      "share": 0.006508756357673153,
+      "detail": ""
+    },
+    {
+      "row": "reduction: tensor:mean_axis",
+      "ms": 0.40189851288561534,
+      "share": 0.0062735377621169226,
+      "detail": ""
+    },
+    {
+      "row": "layout: tensor:transpose",
+      "ms": 0.38916858649160607,
+      "share": 0.006074826715966534,
+      "detail": ""
+    },
+    {
+      "row": "reduction: tensor:sum_axis",
+      "ms": 0.21078488972746715,
+      "share": 0.003290300717697048,
+      "detail": ""
+    },
+    {
+      "row": "other: :tangent/zeros_arr",
+      "ms": 0.10135754290665465,
+      "share": 0.0015821665234209505,
+      "detail": ""
+    },
+    {
+      "row": "elementwise, forward: tensor:log",
+      "ms": 0.042357761643263964,
+      "share": 0.0006611943280899741,
+      "detail": ""
+    },
+    {
+      "row": "layout: tensor:one_hot",
+      "ms": 0.019500414145081194,
+      "share": 0.00030439670860614546,
+      "detail": ""
+    },
+    {
+      "row": "elementwise, forward: tensor:sqrt",
+      "ms": 0.009536331073688894,
+      "share": 0.00014885980212587542,
+      "detail": ""
+    },
+    {
+      "row": "layout: tensor:reshape",
+      "ms": 0.009650057283884322,
+      "share": 0.000150635040528926,
+      "detail": ""
+    },
+    {
+      "row": "layout: tensor:broadcast_like",
+      "ms": 0.0019545416298958266,
+      "share": 3.050991812520315e-05,
+      "detail": ""
+    },
+    {
+      "row": "other: time:now",
+      "ms": 0.0010657596151814103,
+      "share": 1.663624765161226e-05,
+      "detail": ""
+    },
+    {
+      "row": "other: tensor:mean",
+      "ms": 0.0008089231878623976,
+      "share": 1.2627093664193524e-05,
+      "detail": ""
+    },
+    {
+      "row": "layout: tensor:dim",
+      "ms": 0.0006492686803050537,
+      "share": 1.013492574134718e-05,
+      "detail": ""
+    },
+    {
+      "row": "other: :op/ltod",
+      "ms": 0.0006184533607185076,
+      "share": 9.653906118532802e-06,
+      "detail": ""
+    },
+    {
+      "row": "other: :op/neg_d",
+      "ms": 0.0004185747577172501,
+      "share": 6.533849876561953e-06,
+      "detail": ""
+    },
+    {
+      "row": "layout: tensor:numel",
+      "ms": 0.0003173093871360528,
+      "share": 4.953122140660336e-06,
+      "detail": ""
+    },
+    {
+      "row": "other: :struct/len_arr",
+      "ms": 0.0002931665103834788,
+      "share": 4.576257723059181e-06,
+      "detail": ""
+    }
+  ],
+  "residual_ms": 0.21628686015421295,
+  "residual_share": 0.0033761851341145436,
+  "round_mean_ms": 95.110465,
+  "row_sum_ms": 97.720008625,
+  "rows_over_round": 1.027436976835304,
+  "forward_round_ms": 20.707009,
+  "forward_backward_round_ms": 104.242664,
+  "tiny": {
+    "round_mean_ms": 6.007462,
+    "row_sum_ms": 6.05993709375,
+    "step_cpu_ms": null
+  },
+  "machine": {
+    "host": "tangshan88",
+    "hardware_threads": 32,
+    "cpu": "AMD EPYC 7343 16-Core",
+    "isa": "AVX2 (no AVX-512)"
+  },
+  "like_for_like": {
+    "multiply": {
+      "shape": "512x512",
+      "elements": 262144,
+      "reps": 2000,
+      "camel": {
+        "ns_per_call": 98805.189,
+        "gbs": 31.837680104027733,
+        "samples_ms": [
+          229.637384,
+          235.090017,
+          197.610378,
+          230.7899,
+          200.708151
+        ]
+      },
+      "torch": {
+        "ns_per_call": 93221.1855,
+        "gbs": 33.74477575164499,
+        "samples_ms": [
+          201.869352,
+          197.082458,
+          218.168611,
+          186.442371,
+          220.426872
+        ]
+      },
+      "camel_over_torch": 1.0599005845082285
+    },
+    "divide": {
+      "shape": "512x256",
+      "elements": 131072,
+      "reps": 2000,
+      "camel": {
+        "ns_per_call": 214892.864,
+        "gbs": 7.319293766776731,
+        "samples_ms": [
+          464.92815,
+          431.912899,
+          462.222576,
+          435.939789,
+          429.785728
+        ]
+      },
+      "torch": {
+        "ns_per_call": 51037.133,
+        "gbs": 30.81803203953482,
+        "samples_ms": [
+          130.974296,
+          102.074266,
+          118.375098,
+          114.043527,
+          107.643144
+        ]
+      },
+      "camel_over_torch": 4.210519897346114
+    }
+  },
+  "matmul_profile_row_ms": 39.87047357043925,
+  "matmul_vs_profile_pct": -5.269497405711682,
+  "generated_at": "2026-10-23T03:22:13-0400",
+  "mode": "measure"
+}

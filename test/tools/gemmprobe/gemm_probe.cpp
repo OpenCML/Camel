@@ -540,6 +540,18 @@ int main(int argc, char **argv) {
         {512, 256, 512, false, true},
         {512, 256, 256, true, false},
         {256, 256, 512, false, true},
+        {512, 256, 256, false, true},
+        {256, 256, 512, true, false},
+        // The rest of the step's list, so that every product one step issues has its own measured
+        // rate: the gradient of `w1` along its short side, of `w2` along its long side, of the
+        // vocabulary projection (m = tokens, n = d_model, k = vocab), and the value product
+        // (p [32, 32] times v [32, 16] per batch and head).
+        {256, 512, 512, true, false},
+        {512, 512, 256, false, true},
+        {512, 256, 32, false, true},
+        {256, 32, 512, true, false},
+        {512, 32, 256},
+        {32, 16, 32},
         // The large reference: the same kernel where per-tile costs are amortised.
         {1024, 1024, 1024},
     };
