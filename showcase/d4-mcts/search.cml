@@ -1,0 +1,341 @@
+// D4 -- a Monte-Carlo tree search over tic-tac-toe.
+//
+// The search is the whole program: UCT selection, expansion of one move, a playout, and the
+// write-back that folds the playout's result into every node on the path it took.
+//
+//   * The tree is a recursive struct: `Node` holds a `Node[]`, so the search is a recursion and
+//     the tree is a value, like any other value in the language.
+//   * Its statistics grow in place through a path assignment (`children[i] = ...`), which is
+//     what an MCTS needs from a language whose values are immutable.
+//   * The value of a move is decided by search, not by a heuristic: the program reports the
+//     move it chose and what that move is worth in the units the search itself used, so a
+//     reader can check the answer the same way the tests do.
+//
+// Every number in the output is deterministic: the playouts draw their moves from a
+// counter-based generator seeded from the path through the tree, and moves are taken in a fixed
+// order, so the same three arguments give the same tree, the same best move and the same values
+// on every scheduler and every machine.  README.md has what a run costs and the positions the
+// tests pin.
+//
+// Run:
+//   camel showcase/d4-mcts/search.cml --arg seed=42 --arg playouts=20000 --arg position=.........
+//         std::nvm      (std::fvm, std::jit and std::prl run the same program)
+module d4_mcts
+
+// == imports ==
+import { count } from array
+import { log, sqrt } from math
+
+// == game ==
+// A position is the nine places -- empty 0, X 1, O 2 -- and the player to move.  Whose turn it
+// is follows from the two counts, so one string on the command line is a whole position.
+type State = { board: int[], to_move: int }
+
+// The eight lines that win, in a fixed order: `completing_move` takes the first one it finds, so
+// this order is part of every result the search reports.
+let LINES: int[][] = [
+    [0, 1, 2], [3, 4, 5], [6, 7, 8],
+    [0, 3, 6], [1, 4, 7], [2, 5, 8],
+    [0, 4, 8], [2, 4, 6]
+]
+
+// The player whose line is complete, or 0 when neither has one.
+func winner(board: int[]): int {
+    return loop found = 0 for line in LINES while found == 0 do {
+        let mark = board[line[0]]
+        if mark != 0 && mark == board[line[1]] && mark == board[line[2]] then mark else 0
+    }
+}
+
+// True when every place is taken.
+func full(board: int[]): bool {
+    return loop taken = true for mark in board while taken do mark != 0
+}
+
+// The empty places, in ascending order.  Expansion takes them in this order and a tie between
+// two children is broken by it, so the order is part of what the search reports.
+func empty_places(board: int[]): int[] {
+    return range(0, 9)->filter<(place: int): bool => board[place] == 0>
+}
+
+// The moves a node offers: the empty places, or none when the game is over -- a complete line or
+// a full board.  A node with no moves is a leaf whose result the search knows without playing.
+func moves_of(state: State): int[] {
+    let none: int[] = []
+    return if winner(state.board) != 0 || full(state.board) then none else empty_places(state.board)
+}
+
+// The position after `place` is taken by the player to move.  The write is a path assignment on
+// a local `var`, so it is `wait`ed: `next` is a new value, and `state` is unchanged.
+func apply_move(state: State, place: int): State {
+    var next = state
+    wait next.board[place] = state.to_move
+    wait next.to_move = 3 - state.to_move
+    return next
+}
+
+// The result of a finished game from `player`'s point of view: 1.0 for a win, 0.5 for a draw,
+// 0.0 for a loss.  Every value the search keeps is from the point of view of the player who
+// moves at the root, so a playout's result is added unchanged at every node on its path.
+func result_for(board: int[], player: int): float {
+    let mark = winner(board)
+    return if mark == player then 1.0 else if mark == 0 then 0.5 else 0.0
+}
+
+// == policy ==
+// The light policy both players follow inside a playout: take a win when there is one, block the
+// opponent's win when there is one, and otherwise play a place drawn from the generator.  The
+// first two rules are what make the pinned positions readable: a move that leaves the opponent
+// an immediate win is worth exactly 0, because every playout takes that win, and a move that
+// wins is worth exactly 1.
+//
+// The generator is counter-based: its next value follows from its value alone, so a subtree's
+// whole stream of playouts follows from the key the subtree carries and no node stores a
+// generator.  It is the example's own -- Lehmer's `x * 48271 mod 2^31 - 1` -- and not the
+// `random` module's, because the Python counterpart in baseline/ has to draw the same numbers
+// for the two searches to be compared playout by playout.  (A program that only needs its own
+// reproducible randomness uses `random::key`, `random::split` and `random::permutation`; the
+// seed this program is given must be positive and below 2^31.)
+func next_key(key: int): int {
+    return (key * 48271) % 2147483647
+}
+
+// The empty place that completes a line for `mark`, or -1 when there is none.
+func completing_move(board: int[], mark: int): int {
+    return loop found = -1 for line in LINES while found < 0 do {
+        let first = board[line[0]]
+        let second = board[line[1]]
+        let third = board[line[2]]
+        if first == mark && second == mark && third == 0 then line[2]
+        else if first == mark && third == mark && second == 0 then line[1]
+        else if second == mark && third == mark && first == 0 then line[0]
+        else -1
+    }
+}
+
+// One move of the light policy for the player to move.
+func policy_move(state: State, draw: int): int {
+    let win = completing_move(state.board, state.to_move)
+    let block = completing_move(state.board, 3 - state.to_move)
+    let places = empty_places(state.board)
+    return if win >= 0 then win else if block >= 0 then block else places[draw % len(places)]
+}
+
+// One playout from `state`: the game is played to its end with the light policy, and the result
+// is returned from `player`'s point of view.  Nothing here reads the tree, so a playout is a
+// pure function of the position, the key and the player.
+func playout(state: State, key: int, player: int): float {
+    let (final, last) = loop current = state, draw = key
+        while winner(current.board) == 0 && !full(current.board)
+        do {
+            let place = policy_move(current, draw)
+            (apply_move(current, place), next_key(draw))
+        }
+    return result_for(final.board, player)
+}
+
+// == tree ==
+// A search node.  `key` seeds every playout below it (a child's key comes from its parent's, so
+// a node's stream follows the path that reached it); `moves` is every move the position offers,
+// and `children` holds the moves already expanded, in the order of `moves`, so the child at
+// index i was made by moves[i].  `score` is the sum of the results of the playouts through this
+// node, from the root player's point of view, and `visits` counts them.
+type Node = {
+    key: int,
+    state: State,
+    place: int,
+    visits: int,
+    score: float,
+    moves: int[],
+    children: Node[]
+}
+
+// The exploration constant of UCT.  sqrt(2) is the textbook value for results in [0, 1]; it is a
+// named constant so the Python counterpart explores with the same number.
+let EXPLORATION: float = 1.4142135623730951
+
+// A node for `state`, reached by `place` from its parent; a child's key is derived from its
+// parent's, which is what makes a node's playouts a function of its path.  The empty array is
+// held in a typed local: writing `[]` in the field of a literal that also carries a named
+// struct (`state`) makes the literal's type `... children: void[]` instead of `Node` (see
+// README.md, "What went wrong").
+func open_node(state: State, place: int, key: int): Node {
+    let none: Node[] = []
+    return {
+        key: next_key(key),
+        state: state,
+        place: place,
+        visits: 0,
+        score: 0.0,
+        moves: moves_of(state),
+        children: none
+    }
+}
+
+// The same node with one more playout in its statistics.  Every node on a playout's path gets
+// the same result, because all values are from the same player's point of view.
+func record(node: Node, played: float): Node {
+    var counted = node
+    wait counted.visits = node.visits + 1
+    wait counted.score = node.score + played
+    return counted
+}
+
+// The same node with one more child.  `concat` makes a new array, so the value the caller held
+// is unchanged; the child is appended, so `children` stays in the order of `moves`.
+func grow(node: Node, child: Node): Node {
+    var grown = node
+    wait grown.children = concat(node.children, [child])
+    return grown
+}
+
+// The same node with one child replaced: the write-back after a recursion, written as the path
+// assignment an MCTS needs on a value that is otherwise immutable.
+func put_child(node: Node, index: int, child: Node): Node {
+    var updated = node
+    wait updated.children[index] = child
+    return updated
+}
+
+// == search ==
+// The score UCT gives child `index` of `node`: the mean result of that child seen from the
+// player who moves at `node` (hence the sign), plus the exploration term.  A child's `visits` is
+// never 0: expansion records the child's first playout in the round that creates it.
+func score_of(node: Node, index: int, player: int): float {
+    let child = node.children[index]
+    let sign = if node.state.to_move == player then 1.0 else -1.0
+    return sign * child.score / float(child.visits) +
+        EXPLORATION * sqrt(log(float(node.visits)) / float(child.visits))
+}
+
+// The child to descend into: the highest score, with ties going to the earliest child, so the
+// choice does not depend on anything but the tree.
+func best_child(node: Node, player: int): int {
+    let (best, examined) = loop best = 0, index = 1
+        while index < len(node.children)
+        do {
+            if score_of(node, index, player) > score_of(node, best, player) then (index, index + 1)
+            else (best, index + 1)
+        }
+    return best
+}
+
+// One playout below `node`: when the node still has an unexpanded move, the playout starts there
+// and the new child is opened, played out and recorded; otherwise it descends into the child UCT
+// likes, and the child's updated subtree is put back with a path assignment.  A node with no
+// moves is a finished game, and its own playout is the game's result.
+//
+// The three arms are one expression because a `return` inside an arm gives the arm's value and
+// does not leave the function (it is the warning `SemanticDiag::ExitInUnusedBranch`).
+func visit(node: Node, player: int): (Node, float) {
+    let exhausted = len(node.moves) == 0
+    return if exhausted then {
+        let done = result_for(node.state.board, player)
+        (record(node, done), done)
+    } else if len(node.children) < len(node.moves) then {
+        let place = node.moves[len(node.children)]
+        let child_state = apply_move(node.state, place)
+        let child = open_node(child_state, place, node.key)
+        let played = playout(child_state, child.key, player)
+        (record(grow(node, record(child, played)), played), played)
+    } else {
+        let chosen = best_child(node, player)
+        let (child, played) = visit(node.children[chosen], player)
+        (record(put_child(node, chosen, child), played), played)
+    }
+}
+
+// The whole search: `playouts` playouts from the root.  The root counts them like any other
+// node, so a search that examined nothing is visible in the output and in the exit code.
+func search(root: Node, playouts: int, player: int): Node {
+    let (tree, done) = loop tree = root, round = 0
+        while round < playouts
+        do {
+            let (grown, played) = visit(tree, player)
+            (grown, round + 1)
+        }
+    return tree
+}
+
+// The move to play: the child whose mean result is highest, ties going to the earliest move.
+// The mean is the number the search itself maximized at the root, so the move it reports and the
+// value it reports it with are the same decision seen twice.
+func best_move(node: Node): int {
+    let (chosen, examined) = loop chosen = 0, index = 1
+        while index < len(node.children)
+        do {
+            let here = node.children[index]
+            let best = node.children[chosen]
+            if here.score / float(here.visits) > best.score / float(best.visits) then
+                (index, index + 1)
+            else (chosen, index + 1)
+        }
+    return node.moves[chosen]
+}
+
+// The number of nodes in the tree, the root included: part of what the search reports, because
+// it says how much of the tree the playouts actually built.
+func node_count(node: Node): int {
+    return loop total = 1 for child in node.children do total + node_count(child)
+}
+
+// == entry ==
+// A position is written as nine characters: `.` for an empty place, `X` and `O` for the marks.
+func board_of(text: string): int[] {
+    return range(0, 9)->map<(place: int): int => mark_of(text[place])>
+}
+
+func mark_of(character: string): int {
+    return if character == '.' then 0 else if character == 'X' then 1 else 2
+}
+
+func main(seed: int, playouts: int, position: string): int sync {
+    let board = board_of(position)
+    let x_marks = board->count<(mark: int): bool => mark == 1>
+    let o_marks = board->count<(mark: int): bool => mark == 2>
+    let player = if x_marks == o_marks then 1 else 2
+    `d4 config seed=${seed} playouts=${playouts} position=${position} to_move=${player}`->println
+
+    // X moves first, so a position is reachable only when X has as many marks as O or one more.
+    if x_marks != o_marks && x_marks != o_marks + 1 then sync {
+        `d4 invalid position=${position}: X has ${x_marks} marks and O has ${o_marks}`->println
+        exit(1)
+    }
+
+    let state: State = { board: board, to_move: player }
+    // A position with a complete line is over: there is no move to search for.
+    if winner(board) != 0 then sync {
+        `d4 over position=${position}: ${if winner(board) == 1 then 'X' else 'O'} has won`->println
+        exit(1)
+    }
+    let none: Node[] = []
+    let root: Node = {
+        key: seed,
+        state: state,
+        place: -1,
+        visits: 0,
+        score: 0.0,
+        moves: moves_of(state),
+        children: none
+    }
+    let tree = search(root, playouts, player)
+
+    // The guard the search must not pass silently: a search that expanded nothing has no move to
+    // report, and saying so is more honest than reporting the first place.  `--arg playouts=0`
+    // reaches this line, and the tests pin it.
+    if len(tree.children) == 0 then sync {
+        `d4 no search position=${position} playouts=${playouts} root_visits=${tree.visits}`->println
+        exit(1)
+    }
+
+    `d4 search root_visits=${tree.visits} nodes=${node_count(tree)} children=${len(tree.children)} best=${best_move(tree)}`->println
+    let _ = loop index = 0
+        while index < len(tree.children)
+        do sync {
+            let child = tree.children[index]
+            let mean = child.score / float(child.visits)
+            `d4 child place=${child.place} visits=${child.visits} score=${child.score:.6f} mean=${mean:.6f}`->println
+            index + 1
+        }
+    return 0
+}
