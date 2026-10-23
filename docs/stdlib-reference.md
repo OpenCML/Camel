@@ -2026,14 +2026,26 @@ The name of the matrix-multiplication kernel the module dispatches to.
 gemm_threads: () => int
 ```
 
-The thread count the matrix multiplication had for its most recent call: 1 for a library
-call (a whole-work product or one batch chunk; the library runs one thread and owns no pool
-of its own), and the worker pool's width for a canonical call, 1 inside a region. The count is
-what one product got: `num_threads()` is what the run was given, and this is what one product
-spent.
+The thread count the matrix multiplication had for its most recent call: the tensor-pool
+chunks that split a whole-work library product, the worker pool's width for a canonical call,
+and 1 inside a region or for a library call inside a batch chunk. The count is what one
+product got: `num_threads()` is what the run was given, and this is what one product spent.
 
 - With effects: reads the size of the worker pool.
 - Example: `gemm_threads()`
+
+#### `gemm_library_threads`
+
+```camel
+gemm_library_threads: () => int
+```
+
+The library's own thread count for the most recent call: 1 when a library call ran (each chunk
+of a split product is one such call), 0 when the canonical kernel did. `gemm_threads()` is the
+pool that split the product; this is what each of its library calls got.
+
+- With effects: reads the thread count of the last library call.
+- Example: `gemm_library_threads()`
 
 #### `gemm_library`
 

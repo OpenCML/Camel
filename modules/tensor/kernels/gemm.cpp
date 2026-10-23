@@ -17,13 +17,16 @@
  * product does not pay a per-call library overhead it cannot repay.
  *
  * The thread count is the run's budget, and the tensor pool spends it. The
- * library's own pool is one thread for every call: a whole-work product is one
- * library call on one thread, and a product inside a batch loop that splits
- * over the pool is one thread because the pool already spends the budget. The
- * curve that decided this (the library uncapped loses to the canonical kernel
- * from four threads up, and one library thread beats it at -t 1) is in
+ * library's own pool is one thread for every call: a whole-work product splits
+ * its output rows over the tensor pool, one library thread per chunk, and a
+ * product inside a batch loop that splits over the pool is one library thread
+ * per batch chunk because the pool already spends the budget. Rows only, never
+ * K: every output element's accumulation stays inside one call. The curve that
+ * decided this (the library's own pool beside the tensor pool loses from four
+ * threads up, and one library thread beats the canonical kernel at -t 1) is in
  * docs/technical/25_tensor_stack_and_onnx_export.md, "The library GEMM's
- * thread budget"; `gemmThreadsUsed()` is what a program can observe.
+ * thread budget"; `gemmThreadsUsed()` and `gemmLibraryThreadsUsed()` are what a
+ * program can observe.
  */
 
 #include "gemm.h"
@@ -201,6 +204,14 @@ std::atomic<int> gGemmThreadsUsed{1};
 
 void noteGemmThreads(int threads) { gGemmThreadsUsed.store(std::max(threads, 1)); }
 
+/// The library's own thread count for the most recent call (gemm.h, `gemmLibraryThreadsUsed`):
+/// 1 when a library call ran, 0 when the canonical kernel did.
+std::atomic<int> gGemmLibraryThreadsUsed{1};
+
+void noteGemmLibraryThreads(int threads) {
+    gGemmLibraryThreadsUsed.store(std::max(threads, 0));
+}
+
 /**
  * The library GEMM's own pool: one thread, for the duration of one matmul and after it.
  *
@@ -210,8 +221,9 @@ void noteGemmThreads(int threads) { gGemmThreadsUsed.store(std::max(threads, 1))
  * `docs/technical/25_tensor_stack_and_onnx_export.md` has the uncapped library losing to the
  * canonical kernel from four threads up (H288), while one library thread beats the canonical
  * kernel at `-t 1` (3921 against 7260 ms on the 1024^3 cell). So the budget stays with the tensor
- * pool and the library runs one thread; a batched product gives the pool the budget and each
- * library call one thread, and a whole-work product is one library call on one thread.
+ * pool and the library runs one thread per call: a whole-work product splits its output rows over
+ * the pool (one library call per chunk), and a batched product gives the pool the budget and each
+ * library call one thread.
  *
  * The library's initial count is one before it loads as well: OpenBLAS creates its worker pool in
  * a constructor, at the machine's count, and a setting applied later leaves those threads alive
@@ -231,10 +243,11 @@ class LibraryThreads {
 void sgemm(
     bool transA, bool transB, int64_t M, int64_t N, int64_t K, float alpha, const float *A,
     int64_t lda, const float *B, int64_t ldb, float beta, float *C, int64_t ldc) {
-    // The canonical kernel splits its output tiles over the tensor pool, and runs serially inside a
-    // region. It reports the width of that split, not the library's one thread: the canonical path
-    // is the one that spends the pool.
+    // The canonical kernel splits its output tiles over the tensor pool, and runs serially inside
+    // a region. It reports the width of that split, not the library's one thread per call: the
+    // canonical path is the one that spends the pool.
     noteGemmThreads(insideParallelRegion() ? 1 : numThreads());
+    noteGemmLibraryThreads(0);
     builtinBackend().fn(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
 }
 
@@ -267,19 +280,16 @@ bool libraryPays(int64_t M, int64_t N, int64_t K) {
            static_cast<long double>(kLibraryMinProducts);
 }
 
-} // namespace
-
-void sgemmLibrary(
+/**
+ * One library call, with the library's own pool at one thread: the unit a row block hands to the
+ * library. `gemm_threads()` reports the tensor-pool chunks that split the product, not this call;
+ * `gemm_library_threads()` reports this one thread.
+ */
+void sgemmLibraryCall(
     bool transA, bool transB, int64_t M, int64_t N, int64_t K, float alpha, const float *A,
     int64_t lda, const float *B, int64_t ldb, float beta, float *C, int64_t ldc) {
 #if defined(CAMEL_TENSOR_USE_CBLAS)
-    if (!libraryPays(M, N, K)) {
-        // The canonical kernel, through `sgemm` so that `gemm_threads()` reports the pool it
-        // actually split over, rather than leaving the library's one thread beside a split.
-        sgemm(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
-        return;
-    }
-    noteGemmThreads(1);
+    noteGemmLibraryThreads(1);
     cblas_sgemm(
         CblasRowMajor,
         transA ? CblasTrans : CblasNoTrans,
@@ -295,6 +305,58 @@ void sgemmLibrary(
         beta,
         C,
         static_cast<int>(ldc));
+#else
+    // No library: the path is the canonical kernel, which reports itself as 0 library threads.
+    noteGemmLibraryThreads(0);
+    builtinBackend().fn(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
+#endif
+}
+
+} // namespace
+
+void sgemmLibrary(
+    bool transA, bool transB, int64_t M, int64_t N, int64_t K, float alpha, const float *A,
+    int64_t lda, const float *B, int64_t ldb, float beta, float *C, int64_t ldc) {
+#if defined(CAMEL_TENSOR_USE_CBLAS)
+    if (!libraryPays(M, N, K)) {
+        // The canonical kernel, through `sgemm` so that `gemm_threads()` reports the pool it
+        // actually split over, rather than leaving the library's one thread beside a split.
+        sgemm(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
+        return;
+    }
+    // A product that is the whole work splits its output rows over the tensor pool: the pool
+    // spends the run's budget, one library thread per chunk. Rows only, never K, so every output
+    // element's accumulation stays inside one call and the bits are the ones one library call
+    // would produce. Inside a batch chunk the caller is already in the pool region,
+    // `parallelWouldSplit` is false, and the call is the one thread the pool left it.
+    if (parallelWouldSplit(M, 1)) {
+        std::atomic<int> chunks{0};
+        parallelFor(M, 1, [&](int64_t begin, int64_t end) {
+            // A row block: with A transposed the rows of C are the columns of A, so the block
+            // starts one element in, not one leading dimension in. C's block always starts a
+            // leading dimension in. B does not depend on the row.
+            const int64_t aOffset = transA ? begin : begin * lda;
+            sgemmLibraryCall(
+                transA,
+                transB,
+                end - begin,
+                N,
+                K,
+                alpha,
+                A + aOffset,
+                lda,
+                B,
+                ldb,
+                beta,
+                C + begin * ldc,
+                ldc);
+            chunks.fetch_add(1, std::memory_order_relaxed);
+        });
+        noteGemmThreads(chunks.load(std::memory_order_relaxed));
+        return;
+    }
+    noteGemmThreads(1);
+    sgemmLibraryCall(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
 #else
     sgemm(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
 #endif
@@ -315,13 +377,16 @@ void setGemmThreads(int threads) {
     // take a share of it: one thread per library call, so the process has one pool, not two
     // (H303). The parameter is the caller's budget and is deliberately not applied to the library;
     // it stays in the signature because `setNumThreads` is the one caller and the declaration is
-    // the module's. What the library got is what `gemm_threads()` reports: one.
+    // the module's. The library's own count is 1; `gemm_threads()` reports the pool chunks that
+    // split a whole-work product, and `gemm_library_threads()` reports this one.
     (void)threads;
     applyLibraryThreads(1);
     noteGemmThreads(1);
 }
 
 int gemmThreadsUsed() { return gGemmThreadsUsed.load(); }
+
+int gemmLibraryThreadsUsed() { return gGemmLibraryThreadsUsed.load(); }
 
 Shape matmulShape(std::span<const int64_t> lhs, std::span<const int64_t> rhs) {
     return planMatmul(lhs, rhs).outShape;

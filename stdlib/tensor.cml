@@ -87,14 +87,20 @@ export func set_num_threads(n: i32): void
 /// @example gemm_backend()
 export func gemm_backend(): string
 
-/// The thread count the matrix multiplication had for its most recent call: 1 for a library
-/// call (a whole-work product or one batch chunk; the library runs one thread and owns no pool
-/// of its own), and the worker pool's width for a canonical call, 1 inside a region. The count is
-/// what one product got: `num_threads()` is what the run was given, and this is what one product
-/// spent.
+/// The thread count the matrix multiplication had for its most recent call: the tensor-pool
+/// chunks that split a whole-work library product, the worker pool's width for a canonical call,
+/// and 1 inside a region or for a library call inside a batch chunk. The count is what one
+/// product got: `num_threads()` is what the run was given, and this is what one product spent.
 /// @effect reads the size of the worker pool
 /// @example gemm_threads()
 export func gemm_threads(): int
+
+/// The library's own thread count for the most recent call: 1 when a library call ran (each chunk
+/// of a split product is one such call), 0 when the canonical kernel did. `gemm_threads()` is the
+/// pool that split the product; this is what each of its library calls got.
+/// @effect reads the thread count of the last library call
+/// @example gemm_library_threads()
+export func gemm_library_threads(): int
 
 /// The name of the matrix-multiplication kernel the library path calls: `cblas` in a build with a
 /// CBLAS, otherwise the canonical kernel's name, which is what the path forwards to.
