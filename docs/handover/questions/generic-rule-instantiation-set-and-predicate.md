@@ -121,20 +121,43 @@ The missing mechanism is how an instance's **graphs and condition function come 
 program the pass is running on**. `compileRule` reads the sides out of the runtime program
 (`rule.lhs()->program()`, `sourceOf` at `modules/rewrite/module.cpp:268-295`), and the pass runs
 after the program is encoded, so an instance built by `instantiateGeneric` afterwards has no graph
-the engine can read. Two ways out, and the choice is engineering, not semantics:
+the engine can read.
 
-1. **publish the instance graphs into the current program.** `RuntimeGraphDraftSession` already
-   encodes a graph of its own and tells the manager about it (`src/runtime/draft_session.cpp:983-995`,
-   `context_->noteUnboundRuntimeGraph`), but it does so for a *version of an id the program has*; a
-   brand-new graph needs an id and a bind. `Program::bind` is not the obstacle — it grows its table
-   to any id (`include/camel/runtime/program.h:214-229`) — the open part is who allocates an id
-   after the program is built and which encoder is still alive then: ids are handed out by the
-   graph manager while the builder encodes (`Context::runtimeGraphMgr_`, `context.cpp:985-993`), so
-   this is the first thing to prove.
-2. **hand the engine materialized patterns** — the front end reads the instance's GIR graphs and
-   builds the `Pattern` values (`include/camel/runtime/writings.h`) itself, so nothing is published
-   for the sides. The instance's `when` function still has to be callable at match time, so a
-   condition that keeps a value-level part (see §5) still needs (1).
+**Measured (2026-10-24), temporary probe in `engineRules` run through
+`test/plans/feat/modules/rules.plan.toml`, one line per process:**
+
+```
+PROOF session=1 reserved=1 fresh_id=51 side=1 bound=1 table=52 version=1
+```
+
+* `session=1` — `Context::graphBuildSession()` is still set while a pass runs, so `Builder::of(ctx)`
+  answers with the Builder of the program being compiled and does not make a second one.
+* `reserved=1` — `Context::reserveProgram()` is usable from the engine at pass time.
+* `fresh_id=51` — the context's `GraphIdAllocator` (`Context::graphIds()`, `context.h:119, 288`)
+  still hands out ids after the program is built, and one allocator serves every program of the
+  context.
+* `bound=1`, `table=52`, `version=1` — `Program::bind(id, graph)` puts a graph the engine holds
+  (the probe used a rule side's own graph) at that id, the table grows to hold it, and the program
+  reads it back there.
+
+So the first way is the one to build, and the encoder is not an obstacle: publication is the three
+lines the runtime already uses at pass time for an operator's definition graph —
+`context.reserveProgram()`, `encodeToRuntimeProgram(graph, *program, &context.graphIds())`,
+`context.pinRuntimeProgram(program)` (`src/runtime/definitions.cpp:331-333, 410-412`) — and
+`encodeToRuntimeProgram` is a public entry (`include/camel/compile/gir/encode.h:29`).
+
+What is missing is smaller than it looked: `Builder`, `GenericTemplate` and `instantiateGenericAs`
+live in `src/compile/gir/builder.h`, which no module can include — the public compile-side headers
+are `include/camel/compile/gir/{graph,nodes,encode,types,value_entity,…}.h`. The bridge is therefore
+one new public entry beside `encodeToRuntimeProgram` (the context, a template handle and the
+expected `FunctionType` in, the instance's compile graph out, `why` when it does not fit), with the
+handle carried by the `RuleObject` (the ruling's "the Rule value carries its template"). The engine
+needs no lookup of its own for it: the public module API exposes an `Entity` only as an opaque
+carrier (`include/camel/core/module/module.h:32, 61`), and the front end is the side that knows what
+a rule's template is.
+
+The second way stays an alternative for the *sides* only, and only if materialized patterns turn out
+to be cheaper; the condition's function needs the first whatever happens.
 
 ## 5. What `when` is, for a generic rule
 
@@ -176,9 +199,10 @@ against (one instance per type tuple, not one per match).
 
 ## 7. What this work does next, on the readings above
 
-(a) or (b) in §1; (i)+(ii) in §2; the speculative instantiation of §3; then, in order: the maker and
-the cache (§4), the per-instance engine rules, one merged law end to end with red-before/green-after
-and the cache read through `explain`/`why_not`, then the rest of the families with `pairs.mjs`
-re-pointed. The full step is not a single session's work: it touches the front end, the runtime
-boundary of §4, the module's engine loop, `check`/`explain`/`why_not` and the library at once, and
+(a) or (b) in §1; (i)+(ii) in §2; the speculative instantiation of §3 (done, commit `573502119`); the
+bridge of §4 (measured, above); then, in order: the maker and the cache, the per-instance engine
+rules, one merged law end to end with red-before/green-after and the cache read through
+`explain`/`why_not`, then the rest of the families with `pairs.mjs` re-pointed. The full step is not a
+single session's work: it touches the front end, the runtime boundary of §4, the module's engine loop,
+`check`/`explain`/`why_not` and the library at once, and
 the two decisions above are its prerequisites.
