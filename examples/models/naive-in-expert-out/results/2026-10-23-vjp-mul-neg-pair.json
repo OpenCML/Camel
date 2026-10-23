@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "what": "The autodiff divide VJP chain that the three-node `vjp_div_neg` group declines (a parameter numerator, so the divide's quotient is still read by the numerator's gradient) now runs its `multiply -> neg` tail as a second group, `tensor.fusion = \"vjp_mul_neg\"`: the tail reads the quotient the divide already stored, so the two tail operators become one pass and one buffer",
+  "generated_at": "2026-10-23T14:40:00+08:00",
+  "machine": {
+    "host": "88zjwei",
+    "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+    "cpu": "AMD EPYC 7343 16-Core Processor",
+    "cpus": 32,
+    "memory_bytes": 540891693056,
+    "threads": 1,
+    "thread_control": "camel -t 1 on the command line"
+  },
+  "git": {
+    "commit": "b43dd5c68e976e8d135a0e83e767a5bf42697878",
+    "branch": "handover/h299-mulneg-tail",
+    "dirty": true,
+    "dirty_paths": [
+      "M modules/tensor/attrs.h",
+      "M modules/tensor/fusion_group.cpp",
+      "M modules/tensor/fusion_group.h",
+      "M modules/tensor/module.cpp",
+      "M modules/tensor/ops/elementwise_ops.cpp",
+      "M test/cases/modules/tensor/fusion_group.cml",
+      "M test/plans/feat/modules/fusion_group.plan.toml",
+      "?? test/cases/modules/tensor/fusion_group_mul_neg.cml"
+    ]
+  },
+  "build": {
+    "after": {
+      "revision": "b43dd5c68",
+      "dirty": true,
+      "dirtyCount": 8,
+      "config": "Release",
+      "fingerprint": "22861ce83e2f"
+    },
+    "before": {
+      "revision": "b43dd5c68",
+      "dirty": false,
+      "note": "the same source tree without the change, built clean; copied to /tmp/h299-base-install so both installs stay runnable"
+    }
+  },
+  "method": {
+    "programs": {
+      "chain": "test/cases/perf/fusion_chain.cml --arg fused=0: the declined program alone (sum of a parameter tensor divided by a parameter vector)",
+      "step": "test/cases/perf/fusion_step.cml --arg fused=0 --arg lr=0.01: the same declined chain inside a training step"
+    },
+    "timing": "each process reports ms_per_step from inside its loop; the two installs are run alternately (the second-installed side runs first on odd pairs) so a drifting host falls on both sides of a pair",
+    "pairs": {
+      "change": 41,
+      "null_control": 21
+    },
+    "null_control": "two copies of the *before* install compared through the same loop: it measures what the host alone does to a pair of identical builds, and bounds every difference the change can claim",
+    "load_average": {
+      "start": {"1m": 91.76, "5m": 105.16, "15m": 104.3},
+      "end": {"1m": 86.71, "5m": 98.1, "15m": 101.75},
+      "note": "the host runs other tenants' work throughout; a separate 19-core job keeps the load above 50 and swings it by a factor of two between runs"
+    }
+  },
+  "deterministic_evidence": {
+    "operator_calls_per_step": {
+      "program": "chain, 1M elements, 50 steps, std::profile std::nvm",
+      "before": {"tensor:divide": 2, "tensor:multiply": 1, "tensor:neg": 1, "tensor:sum": 2, "tensor:broadcast_like": 1, "tensor:sum_to": 2},
+      "after": {"tensor:divide": 2, "tensor:multiply": 0, "tensor:neg": 0, "tensor:sum": 2, "tensor:broadcast_like": 1, "tensor:sum_to": 2},
+      "note": "the two tail operators are replaced by the group pass, which the node VM runs inside the neg node; the divide still runs, which is the point: the tail reads its stored value"
+    },
+    "operator_share_of_the_step_before": {
+      "multiply_plus_neg_ms": 1.44,
+      "step_ms": 8.45,
+      "share": 0.17,
+      "note": "upper bound of what a one-buffer-saving fusion can remove at 1M: the group still reads both operands and writes one buffer, so the saving is the intermediate buffer's traffic, not two passes of work"
+    },
+    "bytes": "test/plans/feat/modules/fusion_group.plan.toml pins gradient.w bytes equal between std::nvm (group runs) and std::fvm (no kernel: the two operators run) in the default mode and under std::opt safe_fp=true; the pair is one multiply rounding and one sign flip in the operators' order, so it takes no numeric licence"
+  },
+  "timing": {
+    "unit": "ms per step, one thread",
+    "size_131k": {
+      "chain": {
+        "steps": 100, "rows": 512, "d": 256, "elements": 131072,
+        "before": {"min": 0.452, "median": 0.917},
+        "after": {"min": 0.431, "median": 0.895},
+        "paired_median_delta": -0.024,
+        "paired_absolute_median_delta": 0.146,
+        "null_control": {"min": [0.428, 0.427], "median": [0.453, 0.438], "paired_median_delta": -0.001, "paired_absolute_median_delta": 0.027}
+      },
+      "step": {
+        "steps": 30, "rows": 512, "d": 256, "elements": 131072,
+        "before": {"min": 0.829, "median": 0.893},
+        "after": {"min": 0.836, "median": 0.910},
+        "paired_median_delta": 0.006,
+        "paired_absolute_median_delta": 0.064,
+        "null_control": {"min": [0.920, 0.915], "median": [1.848, 1.862], "paired_median_delta": -0.035, "paired_absolute_median_delta": 0.123}
+      }
+    },
+    "size_1m": {
+      "chain": {
+        "steps": 30, "rows": 1024, "d": 1024, "elements": 1048576,
+        "before": {"min": 3.855, "median": 7.626},
+        "after": {"min": 3.792, "median": 7.973},
+        "paired_median_delta": 0.349,
+        "paired_absolute_median_delta": 2.243,
+        "null_control": {"min": [4.587, 4.158], "median": [8.330, 10.041], "paired_median_delta": 0.262, "paired_absolute_median_delta": 2.501}
+      },
+      "step": {
+        "steps": 15, "rows": 1024, "d": 1024, "elements": 1048576,
+        "before": {"min": 12.527, "median": 28.613},
+        "after": {"min": 12.439, "median": 30.161},
+        "paired_median_delta": -0.470,
+        "paired_absolute_median_delta": 3.471,
+        "null_control": {"min": [13.632, 13.606], "median": [24.229, 22.592], "paired_median_delta": -2.566, "paired_absolute_median_delta": 5.772}
+      }
+    }
+  },
+  "conclusion": "The change removes two operator calls per declined step (multiply and neg) and the profile counts prove it, but this host at load 87-105 cannot resolve the time it saves: the smallest per-pair change (0.006 ms at 131k in the step) is far below the host's own spread, and a pair of identical builds moves by up to 2.5 ms at 1M. The one number that points the right way is the chain's minimum at 131k (0.452 -> 0.431 ms, -4.6%); every larger case is inside the noise, in both directions. A quiet host is needed to put a percentage on the one buffer the pass saves; the operator counts and the byte equality do not depend on the host and are pinned by the plan."
+}

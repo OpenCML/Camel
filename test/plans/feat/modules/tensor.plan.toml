@@ -562,6 +562,29 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "gemm_canonical.bits"
+desc = "The canonical GEMM's storage bits at the d=256 shapes, over the paths the band-major packing change touched: a column band reused by several row tiles, edge row tiles (M=300 leaves 12 rows), edge column panels (N=130 leaves 2 columns), and three K blocks through the carry buffer. The digests are the kernel's bits before that change; a rewriting that re-associates a chain changes them even when the error is small."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gemm_canonical_bits.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "gemm_bits small_n=b2c335601dc7bb25f88273a9e24ecb7471820acfa460ad6744c377000a84e5f9\ngemm_bits two_blocks=e3d818312909a3ebb51effabb9908973b87f00cf86b9c8d0b401528add6ec89d\ngemm_bits edges=f23f977bf60ef6d937c0d4c022a1dac87cfdaf637a2f5ebc7dcc7c197d469ca6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "gemm_canonical.bits.generic_unit"
+desc = "The same bit guard in the portable GEMM unit: the band-major packing is shared, so its bits must not move either."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gemm_canonical_bits.cml"
+args = ["${case}"]
+envs = ["CAMEL_TENSOR_ISA=generic"]
+expect_exit = 0
+expect_stdout_exact = "gemm_bits small_n=b2c335601dc7bb25f88273a9e24ecb7471820acfa460ad6744c377000a84e5f9\ngemm_bits two_blocks=e3d818312909a3ebb51effabb9908973b87f00cf86b9c8d0b401528add6ec89d\ngemm_bits edges=f23f977bf60ef6d937c0d4c022a1dac87cfdaf637a2f5ebc7dcc7c197d469ca6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "numeric_contract.generic_unit"
 desc = "The numeric-contract program in the portable kernel units: the same output as the default units."
 kind = "behavior"

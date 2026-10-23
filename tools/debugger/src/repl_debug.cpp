@@ -160,6 +160,10 @@ void printStop(const json &stop) {
     if (auto ex = stop.find("exception"); ex != stop.end()) {
         std::cout << ex->value("text", ex->value("message", std::string())) << std::endl;
     }
+    // A stop at a fusion group's tail: the group ran there, its members did not (2).
+    if (auto fusion = stop.find("fusion"); fusion != stop.end() && fusion->is_object()) {
+        std::cout << fusion->value("message", std::string()) << std::endl;
+    }
     // The lines the step went past that did not execute, and why (4.2).
     for (const json &line : stop.value("skipped", json::array())) {
         std::cout << "  " << line.value("text", std::string()) << std::endl;

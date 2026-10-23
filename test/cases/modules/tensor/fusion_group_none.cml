@@ -1,0 +1,42 @@
+/**
+ * A training step with no fusion group: the same shape as the fusion cases, without a division,
+ * so no node carries `tensor.fusion` and no backend can run a group.
+ *
+ * `std::profile` must report exactly what it reported before groups were reported: the same
+ * lines, no fusion line, no group row, and no fusion key in the JSON (the guard of the off path).
+ * The step is a loop of `steps` rounds, so the step numbers are exercised too.
+ */
+
+module fusion_group_none
+
+import { Tensor, sum, zeros } from tensor
+import { with_grad } from autodiff
+
+type Model = {
+    w: Tensor
+}
+
+with <m: Model>
+func loss(x: Tensor): float {
+    let scaled = x * m.w
+    return sum(scaled * scaled)
+}
+
+func main(steps: int): int sync {
+    let x = zeros([64]) + 0.25
+    let model: Model = {
+        w: zeros([64]) + 1.5
+    }
+    let grad = with_grad(loss)
+    let (trained, done) = loop m = model, step = 0
+        while step < steps
+        do {
+            let (value, gradient) = grad<m>(x)
+            let next = {
+                w: m.w - 0.1 * gradient.w
+            }
+            (next, step + 1)
+        }
+    'none steps={} w={} value={}'->format<done, sum(trained.w), sum(x)>->println
+    return 0
+}

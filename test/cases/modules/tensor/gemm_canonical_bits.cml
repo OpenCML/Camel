@@ -1,0 +1,31 @@
+/**
+ * The canonical GEMM's bits at the shapes the d=256 step issues, over the paths the band-major
+ * packing change of H296 touched: a column band reused by several row tiles, edge row tiles
+ * (M = 300 leaves a 12-row tile), edge column panels (N = 130 leaves a 2-column panel), and more
+ * than one K block (K = 600, three blocks through the carry buffer).
+ *
+ * Each product is reduced to the sha256 of its storage bits, so one changed bit anywhere in the
+ * product changes the printed digest. The digests below are the kernel's bits before the change;
+ * the plan pins them, so a later rewriting that re-associates a chain is visible even when the
+ * error is small. `gemm_canonical.cml` and `gemm_consistency.cml` remain the numeric cases.
+ */
+module gemm_canonical_bits
+
+import { random, seed, to_bytes } from tensor
+import { sha256 } from hash
+
+func main(): int sync {
+    seed(5)
+    let a1 = random([256, 256], -1.0, 1.0)
+    let b1 = random([256, 64], -1.0, 1.0)
+    'gemm_bits small_n={}'->format<sha256(to_bytes(a1 @ b1))>->println
+
+    let a2 = random([512, 256], -1.0, 1.0)
+    let b2 = random([256, 512], -1.0, 1.0)
+    'gemm_bits two_blocks={}'->format<sha256(to_bytes(a2 @ b2))>->println
+
+    let a3 = random([300, 600], -1.0, 1.0)
+    let b3 = random([600, 130], -1.0, 1.0)
+    'gemm_bits edges={}'->format<sha256(to_bytes(a3 @ b3))>->println
+    return 0
+}

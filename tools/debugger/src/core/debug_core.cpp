@@ -538,7 +538,9 @@ DebugCore::ShadowFrame &DebugCore::replaceTop(GCGraph *graph, Frame *frame) {
     return f;
 }
 
-void DebugCore::beforeNode(GCGraph *graph, Frame *frame, gc_node_ref_t node) {
+void DebugCore::beforeNode(
+    GCGraph *graph, Frame *frame, gc_node_ref_t node,
+    const camel::execute::FusionGroupSite *group) {
     // A pass may run graphs of its own for its work (`std::opt`'s rules library, the function of
     // a macro). The program being debugged runs only in a scheduling pass; indexing or keeping
     // a frame of that other execution would describe the session as that program and report
@@ -570,6 +572,7 @@ void DebugCore::beforeNode(GCGraph *graph, Frame *frame, gc_node_ref_t node) {
     } else {
         f.pendingNode = -1;
     }
+    arrival.group = group;
     arrive(f, arrival);
 }
 
@@ -770,6 +773,12 @@ void DebugCore::arrive(ShadowFrame &f, const Arrival &a) {
         f.activationLine = LinePosition{f.loc.file, f.loc.line, a.function};
     }
     if (!reason.empty()) {
+        // A node that runs a fusion group is the group's tail: the members before it were
+        // deferred and did not execute, so the stop says what the group stood for (2). The text
+        // is also printed to the debug console by the adapter, which reads `message`.
+        if (a.group != nullptr) {
+            details["fusion"] = fusionDetails(f, *a.group);
+        }
         if (auto ids = details.find("breakpointIds"); ids != details.end()) {
             for (const auto &id : *ids) {
                 hitBreakpoints_.insert(id.get<int>());
@@ -777,6 +786,33 @@ void DebugCore::arrive(ShadowFrame &f, const Arrival &a) {
         }
         stop(reason, std::move(details));
     }
+}
+
+json DebugCore::fusionDetails(
+    const ShadowFrame &f, const camel::execute::FusionGroupSite &site) {
+    json members = json::array();
+    json refs    = json::array();
+    std::string list;
+    for (const camel::runtime::gc_node_ref_t ref : site.members) {
+        std::string label = "?";
+        if (auto it = f.info->byRef.find(ref); it != f.info->byRef.end()) {
+            label = f.info->nodes[it->second].label;
+        }
+        if (!list.empty()) {
+            list += ", ";
+        }
+        list += label;
+        members.push_back(label);
+        refs.push_back(ref);
+    }
+    const std::string name(site.name);
+    return json{
+        {"name", name},
+        {"members", std::move(members)},
+        {"refs", std::move(refs)},
+        {"message",
+         "fusion group `" + name + "` runs here: it computes " + list +
+             " in one pass; those nodes do not execute separately."}};
 }
 
 void DebugCore::faultRaised(const camel::core::error::RuntimeFault &fault, bool isolated) {

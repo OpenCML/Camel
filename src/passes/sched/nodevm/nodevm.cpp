@@ -365,17 +365,15 @@ slot_t NodeVMSchedPass::call(
                 continue;
             }
 
-            // Debugger hook: live in release builds, one load of a pointer when no observer
-            // is installed. It fires after branch-skip resolution and before the node
-            // executes, so breakpoints and steps stop at the node that is about to run.
-            if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
-                observer->beforeNode(currRuntimeGraph, currFrame, nodeRef);
-            }
-
             // A fusion group a module registered (camel/execute/fusion_group.h): the members
             // before the group's tail are computed by the tail, so they are skipped, and the
             // tail runs the group in place of its operator. A node no kernel owns runs as the
             // program says: that is the fallback of a group a backend cannot run.
+            //
+            // A skipped member is not reported to the observer: it does not run, and a stop at a
+            // node that does not run would claim an execution the profile says never happened
+            // (docs/technical/35_debugger.md, 2). The tail is reported with the group, before
+            // its kernel runs, so a breakpoint or a step still stops where the work happens.
             if (n->kind == GCNodeKind::Oper &&
                 (currRuntimeGraph->nodeAttrs(nodeRef) != camel::core::attr::kNoAttrs ||
                  !groupDeferred.empty())) {
@@ -386,6 +384,7 @@ slot_t NodeVMSchedPass::call(
                     continue;
                 }
                 std::vector<gc_node_ref_t> groupMembers;
+                camel::execute::FusionGroupRef group;
                 const camel::execute::FusionGroupAction groupAction =
                     camel::execute::runFusionGroup(
                         *currRuntimeGraph,
@@ -393,15 +392,37 @@ slot_t NodeVMSchedPass::call(
                         *currPlan,
                         nodeRef,
                         groupDeferred,
-                        groupMembers);
+                        groupMembers,
+                        group);
                 if (groupAction == camel::execute::FusionGroupAction::Deferred) {
                     groupDeferred.insert(
                         groupDeferred.end(), groupMembers.begin(), groupMembers.end());
                     continue;
                 }
                 if (groupAction == camel::execute::FusionGroupAction::Ran) {
+                    // The tail is the node the group ran at; the members the kernel reported
+                    // precede it in execution order.
+                    groupMembers.push_back(nodeRef);
+                    const camel::execute::FusionGroupSite site{group.name, groupMembers};
+                    if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+                        observer->beforeNode(currRuntimeGraph, currFrame, nodeRef, &site);
+                    }
+                    // The group's members are done for this round; a later round defers them
+                    // again from the head.
+                    for (const gc_node_ref_t member : groupMembers) {
+                        if (member != nodeRef) {
+                            std::erase(groupDeferred, member);
+                        }
+                    }
                     goto node_done;
                 }
+            }
+
+            // Debugger hook: live in release builds, one load of a pointer when no observer
+            // is installed. It fires after branch-skip resolution and before the node
+            // executes, so breakpoints and steps stop at the node that is about to run.
+            if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+                observer->beforeNode(currRuntimeGraph, currFrame, nodeRef);
             }
 
             EXEC_WHEN_DEBUG({

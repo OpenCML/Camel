@@ -1062,7 +1062,6 @@ kind = "behavior"
 case = "../../../cases/modules/nn/svm.cml"
 args = ["${case}"]
 expect_exit = 0
-failure_note = "The SVM helper path still has a neural-network runtime regression."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 

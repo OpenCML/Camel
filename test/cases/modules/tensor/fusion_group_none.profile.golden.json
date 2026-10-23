@@ -1,0 +1,188 @@
+{
+ "allocations": {
+  "blocks": 0,
+  "bytes": 0,
+  "calls": 115,
+  "inside_blocks": 0,
+  "inside_bytes": 0,
+  "inside_calls": 101,
+  "inside_ns": 0,
+  "ns": 0
+ },
+ "backend": "std::nvm",
+ "device": "cpu",
+ "device_work": {
+  "compile_ns": 0,
+  "compiles": 0,
+  "kernel_ns": 0,
+  "kernels": 0,
+  "syncs": 0,
+  "to_device_bytes": 0,
+  "to_host_bytes": 0,
+  "transfers": 0
+ },
+ "hints": [
+  {
+   "elementwise": false,
+   "graph": "main",
+   "operators": "tensor:multiply, tensor:subtract, :op/add_l",
+   "origin": 604,
+   "reason": "no device region covers this loop, and its body could not be one kernel even then: the body calls a function. It runs in the host interpreter.",
+   "tensor": false
+  }
+ ],
+ "loops": [
+  {
+   "operators_per_round": 15.0,
+   "origin": 604,
+   "rounds": 3,
+   "samples": 2
+  }
+ ],
+ "operator_rows": [
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 0,
+   "alloc_ns": 0,
+   "calls": 1,
+   "device": "cpu",
+   "ns": 0,
+   "uri": ":io/println"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 0,
+   "alloc_ns": 0,
+   "calls": 3,
+   "device": "cpu",
+   "ns": 0,
+   "uri": ":op/add_l"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 0,
+   "alloc_ns": 0,
+   "calls": 4,
+   "device": "cpu",
+   "ns": 0,
+   "uri": ":op/lt_l"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 1,
+   "alloc_ns": 0,
+   "calls": 1,
+   "device": "cpu",
+   "ns": 0,
+   "uri": ":str/format"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 7,
+   "alloc_ns": 0,
+   "calls": 1,
+   "device": "cpu",
+   "ns": 0,
+   "uri": "autodiff:with_grad"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 15,
+   "alloc_ns": 0,
+   "calls": 5,
+   "device": "cpu",
+   "ns": 0,
+   "uri": "tensor:add"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 9,
+   "alloc_ns": 0,
+   "calls": 3,
+   "device": "cpu",
+   "ns": 0,
+   "uri": "tensor:broadcast_like"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 54,
+   "alloc_ns": 0,
+   "calls": 18,
+   "device": "cpu",
+   "ns": 0,
+   "uri": "tensor:multiply"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 9,
+   "alloc_ns": 0,
+   "calls": 3,
+   "device": "cpu",
+   "ns": 0,
+   "uri": "tensor:subtract"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 0,
+   "alloc_ns": 0,
+   "calls": 5,
+   "device": "cpu",
+   "ns": 0,
+   "uri": "tensor:sum"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 0,
+   "alloc_ns": 0,
+   "calls": 9,
+   "device": "cpu",
+   "ns": 0,
+   "uri": "tensor:sum_to"
+  },
+  {
+   "alloc_blocks": 0,
+   "alloc_bytes": 0,
+   "alloc_calls": 6,
+   "alloc_ns": 0,
+   "calls": 2,
+   "device": "cpu",
+   "ns": 0,
+   "uri": "tensor:zeros"
+  }
+ ],
+ "operators": {
+  "calls": 55,
+  "ns": 0,
+  "overhead_ns": 0,
+  "untimed": 0
+ },
+ "run_ns": 0,
+ "schema": 1,
+ "step": {
+  "allocations_per_round": {
+   "blocks": 0.0,
+   "bytes": 0.0,
+   "calls": 27.0,
+   "ns": 0
+  },
+  "kernels_per_round": 0.0,
+  "operators_per_round": 15.0,
+  "origin": 604,
+  "rounds": 3,
+  "samples": 2,
+  "syncs_per_round": 0.0,
+  "transfers_per_round": 0.0,
+  "wall_per_round_ns": 0
+ }
+}

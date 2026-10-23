@@ -40,7 +40,21 @@ When adding a new feature or test case, manually run the case from the command l
   a change").
 
 The runner prints one line per test and, at the end, `[SUMMARY]` counts and the wall time with
-the job count and layer.
+the job count and layer, then the gate's split:
+
+```
+[SPLIT] build 370.0 s, test 193.3 s, total 563.3 s
+```
+
+`build` is the build's own clock, passed by the remote gate helper as
+`CAMEL_GATE_BUILD_SECONDS`; a run that built nothing (`-NoBuild`, or a local plan run) prints
+`build 0.0 s`. `test` is the runner's wall time, and `total` is their sum. The format and the
+arithmetic are pinned by `test/tools/selftest/run.mjs`.
+
+`scripts/gate-time-check.mjs` measures the build side on the gate host: an unchanged tree must
+be a no-op (`ninja -n` builds nothing), touching one header must rebuild exactly the objects that
+include it (the expected set comes from `ninja -t deps`, and the count is printed), and
+`scripts/build-info.js check` must accept the install, which is the precondition of `-NoBuild`.
 
 `node test/tools/selftest/run.mjs` checks the runner itself: the back-end matrix, the per-test
 scratch directories and the run root, parallel versus serial output, the tier filter and the
