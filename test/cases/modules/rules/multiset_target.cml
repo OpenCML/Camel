@@ -13,7 +13,10 @@ func zero_left(a: int, b: int): int { return (a + b) + 0 }
 func zero_right(a: int, b: int): int { return a + (b + 0) }
 
 /// `(1 + a) + 2`, `1 + (a + 2)` and `1 + (2 + a)`: the folded sum `a + 3` however the two
-/// constants and the variable were written.
+/// constants and the variable were written. All three are reached by exchanging operands (the
+/// variable is next to a constant in every one of them, and a sum is commutative), so this shape
+/// does not need the association read; the added constant has to be written after the variable for
+/// that (`fold_three`).
 func fold_left(a: int): int { return (1 + a) + 2 }
 func fold_right(a: int): int { return 1 + (a + 2) }
 func fold_three(a: int): int { return 1 + (2 + a) }

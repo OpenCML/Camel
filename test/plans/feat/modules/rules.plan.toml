@@ -168,7 +168,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.multiset_reads_a_sum_in_any_brackets"
-desc = "The matcher reads a chain of one operator as the multiset of its terms (rewrite design 6): `x + 0` finds the zero of `a + (b + 0)` and leaves `a + b` behind, the shape no pattern in the written order finds, and `(a + b) + 0` is read the same way. The counts before and after say which additions went, the rewrites say the law fired once per shape, and the program prints the values it printed before."
+desc = "The matcher reads a chain of one operator as the multiset of its terms (rewrite design 6): `x + 0` finds the zero of `a + (b + 0)` and leaves `a + b` behind, and `(a + b) + 0` loses its zero too, so both bracketings of the sum reach the same result with one rewrite each. The counts before and after say which additions went, the rewrites say the law fired once per shape, and the program prints the values it printed before. (A neutral term always has a node to pair with, so this guard pins the outcome, not the association read; the two guards below are the ones that need it.)"
 kind = "behavior"
 case = "../../../cases/modules/rules/multiset_target.cml"
 args = ["${case}", "multiset_counts::report_zero", "multiset_counts::multiset", "multiset_counts::report_zero", "std::nvm"]
@@ -178,7 +178,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.multiset_folds_constants_written_apart"
-desc = "The same read for a law over two constants: `(x + c1) + c2` folds the sum written with the constants apart and with the variable between them, since the terms of the chain are the multiset and their order and bracketing are the matcher's business, not the law's."
+desc = "The same read for a law over two constants: `(x + c1) + c2` folds the sum written with the constants apart from the variable and with the variable between them, since the order of a commutative sum is the matcher's business, not the law's. A three-term sum of one variable and two constants is reachable by exchanging operands alone (the variable is always next to a constant), so this guard pins the outcome of all three writings, and the guard that carries the rest of a sum is the one that needs the association read."
 kind = "behavior"
 case = "../../../cases/modules/rules/multiset_target.cml"
 args = ["${case}", "multiset_counts::report_fold", "multiset_counts::multiset", "multiset_counts::report_fold", "std::nvm"]
