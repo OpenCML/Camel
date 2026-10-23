@@ -21,7 +21,7 @@ TypeCode DeviceType::typeCode() {
 DeviceType::DeviceType(Type *host)
     : OtherType(typeCode(), 1, copyParams(std::span<Type *const>(&host, 1))) {}
 DeviceType *DeviceType::get(Type *host) {
-    if (!tensor::asTensorType(host) && host->code() != TypeCode::Float64 &&
+    if (!tensor::isTensorType(host) && host->code() != TypeCode::Float64 &&
         host->code() != TypeCode::TypeVar)
         throw std::runtime_error("Device requires a tensor or float type");
     static std::mutex mutex;
@@ -70,7 +70,7 @@ Type *distributeDevice(Type *host, const std::string &path, std::string &error) 
     return core::type::tree::mapLeaves(
         host,
         [&](const std::string &leafPath, Type *leaf) -> Type * {
-            if (tensor::asTensorType(leaf) || leaf->code() == TypeCode::Float64 ||
+            if (tensor::isTensorType(leaf) || leaf->code() == TypeCode::Float64 ||
                 leaf->code() == TypeCode::TypeVar)
                 return DeviceType::get(leaf);
             error = "Device leaf '" + core::type::tree::displayPath(leafPath) +

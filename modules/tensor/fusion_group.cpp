@@ -81,7 +81,7 @@ bool numericOperand(const type::Type *t) {
     if (t == nullptr) {
         return false;
     }
-    if (asTensorType(t) != nullptr) {
+    if (isTensorType(t)) {
         return true;
     }
     switch (t->code()) {
@@ -148,7 +148,7 @@ bool chainAtHead(
 
 k::Operand operandOf(const FusionGroupView &view, gc_node_ref_t node, k::ScalarOperand &store) {
     type::Type *t = view.typeOf(node);
-    if (asTensorType(t) != nullptr) {
+    if (isTensorType(t)) {
         auto *array = camel::core::rtdata::fromSlot<Array *>(view.valueOf(node));
         if (array == nullptr) {
             ops::reportKernelError("tensor.fusion vjp_div_neg", "a tensor operand is null");
@@ -224,9 +224,9 @@ Array *runChain(
     // One pass over the tail's buffer: the operators' three roundings, in the operators' order,
     // with one buffer written and the two intermediates never stored. The denominator may be one
     // right-aligned block repeated (a per-channel scale), which this kernel tiles.
-    if (asTensorType(view.typeOf(headInputs[0])) != nullptr &&
-        asTensorType(view.typeOf(headInputs[1])) != nullptr &&
-        asTensorType(view.typeOf(midInputs[1])) != nullptr) {
+    if (isTensorType(view.typeOf(headInputs[0])) &&
+        isTensorType(view.typeOf(headInputs[1])) &&
+        isTensorType(view.typeOf(midInputs[1]))) {
         const auto *a = static_cast<const Array *>(dy.data);
         const auto *b = static_cast<const Array *>(rhs.data);
         const auto *c = static_cast<const Array *>(y.data);
@@ -289,8 +289,8 @@ Array *runPair(const FusionGroupView &view, gc_node_ref_t middle) {
     k::ScalarOperand lhsStore, yStore;
     const k::Operand lhs = operandOf(view, midInputs[0], lhsStore);
     const k::Operand y   = operandOf(view, midInputs[1], yStore);
-    if (asTensorType(view.typeOf(midInputs[0])) != nullptr &&
-        asTensorType(view.typeOf(midInputs[1])) != nullptr) {
+    if (isTensorType(view.typeOf(midInputs[0])) &&
+        isTensorType(view.typeOf(midInputs[1]))) {
         const auto *a = static_cast<const Array *>(lhs.data);
         const auto *b = static_cast<const Array *>(y.data);
         const type::TypeCode dtype = a->dtype();
@@ -327,8 +327,8 @@ bool pairAtMiddle(const FusionGroupView &view, gc_node_ref_t middle, gc_node_ref
     if (view.operOf(head) != ops.divide || view.memberOf(head)) {
         return false;
     }
-    if (asTensorType(view.typeOf(head)) == nullptr ||
-        asTensorType(view.typeOf(inputs[1])) == nullptr) {
+    if (!isTensorType(view.typeOf(head)) ||
+        !isTensorType(view.typeOf(inputs[1]))) {
         return false;
     }
     const auto users = view.usersOf(middle);

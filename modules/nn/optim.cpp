@@ -172,7 +172,7 @@ void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const L
 
 // ---------------------------------------------------------------- leaves
 
-bool isTensorLeaf(Type *type) { return camel::tensor::asTensorType(type) != nullptr; }
+bool isTensorLeaf(Type *type) { return camel::tensor::isTensorType(type); }
 
 /// The element type of a tensor leaf: the one its type states. A leaf whose type states no element
 /// type is f32 -- the rule the Camel `optim` module states for the same spelling (its `case _`

@@ -464,7 +464,7 @@ std::vector<ExprId> dimsOverTarget(
 std::optional<IndexedInstance> reshapeIndexing(const InferContext &ctx) {
     const auto in     = shapeOf(ctx, 0);
     const auto target = ctx.constInts(1);
-    if (!in || !fullyKnown(*in) || !target || !asTensorType(ctx.type(0))) {
+    if (!in || !fullyKnown(*in) || !target || !isTensorType(ctx.type(0))) {
         return std::nullopt;
     }
     StaticShape out;

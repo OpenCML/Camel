@@ -193,4 +193,14 @@ class ArrayType : public CompositeType {
     const std::string *packName_; // interned, nullptr for an anonymous pack or no pack
 };
 
+/// The array type of `type`, or nullptr when `type` is not an array. The counterpart of the
+/// per-composite `as...Type` casts, for the code that used to ask a module whether a value was
+/// its own kind of type (plan section 5.3).
+const ArrayType *asArrayType(const Type *type);
+
+/// True for an array whose element is a numeric scalar, or is not fixed yet but is known to be
+/// one (the numeric-unknown array, `Tensor`): the arrays a tensor operator takes. A nested array
+/// (`f32[][]`) is an array of arrays, not one numeric array, and is not one of these.
+bool isNumericArrayType(const Type *type);
+
 } // namespace camel::core::type

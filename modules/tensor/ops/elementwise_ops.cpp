@@ -65,7 +65,7 @@ template <k::UnaryOp Op> slot_t unaryKernel(ArgsView &, ArgsView &norm, context:
 }
 
 bool isTensorArg(const InferContext &ctx, size_t index) {
-    return asTensorType(ctx.type(index)) != nullptr;
+    return isTensorType(ctx.type(index));
 }
 
 /// The element type a binary operator's two operands are computed in, mirroring

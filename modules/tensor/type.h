@@ -114,4 +114,42 @@ class TensorType : public type::OtherType {
 /// The TensorType of `type`, or nullptr when `type` is not a tensor.
 const TensorType *asTensorType(const type::Type *type);
 
+/*
+ * What a tensor is, while `Tensor` becomes an alias of the native array type (plan section 5):
+ * a rank >= 1 tensor is an `ArrayType` whose element is a numeric scalar, and only the rank-0
+ * tensor (a scalar tensor) is still a `TensorType`. Everything that asks "is this a tensor?" or
+ * "what is known about it?" asks these two instead of naming a representation, so the module
+ * reads one kind of answer through the change.
+ */
+
+/// What is statically known about a tensor-valued argument: the element type when one is fixed,
+/// and the shape when the rank is (an extent that is not known is `kUnknownDim`).
+struct TensorFacts {
+    std::optional<type::TypeCode> dtype;
+    std::optional<StaticShape> shape;
+
+    /// True when the rank and every extent are known (what `TensorType::isStaticShape` answers).
+    bool isStaticShape() const {
+        if (!shape) {
+            return false;
+        }
+        for (int64_t extent : *shape) {
+            if (extent == kUnknownDim) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+/// True for an array whose element is a numeric scalar (or is not fixed yet, `Tensor`), and for
+/// the rank-0 `TensorType`. A nested array (`f32[][]`) is not one of these: it is an array of
+/// arrays, the shape a tensor-like parameter also accepts.
+bool isTensorType(const type::Type *type);
+
+/// The facts of `type` as an operator sees them (ops/op_def.cpp#InferContext::facts): a tensor,
+/// a nested numeric array (its nesting depth is the rank, its extents are not known), or a
+/// numeric scalar (rank 0). A type this module does not take gives the empty facts.
+TensorFacts tensorFactsOf(const type::Type *type);
+
 } // namespace camel::tensor

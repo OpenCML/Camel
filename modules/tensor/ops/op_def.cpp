@@ -8,37 +8,12 @@
 #include "op_def.h"
 
 #include "../dtype.h"
-#include "camel/core/type/composite/array.h"
 
 namespace camel::tensor::ops {
 
 using namespace camel::core::type;
 
-TensorFacts InferContext::facts(size_t index) const {
-    Type *argType = types_[index];
-    if (const TensorType *tensor = asTensorType(argType)) {
-        return {tensor->dtype(), tensor->shape()};
-    }
-    if (argType->code() == TypeCode::Array) {
-        // Nested arrays: the innermost element type decides the dtype.
-        Type *elem  = static_cast<ArrayType *>(argType)->elemType();
-        size_t rank = 1;
-        while (elem->code() == TypeCode::Array) {
-            elem = static_cast<ArrayType *>(elem)->elemType();
-            ++rank;
-        }
-        TensorFacts facts;
-        if (isSupportedTensorScalar(elem->code())) {
-            facts.dtype = elem->code();
-        }
-        facts.shape = StaticShape(rank, kUnknownDim);
-        return facts;
-    }
-    if (isSupportedTensorScalar(argType->code())) {
-        return {argType->code(), StaticShape{}};
-    }
-    return {};
-}
+TensorFacts InferContext::facts(size_t index) const { return tensorFactsOf(types_[index]); }
 
 const ConstArg *InferContext::constant(size_t index) const {
     if (index >= constants_.size() || !constants_[index]) {

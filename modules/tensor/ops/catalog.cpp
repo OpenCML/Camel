@@ -94,13 +94,13 @@ void registerTensorOps() {
         camel::runtime::fact::registerShapeReader(
             [](const camel::core::type::Type *type)
                 -> std::optional<camel::runtime::fact::TensorShape> {
-                const TensorType *tensor = asTensorType(type);
-                if (tensor == nullptr) {
+                if (!isTensorType(type)) {
                     return std::nullopt;
                 }
+                const TensorFacts facts = tensorFactsOf(type);
                 return camel::runtime::fact::TensorShape{
-                    .dtype = tensor->dtype(),
-                    .dims  = tensor->shape()};
+                    .dtype = facts.dtype,
+                    .dims  = facts.shape};
             });
     });
 }

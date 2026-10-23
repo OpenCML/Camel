@@ -1112,9 +1112,9 @@ void runOperator(
         StaticShape outShape;
         if (kernelResult) {
             outShape = kernelResult->shape;
-        } else if (const auto *tt = resultType ? asTensorType(resultType) : nullptr;
-                   tt && tt->isStaticShape()) {
-            outShape = *tt->shape();
+        } else if (const TensorFacts facts = tensorFactsOf(resultType);
+                   isTensorType(resultType) && facts.isStaticShape()) {
+            outShape = *facts.shape;
         } else if (!resultType || resultType->code() != TypeCode::Float64) {
             mismatch(c, "the kernel faults, the declaration gives an instance");
             continue;

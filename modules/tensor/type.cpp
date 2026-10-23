@@ -12,6 +12,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/utils/assert.h"
 #include "dtype.h"
 #include "tensor.h"
@@ -409,6 +410,63 @@ const TensorType *asTensorType(const Type *type) {
         return nullptr;
     }
     return static_cast<const TensorType *>(type);
+}
+
+bool isTensorType(const Type *type) {
+    if (asTensorType(type) != nullptr) {
+        return true;
+    }
+    // While the alias is being introduced, the only array a tensor can be is the numeric-unknown
+    // array it hands out (`Tensor`, `Tensor<f32>`, `Tensor<f32, [3]>`): an array a program writes
+    // (`f32[]`, `f32[2, 3]`) is still an array. The flip replaces this line with
+    // `isNumericArrayType(type)`.
+    const ArrayType *array = asArrayType(type);
+    return array != nullptr && array->isNumericUnknown();
+}
+
+TensorFacts tensorFactsOf(const Type *type) {
+    if (type == nullptr) {
+        return {};
+    }
+    if (const TensorType *tensor = asTensorType(type)) {
+        return {tensor->dtype(), tensor->shape()};
+    }
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr) {
+        if (isSupportedTensorScalar(type->code())) {
+            // A scalar argument: rank 0, the element type it has.
+            return {type->code(), StaticShape{}};
+        }
+        return {};
+    }
+    if (array->isNumericUnknown()) {
+        // `Tensor`: no element type is fixed. A shape argument fixes the rank and its extents;
+        // a bare `Tensor` fixes neither.
+        TensorFacts facts;
+        if (!array->anyRank()) {
+            StaticShape shape;
+            shape.reserve(array->rank());
+            for (const ExtentForm &form : array->extents()) {
+                shape.push_back(form.isConstant() ? form.constant() : kUnknownDim);
+            }
+            facts.shape = std::move(shape);
+        }
+        return facts;
+    }
+    // A nested array (`f32[][]`): the innermost element type decides the dtype, the nesting depth
+    // is the rank, and the extents of a written-out literal are not known.
+    Type *elem = array->elemType();
+    size_t depth = 1;
+    while (elem->code() == TypeCode::Array) {
+        elem = static_cast<ArrayType *>(elem)->elemType();
+        ++depth;
+    }
+    TensorFacts facts;
+    if (isSupportedTensorScalar(elem->code())) {
+        facts.dtype = elem->code();
+    }
+    facts.shape = StaticShape(depth, kUnknownDim);
+    return facts;
 }
 
 } // namespace camel::tensor

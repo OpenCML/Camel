@@ -133,7 +133,7 @@ type::Type *scalarCamelTypeOf(const Value &v) {
     if (v.isSymbolic()) {
         return v.form == Value::Form::Scalar ? v.camelType : nullptr;
     }
-    return tensor::asTensorType(v.ty) ? nullptr : v.ty;
+    return tensor::isTensorType(v.ty) ? nullptr : v.ty;
 }
 
 /// Operator arguments backed by constant values, for the exporter's constant folds (the local
@@ -872,7 +872,7 @@ Value Evaluator::evalCast(Activation &act, gc_node_ref_t ref, Value src) {
             return Value::aggregate(target, std::move(src.fields));
         }
     }
-    if (tensor::asTensorType(target)) {
+    if (tensor::isTensorType(target)) {
         const TensorFacts facts = factsOf(src);
         type::Type *known       = src.form == Value::Form::Tensor
                                       ? tensor::TensorType::get(facts.dtype, facts.shape)
@@ -1211,7 +1211,7 @@ bool isCarriable(const Value &v) {
     if (v.ty == nullptr) {
         return false;
     }
-    return tensor::asTensorType(v.ty) != nullptr || tensor::isSupportedTensorScalar(v.ty->code());
+    return tensor::isTensorType(v.ty) || tensor::isSupportedTensorScalar(v.ty->code());
 }
 
 /// What a value that a Loop cannot carry is, for a diagnostic: an array, a string, a function.
@@ -3261,8 +3261,8 @@ Value Evaluator::applyOper(
     if (def && def->infer) {
         try {
             if (auto inferred = def->infer(inferContext)) {
-                if (const auto *t = tensor::asTensorType(*inferred)) {
-                    facts = {t->dtype(), t->shape()};
+                if (tensor::isTensorType(*inferred)) {
+                    facts = tensor::tensorFactsOf(*inferred);
                 }
             }
         } catch (const tensor::ShapeError &e) {
@@ -3857,7 +3857,7 @@ class InputBinder {
     /// The input value of a parameter like `example`, and the exact type that goes with it.
     std::pair<Value, type::Type *> bind(const Example &example, const std::string &name, bool top) {
         type::Type *ty = example.type;
-        if (const auto *tensorType = tensor::asTensorType(ty); tensorType || isTensor(example)) {
+        if (tensor::isTensorType(ty) || isTensor(example)) {
             const auto *t = rtdata::fromSlot<tensor::Array *>(example.value);
             tensor::StaticShape shape(t->shapeSpan().begin(), t->shapeSpan().end());
             std::vector<size_t> dynamic;
@@ -4039,8 +4039,8 @@ bool exampleFits(type::Type *want, type::Type *have) {
     if (!want || !have || want == have) {
         return true;
     }
-    if (tensor::asTensorType(want)) {
-        return tensor::asTensorType(have) &&
+    if (tensor::isTensorType(want)) {
+        return tensor::isTensorType(have) &&
                want->castSafetyFrom(have) != type::CastSafety::Forbidden;
     }
     if (want->code() == TypeCode::Tuple) {
@@ -4130,7 +4130,7 @@ bindInputs(Emitter &emitter, const ExportOptions &options, std::span<const Examp
     // nothing is claimed about their equality.
     size_t batched = 0;
     for (const Example &example : examples) {
-        if (!tensor::asTensorType(example.type) &&
+        if (!tensor::isTensorType(example.type) &&
             !(example.type && example.type->code() == tensor::TensorType::typeCode())) {
             continue;
         }
@@ -4142,7 +4142,7 @@ bindInputs(Emitter &emitter, const ExportOptions &options, std::span<const Examp
     BoundInputs inputs;
     size_t tensorArgs = 0;
     for (const Example &example : examples) {
-        tensorArgs += tensor::asTensorType(example.type) ? 1 : 0;
+        tensorArgs += tensor::isTensorType(example.type) ? 1 : 0;
     }
     for (size_t i = 0; i < examples.size(); ++i) {
         const std::string name  = tensorArgs == 1 && examples.size() == 1
@@ -4554,8 +4554,9 @@ class DeclaredInputBinder {
         if (!ty) {
             refuse(param, name, "has no declared type");
         }
-        if (const auto *tensorType = tensor::asTensorType(ty)) {
-            if (!tensorType->dtype() || !tensorType->shape()) {
+        if (tensor::isTensorType(ty)) {
+            const tensor::TensorFacts declared = tensor::tensorFactsOf(ty);
+            if (!declared.dtype || !declared.shape) {
                 refuse(
                     param,
                     name,
@@ -4565,11 +4566,10 @@ class DeclaredInputBinder {
                         "negative extent is a dynamic axis), or give the parameter a value "
                         "with --arg, which makes it a constant of the model",
                         ty->toString(),
-                        !tensorType->shape()
-                            ? (tensorType->dtype() ? "shape" : "element type and shape")
-                            : "element type"));
+                        !declared.shape ? (declared.dtype ? "shape" : "element type and shape")
+                                        : "element type"));
             }
-            tensor::StaticShape shape = *tensorType->shape();
+            tensor::StaticShape shape = *declared.shape;
             std::vector<size_t> dynamic;
             for (size_t a = 0; a < shape.size(); ++a) {
                 if (shape[a] < 0) {
@@ -4578,7 +4578,7 @@ class DeclaredInputBinder {
                 }
             }
             declare(name);
-            const Value input   = Value::symbolic(name, tensorType->dtype(), shape);
+            const Value input   = Value::symbolic(name, declared.dtype, shape);
             ValueInfo inputInfo = valueInfoOf(name, factsOf(input));
             for (size_t a : dynamic) {
                 (*inputInfo.shape)[a] = Dim{std::format("{}_dim{}", name, a)};

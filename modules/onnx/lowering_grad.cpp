@@ -335,7 +335,7 @@ Value sgdTree(Emitter &e, const Value &p, const Value &g, double lr) {
         return Value::aggregate(p.camelType, std::move(fields));
     }
     const bool scalar =
-        p.isConstant() ? !tensor::asTensorType(p.ty) : p.form == Value::Form::Scalar;
+        p.isConstant() ? !tensor::isTensorType(p.ty) : p.form == Value::Form::Scalar;
     if (scalar) {
         // A number in the tree (e.g. a learned scale) is updated the same way.
         type::Type *ty = p.isConstant() ? p.ty : p.camelType;
@@ -426,7 +426,7 @@ AdamUpdate adamTree(
             Value::aggregate(v.camelType, std::move(vs))};
     }
     const bool scalar =
-        p.isConstant() ? !tensor::asTensorType(p.ty) : p.form == Value::Form::Scalar;
+        p.isConstant() ? !tensor::isTensorType(p.ty) : p.form == Value::Form::Scalar;
     if (scalar) {
         throw ExportError("nn:adam: a non-tensor leaf of the parameters cannot be exported");
     }
@@ -495,7 +495,7 @@ Value zeroTree(Emitter &e, const Value &p) {
         return Value::aggregate(p.camelType, std::move(fields));
     }
     const bool scalar =
-        p.isConstant() ? !tensor::asTensorType(p.ty) : p.form == Value::Form::Scalar;
+        p.isConstant() ? !tensor::isTensorType(p.ty) : p.form == Value::Form::Scalar;
     if (scalar) {
         type::Type *ty = p.isConstant() ? p.ty : p.camelType;
         return Value::constant(

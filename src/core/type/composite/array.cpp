@@ -583,3 +583,23 @@ ArrayType::withExtentValues(const ExtentValues &values, const ExtentPacks &packs
     return make(elemType_, std::move(forms), anyRank, anyRank ? packName() : std::string_view(),
                 numericUnknown_);
 }
+
+namespace camel::core::type {
+
+const ArrayType *asArrayType(const Type *type) {
+    if (type == nullptr || type->code() != TypeCode::Array) {
+        return nullptr;
+    }
+    return static_cast<const ArrayType *>(type);
+}
+
+bool isNumericArrayType(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr) {
+        return false;
+    }
+    // The numeric-unknown array has no element type to read; that it is numeric is the marker.
+    return array->isNumericUnknown() || isNumericScalarTypeCode(array->elemTypeCode());
+}
+
+} // namespace camel::core::type

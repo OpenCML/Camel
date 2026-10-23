@@ -27,8 +27,8 @@ Type *transferTreeType(Type *type, bool upload) {
         }
         if (leaf->code() == TypeCode::Float64)
             return DeviceType::get(leaf);
-        const auto *tensor = tensor::asTensorType(leaf);
-        return tensor && (!tensor->dtype() || *tensor->dtype() == TypeCode::Float32)
+        const tensor::TensorFacts facts = tensor::tensorFactsOf(leaf);
+        return tensor::isTensorType(leaf) && (!facts.dtype || *facts.dtype == TypeCode::Float32)
                    ? DeviceType::get(leaf)
                    : nullptr;
     });
