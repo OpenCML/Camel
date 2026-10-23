@@ -1,0 +1,59 @@
+id = "compile.contextual_empty_array"
+order = 344
+tier = "fast"
+tags = ["feat", "compile", "types", "array", "struct", "literal", "context"]
+desc = "The empty array literal `[]` takes the element type of the position it stands in (design principles 5.1, 5.2) wherever that position is: a field of a struct literal whose other fields are values the program computes gets the field's declared element type, exactly as it already does when every field is written as a literal. The all-literal spellings keep compiling, and the rule still refuses a field of another type."
+
+[[tests]]
+name = "context.var_sibling"
+desc = "`{ state: state, children: [] }` in a declared `Node`: a sibling field's value is a variable, so the literal is not the constant the conversion used to work on, and the empty array must still read its element type from the field it stands in. Covers both a variable of a named struct type and a computed scalar."
+kind = "behavior"
+case = "../../../cases/compile/contextual_empty_array/named_sibling.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 4, `expected four lines, got ${lines.length}`)
+assert(lines[0].trim() === '9', `len(node.state.board) printed ${lines[0]}`)
+assert(lines[1].trim() === '1', `width(node) printed ${lines[1]}`)
+assert(lines[2].trim() === '0', `len(tree.children) printed ${lines[2]}`)
+assert(lines[3].trim() === '0', `siblings(tree) printed ${lines[3]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.all_literal"
+desc = "The all-literal spellings of the same positions still compile and print what they printed before the fix: `{ value: 4, children: [] }`, `{ value: 1, moves: [1, 2], children: [] }`, and a nested declared tree."
+kind = "behavior"
+case = "../../../cases/compile/contextual_empty_array/all_literal.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 4, `expected four lines, got ${lines.length}`)
+assert(lines[0].trim() === '0', `count(tree) printed ${lines[0]}`)
+assert(lines[1].trim() === '2', `len(move.moves) printed ${lines[1]}`)
+assert(lines[2].trim() === '0', `count(nested) printed ${lines[2]}`)
+assert(lines[3].trim() === '7', `the sum printed ${lines[3]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.still_refused"
+desc = "The rule about where `[]` gets its element type does not make the fields beside it convert: a field whose value is a string in an `int` position is still refused with the declared type named, and the empty array in the sibling field does not change that."
+kind = "negative"
+case = "../../../cases/compile/contextual_empty_array/still_refused.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_contains = ["is not the declared type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

@@ -123,6 +123,17 @@ bool isEmptyArrayLiteral(node_handle_t node) {
     return withInputsOf(node).empty();
 }
 
+/// The type of the untyped empty array literal `[]`: an array whose element type nobody wrote.
+/// Its element type is the only thing it leaves open, so every position it stands in fixes it.
+bool isEmptyArrayLiteralType(const Type *type) {
+    if (type == nullptr || type->code() != TypeCode::Array) {
+        return false;
+    }
+    const auto *array = tt::as_ptr<const ArrayType>(type);
+    return array != nullptr && array->elemType() != nullptr &&
+           array->elemType()->code() == TypeCode::Void;
+}
+
 /// Whether a value of this type is a struct or tuple whose parts can be the components of a
 /// loop state (H71). A cell and the tagged forms are representations, not collections of values:
 /// their parts are not independent values of the programme.
@@ -497,6 +508,18 @@ node_handle_t Builder::convertStructValue(
                 } else if (!targetFieldType->assignableFrom(sourceFieldType)) {
                     return nullptr;
                 }
+            } else if (isEmptyArrayLiteralType(sourceFieldType) &&
+                       targetFieldType->code() == TypeCode::Array) {
+                // The field is a position with an expected type like any other, and the empty
+                // array literal takes the element type of the type it stands in (design
+                // principles 5.1, 5.2) — the same rule, and the same call, that types `[]` when
+                // the whole literal is a constant (compositeDataInType). A field beside it whose
+                // value the program computes is what kept this path from being reached before.
+                node_handle_t typed = coerceTo(access, targetFieldType, origin);
+                if (typed == nullptr) {
+                    return nullptr;
+                }
+                field = typed;
             } else if (!targetFieldType->assignableFrom(sourceFieldType)) {
                 // A field of another type (a refined module type is assignable; a number of
                 // another type is not).
