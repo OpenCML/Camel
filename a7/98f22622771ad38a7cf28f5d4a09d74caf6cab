@@ -1,0 +1,9 @@
+H226 / h333 — tags.plan.toml 的区域 id 钉子：判定脆弱，已修（分支 handover/h333-region-ids，73d1add8c）
+
+钉子：test/plans/feat/compile/tags.plan.toml 的 placement.graph 断言 regionLines[0].includes('region #1 block parent=0')。那个 N 是区域表下标（GraphDraft::addRegion 返回 regions_.size()-1；带标签的块进块时取下一个；每条臂/循环部件也各占一个），紧凑视图打印该下标且跳过无 fact 的区域而不重编号 → N 是表下标，不是打印行数。同一计划里 placement.regions 的 cluster_F01_r1/r2 是同一类的第二个实例。
+
+证据（都走 camel-remote.ps1；主机共享且负载高，故只报事实）：旧的字面量形式在 placement.cml 绿，在"块前面多一个无关 if"的同样事实上红（打印 region #3 block parent=0），无关 match 同样红，兄弟块也红；旧的 cluster 字面量在移位情形红（missing subgraph cluster_F01_r1）；新关系形式在 placement.cml 与两个移位情形 5/5 绿，在兄弟块仍红（内层块的 parent 不是外层块）。→ 旧的红在重编号上，新的绿在重编号上、红在真结构变化上。没有删任何断言，没有把比较弱化成子串。
+
+修法（单提交，只改那份计划）：比较哪个区域携带哪个 fact、两者都是块、外层的 parent=0、内层 parent == 外层 id（无论它是几）；regions 视图则断言两个不同的 Block cluster，且 cpu 区域的 enclosing cluster 链是 gpu 的链加上它自己。提交信息里引了理由与类别（docs/test-plans.md 的 identity-over-counter，与 16989e21f 同类）。
+
+该计划其余部分逐个查过、都无问题（span 行号、expect_diagnostic_line/column、Bits.0、cluster_F01、lines[at('main')+1]、placement.facts）；全树 grep region #\d 与 cluster_..._r\d 没有别的钉子。闸门：[SUMMARY] total: 5705, pass: 5691, fail: 0, skip: 14，RUN_EXIT=0，三个 placement.* 全绿。
