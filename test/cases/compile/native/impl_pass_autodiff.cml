@@ -17,7 +17,8 @@ import { grad } from autodiff
 func div_kernel(a: float, b: float): float
 
 #impl<div_kernel>
-func curve(a: float, b: float): float {
+with <a: float, b: float>
+func curve(): float {
     return a * b
 }
 

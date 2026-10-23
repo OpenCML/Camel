@@ -11,6 +11,9 @@
  */
 module tensor
 
+import { Tensor } from tensor
+
+
 #op<'tensor:sum'>
 func sum_kernel(t: Tensor): Tensor
 

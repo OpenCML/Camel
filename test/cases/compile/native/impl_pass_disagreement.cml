@@ -24,7 +24,8 @@ func wrong(a: int, b: int): int {
 func div_kernel(a: float, b: float): float
 
 #impl<div_kernel>
-func mix(a: float, b: float): float {
+with <a: float, b: float>
+func mix(): float {
     return a * b
 }
 

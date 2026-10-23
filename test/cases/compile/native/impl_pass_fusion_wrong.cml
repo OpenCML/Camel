@@ -13,6 +13,9 @@
  */
 module tensor
 
+import { Tensor } from tensor
+
+
 #op<'tensor:tanh'>
 func tanh_kernel(x: Tensor): Tensor
 

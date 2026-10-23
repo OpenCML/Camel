@@ -217,12 +217,10 @@ const out = input.normalized.stdout
 const count = s => out.split(s).length - 1
 assert(count('label=":op/add_l", type="OPER"') === 1, `the kernel call is not one OPER after the optimizer:\\n${out}`)
 assert(count('label=":op/sub_l", type="OPER"') === 2, `the body's two operators are not in the graph:\\n${out}`)
-assert(out.includes('label="plus";'), `the body graph of plus is not in the dump:\\n${out}`)
-const start = out.indexOf('label="main"')
-assert(start >= 0, `no main graph:\\n${out}`)
-const tail = out.slice(start)
-const close = tail.indexOf('\\n    }\\n')
-const main = close >= 0 ? tail.slice(0, close) : tail
+assert(out.includes('label="plus"'), `the body graph of plus is not in the dump:\\n${out}`)
+const start = out.indexOf('cluster_F01')
+const end = out.indexOf('cluster_F02')
+const main = start >= 0 && end > start ? out.slice(start, end) : out
 assert(main.includes('label=":op/add_l"'), `the kernel is not in main:\\n${main}`)
 assert(!main.includes('label=":op/sub_l"'), `the body was inlined into main:\\n${main}`)
 }
