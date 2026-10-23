@@ -336,6 +336,15 @@ enum class SemanticDiag : uint32_t {
     ParamArgumentWrongType      = 0x0001D6,
     PrecisionChangeNotPermitted = 0x0001D5,
     ReducedPrecisionUnsupported = 0x0001D7,
+    // #impl<f> (design principles 10.4): the Camel body of the function is its semantics and the
+    // body-less declaration f of the same module is the operator that runs it. The graph builder
+    // resolves the tag when it declares the module, so no pass reads it and it names no reader.
+    ImplOnBodylessDeclaration = 0x0001D8,
+    ImplKernelUnknown         = 0x0001D9,
+    ImplKernelForeign         = 0x0001DA,
+    ImplSignatureMismatch     = 0x0001DB,
+    ImplKernelNotBodyless     = 0x0001DC,
+    ImplOnGenericFunction     = 0x0001DD,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

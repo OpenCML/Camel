@@ -307,7 +307,7 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
             const auto name =
                 std::static_pointer_cast<camel::core::data::StringData>(arg)->data();
             // A reader names tags, so a name that is not a declared one is a typo, not a fact.
-            if (!tagNamed(name).has_value()) {
+            if (decl.namesAreTags && !tagNamed(name).has_value()) {
                 diags_->of(SemanticDiag::TagUndeclared).atOrigin(use.origin).commit(name);
                 throw BuildAbortException();
             }
@@ -531,6 +531,45 @@ void Builder::recordFieldTags(const GCT::node_ptr_t &decl) {
         const TagFacts facts = tagFactsOfList(uses, camel::core::tag::Field);
         camel::core::tag::attachToField(*module_, typeName, index, facts.declaration);
     }
+}
+
+std::optional<Builder::ImplTag> Builder::implTagOf(const GCT::node_ptr_t &gct) {
+    if (gct == nullptr) {
+        return std::nullopt;
+    }
+    // `impl` is a tag of the core, so a program writes it without importing anything. The
+    // standard declaration is the one this reads; a module that declares a tag of its own with
+    // that name is a different tag, and a use of it is not this one (design principles 10.2).
+    const auto implTag = camel::core::tag::find(std::string_view{}, "impl");
+    if (!implTag.has_value()) {
+        return std::nullopt;
+    }
+    const camel::core::tag::Decl *decl = camel::core::tag::get(*implTag);
+    const auto *uses                  = GCT::Tree::of(gct)->tagUsesOf(gct);
+    if (decl == nullptr || uses == nullptr) {
+        return std::nullopt;
+    }
+    for (const GCT::TagUse &use : *uses) {
+        const auto named = tagNamed(use.name);
+        if (!named.has_value() || *named != *implTag) {
+            continue;
+        }
+        // The argument is one name, carried as a one-item tuple of symbols (`namesAreTags`
+        // false: the name is a declaration, not a tag). A wrong number or kind is reported by
+        // tagValueOf here, at the tag, like every other argument mistake.
+        const camel::core::attr::Value value =
+            camel::core::attr::value(tagValueOf(*decl, use));
+        if (value.kind != camel::core::attr::ValueKind::Tuple || value.items.size() != 1) {
+            continue;
+        }
+        const camel::core::attr::Value kernel =
+            camel::core::attr::value(value.items.front());
+        if (kernel.kind != camel::core::attr::ValueKind::Symbol || kernel.text.empty()) {
+            continue;
+        }
+        return ImplTag{std::move(kernel.text), use.origin};
+    }
+    return std::nullopt;
 }
 
 } // namespace camel::compile::gir

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-251 diagnostics: 232 errors, 19 warnings.
+257 diagnostics: 238 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -218,6 +218,12 @@ prints one entry.
 | `0x030001D5` | [SemanticDiag::PrecisionChangeNotPermitted](#precisionchangenotpermitted) | Error |
 | `0x030001D6` | [SemanticDiag::ParamArgumentWrongType](#paramargumentwrongtype) | Error |
 | `0x030001D7` | [SemanticDiag::ReducedPrecisionUnsupported](#reducedprecisionunsupported) | Error |
+| `0x030001D8` | [SemanticDiag::ImplOnBodylessDeclaration](#implonbodylessdeclaration) | Error |
+| `0x030001D9` | [SemanticDiag::ImplKernelUnknown](#implkernelunknown) | Error |
+| `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error |
+| `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error |
+| `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error |
+| `0x030001DD` | [SemanticDiag::ImplOnGenericFunction](#implongenericfunction) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -3667,18 +3673,19 @@ The tag '{0}' takes {1} parameter(s), but {2} argument(s) are written.
 Write one argument for each parameter of the tag, in the order of the declaration.
 ```
 
-**Example** (`test/cases/compile/tags/err_arity.cml`, run as `camel test/cases/compile/tags/err_arity.cml`)
+**Example** (`test/cases/compile/native/impl_syntax_args.cml`, run as `camel test/cases/compile/native/impl_syntax_args.cml`)
 
 ```camel
-/// A tag written with the wrong number of arguments.
-module err_arity
+module impl_syntax_args
 
-export tag width<w: int> on type
+func add(a: int, b: int): int {
+    return a + b
+}
 
-#width
-type T = { a: int }
-
-func main(): int { return 0 }
+#impl<>
+func add_with_kernel(a: int, b: int): int {
+    return a + b
+}
 ```
 
 ### TagArgumentNotConstant
@@ -6254,6 +6261,203 @@ func main(): int sync {
     let xs: bf16[] = []
     println(sum(xs))
     return 0
+}
+```
+
+### ImplOnBodylessDeclaration
+
+`0x030001D8` · Error · `SemanticDiag::ImplOnBodylessDeclaration`
+
+**Message**
+
+```text
+The body-less declaration '{0}' cannot carry '#impl<{1}>': it has no Camel body.
+```
+
+**Help**
+
+```text
+'#impl<f>' is written before a function whose Camel body is the semantics; f is the body-less declaration of the operator that runs it. A body-less declaration is the kernel itself and needs no tag: remove the tag, or write the body.
+```
+
+**Example** (`test/cases/compile/native/impl_on_bodyless.cml`, run as `camel test/cases/compile/native/impl_on_bodyless.cml`)
+
+```camel
+module impl_on_bodyless
+
+#op<':op/add_l'>
+#impl<add_kernel>
+func add_kernel(a: int, b: int): int
+
+func main(): int sync {
+    return 0
+}
+```
+
+### ImplKernelUnknown
+
+`0x030001D9` · Error · `SemanticDiag::ImplKernelUnknown`
+
+**Message**
+
+```text
+The '#impl' tag of '{0}' names '{1}', which is no body-less declaration.
+```
+
+**Help**
+
+```text
+The kernel of a '#impl' function is a body-less declaration of the same module ('func k(...): T'). Declare the operator, and write its name in the tag.
+```
+
+**Example** (`test/cases/compile/native/impl_unknown.cml`, run as `camel test/cases/compile/native/impl_unknown.cml`)
+
+```camel
+module impl_unknown
+
+#impl<nope>
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    return add(1, 2)
+}
+```
+
+### ImplKernelForeign
+
+`0x030001DA` · Error · `SemanticDiag::ImplKernelForeign`
+
+**Message**
+
+```text
+The '#impl' tag of '{0}' names '{1}', which another module declares.
+```
+
+**Help**
+
+```text
+A kernel is the implementation detail of the function that keeps it: declare the body-less declaration in the same module as the function, private to that module (not exported), and name it there.
+```
+
+**Example** (`test/cases/compile/native/impl_foreign.cml`, run as `camel test/cases/compile/native/impl_foreign.cml`)
+
+```camel
+module impl_foreign
+
+import { at } from generic_module
+
+#impl<at>
+func first(xs: int[], i: int): int {
+    return xs[i]
+}
+
+func main(): int sync {
+    return first([1, 2, 3], 0)
+}
+```
+
+### ImplSignatureMismatch
+
+`0x030001DB` · Error · `SemanticDiag::ImplSignatureMismatch`
+
+**Message**
+
+```text
+The kernel '{0}' of the '#impl' function '{1}' has the signature {2}, but the function has {3}.
+```
+
+**Help**
+
+```text
+The kernel is another implementation of the very same function: same 'with' and normal parameters (types and 'var' marks), same result type, and no 'constas' parameter (a body-less declaration cannot carry one).
+```
+
+**Example** (`test/cases/compile/native/impl_signature.cml`, run as `camel test/cases/compile/native/impl_signature.cml`)
+
+```camel
+module impl_signature
+
+#op<':op/add_l'>
+func add_kernel(a: int, b: int): int
+
+#impl<add_kernel>
+func add(a: float, b: float): float {
+    return a + b
+}
+
+func main(): int sync {
+    return 0
+}
+```
+
+### ImplKernelNotBodyless
+
+`0x030001DC` · Error · `SemanticDiag::ImplKernelNotBodyless`
+
+**Message**
+
+```text
+The '#impl' tag of '{0}' names '{1}', which has a body.
+```
+
+**Help**
+
+```text
+The kernel is the body-less declaration of the C++ operator that runs the function's semantics. A function that already has a body is the semantics itself, so there is nothing for the tag to do: name a body-less declaration, or remove the tag.
+```
+
+**Example** (`test/cases/compile/native/impl_kernel_has_body.cml`, run as `camel test/cases/compile/native/impl_kernel_has_body.cml`)
+
+```camel
+module impl_kernel_has_body
+
+func helper(a: int, b: int): int {
+    return a + b
+}
+
+#impl<helper>
+func add(a: int, b: int): int {
+    return a - (0 - b)
+}
+
+func main(): int sync {
+    return add(1, 2)
+}
+```
+
+### ImplOnGenericFunction
+
+`0x030001DD` · Error · `SemanticDiag::ImplOnGenericFunction`
+
+**Message**
+
+```text
+The '#impl' tag of '{0}' is on a generic function.
+```
+
+**Help**
+
+```text
+A generic function's instances have signatures of their own, so one kernel cannot be the implementation of all of them. Write each instance as an ordinary function and give it its own '#impl', or remove the tag.
+```
+
+**Example** (`test/cases/compile/native/impl_generic.cml`, run as `camel test/cases/compile/native/impl_generic.cml`)
+
+```camel
+module impl_generic
+
+#op<':op/idx_arr'>
+func idx_kernel::<T>(xs: T[], i: int): T
+
+#impl<idx_kernel>
+func at::<T>(xs: T[], i: int): T {
+    return xs[i]
+}
+
+func main(): int sync {
+    return at([1, 2, 3], 0)
 }
 ```
 

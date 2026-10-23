@@ -546,6 +546,24 @@ A tag of `on nodes` is a **node attribute** (`camel/core/node_attrs.h`): a tag w
 
 A parameter may also be declared `func`: its argument is then a function name, and the tag's fact is the **graph reference** of that function (`attr::graphRef`), not a function value. The GIR builder keeps that graph in the reference table of the function's graph (`kGraphRefRule`), so the frozen graph names the function directly; it is not resolved by name again at run time and no closure captures it. A `func` argument is therefore a static function of the program, never a closure over the surrounding scope. The autodiff module declares `export tag vjp<rule: func> on func` this way: `#vjp<rule>` before a function declaration makes calls of that function use the rule instead of the derivative of its body ([26 Autodiff](../../technical/26_autodiff_as_graph_rewrite.md)). The old `@vjp<rule>` annotation is gone: it is reported at the annotation as `SemanticDiag::InvalidAnnotation`, naming `#vjp<rule>`.
 
+**`#impl<f>`: the Camel body is the semantics, the native kernel is the execution** (design principles 10.4). It is written before a function declaration that has a body:
+
+```cml
+#op<':op/add_l'>
+func add_kernel(a: int, b: int): int          // a body-less declaration of this module, the kernel
+
+#impl<add_kernel>
+export func add(a: int, b: int): int {
+    return a - (0 - b)                        // the semantics (the Camel definition)
+}
+```
+
+- The syntax is `#impl<kernel name>`: one argument, a name rather than a value, because a body-less declaration has no function value to pass.
+- `f` must be a body-less declaration of **the same module**. By design it is a private declaration of that module (not exported: the kernel is an implementation detail, not part of the module interface), written beside the function. A declaration of another module (`SemanticDiag::ImplKernelForeign`), a name no declaration brings (`ImplKernelUnknown`), a function that has a body (`ImplKernelNotBodyless`), and `#impl` on the body-less declaration itself (`ImplOnBodylessDeclaration`) are all refused; neither can a generic function carry it (`ImplOnGenericFunction`: every instance has its own signature, so one kernel matches none of them all), and `#impl` cannot be written on a lambda, a type, a field or a block (tag-position error).
+- **The signatures must agree**: the same number of `with` and normal parameters, the same types and `var` marks, the same result type, and no `constas` parameter on the kernel; otherwise `ImplSignatureMismatch`.
+- **Not inlined by default**: an ordinary call calls the kernel operator (one `OPER` node, labelled with the kernel's URI). Ordinary passes and executors do not reach the body, and the body is not inlined into callers; compiling and running it costs what calling an atomic operator costs. The semantic graph is still built and kept, out of the ordinary program's reachable graphs.
+- **Expanded on demand**: a consumer that must look inside takes the semantic graph the tag kept. A function value (`let g = add`, `grad(add)`) is that graph, and at run time `Program::implBodies` returns the graphs that carry `kGraphFlagImplBody`. No production pass expands `#impl` bodies yet; the tag leaves that to autodiff, fusion, export and rules as they need it. The test-only `test::impl` pass is the demonstration: it reads `Program::implBodies`, expands the body of the tagged function, and compares it node for node with the same Camel body written without the tag. A differential test keeps the kernel path and the body path in agreement (a test that cannot be exact states its tolerance).
+
 `@name(arguments)` is not how a tag is written: it is reported as an annotation, and the message points at `#name`.
 
 ## 7.7 Type declarations

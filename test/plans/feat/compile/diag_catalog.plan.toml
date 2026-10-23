@@ -59,6 +59,6 @@ tool = "node"
 case = "../../../../scripts/diagnostics-catalog.mjs"
 args = ["${case}", "--coverage-check"]
 expect_exit = 0
-expect_stdout_contains = ["every one of 251 diagnostic codes is mentioned by a test"]
+expect_stdout_contains = ["every one of 257 diagnostic codes is mentioned by a test"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000

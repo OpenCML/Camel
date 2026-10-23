@@ -150,6 +150,21 @@ void declareStandardTags() {
         op.params = {{"uri", "string"}};
         declare(std::move(op));
 
+        // `impl<f>` (design principles 10.4): the Camel body of the function is its semantics,
+        // and the body-less declaration `f` of the same module is the operator that runs it.
+        // f is a kernel, not a value: a body-less declaration has no function value, so the
+        // argument is the name as written, not an expression. A standard tag, so no import.
+        // No pass reads the tag: the graph builder resolves it (a call goes to the kernel, a
+        // consumer that asks for the body gets the semantic graph).
+        Decl impl;
+        impl.name         = "impl";
+        impl.ident        = "impl";
+        impl.on           = Func;
+        impl.names        = true;
+        impl.namesAreTags = false;
+        impl.params       = {{"kernel", "string"}};
+        declare(std::move(impl));
+
         // `macro` (design principles 8): the function may be evaluated ahead of time by the
         // `std::macro` pass, which materialises the result as a constant of the graph. It is a
         // standard tag, so a program writes it without an import. The pass is optional: without

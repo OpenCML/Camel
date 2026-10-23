@@ -1,0 +1,186 @@
+id = "compile.impl"
+order = 228
+tier = "fast"
+tags = ["feat", "compile", "tags", "native", "impl", "semantics"]
+desc = "`#impl<f>` (design principles 10.4): a function's Camel body is its semantics and the body-less declaration f of the same module is the operator that runs it. An ordinary call is one OPER of the kernel, the body is not inlined and is absent from the ordinary dump; the body graph stays the semantic function for what asks to look inside (Program::implBodies / test::impl); a differential test shows the kernel path and the body path agree. Five refusals, one case each: the tag on a body-less declaration, a kernel no declaration brings, a kernel of another module, a kernel whose signature differs, and a kernel that has a body. A generic function carries no single signature, so the tag is refused there too."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+# ---- The ordinary pipeline: one call of the kernel, no body ----
+
+[[tests]]
+name = "impl.ordinary_call"
+desc = "`std::gir` shows exactly one OPER of the kernel's URI (`:op/add_l`) for the call of the `#impl` function, and none of the body's nodes (`:op/sub_l`, `:op/neg_l`): the ordinary pipeline treats the function as the kernel, not as a body to inline."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_ordinary.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const kernel = out.match(/label=":op\/add_l"/g) || []
+assert(kernel.length === 1, `expected one :op/add_l OPER, got ${kernel.length}:\n${out}`)
+assert(!out.includes(':op/sub_l'), `the body is in the ordinary dump:\n${out}`)
+assert(!out.includes(':op/neg_l'), `the body is in the ordinary dump:\n${out}`)
+// The caller's graph: everything the dump prints under `label="main"`, to the end of that
+// cluster.
+const start = out.indexOf('label="main"')
+assert(start >= 0, `no main graph in the dump:\n${out}`)
+const tail = out.slice(start)
+const close = tail.indexOf('\n    }\n')
+const main = close >= 0 ? tail.slice(0, close) : tail
+assert(!main.includes('type="FUNC"'), `the caller still calls the body as a function:\n${main}`)
+assert(!main.includes('type="CALL"'), `the caller still calls the body as a function:\n${main}`)
+}
+"""
+
+[[tests]]
+name = "impl.ordinary_run"
+desc = "The same program runs through the kernel operand in the four back ends: `add(19, 23)` is 42 and the body is never needed."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_ordinary.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "impl_ordinary add=42\n"
+
+# ---- Expansion: the body is the graph the tag-less function has ----
+
+[[tests]]
+name = "impl.expansion"
+desc = "`test::impl` reads the semantic bodies through Program::implBodies (kGraphFlagImplBody). The body of `add_via_kernel` expands to the same graph, node for node, as `add_via_body`, which is the same Camel body written without the tag: the tag changes call resolution only."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_differential.cml"
+args = ["${case}", "test::impl"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.some(l => l === 'IMPL bodies 1'), `expected one impl body:\n${input.normalized.stdout}`)
+const graphLine = name => lines.find(l => l.startsWith('IMPL graph ' + name + ' '))
+const impl = graphLine('add_via_kernel')
+const plain = graphLine('add_via_body')
+assert(impl && impl.includes('body=yes'), `the body is not marked impl: ${impl}`)
+assert(plain && plain.includes('body=no'), `the tag-less twin is marked impl: ${plain}`)
+const nodes = name => lines
+  .filter(l => l.startsWith('IMPL node ' + name + ' '))
+  .map(l => l.slice(('IMPL node ' + name + ' ').length))
+const expanded = nodes('add_via_kernel')
+const written = nodes('add_via_body')
+assert(expanded.length > 3, `the body has no nodes: ${expanded.length}`)
+assert(expanded.length === written.length, `node count differs: ${expanded.length} vs ${written.length}`)
+for (let i = 0; i < expanded.length; ++i) {
+  assert(expanded[i] === written[i], `node ${i} differs:\n${expanded[i]}\n${written[i]}`)
+}
+}
+"""
+
+# ---- The differential test ----
+
+[[tests]]
+name = "impl.differential"
+desc = "The kernel path (`add_via_kernel`, one OPER of :op/add_l) and the body path (`add_via_body`, a CALL of the Camel body) compute the same values; the tolerance is zero and every printed difference is 0."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_differential.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
+
+[[tests]]
+name = "impl.differential.gir"
+desc = "The two paths in one program: the tagged function is an OPER of the kernel inside `main`; the tag-less twin is a FUNC and a CALL of its body graph."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_differential.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('label=":op/add_l", type="OPER"'), `the kernel call is missing:\n${out}`)
+assert(out.includes('type="FUNC"'), `the tag-less twin has no function value:\n${out}`)
+assert(out.includes('label=":op/sub_l"'), `the tag-less twin has no body nodes:\n${out}`)
+}
+"""
+
+# ---- The five refusals, one case each ----
+
+[[tests]]
+name = "impl.on_bodyless"
+desc = "`#impl<f>` written on the body-less declaration itself: a kernel has no Camel body to be the semantics of."
+kind = "negative"
+case = "../../../cases/compile/native/impl_on_bodyless.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImplOnBodylessDeclaration"
+expect_diagnostic_code = "0x030001D8"
+expect_output_contains = ["cannot carry '#impl", "add_kernel", "it has no Camel body"]
+
+[[tests]]
+name = "impl.unknown_kernel"
+desc = "`#impl<nope>`: no body-less declaration of this module and no import brings the kernel."
+kind = "negative"
+case = "../../../cases/compile/native/impl_unknown.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImplKernelUnknown"
+expect_diagnostic_code = "0x030001D9"
+expect_output_contains = ["names 'nope'", "which is no body-less declaration"]
+
+[[tests]]
+name = "impl.foreign_kernel"
+desc = "`#impl<at>`: `at` is a body-less declaration of another module; a kernel is declared in the module of the function that keeps it."
+kind = "negative"
+case = "../../../cases/compile/native/impl_foreign.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImplKernelForeign"
+expect_diagnostic_code = "0x030001DA"
+expect_output_contains = ["names 'at'", "which another module declares"]
+
+[[tests]]
+name = "impl.signature_mismatch"
+desc = "`#impl<add_kernel>` on a function of another type: `add_kernel` is `(int, int) => int`, the function is `(float, float) => float`."
+kind = "negative"
+case = "../../../cases/compile/native/impl_signature.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImplSignatureMismatch"
+expect_diagnostic_code = "0x030001DB"
+expect_output_contains = ["add_kernel", "has the signature", "but the function has"]
+
+[[tests]]
+name = "impl.kernel_has_body"
+desc = "`#impl<helper>` where `helper` has a body: the function already is the semantics, so it cannot be a kernel."
+kind = "negative"
+case = "../../../cases/compile/native/impl_kernel_has_body.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImplKernelNotBodyless"
+expect_diagnostic_code = "0x030001DC"
+expect_output_contains = ["names 'helper'", "which has a body"]
+
+[[tests]]
+name = "impl.on_generic_function"
+desc = "`#impl` on a generic function: its instances have signatures of their own, so there is no one signature for a kernel to match."
+kind = "negative"
+case = "../../../cases/compile/native/impl_generic.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImplOnGenericFunction"
+expect_diagnostic_code = "0x030001DD"
+expect_output_contains = ["is on a generic function", "signatures of their own"]
+
+[[tests]]
+name = "impl.syntax_arguments"
+desc = "`#impl<>` names no kernel: the form takes exactly one name, so the use is reported with the argument count before the tag is resolved."
+kind = "negative"
+case = "../../../cases/compile/native/impl_syntax_args.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
+expect_output_contains = ["takes 1 parameter(s)", "0 argument(s)"]

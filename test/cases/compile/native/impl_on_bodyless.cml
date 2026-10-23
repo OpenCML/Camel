@@ -1,0 +1,13 @@
+/**
+ * `#impl<f>` on the kernel itself: a body-less declaration has no Camel body to be the
+ * semantics of, so the tag is refused at the tag (ImplOnBodylessDeclaration).
+ */
+module impl_on_bodyless
+
+#op<':op/add_l'>
+#impl<add_kernel>
+func add_kernel(a: int, b: int): int
+
+func main(): int sync {
+    return 0
+}

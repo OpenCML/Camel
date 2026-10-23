@@ -56,6 +56,7 @@
 #include "passes/test/definitions.h"
 #include "passes/test/facts.h"
 #include "passes/test/fault.h"
+#include "passes/test/impl_body.h"
 #include "passes/test/index_semantics.h"
 #include "passes/test/native_call.h"
 #include "passes/test/resources.h"
@@ -864,6 +865,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kResourcesTestPass, ResourcesTestPass),
         TEST_PASS(kControlTestPass, ControlTestPass),
         TEST_PASS(kTagsTestPass, TagsTestPass),
+        TEST_PASS(kImplBodyTestPass, ImplBodyTestPass),
         TEST_PASS(kChunksTestPass, ChunksTestPass),
         TEST_PASS(kEdgesCycleTestPass, EdgesCycleTestPass),
         TEST_PASS(kEdgesTypeTestPass, EdgesTypeTestPass),
