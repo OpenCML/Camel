@@ -116,6 +116,7 @@ camel::core::OperatorTable::ReducedPrecisionNarrowing narrowingIntoReducedType(
 TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     camel::tensor::registerTensorAttrKeys();
     camel::tensor::registerDivideMulNegFusion();
+    camel::tensor::registerMulNegFusion();
     camel::tensor::ops::registerTensorOps();
     camel::tensor::passes::registerTensorPasses();
     exportType(Reference("Tensor"), camel::tensor::TensorType::Default());
