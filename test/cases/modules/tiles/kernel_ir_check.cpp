@@ -262,6 +262,21 @@ void checkMatrixContracts() {
     bad=p;bad.nodes[2].indexing->domain.constraints.push_back({two,sem::Constraint::Rel::Lt,two});rejected(bad,"unsatisfied domain");
     bad=p;bad.nodes[2].indexing.reset();rejected(bad,"missing index instance");
     bad=p;bad.nodes[2].indexing->output.coords={n,m};rejected(bad,"direct matrix domain");
+    // The mixed GEMM is the one computation the compiler moves to a lower precision on its own, so
+    // its refusal names the permission the node is missing instead of saying "mixed GEMM
+    // permissions" -- the author's ruling of 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md,
+    // "precision-diagnostic-removal"): "`tiles` 拒绝"编译器引入的低精度"时，消息点名缺的是哪个许可
+    // （`change_precision` 等），而不是笼统的 "mixed GEMM permissions"。"
+    auto mixed=p;
+    mixed.nodes[2].permissions=static_cast<sem::PermissionMask>(
+        sem::kReassociate|sem::kChangePrecision|sem::kFiniteMath);
+    generate(mixed);
+    if(mixed.launches.size()!=1||mixed.launches.front().implementation!="cublas_bf16")
+        throw std::runtime_error("the three permissions did not select the mixed GEMM");
+    auto missingPermission=mixed;
+    missingPermission.nodes[2].permissions=static_cast<sem::PermissionMask>(
+        sem::kReassociate|sem::kFiniteMath);
+    rejected(missingPermission,"missing change_precision");
     declaration.laws[0].kind=sem::LawKind::MulAdd;
     table.declareSemantics(uri,declaration);
     p.contracts[0].declaration=table.semantics(id);

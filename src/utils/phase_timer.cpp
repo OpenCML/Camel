@@ -24,6 +24,11 @@
 
 #ifndef _WIN32
 #include <dlfcn.h>
+#include <ctime>
+#else
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
 #endif
 
 namespace camel::utils::phase {
@@ -53,9 +58,11 @@ using AllocSnapshotFn = void (*)(AllocCounters *);
 struct Phase {
     std::string name;
     std::string detail;
-    uint32_t depth  = 0; // number of phases open when this one was opened
-    int64_t startNs = 0;
-    int64_t wallNs  = -1;    // -1 while open
+    uint32_t depth       = 0; // number of phases open when this one was opened
+    int64_t startNs      = 0;
+    int64_t wallNs       = -1;    // -1 while open
+    int64_t startCpuNs   = -1;    // -1 where the platform has no CPU accounting
+    int64_t cpuNs        = -1;    // -1 while open, and where there is no accounting
     AllocCounters atStart{}; // totals when the phase was opened
     AllocCounters atEnd{};
 };
@@ -78,6 +85,39 @@ Recorder &recorder() {
 
 int64_t nowNs(const Recorder &r) {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - r.origin).count();
+}
+
+/// The CPU time (user + system) this process has used so far, in nanoseconds, or -1 where the
+/// platform cannot report it. `Clock` is a wall clock: it drifts with whatever else the host is
+/// running, so a CPU-bound phase reads several times longer on a busy host without having used
+/// more CPU. The declaration-cost gate reads CPU time for that reason (the author's ruling of
+/// 2026-10-23, docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)).
+int64_t cpuNowNs() {
+#if defined(_WIN32)
+    FILETIME created{}, exited{}, kernelTime{}, userTime{};
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernelTime, &userTime)) {
+        return -1;
+    }
+    // FILETIME counts 100 ns units.
+    const auto ticks = [](const FILETIME &time) {
+        return (static_cast<uint64_t>(time.dwHighDateTime) << 32) | time.dwLowDateTime;
+    };
+    return static_cast<int64_t>(ticks(kernelTime) + ticks(userTime)) * 100;
+#elif defined(CLOCK_PROCESS_CPUTIME_ID)
+    timespec now{};
+    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &now) != 0) {
+        return -1;
+    }
+    return static_cast<int64_t>(now.tv_sec) * 1000000000 + static_cast<int64_t>(now.tv_nsec);
+#else
+    return -1;
+#endif
+}
+
+/// CPU time used since `start`, or -1 when either end has none to report.
+int64_t cpuSince(int64_t start) {
+    const int64_t now = cpuNowNs();
+    return start < 0 || now < 0 ? -1 : now - start;
 }
 
 /// The shim exports its counters under this name when it is preloaded. It is looked up among
@@ -123,6 +163,7 @@ void appendJsonString(std::ostringstream &os, std::string_view text) {
 void closeInnermost(Recorder &r) {
     Phase &phase = r.phases[r.open.back()];
     phase.wallNs = nowNs(r) - phase.startNs;
+    phase.cpuNs  = cpuSince(phase.startCpuNs);
     if (r.allocSnapshot != nullptr) {
         r.allocSnapshot(&phase.atEnd);
     }
@@ -137,10 +178,11 @@ void detail::begin(std::string_view name, std::string_view detail) {
         return;
     }
     Phase phase;
-    phase.name    = std::string(name);
-    phase.detail  = std::string(detail);
-    phase.depth   = static_cast<uint32_t>(r.open.size());
-    phase.startNs = nowNs(r);
+    phase.name       = std::string(name);
+    phase.detail     = std::string(detail);
+    phase.depth      = static_cast<uint32_t>(r.open.size());
+    phase.startNs    = nowNs(r);
+    phase.startCpuNs = cpuNowNs();
     if (r.allocSnapshot != nullptr) {
         r.allocSnapshot(&phase.atStart);
     }
@@ -242,7 +284,9 @@ std::string toJson() {
         os << ",\"detail\":";
         appendJsonString(os, phase.detail);
         os << ",\"depth\":" << phase.depth << ",\"start_ns\":" << phase.startNs
-           << ",\"wall_ns\":" << (phase.wallNs >= 0 ? phase.wallNs : now - phase.startNs);
+           << ",\"wall_ns\":" << (phase.wallNs >= 0 ? phase.wallNs : now - phase.startNs)
+           << ",\"cpu_ns\":"
+           << (phase.cpuNs >= 0 ? phase.cpuNs : cpuSince(phase.startCpuNs));
         if (r.allocSnapshot != nullptr && phase.wallNs >= 0) {
             os << ",\"allocations\":" << phase.atEnd.allocations - phase.atStart.allocations
                << ",\"alloc_bytes\":" << phase.atEnd.bytes - phase.atStart.bytes

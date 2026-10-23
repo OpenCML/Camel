@@ -8,8 +8,15 @@
  * Off by default. It is switched on by `camel --time-phases` (standard error),
  * `camel --time-phases=<file>` or by the environment variable CAMEL_TIME_PHASES=<file>
  * (`-` is standard error), and the report is one JSON
- * object: one entry per phase with its wall-clock time, and with the counting allocator
+ * object: one entry per phase with its wall-clock time and its CPU time (user + system; -1 where
+ * the platform has no such accounting), and with the counting allocator
  * also its allocations; benchmarks/compile/ renders the tables.
+ *
+ * The two times answer different questions. The wall clock is what a user waits for and what the
+ * host's load stretches: a CPU-bound phase reads several times longer on a busy host without
+ * having used more CPU. CPU time is what the phase itself cost, and it is what a ceiling that
+ * should mean a regression is read against (the author's ruling of 2026-10-23,
+ * docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate").
  *
  * Cost when off: a Scope is one load of a global flag and one branch at each end, and scopes
  * are only placed around whole phases (a module, a pass), never inside a loop over nodes.
