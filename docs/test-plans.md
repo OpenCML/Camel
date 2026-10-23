@@ -274,7 +274,9 @@ That copy, not the output, was most of what a run directory weighed: of the 43,8
 245.0 MB of a full `smoke` + `feat` fast layer run directory (5,691 tests, measured on the integration
 checkout), the copy of the plan and of the case was 11,382 files and 214.2 MB -- 87% of the bytes and
 26% of the entries. What a test's record actually holds is its captured output and its `meta.json`:
-32,516 entries and 30.8 MB per gate. Twenty of those is the whole bound, about 0.6 GB.
+the same gate run on this branch wrote 32,461 entries and 31.0 MB (112 MB of disk blocks, at 4 KB a
+file), and every one of the 26,578 files in it is one the runner wrote. Twenty of those is the whole
+bound, about 0.6 GB of content, and the `run.json` that replaced the plan copies is 11 KB.
 
 `isRunnerOutput(path)` in the same module is also the answer to *which* trees a run writes, for
 everything that walks the checkout (`test/tools/check-no-algo.mjs`, `scripts/check-doc-links.mjs`,

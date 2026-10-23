@@ -23,8 +23,9 @@
  * layer gate at `-Jobs 8`, 5,691 tests, written by the runner before the plan and case copies were
  * dropped): 43,898 entries, 245.0 MB of file content, 353 MB of disk blocks. Of that, the copy of the
  * plan and of the case was 11,382 files and 214.2 MB -- 87% of the bytes and 26% of the entries, the
- * same plan file rewritten once per test. What a run records itself is 32,516 entries and 30.8 MB.
- * See `docs/test-plans.md`, "Runner Output".
+ * same plan file rewritten once per test. The same gate on this branch (5,682 tests, all of them
+ * runs): 32,461 entries, 31.0 MB of file content, 112 MB of disk blocks, and no file in it that the
+ * runner did not write. See `docs/test-plans.md`, "Runner Output".
  *
  * So this module is the one definition of both facts: `isRunnerOutput` answers "did a run write
  * this path?" for anything that walks the checkout, and `pruneRunnerOutput` is the bound the runner
@@ -56,8 +57,8 @@ export const RUNNER_OUTPUT_DIRS = [RESULTS_DIR, SCRATCH_DIR]
  * what the tree was pruned to by hand, and it is four times the number of runs this repository
  * starts at once in the worst case (the runner's own self-test starts one nested run at a time;
  * four host gates run side by side at most). One full `smoke` + `feat` fast layer run writes a
- * directory per selected plan and one per test -- 5,691 status directories in the run measured below
- * -- so the bound holds the tree at twenty gates instead of growing by a gate per run;
+ * directory per selected plan and one per test -- about 5,700 status directories in the runs measured
+ * below -- so the bound holds the tree at twenty gates instead of growing by a gate per run;
  * `docs/test-plans.md`, "Runner Output", has the measured figures.
  */
 export const RUN_DIRS_KEPT = 20
