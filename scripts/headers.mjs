@@ -53,8 +53,11 @@ const SPDX = 'SPDX-License-Identifier: MIT'
 const CPP_EXT = /\.(?:c|cc|cpp|h|hpp|inl)$/
 // `.ts` is the VS Code extension's source. It is hand-written source of the same kind as the .mjs
 // scripts, so it is named here rather than left undecided; the policy's four script languages did
-// not mention it because the extension was the only place it appears.
-const SCRIPT_EXT = /\.(?:js|mjs|ts|py|cmake)$/
+// not mention it because the extension was the only place it appears. `.cjs` is named for the same
+// reason: it is a CommonJS script a test fixture loads with `--require`, hand-written source of the
+// same kind as the `.mjs` fixtures beside it, and leaving it undecided fails the guard on a file
+// whose header is canonical.
+const SCRIPT_EXT = /\.(?:js|mjs|cjs|ts|py|cmake)$/
 
 function commentPrefix(ext) {
     return ext === '.py' || ext === '.cmake' ? '#' : '//'
