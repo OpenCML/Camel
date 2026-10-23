@@ -1,0 +1,1 @@
+Report: handover/h338-cpu-ceilings, 4 commits; full text in the note on fc0dceecf (startup-cost.mjs, startup.plan.toml, phase_timer cpu_ns, the tiles message). Coordinator's call on the instrument: accepted, additive with -1 where no process CPU clock exists.
