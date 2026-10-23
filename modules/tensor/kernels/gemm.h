@@ -13,13 +13,14 @@
  * `gemmBackendName()` reports which ISA unit runs it.
  *
  * `sgemmLibrary` forwards to cblas_sgemm when the build has a CBLAS (CMake
- * option CAMEL_TENSOR_BLAS, off by default), and is `sgemm` otherwise. A BLAS
- * library chooses its own order and grouping of the accumulation (and may not
- * fuse the multiply-adds), so it does not follow the canonical algorithm: it
- * runs behind `tensor:matmul` when the node's `tensor.kernel` attribute says
- * "library", which `tensor::fuse` writes for a matmul the 7.3 rule lets use it
- * (default mode; safe mode withholds it). The operator stays `matmul`
- * (design principles 9.6). `libraryGemmName()` reports what sgemmLibrary calls.
+ * option CAMEL_TENSOR_BLAS, on by default; without one it forwards to `sgemm`).
+ * A BLAS library chooses its own order and grouping of the accumulation (and
+ * may not fuse the multiply-adds), so it does not follow the canonical
+ * algorithm: it runs behind `tensor:matmul` when the node's `tensor.kernel`
+ * attribute says "library", which `tensor::fuse` writes for a matmul the 7.3
+ * rule lets use it (default mode; safe mode withholds it). The operator stays
+ * `matmul` (design principles 9.6). `libraryGemmName()` reports what
+ * sgemmLibrary calls.
  *
  * `matmul` follows NumPy semantics: rank-1 operands are promoted to a row or
  * column vector and the promoted dimension is removed from the result; leading
@@ -45,6 +46,12 @@ void sgemmLibrary(
 
 std::string_view gemmBackendName();
 std::string_view libraryGemmName();
+
+/// Caps the library GEMM's own pool at the run's thread budget and at the measured knee (four
+/// threads on the reference host, where 1024^3 is 458 ms canonical, 404 ms via the library at one
+/// thread, 142 ms at four and 693 ms at 32). The cap keeps a batch loop from multiplying pools. A
+/// build without a library does nothing.
+void setGemmThreads(int threads);
 
 /// Result shape of matmul(lhs, rhs). Throws std::invalid_argument when inner extents differ.
 Shape matmulShape(std::span<const int64_t> lhs, std::span<const int64_t> rhs);

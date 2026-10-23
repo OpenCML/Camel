@@ -1,0 +1,38 @@
+/**
+ * The library GEMM and the canonical GEMM are two implementations of one operator (design
+ * principles 9.6). The default policy lets the plain product use the library (7.3's
+ * `reassociate`); `#strict` withholds every permission, so its product runs the canonical
+ * algorithm (7.4). The program prints the two sums and the largest per-element difference,
+ * together with the bound the licence gives for it: `gamma_K * sum |a_k b_k|`, at most
+ * `K^2 * eps * max|a| * max|b|` for an output of K products. The test asserts the difference is
+ * inside that bound; a library whose results left the licence's bound would fail it.
+ */
+module gemm_library
+
+import { Tensor, abs, max, randn, seed, sum } from tensor
+
+#strict
+func exact(a: Tensor, b: Tensor): Tensor {
+    return a @ b
+}
+
+func fast(a: Tensor, b: Tensor): Tensor {
+    return a @ b
+}
+
+func max_abs(t: Tensor): float {
+    return sum(max(max(abs(t), 0), 0))
+}
+
+func main(): int sync {
+    seed(20261023)
+    let a = randn([256, 64])
+    let b = randn([64, 128])
+    let library = fast(a, b)
+    let canonical = exact(a, b)
+    let difference = max_abs(library - canonical)
+    let bound = 64.0 * 64.0 * 5.9604645e-8 * max_abs(a) * max_abs(b)
+    'gemm_library sums={} {} diff={} bound={}'->format<
+        sum(library), sum(canonical), difference, bound>->println
+    return 0
+}

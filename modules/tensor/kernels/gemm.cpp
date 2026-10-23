@@ -201,6 +201,23 @@ std::string_view libraryGemmName() {
 #endif
 }
 
+#if defined(CAMEL_TENSOR_HAS_OPENBLAS)
+extern "C" void openblas_set_num_threads(int);
+#endif
+#if defined(CAMEL_TENSOR_HAS_MKL)
+extern "C" void mkl_set_num_threads(int);
+#endif
+
+void setGemmThreads(int threads) {
+#if defined(CAMEL_TENSOR_HAS_OPENBLAS)
+    openblas_set_num_threads(std::min(std::max(threads, 1), 4));
+#elif defined(CAMEL_TENSOR_HAS_MKL)
+    mkl_set_num_threads(std::min(std::max(threads, 1), 4));
+#else
+    (void)threads;
+#endif
+}
+
 Shape matmulShape(std::span<const int64_t> lhs, std::span<const int64_t> rhs) {
     return planMatmul(lhs, rhs).outShape;
 }

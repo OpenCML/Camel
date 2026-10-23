@@ -81,8 +81,10 @@ one definition.
   B, ldb, beta, C, ldc)`, with two backends:
   - `builtin`: cache-blocked, packed, compiler-vectorized, parallel over row
     blocks. Always available, no external dependency.
-  - `cblas`: forwards to `cblas_sgemm`. Enabled by the CMake option
-    `CAMEL_TENSOR_BLAS` when `find_package(BLAS)` succeeds. A BLAS orders
+  - `cblas`: forwards to `cblas_sgemm`. The CMake option `CAMEL_TENSOR_BLAS`
+    is on by default; configure turns it into the library when `find_package(BLAS)`
+    or the explicit OpenBLAS/MKL search finds a CBLAS, and otherwise keeps the
+    builtin (the configure output says which). A BLAS orders
     the accumulation its own way, so it does not follow matmul's canonical
     algorithm (design principles 7.1). Per 7.3 it is available by default for
     an f32 matmul; the graph keeps `tensor:matmul` and `tensor::fuse` records
@@ -440,9 +442,16 @@ Decisions recorded here because they change semantics outside the module:
   ("Tensor shape mismatch in '<op>': <detail>") instead of generic runtime errors.
 - **GEMM dispatch.** The builtin GEMM is compiled twice (portable, AVX2+FMA) and
   selected by a runtime CPU check, so portable builds still use wide vectors.
-  `CAMEL_TENSOR_BLAS=ON` adds a system CBLAS; a matmul runs on it when its node's
+  `CAMEL_TENSOR_BLAS` is on by default and adds a system CBLAS when one is found;
+  a build without one keeps the builtin and still compiles and passes the same
+  programs. A matmul runs on the library when its node's
   `tensor.kernel` attribute says so, which `tensor::fuse` writes under the 7.3
   rule (default mode; safe mode withholds it). The operator is still `matmul`.
+  The library's own pool is capped at the run's `-t` and at four threads, so it
+  does not multiply the tensor pool of a batch loop. The pass marks
+  `tensor:matmul`; the `matmul_grad_lhs` / `matmul_grad_rhs` nodes are created
+  by autodiff after it, so backward matmuls stay on the canonical kernel until
+  a later change gives them the same choice.
 - **Operator semantics generalized** (all within the previous behavior for the
   old supported cases): arithmetic and comparison broadcast fully; matmul
   supports batched and vector operands; reductions take any axis and optional
