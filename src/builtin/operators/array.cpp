@@ -3,17 +3,20 @@
 
 /*
  * The native operators of the `array` module (stdlib/array.cml): the sorting family, the merge
- * of two sorted arrays, and the primitives `flatten`, `unique` and `argsort` that the rest of
- * the module is written on. They answer on the `array` protocol; the built-in module registers
- * the executor factory under that name, so the module written in Camel needs no second module of
- * its own to load them.
+ * of two sorted arrays, the primitives `flatten`, `unique` and `argsort` that the rest of the
+ * module is written on, and the reductions `sum`, `min` and `max` (builtin/operators/
+ * array_reduce.cpp). They answer on the `array` protocol; the built-in module registers the
+ * executor factory under that name, so the module written in Camel needs no second module of its
+ * own to load them.
  *
  * Each is here because composing it from the built-in operators would cost more than its size: a
  * `flatten` folded with `concat` copies the result once per inner array, a `unique` folded with
- * `contains` and `concat` is quadratic and copies as well, and a sort written with recursion
- * would recurse once per element. The sorts are the one family with in-place forms: the compiler
- * rewrites `xs = xs->sort` to the in-place form when nothing else refers to the array (design
- * principles 11.3), so the forms change their operand and their result is that operand.
+ * `contains` and `concat` is quadratic and copies as well, a sort written with recursion would
+ * recurse once per element, and a reduction written with `reduce` calls the combining function
+ * once per element through the interpreter instead of sweeping the array (design principles
+ * 10.4). The sorts are the one family with in-place forms: the compiler rewrites
+ * `xs = xs->sort` to the in-place form when nothing else refers to the array (design principles
+ * 11.3), so the forms change their operand and their result is that operand.
  */
 
 #include "array.h"
@@ -419,6 +422,14 @@ std::unordered_map<std::string, operator_t> getArrayOpsMap() {
         {"flatten", __array_flatten__},
         {"unique", __array_unique__},
         {"argsort", __array_argsort__},
+        // The reductions' kernels (builtin/operators/array_reduce.cpp): one executor per element
+        // type the rule of the kernel declarations in stdlib/array.cml admits, named after the
+        // rule's operator and the element type it takes. The declaration's `when` is what decides
+        // which calls reach them (`Builder::declaredRuleApplies`), so a type it refuses has no
+        // executor and runs the Camel body (H228: one operator, per-type executors).
+        {"sum", __array_sum__},
+        {"min", __array_min__},
+        {"max", __array_max__},
     };
 }
 
@@ -437,6 +448,12 @@ void declareArrayOperatorFacts() {
             {"flatten", true},
             {"unique", true},
             {"argsort", true},
+            // The reductions' kernels are pure as the functions they execute are: the fold reads
+            // the array it is given and touches nothing else. The declarations in the map above
+            // name them; this is what tells the compiler what a call of one may touch.
+            {"sum", true},
+            {"min", true},
+            {"max", true},
         });
     // The in-place forms of the sorting operators (design principles 11.3): `xs = xs->sort`
     // sorts the variable's own array when nothing else refers to it (Builder::

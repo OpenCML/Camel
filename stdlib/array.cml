@@ -23,7 +23,7 @@
 module array
 
 import math
-import { is_numeric, is_ordered } from types
+import { is_bool, is_float, is_integer, is_numeric, is_ordered, is_string } from types
 
 // The native primitives are declared here, as body-less declarations of this module: each stands
 // for the operator of its own name (`array:argsort`, `array:sort`, ...), implemented in C++ and
@@ -168,7 +168,7 @@ export func count::<T>(xs: T[]): int {
 // raised, and `change_precision` (7.2, which governs what the compiler changes) is neither
 // needed nor consumed by this module. The addition order is unchanged too: ascending from +0,
 // as it was.
-
+#impl<sum_kernel>
 /// The sum of the elements, 0 for an empty array.
 ///
 /// A floating-point element type accumulates in f64 and rounds once into the element type at the
@@ -204,7 +204,7 @@ export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
 func sumF64::<T>(xs: T[]): float {
     return xs->reduce<(acc: float, x: T): float => acc + float(x), 0.0 as float>
 }
-
+#impl<min_kernel>
 /// The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
 /// +0), or null for an empty array.
 ///
@@ -216,7 +216,7 @@ func sumF64::<T>(xs: T[]): float {
 export func min::<T>(xs: T[]): T? when is_ordered::<T>() {
     return if len(xs) == 0 then null else xs->reduce<math::min, xs[0]>
 }
-
+#impl<max_kernel>
 /// The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
 /// -0), or null for an empty array.
 ///
@@ -253,3 +253,51 @@ with <f: (a: T, b: U) => V>
 export func zip_with::<T, U, V>(xs: T[], ys: U[]): V[] {
     return zip(xs, ys)->map<((a, b)) => f(a, b)>
 }
+
+// ---- the kernels of the reductions ----
+
+// The kernel of a reduction is the body-less declaration below: the function above is the semantics
+// and what a call of the name takes when no kernel applies, and the declaration is what a call may
+// take instead (design principles 10.4, "常用而热的定义带原生内核"). The declaration's own `when` is
+// what says which element types have an executor: `Builder::declaredRuleApplies` binds the
+// declaration's type parameter from the instance's element type and evaluates the condition, an
+// element type it refuses has no executor and keeps the body, which is the semantics (H228: one
+// operator, per-type executors).
+//
+// A rule names the union of the element types its executors cover, and the executors are one per
+// element type (builtin/operators/array_reduce.cpp): one rule per element type is the shape the arms
+// ask for and the compiler refuses it, because two generic rules of one name are
+// `NativeDeclarationOverlap` whatever their conditions say — a call both accept would be decided by
+// the order the declarations are written in (design principles 4.3, 5.1).
+//
+// Nothing here states how to compare or how to add. That is written once, in modules/math/minmax.h,
+// which these kernels and the tensor kernels both call (the tensor header forwards to it rather than
+// holding a second copy). The executors differ in the type they accumulate or carry, not in the
+// comparison. The kernel and the body are pinned against each other by
+// test/cases/modules/stdlib/array_reduction_kernels.cml, element type by element type, including the
+// two reduced-precision ones and the sign of a zero.
+//
+// These declarations stand at the end of the module: one of them above the fault line would move it,
+// and the line `zip`'s fault is on is how the fault is located (stdlib.fault.zip_with,
+// attempt.library's golden output).
+
+/// The kernel of `sum` for the element types that have an executor: a floating-point element type
+/// accumulates in f64 and rounds once into the element type at the end, and an integer element type
+/// accumulates in itself and wraps on overflow, as `+` does on it.
+/// @example sum([1, 2, 3])    // 6
+#op<'array:sum'>
+func sum_kernel::<T>(xs: T[]): T when is_integer::<T>() || is_float::<T>()
+
+/// The kernel of `min` for the element types that have an executor, as the body: the fold carries an
+/// element of T and combines it with `math::min` (IEEE 754 minimum), so the result is one of the
+/// elements and nothing rounds.
+/// @example min([3, 9, 2]) ?? 0    // 2
+#op<'array:min'>
+func min_kernel::<T>(xs: T[]): T? when is_integer::<T>() || is_float::<T>() || is_string::<T>() || is_bool::<T>()
+
+/// The kernel of `max` for the element types that have an executor, as the body: the fold carries an
+/// element of T and combines it with `math::max` (IEEE 754 maximum), so the result is one of the
+/// elements and nothing rounds.
+/// @example max([3, 9, 2]) ?? 0    // 9
+#op<'array:max'>
+func max_kernel::<T>(xs: T[]): T? when is_integer::<T>() || is_float::<T>() || is_string::<T>() || is_bool::<T>()

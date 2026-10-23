@@ -1,0 +1,42 @@
+id = "modules.array_reduction_kernels"
+order = 378
+tier = "fast"
+tags = ["feat", "modules", "stdlib", "precision", "profile"]
+desc = "`array::sum`, `min` and `max` have native kernels of the `array` executor (design principles 10.4; the ruling docs/handover/reviews/questions-2026-10-23.md, section \"array-kernel-executors\": 「`array:sum`/`min`/`max` 是数组归约的实现原子」). Each kernel answers what the Camel body beside it says, and a floating-point reduction still accumulates in f64 and rounds once into the element type (7.3). The kernel is one executor per reduction, choosing its arm on the element type of the array the `#impl` instance was made with, and every element type the functions are declared for has an arm (numeric for `sum`; numeric, `string` and `bool` for `min`/`max`)."
+
+# The values, on vectors whose per-step f32 fold, f64 accumulation and one rounding are told apart,
+# over every element type the kernel has an arm for, with the two non-numeric ordered types too.
+
+[[tests]]
+name = "array_reduction_kernels"
+desc = "The kernel and the Camel body agree on every element type: `sum` over int, i32, f32, f64, f16 and bf16, `min` and `max` over f32 and f16. An f32 array of 2^24 then 1025 ones answers 16778240 (the f64 sum 16778241 rounded once, ties to even) where a per-step f32 accumulator answers 16777216; an f32 array of 2^24 and 0.5 answers the even 16777216 with an exact f64 sum of 16777216.5; an f16 array of 32768, 1 and 1.5 (exact sum 32770.5, the midpoint between 32770 and 32772) answers 32770, and the same array with 1 and 0.5 (exact sum 32769.5, the midpoint between 32769 and 32770) answers 32770 as well — 32768 there would mean the kernel rounded through f32. NaN on either side of `min`/`max` gives NaN, -0 is below +0 (the bytes of the results), a `string[]` gives 'apple' and 'pear', and a `bool[]` gives false and true. An empty array gives +0 for `sum` and null for `min` and `max`. The values are the same on all four back ends."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/array_reduction_kernels.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "sum {} 16778240.0\nf64 {} 16778241.0\nrounded {} 16778240.0\nstepwise {} 16777216.0\nmidpoint {} 16777216.5\nf16 {} {} 32770.0 32770.0\nbf16 {} 32800.0\nbody {}/6 6\nrounds-once {} {} true true\nties {} {} true true\nnan {} {} true true\nzeros {} {} true true\nhalfzeros {} {} {} true true true\nminmax {} {} true true\nordered {}/4 4\nempty {} true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "array_reduction_kernels.paths"
+desc = "In that run `std::profile` counts the three kernels and the Camel body's own reduce apart: `array:sum` 14 times, `array:min` 11 and `array:max` 10, while `:mark/reduce_arr` counts 18 — the folds the case writes out, the per-step f32 and f64 accumulations, the widening maps and the `#impl` bodies that no call reached. A compiler that ran the body for the direct calls as well would count the fallbacks' reduce calls; one whose kernel did not run would not show the `array:` rows at all."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/array_reduction_kernels.cml"
+args = ["${case}", "std::profile top=0 json=\"${test_tmp}/profile.json\"", "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
+    assert(calls['array:sum'] === 14, `array:sum ran ${calls['array:sum']} times, not 14`)
+    assert(calls['array:min'] === 17, `array:min ran ${calls['array:min']} times, not 17`)
+    assert(calls['array:max'] === 16, `array:max ran ${calls['array:max']} times, not 16`)
+    assert(calls[':mark/reduce_arr'] === 22, `the body's reduce ran ${calls[':mark/reduce_arr']} times, not 22`)
+    assert(input.normalized.stdout.includes('sum {} 16778240.0'), 'the program changed')
+}
+"""
+timeout_ms = 60000
