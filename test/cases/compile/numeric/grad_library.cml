@@ -8,7 +8,7 @@
  *
  * The program prints the largest absolute difference between the two gradients and the licence
  * bound for the K-product accumulation: K^2 * eps * max|x| * max|ones|. Safe mode
- * (`tensor::fuse(safe_fp=true)`) makes both gradients canonical, so the same program prints 0.
+ * (`tensor::fuse safe_fp=true`) makes both gradients canonical, so the same program prints 0.
  */
 module grad_library
 
