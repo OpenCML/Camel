@@ -1266,6 +1266,11 @@ std::string partName(type::Type *ty, size_t index) {
     return std::to_string(index);
 }
 
+/// `path` with the child `name` under it; the root has no separator of its own.
+std::string childPath(const std::string &path, std::string_view separator, const std::string &name) {
+    return path.empty() ? name : path + std::string(separator) + name;
+}
+
 /// The paths of the leaves `flattenValue` yields, in the same order: "w", "deep_h", "0". A Loop's
 /// state input is named after the path it rebuilds, so the emitted graph reads like the struct.
 /// A diagnostic names them the way the programme writes them, with `separator` of ".": the path
@@ -1278,7 +1283,7 @@ void leafPaths(const Value &v,
         for (size_t i = 0; i < v.fields.size(); ++i) {
             leafPaths(
                 v.fields[i],
-                path + std::string(separator) + partName(v.camelType, i),
+                childPath(path, separator, partName(v.camelType, i)),
                 out,
                 separator);
         }
@@ -1288,11 +1293,7 @@ void leafPaths(const Value &v,
         (v.ty->code() == TypeCode::Tuple || v.ty->code() == TypeCode::Struct)) {
         const std::vector<Value> fields = elementsOf(v.slot, v.ty);
         for (size_t i = 0; i < fields.size(); ++i) {
-            leafPaths(
-                fields[i],
-                path + std::string(separator) + partName(v.ty, i),
-                out,
-                separator);
+            leafPaths(fields[i], childPath(path, separator, partName(v.ty, i)), out, separator);
         }
         return;
     }
