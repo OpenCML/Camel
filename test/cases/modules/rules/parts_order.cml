@@ -1,0 +1,95 @@
+/**
+ * A fact query inside a condition, and the parts of a commutative operator (the ruling of
+ * 2026-10-23 on `rule_when_const_node`: "可交换算子的匹配会交换操作数顺序，带参数的事实查询却按顺序找
+ * "操作数正是这些部件的值"，找不到就让**整个遍失败**。两处都改：(1) 对声明了交换律的算子，部件查询
+ * 不看顺序；(2) 条件里的事实查询找不到时，条件为假（这条规则在此不适用），而不是遍失败").
+ *
+ * `mul_by_one(a, b)` is the fact of a product: its `x * y` clause is "by one" when the *second*
+ * operand is the constant 1. The rule `drop_by_one` declares its coefficient `const c: int`, so the
+ * condition reaches the coefficient's *node* with `node_of(c)` (the change this branch is about),
+ * and asks `mul_by_one(x, node_of(c))`: the factor first, the coefficient second.
+ *
+ * `drop_by_one`'s condition hands the query the parts `(factor, coefficient)`, and `swapped` is
+ * `a * 1`: the pattern `x * c` binds `c` to the constant only under the exchange of the product's
+ * two operands, which the declaration of `*` carries (op-semantics 7.4: the exchange gives the same
+ * value). The parts therefore reach the query in the order `(1, a)` while the product holds them
+ * `(a, 1)` -- the other order. Both orders name the same value, so the query must answer either
+ * way. Before the ruling it looked for the operands in exactly the order it was given, found no
+ * value, and threw `Invalid argument of 'analysis': the analysis 'mul_by_one' has no value whose
+ * operands are these 2 nodes`, which is **the pass failing**, not a condition being false -- this
+ * test is red exactly that way (`swapped 1`: the product stays and the value is `7`). A `const`
+ * parameter and a parts query are the case that could not be written at all before the ruling.
+ *
+ * The half of the ruling about a query that finds nothing has its own case, `no_value.cml`, where a
+ * non-commutative operator makes "no value with these parts" real rather than a matter of order.
+ *
+ * `kept` (`a * 2`) is the same query on a coefficient that is not one: the query answers, and the
+ * condition is false -- the rule must not apply, the product and the value must stay, and the pass
+ * must not fail either. `plain` (`a * 5.0`) has a guard on the value, which asks no question about
+ * parts: it loses its product in the same pass, so a pass that quietly stopped doing its work would
+ * show up there.
+ */
+module parts_order
+
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { max } from math
+import { rewrite } from rewrite
+
+analysis sign: int {
+    initial => 0
+    join(a, b) => max(a, b)
+    on (const c: int) => c
+}
+
+analysis mul_by_one(a: Node, b: Node): bool {
+    initial => false
+    join(a, b) => a || b
+    on (x * y) => sign(y) == 1
+}
+
+func positive(c: float): bool {
+    return c > 0.0
+}
+
+/// The coefficient is `const`, so its node is reached with `node_of`; the pattern writes the factor
+/// first, and for `swapped` (`1 * a`) the exchange is the pairing that binds the constant to `c`,
+/// so the parts reach the condition in the other order from the one the product holds them in.
+rule drop_by_one(x: int, const c: int) { x * c => x }
+    when mul_by_one(x, node_of(c))
+
+/// A guard on the value, which the value channel answers without any node.
+rule drop_positive(x: float, const c: float) { x * c => x } when positive(c)
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [drop_by_one, drop_positive])
+}
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func countOf(p: Program, function: string, operator: string): int {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return len(nodes(found[0])->filter<(n: Node): bool => opText(n) == operator>)
+}
+
+export func report(p: Program): Program! sync {
+    println('swapped', countOf(p, 'swapped', ':op/mul_l'))
+    println('kept', countOf(p, 'kept', ':op/mul_l'))
+    println('plain', countOf(p, 'plain', ':op/mul_d'))
+    return p
+}
+
+func swapped(a: int): int { return a * 1 }
+
+func kept(a: int): int { return a * 2 }
+
+func plain(a: float): float { return a * 5.0 }
+
+func main(): int sync {
+    println(swapped(7), kept(7), plain(3.0))
+    return 0
+}

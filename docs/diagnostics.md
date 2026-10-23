@@ -15,7 +15,11 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
+<<<<<<< HEAD
 254 diagnostics: 235 errors, 19 warnings.
+=======
+257 diagnostics: 238 errors, 19 warnings.
+>>>>>>> handover/h337-node-of
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -221,6 +225,11 @@ prints one entry.
 | `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error |
 | `0x030001DB` | [SemanticDiag::ImplSignatureMismatch](#implsignaturemismatch) | Error |
 | `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error |
+<<<<<<< HEAD
+=======
+| `0x030001DD` | [SemanticDiag::ImplOnGenericFunction](#implongenericfunction) | Error |
+| `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error |
+>>>>>>> handover/h337-node-of
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -6369,6 +6378,81 @@ func main(): int sync {
 }
 ```
 
+<<<<<<< HEAD
+=======
+### ImplOnGenericFunction
+
+`0x030001DD` · Error · `SemanticDiag::ImplOnGenericFunction`
+
+**Message**
+
+```text
+The '#impl' tag of '{0}' is on a generic function.
+```
+
+**Help**
+
+```text
+A generic function's instances have signatures of their own, so one kernel cannot be the implementation of all of them. Write each instance as an ordinary function and give it its own '#impl', or remove the tag.
+```
+
+**Example** (`test/cases/compile/native/impl_generic.cml`, run as `camel test/cases/compile/native/impl_generic.cml`)
+
+```camel
+module impl_generic
+
+#op<':op/idx_arr'>
+func idx_kernel::<T>(xs: T[], i: int): T
+
+#impl<idx_kernel>
+func at::<T>(xs: T[], i: int): T {
+    return xs[i]
+}
+
+func main(): int sync {
+    return at([1, 2, 3], 0)
+}
+```
+
+### NodeOfNotAParameter
+
+`0x030001DE` · Error · `SemanticDiag::NodeOfNotAParameter`
+
+**Message**
+
+```text
+'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.
+```
+
+**Help**
+
+```text
+node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.
+```
+
+**Example** (`test/cases/modules/rules/node_of_misuse.cml`, run as `camel test/cases/modules/rules/node_of_misuse.cml std::nvm`)
+
+```camel
+module node_of_misuse
+
+import { Program, Node } from graph
+import { rewrite } from rewrite
+
+rule drop_by_node(x: int, const c: int) { x * c => x } when node_of(x) == node_of(c)
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [drop_by_node])
+}
+
+func scaled(x: int): int { return x * 2 }
+
+func main(): int sync {
+    println(scaled(21))
+    return 0
+}
+```
+
+>>>>>>> handover/h337-node-of
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`

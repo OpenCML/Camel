@@ -102,6 +102,13 @@ class Builder {
     /// The import of `graph.Node` for a rule condition was made: a condition whose parameters are
     /// all `const` names values, not nodes, and does not need it.
     bool whenNodeImportAdded_ = false;
+    /// The `node_of` names of the condition being built: a `const` parameter of a rule that the
+    /// condition reaches with `node_of(c)`, and the hidden node parameter appended to the
+    /// condition for it. Empty outside a rule condition, so `node_of` written anywhere else is
+    /// refused by name (the ruling of 2026-10-23 on `rule_when_const_node`).
+    std::map<std::string, std::string> ruleWhenNodeParams_;
+    /// The rule whose condition is being built, for the refusal above.
+    std::string ruleWhenName_;
     Value visitBlockStmt(syntax::cst::BlockStmt context);
     Value visitStmtBlock(syntax::cst::StmtBlock context);
     Value visitFuncData(syntax::cst::FuncData context);

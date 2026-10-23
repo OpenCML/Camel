@@ -999,6 +999,10 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     // and needs neither `constant(node, sample)` nor the `match … case null` layers around it.
     node_ptr_t whenFunc;
     if (when) {
+        // The condition of this rule is being built: `node_of(c)` is read here and nowhere else
+        // (the ruling of 2026-10-23 on `rule_when_const_node`), and the name of the rule is what
+        // a refusal names.
+        ruleWhenName_ = name;
         const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams();
         const auto constValueParam = [](cst::KeyParamPair pair) {
             return static_cast<bool>(pair->has(TK::KwConst)) && static_cast<bool>(pair->type());
@@ -1026,6 +1030,24 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             imports_.push_back(graphImport);
         }
         const Reference whenRef = qualifyRef(Reference(name + "__when"));
+        // The hidden node parameter of every `const` parameter (the ruling of 2026-10-23 on
+        // `rule_when_const_node`: "条件函数按 `const` 形参追加隐藏的节点形参，构建期把
+        // `node_of(c)` 换成它；不引入新类型"). The condition takes the rule's parameters first,
+        // in the order they are written, and then one node per `const` parameter, in the same
+        // order. `node_of(c)` becomes the name of that parameter, and the map is what refuses a
+        // name that is not one of this rule's own `const` parameters.
+        std::vector<std::string> whenNodeNames;
+        if (params) {
+            for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                if (constValueParam(pair)) {
+                    whenNodeNames.emplace_back(
+                        std::string(pair->get<cst::IdentDef>()->text()) + "__node");
+                }
+            }
+        }
+        for (const std::string &nodeName : whenNodeNames) {
+            ruleWhenNodeParams_.emplace(nodeName.substr(0, nodeName.size() - 6), nodeName);
+        }
         node_ptr_t whenParams   = createNodeAs<RepeatedLoad>("NamedPair");
         setNodeTokenRangeByContext(whenParams, context);
         if (params) {
@@ -1046,6 +1068,14 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                 *whenParams << named;
             }
         }
+        for (const std::string &nodeName : whenNodeNames) {
+            node_ptr_t named = createNodeAs<NamedPairLoad>(Reference(nodeName), false, false);
+            setNodeTokenRangeByContext(named, context);
+            node_ptr_t paramType = createNodeAs<RefTypeLoad>(Reference("Node"));
+            setNodeTokenRangeByContext(paramType, context);
+            *named << paramType << createNodeAs<OptionalLoad>("DataExpr");
+            *whenParams << named;
+        }
         node_ptr_t whenType = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(whenType, when);
         unwrapNodeAs<FuncTypeLoad>(whenType)->setTypeParams(typeParams);
@@ -1059,6 +1089,10 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         node_ptr_t whenData = createNodeAs<FuncDataLoad>(whenRef);
         setNodeTokenRangeByContext(whenData, when);
         *whenData << whenType << any2node(visitBlockExpr(when));
+        // `node_of` reaches a node only here, in the condition of the rule it belongs to: the two
+        // sides and every other condition of the program meet an empty map and are refused.
+        ruleWhenNodeParams_.clear();
+        ruleWhenName_.clear();
         whenFunc = createNodeAs<FuncDeclLoad>(whenRef);
         setNodeTokenRangeByContext(whenFunc, when);
         *whenFunc << whenData;
@@ -3620,6 +3654,48 @@ annoExpr
 */
 Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
     ENTER("AnnoExpr");
+    // `node_of(c)` in a rule's condition (the ruling of 2026-10-23 on `rule_when_const_node`):
+    // "条件函数按 `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)` 换成它；不引入新类型"
+    // and "名字是 `node_of(c)`，只接受该规则（或 `fact` 的 `case`）自己的形参名". The call is
+    // read here, before the callee is built, and becomes the hidden node parameter the rule
+    // declaration appended for that `const` parameter. A name that is not a `const` parameter of
+    // this rule is refused here, by name, and `node_of` written where no such parameter exists is
+    // refused too, because the map is empty outside a rule condition.
+    if (context->expr().is(NK::RefData) && context->expr().text() == "node_of") {
+        // The argument is read from the tree, not built: `node_of(c)` is not a call of a
+        // function, and building `c` would put a node in the tree that nothing reads. It is one
+        // written name and nothing else: `node_of` names a parameter, so anything else (a call,
+        // an arithmetic expression) has no parameter to name and is refused below, by name.
+        std::string argument;
+        if (const cst::ParentArgues argues = context->get<cst::ParentArgues>()) {
+            if (const cst::ArgumentList args = argues->get<cst::ArgumentList>()) {
+                if (const cst::IndexValues values = args->get<cst::IndexValues>()) {
+                    const auto exprs = values->exprs();
+                    if (exprs.size() == 1 && exprs[0].kind() == NK::RefData) {
+                        argument = std::string(exprs[0].text());
+                    }
+                }
+            }
+        }
+        const bool writtenArgument = !argument.empty();
+        const auto found = writtenArgument ? ruleWhenNodeParams_.find(argument)
+                                           : ruleWhenNodeParams_.end();
+        if (writtenArgument && found != ruleWhenNodeParams_.end()) {
+            node_ptr_t nodeRef = createNodeAs<RefDataLoad>(Reference(found->second));
+            setNodeTokenRangeByContext(nodeRef, context);
+            LEAVE("AnnoExpr");
+            return nodeRef;
+        }
+        diags_->of(SemanticDiag::NodeOfNotAParameter)
+            .at(rangeOf(context->firstToken(), context->lastToken()))
+            .commit(argument, ruleWhenName_);
+        // The diagnostic is the report; the condition still needs a value, and `false` says
+        // "this rule does not apply here", which is what a name that holds no node means.
+        node_ptr_t noNode = createNodeAs<LiteralLoad>(Literal(LiteralType::Boolean, "false"));
+        setNodeTokenRangeByContext(noNode, context);
+        LEAVE("AnnoExpr");
+        return noNode;
+    }
     node_ptr_t lhsNode = any2node(visitExpr(context->expr()));
     for (size_t i = 1; i < context->childCount(); i++) {
         auto child = context->child(i);

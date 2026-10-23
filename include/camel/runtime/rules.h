@@ -40,8 +40,17 @@ struct RuleSource {
     std::vector<uint8_t> constParams;
     /// The condition, if the declaration has one.
     std::function<bool(const Match &)> when;
-    /// The condition's parameter count, when it has one; must equal the sides'.
+    /// The condition's parameter count, when it has one: the sides' parameters, each `const` one
+    /// followed by the hidden node parameter `node_of` reaches it through (the ruling of
+    /// 2026-10-23 on `rule_when_const_node`). The rule's own parameters come first, in the order
+    /// it writes them; the hidden node parameters follow, one per `const` parameter, in the same
+    /// order.
     uint32_t whenArity = 0;
+    /// Where the hidden node parameters of the condition begin: the number of parameters of the
+    /// sides, which is also the first of the hidden ones. The condition's own parameters are the
+    /// first `whenNodesStart` of its parameter list, and it must take `whenNodesStart` plus one
+    /// more per `const` parameter of the sides (`RuleCompileError` otherwise).
+    uint32_t whenNodesStart = 0;
 };
 
 /// The rule cannot be a rule: what is wrong with it.

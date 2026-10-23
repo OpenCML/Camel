@@ -1453,6 +1453,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::NodeOfNotAParameter,
+            {
+                "NodeOfNotAParameter",
+                "'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.",
+                "node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.",
+            },
+        },
+        {
             SemanticDiag::VarParamInAsyncFunction,
             {
                 "VarParamInAsyncFunction",
