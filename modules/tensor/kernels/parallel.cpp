@@ -17,6 +17,8 @@
 
 #include "parallel.h"
 
+#include "gemm.h"
+
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
@@ -278,6 +280,9 @@ void setNumThreads(int threads) {
     if (WorkerPool *created = poolSlot()) {
         created->resize(threads);
     }
+    // A library GEMM has its own pool; it must not multiply this one (the batch loop already
+    // runs on it). setGemmThreads caps it and is a no-op without a library.
+    setGemmThreads(threads);
 }
 
 } // namespace camel::tensor::kernels

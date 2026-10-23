@@ -96,8 +96,55 @@ using type::TypeCode;
             .cachedOrigin = static_cast<camel::source::origin_id_t>(origin)});
 }
 
+/// A gradient whose element type is not the differentiated value's (design principles 9.9). The
+/// accumulator stores the node at the value's width, so a float64 gradient in an f32 parameter is
+/// read as 0.0 and a float32 one in a float parameter as a denormal: both are numbers that are not
+/// the derivative, and neither has a sign of it. Dropping the gradient is not an answer either --
+/// the zero would be just as wrong -- so the build stops here, naming the value, the gradient's
+/// element type and the operator or rule that produced it.
+[[noreturn]] void failGradientType(
+    uint64_t origin, const std::string &valueType, const std::string &elementType,
+    const std::string &producer) {
+    throw camel::core::error::RuntimeFault(
+        RuntimeDiag::GradientElementTypeMismatch,
+        {valueType, elementType, producer},
+        "",
+        nullptr,
+        camel::core::error::ExecutionSiteHint{
+            .cachedOrigin = static_cast<camel::source::origin_id_t>(origin)});
+}
+
+/// A differentiable value passed through an operator's `with` parameter that the backward pass
+/// cannot carry (design principles 9.9). A `with` parameter is configuration by default (a flag,
+/// a mode, a bound), so no gradient flows through it; an operator that takes a *value* this way
+/// (`append`) says so by the value's type having a tangent, and its rule has to send the value its
+/// gradient. A missing rule, or a rule that adds nothing for that value, is the silent omission
+/// this diagnostic replaces, and it names the operator and the parameter.
+[[noreturn]] void failValueWith(
+    uint64_t origin, std::string_view uri, size_t index, Type *type, std::string_view why) {
+    throw camel::core::error::RuntimeFault(
+        RuntimeDiag::ValueWithNoDerivativeRule,
+        {std::string(uri), std::to_string(index + 1), type->toString(), std::string(why)},
+        "",
+        nullptr,
+        camel::core::error::ExecutionSiteHint{
+            .cachedOrigin = static_cast<camel::source::origin_id_t>(origin)});
+}
+
 /// The source of the program being differentiated, to say where a refused node is.
 thread_local camel::source::source_context_ptr_t currentSource;
+
+/// The element type a tangent of `type` is made of: an array's innermost element type, or the type
+/// itself. A module-owned type (a tensor) is its own element type: the core cannot see inside it,
+/// and this build's tensor element type is f32 -- a written `Tensor<f64>` is refused before a value
+/// of it can exist -- so comparing the two types' codes is the comparison there is to make.
+Type *tangentElementType(Type *type) {
+    Type *tangent = tangentTypeOf(type);
+    while (tangent != nullptr && tangent->code() == TypeCode::Array) {
+        tangent = tt::as_ptr<ArrayType>(tangent)->elemType();
+    }
+    return tangent;
+}
 
 /// " (at file:line:column)" for a node origin, or nothing when it is unknown.
 std::string whereIs(uint64_t origin) {
@@ -837,7 +884,7 @@ class Backward final : public VjpBuilder {
     /// accumulateInto does for every other whole-value gradient — otherwise visitFill, which
     /// distributes elements, would find none and the seed would stop at the result node.
     void seed(gc_node_ref_t primal, gc_node_ref_t gradient) {
-        accumulateInto(gradients_[primal], typeOf(forward_, primal), gradient);
+        accumulateInto(gradients_[primal], typeOf(forward_, primal), gradient, primal);
     }
     /// Propagates gradients through the forward nodes `order` (inputs before users).
     void run(const std::vector<gc_node_ref_t> &order);
@@ -868,6 +915,17 @@ class Backward final : public VjpBuilder {
     addOper(Type *type, std::string_view uri, std::span<const vjp_node_t> normInputs) override {
         return autodiff::addOper(target_, type, uri, normInputs);
     }
+    vjp_node_t addOper(
+        Type *type,
+        std::string_view uri,
+        std::span<const vjp_node_t> normInputs,
+        camel::core::attr::AttrSetId attrs) override {
+        const vjp_node_t node = autodiff::addOper(target_, type, uri, normInputs);
+        if (attrs != camel::core::attr::kNoAttrs) {
+            target_.setNodeAttrs(node, attrs);
+        }
+        return node;
+    }
     vjp_node_t addAccess(vjp_node_t aggregate, size_t index) override {
         return autodiff::addField(target_, typeOf(target_, aggregate), aggregate, index);
     }
@@ -878,8 +936,18 @@ class Backward final : public VjpBuilder {
   private:
     std::optional<gc_node_ref_t> primalOf(gc_node_ref_t target) const;
     void accumulate(gc_node_ref_t primal, gc_node_ref_t gradient);
-    void accumulateInto(Tangent &tangent, Type *primalType, gc_node_ref_t gradient);
-    void mergeInto(Tangent &tangent, Type *primalType, Tangent &&other);
+    void accumulateInto(
+        Tangent &tangent, Type *primalType, gc_node_ref_t gradient,
+        gc_node_ref_t at = kInvalidNodeRef);
+    void mergeInto(
+        Tangent &tangent, Type *primalType, Tangent &&other,
+        gc_node_ref_t at = kInvalidNodeRef);
+    /// Refuses a gradient whose element type is not the differentiated value's (design principles
+    /// 9.9). `at` is the forward node whose gradient it is, for a location when no rule is running.
+    void checkGradientType(Type *primalType, gc_node_ref_t gradient, gc_node_ref_t at);
+    /// What produced `gradient` (an operator of the derivative rule, a constant, a rule call), for
+    /// the message of checkGradientType.
+    std::string producerOf(gc_node_ref_t gradient) const;
     gc_node_ref_t materialize(Tangent &tangent, Type *primalType, gc_node_ref_t primal);
     gc_node_ref_t zero(Type *primalType, gc_node_ref_t primal);
     gc_node_ref_t add(Type *primalType, gc_node_ref_t lhs, gc_node_ref_t rhs);
@@ -927,6 +995,11 @@ class Backward final : public VjpBuilder {
     /// contribution of that parameter cannot be carried through them (design principles 9.9).
     std::unordered_set<gc_node_ref_t> tainted_;
     mutable std::unordered_map<gc_node_ref_t, Tangent> gradients_;
+    /// How many gradient contributions each primal value has received. A rule that is given an
+    /// active value through a `with` parameter must add one to it (visitOper checks the count
+    /// after the rule runs); without the count, a rule that forgot the value would leave the
+    /// gradient silently absent.
+    std::unordered_map<gc_node_ref_t, uint64_t> contributions_;
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> toTarget_;
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> toPrimal_;
     std::vector<gc_node_ref_t> captures_;
@@ -938,6 +1011,9 @@ class Backward final : public VjpBuilder {
     std::unordered_set<gc_node_ref_t> boundary_;
     /// Loops whose value has no gradient channel and that were therefore left alone.
     std::unordered_set<gc_node_ref_t> untapedLoops_;
+    /// The forward node whose rule is producing gradients right now (an operator's rule or a
+    /// custom rule call), for the location of a refused accumulation; kInvalidNodeRef outside.
+    gc_node_ref_t producing_ = kInvalidNodeRef;
 };
 
 // ---------------------------------------------------------------- engine
@@ -2491,10 +2567,12 @@ void Backward::accumulate(gc_node_ref_t primal, gc_node_ref_t gradient) {
     if (!active_.contains(primal)) {
         return; // a constant, or a value no parameter flows into
     }
-    accumulateInto(gradients_[primal], typeOf(forward_, primal), gradient);
+    ++contributions_[primal];
+    accumulateInto(gradients_[primal], typeOf(forward_, primal), gradient, primal);
 }
 
-void Backward::accumulateInto(Tangent &tangent, Type *primalType, gc_node_ref_t gradient) {
+void Backward::accumulateInto(
+    Tangent &tangent, Type *primalType, gc_node_ref_t gradient, gc_node_ref_t at) {
     ASSERT(tangent.materialized == kInvalidNodeRef, "autodiff: gradient changed after use.");
     if (isAggregate(primalType)) {
         // Keep aggregates element-wise: split a whole-value gradient into its elements.
@@ -2505,20 +2583,74 @@ void Backward::accumulateInto(Tangent &tangent, Type *primalType, gc_node_ref_t 
                 continue;
             }
             const gc_node_ref_t element = addField(target_, tangentType, gradient, *position);
-            accumulateInto(tangent.elements[i], aggregateElement(primalType, i), element);
+            accumulateInto(tangent.elements[i], aggregateElement(primalType, i), element, at);
         }
         return;
     }
+    checkGradientType(primalType, gradient, at);
     tangent.value =
         tangent.value == kInvalidNodeRef ? gradient : add(primalType, tangent.value, gradient);
 }
 
-void Backward::mergeInto(Tangent &tangent, Type *primalType, Tangent &&other) {
+/// The element type of a gradient has to be the element type of the value it is the gradient of:
+/// the accumulator stores the node where the value is read at its own width, so a gradient of
+/// another width is a wrong number with no sign of it (design principles 9.9). This is not the
+/// place to decide that a gradient may be *dropped*: a rule that stops a gradient adds none at all
+/// (`noGradient`, for a discrete input), and what is missing is materialized as the zero of the
+/// right type -- not a converted gradient.
+void Backward::checkGradientType(Type *primalType, gc_node_ref_t gradient, gc_node_ref_t at) {
+    Type *expected = tangentElementType(primalType);
+    Type *given    = tangentElementType(typeOf(target_, gradient));
+    if (expected == nullptr || given == nullptr || expected->code() == given->code()) {
+        return;
+    }
+    const gc_node_ref_t where = producing_ != kInvalidNodeRef ? producing_ : at;
+    const uint64_t origin     = where != kInvalidNodeRef ? forward_.nodeOrigin(where) : 0;
+    failGradientType(
+        origin,
+        primalType->toString(),
+        given->toString(),
+        std::format("{} produced it{}", producerOf(gradient), whereIs(origin)));
+}
+
+/// What produced the gradient node `gradient`, for the refusal that names it: the derivative rule's
+/// operator (the usual case), or the kind of value the rule handed over.
+std::string Backward::producerOf(gc_node_ref_t gradient) const {
+    switch (kindOf(target_, gradient)) {
+    case GCNodeKind::Oper: {
+        const auto payload = target_.payloadOf(gradient);
+        if (payload.size() >= sizeof(rt::GCOperBody)) {
+            const auto *body = reinterpret_cast<const rt::GCOperBody *>(payload.data());
+            return std::format("operator '{}'", body->uri());
+        }
+        return "an operator of the derivative rule";
+    }
+    case GCNodeKind::Data:
+        return "a constant of the derivative rule";
+    case GCNodeKind::Port:
+        return "an argument of the derivative rule";
+    case GCNodeKind::Call:
+        return "the derivative rule";
+    case GCNodeKind::Accs:
+        return "a field or element read";
+    case GCNodeKind::Fill:
+        return "a literal of the derivative rule";
+    default:
+        return "the derivative rule";
+    }
+}
+
+void Backward::mergeInto(
+    Tangent &tangent, Type *primalType, Tangent &&other, gc_node_ref_t at) {
     if (other.value != kInvalidNodeRef) {
-        accumulateInto(tangent, primalType, other.value);
+        accumulateInto(tangent, primalType, other.value, at);
     }
     for (auto &[index, element] : other.elements) {
-        mergeInto(tangent.elements[index], aggregateElement(primalType, index), std::move(element));
+        mergeInto(
+            tangent.elements[index],
+            aggregateElement(primalType, index),
+            std::move(element),
+            at);
     }
 }
 
@@ -3291,6 +3423,9 @@ void Backward::visitRuleSite(gc_node_ref_t node, const CallSite &site) {
         target_.materializeStaticValue(toSlot<::Function *>(site.rule), ruleType);
     const gc_node_ref_t result = addCall(target_, ruleType->exitType(), rule, args);
     const size_t count         = site.plan.tangentsType->size();
+    // The rule's declared result type is what it is; a rule whose gradient is a different width
+    // than the value it differentiates is refused below, at this call.
+    producing_ = node;
     for (size_t i = 0; i < site.inputs.size(); ++i) {
         if (const auto position = site.plan.tangentIndex(i)) {
             accumulate(
@@ -3300,6 +3435,7 @@ void Backward::visitRuleSite(gc_node_ref_t node, const CallSite &site) {
                     : addAccs(target_, tangentTypeOf(site.plan.portTypes[i]), result, *position));
         }
     }
+    producing_ = kInvalidNodeRef;
 }
 
 void Backward::visitOper(gc_node_ref_t node) {
@@ -3307,16 +3443,42 @@ void Backward::visitOper(gc_node_ref_t node) {
     const auto *body   = reinterpret_cast<const rt::GCOperBody *>(payload.data());
     const std::string uri(body->uri());
     // Operators without an active input (conversions from integers, arithmetic on shapes) pass
-    // no gradient on and need no rule.
+    // no gradient on and need no rule. A `with` input is configuration by default (a flag, a
+    // mode, a bound), so no gradient flows through it; an operator may also take a *value* this
+    // way (`append`), and such an input has a tangent type and is differentiable like an
+    // ordinary input (design principles 9.9). The activity analysis in run() already counts a
+    // with input as an input, so the gate must count the ones that carry a value too: looking at
+    // the ordinary inputs alone is what dropped the value's gradient silently.
+    struct ValueWith {
+        gc_node_ref_t input;
+        size_t index; // in the call's with inputs, from 0
+    };
     bool active = false;
     for (gc_node_ref_t input : forward_.normInputsOf(node)) {
         active |= active_.contains(input);
+    }
+    std::vector<ValueWith> valueWith;
+    size_t withIndex = 0;
+    for (gc_node_ref_t input : forward_.withInputsOf(node)) {
+        if (active_.contains(input) && tangentTypeOf(typeOf(forward_, input)) != nullptr) {
+            valueWith.push_back(ValueWith{.input = input, .index = withIndex});
+            active = true;
+        }
+        ++withIndex;
     }
     if (!active) {
         return;
     }
     const camel::core::VjpRule rule = DerivativeRegistry::instance().findRule(uri);
     if (rule == nullptr) {
+        if (!valueWith.empty()) {
+            failValueWith(
+                forward_.nodeOrigin(node),
+                uri,
+                valueWith.front().index,
+                typeOf(forward_, valueWith.front().input),
+                "no derivative rule is registered for it");
+        }
         failAt(
             forward_.nodeOrigin(node),
             std::format(
@@ -3334,6 +3496,18 @@ void Backward::visitOper(gc_node_ref_t node) {
     for (gc_node_ref_t input : forward_.withInputsOf(node)) {
         withInputs.push_back(ref(input));
     }
+    // A rule that is given an active value through a with parameter must add a gradient for it;
+    // a rule that ignores the parameter would leave the contribution silently absent, which is
+    // the defect this check exists for. The count is per value, so another path that already
+    // accumulated a gradient cannot hide the omission.
+    std::vector<uint64_t> before;
+    before.reserve(valueWith.size());
+    for (const ValueWith &value : valueWith) {
+        before.push_back(contributions_[value.input]);
+    }
+    // What the rule hands the accumulator is checked against the value's element type; the
+    // location of a refusal is this operator's own place in the program.
+    producing_ = node;
     rule(
         *this,
         VjpCall{
@@ -3341,7 +3515,21 @@ void Backward::visitOper(gc_node_ref_t node) {
             .inputs     = inputs,
             .withInputs = withInputs,
             .output     = ref(node),
-            .origin     = forward_.nodeOrigin(node)});
+            .origin     = forward_.nodeOrigin(node),
+            .attrs      = forward_.nodeAttrs(node)});
+    producing_ = kInvalidNodeRef;
+    for (size_t i = 0; i < valueWith.size(); ++i) {
+        const auto found = contributions_.find(valueWith[i].input);
+        const uint64_t now = found == contributions_.end() ? 0 : found->second;
+        if (now == before[i]) {
+            failValueWith(
+                forward_.nodeOrigin(node),
+                uri,
+                valueWith[i].index,
+                typeOf(forward_, valueWith[i].input),
+                "its derivative rule added no gradient for it");
+        }
+    }
 }
 
 void Backward::visitAccs(gc_node_ref_t node) {
@@ -3363,7 +3551,8 @@ void Backward::visitAccs(gc_node_ref_t node) {
     mergeInto(
         gradients_[source].elements[index],
         aggregateElement(sourceType, index),
-        std::move(moved));
+        std::move(moved),
+        source);
 }
 
 void Backward::visitFill(gc_node_ref_t node) {

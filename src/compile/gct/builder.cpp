@@ -317,6 +317,11 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("float"), Type::Float64());
     typeScope_->insert(Reference("c64"), Type::Complex64());
     typeScope_->insert(Reference("c128"), Type::Complex128());
+    // Reduced-precision tensor element types (design principles 7.3, H238). They are names a
+    // program writes only as an argument of `Tensor<...>` and of `from_bytes::<...>`; no
+    // literal or scalar operator produces a value of either.
+    typeScope_->insert(Reference("bf16"), Type::BFloat16());
+    typeScope_->insert(Reference("f16"), Type::Float16());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("string"), Type::String());
     // The type of binary data (design principles 11.1), a built-in name like `string`.
@@ -5251,13 +5256,6 @@ Type *Builder::visitFuncType(
             diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
         }
         const Reference &paramRef = paramLoad->getRef();
-        if (!paramRef.plain()) {
-            // Parameter references must be unqualified
-            diags_->of(SemanticDiag::ParamRefMustBeUnqualified)
-                .at(paramLoad->tokenRange())
-                .commit(paramRef.toString());
-            throw BuildAbortException();
-        }
         const string &name = paramRef.ident();
         Type *type         = nullptr;
         {
@@ -5301,13 +5299,6 @@ Type *Builder::visitFuncType(
         const auto &paramPair = normParams[pi];
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         const Reference &paramRef = paramLoad->getRef();
-        if (!paramRef.plain()) {
-            // Parameter references must be unqualified
-            diags_->of(SemanticDiag::ParamRefMustBeUnqualified)
-                .at(paramLoad->tokenRange())
-                .commit(paramRef.toString());
-            throw BuildAbortException();
-        }
         const string &name = paramRef.ident();
         // Every ordinary parameter takes a place in the defaults list, so that an index into it
         // is a parameter's index: `constas` values and the rest parameter included.

@@ -10,6 +10,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/complex.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/rtdata/tuple.h"
@@ -67,6 +68,10 @@ const char *storageName(TypeCode code) {
         return "int64";
     case TypeCode::Bool:
         return "bool";
+    case TypeCode::BFloat16:
+        return "bfloat16";
+    case TypeCode::Float16:
+        return "float16";
     default:
         return "unknown";
     }
@@ -650,6 +655,10 @@ double Array::getAsDouble(uint64_t flatIndex) const {
         return static_cast<double>(dataAs<int64_t>()[flatIndex]);
     case TypeCode::Bool:
         return dataAs<uint8_t>()[flatIndex] != 0 ? 1.0 : 0.0;
+    case TypeCode::BFloat16:
+        return static_cast<double>(dataAs<rtdata::BFloat16>()[flatIndex].toFloat());
+    case TypeCode::Float16:
+        return static_cast<double>(dataAs<rtdata::Float16>()[flatIndex].toFloat());
     default:
         throw std::invalid_argument("Unsupported numeric element type");
     }
@@ -668,6 +677,10 @@ int64_t Array::getAsInt64(uint64_t flatIndex) const {
         return dataAs<int64_t>()[flatIndex];
     case TypeCode::Bool:
         return dataAs<uint8_t>()[flatIndex] != 0 ? 1 : 0;
+    case TypeCode::BFloat16:
+        return static_cast<int64_t>(dataAs<rtdata::BFloat16>()[flatIndex].toFloat());
+    case TypeCode::Float16:
+        return static_cast<int64_t>(dataAs<rtdata::Float16>()[flatIndex].toFloat());
     default:
         throw std::invalid_argument("Unsupported numeric element type");
     }
@@ -686,6 +699,10 @@ bool Array::getAsBool(uint64_t flatIndex) const {
         return dataAs<int64_t>()[flatIndex] != 0;
     case TypeCode::Bool:
         return dataAs<uint8_t>()[flatIndex] != 0;
+    case TypeCode::BFloat16:
+        return dataAs<rtdata::BFloat16>()[flatIndex].toFloat() != 0.0f;
+    case TypeCode::Float16:
+        return dataAs<rtdata::Float16>()[flatIndex].toFloat() != 0.0f;
     default:
         throw std::invalid_argument("Unsupported numeric element type");
     }
@@ -708,6 +725,12 @@ void Array::setFromDouble(uint64_t flatIndex, double value) {
         break;
     case TypeCode::Bool:
         dataAs<uint8_t>()[flatIndex] = value != 0.0 ? 1 : 0;
+        break;
+    case TypeCode::BFloat16:
+        dataAs<rtdata::BFloat16>()[flatIndex] = rtdata::BFloat16(value);
+        break;
+    case TypeCode::Float16:
+        dataAs<rtdata::Float16>()[flatIndex] = rtdata::Float16(value);
         break;
     default:
         throw std::invalid_argument("Unsupported numeric element type");
@@ -732,6 +755,12 @@ void Array::setFromInt64(uint64_t flatIndex, int64_t value) {
     case TypeCode::Bool:
         dataAs<uint8_t>()[flatIndex] = value != 0 ? 1 : 0;
         break;
+    case TypeCode::BFloat16:
+        dataAs<rtdata::BFloat16>()[flatIndex] = rtdata::BFloat16(value);
+        break;
+    case TypeCode::Float16:
+        dataAs<rtdata::Float16>()[flatIndex] = rtdata::Float16(value);
+        break;
     default:
         throw std::invalid_argument("Unsupported numeric element type");
     }
@@ -754,6 +783,12 @@ void Array::setFromBool(uint64_t flatIndex, bool value) {
         break;
     case TypeCode::Bool:
         dataAs<uint8_t>()[flatIndex] = value ? 1 : 0;
+        break;
+    case TypeCode::BFloat16:
+        dataAs<rtdata::BFloat16>()[flatIndex] = rtdata::BFloat16(value ? 1.0f : 0.0f);
+        break;
+    case TypeCode::Float16:
+        dataAs<rtdata::Float16>()[flatIndex] = rtdata::Float16(value ? 1.0f : 0.0f);
         break;
     default:
         throw std::invalid_argument("Unsupported numeric element type");
@@ -1250,7 +1285,9 @@ std::string Array::formatTensorElement(uint64_t flatIndex) const {
     char buf[32];
     std::ostringstream oss;
     switch (elemTypeCode_) {
-    case TypeCode::Float32: {
+    case TypeCode::Float32:
+    case TypeCode::BFloat16:
+    case TypeCode::Float16: {
         const double value = getAsDouble(flatIndex);
         if (value == std::floor(value) && std::abs(value) < 1e10) {
             (void)std::snprintf(buf, sizeof(buf), "% 7.0f.", value);

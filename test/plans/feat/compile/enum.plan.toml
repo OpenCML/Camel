@@ -342,12 +342,12 @@ name = "refuse_onnx"
 desc = "onnx::export refuses a model whose input is an enum: a model input is a tensor, a number, or a struct or tuple of those."
 kind = "negative"
 case = "../../../cases/compile/enum/refuse_onnx.cml"
-args = ["-E", "short", "${case}", "onnx::export(out=\"${test_tmp}/enum_never_written.onnx\")"]
+args = ["-E", "short", "${case}", "onnx::export out=\"${test_tmp}/enum_never_written.onnx\""]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 15
 expect_diagnostic_column = 1
-expect_output_contains = ["Translation pass 'onnx::export' refused the graph: parameter 's' of 'main' has type 'Shape'"]
+expect_output_contains = ["Translation pass 'onnx::export_model' refused the graph: parameter 's' of 'main' has type 'Shape'"]
 expect_output_not_contains = ["wrote", "Segmentation fault", "dumped core", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000
@@ -373,4 +373,19 @@ const want = [
 assert(out === want, `stdout: ${out}`)
 }
 """
+timeout_ms = 8000
+
+[[tests]]
+name = "type_argument_not_inferred"
+desc = "A unit variant of a generic enum (`Option::None`) says nothing about the type argument: the construction is refused where it is written, naming the variant's fields, and says to give the expected type (`let x: Option<int> = Option::None`)."
+kind = "negative"
+case = "../../../cases/compile/enum/type_argument_not_inferred.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EnumTypeArgumentNotInferred"
+expect_diagnostic_code = "0x03000139"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 13
+expect_output_contains = ["Cannot infer the type argument 'T' of enum 'Option' from the fields of 'None'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

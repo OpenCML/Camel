@@ -1,4 +1,4 @@
-"""Checks the effect trace written by `std::profile(effect_trace="...")`.
+"""Checks the effect trace written by `std::profile effect_trace=...`.
 
   order   exemplars/05_effect_order runs under NodeVM, FastVM and inline + NodeVM; the three
           traces are identical line by line once `seq` is dropped, every line names an
@@ -44,7 +44,7 @@ def run(program: Path, passes: list[str], trace: Path) -> tuple[int, str, list[d
     if trace.exists():
         trace.unlink()
     # The trace is a parameter of the run: std::profile turns it on and writes no report.
-    profile = f'std::profile(effect_trace="{trace.as_posix()}",report=false,hints=false)'
+    profile = f'std::profile effect_trace="{trace.as_posix()}" report=false hints=false'
     proc = subprocess.run([camel_exe(), str(program), profile, *passes], env=env,
                           capture_output=True, text=True, cwd=REPO_ROOT)
     lines = ([json.loads(l) for l in trace.read_text(encoding="utf-8").splitlines()]

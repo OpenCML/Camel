@@ -41,7 +41,7 @@ timeout_ms = 120000
 name = "json.nvm"
 kind = "behavior"
 case = "../../cases/gpu/profile/host_loop.cml"
-args = ["${case}", 'std::profile(json="${test_tmp}/profile.json")', "std::nvm"]
+args = ["${case}", 'std::profile json="${test_tmp}/profile.json"', "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["PROFILE camel"]
 verify_script = """

@@ -1,0 +1,38 @@
+/**
+ * The same refusal for a hand-written `#vjp` rule, in the shape the original report had: a gather
+ * whose rule answers with a gradient of the other float width.
+ *
+ * `pick` is a gather of one element. Its rule returns an `f32` zero -- a plausible thing to write,
+ * and the wrong width for `xs: float[]`. The accumulator used to store that f32 zero as the
+ * parameter's float64 gradient, and a f32 zero read as f64 is exactly 0.0, so the derivative of
+ * `xs[1]` (which is [0, 1, 0]) came out as the zero a discrete input may legitimately have. The
+ * refusal names the value's element type (float), the gradient's (f32) and that the derivative rule
+ * produced it, at the `pick` call on line 31.
+ *
+ * What it pins: a rule's gradient is checked like any other, so a rule cannot hand over a value of
+ * another width and be read as if it were the derivative. Red when the accumulator accepts the
+ * mismatch: the program then runs and prints `grad=0.0`.
+ */
+module refuse_gradient_element_type_rule
+
+import { grad } from autodiff
+
+func pick_rule(xs: float[], i: int, dy: float): f32 {
+    return f32(0.0)
+}
+
+#vjp<pick_rule>
+func pick(xs: float[], i: int): float {
+    return xs[i]
+}
+
+with <xs: float[]>
+func loss(): float {
+    return pick(xs, 1)
+}
+
+func main(): int sync {
+    let g = grad(loss)<[1.0, 2.0, 3.0]>()
+    'refuse_gradient_element_type_rule grad={}'->format<g>->println
+    return 0
+}

@@ -39,6 +39,7 @@
 #include "camel/passes/trans/cml/cml.h"
 #include "camel/passes/trans/json/gir.h"
 #include "macro/macro.h"
+#include "pass_declarations.h"
 #include "pass_spec.h"
 #include "passes/opt/devirtualize/devirtualize.h"
 #include "passes/opt/generic/generic.h"
@@ -79,6 +80,7 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <tuple>
 
 using namespace camel::core::error;
 using namespace camel::core::context;
@@ -90,8 +92,6 @@ NullGraphIRPass::apply(const camel::runtime::Program *program, std::ostream &os)
     return nullptr;
 }
 
-using PassScope    = Scope<std::string, PassDescriptor, std::string>;
-using PassScopePtr = scope_ptr_t<std::string, PassDescriptor, std::string>;
 
 namespace {
 
@@ -103,10 +103,11 @@ std::string trimText(std::string_view value) {
     return std::string(value.substr(first, last - first + 1));
 }
 
-/// The name of a specification, parameters removed.
+/// The name of a specification, parameters removed: the words after the first are the
+/// `key=value` parameters.
 std::string specName(const std::string &spec) {
-    const auto open = spec.find('(');
-    return trimText(open == std::string::npos ? spec : spec.substr(0, open));
+    const auto end = spec.find_first_of(" \t\r\n");
+    return trimText(end == std::string::npos ? spec : spec.substr(0, end));
 }
 
 FastVMConfig makeDefaultFastVmJitConfig() {
@@ -322,156 +323,47 @@ class GcViewsEscapePass final : public GraphIRPass {
     }
 };
 
-std::vector<std::string> splitPath(const std::string &path) {
-    std::vector<std::string> result;
-    size_t start = 0;
-    while (start < path.size()) {
-        size_t pos = path.find("::", start);
-        if (pos == std::string::npos) {
-            result.push_back(path.substr(start));
-            break;
-        }
-        result.push_back(path.substr(start, pos - start));
-        start = pos + 2;
-    }
-    return result;
-}
-
-std::optional<PassDescriptor>
-lookupInScope(PassScopePtr scope, const std::vector<std::string> &path) {
-    if (path.empty())
-        return std::nullopt;
-    for (size_t i = 0; i < path.size() - 1; ++i) {
-        scope = scope->enter(path[i]);
-        if (!scope)
-            return std::nullopt;
-    }
-    auto opt = scope->get(path.back(), false);
-    if (!opt)
-        return std::nullopt;
-    return *opt;
-}
-
-void collectPassPaths(
-    PassScopePtr scope, const std::string &prefix,
-    std::vector<std::pair<std::string, PassDescriptor>> &out) {
-    for (const auto &[key, descriptor] : scope->map()) {
-        out.emplace_back(prefix.empty() ? key : prefix + "::" + key, descriptor);
-    }
-    scope->forEachNamedInner([&](const std::string &name, const PassScopePtr &child) {
-        collectPassPaths(child, prefix.empty() ? name : prefix + "::" + name, out);
-    });
-}
-
-// Nested pass registry initializer helpers: `def(factory)` creates a leaf,
-// `def(factory, {...})` creates a node with both a factory and children, and
-// `scope({...})` creates a pure namespace node.
-struct PassDef {
-    std::optional<PassDescriptor> value;
-    // shared_ptr: vector<pair<..., PassDef>> would instantiate vector while PassDef is still
-    // incomplete; Clang + libstdc++ reject that ([vector] requires a complete element type).
-    std::vector<std::pair<std::string, std::shared_ptr<PassDef>>> children;
-};
-
-PassDef def(PassDescriptor f) { return PassDef{.value = std::move(f), .children = {}}; }
-
-PassDef def(PassFactory f) { return def(passWithoutParameters(std::move(f))); }
-
-PassDef def(PassDescriptor f, std::initializer_list<std::pair<const char *, PassDef>> list) {
-    PassDef r{.value = std::move(f), .children = {}};
-    for (const auto &[k, v] : list)
-        r.children.emplace_back(k, std::make_shared<PassDef>(v));
-    return r;
-}
-
-PassDef def(PassFactory f, std::initializer_list<std::pair<const char *, PassDef>> list) {
-    return def(passWithoutParameters(std::move(f)), list);
-}
-
-PassDef scope(std::initializer_list<std::pair<const char *, PassDef>> list) {
-    PassDef r;
-    for (const auto &[k, v] : list)
-        r.children.emplace_back(k, std::make_shared<PassDef>(v));
-    return r;
-}
-
-void buildPassScope(PassScopePtr s, const PassDef &def) {
-    for (const auto &[name, childPtr] : def.children) {
-        const PassDef &child = *childPtr;
-        if (child.value)
-            s->insert(name, *child.value);
-        if (!child.children.empty()) {
-            auto sub = s->enter(name);
-            buildPassScope(sub, child);
-        }
-    }
-}
-
-PassParam safeFpParameter() {
-    return PassParam{
-        "safe_fp",
-        PassParamType::Bool,
-        false,
-        "keep the algebraic stage to strictly equivalent floating-point transformations "
-        "(design principles 7.4)"};
-}
-
 /// The `growth_budget` parameter of every pass built on the rewrite engine (design principles
-/// 9.3): the nodes specialization and inlining may copy. A pipeline no longer sets it through an
-/// environment variable.
-PassParam growthBudgetParameter() {
-    return PassParam{
-        "growth_budget",
-        PassParamType::Int,
-        static_cast<int64_t>(kDefaultGrowthBudgetNodes),
-        "nodes specialization and inlining may copy before the remaining calls are left as "
-        "calls; 0 stops them (design principles 9.6)"};
-}
-
+/// 9.3): the nodes specialization and inlining may copy. Its declaration is in stdlib/std.cml.
 GrowthBudget growthBudgetOf(const PassArgs &args, std::string passName) {
     GrowthBudget budget;
     const int64_t nodes = args.getInt("growth_budget");
-    budget.nodes    = nodes < 0 ? 0 : static_cast<size_t>(nodes);
-    budget.written  = args.given("growth_budget");
-    budget.passName = std::move(passName);
+    budget.nodes        = nodes < 0 ? 0 : static_cast<size_t>(nodes);
+    budget.written      = args.given("growth_budget");
+    budget.passName     = std::move(passName);
     return budget;
 }
 
-PassDescriptor optimizeDescriptor() {
-    PassDescriptor d;
-    d.doc    = "the standard optimization pipeline";
-    d.params = {
-        safeFpParameter(),
-        growthBudgetParameter(),
-        PassParam{
-            "check_screens",
-            PassParamType::Bool,
-            false,
-            "test of the generic passes' screens: give the graphs they skip to the pass anyway "
-            "and fail if it rewrites one"}};
-    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+PassMaker makeGraphVizPass(GraphVizDumpConfig config) {
+    return [config](const context_ptr_t &ctx, const PassArgs &) {
+        return std::make_unique<GraphVizDumpPass>(ctx, config);
+    };
+}
+
+template <class Pass, class... Args> PassMaker makePass(Args &&...args) {
+    return [arguments = std::tuple<Args...>(std::forward<Args>(args)...)](
+               const context_ptr_t &ctx, const PassArgs &) {
+        return std::apply(
+            [&](const auto &...unpacked) {
+                return std::make_unique<Pass>(ctx, unpacked...);
+            },
+            arguments);
+    };
+}
+
+PassMaker optimizePass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
         OptimizeRewriteConfig config;
         config.safeFloatingPoint = args.getBool("safe_fp");
         config.checkScreens      = args.getBool("check_screens");
         config.growthBudget      = growthBudgetOf(args, "std::opt");
         return std::make_unique<OptimizeRewritePass>(ctx, config);
     };
-    return d;
 }
 
-PassDescriptor inlineDescriptor(
-    std::optional<InlineTargetStrategy> strategy, std::string passName) {
-    PassDescriptor d;
-    if (strategy == InlineTargetStrategy::Small) {
-        d.doc = "inline-only rewrite pass, small targets";
-    } else if (strategy == InlineTargetStrategy::Arm) {
-        d.doc = "inline-only rewrite pass, branch-arm targets";
-    } else {
-        d.doc = "inline-only rewrite pass (hybrid target strategy)";
-    }
-    d.params = {growthBudgetParameter()};
-    d.make   = [strategy, passName = std::move(passName)](
-                   const context_ptr_t &ctx, const PassArgs &args) {
+PassMaker inlinePass(std::optional<InlineTargetStrategy> strategy, std::string passName) {
+    return [strategy, passName = std::move(passName)](
+               const context_ptr_t &ctx, const PassArgs &args) {
         InlineRewriteConfig config{};
         if (strategy) {
             config.inlineStrategy = *strategy;
@@ -479,59 +371,32 @@ PassDescriptor inlineDescriptor(
         return std::make_unique<InlineRewritePass>(
             ctx, config, growthBudgetOf(args, passName));
     };
-    return d;
 }
 
-PassDescriptor specializeDescriptor() {
-    PassDescriptor d;
-    d.doc    = "specialization only";
-    d.params = {growthBudgetParameter()};
-    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
+PassMaker specializePass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<SpecializeRewritePass>(
             ctx, growthBudgetOf(args, "std::opt::specialize"));
     };
-    return d;
 }
 
-PassDescriptor devirtualizeDescriptor() {
-    PassDescriptor d;
-    d.doc    = "devirtualization only";
-    d.params = {growthBudgetParameter()};
-    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
+PassMaker devirtualizePass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<DevirtualizeRewritePass>(
             ctx, growthBudgetOf(args, "std::opt::devirtualize"));
     };
-    return d;
 }
 
-PassDescriptor extractDescriptor() {
-    PassDescriptor d;
-    d.doc    = "one writing for every value that has several, chosen by a cost model";
-    d.params = {PassParam{
-        "cost",
-        PassParamType::String,
-        std::string("weighted"),
-        "the cost model: 'nodes' (every node costs one), 'weighted' (a division costs more than a "
-        "product, a product more than a sum), or one a module registered"}};
-    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
+PassMaker extractPass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<ExtractPass>(ctx, args.getString("cost"));
     };
-    return d;
 }
 
-PassDescriptor dceDescriptor() {
-    PassDescriptor d;
-    d.doc    = "dead code elimination";
-    d.params = {PassParam{
-        "values_only",
-        PassParamType::Bool,
-        false,
-        "remove only the constants and pure operations that no node reads, not gates and syncs "
-        "(the reference for passes that do the same, such as one written in Camel)"}};
-    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+PassMaker dcePass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<DeadCodePass>(ctx, args.getBool("values_only"));
     };
-    return d;
 }
 
 /// The algebraic simplification under the core's name: the rules library's pass
@@ -555,85 +420,18 @@ class RulesAlgebraPass final : public GraphIRPass {
     bool safeFp_;
 };
 
-PassDescriptor algebraDescriptor() {
-    PassDescriptor d;
-    d.doc    = "algebraic simplification (the rules library's simplified form: the laws of "
-               "stdlib/rules.cml, under the strict numeric policy when safe_fp is true)";
-    d.params = {
-        safeFpParameter(),
-        PassParam{
-            "neutral_only",
-            PassParamType::Bool,
-            false,
-            "apply only the integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), not the "
-            "merging of like terms and constant factors (the C++ reference for passes that do the "
-            "same; the rules library has no neutral-only mode)"},
-    };
-    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+PassMaker algebraPass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
         if (args.getBool("neutral_only")) {
             return std::unique_ptr<GraphIRPass>(std::make_unique<AlgebraPass>(ctx, true));
         }
         return std::unique_ptr<GraphIRPass>(
             std::make_unique<RulesAlgebraPass>(ctx, args.getBool("safe_fp")));
     };
-    return d;
 }
 
-PassParam statsParameter() {
-    return PassParam{
-        "stats",
-        PassParamType::String,
-        std::string(),
-        "append per-graph bytecode and execution counts of the run to this file"};
-}
-
-PassDescriptor profileDescriptor() {
-    PassDescriptor d;
-    d.doc =
-        "profiles the run (design docs/design/gpu/README.cn.md 5.6): the device and the time of "
-        "every operator, the operators and kernels of one step, the host/device transfers, the "
-        "synchronisations, the phase split of the compilation, and the element-wise loops that "
-        "run on the host; the report is written when the run ends";
-    d.params = {
-        PassParam{
-            "top",
-            PassParamType::Int,
-            int64_t{24},
-            "rows of the operator table; 0 writes every operator that ran"},
-        PassParam{
-            "hints",
-            PassParamType::Bool,
-            true,
-            "report the element-wise loops that run on the host, and why they did not go to a "
-            "device"},
-        PassParam{
-            "json",
-            PassParamType::String,
-            std::string(),
-            "also write the report as one JSON object to this file"},
-        PassParam{
-            "report",
-            PassParamType::Bool,
-            true,
-            "print the text report when the run ends; false turns on only the diagnostics the "
-            "other parameters ask for"},
-        PassParam{
-            "gc_stats",
-            PassParamType::Int,
-            int64_t{0},
-            "the allocator's statistics at exit: 1 one line, 2 also one line per collection"},
-        PassParam{
-            "type_stats",
-            PassParamType::Bool,
-            false,
-            "the type storage's statistics at exit (one line per kind, and the type table)"},
-        PassParam{
-            "effect_trace",
-            PassParamType::String,
-            std::string(),
-            "append one JSON line per executed effectful operator to this file"},
-    };
-    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+PassMaker profilePass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
         camel::profile::ReportOptions options;
         const int64_t top = args.getInt("top");
         options.top       = top < 0 ? 0 : static_cast<size_t>(top);
@@ -648,24 +446,10 @@ PassDescriptor profileDescriptor() {
             args.getBool("type_stats"),
             args.getString("effect_trace"));
     };
-    return d;
 }
 
-PassDescriptor fastVmDescriptor(bool jit) {
-    PassDescriptor d;
-    d.doc =
-        jit ? "the bytecode interpreter with on-demand native code" : "the bytecode interpreter";
-    d.params = {statsParameter()};
-    if (jit) {
-        d.params.push_back(
-            PassParam{
-                "hot_threshold",
-                PassParamType::Int,
-                int64_t{1},
-                "calls from one call site before a graph is compiled; 0 compiles at the first call "
-                "(short test programs then run as compiled code too)"});
-    }
-    d.make = [jit](const context_ptr_t &ctx, const PassArgs &args) {
+PassMaker fastVmPass(bool jit) {
+    return [jit](const context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config = jit ? makeDefaultFastVmJitConfig() : FastVMConfig{};
         config.statsPath    = args.getString("stats");
         if (jit) {
@@ -674,42 +458,10 @@ PassDescriptor fastVmDescriptor(bool jit) {
         }
         return std::make_unique<FastVMSchedPass>(ctx, config);
     };
-    return d;
 }
 
-PassDescriptor taskflowDescriptor() {
-    PassDescriptor d;
-    d.doc    = "the parallel scheduler";
-    d.params = {
-        PassParam{
-            "linear",
-            PassParamType::Bool,
-            false,
-            "evaluate every graph node by node (for comparison and diagnosis)"},
-        PassParam{
-            "fanout_all",
-            PassParamType::Bool,
-            false,
-            "fan every unordered higher-order call out, not only those worth it by measurement"},
-        PassParam{
-            "diag",
-            PassParamType::Bool,
-            false,
-            "print the decision for every graph and why a graph stays node by node"},
-        PassParam{
-            "bytecode",
-            PassParamType::Bool,
-            true,
-            "hand graphs that need no parallelism to the bytecode interpreter; false: the "
-            "scheduler evaluates every graph itself"},
-        PassParam{
-            "gc_stats",
-            PassParamType::Int,
-            int64_t{0},
-            "1: print the task graphs and collections of the run when it ends; 2: also one "
-            "line per collection"},
-    };
-    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+PassMaker taskflowPass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
         TaskflowOptions options;
         options.linear    = args.getBool("linear");
         options.fanOutAll = args.getBool("fanout_all");
@@ -720,158 +472,122 @@ PassDescriptor taskflowDescriptor() {
         pass->setOptions(options);
         return pass;
     };
-    return d;
 }
 
-#define PASS(T) [](const context_ptr_t &ctx) { return std::make_unique<T>(ctx); }
-#define PASS1(T, A) [](const context_ptr_t &ctx) { return std::make_unique<T>(ctx, A); }
-
-PassScopePtr initPassScope() {
-    auto root = PassScope::create();
-    buildPassScope(
-        root,
-        scope({
-            {
-                "std",
-                scope({
-                    {"null", def(PASS(NullGraphIRPass))},
-                    {"macro", def(PASS(MacroRewritePass))},
-                    // GIR formats: compact DOT by default, rich DOT for Graphviz, JSON for tools.
-                    {"gir", def(PASS(GraphVizDumpPass))},
-                    {"rgir", def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.rich = true}))},
-                    {"gir_regions", def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.regions = true}))},
-                    {"rgir_regions",
-                     def(PASS1(
-                         GraphVizDumpPass, (GraphVizDumpConfig{.rich = true, .regions = true})))},
-                    {"jgir", def(jgirDescriptor())},
-                    {"cml", def(cmlDescriptor())},
-                    {"agir",
-                     def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.annotateRoles = true}))},
-                    {"argir",
-                     def(PASS1(
-                         GraphVizDumpPass,
-                         (GraphVizDumpConfig{.rich = true, .annotateRoles = true})))},
-                    {"stats", def(PASS(GraphStatsPass))},
-                    {"profile", def(profileDescriptor())},
-                    {"cpp",
-                     def(PASS(CppDumpPass),
-                         {
-                             {"module", def(PASS(CppModuleDumpPass))},
-                             {"inspect", def(PASS(CppInspectDumpPass))},
-                         })},
-                    {"topo_node_seq", def(PASS(TopoNodeSeqDumpPass))},
-                    {"gc",
-                     scope({
-                         {"snapshot", def(PASS(GcSnapshotPass))},
-                         {"verify", def(PASS(GcVerifyPass))},
-                         {"minor", def(PASS(GcMinorPass))},
-                         {"major", def(PASS(GcMajorPass))},
-                         {"config", def(PASS(GcConfigPass))},
-                         {"summary", def(PASS(GcSummaryPass))},
-                          {"blocks", def(PASS(GcBlocksPass))},
-                         {"views", def(PASS(GcViewsPass))},
-                         {"views_escape", def(PASS(GcViewsEscapePass))},
-                         {"remembered_set", def(PASS(GcRememberedSetPass))},
-                         {"foreign_resource", def(PASS(GcForeignResourcePass))},
-                         {"poison", def(PASS(GcPoisonPass))},
-                     })},
-                    {"type",
-                     scope({
-                         {"array", def(PASS(ArrayTypeSelfTestPass))},
-                     })},
-                    {"nodevm", def(PASS(NodeVMSchedPass))},
-                    {"fastvm",
-                     def(fastVmDescriptor(false),
-                         {
-                             {"bytecode", def(PASS(BytecodeDumpPass))},
-                             {"linked_bytecode", def(PASS(LinkedBytecodeDumpPass))},
-                             {"jit",
-                              def(fastVmDescriptor(true),
-                                  {
-                                      {"dump",
-                                       scope({
-                                           {"asm", def(PASS(JitAsmDumpPass))},
-                                           {"bin", def(PASS(JitBinaryDumpPass))},
-                                           {"rmir", def(PASS(JitRmirDumpPass))},
-                                           {"mir", def(PASS(JitMirDumpPass))},
-                                       })},
-                                  })},
-                         })},
-                    {"opt",
-                     def(optimizeDescriptor(),
-                         {
-                             {"inline",
-                              def(inlineDescriptor(std::nullopt, "std::opt::inline"),
-                                  {
-                                      {"small",
-                                       def(inlineDescriptor(
-                                           InlineTargetStrategy::Small, "std::opt::inline::small"))},
-                                      {"arm",
-                                       def(inlineDescriptor(
-                                           InlineTargetStrategy::Arm, "std::opt::inline::arm"))},
-                                      {"hybrid",
-                                       def(inlineDescriptor(
-                                           InlineTargetStrategy::Hybrid,
-                                           "std::opt::inline::hybrid"))},
-                                  })},
-                             {"devirtualize", def(devirtualizeDescriptor())},
-                             {"specialize", def(specializeDescriptor())},
-                             {"fold", def(PASS(ConstantFoldPass))},
-                             {"algebra", def(algebraDescriptor())},
-                             {"extract", def(extractDescriptor())},
-                             {"cse", def(PASS(CommonSubexpressionPass))},
-                             {"dce", def(dceDescriptor())},
-                             {"ctrl", def(PASS(ControlReductionPass))},
-                         })},
-                    {"taskflow", def(taskflowDescriptor())},
-                    {"tfdump", def(PASS(TfDumpPass))},
-                }),
-            },
-        }));
-    // The core passes that read tag facts: the dumps show a node's attributes and numeric
-    // permissions, and std::opt keeps them across rewrites (CSE combines by their merge rules).
-    // A tag's `read_by` names one of these (or a module's pass that registers itself).
-    for (const char *reader :
-         {"std::gir",
-          "std::rgir",
-          "std::gir_regions",
-          "std::rgir_regions",
-          "std::jgir",
-          "std::agir",
-          "std::argir",
-          "std::opt"}) {
-        camel::core::tag::declareReader(reader);
-    }
-    return root;
+/// The implementations of the core's passes, by the declaration name in stdlib/std.cml. A
+/// declaration with no entry here is a pass the language declares and the core does not
+/// implement; the pipeline refuses it, and the test that resolves every declaration catches it.
+const std::map<std::string, PassMaker> &corePasses() {
+    static const std::map<std::string, PassMaker> map = [] {
+        std::map<std::string, PassMaker> implementations = {
+            {"nop", makePass<NullGraphIRPass>()},
+            {"macro", makePass<MacroRewritePass>()},
+            {"gir", makeGraphVizPass({})},
+            {"rgir", makeGraphVizPass(GraphVizDumpConfig{.rich = true})},
+            {"gir_regions", makeGraphVizPass(GraphVizDumpConfig{.regions = true})},
+            {"rgir_regions",
+             makeGraphVizPass(GraphVizDumpConfig{.rich = true, .regions = true})},
+            {"jgir", jgirPass()},
+            {"cml", cmlPass()},
+            {"agir", makeGraphVizPass(GraphVizDumpConfig{.annotateRoles = true})},
+            {"argir", makeGraphVizPass(
+                          GraphVizDumpConfig{.rich = true, .annotateRoles = true})},
+            {"stats", makePass<GraphStatsPass>()},
+            {"profile", profilePass()},
+            {"cpp", makePass<CppDumpPass>()},
+            {"cpp::module_file", makePass<CppModuleDumpPass>()},
+            {"cpp::inspect", makePass<CppInspectDumpPass>()},
+            {"topo_node_seq", makePass<TopoNodeSeqDumpPass>()},
+            {"tfdump", makePass<TfDumpPass>()},
+            {"arraytype", makePass<ArrayTypeSelfTestPass>()},
+            {"gc::snapshot", makePass<GcSnapshotPass>()},
+            {"gc::verify", makePass<GcVerifyPass>()},
+            {"gc::minor", makePass<GcMinorPass>()},
+            {"gc::major", makePass<GcMajorPass>()},
+            {"gc::config", makePass<GcConfigPass>()},
+            {"gc::summary", makePass<GcSummaryPass>()},
+            {"gc::blocks", makePass<GcBlocksPass>()},
+            {"gc::views", makePass<GcViewsPass>()},
+            {"gc::views_escape", makePass<GcViewsEscapePass>()},
+            {"gc::remembered_set", makePass<GcRememberedSetPass>()},
+            {"gc::foreign_resource", makePass<GcForeignResourcePass>()},
+            {"gc::poison", makePass<GcPoisonPass>()},
+            {"nvm", makePass<NodeVMSchedPass>()},
+            {"fvm", fastVmPass(false)},
+            {"fastvm::bytecode", makePass<BytecodeDumpPass>()},
+            {"fastvm::linked_bytecode", makePass<LinkedBytecodeDumpPass>()},
+            {"fastvm::jit", fastVmPass(true)},
+            {"fastvm::jit_asm", makePass<JitAsmDumpPass>()},
+            {"fastvm::jit_bin", makePass<JitBinaryDumpPass>()},
+            {"fastvm::jit_rmir", makePass<JitRmirDumpPass>()},
+            {"fastvm::jit_mir", makePass<JitMirDumpPass>()},
+            {"taskflow", taskflowPass()},
+            {"opt", optimizePass()},
+            {"opt::inline", inlinePass(std::nullopt, "std::opt::inline")},
+            {"opt::small", inlinePass(InlineTargetStrategy::Small, "std::opt::inline::small")},
+            {"opt::arm", inlinePass(InlineTargetStrategy::Arm, "std::opt::inline::arm")},
+            {"opt::hybrid", inlinePass(InlineTargetStrategy::Hybrid, "std::opt::inline::hybrid")},
+            {"opt::devirtualize", devirtualizePass()},
+            {"opt::specialize", specializePass()},
+            {"opt::fold", makePass<ConstantFoldPass>()},
+            {"opt::algebra", algebraPass()},
+            {"opt::extract", extractPass()},
+            {"opt::cse", makePass<CommonSubexpressionPass>()},
+            {"opt::dce", dcePass()},
+            {"opt::ctrl", makePass<ControlReductionPass>()},
+        };
+        // The core passes that read tag facts: the dumps show a node's attributes and numeric
+        // permissions, and std::opt keeps them across rewrites (CSE combines by their merge
+        // rules). A tag's `read_by` names one of these (or a module's pass that registers
+        // itself).
+        for (const char *reader :
+             {"std::gir",
+              "std::rgir",
+              "std::gir_regions",
+              "std::rgir_regions",
+              "std::jgir",
+              "std::agir",
+              "std::argir",
+              "std::opt"}) {
+            camel::core::tag::declareReader(reader);
+        }
+        return implementations;
+    }();
+    return map;
 }
 
-#undef PASS
-#undef PASS1
-
-const PassScopePtr passScope = initPassScope();
-
-std::unordered_map<std::string, std::string> passAliases = {
+const std::map<std::string, std::string> passAliases = {
     // Frequently used spelling of the standalone inline stage and its strategies.
     {"std::inline", "std::opt::inline"},
-    {"std::inline::small", "std::opt::inline::small"},
-    {"std::inline::arm", "std::opt::inline::arm"},
-    {"std::inline::hybrid", "std::opt::inline::hybrid"},
+    {"std::inline::small", "std::opt::small"},
+    {"std::opt::inline::small", "std::opt::small"},
+    {"std::opt::inline::arm", "std::opt::arm"},
+    {"std::opt::inline::hybrid", "std::opt::hybrid"},
+    {"std::fastvm::jit::dump::asm", "std::fastvm::jit_asm"},
+    {"std::fastvm::jit::dump::bin", "std::fastvm::jit_bin"},
+    {"std::fastvm::jit::dump::rmir", "std::fastvm::jit_rmir"},
+    {"std::fastvm::jit::dump::mir", "std::fastvm::jit_mir"},
+    {"std::inline::arm", "std::opt::arm"},
+    {"std::inline::hybrid", "std::opt::hybrid"},
     // Standard scheduler aliases
-    {"std::default", "std::nodevm"},
-    {"std::linear", "std::nodevm"},
+    {"std::default", "std::nvm"},
+    {"std::linear", "std::nvm"},
     {"std::parallel", "std::taskflow"},
+    {"std::tf", "std::taskflow"},
 
     // Common VM aliases
-    {"std::lnr", "std::fastvm"},
+    {"std::lnr", "std::fvm"},
     {"std::prl", "std::taskflow"},
-    {"std::fvm", "std::fastvm"},
+    {"std::fastvm", "std::fvm"},
     {"std::jit", "std::fastvm::jit"},
-    {"std::nvm", "std::nodevm"},
-    {"std::tf", "std::taskflow"},
+    {"std::nodevm", "std::nvm"},
     // Common translation and dump aliases
-    // Common translation and dump aliases
+    // Names whose leaf is a keyword of the language: the declaration uses a name that can be
+    // written, and the old spelling keeps resolving to it.
+    {"std::null", "std::nop"},
+    {"std::type::array", "std::arraytype"},
     {"std::cxx", "std::cpp"},
-    {"std::cppmod", "std::cpp::module"},
+    {"std::cppmod", "std::cpp::module_file"},
     {"std::cppinspect", "std::cpp::inspect"},
     {"std::tns", "std::topo_node_seq"},
     {"std::gcsnap", "std::gc::snapshot"},
@@ -886,16 +602,23 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::gcremembered", "std::gc::remembered_set"},
     {"std::gcforeign", "std::gc::foreign_resource"},
     {"std::gcpoison", "std::gc::poison"},
-    {"std::arraytype", "std::type::array"},
     {"std::bc", "std::fastvm::bytecode"},
     {"std::lbc", "std::fastvm::linked_bytecode"},
-    {"std::bin", "std::fastvm::jit::dump::bin"},
-    {"std::asm", "std::fastvm::jit::dump::asm"},
-    {"std::rmir", "std::fastvm::jit::dump::rmir"},
-    {"std::mir", "std::fastvm::jit::dump::mir"},
+    {"std::bin", "std::fastvm::jit_bin"},
+    {"std::asm", "std::fastvm::jit_asm"},
+    {"std::rmir", "std::fastvm::jit_rmir"},
+    {"std::mir", "std::fastvm::jit_mir"},
     {"std::tfg", "std::tfdump"},
     {"std::prof", "std::profile"},
 };
+std::optional<PassMaker> findCorePass(const std::string &name) {
+    const auto &implementations = corePasses();
+    const auto it               = implementations.find(name);
+    if (it == implementations.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
 
 struct ModulePassRegistry {
     std::mutex mutex;
@@ -1086,12 +809,9 @@ void registerModulePass(const std::string &path, PassFactory factory) {
 }
 
 void registerPassAlias(const std::string &alias, const std::string &target) {
-    // The core's names are the core's: an alias in `std::`, or a bare name that `std::` already
-    // has (bare names are tried in `std::` first), would shadow or replace them.
-    const bool bare = alias.find("::") == std::string::npos;
-    if (alias.starts_with("std::") || passAliases.contains(alias) ||
-        (bare && (passAliases.contains("std::" + alias) ||
-                  lookupInScope(passScope, splitPath("std::" + alias))))) {
+    // The core's namespace belongs to the core. A bare alias may not shadow a core declaration
+    // either: resolution tries the written name as a declaration before any alias.
+    if (alias.starts_with("std::") || passAliases.contains(alias)) {
         CAMEL_LOG_WARN_S(
             "Pass",
             "alias '{}' -> '{}' ignored: the name belongs to the core's std:: namespace",
@@ -1179,46 +899,170 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
     return table;
 }
 
-/// The descriptor of a pass name (no parameters written), or nothing.
-std::optional<PassDescriptor> findDescriptor(const std::string &name) {
-    // 1. Resolve aliases
-    const std::string resolved = resolveAlias(name);
+/// A test-only pass whose call can be read back: it prints every parameter the declaration
+/// names, the value it was given, whether that value was written, and how many default
+/// expressions have been evaluated in the process. A plan pins the declaration's count with
+/// `declared=`, writes each name in one call, and compares the count of two calls that use the
+/// defaults (equal: a default is evaluated at the declaration, not at each call).
+class PassParamsTestPass final : public GraphIRPass {
+  public:
+    PassParamsTestPass(
+        const context_ptr_t &ctx, const PassArgs &args, std::vector<PassParam> declared)
+        : GraphIRPass(ctx), args_(args), declared_(std::move(declared)) {}
 
-    // 2. Full paths with :: search by scope hierarchy
-    if (resolved.find("::") != std::string::npos) {
-        auto path = splitPath(resolved);
-        if (!path.empty()) {
-            if (auto found = lookupInScope(passScope, path))
-                return found;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        os << "test::params";
+        for (const auto &p : declared_) {
+            os << ' ' << p.name << '=';
+            switch (p.type) {
+            case PassParamType::Bool:
+                os << (args_.getBool(p.name) ? "true" : "false");
+                break;
+            case PassParamType::Int:
+                os << args_.getInt(p.name);
+                break;
+            case PassParamType::Float:
+                os << std::format("{}", args_.getFloat(p.name));
+                break;
+            case PassParamType::String:
+                os << args_.getString(p.name);
+                break;
+            }
+            os << (args_.given(p.name) ? " (given)" : " (default)");
         }
-    } else {
-        // 3. No :: try std::name first, then the global name
-        if (auto found = lookupInScope(passScope, splitPath("std::" + resolved)))
-            return found;
-        if (auto found = lookupInScope(passScope, std::vector<std::string>{resolved}))
-            return found;
+        os << std::format(" declared={}\n", declared_.size());
+        return program;
     }
 
-    // 4. Passes contributed by loaded modules (full names such as "tensor::fuse")
-    if (auto found = findModulePass(resolved)) {
+  private:
+    PassArgs args_;
+    std::vector<PassParam> declared_;
+};
+
+const PassDescriptor &passParamsTestDescriptor() {
+    static const PassDescriptor descriptor = [] {
+        PassDescriptor d;
+        d.params = {
+            {"flag", PassParamType::Bool, false, "a parameter that must be given", true},
+            {"n", PassParamType::Int, int64_t{5}, "an int whose default is a constant expression", false},
+            {"ratio", PassParamType::Float, 1.5, "a float", false},
+            {"label", PassParamType::String, std::string("x"), "a string", false},
+            {"count", PassParamType::Int, int64_t{7}, "another int", false},
+        };
+        d.make = [declared = d.params](const context_ptr_t &ctx, const PassArgs &args) {
+            return std::make_unique<PassParamsTestPass>(ctx, args, declared);
+        };
+        return d;
+    }();
+    return descriptor;
+}
+
+/// A pass a name resolves to: how to make it and the parameters its declaration gives. The
+/// declaration is the standard library's; a pass written in Camel's is its signature's `with`
+/// list.
+struct FoundPass {
+    PassDescriptor descriptor;
+    std::vector<PassParam> params;
+    /// A declaration that exists but whose applicability condition does not hold.
+    std::string inapplicable;
+};
+
+/// Resolves a pass name to its declaration and implementation. `ctx` locates the standard
+/// library and the pass modules; a name without one is a name the pipeline cannot resolve.
+std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::string &name) {
+    // The core's passes: their declarations are stdlib/std.cml, their implementations the
+    // table of kernels keyed by the same name. The name as written is tried first, so a module
+    // alias can never shadow a declaration of the core.
+    const auto coreFound = [&](const std::string &candidate) -> std::optional<FoundPass> {
+        std::string coreName;
+        if (candidate.rfind("std::", 0) == 0) {
+            coreName = candidate.substr(5);
+        } else if (candidate.find("::") == std::string::npos) {
+            coreName = candidate;
+        } else {
+            return std::nullopt;
+        }
+        if (coreName.empty()) {
+            return std::nullopt;
+        }
+        const auto declaration =
+            camel::execute::detail::findPassDeclaration("std", coreName, ctx);
+        if (!declaration) {
+            return std::nullopt;
+        }
+        FoundPass found;
+        found.params = declaration->params;
+        if (!passDeclarationApplies(*declaration, found.inapplicable)) {
+            found.inapplicable = "std::" + coreName + ": " + found.inapplicable;
+            return found;
+        }
+        const auto maker = findCorePass(coreName);
+        if (!maker) {
+            return std::nullopt;
+        }
+        found.descriptor.make = *maker;
+        return found;
+    };
+    if (auto written = coreFound(name)) {
+        return written;
+    }
+    const std::string resolved = resolveAlias(name);
+    if (resolved != name) {
+        if (auto aliased = coreFound(resolved)) {
+            return aliased;
+        }
+    }
+    if (resolved.find("::") == std::string::npos) {
+        // A bare name that is not a declaration is not a pass: the module passes are named by
+        // their module, and the test passes by `test::`.
+        return std::nullopt;
+    }
+    // A pass contributed by a module: its implementation is registered under `<module>::<name>`,
+    // and its declaration is the module's `.cml` file.
+    const size_t separator       = resolved.find("::");
+    const std::string module     = resolved.substr(0, separator);
+    const std::string function   = resolved.substr(separator + 2);
+    if (const auto descriptor = findModulePass(resolved)) {
+        FoundPass found;
+        found.descriptor       = *descriptor;
+        found.params           = descriptor->params;
+        if (const auto declaration =
+                camel::execute::detail::findPassDeclaration(module, function, ctx)) {
+            found.params = declaration->params;
+            if (!passDeclarationApplies(*declaration, found.inapplicable)) {
+                found.inapplicable = resolved + ": " + found.inapplicable;
+                return found;
+            }
+        }
         return found;
     }
 
-    // 5. Test-only passes. They are reachable by name and by nothing else; no pipeline adds them.
+    // Test-only passes. They are reachable by name and by nothing else; no pipeline adds them.
+    if (resolved == "test::params") {
+        FoundPass found;
+        found.descriptor = passParamsTestDescriptor();
+        found.params     = found.descriptor.params;
+        return found;
+    }
     for (const auto &[testName, factory] : testPasses()) {
         if (resolved == testName) {
-            return passWithoutParameters(factory);
+            FoundPass found;
+            found.descriptor = passWithoutParameters(factory);
+            return found;
         }
     }
     return std::nullopt;
 }
 
 struct ResolvedPass {
-    PassFactory factory;                // the pass with its parameters bound; null if not usable
-    bool known = false;                 // the name is a pass
-    std::optional<std::string> problem; // the parameters are wrong
-    /// When the problem is a pass module that does not compile: its first error, as a secondary
-    /// location (H36c).
+    PassFactory factory; // the pass with its parameters bound; null if not usable
+    bool known = false;  // the name is a pass
+    /// A parameter the call wrote wrongly: unknown, written twice, of the wrong type, or a
+    /// required one left out.
+    std::optional<camel::execute::detail::ParamProblem> paramProblem;
+    /// A pass module that does not compile: its first error, as a secondary location (H36c).
+    std::optional<std::string> problem;
     std::optional<DiagLabel> errorLocation;
     /// A `<module>::<pass>` whose module is there and compiles but provides no such pass: the
     /// module, the name, what the module does provide, and whether it declares the name without
@@ -1232,29 +1076,105 @@ struct ResolvedPass {
     std::optional<MissingPass> missingPass;
 };
 
-/// Resolves `name` or `name(key=value, ...)`. Prints nothing.
-ResolvedPass resolvePass(const std::string &spec) {
+/// Resolves one specification: the pass name and its `key=value` words. Prints nothing.
+ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
     ResolvedPass result;
-    const auto descriptor = findDescriptor(specName(spec));
+    camel::execute::detail::ParsedSpec parsed;
+    if (auto problem = camel::execute::detail::parseSpec(spec, parsed)) {
+        result.paramProblem = std::move(problem);
+        return result;
+    }
+    // A core pass exists only as the declaration in stdlib/std.cml plus its kernel. When the
+    // declaration cannot be read, the kernel must not run on defaults invented elsewhere: the
+    // failure names the module and the files the pipeline looked at.
+    if (ctx) {
+        const std::string resolvedName = resolveAlias(parsed.name);
+        if (resolvedName.rfind("std::", 0) == 0) {
+            const std::string bare = resolvedName.substr(5);
+            if (findCorePass(bare) &&
+                camel::execute::detail::findPassDeclaration("std", bare, ctx) == nullptr) {
+                result.known = true;
+                const std::string path =
+                    camel::execute::detail::moduleDeclarationPath("std", ctx);
+                if (!path.empty()) {
+                    result.problem =
+                        std::format("module 'std' declares no pass '{}' in {}", bare, path);
+                } else {
+                    const auto candidates =
+                        camel::execute::detail::moduleDeclarationCandidates("std", ctx);
+                    std::string looked;
+                    for (const auto &candidate : candidates) {
+                        looked += (looked.empty() ? "" : ", ") + candidate;
+                    }
+                    result.problem = std::format(
+                        "the pass declarations of module 'std' are not found: looked for std.cml "
+                        "at {}",
+                        looked.empty() ? "no module search path" : looked);
+                }
+                return result;
+            }
+        }
+    }
+    const auto descriptor = findDescriptor(ctx, parsed.name);
     if (!descriptor) {
         return result;
     }
     result.known = true;
-    camel::execute::detail::ParsedSpec parsed;
-    if (auto problem = camel::execute::detail::parseSpec(spec, parsed)) {
-        result.problem = std::move(problem);
+    if (!descriptor->inapplicable.empty()) {
+        result.problem = descriptor->inapplicable;
         return result;
     }
     PassArgs args;
     if (auto problem =
             camel::execute::detail::bindArgs(parsed.name, descriptor->params, parsed, args)) {
-        result.problem = std::move(problem);
+        result.paramProblem = std::move(problem);
         return result;
     }
-    result.factory = [make = descriptor->make, args = std::move(args)](const context_ptr_t &ctx) {
-        return make(ctx, args);
-    };
+    result.factory =
+        [make = descriptor->descriptor.make, args = std::move(args)](const context_ptr_t &ctx) {
+            return make(ctx, args);
+        };
     return result;
+}
+
+/// A parameter written wrongly at a pass call: the language's own diagnostics for a call, at the
+/// place in the pipeline the pass is written (`<pipeline>:<line>:<column>`), in the semantic
+/// stage. A specification that is not a call at all (a positional value, a missing `)`, an
+/// argument that is not a constant) is still `InvalidPassParameter`, now with the same position.
+Diagnostic parameterDiagnostic(
+    const std::string &spec, const camel::execute::detail::ParamProblem &problem, size_t line) {
+    using Kind = camel::execute::detail::ParamProblemKind;
+    Diagnostic diag;
+    switch (problem.kind) {
+    case Kind::Syntax:
+        diag = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem.text);
+        diag.stage = "typecheck";
+        break;
+    case Kind::Unknown:
+        diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentUnknown)
+                   .commit(problem.name, specName(spec));
+        break;
+    case Kind::Duplicate:
+        diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentDuplicate)
+                   .commit(problem.name, specName(spec));
+        break;
+    case Kind::WrongType:
+        diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentWrongType)
+                   .commit(problem.name, specName(spec), problem.found, problem.expected);
+        break;
+    case Kind::Missing:
+        diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentMissing)
+                   .commit(problem.name, specName(spec));
+        break;
+    }
+    // The whole specification for a problem that has no narrower place (a required parameter
+    // left out, a specification that is not a call).
+    const size_t length =
+        problem.length > 0 ? problem.length : std::max<size_t>(spec.size(), 1);
+    diag.range      = CharRange{{line, problem.column}, {line, problem.column + length}};
+    diag.modulePath = "<pipeline>";
+    diag.moduleName = "pipeline";
+    return diag;
 }
 
 Diagnostic invalidParameterDiagnostic(
@@ -1270,31 +1190,27 @@ Diagnostic invalidParameterDiagnostic(
     return diag;
 }
 
-void printPass(std::ostream &help, const std::string &path, const PassDescriptor &descriptor) {
-    help << std::format("  {}", path);
-    if (!descriptor.params.empty()) {
-        help << std::format("({})", camel::execute::detail::describeParams(descriptor.params));
+void printPass(
+    std::ostream &help, const std::string &path, const std::string &doc,
+    const std::vector<PassParam> &params) {
+    help << std::format("  {}\n", path);
+    if (!doc.empty()) {
+        help << std::format("      {}\n", doc);
     }
-    help << '\n';
-    if (!descriptor.doc.empty()) {
-        help << std::format("      {}\n", descriptor.doc);
-    }
-    for (const auto &param : descriptor.params) {
-        if (!param.doc.empty()) {
-            help << std::format("      {}: {}\n", param.name, param.doc);
-        }
+    if (!params.empty()) {
+        help << std::format("      {}\n", camel::execute::detail::describeParams(params));
     }
 }
 
 /// Lists the available passes on stderr. The listing is help text for the command line:
 /// stdout stays reserved for program output and the diagnostics array.
-void listAvailablePasses(const std::string &name) {
+void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
     std::ostream &help = std::cerr;
     help << std::format("Pass <{}> not found, available passes are:\n", name);
-    std::vector<std::pair<std::string, PassDescriptor>> allPaths;
-    collectPassPaths(passScope, "", allPaths);
-    for (const auto &[path, descriptor] : allPaths) {
-        printPass(help, path, descriptor);
+    for (const auto &declaration :
+         camel::execute::detail::passDeclarations("std", ctx)) {
+        printPass(
+            help, "std::" + declaration.name, declaration.doc, declaration.params);
     }
     {
         auto &registry = modulePasses();
@@ -1302,9 +1218,24 @@ void listAvailablePasses(const std::string &name) {
         if (!registry.passes.empty()) {
             help << std::format("Passes contributed by loaded modules:\n");
             for (const auto &[path, descriptor] : registry.passes) {
-                printPass(help, path, descriptor);
+                const size_t separator     = path.find("::");
+                const std::string module   = path.substr(0, separator);
+                const std::string function = path.substr(separator + 2);
+                const auto declaration = camel::execute::detail::findPassDeclaration(
+                    module, function, ctx);
+                printPass(
+                    help,
+                    path,
+                    declaration ? declaration->doc : std::string(),
+                    declaration ? declaration->params : descriptor.params);
             }
         }
+    }
+    help << std::format("Passes that exist for the tests only:\n");
+    printPass(help, "test::params", "a test pass whose parameters exercise every type", {});
+    for (const auto &[testName, factory] : testPasses()) {
+        (void)factory;
+        printPass(help, testName, {}, {});
     }
     help << std::format("Available aliases are:\n");
     for (const auto &[alias, target] : passAliases) {
@@ -1318,8 +1249,8 @@ void listAvailablePasses(const std::string &name) {
         }
     }
     help << std::endl;
-    help << "A pass is written `name` or `name(key=value, ...)`; the values are constants "
-            "(bool, int, float, string).\n";
+    help << "A pass is written `name`, followed by its parameters as `key=value` words; the "
+            "values are constants (bool, int, float, string).\n";
 }
 
 /// The passes of a module, as the sentence of a diagnostic writes them: "no passes", "the pass
@@ -1346,7 +1277,11 @@ std::string providedPassesText(const std::vector<std::string> &passes) {
 ///     the passes it does provide, so that a name that is simply wrong does not read like a
 ///     compiler that lost the module;
 ///   - a name with no module behind it: unknown, followed by the list of passes that exist.
-[[noreturn]] void throwUnresolvedPass(const std::string &spec, const ResolvedPass &resolved) {
+[[noreturn]] void
+throwUnresolvedPass(const std::string &spec, const ResolvedPass &resolved, size_t line, const context_ptr_t &ctx) {
+    if (resolved.paramProblem) {
+        throw parameterDiagnostic(spec, *resolved.paramProblem, line);
+    }
     if (resolved.problem) {
         throw invalidParameterDiagnostic(spec, *resolved.problem, resolved.errorLocation);
     }
@@ -1362,7 +1297,7 @@ std::string providedPassesText(const std::vector<std::string> &passes) {
         setPipelineStage("");
         throw diag;
     }
-    listAvailablePasses(spec);
+    listAvailablePasses(spec, ctx);
     setPipelineStage("pass:" + specName(spec));
     auto unknown  = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(spec);
     unknown.stage = "pass:" + specName(spec);
@@ -1372,14 +1307,16 @@ std::string providedPassesText(const std::vector<std::string> &passes) {
 
 } // namespace
 
-PassFactory findPassFactory(const std::string &name, std::ostream &os) {
-    (void)os;
-    auto resolved = resolvePass(name);
+PassFactory findPassFactory(const std::string &name, const context_ptr_t &ctx) {
+    auto resolved = resolvePass(name, ctx);
+    if (resolved.paramProblem) {
+        throw parameterDiagnostic(name, *resolved.paramProblem, 0);
+    }
     if (resolved.problem) {
         throw invalidParameterDiagnostic(name, *resolved.problem);
     }
     if (!resolved.factory) {
-        listAvailablePasses(name);
+        listAvailablePasses(name, ctx);
     }
     return resolved.factory;
 }
@@ -1389,8 +1326,8 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
 /// not import, and loading the module registers the pass. A name that stays unknown resolves
 /// to no factory, and a bad parameter list keeps its problem.
 ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t &ctx) {
-    ResolvedPass resolved = resolvePass(spec);
-    if (resolved.problem || resolved.factory || !ctx) {
+    ResolvedPass resolved = resolvePass(spec, ctx);
+    if (resolved.paramProblem || resolved.problem || resolved.factory || !ctx) {
         return resolved;
     }
     const std::string name = resolveAlias(specName(spec));
@@ -1404,8 +1341,8 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
         // No such module: the name stays unknown and is reported by the caller.
     } catch (const std::exception &) {
     }
-    resolved = resolvePass(spec);
-    if (resolved.problem || resolved.factory) {
+    resolved = resolvePass(spec, ctx);
+    if (resolved.paramProblem || resolved.problem || resolved.factory) {
         return resolved;
     }
     // A function written in Camel: the module is a library of its own, compiled now.
@@ -1414,7 +1351,7 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
     camel::execute::MissingCamelPass missing;
     camel::execute::registerCamelPass(
         ctx, name.substr(0, sep), name.substr(sep + 2), problem, &errorLocation, &missing);
-    resolved = resolvePass(spec);
+    resolved = resolvePass(spec, ctx);
     if (!resolved.factory) {
         if (!problem.empty()) {
             resolved.problem       = problem;
@@ -1466,7 +1403,8 @@ PassRunResult applyRegisteredPass(
     std::ostream &os) {
     ResolvedPass resolved = resolvePassWithModule(spec, ctx);
     if (!resolved.factory) {
-        throwUnresolvedPass(spec, resolved);
+        // No pipeline source here (a pass run by name from a tool): the first line is the call.
+        throwUnresolvedPass(spec, resolved, 0, ctx);
     }
     const bool publishes = ctx && ctx->currentRuntimeProgram() == program;
     auto pass            = resolved.factory(ctx);
@@ -1507,10 +1445,13 @@ const camel::runtime::Program *runRulesAlgebra(
 } // namespace
 
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
-    for (const auto &name : passes) {
-        auto resolved = resolvePassWithModule(name, ctx);
+    for (size_t i = 0; i < passes.size(); ++i) {
+        const auto &name = passes[i];
+        auto resolved    = resolvePassWithModule(name, ctx);
         if (!resolved.factory) {
-            throwUnresolvedPass(name, resolved);
+            // One pass per line of the pipeline (`--passes a,b` or the passes after the file),
+            // so a parameter diagnostic points at the line the call is written on.
+            throwUnresolvedPass(name, resolved, i, ctx);
         }
     }
 }
@@ -1653,6 +1594,10 @@ std::vector<Diagnostic> tagsNeverReadWarnings(
     if (ctx->tagUses().empty()) {
         return warnings;
     }
+    // The registry says which of the core's passes read tag facts, and it is built on first
+    // use (a descriptor reads its declaration through the parser). A run whose pipeline never
+    // looks a pass up would otherwise find no core reader at all.
+    (void)corePasses();
     // The names in the pipeline, as written and as they resolve (an alias strips to the pass's
     // own name): a tag's `read_by` may name either.
     std::vector<std::string> inPipeline;
@@ -1734,7 +1679,7 @@ PassApplyResult applyPassesDetailed(
             return {nullptr, PassApplyStatus::Consumed};
         }
 
-        auto factory = findPassFactory(p, os);
+        auto factory = findPassFactory(p, ctx);
         if (factory) {
             camel::core::mm::autoSpace().safepoint(std::format("before pass {}", p));
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), program->root()); });
@@ -1884,4 +1829,10 @@ const camel::runtime::Program *applyPasses(
     const context_ptr_t &ctx, std::ostream &os) {
     return applyPassesDetailed(program, passes, ctx, os).program;
 }
+
+
+
+
+
+
 

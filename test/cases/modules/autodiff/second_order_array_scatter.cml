@@ -1,0 +1,36 @@
+// Second order through a gather at a runtime index.
+//
+// xs = [w, 2w, 3w]; i = int(w); f(w) = xs[i]^3. At w = 2 the index is 2, so the element is 3w
+// and f = (3w)^3 = 27w^3:
+//   f'(w) = 81w^2  -> f'(2) = 324
+//   f''(w) = 162w  -> f''(2) = 324
+//
+// The gather's gradient is a zero array with the element's gradient scattered into it
+// (`tangent/zeros_arr` + `tangent/scatter_add_arr`). The index is discrete: it contributes
+// exactly nothing to either derivative, so the real 324 must survive both orders. Without the
+// scatter's rule the build refuses with "no derivative rule for operator
+// ':tangent/scatter_add_arr'" (exit 1).
+module second_order_array_scatter
+
+import { grad } from autodiff
+
+with <w: float>
+func f(): float {
+    let xs = [w, w * 2.0, w * 3.0]
+    let i = int(w)
+    let a = xs[i]
+    return a * a * a
+}
+
+with <v: float>
+func df(): float {
+    return grad(f)<v>()
+}
+
+func main(): int sync {
+    let value = f<2.0>()
+    let g = grad(f)<2.0>()
+    let h = grad(df)<2.0>()
+    'second_order_array_scatter value={:.1f} d={:.1f} d2={:.1f}'->format<value, g, h>->println
+    return 0
+}

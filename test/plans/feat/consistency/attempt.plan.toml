@@ -360,7 +360,7 @@ desc = "onnx::export refuses the operator, at the `attempt`, and names it."
 kind = "negative"
 backends = false
 case = "../../../cases/consistency/attempt/refuse_translate.cml"
-args = ["${case}", 'onnx::export(out="${test_tmp}/attempt_refused.onnx")']
+args = ["${case}", 'onnx::export out="${test_tmp}/attempt_refused.onnx"']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 11

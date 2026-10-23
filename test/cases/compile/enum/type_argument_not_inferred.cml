@@ -1,0 +1,9 @@
+/// A variant whose fields do not say the type argument of the enum.
+module type_argument_not_inferred
+
+type Option<T> = enum { Some(T), None }
+
+func main(): int sync {
+    let x = Option::None
+    return 0
+}

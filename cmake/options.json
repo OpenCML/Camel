@@ -21,8 +21,8 @@
         },
         {
             "name": "CAMEL_TENSOR_BLAS",
-            "description": "Link a system CBLAS (find_package(BLAS)) for a matmul whose node the 7.3 rule lets run on the library GEMM (tensor.kernel=\"library\", written by tensor::fuse); safe mode and every withheld node stay on the canonical builtin kernels",
-            "default": "OFF",
+            "description": "Use a system CBLAS (find_package(BLAS)) for a matmul whose node the 7.3 rule lets run on the library GEMM (tensor.kernel=\"library\", written by tensor::fuse); safe mode and every withheld node stay on the canonical builtin kernels. On by default: without a findable CBLAS the builtin GEMM is the library path and the build is unchanged",
+            "default": "ON",
             "type": "bool"
         }
     ]

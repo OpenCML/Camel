@@ -309,11 +309,11 @@ def run_one(program: dict, pipeline_id: str, passes: List[str], repeat: int, set
     # The effect trace is a parameter of `std::profile`, not an environment variable (H81):
     # the pass observes the run, so it goes first in the pipeline and keeps its own report
     # quiet with `report=false` so the program's output is what the run is measuring.
-    trace = f'std::profile(effect_trace="{effects_path.as_posix()}",report=false)'
+    trace = f'std::profile effect_trace="{effects_path.as_posix()}" report=false'
     cmd_passes = [trace, *passes]
     if is_onnx:
         # The model file is a parameter of the pass (design principles 9.3).
-        cmd_passes = [*passes[:-1], f'{pl.ONNX_TERMINAL}(out="{(tmp / "pass.onnx").as_posix()}")']
+        cmd_passes = [*passes[:-1], f'{pl.ONNX_TERMINAL} out="{(tmp / "pass.onnx").as_posix()}"']
 
     cmd = [settings.camel, "--output-format", "json", program["path"], *cmd_passes]
     started = time.time()

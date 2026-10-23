@@ -122,7 +122,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 
 第 3 步使一个模块的算子组可以引用另一个模块的实现：全局内置模块导出的 `sleep` 与 `exit` 的 URI 是 `process:sleep`、`process:exit`，首次查找时自动加载 `process` 模块，程序不必显式导入它。
 
-找不到实现时 `find` 返回 `nullopt`，各调度器据此报告运行时诊断 `UnrecognizedOperatorURI`。
+找不到实现时 `find` 返回 `nullopt`，各调度器据此报告运行时诊断 `PassInternalError`：图里有一个没有实现的操作符是编译器的缺陷，不是程序的错误。
 
 ### 3.3 全局内置算子
 

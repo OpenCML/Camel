@@ -1,0 +1,16 @@
+/**
+ * The sorts are generic over the element type but their kernel orders only i32, i64, f32 and f64
+ * (src/builtin/operators/array.cpp reads the element type code before it sorts). bf16 and f16 are
+ * numbers now (`is_numeric` asks `is_float`), so the old "not a number" wording no longer
+ * described the refusal: an array of one is still refused, by name, with the element type and the
+ * types the kernel does order. Nothing is sorted as raw two-byte slots.
+ */
+module stdlib_reduced_sort_refused
+
+import { sort } from array
+
+func main(): int sync {
+    let xs: f16[] = []
+    println(sort(xs))
+    return 0
+}

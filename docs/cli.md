@@ -39,7 +39,7 @@ If both `--log-level` and `-v*` appear, the **last** one on the command line win
 Executes the specified `.cml` file or directory as the entry point. **Input file** must be provided either as a positional argument or via `--input <file>` (at least one required).
 
 - `--input <file>`: Input file path (alternative to positional; use with `--passes` to avoid ambiguity)  
-- `--passes <list>`: Comma-separated pass list (e.g. `--passes std::gir,other`; commas inside a pass's parameters do not split it). If omitted, first positional is file, rest are passes. A pass may take parameters: `std::opt(safe_fp=true)` (see "Pass parameters")  
+- `--passes <list>`: Comma-separated pass list (e.g. `--passes std::gir,other`). Each pass is followed by its parameters as `key=value` words; a comma separates passes, not parameters. If omitted, first positional is file, rest are passes. A pass may take parameters: `std::opt safe_fp=true` (see "Pass parameters")  
 - `--timeit <pass>/<N>`: Measure one pass `N` times from a fresh graph; text mode prints samples plus a compact summary table, while `--output-format json` emits structured benchmark data. A run that fails names the 1-based number of the iteration that failed: text mode prints it in a `[timeit] i/N ... failed` line, and JSON mode writes one timeit object with `"iteration"`, the diagnostics (or a `"failure"` sentence when there are none) and the samples that completed before the failure. A program that did not compile is a failed run in the same way: the diagnostics are reported, no elapsed time is recorded for that iteration, no summary is printed, and the exit code is 1.
 - `--dump-after-each-pass <dir>`: Write the graph before the first pass (`00_input`) and after each pass that returns a graph (`NN_<pass>`, `::` written as `.`) into `<dir>`: a readable DOT (`.rgir.dot`, the `std::rgir` format with `origin`/`span`/`srcfile` per node) and the `std::stats` counters (`.stats.json`). Scheduling and translation passes consume the graph and leave no snapshot. Compare two snapshots with `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
 - `--time-phases`, `--time-phases=<file>`: Write the wall-clock time of each phase of the run (start-up, parse, GCT, GIR, each pass, teardown; one entry per module and per pass) as one JSON object to standard error, or to `<file>` (the file is joined to the option with `=`, so that the program after it is never taken for the file). With the counting allocator shim preloaded (`test/tools/allocshim`), each phase also carries its heap allocations. The environment variable `CAMEL_TIME_PHASES=<file>` does the same for every command. Off by default and free when off; each entry names the phase and carries its wall-clock time, and with the counting allocator also its allocations, bytes and peak.
@@ -154,7 +154,76 @@ The passes given on the command line run in the order written. Each pass transfo
 
 ### Pass parameters
 
-Every pass, scheduler and module pass is written `name` or `name(key=value, ...)`. The values are Camel constant expressions: bool, int, float and string literals, and the operators on them (`n=2*8`, `safe_fp=!false`, `out="a" + ".onnx"`); an int may be given where a float is declared. They are read by the language's own parser. A pass declares its parameters (name, type, default, a line of documentation); the pipeline checks what is written against the declaration before anything runs, and a mistake is reported as `RuntimeDiag::InvalidPassParameter` (`0x04000060`, stage `pass:<spec>`) with the column in the specification: an unknown parameter (the message lists the ones the pass takes), a value of the wrong type, a parameter written twice, a value that is not a constant, a missing value. Quote a parameterized pass in a shell (`'std::opt(safe_fp=true)'`), and mind the commas: `--passes 'a,b(x=1,y=2)'` splits only at the commas outside the parentheses and string literals. The unknown-pass listing on stderr shows the parameters of every pass with their defaults.
+A pass is a function of the standard library (design principles 9.3): its name, documentation and
+parameters are one declaration in `stdlib/std.cml`, and the pipeline reads them from there. A
+parameter is written as a `key=value` **word after the pass name, with no parentheses**:
+
+```
+camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm
+```
+
+The value is one word. It is a Camel constant expression: bool, int, float and string literals and
+the operators on them (`n=2*8`, `safe_fp=!false`). An expression with spaces is written without
+them (`growth_budget=2*8+1`); a string with spaces is quoted by the shell (`out="a b.onnx"`).
+Between a pass name and its parameters, and between two parameters, nothing but whitespace is
+allowed. The parenthesised form (`std::opt(safe_fp=true)`), the colon spelling on the command line
+(`safe_fp: true`) and positional parameters are gone: they are refused as
+`RuntimeDiag::InvalidPassParameter`, and the message says how to write the parameter.
+
+The declarations are read when the pipeline is resolved, from the module search paths. If
+`stdlib/std.cml` cannot be found or does not declare the pass, the pass is refused rather than run
+on defaults the declaration never gave it: the message names module `std` and the file the pipeline
+read (or the `std.cml` paths it looked at), so an install without its standard library says so
+instead of reporting the pass as unknown.
+
+The declaration is the function's own `with` list, so it has a function's rules (design
+principles 4.4): a name, `:`, a type, and a default written `= value`:
+
+<!-- camel-snippet: fragment: the declaration of a built-in pass stands alone; its kernel is in the core, so the fragment is not a program. -->
+```camel
+/// The standard optimization pipeline.
+with <
+    /// Keep the algebraic stage to strictly equivalent floating-point transformations
+    /// (design principles 7.4).
+    safe_fp: bool = false,
+    /// Nodes specialization and inlining may copy before the remaining calls are left as calls;
+    /// 0 stops them (design principles 9.6).
+    growth_budget: int = 4096,
+    /// Test of the generic passes' screens: give the graphs they skip to the pass anyway and
+    /// fail if it rewrites one.
+    check_screens: bool = false
+>
+export func opt::<F>(f: F): F! when is_function::<F>()
+```
+
+The type is `bool`, `int`, `float` or `string`; a parameter written without a default is required;
+a parameter with no default may not follow one that has a default. **A default is a constant
+expression evaluated once, where the declaration is**, not at each call: the help listing shows the
+value (`top: int = 24`, not `top=8*3`), and every call that leaves the parameter out copies that
+one value. The `when` clause is the pass's applicability: `is_function::<F>()` is what the pipeline
+checks, and a declaration whose condition is something else is refused rather than applied on an
+assumption.
+
+The call is checked when the pipeline is resolved, before any pass runs, and the refusal is the
+language's own for a call, located at the call and in the semantic stage (`typecheck`):
+
+| What is wrong | Diagnostic | Message |
+| --- | --- | --- |
+| a name the pass does not declare | `SemanticDiag::ParamArgumentUnknown` | `'safe_fpp' is not a parameter of 'std::opt'.` |
+| the same name twice | `SemanticDiag::ParamArgumentDuplicate` | `The parameter 'safe_fp' of 'std::opt' is given twice.` |
+| a value of the wrong type | `SemanticDiag::ParamArgumentWrongType` | `The argument 'safe_fp' of 'std::opt' has type 'int', not 'bool'.` |
+| a required parameter left out | `SemanticDiag::ParamArgumentMissing` | `The call gives no value for the parameter 'flag' of 'test::params', and it has no default.` |
+
+The position is the call in the pipeline: one pass is one line, so the second pass of
+`camel f.cml std::fvm 'std::opt safe_fpp=true'` is reported at ``<pipeline>:2:10` (line 2, the column
+of `safe_fpp`). A specification that is not a call at all — a positional value, a missing value, an
+argument that is not a constant — is still `RuntimeDiag::InvalidPassParameter` (`0x04000060`), with
+the same `<pipeline>:<line>:<column>` position. Nothing has run when the diagnostic is reported.
+
+Quote a parameterized pass in a shell (`'std::opt safe_fp=true'`). `--passes` splits at the commas
+outside string literals, and within one entry the `key=value` words follow the pass name:
+`--passes 'std::opt safe_fp=false,std::fvm stats=""'`. The unknown-pass listing on stderr shows the
+parameters of every pass with their defaults, read from the declarations.
 
 Settings of a pass are parameters, no longer environment variables:
 
@@ -178,19 +247,19 @@ The `std::` prefix belongs to the passes of the core. A pass of a module is name
 
 A module may register passes of its own (`registerModulePass`, plus short aliases with `registerPassAlias`). They run only where the pipeline writes them: the pipeline is composed explicitly, so importing a module never adds a pass. A library whose pass is needed (autodiff needs `std::macro` before it) diagnoses the missing pass and says which one to add, and a tag whose reading pass is absent draws a warning.
 
-A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) declares its parameters as the `with` parameters of that function: `with <label: string, n: int> export func report(p: Program): Program!` is run as `mymod::report(label='x', n=21)`. The names, order and types of the `with` parameters are the pass's parameters (design principles 4.4 and 9.3); bool, int, float and string are the types a pass parameter may have. A `with` parameter has no default in source, so each one is required: leaving one out is `RuntimeDiag::InvalidPassParameter`, and the message lists every parameter with its type.
+A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) declares its parameters as the `with` parameters of that function: `with <label: string, n: int> export func report(p: Program): Program!` is run as `mymod::report label="x" n=21`. The names, order and types of the `with` parameters are the pass's parameters (design principles 4.4 and 9.3); bool, int, float and string are the types a pass parameter may have. A `with` parameter has no default in source, so each one is required: leaving one out is `SemanticDiag::ParamArgumentMissing` at the call in the pipeline, and the message names the parameter.
 
 ### Common Passes
 
-- `std::opt::inline`: inline-only rewrite pass; default target strategy is `std::opt::inline::hybrid`
-- `std::opt::inline::small` / `std::opt::inline::arm` / `std::opt::inline::hybrid`: explicit inline target strategies
+- `std::opt::inline`: inline-only rewrite pass; default target strategy is `std::opt::hybrid`
+- `std::opt::small` / `std::opt::arm` / `std::opt::hybrid`: explicit inline target strategies (the former `std::opt::inline::small`, `::arm` and `::hybrid` are aliases of these)
 - `std::opt::devirtualize`: runtime-native devirtualization pass
 - `std::opt::specialize`: runtime-native specialization pass
 - `std::opt`: integrated optimization entry point; repeats call rewriting (`devirtualize`, `specialize`, `inline`), `fold`, `cse`, `algebra`, and `dce` until stable, within shared growth and round limits
 - `std::opt::algebra`: the rules library's simplification, `rules::simplify`, so its laws are the rules in `stdlib/rules.cml` and a law is written once. Under `safe_fp=true` it runs `rules::simplify_strict` (design principles 7.4: strictly equivalent float algebra); `safe_fp=false` is the default, not permission for lower precision, approximate functions or arbitrary special-value assumptions. It is valid without `std::opt::fold` before it; `std::opt` runs fold first, which exposes the coefficient forms the corpus measurements use. `neutral_only=true` keeps the C++ reference mode (the integer neutral elements alone). Quote parameterized passes in PowerShell; parameters are validated before any pass runs.
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`: standalone constant folding, common-subexpression elimination, and dead-code elimination
 - `std::opt::ctrl`: bounded removal of CTRL edges covered by mandatory data/control paths; `std::opt` runs it once after its other stages finish. Branch/loop boundaries and arm anchors are retained; unselected arms are never treated as mandatory dependencies
-- `std::inline` (including `small` / `arm` / `hybrid`): alias of `std::opt::inline`
+- `std::inline` (including `small` / `arm` / `hybrid`): alias of `std::opt::inline` and its strategies
 
 - `std::fvm`: high-performance bytecode VM scheduler
 - `std::jit`: JIT-enabled bytecode VM scheduler. The JIT generates code for x86-64 only. In a build for another processor (arm64 macOS; `ENABLE_FASTVM_JIT` off) `std::jit` is accepted and runs the program on the bytecode interpreter, as `std::fvm` does, with the same results; the build says so once in its log (`-v`: `std::jit: this build has no native code generator ...`). It is a log line and not a warning, so the same command line runs on every platform, also under `-Werror`
@@ -222,8 +291,8 @@ Consequences of the rule:
 ### Profiling a run: `std::profile`
 
     camel m.cml std::profile std::fvm
-    camel m.cml 'std::profile(json="profile.json")' std::jit
-    camel train.cml --arg steps=50 'std::profile(top=0)' std::nvm
+    camel m.cml 'std::profile json="profile.json"' std::jit
+    camel train.cml --arg steps=50 'std::profile top=0' std::nvm
 
 `std::profile` is a pass of the core, written before the scheduler like `std::stats`: it hands the
 program on unchanged and starts a recording session, and the driver writes the report when the run
@@ -283,7 +352,7 @@ A run of a training step, short:
 
 ### ONNX export as a pass (`onnx::export`)
 
-    camel m.cml std::macro std::opt 'onnx::export(out="model.onnx")'
+    camel m.cml std::macro std::opt 'onnx::export out="model.onnx"'
 
 `onnx::export` is a translation pass contributed by the `onnx` module. As the last pass of a pipeline it writes an ONNX model and consumes the graph: the program is not executed.
 
@@ -294,8 +363,8 @@ A run of a training step, short:
 
 **A program without an `export_model` call: `main` is the model.** A program that only computes is exported by the same pass composition, with nothing written for the export in the program (not even `import onnx`: naming the pass loads the module):
 
-    camel model.cml std::macro std::opt 'onnx::export(out="model.onnx")'
-    camel model.cml --arg p=weights std::macro std::opt 'onnx::export(out="model.onnx")'
+    camel model.cml std::macro std::opt 'onnx::export out="model.onnx"'
+    camel model.cml --arg p=weights std::macro std::opt 'onnx::export out="model.onnx"'
 
 When no `export_model` call exists anywhere in the program, the pass translates the entry graph itself, that is the computation of `main`:
 
@@ -346,11 +415,11 @@ Errors are printed on stdout, after any program output, as a JSON array of objec
 - An exception that escapes a pass without being a diagnostic (graph validation when a rewrite is committed, a cycle met while a scheduler builds its execution order) is reported as `RuntimeDiag::PassInternalError` (`0x0400000C`) with stage `pass:<name>`, the exception text in the message, no source position, and exit code 1. It marks a defect of the compiler, not a refusal of the program. The stage names the pass even when it is a scheduling pass, so it does not tell whether part of the program had already run. An exception outside any pass is reported as `InternalDiag::UnknownInternalError` with stage `internal`.
 - `data.stage` tells where in the pipeline the diagnostic was raised: `parse`, `typecheck`, `compile` (see "Resource limits"), `pass:<name>` for a rewrite or translation pass (including an unknown pass name), `run` for a scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`), or `internal`.
 
-### Effect trace (`std::profile(effect_trace="...")`)
+### Effect trace (`std::profile effect_trace="..."`)
 
-Giving `std::profile(effect_trace="<file>")` in the pipeline makes the process append one JSON line per executed effectful operator (any operator not registered as pure or as state-only in the operator-traits registry: `println`, file I/O, `py_*`, assignment `:op/assn*`, including `:op/assn_append`, the statement `acc = acc->append<v>`, ...), in call order. `report=false` keeps the text report of `std::profile` out of the program's output:
+Giving `std::profile effect_trace="<file>"` in the pipeline makes the process append one JSON line per executed effectful operator (any operator not registered as pure or as state-only in the operator-traits registry: `println`, file I/O, `py_*`, assignment `:op/assn*`, including `:op/assn_append`, the statement `acc = acc->append<v>`, ...), in call order. `report=false` keeps the text report of `std::profile` out of the program's output:
 
-    camel m.cml 'std::profile(effect_trace="trace.jsonl",report=false)' std::nvm
+    camel m.cml 'std::profile effect_trace="trace.jsonl" report=false' std::nvm
 
 Creating and reading a `var` variable (`:var/new`, `:var/get`) are state-only and emit no event; a store into one (`:op/assn*`) does:
 
@@ -372,7 +441,7 @@ Limits of the compiler and the back ends. A pass that reaches one of its limits 
 
 | Limit | Value | Adjustable | When reached |
 |---|---|---|---|
-| Growth of `std::opt::inline`, `std::opt::specialize`, `std::opt::devirtualize`, `std::opt` (nodes copied by specializing and inlining; one budget for all rounds of `std::opt`) | 4096 nodes | `growth_budget=<nodes>` on the pass, e.g. `std::opt(growth_budget=8192)` or `std::opt::inline(growth_budget=0)` | nothing further is specialized or inlined; the remaining calls stay calls. Logged with `-v` |
+| Growth of `std::opt::inline`, `std::opt::specialize`, `std::opt::devirtualize`, `std::opt` (nodes copied by specializing and inlining; one budget for all rounds of `std::opt`) | 4096 nodes | `growth_budget=<nodes>` on the pass, e.g. `std::opt growth_budget=8192` or `std::opt::inline growth_budget=0` | nothing further is specialized or inlined; the remaining calls stay calls. Logged with `-v` |
 | Size of a graph that `std::opt::inline` inlines into | 4096 nodes | no | that call is not inlined |
 | Rounds of `std::opt` | 16 | no | the program is passed on as it is. Logged with `-v` |
 | Type-only specializations of one recursive function (a tensor argument whose shape changes at every level of the recursion) | 8 | no | the call keeps its callee |
@@ -403,11 +472,11 @@ Limits of the compiler and the back ends. A pass that reaches one of its limits 
 
 The frame pool of `std::nvm` and `std::fvm` is sized with the limit: 4 KiB per call that may be open (about 4 MiB for the default), at most 256 MiB; it is reserved once and only the part in use is touched. A recursion of functions with very large frames can fill it before the count is reached; that is the same located diagnostic, saying the frame pool is full. Running time is not affected by the limit. `--native-stack-guard off` switches the native-stack check off; it exists to measure where the stack really ends (the crash points above) and is not for normal use.
 
-The three space limits bound the size of the compiled program, not of one graph: they are totals that only guard against a compiler that does not stop allocating (a pass whose unrolling or inlining never ends is stopped by the graph or permanent space filling up, and the time that takes grows faster than the limit, which is why the defaults are not larger). `std::profile(gc_stats=1)` prints the occupancy of the three spaces at exit, with the allocator's own line (`[camel] spaces: ...`: bytes in use, high-water mark, bytes reserved, segments, allocations, limit).
+The three space limits bound the size of the compiled program, not of one graph: they are totals that only guard against a compiler that does not stop allocating (a pass whose unrolling or inlining never ends is stopped by the graph or permanent space filling up, and the time that takes grows faster than the limit, which is why the defaults are not larger). `std::profile gc_stats=1` prints the occupancy of the three spaces at exit, with the allocator's own line (`[camel] spaces: ...`: bytes in use, high-water mark, bytes reserved, segments, allocations, limit).
 
 The other limits marked "no" are compile-time constants (`generic.h`, the inliner's configuration); there is no command-line option or `.opencmlrc` key for them (`.opencmlrc` only configures the pass list).
 
-`std::opt` unrolls a recursion whose arguments are constants one level per round (`fib(15)` would become its whole call tree); the growth budget is what stops it. `onnx.export_model` simplifies the function it exports without the growth budget and the inline size cap, because an export has to reach straight-line code; a pipeline that exports through `std::opt onnx::export` is held to them and may need a larger `growth_budget` on the pass that inlines, for example `std::opt(growth_budget=8192)` (the export pass then refuses with `TranslationRefused` rather than writing a partial model, and the refusal names the budget, its value, the pass and the parameter).
+`std::opt` unrolls a recursion whose arguments are constants one level per round (`fib(15)` would become its whole call tree); the growth budget is what stops it. `onnx.export_model` simplifies the function it exports without the growth budget and the inline size cap, because an export has to reach straight-line code; a pipeline that exports through `std::opt onnx::export` is held to them and may need a larger `growth_budget` on the pass that inlines, for example `std::opt growth_budget=8192` (the export pass then refuses with `TranslationRefused` rather than writing a partial model, and the refusal names the budget, its value, the pass and the parameter).
 
 ---
 
@@ -428,8 +497,8 @@ Related settings, as pass parameters or environment variables:
 
 | Setting | Meaning |
 |---|---|
-| `std::profile(gc_stats=1)` (`2`) | One line on standard error at exit (`[camel] gc: ...`): minor and major collections and the cause that asked for each, objects moved and promoted, megabytes allocated per space, what the elder space, the blocks promoted values hold and the large-object space hold and have reserved, the time the program was stopped (`minor_pause_ms`, `major_pause_ms`) and the longest single stop (`..._max_ms`). `2` adds a line per major collection. `std::tf(gc_stats=...)` / `std::prl(gc_stats=...)` report the task graphs and collections of the scheduler itself |
-| `std::profile(type_stats=true)` | One line on standard error at exit (`[camel] types: ...`): for each kind of type object in the permanent space (`tuple`, `function`, `array`, `struct`, ...), `objects/bytes` allocated by the core type system, then how many types the type table holds and how many constructions it answered with an existing object (`interned=`, `intern_hits=`). It tells which kind of type a program or a pass keeps allocating; module-defined types are not counted |
+| `std::profile gc_stats=1` (`2`) | One line on standard error at exit (`[camel] gc: ...`): minor and major collections and the cause that asked for each, objects moved and promoted, megabytes allocated per space, what the elder space, the blocks promoted values hold and the large-object space hold and have reserved, the time the program was stopped (`minor_pause_ms`, `major_pause_ms`) and the longest single stop (`..._max_ms`). `2` adds a line per major collection. `std::tf gc_stats=...` / `std::prl gc_stats=...` report the task graphs and collections of the scheduler itself |
+| `std::profile type_stats=true` | One line on standard error at exit (`[camel] types: ...`): for each kind of type object in the permanent space (`tuple`, `function`, `array`, `struct`, ...), `objects/bytes` allocated by the core type system, then how many types the type table holds and how many constructions it answered with an existing object (`interned=`, `intern_hits=`). It tells which kind of type a program or a pass keeps allocating; module-defined types are not counted |
 | `CAMEL_GC_HEAP_LIMIT_MB=<n>` | Limit on what the elder and large-object spaces hold together. Without it the heap is bounded by the memory of the machine only. An allocation that crosses the limit asks for a major collection at the next safepoint; if what is alive still exceeds the limit after it, or the program allocates past one and a half times the limit before it reaches a safepoint, or one value is larger than the limit, the program stops with `RuntimeDiag::MemoryExhausted`, which names the space (`auto`, run-time values), the request, the usage, the limit and this variable |
 | `CAMEL_GC_GROWTH_PERCENT=<n>`, `CAMEL_GC_LARGE_BUDGET_MB=<n>` | Pacing of major collections: allocation allowed between two of them, in percent of what the last one left alive (default 100), and its floor for the large-object space and for the block bytes of values promoted to the elder space (default 4 MB; the floor of the elder space itself is its first segment, 32 MB) |
 | `CAMEL_GC_PROMOTION_AGE=<n>` | Minor collections a value survives before it is promoted (1 to 15, default 4) |
@@ -558,3 +627,7 @@ camel inspect --gir main.cml
 # View Zen of Camel
 camel --zen
 ```
+
+
+
+

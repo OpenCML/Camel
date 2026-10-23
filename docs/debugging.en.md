@@ -85,6 +85,8 @@ stopped.
 | `bt` (`backtrace`, `where`) | the call stack |
 | `locals [n]` | the variables of frame `n` of `bt` (default: the top frame) |
 | `print <name>` (`p`) | the value of a name, with member accesses (`p.x`, `t.0`, `xs[2]`) |
+| `explain <run> [<a> <b>]` | the rewrites the run recorded (with two values: the shortest chain between them), naming the rule and both node positions |
+| `why_not <run> <rule> <value>` | why the rule did not fire at the value: the first mismatch, the missing permission, the false condition, or the rule that did fire |
 | `frames [functions\|subgraphs]` | show or switch how arms of branches are shown ([3.3](#33-the-call-stack-is-a-chain-of-function-calls)) |
 
 A command that lets the program run waits until it stops or ends, and prints on the way what the
@@ -256,7 +258,10 @@ code nothing depends on does not run at all.
   function the step left and the start of one it entered; not for a line that simply has not run
   yet, nor for an arm of a branch that was not taken.
 
-The debugger never reorders the program and never evaluates anything in order to show it.
+The debugger never reorders the program. It evaluates a value when you ask for it: `print` (and
+`evaluate`) reads one name, and `explain`/`why_not` call the rewrite module's reader for the proof
+the run left, which does not re-run the rewrite (`why_not` may run a rule's condition, as the
+program would). No other expression is evaluated to show a value.
 
 ### 3.3 The call stack is a chain of function calls
 
@@ -361,7 +366,8 @@ survive. What changes:
 - One thread, one program per session; no attach, no restart request (the editor restarts by
   launching again), no conditional breakpoints, hit counts or logpoints, no data breakpoints,
   no changing of values, no reverse stepping.
-- Expressions other than names with member accesses cannot be evaluated.
+- Expressions other than names with member accesses cannot be evaluated by `print` or DAP
+  `evaluate`; `explain` and `why_not` read their arguments the same way.
 - The program's output and the stop events travel on different channels: output printed just
   before a stop may appear in the console a moment after the editor shows the stop. At the end
   of a session the output is always complete before the program is reported as ended.

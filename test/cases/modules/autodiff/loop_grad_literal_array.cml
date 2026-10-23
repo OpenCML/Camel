@@ -1,9 +1,9 @@
 /**
  * A differentiated loop over an array literal. Nothing that can carry a gradient reaches the
- * array, so the reverse pass carries no array gradient for it: no array site port, no zero array
- * and no per-round scatter (design principles 9.9). `std::stats` prints the node count this case
- * pins, and its twin `loop_grad_parameter_array.cml` -- the same loop body over an array built
- * from the parameter -- prints a larger one.
+ * array, so the reverse pass carries no array gradient for it: the graph `std::jgir` prints after
+ * `std::macro` has no `:tangent/zeros_arr` and no `:tangent/scatter_add_arr` (design principles
+ * 9.9). Its twin `loop_grad_parameter_array.cml` -- the same loop body over an array built from
+ * the parameter -- has both. The gradient of w + w * (1 + 2 + 3) at 2 is 7.
  */
 module loop_grad_literal_array
 

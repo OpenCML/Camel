@@ -228,6 +228,9 @@ class Context : public std::enable_shared_from_this<Context> {
         return entryConfig_.sourceOverride ? entryConfig_.sourceOverride(path) : std::nullopt;
     }
     const std::string &entryDir() const { return entryConfig_.entryDir; }
+    /// The roots a module is looked for under, in order. A pass declaration is a module
+    /// declaration, so the pipeline finds `std.cml`, `onnx.cml`, ... here.
+    const std::vector<std::string> &searchPaths() const { return entryConfig_.searchPaths; }
     size_t maxThreads() const { return entryConfig_.maxThreads; }
     /// The threads the run may use: `maxThreads()` when `-t` gave one, else the hardware
     /// concurrency. The value of record for every pool of the run.

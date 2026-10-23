@@ -415,11 +415,17 @@ void DebugCore::refreshConfig() {
 // ---------------------------------------------------------------------------------------
 
 void DebugCore::activationEntered() {
+    if (!observingRun_) {
+        return;
+    }
     activationBase_.push_back(stack_.size());
     pending_ = Pending::Enter;
 }
 
 void DebugCore::activationLeft() {
+    if (!observingRun_) {
+        return;
+    }
     if (activationBase_.empty()) {
         return;
     }
@@ -432,7 +438,12 @@ void DebugCore::activationLeft() {
     pending_ = Pending::None;
 }
 
-void DebugCore::tailCall() { pending_ = Pending::Tail; }
+void DebugCore::tailCall() {
+    if (!observingRun_) {
+        return;
+    }
+    pending_ = Pending::Tail;
+}
 
 void DebugCore::firstNodeOfRun(GCGraph *root) {
     runIndexed_ = true;
@@ -752,6 +763,11 @@ void DebugCore::arrive(ShadowFrame &f, const Arrival &a) {
 }
 
 void DebugCore::faultRaised(const camel::core::error::RuntimeFault &fault, bool isolated) {
+    // A condition `why_not` runs, or any other nested graph of an evaluation, is not the program:
+    // its fault is reported by the call that made it, not as a stop of the session (H150).
+    if (!observingRun_) {
+        return;
+    }
     if (stack_.empty()) {
         return;
     }
@@ -1389,11 +1405,8 @@ json DebugCore::handleJson(int reference) {
     return json{{"ok", true}, {"variables", std::move(variables)}};
 }
 
-json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
-    ShadowFrame *f = frameId == 0 && !stack_.empty() ? &stack_.back() : frameById(frameId);
-    if (f == nullptr) {
-        return fail("no such frame");
-    }
+bool DebugCore::resolveValueAt(
+    ShadowFrame &f, const std::string &expression, ResolvedValue &out, std::string &why) {
     // name ( '::' name )* ( '.' member | '[' index ']' )*: a full name such as
     // `lib::Config::limit` names a value of a module's top level (design principles 10.2).
     const auto isNameChar = [](char c) {
@@ -1439,9 +1452,9 @@ json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
         }
     }
     if (!wellFormed) {
-        return fail(
-            "Only a name, optionally followed by member accesses (p.x, t.0, xs[2]), can be "
-            "evaluated.");
+        why = "Only a name, optionally followed by member accesses (p.x, t.0, xs[2]), can be "
+              "evaluated.";
+        return false;
     }
     // The name: a local or parameter, then a captured name, then an inlined one. Of several
     // declarations of the name, one that has a value is preferred, the latest of them. A
@@ -1469,7 +1482,7 @@ json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
             }
         }
     };
-    const Chain chain = chainOf(*f);
+    const Chain chain = chainOf(f);
     consider(localsOf(chain), Match::Exact);
     if (!found) {
         consider(capturedOf(chain), Match::FullName);
@@ -1478,35 +1491,58 @@ json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
         consider(inlinedOf(chain), Match::Inlined);
     }
     if (!found) {
-        return fail("'" + name + "' is not a name of this frame.");
+        why = "'" + name + "' is not a name of this frame.";
+        return false;
     }
-    if (!found->evaluated) {
-        if (!path.empty()) {
-            return fail("'" + name + "' has no value yet: " + found->note);
-        }
-        return json{
-            {"ok", true},
-            {"result", found->note},
-            {"type", typeText(found->view.type)},
-            {"reference", 0},
-            {"evaluated", false}};
+    out.variable = std::move(*found);
+    out.hasPath  = !path.empty();
+    out.evaluated = out.variable.evaluated;
+    if (!out.evaluated) {
+        return true;
     }
-    ValueView view     = found->view;
+    ValueView view = out.variable.view;
     std::string walked = name;
     for (const auto &step : path) {
         auto next = member(view, step);
         if (!next) {
-            return fail("'" + walked + "' has no member '" + step + "'.");
+            why = "'" + walked + "' has no member '" + step + "'.";
+            return false;
         }
         view = *next;
         walked += "." + step;
     }
-    Rendered r = render(view);
+    out.view = view;
+    return true;
+}
+
+json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
+    ShadowFrame *f = frameId == 0 && !stack_.empty() ? &stack_.back() : frameById(frameId);
+    if (f == nullptr) {
+        return fail("no such frame");
+    }
+    ResolvedValue resolved;
+    std::string why;
+    if (!resolveValueAt(*f, expression, resolved, why)) {
+        return fail(why);
+    }
+    const Variable &found = resolved.variable;
+    if (!resolved.evaluated) {
+        if (resolved.hasPath) {
+            return fail("'" + found.name + "' has no value yet: " + found.note);
+        }
+        return json{
+            {"ok", true},
+            {"result", found.note},
+            {"type", typeText(found.view.type)},
+            {"reference", 0},
+            {"evaluated", false}};
+    }
+    Rendered r = render(resolved.view);
     return json{
         {"ok", true},
         {"result", r.value},
         {"type", r.type},
-        {"reference", r.expandable ? newHandle({Handle::Kind::Value, f->id, view}) : 0},
+        {"reference", r.expandable ? newHandle({Handle::Kind::Value, f->id, resolved.view}) : 0},
         {"evaluated", true}};
 }
 
@@ -1776,6 +1812,12 @@ json DebugCore::command(const std::string &name, const json &args) {
             const std::string expression = args.value("expression", "");
             return runWhileStopped(
                 [this, frame, expression] { return evaluateJson(frame, expression); });
+        }
+        if (name == "explain") {
+            return runWhileStopped([this, args] { return explainJson(args); });
+        }
+        if (name == "why_not" || name == "whyNot") {
+            return runWhileStopped([this, args] { return whyNotJson(args); });
         }
         if (name == "memorySnapshot" || name == "regionMemory" || name == "regionObjects" ||
             name == "allocationBreakpoints") {

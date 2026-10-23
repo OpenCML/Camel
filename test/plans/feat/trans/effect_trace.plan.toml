@@ -5,7 +5,7 @@ tags = ["feat", "trans", "effect_trace"]
 
 [[tests]]
 name = "effect_order_across_backends"
-desc = "std::profile(effect_trace="<file>"): the effect-order exemplar yields the same trace (uri, stage, origin, payload hash) under NodeVM, FastVM and inline + NodeVM."
+desc = "std::profile effect_trace="<file>": the effect-order exemplar yields the same trace (uri, stage, origin, payload hash) under NodeVM, FastVM and inline + NodeVM."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/effect_trace/effect_trace.py"
@@ -17,7 +17,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "macro_body_effect_stage"
-desc = "std::profile(effect_trace="<file>"): a println in a macro function body is traced with stage macro under std::macro and stage run without it."
+desc = "std::profile effect_trace="<file>": a println in a macro function body is traced with stage macro under std::macro and stage run without it."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/effect_trace/effect_trace.py"
@@ -29,7 +29,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "effect_payload_text"
-desc = "std::profile(effect_trace="<file>"): `payload` is the hashed argument text, JSON-escaped; a payload over 2048 bytes is cut on a character boundary with payload_truncated, and payload_sha1 still covers the full text."
+desc = "std::profile effect_trace="<file>": `payload` is the hashed argument text, JSON-escaped; a payload over 2048 bytes is cut on a character boundary with payload_truncated, and payload_sha1 still covers the full text."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/effect_trace/effect_trace.py"
@@ -41,7 +41,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "variable_reads_not_traced"
-desc = "std::profile(effect_trace="<file>"): a store into a var is an effect event, creating and reading the variable (:var/new, :var/get) are not, under NodeVM, FastVM and inline + NodeVM."
+desc = "std::profile effect_trace="<file>": a store into a var is an effect event, creating and reading the variable (:var/new, :var/get) are not, under NodeVM, FastVM and inline + NodeVM."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/effect_trace/effect_trace.py"

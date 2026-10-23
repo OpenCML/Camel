@@ -54,6 +54,7 @@ camel::core::OperId operOf(const GraphDraft &draft, gc_node_ref_t id) {
 struct PatternOperators {
     camel::core::OperId add    = camel::core::OperatorTable::instance().intern("tensor:add");
     camel::core::OperId matmul = camel::core::OperatorTable::instance().intern("tensor:matmul");
+    camel::core::OperId linear = camel::core::OperatorTable::instance().intern("tensor:linear");
     camel::core::OperId relu   = camel::core::OperatorTable::instance().intern("tensor:relu");
 };
 
@@ -95,15 +96,19 @@ std::string_view kernelChoice(const GraphDraft &draft, gc_node_ref_t id, const s
     return (effective & sem::kReassociate) != 0 ? kLibraryKernel : kCanonicalKernel;
 }
 
-/// Writes tensor.kernel on every tensor:matmul of `draft`. Returns how many nodes it changed and
-/// counts the choices, so a run says how many matmuls run each way.
+/// Writes tensor.kernel on every tensor:matmul and tensor:linear of `draft`. `linear` keeps the
+/// choice for its gradient: the forward kernel is the canonical x @ w + b, while the backward
+/// matmuls it emits are the same GEMMs a matmul gradient runs, so the node records which licence
+/// the rule may carry. Returns how many nodes it changed and counts the choices, so a run says
+/// how many products run each way.
 size_t markKernels(
     GraphDraft &draft, const sem::NumericPolicy &policy, size_t &library, size_t &canonical) {
     const PatternOperators &ops = patternOperators();
     size_t changed              = 0;
     const gc_node_ref_t slots   = draft.nodeSlotCount();
     for (gc_node_ref_t id = 0; id < slots; ++id) {
-        if (operOf(draft, id) != ops.matmul) {
+        const camel::core::OperId oper = operOf(draft, id);
+        if (oper != ops.matmul && oper != ops.linear) {
             continue;
         }
         const std::string_view choice = kernelChoice(draft, id, policy);
@@ -242,7 +247,7 @@ class ParamEchoTestPass : public GraphIRPass {
 
 void registerParamEchoTestPass() {
     PassDescriptor descriptor;
-    descriptor.doc = "prints the parameters it received (a test pass)";
+    // Documentation and parameters are the declaration in stdlib/tensor.cml.
     descriptor.params = {
         PassParam{"n", PassParamType::Int, int64_t{1}, "an int"},
         PassParam{"ratio", PassParamType::Float, 0.5, "a float"},
@@ -260,9 +265,7 @@ void registerParamEchoTestPass() {
 
 void registerTensorPasses() {
     PassDescriptor descriptor;
-    descriptor.doc =
-        "records how the tensor operators run as node attributes (tensor.kernel, tensor.fusion) "
-        "without changing an operator";
+    // The pass declares `safe_fp` in its module declaration (stdlib/tensor.cml).
     descriptor.params = {PassParam{
         "safe_fp",
         PassParamType::Bool,

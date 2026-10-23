@@ -189,6 +189,16 @@ struct Rule {
     bool twoWay = false;
 };
 
+/// Why a rule does or does not fire at one node, for `why_not` (rewrite design 8.7). `detail` is
+/// one sentence: the first term of the left side that does not match and what the program has
+/// there, the permission the value lacks, the condition that is false with the values it read, or
+/// the rewrite that did fire.
+struct RuleMiss {
+    enum class Kind : uint8_t { Fired, NotPart, Needs, Match, Condition, Blocked };
+    Kind kind = Kind::Fired;
+    std::string detail;
+};
+
 /// Relocates the constant values the patterns of `rules` hold. The objects themselves are kept
 /// alive by the rule's Program; a collection during a rule condition can move them, and the
 /// patterns hold copies of their slots.
@@ -329,6 +339,12 @@ class DraftWritings : private WritingObserver {
     /// forgets them. With no log the recording is skipped and nothing is allocated for it.
     RewriteStats rewrite(
         std::span<const Rule> rules, size_t maxRounds = 16, RewriteLog *log = nullptr);
+    /// Why `rule` does or does not fire at `node`, as one sentence for `why_not` (rewrite design
+    /// 8.7): it matches the left side the way the engine does — an operator's declared
+    /// commutativity is tried when the written order fails — but does not rewrite, and reports the
+    /// first term that does not match with the value the program has there, the permission the
+    /// value lacks, or the condition's verdict on the values it matched.
+    RuleMiss whyNot(const Rule &rule, gc_node_ref_t node);
     /// The constant node `value` of `type` in this region with these permissions: the one there
     /// is, or a new one.
     gc_node_ref_t constantNode(slot_t value, camel::core::type::Type *type, camel::core::sem::PermissionMask perms, uint32_t region);
@@ -342,6 +358,9 @@ class DraftWritings : private WritingObserver {
     gc_node_ref_t find(gc_node_ref_t node);
     /// The writings of the value `node` is one of, ascending (empty: the only one).
     std::span<const gc_node_ref_t> writingsOf(gc_node_ref_t node);
+    /// The text of a node of the draft, as a proof prints it: `%id kind operator : type` (and the
+    /// value of a static constant, bounded). The id it names is the draft's.
+    std::string textOf(gc_node_ref_t node);
     /// Picks one writing for every value, by the cost model, and leaves the draft in the
     /// executable state: the inputs of the nodes that stay read the chosen writings, the other
     /// writings are erased, the equivalences are dropped. Throws when a value that is read has

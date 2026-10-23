@@ -975,6 +975,10 @@ void emitDraftPayload(
 
 } // namespace
 
+std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphDraft &draft) {
+    return planDraftPayload(draft).runtimeRefsByDraftId;
+}
+
 void collectStaticGraphRefsRecursive(
     std::vector<GraphId> &refs, slot_t slot, Type *type,
     std::unordered_set<const Object *> &visited);

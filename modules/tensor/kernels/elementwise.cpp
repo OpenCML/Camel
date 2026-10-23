@@ -225,10 +225,14 @@ TypeCode operandType(const Operand &lhs, const Operand &rhs) {
 }
 
 /// Result type of a binary operator: `Div` and `Pow` produce a float, f64 when a tensor operand
-/// is f64, f32 otherwise (an integer tensor's division has always produced f32).
+/// is f64, f32 otherwise (an integer tensor's division has always produced f32). A bf16 or f16
+/// tensor keeps its element type: the operator computes in f32 and the store rounds once.
 TypeCode binaryResultType(BinaryOp op, const Operand &lhs, const Operand &rhs) {
     const TypeCode base = operandType(lhs, rhs);
     if (!binaryProducesFloat(op)) {
+        return base;
+    }
+    if (isReducedFloatTensorType(base)) {
         return base;
     }
     if ((!lhs.scalar && lhs.dtype == TypeCode::Float64) ||
@@ -245,6 +249,12 @@ template <typename To> void convertBuffer(const Operand &src, To *dst) {
         for (uint64_t i = 0; i < count; ++i) {
             if constexpr (std::is_same_v<To, bool_t>) {
                 dst[i] = in[i] != From{} ? 1 : 0;
+            } else if constexpr (
+                camel::core::rtdata::is_reduced_float_v<To> &&
+                camel::core::rtdata::is_reduced_float_v<From>) {
+                // bf16 to f16 (or back) goes through f32, the compute precision: the stored value
+                // widens exactly, then rounds once into the other type (dtype.h).
+                dst[i] = To(in[i].toFloat());
             } else {
                 dst[i] = static_cast<To>(in[i]);
             }
@@ -279,7 +289,13 @@ template <typename T> T applyBinary(BinaryOp op, T a, T b) {
     case BinaryOp::Div:
         return static_cast<T>(a / b);
     case BinaryOp::Pow:
-        return static_cast<T>(std::pow(a, b));
+        if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
+            // The power functions are computed in f32 and rounded once into the element type,
+            // the same path as + - * / (dtype.h).
+            return static_cast<T>(std::pow(static_cast<float>(a), static_cast<float>(b)));
+        } else {
+            return static_cast<T>(std::pow(a, b));
+        }
     case BinaryOp::Max:
         return maximum(a, b); // IEEE 754-2019 maximum (minmax.h)
     case BinaryOp::Min:
@@ -534,13 +550,36 @@ Shape broadcastShapes(std::span<const int64_t> lhs, std::span<const int64_t> rhs
 }
 
 Array *unary(UnaryOp op, const Array *input, mm::IAllocator &allocator) {
+    // A bf16 or f16 input keeps its element type: the operator is computed by the f32 loops
+    // below and each result is rounded once when it is stored, the one arithmetic path of a
+    // reduced element type (dtype.h). Widening it to f32 here would change the type the program
+    // wrote.
+    const bool reduced = isReducedFloatTensorType(input->dtype());
     const TypeCode outType =
-        unaryProducesFloat(op) ? (input->dtype() == TypeCode::Float64 ? TypeCode::Float64
-                                                                      : TypeCode::Float32)
-                               : input->dtype();
+        (unaryProducesFloat(op) && !reduced)
+            ? (input->dtype() == TypeCode::Float64 ? TypeCode::Float64 : TypeCode::Float32)
+            : input->dtype();
     const TypedBuffer in   = asDType(Operand::of(input), outType);
     Array *out      = createTensor(outType, input->shapeSpan(), allocator);
     const auto count       = static_cast<int64_t>(input->numel());
+    if (reduced) {
+        if (count == 0) {
+            return out;
+        }
+        dispatchDType(outType, [&]<typename T>() {
+            const T *src = static_cast<const T *>(in.data);
+            std::vector<float> wide(static_cast<size_t>(count));
+            for (int64_t i = 0; i < count; ++i) {
+                wide[static_cast<size_t>(i)] = static_cast<float>(src[i]);
+            }
+            runUnaryF32(op, wide.data(), wide.data(), count);
+            T *dst = out->dataAs<T>();
+            for (int64_t i = 0; i < count; ++i) {
+                dst[i] = T(wide[static_cast<size_t>(i)]);
+            }
+        });
+        return out;
+    }
     if (outType == TypeCode::Float32) {
         runUnaryF32(op, static_cast<const float *>(in.data), out->dataAs<float>(), count);
         return out;

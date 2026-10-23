@@ -19,7 +19,6 @@ using namespace camel::core::rtdata;
 #include "../operators/macro.h"
 #include "../operators/mem.h"
 #include "../operators/ops.h"
-#include "../operators/other.h"
 #include "../operators/profiler.h"
 #include "../operators/set_value.h"
 #include "../operators/str.h"
@@ -32,12 +31,6 @@ using namespace camel::core::rtdata;
 
 const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
-        // The placeholder for an operator that is declared before it is written. Nothing below
-        // maps to it: a combination of operator and type without an implementation has no
-        // resolver either (globals.cpp), so the compiler rejects it. Should one be mapped to it
-        // again, running it is a located fault, never a silent null.
-        {"not-impl", __not_implemented__},
-
         // Type conversions
         {"op/itoi", __itoi__},
         {"op/ltoi", __ltoi__},

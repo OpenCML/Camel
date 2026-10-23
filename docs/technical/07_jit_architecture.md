@@ -748,7 +748,7 @@ SysV 下的序列是 `push rdi; mov rsi, r13; mov edx, pc; mov rax, helper; call
 
 ### 17.5 覆盖面统计
 
-`std::fvm(stats="<文件>")`（或 `std::jit(stats=...)`）让 `std::fvm` / `std::jit` 在结束时写出每张图的字节码数、解释器执行了其中多少条、JIT 的结论与原因（`fastvm_stats.cpp`）。`test/tools/jitcov/jitcov.py` 用它对一批程序在三条流水线下各跑 `std::fvm` 与 `std::jit`，汇总成表：
+`std::fvm stats="<文件>"`（或 `std::jit stats=...`）让 `std::fvm` / `std::jit` 在结束时写出每张图的字节码数、解释器执行了其中多少条、JIT 的结论与原因（`fastvm_stats.cpp`）。`test/tools/jitcov/jitcov.py` 用它对一批程序在三条流水线下各跑 `std::fvm` 与 `std::jit`，汇总成表：
 
 ```
 python3 test/tools/jitcov/jitcov.py --timeout 60 --out DIR      # 仓库里全部 .cml
@@ -833,7 +833,7 @@ python3 test/tools/jitcov/jitcov.py --progen 1-300              # 随机程序
 - 随机程序（`test/tools/progen`，参考求值器独立于各后端）：`progen.py diff --matrix full --backends jit`（25 种重写序列各接 `std::jit`，加不带遍的运行，每个程序 26 格）。种子 20001–20300：7800 格，7790 格与参考一致，10 格是合法的拒绝（`MacroEvaluationFailed`），没有坏格。加 `CAMEL_JIT_HOT_THRESHOLD=0`、种子 21001–21400：10400 格，10369 格一致，5 格合法拒绝，26 格是同一个程序（种子 21364）在全部 26 格上的 `IndexOutOfRange`，包括不带遍的节点虚拟机，所以与 JIT 无关：程序里是 `false && xs[2].0`，参考求值器对 `&&` 短路，而实现先求了右边。
 - `test/tools/jitcov/deep_recursion.sh`：上限 100000 与 1000000、递归 50000 与 900000 层、机器栈 256 KiB 到 8 MiB、`std::nvm` / `std::fvm` / `std::jit` / `std::prl` 及其与 `std::opt::inline`、`std::opt` 的组合、直接递归、经函数值、在 `map` 元素里、在 `attempt` 里，共 256 次运行：96 次算完，160 次给出带位置的 `MaxRecursionDepthExceeded`，没有一次以信号结束。
 - 2026-10-14（主干 v0.2.9 之上）：完整默认测试集在标记-清除下 4418 个中 4413 个通过，5 个因机器负载超时（都不经 JIT：`unordered_foreach_smoke.nvm`、`export_tree_recursion`、三个 `gc.collection_trees_tiny_*_young_nvm`），单独重跑全部通过；`CAMEL_GC=generational` 下 4418 个全部通过。默认测试集本身含安全点投毒的扫测（`mm.gc_poison_sweep`）。随机程序（生成器 VERSION 3，全矩阵 101 格）：种子 30001–30150 标记-清除 15150 格、30151–30300 分代 15150 格，全部与参考一致；种子 30301–30400 在投毒且第一次调用即编译下跑 `std::jit` 的 26 格，2600 格全部一致。`deep_recursion.sh` 在两种回收器下各 256 次，没有一次以信号结束。
-- `std::jit(hot_threshold=0)` 让图在第一次调用时就编译（默认是同一调用点的第二次），用于让短程序也跑在编译出的代码上。
+- `std::jit hot_threshold=0` 让图在第一次调用时就编译（默认是同一调用点的第二次），用于让短程序也跑在编译出的代码上。
 - 调试器下 `std::jit` 按 `std::fvm` 运行（`35_debugger.md`）。带观察者钩子的解释循环（`inspectvm.cpp`）不把尾调用交给编译出的代码，驱动循环在有观察者时经 `call()` 运行解释的被调方，所以钩子不会被绕过。
 
 ### 17.8 没有做的

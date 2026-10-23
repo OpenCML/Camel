@@ -468,3 +468,29 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 11
 expect_stdout_exact = ""
+
+[[tests]]
+name = "tag_on_unnamed_field"
+desc = "A tag written on a field of a struct type written inline is refused at the `#`: an unnamed struct type is no declaration, so the tag would belong to nothing, and the diagnostic points at the declaration form that can carry it."
+kind = "negative"
+case = "../../../cases/compile/tags/tag_on_unnamed_field.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagOnUnnamedField"
+expect_diagnostic_code = "0x03000167"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 14
+expect_output_contains = ["A tag on the field 'a' of an unnamed struct type belongs to no declaration."]
+
+[[tests]]
+name = "tag_argument_named"
+desc = "A tag argument is positional: `#width<w: 8>` is refused at the argument, and the diagnostic shows the positional form `#tag<a, b>`."
+kind = "negative"
+case = "../../../cases/compile/tags/tag_argument_named.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentNamed"
+expect_diagnostic_code = "0x03000168"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 7
+expect_output_contains = ["A tag argument is positional: 'NamedData: w' is named."]

@@ -5,7 +5,7 @@ func twice(x: int): int {
     return x * 2
 }
 
-/// The `with` parameters of the function are the pass's parameters: `params::report(n=21, ...)`.
+/// The `with` parameters of the function are the pass's parameters: `params::report label='ok' n=21 ...`.
 /// `n` is read at a call site (`twice(n)`), captured by a lambda and printed with the others.
 with <label: string, n: int, scale: f64, small: f32, flag: bool>
 export func report(p: Program): Program! sync {
@@ -18,3 +18,4 @@ export func report(p: Program): Program! sync {
     println(flag)
     return p
 }
+

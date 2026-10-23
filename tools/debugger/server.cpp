@@ -1400,7 +1400,7 @@ void DebuggerServer::httpServerLoop() {
         });
 
     svr.Post(
-        R"(/api/debug/([A-Za-z]+))",
+        R"(/api/debug/([A-Za-z_]+))",
         [this](const httplib::Request &req, httplib::Response &res) {
             const std::string command = req.matches[1];
             if (!isWorkerProcess()) {

@@ -1,9 +1,10 @@
 /**
  * matmul's canonical algorithm (design principles 7.1): every element is one chain of fused
  * multiply-adds in ascending k from +0, so the product has the same bits in every GEMM unit
- * (run with and without CAMEL_TENSOR_ISA=generic) and the fused forms of `x @ w + b` give the
- * bits of the unfused expression (run with and without tensor::fuse). K is beyond one cache
- * block of the blocked GEMM (256), and the shapes leave edge tiles.
+ * (run with and without CAMEL_TENSOR_ISA=generic) and, in safe mode, the fused forms of
+ * `x @ w + b` give the bits of the unfused expression. K is beyond one cache block of the
+ * blocked GEMM (256), and the shapes leave edge tiles. In default mode tensor::fuse may put the
+ * product on a library GEMM (7.3); gemm_canonical.library pins the licence bound for that path.
  */
 module gemm_canonical
 

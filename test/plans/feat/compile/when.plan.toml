@@ -225,3 +225,14 @@ expect_exit = 0
 expect_stdout_exact = "numeric\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "when.types_numeric_complex"
+desc = "`is_numeric` is composed of `is_integer`, `is_float` and `is_complex` rather than listing numeric types again: a declaration guarded by `is_numeric::<T>()` accepts `c64`, while `is_integer` and `is_float` are false for it, so the complex branch is what makes it applicable. `is_ordered` composes the same way and rejects `c64`. A duplicated `c64` case, a false `is_complex`, or a hand-written integer list in `is_ordered` changes the application or the printed answers."
+kind = "behavior"
+case = "../../../cases/compile/when/types_numeric_complex.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "numeric\nnot integer\nnot float\ncomplex\nnumeric\nnot ordered\nnot numeric\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

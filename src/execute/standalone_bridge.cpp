@@ -141,9 +141,12 @@ OperatorFault describe(const camel::core::error::RuntimeFault &fault) {
     }
     auto op = r.context->execMgr().find(key);
     if (!op) {
+        // The generated program names an operator its modules do not provide: the translation
+        // and the runtime disagree, which is a defect of the compiler, not of the program.
         throw describe(camel::core::error::RuntimeFault::make(
-            camel::core::error::RuntimeDiag::UnrecognizedOperatorURI,
-            key));
+            camel::core::error::RuntimeDiag::PassInternalError,
+            "std::cpp",
+            "the operator '" + key + "' is not provided by the module that declares it"));
     }
     r.operators.emplace(key, *op);
     return *op;

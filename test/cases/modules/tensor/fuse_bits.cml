@@ -1,7 +1,7 @@
 /**
  * The bits belong to the program, not to the pass: tensor::fuse records the group as an
  * attribute and changes no operator (design principles 9.6), so the program's bytes are the same
- * with the pass. In safe mode (`tensor::fuse(safe_fp=true)`) the marked group and the unfused
+ * with the pass. In safe mode (`tensor::fuse safe_fp=true`) the marked group and the unfused
  * expression are bit-identical (every matmul runs the canonical algorithm, 7.4); in default mode
  * two runs of the same program are bit-identical (7.6).
  */

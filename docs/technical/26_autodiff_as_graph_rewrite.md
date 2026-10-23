@@ -101,8 +101,8 @@ keeps the derivative arithmetic visible even when all entry arguments are bound.
 the shared `t = (x + 1) * 3; t + t` into `(x + 1) * 6` and the analogous unit-seed
 path into `x * 2`, reducing main's derivative arithmetic from six nodes to four.
 Default algebra permits local reassociation, so bitwise equality with the original
-program is not promised. Use `'std::opt(safe_fp=true)'` or the standalone
-`'std::opt::algebra(safe_fp=true)'` to restrict this stage to exact float rewrites;
+program is not promised. Use `'std::opt safe_fp=true'` or the standalone
+`'std::opt::algebra safe_fp=true'` to restrict this stage to exact float rewrites;
 the coefficient doubling above is exact and remains enabled in safe mode.
 
 Matching inspects only adjacent scalar add/multiply nodes and direct constants;
@@ -445,7 +445,7 @@ on `fn`.
 
 What exists (`modules/onnx/passes/export.cpp`, `docs/cli.md`):
 
-    camel m.cml std::macro std::opt 'onnx::export(out="model.onnx")'
+    camel m.cml std::macro std::opt 'onnx::export out="model.onnx"'
 
 - `onnx::export` is registered by the `onnx` module and is the last pass of the
   pipeline; it consumes the graph, so the program does not run. The export

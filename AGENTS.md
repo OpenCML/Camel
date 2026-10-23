@@ -57,7 +57,7 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 ## Pass Execution Model
 - Canonical syntax: `camel xxx.cml pass1 pass2 ...`
 - `std::nvm` is the fallback pass when no pass is specified or when specified passes complete without yielding an empty graph.
-- Pass settings are pass parameters, not environment variables: `name(key=value, ...)` with constant values (`std::opt(safe_fp=true)`, `std::jit(hot_threshold=0)`, `std::tf(bytecode=false)`, `onnx::export(out="m.onnx")`); quote them in a shell. A pass declares its parameters in a `PassDescriptor` (`include/camel/execute/pass/params.h`); see `docs/cli.md`, "Pass parameters".
+- Pass settings are pass parameters, not environment variables: `key=value` words after the pass name, with no parentheses (`std::opt safe_fp=true`, `std::jit hot_threshold=0`, `std::tf bytecode=false`, `onnx::export out="m.onnx"`); quote a parameterized pass in a shell. A pass is a function declared in the standard library (`stdlib/std.cml` for the core's, `with <...>` for its parameters); see `docs/cli.md`, "Pass parameters".
 - `std::` is for the core's own passes; a module's passes use the module's name (`tiles::compile`) and the module registers them and their short aliases (`registerModulePass`, `registerPassAlias`). The pipeline is composed explicitly: importing a module never adds a pass, and a library whose pass is a precondition diagnoses the missing pass and names it.
 
 ## Test Execution

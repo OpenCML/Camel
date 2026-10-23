@@ -69,7 +69,7 @@ camel prog.cml std::jit                 # run with JIT compilation
 camel prog.cml std::prl                 # run with parallel scheduling
 camel prog.cml std::opt std::fvm        # optimize, then run
 camel prog.cml std::gir                # print the graph (Graphviz DOT) instead of running
-camel prog.cml std::macro std::opt 'onnx::export(out="model.onnx")'   # export `main` to an ONNX model
+camel prog.cml std::macro std::opt 'onnx::export out="model.onnx"'   # export `main` to an ONNX model
 ```
 
 Automatic differentiation (`grad` from the `autodiff` module) and ONNX export are libraries built on the same pass mechanism. The [tutorial](docs/tutorial/tutorial.en.md) walks through looking at the graph, changing the pipeline, exporting a small model and taking a gradient.

@@ -997,6 +997,39 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
 
 namespace {
 
+/// The reduced-precision element type (bf16, f16) an argument carries — as its own type, or as
+/// the element type of an array — or nullopt when none does. A tensor argument is not one: its
+/// type is not an `ArrayType`, and a bf16 or f16 tensor is computed by the tensor module, which
+/// widens every element to f32 and rounds once when it stores the result (modules/tensor/dtype.h,
+/// design principles 7.3, H238). A bf16 or f16 scalar or array has no operation in the language:
+/// there is no literal, no operator and no conversion for one, so a call that needs to add,
+/// compare or otherwise use it is reported as such instead of as "no matching function".
+std::optional<TypeCode> reducedPrecisionArgumentOf(
+    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+    const auto reducedCode = [](const Type *type) -> std::optional<TypeCode> {
+        if (type == nullptr) {
+            return std::nullopt;
+        }
+        TypeCode code = type->code();
+        if (code == TypeCode::Array) {
+            const auto *arrayType = static_cast<const ArrayType *>(type);
+            code                  = arrayType->elemTypeCode();
+        }
+        if (code == TypeCode::BFloat16 || code == TypeCode::Float16) {
+            return code;
+        }
+        return std::nullopt;
+    };
+    for (const type_vec_t *types : {&withTypes, &normTypes}) {
+        for (const Type *type : *types) {
+            if (const auto code = reducedCode(type)) {
+                return code;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 /// One place a path assignment writes: a field (`v.f`, `v.0`) or an element (`v[i]`).
 struct PathStep {
     GCT::node_ptr_t node;   // the ACCS or __idx__ node, as written
@@ -2072,6 +2105,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         .commit(graphs->front()->name(), argumentTypes, conditions);
                     throw BuildAbortException();
                 }
+                // A bf16 or f16 scalar or array among the arguments: no candidate can compute
+                // with it, whatever its parameters say, because the language defines no
+                // operation on a value of the element type (design principles 7.3, H238). Say
+                // that, rather than list overloads the call could never match.
+                if (const auto reduced =
+                        reducedPrecisionArgumentOf(withInputTypes, normInputTypes)) {
+                    diags_->of(SemanticDiag::ReducedPrecisionUnsupported)
+                        .atOrigin(gct->origin())
+                        .commit(displayNameOf(graphs->front()->name()), typeCodeToString(*reduced));
+                    throw BuildAbortException();
+                }
                 std::vector<std::pair<std::string, FunctionType *>> candidates;
                 for (const auto &g : *graphs) {
                     candidates.emplace_back(g->name(), signatureOf(g));
@@ -2202,6 +2246,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
             if (!res.has_value()) {
+                // A bf16 or f16 operand (or an array of one): the language defines no operation
+                // on a value of the element type, so no overload can compute with it however it
+                // is parameterised. Say that, rather than print an overload set the call could
+                // never match (design principles 7.3, H238).
+                if (const auto reduced =
+                        reducedPrecisionArgumentOf(withInputTypes, normInputTypes)) {
+                    diags_->of(SemanticDiag::ReducedPrecisionUnsupported)
+                        .atOrigin(gct->origin())
+                        .commit(displayNameOf(ops->name()), typeCodeToString(*reduced));
+                    throw BuildAbortException();
+                }
                 std::string argTypesStr = std::format(
                     "<{}> ({})",
                     strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
@@ -2454,6 +2509,27 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
             targetFuncType = targetOperator->funcType();
+            // A call that writes a value of another element type into a reduced-precision one
+            // (bf16 or f16) needs `change_precision` where it is written (design principles
+            // 7.3). The module that owns those element types declares how to recognise the
+            // narrowing; the permission is read from this node after stamping, so `#strict`
+            // revokes it exactly as it revokes every other permission.
+            if (const auto gate = camel::core::OperatorTable::instance().precisionGate()) {
+                if (auto narrowing =
+                        (*gate)(targetOperator->uri(), normInputTypes, withInputTypes,
+                                targetFuncType->exitType())) {
+                    const auto permissions = camel::core::tag::effectivePermissions(
+                        *nodeDraftOf(targetNode),
+                        nodeIdOf(targetNode),
+                        camel::core::sem::NumericPolicy::explicitOnly());
+                    if ((permissions & camel::core::sem::kChangePrecision) == 0) {
+                        diags_->of(SemanticDiag::PrecisionChangeNotPermitted)
+                            .atOrigin(gct->origin())
+                            .commit(narrowing->first, narrowing->second);
+                        throw BuildAbortException();
+                    }
+                }
+            }
             // A result that the argument types fix (the shape of a tensor whose type carries
             // it) is a constant for the operators it is passed to, as a literal would be.
             if (const auto *folder =

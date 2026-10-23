@@ -1,7 +1,7 @@
 """The canonical JSON GIR document and the equivalence checker (plan S0).
 
 S0 changes no language and no pipeline: it adds a second shape of the existing JSON dump
-(`std::jgir(canonical=true)`, version 2) that keeps only what graph equivalence is defined on,
+(`std::jgir canonical=true`, version 2) that keeps only what graph equivalence is defined on,
 and an independent structural checker (`test/tools/cml_roundtrip.py`). This case pins both:
 
   * the document is deterministic and contains no names, origins or original node numbers;
@@ -48,7 +48,7 @@ def invoke(*args):
 
 def canonical(source, *passes):
     """The canonical document a pipeline writes for `source`, as (text, parsed)."""
-    done = invoke(EXE, source, *passes, "std::jgir(canonical=true)")
+    done = invoke(EXE, source, *passes, "std::jgir canonical=true")
     assert done.returncode == 0, (source, passes, done.stdout, done.stderr)
     body = "\n".join(
         line for line in done.stdout.splitlines() if not line.startswith("GRAPH_STATS")

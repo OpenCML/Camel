@@ -1218,3 +1218,44 @@ case = "../../../cases/compile/native/graph_constant_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_constant_type.cml:11:21", "argument types: <> (int, int)", "<graph:constant>: (n: Node, sample: i32) => i32?"]
+
+# ---- The declaration itself is checked: its URI and its result type ----
+
+[[tests]]
+name = "native.operator_uri_invalid"
+desc = "A `#op` argument without a protocol (`stdadd`) is not an operator URI: refused at the declaration, before any call, with the expected `protocol:path` form."
+kind = "negative"
+case = "../../../cases/compile/native/operator_uri_invalid.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidOperatorURI"
+expect_diagnostic_code = "0x03000019"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 1
+expect_output_contains = ["Invalid operator URI format: 'stdadd'. Expected 'protocol:path'."]
+
+[[tests]]
+name = "native.incomplete_declaration"
+desc = "A body-less declaration is the whole signature of a C++ operator, result included: without `: T` it is refused at the declaration, naming the function."
+kind = "negative"
+case = "../../../cases/compile/native/incomplete.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeDeclarationIncomplete"
+expect_diagnostic_code = "0x0300017B"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 1
+expect_output_contains = ["The body-less declaration 'foo' is incomplete: it has no result type."]
+
+[[tests]]
+name = "native.builtin_field_not_found"
+desc = "A struct indexed by a field it does not have: the built-in '[]' reports the field at the call. The route is a declaration of the built-in `:op/idx_str` with the struct signature the type rules refuse for `s['y']`; the declaration is the signature, so the call reaches the operator and the runtime names the missing field. This pins the runtime half of the built-in index operator, not a syntax a program can write directly."
+kind = "negative"
+case = "../../../cases/compile/native/idx_field_missing.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::FieldNotFound"
+expect_diagnostic_code = "0x04000033"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 12
+expect_output_contains = ["The struct has no field 'y'. A struct is indexed by the name of one of its fields."]

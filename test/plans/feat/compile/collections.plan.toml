@@ -725,11 +725,11 @@ name = "refuse_onnx"
 desc = "onnx::export does not translate a model whose input goes through a map: a located TranslationRefused, no model file."
 kind = "negative"
 case = "../../../cases/compile/collections/refuse_onnx.cml"
-args = ["${case}", 'onnx::export(out="${test_tmp}/refuse_onnx_never_written.onnx")']
+args = ["${case}", 'onnx::export out="${test_tmp}/refuse_onnx_never_written.onnx"']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 9
-expect_output_contains = ["Translation pass 'onnx::export' refused the graph"]
+expect_output_contains = ["Translation pass 'onnx::export_model' refused the graph"]
 expect_output_not_contains = ["wrote", "Segmentation fault", "dumped core", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000
@@ -1225,3 +1225,4 @@ expect_diagnostic_column = 19
 expect_output_contains = ["The type 'Boxed' cannot be a key of 'Set<Boxed>'", "[field 0 of variant 'Weight' is declared here at 7:35]"]
 expect_output_not_contains = ["never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+

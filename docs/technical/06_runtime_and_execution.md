@@ -81,9 +81,9 @@ recursive calls.
 The rule is static: it is decided once per graph when its plan is built, and nothing is measured
 at run time. The higher-order operators decide for themselves, whatever the rule says about the
 scope they sit in: the ordered ones (`reduce`, `foreach`) run their steps on the calling thread,
-the unordered ones hand their elements out in measured chunks (4.3.2). `std::prl(fanout_all=true)`
+the unordered ones hand their elements out in measured chunks (4.3.2). `std::prl fanout_all=true`
 switches the rule off (every scope that is not totally ordered runs as a task graph) for
-comparison; `std::prl(gc_stats=1)` prints the number of task graphs a run started and the number
+comparison; `std::prl gc_stats=1` prints the number of task graphs a run started and the number
 of workers (`[taskflow] run: task_graphs=N workers=W`; scopes, and unordered operators that
 asked for helpers).
 
@@ -284,7 +284,7 @@ serial ones are compiled once, with the strategy of `std::fvm`, into one image
 (`FastVMHostImage`). The image and the debug map's pc origins are written then and only read
 while the workers run, so no thread takes a lock for them. A graph created during the run (a
 gradient built at run time) is not in the image and is evaluated by the scheduler.
-`std::prl(diag=true)` prints the decision for every graph and the reason when a graph stays.
+`std::prl diag=true` prints the decision for every graph and the reason when a graph stays.
 
 **Where.** The scheduler reaches a graph at a call (`callGraph`: `FUNC`, `CALL`, an element call
 of a higher-order operator, the call made by `attempt`, the entry graph) and at a tail call (the
@@ -316,16 +316,16 @@ a serial recursion no longer nests on the native stack, so it completes on `std:
 on `std::fvm` instead of stopping when the thread's stack is nearly full (design principles
 10.5; `para.core.recursion_too_deep.prl`).
 
-**Switch.** `std::prl(bytecode=false)` turns the hand-off off: every graph is evaluated by the
+**Switch.** `std::prl bytecode=false` turns the hand-off off: every graph is evaluated by the
 scheduler as before. For A/B measurements and as an escape hatch. The hand-off is also off under
-`std::prl(linear=true)` and while an execution observer or the inspection mode is active (both keep
-state for one thread; a debugger runs a program on `std::fvm` anyway). `std::prl(gc_stats=1)`
+`std::prl linear=true` and while an execution observer or the inspection mode is active (both keep
+state for one thread; a debugger runs a program on `std::fvm` anyway). `std::prl gc_stats=1`
 prints `[taskflow] bytecode: graphs=G bytecodes=B calls=C interpreters=I` (or `off`) next to the
 collector's line.
 
 **Measured.** Wall seconds of the whole process, median [min, max] of 5 rounds in which the
 configurations ran in turn (`benchmarks/parallel/run.sh` with
-`CONFIGS` with `std::prl` and `std::prl(bytecode=false)`, one release build of 2026-10-14, Linux x86-64
+`CONFIGS` with `std::prl` and `std::prl bytecode=false`, one release build of 2026-10-14, Linux x86-64
 in a container, 18 logical CPUs, load average 15 to 25 from other builds). "off" is the
 scheduler as it was before (its evaluator for every graph); `std::prl` uses 18 workers unless
 the row says `-t`.

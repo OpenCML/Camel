@@ -2384,23 +2384,13 @@ class CmlPrinter {
 
 } // namespace
 
-PassDescriptor cmlDescriptor() {
-    PassDescriptor descriptor;
-    descriptor.doc = "print the program as Camel source (branches, loops, closures, with/var)";
-    descriptor.params.push_back(
-        PassParam{
-            "max_literal_bytes",
-            PassParamType::Int,
-            int64_t(64 * 1024),
-            "the largest constant the printer writes as a literal",
-        });
-    descriptor.make = [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+PassMaker cmlPass() {
+    return [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
         CmlOptions options;
-        const int64_t limit      = args.getInt("max_literal_bytes");
-        options.maxLiteralBytes  = limit > 0 ? static_cast<size_t>(limit) : 0;
+        const int64_t limit     = args.getInt("max_literal_bytes");
+        options.maxLiteralBytes = limit > 0 ? static_cast<size_t>(limit) : 0;
         return std::make_unique<CmlDumpPass>(ctx, options);
     };
-    return descriptor;
 }
 
 const camel::runtime::Program *CmlDumpPass::apply(
@@ -2440,3 +2430,4 @@ const camel::runtime::Program *CmlDumpPass::apply(
     out << rendered.str();
     return nullptr;
 }
+

@@ -18,11 +18,17 @@ writes as .npy files (``--arg init_dir=...``).  Adam is the same explicit formul
 computed in float64 and stored in float32, because that is what ``nn.adam`` does; the optimizer
 is not one of the differences under test.
 
+The shape is an input: ``--batch --sequence --d-model --n-heads --d-ff --vocab`` name the same
+extents the Camel program was generated with, so the sweep measures one model at several sizes.
+``--d-head`` is derived (``d_model / n_heads``).  The defaults are the single-size example.
+
 Usage:
   python torch_impl.py --variant naive --init artifacts/init --steps 16 --warmup 3
   python torch_impl.py --variant expert --init artifacts/init --save-final artifacts/expert.npz
   python torch_impl.py --variant compiled --init artifacts/init
   python torch_impl.py --variant reference --init artifacts/init --save-final artifacts/ref.npz
+  python torch_impl.py --variant naive --init <dir> --batch 32 --sequence 64 --d-model 1024 \
+      --n-heads 64 --d-ff 2048 --vocab 32
 """
 
 from __future__ import annotations
@@ -226,6 +232,7 @@ def save_final(path: Path, params: dict) -> None:
 
 
 def main() -> int:
+    global BATCH, SEQUENCE, D_MODEL, N_HEADS, D_HEAD, D_FF, VOCAB
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--variant", choices=("naive", "expert", "compiled", "reference"),
                         required=True)
@@ -233,8 +240,20 @@ def main() -> int:
     parser.add_argument("--steps", type=int, default=16)
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--batch", type=int, default=BATCH)
+    parser.add_argument("--sequence", type=int, default=SEQUENCE)
+    parser.add_argument("--d-model", type=int, default=D_MODEL)
+    parser.add_argument("--n-heads", type=int, default=N_HEADS)
+    parser.add_argument("--d-ff", type=int, default=D_FF)
+    parser.add_argument("--vocab", type=int, default=VOCAB)
     parser.add_argument("--save-final", default=None)
     args = parser.parse_args()
+
+    BATCH, SEQUENCE, D_MODEL = args.batch, args.sequence, args.d_model
+    N_HEADS, D_FF, VOCAB = args.n_heads, args.d_ff, args.vocab
+    D_HEAD = D_MODEL // N_HEADS
+    if D_HEAD * N_HEADS != D_MODEL:
+        raise SystemExit(f"d_model {D_MODEL} is not n_heads {N_HEADS} * d_head")
 
     torch.set_num_threads(args.threads)
     torch.manual_seed(0)
@@ -272,6 +291,10 @@ def main() -> int:
         "threads": args.threads,
         "steps": args.steps,
         "warmup": args.warmup,
+        "shape": {
+            "batch": BATCH, "sequence": SEQUENCE, "d_model": D_MODEL,
+            "heads": N_HEADS, "d_head": D_HEAD, "d_ff": D_FF, "vocab": VOCAB,
+        },
         "init_loss": init_loss,
         "losses": losses,
         "final_loss": final_loss,

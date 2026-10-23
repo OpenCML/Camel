@@ -1,0 +1,27 @@
+/**
+ * `is_numeric` is composed of the three family predicates (`is_integer`, `is_float`,
+ * `is_complex`), not a list of numeric types of its own. A `when` declaration guarded by
+ * `is_numeric::<T>()` therefore accepts a `c64`, and the integer and float predicates both say
+ * no for it, so only the complex branch can have made it applicable. A `c64` listed again
+ * inside `is_numeric`, an `is_complex` that answered false, or a `is_ordered` that still
+ * listed the numeric types by hand each change this output.
+ */
+module when_types_numeric_complex
+
+import { is_complex, is_float, is_integer, is_numeric, is_ordered } from types
+
+func classify::<T>(x: T): string when is_numeric::<T>() {
+    return "numeric"
+}
+
+func main(): int sync {
+    let z: c64 = 1 + 2i
+    println(classify(z))
+    println(if is_integer::<c64>() then "integer" else "not integer")
+    println(if is_float::<c64>() then "float" else "not float")
+    println(if is_complex::<c64>() then "complex" else "not complex")
+    println(if is_numeric::<c64>() then "numeric" else "not numeric")
+    println(if is_ordered::<c64>() then "ordered" else "not ordered")
+    println(if is_numeric::<string>() then "numeric" else "not numeric")
+    return 0
+}

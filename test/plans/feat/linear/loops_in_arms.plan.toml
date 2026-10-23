@@ -21,7 +21,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops_in_arms.compiled"
-desc = "The same matrix with the loops in arms compiled by the JIT: `std::jit(hot_threshold=0)` compiles the callees at their first call (framed code, the loop events are native), and `std::opt::inline std::jit(hot_threshold=0)` compiles main with the arms and their loops in it. The compiled values are the interpreters' (`backends_agree` with nvm)."
+desc = "The same matrix with the loops in arms compiled by the JIT: `std::jit hot_threshold=0` compiles the callees at their first call (framed code, the loop events are native), and `std::opt::inline std::jit hot_threshold=0` compiles main with the arms and their loops in it. The compiled values are the interpreters' (`backends_agree` with nvm)."
 kind = "behavior"
 case = "../../../cases/loops/arm_loops.cml"
 args = ["${case}", "${backend}"]
@@ -35,7 +35,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "loops_in_arms.inline"
-desc = "The matrix after `std::opt::inline`, and with `std::prl(bytecode=false)` (the scheduler evaluates every graph itself instead of handing it to the bytecode interpreter): the arms and their loops are inlined into their callers, and the values are still the matrix's."
+desc = "The matrix after `std::opt::inline`, and with `std::prl bytecode=false` (the scheduler evaluates every graph itself instead of handing it to the bytecode interpreter): the arms and their loops are inlined into their callers, and the values are still the matrix's."
 kind = "behavior"
 case = "../../../cases/loops/arm_loops.cml"
 args = ["${case}", "${backend}"]
@@ -63,7 +63,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops_in_arms.edges.compiled"
-desc = "The edge shapes with the loops in arms compiled (`std::jit(hot_threshold=0)`), inlined into main (`std::opt::inline std::jit(hot_threshold=0)`), and on `std::prl(bytecode=false)`: the same values as the interpreters."
+desc = "The edge shapes with the loops in arms compiled (`std::jit hot_threshold=0`), inlined into main (`std::opt::inline std::jit hot_threshold=0`), and on `std::prl bytecode=false`: the same values as the interpreters."
 kind = "behavior"
 case = "../../../cases/loops/arm_loops_edges.cml"
 args = ["${case}", "${backend}"]

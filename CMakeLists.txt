@@ -72,6 +72,32 @@ add_compile_options(-ffp-contract=off)
 add_library(libcamel_objects OBJECT ${LIBCAMEL_SRC})
 add_library(libcamel SHARED $<TARGET_OBJECTS:libcamel_objects>)
 
+# Diagnostic codes are assigned in diagnostics/registry.tsv, not written by hand (H239): the
+# headers and message tables under core/error/diagnostics/messages are generated from it, and
+# this step refuses a duplicate number, a number outside its section's range, a duplicate name
+# and a generated file that no longer matches the registry. It runs before libcamel_objects, so
+# no translation unit is compiled against a stale code table.
+find_program(CAMEL_DIAGNOSTICS_NODE NAMES node nodejs REQUIRED)
+set(_camel_diagnostic_sources
+    "${PROJECT_SOURCE_DIR}/diagnostics/registry.tsv"
+    "${PROJECT_SOURCE_DIR}/scripts/diagnostics-catalog.mjs"
+    "${PROJECT_SOURCE_DIR}/include/camel/core/error/diagnostics/base.h")
+foreach(_section internal lexical syntax semantic runtime)
+    list(APPEND _camel_diagnostic_sources
+        "${PROJECT_SOURCE_DIR}/include/camel/core/error/diagnostics/messages/${_section}.h"
+        "${PROJECT_SOURCE_DIR}/src/core/error/diagnostics/messages/${_section}.cpp")
+endforeach()
+add_custom_command(
+    OUTPUT "${PROJECT_BINARY_DIR}/diagnostics-registry.stamp"
+    COMMAND "${CAMEL_DIAGNOSTICS_NODE}" "${PROJECT_SOURCE_DIR}/scripts/diagnostics-catalog.mjs" --check
+    COMMAND "${CMAKE_COMMAND}" -E touch "${PROJECT_BINARY_DIR}/diagnostics-registry.stamp"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    DEPENDS ${_camel_diagnostic_sources}
+    COMMENT "Checking diagnostics/registry.tsv against the generated code tables"
+    VERBATIM)
+add_custom_target(camel_diagnostics_check DEPENDS "${PROJECT_BINARY_DIR}/diagnostics-registry.stamp")
+add_dependencies(libcamel_objects camel_diagnostics_check)
+
 # The target name already carries "lib": without this, the Unix prefix produces liblibcamel.so,
 # which the scripts (scripts/common.js: libName) do not find, so out/latest/libs stays empty and
 # the tools only run through the build-tree runpath.

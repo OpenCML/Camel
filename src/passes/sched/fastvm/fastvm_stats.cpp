@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Coverage statistics of the bytecode VM and its JIT, off unless the environment variable
-// std::fvm(stats="file") names a file. One JSON object is appended to the file for each run:
+// std::fvm stats="file" names a file. One JSON object is appended to the file for each run:
 //
 //   {"jit": true, "graphs": [{"name": ..., "pc": ..., "ops": ..., "executed": ...,
 //     "status": "compiled" | "compilable" | "rejected" | "interpreter",

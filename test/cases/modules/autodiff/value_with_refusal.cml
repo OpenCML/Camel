@@ -1,0 +1,20 @@
+/**
+ * `get_or`'s default is a value in a `with` parameter, and the operator has no derivative rule:
+ * the default's gradient cannot be carried. The map is constant, so before the gate fix the
+ * gradient was silently 0.0 although the derivative is 3.0; now the pass refuses at the call and
+ * names the operator and the parameter.
+ */
+module value_with_refusal
+
+import { grad } from autodiff
+
+with <w: float>
+func defaulted(): float {
+    let m = [(1, 2.0)] as Map<int, float>
+    return m->get_or<2, w>() * 3.0
+}
+
+func main(): int sync {
+    println(grad(defaulted)<5.0>())
+    return 0
+}

@@ -33,7 +33,7 @@ verify_script = '''
 [[tests]]
 name = "graph.safe"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}","std::opt::fold","std::opt::algebra(safe_fp=true)","std::jgir"]
+args = ["${case}","std::opt::fold","std::opt::algebra safe_fp=true","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const d=JSON.parse(input.normalized.stdout), safe=true;
@@ -98,7 +98,7 @@ verify_script = '''
 name = "commutative.graph_safe"
 desc = "Under the strict numeric policy the pair is still one graph: the exact doubling of 3.0 needs no permission, so the safe policy takes the same law and the same shape."
 case = "../../../cases/opt/generic/algebra_commutative.cml"
-args = ["${case}","std::opt(safe_fp=true)","std::jgir"]
+args = ["${case}","std::opt safe_fp=true","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const d=JSON.parse(input.normalized.stdout),G=n=>{const g=d.graphs.find(x=>x.name===n);assert(g,'missing '+n);return g};
@@ -168,7 +168,7 @@ verify_script = '''
 [[tests]]
 name = "execution.safe"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}","--arg","x=2","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=2","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -188,7 +188,7 @@ verify_script = '''
 [[tests]]
 name = "execution.opt_safe"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}","--arg","x=2","std::opt(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=2","std::opt safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -236,7 +236,7 @@ verify_script = '''
 [[tests]]
 name = "boundary64.5e-324.safe"
 case = "../../../cases/opt/generic/algebra_boundary.cml"
-args = ["${case}","--arg","x=5e-324","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=5e-324","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -278,7 +278,7 @@ verify_script = '''
 [[tests]]
 name = "boundary64.-5e-324.safe"
 case = "../../../cases/opt/generic/algebra_boundary.cml"
-args = ["${case}","--arg","x=-5e-324","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=-5e-324","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -320,7 +320,7 @@ verify_script = '''
 [[tests]]
 name = "boundary64.2.5e-323.safe"
 case = "../../../cases/opt/generic/algebra_boundary.cml"
-args = ["${case}","--arg","x=2.5e-323","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=2.5e-323","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -362,7 +362,7 @@ verify_script = '''
 [[tests]]
 name = "boundary64.-0.safe"
 case = "../../../cases/opt/generic/algebra_boundary.cml"
-args = ["${case}","--arg","x=-0","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=-0","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -404,7 +404,7 @@ verify_script = '''
 [[tests]]
 name = "boundary64.1e308.safe"
 case = "../../../cases/opt/generic/algebra_boundary.cml"
-args = ["${case}","--arg","x=1e308","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=1e308","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -446,7 +446,7 @@ verify_script = '''
 [[tests]]
 name = "boundary64.inf.safe"
 case = "../../../cases/opt/generic/algebra_boundary.cml"
-args = ["${case}","--arg","x=inf","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=inf","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -488,7 +488,7 @@ verify_script = '''
 [[tests]]
 name = "boundary64.nan.safe"
 case = "../../../cases/opt/generic/algebra_boundary.cml"
-args = ["${case}","--arg","x=nan","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=nan","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -502,7 +502,7 @@ verify_script = '''
 [[tests]]
 name = "boundary32.1.401298464324817e-45.false"
 case = "../../../cases/opt/generic/algebra_boundary32.cml"
-args = ["${case}","--arg","x=1.401298464324817e-45","std::opt::fold","std::opt::algebra(safe_fp=false)","${backend}"]
+args = ["${case}","--arg","x=1.401298464324817e-45","std::opt::fold","std::opt::algebra safe_fp=false","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -517,7 +517,7 @@ verify_script = '''
 [[tests]]
 name = "boundary32.1.401298464324817e-45.true"
 case = "../../../cases/opt/generic/algebra_boundary32.cml"
-args = ["${case}","--arg","x=1.401298464324817e-45","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=1.401298464324817e-45","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -532,7 +532,7 @@ verify_script = '''
 [[tests]]
 name = "boundary32.7.006492321624085e-45.false"
 case = "../../../cases/opt/generic/algebra_boundary32.cml"
-args = ["${case}","--arg","x=7.006492321624085e-45","std::opt::fold","std::opt::algebra(safe_fp=false)","${backend}"]
+args = ["${case}","--arg","x=7.006492321624085e-45","std::opt::fold","std::opt::algebra safe_fp=false","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -547,7 +547,7 @@ verify_script = '''
 [[tests]]
 name = "boundary32.7.006492321624085e-45.true"
 case = "../../../cases/opt/generic/algebra_boundary32.cml"
-args = ["${case}","--arg","x=7.006492321624085e-45","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=7.006492321624085e-45","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -562,7 +562,7 @@ verify_script = '''
 [[tests]]
 name = "boundary32.-0.false"
 case = "../../../cases/opt/generic/algebra_boundary32.cml"
-args = ["${case}","--arg","x=-0","std::opt::fold","std::opt::algebra(safe_fp=false)","${backend}"]
+args = ["${case}","--arg","x=-0","std::opt::fold","std::opt::algebra safe_fp=false","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -577,7 +577,7 @@ verify_script = '''
 [[tests]]
 name = "boundary32.-0.true"
 case = "../../../cases/opt/generic/algebra_boundary32.cml"
-args = ["${case}","--arg","x=-0","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=-0","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -592,7 +592,7 @@ verify_script = '''
 [[tests]]
 name = "boundary32.3e38.false"
 case = "../../../cases/opt/generic/algebra_boundary32.cml"
-args = ["${case}","--arg","x=3e38","std::opt::fold","std::opt::algebra(safe_fp=false)","${backend}"]
+args = ["${case}","--arg","x=3e38","std::opt::fold","std::opt::algebra safe_fp=false","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -607,7 +607,7 @@ verify_script = '''
 [[tests]]
 name = "boundary32.3e38.true"
 case = "../../../cases/opt/generic/algebra_boundary32.cml"
-args = ["${case}","--arg","x=3e38","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+args = ["${case}","--arg","x=3e38","std::opt::fold","std::opt::algebra safe_fp=true","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -661,7 +661,7 @@ verify_script = '''
 [[tests]]
 name = "gradient.false"
 case = "../../../cases/modules/autodiff/collapse_random.cml"
-args = ["${case}","std::macro","std::opt(safe_fp=false)","std::jgir"]
+args = ["${case}","std::macro","std::opt safe_fp=false","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -673,7 +673,7 @@ verify_script = '''
 [[tests]]
 name = "gradient.true"
 case = "../../../cases/modules/autodiff/collapse_random.cml"
-args = ["${case}","std::macro","std::opt(safe_fp=true)","std::jgir"]
+args = ["${case}","std::macro","std::opt safe_fp=true","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -683,9 +683,9 @@ verify_script = '''
 '''
 
 [[tests]]
-name = "invalid.std::opt(safe_fp=typo)"
+name = "invalid.std::opt safe_fp=typo"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}","--arg","x=2","std::nvm","std::opt(safe_fp=typo)"]
+args = ["${case}","--arg","x=2","std::nvm","std::opt safe_fp=typo"]
 expect_exit = 1
 verify_script = '''
 ({input,assert})=>{
@@ -695,37 +695,39 @@ verify_script = '''
 '''
 
 [[tests]]
-name = "invalid.std::opt::algebra(unknown=true)"
+name = "invalid.std::opt::algebra unknown=true"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}","--arg","x=2","std::nvm","std::opt::algebra(unknown=true)"]
+args = ["${case}","--arg","x=2","std::nvm","std::opt::algebra unknown=true"]
 expect_exit = 1
 verify_script = '''
 ({input,assert})=>{
  assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
- assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('ParamArgumentUnknown'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes("'unknown' is not a parameter of 'std::opt::algebra'"),'missing the parameter name');
 }
 '''
 
 [[tests]]
-name = "invalid.std::opt(safe_fp=true,safe_fp=false)"
+name = "invalid.std::opt safe_fp=true safe_fp=false"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}","--arg","x=2","std::nvm","std::opt(safe_fp=true,safe_fp=false)"]
+args = ["${case}","--arg","x=2","std::nvm","std::opt safe_fp=true safe_fp=false"]
 expect_exit = 1
 verify_script = '''
 ({input,assert})=>{
  assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
- assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('ParamArgumentDuplicate'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes("The parameter 'safe_fp' of 'std::opt' is given twice."),'missing the parameter name');
 }
 '''
 
 [[tests]]
-name = "invalid.std::opt::algebra(safe_fp=true"
+name = "removed.parenthesised_form"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}","--arg","x=2","std::nvm","std::opt::algebra(safe_fp=true"]
+args = ["${case}","--arg","x=2","std::nvm","std::opt::algebra(safe_fp=true)"]
 expect_exit = 1
 verify_script = '''
 ({input,assert})=>{
- assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('not in parentheses'),'missing the spelling hint');
  assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
 }
 '''
@@ -733,7 +735,7 @@ verify_script = '''
 [[tests]]
 name = "integrated.graph.false"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "std::opt(safe_fp=false)", "std::jgir"]
+args = ["${case}", "std::opt safe_fp=false", "std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -747,7 +749,7 @@ verify_script = '''
 [[tests]]
 name = "integrated.graph.true"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "std::opt(safe_fp=true)", "std::jgir"]
+args = ["${case}", "std::opt safe_fp=true", "std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -818,7 +820,7 @@ name = "tensor.graph.safe"
 desc = "With safe_fp=true the tensor rewrite is strict as the scalar one is: nothing is regrouped, not even by a node that carries @numeric(reassociate); the exact laws (x * 1, x - 0, x / 1, -(-x)) still fire, while the sum that would need the finite_math grant and the shared product's t + t stay as written."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra_tensor.cml"
-args = ["${case}","std::opt::fold","std::opt::algebra(safe_fp=true)","std::jgir"]
+args = ["${case}","std::opt::fold","std::opt::algebra safe_fp=true","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const d=JSON.parse(input.normalized.stdout), safe=true;

@@ -79,3 +79,63 @@ expect_exit = 0
 expect_stdout_contains = ["part [2, 3]", "after [3, 4]", "till [1, 2]", "whole [1, 2, 3, 4]", "stepped [1, 2, 3, 4]", "rows [3, 1]", "end 4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "lexical.unterminated_comment"
+desc = "A block comment with no closing '*/' is reported where it opens: the lexer says on the line that starts it that the comment was never closed."
+kind = "negative"
+case = "../../../cases/parse/syntax/unterminated_comment.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::UnterminatedComment"
+expect_diagnostic_code = "0x01000003"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 1
+expect_output_contains = ["Unterminated comment: '/*' without its '*/'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "syntax.comparison_needs_space"
+desc = "`i<n` reads the '<' as the start of an angle-bracket argument list, not as a comparison: the parser refuses the 'then' that does not continue it and says to put a space before the '<'."
+kind = "negative"
+case = "../../../cases/parse/syntax/comparison_needs_space.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::ComparisonNeedsSpace"
+expect_diagnostic_code = "0x0200000C"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 9
+expect_output_contains = ["This '<' touches 'i', so it opens an angle-bracket argument list, which 'then' does not continue."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "syntax.angle_close_after_space"
+desc = "In `pick<int >(1, 2)` the '>' follows a space and is read as a comparison, so the angle-bracket list it was meant to close is still open: the parser names the token it found instead ('return') and says to write `pick<int>`."
+kind = "negative"
+case = "../../../cases/parse/syntax/angle_close_after_space.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::AngleCloseAfterSpace"
+expect_diagnostic_code = "0x0200000D"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 22
+expect_output_contains = ["This '>' follows a space and is read as the comparison operator, so the angle-bracket list it was meant to close is still open at 'return'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "syntax.line_starts_with_operator"
+desc = "A line that starts with '+' is not a continuation: the line break above ended the statement, and the operator is refused where it stands."
+kind = "negative"
+case = "../../../cases/parse/syntax/line_starts_with_operator.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::LineStartsWithOperator"
+expect_diagnostic_code = "0x0200000E"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 5
+expect_output_contains = ["A statement cannot start with '+': the line break before it ended the statement of the line above."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

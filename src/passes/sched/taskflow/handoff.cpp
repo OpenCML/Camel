@@ -158,10 +158,10 @@ void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
         }
     };
     if (!options_.bytecode) {
-        return off("std::tf(bytecode=false)");
+        return off("std::tf bytecode=false");
     }
     if (forceLinear_) {
-        return off("std::tf(linear=true) asks for the node-by-node evaluator");
+        return off("std::tf linear=true asks for the node-by-node evaluator");
     }
     // The interpreter reports to an execution observer from whichever thread runs it, and in
     // inspection mode it keeps one "current origin" for the whole process: both are for one
@@ -256,3 +256,4 @@ void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
     }
     handoff_ = std::move(handoff);
 }
+

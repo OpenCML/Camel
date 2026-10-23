@@ -883,7 +883,7 @@ name = "simplify_growth_budget.parameter_zero"
 desc = "The growth_budget parameter of std::opt sets the budget: with 0 nothing is specialized or inlined and the program keeps its size (fewer than 60 nodes) and its output. It used to be the environment variable CAMEL_OPT_GROWTH_BUDGET."
 kind = "behavior"
 case = "../../../cases/opt/generic/simplify_growth_budget.cml"
-args = ["${case}", "std::opt(growth_budget=0)", "std::stats", "std::nvm"]
+args = ["${case}", "std::opt growth_budget=0", "std::stats", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

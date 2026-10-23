@@ -1,0 +1,46 @@
+/**
+ * A value that reaches an operator through a `with` parameter, while the operator's ordinary
+ * argument is a constant. The backward pass must visit the operator when that value is
+ * differentiated; looking only at ordinary inputs dropped the contribution with no error and no
+ * zero.
+ *
+ * - append: ys = [10, 20, w]; f = ys[2] * 3, so f(2) = 6 and df/dw = 3.
+ * - extend: ys = [10, 20, w0, w1]; f = ys[2] * 2 + ys[3] * 5, so the gradient is (2, 5).
+ * - slice: the bound is configuration (an int, no tangent). f is the first element of a constant
+ *   prefix, so the bound's gradient is exactly 0 and the value is still 50.
+ */
+module value_with_grad
+
+import { grad } from autodiff
+
+with <w: float>
+func appended(): float {
+    let xs = [10.0, 20.0]
+    let ys = xs->append<w>
+    return ys[2] * 3.0
+}
+
+with <w: float[]>
+func extended(): float {
+    let xs = [10.0, 20.0]
+    let ys = xs->extend<w>
+    return ys[2] * 2.0 + ys[3] * 5.0
+}
+
+with <w: float>
+func sliced(): float {
+    let xs = [10.0, 20.0, 30.0]
+    let s = xs->slice<0, int(w)>
+    return s[0] * 5.0
+}
+
+func main(): int sync {
+    let ga = grad(appended)<2.0>()
+    let gw = [2.0, 3.0]
+    let ge = grad(extended)<gw>()
+    let gs = grad(sliced)<2.5>()
+    'value_with_grad appended value={:.1f} grad={:.1f}'->format<appended<2.0>(), ga>->println
+    'value_with_grad extended grad={:.1f},{:.1f}'->format<ge[0], ge[1]>->println
+    'value_with_grad sliced value={:.1f} grad={:.1f}'->format<sliced<2.5>(), gs>->println
+    return 0
+}

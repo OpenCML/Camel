@@ -95,8 +95,10 @@ InferFn binaryInfer(bool producesFloat) {
         }
         const TensorFacts lhs = ctx.facts(0), rhs = ctx.facts(1);
         std::optional<TypeCode> dtype = operandType(ctx, lhs, rhs);
-        if (producesFloat && dtype) {
-            // Div and Pow produce a float: f64 when a tensor operand is f64, f32 otherwise.
+        if (producesFloat && dtype && !isReducedFloatTensorType(*dtype)) {
+            // Div and Pow produce a float: f64 when a tensor operand is f64, f32 otherwise. A
+            // bf16 or f16 operand keeps its element type: the quotient is computed in f32 and
+            // rounded once when it is stored (the one arithmetic path of dtype.h).
             dtype = *dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
                                                 : std::optional(TypeCode::Float32);
         }
@@ -115,9 +117,10 @@ InferFn unaryInfer(bool producesFloat) {
     return [producesFloat](const InferContext &ctx) -> std::optional<Type *> {
         const TensorFacts in = ctx.facts(0);
         std::optional<TypeCode> dtype = in.dtype;
-        if (producesFloat && in.dtype) {
+        if (producesFloat && in.dtype && !isReducedFloatTensorType(*in.dtype)) {
             // A math function keeps f64: f64 in, f64 out. An f32 or integer input gives f32,
-            // the type these operators have always produced.
+            // the type these operators have always produced. A bf16 or f16 input keeps its
+            // element type and is rounded once when it is stored (dtype.h).
             dtype = *in.dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
                                                    : std::optional(TypeCode::Float32);
         }
@@ -212,15 +215,38 @@ TypeCode dtypeFromName(const std::string &name) {
     if (name == "bool") {
         return TypeCode::Bool;
     }
+    if (name == "bfloat16" || name == "bf16") {
+        return TypeCode::BFloat16;
+    }
+    if (name == "float16" || name == "half" || name == "f16") {
+        return TypeCode::Float16;
+    }
     throw std::invalid_argument("cast: unknown dtype '" + name + "'");
 }
 
 slot_t castKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("cast", [&] {
-        return wrap(k::cast(
-            tensorArg(norm, 0, true),
-            dtypeFromName(stringArg(norm, 1)),
-            resultAllocator()));
+        Array *input = tensorArg(norm, 0, true);
+        const TypeCode target = dtypeFromName(stringArg(norm, 1));
+        // A conversion into bf16 or f16 rounds, so the compiler checks it against
+        // `change_precision` where the call is written (design principles 7.3, H238). That
+        // check knows the target only when it is written at the call: a target chosen from a
+        // run-time string leaves the result's static element type unknown, and the conversion
+        // would round with no licence. The static result type is the evidence that the check
+        // ran, so a reduced target it does not name is refused here instead of narrowing
+        // silently.
+        if (isReducedFloatTensorType(target) && input->dtype() != target) {
+            const auto *declared = asTensorType(norm.resultType());
+            if (declared == nullptr || !declared->dtype() || *declared->dtype() != target) {
+                throw std::invalid_argument(
+                    "cast from '" + elementTypeSpelling(input->dtype()) + "' to '" +
+                    elementTypeSpelling(target) +
+                    "' rounds, but the target is chosen at run time, so the compiler cannot "
+                    "check the change_precision permission where the conversion is written. "
+                    "Write the element type at the call");
+            }
+        }
+        return wrap(k::cast(input, target, resultAllocator()));
     });
 }
 
@@ -411,10 +437,26 @@ void whereVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// cast(t, dtype): the gradient returns to t's dtype.
+// cast(t, dtype): the gradient returns to t's dtype. `cast` also accepts a numeric array, and a
+// float array is a continuous value with a tangent (design principles 9.9): its adjoint would be
+// the elements of dy in t's dtype, which no operator of this module builds from a tensor's
+// gradient, so an array that depends on a differentiated input is refused by name instead of being
+// dropped -- the refusal `new`, `reshape` and `concat` make for the same reason.
 void castVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 2);
-    if (auto dy = b.gradientOf(call.output); dy && isTensorNode(b, call.inputs[0])) {
+    if (!isTensorNode(b, call.inputs[0])) {
+        if (b.isActive(call.inputs[0])) {
+            refuseVjp(
+                call,
+                "its input is a numeric array of type '" + b.nodeType(call.inputs[0])->toString() +
+                    "', not a tensor, and this module has no operator that carries a tensor's "
+                    "gradient back into an array; the array's gradient would be dropped silently. "
+                    "Cast a differentiable tensor (a parameter, a slice of one) instead of an "
+                    "array");
+        }
+        return;
+    }
+    if (auto dy = b.gradientOf(call.output); dy) {
         b.accumulateGradient(
             call.inputs[0],
             addTensorOper(b, "tensor:cast_like", {*dy, call.inputs[0]}));

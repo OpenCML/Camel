@@ -1,0 +1,39 @@
+// The second derivative of `append` is blocked, and stays blocked: this pins that the refusal
+// is the precise one, not a wrong number.
+//
+// f(xs) = (xs->append<2.0>)[0]^2 + (xs->append<2.0>)[1] * 2.0 at xs = [3, 4]:
+//   ys = [3, 4, 2]; f = ys0^2 + 2*ys1 = 9 + 8 = 17
+//   f'(xs) = [2*ys0, 2] = [6, 2]
+//   f''(xs) = [2, 0] -- but not expressible today.
+//
+// append's adjoint splits the gradient of `ys` into `:tangent/init_arr` (all but the last
+// element, the gradient of xs) and `:tangent/last_arr` (the last element, the gradient of the
+// appended value). The adjoint of `init_arr` is "pad the upstream gradient with the zero
+// tangent at the end": an operator that takes a computed zero tangent and grows the array.
+// The array library has no such operator -- `append`/`extend` take the appended value as a
+// `with` input, and a derivative rule can emit only ordinary inputs -- so no half rule is
+// written here. The first derivative is the real one; the second refuses by name at the
+// operator instead of printing a zero.
+module second_order_array_append_init_blocked
+
+import { grad } from autodiff
+
+with <xs: float[]>
+func f(): float {
+    let ys = xs->append<2.0>
+    return ys[0] * ys[0] + ys[1] * ys[2]
+}
+
+with <v: float[]>
+func df0(): float {
+    let g = grad(f)<v>()
+    return g[0]
+}
+
+func main(): int sync {
+    let xs = [3.0, 4.0]
+    let g = grad(f)<xs>()
+    'second_order_array_append_init d0={:.1f} d1={:.1f}'->format<g[0], g[1]>->println
+    println(grad(df0)<xs>())
+    return 0
+}

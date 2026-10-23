@@ -503,7 +503,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 DEF_CMP_OP_CASE(DGE, Double, >=);
 
             default: {
-                throwRuntimeFault(RuntimeDiag::UnsupportedBytecode, to_string(bc.opcode));
+                // Every OpCode the compiler emits has a case above; an opcode it does not know
+                // is a defect of the compiler, not of the program.
+                throwRuntimeFault(
+                    RuntimeDiag::PassInternalError,
+                    "std::fvm",
+                    "unsupported bytecode " + to_string(bc.opcode));
             }
             }
 

@@ -1546,58 +1546,75 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 # The two cases below are twins: one loop body, iterating a literal array or an array built from
-# the parameter. `std::stats` runs before and after `std::macro`, so the first GRAPH_STATS line
-# counts the program's own graph and the second the graph with the gradient's reverse loop in it.
-# The counts are pinned exactly, so the cost is in the output rather than in prose:
-#   literal   19 nodes ->  92 nodes (5 -> 18 operators)
-#   parameter 24 nodes -> 122 nodes (7 -> 33 operators)
-# The parameter twin's forward array costs 5 nodes, and its own backward pass 25 more nodes than
-# the literal twin's. The reach test is worth 8 of those nodes: with `dependsOnTangentPort` removed
-# from the loop rule, the literal twin prints 100 nodes, 115 edges and 21 operators instead of 92,
-# 102 and 18, so this pair fails if every loop carries an array gradient unconditionally.
+# the parameter. `std::macro` builds the gradient's reverse loop, `std::jgir` prints the graphs as
+# JSON, and what is asserted is the array gradient's own machinery rather than a graph size:
+# `:tangent/zeros_arr` (the zero array a round's element gradient is scattered into) and
+# `:tangent/scatter_add_arr` (the scatter itself) must be absent for the literal and present for
+# the parameter-built array. No count is pinned, so a CSE or an inlining decision that moves node
+# numbers leaves these assertions alone; dropping the reach test from the loop rule adds exactly
+# those two operators to the literal twin and fails its assertion, which prints the labels it
+# found. The first entry of each pair asserts the shape, the second the printed value.
 
 [[tests]]
-name = "loop_grad_literal_array.stats"
-desc = "A differentiated loop over an array literal: nothing that can carry a gradient reaches the array, so the reverse pass carries no array gradient for it. std::stats before and after std::macro pins the program graph at 19 nodes and the graph with the gradient at 92 nodes, 102 edges and 18 operators, against 24 and 122, 148 and 33 for the parameter-built twin."
+name = "loop_grad_literal_array.shape"
+desc = "A differentiated loop over an array literal: no port reaches the array, so its reverse loop carries no array gradient and no tangent-space operator of the array kind (`:tangent/zeros_arr`, `:tangent/scatter_add_arr`) appears anywhere in the graphs std::jgir prints after std::macro. The reverse loop itself is there, so the absence is the rule's, not a missing transformation. The parameter-built twin has both operators."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_literal_array.cml"
-args = ["${case}", "std::stats", "std::macro", "std::stats", "${run_nvm}"]
+args = ["${case}", "std::macro", "std::jgir"]
 expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout
-const stats = [...out.matchAll(/GRAPH_STATS ([{].*[}])/g)].map((m) => JSON.parse(m[1]))
-assert(stats.length === 2, `expected two GRAPH_STATS lines: ${out}`)
-const [before, after] = stats
-assert(before.nodes === 19 && before.opers === 5, `program graph changed: ${JSON.stringify(before)}`)
-assert(after.nodes === 92 && after.edges === 102 && after.opers === 18, `gradient graph changed: ${JSON.stringify(after)}`)
-assert(after.loops === 3, `expected the forward and the reverse loop: ${JSON.stringify(after)}`)
-assert(out.includes('loop_grad_literal_array d=7.0'), `unexpected output: ${out}`)
+const doc = JSON.parse(input.normalized.stdout)
+const graphs = doc.graphs.map((g) => g.name)
+assert(graphs.some((name) => name.endsWith('.tape.reverse')), `no reverse loop to inspect: ${JSON.stringify(graphs)}`)
+const labels = doc.graphs.flatMap((g) => g.nodes).filter((n) => n.kind === 'OPER').map((n) => n.label)
+const tangents = labels.filter((label) => label.startsWith(':tangent/'))
+assert(tangents.length === 0, `the literal array's gradient is carried: ${JSON.stringify(tangents)}`)
 }
 """
 timeout_ms = 8000
 
 [[tests]]
-name = "loop_grad_parameter_array.stats"
-desc = "The twin of loop_grad_literal_array.stats over an array built from the parameter: the array takes part in the gradient, so the reverse loop carries its gradient and the gradient graph is 122 nodes, 148 edges and 33 operators, 25 nodes of gradient more than the literal twin's 92 (5 of them its forward array)."
+name = "loop_grad_literal_array"
+desc = "The same case runs: the gradient of w + w * (1 + 2 + 3) at 2 is 7."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_literal_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_literal_array d=7.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_parameter_array.shape"
+desc = "The twin over an array built from the parameter: the array takes part in the gradient, so the reverse loop carries it and both tangent operators are in the graphs: `:tangent/zeros_arr`, the zero array whose length is the forward value's, and `:tangent/scatter_add_arr`, each round's element gradient scattered at its index."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_parameter_array.cml"
-args = ["${case}", "std::stats", "std::macro", "std::stats", "${run_nvm}"]
+args = ["${case}", "std::macro", "std::jgir"]
 expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout
-const stats = [...out.matchAll(/GRAPH_STATS ([{].*[}])/g)].map((m) => JSON.parse(m[1]))
-assert(stats.length === 2, `expected two GRAPH_STATS lines: ${out}`)
-const [before, after] = stats
-assert(before.nodes === 24 && before.opers === 7, `program graph changed: ${JSON.stringify(before)}`)
-assert(after.nodes === 122 && after.edges === 148 && after.opers === 33, `gradient graph changed: ${JSON.stringify(after)}`)
-assert(after.loops === 3, `expected the forward and the reverse loop: ${JSON.stringify(after)}`)
-assert(out.includes('loop_grad_parameter_array d=25.0'), `unexpected output: ${out}`)
+const doc = JSON.parse(input.normalized.stdout)
+const graphs = doc.graphs.map((g) => g.name)
+assert(graphs.some((name) => name.endsWith('.tape.reverse')), `no reverse loop to inspect: ${JSON.stringify(graphs)}`)
+const labels = doc.graphs.flatMap((g) => g.nodes).filter((n) => n.kind === 'OPER').map((n) => n.label)
+assert(labels.includes(':tangent/zeros_arr'), `no zero array for the iterated array: ${JSON.stringify(labels)}`)
+assert(labels.includes(':tangent/scatter_add_arr'), `no scatter into the array's gradient: ${JSON.stringify(labels)}`)
 }
 """
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_parameter_array"
+desc = "The same case runs: the gradient of w + w * (w + 2w + 3w) at 2 is 25."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_parameter_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_parameter_array d=25.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -2641,6 +2658,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "refuse_cast_array"
+desc = "`cast` takes a numeric array as well as a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9): the gradient of the tensor it returns would have to go back into an array, which no operator here builds from a tensor's gradient. The rule used to drop it and the pass materialized the array's zero -- [0.0, 0.0, 0.0] for a loss whose gradient is [1, 1, 1], the silent zero this class of defect is about. It is refused by name at the cast call (line 18), like new, reshape and concat, naming the operator and the array's type. A constant array is not refused: it starts no gradient flow."
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_cast_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 18
+expect_output_contains = ["cannot differentiate operator 'tensor:cast'", "numeric array of type 'float[]'", "would be dropped silently"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "slice_open_end.runtime.nvm"
 desc = "The open-ended slice `x[3:]`: the end was not written, so the adjoint recovers it as dim(x, 0), the length of the parent along the sliced dimension, instead of reading it from the call. Checked against the adjoint written out by hand for sum(x[3:] * [2, 3]), which is [0, 0, 0, 2, 3]: `dot` with c = [0, 0, 0, 1, 2] is 8.0 (0.0 if the rule returned the zero tensor, and 0.0 again if the gradient landed a place to the left), `sq` is 13.0 and `sum` 5.0. (grad built at run time)"
 kind = "behavior"
@@ -2673,5 +2703,128 @@ expect_diagnostic_name = "RuntimeDiag::RuntimeError"
 expect_diagnostic_line = 28
 expect_stdout_contains = ["concat_array_part sum=5.0 sq=13.0"]
 expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "carries a tensor's gradient back into an array"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_scalar_width.runtime.nvm"
+desc = "A gradient handed to the accumulator is of the parameter's own element type, and this is where the scalar path used to break it. `w * x` on an f32 parameter runs tensor:multiply, whose rule reduces the scalar operand's gradient with tensor:sum -- a float64 operator. Stored as it was, the float64 node sat in the f32 parameter's tangent and was read at f32's width: 6.0 is 0x4018000000000000, whose low half is 0x00000000, so the program printed a gradient of 0.0 with nothing faulting. The rules now convert the gradient to the value's width (:op/dtof) and the accumulator refuses any gradient still of another element type, so the multiply prints 6.0 and a `where` branch prints 1.0 -- their real derivatives. Red if a gradient of another element type is accepted again (both numbers are integral, so read at f32's width they are 0.0) and red if a rule stops converting and the accumulator refuses instead (the line is missing and the process exits 1). (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_scalar_width.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "grad_scalar_width multiply=(12.0,6.0) where=(4.5,1.0)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_scalar_width.macro.fvm"
+desc = "The same f32 scalar widths when std::macro builds the gradient ahead of time and the FastVM runs it: the :op/dtof conversion the rules add is in the compiled gradient graph too, and the numbers are the same bits."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_scalar_width.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "grad_scalar_width multiply=(12.0,6.0) where=(4.5,1.0)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "refuse_gradient_element_type_rule"
+desc = "The report's own shape: a hand-written rule for a gather that answers with a gradient of the other float width. pick_rule declares f32 and returns f32(0.0) for a float[] parameter; an f32 zero read as f64 is exactly 0.0, so the derivative of xs[1] (which is [0, 1, 0]) used to come back as the zero a discrete input may legitimately have. The build refuses it at the pick call (line 31), naming the value's element type (float[]), the gradient's (f32) and that the derivative rule produced it. Red if the accumulator accepts the mismatch again: the program then runs and prints grad=0.0."
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_gradient_element_type_rule.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GradientElementTypeMismatch"
+expect_diagnostic_line = 31
+expect_output_contains = ["of type 'float[]'", "element type 'f32'", "the derivative rule produced it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "gather_discrete_index_zero.runtime.nvm"
+desc = "The zero the refusal must leave alone (design principles 9.9): a gather whose index array is discrete. take never accumulates into its indices, so what the accumulator materializes for them is the zero of their own type, and the rows the indices name get their real gradient. Printed together: the weights' gradient sums to 6.0 and the labels' to exactly 0.0, so neither a pass that produced nothing nor a rule that leaked the weights' gradient into the indices passes. Red if the new check starts refusing a discrete input's zero or if it is replaced by a converted gradient."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/gather_discrete_index_zero.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "gather_discrete_index_zero value=1.0 weights_grad=6.0 index_grad=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "gather_discrete_index_zero.macro.fvm"
+desc = "The same discrete zero when std::macro builds the gradient ahead of time and the FastVM runs it: the zero is decided by take's rule in the compiled gradient graph too, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/gather_discrete_index_zero.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "gather_discrete_index_zero value=1.0 weights_grad=6.0 index_grad=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# ---- Second order through the array kind ----
+#
+# The tangent of an array is the array of its elements' tangents (design principles 9.9), so a
+# first-order gradient of an array expression is built from the `:tangent/*` operators. Taking a
+# gradient of that graph needs a rule per tangent operator; four have one now, and two
+# (`tangent/init_arr`, `tangent/last_arr`) stay blocked because their adjoints need an append or
+# a pad that takes a computed element as an ordinary input. Each case below fails when its own
+# rule is removed: the outer pass then refuses with "no derivative rule for operator ':tangent/...'".
+# The numbers are hand-computed in the desc, not read back from the code.
+
+[[tests]]
+name = "second_order_array_add.runtime.nvm"
+desc = "Second order through an array whose gradient accumulates from two paths: the two reads of xs[0] each scatter a range back into the parameter's gradient, so the gradient graph adds two tangent arrays with `:tangent/add_arr`. f(xs)=xs0^3+xs1^2+xs0^2 at [2,3,0]: f'=[3*xs0^2+2*xs0, 2*xs1, 0]=[16,6,0]; d/dxs0(3*xs0^2+2*xs0)=6*xs0+2=14 and d/dxs1(2*xs1)=2. The case prints 14 and 0.0; without the rule the outer pass refuses with no derivative rule for ':tangent/add_arr' and prints no number."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_array_add.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_array_add d0=16.0 d1=6.0 d2=0.0 dd0=14.0 dd1=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "second_order_array_zeros.runtime.nvm"
+desc = "Second order through a gather of an array parameter, the case that pins the zero array's rule: the gather's gradient is a zero array of the parameter's length (`:tangent/zeros_arr`) with the element's gradient scattered into it. f(xs)=xs0^3 at [2,3,0]: f'=[3*xs0^2, 0, 0]=[12,0,0]; d/dxs0(3*xs0^2)=6*xs0=12, and the other components are exactly 0. The zero array's values are the zero tangents of the elements of an array it takes only a length from, so its rule passes on no gradient (9.9) and must not add anything to the 12. Without the rule the outer pass refuses with no derivative rule for ':tangent/zeros_arr'."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_array_zeros.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_array_zeros d0=12.0 d1=0.0 dd0=12.0 dd1=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "second_order_array_scatter.runtime.nvm"
+desc = "Second order through a gather at a runtime index: the gather's gradient is a zero array with the element's gradient scattered into it (`:tangent/scatter_add_arr`). xs=[w,2w,3w], i=int(w), f(w)=xs[i]^3; at w=2 the index is 2, the element is 3w, so f=(3w)^3=27w^3, f'(w)=81w^2=324 and f''(w)=162w=324. The scatter's rule must send the upstream gradient back to the scattered element (a gather of it, not of the base); the wrong base read would make the second derivative 0.0. The index is discrete (9.9), so it contributes exactly zero while the real 324 survives both orders. Without the rule the outer pass refuses with no derivative rule for ':tangent/scatter_add_arr'."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_array_scatter.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_array_scatter value=216.0 d=324.0 d2=324.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "second_order_array_slice.runtime.nvm"
+desc = "Second order through a slice whose bound is computed from the parameter: the slice's gradient is a range scatter (`:tangent/scatter_slice_arr`), and its rule hands the sliced part the same slice of the upstream gradient. xs=[w,2w,3w,4w], k=int(w)=2, s=xs[0:k], f(w)=s0^2+s1^2=w^2+4w^2=5w^2, so f'(w)=10w=20 and f''(w)=10. The bound is discrete (9.9): bound_only(w)=float(len(xs[0:int(w)])) has derivative exactly 0.0 and second derivative 0.0, printed beside the real 20 and 10, so a pass that returned zeros for everything fails on the real numbers. Without the rule the outer pass refuses with no derivative rule for ':tangent/scatter_slice_arr'."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/second_order_array_slice.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "second_order_array_slice d=20.0 d2=10.0 bound=0.0 bound2=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "second_order_array_append_init_blocked"
+desc = "The block, pinned: the second derivative of `append` on the side of its array. append's adjoint splits the appended array's gradient into `:tangent/init_arr` (the parent's gradient) and `:tangent/last_arr` (the appended value's). The adjoint of init_arr would pad the upstream gradient with the zero tangent at the end, which needs an operator that grows a tangent array with a computed element as an ordinary input; the array library's append and extend take their value as a `with` input and a rule can emit only ordinary inputs. The first derivative is the real [6, 2] (f(xs)=ys0^2+ys1*ys2 at [3,4] gives ys=[3,4,2] and f'=[2*ys0, 2]); the second refuses by name at ':tangent/init_arr' with no derivative rule, rather than printing a zero for a derivative nobody computed. The value half (`:tangent/last_arr`) is in the same gradient graph and is blocked for the same reason; the backward order meets init_arr first here. No rule is written for either half."
+kind = "negative"
+case = "../../../cases/modules/autodiff/second_order_array_append_init_blocked.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_stdout_contains = ["second_order_array_append_init d0=6.0 d1=2.0"]
+expect_output_contains = ["no derivative rule for operator ':tangent/init_arr'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

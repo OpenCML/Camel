@@ -1905,8 +1905,13 @@ cast: (t: Tensor | number[], dtype: string) => Tensor
 ```
 
 t converted to the element type the name gives: "float32", "float", "double" or "float64"
-for `f32`; "int64", "int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do
-not change.
+for `f32`; "bfloat16" or "bf16" for `bf16`; "float16", "half" or "f16" for `f16`; "int64",
+"int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do not change.
+
+A conversion into `bf16` or `f16` rounds (to nearest, ties to even) and needs the numeric
+permission `change_precision` where the call is written; `#strict` revokes it. Reading a
+`bf16` or `f16` tensor into a wider type is exact for every stored value and needs no
+permission.
 
 - Pure.
 - Failure: fault `RuntimeError` when the name is not one of those.
@@ -1934,8 +1939,9 @@ from_bytes: (bytes: Bytes, shape: int[]) => Tensor
 
 A tensor of the given shape made of little-endian elements. The element type is the explicit
 type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result; it
-is `f32`, `f64`, `i32`, `i64` or `bool`, exactly the type given. A byte count that does not fit
-the shape is a fault.
+is `f32`, `f64`, `bf16`, `f16`, `i32`, `i64` or `bool`, exactly the type given. A byte count
+that does not fit the shape is a fault. The bits are copied: reading `bf16` or `f16` here
+passes the stored values through without rounding, so it needs no numeric permission.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type.
@@ -2035,20 +2041,19 @@ functions: each one matches the type it is given with `match type` and returns a
 `func f::<T>(x: T) when is_numeric::<T>()` is applicable exactly where `T` is a number.
 
 `match type` compares a type's identity as well as its shape (design principles 5.5): the
-cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `c64`, `c128`,
-`string`, `bool`), and `case func` is the shape of every function type.
+cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,
+`c64`, `c128`, `string`, `bool`), and `case func` is the shape of every function type.
 
-#### `is_numeric`
+A type is named once: the family predicates (`is_integer`, `is_float`, `is_complex`,
+`is_string`, `is_bool`) carry the identity cases, and `is_numeric` and `is_ordered` ask them
+instead of listing the types again, so a new integer width is added in one place.
 
-```camel
-is_numeric: () => bool
-```
-
-True when `T` is a number: an integer, a float or a complex number.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `is_numeric::<int>()` gives `true`
-- Example: `is_numeric::<string>()` gives `false`
+`bf16` and `f16` are floating-point types (design principles 7.3; handover H238): a tensor
+stores an element in one of them and every kernel computes in f32 and rounds once, so they
+belong to `is_float` and inherit `is_numeric` and `is_ordered` from it. They are element
+types: the language has no bf16 or f16 literal, scalar operator or conversion, so a generic
+function that combines two element values is refused where it is written rather than
+answered at a narrower width.
 
 #### `is_integer`
 
@@ -2068,11 +2073,42 @@ True when `T` is an integer type (`int` is 64-bit, `i32` is 32-bit).
 is_float: () => bool
 ```
 
-True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit).
+True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit, `bf16` and
+`f16` are the two-byte tensor element types).
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `is_float::<float>()` gives `true`
+- Example: `is_float::<bf16>()` gives `true`
 - Example: `is_float::<int>()` gives `false`
+
+#### `is_complex`
+
+```camel
+is_complex: () => bool
+```
+
+True when `T` is a complex number (`c64` is 64-bit, `c128` is 128-bit).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_complex::<c64>()` gives `true`
+- Example: `is_complex::<float>()` gives `false`
+
+#### `is_numeric`
+
+```camel
+is_numeric: () => bool
+```
+
+True when `T` is a number: an integer, a float or a complex number.
+
+The three families are asked, not listed again: a type spelled in one of them is numeric
+without appearing here, so adding an integer width changes `is_integer` alone. The complex
+branch is `is_complex`, which is why `c64` is numeric.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_numeric::<int>()` gives `true`
+- Example: `is_numeric::<string>()` gives `false`
+- Example: `is_numeric::<c64>()` gives `true`
 
 #### `is_ordered`
 
@@ -2172,7 +2208,7 @@ sort: (xs: T[]) => T[]
 A sorted copy of xs (quicksort).
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `insert_sort`
@@ -2184,7 +2220,7 @@ insert_sort: (xs: T[]) => T[]
 A sorted copy of xs, by insertion sort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `quick_sort`
@@ -2196,7 +2232,7 @@ quick_sort: (xs: T[]) => T[]
 A sorted copy of xs, by quicksort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `merge_sort`
@@ -2208,7 +2244,7 @@ merge_sort: (xs: T[]) => T[]
 A sorted copy of xs, by merge sort.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Failure: fault `OperandTypeUnsupported` when the element type is not i32, i64, f32 or f64.
 - Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `merge_sorted_arrays`
@@ -2220,7 +2256,7 @@ merge_sorted_arrays: (left: T[], right: T[]) => T[]
 The sorted array made of the elements of two sorted arrays of numbers.
 
 - A native operator of this module: an opaque node, pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Failure: fault `OperandTypeUnsupported` when the elements are not i32, i64, f32 or f64.
 - Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
 
 ### Rearranging
@@ -4463,9 +4499,10 @@ Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an a
 values to a `Program`, `check` tests rules on random programs, and the four readers report a
 `Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
 round budget explicit and the cost kept: it answers a `Run`, the program and what the
-application cost (H226). Its fifth parameter opens the attribution record, and `explain` prints
-it as the chain of rewrites, each with the rule, round, graph and nodes that made it (rewrite
-design 8.7). A rule that stops a rewrite without changing the program is a fault,
+application cost (H226). Its `explain` with parameter opens the attribution record; `explain`
+prints the shortest chain between two values and `explain_all` every rewrite that was made,
+each with the rule, round, graph and nodes (rewrite design 8.7); `why_not` says why a rule did
+not fire at a value. A rule that stops a rewrite without changing the program is a fault,
 and `strict` restricts the float rules to the ones that hold bit for bit.
 
 The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
@@ -4527,35 +4564,69 @@ that fails, or that all of them hold.
 #### `run`
 
 ```camel
-run: (p: Program, rules: Rule[], rounds: int, strict: bool) => Run<Program>!
-run: (p: Program, rules: Rule[], rounds: int, strict: bool, explain: bool) => Run<Program>!
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (p: Program) => Run<Program>!
 ```
 
 Applies `rules` to `p` one way, for at most `rounds` rounds, and gives the program it produced
 and what the application cost. This is `rewrite` with the round budget explicit and the cost
-kept (H226). The fifth parameter of the same call opens the attribution record (rewrite design
-8.7): `explain` then reads back the rule that made each rewrite, its round, its graph and the
-nodes it matched, produced and erased. Recording is off unless it is asked for, so a plain
-application pays nothing for it.
+kept (H226). The rule set, the budget and the choices are configuration, so they are `with`
+parameters, written at the call (design principles 4.4; handover H235): `p->run<rules>`,
+`p->run<rules, explain: true>`, `p->run<rules, rounds: 8, strict: true>`. The first one has no
+default and must be written; `rounds` defaults to 16 and `strict` and `explain` to false.
+`explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
+the shortest chain between two values, and `explain_all` every rewrite that was made. Recording
+is off unless it is asked for, so a plain application pays nothing for it.
 
 - With effects: runs the rules' functions, and nothing else.
 - Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out.
-- Example: `run(p, rules, 16, false)` gives `the run`
+- Example: `let rs: Rule[] = []; p->run<rs>` gives `the run`
 
 #### `explain`
 
 ```camel
-explain: (r: Run<Program>) => Proof!
+explain: (r: Run<Program>, a: Node, b: Node) => Proof!
 ```
 
-The proof of the run `r`: the chain of the rewrites it made, in the order it made them, each
-naming the rule that made it, the round and the graph it was made in, and the nodes that
-matched, were produced and were erased (rewrite design 8.7). A run that applied nothing is
-explained as such, not as an empty table.
+The shortest chain of rewrites of the run `r` that connects the values `a` and `b`, as the
+derivation `a = ... = b`: only that chain, not every step the run made (rewrite design 8.7).
+Each line names the rule and whether the step is read backwards; a chain through a value that
+was later rewritten away names it too. When two chains are equally short both are printed, in
+the order the rewrites were made. A run that recorded nothing, or that holds no chain between
+the two values, is refused as an error value, never answered with an empty chain.
 
 - Pure.
-- Failure: error value `NoAttribution` when the run was made without `explain: true`.
-- Example: `explain(r)` gives `the chain of rewrites`
+- Failure: error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program; error value `NoChain` when no rewrite connects the two values.
+- Example: `explain(r, a, b)` gives `the chain between a and b`
+
+#### `explain_all`
+
+```camel
+explain_all: (r: Run<Program>) => Proof!
+```
+
+Every rewrite of the run `r`, in the order it made them, each naming the rule, the round, the
+graph and the nodes that matched, were produced and were erased (rewrite design 8.7). This is
+the full record `explain` narrows to one chain. A run that applied nothing is explained as
+such, not as an empty table.
+
+- Pure.
+- Failure: error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program.
+- Example: `explain_all(r)` gives `every rewrite the run made`
+
+#### `why_not`
+
+```camel
+why_not: (r: Run<Program>, rule: Rule, v: Node) => string!
+```
+
+Why the rule `rule` did not fire at the value `v` of the run `r` (rewrite design 8.7): the
+first place the left side fails to match, the value the pattern wanted there and the value the
+program has, a missing permission, or the rule's condition being false with the values it read.
+A rule that did fire at `v` is reported as such.
+
+- With effects: runs the rule's condition.
+- Failure: error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program.
+- Example: `why_not(r, target, v)` gives `the reason`
 
 #### `rule_name`
 

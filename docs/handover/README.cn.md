@@ -49,7 +49,7 @@
 - 工作中只跑相关的测试计划；**任务结束前在主机上跑一次快速层**（`smoke` + `feat/**`）与相关计划。
 - **验收**：快速层必须全绿；`skip` 不是失败；基线是零——没有“已知失败名单”，任何一条红都要由变红的分支解释。
 - 改了语法、`test/cases/parse` 下的用例或 `test/tools/parsecheck/probes.py`：在主机上更新 AST 快照 `python3 test/tools/parsecheck/check.py snapshot --update`。快照只含解析用例与探针（H188），改 `examples/`、`stdlib/`、`benchmarks/` 或别的计划的用例不会再动它。
-- 改了诊断：`node scripts/diagnostics-catalog.mjs --write`。
+- 改了诊断：在 `diagnostics/registry.tsv` 里加一行（编号留空），再跑 `node scripts/diagnostics-catalog.mjs --write`；编号由它在该区段末尾分配，不要手写。
 - 每次提交前：`node scripts/check-doc-links.mjs --all`、`node scripts/check-std-includes.mjs`。
 
 ### 1.3 提交
@@ -577,7 +577,7 @@ H237 发现：张量的公开元素类型实际只有 f32、i64、bool，**f64 �
 
 **H3a 已完成**（分支 `handover/H102-fusion-keeps-operator`，报告 note ⟨ebfc812⟩）：图上的算子保持
 `matmul`/`add`/`relu`，`tensor::fuse` 只写 `tensor.kernel`（"library"/"canonical"，按 7.3 的有效许可
-判定，`#strict` 与 `tensor::fuse(safe_fp=true)` 得到 canonical）与 `tensor.fusion`（"linear"/
+判定，`#strict` 与 `tensor::fuse safe_fp=true` 得到 canonical）与 `tensor.fusion`（"linear"/
 "linear_relu"，组内每个节点都写）；`matmul_blas`、`matmul_add`、`matmul_add_relu` 的注册、内核、
 VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到的就是程序写的算子。逐位证据在
 `fuse_bits`（四种运行逐字节相同）与 `gemm_canonical.fused`；安全模式下融合与不融合相同是构造性的，
@@ -666,7 +666,7 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 协调者一方已完成 `graph` 模块 C0–C9（读图、事务、`commitChecked`、Camel 写的遍在流水线上运行、函数到函数、事实、文档；见 `docs/technical/45_graph_module.md`）。
 
 1. **遍所在的模块能导入 Camel 库**（如 `array`）：交接说明给出两种做法与入口，选一种并说明理由。
-2. **命令行遍参数**：`mymod::p(k=v)` 映射到函数的 `with` 参数（配置，设计原则 4.4）。
+2. **命令行遍参数**：`mymod::p k=v` 映射到函数的 `with` 参数（配置，设计原则 4.4）。
 3. **事务中新建值的根规则**：编辑可以创建常量等新值（常量折叠类改写需要），草稿的静态槽在 NodeVM 安全点不得被移动或回收。
 4. **区域的读取**（`region_of`、种类、父区域）与校验器的区域规则（2）（3）：在协调者一方的 R2c/R2b 合入后。
 5. Q1 类型实参落地后把 `constant(n, sample)` 改为 `constant::<T>(n)`（`graph` 已由 H141 声明化；H19 只剩 `ckpt`、`globals`）。

@@ -1,0 +1,11 @@
+/// A '>' after a space is read as a comparison, leaving the argument list open.
+module angle_close_after_space
+
+func pick::<T>(a: T, b: T): T {
+    return a
+}
+
+func main(): int {
+    let x = pick<int >(1, 2)
+    return x
+}

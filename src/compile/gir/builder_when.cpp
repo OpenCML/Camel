@@ -1252,7 +1252,16 @@ const std::string written = callee->at(0)->name();
                 // field names of T against the argument). The same GCT the graph came from is
                 // walked over the constants the call gave; a body this evaluation cannot read
                 // says why, and the declaration stays inapplicable rather than becoming false.
+                //
+                // The body is read where it is written, not where the declaration was selected:
+                // `is_numeric` is declared in `types` and asks `is_integer`, which `types` also
+                // declares, while the consumer that selected it (a program's `classify`) need not
+                // have imported `is_integer` at all. Folding the body with the consumer's
+                // `templateScope_` looks the callee up among the names the consumer can see and
+                // refuses it as "not a generic declaration" -- a scope, not a missing capability.
+                // `ConditionContext` is exactly that scope switch, and it is all this needs.
                 try {
+                    ConditionContext body(*this, tmpl, nullptr);
                     data_ptr_t folded = GctConstantEvaluator::runFunction(
                         tmpl->func, callBindings, valueArgs, {}, nullptr,
                         [this](

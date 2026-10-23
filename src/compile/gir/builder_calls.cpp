@@ -858,7 +858,34 @@ const std::vector<std::optional<Builder::ParameterDefaultValue>> *Builder::defau
     }
     const auto &target = nodeGraphOf(callee)->drefTarget(callee);
     if (!std::holds_alternative<graph_vec_ptr_t>(target)) {
-        return nullptr;
+        // A native operator: its declaration's defaults are kept under the URI of the group's
+        // entry, and each entry is one declaration. A group whose fixed entries are not one
+        // signature says nothing about which declaration a call means, and gets none.
+        if (!std::holds_alternative<oper_group_ptr_t>(target)) {
+            return nullptr;
+        }
+        FunctionType *same = nullptr;
+        const std::string *uri = nullptr;
+        for (const auto &[entryUri, resolver] :
+             std::get<oper_group_ptr_t>(target)->resolvers()) {
+            FunctionType *fixed = resolver ? resolver->fixedSignature() : nullptr;
+            if (fixed == nullptr) {
+                continue;
+            }
+            if (same != nullptr && same != fixed) {
+                return nullptr;
+            }
+            same = fixed;
+            if (uri == nullptr && nativeDefaults_.contains(entryUri)) {
+                uri = &entryUri;
+            }
+        }
+        if (uri == nullptr) {
+            return nullptr;
+        }
+        const auto &values = isWith ? nativeDefaults_.at(*uri).with
+                                    : nativeDefaults_.at(*uri).norm;
+        return values.empty() ? nullptr : &values;
     }
     const auto graphs = std::get<graph_vec_ptr_t>(target);
     // One declaration: an overload set has one signature per declaration, and a name is not

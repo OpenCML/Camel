@@ -593,7 +593,10 @@ slot_t NodeVMSchedPass::call(
                             evalMarkedOperator(body->oper, currRuntimeGraph, nodeRef, *currFrame);
                             break;
                         }
-                        throwRuntimeFault(RuntimeDiag::UnrecognizedOperatorURI, uri);
+                        throwRuntimeFault(
+                            RuntimeDiag::PassInternalError,
+                            "std::nvm",
+                            "the operator '" + uri + "' has no implementation");
                     }
                 }
 

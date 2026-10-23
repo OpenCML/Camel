@@ -125,7 +125,7 @@ struct ReportOptions {
     bool report = true;
 };
 
-/// What the pass was written with (`std::profile(top=..., hints=..., json="...")`): the driver
+/// What the pass was written with (`std::profile top=... hints=... json="..."`): the driver
 /// reads it when the run ends, which is when the report is written.
 void setReportOptions(const ReportOptions &options);
 ReportOptions reportOptions();
