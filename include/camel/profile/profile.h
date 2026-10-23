@@ -15,12 +15,17 @@
  *
  *   - operators: the CPU time inside an operator call, per operator, through the timing thunks
  *     of profile/operators.h (a scheduler hands out a thunk in place of the operator it resolved
- *     while the session is on). One entry per URI, with its calls and its total time.
+ *     while the session is on). One entry per URI, with its calls and its total time. The same
+ *     row says how much of that time was inside the Camel allocators, how many allocations the
+ *     call made, how many were data blocks and how many payload bytes they asked for
+ *     (profile/allocation.h): an operator boundary alone cannot separate a kernel's arithmetic
+ *     from the allocation and packing it does, and this column does the allocation part.
  *   - steps: a step is one round of a loop of the program (`loopRound`), which every back end
  *     reports from camel/execute/loop_frame.h: nvm, fvm, jit and the macro evaluator share
  *     `loopEnd`. The report reads the numbers per round of every loop that ran, and picks the
  *     loop that carries the most operators per round as the step loop of the program (the
- *     training loop of a training step; a loop nested in it has fewer operators per round).
+ *     training loop of a training step; a loop nested in it has fewer operators per round). The
+ *     step also says how many allocations one round made and what they cost.
  *   - devices: one kernel launch, one host/device transfer and one synchronisation, recorded
  *     by the module that does them (tiles today: measures/kernels, uploads/downloads, waits).
  *   - compilation: the phase recorder of camel/utils/phase_timer.h (parse, GCT, GIR, every pass,

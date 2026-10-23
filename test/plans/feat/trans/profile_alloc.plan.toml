@@ -1,0 +1,43 @@
+id = "trans.profile_alloc"
+order = 341
+tier = "fast"
+tags = ["feat", "trans", "profile", "allocation"]
+
+[[tests]]
+name = "profile.alloc_count"
+desc = "std::profile attributes allocations to the operator call that made them: two `zeros` of 1024 f32 and one `add` report exactly three block payloads of 4096 bytes (two under tensor:zeros, one under tensor:add) and the aggregate row agrees; a broken instrument that reports zero allocations fails."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/profile/profile_alloc.py"
+args = ["${case}", "count"]
+expect_exit = 0
+expect_stdout_contains = ["profile allocations: PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "profile.alloc_step"
+desc = "the aggregate allocation row, the per-step row and the operator rows agree: one loop round allocates one block of 4096 bytes, the `zeros` before the loop is the ninth block, and the sum of the operator rows equals the aggregate."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/profile/profile_alloc.py"
+args = ["${case}", "step"]
+expect_exit = 0
+expect_stdout_contains = ["profile allocations: PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "profile.off_by_default"
+desc = "without the pass, and with `std::profile report=false hints=false`, stdout is byte-identical: the allocation instrument is off by default and the program's own output is unchanged."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/profile/profile_alloc.py"
+args = ["${case}", "off"]
+expect_exit = 0
+expect_stdout_contains = ["profile allocations: PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

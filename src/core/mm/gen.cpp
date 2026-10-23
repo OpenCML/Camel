@@ -13,6 +13,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/profile/allocation.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
 #include "camel/utils/log.h"
@@ -81,6 +82,7 @@ void *GenerationalAllocatorWithGC::alloc(size_t payloadSize, size_t align) {
 #ifndef NDEBUG
     AllocationDebugScope debugScope;
 #endif
+    const camel::profile::AllocationScope allocation(payloadSize, false);
     std::lock_guard<std::mutex> lock(mutex_);
     return allocUnlocked(payloadSize, align);
 }

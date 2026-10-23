@@ -1,0 +1,15 @@
+// Three data blocks and their payload bytes are known before the run: two `zeros` outputs of
+// 1024 f32 (4096 bytes each) and one `add` output (4096 bytes). The profile's allocation row
+// must report exactly that count and those bytes; the counts are deterministic, the times are
+// not, so the guard test asserts only the counts.
+module profile_alloc_count
+
+import { Tensor, zeros } from tensor
+
+func main(): int sync {
+    let a = zeros([1024])
+    let b = zeros([1024])
+    let c = a + b
+    println(c[0])
+    return 0
+}

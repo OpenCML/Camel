@@ -1,0 +1,276 @@
+{
+  "schema": 1,
+  "what": "The allocation column of std::profile, used to answer whether the d=256 gap to torch.compile is allocation or kernel: one thread, the same generated train_step.cml at d=256 and d=1024, the library-shape pipeline (tensor::fuse std::jit), 16 steps and 3 warm-up as in the earlier profiles.",
+  "generated_at": "2026-10-23T12:40:00+08:00",
+  "machine": {
+    "host": "tangshan88",
+    "cpu": "AMD EPYC 7343 16-Core",
+    "hardware_threads": 32,
+    "load_average_1min": 60,
+    "note": "The host is shared; other builds and tests ran throughout. Absolute step times are therefore inflated and vary by a factor of two in this run. The allocation shares are ratios inside the same run and do not depend on the host's load."
+  },
+  "build": {
+    "revision": "924504cd19fff3eb11787b9b634bfe45c7c19df0",
+    "dirty": true,
+    "fingerprint": "71f705f6d539446520015daff7e24c14a2bc0d22e38029d5dd475e975cd5b057",
+    "config": "Release"
+  },
+  "shape": {
+    "d256": {
+      "batch": 16,
+      "sequence": 32,
+      "tokens": 512,
+      "d_model": 256,
+      "heads": 16,
+      "d_head": 16,
+      "d_ff": 512,
+      "blocks": 2
+    },
+    "d1024": {
+      "batch": 32,
+      "sequence": 64,
+      "tokens": 2048,
+      "d_model": 1024,
+      "heads": 64,
+      "d_head": 16,
+      "d_ff": 2048,
+      "blocks": 2
+    },
+    "threads": 1,
+    "steps": 16,
+    "warmup": 3
+  },
+  "method": "Camel: std::profile report=true top=0 on the generated train_step.cml (measure.py's substitutions, run through a local generator with the same substitution list); operator rows are the 16-step run, the step block is the 15 measured rounds. A row's allocation column counts the time inside the Camel value allocators (block space payload, collected-heap object, permanent-space object) during that operator's calls, the allocator calls, the data blocks among them and the payload bytes of those blocks. A block's payload bytes are Block::create/grow's argument (the block space's rounded request, header and alignment are the allocator's own overhead). PyTorch was not re-run for this file: the question is the share inside Camel's own step, and the earlier paired profiles give the gap.",
+  "commands": {
+    "generate_d256": "python3 gen.py 256 /tmp/h290/train_step_256.cml (the same substitutions as examples/models/naive-in-expert-out/measure.py)",
+    "profile_d256": "camel -t 1 --block-limit 8192 train_step_256.cml tensor::fuse std::profile report=true 'json=\"prof-256.json\"' top=0 std::jit --arg bench=true --arg init_dir= --arg final_dir=",
+    "profile_d1024": "the same with train_step_1024.cml",
+    "without_profile_d256": "the same without std::profile"
+  },
+  "allocations": {
+    "counted": "the block space (mm::Block::create/grow: tensor payloads and packing buffers), the collected heap (mm::autoSpace(): object headers, small arrays), the permanent space (mm::permSpace())",
+    "not_counted": "a malloc behind new (a Block header, a std::vector buffer), a BLAS library's packing buffers, a memcpy over memory the kernel already owns, the page faults of first touching a newly reserved segment (charged to the kernel that writes the memory), and the free side (the report times allocations, not the free-list push or the collection that reclaims a block)",
+    "granularity": "per operator URI, not per graph node; two nodes of one operator share a row, and a parallel operator's worker-thread allocations count as outside operator calls"
+  },
+  "d256": {
+    "run_ns": 3193258428,
+    "operator_ns": 3114646042,
+    "allocation_ns_all": 11567292,
+    "allocation_ns_inside_operators": 11460054,
+    "allocation_calls_all": 26771,
+    "allocation_calls_inside_operators": 25151,
+    "block_payloads": 6031,
+    "block_payload_bytes": 2407343104,
+    "step": {
+      "rounds": 16,
+      "measured_rounds": 15,
+      "wall_median_ms": 171.19,
+      "operator_calls_per_round": 354.733,
+      "allocation_calls_per_round": 1498.867,
+      "block_payloads_per_round": 362.0,
+      "block_payload_bytes_per_round": 144642048.0,
+      "allocator_ns_per_round": 680561.267,
+      "allocator_share_of_step": 0.003975473257783749
+    },
+    "categories": {
+      "matmul": {
+        "rows": [
+          "tensor:matmul",
+          "tensor:matmul_grad_lhs",
+          "tensor:matmul_grad_rhs"
+        ],
+        "ns": 1813822040,
+        "allocation_ns": 1358174,
+        "allocation_share": 0.000748791209968978,
+        "calls": 850,
+        "blocks": 850,
+        "payload_bytes": 467271680
+      },
+      "elementwise": {
+        "rows": [
+          "tensor:multiply",
+          "tensor:divide",
+          "tensor:add",
+          "tensor:neg",
+          "tensor:exp",
+          "tensor:gelu",
+          "tensor:gelu_grad",
+          "tensor:log",
+          "tensor:sqrt"
+        ],
+        "ns": 733818386,
+        "allocation_ns": 3513689,
+        "allocation_share": 0.004788226987814939,
+        "calls": 2400,
+        "blocks": 2464,
+        "payload_bytes": 1328848896
+      },
+      "note": "The category rows are the operator rows of the profile grouped; the full rows are below."
+    },
+    "key_rows": [
+      {
+        "uri": "tensor:matmul",
+        "calls": 306,
+        "ns": 681478451,
+        "allocation_ns": 498108,
+        "allocation_share": 0.0007309225981673777,
+        "allocation_calls": 1224,
+        "blocks": 306,
+        "payload_bytes": 189923328
+      },
+      {
+        "uri": "tensor:matmul_grad_rhs",
+        "calls": 272,
+        "ns": 582130286,
+        "allocation_ns": 509149,
+        "allocation_share": 0.000874630666441567,
+        "allocation_calls": 1088,
+        "blocks": 272,
+        "payload_bytes": 101187584
+      },
+      {
+        "uri": "tensor:matmul_grad_lhs",
+        "calls": 272,
+        "ns": 550213303,
+        "allocation_ns": 350917,
+        "allocation_share": 0.0006377835615508555,
+        "allocation_calls": 1088,
+        "blocks": 272,
+        "payload_bytes": 176160768
+      },
+      {
+        "uri": "tensor:multiply",
+        "calls": 870,
+        "ns": 233740842,
+        "allocation_ns": 1071291,
+        "allocation_share": 0.004583242666679536,
+        "allocation_calls": 3480,
+        "blocks": 870,
+        "payload_bytes": 443842560
+      },
+      {
+        "uri": "tensor:divide",
+        "calls": 516,
+        "ns": 197809725,
+        "allocation_ns": 752307,
+        "allocation_share": 0.0038031851062934343,
+        "allocation_calls": 2064,
+        "blocks": 516,
+        "payload_bytes": 277118976
+      },
+      {
+        "uri": "tensor:add",
+        "calls": 570,
+        "ns": 136939917,
+        "allocation_ns": 999297,
+        "allocation_share": 0.007297339022047165,
+        "allocation_calls": 2280,
+        "blocks": 570,
+        "payload_bytes": 280154112
+      },
+      {
+        "uri": "tensor:sum_axis",
+        "calls": 72,
+        "ns": 26365429,
+        "allocation_ns": 4063227,
+        "allocation_share": 0.15411192436883922,
+        "allocation_calls": 288,
+        "blocks": 72,
+        "payload_bytes": 1253376
+      }
+    ],
+    "note": "tensor:sum_axis's allocation is a one-off block-space segment reservation, which lands on the call that first needs it; it is 4.06 ms of the 11.46 ms allocated inside operators, and it is not a per-step cost (the step row averages 0.68 ms)."
+  },
+  "d1024": {
+    "run_ns": 102370759038,
+    "operator_ns": 102244471592,
+    "allocation_ns_all": 22448691,
+    "allocation_ns_inside_operators": 22214250,
+    "allocation_calls_all": 26770,
+    "allocation_calls_inside_operators": 25150,
+    "block_payloads": 6031,
+    "block_payload_bytes": 47163674624,
+    "step": {
+      "rounds": 16,
+      "measured_rounds": 15,
+      "wall_median_ms": 6270,
+      "operator_calls_per_round": 354.733,
+      "allocation_calls_per_round": 1498.867,
+      "block_payloads_per_round": 362.0,
+      "block_payload_bytes_per_round": 2834579456.0,
+      "allocator_ns_per_round": 1339651.8,
+      "allocator_share_of_step": 0.00021366057416267943
+    },
+    "categories": {
+      "matmul": {
+        "ns": 79093778267,
+        "allocation_ns": 5685168,
+        "allocation_share": 7.187882693893258e-05,
+        "calls": 850,
+        "blocks": 850,
+        "payload_bytes": 8596750336
+      },
+      "elementwise": {
+        "ns": 13249171449,
+        "allocation_ns": 10692329,
+        "allocation_share": 0.000807018691029696,
+        "calls": 2400,
+        "blocks": 2464
+      }
+    },
+    "key_rows": [
+      {
+        "uri": "tensor:matmul",
+        "calls": 306,
+        "ns": 32566195263,
+        "allocation_ns": 713612,
+        "allocation_share": 2.1912661096482722e-05,
+        "allocation_calls": 1224,
+        "blocks": 306,
+        "payload_bytes": 3628597248
+      },
+      {
+        "uri": "tensor:matmul_grad_rhs",
+        "calls": 272,
+        "ns": 23610547777,
+        "allocation_ns": 4390973,
+        "allocation_share": 0.00018597505832869437,
+        "allocation_calls": 1088,
+        "blocks": 272,
+        "payload_bytes": 1612709888
+      },
+      {
+        "uri": "tensor:matmul_grad_lhs",
+        "calls": 272,
+        "ns": 22917035227,
+        "allocation_ns": 580583,
+        "allocation_share": 2.533412346968768e-05,
+        "allocation_calls": 1088,
+        "blocks": 272,
+        "payload_bytes": 3355443200
+      },
+      {
+        "uri": "tensor:add",
+        "calls": 570,
+        "ns": 1908513459,
+        "allocation_ns": 5859025,
+        "allocation_share": 0.0030699416723369306,
+        "allocation_calls": 2280,
+        "blocks": 570,
+        "payload_bytes": 5004541952
+      }
+    ]
+  },
+  "overhead": {
+    "timestamp_pair_ns": 50,
+    "enabled_cost": "5,976 operator calls and 26,771 allocator calls at 50 ns each is 1.64 ms over the 3.19 s d=256 run (0.05%); the allocation timer sits inside the operator's wall time, so the row is very slightly slower under the session",
+    "off_cost": "one relaxed flag load and a not-taken branch per operator call, per allocation, and a handful of counter reads per loop round",
+    "observed": "the program's own `naive bench` median was 164.09 ms with the pass and 144.27 ms without it (13.7%), but the same run's steps ranged 123.4-238.6 ms and the host carried load 60 on 32 threads; this difference is not separable from the host's noise, so only the arithmetic cost above is claimed"
+  },
+  "answer": {
+    "question": "Is the 34% d=256 gap to torch.compile allocator or kernel?",
+    "answer": "Kernel. At d=256 one step makes 362 block payloads (1,499 allocator calls, 137.9 MiB) and spends 0.68 ms inside the allocators, 0.40% of the step and 0.37% of the operator time; the three matmul rows spend 0.075% of their time in the allocator and allocate exactly one block per call, their output, so they also allocate no packing buffer. A 34% gap on the 66.1 ms step is about 22 ms, roughly 33 times the whole allocator work of a step. At d=1024 allocation is 1.34 ms of a 6.27 s step (0.02%) and 0.007% of the matmul rows.",
+    "what_it_does_not_answer": "The copies a kernel makes with memcpy, a BLAS library's own malloc'd packing buffers, the page faults of first touching a new segment, and the free/reclaim side (only allocations are timed) are still inside the kernel rows or not timed at all and cannot be split by this instrument; the answer rules out the Camel allocation calls, not every copy or the collector."
+  },
+  "caveat_retired": "The two earlier profiles had to write 'allocation and copying inside a kernel is not separable; std::profile times operator boundaries' and 'the matmul row includes its own packing and output allocation'. The allocation half is now measured (this file and docs/technical/54_profiler_allocations.md); the copying half is still not, and the report now says which of the two it can and cannot see instead of naming both as one unknown."
+}

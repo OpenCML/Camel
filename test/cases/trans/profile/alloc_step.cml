@@ -1,0 +1,16 @@
+// One loop round allocates exactly one data block (the `add` result, 1024 f32 = 4096 bytes);
+// the `zeros` before the loop is the other block of the run. The step line and the aggregate
+// line of the profile must agree with that, and the per-operator rows must add up to them.
+module profile_alloc_step
+
+import { Tensor, zeros } from tensor
+
+func main(): int sync {
+    let start = zeros([1024])
+    let (i, x) = loop i = 0, x = start while i < 8 do {
+        let y = x + 1.0
+        (i + 1, y)
+    }
+    println(i, x[0])
+    return 0
+}
