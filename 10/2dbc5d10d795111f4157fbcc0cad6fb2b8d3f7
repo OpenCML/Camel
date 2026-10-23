@@ -1,0 +1,8 @@
+h350 — 覆盖检查断言双射，用例注释只陈述现在的事实（分支 handover/h350-coverage-bijection，4 提交，基线 e10f3f797；合入 102dbc5d1）
+
+**第 1 部分（裁定要求的返工）**：`--coverage-check` 不再钉 255 这个数。注册表→测试：整语料、整词匹配；测试→注册表：只认**活引用**（带 section 的限定名连同 section、报告的 `name=` 字段、`code=` 数字），注释与计划 desc 被剥掉，所以叙述历史的注释**不是**引用。断言行不含数字："every diagnostic code the registry declares is mentioned by a test, and every code a test cites is one the registry declares"；计划 desc 一句话，257→256→254→255 的历史全部删除；加删诊断码不再需要动这个计划。
+**在草稿 --root 上植出红再转绿（真树只在提交里变）**：声明了但没测试提到 → `0x03000000 SemanticDiag::PlantedNowhereDeclared is declared and no test mentions it; name it in a test`（exit 1）；测试引用未声明的码 → `'PlantedTestOnlyCode' is cited by a test and diagnostics/registry.tsv declares no such code`（exit 1）；两者同时 → 2 problems exit 1；空注册表 → "no diagnostic was read from diagnostics/registry.tsv; nothing was checked"。现状树通过且不断言任何数字。
+**这个守卫抓到一个真缺陷**：impl_kernel_site.mjs 原来断言"不出现已删除的 SemanticDiag::ImplOnGenericFunction"，现在断言活的归属拒绝（测试体**唯一**一处改动，引用设计原则 10.4 而不是裁定）。
+**第 2 部分（只改注释）**：裁定点名的五个文件 parts_order.cml / no_value.cml / node_of.cml / node_of_misuse.cml / analysis_parts.cml 里，每条裁定引用改指规则语言设计 v2 §1、重写设计 4.1–4.2 或设计原则 4.4；"Before the ruling it looked for…"、"this test is red exactly that way" 之类的红绿经过删掉。**证明只改注释**：对五个文件 `git diff -U0` 在注释行之外零改动，期望与输入未碰。同样的清理到了四个 rules.plan.toml 的 desc 与一个 impl.plan.toml 的 desc。
+
+闸门：最终提交上 total 5778, pass 5764, fail 0, skip 14（126.9 s）；rules 计划整份 113/113；--check、--coverage-check、headers、check-std-includes、check-doc-links 全绿。**合入后协调者重跑整层：total 5830, pass 5816, fail 0, skip 14**，`--coverage-check` 打印上面那句不含数字的话。
