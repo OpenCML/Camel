@@ -1,33 +1,27 @@
 /**
- * A fact query inside a condition, and the parts of a commutative operator (the ruling of
- * 2026-10-23 on `rule_when_const_node`: "可交换算子的匹配会交换操作数顺序，带参数的事实查询却按顺序找
- * "操作数正是这些部件的值"，找不到就让**整个遍失败**。两处都改：(1) 对声明了交换律的算子，部件查询
- * 不看顺序；(2) 条件里的事实查询找不到时，条件为假（这条规则在此不适用），而不是遍失败").
+ * A fact query inside a condition, and the parts of a commutative operator. A rule whose condition
+ * asks a parameterized analysis hands it the parts of the compound it matched (rule-language design
+ * v2, section 1: a `const` parameter is the constant's value in a condition, and the node itself is
+ * reached with `node_of(c)`; rewrite design 4.1-4.2: the query answers for the value whose parts
+ * these are).
  *
  * `mul_by_one(a, b)` is the fact of a product: its `x * y` clause is "by one" when the *second*
  * operand is the constant 1. The rule `drop_by_one` declares its coefficient `const c: int`, so the
- * condition reaches the coefficient's *node* with `node_of(c)` (the change this branch is about),
- * and asks `mul_by_one(x, node_of(c))`: the factor first, the coefficient second.
+ * condition reaches the coefficient's *node* with `node_of(c)` and asks
+ * `mul_by_one(x, node_of(c))`: the factor first, the coefficient second.
  *
  * `drop_by_one`'s condition hands the query the parts `(factor, coefficient)`, and `swapped` is
  * `a * 1`: the pattern `x * c` binds `c` to the constant only under the exchange of the product's
  * two operands, which the declaration of `*` carries (op-semantics 7.4: the exchange gives the same
  * value). The parts therefore reach the query in the order `(1, a)` while the product holds them
- * `(a, 1)` -- the other order. Both orders name the same value, so the query must answer either
- * way. Before the ruling it looked for the operands in exactly the order it was given, found no
- * value, and threw `Invalid argument of 'analysis': the analysis 'mul_by_one' has no value whose
- * operands are these 2 nodes`, which is **the pass failing**, not a condition being false -- this
- * test is red exactly that way (`swapped 1`: the product stays and the value is `7`). A `const`
- * parameter and a parts query are the case that could not be written at all before the ruling.
+ * `(a, 1)`, the other order. Both orders name the same value, so the query answers either way, and
+ * that is what this input detects: an engine that looked for the operands in exactly the order it
+ * was given would answer no value for `swapped`, and the case would show the product kept.
  *
- * The half of the ruling about a query that finds nothing has its own case, `no_value.cml`, where a
- * non-commutative operator makes "no value with these parts" real rather than a matter of order.
- *
- * `kept` (`a * 2`) is the same query on a coefficient that is not one: the query answers, and the
- * condition is false -- the rule must not apply, the product and the value must stay, and the pass
- * must not fail either. `plain` (`a * 5.0`) has a guard on the value, which asks no question about
- * parts: it loses its product in the same pass, so a pass that quietly stopped doing its work would
- * show up there.
+ * `kept` (`a * 2`) is the same query on a coefficient that is not one: the query answers false, so
+ * the rule must not apply, the product and the value must stay, and the pass must not fail either.
+ * `plain` (`a * 5.0`) has a guard on the value, which asks no question about parts: it loses its
+ * product in the same pass, so a pass that quietly stopped doing its work would show up there.
  */
 module parts_order
 

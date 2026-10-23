@@ -1,0 +1,16 @@
+// The control for the two refusals beside it: the same signature with a second argument of the
+// extent the first one bound runs.
+module array_shape_call_agree
+
+func pair(a: f32[n], b: f32[n + 1]): int {
+    return len(a) + len(b)
+}
+
+func main(): int sync {
+    let v: f32[] = [1.0, 2.0]
+    let w: f32[] = [3.0, 4.0, 5.0]
+    let a = v as f32[2]
+    let b = w as f32[3]
+    println(pair(a, b))
+    return 0
+}

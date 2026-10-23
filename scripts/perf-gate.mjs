@@ -90,12 +90,13 @@ const POLICY =
     'plans are heavy: they saturate every core for minutes and are worth running only at a ' +
     'milestone, by the coordinator, on a quiet machine."'
 
-// The plans of test/plans/perf (H167 classified them; the list is checked against the directory,
-// H185): what each one measures, what it costs
-// on the shared host, whether it already has a baseline or a ceiling of its own, and whether this
-// gate can take it. `cases` exist only for the gateable plans: the argv is the plan's own command,
-// so the number the gate reads is the number the plan reads. The costs are the plan comments' own
-// measurements plus H167's one run of each gateable plan; the report has the evidence.
+// The plans of test/plans/perf (H167 classified them; H349 classified the four the list had
+// missed and made the check below a property of the directory): what each one measures, what it
+// costs on the shared host, whether it already has a baseline or a ceiling of its own, and whether
+// this gate can take it. `cases` exist only for the gateable plans: the argv is the plan's own
+// command, so the number the gate reads is the number the plan reads. The costs are the plan
+// comments' own measurements plus H167's one run of each gateable plan, and the plan's own bounds
+// for the plans this classification did not run; the report has the evidence.
 const PLANS = [
     {
         id: 'perf.startup',
@@ -186,6 +187,79 @@ const PLANS = [
             'yes, and it is the only reader that must be: the assertion is the ratio of the two ' +
             'sides measured in the run, with each side\'s CPU time printed and not gated. A stored ' +
             'baseline is what the ruling replaced, so this gate compares nothing here',
+    },
+    {
+        id: 'perf.gemm_threads',
+        file: 'test/plans/perf/gemm_threads.plan.toml',
+        gateable: false,
+        refusal: 'in-run',
+        measures:
+            'the library GEMM\'s thread curve inside one process: six thread counts over the seven ' +
+            'shapes of the naive-in-expert-out sweep and both implementations, every point printed ' +
+            'and finite (the plan asserts no duration)',
+        cost:
+            'the plan\'s own bound is 300 s; one process allocates the operands once and visits every ' +
+            'thread count once, and the same program recorded twelve interleaved rounds in ' +
+            'examples/models/naive-in-expert-out/results/2026-10-23-gemm-thread-budget-linux.json',
+        own:
+            'yes, in the run: the curve is a same-run comparison (`set_num_threads(t)` inside one ' +
+            'process, one copy of the operands, one round), and what it pins is that every point of ' +
+            'the curve was measured -- a missing or zeroed point is a defect of the harness',
+    },
+    {
+        id: 'perf.gemm_canonical_shapes',
+        file: 'test/plans/perf/gemm_canonical_shapes.plan.toml',
+        gateable: false,
+        refusal: 'in-run',
+        measures:
+            'the canonical (blocked) GEMM\'s rate at the d=256 step\'s shapes, one thread: six shapes ' +
+            'over three rounds, plus the same 128x128x128 product written as ' +
+            'broadcast-multiply-and-reduce as the reference',
+        cost:
+            'the plan\'s own bound is 300 s; one process, one thread, three rounds of seven products',
+        own:
+            'yes, in the run: the canonical kernel must stay 5x the unblocked reference formulation ' +
+            'of the same round, and every shape must print a finite positive rate; the plan records ' +
+            'the absolute GFLOP/s next to the sweep and says a wall-clock budget here would measure ' +
+            'the neighbours',
+    },
+    {
+        id: 'perf.step_budget',
+        file: 'test/plans/perf/step_budget.plan.toml',
+        gateable: false,
+        refusal: 'expensive',
+        measures:
+            'one d=256 training step: `count` (the operator calls one round issues), `elementwise` ' +
+            '(one allocator block per call) and `budget` (the step\'s CPU time from two run lengths, ' +
+            'its profiled phases and the residual)',
+        cost:
+            'the plan\'s own bounds are 300 s for the two count guards and 1800 s for `budget`; the ' +
+            'step itself costs 62-64 ms of CPU time, and `budget` profiles it and its two phases',
+        own:
+            'yes: counts, one block per call, and the structural invariants of the budget (every ' +
+            'phase\'s rows account for the round mean, the residual stays small); the absolute ' +
+            'numbers are recorded, not asserted, because a shared host moved one step\'s wall ' +
+            'between 65 and 159 ms',
+    },
+    {
+        id: 'perf.reduce_layout',
+        file: 'test/plans/perf/reduce_layout.plan.toml',
+        gateable: false,
+        refusal: 'expensive',
+        measures:
+            'one reduction or layout operator at a time at the d=256 step\'s shapes: `count` pins the ' +
+            'calls a round issues, `sum_to`\'s one block per call and the pinned checksum; `ops` ' +
+            'profiles each shape SAMPLES times and reads every row against a reference kernel of the ' +
+            'same shape in the same run, the whole procedure repeated at another round count as the ' +
+            'null control',
+        cost:
+            'the plan\'s own bounds are 600 s for `count` and 1800 s for `ops`; `ops` is five samples ' +
+            'of seven shapes at two round counts, each 2048/2049 rounds of one expression\'s forward ' +
+            'and backward',
+        own:
+            'yes, and it is a ratio inside one run: a row is judged by its share of the round and ' +
+            'read against a reference kernel of the same shape in the same run; the plan says the ' +
+            'wall times themselves are not usable on this host (about twenty tasks per core)',
     },
     {
         id: 'perf.gc',
@@ -372,10 +446,11 @@ function refuse(plan) {
             `perf-gate: refusing to run "${plan.id}": it carries its own measurement.\n\n` +
                 `  ${plan.id} ${plan.measures}.\n` +
                 `  ${plan.cost}.\n` +
-                '  The number it reads is the ratio of two sides of one run, and this gate compares\n' +
-                '  medians against test/perf-baseline.json -- a stored baseline, which the 2026-10-23\n' +
-                '  review ("perf-para-gate") replaced for this plan. Run that plan itself; it asserts\n' +
-                '  the property in the run that measured it.\n'
+                `  its own baseline or ceiling: ${plan.own}.\n` +
+                '  What the plan reads is asserted inside one run -- its own measurement, or a relation\n' +
+                '  between two sides of that run -- not a stored baseline, and this gate compares medians\n' +
+                '  against test/perf-baseline.json. Run that plan itself; the property is asserted by the\n' +
+                '  run that measured it.\n'
         )
     } else if (plan.refusal === 'expensive') {
         console.error(
@@ -383,9 +458,9 @@ function refuse(plan) {
                 `  ${plan.id} ${plan.measures}.\n` +
                 `  ${plan.cost}.\n` +
                 '  A repetition costs minutes, so the median cannot be repeated often enough to be a\n' +
-                '  gate; H167 measured the plan once and recorded the number in\n' +
-                '  handover note ⟨f14c90d⟩ (H167). If a milestone needs it, run that plan itself\n' +
-                '  (docs/test-plans.md, "Layers: fast, slow And debug").\n'
+                '  gate. H167 classified the layer and measured the plans whose cost allowed it\n' +
+                '  (handover note ⟨f14c90d⟩); the bounds above are this plan\'s own. If a milestone\n' +
+                '  needs it, run that plan itself (docs/test-plans.md, "Layers: fast, slow And debug").\n'
         )
     } else {
         console.error(
@@ -822,31 +897,89 @@ function printConditions(caseCount, options, revision, build, host, load) {
 
 // The plan files the tree holds, and how that set differs from PLANS. The list is a classification,
 // not a count: a new perf plan has to say whether this gate takes it (and why not, if not), the
-// same way stdlib-declarations.mjs makes a new operator module name itself (H173).
+// same way stdlib-declarations.mjs makes a new operator module name itself (H173). `--list` names
+// every plan of the directory exactly once, and the two sets are compared as sets, never by count.
 function perfPlanFiles() {
     const directory = path.join(REPO_ROOT, 'test', 'plans', 'perf')
-    return fs
-        .readdirSync(directory)
-        .filter((name) => name.endsWith('.plan.toml'))
-        .map((name) => `test/plans/perf/${name}`)
-        .sort()
-}
-
-function planInventory() {
-    const onDisk = perfPlanFiles()
-    const listed = PLANS.map((plan) => plan.file).sort()
+    let names
+    try {
+        names = fs.readdirSync(directory)
+    } catch (error) {
+        return { directory, onDisk: [], unreadable: error.message }
+    }
     return {
-        onDisk,
-        missing: onDisk.filter((file) => !listed.includes(file)),
-        stale: listed.filter((file) => !onDisk.includes(file)),
+        directory,
+        onDisk: names
+            .filter((name) => name.endsWith('.plan.toml'))
+            .map((name) => `test/plans/perf/${name}`)
+            .sort(),
+        unreadable: null,
     }
 }
 
-function printList(options) {
-    const count = perfPlanFiles().length
+function planInventory() {
+    const { directory, onDisk, unreadable } = perfPlanFiles()
+    const listed = PLANS.map((plan) => plan.file).sort()
+    const ids = PLANS.map((plan) => plan.id)
+    return {
+        directory,
+        unreadable,
+        onDisk,
+        missing: onDisk.filter((file) => !listed.includes(file)),
+        stale: listed.filter((file) => !onDisk.includes(file)),
+        // "Exactly once": a file or an id classified twice would still pass the two set
+        // comparisons above, and `--list` would name that plan twice.
+        duplicates: [
+            ...new Set([
+                ...listed.filter((file, index) => listed.indexOf(file) !== index),
+                ...ids.filter((id, index) => ids.indexOf(id) !== index),
+            ]),
+        ],
+    }
+}
+
+// Every way the classification can fail to describe the directory, printed by name. A directory
+// that yields no plan at all fails too: a guard that examined nothing is not a pass (H185), and a
+// rename or a moved tree would otherwise turn the whole check into a silent success.
+function reportInventoryProblems(inventory) {
+    const shown = displayPath(inventory.directory)
+    if (inventory.unreadable) {
+        console.error(`perf-gate: cannot read ${shown}: ${inventory.unreadable}`)
+        return true
+    }
+    if (inventory.onDisk.length === 0) {
+        console.error(
+            `perf-gate: ${shown} holds no *.plan.toml: the classification examined nothing, which is ` +
+                'not a pass (--list names every plan of that directory)'
+        )
+        return true
+    }
+    let failed = false
+    for (const file of inventory.missing) {
+        console.error(
+            `perf-gate: ${file} is a perf plan but PLANS does not classify it: add it as gateable ` +
+                'or name the reason it is refused',
+        )
+        failed = true
+    }
+    for (const file of inventory.stale) {
+        console.error(`perf-gate: PLANS lists ${file}, which is not in test/plans/perf`)
+        failed = true
+    }
+    for (const name of inventory.duplicates) {
+        console.error(
+            `perf-gate: PLANS classifies ${name} more than once: every plan of test/plans/perf must be ` +
+                'named exactly once (--list would print it twice)'
+        )
+        failed = true
+    }
+    return failed
+}
+
+function printList(options, inventory) {
     const gateable = PLANS.filter((plan) => plan.gateable)
     console.log(
-        `perf-gate: ${count} plans in test/plans/perf; ${gateable.length} are gateable here ` +
+        `perf-gate: ${inventory.onDisk.length} plans in test/plans/perf; ${gateable.length} are gateable here ` +
             `(${gateable.map((plan) => plan.id).join(', ')}).`
     )
     console.log('This gate is manual: it is never selected by --changed and never runs under npm run test.')
@@ -899,20 +1032,11 @@ function log(message) {
 function main() {
     const options = parseArgs(process.argv.slice(2))
     const inventory = planInventory()
-    if (inventory.missing.length > 0 || inventory.stale.length > 0) {
-        for (const file of inventory.missing) {
-            console.error(
-                `perf-gate: ${file} is a perf plan but PLANS does not classify it: add it as gateable ` +
-                    'or name the reason it is refused',
-            )
-        }
-        for (const file of inventory.stale) {
-            console.error(`perf-gate: PLANS lists ${file}, which is not in test/plans/perf`)
-        }
+    if (reportInventoryProblems(inventory)) {
         return 2
     }
     if (options.list) {
-        printList(options)
+        printList(options, inventory)
         return 0
     }
     options.selected = selectPlans(options)

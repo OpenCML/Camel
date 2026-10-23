@@ -1,15 +1,15 @@
 /**
- * A condition reaches the node of a `const` parameter (the ruling of 2026-10-23 on
- * `rule_when_const_node`: "条件函数按 `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)` 换成它；
- * 不引入新类型"). The surface name is `node_of(c)`, and it takes the name of one of the rule's
- * own `const` parameters.
+ * A condition reaches the node of a `const` parameter. A `const` parameter is the constant's *value*
+ * in a condition, and the node itself is reached with `node_of(c)` (rule-language design v2, section
+ * 1). The surface name is `node_of(c)`, and it takes the name of one of the rule's own `const`
+ * parameters.
  *
- * A `const` parameter is the constant's *value* in a condition (rewrite design 2 (second version)
- * 1), which is what `drop_positive` uses for its arithmetic (`c > 0.0`) -- no `constant(node,
- * sample)` and no `match ... case null`. `drop_int_coefficient` needs the other channel: its guard
- * is `typeText(node_of(c)) == 'int' && is_constant(node_of(c))`, a test of the coefficient's
- * *node*, which no value of the coefficient can be given -- there is nothing in a float value that
- * says `int`. The three functions tell the channels apart:
+ * The two channels answer different questions, and this case holds them apart. `drop_positive` asks
+ * about the value (`c > 0.0`) -- no `constant(node, sample)` and no `match ... case null`.
+ * `drop_int_coefficient` needs the other channel: its guard is `typeText(node_of(c)) == 'int' &&
+ * is_constant(node_of(c))`, a test of the coefficient's *node*, which no value of the coefficient
+ * can be given -- there is nothing in a float value that says `int`. The three functions tell the
+ * channels apart:
  *
  *   positive_coefficient  `x * 3.0`  the value is positive, so `drop_positive` fires (its node is
  *                                    a `float` constant, so the int rule does not);

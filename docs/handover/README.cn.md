@@ -707,7 +707,7 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 3. **原地更新的保证**：计数为 1 时，"返回新值"的数组操作原地进行；以分配计数断言的测试覆盖每种操作。
 4. 性能基线前后对比（小型逻辑计算不变慢；张量程序的时间与峰值内存不升）。
 
-**剩下什么**：第 2 项（`T[维度...]`、维度绑定、`Tensor` 别名）未开始，第 1 项还差三个证明缺口、第 3 项只覆盖排序/追加/下标/循环状态，第 4 项按计划的 P7 未做。
+**剩下什么**：第 2 项先落的两步已经在树上——P2「数组类型带维度与关系」（`ecaa31f58`）与 P3「`T[维度...]` 语法与维度绑定」（`fee698bb9`，用例 `test/cases/compile/array_shape/*`）；未做的是 P4（`Tensor` 作为 `ArrayType` 别名、删除 `TensorType`、打印统一、入口参数）与 P5（`map`/`filter`/`sort` 按第一维，依赖 P4）。P4 是一个原子提交，波及 27 个文件的 63 处 `asTensorType`、15 个文件的 115 处 `TensorType`、`test/cases` 下 198 个 `.cml` 用例（1096 处 `Tensor<`）。本轮另修两处：字面量长度不与位置写下的常量 extent 比较（`468880f60`）、生成页 `docs/diagnostics.md` 里遗留的合并冲突标记（`e7611d704`）；声明写下的 extent 到不了调用点、`constas` 值管不住数组参数的 extent、`[]` 站在固定长度位置上这三条待作者裁决，见 [questions/declared-extent-reaches-the-call.md](questions/declared-extent-reaches-the-call.md)。第 1 项还差三个证明缺口、第 3 项只覆盖排序/追加/下标/循环状态，第 4 项按计划的 P7 未做。
 
 ### H19：标准库重新规划的落地（2026-10-20 指派，先交计划）
 

@@ -528,7 +528,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "impl.kernel_site"
-desc = "Where a kernel can be declared, now that the ruling has removed the two walls (2026-10-23: 「声明模块可以有函数体」 and 「泛型函数可以带 `#impl`」): `#op<'tensor:log_softmax'>` outside the tensor module is still refused as another module's operator, not as an operator no module implements, and `#op<'nn:adam'>` is refused the same way — a module writes its own signature and nobody else's (option (b) stays refused); the tensor module's own `.cml` beside its `.cmo` declares the kernel and holds the definition's body, which is what `stdlib/tensor.cml` now does; and a generic function carries a kernel whose rules are adopted at instantiation."
+desc = "Where a kernel can be declared (design principles 10.4: the module that owns an operator owns its kernel and its Camel definition): `#op<'tensor:log_softmax'>` outside the tensor module is refused as another module's operator, not as an operator no module implements, and `#op<'nn:adam'>` is refused the same way — a module writes its own signature and nobody else's; the tensor module's own `.cml` beside its `.cmo` declares the kernel and holds the definition's body, which is what `stdlib/tensor.cml` now does; and a generic function carries a kernel whose rules are adopted at instantiation."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/native/impl_kernel_site.mjs"
