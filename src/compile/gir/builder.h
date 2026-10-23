@@ -245,7 +245,18 @@ class Builder {
     // principles 10.4): a direct call of the function is a call of the kernel instead; the
     // graph is kept for what asks to look inside (autodiff, fusion, export, a rule).
     std::unordered_map<DraftGraphBuilder *, ImplKernel> implKernels_;
-    // The module of each graph made directly under the root graph (a top-level function, a
+    // The kernel a generic `#impl` function declares, by its template (ruling impl-kernel-site;
+    // design principles 10.4, H228: one operator, per-type executors). A generic function's
+    // instances have signatures of their own, so which rule of the kernel's declaration is the
+    // executor is decided when the instance is built (adoptImplKernel); an instance whose types
+    // no rule accepts keeps the body, which is the semantics.
+    struct ImplTemplateKernel {
+        std::string name;
+        std::string uri;
+        // The kernel's declaration as a whole: the rules an instance may adopt.
+        oper_group_ptr_t group;
+    };
+    std::unordered_map<const GenericTemplate *, ImplTemplateKernel> implTemplateKernels_;
     // generic instance of one, a lambda at the top level): the root graph lists as its own
     // functions only the entry module's, so that what the program does not use of the
     // modules it imports is not part of it.
@@ -1183,9 +1194,22 @@ class Builder {
     /// function is a call of the kernel (visitDRefNode) while the graph stays the semantic body
     /// (the expansion a consumer uses).
     void resolveImplDeclarations(const GCT::node_ptr_t &root);
+    /// Whether the body-less declaration `kernel` is the same function as `function`, for the
+    /// non-generic case where one signature answers for all calls (design principles 10.4).
+    static bool sameImplSignature(FunctionType *function, FunctionType *kernel);
+    /// Adopts the executor of the instance `graph` of the generic `#impl` function `tmpl`: the
+    /// rule of the kernel's declaration that accepts `funcType`, if any. Chosen here, at
+    /// instantiation, because that is when the instance's types are known (ruling
+    /// impl-kernel-site; H228). An instance no rule accepts has no executor: it runs the body,
+    /// which is the semantics, and gives the same result.
+    void adoptImplKernel(
+        const template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType);
     /// The kernel of `graphs` when they are exactly the one `#impl` body: what a call of the
     /// function is, instead of a call of the body (design principles 10.4).
     std::optional<ImplKernel> implKernelOf(const graph_set_ptr_t &graphs) const;
+    /// The kernel of the one graph `graph`, when it is an `#impl` body an executor was found
+    /// for (a generic function's instance, adoptImplKernel).
+    std::optional<ImplKernel> implKernelOfGraph(const compile_graph_ptr_t &graph) const;
     /// Whether the graph being built is an `#impl` body or nested in one (a lambda in the
     /// body). A call written there stays a call of the function's semantic graph, so that the
     /// body the expansion reads is the body without the tag; the kernel is for callers.

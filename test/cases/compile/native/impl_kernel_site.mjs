@@ -1,27 +1,24 @@
 #!/usr/bin/env node
 /**
- * Where a `#impl` kernel can be declared, and why the standard library has no site for one over a
- * tensor. The ruling of 2026-10-23 (`docs/handover/reviews/H141-H213.md`, Q2) chose that the
- * standard library gets its first kernels beside the functions whose semantics they implement, and
- * named Adam and a composite tensor operation. This case is the state those two items meet: the
- * three experiments below are programs built with the installed standard library, and nothing in
- * the tree is changed.
+ * Where a `#impl` kernel can be declared, after the ruling of 2026-10-23
+ * (`docs/handover/reviews/questions-2026-10-23.md`, 「## impl-kernel-site」). The ruling chose that
+ * the standard library gets its first kernels beside the functions whose semantics they implement,
+ * and removed the two walls that had left Adam and a composite tensor operation without a site:
+ * 「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」 and
+ * 「泛型函数可以带 `#impl`」. This case is what is left of those two walls: the three experiments
+ * below are programs built with the installed standard library, and nothing in the tree is changed.
  *
  *   A. `#op<'tensor:log_softmax'>` in a module that is not `tensor` is refused with
  *      NativeDeclarationForeignOperator, and not with NativeDeclarationNotLoaded: the operator is
- *      registered and the module imports it, so what refuses the declaration is ownership.
- *   B. The same for `#op<'nn:adam'>` (Adam's kernel is `nn`'s), and in the same file `#impl` on a
- *      generic function is refused with ImplOnGenericFunction, which is the shape an Adam written
- *      over a parameter tree has.
+ *      registered and the module imports it, so what refuses the declaration is ownership. This is
+ *      the ruling's option (b), which stays refused: a module writes its own signature, and no
+ *      other module's.
+ *   B. The same for `#op<'nn:adam'>` (Adam's kernel is `nn`'s). The generic function it is written
+ *      on is no longer refused on its own: the shape an Adam over a parameter tree has is legal
+ *      now, and only ownership refuses the declaration.
  *   C. The module that does own `tensor:log_softmax` is a declaration module (a `.cml` beside a
- *      `.cmo`): a copy of the pair in a scratch directory in which the definition keeps its Camel
- *      body is refused with DeclarationModuleHasBody, while the kernel declaration beside it is
- *      not refused at all. The body, not the kernel, is what the tensor module's file cannot hold.
- *
- * So a tensor kernel has no declaration site today, and the tag cannot carry Adam's genericity:
- * this case states what is missing, as the parametric-declaration cases of
- * `native_declarations.plan.toml` do. It fails if either refusal stops being reported, which is
- * the change a kernel here would need.
+ *      `.cmo`): a copy of the pair in a scratch directory in which the kernel is declared and the
+ *      definition keeps its Camel body is accepted, and the module runs.
  *
  * Usage: node impl_kernel_site.mjs
  */
@@ -69,14 +66,19 @@ function run(name, files, entry) {
         timeout: 120000,
     })
     let diagnostics = []
-    try {
-        diagnostics = JSON.parse(proc.stdout)
-    } catch {
-        check(`${name}: the run prints a diagnostics array`, false, `${proc.stdout} ${proc.stderr}`)
+    // A run that compiles prints the diagnostics array; one that also runs the program prints
+    // what the program prints, and an accepted program that prints nothing prints nothing.
+    const text = proc.stdout.trim()
+    if (text.length > 0 && text.startsWith('[')) {
+        try {
+            diagnostics = JSON.parse(text)
+        } catch {
+            check(`${name}: the run prints a diagnostics array`, false, `${proc.stdout} ${proc.stderr}`)
+        }
     }
     const names = diagnostics.map((d) => d.data && d.data.name)
     console.log(`--- ${name}: exit ${proc.status}, diagnostics ${JSON.stringify(names)}`)
-    return { status: proc.status, diagnostics, names }
+    return { status: proc.status, diagnostics, names, stdout: proc.stdout }
 }
 
 // ---- A: the tensor operator cannot be declared by a module that is not `tensor` ----
@@ -122,7 +124,7 @@ if (aFound) {
     check('A. located at the tag', Boolean(aFound.range) && aFound.range.start.line === 3, JSON.stringify(aFound.range))
 }
 
-// ---- B: Adam's kernel is `nn`'s, and Adam over a parameter tree is generic ----
+// ---- B: Adam's kernel is `nn`'s; the generic function it is written on is legal now ----
 const b = run(
     'foreign_adam_kernel',
     {
@@ -151,14 +153,15 @@ check(
     JSON.stringify(b.names),
 )
 check(
-    'B. a kernel on a generic function is refused as such',
-    b.names.includes('SemanticDiag::ImplOnGenericFunction'),
+    'B. the generic function is not refused on its own',
+    !b.names.some((name) => name === 'SemanticDiag::ImplOnGenericFunction') &&
+        !b.names.some((name) => name === 'SemanticDiag::ImplSignatureMismatch'),
     JSON.stringify(b.names),
 )
-const bFound = b.diagnostics.find((d) => d.data && d.data.name === 'SemanticDiag::ImplOnGenericFunction')
-if (bFound) check('B. the generic refusal is the catalog code', bFound.code === '0x030001DD', String(bFound.code))
+const bFound = b.diagnostics.find((d) => d.data && d.data.name === 'SemanticDiag::NativeDeclarationForeignOperator')
+if (bFound) check('B. the refusal is the catalog code', bFound.code === '0x03000181', String(bFound.code))
 
-// ---- C: the tensor module's own file declares the kernel and cannot hold the body ----
+// ---- C: the tensor module's own file declares the kernel and holds the body ----
 const cFiles = {
     'tensor.cml': `module tensor
 
@@ -171,6 +174,7 @@ export func log_softmax(x: Tensor<f32>, axis: int): Tensor<f32> {
 }
 `,
     'main.cml': `import tensor
+import { Tensor } from tensor
 
 func main(): int sync {
     return 0
@@ -181,24 +185,12 @@ const scratchC = path.join(SCRATCH, 'tensor_declaration_module')
 fs.mkdirSync(scratchC, { recursive: true })
 fs.copyFileSync(path.join(HOME, 'stdlib', 'tensor.cmo'), path.join(scratchC, 'tensor.cmo'))
 const c = run('tensor_declaration_module', cFiles, 'main.cml')
-check('C. refused', c.status === 1, String(c.status))
+check('C. accepted', c.status === 0, `${c.status}: ${c.stdout}`)
 check(
-    'C. the body in the tensor module`s declaration file is the diagnostic',
-    c.names.includes('SemanticDiag::DeclarationModuleHasBody'),
+    'C. the kernel declaration and the body in the tensor module`s own file are both accepted',
+    c.names.length === 0,
     JSON.stringify(c.names),
 )
-check(
-    'C. the kernel declaration in that same file is not refused',
-    !c.names.includes('SemanticDiag::NativeDeclarationForeignOperator') &&
-        !c.names.includes('SemanticDiag::NativeDeclarationNotLoaded'),
-    JSON.stringify(c.names),
-)
-const cFound = c.diagnostics.find((d) => d.data && d.data.name === 'SemanticDiag::DeclarationModuleHasBody')
-if (cFound) {
-    check('C. code is the catalog code', cFound.code === '0x0300017D', String(cFound.code))
-    check('C. located in the declaration module', path.basename(cFound.data.modulePath || '') === 'tensor.cml', String(cFound.data.modulePath))
-    check('C. the message names the module and the function', cFound.message.includes("'tensor'") && cFound.message.includes('log_softmax'), cFound.message)
-}
 
 console.log(failed ? `FAILURES: ${JSON.stringify(failures)}` : 'FAILURES: none')
 summarize('A', a)

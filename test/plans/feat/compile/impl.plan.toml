@@ -111,16 +111,18 @@ expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
 # beside the operators, or a test-scoped way to declare another module's operator; both are the
 # language author's call.
 #
-# The ruling of 2026-10-23 (`docs/handover/reviews/H141-H213.md`, Q2) chose the first of the two:
-# the standard library gets its first `#impl` kernels, each beside the function whose semantics it
-# implements. For a tensor operator that file does not exist: the module that owns
-# `tensor:log_softmax` is the tensor module, whose `stdlib/tensor.cml` is the declaration module of
-# `tensor.cmo` and may hold no body (`SemanticDiag::DeclarationModuleHasBody`), while no other
-# module may declare that operator (`SemanticDiag::NativeDeclarationForeignOperator`). `array` is
-# the standard library module with both halves, because libcamel registers its operators and
-# `stdlib/array.cml` has therefore no `.cmo` of its own name. Adam, the ruling's other item, is
-# generic over the parameter tree, and a generic function carries no kernel
-# (`SemanticDiag::ImplOnGenericFunction`). `impl.kernel_site` states what both items are missing.
+# The ruling of 2026-10-23 (`docs/handover/reviews/questions-2026-10-23.md`,
+# 「## impl-kernel-site」) chose the first of the two, and removed both walls on the way
+# (`docs/handover/reviews/H141-H213.md`, Q2): 「选 (a)，而且取宽的那一种：声明模块可以有函数体，
+# `DeclarationModuleHasBody` 删除」 and 「泛型函数可以带 `#impl`」 — the kernel is a body-less
+# declaration with the function's own type parameters, the executor is chosen at instantiation
+# per H228, an instance whose type has no executor runs the body (the body is the semantics, so
+# the result is the same), and `std::profile` says which path that instance took. So the
+# standard library gets its first `#impl` kernels: the tensor module's own `stdlib/tensor.cml`
+# declares the kernel beside the declaration and holds the Camel definition (its `.cmo` is the
+# same module, H94), and a generic function may carry one (Adam, once `optim` lands: H51 step
+# 14; the ruling kept `nn:adam` out of this batch). `impl.kernel_site` states what the two
+# ruling items can now be written as; `impl.generic_executor` is the generic rule itself.
 
 # ---- The optimizer: a direct call is not a call to inline ----
 
@@ -490,23 +492,43 @@ expect_diagnostic_column = 2
 expect_output_contains = ["The '#impl' tag of 'add' names 'helper', which has a body."]
 
 [[tests]]
-name = "impl.on_generic_function"
-desc = "`#impl` on a generic function: its instances have signatures of their own, so there is no one signature for a kernel to match."
-kind = "negative"
+name = "impl.generic_executor"
+desc = "A generic function carries `#impl` (ruling impl-kernel-site: 「泛型函数可以带 `#impl`」). `at` declares its kernel with the function's own type parameters, so every instance of it takes that executor; `add` declares a kernel with one fixed rule `(int, int) => int`, so `add<int>` is the kernel and `add<i32>` — a type the rule does not accept — runs the body. The body is the semantics, so the two paths of `add` give the same value."
+kind = "behavior"
 case = "../../../cases/compile/native/impl_generic.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImplOnGenericFunction"
-expect_diagnostic_code = "0x030001DD"
-expect_diagnostic_line = 10
-expect_diagnostic_column = 2
-expect_output_contains = ["The '#impl' tag of 'at' is on a generic function."]
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "at=7 kernel=42 body=42\n"
 
-# ---- The declaration site a standard library kernel would need ----
+[[tests]]
+name = "impl.generic_executor.paths"
+desc = "In that run `std::profile` counts the kernel path and the body path of `add` apart: one `:op/add_l` (the `int` instance), not one `:op/sub_l` (the `int` instance's body did not run), and at least one `:op/sub_i` (the `i32` instance had no executor and ran the body). A compiler that ran the body for both instances would show sub/neg for both; one that ran the kernel for both could not, since no rule of the declaration accepts `i32`."
+kind = "behavior"
+case = "../../../cases/compile/native/impl_generic.cml"
+args = ["${case}", 'std::profile top=0 json="${test_tmp}/profile.json"', "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const out = input.normalized.stdout
+    assert(out.split('\n')[0] === 'at=7 kernel=42 body=42', `the values changed:\n${out}`)
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
+    assert(calls[':op/add_l'] === 1, `the kernel ran ${calls[':op/add_l']} times, not once:\n${out}`)
+    assert(!calls[':op/sub_l'] && !calls[':op/neg_l'], `the int instance's body ran too: ${JSON.stringify(calls)}`)
+    assert(calls[':op/sub_i'] >= 1, `the instance with no executor did not run its body: ${JSON.stringify(calls)}`)
+    assert(calls[':op/idx_arr'] === 1, `the generic kernel ran ${calls[':op/idx_arr']} times, not once`)
+}
+"""
+timeout_ms = 60000
+
+# ---- The declaration site a standard library kernel needs ----
 
 [[tests]]
 name = "impl.kernel_site"
-desc = "Where a kernel can be declared, and why the ruling's two items (Adam in `optim`, a composite tensor operation) have no site yet: `#op<'tensor:log_softmax'>` outside the tensor module is refused as another module's operator, not as an operator no module implements; `#op<'nn:adam'>` is refused the same way, and `#impl` on a generic function as such; and a copy of the tensor module's own `.cml` beside its `.cmo` may declare the kernel but not hold the definition's body."
+desc = "Where a kernel can be declared, now that the ruling has removed the two walls (2026-10-23: 「声明模块可以有函数体」 and 「泛型函数可以带 `#impl`」): `#op<'tensor:log_softmax'>` outside the tensor module is still refused as another module's operator, not as an operator no module implements, and `#op<'nn:adam'>` is refused the same way — a module writes its own signature and nobody else's (option (b) stays refused); the tensor module's own `.cml` beside its `.cmo` declares the kernel and holds the definition's body, which is what `stdlib/tensor.cml` now does; and a generic function carries a kernel whose rules are adopted at instantiation."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/native/impl_kernel_site.mjs"
