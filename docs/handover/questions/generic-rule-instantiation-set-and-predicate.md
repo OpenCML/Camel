@@ -206,3 +206,44 @@ rules, one merged law end to end with red-before/green-after and the cache read 
 single session's work: it touches the front end, the runtime boundary of §4, the module's engine loop,
 `check`/`explain`/`why_not` and the library at once, and
 the two decisions above are its prerequisites.
+
+## 8. The maker, as the front end can build it (the slice after §4)
+
+A rule declaration lowers to
+`let name = __rule('name', twoWay, needs, consts, name__lhs, name__rhs)` with a third reference for
+`__rule_when` (`src/parse/ast/builder.cpp:1101-1127`), and the two references are *functions*: under a
+generic head they are generic functions, and giving one to `__rule` as a value is the refusal §0
+measured.
+
+A template is a compile-time object, so it cannot travel as a runtime value. The way across is an id:
+the front end registers the rule's three templates (`name__lhs`, `name__rhs`, `name__when`) in a table
+the context owns, emits `__rule_generic('name', twoWay, needs, consts, ruleId)`, and the `RuleObject`
+keeps `ruleId`. The engine then has the templates through the table and the context it already holds
+(`engineRules(Context &ctx, …)`, `modules/rewrite/module.cpp:301`), which is where the per-type-tuple
+cache goes too.
+
+The pieces, each with its own test:
+
+1. **the public entry beside `encodeToRuntimeProgram`**: the context, a template handle and the
+   concrete argument types in; the instance's compile graph out; `why` when the types do not fit or
+   the body does not compile, with nobody told (§3's scope closed over it — a type tuple that
+   resolves to no instance is not a program's error). Its front end side is a small function over
+   `unifyTypeVars`/`instantiateFunctionType` (`src/compile/gir/builder_generics.cpp`), not a second
+   unification.
+2. **the registration table and `__rule_generic`** (the context's table, the module's kernel,
+   `stdlib/rewrite.cml`'s declarations) and the front-end lowering for a generic head. The only case
+   with a generic head today is `test/cases/parse/rules/generic_head.cml`, and its test
+   (`rules.generic_head`, `test/plans/feat/parse/rules.plan.toml:19-27`) only reads the declaration's
+   AST (`${inspect_ast}`) without compiling it: it does not lock today's refusal and needs no
+   re-pointing. **No plan asserts the refusal** — it was measured with a temporary case (§0) — so the
+   new behaviour wants its own test rather than a re-pointed one.
+   A rule with no instance for a type tuple does not fire, so a rule value whose templates are
+   registered and never instantiated is not an error; it is a rule that matches nowhere. Until step 3
+   lands, `apply` of such a rule does nothing and says so.
+3. **the per-type cache** in `RuleObject` (`modules/rewrite/rule.h:47`), keyed by the type tuple the
+   match solves; one `compileRule` per instance; `explain`/`why_not` (and `check`) report the
+   instance's types, which is the observable for "one instantiation per type tuple".
+4. **one law end to end**: `int_add_zero`/`int32_add_zero` and `float_add_minus_zero`/`f32_add_minus_zero`
+   first (the float zero law stays its own), red before and green after on every element type, with
+   `test/cases/modules/rules/typed_cross.cml` green; then the rest of §6's families, with
+   `test/cases/opt/algebra_rules/pairs.mjs` and the plan descriptions re-pointed in the same commit.
