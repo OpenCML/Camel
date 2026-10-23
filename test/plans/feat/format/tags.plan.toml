@@ -1,0 +1,41 @@
+id = "format.tags"
+order = 322
+tier = "fast"
+tags = ["feat", "format", "formatter", "comments", "tags"]
+
+# A declaration's tags (`#impl<...>`, `#op<'...'>`, `#[...]`) are written before it, in its front
+# matter, so its first token is the `#` of the first tag. A doc comment written above the tag stands
+# above the declaration and `commentsBefore` writes it before the tag; one written between the tag
+# and the keyword stands inside the declaration, where no visitor and no list looks, and the
+# formatter used to write it at the end of the file - which is a second AST, not a formatting.
+#
+# Both orders are pinned here, where the property lives: the formatter must write a declaration's
+# comment and its tags in the order the reader wrote them, whichever way round that is.
+# verify/tag_and_doc_order.mjs asserts that the comments and the tag lines of the output are the
+# comments and the tag lines of the case, in the same order, that the output is a fixed point, and
+# that the case really writes a tag against a comment (a case that kept them apart would pin
+# nothing). The same files are read by camel-parsecheck fmtcheck over every .cml of the tree
+# (test/plans/feat/parse/frontend.plan.toml), which counts a comment the formatter could not place
+# and refuses another AST.
+
+[[tests]]
+name = "format.tag_above_doc_comment"
+desc = "A doc comment written between a declaration's tag and the declaration stays there: the formatter writes the tag, then the comment, then the declaration, and no comment is written at the end of the file."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/format/tags/tag_above_doc_comment.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script_path = "./verify/tag_and_doc_order.mjs"
+timeout_ms = 10000
+
+[[tests]]
+name = "format.tag_below_doc_comment"
+desc = "A doc comment written above a declaration's tag stays above it: the formatter writes the comment, then the tag, then the declaration, which is the order the standard library writes and the order the reference reader reads through the tag."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/format/tags/tag_below_doc_comment.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script_path = "./verify/tag_and_doc_order.mjs"
+timeout_ms = 10000
