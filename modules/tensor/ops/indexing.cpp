@@ -911,12 +911,16 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
                 {positionLaw("argmin_axis_f32", false, f32),
                  positionLaw("argmin_axis_i64", false, i64),
                  positionLaw("argmin_axis_bool", false, boolean)}});
-        // sum_to is the gradient reduction of a broadcast and computes in f32 only: it accumulates
-        // in f32 from +0. An int64 or bool tensor is refused by the kernel (P4: a kernel that
-        // computes in f32 says so at the call) instead of being converted to f32 here.
+        // sum_to is the gradient reduction of a broadcast, and it computes at the element type of
+        // the tensors it is given: f32 accumulating from +0, and f64 accumulating from +0 as well.
+        // An f64 gradient through a broadcast is an f64 result (questions-2026-10-23.md, section
+        // f64-tensor-leaf: the element type of a value is always determined), so refusing it is a
+        // missing arm and not a rule -- H238's direction is to support f64 too, and design
+        // principles 5.1 forbids narrowing it to f32 to make the call go through. An int64 or bool
+        // tensor is still refused by the kernel, which says so at the call.
         t.emplace(
             "sum_to",
-            Indexing{sumToIndexing, {sumLaw("sum_to_f32", f32, f32, f32)}});
+            Indexing{sumToIndexing, {sumLaw("sum_to_f32", f32, f32, f32), sumLaw("sum_to_f64", f64, f64, f64)}});
         // matmul: the fused multiply-add chain in ascending k from +0 (design principles 7.1,
         // Q7); merging partial sums (with reassociate) is an addition, which commutes.
         t.emplace(
