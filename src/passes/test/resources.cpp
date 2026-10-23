@@ -134,6 +134,7 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
     const rt::GraphId idTypedUnused = alloc();
     const rt::GraphId idTypedCaller = alloc();
     const rt::GraphId idTypedSame   = alloc();
+    const rt::GraphId idUnnamed     = alloc();
     enum Caller {
         kOpenTwice,
         kOpenTwiceCtrl,
@@ -267,6 +268,23 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
         finish(*draft, cb);
         encode(*draft, "typed-same");
     }
+    {
+        // An effect that names no resource at all, next to one that names a cell: the global
+        // resource meets every effect (design principles 3.3), where two named resources do not
+        // (F9). Before the pair is decided by resource alone there is no pair here at all.
+        auto draft = makeDraft(idUnnamed, unaryInt());
+        const rt::gc_node_ref_t port = addPort(*draft, Type::Int64());
+        const std::array<rt::gc_node_ref_t, 1> inputs{port};
+        const rt::gc_node_ref_t cell =
+            draft->addOperNode(Type::Int64(), nullptr, "semtest:cell_write");
+        draft->setNormInputs(cell, inputs);
+        const rt::gc_node_ref_t global =
+            draft->addOperNode(Type::Int64(), nullptr, "semtest:unnamed");
+        const std::array<rt::gc_node_ref_t, 1> after{cell};
+        draft->setCtrlInputs(global, after);
+        finish(*draft, global);
+        encode(*draft, "unnamed-global");
+    }
 
     // (a) open() then two operations on the same returned value: one object, serialised.
     for (const Caller caller : {kOpenTwice, kOpenTwiceCtrl, kSameTwice, kSameOneCtrl}) {
@@ -385,6 +403,29 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
             os << "\n";
         }
     }
+    // An effect outside the program that names no resource at all: the node carries the global
+    // identity, and the pair with the named resource beside it is a pair of resources, in the order
+    // the graph gives (design principles 3.3; without the identity the node is bare `external` and
+    // two such effects are pairs whatever they touch).
+    {
+        const rt::GCGraph *graph = byName("synth:unnamed-global");
+        for (rt::gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            const rt::NodeResources r = rt::resourcesOf(synthetic, *graph, ref);
+            if (r.none()) {
+                continue;
+            }
+            os << "RESOURCES synth node unnamed-global " << ref << " "
+               << label(synthetic, *graph, ref) << ": " << rt::toString(r) << "\n";
+        }
+        for (const rt::RequiredOrdering &o : rt::requiredOrderings(synthetic, *graph)) {
+            os << "RESOURCES synth order unnamed-global " << o.first << " " << o.second << " "
+               << rt::conflictKindName(o.why) << " " << (o.ordered ? "ordered" : "unordered");
+            if (o.ordered) {
+                os << " by " << (o.byData ? "data" : "control");
+            }
+            os << "\n";
+        }
+    }
 }
 
 } // namespace
@@ -480,6 +521,15 @@ ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     // outside the program (as the assignments do).
     table.set("semtest:assign", {.pure = false});
     attempt(os, "refines_external", "semtest:assign", ResourceSpec{.accesses = {cellWrite}});
+    // An effect outside the program that names nothing at all: the conservative global resource
+    // (design principles 3.3). The traits allow an external effect, so the declaration is accepted
+    // with no access: the node itself gets the access of unknown class.
+    table.set("semtest:unnamed", {.pure = false});
+    attempt(
+        os,
+        "unnamed_effect_declared",
+        "semtest:unnamed",
+        ResourceSpec{.externalEffect = true});
     attempt(
         os,
         "allocates_ambient",

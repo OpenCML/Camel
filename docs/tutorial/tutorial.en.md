@@ -54,7 +54,7 @@ Hello, Camel!
 
 - One `.cml` file is one module, and `module hello` gives it a name (this can be omitted).
 - The program starts at `main`. The `int` that `main` returns is the exit code of the process.
-- The **`sync`** after the return type means that the function body is a sync block: the statements in it run in the order they are written. For now, just remember "a function that prints has `sync` before its body"; section 6 explains why.
+- The **`sync`** after the return type means that the function body is a sync block: the statements it writes directly run in the order they are written (a sync block does not inherit inward; section 6 explains). For now, just remember "a function that prints has `sync` before its body"; section 6 explains why.
 - A line break is enough between statements; no semicolons are needed.
 
 ## 2. Values and types
@@ -377,7 +377,7 @@ Only `1` is printed. The return value `1` of `greet` does not depend on that `pr
 
 ### 6.2 Sync blocks
 
-A `sync` written before a block makes it a sync block: the expressions in the block run in the order they are written, as if the compiler had added control edges between adjacent expressions. [`examples/06_sync_block.cml`](examples/06_sync_block.cml) changes only the body of `greet` into a sync block:
+A `sync` written before a block makes it a sync block: **the statements it writes directly** run in the order they are written, as if the compiler had added control edges between adjacent statements. [`examples/06_sync_block.cml`](examples/06_sync_block.cml) changes only the body of `greet` into a sync block:
 
 <!-- camel-snippet: compile-only: the fence is the changed function only; the text block is the output of examples/06_sync_block.cml -->
 
@@ -394,6 +394,17 @@ hello from greet
 ```
 
 In a sync block it does not matter what you call or whether it has side effects, because there is already an order. Input and output are written in sync blocks.
+
+**A sync block does not inherit inward.** It orders only the statements it writes directly: the branch arms, loop bodies and nested blocks written inside it follow their own spelling, and to synchronise one of them, write `sync` there ([design principles 3.4](../design-principles.en.md#34-sync-blocks)). This is the same rule as "a function's behaviour is decided by the function itself" in the next section, one level in:
+
+```cml
+func f(c: bool): int sync {
+    if c then { println(1); println(2) }   // the arm is not a sync block: only println(2) executes
+    return 0
+}
+```
+
+The `if` itself is on the sync chain, its arm is not: the arm is evaluated by dependency, the `println(1)` whose value nobody uses does not execute, and `println(2)` is the arm's value, which is the `if`'s value, so it executes. To print both, write `sync` on the arm: `if c then sync { println(1); println(2) }`.
 
 ### 6.3 A function's behaviour is decided by the function itself
 
