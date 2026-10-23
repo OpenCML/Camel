@@ -27,6 +27,7 @@
 #include <exception>
 #include <iomanip>
 #include <iostream>
+#include <map>
 
 namespace parsecheck {
 
@@ -141,7 +142,7 @@ int runFormatCheck(const std::vector<std::string> &files) {
                 ++comments;
             }
             const ParseOutcome again = parseText(path, original.formatted);
-            if (again.parsed()) {
+            if (again.syntaxOk) {
                 for (const std::string &comment : again.comments) {
                     ++got[comment];
                 }
