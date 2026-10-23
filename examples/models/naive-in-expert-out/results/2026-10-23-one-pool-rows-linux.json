@@ -1,0 +1,1897 @@
+{
+ "what": "one pool, variant B: the library GEMM's whole-work product split over the tensor pool by output rows, against the base build",
+ "when": "2026-10-23T04:05:00",
+ "host": {
+  "name": "tangshan88",
+  "cpu": "AMD EPYC 7343, 16 cores / 32 logical threads",
+  "note": "Shared host; load 1m over the curve window was 79-160, the step window 97-175. Absolute numbers carry the load; compare inside this window only."
+ },
+ "how": {
+  "plate": "test/cases/perf/gemm_threads_curve.cml, one process per invocation, `set_num_threads(t)` per point, 10 interleaved rounds of four build directories with the order rotated each round, one product per visit, `sum` inside the timed region; `tensor::fuse std::jit`. B measured 2026-10-23, same plate.",
+  "builds": {
+   "before-a": "/tmp/h303-m/before-a (92f18af9c, the base)",
+   "before-b": "/tmp/h303-m/before-b (the same install copied)",
+   "b-a": "/tmp/h303-m/b-a (this tree: rows split over the tensor pool, library one thread per chunk, pool seeded to 1)",
+   "b-b": "/tmp/h303-m/b-b (the same install copied)"
+  },
+  "null": "before-a against before-b and b-a against b-b: the distance between two copies of one build is the host's resolution floor for that cell.",
+  "pools": "strace -f -e trace=clone,clone3 for thread creations and ps -L / /proc/pid/status for live threads; /usr/bin/time -v for peak RSS.",
+  "step": "two copies of each build, three rounds, -t 16, d=256 and d=1024, median of four timed steps; loads 97-175."
+ },
+ "pools": {
+  "threads_before": {
+   "import_tensor_t1": 32,
+   "import_tensor_t16": 32,
+   "product_1024_library_t16": 32,
+   "product_1024_canonical_t16": 47,
+   "batched_4x1024_t16": 47,
+   "canonical_t1": 32
+  },
+  "threads_after": {
+   "import_tensor_t1": 1,
+   "import_tensor_t16": 1,
+   "product_1024_library_t16": 16,
+   "product_1024_canonical_t16": 16,
+   "batched_4x1024_t16": 16,
+   "canonical_t1": 1
+  },
+  "how": "The library's 31 workers are created in OpenBLAS's constructor at load and are alive until the process exits even at -t 1 (measured with ps -L during a 2 s spin after the product). The tensor pool's 15 workers are created on the first split and joined on resize or exit. With B the whole-work library product splits rows over that same pool, so it is the 16th thread and no other: strace counts 15 clones at -t 16, and the thread_pools case pins the live count at 16.",
+  "rss_kb_import_t1": {
+   "before": [
+    20992,
+    20992,
+    20480
+   ],
+   "b": [
+    20736,
+    20224,
+    20736
+   ]
+  },
+  "rss_kb_product_t1": {
+   "before": 35584,
+   "after": 34560
+  },
+  "user_set": "OPENBLAS_NUM_THREADS=8 at -t 1 leaves 8 live threads (7 library workers and the caller) during a 2 s spin after a product, measured with ps -L; the seed leaves a user value alone and openblas_set_num_threads(1) does not join the constructor pool. The GEMM still runs one thread per call, so those workers are idle. The single-pool promise is conditional on the variable being unset; the unset run has 1 live thread at -t 1.",
+  "rss_note": "The 31 threads cost about 1 MB, the touched page of each stack and bookkeeping, not the 8 MB each stack reserves: what they spend is cores. B creates the same tensor pool at -t 16 as any other split, so its product RSS adds nothing to the pool's."
+ },
+ "curve": {
+  "cells": [
+   {
+    "t": 1,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 44.177,
+    "b_median_ms": 43.776,
+    "before_a": 45.462,
+    "before_b": 43.711,
+    "b_a": 42.489,
+    "b_b": 45.293,
+    "null_pct": 6.4,
+    "effect_pct": -0.9,
+    "paired_ratio_median": 1.1188,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_b": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 24.714,
+    "b_median_ms": 27.192,
+    "before_a": 23.798,
+    "before_b": 24.783,
+    "b_a": 25.045,
+    "b_b": 29.286,
+    "null_pct": 15.6,
+    "effect_pct": 10.0,
+    "paired_ratio_median": 1.0559,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_b": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 23.033,
+    "b_median_ms": 20.062,
+    "before_a": 24.333,
+    "before_b": 21.825,
+    "b_a": 19.334,
+    "b_b": 20.595,
+    "null_pct": 10.9,
+    "effect_pct": -12.9,
+    "paired_ratio_median": 0.6875,
+    "resolvable": true,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_b": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 16.468,
+    "b_median_ms": 17.906,
+    "before_a": 15.216,
+    "before_b": 16.951,
+    "b_a": 16.291,
+    "b_b": 21.894,
+    "null_pct": 29.3,
+    "effect_pct": 8.7,
+    "paired_ratio_median": 1.0765,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_b": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 12.914,
+    "b_median_ms": 13.382,
+    "before_a": 10.45,
+    "before_b": 14.171,
+    "b_a": 13.313,
+    "b_b": 13.585,
+    "null_pct": 30.2,
+    "effect_pct": 3.6,
+    "paired_ratio_median": 1.316,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_b": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 10.969,
+    "b_median_ms": 11.387,
+    "before_a": 12.208,
+    "before_b": 9.528,
+    "b_a": 11.387,
+    "b_b": 10.991,
+    "null_pct": 24.7,
+    "effect_pct": 3.8,
+    "paired_ratio_median": 0.9488,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_b": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 47.711,
+    "b_median_ms": 48.449,
+    "before_a": 44.998,
+    "before_b": 47.711,
+    "b_a": 48.833,
+    "b_b": 46.158,
+    "null_pct": 5.9,
+    "effect_pct": 1.5,
+    "paired_ratio_median": 0.9925,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7403778284788"
+    ],
+    "checksum_b": [
+     "1073.7403778284788"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 41.876,
+    "b_median_ms": 24.278,
+    "before_a": 33.414,
+    "before_b": 44.38,
+    "b_a": 23.092,
+    "b_b": 25.591,
+    "null_pct": 28.2,
+    "effect_pct": -42.0,
+    "paired_ratio_median": 0.6986,
+    "resolvable": true,
+    "checksum_before": [
+     "1073.7403847575188"
+    ],
+    "checksum_b": [
+     "1073.7403782010078"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 33.074,
+    "b_median_ms": 18.528,
+    "before_a": 32.019,
+    "before_b": 34.116,
+    "b_a": 18.475,
+    "b_b": 18.952,
+    "null_pct": 6.3,
+    "effect_pct": -44.0,
+    "paired_ratio_median": 0.6592,
+    "resolvable": true,
+    "checksum_before": [
+     "1073.740383863449"
+    ],
+    "checksum_b": [
+     "1073.7403847575188"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 48.542,
+    "b_median_ms": 16.748,
+    "before_a": 43.887,
+    "before_b": 50.688,
+    "b_a": 15.786,
+    "b_b": 16.748,
+    "null_pct": 14.4,
+    "effect_pct": -65.5,
+    "paired_ratio_median": 0.3499,
+    "resolvable": true,
+    "checksum_before": [
+     "1073.740430355072"
+    ],
+    "checksum_b": [
+     "1073.740386247635"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 52.608,
+    "b_median_ms": 13.506,
+    "before_a": 53.078,
+    "before_b": 52.608,
+    "b_a": 14.074,
+    "b_b": 12.738,
+    "null_pct": 10.0,
+    "effect_pct": -74.3,
+    "paired_ratio_median": 0.3604,
+    "resolvable": true,
+    "checksum_before": [
+     "1073.7404232025146"
+    ],
+    "checksum_b": [
+     "1073.7404124736786"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 66.822,
+    "b_median_ms": 15.331,
+    "before_a": 66.822,
+    "before_b": 66.684,
+    "b_a": 16.774,
+    "b_b": 15.015,
+    "null_pct": 11.1,
+    "effect_pct": -77.1,
+    "paired_ratio_median": 0.2535,
+    "resolvable": true,
+    "checksum_before": [
+     "1073.740623474121"
+    ],
+    "checksum_b": [
+     "1073.740418434143"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 87.603,
+    "b_median_ms": 89.545,
+    "before_a": 88.183,
+    "before_b": 87.603,
+    "b_a": 89.545,
+    "b_b": 91.341,
+    "null_pct": 2.0,
+    "effect_pct": 2.2,
+    "paired_ratio_median": 0.9071,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_b": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 59.655,
+    "b_median_ms": 58.648,
+    "before_a": 48.646,
+    "before_b": 67.373,
+    "b_a": 65.208,
+    "b_b": 51.95,
+    "null_pct": 32.3,
+    "effect_pct": -1.7,
+    "paired_ratio_median": 1.0952,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_b": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 34.948,
+    "b_median_ms": 34.584,
+    "before_a": 35.427,
+    "before_b": 34.948,
+    "b_a": 34.584,
+    "b_b": 34.089,
+    "null_pct": 1.4,
+    "effect_pct": -1.0,
+    "paired_ratio_median": 0.9875,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_b": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 30.959,
+    "b_median_ms": 30.402,
+    "before_a": 31.996,
+    "before_b": 30.386,
+    "b_a": 28.001,
+    "b_b": 31.297,
+    "null_pct": 11.1,
+    "effect_pct": -1.8,
+    "paired_ratio_median": 0.8743,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_b": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 22.721,
+    "b_median_ms": 19.092,
+    "before_a": 22.485,
+    "before_b": 23.468,
+    "b_a": 17.768,
+    "b_b": 20.757,
+    "null_pct": 15.5,
+    "effect_pct": -16.0,
+    "paired_ratio_median": 0.7856,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_b": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 22.273,
+    "b_median_ms": 17.585,
+    "before_a": 22.126,
+    "before_b": 22.273,
+    "b_a": 16.806,
+    "b_b": 17.643,
+    "null_pct": 4.9,
+    "effect_pct": -21.0,
+    "paired_ratio_median": 0.665,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_b": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 83.442,
+    "b_median_ms": 82.126,
+    "before_a": 85.14,
+    "before_b": 79.65,
+    "b_a": 74.908,
+    "b_b": 82.34,
+    "null_pct": 9.5,
+    "effect_pct": -1.6,
+    "paired_ratio_median": 0.8538,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.480974137783"
+    ],
+    "checksum_b": [
+     "2147.480974137783"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 79.053,
+    "b_median_ms": 47.168,
+    "before_a": 72.948,
+    "before_b": 85.959,
+    "b_a": 47.953,
+    "b_b": 46.984,
+    "null_pct": 16.4,
+    "effect_pct": -40.3,
+    "paired_ratio_median": 0.5958,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.480979681015"
+    ],
+    "checksum_b": [
+     "2147.4809744358063"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 61.715,
+    "b_median_ms": 39.937,
+    "before_a": 48.844,
+    "before_b": 61.715,
+    "b_a": 36.592,
+    "b_b": 45.678,
+    "null_pct": 23.3,
+    "effect_pct": -35.3,
+    "paired_ratio_median": 0.9317,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.4809789657593"
+    ],
+    "checksum_b": [
+     "2147.480979681015"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 64.629,
+    "b_median_ms": 27.587,
+    "before_a": 73.165,
+    "before_b": 62.335,
+    "b_a": 27.805,
+    "b_b": 27.587,
+    "null_pct": 16.0,
+    "effect_pct": -57.3,
+    "paired_ratio_median": 0.3815,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.4810161590576"
+    ],
+    "checksum_b": [
+     "2147.480980873108"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 86.324,
+    "b_median_ms": 20.441,
+    "before_a": 69.464,
+    "before_b": 107.217,
+    "b_a": 20.243,
+    "b_b": 20.581,
+    "null_pct": 42.7,
+    "effect_pct": -76.3,
+    "paired_ratio_median": 0.2493,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.4810104370117"
+    ],
+    "checksum_b": [
+     "2147.481001853943"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 109.501,
+    "b_median_ms": 21.057,
+    "before_a": 92.727,
+    "before_b": 122.348,
+    "b_a": 19.77,
+    "b_b": 24.727,
+    "null_pct": 27.5,
+    "effect_pct": -80.8,
+    "paired_ratio_median": 0.2063,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.481170654297"
+    ],
+    "checksum_b": [
+     "2147.4810066223145"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 91.565,
+    "b_median_ms": 89.504,
+    "before_a": 91.565,
+    "before_b": 89.437,
+    "b_a": 93.526,
+    "b_b": 80.88,
+    "null_pct": 14.5,
+    "effect_pct": -2.3,
+    "paired_ratio_median": 0.9231,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_b": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 49.961,
+    "b_median_ms": 63.564,
+    "before_a": 46.009,
+    "before_b": 79.692,
+    "b_a": 51.573,
+    "b_b": 72.822,
+    "null_pct": 53.6,
+    "effect_pct": 27.2,
+    "paired_ratio_median": 1.1345,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_b": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 38.447,
+    "b_median_ms": 38.611,
+    "before_a": 36.331,
+    "before_b": 39.312,
+    "b_a": 38.611,
+    "b_b": 39.264,
+    "null_pct": 7.9,
+    "effect_pct": 0.4,
+    "paired_ratio_median": 0.8808,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_b": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 33.208,
+    "b_median_ms": 31.45,
+    "before_a": 32.612,
+    "before_b": 33.348,
+    "b_a": 30.901,
+    "b_b": 35.35,
+    "null_pct": 13.4,
+    "effect_pct": -5.3,
+    "paired_ratio_median": 1.1016,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_b": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 22.634,
+    "b_median_ms": 21.498,
+    "before_a": 21.197,
+    "before_b": 24.816,
+    "b_a": 18.623,
+    "b_b": 25.706,
+    "null_pct": 32.0,
+    "effect_pct": -5.0,
+    "paired_ratio_median": 1.1486,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_b": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 20.435,
+    "b_median_ms": 19.295,
+    "before_a": 17.908,
+    "before_b": 20.741,
+    "b_a": 17.768,
+    "b_b": 21.656,
+    "null_pct": 19.7,
+    "effect_pct": -5.6,
+    "paired_ratio_median": 0.9344,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_b": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 84.256,
+    "b_median_ms": 85.837,
+    "before_a": 88.625,
+    "before_b": 82.375,
+    "b_a": 87.338,
+    "b_b": 84.737,
+    "null_pct": 7.3,
+    "effect_pct": 1.9,
+    "paired_ratio_median": 1.0522,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.480752378702"
+    ],
+    "checksum_b": [
+     "2147.480752378702"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 61.81,
+    "b_median_ms": 56.431,
+    "before_a": 61.81,
+    "before_b": 64.069,
+    "b_a": 56.431,
+    "b_b": 52.64,
+    "null_pct": 7.0,
+    "effect_pct": -8.7,
+    "paired_ratio_median": 1.0254,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.480755209923"
+    ],
+    "checksum_b": [
+     "2147.4807556569576"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 46.165,
+    "b_median_ms": 39.401,
+    "before_a": 52.217,
+    "before_b": 43.46,
+    "b_a": 41.379,
+    "b_b": 37.916,
+    "null_pct": 18.3,
+    "effect_pct": -14.7,
+    "paired_ratio_median": 0.7721,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.4807695150375"
+    ],
+    "checksum_b": [
+     "2147.4807564020157"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 43.734,
+    "b_median_ms": 28.521,
+    "before_a": 55.109,
+    "before_b": 39.52,
+    "b_a": 28.521,
+    "b_b": 29.318,
+    "null_pct": 32.9,
+    "effect_pct": -34.8,
+    "paired_ratio_median": 0.7184,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.480793952942"
+    ],
+    "checksum_b": [
+     "2147.4807695150375"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 45.066,
+    "b_median_ms": 20.747,
+    "before_a": 44.163,
+    "before_b": 45.965,
+    "b_a": 19.621,
+    "b_b": 24.543,
+    "null_pct": 22.3,
+    "effect_pct": -54.0,
+    "paired_ratio_median": 0.5129,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.480932235718"
+    ],
+    "checksum_b": [
+     "2147.48077249527"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 60.575,
+    "b_median_ms": 20.721,
+    "before_a": 57.304,
+    "before_b": 64.614,
+    "b_a": 22.666,
+    "b_b": 19.291,
+    "null_pct": 16.1,
+    "effect_pct": -65.8,
+    "paired_ratio_median": 0.3359,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.480951309204"
+    ],
+    "checksum_b": [
+     "2147.480824947357"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 203.234,
+    "b_median_ms": 197.342,
+    "before_a": 203.029,
+    "before_b": 204.376,
+    "b_a": 197.342,
+    "b_b": 192.533,
+    "null_pct": 2.5,
+    "effect_pct": -2.9,
+    "paired_ratio_median": 0.9764,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 120.08,
+    "b_median_ms": 114.73,
+    "before_a": 121.36,
+    "before_b": 114.544,
+    "b_a": 128.726,
+    "b_b": 103.943,
+    "null_pct": 21.3,
+    "effect_pct": -4.5,
+    "paired_ratio_median": 0.9753,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 82.554,
+    "b_median_ms": 79.645,
+    "before_a": 90.61,
+    "before_b": 78.33,
+    "b_a": 70.744,
+    "b_b": 87.018,
+    "null_pct": 20.6,
+    "effect_pct": -3.5,
+    "paired_ratio_median": 1.0942,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 56.247,
+    "b_median_ms": 51.335,
+    "before_a": 52.517,
+    "before_b": 59.861,
+    "b_a": 49.393,
+    "b_b": 53.103,
+    "null_pct": 13.1,
+    "effect_pct": -8.7,
+    "paired_ratio_median": 0.858,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 48.366,
+    "b_median_ms": 35.641,
+    "before_a": 43.937,
+    "before_b": 56.094,
+    "b_a": 33.791,
+    "b_b": 39.314,
+    "null_pct": 24.3,
+    "effect_pct": -26.3,
+    "paired_ratio_median": 0.6905,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 42.824,
+    "b_median_ms": 30.717,
+    "before_a": 38.506,
+    "before_b": 44.649,
+    "b_a": 28.756,
+    "b_b": 31.537,
+    "null_pct": 14.8,
+    "effect_pct": -28.3,
+    "paired_ratio_median": 0.6343,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 186.834,
+    "b_median_ms": 175.774,
+    "before_a": 198.293,
+    "before_b": 179.412,
+    "b_a": 145.213,
+    "b_b": 203.166,
+    "null_pct": 33.3,
+    "effect_pct": -5.9,
+    "paired_ratio_median": 1.0553,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961493767798"
+    ],
+    "checksum_b": [
+     "4294.961493767798"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 116.778,
+    "b_median_ms": 121.682,
+    "before_a": 119.926,
+    "before_b": 111.31,
+    "b_a": 111.008,
+    "b_b": 125.39,
+    "null_pct": 12.2,
+    "effect_pct": 4.2,
+    "paired_ratio_median": 1.011,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961506843567"
+    ],
+    "checksum_b": [
+     "4294.961501814425"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 86.247,
+    "b_median_ms": 83.32,
+    "before_a": 91.262,
+    "before_b": 82.064,
+    "b_a": 80.838,
+    "b_b": 89.301,
+    "null_pct": 10.6,
+    "effect_pct": -3.4,
+    "paired_ratio_median": 0.9081,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961539030075"
+    ],
+    "checksum_b": [
+     "4294.961497455835"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 55.655,
+    "b_median_ms": 59.471,
+    "before_a": 51.809,
+    "before_b": 58.403,
+    "b_a": 59.844,
+    "b_b": 59.325,
+    "null_pct": 12.0,
+    "effect_pct": 6.9,
+    "paired_ratio_median": 1.1197,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.96151638031"
+    ],
+    "checksum_b": [
+     "4294.9615296423435"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 67.247,
+    "b_median_ms": 43.342,
+    "before_a": 66.2,
+    "before_b": 69.617,
+    "b_a": 42.09,
+    "b_b": 45.379,
+    "null_pct": 7.5,
+    "effect_pct": -35.5,
+    "paired_ratio_median": 0.7135,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.961721420288"
+    ],
+    "checksum_b": [
+     "4294.961512207985"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 87.194,
+    "b_median_ms": 41.463,
+    "before_a": 88.645,
+    "before_b": 82.871,
+    "b_a": 31.24,
+    "b_b": 46.165,
+    "null_pct": 38.6,
+    "effect_pct": -52.4,
+    "paired_ratio_median": 0.4551,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.961673736572"
+    ],
+    "checksum_b": [
+     "4294.961640954018"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 27.816,
+    "b_median_ms": 27.646,
+    "before_a": 27.816,
+    "before_b": 28.476,
+    "b_a": 26.515,
+    "b_b": 28.699,
+    "null_pct": 7.9,
+    "effect_pct": -0.6,
+    "paired_ratio_median": 1.0585,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 25.109,
+    "b_median_ms": 23.178,
+    "before_a": 26.405,
+    "before_b": 23.334,
+    "b_a": 24.287,
+    "b_b": 22.908,
+    "null_pct": 12.3,
+    "effect_pct": -7.7,
+    "paired_ratio_median": 0.9978,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 22.847,
+    "b_median_ms": 23.188,
+    "before_a": 22.61,
+    "before_b": 24.474,
+    "b_a": 23.141,
+    "b_b": 23.188,
+    "null_pct": 7.9,
+    "effect_pct": 1.5,
+    "paired_ratio_median": 0.9123,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 22.845,
+    "b_median_ms": 21.738,
+    "before_a": 22.449,
+    "before_b": 23.722,
+    "b_a": 22.626,
+    "b_b": 20.964,
+    "null_pct": 7.6,
+    "effect_pct": -4.8,
+    "paired_ratio_median": 1.0231,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 22.107,
+    "b_median_ms": 20.558,
+    "before_a": 19.964,
+    "before_b": 22.677,
+    "b_a": 20.558,
+    "b_b": 19.274,
+    "null_pct": 12.7,
+    "effect_pct": -7.0,
+    "paired_ratio_median": 0.7354,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 21.126,
+    "b_median_ms": 21.552,
+    "before_a": 20.341,
+    "before_b": 21.526,
+    "b_a": 21.571,
+    "b_b": 21.054,
+    "null_pct": 5.7,
+    "effect_pct": 2.0,
+    "paired_ratio_median": 0.9609,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 57.993,
+    "b_median_ms": 56.584,
+    "before_a": 64.318,
+    "before_b": 56.729,
+    "b_a": 56.584,
+    "b_b": 55.556,
+    "null_pct": 12.5,
+    "effect_pct": -2.4,
+    "paired_ratio_median": 0.9421,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 24.568,
+    "b_median_ms": 31.082,
+    "before_a": 27.294,
+    "before_b": 22.452,
+    "b_a": 35.394,
+    "b_b": 26.704,
+    "null_pct": 28.0,
+    "effect_pct": 26.5,
+    "paired_ratio_median": 1.3394,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 22.68,
+    "b_median_ms": 24.8,
+    "before_a": 23.798,
+    "before_b": 21.003,
+    "b_a": 24.541,
+    "b_b": 25.33,
+    "null_pct": 12.5,
+    "effect_pct": 9.3,
+    "paired_ratio_median": 0.9607,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 19.31,
+    "b_median_ms": 23.465,
+    "before_a": 19.499,
+    "before_b": 18.029,
+    "b_a": 24.799,
+    "b_b": 23.261,
+    "null_pct": 7.8,
+    "effect_pct": 21.5,
+    "paired_ratio_median": 1.2734,
+    "resolvable": true,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 23.502,
+    "b_median_ms": 21.951,
+    "before_a": 28.221,
+    "before_b": 21.746,
+    "b_a": 22.056,
+    "b_b": 19.815,
+    "null_pct": 25.9,
+    "effect_pct": -6.6,
+    "paired_ratio_median": 0.7479,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 21.756,
+    "b_median_ms": 22.328,
+    "before_a": 19.716,
+    "before_b": 24.471,
+    "b_a": 17.747,
+    "b_b": 25.826,
+    "null_pct": 37.1,
+    "effect_pct": 2.6,
+    "paired_ratio_median": 1.0013,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_b": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 175.53,
+    "b_median_ms": 184.292,
+    "before_a": 130.852,
+    "before_b": 178.135,
+    "b_a": 186.22,
+    "b_b": 184.292,
+    "null_pct": 30.6,
+    "effect_pct": 5.0,
+    "paired_ratio_median": 1.0438,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 113.703,
+    "b_median_ms": 132.984,
+    "before_a": 93.051,
+    "before_b": 128.463,
+    "b_a": 141.652,
+    "b_b": 104.896,
+    "null_pct": 32.0,
+    "effect_pct": 17.0,
+    "paired_ratio_median": 1.162,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 74.6,
+    "b_median_ms": 82.837,
+    "before_a": 74.93,
+    "before_b": 69.142,
+    "b_a": 84.806,
+    "b_b": 82.837,
+    "null_pct": 8.0,
+    "effect_pct": 11.0,
+    "paired_ratio_median": 1.0792,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 65.043,
+    "b_median_ms": 75.297,
+    "before_a": 62.738,
+    "before_b": 69.107,
+    "b_a": 75.487,
+    "b_b": 75.174,
+    "null_pct": 9.7,
+    "effect_pct": 15.8,
+    "paired_ratio_median": 1.1117,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 78.262,
+    "b_median_ms": 95.168,
+    "before_a": 75.286,
+    "before_b": 103.333,
+    "b_a": 87.328,
+    "b_b": 96.901,
+    "null_pct": 31.4,
+    "effect_pct": 21.6,
+    "paired_ratio_median": 1.1288,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 89.103,
+    "b_median_ms": 87.274,
+    "before_a": 85.25,
+    "before_b": 98.264,
+    "b_a": 103.275,
+    "b_b": 80.234,
+    "null_pct": 25.1,
+    "effect_pct": -2.1,
+    "paired_ratio_median": 1.0674,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_b": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 169.127,
+    "b_median_ms": 169.399,
+    "before_a": 158.922,
+    "before_b": 178.537,
+    "b_a": 153.011,
+    "b_b": 178.441,
+    "null_pct": 15.3,
+    "effect_pct": 0.2,
+    "paired_ratio_median": 1.0024,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_b": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 106.682,
+    "b_median_ms": 115.5,
+    "before_a": 99.757,
+    "before_b": 109.24,
+    "b_a": 108.733,
+    "b_b": 117.745,
+    "null_pct": 9.1,
+    "effect_pct": 8.3,
+    "paired_ratio_median": 1.0233,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_b": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 75.848,
+    "b_median_ms": 76.854,
+    "before_a": 69.339,
+    "before_b": 75.914,
+    "b_a": 72.313,
+    "b_b": 97.559,
+    "null_pct": 29.7,
+    "effect_pct": 1.3,
+    "paired_ratio_median": 1.1583,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_b": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 81.522,
+    "b_median_ms": 80.28,
+    "before_a": 79.193,
+    "before_b": 83.379,
+    "b_a": 78.688,
+    "b_b": 83.737,
+    "null_pct": 6.2,
+    "effect_pct": -1.5,
+    "paired_ratio_median": 1.026,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_b": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 80.636,
+    "b_median_ms": 81.162,
+    "before_a": 77.022,
+    "before_b": 96.117,
+    "b_a": 82.472,
+    "b_b": 76.551,
+    "null_pct": 22.1,
+    "effect_pct": 0.7,
+    "paired_ratio_median": 0.9719,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_b": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 78.397,
+    "b_median_ms": 76.422,
+    "before_a": 76.895,
+    "before_b": 79.746,
+    "b_a": 71.785,
+    "b_b": 82.005,
+    "null_pct": 13.3,
+    "effect_pct": -2.5,
+    "paired_ratio_median": 1.0317,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_b": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 1.952,
+    "b_median_ms": 2.409,
+    "before_a": 1.939,
+    "before_b": 2.264,
+    "b_a": 3.722,
+    "b_b": 1.766,
+    "null_pct": 71.3,
+    "effect_pct": 23.4,
+    "paired_ratio_median": 1.1407,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 1.232,
+    "b_median_ms": 1.632,
+    "before_a": 4.288,
+    "before_b": 0.915,
+    "b_a": 1.815,
+    "b_b": 1.559,
+    "null_pct": 129.6,
+    "effect_pct": 32.5,
+    "paired_ratio_median": 1.257,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 1.638,
+    "b_median_ms": 1.822,
+    "before_a": 1.638,
+    "before_b": 1.525,
+    "b_a": 1.621,
+    "b_b": 2.108,
+    "null_pct": 26.2,
+    "effect_pct": 11.2,
+    "paired_ratio_median": 0.7053,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 1.329,
+    "b_median_ms": 1.202,
+    "before_a": 1.514,
+    "before_b": 1.277,
+    "b_a": 1.202,
+    "b_b": 1.277,
+    "null_pct": 17.0,
+    "effect_pct": -9.6,
+    "paired_ratio_median": 0.8216,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 2.725,
+    "b_median_ms": 1.738,
+    "before_a": 2.028,
+    "before_b": 3.939,
+    "b_a": 1.523,
+    "b_b": 1.923,
+    "null_pct": 64.1,
+    "effect_pct": -36.2,
+    "paired_ratio_median": 0.6035,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 4.329,
+    "b_median_ms": 3.431,
+    "before_a": 4.344,
+    "before_b": 4.152,
+    "b_a": 3.316,
+    "b_b": 3.596,
+    "null_pct": 8.1,
+    "effect_pct": -20.7,
+    "paired_ratio_median": 1.0817,
+    "resolvable": true,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 1.692,
+    "b_median_ms": 2.438,
+    "before_a": 1.619,
+    "before_b": 1.777,
+    "b_a": 2.295,
+    "b_b": 2.717,
+    "null_pct": 16.9,
+    "effect_pct": 44.1,
+    "paired_ratio_median": 2.1336,
+    "resolvable": true,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 1.325,
+    "b_median_ms": 1.828,
+    "before_a": 2.586,
+    "before_b": 1.061,
+    "b_a": 2.094,
+    "b_b": 1.672,
+    "null_pct": 83.7,
+    "effect_pct": 37.9,
+    "paired_ratio_median": 1.2364,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 2.062,
+    "b_median_ms": 1.783,
+    "before_a": 1.926,
+    "before_b": 2.488,
+    "b_a": 1.844,
+    "b_b": 1.756,
+    "null_pct": 25.4,
+    "effect_pct": -13.5,
+    "paired_ratio_median": 0.7931,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 2.227,
+    "b_median_ms": 2.092,
+    "before_a": 3.383,
+    "before_b": 1.916,
+    "b_a": 2.596,
+    "b_b": 1.739,
+    "null_pct": 55.4,
+    "effect_pct": -6.1,
+    "paired_ratio_median": 1.1791,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 3.71,
+    "b_median_ms": 4.218,
+    "before_a": 3.824,
+    "before_b": 3.71,
+    "b_a": 5.47,
+    "b_b": 3.988,
+    "null_pct": 31.3,
+    "effect_pct": 13.7,
+    "paired_ratio_median": 1.3298,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 4.411,
+    "b_median_ms": 4.002,
+    "before_a": 1.898,
+    "before_b": 5.739,
+    "b_a": 3.596,
+    "b_b": 4.076,
+    "null_pct": 100.6,
+    "effect_pct": -9.3,
+    "paired_ratio_median": 0.8162,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_b": [
+     "67.10867309570312"
+    ]
+   }
+  ]
+ },
+ "reading": {
+  "problem": "Two pools in one process: the tensor pool spends -t, and OpenBLAS's pool was created in a constructor at load (31 workers here) and given the run's width per call. On a loaded host the second pool spins between calls and competes.",
+  "change": "The library runs one thread per call and the tensor pool keeps -t. A whole-work product splits its output rows over the pool, one library call per chunk; K is never split, so every output element's sum stays inside one call. The pool is seeded to 1 for OPENBLAS_NUM_THREADS/MKL_NUM_THREADS when the user has not set them, so the constructor cannot create the second pool at all.",
+  "curve_says": "The cells A lost are recovered: 2048x1024x1024 library -34.8% at t=8 and -54.0% at t=16 (null 32.9% and 22.3%), 2048x1024x2048 -35.5% at t=16 (null 7.5%) and -52.4% at t=32, 1024x2048x1024 -35% to -81% from t=2 up, 1024^3 -44% to -77% from t=4 up. At t=1 nothing changes (+1.5% at 1024^3, within the null): one chunk is the old one call. The batched cells do not change (the batch loop already spread them): 4x1024^3 library within 3% at every t. The canonical kernel is the same code in both builds; its reads (2048x1024x2048 -26%/-28% at t=16/32, 4x1024^3 +11%/+16% at t=4/8) are the seed removing 31 idle library threads on some cells and the host on others, not a kernel change.",
+  "step_says": "d=1024: library 5,076 -> 2,969 ms (-41.5%, null 15.5%) - read; the before copies span 4.6-8.8 s, B 2.0-2.7 s. Canonical is the same kernel in both builds and moves +2.4% (null 0.6%); at d=256 canonical reads -28.0% (null 20.6%) while its library arm (below the 2^30 threshold, so canonical too) reads -2.0% (null 31.2%). Two opposite reads on unchanged code say the step null understates this host window; the arm the change touches is the d=1024 library one, and it reads with the change's size.",
+  "threads": "strace: 0 clones for an import at -t 1, 15 for a -t 16 library product (the tensor pool, caller included 16); thread_pools.cml pins 1/4/8/16. The seed is conditional: a user-set OPENBLAS_NUM_THREADS=8 leaves 8 live threads at -t 1, and the GEMM still runs one thread per call.",
+  "licence": "Row blocks only, never K. Canonical: all 42 cells carry the same checksum as the base. Library: 22 of 42 cells equal A's one-call bits; the other 20 differ by at most 3.8e-8 relative (a few 1-ulp elements in a 1M-element f32 tensor), and the library's result again depends on -t (6 checksums per shape, as the base did), because OpenBLAS's own grouping depends on the call's M. The library path already runs under the default reassociation licence; #strict/safe_fp withhold it; the seed touches no sum. The expectation that a row split would be bit-identical to one call is false for this library, and the JSON records it.",
+  "next": "If fixed library bits across -t are required, the row split is not the design: the options are A (one thread, fixed bits, 1.6-2.9x slower on wide products) or a canonical path. If one pool and the library's parallelism both are, B is the one that has them, and the licence covers its regrouping."
+ },
+ "step": {
+  "cell": "examples/models/naive-in-expert-out train_step, batch 32 x sequence 64, d=256 and d=1024, 5 steps (1 warmup), -t 16, `tensor::fuse` (library) vs no pass (canonical)",
+  "how": "two copies of each build, three rounds, -t 16, d=256 and d=1024, median of four timed steps; loads 97-175.",
+  "variants": {
+   "d=256": {
+    "canonical": {
+     "before_a": 314,
+     "before_b": 323,
+     "b_a": 206,
+     "b_b": 253,
+     "before_median": 319,
+     "b_median": 229,
+     "change_pct": -28.0,
+     "null_pct": 20.6,
+     "resolvable": true
+    },
+    "library": {
+     "before_a": 289,
+     "before_b": 360,
+     "b_a": 336,
+     "b_b": 245,
+     "before_median": 308,
+     "b_median": 302,
+     "change_pct": -2.0,
+     "null_pct": 31.2,
+     "resolvable": false
+    }
+   },
+   "d=1024": {
+    "canonical": {
+     "before_a": 3383,
+     "before_b": 3405,
+     "b_a": 3479,
+     "b_b": 3473,
+     "before_median": 3394,
+     "b_median": 3476,
+     "change_pct": 2.4,
+     "null_pct": 0.6,
+     "resolvable": true
+    },
+    "library": {
+     "before_a": 4825,
+     "before_b": 5371,
+     "b_a": 2739,
+     "b_b": 3200,
+     "before_median": 5076,
+     "b_median": 2969,
+     "change_pct": -41.5,
+     "null_pct": 15.5,
+     "resolvable": true
+    }
+   }
+  },
+  "reading": "d=1024: library 5,076 -> 2,969 ms (-41.5%, null 15.5%) - read; the before copies span 4.6-8.8 s, B 2.0-2.7 s. Canonical is the same kernel in both builds and moves +2.4% (null 0.6%); at d=256 canonical reads -28.0% (null 20.6%) while its library arm (below the 2^30 threshold, so canonical too) reads -2.0% (null 31.2%). Two opposite reads on unchanged code say the step null understates this host window; the arm the change touches is the d=1024 library one, and it reads with the change's size."
+ },
+ "licence": {
+  "library_same_as_a": 22,
+  "library_differ": 20,
+  "canonical_same_as_base": 42,
+  "canonical_differ": 0,
+  "note": "Row blocks only, K is never split, so each output element's sum is inside one library call. Canonical: 42/42 cells identical to the base. Library: 22/42 equal A's one-call bits; 20/42 differ by at most 3.8e-8 relative and the result again depends on -t (6 checksums per shape), because OpenBLAS's own grouping depends on the call's M. The library path runs under the default reassociation licence, which covers this regrouping; #strict/safe_fp withhold the library."
+ }
+}

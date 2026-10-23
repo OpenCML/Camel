@@ -4,6 +4,7 @@
 #pragma once
 
 #include "camel/utils/dll_path.h"
+#include "camel/utils/env.h"
 
 #include <atomic>
 #include <cstdio>
@@ -46,6 +47,22 @@ inline void initialize() {
     static std::once_flag once;
     std::call_once(once, []() {
         useBinaryStandardOutput();
+        // A linked BLAS creates its worker pool in a constructor, at the machine's thread count,
+        // when the module that links it is loaded. The tensor module sets the count through the
+        // library's API, but that runs after the constructor: the pool is already there, alive and
+        // unused, and even `-t 1` still has it. Seed the count before anything can be loaded, so
+        // the library starts with one thread and the tensor pool is the process's only pool
+        // (H303; without this, 31 threads on a 32-thread host, on the canonical path too).
+        //
+        // A value the user set is left alone. Setting either variable re-introduces the second
+        // pool, so the single-pool promise is conditional on them being unset; a value above one
+        // is not honoured by the GEMM path either, which runs the library one thread per call
+        // (docs/technical/25_tensor_stack_and_onnx_export.md).
+        for (const char *name : {"OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"}) {
+            if (getEnv(name).empty()) {
+                setEnv(name, "1");
+            }
+        }
         camel::utils::setupLibrarySearchPathForHost();
         auto installRoot = camel::utils::resolveInstallRoot();
         namespace fs     = std::filesystem;

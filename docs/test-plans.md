@@ -444,6 +444,13 @@ path nothing); it runs with the default test set (`test/plans/feat/consistency/r
   `span` and `srcfile` (the span fields in `jgir`), and `origin=<ORIGIN>` still asserts that a node
   has an origin. Use it on a `text_exact` snapshot that prints origins; a `gir_dot_isomorphic`
   comparison already ignores them.
+  A *profile* golden pins a source position too: `test/cases/modules/tensor/fusion_group_none.profile.golden.json`
+  records an `origin` that is a position in the concatenated module source, not a compiler id.
+  Adding a declaration to `stdlib/tensor.cml` moved it (604 -> 615) and reddened
+  `fusion_group.profile.none` with no change to the report. Regenerate that golden from the current
+  build (the case's `none` mode prints the failing check; write the two goldens from
+  `normalize_doc` / `normalize_text`), do not hand-edit the number, and do not loosen the case: a
+  profile row's position is not a count and moves whenever an imported declaration does.
 - `normalize_duration_seconds`
 
 `test/tools/normalizers.mjs` holds the one definition of these; the plan runner and

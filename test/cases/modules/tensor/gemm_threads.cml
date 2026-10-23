@@ -1,42 +1,49 @@
 /**
- * The thread count a matrix multiplication actually used is the run's budget, not a private cap.
+ * The thread counts a matrix multiplication actually used: the pool that split it, and the
+ * library threads each of its calls got.
  *
  * `-t` names one number of threads for the run (or the hardware concurrency without it), and the
- * GEMM spends that number: a product that is the whole work takes all of it, and a product inside
- * a batch region takes one thread per call, because the batch loop already spreads the budget over
- * the pool. `gemm_threads()` reports the number the GEMM path had for its most recent call, so this
- * program checks the two cases against the number `-t` gave: `expected` (0 means "the run gave
- * none", and the hardware concurrency is the budget).
+ * tensor pool spends it. The library's own pool is one thread (H303): a whole-work product splits
+ * its output rows over the tensor pool, one library call per chunk, so `plain` is the run's
+ * number; a product inside a batch region takes one library thread per call because the batch
+ * loop already spreads the budget over the pool. `gemm_library_threads()` reports 1 while a
+ * library call is what ran, and 0 on a build without a CBLAS, where the library path forwards to
+ * the canonical kernel.
  *
  * The batched product is four 1024x1024 matrices: each call is at the 2^30 shape threshold, so a
  * CBLAS build would run the library four times over — once per chunk — if each call also took the
  * whole budget. Without a library both products run the canonical kernel, which splits over the
- * same pool and runs serially inside a region, so the two lines hold in either build.
+ * same pool and runs serially inside a region.
  *
- * Exit 1 is a pool that does not report the run's number, 2 a product that did not get the whole
- * budget, 3 a batched product whose calls took more than one thread.
+ * Exit 1 is a pool that does not report the run's number, 2 a whole-work product whose library
+ * calls did not all get one thread, 3 a batched product whose calls took more than one thread.
  */
 module gemm_threads
 
-import { Tensor, gemm_threads, num_threads, sum, zeros } from tensor
+import { Tensor, gemm_library, gemm_library_threads, gemm_threads, num_threads, sum, zeros } from tensor
 import { cpu_count } from process
 
 func main(expected: int): int sync {
     let want = if expected > 0 then expected else cpu_count()
+    // The library path exists only with a CBLAS: without one, `sgemmLibrary` is `sgemm`.
+    let library = gemm_library() == "cblas"
+    let library_want = if library then 1 else 0
 
-    // One product that is the whole work: the library takes the run's budget.
+    // One product that is the whole work: its rows split over the pool, one library thread each.
     let a = zeros([1024, 1024]) + 0.001
     let b = zeros([1024, 1024]) + 0.001
     let plain = sum(a @ b)
     let plain_threads = gemm_threads()
+    let plain_library_threads = gemm_library_threads()
 
     // Four large products: the batch loop spends the budget, one thread per call.
     let batch_a = zeros([4, 1024, 1024]) + 0.001
     let batch_b = zeros([4, 1024, 1024]) + 0.001
     let batched = sum(batch_a @ batch_b)
     let batch_threads = gemm_threads()
+    let batch_library_threads = gemm_library_threads()
 
-    'gemm_threads pool={} plain={} batched={} expected={}'->format<
-        num_threads(), plain_threads, batch_threads, want>->println
-    return if num_threads() != want then 1 else if plain_threads != want then 2 else if batch_threads != 1 then 3 else 0
+    'gemm_threads pool={} plain={} plain_lib={} batched={} batched_lib={} expected={} library={}'->format<
+        num_threads(), plain_threads, plain_library_threads, batch_threads, batch_library_threads, want, gemm_library()>->println
+    return if num_threads() != want then 1 else if plain_threads != want then 2 else if plain_library_threads != library_want then 3 else if batch_threads != 1 then 4 else if batch_library_threads != library_want then 5 else 0
 }

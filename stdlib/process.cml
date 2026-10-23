@@ -8,13 +8,13 @@
 
 // The declarations of the operators of the C++ module `modules/process` (design principles 6.4;
 // handover H19, step 10; H163). This file is the one source of their signatures; the C++ side
-// keeps the kernels, the executor, the purity and the resources: `sleep` waits on the clock, and
-// `whoami` and `cpu_count` read the environment (design principles 3.3). `exit` is the built-in
-// operator of `src/builtin/modules/globals.cpp`, not a group of this module, so it is not
-// declared here.
+// keeps the kernels, the executor, the purity and the resources: `sleep` waits on the clock,
+// `whoami` and `cpu_count` read the environment, and `thread_count` reads the process (design
+// principles 3.3). `exit` is the built-in operator of `src/builtin/modules/globals.cpp`, not a
+// group of this module, so it is not declared here.
 //
 // No signature of this module is computed from an argument: `sleep` answers nothing and the other
-// two answer `string` and `int` whatever the values are. `modules/process` therefore exports no
+// three answer `string` and `int` whatever the values are. `modules/process` therefore exports no
 // operator group of its own, and the module needs no `stdlib/signatures/process.cml`.
 
 module process
@@ -35,3 +35,10 @@ export func whoami(): string
 /// @effect reads the machine
 /// @example cpu_count()    // 8
 export func cpu_count(): int
+
+/// The number of threads this process has, the caller included: the count the operating system
+/// reports for the process, not the number of processors. A test reads it to pin how many worker
+/// threads a run creates.
+/// @effect reads the process
+/// @example thread_count()    // 1 at -t 1
+export func thread_count(): int

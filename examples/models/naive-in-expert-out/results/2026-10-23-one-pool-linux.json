@@ -1,0 +1,1864 @@
+{
+ "what": "h303: one pool -- the library GEMM at one thread, against the base build",
+ "when": "2026-10-23T03:27:42",
+ "host": {
+  "name": "tangshan88",
+  "cpu": "AMD EPYC 7343, 16 cores / 32 logical threads",
+  "note": "Shared host; load 1m over the measurement window was 69-109. Absolute numbers carry the load; compare inside this window only."
+ },
+ "how": {
+  "plate": "test/cases/perf/gemm_threads_curve.cml, one process per invocation, `set_num_threads(t)` per point, 10 interleaved rounds of four build directories with the order rotated each round, one product per visit, `sum` inside the timed region; `tensor::fuse std::jit`.",
+  "builds": {
+   "before-a": "/tmp/h303-m/before-a (92f18af9c, the base)",
+   "before-b": "/tmp/h303-m/before-b (the same install copied)",
+   "after-a": "/tmp/h303-m/after-a (this tree: library one thread, pool seeded to 1)",
+   "after-b": "/tmp/h303-m/after-b (the same install copied)"
+  },
+  "null": "before-a against before-b and after-a against after-b: the distance between two copies of one build is the host's resolution floor for that cell.",
+  "pools": "strace -f -e trace=clone,clone3 for thread creations and ps -L / /proc/pid/status for live threads; /usr/bin/time -v for peak RSS.",
+  "step": "two copies of each build, one round, median of the four timed steps; loads 129-180. A second round was started and stopped when the load passed 160: the null was already wider than the change."
+ },
+ "pools": {
+  "threads_before": {
+   "import_tensor_t1": 32,
+   "import_tensor_t16": 32,
+   "product_1024_library_t16": 32,
+   "product_1024_canonical_t16": 47,
+   "batched_4x1024_t16": 47,
+   "canonical_t1": 32
+  },
+  "threads_after": {
+   "import_tensor_t1": 1,
+   "import_tensor_t16": 1,
+   "product_1024_library_t16": 1,
+   "product_1024_canonical_t16": 16,
+   "batched_4x1024_t16": 16,
+   "canonical_t1": 1
+  },
+  "how": "The library's 31 workers are created in OpenBLAS's constructor at load and are alive until the process exits even at -t 1 (measured with ps -L during a 2 s spin after the product). The tensor pool's 15 workers are created on the first split and joined on resize or exit. After: no library workers at all; the tensor pool's workers are the only others.",
+  "rss_kb_import_t1": {
+   "before": [
+    20992,
+    20992,
+    20480
+   ],
+   "after": [
+    20224,
+    19968,
+    20224
+   ]
+  },
+  "rss_kb_product_t1": {
+   "before": 35584,
+   "after": 34560
+  },
+  "user_set": "OPENBLAS_NUM_THREADS=8 at -t 1 leaves 8 live threads (7 library workers and the caller) during a 2 s spin after a product, measured with ps -L; the seed leaves a user value alone and openblas_set_num_threads(1) does not join the constructor pool. The GEMM still runs one thread per call, so those workers are idle. The single-pool promise is conditional on the variable being unset; the unset run has 1 live thread at -t 1."
+ },
+ "curve": {
+  "cells": [
+   {
+    "t": 1,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 40.819,
+    "after_median_ms": 39.316,
+    "before_a": 44.149,
+    "before_b": 37.488,
+    "after_a": 34.476,
+    "after_b": 44.156,
+    "null_pct": 28.1,
+    "effect_pct": 3.8,
+    "paired_ratio_median": 1.0033,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_after": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 44.189,
+    "after_median_ms": 47.158,
+    "before_a": 47.561,
+    "before_b": 40.816,
+    "after_a": 46.845,
+    "after_b": 47.471,
+    "null_pct": 16.5,
+    "effect_pct": 6.7,
+    "paired_ratio_median": 0.9675,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7403778284788"
+    ],
+    "checksum_after": [
+     "1073.7403778284788"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 66.107,
+    "after_median_ms": 80.882,
+    "before_a": 85.763,
+    "before_b": 46.45,
+    "after_a": 64.893,
+    "after_b": 96.872,
+    "null_pct": 84.6,
+    "effect_pct": 22.4,
+    "paired_ratio_median": 1.1159,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_after": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 54.704,
+    "after_median_ms": 74.99,
+    "before_a": 65.346,
+    "before_b": 44.062,
+    "after_a": 63.023,
+    "after_b": 86.956,
+    "null_pct": 48.3,
+    "effect_pct": 37.1,
+    "paired_ratio_median": 1.2311,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.480974137783"
+    ],
+    "checksum_after": [
+     "2147.480974137783"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 75.649,
+    "after_median_ms": 89.847,
+    "before_a": 92.256,
+    "before_b": 59.042,
+    "after_a": 84.898,
+    "after_b": 94.797,
+    "null_pct": 56.3,
+    "effect_pct": 18.8,
+    "paired_ratio_median": 1.0627,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_after": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 72.394,
+    "after_median_ms": 69.04,
+    "before_a": 92.959,
+    "before_b": 51.83,
+    "after_a": 50.551,
+    "after_b": 87.528,
+    "null_pct": 79.4,
+    "effect_pct": 4.9,
+    "paired_ratio_median": 0.8621,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.480752378702"
+    ],
+    "checksum_after": [
+     "2147.480752378702"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 155.142,
+    "after_median_ms": 201.442,
+    "before_a": 195.857,
+    "before_b": 114.427,
+    "after_a": 201.319,
+    "after_b": 201.566,
+    "null_pct": 71.2,
+    "effect_pct": 29.8,
+    "paired_ratio_median": 1.1065,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 168.505,
+    "after_median_ms": 166.719,
+    "before_a": 215.167,
+    "before_b": 121.844,
+    "after_a": 143.494,
+    "after_b": 189.944,
+    "null_pct": 76.6,
+    "effect_pct": 1.1,
+    "paired_ratio_median": 0.8887,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961493767798"
+    ],
+    "checksum_after": [
+     "4294.961493767798"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 17.653,
+    "after_median_ms": 24.437,
+    "before_a": 18.747,
+    "before_b": 16.559,
+    "after_a": 22.32,
+    "after_b": 26.554,
+    "null_pct": 19.0,
+    "effect_pct": 38.4,
+    "paired_ratio_median": 1.073,
+    "resolvable": true,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 39.648,
+    "after_median_ms": 46.422,
+    "before_a": 41.793,
+    "before_b": 37.502,
+    "after_a": 37.658,
+    "after_b": 55.185,
+    "null_pct": 46.5,
+    "effect_pct": 17.1,
+    "paired_ratio_median": 1.1138,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 138.338,
+    "after_median_ms": 148.427,
+    "before_a": 173.999,
+    "before_b": 102.677,
+    "after_a": 118.874,
+    "after_b": 177.98,
+    "null_pct": 69.5,
+    "effect_pct": 7.3,
+    "paired_ratio_median": 0.9376,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 146.525,
+    "after_median_ms": 172.522,
+    "before_a": 169.634,
+    "before_b": 123.417,
+    "after_a": 175.786,
+    "after_b": 169.258,
+    "null_pct": 37.4,
+    "effect_pct": 17.7,
+    "paired_ratio_median": 1.2187,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_after": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 1.615,
+    "after_median_ms": 1.587,
+    "before_a": 1.561,
+    "before_b": 1.668,
+    "after_a": 1.62,
+    "after_b": 1.555,
+    "null_pct": 6.9,
+    "effect_pct": 1.7,
+    "paired_ratio_median": 0.9391,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 1,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 1.607,
+    "after_median_ms": 3.111,
+    "before_a": 1.588,
+    "before_b": 1.627,
+    "after_a": 1.858,
+    "after_b": 4.363,
+    "null_pct": 134.8,
+    "effect_pct": 93.5,
+    "paired_ratio_median": 1.3391,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 31.501,
+    "after_median_ms": 25.968,
+    "before_a": 26.684,
+    "before_b": 36.317,
+    "after_a": 25.067,
+    "after_b": 26.87,
+    "null_pct": 36.1,
+    "effect_pct": 21.3,
+    "paired_ratio_median": 0.8494,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_after": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 39.023,
+    "after_median_ms": 32.922,
+    "before_a": 39.674,
+    "before_b": 38.372,
+    "after_a": 22.667,
+    "after_b": 43.178,
+    "null_pct": 90.5,
+    "effect_pct": 18.5,
+    "paired_ratio_median": 0.8865,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7403847575188"
+    ],
+    "checksum_after": [
+     "1073.7403778284788"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 53.718,
+    "after_median_ms": 60.616,
+    "before_a": 50.482,
+    "before_b": 56.955,
+    "after_a": 68.778,
+    "after_b": 52.453,
+    "null_pct": 31.1,
+    "effect_pct": 12.8,
+    "paired_ratio_median": 1.0995,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_after": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 62.663,
+    "after_median_ms": 77.176,
+    "before_a": 55.004,
+    "before_b": 70.322,
+    "after_a": 73.388,
+    "after_b": 80.964,
+    "null_pct": 27.8,
+    "effect_pct": 23.2,
+    "paired_ratio_median": 1.2004,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.480979681015"
+    ],
+    "checksum_after": [
+     "2147.480974137783"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 63.015,
+    "after_median_ms": 47.233,
+    "before_a": 67.064,
+    "before_b": 58.967,
+    "after_a": 35.995,
+    "after_b": 58.47,
+    "null_pct": 62.4,
+    "effect_pct": 33.4,
+    "paired_ratio_median": 0.7194,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_after": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 59.213,
+    "after_median_ms": 71.626,
+    "before_a": 52.081,
+    "before_b": 66.345,
+    "after_a": 54.013,
+    "after_b": 89.24,
+    "null_pct": 65.2,
+    "effect_pct": 21.0,
+    "paired_ratio_median": 1.1912,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.480755209923"
+    ],
+    "checksum_after": [
+     "2147.480752378702"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 111.738,
+    "after_median_ms": 113.436,
+    "before_a": 99.683,
+    "before_b": 123.792,
+    "after_a": 99.257,
+    "after_b": 127.614,
+    "null_pct": 28.6,
+    "effect_pct": 1.5,
+    "paired_ratio_median": 1.0176,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 114.179,
+    "after_median_ms": 169.466,
+    "before_a": 115.509,
+    "before_b": 112.849,
+    "after_a": 163.964,
+    "after_b": 174.968,
+    "null_pct": 6.7,
+    "effect_pct": 48.4,
+    "paired_ratio_median": 1.4873,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.961506843567"
+    ],
+    "checksum_after": [
+     "4294.961493767798"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 23.3,
+    "after_median_ms": 20.194,
+    "before_a": 20.122,
+    "before_b": 26.478,
+    "after_a": 17.509,
+    "after_b": 22.879,
+    "null_pct": 31.6,
+    "effect_pct": 15.4,
+    "paired_ratio_median": 0.9574,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 22.197,
+    "after_median_ms": 38.447,
+    "before_a": 22.107,
+    "before_b": 22.288,
+    "after_a": 30.058,
+    "after_b": 46.836,
+    "null_pct": 55.8,
+    "effect_pct": 73.2,
+    "paired_ratio_median": 1.5641,
+    "resolvable": true,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 107.423,
+    "after_median_ms": 108.235,
+    "before_a": 105.371,
+    "before_b": 109.476,
+    "after_a": 114.905,
+    "after_b": 101.565,
+    "null_pct": 13.1,
+    "effect_pct": 0.8,
+    "paired_ratio_median": 0.8721,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 109.747,
+    "after_median_ms": 106.075,
+    "before_a": 109.51,
+    "before_b": 109.984,
+    "after_a": 102.925,
+    "after_b": 109.224,
+    "null_pct": 6.1,
+    "effect_pct": 3.5,
+    "paired_ratio_median": 0.9937,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_after": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 1.578,
+    "after_median_ms": 1.833,
+    "before_a": 1.533,
+    "before_b": 1.623,
+    "after_a": 1.632,
+    "after_b": 2.035,
+    "null_pct": 24.7,
+    "effect_pct": 16.2,
+    "paired_ratio_median": 1.4508,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 2,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 1.97,
+    "after_median_ms": 1.458,
+    "before_a": 2.112,
+    "before_b": 1.828,
+    "after_a": 1.192,
+    "after_b": 1.724,
+    "null_pct": 44.6,
+    "effect_pct": 35.1,
+    "paired_ratio_median": 0.685,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 20.228,
+    "after_median_ms": 17.081,
+    "before_a": 17.919,
+    "before_b": 22.537,
+    "after_a": 16.941,
+    "after_b": 17.221,
+    "null_pct": 25.8,
+    "effect_pct": 18.4,
+    "paired_ratio_median": 0.8834,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_after": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 39.816,
+    "after_median_ms": 43.238,
+    "before_a": 37.37,
+    "before_b": 42.261,
+    "after_a": 39.642,
+    "after_b": 46.834,
+    "null_pct": 18.1,
+    "effect_pct": 8.6,
+    "paired_ratio_median": 0.9741,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.740383863449"
+    ],
+    "checksum_after": [
+     "1073.7403778284788"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 32.751,
+    "after_median_ms": 33.962,
+    "before_a": 34.6,
+    "before_b": 30.901,
+    "after_a": 37.203,
+    "after_b": 30.721,
+    "null_pct": 21.1,
+    "effect_pct": 3.7,
+    "paired_ratio_median": 1.0294,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_after": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 51.864,
+    "after_median_ms": 83.151,
+    "before_a": 51.383,
+    "before_b": 52.345,
+    "after_a": 82.428,
+    "after_b": 83.875,
+    "null_pct": 1.9,
+    "effect_pct": 60.3,
+    "paired_ratio_median": 1.7003,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.4809789657593"
+    ],
+    "checksum_after": [
+     "2147.480974137783"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 44.691,
+    "after_median_ms": 31.537,
+    "before_a": 44.629,
+    "before_b": 44.753,
+    "after_a": 32.931,
+    "after_b": 30.143,
+    "null_pct": 9.2,
+    "effect_pct": 41.7,
+    "paired_ratio_median": 0.7522,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_after": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 53.518,
+    "after_median_ms": 86.454,
+    "before_a": 50.771,
+    "before_b": 56.265,
+    "after_a": 83.282,
+    "after_b": 89.627,
+    "null_pct": 10.8,
+    "effect_pct": 61.5,
+    "paired_ratio_median": 1.5726,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.4807695150375"
+    ],
+    "checksum_after": [
+     "2147.480752378702"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 66.722,
+    "after_median_ms": 68.034,
+    "before_a": 68.253,
+    "before_b": 65.191,
+    "after_a": 75.892,
+    "after_b": 60.175,
+    "null_pct": 26.1,
+    "effect_pct": 2.0,
+    "paired_ratio_median": 0.9808,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 85.918,
+    "after_median_ms": 165.653,
+    "before_a": 79.992,
+    "before_b": 91.843,
+    "after_a": 126.539,
+    "after_b": 204.767,
+    "null_pct": 61.8,
+    "effect_pct": 92.8,
+    "paired_ratio_median": 1.8658,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.961539030075"
+    ],
+    "checksum_after": [
+     "4294.961493767798"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 20.648,
+    "after_median_ms": 22.424,
+    "before_a": 18.988,
+    "before_b": 22.308,
+    "after_a": 22.978,
+    "after_b": 21.87,
+    "null_pct": 17.5,
+    "effect_pct": 8.6,
+    "paired_ratio_median": 1.0399,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 20.674,
+    "after_median_ms": 22.175,
+    "before_a": 19.844,
+    "before_b": 21.503,
+    "after_a": 22.939,
+    "after_b": 21.412,
+    "null_pct": 8.4,
+    "effect_pct": 7.3,
+    "paired_ratio_median": 1.1462,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 70.52,
+    "after_median_ms": 58.451,
+    "before_a": 72.607,
+    "before_b": 68.434,
+    "after_a": 59.7,
+    "after_b": 57.201,
+    "null_pct": 6.1,
+    "effect_pct": 20.6,
+    "paired_ratio_median": 0.7548,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 70.451,
+    "after_median_ms": 65.764,
+    "before_a": 73.159,
+    "before_b": 67.742,
+    "after_a": 71.09,
+    "after_b": 60.438,
+    "null_pct": 17.6,
+    "effect_pct": 7.1,
+    "paired_ratio_median": 0.8993,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_after": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 1.524,
+    "after_median_ms": 1.281,
+    "before_a": 1.863,
+    "before_b": 1.186,
+    "after_a": 1.292,
+    "after_b": 1.27,
+    "null_pct": 57.1,
+    "effect_pct": 19.0,
+    "paired_ratio_median": 0.8109,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 4,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 1.005,
+    "after_median_ms": 2.276,
+    "before_a": 0.972,
+    "before_b": 1.038,
+    "after_a": 2.801,
+    "after_b": 1.752,
+    "null_pct": 59.9,
+    "effect_pct": 126.5,
+    "paired_ratio_median": 1.9047,
+    "resolvable": true,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 15.367,
+    "after_median_ms": 12.802,
+    "before_a": 16.195,
+    "before_b": 14.538,
+    "after_a": 14.599,
+    "after_b": 11.005,
+    "null_pct": 32.7,
+    "effect_pct": 20.0,
+    "paired_ratio_median": 0.8715,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_after": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 36.035,
+    "after_median_ms": 40.583,
+    "before_a": 36.712,
+    "before_b": 35.358,
+    "after_a": 40.703,
+    "after_b": 40.463,
+    "null_pct": 3.8,
+    "effect_pct": 12.6,
+    "paired_ratio_median": 1.0946,
+    "resolvable": true,
+    "checksum_before": [
+     "1073.740430355072"
+    ],
+    "checksum_after": [
+     "1073.7403778284788"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 28.227,
+    "after_median_ms": 24.123,
+    "before_a": 30.153,
+    "before_b": 26.302,
+    "after_a": 22.75,
+    "after_b": 25.497,
+    "null_pct": 14.6,
+    "effect_pct": 17.0,
+    "paired_ratio_median": 0.7333,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_after": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 60.007,
+    "after_median_ms": 84.778,
+    "before_a": 58.529,
+    "before_b": 61.484,
+    "after_a": 82.162,
+    "after_b": 87.394,
+    "null_pct": 6.4,
+    "effect_pct": 41.3,
+    "paired_ratio_median": 1.2426,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.4810161590576"
+    ],
+    "checksum_after": [
+     "2147.480974137783"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 31.616,
+    "after_median_ms": 29.8,
+    "before_a": 32.643,
+    "before_b": 30.589,
+    "after_a": 23.212,
+    "after_b": 36.388,
+    "null_pct": 56.8,
+    "effect_pct": 6.1,
+    "paired_ratio_median": 0.879,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_after": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 43.075,
+    "after_median_ms": 87.407,
+    "before_a": 43.355,
+    "before_b": 42.796,
+    "after_a": 89.314,
+    "after_b": 85.501,
+    "null_pct": 4.5,
+    "effect_pct": 102.9,
+    "paired_ratio_median": 1.7967,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.480793952942"
+    ],
+    "checksum_after": [
+     "2147.480752378702"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 63.424,
+    "after_median_ms": 55.505,
+    "before_a": 49.799,
+    "before_b": 77.048,
+    "after_a": 58.393,
+    "after_b": 52.618,
+    "null_pct": 54.7,
+    "effect_pct": 14.3,
+    "paired_ratio_median": 0.8381,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 59.026,
+    "after_median_ms": 170.837,
+    "before_a": 59.744,
+    "before_b": 58.309,
+    "after_a": 181.914,
+    "after_b": 159.761,
+    "null_pct": 13.9,
+    "effect_pct": 189.4,
+    "paired_ratio_median": 2.665,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.96151638031"
+    ],
+    "checksum_after": [
+     "4294.961493767798"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 20.313,
+    "after_median_ms": 20.212,
+    "before_a": 19.962,
+    "before_b": 20.664,
+    "after_a": 20.513,
+    "after_b": 19.912,
+    "null_pct": 3.5,
+    "effect_pct": 0.5,
+    "paired_ratio_median": 0.9339,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 21.271,
+    "after_median_ms": 18.637,
+    "before_a": 21.536,
+    "before_b": 21.006,
+    "after_a": 17.821,
+    "after_b": 19.452,
+    "null_pct": 9.2,
+    "effect_pct": 14.1,
+    "paired_ratio_median": 0.9014,
+    "resolvable": true,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 75.981,
+    "after_median_ms": 74.348,
+    "before_a": 82.944,
+    "before_b": 69.018,
+    "after_a": 74.95,
+    "after_b": 73.746,
+    "null_pct": 20.2,
+    "effect_pct": 2.2,
+    "paired_ratio_median": 0.8986,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 73.893,
+    "after_median_ms": 72.224,
+    "before_a": 72.716,
+    "before_b": 75.071,
+    "after_a": 72.779,
+    "after_b": 71.668,
+    "null_pct": 3.2,
+    "effect_pct": 2.3,
+    "paired_ratio_median": 0.98,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_after": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 1.385,
+    "after_median_ms": 1.462,
+    "before_a": 1.607,
+    "before_b": 1.163,
+    "after_a": 2.162,
+    "after_b": 0.761,
+    "null_pct": 184.1,
+    "effect_pct": 5.5,
+    "paired_ratio_median": 0.9437,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 8,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 1.742,
+    "after_median_ms": 1.868,
+    "before_a": 1.448,
+    "before_b": 2.036,
+    "after_a": 2.706,
+    "after_b": 1.03,
+    "null_pct": 162.7,
+    "effect_pct": 7.2,
+    "paired_ratio_median": 1.3041,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 12.222,
+    "after_median_ms": 11.694,
+    "before_a": 11.746,
+    "before_b": 12.698,
+    "after_a": 11.682,
+    "after_b": 11.705,
+    "null_pct": 8.1,
+    "effect_pct": 4.5,
+    "paired_ratio_median": 1.0311,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_after": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 46.399,
+    "after_median_ms": 42.832,
+    "before_a": 39.697,
+    "before_b": 53.101,
+    "after_a": 43.425,
+    "after_b": 42.24,
+    "null_pct": 33.8,
+    "effect_pct": 8.3,
+    "paired_ratio_median": 0.7856,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7404232025146"
+    ],
+    "checksum_after": [
+     "1073.7403778284788"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 24.13,
+    "after_median_ms": 19.137,
+    "before_a": 29.032,
+    "before_b": 19.227,
+    "after_a": 18.286,
+    "after_b": 19.988,
+    "null_pct": 51.0,
+    "effect_pct": 26.1,
+    "paired_ratio_median": 0.8862,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_after": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 70.422,
+    "after_median_ms": 75.957,
+    "before_a": 76.842,
+    "before_b": 64.001,
+    "after_a": 69.508,
+    "after_b": 82.407,
+    "null_pct": 20.1,
+    "effect_pct": 7.9,
+    "paired_ratio_median": 1.1061,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.4810104370117"
+    ],
+    "checksum_after": [
+     "2147.480974137783"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 21.634,
+    "after_median_ms": 24.017,
+    "before_a": 22.177,
+    "before_b": 21.091,
+    "after_a": 23.974,
+    "after_b": 24.06,
+    "null_pct": 5.1,
+    "effect_pct": 11.0,
+    "paired_ratio_median": 1.1111,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_after": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 52.897,
+    "after_median_ms": 89.228,
+    "before_a": 52.588,
+    "before_b": 53.205,
+    "after_a": 93.166,
+    "after_b": 85.29,
+    "null_pct": 9.2,
+    "effect_pct": 68.7,
+    "paired_ratio_median": 1.6205,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.480932235718"
+    ],
+    "checksum_after": [
+     "2147.480752378702"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 45.889,
+    "after_median_ms": 40.084,
+    "before_a": 46.851,
+    "before_b": 44.927,
+    "after_a": 40.465,
+    "after_b": 39.702,
+    "null_pct": 4.3,
+    "effect_pct": 14.5,
+    "paired_ratio_median": 0.8118,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 62.178,
+    "after_median_ms": 157.685,
+    "before_a": 64.411,
+    "before_b": 59.946,
+    "after_a": 146.26,
+    "after_b": 169.11,
+    "null_pct": 15.6,
+    "effect_pct": 153.6,
+    "paired_ratio_median": 2.1465,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.961721420288"
+    ],
+    "checksum_after": [
+     "4294.961493767798"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 20.936,
+    "after_median_ms": 22.803,
+    "before_a": 19.284,
+    "before_b": 22.588,
+    "after_a": 22.478,
+    "after_b": 23.127,
+    "null_pct": 17.1,
+    "effect_pct": 8.9,
+    "paired_ratio_median": 1.1075,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 19.54,
+    "after_median_ms": 19.925,
+    "before_a": 19.719,
+    "before_b": 19.36,
+    "after_a": 17.622,
+    "after_b": 22.227,
+    "null_pct": 26.1,
+    "effect_pct": 2.0,
+    "paired_ratio_median": 1.0489,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 77.294,
+    "after_median_ms": 84.814,
+    "before_a": 72.398,
+    "before_b": 82.19,
+    "after_a": 76.548,
+    "after_b": 93.079,
+    "null_pct": 21.6,
+    "effect_pct": 9.7,
+    "paired_ratio_median": 0.9447,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 80.389,
+    "after_median_ms": 57.416,
+    "before_a": 85.202,
+    "before_b": 75.577,
+    "after_a": 60.792,
+    "after_b": 54.041,
+    "null_pct": 12.7,
+    "effect_pct": 40.0,
+    "paired_ratio_median": 0.8033,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_after": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 1.479,
+    "after_median_ms": 1.713,
+    "before_a": 1.037,
+    "before_b": 1.922,
+    "after_a": 1.261,
+    "after_b": 2.166,
+    "null_pct": 85.3,
+    "effect_pct": 15.8,
+    "paired_ratio_median": 1.2423,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 16,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 2.859,
+    "after_median_ms": 4.011,
+    "before_a": 3.217,
+    "before_b": 2.502,
+    "after_a": 4.667,
+    "after_b": 3.355,
+    "null_pct": 39.1,
+    "effect_pct": 40.3,
+    "paired_ratio_median": 1.1826,
+    "resolvable": true,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 10.899,
+    "after_median_ms": 11.23,
+    "before_a": 10.067,
+    "before_b": 11.732,
+    "after_a": 10.809,
+    "after_b": 11.651,
+    "null_pct": 16.5,
+    "effect_pct": 3.0,
+    "paired_ratio_median": 1.0174,
+    "resolvable": false,
+    "checksum_before": [
+     "1073.7471923828125"
+    ],
+    "checksum_after": [
+     "1073.7471923828125"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 54.513,
+    "after_median_ms": 45.102,
+    "before_a": 51.674,
+    "before_b": 57.352,
+    "after_a": 42.007,
+    "after_b": 48.197,
+    "null_pct": 14.7,
+    "effect_pct": 20.9,
+    "paired_ratio_median": 0.8024,
+    "resolvable": true,
+    "checksum_before": [
+     "1073.740623474121"
+    ],
+    "checksum_after": [
+     "1073.7403778284788"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "1024x2048x1024",
+    "path": "canonical",
+    "before_median_ms": 21.2,
+    "after_median_ms": 17.172,
+    "before_a": 20.975,
+    "before_b": 21.426,
+    "after_a": 18.028,
+    "after_b": 16.317,
+    "null_pct": 10.5,
+    "effect_pct": 23.5,
+    "paired_ratio_median": 0.7692,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.4970703125"
+    ],
+    "checksum_after": [
+     "2147.4970703125"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "1024x2048x1024",
+    "path": "library",
+    "before_median_ms": 99.35,
+    "after_median_ms": 85.376,
+    "before_a": 94.292,
+    "before_b": 104.407,
+    "after_a": 82.986,
+    "after_b": 87.765,
+    "null_pct": 10.7,
+    "effect_pct": 16.4,
+    "paired_ratio_median": 0.7711,
+    "resolvable": true,
+    "checksum_before": [
+     "2147.481170654297"
+    ],
+    "checksum_after": [
+     "2147.480974137783"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "2048x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 18.349,
+    "after_median_ms": 17.586,
+    "before_a": 18.067,
+    "before_b": 18.631,
+    "after_a": 17.151,
+    "after_b": 18.021,
+    "null_pct": 5.1,
+    "effect_pct": 4.3,
+    "paired_ratio_median": 1.0057,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.494384765625"
+    ],
+    "checksum_after": [
+     "2147.494384765625"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "2048x1024x1024",
+    "path": "library",
+    "before_median_ms": 61.013,
+    "after_median_ms": 73.124,
+    "before_a": 61.695,
+    "before_b": 60.33,
+    "after_a": 58.374,
+    "after_b": 87.875,
+    "null_pct": 50.5,
+    "effect_pct": 19.9,
+    "paired_ratio_median": 1.1363,
+    "resolvable": false,
+    "checksum_before": [
+     "2147.480951309204"
+    ],
+    "checksum_after": [
+     "2147.480752378702"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "2048x1024x2048",
+    "path": "canonical",
+    "before_median_ms": 42.206,
+    "after_median_ms": 35.279,
+    "before_a": 46.465,
+    "before_b": 37.946,
+    "after_a": 35.017,
+    "after_b": 35.541,
+    "null_pct": 22.5,
+    "effect_pct": 19.6,
+    "paired_ratio_median": 0.8315,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "2048x1024x2048",
+    "path": "library",
+    "before_median_ms": 80.672,
+    "after_median_ms": 178.479,
+    "before_a": 79.786,
+    "before_b": 81.558,
+    "after_a": 187.081,
+    "after_b": 169.877,
+    "null_pct": 10.1,
+    "effect_pct": 121.2,
+    "paired_ratio_median": 2.1549,
+    "resolvable": true,
+    "checksum_before": [
+     "4294.961673736572"
+    ],
+    "checksum_after": [
+     "4294.961493767798"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "32x64x64x16x64",
+    "path": "canonical",
+    "before_median_ms": 20.977,
+    "after_median_ms": 23.752,
+    "before_a": 21.202,
+    "before_b": 20.751,
+    "after_a": 24.084,
+    "after_b": 23.419,
+    "null_pct": 2.8,
+    "effect_pct": 13.2,
+    "paired_ratio_median": 1.2234,
+    "resolvable": true,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "32x64x64x16x64",
+    "path": "library",
+    "before_median_ms": 20.477,
+    "after_median_ms": 21.276,
+    "before_a": 20.788,
+    "before_b": 20.167,
+    "after_a": 20.303,
+    "after_b": 22.248,
+    "null_pct": 9.6,
+    "effect_pct": 3.9,
+    "paired_ratio_median": 1.1031,
+    "resolvable": false,
+    "checksum_before": [
+     "134.21774291992188"
+    ],
+    "checksum_after": [
+     "134.21774291992188"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "4x1024x1024x1024",
+    "path": "canonical",
+    "before_median_ms": 78.395,
+    "after_median_ms": 84.716,
+    "before_a": 75.395,
+    "before_b": 81.395,
+    "after_a": 89.81,
+    "after_b": 79.623,
+    "null_pct": 12.8,
+    "effect_pct": 8.1,
+    "paired_ratio_median": 1.0576,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.98876953125"
+    ],
+    "checksum_after": [
+     "4294.98876953125"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "4x1024x1024x1024",
+    "path": "library",
+    "before_median_ms": 71.244,
+    "after_median_ms": 71.069,
+    "before_a": 71.133,
+    "before_b": 71.355,
+    "after_a": 66.577,
+    "after_b": 75.561,
+    "null_pct": 13.5,
+    "effect_pct": 0.2,
+    "paired_ratio_median": 1.1229,
+    "resolvable": false,
+    "checksum_before": [
+     "4294.961511313915"
+    ],
+    "checksum_after": [
+     "4294.961511313915"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "512x256x512",
+    "path": "canonical",
+    "before_median_ms": 4.02,
+    "after_median_ms": 3.317,
+    "before_a": 4.262,
+    "before_b": 3.778,
+    "after_a": 3.009,
+    "after_b": 3.624,
+    "null_pct": 20.4,
+    "effect_pct": 21.2,
+    "paired_ratio_median": 0.8021,
+    "resolvable": true,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   },
+   {
+    "t": 32,
+    "shape": "512x256x512",
+    "path": "library",
+    "before_median_ms": 4.071,
+    "after_median_ms": 4.361,
+    "before_a": 3.33,
+    "before_b": 4.811,
+    "after_a": 5.951,
+    "after_b": 2.77,
+    "null_pct": 114.8,
+    "effect_pct": 7.1,
+    "paired_ratio_median": 1.0183,
+    "resolvable": false,
+    "checksum_before": [
+     "67.10867309570312"
+    ],
+    "checksum_after": [
+     "67.10867309570312"
+    ]
+   }
+  ]
+ },
+ "reading": {
+  "problem": "A run had two worker pools: the tensor pool, sized by `-t`, and the library GEMM's own pool, which OpenBLAS creates in a constructor at load at the machine's thread count (31 threads on this host), before any API call can reach it. On a loaded host the two compete: the uncapped library loses to the canonical kernel from four threads up (2026-10-23-gemm-thread-budget-linux.json), and the pool's workers spin between calls even when the library is not used, on the canonical path too.",
+  "change": "The library runs one thread for every call; the tensor pool keeps the run's thread count. camel::initialize() seeds OPENBLAS_NUM_THREADS and MKL_NUM_THREADS to 1 when the user has not set them, before any module is loaded, which removes the constructor's pool. gemm_threads() reports what a call got: 1 for a library call, the pool's width for a canonical call. A new process.thread_count() and test/cases/modules/tensor/thread_pools.cml pin the process's thread count within `-t`, so a second pool is red.",
+  "curve_says": "Ten interleaved rounds, two copies of each build, a null control per cell. Removing the second pool helps where it was pure overhead: the batched 4x1024^3 library cell at -t 16 falls from 80.4 to 57.4 ms (-29%, null 13%), the canonical 2048x1024x1024 at -t 4 from 44.7 to 31.5 (-29%, null 9%), the canonical 4x1024^3 at -t 4 from 70.5 to 58.5 (-17%, null 6%). It costs the library's own whole-work products at four threads and up: 2048x1024x1024 is 53.5 -> 86.5 ms at 4 (+62%), 43.1 -> 87.4 at 8 (+103%), 52.9 -> 89.2 at 16 (+69%); 2048x1024x2048 is 85.9 -> 165.7 (+93%), 59.0 -> 170.8 (+189%), 62.2 -> 157.7 (+154%). At 1024^3 the two are level (39.8 -> 43.2 at 4, 36.0 -> 40.6 at 8, 46.4 -> 42.8 at 16: the wide library was already no faster there). The rest of the read cells are small (512x256x512 and the 4-D attention product are 1-2 ms, with nulls of the same order) or the same pattern at t=2 and t=32; all 84 cells carry their nulls and a resolvable flag.",
+  "step_says": "Not resolved: the d=1024 step at -t 16 measured at loads 129-180; the two copies read library 5750/4248 ms before and 5607/5137 after (mean change +8%, null 35%), and canonical 5141/2680 before and 3300/3127 after (-18%, null 92%). The before copies disagree by more than the change, so the step is unresolved; the after copies agree with each other, which is the one-pool effect this host can show without a quiet window: the variance falls, the median does not move beyond the null.",
+  "threads": "Import `tensor`, -t 1: 32 threads (31 library + caller) before, 1 after. -t 16 canonical product: 47 before, 16 after. -t 16 batched product: 47 before, 16 after. -t 16 library product: 32 before, 1 after. The library's pool is created at load and never joined; its 31 threads cost about 1 MB of RSS (import 20.5-21.0 MB -> 20.0-20.2 MB; 1024^3 product 35.6 -> 34.6 MB), i.e. threads and cores, not memory. A user-set OPENBLAS_NUM_THREADS is left alone and re-creates the pool, so the single-pool promise is conditional on it being unset.",
+  "licence": "Canonical: all 42 cells (six thread counts, seven shapes) carry identical checksums before and after; #strict and safe_fp withhold the library. Library: before, each whole-work shape had six distinct checksums across t = 1..32 (OpenBLAS groups partial sums by worker); after, one per shape at every -t, equal to the old t=1 checksum. The library path already ran under the default reassociation licence; the change removes orders rather than adding one, and the seed touches no sum.",
+  "unresolved": "The d=1024 step is unresolved at this load (null 35% and 92%); the curve's 1024^3 cell and the step are consistent with a wash on the library variant, but that is not a resolved result. A user-set OPENBLAS_NUM_THREADS or MKL_NUM_THREADS re-introduces the second pool; the guarantee is conditional.",
+  "next": "The library at one thread is 1.6-2.9x slower than the pool it replaced on the wide whole-work products, so the follow-up is to split one whole-work library product over the tensor pool by output rows and call the library one thread per chunk: one pool, the library's parallelism kept, no idle threads. That is a change in matmul's library branch, not in the thread setting; the seed and the one-thread rule stay. Not implemented here."
+ },
+ "step": {
+  "cell": "examples/models/naive-in-expert-out train_step, d=1024, batch 32 x sequence 64, 5 steps (1 warmup), -t 16, `tensor::fuse` (library) vs no pass (canonical)",
+  "how": "two copies of each build, one round, median of the four timed steps; loads 129-180. A second round was started and stopped when the load passed 160: the null was already wider than the change.",
+  "variants": {
+   "library": {
+    "before_a": 5750,
+    "before_b": 4248,
+    "after_a": 5607,
+    "after_b": 5137,
+    "before_median": 4999,
+    "after_median": 5372,
+    "change_pct": 7.5,
+    "null_pct": 35.4,
+    "resolvable": false
+   },
+   "canonical": {
+    "before_a": 5141,
+    "before_b": 2680,
+    "after_a": 3300,
+    "after_b": 3127,
+    "before_median": 3910,
+    "after_median": 3213,
+    "change_pct": -17.8,
+    "null_pct": 91.9,
+    "resolvable": false
+   }
+  },
+  "reading": "Unresolved: the two copies of the before build differ by more than the change (library null 35%, canonical null 92%), because the step at this load is dominated by the neighbours. The point estimates are library +8% and canonical -18%. The after copies agree (library 5607/5137, canonical 3300/3127) while the before copies do not (library 5750/4248, canonical 5141/2680): one pool removes the variance; the median stays under the null."
+ }
+}
