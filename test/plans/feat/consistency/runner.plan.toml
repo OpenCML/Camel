@@ -13,7 +13,11 @@ case = "../../../tools/selftest/run.mjs"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["runner self-test ok"]
-timeout_ms = 60000
+# 180 s: the self-test starts 36 nested runs (32 at a time), so its wall time is the host's, not
+# the work's. Measured 10.5 s standalone and 16.2-23.5 s inside the parallel gate at -Jobs 8;
+# four times the worst of those is 94 s. 180 s is that 4x over a host twice as busy again and
+# still fails a nested run that hangs.
+timeout_ms = 180000
 # No `parallel = false`: this test starts the runner itself, and it used to be serial because
 # the inner run cleared tmp/test, deleting the outer run's scratch. Every run now owns
 # tmp/test/run-<pid> and removes only that root, so the inner run cannot touch this one.
