@@ -50,11 +50,21 @@ void sgemmLibrary(
 std::string_view gemmBackendName();
 std::string_view libraryGemmName();
 
-/// Caps the library GEMM's own pool at the run's thread budget and at the measured knee (four
-/// threads on the reference host, where 1024^3 is 458 ms canonical, 404 ms via the library at one
-/// thread, 142 ms at four and 693 ms at 32). The cap keeps a batch loop from multiplying pools. A
-/// build without a library does nothing.
+/// Sets the library GEMM's share of the run's thread budget: the number the run's `-t` names (or
+/// the hardware concurrency without it). There is no separate cap. A build without a library does
+/// nothing, and `libraryGemmName()` then reports the builtin kernel.
+///
+/// The library is not a second pool beside the tensor pool: it is the other way of spending the
+/// same budget (see `matmul`). A product that is the whole work gives the library all of it; a
+/// product inside a batch region takes one thread per call, because the pool already spends the
+/// budget. The budget and its measured curve are in `gemm.cpp`.
 void setGemmThreads(int threads);
+
+/// The thread count the GEMM path had for its most recent call: the run's budget for a call that
+/// was the whole work, 1 for a call made inside a pool region (the batched products), and the
+/// canonical kernel reports the same two numbers because it splits over the same pool. What a
+/// program sees as the tensor module's `gemm_threads()`.
+int gemmThreadsUsed();
 
 /// Result shape of matmul(lhs, rhs). Throws std::invalid_argument when inner extents differ.
 Shape matmulShape(std::span<const int64_t> lhs, std::span<const int64_t> rhs);

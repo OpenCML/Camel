@@ -285,3 +285,76 @@ verify_script = """
 }
 """
 timeout_ms = 30000
+
+# The thread count is a numeric decision (design principles 7): a library GEMM with more threads
+# sums each output's K products in a different order, so the licence and its bound are what the
+# cases below have to keep. The bound is on the accumulation, not on the thread count: for any
+# summation order, |fl(sum) - sum| <= gamma_{K-1} * sum |a_k b_k| <= K^2 eps max|a| max|b|
+# (Higham, Thm 3.1, holds for every summation tree), so the same bound has to hold at eight
+# threads, and it does. Safe mode must not take the library at all, however many threads there
+# are: the two products stay bit-identical.
+
+[[tests]]
+name = "library_gemm.tolerance.eight_threads"
+desc = "The same licence check with `-t 8`: the library really runs on eight threads (gemm.cpp spends the run's budget), the accumulation order changes with it, and the difference still stays inside K^2*eps*max|a|*max|b|."
+kind = "behavior"
+case = "../../../cases/compile/numeric/gemm_library.cml"
+args = ["-t", "8", "${case}", "tensor::fuse"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const line = input.normalized.stdout.trim().split('\n').find((l) => l.startsWith('gemm_library '))
+  assert(line, 'the program prints its sums, difference and bound')
+  const m = line.match(/sums=(\S+) (\S+) diff=(\S+) bound=(\S+)/)
+  assert(m, `unexpected line: ${line}`)
+  const [, left, right, diffText, boundText] = m
+  const diff = Number(diffText), bound = Number(boundText)
+  assert(Number.isFinite(Number(left)) && Number.isFinite(Number(right)), `non-finite sum: ${line}`)
+  assert(Number.isFinite(diff) && Number.isFinite(bound), `non-finite difference or bound: ${line}`)
+  assert(bound > 0, `the licence bound must be positive: ${line}`)
+  assert(diff >= 0, `a largest absolute difference is not negative: ${line}`)
+  assert(diff <= bound, `library GEMM difference ${diff} leaves the licence bound ${bound}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "library_gemm.tolerance.safe.eight_threads"
+desc = "Safe mode at `-t 8` still withholds the library: the same program prints a difference of zero, so no thread count reaches the canonical path's result."
+kind = "behavior"
+case = "../../../cases/compile/numeric/gemm_library.cml"
+args = ["-t", "8", "${case}", "tensor::fuse safe_fp=true"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const line = input.normalized.stdout.trim().split('\n').find((l) => l.startsWith('gemm_library '))
+  assert(line, 'the program prints its sums, difference and bound')
+  const m = line.match(/sums=(\S+) (\S+) diff=(\S+) bound=(\S+)/)
+  assert(m, `unexpected line: ${line}`)
+  assert(Number(m[3]) === 0, `safe mode must be bit-identical, got diff ${m[3]}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "grad_library.eight_threads"
+desc = "The gradient's licence check at `-t 8`: the backward matmuls take the run's eight threads, and the largest difference from the #strict canonical gradient stays inside K^2*eps*max|x|*max|ones|."
+kind = "behavior"
+case = "../../../cases/compile/numeric/grad_library.cml"
+args = ["-t", "8", "${case}", "tensor::fuse"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const line = input.normalized.stdout.trim().split('\n').find((l) => l.startsWith('grad_library '))
+  assert(line, 'the program prints the gradient difference and the licence bound')
+  const m = line.match(/diff=(\S+) bound=(\S+) sums=(\S+) (\S+)/)
+  assert(m, `unexpected line: ${line}`)
+  const [, diffText, boundText, left, right] = m
+  const diff = Number(diffText), bound = Number(boundText)
+  assert(Number.isFinite(diff) && Number.isFinite(bound), `non-finite difference or bound: ${line}`)
+  assert(Number.isFinite(Number(left)) && Number.isFinite(Number(right)), `non-finite sum: ${line}`)
+  assert(bound > 0, `the licence bound must be positive: ${line}`)
+  assert(diff <= bound, `gradient difference ${diff} leaves the licence bound ${bound}`)
+}
+"""
+timeout_ms = 30000

@@ -2020,6 +2020,20 @@ The name of the matrix-multiplication kernel the module dispatches to.
 - Pure.
 - Example: `gemm_backend()`
 
+#### `gemm_threads`
+
+```camel
+gemm_threads: () => int
+```
+
+The thread count the matrix multiplication had for its most recent call: the run's thread
+count for a product that was the whole work, 1 for one call inside a batch region, where the
+worker pool already spends that budget. The count is one budget, not a second pool beside the
+workers: `num_threads()` is what the run was given, and this is what one product got.
+
+- With effects: reads the size of the worker pool.
+- Example: `gemm_threads()`
+
 #### `seed`
 
 ```camel

@@ -1,0 +1,140 @@
+/**
+ * The thread curve of the library GEMM, measured inside one process.
+ *
+ * The graph `tensor::fuse` marks (default mode) runs the library GEMM and the same product inside
+ * a `#strict` function runs the canonical algorithm, so one build prints both paths for every
+ * thread count. `set_num_threads(t)` is the run's `-t` applied from inside the program, which is
+ * the same path the module installs at load, so every point shares one process and one copy of the
+ * operands: the curve is a same-run comparison, not a series of runs.
+ *
+ * The rounds are interleaved the other way round from the obvious nesting: `main` walks the six
+ * thread counts once per round instead of measuring one count to exhaustion, so a load spike on the
+ * shared host lands on all of them and the per-point samples are spread over the whole measurement.
+ * The printed `ms` is one sample; take the median (or the minimum) of the rounds when reading it.
+ *
+ * The shapes are the ones the naive-in-expert-out sweep reaches at d=1024 and d=256: the two
+ * projections and two backward products of the large cell, one product that is a batch of four
+ * large matrices (the case where the batch loop, not the library, owns the threads), the batched
+ * attention product that stays below the 2^30 shape threshold, and one d=256 product.
+ *
+ * `sum` of each product is inside the timed region, exactly as in the shape table recorded in
+ * gemm.cpp: it forces the product to run and costs the same at every thread count.
+ *
+ *   camel -t 16 --arg rounds=5 --arg reps=1 test/cases/perf/gemm_threads_curve.cml tensor::fuse std::jit
+ */
+module gemm_threads_curve
+
+import { Tensor, num_threads, set_num_threads, sum, zeros } from tensor
+import { now } from time
+
+/// The operands, allocated once: a visit to a thread count must measure the GEMM, not the allocator.
+type Shapes = {
+    cube_a: Tensor,
+    cube_b: Tensor,
+    forward_a: Tensor,
+    forward_b: Tensor,
+    up_b: Tensor,
+    gradient_a: Tensor,
+    gradient_b: Tensor,
+    batch_a: Tensor,
+    batch_b: Tensor,
+    attention_q: Tensor,
+    attention_k: Tensor,
+    small_a: Tensor,
+    small_b: Tensor
+}
+
+/// The canonical algorithm: `#strict` withholds every permission, the library GEMM included.
+#strict
+func exact(a: Tensor, b: Tensor): Tensor {
+    return a @ b
+}
+
+/// The default policy: `tensor::fuse` records this product as the library GEMM's.
+func fast(a: Tensor, b: Tensor): Tensor {
+    return a @ b
+}
+
+func time_fast(round: int, label: string, a: Tensor, b: Tensor, reps: int): void sync {
+    let warm = fast(a, b)
+    let started = now()
+    let measured = loop i = 0, s = 0.0 while i < reps do {
+        let product = fast(a, b)
+        return (i + 1, s + sum(product))
+    }
+    let elapsed = now() - started
+    'gemm_threads_curve round={} t={} shape={} path=library ms={} checksum={}'->format<
+        round, num_threads(), label, elapsed * 1000.0 / float(reps), measured.1>->println
+}
+
+func time_exact(round: int, label: string, a: Tensor, b: Tensor, reps: int): void sync {
+    let warm = exact(a, b)
+    let started = now()
+    let measured = loop i = 0, s = 0.0 while i < reps do {
+        let product = exact(a, b)
+        return (i + 1, s + sum(product))
+    }
+    let elapsed = now() - started
+    'gemm_threads_curve round={} t={} shape={} path=canonical ms={} checksum={}'->format<
+        round, num_threads(), label, elapsed * 1000.0 / float(reps), measured.1>->println
+}
+
+/// Every shape at one thread count. Explicit calls rather than a loop over the shapes: each shape
+/// is a different extent, and a reader sees which extents a point of the curve belongs to.
+func curve_at(round: int, shapes: Shapes, t: int, reps: int): void sync {
+    set_num_threads(t)
+
+    time_fast(round, '1024x1024x1024', shapes.cube_a, shapes.cube_b, reps)
+    time_exact(round, '1024x1024x1024', shapes.cube_a, shapes.cube_b, reps)
+
+    time_fast(round, '2048x1024x1024', shapes.forward_a, shapes.forward_b, reps)
+    time_exact(round, '2048x1024x1024', shapes.forward_a, shapes.forward_b, reps)
+
+    time_fast(round, '2048x1024x2048', shapes.forward_a, shapes.up_b, reps)
+    time_exact(round, '2048x1024x2048', shapes.forward_a, shapes.up_b, reps)
+
+    time_fast(round, '1024x2048x1024', shapes.gradient_a, shapes.gradient_b, reps)
+    time_exact(round, '1024x2048x1024', shapes.gradient_a, shapes.gradient_b, reps)
+
+    // A batch of four large products: the batch loop splits over the pool, so this is the shape
+    // where the library must not take the budget a second time.
+    time_fast(round, '4x1024x1024x1024', shapes.batch_a, shapes.batch_b, reps)
+    time_exact(round, '4x1024x1024x1024', shapes.batch_a, shapes.batch_b, reps)
+
+    // The batched attention product of the d=1024 sweep: below 2^30 per call, canonical either way.
+    time_fast(round, '32x64x64x16x64', shapes.attention_q, shapes.attention_k, reps)
+    time_exact(round, '32x64x64x16x64', shapes.attention_q, shapes.attention_k, reps)
+
+    // The d=256 sweep's largest projection.
+    time_fast(round, '512x256x512', shapes.small_a, shapes.small_b, reps)
+    time_exact(round, '512x256x512', shapes.small_a, shapes.small_b, reps)
+}
+
+func main(rounds: int, reps: int): int sync {
+    let shapes = {
+        cube_a: zeros([1024, 1024]) + 0.001,
+        cube_b: zeros([1024, 1024]) + 0.001,
+        forward_a: zeros([2048, 1024]) + 0.001,
+        forward_b: zeros([1024, 1024]) + 0.001,
+        up_b: zeros([1024, 2048]) + 0.001,
+        gradient_a: zeros([1024, 2048]) + 0.001,
+        gradient_b: zeros([2048, 1024]) + 0.001,
+        batch_a: zeros([4, 1024, 1024]) + 0.001,
+        batch_b: zeros([4, 1024, 1024]) + 0.001,
+        attention_q: zeros([32, 64, 64, 16]) + 0.001,
+        attention_k: zeros([32, 64, 16, 64]) + 0.001,
+        small_a: zeros([512, 256]) + 0.001,
+        small_b: zeros([256, 512]) + 0.001
+    }
+    let done = loop round = 0 while round < rounds do sync {
+        curve_at(round, shapes, 1, reps)
+        curve_at(round, shapes, 2, reps)
+        curve_at(round, shapes, 4, reps)
+        curve_at(round, shapes, 8, reps)
+        curve_at(round, shapes, 16, reps)
+        curve_at(round, shapes, 32, reps)
+        return round + 1
+    }
+    'gemm_threads_curve rounds={} reps={}'->format<done, reps>->println
+    return 0
+}

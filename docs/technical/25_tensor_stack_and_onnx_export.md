@@ -77,6 +77,15 @@ one definition.
 - `parallel_for(range, grain, fn)` is the only threading primitive kernels use.
   It is backed by one process-wide Taskflow executor (Taskflow is already a
   build dependency).
+- The run's thread count is one budget, `-t` (or the hardware concurrency
+  without it), and it is spent in one place at a time: the pool for elementwise
+  ranges, reductions and the canonical GEMM's row blocks, and the library's own
+  pool for a library GEMM that is the whole work. A library call inside a
+  parallel region, or inside a batch loop that splits over the pool, takes one
+  thread, because the pool already spends the budget there. The two numbers
+  `num_threads()` and `gemm_threads()` say which of the two a product got, and
+  the curve behind the split is in section 6, "The library GEMM's thread
+  budget".
 - GEMM is a single interface, `gemm<T>(transA, transB, M, N, K, alpha, A, lda,
   B, ldb, beta, C, ldc)`, with two backends:
   - `builtin`: cache-blocked, packed, compiler-vectorized, parallel over row
@@ -453,8 +462,11 @@ Decisions recorded here because they change semantics outside the module:
   programs. A matmul runs on the library when its node's
   `tensor.kernel` attribute says so, which `tensor::fuse` writes under the 7.3
   rule (default mode; safe mode withholds it). The operator is still `matmul`.
-  The library's own pool is capped at the run's `-t` and at four threads, so it
-  does not multiply the tensor pool of a batch loop. The pass marks
+  The library's own pool is the run's thread budget, and it is spent in one
+  place at a time: a product that is the whole work gives the library all of
+  `-t`, while a library call inside a batch loop that splits over the pool takes
+  one thread, so the budget is never multiplied (section 6, "The library GEMM's
+  thread budget", has the measured curve). The pass marks
   `tensor:matmul` and `tensor:linear`; the VJP carries that choice to
   `matmul_grad_lhs` / `matmul_grad_rhs` when autodiff creates them, so backward
   matmuls take the same path. Below 2^30 multiply-adds per call the library path
@@ -540,6 +552,96 @@ rejection reason. That resolver extension is part of step 2.
   The container is shared (load average ~2.5 on 4 cores), so sub-millisecond
   results vary by up to 1.7x between runs; paper numbers need a quiet machine
   and repeated trials.
+
+### The library GEMM's thread budget
+
+The run names one thread count (`-t`, or the hardware concurrency when it says
+nothing), and the GEMM spends that number. It is spent in one place at a time:
+
+- a product that is the whole work (one call, as every large 2-D product of a
+  training step is) gives the library's own pool all of the budget;
+- a library call inside a parallel region, or inside a batch loop that splits
+  over the pool, takes one thread, because the pool already spreads the budget
+  over the chunks;
+- the canonical kernel splits its output tiles over the same pool, and runs
+  serially inside a region, so `num_threads()` and `gemm_threads()` answer the
+  same two questions for either implementation.
+
+The operator is still `matmul` and the choice is still `tensor.kernel`
+(sections 3.1 and 6); what changed is that the number is a budget the run
+declares rather than a second, hidden pool. `gemm_threads()` reports the number
+a product got, `test/plans/feat/modules/threads.plan.toml` pins it at 1, 4, 8
+and 16 threads for a whole-work product and to one for a batched product, and
+`test/plans/perf/gemm_threads.plan.toml` runs the curve below as a plan.
+
+**How the number used to be chosen.** Commit `e11a4e64c`, which introduced the
+system-CBLAS path, capped the library's pool at `min(-t, 4)` from three points
+measured in one process at 1024^3: 404 ms at one thread, 142 ms at four, 693 ms
+at 32. Two and eight threads were never measured, and the 32-thread point was
+taken on this shared host under other agents' load, where a pool as wide as the
+logical-thread count is the worst case. There was no correctness reason for the
+cap: the licence bound of section 3.1 (`K^2 * eps * max|a| * max|b|`) holds for
+every summation order, so the thread count never had to be bounded for the
+numbers to stay inside it; `#strict` and `safe_fp` withhold the library
+entirely, which is what keeps the canonical path's bits.
+
+**The curve it is read from.** `test/cases/perf/gemm_threads_curve.cml`
+measures both implementations in one process at six thread counts over the
+shapes of the naive-in-expert-out sweep, twelve interleaved rounds per point,
+`sum` inside the timed region so the product is forced. Milliseconds, median and
+best of the twelve (the host is shared: the median is what a run costs, the best
+is what the hardware can do):
+
+| shape | t | library | canonical |
+|---|---|---|---|
+| 1024x1024x1024 | 1 | 36.1 / 20.8 | 31.2 / 22.8 |
+| | 4 | 30.0 / 6.8 | 15.3 / 6.8 |
+| | 8 | 36.2 / 5.1 | 14.1 / 4.6 |
+| | 16 | 35.4 / 4.8 | 10.2 / 5.3 |
+| | 32 | 50.3 / 7.8 | 10.4 / 4.3 |
+| 2048x1024x1024 | 1 | 46.1 / 40.8 | 52.1 / 46.0 |
+| | 4 | 39.4 / 14.3 | 31.3 / 14.8 |
+| | 8 | 34.1 / 9.8 | 22.1 / 9.7 |
+| | 16 | 38.8 / 7.2 | 21.0 / 8.5 |
+| | 32 | 50.8 / 14.1 | 16.0 / 10.8 |
+| 2048x1024x2048 | 1 | 96.3 / 85.6 | 110.8 / 99.4 |
+| | 16 | 49.1 / 15.7 | 42.5 / 19.9 |
+| 4x1024x1024x1024 | 1 | 92.5 / 80.4 | 107.0 / 102.0 |
+| | 16 | 61.4 / 29.5 | 77.1 / 27.1 |
+| 512x256x512 (d=256) | 1 | 1.8 / 1.6 | 1.6 / 1.6 |
+| | 16 | 1.7 / 0.5 | 1.9 / 0.6 |
+
+The library's best case keeps improving to sixteen threads, the physical core
+count of this host, and gets worse again at 32, the logical count: the cap at
+four was leaving two thirds of the library's speed unused on a quiet machine.
+Its *typical* case on a loaded host is worse than the canonical kernel's from
+four threads up, because the library's pool is a second pool that spins between
+calls and competes with the tensor pool and with the neighbours; the gap between
+the median and the best of the same point is that competition, not arithmetic.
+So the budget is a structural rule, and how wide to run the whole program stays
+the user's decision (`-t`).
+
+**The training step, before and after.** Same window, the library and the
+canonical path interleaved in one loop, median of thirteen timed steps,
+d=1024, `tensor::fuse` versus no pass:
+
+| window | t=16 library | t=16 canonical | load |
+|---|---|---|---|
+| before (cap: 4 library threads) | 2650, 2751 | 2552 | 45-67 |
+| after (budget: 16 library threads) | 3947, 4299 | 2518, 2619 | 72-81 |
+| t=1, after | 3921, 5635 | 7260, 7814 | 56-73 |
+
+Uncapping made this step slower, not faster, on this host at these loads: the
+library at sixteen threads is 1.5x the canonical path, while at four threads it
+was at parity. The recorded `2026-10-23-sweep-linux-shape.json` cell (1146 ms,
+load 34-76) against torch.compile (369 ms) cannot be reproduced today — the same
+program measures 2518-4299 ms here, and torch compiled measures 5999 ms at one
+thread and 14448 ms at sixteen in the window after these cells — so that 3.1x
+gap is not explained by the cap, and it cannot be re-measured until the host is
+quiet. `examples/models/naive-in-expert-out/results/2026-10-23-gemm-thread-budget-linux.json`
+holds the curve, every cell with the load it was measured at, and this reading.
+d=256 is unaffected either way: every product in that cell is below the 2^30
+shape threshold, so the library never runs there.
 
 ## 7. Delivery Order
 

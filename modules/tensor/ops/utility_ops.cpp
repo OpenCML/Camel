@@ -162,6 +162,12 @@ slot_t numThreadsKernel(ArgsView &, ArgsView &, context::Context &) {
     return camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Int64>(k::numThreads()));
 }
 
+/// The thread count the GEMM path had for its most recent call: the run's budget for a product
+/// that was the whole work, 1 for one inside a batch region (gemm.h).
+slot_t gemmThreadsKernel(ArgsView &, ArgsView &, context::Context &) {
+    return camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Int64>(k::gemmThreadsUsed()));
+}
+
 slot_t backendKernel(ArgsView &, ArgsView &, context::Context &) {
     return camel::core::rtdata::toSlot(
         ::String::from(std::string(k::gemmBackendName()), mm::autoSpace()));
@@ -254,6 +260,15 @@ std::vector<OpDef> utilityOps() {
             .resultDoc = "int",
             .infer  = [](const InferContext &) -> std::optional<Type *> { return Type::Int64(); },
             .kernel = &numThreadsKernel,
+            .traits = impure});
+    defs.push_back(
+        OpDef{
+            .name      = "gemm_threads",
+            .exports   = {"gemm_threads"},
+            .params    = {},
+            .resultDoc = "int",
+            .infer  = [](const InferContext &) -> std::optional<Type *> { return Type::Int64(); },
+            .kernel = &gemmThreadsKernel,
             .traits = impure});
     defs.push_back(
         OpDef{
