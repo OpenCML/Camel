@@ -9,23 +9,25 @@
  * condition reaches the coefficient's *node* with `node_of(c)` (the change this branch is about),
  * and asks `mul_by_one(x, node_of(c))`: the factor first, the coefficient second.
  *
- placeholder
  * `drop_by_one`'s condition hands the query the parts `(factor, coefficient)`, and `swapped` is
- * `1 * a`: the pattern `x * c` cannot bind its `x` to the constant, so the pairing that binds the
- * constant to `c` is the exchange, which the declaration of `*` carries (op-semantics 7.4: the
- * exchange gives the same value). The parts therefore reach the query in the order `(a, 1)` while
- * the product holds them `(1, a)` -- the other order. Both orders name the same value, so the query
- * must answer either way. Before the ruling it looked for the operands in exactly the order it was
- * given, found no value, and threw `Invalid argument of 'analysis': the analysis 'mul_by_one' has
- * no value whose operands are these 2 nodes`, which is **the pass failing**, not a condition being
- * false -- this test is red exactly that way. A `const` parameter and a parts query are the case
- * that could not be written at all before the ruling.
+ * `a * 1`: the pattern `x * c` binds `c` to the constant only under the exchange of the product's
+ * two operands, which the declaration of `*` carries (op-semantics 7.4: the exchange gives the same
+ * value). The parts therefore reach the query in the order `(1, a)` while the product holds them
+ * `(a, 1)` -- the other order. Both orders name the same value, so the query must answer either
+ * way. Before the ruling it looked for the operands in exactly the order it was given, found no
+ * value, and threw `Invalid argument of 'analysis': the analysis 'mul_by_one' has no value whose
+ * operands are these 2 nodes`, which is **the pass failing**, not a condition being false -- this
+ * test is red exactly that way (`swapped 1`: the product stays and the value is `7`). A `const`
+ * parameter and a parts query are the case that could not be written at all before the ruling.
  *
- * `kept` (`a * 2`) is the other half of the ruling: the same parts with a coefficient that is not
- * one, so the query answers but the condition is false -- the rule must not apply, the product and
- * the value must stay, and the pass must not fail either. `plain` (`a * 5.0`) has a guard on the
- * value, which asks no question about parts: it loses its product in the same pass, so a pass that
- * quietly stopped doing its work would show up there.
+ * The half of the ruling about a query that finds nothing has its own case, `no_value.cml`, where a
+ * non-commutative operator makes "no value with these parts" real rather than a matter of order.
+ *
+ * `kept` (`a * 2`) is the same query on a coefficient that is not one: the query answers, and the
+ * condition is false -- the rule must not apply, the product and the value must stay, and the pass
+ * must not fail either. `plain` (`a * 5.0`) has a guard on the value, which asks no question about
+ * parts: it loses its product in the same pass, so a pass that quietly stopped doing its work would
+ * show up there.
  */
 module parts_order
 

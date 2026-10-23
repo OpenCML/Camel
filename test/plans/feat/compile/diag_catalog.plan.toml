@@ -58,12 +58,12 @@ timeout_ms = 20000
 
 [[tests]]
 name = "catalog.coverage_zero"
-desc = "Every diagnostic code in the registry is mentioned by a test: the check fails if one is not. The count is pinned because this is a completeness check over the set of declared codes — a new declaration without a test, or a deletion whose guard line was not updated, changes it — not a target or a performance number. It went from 257 to 256 when the tensor cast permission check was deleted: SemanticDiag::PrecisionChangeNotPermitted had that check as its only producer, and the ruling of 2026-10-23 deleted the check (design principles 7.2-7.3)."
+desc = "Every diagnostic code in the registry is mentioned by a test: the check fails if one is not. The count is pinned because this is a completeness check over the set of declared codes — a new declaration without a test, or a deletion whose guard line was not updated, changes it — not a target or a performance number. It went from 257 to 256 when the tensor cast permission check was deleted: SemanticDiag::PrecisionChangeNotPermitted had that check as its only producer, and the ruling of 2026-10-23 deleted the check (design principles 7.2-7.3). It is 257 again with SemanticDiag::NodeOfNotAParameter, the refusal of a `node_of` over a name that is not a `const` parameter (the ruling of 2026-10-23 on `rule_when_const_node`), which `rules.node_of_refuses_a_name_that_is_not_a_const_parameter` is the test of."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/diagnostics-catalog.mjs"
 args = ["${case}", "--coverage-check"]
 expect_exit = 0
-expect_stdout_contains = ["every one of 256 diagnostic codes is mentioned by a test"]
+expect_stdout_contains = ["every one of 257 diagnostic codes is mentioned by a test"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
