@@ -292,3 +292,11 @@ rule tensor_mul_zero::<T>(t: Tensor<T>) when is_float::<T>() #requires<finite_ma
 - **互斥检查**：对已登记的类型逐个求两条 `when`，有类型同时满足两条即报重叠（诊断指出那个类型与两条声明）；求不出（谓词含无法在编译期求值的部分）按今天的规则拒绝。
 - **规则统一**：同一检查适用于所有带 `when` 的同名重载（有函数体的普通函数也一样），不是 `#impl` 声明的特例。
 - 用例：`sum` 的整数臂与浮点臂各一条声明；一个两条都满足的类型报重叠；一个都不满足的类型回到函数体。
+
+## 返工（排在第一梯队之后）：环境变量开关
+
+GC 根的修复（条件闭包改读有根的句柄）是对的。它的说明提到用 `CAMEL_GC_POISON=1` 复现——顺带清点：`src/`、`modules/`、`include/`、`tools/` 里有 42 个 `CAMEL_*` 环境变量名（`CAMEL_GC_POISON`、`CAMEL_ONNX_DUMP`、`CAMEL_ONNX_TRACE`、`CAMEL_TENSOR_OPSTATS`、`CAMEL_TENSOR_ISA`、`CAMEL_STARTUP_PROFILE`、`CAMEL_MAX_RECURSION_DEPTH`、`CAMEL_TILES_NVRTC`、`CAMEL_TILES_TEST_INVALIDATION`……）。负责人的要求是不用环境变量做开关：行为由命令行、遍参数或构建选项决定，读程序与命令行就能知道它会做什么。
+
+- 清点全部 42 个，逐个归类，写成一张表放进报告：**保留**（只有定位安装目录一类、不改变行为的，如 `CAMEL_HOME`）；**改为命令行选项**（`--error-format`、`--max-recursion-depth`、GC 调试如 `--gc-poison`）；**改为遍或遍参数**（ONNX 的转储与跟踪 → `std::onnx dump=… trace=true`，算子统计与启动剖析 → `std::profile` 的参数）；**改为构建选项**（ISA 选择、NVRTC）；**删除**（只为某个测试存在的，如 `CAMEL_TILES_TEST_INVALIDATION`，改由测试直接调用）。
+- 测试运行器与脚本跟着改；不留"环境变量已退役"的提示。
+- 之后新代码不再加 `getenv("CAMEL_…")`；`agents/refactor.md` 的标准里补一条。
