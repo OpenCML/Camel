@@ -780,6 +780,12 @@ class ForwardRewrite {
     /// Brings the functions that function values stand for into this graph, so that the calls
     /// of those values become calls of closures built here (see the definition).
     void followFunctionValues();
+    /// Turns a direct call of an `#impl` function into a call of that function's semantic body
+    /// (design principles 10.4). The call is one OPER of the kernel, and the kernel is only the
+    /// execution; the meaning is the Camel body the tag kept, which names the kernel it
+    /// implements. A kernel that is a real primitive operator (a core arithmetic operator, a
+    /// tensor kernel) names no body and keeps the derivative rule of its own.
+    void expandKernelBodies();
     bool carriesFunctionValue(gc_node_ref_t call) const;
     void rewriteBranch(gc_node_ref_t join);
     void rewriteCall(gc_node_ref_t call);
@@ -866,13 +872,13 @@ class Backward final : public VjpBuilder {
     /// merely has a tangent (an ordinary tensor argument used as data) is not one, and neither
     /// is anything derived from it: no gradient is being computed there, so nothing can be lost.
     Backward(
-        GraphDraft &forward, GraphDraft &target,
+        Engine &engine, GraphDraft &forward, GraphDraft &target,
         const std::unordered_map<gc_node_ref_t, CallSite> &sites, const GraphScope &scope,
         std::vector<Refusal> &refusals, std::vector<gc_node_ref_t> differentiated,
         bool residualPorts = false, std::unordered_set<gc_node_ref_t> boundary = {},
         std::unordered_set<gc_node_ref_t> untaped = {})
-        : forward_(forward), target_(target), sites_(sites), inPlace_(&forward == &target),
-          scope_(scope), refusals_(refusals),
+        : engine_(engine), forward_(forward), target_(target), sites_(sites),
+          inPlace_(&forward == &target), scope_(scope), refusals_(refusals),
           differentiated_(differentiated.begin(), differentiated.end()),
           residualPorts_(residualPorts), boundary_(std::move(boundary)),
           untapedLoops_(std::move(untaped)) {}
@@ -993,6 +999,7 @@ class Backward final : public VjpBuilder {
     gc_node_ref_t activeFunctionInput(gc_node_ref_t call) const;
     void reportRefusals(const std::vector<gc_node_ref_t> &order);
 
+    Engine &engine_; // the `#impl` bodies this pass must not confuse with their kernels
     GraphDraft &forward_;
     GraphDraft &target_;
     const std::unordered_map<gc_node_ref_t, CallSite> &sites_;
@@ -1067,6 +1074,13 @@ class Engine {
     }
     bool followingExhausted() const { return followed_ >= kMaxFollowedCalls; }
     static constexpr size_t kMaxFollowedCalls = 256;
+
+    /// The semantic bodies of the program's `#impl` functions by the kernel URI they implement
+    /// (see the definition for what names the kernel and what two bodies on one kernel mean).
+    /// ForwardRewrite expands a call of the function into a call of its body from this, and the
+    /// reverse pass refuses an OPER of such a kernel that reached it unexpanded.
+    const std::unordered_map<std::string, std::vector<GCGraph *>> &implBodiesByKernel();
+    const std::unordered_set<std::string> &implBodyKernelUris();
 
     /// The plan differentiating calls of `callee` (memoized; recursion reuses the plan).
     const PullbackPlan &planFor(GCGraph *callee);
@@ -1145,6 +1159,13 @@ class Engine {
     std::map<std::pair<const GraphDraft *, uint32_t>, std::unordered_set<GCGraph *>> regionOwners_;
     std::unordered_set<GCGraph *> recursions_;
     std::vector<Refusal> refusals_;
+    // The semantic bodies of the program's `#impl` functions (see implBodiesByKernel), read
+    // once: the whole transformation asks for them, the forward rewrite to expand a call into
+    // the body and the reverse pass to refuse a kernel OPER that reached it unexpanded.
+    std::unordered_map<std::string, std::vector<GCGraph *>> implBodies_;
+    std::unordered_set<std::string> implKernelUris_;
+    bool implBodiesBuilt_    = false;
+    bool implKernelUrisBuilt_ = false;
     camel::source::source_context_ptr_t outerSource_;
 };
 
@@ -1296,7 +1317,145 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
            std::ranges::any_of(draft_.normInputsOf(call), evident);
 }
 
+/// The semantic bodies of the program's `#impl` functions, by the kernel URI a direct call of
+/// the function is compiled to. The body graph is kept in the program for exactly this
+/// (design principles 10.4: "the tag leaves expansion to autodiff, fusion, export and rules as
+/// they need it"), and it names its kernel, so a call site that only shows the kernel OPER can
+/// still reach the meaning. Two bodies may name one kernel; expandKernelBodies tells what is
+/// done then.
+const std::unordered_map<std::string, std::vector<GCGraph *>> &Engine::implBodiesByKernel() {
+    if (implBodiesBuilt_) {
+        return implBodies_;
+    }
+    implBodiesBuilt_ = true;
+    const rt::Program *program = &inlining_.work();
+    for (GCGraph *body : program->implBodies()) {
+        const std::string &uri = body->implKernelUri();
+        if (!uri.empty()) {
+            implBodies_[uri].push_back(body);
+        }
+    }
+    return implBodies_;
+}
+
+/// The kernel URIs of those bodies, for a place that only has the OPER's URI in hand.
+const std::unordered_set<std::string> &Engine::implBodyKernelUris() {
+    if (!implKernelUrisBuilt_) {
+        implKernelUrisBuilt_ = true;
+        for (const auto &[uri, bodies] : implBodiesByKernel()) {
+            implKernelUris_.insert(uri);
+        }
+    }
+    return implKernelUris_;
+}
+
+/// A direct call of an `#impl` function is one OPER of its kernel, and the kernel carries no
+/// meaning (design principles 10.4: the body is the semantics and the kernel is the execution).
+/// This turns each such OPER into a direct call of the body, which the ordinary call machinery
+/// then differentiates like any other call of a Camel function; the kernel's registered
+/// derivative rule is never consulted for it. A kernel that is a real primitive operator
+/// (`:op/add_d`, a tensor kernel) implements no Camel body and keeps its rule.
+void ForwardRewrite::expandKernelBodies() {
+    const auto &bodies = engine_.implBodiesByKernel();
+    if (bodies.empty()) {
+        return;
+    }
+    for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
+        if (!draft_.alive(id) || !member(id) || kindOf(draft_, id) != GCNodeKind::Oper) {
+            continue;
+        }
+        const auto payload = draft_.payloadOf(id);
+        const auto *body   = reinterpret_cast<const rt::GCOperBody *>(payload.data());
+        const auto found   = bodies.find(std::string(body->uri()));
+        if (found == bodies.end()) {
+            continue;
+        }
+        GCGraph *const semantic = found->second.front();
+        if (found->second.size() > 1) {
+            // Two `#impl` functions of the program name this one kernel, and a call site shows
+            // only the kernel: which of their bodies the call means is not in the graph. Taking
+            // one would be a semantic choice this pass may not make, and taking the kernel's
+            // own rule is what design principles 10.4 forbids. Stop and name both functions.
+            std::string named;
+            for (GCGraph *implementing : found->second) {
+                named += named.empty() ? "" : ", ";
+                named += "'" + implementing->name() + "'";
+            }
+            failAt(
+                draft_.nodeOrigin(id),
+                std::format(
+                    "the call of an '#impl' function is one OPER of the '{}' kernel, and {} "
+                    "semantic bodies of this program implement that kernel ({}); which one the "
+                    "call means is not in the graph. A kernel implements one function: give the "
+                    "functions different kernels{}",
+                    body->uri(),
+                    found->second.size(),
+                    named,
+                    whereIs(draft_.nodeOrigin(id))));
+        }
+        const std::vector<gc_node_ref_t> withInputs = copyOf(draft_.withInputsOf(id));
+        const std::vector<gc_node_ref_t> normInputs = copyOf(draft_.normInputsOf(id));
+        const auto portTypes                        = portTypesOf(semantic);
+        if (withInputs.size() + normInputs.size() != portTypes.size()) {
+            // Not reachable through `#impl` today: the builder compares the kernel's signature
+            // with the function's, `with` and ordinary parameters apart
+            // (SemanticDiag::ImplSignatureMismatch). Kept because this is the one place that
+            // builds a call of the body out of the OPER's own inputs, and a call built from the
+            // wrong argument list would be a wrong number: name the call instead.
+            failAt(
+                draft_.nodeOrigin(id),
+                std::format(
+                    "the '{}' kernel of an '#impl' function is called with {} argument(s), but "
+                    "the semantic body of that function has {} port(s): the kernel does not "
+                    "implement the body's signature (design principles 10.4){}",
+                    body->uri(),
+                    withInputs.size() + normInputs.size(),
+                    portTypes.size(),
+                    whereIs(draft_.nodeOrigin(id))));
+        }
+        const uint32_t savedInsert = draft_.insertRegion();
+        if (part_ != 0) {
+            draft_.setInsertRegion(part_);
+        }
+        // A direct call of the body: the with-inputs of the OPER are the with-arguments of the
+        // function and its ordinary inputs the ordinary ones, which is the order the body's
+        // ports are in (with ports, then norm ports).
+        const gc_node_ref_t direct =
+            draft_.addFuncNode(semantic->id(), semantic->funcType(), 0, 0);
+        draft_.setNodeOrigin(direct, draft_.nodeOrigin(id));
+        draft_.setWithInputs(direct, withInputs);
+        draft_.setNormInputs(direct, normInputs);
+        draft_.setCtrlInputs(direct, copyOf(draft_.ctrlInputsOf(id)));
+        draft_.replaceAllValueUses(id, direct);
+        for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(id))) {
+            draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, id, direct);
+        }
+        if (draft_.outputNode() == id) {
+            draft_.setOutputNode(direct);
+        }
+        if (draft_.exitNode() == id) {
+            draft_.setExitNode(direct);
+        }
+        if (draft_.returnNode() == id) {
+            draft_.setReturnNode(direct, draft_.returnKind());
+        }
+        for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
+            if (draft_.region(r).result == id) {
+                draft_.setRegionResult(r, direct);
+            }
+        }
+        draft_.eraseNode(id);
+        if (part_ != 0) {
+            draft_.setInsertRegion(savedInsert);
+        }
+    }
+    // The rewritten calls are left for the ordinary rewrite pass: the node scan of run() finds
+    // them as FUNC nodes and rewriteCall records them as call sites there, exactly as it does
+    // for a direct call of a function the program always had.
+}
+
 void ForwardRewrite::run() {
+    expandKernelBodies();
     followFunctionValues();
     std::vector<gc_node_ref_t> joins;
     std::vector<gc_node_ref_t> calls;
@@ -2467,7 +2626,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
             differentiated.push_back(input);
         }
         Backward backward(
-            draft_, *pullback, arm.rewrite->sites(), arm.scope, engine_.refusals(),
+            engine_, draft_, *pullback, arm.rewrite->sites(), arm.scope, engine_.refusals(),
             std::move(differentiated),
             /*residualPorts=*/false, boundary, arm.rewrite->untapedLoops());
         backward.seed(value, dy);
@@ -3483,6 +3642,22 @@ void Backward::visitOper(gc_node_ref_t node) {
     if (!active) {
         return;
     }
+    // An OPER of a kernel that implements a Camel body: the body is the semantics (design
+    // principles 10.4), and ForwardRewrite::expandKernelBodies turns the call site into a call
+    // of that body before this pass runs. Reaching here therefore means the body was not
+    // expanded for this call, and the kernel's registered rule is execution, not meaning: it is
+    // not read, whether or not one is registered. Say what happened instead of differentiating
+    // the kernel.
+    if (engine_.implBodyKernelUris().contains(uri)) {
+        failAt(
+            forward_.nodeOrigin(node),
+            std::format(
+                "operator '{}' implements the Camel body of an '#impl' function, and the call of "
+                "that function was not expanded into the body before the reverse pass, so its "
+                "derivative is the body's and not the kernel's (design principles 10.4){}",
+                uri,
+                whereIs(forward_.nodeOrigin(node))));
+    }
     const camel::core::VjpRule rule = DerivativeRegistry::instance().findRule(uri);
     if (rule == nullptr) {
         if (!valueWith.empty()) {
@@ -3816,8 +3991,8 @@ void Engine::build(Pending &pending) {
         }
     }
     Backward backward(
-        forward, *pullback, rewrite.sites(), pending.scope, refusals_, std::move(differentiated),
-        /*residualPorts=*/false, {}, rewrite.untapedLoops());
+        *this, forward, *pullback, rewrite.sites(), pending.scope, refusals_,
+        std::move(differentiated), /*residualPorts=*/false, {}, rewrite.untapedLoops());
     backward.seed(value, dy);
     const auto edges = siteEdges(rewrite.sites());
     backward.run(valueOrder(forward, value, 0, &edges));
@@ -4011,7 +4186,7 @@ LoopBodyPlan Engine::buildLoopBody(
     }
     const std::unordered_set<gc_node_ref_t> boundarySet(boundary.begin(), boundary.end());
     Backward backward(
-        draft, *pullback, rewrite.sites(), scope, refusals_, std::move(differentiated),
+        *this, draft, *pullback, rewrite.sites(), scope, refusals_, std::move(differentiated),
         /*residualPorts=*/true, boundarySet, rewrite.untapedLoops());
     backward.seed(stateValue, dy);
     std::vector<gc_node_ref_t> order = valueOrder(draft, stateValue, bodyRegion);
@@ -4123,7 +4298,7 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     // `grad` and `with_grad` differentiate the first `with` parameter only. The other `with`
     // parameters and every ordinary parameter are data, even when their type has a tangent.
     Backward backward(
-        *draft, *draft, rewrite.sites(), scope, refusals_,
+        *this, *draft, *draft, rewrite.sites(), scope, refusals_,
         withPorts.empty() ? std::vector<gc_node_ref_t>{}
                           : std::vector<gc_node_ref_t>{withPorts.front()},
         /*residualPorts=*/false, {}, rewrite.untapedLoops());

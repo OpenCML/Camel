@@ -1,0 +1,60 @@
+/**
+ * What autodiff differentiates for a direct call of an `#impl` function (design principles
+ * 10.4): the body is the semantics and the kernel is the execution, so the derivative is the
+ * body's, and the kernel's own registered rule does not take part.
+ *
+ * `t` is `a * b` and is tagged with the `:op/div_d` kernel. The two are deliberately different
+ * functions: the kernel's registered rule for `:op/div_d` with respect to its first input is
+ * `1 / b`, which is 0.5 where the body's derivative is `b`, that is 2.0. `outer` calls `t` by
+ * name, so that call is one `:op/div_d` OPER and the kernel rule is the only rule that could
+ * answer for it. `outer_plain` is the same call of the same body without the tag.
+ *
+ * The forward run proves the kernel really runs: `t(4.0, 2.0)` prints 2.0 (one `:op/div_d`)
+ * where `plain(4.0, 2.0)`, the same body untagged, prints 8.0. The derivatives prove that the
+ * reverse pass reads the body: if a call site reached the kernel's rule the first would be 0.5,
+ * and if the tag changed the meaning the first and the third would differ.
+ */
+module impl_grad_body
+
+import { grad } from autodiff
+
+#op<':op/div_d'>
+func div_kernel(a: float, b: float): float
+
+#impl<div_kernel>
+func t(a: float, b: float): float {
+    return a * b
+}
+
+func plain(a: float, b: float): float {
+    return a * b
+}
+
+// The tagged function reached as a function value: `grad` differentiates that value, which is
+// the body graph itself. This path answers for the body on its own.
+with <a: float, b: float>
+func tagged_value(): float {
+    return a * b
+}
+
+with <a: float>
+func outer(b: float): float {
+    return t(a, b)
+}
+
+with <a: float>
+func outer_plain(b: float): float {
+    return plain(a, b)
+}
+
+func main(): int sync {
+    let kernel_ran = t(4.0, 2.0)
+    let body_value = plain(4.0, 2.0)
+    'impl_grad_body forward kernel={} body={}'->format<kernel_ran, body_value>->println
+    let d_direct = grad(outer)<4.0>(2.0)
+    let d_plain = grad(outer_plain)<4.0>(2.0)
+    let d_value = grad(tagged_value)<4.0, 2.0>()
+    'impl_grad_body grad direct={} plain={} value={}'
+        ->format<d_direct, d_plain, d_value>->println
+    return 0
+}

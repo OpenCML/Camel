@@ -263,6 +263,13 @@ class GraphDraft {
         ++mutations_;
         flags_ = flags;
     }
+    /// The kernel the semantic body of an `#impl` function implements (kGraphFlagImplBody):
+    /// the operator URI its direct calls are compiled to, or empty for every other graph. The
+    /// builder sets it when it tags the body (design principles 10.4); it is the link a
+    /// consumer that must see inside the function follows from the OPER at a call site. Cold
+    /// metadata: it says nothing about the graph's content, so it does not invalidate it.
+    const std::string &implKernelUri() const { return implKernelUri_; }
+    void setImplKernelUri(std::string uri) { implKernelUri_ = std::move(uri); }
     camel::core::type::FunctionType *funcType() const { return funcType_; }
     /// The names the function captures, in capture order (GCGraph::captureNames).
     std::span<const camel::core::SymId> captureNames() const { return captureNames_; }
@@ -646,6 +653,7 @@ class GraphDraft {
     const Program *program_                    = nullptr;
     GraphId typeSpecializationRoot_            = kInvalidGraphId;
     uint8_t flags_                             = 0;
+    std::string implKernelUri_;
     camel::core::type::FunctionType *funcType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside

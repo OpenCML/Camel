@@ -27,6 +27,12 @@ class Program;
 struct GCGraphDebugRecord {
     std::string mangledName;
     std::string name;
+    // The kernel an `#impl` function's semantic body implements (GCGraph::implKernelUri), empty
+    // for every other graph. A direct call of the function is one OPER of that kernel, and the
+    // link back from that OPER to this body is what design principles 10.4 needs: a consumer
+    // that must see inside the function (autodiff, fusion, export, a rule) reaches the body
+    // through it instead of the kernel's own rule.
+    std::string implKernelUri;
     // The names the graph captures, in the order it captured them (GCGraph::captureNames).
     std::vector<camel::core::SymId> captureNames;
     // The source name of each node's value (`let x`, `var x`), indexed by node reference;

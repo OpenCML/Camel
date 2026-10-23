@@ -826,6 +826,11 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
             // exactly the graph the compiler built for the Camel body.
             body->draft().setFlags(
                 static_cast<uint8_t>(body->draft().flags() | camel::runtime::kGraphFlagImplBody));
+            // The body names the kernel it implements. A direct call of the function is one OPER
+            // of that kernel, so this is the only link back from such a call site to the
+            // semantics (design principles 10.4): a consumer that must see inside the function
+            // follows it, rather than reading the kernel's own derivative or lowering rule.
+            body->draft().setImplKernelUri(std::string(uri));
         } catch (const BuildAbortException &) {
             // Reported at the tag; the other declarations are still read.
         } catch (Diagnostic &d) {
