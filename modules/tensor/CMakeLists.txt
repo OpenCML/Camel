@@ -5,6 +5,7 @@ add_camel_module(
     attrs.cpp
     binary.cpp
     dtype.cpp
+    fusion_group.cpp
     interop.cpp
     npy.cpp
     module.cpp

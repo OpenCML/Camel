@@ -926,6 +926,20 @@ class Backward final : public VjpBuilder {
         }
         return node;
     }
+    void markFusionGroup(
+        camel::core::attr::AttrKey key,
+        std::string_view name,
+        std::span<const vjp_node_t> members) override {
+        if (key == camel::core::attr::kNoKey || members.empty()) {
+            return;
+        }
+        const camel::core::attr::AttrValueId value = camel::core::attr::symbol(name);
+        const camel::core::attr::AttrSetId attrs = camel::core::attr::single(key, value);
+        for (vjp_node_t node : members) {
+            target_.setNodeAttrs(
+                node, camel::core::attr::unite(target_.nodeAttrs(node), attrs));
+        }
+    }
     vjp_node_t addAccess(vjp_node_t aggregate, size_t index) override {
         return autodiff::addField(target_, typeOf(target_, aggregate), aggregate, index);
     }

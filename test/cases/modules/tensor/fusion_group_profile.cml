@@ -1,0 +1,42 @@
+/**
+ * What a step executes with and without the `vjp_div_neg` group (`std::profile`).
+ *
+ * With `fused=1` the numerator is data, the divide's result has one reader, and the node VM runs
+ * divide -> multiply -> neg in one pass: the operator table has the forward divide but no
+ * multiply and no neg. With `fused=0` the numerator is differentiated too, so the gradient
+ * struct reads the divide's result, the backend declines, and the three operators run one by one.
+ * The group is marked in both programs; only the backend's choice differs.
+ */
+module fusion_group_profile
+
+import { Tensor, sum, zeros } from tensor
+import { with_grad } from autodiff
+
+type W = { w: Tensor }
+
+with <m: W>
+func private_chain(x: Tensor): float {
+    return sum(x / m.w)
+}
+
+type AB = { a: Tensor, w: Tensor }
+
+with <m: AB>
+func shared_chain(): float {
+    return sum(m.a / m.w)
+}
+
+func main(fused: int): int sync {
+    let x = zeros([8, 8]) + 1.0
+    let w = zeros([8, 8]) + 0.5
+    if fused != 0 then {
+        let g = with_grad(private_chain)
+        let (value, gradient) = g<{w: w}>(x)
+        'profile fused v={} sum={}'->format<value, sum(gradient.w)>->println
+    } else {
+        let h = with_grad(shared_chain)
+        let (value, gradient) = h<{a: x, w: w}>()
+        'profile shared v={} sum={}'->format<value, sum(gradient.a)>->println
+    }
+    return 0
+}

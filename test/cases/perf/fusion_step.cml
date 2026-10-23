@@ -1,0 +1,76 @@
+/**
+ * One training step whose backward contains a division VJP, wide enough to measure the group.
+ *
+ * `loss` divides a data tensor by a learned per-column scale and feeds the result to a matmul, so
+ * the divide's numerator is not differentiated: its VJP chain (divide -> multiply -> neg) has one
+ * reader per member and `std::nvm` runs it as one pass. `declined_loss` does the same arithmetic
+ * with the numerator as a parameter, so the gradient struct reads the divide's result and the
+ * backend must run the three operators one by one; the two steps do the same work and are the
+ * before/after of the group.
+ *
+ * Usage (one thread, min of several runs):
+ *   camel fusion_step.cml --arg steps=20 --arg rows=2048 --arg d=256 --arg fused=1
+ *     std::profile std::nvm
+ */
+
+module perf_fusion_step
+
+import { Tensor, sum, zeros } from tensor
+import { with_grad } from autodiff
+import { now } from time
+
+type Model = {
+    w: Tensor,
+    a: Tensor,
+    u: Tensor
+}
+
+with <m: Model>
+func fused_loss(x: Tensor): float {
+    let scaled = x / m.w
+    return sum(scaled @ m.u)
+}
+
+with <m: Model>
+func declined_loss(x: Tensor): float {
+    let scaled = m.a / m.w
+    return sum(scaled @ m.u)
+}
+
+func main(steps: int, rows: int, d: int, lr: float, fused: int): int sync {
+    let x = zeros([rows, d]) + 0.001
+    let model: Model = {
+        w: zeros([d]) + 1.5,
+        a: zeros([rows, d]) + 0.001,
+        u: zeros([d, d / 8]) + 0.01
+    }
+    'perf fusion_step rows={} d={} steps={} fused={}'->format<rows, d, steps, fused>->println
+    let grad_fused = with_grad(fused_loss)
+    let grad_declined = with_grad(declined_loss)
+    let started = now()
+    let (trained, done) = loop m = model, step = 0
+        while step < steps
+        do {
+            let next = if fused != 0 then {
+                let (value, gradient) = grad_fused<m>(x)
+                return {
+                    w: m.w - lr * gradient.w,
+                    a: m.a,
+                    u: m.u - lr * gradient.u
+                }
+            } else {
+                let (value, gradient) = grad_declined<m>(x)
+                return {
+                    w: m.w - lr * gradient.w,
+                    a: m.a,
+                    u: m.u - lr * gradient.u
+                }
+            }
+            return (next, step + 1)
+        }
+    let elapsed = now() - started
+    'perf fusion ms_per_step={:.3f} w={} u={}'
+    ->format<elapsed * 1000.0 / float(done), sum(trained.w), sum(trained.u)>
+    ->println
+    return 0
+}
