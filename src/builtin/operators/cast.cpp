@@ -5,7 +5,9 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/numeric_convert.h"
+#include "camel/core/numeric_convert_half.h"
 #include "camel/core/rtdata/complex.h"
+#include "camel/core/rtdata/half.h"
 
 #include <sstream>
 
@@ -151,8 +153,7 @@ slot_t __atos__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 namespace {
 
-template <typename T>
-slot_t realToComplex(ArgsView &norm, camel::core::type::TypeCode code) {
+template <typename T> slot_t realToComplex(ArgsView &norm, camel::core::type::TypeCode code) {
     const T value = norm.get<T>(0);
     return toSlot(Complex::create(static_cast<double>(value), 0.0, code, mm::autoSpace()));
 }
@@ -175,8 +176,12 @@ slot_t __ctoc__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot
 
 slot_t __ztoc__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const Complex *value = norm.get<Complex *>(0);
-    return toSlot(Complex::create(
-        value->real(), value->imaginary(), camel::core::type::TypeCode::Complex64, mm::autoSpace()));
+    return toSlot(
+        Complex::create(
+            value->real(),
+            value->imaginary(),
+            camel::core::type::TypeCode::Complex64,
+            mm::autoSpace()));
 }
 
 slot_t __itoz__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -193,7 +198,92 @@ slot_t __dtoz__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 slot_t __ctoz__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const Complex *value = norm.get<Complex *>(0);
-    return toSlot(Complex::create(
-        value->real(), value->imaginary(), camel::core::type::TypeCode::Complex128, mm::autoSpace()));
+    return toSlot(
+        Complex::create(
+            value->real(),
+            value->imaginary(),
+            camel::core::type::TypeCode::Complex128,
+            mm::autoSpace()));
 }
 slot_t __ztoz__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
+
+// A written conversion into bf16 or f16 (design principles 7.3): the type the program wrote is
+// the precision it asked for, so there is no permission to check, and the narrowing rounds to
+// nearest with ties to even exactly once (camel/core/rtdata/half.h, the one store rounding of
+// the element type). Every source is brought to f32, the compute precision of the element type,
+// and rounded once into it: an f64 source goes through f32 for that reason, as the tensor
+// kernels do. The value of a bf16 or f16 in a slot is its 16-bit pattern in the low half.
+
+#define CAMEL_HALF_FROM(NAME, HALF, GET)                                                           \
+    slot_t NAME(ArgsView &with, ArgsView &norm, Context &ctx) {                                    \
+        (void)with;                                                                                \
+        (void)ctx;                                                                                 \
+        return camel::core::rtdata::halfFromValue<HALF>(GET);                                      \
+    }
+
+CAMEL_HALF_FROM(__itobf__, camel::core::rtdata::BFloat16, norm.get<Int32>(0))
+CAMEL_HALF_FROM(__ltobf__, camel::core::rtdata::BFloat16, norm.get<Int64>(0))
+CAMEL_HALF_FROM(__ftobf__, camel::core::rtdata::BFloat16, norm.get<Float32>(0))
+CAMEL_HALF_FROM(__dtobf__, camel::core::rtdata::BFloat16, norm.get<Float64>(0))
+CAMEL_HALF_FROM(__itof6__, camel::core::rtdata::Float16, norm.get<Int32>(0))
+CAMEL_HALF_FROM(__ltof6__, camel::core::rtdata::Float16, norm.get<Int64>(0))
+CAMEL_HALF_FROM(__ftof6__, camel::core::rtdata::Float16, norm.get<Float32>(0))
+CAMEL_HALF_FROM(__dtof6__, camel::core::rtdata::Float16, norm.get<Float64>(0))
+
+#undef CAMEL_HALF_FROM
+
+// A bf16 or f16 into its own type is the value itself: the bits are already the type's.
+slot_t __bftobf__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
+slot_t __f6tof6__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
+
+slot_t __stobf__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // The whole string must be one number (design principles 5.1); it is read as f32 and rounded
+    // once into bf16, which is the same value as rounding the decimal text directly.
+    (void)with;
+    (void)ctx;
+    String *s = norm.get<String *>(0);
+    return camel::core::halfFromText<camel::core::rtdata::BFloat16>(s->view(), "bf16");
+}
+
+slot_t __stof6__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    String *s = norm.get<String *>(0);
+    return camel::core::halfFromText<camel::core::rtdata::Float16>(s->view(), "f16");
+}
+
+// A bf16 or f16 widens exactly to f32, f64, int and i32 alike, so this conversion loses nothing:
+// the value is the f32 of its bits, and a target that a float cannot hold is refused by
+// checkedTruncate as it is for an f32 source. The bits are read from the low half of the slot.
+
+#define CAMEL_HALF_TO(NAME, HALF, CONVERT)                                                         \
+    slot_t NAME(ArgsView &with, ArgsView &norm, Context &ctx) {                                    \
+        (void)with;                                                                                \
+        (void)ctx;                                                                                 \
+        const float value = camel::core::rtdata::halfToFloat<HALF>(norm.slot(0));                  \
+        return CONVERT;                                                                            \
+    }
+
+CAMEL_HALF_TO(__bftof__, camel::core::rtdata::BFloat16, toSlot(value))
+CAMEL_HALF_TO(__bftod__, camel::core::rtdata::BFloat16, toSlot(static_cast<Float64>(value)))
+CAMEL_HALF_TO(__f6tof__, camel::core::rtdata::Float16, toSlot(value))
+CAMEL_HALF_TO(__f6tod__, camel::core::rtdata::Float16, toSlot(static_cast<Float64>(value)))
+
+#undef CAMEL_HALF_TO
+
+/// An integer target: a float that the type cannot hold is out of range, as it is for an f32
+/// source (`int(1e30)`), and a fraction is truncated toward zero.
+#define CAMEL_HALF_TO_INT(TARGET, NAME, HALF)                                                      \
+    slot_t NAME(ArgsView &with, ArgsView &norm, Context &ctx) {                                    \
+        (void)with;                                                                                \
+        (void)ctx;                                                                                 \
+        const float value = camel::core::rtdata::halfToFloat<HALF>(norm.slot(0));                  \
+        return toSlot(camel::core::checkedTruncate<TARGET>(value, #TARGET));                       \
+    }
+
+CAMEL_HALF_TO_INT(Int32, __bftoi__, camel::core::rtdata::BFloat16)
+CAMEL_HALF_TO_INT(Int64, __bftol__, camel::core::rtdata::BFloat16)
+CAMEL_HALF_TO_INT(Int32, __f6toi__, camel::core::rtdata::Float16)
+CAMEL_HALF_TO_INT(Int64, __f6tol__, camel::core::rtdata::Float16)
+
+#undef CAMEL_HALF_TO_INT

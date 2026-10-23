@@ -5,6 +5,7 @@
 
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
@@ -36,6 +37,8 @@ bool isContentComparableImpl(const Type *type, std::vector<const Type *> &active
     case TypeCode::Int64:
     case TypeCode::Float32:
     case TypeCode::Float64:
+    case TypeCode::BFloat16:
+    case TypeCode::Float16:
     case TypeCode::Bool:
     case TypeCode::String:
     case TypeCode::Complex64:
@@ -52,14 +55,13 @@ bool isContentComparableImpl(const Type *type, std::vector<const Type *> &active
     }
     const TypeCode code = type->code();
     const bool onPath   = code == TypeCode::Array || code == TypeCode::Tuple ||
-                        code == TypeCode::Struct || asEnumType(type) != nullptr ||
-                        asCollectionType(type) != nullptr;
+                          code == TypeCode::Struct || asEnumType(type) != nullptr ||
+                          asCollectionType(type) != nullptr;
     if (onPath) {
         active.push_back(type);
     }
     bool comparable = true;
-    bool handled    = code == TypeCode::Array || code == TypeCode::Tuple ||
-                   code == TypeCode::Struct;
+    bool handled = code == TypeCode::Array || code == TypeCode::Tuple || code == TypeCode::Struct;
     switch (code) {
     case TypeCode::Array:
         comparable =
@@ -152,6 +154,13 @@ bool comparePair(slot_t a, slot_t b, const Type *type, std::vector<EqualPair> &p
         return fromSlot<Float32>(a) == fromSlot<Float32>(b);
     case TypeCode::Float64:
         return fromSlot<Float64>(a) == fromSlot<Float64>(b);
+    // bf16 and f16 compare as the numbers they are (design principles 7.3), not as their bit
+    // patterns: a NaN equals nothing and the two zeros are equal, as for every float. The slot
+    // holds the two-byte pattern in its low half (camel/core/rtdata/half.h).
+    case TypeCode::BFloat16:
+        return halfToFloat<BFloat16>(a) == halfToFloat<BFloat16>(b);
+    case TypeCode::Float16:
+        return halfToFloat<Float16>(a) == halfToFloat<Float16>(b);
     case TypeCode::String: {
         if (a == b) {
             return true;
@@ -183,8 +192,7 @@ bool comparePair(slot_t a, slot_t b, const Type *type, std::vector<EqualPair> &p
             if (isNullValue(a) || isNullValue(b)) {
                 return isNullValue(a) && isNullValue(b);
             }
-            pending.push_back(
-                {nullablePayload(a), nullablePayload(b), tuple->payloadType()});
+            pending.push_back({nullablePayload(a), nullablePayload(b), tuple->payloadType()});
             return true;
         }
         if (tuple->isFallible()) {
@@ -195,8 +203,7 @@ bool comparePair(slot_t a, slot_t b, const Type *type, std::vector<EqualPair> &p
             if (failedA) {
                 pending.push_back({fallibleError(a), fallibleError(b), errorType()});
             } else {
-                pending.push_back(
-                    {falliblePayload(a), falliblePayload(b), tuple->payloadType()});
+                pending.push_back({falliblePayload(a), falliblePayload(b), tuple->payloadType()});
             }
             return true;
         }
@@ -247,8 +254,7 @@ bool comparePair(slot_t a, slot_t b, const Type *type, std::vector<EqualPair> &p
         }
         const EnumVariant &variant = enumType->variant(lhsVariant->tag());
         for (size_t i = 0; i < lhsVariant->fieldCount(); ++i) {
-            pending.push_back(
-                {lhsVariant->get(i), rhsVariant->get(i), variant.fieldTypes[i]});
+            pending.push_back({lhsVariant->get(i), rhsVariant->get(i), variant.fieldTypes[i]});
         }
         return true;
     }

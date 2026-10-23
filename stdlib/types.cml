@@ -15,11 +15,10 @@
  * instead of listing the types again, so a new integer width is added in one place.
  *
  * `bf16` and `f16` are floating-point types (design principles 7.3; handover H238): a tensor
- * stores an element in one of them and every kernel computes in f32 and rounds once, so they
- * belong to `is_float` and inherit `is_numeric` and `is_ordered` from it. They are element
- * types: the language has no bf16 or f16 literal, scalar operator or conversion, so a generic
- * function that combines two element values is refused where it is written rather than
- * answered at a narrower width.
+ * stores an element in one of them, every kernel computes in f32 and rounds once, and the
+ * language itself gives them what it gives `f32`: literals, a written conversion (`bf16(x)`,
+ * `f16(x)`, `x as bf16`), scalar arithmetic and comparison, and arrays of them. They belong to
+ * `is_float` and inherit `is_numeric` and `is_ordered` from it.
  */
 
 module types
@@ -35,7 +34,7 @@ export func is_integer::<T>(): bool {
 }
 
 /// True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit, `bf16` and
-/// `f16` are the two-byte tensor element types).
+/// `f16` are the two reduced-precision floating types).
 /// @example is_float::<float>()    // true
 /// @example is_float::<bf16>()    // true
 /// @example is_float::<int>()    // false

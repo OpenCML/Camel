@@ -49,3 +49,30 @@ slot_t __ftoz__(ArgsView &with, ArgsView &norm, camel::core::context::Context &c
 slot_t __dtoz__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __ctoz__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __ztoz__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
+// bf16 and f16 are floating types of the language with a written conversion of their own (design
+// principles 7.3): `bf16(x)`, `f16(x)` and `x as bf16` all come here, round to nearest with ties
+// to even once, and need no numeric permission. `h` in a name is bf16 and `f6` is f16.
+slot_t __itobf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ltobf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ftobf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __dtobf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __bftobf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __stobf__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
+slot_t __itof6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ltof6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ftof6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __dtof6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __f6tof6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __stof6__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
+slot_t __bftoi__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __bftol__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __bftof__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __bftod__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
+slot_t __f6toi__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __f6tol__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __f6tof__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __f6tod__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

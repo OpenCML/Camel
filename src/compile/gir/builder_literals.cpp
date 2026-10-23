@@ -315,12 +315,13 @@ void Builder::adaptLiteralOperands(
                 continue;
             }
             Type *candidate = valueTypeOf(types[j]);
+            // A bf16 or f16 operand takes the literal too: it is a floating type of the language,
+            // and a literal has one of it (design principles 5.1, 7.3). Leaving it out left
+            // `bf16_v + 0.0` with no overload at all, while `f32_v + 0.0` is an f32 sum.
             if (candidate != nullptr &&
-                (candidate->isPrimitive() ||
-                 camel::core::type::isComplex(candidate->code())) &&
+                (candidate->isPrimitive() || camel::core::type::isComplex(candidate->code())) &&
                 (candidate->code() == TypeCode::Int32 || candidate->code() == TypeCode::Int64 ||
-                 candidate->code() == TypeCode::Float32 ||
-                 candidate->code() == TypeCode::Float64 ||
+                 camel::core::type::isFloatingScalar(candidate->code()) ||
                  camel::core::type::isComplex(candidate->code()))) {
                 other = candidate;
             }

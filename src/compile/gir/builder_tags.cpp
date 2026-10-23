@@ -56,13 +56,13 @@ ArgKind kindOfDeclaredType(std::string_view type) {
             t += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         }
     }
-    if (t == "int" || t == "int8" || t == "int16" || t == "int32" || t == "int64" ||
-        t == "i8" || t == "i16" || t == "i32" || t == "i64" || t == "u8" || t == "u16" ||
-        t == "u32" || t == "u64" || t == "uint" || t == "integer") {
+    if (t == "int" || t == "int8" || t == "int16" || t == "int32" || t == "int64" || t == "i8" ||
+        t == "i16" || t == "i32" || t == "i64" || t == "u8" || t == "u16" || t == "u32" ||
+        t == "u64" || t == "uint" || t == "integer") {
         return ArgKind::Int;
     }
     if (t == "float" || t == "float32" || t == "float64" || t == "f32" || t == "f64" ||
-        t == "double" || t == "real") {
+        t == "double" || t == "real" || t == "bf16" || t == "f16") {
         return ArgKind::Float;
     }
     if (t == "bool" || t == "boolean") {
@@ -85,6 +85,8 @@ ArgKind kindOfValue(camel::core::type::TypeCode code) {
         return ArgKind::Int;
     case TypeCode::Float32:
     case TypeCode::Float64:
+    case TypeCode::BFloat16:
+    case TypeCode::Float16:
         return ArgKind::Float;
     case TypeCode::Bool:
         return ArgKind::Bool;
@@ -138,23 +140,21 @@ std::optional<camel::core::tag::TagId> Builder::tagNamed(const std::string &writ
     // The language's own tags (`reassociate`, `finite_math`, ...) are names of the core: a
     // program writes them without importing anything, as it writes `#macro`.
     if (written.find("::") == std::string::npos) {
-        if (auto core = camel::core::tag::find(std::string_view{}, written);
-            core.has_value()) {
+        if (auto core = camel::core::tag::find(std::string_view{}, written); core.has_value()) {
             return core;
         }
     }
     // A tag is a name of the entity namespace: an imported one resolves exactly as an imported
     // function does, by name or through the module that exports it.
     const Reference ref(written);
-    if (auto entity = importedEntity(ref);
-        entity.has_value() && entity->isTag()) {
+    if (auto entity = importedEntity(ref); entity.has_value() && entity->isTag()) {
         return entity->tagId();
     }
     return std::nullopt;
 }
 
-camel::core::attr::AttrValueId Builder::tagValueOf(
-    const camel::core::tag::Decl &decl, const GCT::TagUse &use) {
+camel::core::attr::AttrValueId
+Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) {
     if (decl.variadic) {
         if (use.args.empty()) {
             diags_->of(SemanticDiag::TagArgumentCount)
@@ -185,6 +185,12 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
         case TypeCode::Float64:
             return camel::core::attr::real(
                 std::static_pointer_cast<camel::core::data::DoubleData>(data)->data());
+        case TypeCode::BFloat16:
+        case TypeCode::Float16:
+            // A bf16 or f16 constant is a real to the pass that reads it: the attribute carries
+            // the value, so the f32 it widens to is what it means (design principles 7.3).
+            return camel::core::attr::real(
+                std::static_pointer_cast<camel::core::data::HalfData>(data)->toFloat());
         case TypeCode::Bool:
             return camel::core::attr::integer(
                 std::static_pointer_cast<camel::core::data::BoolData>(data)->data() ? 1 : 0);
@@ -242,7 +248,7 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
                             "not a function of the program");
                     throw BuildAbortException();
                 }
-                const camel::runtime::GraphId id = graph.value()->graphId();
+                const camel::runtime::GraphId id                = graph.value()->graphId();
                 tagFunctionGraphs_[camel::runtime::toValue(id)] = graph.value();
                 values.push_back(camel::core::attr::graphRef(id));
                 continue;
@@ -304,8 +310,7 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
                     .commit("", use.name, "string", arg->toString(), "another kind");
                 throw BuildAbortException();
             }
-            const auto name =
-                std::static_pointer_cast<camel::core::data::StringData>(arg)->data();
+            const auto name = std::static_pointer_cast<camel::core::data::StringData>(arg)->data();
             // A reader names tags, so a name that is not a declared one is a typo, not a fact.
             if (decl.namesAreTags && !tagNamed(name).has_value()) {
                 diags_->of(SemanticDiag::TagUndeclared).atOrigin(use.origin).commit(name);
@@ -341,8 +346,7 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
         if (actual != declared) {
             diags_->of(SemanticDiag::TagArgumentType)
                 .atOrigin(use.origin)
-                .commit(
-                    param.name, use.name, param.type, writtenText(args[i]), kindName(actual));
+                .commit(param.name, use.name, param.type, writtenText(args[i]), kindName(actual));
             throw BuildAbortException();
         }
     }
@@ -382,8 +386,7 @@ std::optional<compile_graph_ptr_t> Builder::functionGraphNamed(const std::string
     return std::nullopt;
 }
 
-void Builder::attachRuleGraphs(
-    const compile_graph_ptr_t &graph, camel::core::attr::AttrSetId set) {
+void Builder::attachRuleGraphs(const compile_graph_ptr_t &graph, camel::core::attr::AttrSetId set) {
     if (!graph || set == camel::core::attr::kNoAttrs) {
         return;
     }
@@ -433,13 +436,12 @@ void Builder::addTagFacts(
     const bool allows = (decl->on & at) != 0;
     // A tag written before a function may be a tag of the function (its declaration) or of the
     // nodes of its body: the declaration lists which. Anywhere else only the written position.
-    const bool asDeclaration =
-        at == camel::core::tag::Func || at == camel::core::tag::Type ||
-        at == camel::core::tag::Field;
-    const bool asNodes = at == camel::core::tag::Nodes;
-    const bool declaration = allows && asDeclaration;
-    const bool nodes       = ((decl->on & camel::core::tag::Nodes) != 0) &&
-                       (asNodes || (at == camel::core::tag::Func));
+    const bool asDeclaration = at == camel::core::tag::Func || at == camel::core::tag::Type ||
+                               at == camel::core::tag::Field;
+    const bool asNodes       = at == camel::core::tag::Nodes;
+    const bool declaration   = allows && asDeclaration;
+    const bool nodes =
+        ((decl->on & camel::core::tag::Nodes) != 0) && (asNodes || (at == camel::core::tag::Func));
     if (!declaration && !nodes) {
         diags_->of(SemanticDiag::TagNotAtPosition)
             .atOrigin(use.origin)
@@ -455,10 +457,12 @@ void Builder::addTagFacts(
         // permission column, not an attribute: the nodes get it through the permission scope
         // of the body or block (see visitExecNode and buildFuncBody). On a declaration the tag
         // is recorded too, so the facts query reports what the declaration grants.
-        facts.permissions = static_cast<camel::core::sem::PermissionMask>(facts.permissions | decl->permission);
+        facts.permissions =
+            static_cast<camel::core::sem::PermissionMask>(facts.permissions | decl->permission);
         if (declaration) {
             facts.declaration = camel::core::attr::unite(
-                facts.declaration, camel::core::attr::single(decl->key, value));
+                facts.declaration,
+                camel::core::attr::single(decl->key, value));
         }
         if (context_ != nullptr && !decl->readBy.empty()) {
             context_->noteTagUse({decl->name, decl->readBy, use.origin});
@@ -466,8 +470,7 @@ void Builder::addTagFacts(
         return;
     }
     const auto mergeFact = [&](camel::core::attr::AttrSetId &set) {
-        const camel::core::attr::AttrValueId current =
-            camel::core::attr::valueOf(set, decl->key);
+        const camel::core::attr::AttrValueId current = camel::core::attr::valueOf(set, decl->key);
         if (current != camel::core::attr::kNoValue && current != value) {
             diags_->of(SemanticDiag::TagValueConflict)
                 .atOrigin(use.origin)
@@ -478,8 +481,7 @@ void Builder::addTagFacts(
                     camel::core::attr::valueText(current));
             throw BuildAbortException();
         }
-        set = camel::core::attr::unite(
-            set, camel::core::attr::single(decl->key, value));
+        set = camel::core::attr::unite(set, camel::core::attr::single(decl->key, value));
     };
     if (declaration) {
         mergeFact(facts.declaration);
@@ -495,8 +497,8 @@ void Builder::addTagFacts(
     }
 }
 
-Builder::TagFacts Builder::tagFactsOfList(
-    const std::vector<GCT::TagUse> &uses, camel::core::tag::Position at) {
+Builder::TagFacts
+Builder::tagFactsOfList(const std::vector<GCT::TagUse> &uses, camel::core::tag::Position at) {
     TagFacts facts;
     std::unordered_set<camel::core::tag::TagId> seen;
     for (const auto &use : uses) {
@@ -545,7 +547,7 @@ std::optional<Builder::ImplTag> Builder::implTagOf(const GCT::node_ptr_t &gct) {
         return std::nullopt;
     }
     const camel::core::tag::Decl *decl = camel::core::tag::get(*implTag);
-    const auto *uses                  = GCT::Tree::of(gct)->tagUsesOf(gct);
+    const auto *uses                   = GCT::Tree::of(gct)->tagUsesOf(gct);
     if (decl == nullptr || uses == nullptr) {
         return std::nullopt;
     }
@@ -557,13 +559,11 @@ std::optional<Builder::ImplTag> Builder::implTagOf(const GCT::node_ptr_t &gct) {
         // The argument is one name, carried as a one-item tuple of symbols (`namesAreTags`
         // false: the name is a declaration, not a tag). A wrong number or kind is reported by
         // tagValueOf here, at the tag, like every other argument mistake.
-        const camel::core::attr::Value value =
-            camel::core::attr::value(tagValueOf(*decl, use));
+        const camel::core::attr::Value value = camel::core::attr::value(tagValueOf(*decl, use));
         if (value.kind != camel::core::attr::ValueKind::Tuple || value.items.size() != 1) {
             continue;
         }
-        const camel::core::attr::Value kernel =
-            camel::core::attr::value(value.items.front());
+        const camel::core::attr::Value kernel = camel::core::attr::value(value.items.front());
         if (kernel.kind != camel::core::attr::ValueKind::Symbol || kernel.text.empty()) {
             continue;
         }

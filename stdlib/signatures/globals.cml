@@ -43,6 +43,10 @@ export func int(x: f32): int
 export func int(x: float): int
 #op<':op/*tol'>
 export func int(x: string): int
+#op<':op/*tol'>
+export func int(x: bf16): int
+#op<':op/*tol'>
+export func int(x: f16): int
 
 /// The same as int.
 /// @pure
@@ -58,6 +62,10 @@ export func i64(x: f32): int
 export func i64(x: float): int
 #op<':op/*tol'>
 export func i64(x: string): int
+#op<':op/*tol'>
+export func i64(x: bf16): int
+#op<':op/*tol'>
+export func i64(x: f16): int
 
 /// x as a 32-bit integer.
 /// @pure
@@ -73,6 +81,10 @@ export func i32(x: f32): i32
 export func i32(x: float): i32
 #op<':op/*toi'>
 export func i32(x: string): i32
+#op<':op/*toi'>
+export func i32(x: bf16): i32
+#op<':op/*toi'>
+export func i32(x: f16): i32
 
 /// x as a 64-bit float.
 /// @pure
@@ -88,6 +100,10 @@ export func float(x: f32): float
 export func float(x: float): float
 #op<':op/*tod'>
 export func float(x: string): float
+#op<':op/*tod'>
+export func float(x: bf16): float
+#op<':op/*tod'>
+export func float(x: f16): float
 
 /// The same as float.
 /// @pure
@@ -103,6 +119,10 @@ export func f64(x: f32): float
 export func f64(x: float): float
 #op<':op/*tod'>
 export func f64(x: string): float
+#op<':op/*tod'>
+export func f64(x: bf16): float
+#op<':op/*tod'>
+export func f64(x: f16): float
 
 /// x as a 32-bit float.
 /// @pure
@@ -118,6 +138,47 @@ export func f32(x: f32): f32
 export func f32(x: float): f32
 #op<':op/*tof'>
 export func f32(x: string): f32
+#op<':op/*tof'>
+export func f32(x: bf16): f32
+#op<':op/*tof'>
+export func f32(x: f16): f32
+
+/// x as a bf16: the nearest bf16 of x, rounding to nearest with ties to even, once. A bf16 is a
+/// floating-point type of the language (design principles 7.3), not only a tensor element type,
+/// and writing the conversion asks for that precision, so no numeric permission is involved.
+/// @pure
+/// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of bf16 (overflow or underflow)
+/// @example bf16(0.5)    // 0.5
+#op<':op/*tobf'>
+export func bf16(x: i32): bf16
+#op<':op/*tobf'>
+export func bf16(x: int): bf16
+#op<':op/*tobf'>
+export func bf16(x: f32): bf16
+#op<':op/*tobf'>
+export func bf16(x: float): bf16
+#op<':op/*tobf'>
+export func bf16(x: bf16): bf16
+#op<':op/*tobf'>
+export func bf16(x: string): bf16
+
+/// x as an f16: the nearest f16 of x, rounding to nearest with ties to even, once. The same
+/// conversion as bf16, at the other reduced precision (design principles 7.3).
+/// @pure
+/// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f16 (overflow or underflow)
+/// @example f16(0.5)    // 0.5
+#op<':op/*tof6'>
+export func f16(x: i32): f16
+#op<':op/*tof6'>
+export func f16(x: int): f16
+#op<':op/*tof6'>
+export func f16(x: f32): f16
+#op<':op/*tof6'>
+export func f16(x: float): f16
+#op<':op/*tof6'>
+export func f16(x: f16): f16
+#op<':op/*tof6'>
+export func f16(x: string): f16
 
 /// x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
 /// keeps both parts as they are.

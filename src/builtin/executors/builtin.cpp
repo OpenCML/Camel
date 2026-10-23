@@ -14,6 +14,7 @@ using namespace camel::core::rtdata;
 #include "../operators/cast.h"
 #include "../operators/collection.h"
 #include "../operators/enum.h"
+#include "../operators/half_ops.h"
 #include "../operators/higher_order.h"
 #include "../operators/io.h"
 #include "../operators/macro.h"
@@ -70,6 +71,33 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/ctoz", __ctoz__},
         {"op/ztoz", __ztoz__},
 
+        // bf16 and f16 are floating types of the language with a written conversion of their own
+        // (design principles 7.3): `bf16(x)`, `f16(x)` and `x as bf16` round to nearest with ties
+        // to even once and need no numeric permission. `bf` is bf16 and `f6` is f16.
+        {"op/itobf", __itobf__},
+        {"op/ltobf", __ltobf__},
+        {"op/ftobf", __ftobf__},
+        {"op/dtobf", __dtobf__},
+        {"op/bftobf", __bftobf__},
+        {"op/stobf", __stobf__},
+
+        {"op/itof6", __itof6__},
+        {"op/ltof6", __ltof6__},
+        {"op/ftof6", __ftof6__},
+        {"op/dtof6", __dtof6__},
+        {"op/f6tof6", __f6tof6__},
+        {"op/stof6", __stof6__},
+
+        {"op/bftoi", __bftoi__},
+        {"op/bftol", __bftol__},
+        {"op/bftof", __bftof__},
+        {"op/bftod", __bftod__},
+
+        {"op/f6toi", __f6toi__},
+        {"op/f6tol", __f6tol__},
+        {"op/f6tof", __f6tof__},
+        {"op/f6tod", __f6tod__},
+
         {"op/itos", __itos__},
         {"op/ltos", __ltos__},
         {"op/ftos", __ftos__},
@@ -78,6 +106,45 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/ctos", __atos__},
         {"op/ztos", __atos__},
         {"op/atos", __atos__},
+
+        // The scalar operations of the two reduced-precision floating types (design principles
+        // 7.3): each widens its operands to f32, computes there and rounds the result once into
+        // the element type, which is what a bf16 or f16 value is a member of. `bf` is bf16 and
+        // `f6` is f16.
+        {"op/eq_bf", __builtin__eq__},
+        {"op/ne_bf", __builtin__ne__},
+        {"op/eq_f6", __builtin__eq__},
+        {"op/ne_f6", __builtin__ne__},
+        {"op/lt_bf", __builtin__lt_bf__},
+        {"op/le_bf", __builtin__le_bf__},
+        {"op/gt_bf", __builtin__gt_bf__},
+        {"op/ge_bf", __builtin__ge_bf__},
+        {"op/lt_f6", __builtin__lt_f6__},
+        {"op/le_f6", __builtin__le_f6__},
+        {"op/gt_f6", __builtin__gt_f6__},
+        {"op/ge_f6", __builtin__ge_f6__},
+        {"op/add_bf", __builtin__add_bfbf__},
+        {"op/sub_bf", __builtin__sub_bfbf__},
+        {"op/mul_bf", __builtin__mul_bfbf__},
+        {"op/div_bf", __builtin__div_bfbf__},
+        {"op/pow_bf", __builtin__pow_bfbf__},
+        {"op/neg_bf", __builtin__neg_bf__},
+        {"op/add_f6", __builtin__add_f6f6__},
+        {"op/sub_f6", __builtin__sub_f6f6__},
+        {"op/mul_f6", __builtin__mul_f6f6__},
+        {"op/div_f6", __builtin__div_f6f6__},
+        {"op/pow_f6", __builtin__pow_f6f6__},
+        {"op/neg_f6", __builtin__neg_f6__},
+        {"op/assn_add_bf", __builtin__assn_add_bf__},
+        {"op/assn_sub_bf", __builtin__assn_sub_bf__},
+        {"op/assn_mul_bf", __builtin__assn_mul_bf__},
+        {"op/assn_div_bf", __builtin__assn_div_bf__},
+        {"op/assn_pow_bf", __builtin__assn_pow_bf__},
+        {"op/assn_add_f6", __builtin__assn_add_f6__},
+        {"op/assn_sub_f6", __builtin__assn_sub_f6__},
+        {"op/assn_mul_f6", __builtin__assn_mul_f6__},
+        {"op/assn_div_f6", __builtin__assn_div_f6__},
+        {"op/assn_pow_f6", __builtin__assn_pow_f6__},
 
         // diagnostics
         {"op/mem_blocks", __builtin__mem_blocks__},
@@ -335,7 +402,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // macro
         {"macro/cmp", __cmp__},
 
-
         // Tagged forms T? and T! (operators/tagged.h). All are under op/: pure.
         {"op/tag_is_null", __is_null__},
         {"op/tag_null_value", __null_value__},
@@ -413,10 +479,54 @@ void registerBuiltinOperatorTraits() {
     // the strict boolean operators only read their operands. Everything else keeps the
     // default (may fault). No pass acts on this declaration yet (operator_table.h).
     static const std::unordered_set<std::string_view> kNeverFaults = {
-        "op/add_i", "op/add_l", "op/add_f", "op/add_d", "op/sub_i", "op/sub_l", "op/sub_f",
-        "op/sub_d", "op/lt_i",  "op/lt_l",  "op/lt_f",  "op/lt_d",  "op/le_i",  "op/le_l",
-        "op/le_f",  "op/le_d",  "op/gt_i",  "op/gt_l",  "op/gt_f",  "op/gt_d",  "op/ge_i",
-        "op/ge_l",  "op/ge_f",  "op/ge_d",  "op/and",   "op/or",    "op/not",
+        "op/add_i",
+        "op/add_l",
+        "op/add_f",
+        "op/add_d",
+        "op/sub_i",
+        "op/sub_l",
+        "op/sub_f",
+        "op/sub_d",
+        "op/lt_i",
+        "op/lt_l",
+        "op/lt_f",
+        "op/lt_d",
+        "op/le_i",
+        "op/le_l",
+        "op/le_f",
+        "op/le_d",
+        "op/gt_i",
+        "op/gt_l",
+        "op/gt_f",
+        "op/gt_d",
+        "op/ge_i",
+        "op/ge_l",
+        "op/ge_f",
+        "op/ge_d",
+        "op/and",
+        "op/or",
+        "op/not",
+        // The same declarations for the two reduced-precision floating types (design principles
+        // 7.3): their arithmetic and ordering cannot fail, and `bf16(x) / y` keeps the fault of
+        // division by zero that f32 has.
+        "op/add_bf",
+        "op/sub_bf",
+        "op/mul_bf",
+        "op/neg_bf",
+        "op/pow_bf",
+        "op/lt_bf",
+        "op/le_bf",
+        "op/gt_bf",
+        "op/ge_bf",
+        "op/add_f6",
+        "op/sub_f6",
+        "op/mul_f6",
+        "op/neg_f6",
+        "op/pow_f6",
+        "op/lt_f6",
+        "op/le_f6",
+        "op/gt_f6",
+        "op/ge_f6",
     };
     auto &registry = camel::core::OperatorTable::instance();
     for (const auto &[name, op] : getOpsImplMap()) {

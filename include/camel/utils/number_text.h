@@ -55,6 +55,15 @@ template <std::floating_point T> std::string_view floatRangeText() {
     }
 }
 
+/// The range of a bf16 or an f16, in the same words (`at most about 3.4e38 in magnitude` for
+/// bf16, the range of f32 with a shorter significand; `at most 65504 in magnitude` for f16).
+/// A reduced-precision type is a floating type with a range of its own, so a literal that does
+/// not fit it is reported with that range, not with f32's (design principles 7.3).
+inline std::string_view halfRangeText(bool isBFloat16) {
+    return isBFloat16 ? std::string_view("at most about 3.4e38 in magnitude")
+                      : std::string_view("at most 65504 in magnitude");
+}
+
 /// The range of one part of a complex number whose parts are of type T (`each part at most
 /// about 3.4e38 in magnitude`).
 template <std::floating_point T> std::string complexRangeText() {
@@ -197,8 +206,8 @@ inline bool integerParts(std::string_view body, IntegerParts &parts) {
 /// a body with neither is an integer token, not a real one. `integerDigits` is the length of the
 /// digit run before the point or the exponent.
 struct RealParts {
-    bool point     = false;
-    bool exponent  = false;
+    bool point                = false;
+    bool exponent             = false;
     std::size_t integerDigits = 0;
 };
 
@@ -210,7 +219,7 @@ inline bool realParts(std::string_view body, RealParts &parts) {
     if (i == 0) {
         return false;
     }
-    parts          = {};
+    parts               = {};
     parts.integerDigits = i;
     if (i < body.size() && body[i] == '.') {
         parts.point = true;
@@ -243,8 +252,7 @@ inline bool realParts(std::string_view body, RealParts &parts) {
 /// The value of `digits` in `radix`, read as T; the text is known to be an integer token. A
 /// magnitude the type cannot hold is OutOfRange, never wrapped around (design principles 5.1).
 template <std::signed_integral T>
-NumberTextStatus integerValue(
-    std::string_view digits, unsigned radix, bool negative, T &out) {
+NumberTextStatus integerValue(std::string_view digits, unsigned radix, bool negative, T &out) {
     // The largest magnitude the type holds, as an unsigned value: for a negative number the
     // magnitude may be one more (the minimum has no positive counterpart).
     const uint64_t maximum = static_cast<uint64_t>(std::numeric_limits<T>::max());
@@ -277,7 +285,10 @@ NumberTextStatus realValue(std::string_view body, bool negative, T &out) {
     T value{};
     if constexpr (requires(const char *p, T &v) { std::from_chars(p, p, v); }) {
         const auto [end, ec] = std::from_chars(
-            body.data(), body.data() + body.size(), value, std::chars_format::general);
+            body.data(),
+            body.data() + body.size(),
+            value,
+            std::chars_format::general);
         if (ec == std::errc::invalid_argument || end != body.data() + body.size()) {
             return NumberTextStatus::NotANumber;
         }
@@ -288,9 +299,9 @@ NumberTextStatus realValue(std::string_view body, bool negative, T &out) {
             // width: 3.5e38 overflows a float but is a finite double, and reading it as a double
             // would call it an underflow.
             const std::string numeral(body);
-            errno         = 0;
-            char *end     = nullptr;
-            T      spread = T{};
+            errno     = 0;
+            char *end = nullptr;
+            T spread  = T{};
             if constexpr (std::is_same_v<T, float>) {
                 spread = std::strtof(numeral.c_str(), &end);
             } else {
@@ -328,7 +339,8 @@ NumberTextStatus realValue(std::string_view body, bool negative, T &out) {
 /// '+'), then decimal digits, and nothing else (no blanks, no digit separators, no base prefix).
 /// The entry reader and a source literal use parseNumberToken, which reads a whole number token
 /// (the language's bases included).
-template <std::signed_integral T> NumberTextStatus parseWholeInteger(std::string_view text, T &out) {
+template <std::signed_integral T>
+NumberTextStatus parseWholeInteger(std::string_view text, T &out) {
     bool negative = false;
     if (!number_text_detail::splitNumberSign(text, negative)) {
         return NumberTextStatus::NotANumber;
@@ -416,8 +428,8 @@ template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_v
     number_text_detail::IntegerParts integer;
     if (number_text_detail::integerParts(text, integer)) {
         int64_t value = 0;
-        const NumberTextStatus status = number_text_detail::integerValue(
-            integer.digits, integer.radix, negative, value);
+        const NumberTextStatus status =
+            number_text_detail::integerValue(integer.digits, integer.radix, negative, value);
         if (status != NumberTextStatus::Ok) {
             return NumberTextStatus::OutOfRangeInteger;
         }
@@ -535,7 +547,8 @@ template <std::floating_point T> T withoutNaNSign(T value) {
 template <std::floating_point T> std::string complexPartText(T value) {
     if (std::isfinite(value) && value == std::trunc(value) && std::abs(value) < T(1e16)) {
         char buffer[32];
-        const auto [end, ec] = std::to_chars(buffer, buffer + sizeof(buffer), static_cast<long long>(value));
+        const auto [end, ec] =
+            std::to_chars(buffer, buffer + sizeof(buffer), static_cast<long long>(value));
         if (ec == std::errc()) {
             return std::string(buffer, static_cast<size_t>(end - buffer));
         }
@@ -550,7 +563,7 @@ template <std::floating_point T> std::string complexPartText(T value) {
 /// and `i` (`3+4i`, `3-4i`, `0+1i`). Both parts are always written, so a real-looking complex
 /// value still reads as a complex one.
 template <std::floating_point T> std::string complexText(T real, T imaginary) {
-    std::string text = complexPartText(real);
+    std::string text    = complexPartText(real);
     const bool negative = !std::isnan(imaginary) && std::signbit(imaginary);
     text += negative ? '-' : '+';
     text += complexPartText(negative ? -imaginary : imaginary);
