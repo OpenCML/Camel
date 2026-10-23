@@ -343,6 +343,7 @@ enum class SemanticDiag : uint32_t {
     /// An argument at a call has a type the parameter it fills does not take.
     ParamArgumentWrongType      = 0x0001D6,
     PrecisionChangeNotPermitted = 0x0001D5,
+    ReducedPrecisionUnsupported = 0x0001D7,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

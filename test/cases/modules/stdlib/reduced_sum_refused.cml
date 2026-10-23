@@ -1,0 +1,20 @@
+/**
+ * A reduction over an array of bf16 has no way to compute: `sum` combines two elements with
+ * `+` and returns their type, and the language defines no bf16 or f16 scalar operation, literal
+ * or conversion (design principles 7.3, H238). The call now passes `sum`'s
+ * `when is_numeric::<T>()` — bf16 is a float — and is then refused where the addition is
+ * written, naming the instance `sum<bf16>` and the element type, instead of being excluded
+ * quietly with WhenConditionUnmet.
+ *
+ * Tensor reductions over bf16 do compute (modules/stdlib/reduced_reduction_bytes.cml), because
+ * the tensor kernel widens each element to f32 and rounds once.
+ */
+module stdlib_reduced_sum_refused
+
+import { sum } from array
+
+func main(): int sync {
+    let xs: bf16[] = []
+    println(sum(xs))
+    return 0
+}
