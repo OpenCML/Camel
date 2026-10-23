@@ -68,25 +68,32 @@ bool isTensorArg(const InferContext &ctx, size_t index) {
     return isTensorType(ctx.type(index));
 }
 
-/// The element type a binary operator's two operands are computed in, mirroring
-/// `kernels::operandType`: a scalar takes the tensor's element type (a float meeting an integer
-/// tensor computes in f32, as the operator always has), and two tensors promote only by
-/// widening. Unknown when an operand's element type is unknown.
+/// The element type a binary operator's two operands are computed in: a scalar operand has the
+/// tensor's element type, and two tensors promote only by widening. A scalar of another type is
+/// refused, not converted (design principles 5.1): a literal operand took the element type before
+/// this (`x * 2.0` with an f32 tensor is the f32 product `x * 2.0f`), and a value whose type is
+/// its own is an error, the same rule as `f32 * f64` between two scalars. Unknown when an
+/// operand's element type is unknown.
 std::optional<TypeCode>
 operandType(const InferContext &ctx, const TensorFacts &lhs, const TensorFacts &rhs) {
-    if (isTensorArg(ctx, 0) != isTensorArg(ctx, 1)) {
-        const bool tensorFirst = isTensorArg(ctx, 0);
-        const TensorFacts &tensor = tensorFirst ? lhs : rhs;
-        const TypeCode scalar = tensorFirst ? ctx.type(1)->code() : ctx.type(0)->code();
-        if (!tensor.dtype) {
-            return std::nullopt;
-        }
-        if (isFloatingTensorType(*tensor.dtype)) {
-            return *tensor.dtype;
-        }
-        return isFloatingTensorType(scalar) ? std::optional(TypeCode::Float32) : tensor.dtype;
+    if (isTensorArg(ctx, 0) == isTensorArg(ctx, 1)) {
+        return promote(lhs.dtype, rhs.dtype);
     }
-    return promote(lhs.dtype, rhs.dtype);
+    const bool tensorFirst = isTensorArg(ctx, 0);
+    const TensorFacts &tensor = tensorFirst ? lhs : rhs;
+    Type *scalar = tensorFirst ? ctx.type(1) : ctx.type(0);
+    if (!tensor.dtype || scalar == nullptr) {
+        return std::nullopt;
+    }
+    if (scalar->code() != *tensor.dtype) {
+        const std::string element = typeCodeToString(*tensor.dtype);
+        throw std::invalid_argument(
+            "the scalar operand has type '" + scalar->toString() + "', but the tensor's element "
+            "type is '" + element + "': a tensor operator computes in its element type, and there "
+            "is no implicit conversion between numeric types (write the conversion, " + element +
+            "(value))");
+    }
+    return tensor.dtype;
 }
 
 InferFn binaryInfer(bool producesFloat) {
