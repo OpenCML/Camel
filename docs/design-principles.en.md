@@ -138,7 +138,7 @@ The body of `main` is a synchronous block, so the two calls to `log` execute in 
 
 ### 3.4 `sync` blocks
 
-A `sync` written before a block (including the postfix form on a function body, `func f(): T sync { ... }`, and a standalone `sync { ... }`) means this is a synchronous block: all expressions in it execute in written order, which can be understood as the compiler automatically inserting control edges between each adjacent pair.
+A `sync` written before a block (including the postfix form on a function body, `func f(): T sync { ... }`, and a standalone `sync { ... }`) means this is a synchronous block: **the statements it writes directly** execute in written order, which can be understood as the compiler inserting sync edges between adjacent statements; arms, loop bodies and nested blocks written inside it are not governed by it (see "a sync block does not reach inward" in this section).
 
 - The side effects of the statements the block writes directly certainly execute, and those statements (across resources, pure computations) are in written order. It serves "I want it to happen" and "order across resources and across pure computations" (such as timing). It is not extended into synchronization by category.
 - Inside a synchronous block it does not matter what is called or whether it has side effects, because there is already an order. Side effects need to be considered only under the premise of the default out-of-order execution, because they limit the order from being shuffled freely.
