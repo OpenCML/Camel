@@ -6,7 +6,9 @@
  * (tensor:sum_to, tensor:matmul_grad_lhs, nn:conv2d_kernel_grad, ...) and of
  * the tree optimizers nn:sgd and nn:adam, so that a training step exports as
  * one ONNX graph. Most of them decompose into several ONNX nodes. They need
- * the static ranks of their operands, which shape specialization provides.
+ * the static ranks of their operands, which shape specialization provides; a
+ * rank the program never states — a bare `Tensor` parameter types a whole
+ * backward graph — is asked of the model at run time instead (sumTo).
  */
 
 #include "lowering.h"
@@ -67,9 +69,73 @@ std::string shapeOperand(const LowerContext &ctx, size_t index) {
     return ctx.emitter().node("Shape", {ctx.input(index)});
 }
 
+/// A constant int64 scalar operand (reduction bounds, ranks, steps); defined below with the
+/// optimizer lowerings and declared here for the gradient lowerings.
+std::string int64Const(Emitter &e, int64_t v);
+
+/// `g` summed down to `like`'s shape when the program states no rank for one of them: the axes
+/// the reduction needs are computed in the model. A bare `Tensor` parameter types the whole
+/// backward graph, so the ranks exist only when the model runs; asking there is the same
+/// discipline `shapeOperand` applies to an extent the program leaves open, and it is the only
+/// honest answer to "sum this down to that" when neither rank was written. `ReduceSum` takes its
+/// axes as an input, and an empty axes list means "fold nothing", from opset 13 on.
+std::string sumToDynamic(const LowerContext &ctx, const std::string &g, size_t likeIndex) {
+    Emitter &e = ctx.emitter();
+    if (e.opset() < 13) {
+        throw ExportError(std::format(
+            "{}: the rank of an operand is not known statically, and opset {} cannot take "
+            "reduction axes as an input",
+            ctx.uri(),
+            e.opset()));
+    }
+    const std::string like      = ctx.input(likeIndex);
+    const std::string gShape    = e.node("Shape", {g});
+    const std::string gRank     = e.node("Size", {gShape});
+    const std::string likeShape = e.node("Shape", {like});
+    const std::string likeRank  = e.node("Size", {likeShape});
+    const std::string zero      = int64Const(e, 0);
+    const std::string one       = int64Const(e, 1);
+    const std::string lead      = e.node("Sub", {gRank, likeRank});
+    // The axes to fold: the leading `rank(g) - rank(like)` ones (an empty range when the ranks
+    // agree), plus every aligned axis `like` has as 1 and `g` does not. A gradient of a lower
+    // rank than its target is a program defect the export cannot see without ranks; the range
+    // then runs backwards and yields no axis, and the shapes disagree at the reshape below,
+    // where the runtime reports it.
+    const std::string head = e.node("Range", {zero, e.node("Max", {lead, zero}), one});
+    const std::string gTail =
+        e.node("Gather", {gShape, e.node("Range", {lead, gRank, one})});
+    const std::string likeDims =
+        e.node("Gather", {likeShape, e.node("Range", {zero, likeRank, one})});
+    const std::string broadcast = e.node(
+        "And",
+        {e.node("Equal", {likeDims, one}), e.node("Not", {e.node("Equal", {gTail, one})})});
+    const int64_t flat[] = {-1};
+    // NonZero answers int64 indices; the cast states it, so the arithmetic below is typed.
+    const std::string tail = e.node(
+        "Add",
+        {e.node(
+             "Reshape",
+             {e.node(
+                  "Cast",
+                  {e.node("NonZero", {broadcast})},
+                  {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(TypeCode::Int64)))},
+                  "axes_cast"),
+              e.int64s(flat)}),
+         lead});
+    const std::string axes = e.node("Concat", {head, tail}, {Attribute::makeInt("axis", 0)});
+    const std::string summed = e.node(
+        "ReduceSum",
+        {g, axes},
+        {Attribute::makeInt("keepdims", 1), Attribute::makeInt("noop_with_empty_axes", 1)});
+    return e.node("Reshape", {summed, likeShape});
+}
+
 /// `g` summed down to `like`'s shape (the reverse of broadcasting).
 std::string
 sumTo(const LowerContext &ctx, const std::string &g, const TensorFacts &gFacts, size_t likeIndex) {
+    if (!gFacts.shape || !ctx.facts(likeIndex).shape) {
+        return sumToDynamic(ctx, g, likeIndex);
+    }
     const auto gShape    = staticShape(gFacts, ctx.uri());
     const auto likeShape = staticShape(ctx.facts(likeIndex), ctx.uri());
     if (likeShape.size() > gShape.size()) {
