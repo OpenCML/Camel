@@ -465,8 +465,8 @@ H246 是「遍即函数」，与流的关系是两点：
 按项目既有体例单独成文，**不在这里给结论**：
 
 1. `docs/handover/reviews/questions-2026-10-23.md` —— `T..` 的表面：与既有开秩数组 `T[..]` 的共存、`T?..` 的拆分、`as T..` 两种读法的判定、以及**流是核心类型还是标准库类型**（第 6 节第 5 条与 5.4 的冲突）。
-2. `docs/handover/questions/h248-linearity-and-tee.md` —— 线性的判据（循环体、`match` 的多臂、`tee` 的结果是否也线性）、`tee(s, n)` 的 `n` 默认值与非法值、缓冲峰值报告的**格式与阈值**、「两种调度结果逐字相同」的比较范围与 `take` 的计算次数怎么观测。
-3. `docs/handover/questions/h248-generator-and-composition.md` —— `yield` 状态机的边界（故障路径、嵌套、委托、生成器里的效应顺序）、生成器值是否也线性、`f..g` 的类型规则（参数个数、`with` 参数、泛型、重载函数值、能否进 `map<>` 的尖括号）、以及区间读法（闭/半开、与 `range(start, end)` 的关系）。
+2. `docs/handover/reviews/questions-2026-10-23.md §h248-linearity-and-tee` —— 线性的判据（循环体、`match` 的多臂、`tee` 的结果是否也线性）、`tee(s, n)` 的 `n` 默认值与非法值、缓冲峰值报告的**格式与阈值**、「两种调度结果逐字相同」的比较范围与 `take` 的计算次数怎么观测。
+3. `docs/handover/reviews/questions-2026-10-23.md §h248-generator-and-composition` —— `yield` 状态机的边界（故障路径、嵌套、委托、生成器里的效应顺序）、生成器值是否也线性、`f..g` 的类型规则（参数个数、`with` 参数、泛型、重载函数值、能否进 `map<>` 的尖括号）、以及区间读法（闭/半开、与 `range(start, end)` 的关系）。
 
 ---
 

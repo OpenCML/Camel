@@ -748,47 +748,65 @@ bool Builder::sameImplSignature(FunctionType *function, FunctionType *kernel) {
     return !function->hasExitType() || function->exitType()->equals(kernel->exitType());
 }
 
-bool Builder::declaredRuleApplies(
+Builder::RuleVerdict Builder::ruleVerdictForCall(
     const camel::core::type::resolver_ptr_t &rule, const std::string &name,
-    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+    const type_vec_t &withTypes, const type_vec_t &normTypes, std::string *conditionText) {
     const auto found = nativeRuleConditions_.find(rule.get());
     if (found == nativeRuleConditions_.end()) {
         // No condition: the rule applies wherever its signature does.
-        return true;
+        return RuleVerdict::Applies;
     }
-    // The instance's parameter types are what the declaration's type parameters are here, and
-    // they are what its condition asks about (`is_armed::<T>()`): the same bindings the rule's
-    // own resolution makes, from the declaration's closed signature.
+    if (conditionText != nullptr) {
+        *conditionText = found->second.clause.text;
+    }
+    // The call's argument types are what the declaration's type parameters are here, and they
+    // are what its condition asks about (`is_arm_i32::<T>()`): the same bindings the rule's own
+    // resolution makes, from the declaration's closed signature. A declaration whose parameters
+    // do not take these arguments was never a candidate for the call, and its condition is not
+    // asked about it.
     FunctionType *declared = nullptr;
     camel::core::type::type_bindings_t bindings;
     if (const auto *generic = dynamic_cast<const DeclaredFuncTypeResolver *>(rule.get());
         generic != nullptr) {
         declared = generic->funcType();
-        for (size_t i = 0; i < declared->withTypesCount() && i < withTypes.size(); ++i) {
+        if (declared->withTypesCount() != withTypes.size() ||
+            declared->normTypesCount() != normTypes.size()) {
+            return RuleVerdict::NotThisRule;
+        }
+        for (size_t i = 0; i < declared->withTypesCount(); ++i) {
             if (!unifyTypeVars(declared->withTypeAt(i), valueTypeOf(withTypes[i]), bindings)) {
-                return false;
+                return RuleVerdict::NotThisRule;
             }
         }
-        for (size_t i = 0; i < declared->normTypesCount() && i < normTypes.size(); ++i) {
+        for (size_t i = 0; i < declared->normTypesCount(); ++i) {
             if (!unifyTypeVars(declared->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
-                return false;
+                return RuleVerdict::NotThisRule;
             }
         }
     }
-    // A rule has no `with` arguments of its own where it is selected for a kernel, so a
-    // condition that reads one of the declaration's cannot be answered here; whatever the
-    // outcome, a condition that is neither true nor false is the declaration's defect and is
-    // reported where it is written, never taken for an arm that applies.
+    // A rule has no `with` arguments of its own where a call selects it, so a condition that
+    // reads one of the declaration's cannot be answered here; whatever the outcome, a condition
+    // that is neither true nor false is the declaration's defect and is reported where it is
+    // written, never taken for a candidate that applies.
     const WhenResult verdict = evaluateWhenCondition(
         found->second.clause.condition, declared, bindings, {}, nullptr, found->second.unit);
     if (verdict.holds()) {
-        return true;
+        return RuleVerdict::Applies;
     }
     if (verdict.fails()) {
-        return false;
+        return RuleVerdict::ConditionUnmet;
     }
     reportWhenProblem(verdict, name, found->second.clause.condition);
-    return false;
+}
+
+bool Builder::declaredRuleApplies(
+    const camel::core::type::resolver_ptr_t &rule, const std::string &name,
+    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+    // The same question a call asks, with one answer instead of three. An `#impl` instance asks
+    // it after checking that the rule's signature names the instance (sameImplSignature, or the
+    // rule's own resolve), so the rule's parameters always take the instance's types and
+    // NotThisRule cannot arise here.
+    return ruleVerdictForCall(rule, name, withTypes, normTypes) == RuleVerdict::Applies;
 }
 
 void Builder::adoptImplKernel(
