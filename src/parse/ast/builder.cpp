@@ -2627,10 +2627,12 @@ staticForExpr
     : STATIC staticForHeader '=>' blockExpr
     ;
 staticForHeader
-    : FOR '(' identDef (',' identDef)? ')' IN ('fields' typeExpr | 'indices' dataExpr)
+    : FOR '(' identDef (',' identDef)* ')' IN ('fields' typeExpr | 'indices' dataExpr)
     ;
 `indices` (H51 step 6) walks the positions of a tuple value; its operand is child 0 as an
-ordinary expression, where `fields` has a type there.
+ordinary expression, where `fields` has a type there. The head may name up to three things --
+`fields`'s element is the triple (name, type, tags), every other element is one thing -- and
+whether the count fits is read from the element (`SemanticDiag::StaticHeadNameCount`).
 */
 Value Builder::visitStaticForExpr(cst::StaticForExpr context) {
     ENTER("StaticForExpr");
@@ -2639,9 +2641,12 @@ Value Builder::visitStaticForExpr(cst::StaticForExpr context) {
         bindings.size() > 0 ? std::string(bindings[0]->text()) : std::string("_");
     const std::string typeName =
         bindings.size() > 1 ? std::string(bindings[1]->text()) : std::string("_");
+    const std::string tagsName =
+        bindings.size() > 2 ? std::string(bindings[2]->text()) : std::string("_");
     const auto mode      = context->tok(TK::Identifier);
     const bool byIndices = mode && mode.text() == "indices";
-    node_ptr_t forNode   = createNodeAs<StaticForLoad>(valueName, typeName, byIndices);
+    node_ptr_t forNode =
+        createNodeAs<StaticForLoad>(valueName, typeName, tagsName, byIndices, bindings.size());
     setNodeTokenRangeByContext(forNode, context);
     node_ptr_t shapeNode = byIndices ? any2node(visitExpr(context->expr()))
                                      : any2node(visitType(context->type()));
@@ -2694,6 +2699,8 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
         bindings.size() > 0 ? std::string(bindings[0]->text()) : std::string("_");
     const std::string typeName =
         bindings.size() > 1 ? std::string(bindings[1]->text()) : std::string("_");
+    const std::string tagsName =
+        bindings.size() > 2 ? std::string(bindings[2]->text()) : std::string("_");
     // The subject word of the head is the only direct identifier token of the node (`acc`,
     // `i` and the names of the states are inside their own nodes): `fields`, `indices`, or
     // nothing at all when what follows `in` is a sequence.
@@ -2701,8 +2708,8 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
     const bool byIndices  = mode && mode.text() == "indices";
     const bool byFields   = mode && mode.text() == "fields";
     const bool bySequence = !byIndices && !byFields;
-    node_ptr_t loopNode =
-        createNodeAs<StaticLoopLoad>(state, valueName, typeName, byIndices, bySequence);
+    node_ptr_t loopNode = createNodeAs<StaticLoopLoad>(
+        state, valueName, typeName, tagsName, byIndices, bySequence, bindings.size());
     setNodeTokenRangeByContext(loopNode, context);
     *loopNode << inits;
     node_ptr_t shapeNode = byIndices || bySequence ? any2node(visitExpr(context->expr()))

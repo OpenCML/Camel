@@ -573,7 +573,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop_sequence_tuple"
-desc = "`for x in ts` walks a compile-time tuple by element and each round's `x` is the type at that position (the ruling of 2026-10-25, H475) -- what tells a `static loop` from an ordinary `loop`, whose variable is the element's value. `x` is used where a type is needed (`tag::<x>()`, as `load_at::<F>` uses `F`), and an empty tuple has no round."
+desc = "`for x in ts` walks a compile-time tuple by element and each round's `x` is the *value* at that position, `ts.[i]` (the ruling of 2026-10-25, H475); its type, which varies with the position, is asked for as `typeof(x)` where a type is wanted. `tag::<typeof(x)>()` reads one per position and an empty tuple has no round."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_loop_sequence_tuple.cml"
 args = ["${case}", "std::fvm"]
@@ -592,13 +592,17 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop_sequence_tuple_value"
-desc = "The other reading of `for x in ts` is refused by name: each round's `x` is the type at that position (the ruling of 2026-10-25, H475), so using it as a value (`acc + x`, the program the h471 measurement wrote for the tuple form) asks a type to be a value, and the ordinary `loop` is the one whose variable is the element's value."
-kind = "negative"
+desc = "The tuple walk read as a value use is a positive case: each round's `x` is the element at that position (the ruling of 2026-10-25, H475 -- the earlier reading, that `x` is the type, was wrong), so the program the h471 measurement wrote for the tuple form (`acc + x`) adds 1, 2 and 3."
+kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_loop_sequence_tuple_value.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.normalized.stdout.trim() === "6", `the value reading of a compile-time tuple changed: ${input.normalized.stdout}`)
+}
+"""
 timeout_ms = 8000
 
 [[tests]]
@@ -725,12 +729,43 @@ timeout_ms = 8000
 
 [[tests]]
 name = "indices_two_names"
-desc = "The header of `indices` binds one name, the position: a second name (the `F` of `fields`) is a syntax error, not a silently unused binding."
+desc = "How many names a head may write is decided by the element of the sequence: the element of `indices ts` is the position, one thing, so a second name (the `F` of `fields`) is refused by name (`SemanticDiag::StaticHeadNameCount`), not as a syntax error."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/indices_two_names.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_name = "SemanticDiag::StaticHeadNameCount"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_head_tags"
+desc = "The head names three things when the element has three: `fields T` gives the field's name, its type and its tags, so `for n, F, tags in fields T` walks (`tags` is a compile-time `string[]` of the tag names, so `len(tags)` folds and `typeof(tags)` is `string[]`), and naming fewer parts (`for n in fields T`) is legal."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_loop_head_tags.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "2",
+  "1",
+  "2",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `the three names of a field head changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_head_name_count"
+desc = "A head that names more things than the element has parts is refused by name: `fields T` gives three (name, type, tags), so a fourth name is `SemanticDiag::StaticHeadNameCount` -- read where the walked shape is known, with the count and the shape in the message."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_head_name_count.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticHeadNameCount"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

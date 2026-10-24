@@ -183,6 +183,12 @@ enum class SemanticDiag : uint32_t {
     // tuple, not a list of spellings. One the compiler cannot work out is this.
     StaticLoopSequenceNotKnown = 0x0001E7,
 
+    // The names of a `static for` / `static loop` head (the ruling of 2026-10-25 on
+    // `static-loop-sequence-two-argument-range-and-the-tuple-reading`, item 4): the number of names
+    // follows the element -- `fields T` gives the field's name, its type and its tags, every other
+    // element gives one thing -- and a head that names more than the element has parts is this.
+    StaticHeadNameCount = 0x000000,
+
     // Rest parameters (design principles 5.5, H51 step 6): 0x18A and up.
     /// A rest parameter is not the last of the ordinary parameters.
     RestParameterNotLast = 0x00018A,

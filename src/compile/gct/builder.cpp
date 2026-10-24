@@ -3430,22 +3430,47 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
     return matchNode;
 }
 
+void Builder::checkStaticHeadNames(
+    const AST::node_ptr_t &ast, const std::string &shape, size_t named) {
+    // The parts of the element, in order: `fields T` gives the field's name, its type and its
+    // tags; `indices ts` gives the position and a written sequence gives the element, each one
+    // thing. A head may write fewer names than the element has parts -- `for n in fields T` reads
+    // the field's name and nothing else -- never more: there would be nothing for the extra name
+    // to be, and the names are read positionally, so `_` takes a position like any other.
+    const size_t parts = shape == "fields" ? 3 : 1;
+    if (named <= parts) {
+        return;
+    }
+    diags_->of(SemanticDiag::StaticHeadNameCount)
+        .at(ast->load()->tokenRange())
+        .commit(std::to_string(named), shape, std::to_string(parts));
+    throw BuildAbortException();
+}
+
 /*
 staticForExpr
     : STATIC staticForHeader '=>' blockExpr
     ;
 staticForHeader
-    : FOR '(' identDef (',' identDef)? ')' IN ('fields' typeExpr | 'indices' dataExpr)
+    : FOR '(' identDef (',' identDef)* ')' IN ('fields' typeExpr | 'indices' dataExpr)
     ;
 The walked shape is child 0: a TYPE for `fields`, the operand value for `indices` (H51 step 6).
+The head names up to three things, and how many the element gives is read here, where the walked
+shape is known (`checkStaticHeadNames`): `fields` gives the triple (name, type, tags) and
+`indices` gives one thing.
 */
 node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
     ENTER("StaticFor");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticFor");
     const auto &load = ast->loadAs<AST::StaticForLoad>();
+    checkStaticHeadNames(
+        ast,
+        load->byIndices() ? "indices"
+                          : "fields",
+        load->nameCount());
 
-    node_ptr_t forNode =
-        tree_->makeStaticFor(load->valueName(), load->typeName(), load->byIndices());
+    node_ptr_t forNode = tree_->makeStaticFor(
+        load->valueName(), load->typeName(), load->tagsName(), load->byIndices());
     setOriginFromAst(context_, forNode, ast, camel::source::OriginKind::GctNode, "gct.static.for");
 
     if (load->byIndices()) {
@@ -3485,7 +3510,7 @@ node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
 staticLoopExpr
     : STATIC LOOP loopState (',' loopState)* staticLoopHeader DO blockExpr
 staticLoopHeader
-    : FOR (identDef | '_') (',' (identDef | '_'))? IN
+    : FOR (identDef | '_') (',' (identDef | '_'))* IN
       ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 The AST node holds the first values of the state (a Repeated Data), the walked shape, and the
 body (StaticLoopLoad). The GCT node holds the shape first, then the first values, then the EXEC
@@ -3493,6 +3518,8 @@ body. `F` is an ordinary type variable of the enclosing function's instance, bou
 by the graph builder; `n` (or `j` for `indices`, or the element's name for a written sequence)
 and the state names are bound per round. The head of `static loop` lost its parentheses in H462
 (the ruling of 2026-10-24): `in <序列>` is what `static for` still writes between parentheses.
+How many names the element gives is read here (`checkStaticHeadNames`): the triple (name, type,
+tags) for `fields`, one thing for everything else.
 */
 node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     ENTER("StaticLoop");
@@ -3501,6 +3528,11 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     // `fields T` is the only head that names a type (`F`): `indices ts` and a written sequence
     // bind one name, the entry itself.
     const bool byFields = !load->byIndices() && !load->bySequence();
+    checkStaticHeadNames(
+        ast,
+        byFields ? "fields"
+                 : (load->byIndices() ? "indices" : "a written sequence"),
+        load->nameCount());
 
     std::vector<std::string> state;
     state.reserve(load->state().size());
@@ -3508,7 +3540,8 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
         state.push_back(name.toString());
     }
     node_ptr_t loopNode = tree_->makeStaticLoop(
-        state, load->valueName(), load->typeName(), load->byIndices(), load->bySequence());
+        state, load->valueName(), load->typeName(), load->tagsName(), load->byIndices(),
+        load->bySequence());
     setOriginFromAst(
         context_,
         loopNode,
@@ -3547,18 +3580,13 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
         typeScope_->insert(
             Reference(load->typeName()),
             TypeVarType::create(load->typeName(), false));
-    } else if (load->bySequence() && load->valueName() != "_") {
-        // A written sequence's round name is a type as well: `for x in ts` walks a compile-time
-        // tuple and binds the type at each position (the ruling of 2026-10-25, H475), while
-        // `for i in 0..5` binds a value and no type. The name is inserted as an unbound type
-        // variable here, as `F` is: the graph builder binds it at each round when the sequence
-        // gives types, and a sequence of values leaves it unbound, so a body that used the name
-        // in a type position reports that the type is not concrete instead of reading some other
-        // `i` of the same name.
-        typeScope_->insert(
-            Reference(load->valueName()),
-            TypeVarType::create(load->valueName(), false));
     }
+    // A written sequence's round name is a value, never a type: `for i in 0..5` binds the round's
+    // integer and `for x in ts` binds the element `ts.[i]`, whose type is the type at that
+    // position (the ruling of 2026-10-25, H475). It is bound by the graph builder at each round,
+    // as the `j` of `indices` is, so nothing of it goes into the type scope here; a body that uses
+    // it where a type belongs writes `typeof x`, and `fields T` is the spelling that gives a
+    // field's name and type.
     node_ptr_t bodyNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(2));
     popScope();
     *loopNode << bodyNode;

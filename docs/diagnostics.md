@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-265 diagnostics: 248 errors, 17 warnings. 15 carry a machine-applicable edit, 250 say why they carry none.
+266 diagnostics: 249 errors, 17 warnings. 15 carry a machine-applicable edit, 251 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -44,6 +44,7 @@ prints one entry.
 | `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error | no |
 | `0x02000012` | [SyntaxDiag::LambdaParametersNeedParentheses](#lambdaparametersneedparentheses) | Error | yes |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn | no |
+| `0x03000000` | [SemanticDiag::StaticHeadNameCount](#staticheadnamecount) | Error | no |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error | no |
 | `0x03000002` | [SemanticDiag::ModuleNotFound](#modulenotfound) | Error | no |
 | `0x03000003` | [SemanticDiag::ReservedIdentifier](#reservedidentifier) | Error | no |
@@ -1055,6 +1056,40 @@ func main(): int sync {
 ```
 
 ## Semantic (`SemanticDiag`)
+
+### StaticHeadNameCount
+
+`0x03000000` · Error · `SemanticDiag::StaticHeadNameCount`
+
+**Fix**
+
+None: choice: the number of names to drop is the writer's
+
+**Message**
+
+```text
+The head of this loop names {0} things; '{1}' gives {2} for each round.
+```
+
+**Help**
+
+```text
+A head names the parts of the element, in order, and may name fewer of them, never more: 'fields T' gives the field's name, its type and its tags, while 'indices ts' and a written sequence give the element itself and nothing else. Drop the names the element has no part for, or walk the fields of a type ('fields T') to get them.
+```
+
+**Example** (`test/cases/compile/static_expansion/indices_two_names.cml`, run as `camel test/cases/compile/static_expansion/indices_two_names.cml`)
+
+```camel
+module indices_two_names
+
+func bad(t: (int, int)): int {
+    return static loop acc = 0 for j, F in indices t do acc + t.[j]
+}
+
+func main(): int {
+    return bad((1, 2))
+}
+```
 
 ### Redeclaration
 
@@ -7689,7 +7724,7 @@ The sequence of a 'static loop' must be known when the function is compiled: '{0
 **Help**
 
 ```text
-A 'static loop' is unrolled where it stands, so how many rounds it has must be known then. Every sequence the compiler works out counts: an expression built only from compile-time constants (literals, names bound to constants, the rounds of an enclosing 'static' expansion) through operations that are pure and cannot fail. So 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'range(a, b, step)' with constant arguments, an array literal or a constant array, 'indices ts' for the positions of a compile-time tuple, 'fields T' for the fields of a type, and 'for x in ts' for the type at each position of a compile-time tuple all count. A run-time array or a run-time value leaves the number of rounds open.
+A 'static loop' is unrolled where it stands, so how many rounds it has must be known then. Every sequence the compiler works out counts: an expression built only from compile-time constants (literals, names bound to constants, the rounds of an enclosing 'static' expansion) through operations that are pure and cannot fail. So 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'range(a, b, step)' with constant arguments, an array literal or a constant array, 'indices ts' for the positions of a compile-time tuple, 'fields T' for the fields of a type, and 'for x in ts' for the element at each position of a compile-time tuple, whose type is that position's type, all count. A run-time array or a run-time value leaves the number of rounds open.
 ```
 
 **Example** (`test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`)

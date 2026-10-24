@@ -201,10 +201,10 @@ funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' 
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
 staticForExpr      : 'static' staticForHeader '=>' blockExpr
-staticForHeader    : 'for' '(' (identDef | '_') (',' (identDef | '_'))? ')' 'in'
+staticForHeader    : 'for' '(' (identDef | '_') (',' (identDef | '_'))* ')' 'in'
                      ('fields' typeExpr | 'indices' dataExpr)
 staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr
-staticLoopHeader   : 'for' (identDef | '_') (',' (identDef | '_'))? 'in'
+staticLoopHeader   : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
                      ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 matchCase          : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
