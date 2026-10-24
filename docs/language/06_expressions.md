@@ -457,7 +457,7 @@ func first(t: (int, float)) {
 
 ```cml
 func sum(t: (int, int, int)): int {
-    return static loop acc = 0 for (j) in indices t do acc + t.[j]
+    return static loop acc = 0 for j in indices t do acc + t.[j]
 }
 
 func positions(t: (int, string)): (int, int) {
@@ -490,26 +490,33 @@ func rebuild::<T>(t: T) {
 
 ### 6.8.5 `static loop`
 
-`static loop 状态 = 初值, ... for (n, F) in fields T do 表达式` 是 `static for` 的折叠形式：字段表在实例化时展开，每个字段把状态推进一轮，展开后没有循环节点。
+`static loop 状态 = 初值, ... for n, F in fields T do 表达式` 是 `static for` 的折叠形式：字段表在实例化时展开，每个字段把状态推进一轮，展开后没有循环节点。
 
 ```
-static loop 名字 = 初值 (, 名字 = 初值)* (for (n, F) in fields T | for (j) in indices ts) do 表达式
+static loop 名字 = 初值 (, 名字 = 初值)* for 名字 (, 名字)? in (fields 类型 | indices 值 | 常量序列) do 表达式
 ```
+
+头与 `static for` 的不同：`static loop` 的头就是普通 `loop` 的 `for 名字 in 序列`，不写括号（同一件事一种写法）；`fields` 与 `indices` 各绑定它自己的那些名字，见下。
 
 - 状态头与 [6.8.6](#686-loop) 的 `loop` 相同：一个名字时循环的值就是这个值；几个名字时循环体给出按书写顺序的元组，循环的值也是这个元组。状态的名字只在循环体内可见；初值在循环所在处求值一次，其中看不到状态的名字。名字不能重复（`SemanticDiag::LoopNameRepeated`）。
 - 循环体每轮的值就是下一轮的状态，其类型必须是状态的类型（能自动装入的除外，如 `int` 进入 `int?`），否则是 `SemanticDiag::LoopBodyTypeMismatch`。空结构体或空元组一轮也不展开，循环的值是初值。
-- 遍历由 `static for` 共用的头给出：`for (n, F) in fields T`（按字段）或 `for (j) in indices ts`（按元组的位置，规则与 6.8.4 的 `indices` 相同）。没有 `while`，没有普通序列的 `for`，也没有 `break`/`continue`。`T` / `ts` 的类型必须是具体的结构体或普通元组（规则与 6.8.4 相同）。遍历外层泛型的类型参数时，轮数由实例化时的类型决定——这就是“实例化时已知的轮数”。
+- 遍历的写法与 [6.8.6](#686-loop) 的 `loop` 头相同（不写括号）：`for n, F in fields T`（按字段）、`for j in indices ts`（按元组的位置，规则与 6.8.4 的 `indices` 相同），或 `for i in a..b`（常量区间；`..` 是半开的，`0..3` 是 0、1、2）。`fields` 绑定两个名字，`indices` 与常量区间各绑定一个名字。
+- 序列必须在编译期求出：`fields T` / `indices ts` 的规则与 6.8.4 相同（`T` / `ts` 必须是具体的结构体或普通元组），区间的两端必须是编译期常量；求不出时报 `SemanticDiag::StaticLoopSequenceNotKnown`。没有 `while`，没有运行期序列的 `for`，也没有 `break`/`continue`。遍历外层泛型的类型参数时，轮数由实例化时的类型决定——这就是“实例化时已知的轮数”。
 - 展开成直线代码：每轮按字段顺序建出它读的 `ACCS`，上一轮的状态直接是下一轮读到的值，`static loop` 本身没有节点。块里的 `return` 与普通函数一样离开函数，不是“跳出循环”。
 - 效应就是直线代码的效应：循环体是不是同步块由它自己决定（3.2），每轮的效应按字段顺序执行。
 
 ```cml
 func count::<T>(t: T): int {
-    return static loop n = 0 for (name, F) in fields T do n + 1
+    return static loop n = 0 for name, F in fields T do n + 1
+}
+
+func sum3(t: (int, int, int)): int {
+    return static loop acc = 0 for i in 0..3 do acc + t.[i]
 }
 
 func total_and_max(t: {a: int, b: int}): (int, int) {
     return static loop total = 0, best = 0
-        for (n, F) in fields {a: int, b: int} do {
+        for n, F in fields {a: int, b: int} do {
             (total + t.[n], if best < t.[n] then t.[n] else best)
         }
 }
