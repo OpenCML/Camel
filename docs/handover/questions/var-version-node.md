@@ -60,3 +60,17 @@ Author: 车道 `handover/h437-splice-verbatim`（H437 拼接/同步链 + H242a�
 
 - `0a93ab2d1` `snapshotNodeInit` 保留被改写节点的 `orderInputs`/`syncInputs`（rewrite 不再丢"在我之前的语句"与"谁排在我前面"）。
 - 链改同步边（第 5 节第 7 条 / 裁决"分支语句的链边是同步边"）已经写出来并可幂等重放（`D:\Projects\Camel-wt\notes\h437-s3-apply.ps1`），`test/plans/feat/linear` 由 741 pass 落到 689 pass / fail 53；53 条的门在同一处（内联之后再被 `cse`/`dce` 合并或删节点，靠"cell + 顺序边"表达的读被挪到写之后），所以它等这份裁定的第一处落地之后再提交。
+
+## 补二：裁定之后的重读 —— 277 红按"逃逸判定"分类，与内存规划要给出的东西
+
+裁定（`docs/handover/reviews/questions-2026-10-24-evening.md` §`var-version-node`）把第一处一分为二：**不逃逸的 `var` 化成 SSA**（写产出新值、读直接用最近一次写的那个值、不建 cell、不经 `:var/get`；所有权与"能否原地"交给内存规划，不靠 `holdsUnsharedArray`），**逃逸的 `var`**（被闭包捕获，或作为 `var` 实参传出——它是资源）保留 cell 那一套（写产出"这一版的 cell"、读与读了捕获变量的调用接最近一次写的产出、调用上这个端口的角色是"捕获"、写与写之间顺序边）。所以"读法 C 的 277 红"要按这个划分重读，而不是当成 C 错了。
+
+**分类（判据：用例源码里有没有 `var` 形参 / `wait` / 捕获；主机上的红清单见 `D:\Projects\Camel-wt\notes\h437-cv-fails.log`）**：
+
+- **逃逸那一类（SSA 不该覆盖，保留 cell ⇒ 这 277 条里的大头本来就是"不能按 C 做"的）**：`var_capture`33、`wait_before_after`33、`var_tensor`33、`var_param`33、`var_grad`33、`var_rule_subpasses`20、`wait_direct_user`18、`captured_write_order`17、`written_variable`9、`var_writes_through_recursion`6、`var_read_before_callee_write`5、`string_plus_assign`4（`var` 形参）、`path_assigned_allocs`、`nested_array_type`、`var_tensor_read_after_write`、`wait_graph`、`onnx/export_var_parameter`、`export_var_append`、`nn/lr`、`nn/lrit` —— 各自的用例源码都带 `var` 形参（`func f(var c: int)`）、`wait`、或"captured/捕获"字样。**这不是说 SSA 落地后它们还红**：SSA 只碰不逃逸的 `var`，这些用例走的仍是今天的 cell 那条路，读数应当与今天一样（绿）。
+- **金标（不是语义）**：`camel_passes` 12 条（`cse_subject`/`fold_subject`/`fold_fault`/`dce_subject` 等）。读法 C 让不逃逸 `var` 的图少了 cell/`:var/get` 若干节点，金标必然要按新图重生成 —— 这一步在 SSA 的提交里做，与红无关。
+- **"内存规划该管"的（`holdsUnsharedArray` 那一族）**：`string_plus_assign`（输出 `abab`：`:var/take` 把一个别人还 refer 着的数组交出去原地追加）、`path_assigned`、`element_assigned_copy`、`nested_array_type` 里的 `[T]` 别名条目。这些要的不是"把标记加回来"，而是内存规划给出统一规则：**同一版本的值在什么时候可以原地改**（今天由 `:op/assn_owned` 置位、`:var/get` 清位、`:var/peek` 不清、`:var/take` 按位复制来表达）。SSA 之后这些标记没有 cell 可挂，判据必须来自"这个值还有没有别的使用者 / 它是不是本版本的最后一用"。这是我下一片要问的一整件事，先记在这里。
+
+**两处撞点在 SSA 落地时的影响面**（按裁定不发明语义，先点出各自影响的用例）：`Builder::orderAfterLastWriter`（今天用 Ctrl 把读排在上一次写之后）影响的正是 `wait_direct_user`18、`captured_write_order`17、`var_rule_subpasses`20 这些**逃逸**族的排序条目——SSA 之后不逃逸的读是纯数据边，这条 Ctrl 应当退回 `ORDER`；`Builder::markNonRetainingReads` / `:var/peek` 影响的正是 `path_assigned`(4)、`element_assigned_copy`、`string_plus_assign`(4) 这些**原地改**的条目——SSA 之后它们不再是所有权标记，而是"路径赋值要读的值"。
+
+**落在 SSA 前的一处要裁定（我不发明）——"逃逸判定"在哪一步做**：裁定说"按变量是否逃逸分两种"，但没说判定发生在哪。单遍建图器要在**发出读之前**就知道这个 `var` 会不会逃逸（逃逸点可能在读的后面出现，例如后面的 `wait f(c)` 把 `c` 传出去），所以要么在建图前先把函数体扫一遍收"被捕获/被作为 `var` 实参传出"的符号（`addCaptureName` 与调用点的 `var` 实参都在本函数体里看得见），要么保持单遍建图、在建完之后用一次**图级转换**做 SSA（那时"逃逸"由图的形状直接判定：cell 的用途只有 `:var/get`/`:var/peek`/`:op/assn*`，且不在任何捕获表里）。两条路对**最终图**是一样的，对**建图期的中间状态**与诊断（`builder_diagnostics.cpp` 里 `__var_peek__` 那条检查）不一样；我倾向后者（图级转换，判定就是图的性质，且能在同一处把不逃逸的 cell 一次收干净），但这一句要作者说。**这一片我没有落 SSA 代码**，等着这句。
