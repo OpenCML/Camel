@@ -1463,6 +1463,36 @@ class Builder {
         const camel::core::type::resolver_ptr_t &rule, const std::string &name,
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes);
+    /// What a body-less declaration's `when` says about a call whose arguments have these types
+    /// (design principles 4.4). `declaredRuleApplies` answers the same question about an `#impl`
+    /// instance, where only "this rule is the executor" and "it is not" exist; selecting among a
+    /// call's candidates needs the third answer, because a rule whose condition is false is not
+    /// one of the call's overloads at all (the call goes on to the other candidates, and a call
+    /// no candidate takes reports the conditions as unmet). A rule with no condition always
+    /// applies, and `conditionText`, when asked for, receives the condition as it was written.
+    enum class RuleVerdict {
+        Applies,        // no condition, or the condition holds for these arguments
+        ConditionUnmet, // the signature takes the arguments, the condition does not
+        NotThisRule,    // the declaration's own type parameters do not bind to these arguments
+    };
+    RuleVerdict ruleVerdictForCall(
+        const camel::core::type::resolver_ptr_t &rule, const std::string &name,
+        const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes, std::string *conditionText = nullptr);
+    /// The rule of the operator group `ops` a call means: the first rule, in the order the group
+    /// answers, whose signature takes the arguments and whose own `when` holds for them (design
+    /// principles 4.4). The order in which two body-less declarations of one name are written
+    /// therefore cannot choose between them. A rule that takes the arguments while its condition
+    /// is false is not a candidate; it is recorded in `unmet` with the condition it wrote, so
+    /// that a call no rule accepts reports those conditions (WhenConditionUnmet) rather than
+    /// settling on one of them. `normStatics` are the compile-time values of constant arguments,
+    /// as for `OperatorGroup::resolveForCall`.
+    std::optional<oper_idx_ptr_t> resolveGroupedCall(
+        const oper_group_ptr_t &ops, const camel::core::type::type_vec_t &explicitTypes,
+        Type *expectedResult, const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes,
+        camel::core::type::static_args_t normStatics,
+        std::vector<std::pair<std::string, std::string>> &unmet);
     /// The kernel of `graphs` when they are exactly the one `#impl` body: what a call of the
     /// function is, instead of a call of the body (design principles 10.4).
     std::optional<ImplKernel> implKernelOf(const graph_set_ptr_t &graphs) const;
