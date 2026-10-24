@@ -83,6 +83,7 @@ struct SyntaxError {
         AngleCloseAfterSpace,  // `f<a >`: the `>` (token) is separated from the last argument
         LineStartsWithSign,    // a line starting with `+` that cannot start a statement
         WhenAfterBody,         // `rule f(x) { … } when c`: the condition belongs before the body
+        AsRightSideIsType,     // `x as int..5`: the interval reading of `..` where a type stands
     };
     /// Members of `expected` that are not token kinds.
     enum Pseudo : uint8_t {

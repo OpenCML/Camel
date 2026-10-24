@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-260 diagnostics: 241 errors, 19 warnings.
+262 diagnostics: 243 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -41,6 +41,7 @@ prints one entry.
 | `0x0200000E` | [SyntaxDiag::LineStartsWithOperator](#linestartswithoperator) | Error |
 | `0x0200000F` | [SyntaxDiag::EmptyInterpolation](#emptyinterpolation) | Error |
 | `0x02000010` | [SyntaxDiag::WhenAfterBody](#whenafterbody) | Error |
+| `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error |
 | `0x03000002` | [SemanticDiag::ModuleNotFound](#modulenotfound) | Error |
@@ -227,6 +228,7 @@ prints one entry.
 | `0x030001E0` | [SemanticDiag::WhenDeclarationOverlap](#whendeclarationoverlap) | Error |
 | `0x030001E1` | [SemanticDiag::CompOperandMismatch](#compoperandmismatch) | Error |
 | `0x030001E2` | [SemanticDiag::CompOperandNotUnary](#compoperandnotunary) | Error |
+| `0x030001E3` | [SemanticDiag::StreamInContainer](#streamincontainer) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -835,6 +837,35 @@ module when_after_body
 rule guarded(x: int) { x + 0 => x } when true
 
 func main(): int sync {
+    return 0
+}
+```
+
+### AsRightSideIsType
+
+`0x02000011` · Error · `SyntaxDiag::AsRightSideIsType`
+
+**Message**
+
+```text
+The right side of '{0}' is a type; write the interval as '(a..b)'.
+```
+
+**Help**
+
+```text
+'T..' is the stream type (design principles 5.4): the elements of 'T' that arrive one after another. An interval is an expression, and it is written in parentheses: (1..5).
+```
+
+**Example** (`test/cases/parse/rulings/stream_type_as_interval.cml`, run as `camel test/cases/parse/rulings/stream_type_as_interval.cml`)
+
+```camel
+module stream_type_as_interval
+
+func main(): int sync {
+    let n = 3
+    let r = n as int..5
+    println(r)
     return 0
 }
 ```
@@ -6605,6 +6636,34 @@ func inc(x: int): int { return x + 1 }
 func main(): int sync {
     let g = add2..inc
     println(g(3))
+    return 0
+}
+```
+
+### StreamInContainer
+
+`0x030001E3` · Error · `SemanticDiag::StreamInContainer`
+
+**Message**
+
+```text
+'{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once.
+```
+
+**Help**
+
+```text
+A stream is read one element at a time and is done when it ends. Write the stream where it is consumed once: a parameter or the result of a function, an item of a tuple, or the subject of an operator that reads it to its end. What needs the elements of a container to be readable again takes an array filled from the stream.
+```
+
+**Example** (`test/cases/compile/stream/type_in_container.cml`, run as `camel test/cases/compile/stream/type_in_container.cml`)
+
+```camel
+module stream_type_in_container
+
+func main(): int sync {
+    let s: int..[3] = [1, 2, 3]
+    println(0)
     return 0
 }
 ```

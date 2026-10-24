@@ -379,6 +379,20 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
         }
 
         // 8. A '(' or '[' still open where a statement starts, a block ends or the file ends;
+        // 6b. `x as int..5`: the interval reading of `..` written where a type stands. The type
+        //     of an `as` ends at the stream mark, and what follows reads as the far end of an
+        //     interval (the author's ruling of 2026-10-24 on the stream surface, option (c)).
+        if (error.kind == SyntaxError::Kind::AsRightSideIsType) {
+            if (once(SyntaxDiag::AsRightSideIsType, offending)) {
+                const Token &op = buffer[error.aux];
+                diagnostics.of(SyntaxDiag::AsRightSideIsType)
+                    .at(at(offending))
+                    .commit(std::string(buffer.text(op)));
+            }
+            continue;
+        }
+
+        // 7. A '(' or '[' still open where a statement starts, a block ends or the file ends;
         //    or the end of the file with a block open.
         if (!open.empty()) {
             static const std::set<std::string> kStatementStart = {

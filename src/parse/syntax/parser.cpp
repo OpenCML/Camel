@@ -204,6 +204,17 @@ void ParserImpl::error(
     tree_.errors_.push_back(std::move(err));
 }
 
+void ParserImpl::error(
+    SyntaxError::Kind kind, std::initializer_list<uint8_t> expected, uint32_t at, uint32_t aux) {
+    const size_t before = tree_.errors_.size();
+    error(kind, expected, at);
+    // The kind a classifier rewrote (`i<n`, `f<a >`) keeps its own second token; only the error
+    // this call pushed is given `aux`.
+    if (tree_.errors_.size() > before) {
+        tree_.errors_.back().aux = aux;
+    }
+}
+
 bool ParserImpl::expect(TK kind) {
     if (cur_ == kind) {
         bump();

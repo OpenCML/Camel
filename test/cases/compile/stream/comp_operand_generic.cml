@@ -1,0 +1,19 @@
+/**
+ * An operand of `..` whose type is not settled: `ident` is generic, and a generic function
+ * named without its type arguments has no value of one type yet, so the composition is refused.
+ * The refusal no longer prints `void` as if it were the operand's type - it says what the
+ * operand is and how to settle it (the record is
+ * docs/handover/questions/generic-operands-of-composition.md; whether the refusal deserves a
+ * diagnostic of its own is still the author's to rule).
+ */
+module stream_type_comp_operand_generic
+
+func ident::<T>(x: T): T {
+    return x
+}
+
+func main(): int sync {
+    let h: (x: int) => int = ident..ident
+    println(h(4))
+    return 0
+}

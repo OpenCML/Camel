@@ -1,0 +1,13 @@
+/**
+ * The right side of `as` is always a type (the author's ruling of 2026-10-24, option (c)): `..`
+ * after a type there is the stream suffix, never the interval operator. `xs as int..` is a
+ * conversion to the stream type, and it is read as one - not as an expression.
+ */
+module stream_type_as
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    let s = xs as int..
+    println(0)
+    return 0
+}

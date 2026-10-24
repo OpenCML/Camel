@@ -1340,12 +1340,29 @@ node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct) {
         rhsType->code() == TypeCode::Int64) {
         return intervalValue(lhs, rhs, gct);
     }
-    diags_->of(SemanticDiag::CompOperandMismatch)
-        .atOrigin(gct->origin())
-        .commit(
-            lhsType != nullptr ? lhsType->toString() : std::string("nothing"),
-            rhsType != nullptr ? rhsType->toString() : std::string("nothing"));
-    throw BuildAbortException();
+    // The operand's type as the message names it. A value whose type is not settled reads as
+// `void`, which is no type the program wrote: a generic function named without its type
+// arguments is the case that reaches here, and the note says how to settle it. The record of
+// the question is docs/handover/questions/generic-operands-of-composition.md.
+const auto operandText = [](Type *type) -> std::string {
+    if (type == nullptr) {
+        return "nothing";
+    }
+    if (type->code() != TypeCode::Void) {
+        return type->toString();
+    }
+    return "a generic function with no type arguments";
+};
+const bool unsettled = (lhsType != nullptr && lhsType->code() == TypeCode::Void) ||
+                       (rhsType != nullptr && rhsType->code() == TypeCode::Void);
+auto mismatch = diags_->of(SemanticDiag::CompOperandMismatch).atOrigin(gct->origin());
+if (unsettled) {
+    mismatch.note(
+        "a generic function has no value of one type until its type arguments are written: "
+        "'ident::<int>..ident::<int>' composes the two instances of 'ident'");
+}
+mismatch.commit(operandText(lhsType), operandText(rhsType));
+throw BuildAbortException();
 }
 
 node_handle_t Builder::composeFunctionValue(

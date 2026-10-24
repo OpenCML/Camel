@@ -1,0 +1,21 @@
+/**
+ * The tag of `#impl` matches the kernel's signature to the function's by type identity (design
+ * principles 10.4), and a stream type is one of the types that identity compares: the kernel
+ * takes `(a: int, b: int) => int` and `add` takes the stream `(a: int, b: int..) => int`, so the
+ * two are different functions and the tag is refused (SemanticDiag::ImplSignatureMismatch),
+ * printing the stream where the signatures differ.
+ */
+module stream_type_impl_signature
+
+#op<':op/add_l'>
+func kernel(a: int, b: int): int
+
+#impl<kernel>
+func add(a: int, b: int..): int {
+    return 0
+}
+
+func main(): int sync {
+    println(0)
+    return 0
+}

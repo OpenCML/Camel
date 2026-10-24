@@ -352,6 +352,7 @@ class Builder {
 
     // ast/type.h
     Type *visitType(const AST::node_ptr_t &ast);
+    Type *visitStreamType(const AST::node_ptr_t &ast);
     Type *visitNullableType(const AST::node_ptr_t &ast);
     Type *visitTypeExpr(const AST::node_ptr_t &ast);
     Type *visitArrayType(const AST::node_ptr_t &ast);

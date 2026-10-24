@@ -307,12 +307,33 @@ void ParserImpl::parseNullable() {
 
 /// unaryExpr : linkExpr (('as' | 'is') typeExpr)?
 /// (The prefix operators `-`, `!` and `~` are taken by negExpr, under `->`.)
+/// The right side is always a type (the author's ruling of 2026-10-24), and the type reads its
+/// own marks: `x as int..` is a conversion to the stream type. A number or a name written
+/// directly after the `..` is not a type, though — `x as int..5` is the interval reading of `..`
+/// written where a type stands — and it is reported as such rather than as a stray token.
 void ParserImpl::parseUnary() {
     const size_t m = mark();
     parseLink();
     if ((cur_ == TK::KwAs || cur_ == TK::KwIs) && !panic_) {
         bump();
+        const uint32_t opToken = prev_;
         parseType();
+        if (prev_ != opToken && toks_[prev_].kind == TK::DotDot && adjacent() && !panic_) {
+            // What follows the `..` is an expression's far end written without a space, which
+            // is the interval reading and nothing else. A `(`, a `[` or an operator after the
+            // `..` is not this: `x as f32[3]..[4]` reads its dimension in parseType, and
+            // `x as int.. + 1` is the cast plus one.
+            switch (cur_) {
+            case TK::Integer:
+            case TK::Real:
+            case TK::Identifier:
+            case TK::String:
+                error(SyntaxError::Kind::AsRightSideIsType, {}, prev_, opToken);
+                break;
+            default:
+                break;
+            }
+        }
         close(m, NK::CastExpr);
     }
 }

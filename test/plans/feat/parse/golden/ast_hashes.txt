@@ -37,6 +37,9 @@ c005562ecb6383e6 ok test/cases/parse/rulings/doc_comment.cml
 7a180de2e356ec0b no test/cases/parse/rulings/optional_comp_removed.cml
 4f723341823c8fe9 ok test/cases/parse/rulings/power.cml
 cc32392fed36cd2f ok test/cases/parse/rulings/reserved_and.cml
+c9c12e5193a8f6e5 no test/cases/parse/rulings/stream_type_as_interval.cml
+ba706ba20aa01c91 ok test/cases/parse/rulings/stream_type_in_array.cml
+8b0eadc900fbb66a ok test/cases/parse/rulings/stream_type_marks.cml
 7eaaa656fecc2292 no test/cases/parse/syntax/angle_close_after_space.cml
 f0996e2e802a583a no test/cases/parse/syntax/comparison_needs_space.cml
 1800256e2cca0603 no test/cases/parse/syntax/line_starts_with_operator.cml

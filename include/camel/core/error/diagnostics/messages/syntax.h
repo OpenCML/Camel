@@ -35,7 +35,8 @@ enum class SyntaxDiag : uint32_t {
     // 4.4; the ruling of 2026-10-24). The trailing position a rule used to accept is not read as a
     // condition, and saying so by name is what keeps the program from being told only that a token
     // did not fit.
-    WhenAfterBody = 0x000010,
+    WhenAfterBody     = 0x000010,
+    AsRightSideIsType = 0x000011,
 
     // Warnings (severity bits = Warn).
     ComparisonAcrossLines = 0x100001,

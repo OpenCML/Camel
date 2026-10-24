@@ -30,6 +30,7 @@ namespace camel::core::type {
 enum class TypeStorageKind : unsigned {
     Primitive,  // Type objects of the built-in scalar and auxiliary types
     Array,      // ArrayType
+    Stream,     // StreamType
     Tuple,      // TupleType, including variable cells, `T?` / `T!` and frame layouts
     Struct,     // StructType
     Function,   // FunctionType (parameter names inline)

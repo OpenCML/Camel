@@ -28,6 +28,7 @@ syntax	EmptyInterpolation	0x00000F	error	An interpolation has no expression to f
 # condition, and saying so by name is what keeps the program from being told only that a token
 # did not fit.
 syntax	WhenAfterBody	0x000010	error	A declaration's condition comes before the body it guards, so {0} cannot follow the body.	Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() {{ x + 0 => x }}. The trailing form is not read as a condition.
+syntax	AsRightSideIsType	0x000011	error	The right side of '{0}' is a type; write the interval as '(a..b)'.	'T..' is the stream type (design principles 5.4): the elements of 'T' that arrive one after another. An interval is an expression, and it is written in parentheses: (1..5).
 #
 # Warnings (severity bits = Warn).
 syntax	ComparisonAcrossLines	0x100001	warn	This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one.	A '>' after a space, at the end of a line, is the comparison operator, and the expression goes on with the next line. The '>' that closes '<...>' arguments touches the last argument; a chain of comparisons (a < b > c) is never what a program means.
@@ -474,3 +475,9 @@ semantic	ImplKernelNotBodyless	0x0001DC	error	The '#impl' tag of '{0}' names '{1
 # it takes the name of one of the rule's own `const` parameters, and it is written in the
 # condition. Nothing else reaches a node there.
 semantic	NodeOfNotAParameter	0x0001DE	error	'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.	node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.
+# A stream is linear (design principles 5.4): it is read one element at a time and is finished
+# when it ends, so a container whose elements can be read more than once cannot hold one. The
+# author's ruling of 2026-10-24 (h248-stream-type-surface) names arrays, maps and sets; a tuple
+# is not a container in that sense - its items are taken apart once - and a function signature
+# may take and give a stream.
+semantic	StreamInContainer	0x0001E3	error	'{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once.	A stream is read one element at a time and is done when it ends. Write the stream where it is consumed once: a parameter or the result of a function, an item of a tuple, or the subject of an operator that reads it to its end. What needs the elements of a container to be readable again takes an array filled from the stream.

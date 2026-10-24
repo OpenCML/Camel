@@ -217,7 +217,7 @@ loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
 catchClause        : 'catch' identDef ':' typeExpr stmtBlock
-typeExpr           : interType ('?' | '!')*
+typeExpr           : interType ('?' | '!' | '..')*
 interType          : diffType ('&' diffType)*
 diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
 keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
