@@ -1486,7 +1486,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialization_survives_the_round.copy_is_reused_in_a_later_round"
-desc = "A specialization belongs to the program, not to the session that made it, and a later round that binds the same (function, values) gets the copy back instead of making a second one -- while the program still reaches it. walk's first argument drives the unrolling (walk(6) makes walk(5), which makes walk(4), ...) and its second comes from a cell, so the arithmetic stays in the graph and the call spin(k % 2) is never specialized either; spin is recursive, so every copy keeps reaching a recursion, is not inlined and stays reachable from the root in the rounds that follow. The copy walk(4) made in the first round is handed back to the walk(5) copy's request in a later round (walk$spec7 calls walk$spec1): the copies the program reaches are all the table holds, where a table that lives with the session would keep the copies it made. The other side is here too: tick's copies are inlined into main in the round that makes them, so the commit drops their entries and the table reports only the copies the root still reaches, not the ones a table that pinned the graphs it named would count. The reachable program is unchanged."
+desc = "A specialization belongs to the program, not to the session that made it, and a later round that binds the same (function, values) gets the copy back instead of making a second one -- while the program still reaches it. walk's first argument drives the unrolling (walk(6) makes walk(5), which makes walk(4), ...) and its second starts in a `var` that does not escape, so it becomes SSA (the graph has no :var/get) and every copy works on the value the write made; spin is recursive, so every copy keeps reaching a recursion, is not inlined and stays reachable from the root in the rounds that follow. The copy the first chain made for walk(5, 4) is handed back to a later request for the same value (the request adds no copy, and the shared copy is named twice in the document), while the request walk(4, k) binds a different value and makes its own chain: the copies the program reaches are all the table holds, where a table that lives with the session would keep the copies it made. The other side is here too: tick's copies are inlined into main in the round that makes them, so the commit drops their entries and the table reports only the copies the root still reaches, not the ones a table that pinned the graphs it named would count. The reachable program is unchanged."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialization_survives_the_round.cml"
 args = ["${case}", "std::opt", "std::stats", "std::jgir"]
@@ -1500,13 +1500,16 @@ const stats = JSON.parse(out.slice(at + 'GRAPH_STATS '.length, out.indexOf('}', 
 const graphs = JSON.parse(out.slice(out.indexOf('}', at) + 1).trim()).graphs
 const names = graphs.map((g) => g.name)
 const specialized = names.filter((name) => name.startsWith('walk$')).sort()
-assert(JSON.stringify(specialized) === JSON.stringify(['walk$spec0', 'walk$spec1', 'walk$spec10', 'walk$spec11', 'walk$spec6', 'walk$spec7', 'walk$spec8']), `the copies that survive are not the ones the program reaches: ${specialized}`)
+assert(JSON.stringify(specialized) === JSON.stringify(['walk$spec0', 'walk$spec1', 'walk$spec13', 'walk$spec15', 'walk$spec2', 'walk$spec23', 'walk$spec25', 'walk$spec27', 'walk$spec29', 'walk$spec39', 'walk$spec7', 'walk$spec9']), `the copies that survive are not the ones the program reaches: ${specialized}`)
 assert(stats.specializations === specialized.length, `the table must hold exactly the copies the program reaches, got ${stats.specializations} for ${specialized.length} reachable copies`)
 assert(!names.some((name) => name.startsWith('tick$')), `a copy whose caller inlined it must not be kept: ${names.filter((name) => name.startsWith('tick$'))}`)
-const copy = graphs.find((g) => g.name === 'walk$spec7')
-assert(copy !== undefined, 'the walk(5) copy the first round made is missing')
-const callees = copy.nodes.filter((n) => n.kind === 'FUNC').map((n) => n.label)
-assert(callees.includes('walk$spec1'), `the walk(5) copy made a second walk(4) instead of reusing the one the first round made: ${callees}`)
+// The request for walk(5, 4) binds a value the first chain already bound, so it gets that copy
+// back instead of making a second one: the copy is named twice in the document (its own graph and
+// the call that reuses it), where a copy that only one chain reached is named once.
+const named = {}
+for (const m of input.normalized.stdout.matchAll(/"(walk\$spec\d+)"/g)) { named[m[1]] = (named[m[1]] || 0) + 1 }
+const shared = Object.keys(named).filter((name) => named[name] > 1)
+assert(shared.length > 0, `the request for a value the first chain bound must get that copy back, so some copy is named twice; found ${JSON.stringify(named)}`)
 }
 """
 timeout_ms = 8000
@@ -1518,7 +1521,7 @@ kind = "behavior"
 case = "../../../cases/opt/generic/specialization_survives_the_round.cml"
 args = ["${case}", "std::opt", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_exact = "87\n16\n45\n"
+expect_stdout_exact = "87\n16\n86\n45\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

@@ -559,7 +559,7 @@ void registerCoreKernels() {
     registerCoreKernel("opt::extract", extractPass());
     registerCoreKernel("opt::cse", makePass<CommonSubexpressionPass>());
     registerCoreKernel("opt::dce", dcePass());
-    registerCoreKernel("opt::ctrl", makePass<ControlReductionPass>());
+    registerCoreKernel("opt::order", makePass<OrderReductionPass>());
     // The core passes that read tag facts: the dumps show a node's attributes and numeric
     // permissions, and std::opt keeps them across rewrites (CSE combines by their merge rules).
     // A tag's `read_by` names one of these (or a module's pass that registers itself).

@@ -140,7 +140,7 @@
 - **块只是元组，不是 `Block[]`**：H17 的原生数组语法与带形状的 `Tensor<f32, [...]>` 已经可用，但
   "循环迭代一个依赖可微参数的张量数组"仍被拒绝（反向要把每轮的梯度散射回数组，而数组元素还没有零切向量）。
   模型因此写 `blocks: (Block, Block)`，前向用
-  `static loop ... for (i, B) in fields (Block, Block)`；没有 `block0`/`block1` 字段，也没有复制块体。
+  `static loop ... for i, B in fields (Block, Block)`；没有 `block0`/`block1` 字段，也没有复制块体。
   H17 能对 `Block[]` 求导后，元组换成数组、静态循环换成
   `loop h = x for b in m.blocks`。
 - **`f32[b, t, d]` 还进不了张量算子**：`exp`、`@`、`sum` 接收的是 `Tensor`，不是核心数组类型；

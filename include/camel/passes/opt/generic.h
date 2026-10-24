@@ -17,10 +17,12 @@
  *                   also bypasses non-anchor GATEs by transferring waits to mandatory users,
  *                   within an edge-growth budget;
  *                   their ordering is transferred to their control users.
- *   std::opt::ctrl  removes control edges already implied by mandatory data/control paths,
- *                   within a work budget and without changing branch boundaries or arm anchors.
+ *   std::opt::order removes ordering edges already implied by a path of ordering edges, within a
+ *                   work budget (docs/design/effects/edges.cn.md 5.4). It still removes control
+ *                   edges implied by mandatory data/control paths until the control-edge kind is
+ *                   gone, without changing branch boundaries or arm anchors.
  *
- * std::opt runs call rewriting, fold, cse, algebra and dce to a fixpoint, then ctrl once.
+ * std::opt runs call rewriting, fold, cse, algebra and dce to a fixpoint, then order once.
  *
  * Together with call rewriting (devirtualization, which also turns calls of closures
  * built in the caller into direct calls of a lambda-lifted graph, and
@@ -92,7 +94,11 @@ class DeadCodePass : public RuntimeGraphRewritePass {
     bool valuesOnly_;
 };
 
-class ControlReductionPass : public RuntimeGraphRewritePass {
+/// std::opt::order: the transitive reduction over a graph's ordering edges (docs/design/effects/
+/// edges.cn.md 5.4). It reduces ORDER edges today and keeps reducing CTRL edges until the
+/// control-edge kind is gone; the commit that removes that kind drops the half here and the CTRL
+/// assertions of test/cases/opt/control_contract.py.
+class OrderReductionPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *

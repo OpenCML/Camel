@@ -20,6 +20,7 @@
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/control.h"
 
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/typevar.h"
@@ -346,6 +347,12 @@ DraftNodeInit snapshotNodeInit(const GraphDraft &draft, gc_node_ref_t nodeId) {
         .normInputs   = draft.normInputsOf(nodeId),
         .withInputs   = draft.withInputsOf(nodeId),
         .ctrlInputs   = draft.ctrlInputsOf(nodeId),
+        // The order and sync runs are part of what the node is (docs/design/effects/edges.cn.md 4):
+        // a rewrite that replaces it and drops them loses where it stood -- the statement written
+        // before it in its block's chain, and what ordered it -- and the chain it was part of dies
+        // with it (a devirtualized call used to take the whole `sync` block's effects down).
+        .orderInputs  = draft.orderInputsOf(nodeId),
+        .syncInputs   = draft.syncInputsOf(nodeId),
     };
 }
 
@@ -1260,6 +1267,116 @@ bool devirtualizeClosureCallInDraft(
     return true;
 }
 
+/// A node whose work is inside the regions it owns (the arms of a branch, the parts of a loop):
+/// it carries no computation of its own to order, and what its regions hold is in them before it
+/// is. Ordering such a node would order the region as a whole, which is not what 5.7 asks for and
+/// what a back end cannot lay out -- the region's own nodes are ordered one by one instead.
+bool nodeOwnsRegions(GCNodeKind kind) {
+    return kind == GCNodeKind::Brch || kind == GCNodeKind::Join || kind == GCNodeKind::Loop;
+}
+
+/// The nodes a spliced body's order edges have to cover (docs/design/effects/edges.cn.md 5.7): the
+/// effect and may-fault nodes of the body, i.e. exactly the ones the model does not let a pass
+/// arrange freely (design principles 3.4). The same predicate is what an order edge may sit on at
+/// all, so the seal check cannot refuse an edge this writes (4.6).
+bool splicedBodyNeedsOrder(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || header->kind == GCNodeKind::Dead ||
+        nodeOwnsRegions(header->kind)) {
+        return false;
+    }
+    const camel::core::OperId oper =
+        header->kind == GCNodeKind::Oper
+            ? reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->oper
+            : camel::core::kNoOper;
+    return !nodeIsFreelySchedulable(header->kind, oper);
+}
+
+/// The innermost control region a region lies in (or is): an arm of a branch, a part of a loop.
+/// Everything else (the graph's own frame and the regions that only annotate where a node came
+/// from: Inline, Block) is looked through, which is the notion the region rules and the layout use
+/// (camel/runtime/control_regions.h).
+bool isControlRegionKind(GCRegionKind kind) {
+    return kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
+           kind == GCRegionKind::LoopBody;
+}
+
+/// The control region a node's region lies in, 0 for the graph's own frame. An ordering never
+/// leaves the region that holds it (docs/design/effects/edges.cn.md 4), so this is the boundary
+/// an order edge of the splice may not cross.
+uint32_t controlRegionOf(const GraphDraft &draft, gc_node_ref_t id) {
+    uint32_t region = draft.nodeRegion(id);
+    while (region != 0) {
+        const GCRegion &enclosing = draft.region(region);
+        if (isControlRegionKind(enclosing.kind)) {
+            return region;
+        }
+        region = enclosing.parent;
+    }
+    return 0;
+}
+
+/// The node that takes the call's place in the chain of its block (docs/design/effects/edges.cn.md
+/// 5.7): the body's result, when the splice made it and nothing has written it into a chain yet. A
+/// node the caller brought in (a forwarded argument, a constant) is not the splice's to make one
+/// statement of the caller's block, and a node the body's own chain already ends in keeps that
+/// place -- an order edge or a sync edge moved onto it would fork the chain. Either way the GATE
+/// over the value carries the place instead, and it is the splice's own node.
+gc_node_ref_t spliceChainAnchor(
+    GraphDraft &draft, size_t slotsBefore, gc_node_ref_t value, uint32_t region) {
+    if (value >= static_cast<gc_node_ref_t>(slotsBefore) && draft.alive(value) &&
+        draft.syncInputsOf(value).empty() && draft.syncUsersOf(value).empty()) {
+        return value;
+    }
+    const DraftNodeHeader *valueHeader = draft.header(value);
+    const DraftNodeInit gateInit{
+        .dataIndex = valueHeader ? valueHeader->dataIndex : static_cast<gc_slot_idx_t>(0),
+        .dataType  = valueHeader ? valueHeader->dataType : nullptr,
+        .kind      = GCNodeKind::Gate,
+        .region    = region,
+        .normInputs = std::span<const gc_node_ref_t>(&value, 1),
+    };
+    return draft.addNode(gateInit);
+}
+
+/// 5.7's extra constraint, written beside the splice: the chain the call stood in runs
+/// `before -> body -> after`, and *beside* that the body's effect and may-fault nodes are ordered
+/// after the statement written before the call and before the one written after it. An order edge
+/// only orders -- it makes nothing run, and it crosses a function boundary without claiming the
+/// body's statements are statements of the caller's block -- which is why the splice needs it for
+/// a body that carries no chain of its own, and keeps it for one that does.
+///
+/// Only the body's nodes in the block the call itself is a statement of are ordered: what the body
+/// does inside a region of its own (the parts of a loop, the arms of a branch) is laid out by that
+/// region's rules (5.2 and the Join/Loop layout), and an ordering never leaves the region that
+/// holds it (4.6) -- ordering an inner-region node after a statement outside it would order the
+/// region's work against the region, which the layout cannot honour.
+void addSpliceOrderEdges(
+    GraphDraft &draft, size_t slotsBefore, uint32_t blockRegion,
+    const std::vector<gc_node_ref_t> &before, const std::vector<gc_node_ref_t> &after) {
+    if (before.empty() && after.empty()) {
+        return;
+    }
+    for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
+         ++id) {
+        if (!draft.alive(id) || !splicedBodyNeedsOrder(draft, id) ||
+            controlRegionOf(draft, id) != blockRegion) {
+            continue;
+        }
+        for (gc_node_ref_t pred : before) {
+            if (draft.alive(pred) && controlRegionOf(draft, pred) == blockRegion) {
+                draft.appendOrderDependency(id, pred);
+            }
+        }
+        for (gc_node_ref_t user : after) {
+            if (draft.alive(user) && splicedBodyNeedsOrder(draft, user) &&
+                controlRegionOf(draft, user) == blockRegion) {
+                draft.appendOrderDependency(user, id);
+            }
+        }
+    }
+}
+
 } // namespace
 
 bool devirtualizeStaticCallInDraft(
@@ -1436,6 +1553,17 @@ DraftInlineResult inlineCallableInDraft(
     }
     ctrlPreds                  = controlFrontier(draft, ctrlPreds);
     const bool hasExternalCtrl = !ctrlPreds.empty();
+    // The statement(s) written after the call in its block: the call is replaced by the body's
+    // result and the chain goes on from there, so 5.7's order edges have to reach exactly the nodes
+    // that followed the call. Read now, because replacing the call's uses below is what makes them
+    // the body's successors.
+    std::vector<gc_node_ref_t> callFollowers(
+        draft.ctrlUsersOf(funcNodeId).begin(), draft.ctrlUsersOf(funcNodeId).end());
+    for (gc_node_ref_t syncUser : draft.syncUsersOf(funcNodeId)) {
+        if (std::ranges::find(callFollowers, syncUser) == callFollowers.end()) {
+            callFollowers.push_back(syncUser);
+        }
+    }
 
     // The body goes in a region of its own, inside the region of the call: where the code
     // came from stays recorded after the call is gone. The body of an arm of a branch is the
@@ -1446,6 +1574,9 @@ DraftInlineResult inlineCallableInDraft(
                      draft.region(draft.nodeRegion(funcNodeId)).kind == GCRegionKind::Arm),
         "The call of an arm is the node of the region of its arm.");
     const size_t slotsBefore = draft.nodeSlotCount();
+    // The block the call is a statement of: 5.7's order edges reach only what the body does in it.
+    // Read before the splice, because the call itself is the statement being replaced.
+    const uint32_t callBlockRegion = controlRegionOf(draft, funcNodeId);
     // The call is the whole of its arm, which already has its region: the body goes into it.
     // The region records the function this code is a copy of, which is what the inline history
     // asks it (GraphDraft::inlinedCopyOf, H44c). A type specialization is that function with a
@@ -1685,6 +1816,22 @@ DraftInlineResult inlineCallableInDraft(
     // inlined output/completion anchor instead.
     draft.replaceAllValueUses(funcNodeId, result.valueExit);
     draft.replaceAllCtrlUses(funcNodeId, result.ctrlExit);
+    // 5.7: the body's result replaces the call and keeps the call's own place in the chain of the
+    // block -- its incoming and outgoing sync edges, and the order edges it stood in.
+    // `takeStatementPlace` writes that place (and the control edge naming the same pairs beside it,
+    // for as long as the chain of a block is written as control edges) when the replacer is a
+    // statement of the block the call was written in. It runs here, before `eraseNode` closes the
+    // chain over the call: the call has to be alive for its place to be read. A call with no such
+    // place -- every call of today's corpus, whose block writes its chain as control edges --
+    // has nothing to hand over, and nothing is added to the graph for it.
+    const bool callHasChainPlace = !draft.syncInputsOf(funcNodeId).empty() ||
+                                   !draft.syncUsersOf(funcNodeId).empty() ||
+                                   !draft.orderInputsOf(funcNodeId).empty();
+    if (callHasChainPlace) {
+        const gc_node_ref_t chainAnchor =
+            spliceChainAnchor(draft, slotsBefore, result.valueExit, draft.nodeRegion(funcNodeId));
+        draft.takeStatementPlace(funcNodeId, chainAnchor);
+    }
     // The statements written directly after the call keep their place in the chain of the block
     // they are written in: the call is gone, so they follow what the call followed. They do not
     // follow the body's anchor instead -- that anchor is a node of the region the body was given,
@@ -1698,6 +1845,11 @@ DraftInlineResult inlineCallableInDraft(
     // (docs/design/effects/edges.cn.md 1.5, 4.6). The ordering it named is what the body's region
     // carries once it stands on the chain as one statement of the block.
     draft.closeChainOver(funcNodeId);
+    // 5.7's extra constraint: the body's effect and may-fault nodes are ordered after the statement
+    // the call was written after and before the one written after it. The chain above carries the
+    // same order for a body whose statements it reaches; this edge is what orders a body that
+    // carries no chain of its own, and it is what survives when the chain's edges change kind.
+    addSpliceOrderEdges(draft, slotsBefore, callBlockRegion, ctrlPreds, callFollowers);
 
     draft.eraseNode(funcNodeId);
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice finished for draft node {}.", funcNodeId);

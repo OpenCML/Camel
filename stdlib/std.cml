@@ -306,7 +306,10 @@ with <
 >
 export func dce::<F>(f: F): F! when is_function::<F>()
 
-/// Control-flow reduction.
-export func ctrl::<F>(f: F): F! when is_function::<F>()
+/// The transitive reduction over ordering edges (docs/design/effects/edges.cn.md 5.4): an order
+/// edge A -> C goes away when a path of order edges already orders the two ends. A sync block's
+/// statements are one chain and carry no redundancy. Control edges are still reduced until that
+/// edge kind is gone from the graph.
+export func order::<F>(f: F): F! when is_function::<F>()
 }
 

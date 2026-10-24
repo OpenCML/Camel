@@ -9,10 +9,11 @@ module specialization_survives_the_round
 // form the chain walk(6), walk(5), walk(4), ... and each round keeps asking for the values the
 // round before made.
 //
-// The second argument comes from a cell (`var k`), and a read of a cell is not folded: the
-// arithmetic on `k` stays in the graph, so a copy is never small enough to be folded away. spin
-// is called with k % 2, which is not constant either, so that call is not specialized either; it
-// keeps every copy reaching a recursion, and the inliner leaves a copy that reaches one in place.
+// The second argument is a `var` that does not escape, so it becomes SSA: the graph has no
+// :var/get and every copy works on the value the write made (`k` is 5 here). spin is called with
+// a constant, and a copy whose chain reached no recursion would be inlined into its caller, so
+// the table would drop it again (see tick below): spin is what keeps these copies reachable from
+// the root in later rounds.
 // A copy whose chain no longer reached a recursion would eventually be inlined into its caller
 // and the table would have to drop it again (see tick below): this call is what keeps these
 // copies reachable from the root in later rounds.
@@ -43,9 +44,13 @@ func main(): int sync {
     var k = 5
     let p = walk(6, k)
     let q = walk(4, k)
+    // A value the first chain already bound: walk(5, 4) is one of its links, so this request gets
+    // that copy back and adds none.
+    let r = walk(5, 4)
     let t = tick(1) + tick(2) + tick(3)
     println(p)
     println(q)
+    println(r)
     println(t)
     return 0
 }

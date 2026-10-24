@@ -20,12 +20,14 @@ for suffix in ("", "::small", "::arm", "::hybrid"):
     assert canonical.returncode == shortcut.returncode == 0, canonical.stderr + shortcut.stderr
     assert canonical.stdout == shortcut.stdout, f"inline alias differs: {suffix}"
 
-for stage in ("devirtualize", "specialize", "fold", "cse", "dce", "ctrl"):
+for stage in ("devirtualize", "specialize", "fold", "cse", "dce", "order"):
     result = run("std::opt::" + stage, "std::nvm")
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == ["1", "11", "203", "4"], result.stdout
 
-for retired in ("std::devirtualize", "std::specialize", "std::opt::simplify"):
+# `std::opt::ctrl` was renamed to `std::opt::order` (docs/design/effects/edges.cn.md 5.4): the old
+# name is not an alias, so a pipeline that still writes it is refused rather than silently reduced.
+for retired in ("std::devirtualize", "std::specialize", "std::opt::simplify", "std::opt::ctrl"):
     result = run(retired, "std::gir")
     assert result.returncode != 0, f"retired entry still registered: {retired}"
 
