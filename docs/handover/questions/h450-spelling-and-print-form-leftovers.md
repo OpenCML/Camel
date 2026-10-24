@@ -136,4 +136,45 @@ indexed by the model input
 `autodiff: no derivative rule for ':op/idx_take'`）。可用的修法很小：`Gather` 对任意数据类型都成立，
 常量下标时把浮点数组的输入直接交给 `Gather`（当前代码用 `ctx.input(0, TypeCode::Int64)` 把输入钉成
 int64），只保留「浮点数组 + 非常量下标」为拒绝。本 lane 没落：这属于导出器的能力矩阵，且放宽它可能
-让别的应当拒绝的程序被接受，应由掌握导出器用例的车道改并验收。
+让别的应当拒绝的程序被接受，应由掌握导出器用例的车道改并验收。（2026-10-25：已转 h456 那条线，
+本 lane 不再动导出器。）
+
+## 八、`constas` 的形状实参不静态比对（回归，已修，`bbb3a4a18`）
+
+裁定（§print-form-flip-2026-10-25 第 1 条）选 A：形状实参恢复静态拒绝，形状检查由核心负责（5.4）⇒
+修代码、不改期望。用例 `compile.constas/constas_argument_shape`（`func total(constas n: int, x: f32[n])`
+调 `total(3, ones([4]))`）红前 = `expected exit 1, got 0`、stdout `4.0`。
+
+定位（临时探针，读数出来即撤，未留第二处半改）：
+
+```
+PROBE instantiateForCall tmpl=total declared=2 constas=1 with=0
+PROBE constas name=n extent=3
+PROBE arg i=0 wanted=f32[n] actual=f32[4] ENTERS
+4.0
+```
+
+即：路径走对了（`Builder::instantiateForCall`），`constas` 值也拿到了（`n=3`），但检查处看到的参数
+仍是 **`f32[n]`**，而带维名的数组接受任意极值 ⇒ 实参被原样收下。
+
+根因：`substituteExtentValues`（`src/core/type/typevar.cpp:424`）在 `TypeCode::Array` 那支只代换**元素
+类型**，从不代换数组**自身的极值**（维名）；代换维名的能力在模块类型的类型实参那支（`TypeCode::Struct`
+454-465）。翻转前 `Tensor<f32, [n]>` 的维名正是模块类型的类型实参，所以代换得到；翻转后 `[]` 的维名
+落在 core `ArrayType` 自己的 `extents_` 上，那一支不认 ⇒ 参数保持开放。
+
+修法：数组那支同时套 `ArrayType::withExtentValues(values, packs)`，参数变成 `f32[3]`，实参 `f32[4]`
+被静态拒绝（红后逐字）：
+
+```
+error[SemanticDiag::GenericArgumentsMismatch]: The generic function 'total' cannot be called with
+argument types (f32[4]): argument 1 has type 'f32[4]', but its parameter 'x: f32[3]' is 'f32[3]'
+here ().
+   --> test/cases/compile/constas/constas_argument_shape.cml:10:18   (code 0x03000053)
+```
+
+顺带修掉同一支的一处形状丢失：元素类型变了时原代码 `ArrayType::create(elem)` 会丢掉极值，改为
+`withElementType`（保留形状与标志）。
+
+遗留（措辞，未动）：`reject` 末尾把 `describe(i)` 与 `is '<wanted>' here (<bound variables>)` 拼在
+一起，于是出现「its parameter 'x: f32[3]' is 'f32[3]' here ()」的重复与空绑定括号。改它属消息措辞那一族，
+会让若干断言该文本的用例需要同步，本 lane 未在无验证的情况下动。
