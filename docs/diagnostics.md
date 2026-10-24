@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-264 diagnostics: 245 errors, 19 warnings. 14 carry a machine-applicable edit, 250 say why they carry none.
+265 diagnostics: 246 errors, 19 warnings. 14 carry a machine-applicable edit, 251 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -231,6 +231,7 @@ prints one entry.
 | `0x030001E3` | [SemanticDiag::StreamInContainer](#streamincontainer) | Error | no |
 | `0x030001E4` | [SemanticDiag::CompOperandGenericWithoutType](#compoperandgenericwithouttype) | Error | no |
 | `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
+| `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn | no |
@@ -7593,6 +7594,42 @@ module h426_range_two_arguments
 
 func main(): int sync {
     let xs = range(0, 3)
+    println(xs)
+    return 0
+}
+```
+
+### RangeStepZero
+
+`0x030001E6` · Error · `SemanticDiag::RangeStepZero`
+
+**Fix**
+
+None: choice: which step the range takes is the writer's to say, and the message names both a stepped range and the interval
+
+**Message**
+
+```text
+The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers.
+```
+
+**Help**
+
+```text
+The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
+```
+
+**Example** (`test/cases/compile/stream/range_step_zero.cml`, run as `camel test/cases/compile/stream/range_step_zero.cml`)
+
+```camel
+// `range(a, b, 0)` names no sequence at all: the step never moves, so no integers are the
+// sequence and no sequence is the array (design principles 4.2; the author's ruling of
+// 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the refusal is at the
+// call, under the step the program wrote, and says both ways to write what it meant.
+module h426_range_step_zero
+
+func main(): int sync {
+    let xs = range(0, 10, 0)
     println(xs)
     return 0
 }
