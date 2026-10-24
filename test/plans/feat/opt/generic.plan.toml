@@ -800,7 +800,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_growing_shape.fold_specialize.bounded"
-desc = "The program after std::opt::fold std::opt::specialize holds a bounded number of graphs (the 8 type specializations of the recursion's branch arm and what they call), and still prints the zero-pass output."
+desc = "The program after std::opt::fold std::opt::specialize holds a bounded number of graphs (the type specializations of the recursion's branch arm and what they call; a recursive call inside an instance of the function it names keeps the caller's parameters instead of taking a copy, so no extent makes the copies grow without end), and still prints the zero-pass output."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_growing_shape.cml"
 args = ["${case}", "std::opt::fold", "std::opt::specialize", "std::stats", "std::fvm"]
