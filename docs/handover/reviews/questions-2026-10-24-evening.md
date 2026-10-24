@@ -101,3 +101,20 @@
 ### 诊断改法的文本与 code action
 
 五处画法与形状都同意：rustc 式的 `+`/`-` 与颜色、LSP 用 `newText` 而 CLI JSON 用 `replacement`（各随各的协议）、放不下的改法整个不给。**快照不记严重度**：可以——严重度由诊断码在注册表里决定，码已经记了。性质测试"注册表标 `edit` 的码与产出可用改法的码双向相等"正是要的。
+
+## 翻转线的两条与 lambda 括号
+
+### z-bucket-print-form-and-unstated-leaf
+
+1. **打印只有一种形式：数组的形式**。张量就是数组，`tensor(…, dtype=…)` 的文本随 `Tensor` 一起消失；不要 `%8.1f` 对齐的那一种。元素按"值自己类型的最短文本"（已定），多维用嵌套方括号：`[8.0, 16.0, 24.0]`、`[[0.0, 1.0], [2.0, 3.0]]`。约 90 条 golden 按此更新——这是规则的结果，不是放宽断言；仍在断言"不含 `tensor(`"的那几条保留（它们正好钉住这条规则）。
+2. **未述元素类型的叶子**：已裁定（unstated-element-type-scalar-and-print）——不为过渡类型发明语义，这 22 处用例按终态写法改写（显式泛型或写明元素类型）。`numeric_contract.cml:57` 的 `sum(bool)`：布尔不满足 `is_numeric`，拒绝是对的，按用例的本意改写（要计数就先转成整数）。
+
+### loop-domain-through-the-tensor-iterator
+
+**对数组的 `for` 是核心语义，不经过模块的 `__iter__`**：设计原则 5.4"`t[i]` 取第一维的第 `i` 个"，`for x in xs` 对任何数组（任意秩）都是沿第一维逐行，由核心负责；`core.loopDomain` 的 `extent` 就是 `shape[0]`（常量数组的行数，秩 1 时等于元素个数），所有读者共用这一个事实。P4 之后张量模块的 `iter` 删除（一件事一种写法）。你们在 `tiles` 里的看穿是过渡，核心事实补上后去掉。
+
+### lambda-parameter-parentheses-coverage
+
+1. `x: int => e` 归到同一个码，改法给 `(x: int) => e`。
+2. `x, y => e`：只在不可能是调用实参的位置（`let` 的右边、`return` 之后、语句开头）给改法；其余只给句子。照你们的谨慎做法。
+3. `sync x => e` 维持现状。
