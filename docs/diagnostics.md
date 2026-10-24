@@ -3393,14 +3393,17 @@ This value has type '{0}', which is not the declared type '{1}'.
 A declaration written with a type takes a value of that type; nothing is converted on the way (a number does not become a float by itself, and a text does not become a number). Convert the value explicitly: 'float(n)' for a number of another type, 'int(s)' or 'parse_int(s)' for a text, 'string(n)' for a number written as text (the same for 'i32', 'f32', 'f64' and the complex types), 'v as T' for a module type; or change the declared type.
 ```
 
-**Example** (`test/cases/compile/literals/context_text_declared_int.cml`, run as `camel -E short test/cases/compile/literals/context_text_declared_int.cml`)
+**Example** (`test/cases/compile/literals/expected_type_typed_value_not_converted.cml`, run as `camel -E short test/cases/compile/literals/expected_type_typed_value_not_converted.cml`)
 
 ```camel
-module literal_context_text_int
+module expected_type_typed_value_not_converted
+
+func keep::<T>(xs: T[], n: int): T[] { return xs }
 
 func main(): int sync {
-    let x: int = '42'
-    println(x)
+    let v: float[] = [1.0, 2.0]
+    let xs: f32[] = keep(v, 2)
+    println(len(xs))
     return 0
 }
 ```
