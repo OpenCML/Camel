@@ -62,3 +62,44 @@ h480 的转绿清单在它自己的树上成立、在审计基线上不成立，
    `f32[?, ?]` 混用、`static_types`、`export_fold`、`docs.snippets_compile`、
    `print_and_recompile`、`declaration_evaluator`、以及 h446 钉住的
    `loop_grad_tensor_iterable.{runtime.nvm,macro.fvm}` 真实缺陷）。
+
+## 五、第二轮复核：第三节的 5 条已被回答，本文件的两个问题清零
+
+集成树推进到 `db6bf729c` 后（+ merge develop `3f235254f` = 审计树 `604c60778`），同一条命令复量：
+
+| 口径 | `[SUMMARY]` |
+|---|---|
+| `-Plan smoke,test/plans/feat -Tier fast -Jobs 8` | total 6214, pass 6185, **fail 10**, skip 11, known 8 |
+| `-Plan . -Tier fast -Jobs 8` | total 6204, pass 6175, **fail 10**, skip 11, known 8 |
+
+两个口径差 10 = smoke 的 fast 层：`test/plans/smoke/` 只有一个计划 `core.plan.toml`（10 条
+`[[tests]]`）。`all` 才是整棵树：`test/runner.mjs:38` 的 `all: PLANS_ROOT`；`.` 之所以落到
+`test/plans/feat`，是 `test/runner.mjs:59` 把前导 `.` 剥成空串后名字与斜杠两条路径都不命中，
+于是 `:78-79` 的 `['feat', ...]` 兜底命中 `test/plans/feat` 目录（单目标、不含 smoke）。
+两个口径的红名单逐名相同（10 条）。
+
+相对第一轮基线（19 红）：**9 条转绿、0 条新红**。第三节那 5 条全部转绿，红留给了作者：
+
+| 第一轮的红 | 现读数 | 谁回答的 |
+|---|---|---|
+| `feat.modules.graph_facts` 的 rewrite_inline / rewrite_opt / rewrite_macro_simplify / persistence_round_trip | `[PASS]` | `739fd24e0`「the FACTS records are re-read from the tool; no assertion was widened」 |
+| `feat.modules.rules rules.check_program_parameter` | `[PASS]` | 同上：候选集里的 `sum_swap<Tensor>` 随 H466 的 `load_npy` 声明消失，断言改为 `sum_swap<i32>` 并加了更强的否定断言 |
+
+两条「必须仍红」的仍红，且期望自第一轮基线起**一字未动**（
+`git diff aa8f710d5 HEAD -- test/plans/feat/modules/onnx.plan.toml | Select-String export_fold`
+与 `… -- test/plans/feat/modules/rules.plan.toml | Select-String tensor_saturation` 都是空）：
+
+- `export_fold`：`expected exit 0, got null`，导出没写出模型（`ENOENT …/export_fold.onnx`）；
+  `88ed6f8ad` 已把它钉到 `bb4e01be8`（4096 定点的守卫）并落成问答。
+- `rules.tensor_saturation_keeps_values`：`expected exit 0, got 1`，
+  `Pass 'rules::saturate_all' failed: error RewriteInvalid: Two writings of a value have the same
+  type, region and permissions…`；`739fd24e0` 已把原因（两个一类型按地址比较、类型特化键持有
+  按调用点构造的 `Type*`）写进问答。
+
+其余 8 条红各有归属：`nn.lrit`/`lrit`/`nn.mnist`/`mnist`（`50305479f` 的提问文件）、
+`print_and_recompile`（h485 未合）、`declaration_evaluator`（`7b6b93cbb` 只把消息写成
+`dtype differs (kernel f64, declaration f32)`；红的原因是验证脚本要求零 `EVAL_MISMATCH`，
+问题写在 `rank-zero-array-and-a-float-literal.md`）、
+`loop_grad_tensor_iterable.{runtime.nvm,macro.fvm}`（h446 未合）。第一轮第二节那两条
+「报了绿但审计基线上仍红」的，本轮两棵树上都是 `[PASS]`。本轮快照里 h485 / h487 / h488 /
+h446 四条 lane 还没合进来，它们的转绿清单未复核。
