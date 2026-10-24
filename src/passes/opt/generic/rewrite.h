@@ -99,7 +99,7 @@ bool mayFold(const camel::runtime::GCGraph &graph);
 bool mayMerge(const camel::runtime::GCGraph &graph);
 bool mayAlgebra(const camel::runtime::GCGraph &graph);
 bool mayRemoveDead(const camel::runtime::GCGraph &graph);
-bool mayReduceControl(const camel::runtime::GCGraph &graph);
+bool mayReduceOrder(const camel::runtime::GCGraph &graph);
 
 /**
  * Runs `rewrite` on the draft of every graph reachable from the root of `program` and commits

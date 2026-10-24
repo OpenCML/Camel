@@ -896,15 +896,16 @@ DeadCodePass::apply(const camel::runtime::Program *program, std::ostream &) {
 }
 
 const camel::runtime::Program *
-ControlReductionPass::apply(const camel::runtime::Program *program, std::ostream &) {
+OrderReductionPass::apply(const camel::runtime::Program *program, std::ostream &) {
     return rewriteReachableGraphs(
         context_,
         program,
-        "std::opt::ctrl",
-        [](GraphDraft &draft) { return camel::runtime::reduceControlDependencies(draft); },
+        "std::opt::order",
+        [](GraphDraft &draft) { return camel::runtime::reduceOrderDependencies(draft) +
+                   camel::runtime::reduceControlDependencies(draft); },
         nullptr,
         nullptr,
-        mayReduceControl);
+        mayReduceOrder);
 }
 
 const camel::runtime::Program *simplifyGraph(
@@ -922,11 +923,12 @@ const camel::runtime::Program *simplifyGraph(
         return rewriteReachableGraphs(
             context,
             result,
-            "std::opt::ctrl",
-            [](GraphDraft &draft) { return camel::runtime::reduceControlDependencies(draft); },
+            "std::opt::order",
+            [](GraphDraft &draft) { return camel::runtime::reduceOrderDependencies(draft) +
+                   camel::runtime::reduceControlDependencies(draft); },
             nullptr,
             &memo,
-            mayReduceControl,
+            mayReduceOrder,
             config.checkScreens);
     };
     for (size_t round = 0; round < maxRounds; ++round) {

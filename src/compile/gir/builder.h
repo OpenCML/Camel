@@ -894,6 +894,23 @@ class Builder {
     // and stored by the assignment operators. Every other named node is an immutable value
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
+
+    /// A ar that does not escape becomes SSA (docs/handover/reviews/questions-2026-10-24-evening.md,
+    /// "var-version-node"): every read takes the value of the write that made it, and no read node is
+    /// left reading the cell. A ar that escapes -- captured by a closure, handed out as a ar
+    /// argument, or a ar parameter of this graph -- is a resource and keeps its cell.
+    /// ariableReadSource_ records, per read node, the writer it reads from (the cell itself when
+    /// nothing has written yet) and the cell it belongs to; knownCellUsers_ holds the users of a
+    /// cell this builder recorded (its reads and its stores), so a cell with any other user
+    /// (:var/take, a call, a capture port) is left as a cell.
+    struct VariableRead {
+        node_handle_t source = nullptr;
+        node_handle_t cell   = nullptr;
+    };
+    std::unordered_map<node_handle_t, VariableRead> variableReadSource_;
+    std::unordered_set<node_handle_t> knownCellUsers_;
+    std::unordered_set<node_handle_t> escapingVariables_;
+    void collapseNonEscapingVariableReads();
     // What the compiler knows about a node's value beyond static data, for operators whose
     // result type follows constant arguments (StaticArg). `typeFoldedValues_`: the value of an
     // operator result that its argument types fix (its type folder), e.g. the shape
