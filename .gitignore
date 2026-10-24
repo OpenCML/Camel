@@ -7,6 +7,10 @@
 !.vscode/settings.json
 .VSCodeCounter/
 **/.cache/
+# ccache's cache directory. `hendrikmuhs/ccache-action` puts it at the root of the checkout
+# (`ccache --set-config=cache_dir=$GITHUB_WORKSPACE/.ccache`), and the plan-selection audit counts
+# every file git would add -- 1394 cache objects then read as a file class no rule selects (H407).
+.ccache/
 __pycache__/
 
 .todolist
