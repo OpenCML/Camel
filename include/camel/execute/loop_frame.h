@@ -15,6 +15,7 @@
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/rtdata/aggregate.h"
 #include "camel/execute/loop_driver.h"
 #include "camel/profile/profile.h"
@@ -165,11 +166,26 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
                 element = toSlot(from + static_cast<int64_t>(round));
             }
         } else {
-            const ::Array *array = frame.get<::Array *>(loop.iterableSlot);
+            ::Array *array = frame.get<::Array *>(loop.iterableSlot);
+            // The sequence is an array, or it is not. The slot's declared type says `Array` for a
+            // `Tensor` whose rank is not fixed, and such a value may turn out to have no
+            // dimension: a value with no dimension is the element itself (the rank-zero ruling,
+            // docs/handover/reviews/questions-2026-10-23.md), stored as the scalar it is rather
+            // than as an array. It has no first dimension to take elements from, so the rounds
+            // cannot start: reported here, where the loop reads its sequence, rather than taken
+            // as a loop of no round at all.
+            if (array == nullptr) {
+                camel::core::error::throwRuntimeFault(
+                    camel::core::error::RuntimeDiag::RuntimeError,
+                    "a value with no dimension has no first dimension to iterate over");
+            }
             if (static_cast<size_t>(round) >= array->size()) {
                 stop = true;
             } else {
-                element = array->getSlot(static_cast<size_t>(round));
+                // The round's element, along the first dimension: the element itself for a
+                // rank-1 array, the row for a higher-rank one (the core owns that rule for
+                // every array; Array::firstDimensionElement).
+                element = array->firstDimensionElement(static_cast<size_t>(round));
             }
         }
     }

@@ -596,13 +596,13 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.tensor_npy"
-desc = "Tensor parameters are read from .npy files: the default run prints tanh(x @ w) of the two fixtures."
+desc = "Tensor parameters are read from .npy files: the default run prints tanh(x @ w) of the two fixtures, as the array it is (`tensor(..., dtype=...)` is gone with `Tensor`, questions-2026-10-24-evening.md)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/tensors.cml"
 args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy"]
 expect_exit = 0
-expect_stdout_contains = ["0.3308", "0.5546", "dtype=float32"]
-expect_output_not_contains = ["Error"]
+expect_stdout_contains = ["[[0.33082116, 0.24491864, 0.15499073, 0.06241876], [0.06241876, 0.24491864, 0.41157007, 0.55459976]]"]
+expect_output_not_contains = ["tensor(", "Error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -613,8 +613,8 @@ kind = "behavior"
 case = "../../../cases/compile/entry_args/tensors.cml"
 args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy", "std::jit"]
 expect_exit = 0
-expect_stdout_contains = ["0.3308", "0.5546", "dtype=float32"]
-expect_output_not_contains = ["Error"]
+expect_stdout_contains = ["[[0.33082116, 0.24491864, 0.15499073, 0.06241876], [0.06241876, 0.24491864, 0.41157007, 0.55459976]]"]
+expect_output_not_contains = ["tensor(", "Error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -625,8 +625,8 @@ kind = "behavior"
 case = "../../../cases/compile/entry_args/tensors.cml"
 args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy", "std::tf"]
 expect_exit = 0
-expect_stdout_contains = ["0.3308", "0.5546", "dtype=float32"]
-expect_output_not_contains = ["Error"]
+expect_stdout_contains = ["[[0.33082116, 0.24491864, 0.15499073, 0.06241876], [0.06241876, 0.24491864, 0.41157007, 0.55459976]]"]
+expect_output_not_contains = ["tensor(", "Error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -639,7 +639,7 @@ args = ["${case}", "--arg", "x=test/cases/compile/entry_args/bad_shape.npy", "--
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 9
-expect_output_contains = ["Cannot bind the argument 'x' of 'main'", "[2, 3]", "the tensor has shape [3, 3]"]
+expect_output_contains = ["Cannot bind the argument 'x' of 'main'", "[2, 3]", "the array has shape [3, 3]"]
 expect_output_not_contains = ["tensor(["]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -658,17 +658,17 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.with_parameters"
-desc = "`with` parameters of main (the weights) get their values like ordinary ones; the two call forms `layer<w, b>(x)` and `x->layer<w, b>` print the same tanh(x @ w + b). The .npy extension may be left out (b)."
+desc = "`with` parameters of main (the weights) get their values like ordinary ones; the two call forms `layer<w, b>(x)` and `x->layer<w, b>` print the same tanh(x @ w + b), as the array it is. The .npy extension may be left out (b)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/with_params.cml"
 args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy", "--arg", "b=test/cases/compile/entry_args/b"]
 expect_exit = 0
-expect_output_not_contains = ["Error"]
+expect_output_not_contains = ["tensor(", "Error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 const out = input.normalized.stdout
 const count = (s) => out.split(s).length - 1
-assert(count('0.6878') === 2 && count('0.6351') === 2, 'both call forms print tanh(x @ w + b): ' + out)
+assert(count('[[0.68779016, 0.0, 0.15499073, 0.18533319], [0.50983, 0.0, 0.41157007, 0.63514894]]') === 2, 'both call forms print tanh(x @ w + b): ' + out)
 """
 timeout_ms = 8000
 
@@ -679,12 +679,12 @@ kind = "behavior"
 case = "../../../cases/compile/entry_args/with_params.cml"
 args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy", "--arg", "b=test/cases/compile/entry_args/b.npy", "std::macro", "std::opt", "std::fvm"]
 expect_exit = 0
-expect_output_not_contains = ["Error"]
+expect_output_not_contains = ["tensor(", "Error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 const out = input.normalized.stdout
 const count = (s) => out.split(s).length - 1
-assert(count('0.6878') === 2 && count('0.6351') === 2, 'both call forms print tanh(x @ w + b): ' + out)
+assert(count('[[0.68779016, 0.0, 0.15499073, 0.18533319], [0.50983, 0.0, 0.41157007, 0.63514894]]') === 2, 'both call forms print tanh(x @ w + b): ' + out)
 """
 timeout_ms = 8000
 

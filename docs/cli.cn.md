@@ -192,7 +192,7 @@
 - `std::opt`：集成优化总入口；循环执行去虚化、特化、内联、fold、cse、algebra 和 dce，直到稳定或达到共享的增长及轮数预算
 - `std::opt::algebra`：就是规则库的化简遍 `rules::simplify`，定律即 `stdlib/rules.cml` 里的规则，一条定律只写一次；`safe_fp=true` 时运行 `rules::simplify_strict`（设计原则 7.4：严格等价的浮点算式）。默认 `safe_fp=false`，不自动允许降精度、近似函数或任意特殊值假设。它不要求前面先有 `std::opt::fold`；`std::opt` 会先跑 fold，以得到语料对照所用的系数形式。`neutral_only=true` 保留 C++ 对照模式（只做整数单位元）。PowerShell 中带参数的遍须加引号（这是普通的遍参数）；所有参数在运行第一个遍之前校验。
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`：分别运行常量折叠、公共子表达式消除、死代码消除
-- `std::opt::ctrl`：在预算内消除被必需的数据/控制路径覆盖的 CTRL 边；`std::opt` 的其他阶段结束后默认执行一次。保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖
+- `std::opt::order`：顺序边的传递约简——A→B→C 已在时删去 A→C（设计稿 `docs/design/effects/edges.cn.md` 第 5 节第 4 条）；同步边是一条链，没有冗余，不动。CTRL 边还没有从图里删掉，所以在它消失之前这一遍同时继续做控制边的传递约简：删掉被必需的数据/控制路径覆盖的 CTRL 边，保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖。`std::opt` 的其他阶段结束后默认执行一次
 - `std::inline`（含 `small` / `arm` / `hybrid`）：`std::opt::inline` 及其策略的别名
 
 - `std::fvm`：高性能字节码虚拟机调度器

@@ -936,7 +936,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.tensor_show_declaration_import"
-desc = "`show`'s two declarations are what an importer sees: the tensor rule and the array rule both type-check and both reach the C++ operator, printing in the module's layout; the marker line proves the program ran to the end."
+desc = "`show`'s two declarations are what an importer sees: the tensor rule and the array rule both type-check and both reach the C++ operator, printing the array form (the single print form of the 2026-10-24 ruling: the value's own shape in brackets, each element in the shortest text of its own type); the marker line proves the program ran to the end."
 kind = "behavior"
 case = "../../../cases/compile/native/tensor_show_declaration_import.cml"
 args = ["${case}"]

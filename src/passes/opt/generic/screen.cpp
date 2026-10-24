@@ -252,14 +252,20 @@ bool mayRemoveDead(const GCGraph &graph) {
     return false;
 }
 
-bool mayReduceControl(const GCGraph &graph) {
+bool mayReduceOrder(const GCGraph &graph) {
     if (!graph.hasNodePayload()) {
         return true;
     }
     for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
         const gc_node_ref_t ref = it.ref();
-        const size_t ctrl       = graph.ctrlInputsOf(ref).size();
-        // Redundant control inputs: several, or one that a value input makes unnecessary.
+        // Several order edges meeting in one node: one of them may be implied by a path through
+        // the others (docs/design/effects/edges.cn.md 5.4). The pass reads the same condition.
+        if (graph.orderPredsOf(ref).size() >= 2) {
+            return true;
+        }
+        const size_t ctrl = graph.ctrlInputsOf(ref).size();
+        // Redundant control inputs: several, or one that a value input makes unnecessary. The
+        // control-edge kind is still in the graph, so the pass still reduces it.
         if (ctrl >= 2 ||
             (ctrl == 1 && (!graph.normInputsOf(ref).empty() || !graph.withInputsOf(ref).empty()))) {
             return true;

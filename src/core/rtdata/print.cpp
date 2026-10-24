@@ -67,9 +67,10 @@ void pushText(std::vector<PrintItem> &stack, std::string_view text) {
 /// Pushes the parts of one dimension of an array value: one bracket level per dimension, and the
 /// elements of the last dimension as slots that print by `elemType`. `base` is the flat index the
 /// dimension starts at. The items go on the stack in reverse, because the work list pops from the
-/// back; the opening bracket of the outermost dimension is written by the caller before the list
-/// is walked, and every deeper level gets its own opening bracket pushed right after its rows
-/// (each row is a value of its own, so a rank-2 value prints `[[a, b], [c, d]]`).
+/// back: the dimension pushes its closing bracket first and its opening bracket last, so the
+/// opening one is written first. Every dimension has its own pair -- the outermost level included
+/// -- because a value of rank r is r nested bracket levels, whatever the spelling that produced it
+/// (`f32[2, 2]`, `Tensor<f32, [2, 2]>`); a rank-2 value is `[[1.0, 2.0], [3.0, 4.0]]`.
 void pushArray(
     const Array *array, const Type *elemType, size_t dim, uint64_t base,
     std::vector<PrintItem> &stack) {
@@ -88,12 +89,12 @@ void pushArray(
             pushSlot(stack, array->getSlot(at), elemType);
         } else {
             pushArray(array, elemType, dim + 1, at, stack);
-            pushText(stack, "[");
         }
         if (i > 0) {
             pushText(stack, ", ");
         }
     }
+    pushText(stack, "[");
 }
 
 /// Whether the text of a value of `type` is made of other values. These are the types whose
@@ -254,10 +255,22 @@ void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit
                    << std::dec << ", " << array->numel() << " elements>";
                 continue;
             }
+            if (array->rank() == 0) {
+                // A value with no dimension is the element it holds (the rank-zero ruling,
+                // docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor): it
+                // prints as that value, not as a bracketed list of none, which is the text
+                // `Array::print` writes for `show`. `pushArray` cannot take this value: it reads
+                // dimension 0, which a rank-0 array has not, and its descent `dim + 1 == rank`
+                // never holds there, so it pushed work without end instead of finishing (the
+                // `Tensor`-is-an-array path reaches this with a rank-0 reduction's result, which
+                // `wrap` keeps an array because the declared type is one).
+                pushSlot(stack, array->getSlot(0), elemType);
+                continue;
+            }
             // One bracket level per dimension of the value, the elements pushed with the element
-            // type and the opening bracket written last, because the work list pops in reverse.
+            // type; every level carries its own opening and closing bracket, the opening one
+            // pushed last because the work list pops in reverse (pushArray).
             pushArray(array, elemType, 0, 0, stack);
-            os << "[";
             continue;
         }
         case TypeCode::Tuple: {

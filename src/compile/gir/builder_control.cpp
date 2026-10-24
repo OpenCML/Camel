@@ -2649,65 +2649,62 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     node_handle_t sequence = nullptr;
     Type *elementType      = nullptr;
     bool intervalIterates  = false;
-    // The element type of a sequence a loop iterates: an array gives its own element type, and a
-    // string, a map and a tensor give theirs through the `__iter__` operator their type declares
-    // (design principles 3.10, 11.1, 11.3): the code points of a string as one-character
-    // strings, the (key, value) pairs of a map in key order, and the sub-tensors of a tensor
-    // along its first dimension. The operator is resolved like any other, by the type of the
-    // sequence; the loop then iterates the array it gives, on every back end, with one driver.
+    // The element type of a sequence a loop iterates: an array gives its own elements along its
+    // first dimension, and a string and a map give theirs through the `__iter__` operator their
+    // type declares (design principles 3.10, 11.1, 11.3): the code points of a string as
+    // one-character strings, and the (key, value) pairs of a map in key order. The operator is
+    // resolved like any other, by the type of the sequence; the loop then iterates the array it
+    // gives, on every back end, with one driver.
     //
-    // A tensor is a numeric array (`isNumericArrayType`), and one of these arrays does ask
-    // its type for `__iter__`: what a `for` takes from a tensor — the sub-tensors along the
-    // first dimension, and a value with no dimension not being iterable at all — is the
-    // tensor kind's rule, not the element-wise one every other array follows. An array whose
-    // elements are not numeric scalars is iterated directly, element by element.
+    // A `for` over an array of any rank is the core's, and no module takes part in it: `t[i]`
+    // takes the i-th along the first dimension (design principles 5.4), so the round of a rank-1
+    // array is its element and the round of a higher-rank one is the row one dimension shorter
+    // (ArrayType::firstDimensionElement). The tensor module used to declare `__iter__` for a
+    // numeric array (`tensor:iter`, sub-arrays along the first dimension), and asking it here
+    // made the iterable position an OPER node: that is what hid a constant array's row count
+    // from `core.loopDomain` (runtime/core_facts.cpp, constantLength). The author's ruling of
+    // 2026-10-24 (docs/handover/reviews/questions-2026-10-24-evening.md section
+    // loop-domain-through-the-tensor-iterator) states it once, in the core, for every array;
+    // the module's `iter` goes away with the P4 alias (one thing, one spelling).
     //
-    // `__iter__` reaches a compilation unit only if it imports the module that declares it
-    // (the tensor module declares the tensor one), and the standard library's own array code
-    // compiles without it. With no candidate the array keeps the element-wise iteration it
-    // had before there was a tensor kind to ask, rather than becoming uniterable because a
-    // module is not loaded.
+    // `__iter__` reaches a compilation unit only if it imports the module that declares it, and
+    // the standard library's own array code compiles without it.
     const auto iterableElementType =
         [&](node_handle_t &iterable, const GCT::node_ptr_t &expr) -> Type * {
         Type *type = valueTypeOf(nodeTypeOf(iterable));
-        const bool asksOwnIter = type != nullptr && (type->code() != TypeCode::Array ||
-                                                     isNumericArrayType(type));
-        if (asksOwnIter) {
-            const std::vector<StaticArg> statics(1);
-            std::optional<oper_idx_ptr_t> elements;
-            // `__iter__` is a group of several overloads (`:struct/iter_str`, `:coll/map_items`,
-            // one for a tensor), one per iterable type: no one OperId names it, so it is still
-            // looked up by the group's name.
-            if (const auto group = importedEntity("__iter__");
-                group.has_value() && group->isOperGroup()) {
-                elements = group->operGroup()->resolve({}, {type}, statics, Modifier::None);
-            }
-            const bool ownKind = type->code() != TypeCode::Array;
-            if (!elements.has_value() && ownKind) {
-                diags_->of(SemanticDiag::LoopSequenceNotIterable)
-                    .atOrigin(expr->origin())
-                    .commit(sourceTextOf(expr), type->toString());
-                throw BuildAbortException();
-            }
-            if (elements.has_value()) {
-                node_handle_t array = currGraph_->addOperNode(*elements, 0);
-                stampPermissions(array);
-                registerNodeOrigin(context_, array, expr, "gir.loop.iter");
-                linkNodes(LinkType::Norm, iterable, array);
-                iterable = array;
-                type     = valueTypeOf(nodeTypeOf(iterable));
-                ASSERT(
-                    type != nullptr && type->code() == TypeCode::Array,
-                    "The elements of an iterable must be an array.");
-            }
-        }
         if (type == nullptr) {
             diags_->of(SemanticDiag::LoopSequenceNotIterable)
                 .atOrigin(expr->origin())
                 .commit(sourceTextOf(expr), std::string("void"));
             throw BuildAbortException();
         }
-        return tt::as_ptr<ArrayType>(type)->elemType();
+        if (type->code() != TypeCode::Array) {
+            const std::vector<StaticArg> statics(1);
+            std::optional<oper_idx_ptr_t> elements;
+            // `__iter__` is a group of several overloads (`:struct/iter_str`,
+            // `:coll/map_items`), one per iterable type: no one OperId names it, so it is still
+            // looked up by the group's name.
+            if (const auto group = importedEntity("__iter__");
+                group.has_value() && group->isOperGroup()) {
+                elements = group->operGroup()->resolve({}, {type}, statics, Modifier::None);
+            }
+            if (!elements.has_value()) {
+                diags_->of(SemanticDiag::LoopSequenceNotIterable)
+                    .atOrigin(expr->origin())
+                    .commit(sourceTextOf(expr), type->toString());
+                throw BuildAbortException();
+            }
+            node_handle_t array = currGraph_->addOperNode(*elements, 0);
+            stampPermissions(array);
+            registerNodeOrigin(context_, array, expr, "gir.loop.iter");
+            linkNodes(LinkType::Norm, iterable, array);
+            iterable = array;
+            type     = valueTypeOf(nodeTypeOf(iterable));
+            ASSERT(
+                type != nullptr && type->code() == TypeCode::Array,
+                "The elements of an iterable must be an array.");
+        }
+        return tt::as_ptr<ArrayType>(type)->firstDimensionElement();
     };
     // `for i in a..b` (design principles 4.2; the author's ruling of 2026-10-24 on
     // `h248-generator-and-composition`: "`for i in 0..n` is fused by the compiler, without

@@ -11,6 +11,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/source/manager.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/storage.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/reachable.h"
@@ -26,11 +27,6 @@ using camel::runtime::LoopView;
 using camel::runtime::Program;
 
 namespace {
-
-/// Whether a type name is a tensor (a tensor, or an array of one): what "an element-wise loop
-/// over a tensor" means. The type lives in the tensor module, which the core must not name, so
-/// the hint reads the name the type prints.
-bool tensorNamed(const std::string &name) { return name.find("Tensor") != std::string::npos; }
 
 /// The nodes of one region of `graph`, the regions nested in it included. Mirrors
 /// LoopView::regionNodes for a single region.
@@ -189,25 +185,23 @@ void ProfilePass::noteLoopsOf(const Program &program) {
                 }
             }
 
-            // Is the sequence a tensor's elements?
+            // Is the sequence a tensor's elements? The `for` takes an array's elements along its
+            // first dimension itself (the author's ruling of 2026-10-24, section
+            // loop-domain-through-the-tensor-iterator: a numeric array does not go through the
+            // tensor module's `__iter__` any more), so no operator in between names it and the
+            // type of the sequence answers: a numeric array is the tensor kind.
             bool tensor = false;
             if (const auto iterable = view.iterable(); iterable.has_value()) {
                 const camel::runtime::GCNode *sequence = graph->node(*iterable);
-                if (sequence != nullptr && sequence->kind == GCNodeKind::Oper) {
-                    const auto *body_ = graph->nodeBodyAs<camel::runtime::GCOperBody>(*iterable);
-                    if (body_ != nullptr && std::string(body_->uri()).starts_with("tensor:")) {
-                        tensor = true;
-                    }
+                if (sequence != nullptr && sequence->dataType() != nullptr) {
+                    tensor = camel::core::type::isNumericArrayType(sequence->dataType());
                 }
-                if (!tensor && sequence != nullptr && sequence->dataType() != nullptr) {
-                    tensor = tensorNamed(sequence->dataType()->toString());
-                }
-            }
-            if (!tensor) {
-                if (const auto element = view.bodyElementParam(); element.has_value()) {
-                    if (const camel::runtime::GCNode *port = graph->node(*element);
-                        port != nullptr && port->dataType() != nullptr) {
-                        tensor = tensorNamed(port->dataType()->toString());
+                if (!tensor) {
+                    if (const auto element = view.bodyElementParam(); element.has_value()) {
+                        if (const camel::runtime::GCNode *port = graph->node(*element);
+                            port != nullptr && port->dataType() != nullptr) {
+                            tensor = camel::core::type::isNumericArrayType(port->dataType());
+                        }
                     }
                 }
             }

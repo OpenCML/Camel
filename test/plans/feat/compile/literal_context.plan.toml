@@ -804,7 +804,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
 expect_diagnostic_line = 13
 expect_diagnostic_column = 16
-expect_output_contains = ["The literal '0.5' cannot be represented as type 'int'", "the value would be truncated", "in the instance 'half<int[4]>'"]
+expect_output_contains = ["The literal '0.5' cannot be represented as type 'int'", "the value would be truncated", "in the instance 'half<int[4]>' of the generic function 'half' with T = int[4]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

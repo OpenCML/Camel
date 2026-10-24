@@ -249,6 +249,28 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "si_var_argument_with_parameter"
+desc = "A `with` parameter declared `var` takes the caller's variable like an ordinary `var` parameter does, so the call gives the caller's cell the declared parameter type here too: a variable holding `f32[?, ?]` passes to a `with <var t: Tensor>` parameter, and the callee's write reaches it."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/var_argument_with_parameter.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["1.0 1.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_var_argument_with_parameter_non_numeric"
+desc = "A `with` parameter declared `var` is refused the same cell a `var` ordinary parameter is: a `string[]` variable is not given the declared `Tensor`, so the call has no matching function and the error is at the argument."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_inference/var_argument_with_parameter_non_numeric.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["No matching function found for argument types: <string[]> (float)", "var_argument_with_parameter_non_numeric.cml:18:21"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "si_as_fails"
 desc = "A conversion that fails when it runs names the declared type, the shape the tensor has, and the position of the conversion."
 kind = "behavior"

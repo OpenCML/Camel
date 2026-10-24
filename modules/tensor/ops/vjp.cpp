@@ -122,8 +122,8 @@ vjp_node_t addTensorOperFor(
     return builder.addOper(gradientTypeFor(builder, primal, inputs), uri, inputs, attrs);
 }
 
-vjp_node_t
-addFloatOper(VjpBuilder &builder, std::string_view uri, std::initializer_list<vjp_node_t> inputs) {
+vjp_node_t addFloatOper(
+    VjpBuilder &builder, std::string_view uri, std::initializer_list<vjp_node_t> inputs) {
     return builder.addOper(
         type::Type::Float64(),
         uri,
@@ -160,6 +160,20 @@ vjp_node_t floatGradientAtWidth(VjpBuilder &builder, vjp_node_t value, vjp_node_
         return builder.addOper(type::Type::Float64(), ":op/ftod", inputs);
     }
     return gradient;
+}
+
+vjp_node_t tensorCastTo(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient) {
+    type::Type *valueType = builder.nodeType(value);
+    if (!statesTensorElementType(valueType)) {
+        return gradient;
+    }
+    if (valueType->code() == type::TypeCode::Array) {
+        const std::array<vjp_node_t, 2> inputs{gradient, value};
+        return builder.addOper(valueType, "tensor:cast_like", inputs);
+    }
+    // A scalar value: the gradient is a number of the value's own width, converted with the two
+    // scalar conversions the graph has (`:op/dtof`, `:op/ftod`).
+    return floatGradientAtWidth(builder, value, gradient);
 }
 
 void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradient) {

@@ -29,13 +29,13 @@ timeout_ms = 10000
 
 [[tests]]
 name = "tensor_shape"
-desc = "A declared tensor result shape is checked against the shape of the returned value."
+desc = "A declared array result shape is checked against the shape of the returned value (`f32[2, 3]` against a declared `f32[3, 2]`)."
 kind = "negative"
 case = "../../../cases/compile/return_type/tensor_shape.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
-expect_output_contains = ["does not match the function's declared return type 'Tensor<[3, 2]>'"]
+expect_output_contains = ["does not match the function's declared return type 'f32[3, 2]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

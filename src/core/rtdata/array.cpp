@@ -116,6 +116,44 @@ Array *Array::wrap(
         allocator, arrayType->elemType(), extents, block, byteOffset, false, view);
 }
 
+slot_t Array::firstDimensionElement(uint64_t index) {
+    if (index >= size_) {
+        throw std::invalid_argument("The first dimension of an array has no such element");
+    }
+    if (rank_ <= 1) {
+        // Rank 1: the first dimension's elements are the elements themselves.
+        return getSlot(index);
+    }
+    // A higher rank: the row at `index`, which is where the first dimension's stride takes it —
+    // the elements after the first extent, as the type states them (firstDimensionElement of
+    // ArrayType). Row-major, so a row is a run of `numel / size` elements.
+    const uint64_t row = numel_ / size_;
+    const uint64_t at  = index * row;
+    if (storage_ == Storage::Compact) {
+        // The row shares the data: a view of one dimension fewer (arrays are immutable values,
+        // and a view is how a reader of the type reads a row).
+        return rtdata::toSlot(
+            Array::view(this, std::span<const int64_t>(extents_ + 1, rank_ - 1), at));
+    }
+    // An array of references with more than one dimension: its row is the same run of slots,
+    // copied into an array of the row's shape. The copy is the same value, because an array is
+    // immutable.
+    const std::span<const int64_t> rowExtents(extents_ + 1, rank_ - 1);
+    Array *elements = createSlotsRank(*allocator_, rowExtents, static_cast<size_t>(row));
+    elements->elemTypeCode_ = elemTypeCode_;
+    elements->elemType_     = elemType_;
+    // The row's type, for the write barrier of every reference the copy stores: the elements are
+    // reachable from the new array, and it is the array of the row's shape the type says. (The
+    // element type is interned and lives for the process, so the cast only drops the `const` this
+    // value's own description carries.)
+    const type::ArrayType *rowType =
+        type::ArrayType::create(const_cast<type::Type *>(elemType_), rowExtents);
+    for (uint64_t i = 0; i < row; ++i) {
+        elements->setSlot(i, getSlot(at + i), rowType);
+    }
+    return rtdata::toSlot(elements);
+}
+
 Array *Array::createSlots(
     camel::core::mm::IAllocator &allocator, size_t initSize, size_t capacity) {
     const int64_t extent = static_cast<int64_t>(initSize);

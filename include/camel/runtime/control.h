@@ -1,7 +1,8 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-/* Bounded analysis and reduction of unconditional control dependencies. */
+/* Bounded analysis and reduction of unconditional control dependencies, and the transitive
+ * reduction over ORDER edges. */
 
 #pragma once
 
@@ -28,5 +29,13 @@ bool appendControlDependency(
 /// anchors are retained; JOIN/LOOP results may prove completion but their interiors are not
 /// traversed. Work is limited per target, per graph size, and by maxWork; zero disables analysis.
 size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork = 250000);
+
+/// The transitive reduction over ORDER edges: an order edge A -> C goes away when a path of order
+/// edges A -> ... -> C already orders the two ends, which is exactly what "when both run the
+/// predecessor runs first" makes redundant (docs/design/effects/edges.cn.md 5.4). Sync edges are
+/// left alone: a `sync` block's statements are one chain and carry no redundancy. A proof walks
+/// only nodes of the region that holds the edge, because an ordering never leaves its region.
+/// Work is bounded by maxWork; zero disables analysis.
+size_t reduceOrderDependencies(GraphDraft &draft, size_t maxWork = 250000);
 
 } // namespace camel::runtime

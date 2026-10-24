@@ -450,7 +450,7 @@ inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
     // Whether a value is shared -- whether `:var/take` copies -- is answered at run time by the
     // cell's own `holdsUnsharedArray` mark (`:op/assn_owned` sets it, `:var/get` and `:op/assn`
     // clear it, `:var/peek` leaves it), and a control edge carries order, not a use (design
-    // principles 3.3, 3.4). The transitive reduction over such edges lives in `std::opt::ctrl`;
+    // principles 3.3, 3.4). The transitive reduction over such edges lives in `std::opt::order`;
     // handover H95 measured that adding or removing one changes no copy.
     return linkCheek(from, to) && !hasDirectDataDependency(from, to);
 }
