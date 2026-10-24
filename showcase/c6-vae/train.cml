@@ -56,11 +56,11 @@ func loss(x: Tensor, eps: Tensor): float {
 func load_model(data: string): Vae {
     let init = data + '/init'
     return {
-        ew1: load_npy(init + '/ew1.npy'), eb1: load_npy(init + '/eb1.npy'),
-        ewm: load_npy(init + '/ewm.npy'), ebm: load_npy(init + '/ebm.npy'),
-        ewv: load_npy(init + '/ewv.npy'), ebv: load_npy(init + '/ebv.npy'),
-        dw1: load_npy(init + '/dw1.npy'), db1: load_npy(init + '/db1.npy'),
-        dw2: load_npy(init + '/dw2.npy'), db2: load_npy(init + '/db2.npy')
+        ew1: load_npy::<f32>(init + '/ew1.npy'), eb1: load_npy::<f32>(init + '/eb1.npy'),
+        ewm: load_npy::<f32>(init + '/ewm.npy'), ebm: load_npy::<f32>(init + '/ebm.npy'),
+        ewv: load_npy::<f32>(init + '/ewv.npy'), ebv: load_npy::<f32>(init + '/ebv.npy'),
+        dw1: load_npy::<f32>(init + '/dw1.npy'), db1: load_npy::<f32>(init + '/db1.npy'),
+        dw2: load_npy::<f32>(init + '/dw2.npy'), db2: load_npy::<f32>(init + '/db2.npy')
     }
 }
 
@@ -86,9 +86,9 @@ func main(data: string, steps: int, batch: int, lr: float, log_every: int, threa
     set_num_threads(threads)
 
     // == data ==
-    let train_x = load_npy(data + '/train_x.npy')
-    let val_x = load_npy(data + '/val_x.npy')
-    let noise = load_npy(data + '/noise.npy')
+    let train_x = load_npy::<f32>(data + '/train_x.npy')
+    let val_x = load_npy::<f32>(data + '/val_x.npy')
+    let noise = load_npy::<f32>(data + '/noise.npy')
     let initial = load_model(data)
     let batches = shape(train_x)[0] / batch
     let before = evaluate(initial, val_x)

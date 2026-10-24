@@ -12,7 +12,7 @@ import {
 } from nn
 
 func fixture(name: string): Tensor {
-    return load_npy('test/cases/modules/nn/fixtures/spatial/' + name + '.npy')
+    return load_npy::<f32>('test/cases/modules/nn/fixtures/spatial/' + name + '.npy')
 }
 
 func err(actual: Tensor, name: string): float {

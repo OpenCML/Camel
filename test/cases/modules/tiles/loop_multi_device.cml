@@ -58,9 +58,9 @@ func permission_empty(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
 }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let a = load_npy(folder + '/a.npy') as Tensor<f32>
-    let b = load_npy(folder + '/b.npy') as Tensor<f32>
-    let c = load_npy(folder + '/c.npy') as Tensor<f32>
+    let a = load_npy::<f32>(folder + '/a.npy') as Tensor<f32>
+    let b = load_npy::<f32>(folder + '/b.npy') as Tensor<f32>
+    let c = load_npy::<f32>(folder + '/c.npy') as Tensor<f32>
     println('VALUES')
     println(scalar_swap(2.0, 7.0), download(run_preferred_resident<scalar_swap>((2.0, 7.0))))
     println(fibonacci(0.0, 1.0), download(run_preferred_resident<fibonacci>((0.0, 1.0))))

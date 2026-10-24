@@ -48,8 +48,8 @@ func step(w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor) {
 }
 
 func main(): int sync {
-    let w = load_npy('w.npy')
-    let x = load_npy('x.npy')
+    let w = load_npy::<f32>('w.npy')
+    let x = load_npy::<f32>('x.npy')
     let r = step(w, x)
     save_npy(r.0, 'native_0.npy')
     save_npy(r.1, 'native_1.npy')

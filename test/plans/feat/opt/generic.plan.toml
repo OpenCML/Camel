@@ -294,12 +294,35 @@ const specialized = Object.keys(graphs).filter((name) => name.startsWith('forwar
 assert(specialized.length === 1, `expected one specialized forward, got ${specialized}`)
 const forward = graphs[specialized[0]]
 assert(!forward.some(([k]) => k === 'BRCH'), `specialized forward branches: ${JSON.stringify(forward)}`)
+// Reading E bounds the recursion in the types: a call inside an instance of the function it names
+// reuses that instance (the ruling of 2026-10-24 evening, item 3), so the chain the specialized
+// `forward` calls is not unrolled into straight-line leaves any more. The instance keeps the gate
+// and the chain reaches an instance that calls itself, which is the fixed point; what is asserted
+// here is that the chain is a leaf that computes straight-line, or one that ends in such a
+// self-call. The 8-copy count that used to make the chain finite is gone; nothing takes a copy per
+// level, and a chain that neither computes nor closes on itself would be an unbounded unrolling.
+const calleesOf = (name) => (graphs[name] || []).filter(([k]) => k === 'FUNC').map(([, c]) => c)
+const reachesSelfCall = (start) => {
+  const seen = new Set()
+  const work = [start]
+  while (work.length) {
+    const at = work.pop()
+    if (calleesOf(at).includes(at)) return true
+    for (const next of calleesOf(at)) {
+      if (graphs[next] && !seen.has(next)) { seen.add(next); work.push(next) }
+    }
+  }
+  return false
+}
 for (const [kind, callee] of forward.filter(([k]) => k === 'FUNC')) {
   const body = graphs[callee]
   assert(body, `callee ${callee} not in the dump`)
-  assert(!body.some(([k]) => ['BRCH', 'FUNC', 'CALL'].includes(k)), `callee ${callee} not straight-line: ${JSON.stringify(body)}`)
-  // The end of the unrolled chain is the base case (`t >= steps` known true): it returns one of
-  // its parameters and has no operator. Every other callee computes something.
+  if (body.some(([k]) => ['BRCH', 'FUNC', 'CALL'].includes(k))) {
+    assert(reachesSelfCall(callee), `callee ${callee} branches or calls without reaching a self-call: ${JSON.stringify(body)}`)
+    continue
+  }
+  // A leaf: the end of the chain is the base case (`t >= steps` known true), which returns one of
+  // its parameters and has no operator. Every other leaf computes something.
   assert(body.some(([k]) => k === 'OPER') || body.every(([k]) => ['PORT', 'EXIT'].includes(k)), `callee ${callee} neither computes nor forwards: ${JSON.stringify(body)}`)
 }
 }
@@ -800,17 +823,18 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_growing_shape.fold_specialize.bounded"
-desc = "The program after std::opt::fold std::opt::specialize holds a bounded number of graphs (the type specializations of the recursion's branch arm and what they call; a recursive call inside an instance of the function it names keeps the caller's parameters instead of taking a copy, so no extent makes the copies grow without end), and still prints the zero-pass output."
+desc = "The program after std::opt::fold std::opt::specialize holds one type specialization of the recursion (99 graphs in all: the branch arms and what they call; a recursive call inside an instance of the function it names keeps the caller's parameters instead of taking a copy, so no extent makes the copies grow without end), and still prints the zero-pass output. The count is no longer a bound: the eight-copy limit this used to assert was truncation stops nothing now (the ruling of 2026-10-24 evening, item 3), and the reading is the fixed point -- one specialization, not a shape cut to a count."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_growing_shape.cml"
 args = ["${case}", "std::opt::fold", "std::opt::specialize", "std::stats", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
-({ input, assert }) => {
+async ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
 const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
-assert(stats.graphs > 5 && stats.graphs <= 40, `unexpected graph count: ${stats.graphs}`)
+assert(stats.specializations === 1, `expected one type specialization, got ${stats.specializations}`)
+assert(stats.graphs > 5 && stats.graphs <= 120, `unexpected graph count: ${stats.graphs}`)
 assert(out.endsWith('[12, 2]\n36.0'), `unexpected output: ${out}`)
 }
 """

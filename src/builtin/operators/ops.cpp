@@ -155,9 +155,10 @@ std::complex<T> powerOperand(const Complex *base, ArgsView &norm, size_t index) 
 
 template <typename T> slot_t complexPowBinary(ArgsView &norm, TypeCode code, bool assign) {
     Complex *base = nullptr;
+    Tuple *cell   = nullptr;
     if (assign) {
-        Tuple *cell = variableOf(norm);
-        base        = cell->get<Complex *>(0);
+        cell = variableOf(norm);
+        base = cell->get<Complex *>(0);
     } else {
         base = norm.get<Complex *>(0);
     }
@@ -169,8 +170,9 @@ template <typename T> slot_t complexPowBinary(ArgsView &norm, TypeCode code, boo
             code,
             mm::autoSpace()));
     if (assign) {
-        Tuple *cell = variableOf(norm);
         cell->set<slot_t>(0, slot, static_cast<TupleType *>(norm.type(0)));
+        // The write gives the version of the variable: the cell itself.
+        return toSlot(cell);
     }
     return slot;
 }
@@ -187,7 +189,8 @@ template <typename T> slot_t complexAssign(ArgsView &norm, TypeCode code, Comple
             code,
             mm::autoSpace()));
     cell->set<slot_t>(0, slot, static_cast<TupleType *>(norm.type(0)));
-    return slot;
+    // The write gives the version of the variable: the cell itself.
+    return toSlot(cell);
 }
 
 } // namespace
@@ -221,7 +224,10 @@ slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
     cell->set<slot_t>(0, rhs, static_cast<TupleType *>(norm.type(0)));
     // The value stored may be referred to from elsewhere.
     cell->setHoldsUnsharedArray(false);
-    return rhs;
+    // What a write gives is the version of the variable: the cell itself, holding what was
+    // written. The value written is the write's second operand, and the builder takes it from
+    // there where an assignment stands where a value is wanted.
+    return toSlot(cell);
 }
 
 // `xs = xs->sort`, `acc = acc->append<v>` written as a statement, for an operator that
@@ -256,7 +262,8 @@ slot_t __builtin__assn_owned__(ArgsView &with, ArgsView &norm, Context &ctx) {
     cell->set<slot_t>(0, value, static_cast<TupleType *>(norm.type(0)));
     // Made by :var/take and an in-place form for this variable: no one else refers to it.
     cell->setHoldsUnsharedArray(true);
-    return value;
+    // As for :op/assn: the write gives the version of the variable, the cell itself.
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -265,7 +272,7 @@ slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int32 rhs   = norm.get<Int32>(1);
     lhs += rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_add_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -274,7 +281,7 @@ slot_t __builtin__assn_add_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 rhs   = norm.get<Int64>(1);
     lhs += rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_add_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -283,7 +290,7 @@ slot_t __builtin__assn_add_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 rhs = norm.get<Float32>(1);
     lhs += rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_add_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -292,14 +299,14 @@ slot_t __builtin__assn_add_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 rhs = norm.get<Float64>(1);
     lhs += rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_add_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell    = variableOf(norm);
     String *result = String::concat(cell->get<String *>(0), norm.get<String *>(1), mm::autoSpace());
     cell->set<slot_t>(0, toSlot(result), static_cast<TupleType *>(norm.type(0)));
-    return toSlot(result);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_sub_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -308,7 +315,7 @@ slot_t __builtin__assn_sub_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int32 rhs   = norm.get<Int32>(1);
     lhs -= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_sub_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -317,7 +324,7 @@ slot_t __builtin__assn_sub_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 rhs   = norm.get<Int64>(1);
     lhs -= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_sub_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -326,7 +333,7 @@ slot_t __builtin__assn_sub_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 rhs = norm.get<Float32>(1);
     lhs -= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_sub_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -335,7 +342,7 @@ slot_t __builtin__assn_sub_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 rhs = norm.get<Float64>(1);
     lhs -= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_mul_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -344,7 +351,7 @@ slot_t __builtin__assn_mul_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int32 rhs   = norm.get<Int32>(1);
     lhs *= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_mul_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -353,7 +360,7 @@ slot_t __builtin__assn_mul_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 rhs   = norm.get<Int64>(1);
     lhs *= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_mul_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -362,7 +369,7 @@ slot_t __builtin__assn_mul_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 rhs = norm.get<Float32>(1);
     lhs *= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_mul_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -371,7 +378,7 @@ slot_t __builtin__assn_mul_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 rhs = norm.get<Float64>(1);
     lhs *= rhs;
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -385,7 +392,7 @@ slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -399,7 +406,7 @@ slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -413,7 +420,7 @@ slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -427,7 +434,7 @@ slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 // `%=` on the two integer types: the remainder `%` gives, stored back.
@@ -440,7 +447,7 @@ template <typename T> static slot_t assignMod(ArgsView &norm) {
     }
     lhs = camel::utils::remainder(lhs, rhs);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_mod_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -456,7 +463,7 @@ template <typename T> static slot_t assignPow(ArgsView &norm) {
     Tuple *cell = variableOf(norm);
     T lhs       = static_cast<T>(std::pow(cell->get<T>(0), norm.get<T>(1)));
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_pow_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -482,14 +489,14 @@ slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
     Bool lhs    = cell->get<Bool>(0) && norm.get<Bool>(1);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__assn_or__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
     Bool lhs    = cell->get<Bool>(0) || norm.get<Bool>(1);
     cell->set(0, lhs);
-    return toSlot(lhs);
+    return toSlot(cell);
 }
 
 slot_t __builtin__or__(ArgsView &with, ArgsView &norm, Context &ctx) {

@@ -3456,7 +3456,18 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
                 "written there, can be taken as a constant. Pass the value instead of the "
                 "variable");
         }
-        const gc_node_ref_t cell = forward_.normInputsOf(read).front();
+        gc_node_ref_t cell = forward_.normInputsOf(read).front();
+        // A read of a cell takes the version it reads from -- the write that made it, whose own
+        // first input is the cell (the var version node ruling) -- so a read written after an
+        // assignment names that assignment here, not the cell. What the checks below are about is
+        // the cell: the write it reads is one of the cell's users either way.
+        if (kindOf(forward_, cell) == GCNodeKind::Oper &&
+            camel::core::OperatorTable::instance().isAssignment(operId(cell))) {
+            const auto written = forward_.normInputsOf(cell);
+            if (!written.empty()) {
+                cell = written.front();
+            }
+        }
         if (kindOf(forward_, cell) != GCNodeKind::Port) {
             fail(
                 "a variable of a differentiable type that is declared inside the differentiated "

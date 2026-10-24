@@ -23,7 +23,7 @@ func spin(i: int, n: int, acc: f32[..]): f32[..] {
 }
 
 func main(): int sync {
-    let x = load_npy('test/cases/opt/generic/arms_laid_out_whole_v4.npy') as f32[..]
+let x = load_npy::<f32>('test/cases/opt/generic/arms_laid_out_whole_v4.npy')
     let n = int(x[0] + 2.6)
     let r = if n > 2 then {
         let a = spin(0, 2, x)

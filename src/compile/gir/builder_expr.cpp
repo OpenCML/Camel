@@ -357,7 +357,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         LEAVE("NREF");
         return node;
     }
-    // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
+    // `var` x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
     // that value.
     node_handle_t bound = isVar ? newVariable(node) : node;
     if (isVar) {
@@ -1154,7 +1154,18 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
 
 node_handle_t Builder::readVariableThrough(
     node_handle_t variable, camel::core::OperId oper) {
-    node_handle_t value = variableOperator(oper, variable);
+    // The version of the variable the last write made: that write's own value. A write never
+    // gives anything but the cell it wrote into, so the read may take its data port from the
+    // write. A writer whose value is not that cell -- a call the variable was passed to, a loop
+    // that wrote it -- only orders the read: the read keeps the cell as its data port, and the
+    // writer is a Ctrl edge. Before any write the version is the cell :var/new made.
+    node_handle_t version = variable;
+    if (auto modifier = modifierOf(variable);
+        modifier.has_value() && sameGraph(*modifier, currGraph_) &&
+        valueTypeOf(nodeTypeOf(*modifier)) != nodeTypeOf(*modifier)) {
+        version = *modifier;
+    }
+    node_handle_t value = variableOperator(oper, version);
     pendingUsesOf(variable).push_back({value, true});
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
@@ -1165,12 +1176,7 @@ node_handle_t Builder::readVariableThrough(
     // made it instead of from the cell, so the writer it belongs to is recorded here, while the
     // builder still knows it. The read node counts as one of the cell's known users.
     if (sameGraph(variable, currGraph_)) {
-        node_handle_t source = variable;
-        if (auto modifier = modifierOf(variable);
-            modifier.has_value() && sameGraph(*modifier, currGraph_)) {
-            source = *modifier;
-        }
-        variableReadSource_[value] = VariableRead{source, variable};
+        variableReadSource_[value] = VariableRead{version, variable};
         knownCellUsers_.insert(value);
     }
     // In a sync block a read happens where it is written, like a call.
@@ -1243,8 +1249,27 @@ void Builder::collapseNonEscapingVariableReads() {
             if (draft.header(readId) == nullptr) {
                 continue;
             }
-            const camel::runtime::gc_node_ref_t version =
-                source == cell ? (cellInputs.empty() ? cellId : cellInputs[0]) : nodeIdOf(source);
+            // A write gives the cell of this version; what a read wants is the value written, and
+            // a write holds it as its second operand. A writer that is not one of those -- the JOIN
+            // a branch's writes meet at, say -- gives a cell and no value of its own, so that read
+            // keeps its cell: the writer it takes its version from is still the one the design
+            // names, and reading it is what the design says a read does.
+            camel::runtime::gc_node_ref_t version = readId;
+            if (source == cell) {
+                if (cellInputs.empty()) {
+                    continue;
+                }
+                version = cellInputs[0];
+            } else {
+                if (nodeKindOf(source) != camel::runtime::GCNodeKind::Oper) {
+                    continue;
+                }
+                const auto written = draft.normInputsOf(nodeIdOf(source));
+                if (written.size() < 2) {
+                    continue;
+                }
+                version = written[1];
+            }
             if (version == cellId || draft.header(version) == nullptr) {
                 continue;
             }
