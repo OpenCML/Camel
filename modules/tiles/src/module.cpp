@@ -665,7 +665,7 @@ class TilesModule final : public BuiltinModule {
              "tiles:retain_preferred",
              "tiles:run_preferred_resident",
              "tiles:download"});
-        exportType(Reference("Device"), DeviceType::get(tensor::TensorType::Default()));
+        exportType(Reference("Device"), DeviceType::get(camel::core::type::ArrayType::numericUnknown()));
         // `#gpu` is a standard tag of the core (design principles 13.4); `tiles::compile` reads
         // it and refuses a scope the device cannot run (GPU design 6.1).
         // `available` and `device` are declared in stdlib/tiles.cml (handover H156): their

@@ -45,7 +45,7 @@ template <k::BinaryOp Op> slot_t binaryKernel(ArgsView &, ArgsView &norm, contex
         k::ScalarOperand lhsScalar{}, rhsScalar{};
         const k::Operand lhs = operandArg(norm, 0, lhsScalar);
         const k::Operand rhs = operandArg(norm, 1, rhsScalar);
-        return wrap(k::binary(Op, lhs, rhs, resultAllocator()));
+        return wrap(norm.resultType(), k::binary(Op, lhs, rhs, resultAllocator()));
     });
 }
 
@@ -54,13 +54,13 @@ template <k::CompareOp Op> slot_t compareKernel(ArgsView &, ArgsView &norm, cont
         k::ScalarOperand lhsScalar{}, rhsScalar{};
         const k::Operand lhs = operandArg(norm, 0, lhsScalar);
         const k::Operand rhs = operandArg(norm, 1, rhsScalar);
-        return wrap(k::compare(Op, lhs, rhs, resultAllocator()));
+        return wrap(norm.resultType(), k::compare(Op, lhs, rhs, resultAllocator()));
     });
 }
 
 template <k::UnaryOp Op> slot_t unaryKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(unaryName(Op), [&] {
-        return wrap(k::unary(Op, tensorArg(norm, 0), resultAllocator()));
+        return wrap(norm.resultType(), k::unary(Op, tensorArg(norm, 0), resultAllocator()));
     });
 }
 
@@ -228,7 +228,7 @@ slot_t whereKernel(ArgsView &, ArgsView &norm, context::Context &) {
         const k::Operand cond = k::Operand::of(tensorArg(norm, 0));
         const k::Operand lhs  = operandArg(norm, 1, lhsScalar);
         const k::Operand rhs  = operandArg(norm, 2, rhsScalar);
-        return wrap(k::where(cond, lhs, rhs, resultAllocator()));
+        return wrap(norm.resultType(), k::where(cond, lhs, rhs, resultAllocator()));
     });
 }
 
@@ -271,7 +271,7 @@ slot_t castKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("cast", [&] {
         Array *input = tensorArg(norm, 0, true);
         const TypeCode target = dtypeFromName(stringArg(norm, 1));
-        return wrap(k::cast(input, target, resultAllocator()));
+        return wrap(norm.resultType(), k::cast(input, target, resultAllocator()));
     });
 }
 

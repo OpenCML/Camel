@@ -30,13 +30,13 @@ Type *resultType(TypeCode dtype, const InferContext &ctx) {
             shape->push_back(value.value_or(kUnknownDim));
         }
     }
-    return TensorType::get(dtype, shape);
+    return tensorOf(dtype, shape);
 }
 
 template <TypeCode DType> slot_t fromBytesKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("from_bytes", [&] {
         const auto shape = shapeArg(norm, 1);
-        return wrap(tensorFromLittleEndian(
+        return wrap(norm.resultType(), tensorFromLittleEndian(
             norm.get<core::rtdata::BytesObject *>(0)->view(),
             DType,
             shape,

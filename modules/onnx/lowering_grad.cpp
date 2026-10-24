@@ -11,6 +11,7 @@
 
 #include "lowering.h"
 
+#include "../tensor/ops/support.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 
@@ -674,7 +675,7 @@ Value lowerBatchNormTrainGrad(const LowerContext &ctx) {
     type::Type *resultType = ctx.resultType();
     if (!resultType || resultType->code() != TypeCode::Tuple) {
         resultType = type::TupleType::create(
-            {tensor::TensorType::get(f), tensor::TensorType::get(f), tensor::TensorType::get(f)});
+            {tensor::ops::tensorOf(f, std::nullopt), tensor::ops::tensorOf(f, std::nullopt), tensor::ops::tensorOf(f, std::nullopt)});
     }
     return Value::aggregate(resultType, {std::move(dxV), std::move(dgV), std::move(dbV)});
 }

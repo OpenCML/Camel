@@ -85,7 +85,15 @@ std::optional<slot_t> shapeFold(const InferContext &ctx, mm::IAllocator &allocat
 slot_t reshapeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("reshape", [&] {
         const std::vector<int64_t> target = parseIntArray(norm.get<::Array *>(1), norm.type(1));
-        return wrap(k::reshape(tensorArg(norm, 0, true), target, resultAllocator()));
+        Array *t = tensorArg(norm, 0, true);
+        if (target.empty()) {
+            // No dimension at all: the value with no dimension is the element it holds (the
+            // rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md section
+            // rank-zero-tensor), and `resolveReshape` refuses a value that is not one element.
+            (void)k::resolveReshape(t->shapeSpan(), target);
+            return t->getSlot(0);
+        }
+        return wrap(norm.resultType(), k::reshape(t, target, resultAllocator()));
     });
 }
 
@@ -143,7 +151,9 @@ slot_t flattenKernel(ArgsView &, ArgsView &norm, context::Context &) {
         if (axis < -static_cast<int64_t>(t->rank()) || axis > static_cast<int64_t>(t->rank())) {
             throw std::invalid_argument("flatten axis out of range");
         }
-        return wrap(k::reshape(t, flattenShape(t->shapeSpan(), axis), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::reshape(t, flattenShape(t->shapeSpan(), axis), resultAllocator()));
     });
 }
 
@@ -163,7 +173,7 @@ slot_t unsqueezeKernel(ArgsView &, ArgsView &norm, context::Context &) {
         Shape shape     = t->shapeVector();
         const int64_t a = normalizeAxisOrThrow(intArg(norm, 1), shape.size() + 1);
         shape.insert(shape.begin() + a, 1);
-        return wrap(k::reshape(t, shape, resultAllocator()));
+        return wrap(norm.resultType(), k::reshape(t, shape, resultAllocator()));
     });
 }
 
@@ -184,7 +194,7 @@ std::optional<Type *> unsqueezeInfer(const InferContext &ctx) {
 // transpose(t): swap the last two axes
 slot_t transposeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("transpose", [&] {
-        return wrap(k::transposeLast2(tensorArg(norm, 0), resultAllocator()));
+        return wrap(norm.resultType(), k::transposeLast2(tensorArg(norm, 0), resultAllocator()));
     });
 }
 
@@ -205,7 +215,7 @@ std::optional<Type *> transposeInfer(const InferContext &ctx) {
 slot_t permuteKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("permute", [&] {
         const std::vector<int64_t> perm = parseIntArray(norm.get<::Array *>(1), norm.type(1));
-        return wrap(k::permute(tensorArg(norm, 0), perm, resultAllocator()));
+        return wrap(norm.resultType(), k::permute(tensorArg(norm, 0), perm, resultAllocator()));
     });
 }
 
@@ -224,7 +234,7 @@ std::optional<Type *> permuteInfer(const InferContext &ctx) {
 slot_t concatKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("concat", [&] {
         const Array *parts[] = {tensorArg(norm, 0, true), tensorArg(norm, 1, true)};
-        return wrap(k::concat(parts, intArg(norm, 2), resultAllocator()));
+        return wrap(norm.resultType(), k::concat(parts, intArg(norm, 2), resultAllocator()));
     });
 }
 
@@ -286,7 +296,9 @@ slot_t sliceKernel(ArgsView &, ArgsView &norm, context::Context &) {
     }
     return runKernel("slice", [&] {
         const int64_t step = hasArg(norm, 4) ? intArg(norm, 4) : 1;
-        return wrap(k::slice(input, axisArg, start, end, step, resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::slice(input, axisArg, start, end, step, resultAllocator()));
     });
 }
 
@@ -353,7 +365,14 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
         if (array->size() == 0) {
             return {};
         }
-        if (!isIntegerType(type)) {
+        // The type may state no element type at all (`Tensor`, the numeric-unknown array: its
+        // element type is void, "a numeric scalar, which one is not fixed yet", design
+        // principles 5.4) — the reading `isIntegerCode` already takes, which answers "yes" for
+        // an unstated dtype and leaves the refusal to the kernel. A type that does fix an
+        // element type is the exact one it says, so a concrete `f32[3]` is still refused here;
+        // an unstated one is read from the value, which is the only thing that has it.
+        if (!isIntegerType(type) && array->dtype() != TypeCode::Int32 &&
+            array->dtype() != TypeCode::Int64) {
             reportShapeError(op, "expects an integer array");
         }
         return parseIntArray(array, type);
@@ -404,7 +423,7 @@ slot_t sliceSubKernel(ArgsView &, ArgsView &norm, context::Context &) {
     }
     const int64_t count = end > start ? end - start : 0;
     return runKernel("slice_sub", [&] {
-        return wrap(viewTensor(
+        return wrap(norm.resultType(), viewTensor(
             input, std::span<const int64_t>(&count, 1), resultAllocator(), start));
     });
 }
@@ -471,7 +490,7 @@ slot_t takeKernel(ArgsView &, ArgsView &norm, context::Context &) {
         }
     }
     return runKernel("take", [&] {
-        return wrap(k::take(input, indices, resultAllocator()));
+        return wrap(norm.resultType(), k::take(input, indices, resultAllocator()));
     });
 }
 
@@ -548,7 +567,7 @@ slot_t takeGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     }
     const Array *dy = tensorArg(norm, 2);
     return runKernel("take_grad", [&] {
-        return wrap(k::takeGrad(input, indices, dy, resultAllocator()));
+        return wrap(norm.resultType(), k::takeGrad(input, indices, dy, resultAllocator()));
     });
 }
 
@@ -574,7 +593,7 @@ slot_t oneHotKernel(ArgsView &, ArgsView &norm, context::Context &) {
         }
     }
     return runKernel("one_hot", [&] {
-        return wrap(k::oneHot(labels, classes, resultAllocator()));
+        return wrap(norm.resultType(), k::oneHot(labels, classes, resultAllocator()));
     });
 }
 
@@ -709,7 +728,7 @@ void sliceVjp(VjpBuilder &b, const VjpCall &call) {
         inputs.insert(inputs.end(), call.inputs.begin(), call.inputs.end());
         b.accumulateGradient(
             call.inputs[0],
-            b.addOper(vjpTensorType(), "tensor:slice_grad", inputs));
+            addTensorOperFor(b, call.inputs[0], "tensor:slice_grad", inputs));
     }
 }
 
@@ -744,8 +763,9 @@ void sliceSubVjp(VjpBuilder &b, const VjpCall &call) {
     }
     b.accumulateGradient(
         parent,
-        addTensorOper(
+        addTensorOperFor(
             b,
+            parent,
             "tensor:slice_grad",
             {*dy, parent, staticInt(b, 0), start, end, step}));
 }
@@ -757,7 +777,11 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOper(b, "tensor:take_grad", {call.inputs[0], call.inputs[1], *dy}));
+            addTensorOperFor(
+                b,
+                call.inputs[0],
+                "tensor:take_grad",
+                {call.inputs[0], call.inputs[1], *dy}));
     }
 }
 

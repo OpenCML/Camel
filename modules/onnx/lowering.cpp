@@ -1053,7 +1053,7 @@ Value lowerBatchNormTrain(const LowerContext &ctx) {
     type::Type *resultType = ctx.resultType();
     if (!resultType || resultType->code() != TypeCode::Tuple) {
         resultType = type::TupleType::create(
-            {tensor::TensorType::get(f), tensor::TensorType::get(f), tensor::TensorType::get(f)});
+            {tensor::ops::tensorOf(f, std::nullopt), tensor::ops::tensorOf(f, std::nullopt), tensor::ops::tensorOf(f, std::nullopt)});
     }
     return Value::aggregate(resultType, {std::move(yV), std::move(rmV), std::move(rvV)});
 }

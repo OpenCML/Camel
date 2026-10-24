@@ -650,13 +650,11 @@ class Array : public rtdata::Object {
     void recomputePointers();
 
     bool compactEqualsElements(const Array *other, bool deep) const;
+    /// Prints the elements as nested brackets. `elemType` is the type the elements print by: the
+    /// declared element type, or — when the declaration does not fix one, as the numeric-unknown
+    /// array `Tensor` does not — the type the value holds (`elemType_`).
     void printArray(
-        std::ostream &os, const type::ArrayType *arrayType, size_t dim, uint64_t &flatIndex,
-        const std::string &indent) const;
-    void printTensor(std::ostream &os) const;
-    void printTensorRecursive(std::ostream &os, size_t dim, uint64_t &flatIndex,
-                              const std::string &indent) const;
-    std::string formatTensorElement(uint64_t flatIndex) const;
+        std::ostream &os, const type::Type *elemType, size_t dim, uint64_t &flatIndex) const;
 
     camel::core::mm::IAllocator *allocator_ = nullptr;
     Block *block_                         = nullptr;

@@ -46,7 +46,9 @@ InferFn shapedInfer(std::optional<TypeCode> dtype) {
 
 slot_t newKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("new", [&] {
-        return wrap(tensorFromArray(norm.slot(0), norm.type(0), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            tensorFromArray(norm.slot(0), norm.type(0), resultAllocator()));
     });
 }
 
@@ -54,20 +56,22 @@ std::optional<Type *> newInfer(const InferContext &ctx) { return tensorOf(ctx.fa
 
 slot_t zerosKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("zeros", [&] {
-        return wrap(
+        return wrap(norm.resultType(),
             createTensor(TypeCode::Float32, shapeArg(norm, 0), resultAllocator(), true));
     });
 }
 
 slot_t onesKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("ones", [&] {
-        return wrap(k::full(TypeCode::Float32, shapeArg(norm, 0), 1.0, resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::full(TypeCode::Float32, shapeArg(norm, 0), 1.0, resultAllocator()));
     });
 }
 
 slot_t fullKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("full", [&] {
-        return wrap(k::full(
+        return wrap(norm.resultType(), k::full(
             norm.type(1)->code(),
             shapeArg(norm, 0),
             numberArg(norm, 1),
@@ -81,7 +85,7 @@ std::optional<Type *> fullInfer(const InferContext &ctx) {
 
 slot_t randomKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("random", [&] {
-        return wrap(k::randomUniform(
+        return wrap(norm.resultType(), k::randomUniform(
             shapeArg(norm, 0),
             numberArg(norm, 1),
             numberArg(norm, 2),
@@ -93,7 +97,9 @@ slot_t randnKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("randn", [&] {
         const double mean   = hasArg(norm, 1) ? numberArg(norm, 1) : 0.0;
         const double stddev = hasArg(norm, 2) ? numberArg(norm, 2) : 1.0;
-        return wrap(k::randomNormal(shapeArg(norm, 0), mean, stddev, resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::randomNormal(shapeArg(norm, 0), mean, stddev, resultAllocator()));
     });
 }
 
@@ -109,7 +115,7 @@ slot_t rangeKernel(ArgsView &, ArgsView &norm, context::Context &) {
                 step = intArg(norm, 2);
             }
         }
-        return wrap(k::arange(start, stop, step, resultAllocator()));
+        return wrap(norm.resultType(), k::arange(start, stop, step, resultAllocator()));
     });
 }
 
@@ -118,7 +124,9 @@ std::optional<Type *> rangeInfer(const InferContext &) {
 }
 
 slot_t eyeKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("eye", [&] { return wrap(k::eye(intArg(norm, 0), resultAllocator())); });
+    return runKernel(
+        "eye",
+        [&] { return wrap(norm.resultType(), k::eye(intArg(norm, 0), resultAllocator())); });
 }
 
 std::optional<Type *> eyeInfer(const InferContext &ctx) {

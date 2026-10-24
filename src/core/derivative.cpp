@@ -64,6 +64,23 @@ const TangentSpace *DerivativeRegistry::findTangentSpace(const type::Type *type)
     return it == tangents_.end() ? nullptr : &it->second;
 }
 
+void DerivativeRegistry::setTangentType(type::TypeCode code, type::Type *(*fn)(type::Type *)) {
+    std::unique_lock lock(mutex_);
+    tangentTypes_.insert_or_assign(code, fn);
+}
+
+type::Type *DerivativeRegistry::statedTangentType(type::Type *type) const {
+    if (type == nullptr) {
+        return nullptr;
+    }
+    std::shared_lock lock(mutex_);
+    auto it = tangentTypes_.find(type->code());
+    if (it == tangentTypes_.end() || it->second == nullptr) {
+        return nullptr;
+    }
+    return it->second(type);
+}
+
 void DerivativeRegistry::setDiscretePredicate(
     type::TypeCode code, bool (*predicate)(const type::Type *)) {
     std::unique_lock lock(mutex_);
@@ -125,7 +142,13 @@ Type *computeTangentType(Type *primal) {
     case TypeCode::Array: {
         Type *elem    = tt::as_ptr<ArrayType>(primal)->elemType();
         Type *tangent = elem ? tangentTypeOf(elem) : nullptr;
-        return tangent ? ArrayType::create(tangent) : nullptr;
+        if (tangent != nullptr) {
+            return ArrayType::create(tangent);
+        }
+        // No element type to take a tangent from — the numeric-unknown array `Tensor` is an
+        // array whose element type is not fixed yet. A kind whose values share the array code
+        // states its own answer through the registry; without one there is no tangent.
+        return DerivativeRegistry::instance().statedTangentType(primal);
     }
     default:
         break;

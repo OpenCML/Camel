@@ -36,7 +36,6 @@ using namespace camel::tensor::ops;
 using camel::core::error::RuntimeDiag;
 using camel::core::error::throwRuntimeFault;
 namespace k      = camel::tensor::kernels;
-using TensorType = camel::tensor::TensorType;
 using camel::tensor::kUnknownDim;
 using camel::tensor::StaticShape;
 using camel::tensor::Array;
@@ -94,7 +93,7 @@ std::vector<int64_t> labelArg(ArgsView &args, size_t index, std::string_view op)
 
 slot_t conv2dKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d", [&] {
-        return wrap(
+        return wrap(norm.resultType(),
             k::conv2d(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -126,7 +125,7 @@ std::optional<Type *> conv2dInfer(const InferContext &ctx) {
 
 slot_t conv2dInputGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d_input_grad", [&] {
-        return wrap(
+        return wrap(norm.resultType(),
             k::conv2dInputGrad(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -139,7 +138,7 @@ slot_t conv2dInputGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t conv2dKernelGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d_kernel_grad", [&] {
-        return wrap(
+        return wrap(norm.resultType(),
             k::conv2dKernelGrad(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -152,7 +151,7 @@ slot_t conv2dKernelGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t conv2dBiasGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("conv2d_bias_grad", [&] {
-        return wrap(k::conv2dBiasGrad(tensorArg(norm, 1), resultAllocator()));
+        return wrap(norm.resultType(), k::conv2dBiasGrad(tensorArg(norm, 1), resultAllocator()));
     });
 }
 
@@ -174,13 +173,15 @@ k::Window2d windowArg(ArgsView &norm, size_t first) {
 
 template <k::PoolKind Kind> slot_t poolKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(Kind == k::PoolKind::Max ? "max_pool2d" : "avg_pool2d", [&] {
-        return wrap(k::pool2d(Kind, tensorArg(norm, 0), windowArg(norm, 1), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::pool2d(Kind, tensorArg(norm, 0), windowArg(norm, 1), resultAllocator()));
     });
 }
 
 template <k::PoolKind Kind> slot_t poolGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(Kind == k::PoolKind::Max ? "max_pool2d_grad" : "avg_pool2d_grad", [&] {
-        return wrap(
+        return wrap(norm.resultType(),
             k::pool2dGrad(
                 Kind,
                 tensorArg(norm, 0),
@@ -329,7 +330,7 @@ camel::core::sem::OperatorSemantics poolSemantics(bool max) {
 slot_t batchNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("batch_norm", [&] {
         const double eps = hasArg(norm, 5) ? numberArg(norm, 5) : 1e-5;
-        return wrap(
+        return wrap(norm.resultType(),
             k::batchNorm(
                 tensorArg(norm, 0),
                 tensorArg(norm, 1),
@@ -346,7 +347,7 @@ slot_t tripleOf(Array *first, Array *second, Array *third) {
     namespace mm          = camel::core::mm;
     const auto tensorType = [](const Array *t) -> Type * {
         StaticShape shape(t->shapeSpan().begin(), t->shapeSpan().end());
-        return TensorType::get(t->dtype(), std::move(shape));
+        return camel::tensor::ops::tensorOf(t->dtype(), std::move(shape));
     };
     TupleType *type = TupleType::create({tensorType(first), tensorType(second), tensorType(third)});
     auto *tuple     = ::Tuple::create(3, mm::autoSpace());
@@ -420,7 +421,9 @@ std::optional<Type *> batchNormTrainGradInfer(const InferContext &ctx) {
 
 slot_t embeddingKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("embedding", [&] {
-        return wrap(embedding(tensorArg(norm, 0), tensorArg(norm, 1), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            embedding(tensorArg(norm, 0), tensorArg(norm, 1), resultAllocator()));
     });
 }
 
@@ -438,7 +441,7 @@ std::optional<Type *> embeddingInfer(const InferContext &ctx) {
 
 slot_t embeddingTableGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("embedding_table_grad", [&] {
-        return wrap(embeddingTableGrad(
+        return wrap(norm.resultType(), embeddingTableGrad(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
             tensorArg(norm, 2),
@@ -455,7 +458,7 @@ slot_t softmaxCrossEntropyKernel(ArgsView &, ArgsView &norm, context::Context &)
 
 slot_t softmaxCrossEntropyGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("softmax_cross_entropy_grad", [&] {
-        return wrap(softmaxCrossEntropyGradLogits(
+        return wrap(norm.resultType(), softmaxCrossEntropyGradLogits(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
             numberArg(norm, 2),
@@ -501,7 +504,7 @@ slot_t softmaxCrossEntropyLabelsGradKernel(ArgsView &, ArgsView &norm, context::
     const std::vector<int64_t> labels = labelArg(norm, 1, "softmax_cross_entropy_grad");
     checkClassLabels(logits, labels, "softmax_cross_entropy_grad");
     return runKernel("softmax_cross_entropy_labels_grad", [&] {
-        return wrap(softmaxCrossEntropyLabelsGradLogits(
+        return wrap(norm.resultType(), softmaxCrossEntropyLabelsGradLogits(
             logits, labels, numberArg(norm, 2), resultAllocator()));
     });
 }
@@ -586,10 +589,10 @@ void conv2dVjp(VjpBuilder &b, const VjpCall &call) {
     gradInputs.insert(gradInputs.end(), call.inputs.begin() + 3, call.inputs.end());
     b.accumulateGradient(
         call.inputs[0],
-        b.addOper(vjpTensorType(), "nn:conv2d_input_grad", gradInputs));
+        addTensorOperFor(b, call.inputs[0], "nn:conv2d_input_grad", gradInputs));
     b.accumulateGradient(
         call.inputs[1],
-        b.addOper(vjpTensorType(), "nn:conv2d_kernel_grad", gradInputs));
+        addTensorOperFor(b, call.inputs[1], "nn:conv2d_kernel_grad", gradInputs));
     b.accumulateGradient(
         call.inputs[2],
         addTensorOper(b, "nn:conv2d_bias_grad", {call.inputs[2], *dy}));
@@ -612,7 +615,9 @@ void batchNormTrainVjp(VjpBuilder &b, const VjpCall &call) {
     if (call.inputs.size() > 6) {
         gradInputs.push_back(call.inputs[6]);
     }
-    Type *gradType         = TupleType::create({vjpTensorType(), vjpTensorType(), vjpTensorType()});
+    // The three gradients are those of x, gamma and beta: the tuple states each one's own type.
+    Type *gradType = TupleType::create(
+        {b.nodeType(call.inputs[0]), b.nodeType(call.inputs[1]), b.nodeType(call.inputs[2])});
     const vjp_node_t grads = b.addOper(gradType, "nn:batch_norm_train_grad", gradInputs);
     b.accumulateGradient(call.inputs[0], b.addAccess(grads, 0));
     b.accumulateGradient(call.inputs[1], b.addAccess(grads, 1));
@@ -631,7 +636,9 @@ template <const char *GradUri> void pool2dVjp(VjpBuilder &b, const VjpCall &call
     }
     std::vector<vjp_node_t> gradInputs{call.inputs[0], *dy};
     gradInputs.insert(gradInputs.end(), call.inputs.begin() + 1, call.inputs.end());
-    b.accumulateGradient(call.inputs[0], b.addOper(vjpTensorType(), GradUri, gradInputs));
+    b.accumulateGradient(
+        call.inputs[0],
+        addTensorOperFor(b, call.inputs[0], GradUri, gradInputs));
 }
 
 std::vector<OpDef> nnTensorOps() {

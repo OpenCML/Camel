@@ -23,7 +23,7 @@ namespace {
 /// the same either way: the attribute is the implementation choice.
 slot_t matmulKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("matmul", [&] {
-        return wrap(k::matmul(
+        return wrap(norm.resultType(), k::matmul(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
             resultAllocator(),
@@ -74,7 +74,9 @@ std::optional<Type *> matmulInfer(const InferContext &ctx) {
 slot_t linearKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("linear", [&] {
         Array *bias = hasArg(norm, 2) ? tensorArg(norm, 2) : nullptr;
-        return wrap(k::linear(tensorArg(norm, 0), tensorArg(norm, 1), bias, resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::linear(tensorArg(norm, 0), tensorArg(norm, 1), bias, resultAllocator()));
     });
 }
 

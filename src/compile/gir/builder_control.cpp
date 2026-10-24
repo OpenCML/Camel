@@ -2655,10 +2655,24 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // strings, the (key, value) pairs of a map in key order, and the sub-tensors of a tensor
     // along its first dimension. The operator is resolved like any other, by the type of the
     // sequence; the loop then iterates the array it gives, on every back end, with one driver.
+    //
+    // A tensor is a numeric array (`isNumericArrayType`), and one of these arrays does ask
+    // its type for `__iter__`: what a `for` takes from a tensor — the sub-tensors along the
+    // first dimension, and a value with no dimension not being iterable at all — is the
+    // tensor kind's rule, not the element-wise one every other array follows. An array whose
+    // elements are not numeric scalars is iterated directly, element by element.
+    //
+    // `__iter__` reaches a compilation unit only if it imports the module that declares it
+    // (the tensor module declares the tensor one), and the standard library's own array code
+    // compiles without it. With no candidate the array keeps the element-wise iteration it
+    // had before there was a tensor kind to ask, rather than becoming uniterable because a
+    // module is not loaded.
     const auto iterableElementType =
         [&](node_handle_t &iterable, const GCT::node_ptr_t &expr) -> Type * {
         Type *type = valueTypeOf(nodeTypeOf(iterable));
-        if (type != nullptr && type->code() != TypeCode::Array) {
+        const bool asksOwnIter = type != nullptr && (type->code() != TypeCode::Array ||
+                                                     isNumericArrayType(type));
+        if (asksOwnIter) {
             const std::vector<StaticArg> statics(1);
             std::optional<oper_idx_ptr_t> elements;
             // `__iter__` is a group of several overloads (`:struct/iter_str`, `:coll/map_items`,
@@ -2668,21 +2682,24 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 group.has_value() && group->isOperGroup()) {
                 elements = group->operGroup()->resolve({}, {type}, statics, Modifier::None);
             }
-            if (!elements.has_value()) {
+            const bool ownKind = type->code() != TypeCode::Array;
+            if (!elements.has_value() && ownKind) {
                 diags_->of(SemanticDiag::LoopSequenceNotIterable)
                     .atOrigin(expr->origin())
                     .commit(sourceTextOf(expr), type->toString());
                 throw BuildAbortException();
             }
-            node_handle_t array = currGraph_->addOperNode(*elements, 0);
-            stampPermissions(array);
-            registerNodeOrigin(context_, array, expr, "gir.loop.iter");
-            linkNodes(LinkType::Norm, iterable, array);
-            iterable = array;
-            type     = valueTypeOf(nodeTypeOf(iterable));
-            ASSERT(
-                type != nullptr && type->code() == TypeCode::Array,
-                "The elements of an iterable must be an array.");
+            if (elements.has_value()) {
+                node_handle_t array = currGraph_->addOperNode(*elements, 0);
+                stampPermissions(array);
+                registerNodeOrigin(context_, array, expr, "gir.loop.iter");
+                linkNodes(LinkType::Norm, iterable, array);
+                iterable = array;
+                type     = valueTypeOf(nodeTypeOf(iterable));
+                ASSERT(
+                    type != nullptr && type->code() == TypeCode::Array,
+                    "The elements of an iterable must be an array.");
+            }
         }
         if (type == nullptr) {
             diags_->of(SemanticDiag::LoopSequenceNotIterable)

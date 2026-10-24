@@ -55,28 +55,6 @@ void fillStrides(std::span<const int64_t> extents, int64_t *strides) {
     }
 }
 
-/// The storage name the tensor print has always used (the tensor module's dtypeName).
-const char *storageName(TypeCode code) {
-    switch (code) {
-    case TypeCode::Float32:
-        return "float32";
-    case TypeCode::Float64:
-        return "float64";
-    case TypeCode::Int32:
-        return "int32";
-    case TypeCode::Int64:
-        return "int64";
-    case TypeCode::Bool:
-        return "bool";
-    case TypeCode::BFloat16:
-        return "bfloat16";
-    case TypeCode::Float16:
-        return "float16";
-    default:
-        return "unknown";
-    }
-}
-
 } // namespace
 
 Array *Array::create(camel::core::mm::IAllocator &allocator, size_t initSize) {
@@ -1220,6 +1198,13 @@ rtdata::Object *Array::clone(
 }
 
 void Array::print(std::ostream &os, const type::Type *typeInfo) const {
+    if (rank_ == 0) {
+        // A value with no dimension is the element it holds (the rank-zero ruling,
+        // docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor): it prints as
+        // that value, not as a bracketed list of none.
+        rtdata::printSlot(os, getSlot(0), const_cast<type::Type *>(elemType_));
+        return;
+    }
     if (typeInfo != nullptr && typeInfo->code() == TypeCode::Array) {
         // A compact aggregate stores its elements as bytes, and printing one materializes a
         // Struct/Tuple, which allocates and may move this array. Copy the bytes and the shape
@@ -1256,16 +1241,27 @@ void Array::print(std::ostream &os, const type::Type *typeInfo) const {
             printDim(0);
             return;
         }
+        // The declared element type is what the elements print by, unless the declaration does
+        // not fix one: `Tensor` is the numeric-unknown array, and the elements of a value of that
+        // type print by the element type the value holds (plan section 5.4). A tensor is an array
+        // and prints like one, `[1, 2, 3]` and `[[1, 2], [3, 4]]`, with no `tensor(...)` wrapper.
+        const type::Type *elemType = static_cast<const type::ArrayType *>(typeInfo)->elemType();
+        if (elemType == nullptr || elemType->code() == TypeCode::Void) {
+            elemType = elemType_;
+        }
         uint64_t flatIndex = 0;
-        printArray(os, static_cast<const type::ArrayType *>(typeInfo), 0, flatIndex, "");
-    } else {
-        printTensor(os);
+        printArray(os, elemType, 0, flatIndex);
+        return;
     }
+    // The declared type does not say this is an array (it may be the numeric-unknown array's
+    // spelling, or a scalar the checker left unresolved): print the array the value is, from the
+    // element type the value holds.
+    uint64_t flatIndex = 0;
+    printArray(os, elemType_, 0, flatIndex);
 }
 
 void Array::printArray(
-    std::ostream &os, const type::ArrayType *arrayType, size_t dim, uint64_t &flatIndex,
-    const std::string &indent) const {
+    std::ostream &os, const type::Type *elemType, size_t dim, uint64_t &flatIndex) const {
     os << "[";
     const int64_t extent = extents_[dim];
     for (int64_t i = 0; i < extent; ++i) {
@@ -1273,101 +1269,12 @@ void Array::printArray(
             os << ", ";
         }
         if (dim + 1 == rank_) {
-            rtdata::printSlot(os, getSlot(flatIndex++), arrayType->elemType());
+            rtdata::printSlot(os, getSlot(flatIndex++), const_cast<type::Type *>(elemType));
         } else {
-            printArray(os, arrayType, dim + 1, flatIndex, indent + "  ");
+            printArray(os, elemType, dim + 1, flatIndex);
         }
     }
     os << "]";
-}
-
-std::string Array::formatTensorElement(uint64_t flatIndex) const {
-    char buf[32];
-    std::ostringstream oss;
-    switch (elemTypeCode_) {
-    case TypeCode::Float32:
-    case TypeCode::BFloat16:
-    case TypeCode::Float16: {
-        const double value = getAsDouble(flatIndex);
-        if (value == std::floor(value) && std::abs(value) < 1e10) {
-            (void)std::snprintf(buf, sizeof(buf), "% 7.0f.", value);
-        } else {
-            (void)std::snprintf(buf, sizeof(buf), "% 7.4g", value);
-        }
-        oss << buf;
-        break;
-    }
-    case TypeCode::Float64: {
-        const double value = getAsDouble(flatIndex);
-        if (value == std::floor(value) && std::abs(value) < 1e10) {
-            (void)std::snprintf(buf, sizeof(buf), "% 7.0f.", value);
-        } else {
-            (void)std::snprintf(buf, sizeof(buf), "% 11.7g", value);
-        }
-        oss << buf;
-        break;
-    }
-    case TypeCode::Int32:
-    case TypeCode::Int64:
-        oss << std::setw(7) << getAsInt64(flatIndex);
-        break;
-    case TypeCode::Bool:
-        oss << (getAsBool(flatIndex) ? "  true" : " false");
-        break;
-    default:
-        oss << "?";
-        break;
-    }
-    return oss.str();
-}
-
-void Array::printTensorRecursive(
-    std::ostream &os, size_t dim, uint64_t &flatIndex, const std::string &indent) const {
-    constexpr int indentStep      = 8;
-    constexpr size_t maxLineWidth = 100;
-    const std::string innerIndent = indent + std::string(indentStep, ' ');
-
-    if (rank_ == 0) {
-        os << formatTensorElement(0);
-        return;
-    }
-    if (dim + 1 == rank_) {
-        os << "[";
-        size_t currentLineWidth = indent.size() + indentStep;
-        for (int64_t i = 0; i < extents_[dim]; ++i) {
-            std::string element = formatTensorElement(flatIndex++);
-            if (i > 0) {
-                const size_t nextWidth = currentLineWidth + 2 + element.size();
-                if (nextWidth > maxLineWidth) {
-                    os << ",\n" << innerIndent;
-                    currentLineWidth = innerIndent.size();
-                } else {
-                    os << ", ";
-                    currentLineWidth += 2;
-                }
-            }
-            os << element;
-            currentLineWidth += element.size();
-        }
-        os << "]";
-        return;
-    }
-    os << "[";
-    for (int64_t i = 0; i < extents_[dim]; ++i) {
-        if (i > 0) {
-            os << ",\n" << innerIndent;
-        }
-        printTensorRecursive(os, dim + 1, flatIndex, innerIndent);
-    }
-    os << "]";
-}
-
-void Array::printTensor(std::ostream &os) const {
-    os << "tensor(";
-    uint64_t flatIndex = 0;
-    printTensorRecursive(os, 0, flatIndex, "");
-    os << ", dtype=" << storageName(elemTypeCode_);
-    os << ")";
 }
 
 void Array::updateRefs(

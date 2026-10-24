@@ -38,11 +38,30 @@ bool isFloatNode(const VjpBuilder &builder, vjp_node_t node);
 void requireVjpInputs(const VjpCall &call, size_t minimum, size_t maximum);
 
 /// Adds a tensor-typed operator node (shorthand for rules). `attrs` records an implementation
-/// choice the rule carries from the forward node (tensor.kernel on a matmul gradient).
+/// choice the rule carries from the forward node (tensor.kernel on a matmul gradient). The result
+/// takes the type of the first input that states an element type; a rule whose result is shaped
+/// like a *particular* value states it with addTensorOperFor instead.
 vjp_node_t addTensorOper(
     VjpBuilder &builder,
     std::string_view uri,
     std::initializer_list<vjp_node_t> inputs,
+    attr::AttrSetId attrs = attr::kNoAttrs);
+
+/// The same, for a node that is the gradient *of* `primal`: it takes that value's type. A gradient
+/// has the element type and the shape of the value it is the gradient of (design principles 9.9),
+/// and the value's type is where its element type is. Without this the rule would have to declare
+/// the gradient with the undetermined array `Tensor`, whose element type no tensor kernel can read.
+vjp_node_t addTensorOperFor(
+    VjpBuilder &builder,
+    vjp_node_t primal,
+    std::string_view uri,
+    std::initializer_list<vjp_node_t> inputs,
+    attr::AttrSetId attrs = attr::kNoAttrs);
+vjp_node_t addTensorOperFor(
+    VjpBuilder &builder,
+    vjp_node_t primal,
+    std::string_view uri,
+    std::span<const vjp_node_t> inputs,
     attr::AttrSetId attrs = attr::kNoAttrs);
 /// Adds a float64-typed operator node.
 vjp_node_t

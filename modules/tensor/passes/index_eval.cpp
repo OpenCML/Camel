@@ -335,7 +335,7 @@ struct Arg {
     Type *type() const {
         switch (kind) {
         case Kind::Tensor:
-            return TensorType::get(data.dtype, data.shape);
+            return ops::tensorOf(data.dtype, data.shape);
         case Kind::Number:
             return Type::Float64();
         case Kind::Int:
@@ -351,7 +351,9 @@ struct Arg {
     slot_t slot() const {
         switch (kind) {
         case Kind::Tensor:
-            return ops::wrap(tensorOf(data));
+            // The value is read by the type this same entry reports in `type()`: a rank-0 tensor
+            // argument is the element, and the kernel boxes it back (support.cpp's tensorArg).
+            return ops::wrap(type(), tensorOf(data));
         case Kind::Number:
             return camel::core::rtdata::toSlot(number);
         case Kind::Int:
@@ -1181,7 +1183,7 @@ void query(
 
 void queries(std::ostream &os) {
     const auto T = [](std::optional<StaticShape> shape, TypeCode t = TypeCode::Float32) -> Type * {
-        return TensorType::get(t, std::move(shape));
+        return ops::tensorOf(t, std::move(shape));
     };
     Type *const integer = Type::Int64();
     Type *const ints    = camel::core::type::ArrayType::create(Type::Int64());

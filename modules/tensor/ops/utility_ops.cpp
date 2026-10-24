@@ -96,9 +96,9 @@ std::optional<Type *> iterInfer(const InferContext &ctx) {
             throw std::invalid_argument("a rank-0 tensor has no first dimension");
         }
         StaticShape row(in.shape->begin() + 1, in.shape->end());
-        return ArrayType::create(TensorType::get(in.dtype, row));
+        return ArrayType::create(tensorOf(in.dtype, row));
     }
-    return ArrayType::create(TensorType::get(in.dtype, std::nullopt));
+    return ArrayType::create(tensorOf(in.dtype, std::nullopt));
 }
 
 slot_t iterKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -109,9 +109,40 @@ slot_t iterKernel(ArgsView &, ArgsView &norm, context::Context &) {
         }
         const auto shape    = t->shapeSpan();
         const uint64_t rows = static_cast<uint64_t>(shape[0]);
+        // The round's type is the sequence's element type, as iterInfer declares it: the element
+        // itself when the input's shape is known (the round of a rank-1 tensor is its rank-0
+        // sub-tensor, which is the element — the rank-zero ruling), and a tensor of unknown rank
+        // when the input's is not. Each round is handed on in the representation that type asks
+        // for: a consumer reads the round by its declared type, and a round handed on as the
+        // element under an array type left `tensor:multiply` reading an Array * out of a float
+        // slot (the `gpu.profile/host_loop` crash, reached as soon as a loop iterates a tensor
+        // whose shape is not fixed).
+        Type *roundType = nullptr;
+        if (Type *resultType = norm.resultType();
+            resultType != nullptr && resultType->code() == TypeCode::Array) {
+            roundType = static_cast<ArrayType *>(resultType)->elemType();
+        }
+        if (t->rank() == 1) {
+            // One dimension: its elements are values of the element type (the rank-zero ruling,
+            // docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor). The round
+            // is the element itself and the sequence is `T[]`, the type iterInfer states.
+            auto *arrayType = ArrayType::create(const_cast<Type *>(t->elemType()));
+            ::Array *result = ::Array::create(mm::autoSpace(), static_cast<size_t>(rows));
+            for (uint64_t i = 0; i < rows; ++i) {
+                const slot_t element = t->getSlot(i);
+                if (roundType == nullptr || roundType->code() != TypeCode::Array) {
+                    result->setSlot(i, element, arrayType);
+                    continue;
+                }
+                Array *round = createTensor(t->dtype(), StaticShape{}, mm::autoSpace());
+                round->setSlot(0, element);
+                result->setSlot(i, wrap(roundType, round), arrayType);
+            }
+            return camel::core::rtdata::toSlot(result);
+        }
         const StaticShape rowShape(shape.begin() + 1, shape.end());
         const uint64_t inner = numelOf(rowShape);
-        auto *arrayType      = ArrayType::create(TensorType::get(t->dtype(), rowShape));
+        auto *arrayType      = ArrayType::create(tensorOf(t->dtype(), rowShape));
         ::Array *result      = ::Array::create(mm::autoSpace(), static_cast<size_t>(rows));
         for (uint64_t i = 0; i < rows; ++i) {
             Array *row = viewTensor(t, rowShape, mm::autoSpace(), i * inner);
@@ -126,7 +157,7 @@ std::optional<Type *> voidResult(const InferContext &) { return Type::Void(); }
 slot_t showKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("show", [&] {
         Array *t = tensorArg(norm, 0, true);
-        t->print(std::cout, TensorType::Default());
+        t->print(std::cout, nullptr);
         std::cout << std::endl;
         return NullSlot;
     });
@@ -134,7 +165,9 @@ slot_t showKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t loadNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("load_npy", [&] {
-        return wrap(loadNpy(camel::utils::pathFromUtf8(stringArg(norm, 0)), resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            loadNpy(camel::utils::pathFromUtf8(stringArg(norm, 0)), resultAllocator()));
     });
 }
 
@@ -242,7 +275,7 @@ std::vector<OpDef> utilityOps() {
             .params    = {{"path", ParamKind::String}},
             .resultDoc = "Tensor",
             .infer     = [](const InferContext &) -> std::optional<Type *> {
-                return TensorType::Default();
+                return ArrayType::numericUnknown();
             },
             .kernel = &loadNpyKernel,
             .traits = impure});
