@@ -1,15 +1,20 @@
 /**
- * A warning (line 7: var parameter without the `sync` modifier) in a module that also has an
- * error (line 12). Both are in the diagnostics on stdout, in source order; nothing is printed
- * twice on stderr.
+ * A warning (line 12: `return null` in an arm of an `if` whose value nothing uses) in a module
+ * that also has an error (line 19). Both are in the diagnostics on stdout, in source order;
+ * nothing is printed twice on stderr.
  */
 module warning_with_error
 
-func inc(var x: int): int sync {
-    wait x += 1
-    return 0
+func count(a: int): int sync {
+    var total = 0
+    if a > 0 then sync {
+        total = a
+        return null
+    }
+    return total
 }
 
 func main(): int sync {
+    println(count(1))
     return missing_name
 }

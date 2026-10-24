@@ -7,23 +7,23 @@
 module parse_constructs_static_loop
 
 func sum_of::<T>(t: T): int {
-    return static loop acc = 0 for (n, F) in fields T do acc + t.[n]
+    return static loop acc = 0 for n, F in fields T do acc + t.[n]
 }
 
 func total_and_max(t: {a: int, b: int, c: int}): (int, int) {
     return static loop total = 0, best = 0
-        for (n, F) in fields {a: int, b: int, c: int} do {
+        for n, F in fields {a: int, b: int, c: int} do {
             let v: F = t.[n]
             (total + v, if best < v then v else best)
         }
 }
 
 func sum_tuple(t: (int, int)): int {
-    return static loop acc = 0 for (n, F) in fields (int, int) do acc + t.[n]
+    return static loop acc = 0 for n, F in fields (int, int) do acc + t.[n]
 }
 
 func empty(t: {}): int {
-    return static loop acc = 7 for (n, F) in fields {} do acc + 1
+    return static loop acc = 7 for n, F in fields {} do acc + 1
 }
 
 func main(): int sync {

@@ -1,5 +1,5 @@
 /**
- * `static loop acc = 0 for (n, F) in fields T do body` (H51 step 5): the fields of T are
+ * `static loop acc = 0 for n, F in fields T do body` (H51 step 5): the fields of T are
  * walked at instantiation and the body advances the state once per field. The loop leaves no
  * loop node and its value is the last state. The trip count is the arity of T, so a `T` that
  * comes from an enclosing generic gives a count known only at instantiation.
@@ -7,23 +7,23 @@
 module static_loop
 
 func sumOf::<T>(t: T): int {
-    return static loop acc = 0 for (n, F) in fields T do acc + t.[n]
+    return static loop acc = 0 for n, F in fields T do acc + t.[n]
 }
 
 func totalAndMax(t: {a: int, b: int, c: int}): (int, int) {
     return static loop total = 0, best = 0
-        for (n, F) in fields {a: int, b: int, c: int} do {
+        for n, F in fields {a: int, b: int, c: int} do {
             let v: F = t.[n]
             (total + v, if best < v then v else best)
         }
 }
 
 func emptyStruct(t: {}): int {
-    return static loop acc = 7 for (n, F) in fields {} do acc + 1
+    return static loop acc = 7 for n, F in fields {} do acc + 1
 }
 
 func tupleFold(t: (int, int, int)): int {
-    return static loop acc = 0 for (n, F) in fields (int, int, int) do {
+    return static loop acc = 0 for n, F in fields (int, int, int) do {
         let v: F = t.[n]
         acc + v
     }
@@ -34,7 +34,7 @@ func nested(t: {p: {x: int, y: int}}): int {
     sync {
         static for (n, F) in fields {p: {x: int, y: int}} => {
             let sub = t.[n]
-            sum = sum + (static loop acc = 0 for (m, G) in fields F do acc + sub.[m])
+            sum = sum + (static loop acc = 0 for m, G in fields F do acc + sub.[m])
         }
     }
     return sum

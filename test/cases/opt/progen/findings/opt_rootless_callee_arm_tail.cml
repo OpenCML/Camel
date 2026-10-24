@@ -22,7 +22,7 @@ func r18(a19: int, a20: int, a21: bool): int {
     };
 }
 
-sync func w210(a211: int, var c212: int, a213: int): int sync {
+func w210(a211: int, var c212: int, a213: int): int sync {
     return if false then sync {
         return r18(r18(0, 0, false), -1, true);
     } else sync {

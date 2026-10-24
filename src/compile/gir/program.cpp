@@ -664,7 +664,6 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
             UnitContext context(*this, *unit);
             try {
                 reportIgnoredCapturedWrites();
-                reportUndeclaredCapturedWrites();
                 // Before the bodies are let go by reportDroppedEffectsOfBodies.
                 reportUnusedFallibleValues();
                 reportDroppedEffectsOfBodies();

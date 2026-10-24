@@ -9,7 +9,7 @@ module param_sorted
 import { sort } from array
 
 func f(xs: int[]): int[] sync {
-    wait sort(xs)
+    sort(xs)
     return xs
 }
 

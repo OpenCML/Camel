@@ -6,7 +6,7 @@ module static_loop_graph
 
 func loopSum(t: {a: int, b: int, c: int}): int {
     return static loop acc = 0
-        for (n, F) in fields {a: int, b: int, c: int} do acc + t.[n]
+        for n, F in fields {a: int, b: int, c: int} do acc + t.[n]
 }
 
 func unrolled(t: {a: int, b: int, c: int}): int {

@@ -14,7 +14,7 @@ func make_view(i: int): Tensor {
     return unsqueeze(reshape(flatten(reshape(base, [3, 2])), [6]), 0)
 }
 
-sync func spin(i: int, n: int, acc: Tensor): Tensor {
+func spin(i: int, n: int, acc: Tensor): Tensor {
     return if i >= n then acc else sync {
         let v = make_view(i)
         // A view of a view reads the same owner.

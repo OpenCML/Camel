@@ -7,7 +7,7 @@ module let_compound_assigned
 
 func main(): int sync {
     let k = 1
-    wait k += 2
+    k += 2
     println(k)
     return 0
 }

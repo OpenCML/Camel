@@ -8,7 +8,7 @@ import { sqrt } from math
 import { mean, stdev } from statistics
 
 with <var result: float[], repeat: int>
-export sync func timeit(fn: () => void): void {
+export func timeit(fn: () => void): void {
     if repeat <= 0 then {
         return null
     } else sync {

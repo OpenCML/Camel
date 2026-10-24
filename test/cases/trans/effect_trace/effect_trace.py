@@ -145,7 +145,7 @@ def main() -> int:
                 "module effect_trace_variables\n\nfunc main(): int sync {\n"
                 "    var c = 1\n"
                 "    let a = c + 1\n"
-                "    wait c += a\n"
+                "    c += a\n"
                 "    println(c)\n"
                 "    return 0\n}\n", encoding="utf-8")
             for passes in (["std::nvm"], ["std::fvm"], ["std::opt::inline", "std::nvm"]):

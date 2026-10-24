@@ -18,8 +18,8 @@ func pick(flag: bool): Tensor {
 
 func main(): int sync {
     var w = zeros([2, 1])
-    wait w = grow(w)
-    wait w = ones([5])
+    w = grow(w)
+    w = ones([5])
     seed(7)
     let r1 = random([4], 0.0, 1.0)
     seed(7)

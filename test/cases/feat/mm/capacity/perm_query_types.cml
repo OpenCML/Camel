@@ -48,22 +48,22 @@ func f13(a14: int[], a15: (a0: bool, a1: float) => float): int {
     return (-7) * 3;
 }
 
-sync func e16(var c17: int[]): float sync {
+func e16(var c17: int[]): float sync {
     (if true then {
         let n18 = r5(2, 1.5, 2.0);
         return [3, 1, 12, 4];
     } else [4, 4, 3])->foreach<sync (p19: int) => sync {
         c17 = concat(c17, [f13([10, p19], (p20: bool, p21: float): float => r1(6, p21))]);
     }>;
-    sync func g22(a23: int, a24: bool): int sync {
+    func g22(a23: int, a24: bool): int sync {
         println('L1 {}'->format<a24>);
-        wait c17 = concat(c17, [c17[1] + (if (len(c17) > 1) then c17[1] else 4)]);
+        c17 = concat(c17, [c17[1] + (if (len(c17) > 1) then c17[1] else 4)]);
         return (if a24 then ['cd', 'yz'] else ['b'])->reduce<(p25: int, p26: string): int => [-0.5, 3.0]->reduce<(p27: int, p28: float): int => if a24 then 100 else p25, 31>, a23>;
     };
     return (0.0 * 0.25) / 2.0;
 }
 
-sync func w29(a30: int, var c31: int): int sync {
+func w29(a30: int, var c31: int): int sync {
     return if (a30 <= 0) then sync {
         c31 = f13([a30, 7, 2], (p32: bool, p33: float): float => p33) % 1000;
         return match a30 {
@@ -71,12 +71,12 @@ sync func w29(a30: int, var c31: int): int sync {
             case _ => a30
         };
     } else sync {
-        wait c31 /= -2;
+        c31 /= -2;
         println('L2 {} {} {}'->format<c31, a30, match a30 {
             case 10 => 1.0
             case _ => 2.5
         }>);
-        let n34 = wait w29(a30 - 1, c31);
+        let n34 = w29(a30 - 1, c31);
         c31 -= n34 * 3;
         return n34 + 0;
     };
@@ -92,7 +92,7 @@ func main(): int sync {
     }, f13(n38, (p39: bool, p40: float): float => p40 - 4.75));
     if (!false) || (false || true) then sync {
         println('L3 {} {}'->format<v41, v41>);
-        wait v41 = (len(n38), v41.1);
+        v41 = (len(n38), v41.1);
         null;
     } else sync {
         println('L4 {} {}'->format<n36, v41>);

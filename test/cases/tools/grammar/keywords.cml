@@ -27,8 +27,8 @@ func plain(x: int): int {
     return if x > 0 then x else 0 - x
 }
 
-sync func effect(var target: int) {
-    wait target += 1
+func effect(var target: int) {
+    target += 1
 }
 
 func control(dir: string, xs: int[]): int! {

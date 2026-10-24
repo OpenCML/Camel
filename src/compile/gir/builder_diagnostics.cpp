@@ -169,37 +169,6 @@ void Builder::reportIgnoredCapturedWrites() {
     unit_->pendingIgnoredWrites.clear();
 }
 
-void Builder::reportUndeclaredCapturedWrites() {
-    // The prefix `sync` of a function declares that it has side effects (design principles
-    // 2.3); a function with a `var` parameter is already checked for it
-    // (VarParamInAsyncFunction, in the GCT builder). A function that writes a variable it
-    // captured, itself or through the functions it calls, has side effects as well. This is a
-    // declaration check only: the modifier changes nothing in how calls are compiled.
-    for (const BuiltFunction &function : unit_->builtFunctions) {
-        if (function.graph->funcType()->modifiers().sync() ||
-            blockGraphs_.contains(function.graph)) {
-            continue; // declared so, or a decorated block (no declaration to write it on)
-        }
-        std::vector<std::string> names;
-        for (node_handle_t variable : capturedWritesOf(function.graph)) {
-            names.push_back("'" + captureNameOf(variable, originNames_[variable]) + "'");
-        }
-        if (names.empty()) {
-            continue;
-        }
-        // In the order of the names, not of the nodes.
-        std::ranges::sort(names);
-        diags_->of(SemanticDiag::CapturedWriteInAsyncFunction)
-            .atOrigin(function.origin)
-            .commit(
-                function.name.empty() ? std::string("The lambda")
-                                      : std::format("Function '{}'", function.name),
-                names.size() > 1 ? "s" : "",
-                strutil::join(names, ", ", [](const std::string &name) { return name; }));
-    }
-    unit_->builtFunctions.clear();
-}
-
 bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     const auto declaresEffects = [](Type *type) {
         if (type == nullptr || type->code() != TypeCode::Function) {

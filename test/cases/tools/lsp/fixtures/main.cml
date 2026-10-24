@@ -19,7 +19,7 @@ func add(a: float, b: float): float {
     return a + b
 }
 
-sync func bump(var counter: int, by: int) {
+func bump(var counter: int, by: int) {
     counter += by
     return counter
 }

@@ -21,6 +21,9 @@ Camel 的同步执行语义要求：
 
 ## 2. 语法语义层：`sync` 与 `wait`
 
+> **注意（H461）**：函数前缀 `sync func` 与关键字 `wait` 已退役，解析器不再认识它们。2.2、2.3 与第 3 节
+> 描述的是退役前的模型，作为实现记录保留；现行写法见 `docs/language/04_execution_model.md`。
+
 本节描述“语言层”定义；后续章节给出对应实现路径。
 
 ### 2.1 语法入口（关键产生式）
@@ -94,21 +97,19 @@ sync func g(): int sync {
   见 2.2），这也包括：以一个值结尾的同步块（值在块内最后一个表达式之后交出）、
   写在同步块里的 `sync { }` 块（它自己是外层链上的一个语句，块内按它自己的写法）、
   `let (p, q) = f()` 这样一次绑定多个名字的声明。
-- 同步块内调用什么都无所谓，写不写 `wait` 也无所谓：块内已经有顺序。副作用只在默认的无序执行下才需要
+- 同步块内的调用按书写顺序执行：块的相邻语句之间就是控制边。副作用只在默认的无序执行下才需要
   考虑，因为它限制了重排。
-- 副作用的管理与追踪仍是研究中的部分：按引用捕获、`wait` 跟踪与各个遍相互作用不好的情形，作为研究发现
+- 副作用的管理与追踪仍是研究中的部分：按引用捕获、写入的追踪与各个遍相互作用不好的情形，作为研究发现
   连同复现程序记录，不做临时性的修补。
 
 ### 2.4 静态约束
 
-- `var` 形参只允许出现在带函数修饰符 `sync` 的函数中（前缀 `sync func`）；否则 `VarParamInAsyncFunction`
-  告警。
-- 写入被捕获变量（包括模块顶层变量）的函数或 lambda——自己写，或经由它直接调用的函数写——同样有副作用，
-  没有函数修饰符 `sync` 时给出 `CapturedWriteInAsyncFunction` 告警（定位在函数定义处，列出变量名）。
-- **函数修饰符 `sync` 目前只是声明。** 编译器只做上面两项声明检查，不依据它在调用处产生任何顺序、
-  也不要求调用处写 `wait`；调用处应当如何对待这个修饰符，有待语言作者决定。
+- 函数修饰符 `sync`（前缀 `sync func`）与关键字 `wait` 已退役（H461）：`var` 形参是资源参数，
+  不再有任何声明要求，也不再因此告警（原 `VarParamInAsyncFunction`/`CapturedWriteInAsyncFunction`
+  随前缀一起删除）。
+- 写在函数体位置的 `sync`（函数体是同步块）与 lambda 的 `sync` 前缀保留。
 - 调用带 `var` 形参的函数或算子、直接调用写入被捕获变量的函数、或进入有分支臂写入被捕获变量的分支，
-  而既不在同步块内也不加 `wait`：`IgnoredSideEffect` 告警。
+  而不在同步块内：`IgnoredSideEffect` 告警。
 - 把 `let` 对象传给 `var` 形参：编译期错误（见 2.3）。
 
 ### 2.5 实现现状（与上述规则的差距）
@@ -151,13 +152,13 @@ sync func g(): int sync {
 
 ## 3. 编译实现层：从 AST/GCT 到 GIR 的落地
 
-## 附：代码示例（sync 与 wait）
+## 附：代码示例（sync 与函数体）
 
 ```camel
-module sync_wait_demo
+module sync_body_demo
 
-// 有副作用：修改 var 形参。带 var 形参的函数用函数修饰符 sync 声明。
-sync func bump(var x: int): void {
+// 修改 var 形参。函数体是同步块：修改与读取按书写顺序执行。
+func bump(var x: int): void sync {
     x += 1
 }
 
@@ -169,11 +170,9 @@ func log_value(x: int): void sync {
 func main(): int sync {
     var c = 0          // var：可变对象，可以传给 var 形参
 
-    // 同步块内按书写顺序执行，修改和读取顺序稳定；块内写不写 wait 都一样。
-    // log_value 不涉及 var，对它写 wait 没有意义，这里不写。
-    wait bump(c)
+    bump(c)
     log_value(c)       // x = 1
-    wait bump(c)
+    bump(c)
     log_value(c)       // x = 2
 
     return c
@@ -181,21 +180,20 @@ func main(): int sync {
 ```
 
 ```camel
-module wait_boundary_demo
+module order_demo
 
-sync func bump(var x: int): void {
+func bump(var x: int): void sync {
     x += 1
 }
 
-func main(): int {
+func main(): int sync {
     var c = 0
 
-    // 非同步块：对带可变输入的调用使用 wait，编译器跟踪其副作用并插入控制边，
-    // 读取 c 的后续代码在写入完成之后执行
-    wait bump(c)
+    // 不在同步块里的写入只与读取它的操作按依赖排序：这里的 let 各自读到前一次写入之后的 c
+    bump(c)
     let after1 = c
 
-    wait bump(c)
+    bump(c)
     let after2 = c
 
     // 注意：这里若再写一条结果未被使用的 println(...)，它不在同步块内，不会执行（见 2.2）
