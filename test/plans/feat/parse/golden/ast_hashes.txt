@@ -16,7 +16,7 @@ dc0c2c36c6fe5c9d no test/cases/parse/numbers/leading_zero.cml
 a58a7cd293a77647 no test/cases/parse/numbers/member_index_exponent.cml
 7d7964a39be8391b ok test/cases/parse/numbers/tokens.cml
 c940d1b8974b7fdc no test/cases/parse/rules/declared.cml
-3d30fcfbecc0b91b ok test/cases/parse/rules/generic_head.cml
+3ef401328cb2f22a ok test/cases/parse/rules/generic_head.cml
 ae1fab0de676960a ok test/cases/parse/rules/names.cml
 714c780c7d9e2c1b no test/cases/parse/rules/no_arrow.cml
 a4714d28f417c4ea ok test/cases/parse/rules/values.cml
@@ -35,10 +35,14 @@ c005562ecb6383e6 ok test/cases/parse/rulings/doc_comment.cml
 2208963e01d4a29e ok test/cases/parse/rulings/null_compare.cml
 4f723341823c8fe9 ok test/cases/parse/rulings/power.cml
 cc32392fed36cd2f ok test/cases/parse/rulings/reserved_and.cml
+7eaaa656fecc2292 no test/cases/parse/syntax/angle_close_after_space.cml
+f0996e2e802a583a no test/cases/parse/syntax/comparison_needs_space.cml
+1800256e2cca0603 no test/cases/parse/syntax/line_starts_with_operator.cml
 a24945bb64fb63aa no test/cases/parse/syntax/missing_then.cml
 2b17772c82721c98 ok test/cases/parse/syntax/postfix_access.cml
 296c3ba76674282f ok test/cases/parse/syntax/subscript_forms.cml
 41c46559f542a83c ok test/cases/parse/syntax/tuple_and_parenthesis.cml
+3cdde65c3beacbd8 no test/cases/parse/syntax/unterminated_comment.cml
 4c6b6e3195b9ef66 ok probes/probe_d000.cml
 5131da37189b4814 ok probes/probe_d001.cml
 3e2020201dfe29da ok probes/probe_d002.cml

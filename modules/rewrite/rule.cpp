@@ -41,12 +41,12 @@ OtherType *RuleType::cloneWithParams(std::span<Type *const>) const { return get(
 
 RuleObject *RuleObject::create(
     camel::core::SymId name, bool twoWay, camel::core::sem::PermissionMask needs, uint64_t constParams, ::Function *lhs,
-    ::Function *rhs, ::Function *when, mm::IAllocator &allocator) {
+    ::Function *rhs, ::Function *when, mm::IAllocator &allocator, uint64_t ruleId) {
     void *mem = allocator.alloc(sizeof(RuleObject), alignof(RuleObject));
     if (mem == nullptr) {
         throw std::bad_alloc();
     }
-    return new (mem) RuleObject(name, twoWay, needs, constParams, lhs, rhs, when);
+    return new (mem) RuleObject(name, twoWay, needs, constParams, lhs, rhs, when, ruleId);
 }
 
 bool RuleObject::equals(const rtdata::Object *other, const Type *, bool) const {
@@ -59,11 +59,11 @@ bool RuleObject::equals(const rtdata::Object *other, const Type *, bool) const {
     const auto *that = static_cast<const RuleObject *>(other);
     return name_ == that->name_ && twoWay_ == that->twoWay_ && needs_ == that->needs_ &&
            constParams_ == that->constParams_ && lhs_ == that->lhs_ && rhs_ == that->rhs_ &&
-           when_ == that->when_;
+           when_ == that->when_ && ruleId_ == that->ruleId_;
 }
 
 rtdata::Object *RuleObject::clone(mm::IAllocator &allocator, const Type *, bool) const {
-    return create(name_, twoWay_, needs_, constParams_, lhs_, rhs_, when_, allocator);
+    return create(name_, twoWay_, needs_, constParams_, lhs_, rhs_, when_, allocator, ruleId_);
 }
 
 void RuleObject::print(std::ostream &os, const Type *) const {

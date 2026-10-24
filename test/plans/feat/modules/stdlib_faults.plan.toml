@@ -318,7 +318,7 @@ expect_diagnostic_line = 7
 
 [[tests]]
 name = "stdlib.fault.zip_with"
-desc = "zip_with on arrays of different lengths: the fault of zip, located in the library."
+desc = "zip_with on arrays of different lengths: the fault of zip, located in the library. The line is \"return zip(xs, ys)->map<...>\" in stdlib/array.cml, and it did not move when the reduction kernels were added: each `#impl` tag took the place of the blank line above a reduction's doc comment, and the kernel declarations stand below it."
 case = "../../../cases/modules/stdlib/fault_zip_with.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 254

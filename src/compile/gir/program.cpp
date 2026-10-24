@@ -137,6 +137,20 @@ namespace {
 std::vector<std::string> namespacesOf(const std::string &name) { return Reference(name).paths(); }
 } // namespace
 
+bool Builder::inModule(
+    const camel::core::module::module_ptr_t &module, const std::function<void()> &body) {
+    const auto unit = units_.find(module.get());
+    if (unit == units_.end()) {
+        return false;
+    }
+    UnitContext context(*this, *unit->second);
+    // The sides of a rule are functions of the module's top level: no decorator is around them
+    // (language reference 7.6), as for the declarations built above.
+    AttrScope attrs(currentAttrs_, camel::core::attr::kNoAttrs);
+    body();
+    return true;
+}
+
 std::vector<std::string> Builder::namespacesOf(const TopLevelDeclaration &declaration) const {
     // An operator overload says its block apart from its name (GCT::Tree::namespaceOf).
     if (const auto *path = declaration.unit->tree->namespaceOf(declaration.gct)) {
