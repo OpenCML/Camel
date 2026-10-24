@@ -167,10 +167,10 @@ case = "../../../cases/consistency/values/tail_mutual.cml"
 golden = "golden/tail_mutual.txt"
 
 [[tests]]
-name = "value.wait_order"
-desc = "wait orders a call that writes its var parameter between the uses of the variable."
-case = "../../../cases/consistency/values/wait_order.cml"
-golden = "golden/wait_order.txt"
+name = "value.sync_body_order"
+desc = "a sync body orders a call that writes its var parameter between the uses of the variable."
+case = "../../../cases/consistency/values/sync_body_order.cml"
+golden = "golden/sync_body_order.txt"
 
 [[tests]]
 name = "value.with_params"

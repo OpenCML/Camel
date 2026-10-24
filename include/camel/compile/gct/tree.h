@@ -110,7 +110,6 @@ class Tree {
     /// every other node.
     std::optional<OperId> operRefOf(const Node *node) const;
     node_ptr_t makeVari();
-    node_ptr_t makeWait();
     node_ptr_t makeLink(size_t argCount);
     node_ptr_t makeWith(size_t argCount);
     node_ptr_t makeTypeApplication();
