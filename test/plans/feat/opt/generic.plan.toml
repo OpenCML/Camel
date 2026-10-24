@@ -818,7 +818,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_dim_name_recursion.nvm"
-desc = "A recursion whose parameter is written with a dimension name (`f32[k]`) and whose argument is one element shorter at every level binds the name to a different value each level; the values are the zero-pass ones. The dimension name is written once in this signature, so the compiler warns (DimensionNameUsedOnce) and the program still runs."
+desc = "A recursion whose parameter is written with a dimension name (`f32[n]`) and takes half of its array at every level binds the name to a different value each level; the values are the zero-pass ones. The dimension name is written once in this signature, so the compiler warns (DimensionNameUsedOnce) and the program still runs."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_dim_name_recursion.cml"
 args = ["${case}", "std::nvm"]
@@ -828,14 +828,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === '36.0', `unexpected output: ${out}`)
+assert(out === '4.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
 
 [[tests]]
 name = "specialize_dim_name_recursion.bounded"
-desc = "The program after std::opt::specialize holds exactly one instance of the recursion (4 graphs in all): from the second lap of the call cycle the dimension name is widened to an unknown extent (the ruling of 2026-10-24 evening, item 2), so the recursion reaches a fixed point instead of taking a copy per level. The count does not come from kMaxTypeSpecializationsPerRecursiveFunction: the same numbers are read with that bound at 4096."
+desc = "The program after std::opt::specialize holds exactly one instance of the recursion (4 graphs in all): the call the entry makes takes the one instance, and the call inside it - the same function with a different key along the call cycle - binds nothing, because there the dimension name's extent is widened to `?`. The recursion therefore reaches a fixed point instead of taking a copy per level, and not by a count: kMaxTypeSpecializationsPerRecursiveFunction is on its way out (the ruling of 2026-10-24 evening, item 3), and these readings are the same with it at 8 and at 4096."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_dim_name_recursion.cml"
 args = ["${case}", "std::opt::specialize", "std::stats", "std::nvm"]
@@ -848,14 +848,15 @@ const out = input.normalized.stdout.trim()
 const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
 assert(stats.graphs === 4, `unexpected graph count: ${stats.graphs}`)
 assert(stats.specializations === 1, `unexpected specialization count: ${stats.specializations}`)
-assert(out.endsWith('36.0'), `unexpected output: ${out}`)
+assert(stats.nodes === 48, `unexpected node count: ${stats.nodes}`)
+assert(out.endsWith('4.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
 
 [[tests]]
 name = "specialize_dim_name_recursion.graph"
-desc = "The graph of the same program names what the widening did to the types: the one instance the recursion takes is declared `(n: int, xs: f32[k]) => f32`, the declaration itself with the name still unbound and never the eight the entry argument is long, and the call inside it is a call of the base `sniff` that takes no further instance."
+desc = "The graph of the same program names what the widening did to the types: the one instance the recursion takes is declared `(n: int, xs: f32[n]) => f32`, the declaration itself with the name still unbound and never the eight the entry argument is long, and the call inside it is a call of the base `walk` that takes no further instance."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_dim_name_recursion.cml"
 args = ["${case}", "std::opt::specialize", "std::jgir"]
@@ -866,13 +867,13 @@ verify_script = """
 ({ input, assert }) => {
 const doc = JSON.parse(input.normalized.stdout.match(/\{[\s\S]*\}/)[0])
 const byId = new Map(doc.graphs.map((g) => [g.id, g]))
-const base = doc.graphs.find((g) => g.name === 'sniff')
-const instance = doc.graphs.find((g) => g.name === 'sniff$spec0')
+const base = doc.graphs.find((g) => g.name === 'walk')
+const instance = doc.graphs.find((g) => g.name === 'walk$spec0')
 assert(base && instance, `graphs: ${doc.graphs.map((g) => g.name).join(', ')}`)
-assert(instance.signature === '(n: int, xs: f32[k]) => f32', `instance declared '${instance.signature}'`)
+assert(instance.signature === '(n: int, xs: f32[n]) => f32', `instance declared '${instance.signature}'`)
 const call = instance.nodes.find((n) => n.callee !== undefined)
 assert(call && byId.get(call.callee) === base, `the recursive call is bound to '${call && byId.get(call.callee).name}'`)
-const instances = doc.graphs.filter((g) => g.name.startsWith('sniff$'))
+const instances = doc.graphs.filter((g) => g.name.startsWith('walk$'))
 assert(instances.length === 1, `the recursion took ${instances.length} instances`)
 }
 """
