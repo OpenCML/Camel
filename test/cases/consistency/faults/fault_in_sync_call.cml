@@ -1,7 +1,7 @@
 /**
  * A fault in a call that has already written its var parameter.
  */
-module fault_in_wait
+module fault_in_sync_call
 
 func bump(var x: int, d: int) {
     x += 10
