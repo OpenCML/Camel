@@ -109,6 +109,25 @@ void checkAttributeFates(const rt::GCGraph &g, rt::gc_node_ref_t id) {
     }
 }
 
+// The graph's operand types are the ones this call passes when they are the same type, which is
+// not the same question as whether they are the same object: type equality is structural
+// (camel/core/type/text.cpp), and a composite type is one object only while all of its
+// components are interned (camel/core/type/intern.h), so a type can have several objects and
+// still be one type. Both readers of a graph's operand types decide here, and the instance and
+// the shape a graph fact holds depend on the types, never on which object each of them is.
+static bool sameOperandTypes(
+    const rt::GCGraph &graph, rt::gc_node_ref_t node, const std::vector<Value> &args) {
+    const auto inputs = graph.normInputsOf(node);
+    if (inputs.size() != args.size())
+        return false;
+    for (size_t i = 0; i < args.size(); ++i) {
+        const ty::Type *graphType = graph.node(inputs[i])->dataType();
+        if (!graphType || !graphType->equals(args[i].type))
+            return false;
+    }
+    return true;
+}
+
 class Compiler {
   public:
     Program program;
@@ -647,10 +666,7 @@ class Compiler {
                 const auto semantic   = contract(oper);
                 auto indexed          = graphInstance(*g, id, args);
                 ty::Type *knownResult = nullptr;
-                const auto inputRefs  = g->normInputsOf(id);
-                bool sameTypes        = inputRefs.size() == args.size();
-                for (size_t i = 0; sameTypes && i < args.size(); ++i)
-                    sameTypes = g->node(inputRefs[i])->dataType() == args[i].type;
+                const bool sameTypes  = sameOperandTypes(*g, id, args);
                 if (sameTypes) {
                     const rt::fact::Anchor anchor{runtimeProgram, g, id};
                     const auto shape = facts.obtain<rt::fact::TensorShape>(
@@ -703,10 +719,7 @@ class Compiler {
 
     std::optional<core::sem::IndexedInstance> graphInstance(
         const rt::GCGraph &graph, rt::gc_node_ref_t node, const std::vector<Value> &args) {
-        const auto inputs = graph.normInputsOf(node);
-        bool sameTypes    = inputs.size() == args.size();
-        for (size_t i = 0; sameTypes && i < args.size(); ++i)
-            sameTypes = graph.node(inputs[i])->dataType() == args[i].type;
+        const bool sameTypes = sameOperandTypes(graph, node, args);
         if (sameTypes) {
             const rt::fact::Anchor anchor{runtimeProgram, &graph, node};
             const auto fact =
