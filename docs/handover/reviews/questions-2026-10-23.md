@@ -436,3 +436,9 @@ export func check(rules: Rule[], samples: int = …, seed: int = …, program: P
 1. **调用处不读 body-less 声明的 `when` 是缺陷**（选 1）：设计原则 4.4，`when` 是重载唯一的适用条件，有没有函数体都一样（规则统一）。"先写的那条赢"必须消失；条件不满足与类型不匹配分开报。排进下一个切片，整层回归。
 2. **排序要有 Camel 函数体**（选 4，与归约同形）：`func sort::<T>(xs: T[]): T[] when is_ordered::<T>() { … }`——`is_ordered` 已在 `stdlib/types.cml`，满足它的类型都有 `<`，所以"任意元素类型的排序语义"就是函数体本身。i32/int/f32/float 是 `#impl` 内核；bf16/f16、`bool`、`string` 先走函数体（它们的 `<` 已经存在：浮点按 IEEE 的全序或既有规则、`string` 按字节，与 `min`/`max` 一致），需要快时再加内核。没有 `<` 的类型（`c64` 等）在编译期 `when` 不满足。今天"按名字的编译期拒绝"是过渡。
 3. **in-place 形按元素类型改名**（选 1）：那些名字只由编译器生成，程序写不出来；`docs/design/graph-store/plan-roundtrip.cn.md` 里的旧名一并改。
+
+## 复核：泛型规则族落地（69 → 43 条）
+
+规则在匹配处按值的类型实例化、整数族与浮点族各合为一条泛型律、四个随之暴露的缺陷一并修好——好。一处写法要统一：
+
+- **`when` 的位置**：规则库写成 `rule int_add_zero::<T>(x: T) { x + 0 => x } when is_integer::<T>()`（条件在体之后），而函数写在头部、体之前（`func f::<T>(x: T[]): T when is_numeric::<T>() { … }`），规则语言第二版的例子也是体之前。设计原则 4.4："`when` 是规则、函数重载与 `match` 守卫唯一的适用条件"——同一个东西放在同一个位置（规则统一）：**`rule name::<T>(params) when cond { lhs => rhs }`**。解析器只接受这一种位置，旧位置不保留（不计兼容），`camel-format` 与规则库一次机械改写。
