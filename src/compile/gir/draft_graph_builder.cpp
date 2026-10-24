@@ -84,6 +84,13 @@ void DraftGraphBuilder::setClosureType(camel::core::type::TupleType *closureType
 slot_t DraftGraphBuilder::makeStaticSlot(
     const camel::core::data::data_ptr_t &data, camel::core::mm::IAllocator &allocator) {
     ASSERT(data != nullptr, "Static data cannot be null.");
+    // A `null` of a nullable type: the constant carries the `T?` it is the null of, and its slot
+    // is the null slot of that type whatever the type is. It is not read as a value of the type --
+    // `T?` is traced, and there is no traced object behind a null -- so the paths below are not
+    // taken for it (camel/core/data/base.h, `isNull`).
+    if (data->isNull()) {
+        return NullSlot;
+    }
     if (data->type()->isGCTraced()) {
         Object *obj = makeGCRefFromGCTracedData(data, allocator);
         return toSlot<Object *>(obj);

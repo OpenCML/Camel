@@ -1020,7 +1020,9 @@ class Builder {
             constantNodes_[node] = data;
         }
     }
-    /// The constant a static data node (or a COPY of one) was made from, or null.
+    /// The constant a static data node (or a COPY of one) was made from, or null. A CAST that
+    /// only retypes a constant -- `null` into a `T?` -- is the constant of the type it retypes it
+    /// to, and carries it too.
     data_ptr_t constantOfNode(node_handle_t node) const;
     std::optional<std::string> staticValueNamed(const std::string &name) const {
         for (auto scope = staticValueScopes_.rbegin(); scope != staticValueScopes_.rend();

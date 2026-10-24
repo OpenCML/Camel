@@ -131,7 +131,9 @@ data_ptr_t dataOfStaticValue(Type *type, slot_t value) {
 
 } // namespace
 
-/// The constant a static data node (or a COPY of one) was made from, or null.
+/// The constant a static data node (or a COPY of one) was made from, or null. A CAST that only
+/// retypes a constant -- `null` into a `T?` -- is the constant of the type it retypes it to, and
+/// carries it too.
 data_ptr_t Builder::constantOfNode(node_handle_t node) const {
     if (node == nullptr) {
         return nullptr;
