@@ -243,3 +243,18 @@ expect_exit = 0
 expect_stdout = "[0, 0, 128, 63, 0, 0, 32, 192, 0, 0, 0, 0, 0, 0, 0, 128]\n[1, 0, 0, 0, 0, 0, 32, 0, 254, 255, 255, 255, 255, 255, 255, 255]\n[1, 0, 1]\n0\n[0, 0, 128, 63, 0, 0, 32, 192, 0, 0, 0, 0, 0, 0, 0, 128]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# The f32 arm of the broadcast gradient, pinned bit for bit: the f64 arm of `sum_to` is new, and
+# the f32 one has to keep the additions at f32's width and the same bytes.
+[[tests]]
+name = "f32_broadcast_grad"
+desc = "The f32 reading of the broadcast gradient (sum(x * p0) with p0 broadcast over rows, gradient reduction tensor:sum_to) with values f32 cannot hold exactly: d/dx is the row broadcast of p0 = [[0.1, 0.3, 0.7], [0.1, 0.3, 0.7]] and d/dp0 the column sums [1.1, 0.8, 1.0]. The f64 arm added to sum_to leaves these bytes exactly as they were, so an arm that routed f32 through an f64 accumulator or narrowed f64 into an f32 result fails here."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/f32_broadcast_grad.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "gx tensor([[    0.1,     0.3,     0.7],\n        [    0.1,     0.3,     0.7]], dtype=float32)\ngp tensor([    1.1,     0.8,       1.], dtype=float32)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

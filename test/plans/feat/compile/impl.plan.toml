@@ -621,6 +621,42 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "direct=42 value=42\n"
 
+# ---- Two arms of one kernel name, told apart by their conditions ----
+
+[[tests]]
+name = "impl.when_arms_disjoint"
+desc = "Two declarations of one kernel name whose `when` conditions exclude each other are overloads, one family of element types each (design principles 4.4; the language author's ruling of 2026-10-24 on `impl-declaration-arms`, `docs/handover/reviews/questions-2026-10-23.md`): `arms_kernel` is declared twice with the same generic signature, `when is_arm_i32::<T>()` and `when is_arm_int::<T>()`, and `combine` tags it with `#impl`. Each instance takes the rule whose condition holds for its element type -- `i32` runs `:op/sub_i` and prints -4, `int` runs `:op/add_l` and prints 42 -- and `float` satisfies neither, so that instance has no executor and runs the body `a * b`, whose 437 no rule of the declaration can produce. Each number can only come from its own path, so the three lines say which executor each instance chose; a compiler that refused the pair as `SemanticDiag::NativeDeclarationOverlap` compiles nothing, and one that bound a kernel by name alone could not tell the two arms apart."
+kind = "behavior"
+case = "../../../cases/compile/native/when_arms_disjoint.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "arm_i32=-4\narm_int=42\nbody=437\n"
+timeout_ms = 60000
+
+[[tests]]
+name = "impl.when_arms_disjoint.paths"
+desc = "The same run under `std::profile`: each arm is the executor of its own element type and of no other. `:op/sub_i` once is the `i32` instance's rule and `:op/add_l` once is the `int` instance's; the `float` instance runs neither, and its body's product is the third line. A compiler that took one rule for both families counts one of the two arms twice, and one that gave the instance an executor outside its condition counts an arm for `float` as well."
+kind = "behavior"
+case = "../../../cases/compile/native/when_arms_disjoint.cml"
+args = ["${case}", 'std::profile top=0 json="${test_tmp}/profile.json"', "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const out = input.normalized.stdout
+    const lines = out.split('\n')
+    assert(lines[0] === 'arm_i32=-4' && lines[1] === 'arm_int=42' && lines[2] === 'body=437', `the values changed:\n${out}`)
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
+    const shown = JSON.stringify(calls)
+    assert(calls[':op/sub_i'] === 1, `the i32 instance ran its arm ${calls[':op/sub_i']} times, not once: ${shown}`)
+    assert(calls[':op/add_l'] === 1, `the int instance ran its arm ${calls[':op/add_l']} times, not once: ${shown}`)
+}
+"""
+timeout_ms = 60000
+
 # ---- The declaration site a standard library kernel needs ----
 
 [[tests]]

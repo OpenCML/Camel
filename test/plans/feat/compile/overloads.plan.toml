@@ -173,6 +173,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "when_disjoint_same_signature"
+desc = "Two ordinary functions of one name with the same parameters are told apart by their `when` conditions, as two declarations of a kernel are (design principles 4.4; the language author's ruling of 2026-10-24 on `impl-declaration-arms`: the check applies to every same-named overload that writes `when`, an ordinary function with a body included). Both `label` declarations write `(x: int): string`; `is_int::<int>()` holds and `is_text::<int>()` does not, so the call is the first declaration and prints its body's value where the second declaration of the same signature was a `SemanticDiag::Redeclaration`."
+kind = "behavior"
+case = "../../../cases/compile/overloads/when_ordinary_disjoint.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "integer\n"
+expect_output_not_contains = ["Redeclaration", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "no_match"
 desc = "A call none of the overloads takes is rejected at the call, with the overloads listed"
 kind = "negative"

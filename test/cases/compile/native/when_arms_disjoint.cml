@@ -1,0 +1,62 @@
+/**
+ * Two declarations of one kernel name whose `when` conditions exclude each other (design
+ * principles 4.4; the language author's ruling of 2026-10-24 on `impl-declaration-arms`,
+ * `docs/handover/reviews/questions-2026-10-23.md`): "同名声明按 `when` 互斥分臂就是重载" -- two
+ * same-named declarations split by mutually exclusive conditions are overloads, each the executor
+ * of its own family of instances (H228: one operator, per-type executors).
+ *
+ * `arms_kernel` is declared twice, with the same generic signature and different element types:
+ * `is_arm_i32` covers `i32` and `is_arm_int` covers `int`. Both rules are of the one kernel the
+ * function `combine` tags with `#impl`, and each instance picks the rule whose condition holds
+ * for its element type (adoptImplKernel). `float` satisfies neither condition, so that instance
+ * has no executor and runs the body, which is the semantics (10.4).
+ *
+ * Each of the three values can only come from one of the three code paths: the kernels subtract
+ * (`19 - 23 = -4`) and add (`19 + 23 = 42`), and the body multiplies (`19 * 23 = 437`), so the
+ * numbers say which executor each instance chose -- the `float` line is the body's answer alone.
+ * A compiler that refused the pair would print nothing; one that bound the kernel by name alone
+ * could not tell the two arms apart and would print one arm's answer twice.
+ */
+module when_arms_disjoint
+
+/// The element types of the first arm: `i32` alone.
+func is_arm_i32::<T>(): bool {
+    return match type T {
+        case i32 => true
+        case _ => false
+    }
+}
+
+/// The element types of the second arm: `int` alone. Disjoint from the first, so the two
+/// declarations of `arms_kernel` cover one family of element types each and may stand side by
+/// side where a second declaration of the same signature used to be
+/// `SemanticDiag::NativeDeclarationOverlap`.
+func is_arm_int::<T>(): bool {
+    return match type T {
+        case int => true
+        case _ => false
+    }
+}
+
+#op<':op/sub_i'>
+func arms_kernel::<T>(a: T, b: T): T when is_arm_i32::<T>()
+
+#op<':op/add_l'>
+func arms_kernel::<T>(a: T, b: T): T when is_arm_int::<T>()
+
+#impl<arms_kernel>
+func combine::<T>(a: T, b: T): T {
+    return a * b
+}
+
+func main(): int sync {
+    let x: i32 = 19
+    let y: i32 = 23
+    // `i32`: the first arm's executor.
+    'arm_i32={}'->format<combine(x, y)>->println
+    // `int`: the second arm's executor.
+    'arm_int={}'->format<combine(19, 23)>->println
+    // `float`: neither condition holds, so this instance has no executor and runs the body.
+    'body={}'->format<int(combine(19.0, 23.0))>->println
+    return 0
+}

@@ -457,6 +457,37 @@ expect_diagnostic_code = "0x03000180"
 expect_output_contains = ["overlap.cml:14", "Two declarations of 'pick'", "(xs: T[], i: int) => T", "(xs: U[], i: int) => U"]
 
 
+# ---- Two same-named declarations whose conditions exclude each other are overloads ----
+#
+# The language author's ruling of 2026-10-24 on `impl-declaration-arms`
+# (`docs/handover/reviews/questions-2026-10-23.md`): declarations split by mutually exclusive
+# `when` conditions are overloads and may stand side by side, and the check is the same for every
+# same-named overload that writes `when`, not a special case of `#impl`. A type that satisfies both
+# conditions is reported with the two declarations.
+
+[[tests]]
+name = "native.when_declaration_overlap"
+desc = "Two declarations of one kernel name whose conditions are not mutually exclusive are refused where the second one is written, and the report names the type that satisfies both. `is_small_int` covers `i32` and `is_number` covers `int`, `i32`, `float` and `f32`, so the pair is separable for `int` (only the second condition holds there) and not for `i32`. The type in the message is the one both conditions hold for, not the first type the compiler asks about, which is what a check that asked about one type only would report."
+kind = "negative"
+case = "../../../cases/compile/native/when_arms_overlap.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
+expect_diagnostic_code = "0x030001E0"
+expect_output_contains = ["when_arms_overlap.cml:33", "Two declarations of 'arms_kernel' both apply to the type 'i32'", "(a: T, b: T) => T — when is_small_int::<T>()", "(a: T, b: T) => T — when is_number::<T>()"]
+
+[[tests]]
+name = "native.when_declaration_overlap.shape"
+desc = "The types the check asks about are every type the compiler registers, the shapes of a composite value included: `always` holds for every type and `is_callable` only for a function type, so the two conditions hold together for exactly one type -- the function shape -- and none of `int`, `i32`, `float`, `bool`, `string`, `void`, an array or a tuple is an overlap. A check that asked about the scalar types alone finds no overlap here and lets the pair through. The shape predicate is not spelled `is_function::<T>()` on purpose: a body-less declaration with that condition is a pass declaration, not an operator rule (`Builder::isPassDeclaration`), and the two declarations would not be a pair of rules."
+kind = "negative"
+case = "../../../cases/compile/native/when_shape_overlap.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
+expect_diagnostic_code = "0x030001E0"
+expect_output_contains = ["when_shape_overlap.cml:33", "Two declarations of 'arms_kernel' both apply to the type '(x: int) => int'", "(a: T, b: T) => T — when always::<T>()", "(a: T, b: T) => T — when is_callable::<T>()"]
+
+
 # ---- A declaration cannot be parametric ----
 
 # `from_bytes::<T>` and a per-leaf `ckpt_get::<L>` ask for one name whose result type the call

@@ -22,7 +22,12 @@
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/typevar.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
@@ -733,6 +738,143 @@ inline std::vector<std::string> formatPlaceholders(std::string_view pattern) {
         i = close;
     }
     return out;
+}
+
+// ---- Whether two same-named declarations of one signature are told apart by their conditions ----
+
+/// How the applicability conditions of two same-named declarations relate (design principles
+/// 4.4; the language author's ruling of 2026-10-24 on `impl-declaration-arms`,
+/// `docs/handover/reviews/questions-2026-10-23.md`): "同名声明按 `when` 互斥分臂就是重载"
+/// -- declarations split by mutually exclusive conditions ARE overloads, so a same-named set of
+/// them may stand side by side, one family of types each.
+enum class ConditionSeparation {
+    /// No type the compiler registers satisfies both: the two declarations cover families that
+    /// exclude each other, and a call of either is decided by its argument types.
+    Disjoint,
+    /// A registered type satisfies both (`overlappingType` names it): a call with arguments of
+    /// that type would be decided by the order the declarations are written in, which no rule of
+    /// the language allows (design principles 4.3, 5.1).
+    Overlapping,
+    /// A condition could not be answered for a registered type, or one of the two declarations
+    /// writes no condition at all: nothing is known about the pair, and it is refused exactly as
+    /// it was before this check (the ruling: "求不出 ... 按今天的规则拒绝").
+    NotComputable,
+};
+
+/// The types a condition is asked about: the types the compiler registers as identities -- the
+/// primitive types `stdlib/types.cml` names (`int`, `i32`, `float`, `f32`, `bf16`, `f16`, `c64`,
+/// `c128`, `bool`, `string`, `void`) -- and one sample of each shape a composite value has, so
+/// that a condition that tells shapes apart (`is_function::<T>()`) is asked about those too. A
+/// type a program declares (a struct, an enum, a module's own type) is not among them: the
+/// ruling's check is per registered type, and a pair whose conditions overlap only on such a type
+/// is not caught here.
+///
+/// `int` comes first: a pair whose conditions do not depend on the type at all (two ordinary
+/// functions of one signature) satisfies every type, and the diagnostic then names the type the
+/// signatures themselves are about.
+inline const std::vector<Type *> &registeredWhenTypes() {
+    static const std::vector<Type *> types = [] {
+        std::vector<Type *> list{
+            Type::Int(),        Type::Int32(),     Type::Float(),     Type::Float32(),
+            Type::BFloat16(),   Type::Float16(),   Type::Complex64(), Type::Complex128(),
+            Type::Bool(),       Type::String(),    Type::Void()};
+        // One of each composite shape: an array, a tuple, a function, and an empty struct.
+        list.push_back(ArrayType::create(Type::Int()));
+        list.push_back(TupleType::create({Type::Int(), Type::Int()}));
+        camel::core::type::FunctionTypeFactory factory;
+        factory.addNormArg("x", Type::Int(), false);
+        factory.setExitType(Type::Int());
+        list.push_back(factory.build());
+        list.push_back(StructType::create());
+        return list;
+    }();
+    return types;
+}
+
+/// The names of the type variables a condition writes, in the order it writes them: a condition
+/// is asked about one type by binding each of them to it (`is_integer::<T>()` asks about `T`,
+/// which the declaration's own signature is written over).
+inline void collectConditionTypeVars(
+    const GCT::node_ptr_t &condition, std::vector<std::string> &names) {
+    if (condition == nullptr) {
+        return;
+    }
+    if (condition->type() == GCT::NodeKind::TYPE) {
+        std::vector<std::string> written;
+        camel::core::type::collectTypeVars(condition->dataType(), written);
+        for (const std::string &name : written) {
+            if (std::find(names.begin(), names.end(), name) == names.end()) {
+                names.push_back(name);
+            }
+        }
+    }
+    for (size_t i = 0; i < condition->size(); ++i) {
+        collectConditionTypeVars(condition->at(i), names);
+    }
+}
+
+/// Answers one declaration's condition with one type bound to every type variable it writes. It
+/// is built where the declaration is written, so that the condition's predicate is looked up
+/// there (Builder::evaluateWhenCondition); a condition the asker cannot answer throws, and the
+/// pair is then refused as it was before this check.
+using WhenConditionAsker =
+    std::function<WhenResult(const camel::core::type::type_bindings_t &bindings)>;
+
+/// Whether the conditions `left` and `right` exclude each other over `registeredWhenTypes()`
+/// (design principles 4.4, 5.1; the ruling of 2026-10-24 quoted above). `overlappingType` is set
+/// to the type that satisfies both when the answer is `Overlapping`.
+///
+/// The conditions are asked about every registered type, with the type bound to the type
+/// variables each one writes: a type both conditions hold for is the overlap the ruling reports.
+/// An answer that is neither true nor false (`a predicate with a part that has no compile-time
+/// value`, a name the declaration does not make visible, ...) is not an answer, so the pair is
+/// refused by the caller as it was before.
+inline ConditionSeparation separateWhenConditions(
+    const GCT::node_ptr_t &left, const GCT::node_ptr_t &right, const WhenConditionAsker &askLeft,
+    const WhenConditionAsker &askRight, std::string &overlappingType) {
+    if (left == nullptr || right == nullptr) {
+        return ConditionSeparation::NotComputable; // one of them writes no condition
+    }
+    std::vector<std::string> leftVars;
+    std::vector<std::string> rightVars;
+    collectConditionTypeVars(left, leftVars);
+    collectConditionTypeVars(right, rightVars);
+    bool unanswerable = false;
+    for (Type *type : registeredWhenTypes()) {
+        if (type == nullptr) {
+            continue;
+        }
+        camel::core::type::type_bindings_t leftBindings;
+        camel::core::type::type_bindings_t rightBindings;
+        for (const std::string &name : leftVars) {
+            leftBindings.emplace_back(name, type);
+        }
+        for (const std::string &name : rightVars) {
+            rightBindings.emplace_back(name, type);
+        }
+        WhenResult leftVerdict;
+        WhenResult rightVerdict;
+        try {
+            leftVerdict  = askLeft(leftBindings);
+            rightVerdict = askRight(rightBindings);
+        } catch (...) {
+            // The condition has no answer for this type: it is not an overlap, and not evidence
+            // that the pair is separable either.
+            unanswerable = true;
+            continue;
+        }
+        if (leftVerdict.holds() && rightVerdict.holds()) {
+            overlappingType = type->toString();
+            return ConditionSeparation::Overlapping;
+        }
+        if (!leftVerdict.holds() && !leftVerdict.fails()) {
+            unanswerable = true;
+        }
+        if (!rightVerdict.holds() && !rightVerdict.fails()) {
+            unanswerable = true;
+        }
+    }
+    return unanswerable ? ConditionSeparation::NotComputable : ConditionSeparation::Disjoint;
 }
 
 } // namespace camel::compile::gir

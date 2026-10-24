@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-256 diagnostics: 237 errors, 19 warnings.
+257 diagnostics: 238 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -223,6 +223,7 @@ prints one entry.
 | `0x030001DC` | [SemanticDiag::ImplKernelNotBodyless](#implkernelnotbodyless) | Error |
 | `0x030001DE` | [SemanticDiag::NodeOfNotAParameter](#nodeofnotaparameter) | Error |
 | `0x030001DF` | [SemanticDiag::OverloadParameterNames](#overloadparameternames) | Error |
+| `0x030001E0` | [SemanticDiag::WhenDeclarationOverlap](#whendeclarationoverlap) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -6467,6 +6468,60 @@ func f(a: int, c: string): int {
 
 func main(): int sync {
     return f(a: 1, b: 2)
+}
+```
+
+### WhenDeclarationOverlap
+
+`0x030001E0` · Error · `SemanticDiag::WhenDeclarationOverlap`
+
+**Message**
+
+```text
+Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'.
+```
+
+**Help**
+
+```text
+A 'when' condition is what makes two declarations of one signature different overloads (design principles 4.4): each must cover the types the other does not. Narrow the conditions so that no type satisfies both, or give the declarations parameter types that cannot both accept one call.
+```
+
+**Example** (`test/cases/compile/native/when_arms_overlap.cml`, run as `camel test/cases/compile/native/when_arms_overlap.cml`)
+
+```camel
+module when_arms_overlap
+
+func is_small_int::<T>(): bool {
+    return match type T {
+        case i32 => true
+        case _ => false
+    }
+}
+
+func is_number::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 => true
+        case _ => false
+    }
+}
+
+#op<':op/add_i'>
+func arms_kernel::<T>(a: T, b: T): T when is_small_int::<T>()
+
+#op<':op/sub_i'>
+func arms_kernel::<T>(a: T, b: T): T when is_number::<T>()
+
+#impl<arms_kernel>
+func combine::<T>(a: T, b: T): T {
+    return a * b
+}
+
+func main(): int sync {
+    let x: i32 = 19
+    let y: i32 = 23
+    println(combine(x, y))
+    return 0
 }
 ```
 

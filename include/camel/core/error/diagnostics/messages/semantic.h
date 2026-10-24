@@ -277,6 +277,13 @@ enum class SemanticDiag : uint32_t {
     // Handover H94 (the author's rulings on body-less declarations): 0x17E and up.
     /// Two generic declarations of one name can take the same call (ruling 2).
     NativeDeclarationOverlap = 0x000180,
+    // The language author's ruling of 2026-10-24 on same-named `#impl` declarations split by their
+    // conditions (`docs/handover/reviews/questions-2026-10-23.md`, "impl-declaration-arms"): two
+    // same-named declarations whose `when` conditions are mutually exclusive are overloads and may
+    // stand side by side; a type that satisfies both is this overlap. The conditions are asked about
+    // every type the compiler registers, and a condition it cannot answer leaves the pair refused by
+    // the older code above.
+    WhenDeclarationOverlap = 0x0001E0,
     /// A declaration names an operator of another module (ruling 5).
     NativeDeclarationForeignOperator = 0x000181,
 
