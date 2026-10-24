@@ -3262,7 +3262,14 @@ Value Evaluator::applyOper(
     if (def && def->infer) {
         try {
             if (auto inferred = def->infer(inferContext)) {
-                if (tensor::isTensorType(*inferred)) {
+                // An operator's answer is a tensor, and its rank 0 is the element type itself
+                // (the rank-zero ruling): `sum` and a vector-by-vector `matmul` answer the
+                // element, not an array, and the facts of that answer are the rank-0 tensor a
+                // scalar argument carries. Asking only for a numeric array here lost them —
+                // the value became one with no dtype and no shape, and every lowering that
+                // reads a rank of it (the gradient lowerings) refused.
+                if (tensor::isTensorType(*inferred) ||
+                    tensor::isSupportedTensorScalar((*inferred)->code())) {
                     facts = tensor::tensorFactsOf(*inferred);
                 }
             }

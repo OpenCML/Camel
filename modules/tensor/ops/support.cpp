@@ -274,6 +274,24 @@ bool anyTensor(const InferContext &ctx, size_t count) {
             return true;
         }
     }
+    if (ctx.sourceLevel()) {
+        return false;
+    }
+    // A rank-0 tensor's static type is the element type itself (the rank-zero ruling,
+    // docs/handover/reviews/questions-2026-10-23.md), so a type alone cannot tell one from a
+    // scalar -- and `tensorArg` boxes exactly that scalar slot, a kernel reading the tensor as an
+    // array of no dimension. Reading a graph the compiler already built (a pass, the export, a
+    // draft re-inference) the node itself answers the question the type cannot: it is a `tensor:`
+    // operator, so its numeric scalar operands are the rank-0 tensors its kernel takes, and
+    // answering "no tensor" here is what left such a node with no dtype and no shape. At source
+    // level the same call is not a tensor operation at all, and the scalar operator is the
+    // program's own choice; the question stays where it belongs.
+    for (size_t i = 0; i < count && i < ctx.size(); ++i) {
+        Type *type = ctx.type(i);
+        if (type != nullptr && isSupportedTensorScalar(type->code())) {
+            return true;
+        }
+    }
     return false;
 }
 
