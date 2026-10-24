@@ -315,3 +315,13 @@ println(grow([1.0, 2.0], read_int()))
 2. **元组那一轮的 `x` 是元素的值**，不是类型——我写"每轮 `x` 是该位置的类型"有歧义，本意是"`x` 的类型随位置变"。`ts` 是值的元组（含剩余参数 `..ts`），`for x in ts` 每轮绑定 `ts.[i]` 这个值，其类型是第 i 个位置的类型；这正是它与普通 `loop` 的区别（普通循环每轮同一个类型）。按类型展开走 `fields T`（给出名字与类型）。所以 `probe_tuple.cml` 的 `acc + x` 应当是**正例**，当前实现把 `x` 当类型是错的，改过来；要在类型位置用它就写 `typeof x` 或从 `fields` 取。
 3. **折叠的边界**：实参走同一个读法、整数枚举走同一段 `walkIntegers`，没有第二个求值器——接受，不放开共享折叠的结果种类闸门。
 4. 三个名字：序列的元素是三元组时（`fields T` 带标签）允许 `for n, F, tags in fields T`，与 `static for` 同一规则；名字个数由序列元素决定，多了少了都报错。今天的语法错误改掉。
+
+## fields-third-name-tags-binding
+
+1. **`tags` 绑定标签的值，组成一个编译期结构体**：字段名是标签名，字段值是该标签的实参记录。`type Box = { #width<8> low: int, high: int }` 里，`low` 那一轮的 `tags` 是 `{ width: { w: 8 } }`，`high` 那一轮是 `{}`。于是
+   - 读值：`tags.width.w`（编译期常量）；
+   - 查有没有：`match type typeof(tags)` 或 `static for k, _ in fields typeof(tags)`——用已有的结构体与 `fields`，不另造标签反射的 API；
+   - 每一轮 `tags` 的类型不同，这在展开里本来就成立（与元组那一轮的 `x` 同理）。
+   只给名字的 `string[]` 丢掉了值（`#width<8>` 的 8），不够用；改 `staticFieldTagsNode` 一处即可。无参数的标签（`#leaf`）的值是空记录 `{}`。
+2. **名字可以只写前缀**：`fields T` 的元素是 (名字, 类型, 标签)，头部可以写 1、2 或 3 个名字，按位置取前缀；多写才报 `StaticHeadNameCount`。我上一条"少了也报错"收回——前缀写法与现有语料一致，也不产生歧义。
+3. `H51-plan.md` Q5 已标注被本条取代。
