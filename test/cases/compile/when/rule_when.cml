@@ -7,7 +7,7 @@ module when_rule
 
 import { rule_name } from rewrite
 
-rule guarded(x: int) { x + 0 => x } when true
+rule guarded(x: int) when true { x + 0 => x }
 
 func main(): int sync {
     println(rule_name(guarded))

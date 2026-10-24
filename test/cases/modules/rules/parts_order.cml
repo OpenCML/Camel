@@ -48,11 +48,10 @@ func positive(c: float): bool {
 /// The coefficient is `const`, so its node is reached with `node_of`; the pattern writes the factor
 /// first, and for `swapped` (`1 * a`) the exchange is the pairing that binds the constant to `c`,
 /// so the parts reach the condition in the other order from the one the product holds them in.
-rule drop_by_one(x: int, const c: int) { x * c => x }
-    when mul_by_one(x, node_of(c))
+rule drop_by_one(x: int, const c: int) when mul_by_one(x, node_of(c)) { x * c => x }
 
 /// A guard on the value, which the value channel answers without any node.
-rule drop_positive(x: float, const c: float) { x * c => x } when positive(c)
+rule drop_positive(x: float, const c: float) when positive(c) { x * c => x }
 
 export func apply(p: Program): Program! {
     return rewrite(p, [drop_by_one, drop_positive])

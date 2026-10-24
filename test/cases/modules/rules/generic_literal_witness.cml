@@ -18,7 +18,7 @@ import { is_integer } from types
 /// The wide addend cancels, where the type holds it: `x + C - C` is `x` for every integer type
 /// whose values can hold `C`. The law is asked of both integer widths and can only be written for
 /// the wide one, which is what the case is about.
-rule cancel_wide_addend::<T>(x: T) { x + 3000000000 - 3000000000 => x } when is_integer::<T>()
+rule cancel_wide_addend::<T>(x: T) when is_integer::<T>() { x + 3000000000 - 3000000000 => x }
 
 /// The nodes of one function of the program, by the name of its graph.
 func nodesOf(p: Program, function: string): Node[] {

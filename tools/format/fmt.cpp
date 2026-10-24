@@ -634,8 +634,7 @@ any Formatter::visitWhenClause(cst::WhenClause context) {
 }
 
 /*
-ruleDecl : EXPORT? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}'
-           (IDENTIFIER dataExpr)? ;
+ruleDecl : EXPORT? IDENTIFIER identDef ruleContext? parentParams whenClause? '{' ruleBody '}' ;
 */
 any Formatter::visitRuleDecl(cst::RuleDecl context) {
     string result;
@@ -656,10 +655,12 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
         result += any_cast<string>(visitRuleContext(ruleContext));
     }
     result += any_cast<string>(visitParentParams(context->get<cst::ParentParams>()));
-    result += " { " + any_cast<string>(visitRuleBody(context->get<cst::RuleBody>())) + " }";
-    if (const auto condition = context->expr()) {
-        result += " when " + any_cast<string>(visitExpr(condition));
+    // The rule's condition is part of its signature, so it is written between the parameters and
+    // the body, as a function writes it (design principles 4.4; the ruling of 2026-10-24).
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        result += " " + any_cast<string>(visitWhenClause(whenClause));
     }
+    result += " { " + any_cast<string>(visitRuleBody(context->get<cst::RuleBody>())) + " }";
     return result;
 }
 

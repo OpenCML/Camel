@@ -15,11 +15,12 @@ a0f86c1b77e9580e ok test/cases/parse/constructs/type_arguments.cml
 dc0c2c36c6fe5c9d no test/cases/parse/numbers/leading_zero.cml
 a58a7cd293a77647 no test/cases/parse/numbers/member_index_exponent.cml
 7d7964a39be8391b ok test/cases/parse/numbers/tokens.cml
-c940d1b8974b7fdc no test/cases/parse/rules/declared.cml
+af9cae3548b41112 no test/cases/parse/rules/declared.cml
 3ef401328cb2f22a ok test/cases/parse/rules/generic_head.cml
 ae1fab0de676960a ok test/cases/parse/rules/names.cml
 714c780c7d9e2c1b no test/cases/parse/rules/no_arrow.cml
-a4714d28f417c4ea ok test/cases/parse/rules/values.cml
+011999f58a202f78 ok test/cases/parse/rules/values.cml
+66f6eb75ddfae90d no test/cases/parse/rules/when_after_body.cml
 c005562ecb6383e6 ok test/cases/parse/rulings/doc_comment.cml
 668696be7a97daf5 ok test/cases/parse/rulings/eager_logic.cml
 0da538f5e8f17348 ok test/cases/parse/rulings/exponent.cml

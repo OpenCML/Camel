@@ -49,12 +49,11 @@ func opText(n: Node): string {
     }
 }
 
-rule drop_positive(x: float, const c: float) { x * c => x } when positive(c)
+rule drop_positive(x: float, const c: float) when positive(c) { x * c => x }
 
 /// An `int` coefficient is a constant node of the `int` multiplier: `type_of` of it says `int`,
 /// and no float rule has such a node.
-rule drop_int_coefficient(x: int, const c: int) { x * c => x }
-    when typeText(node_of(c)) == 'int' && is_constant(node_of(c))
+rule drop_int_coefficient(x: int, const c: int) when typeText(node_of(c)) == 'int' && is_constant(node_of(c)) { x * c => x }
 
 export func apply(p: Program): Program! {
     return rewrite(p, [drop_positive, drop_int_coefficient])
