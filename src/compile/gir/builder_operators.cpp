@@ -1971,6 +1971,16 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             normInputTypes,
             gct,
             expectedResult);
+        if (targetGraph == nullptr) {
+            // The instance does not compile for the types these arguments have, and a scope is
+            // open that holds the attempt back (`SpeculativeInstantiation`): the call has no
+            // function then, which is what a caller above the scope is deciding. The instance
+            // that is tried *inside* the attempt makes this reachable -- a rule's `when` whose
+            // predicate is generic over a type the program also uses -- so the failure has to be
+            // an attempt that failed, not a null instance walked into (the ruling of 2026-10-23
+            // on `generic-rule-instantiation-set-and-predicate`, §3).
+            throw BuildAbortException();
+        }
         if (!targetGraph->funcType()->hasExitType()) {
             diags_->of(SemanticDiag::CallingIncompleteFunction)
                 .atOrigin(gct->origin())
