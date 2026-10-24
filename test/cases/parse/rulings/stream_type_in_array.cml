@@ -1,0 +1,14 @@
+/**
+ * `T..[3]` reads left to right: the mark is a type of its own and the dimension applies to it,
+ * so the tree is an array type over a stream type, `(int..)[3]` - never `int..` of something
+ * else. The array is refused after the parse (a stream is consumed once and cannot be an
+ * element: SemanticDiag::StreamInContainer,
+ * test/cases/compile/stream/type_in_container.cml); this file is the parse corpus's probe that
+ * the spelling is read that way at all, and its tree is locked by feat/parse/frontend.
+ */
+module stream_type_in_array
+
+func main(): int sync {
+    let s: int..[3] = [1, 2, 3]
+    return 0
+}

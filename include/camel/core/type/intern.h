@@ -78,6 +78,7 @@ class TypeTable {
     enum class Shape : uint32_t {
         Tuple,    // TupleType::create (layouts included); not cells or tagged forms
         Array,    // ArrayType::create
+        Stream,   // StreamType::create
         Struct,   // StructType
         Function, // FunctionType::create, FunctionTypeFactory::build
     };

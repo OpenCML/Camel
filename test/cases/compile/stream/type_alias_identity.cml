@@ -1,0 +1,24 @@
+/**
+ * The identity of a stream type, seen where it has a consequence: `type Ints = int..` and the
+ * suffix `int..` are two spellings of one type, so two declarations that differ only in which
+ * spelling they use declare the same signature, and the second is refused as a redeclaration
+ * (SemanticDiag::Redeclaration). It is the type that is the same, not the name that is
+ * repeated: `pick(x: int[]): int` beside `pick(x: Ints): int` is an ordinary overload set
+ * (test/cases/compile/stream/type_alias.cml), and so is `pick(x: int): int`.
+ */
+module stream_type_alias_identity
+
+type Ints = int..
+
+func pick(x: int..): int {
+    return 0
+}
+
+func pick(x: Ints): int {
+    return 1
+}
+
+func main(): int sync {
+    println(0)
+    return 0
+}

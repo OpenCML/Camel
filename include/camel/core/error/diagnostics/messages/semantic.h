@@ -366,6 +366,12 @@ enum class SemanticDiag : uint32_t {
     // it takes the name of one of the rule's own `const` parameters, and it is written in the
     // condition. Nothing else reaches a node there.
     NodeOfNotAParameter = 0x0001DE,
+    // A stream is linear (design principles 5.4): it is read one element at a time and is finished
+    // when it ends, so a container whose elements can be read more than once cannot hold one. The
+    // author's ruling of 2026-10-24 (h248-stream-type-surface) names arrays, maps and sets; a tuple
+    // is not a container in that sense - its items are taken apart once - and a function signature
+    // may take and give a stream.
+    StreamInContainer = 0x0001E3,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

@@ -82,6 +82,7 @@ struct SyntaxError {
         ComparisonNeedsSpace,  // `i<n`: the `<` (aux) opened an argument list that fails here
         AngleCloseAfterSpace,  // `f<a >`: the `>` (token) is separated from the last argument
         LineStartsWithSign,    // a line starting with `+` that cannot start a statement
+        AsRightSideIsType,     // `x as int..5`: the interval reading of `..` where a type stands
     };
     /// Members of `expected` that are not token kinds.
     enum Pseudo : uint8_t {

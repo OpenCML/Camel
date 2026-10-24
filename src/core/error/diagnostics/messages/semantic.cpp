@@ -1493,6 +1493,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StreamInContainer,
+            {
+                "StreamInContainer",
+                "'{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once.",
+                "A stream is read one element at a time and is done when it ends. Write the stream where it is consumed once: a parameter or the result of a function, an item of a tuple, or the subject of an operator that reads it to its end. What needs the elements of a container to be readable again takes an array filled from the stream.",
+            },
+        },
+        {
             SemanticDiag::VarParamInAsyncFunction,
             {
                 "VarParamInAsyncFunction",

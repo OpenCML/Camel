@@ -4564,16 +4564,20 @@ Value Builder::visitEnumType(cst::EnumType context) {
 
 /*
 typeExpr
-    : interType ('?' | '!')*
+    : interType ('?' | '!' | '..')*
     ;
 */
 Value Builder::visitTypeExpr(cst::TypeExpr context) {
     ENTER("TypeExpr");
     node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    // `T?` and `T!`, innermost mark first: `T?!` is a fallible nullable.
+    // The marks, in the order they were read, innermost first: `T?!` is a fallible nullable,
+    // `T?..` is the stream of a nullable `T`, and `T..?` is the possibly absent stream. `..` is
+    // the stream (design principles 5.4), `?`/`!` the nullable and fallible marks.
     for (size_t i = 1; i < context->childCount(); ++i) {
+        const std::string mark = context->child(i)->text();
         node_ptr_t markedTypeNode =
-            createNodeAs<NullableTypeLoad>(context->child(i)->text() == "!");
+            mark == ".." ? createNodeAs<StreamTypeLoad>()
+                         : createNodeAs<NullableTypeLoad>(mark == "!");
         setNodeTokenRangeByContext(markedTypeNode, context);
         *markedTypeNode << lhsNode;
         lhsNode = markedTypeNode;

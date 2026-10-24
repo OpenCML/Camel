@@ -133,6 +133,14 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             },
         },
         {
+            SyntaxDiag::AsRightSideIsType,
+            {
+                "AsRightSideIsType",
+                "The right side of '{0}' is a type; write the interval as '(a..b)'.",
+                "'T..' is the stream type (design principles 5.4): the elements of 'T' that arrive one after another. An interval is an expression, and it is written in parentheses: (1..5).",
+            },
+        },
+        {
             SyntaxDiag::ComparisonAcrossLines,
             {
                 "ComparisonAcrossLines",
