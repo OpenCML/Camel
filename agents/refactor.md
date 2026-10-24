@@ -40,6 +40,8 @@ returned for rework when it misses any of these, however well it tests:
 - **Camel code** follows `docs/stdlib-conventions.cn.md` section 6.5 and is formatter output.
 - **Documents cite files and symbols, never line numbers.** A line number moves with every edit; cite `src/compile/gir/builder.cpp` and the function, type or test name instead.
 
+- **Documentation moves with the code.** A commit that changes a module's behaviour or invariants updates that module's page under `docs/internals/` (or, until the reorganisation lands, its page under `docs/technical/`) and the affected `docs/reference/` (today `docs/language/`) sections in the same commit. Those pages say what is true now: responsibilities, core data structures, invariants, interfaces, where the code lives — no history, no task numbers, no line numbers.
+
 ## Architecture Reporting
 - During major refactors, identify the primary structural contradiction early.
 - If a deeper dependency blocks progress, surface that blocker directly instead of only cleaning peripheral symptoms.
