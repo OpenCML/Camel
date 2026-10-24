@@ -157,10 +157,11 @@ node test/tools/run-tests.mjs --update-golden test/plans/feat/parse/core.plan.to
 ```
 
 `--jobs N` sets the number of tests run at once (default: the processor count). `--tier
-fast|slow|all` selects a layer; the default is `fast` for a directory target and the whole tree.
-A plan **file** named as the target runs in full whatever `--tier` says. `--changed` selects the
-plans the working tree touches relative to `origin/develop` (override with `CAMEL_TEST_BASE`):
-directory rules in `test/plan-selection.json` first, file rules second.
+fast|slow|all` selects a layer, orthogonal to the target; the default is `fast` for a directory
+target and for the whole plan tree, which is the `all` target (`all`, `--all` or `test/plans`)
+and not `.`. A plan **file** named as the target runs in full whatever `--tier` says.
+`--changed` selects the plans the working tree touches relative to `origin/develop` (override
+with `CAMEL_TEST_BASE`): directory rules in `test/plan-selection.json` first, file rules second.
 
 ## Target Shorthand Examples
 
@@ -175,7 +176,10 @@ npm run test -- linear.collections_and_structs
 Dot targets resolve against `test/plans/`: `feat.trans.macro` maps to
 `test/plans/feat/trans/macro.plan.toml`, while `feat.trans` maps to the whole
 `test/plans/feat/trans/` directory. Feature-suite names may omit the `feat.`
-prefix when unambiguous, so `trans.macro` resolves to the same macro plan.
+prefix when unambiguous, so `trans.macro` resolves to the same macro plan. A
+bare `.` is the same rule with nothing left after the leading dots are stripped,
+and the empty name resolves to `feat`: `.` is `test/plans/feat`, feat only, never
+`smoke`. The whole plan tree is the `all` target (`all`, `--all` or `test/plans`).
 
 ## Performance Helper Scripts
 
