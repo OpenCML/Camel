@@ -17,6 +17,7 @@
 
 #include "camel/compile/gir/encode.h"
 #include "camel/core/context/context.h"
+#include "camel/core/operator_table.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
@@ -101,19 +102,40 @@ GenericRuleEntry *genericRuleEntry(camel::core::context::Context &context, uint6
 
 uint64_t registerGenericRule(
     camel::core::context::Context &context, void *owner, std::string name,
-    const std::shared_ptr<void> &lhs, const std::shared_ptr<void> &rhs,
-    const std::shared_ptr<void> &when) {
-    Table &table = rulesOf(context);
-    auto entry   = std::make_shared<GenericRuleEntry>();
-    entry->name  = std::move(name);
-    entry->owner = owner;
-    entry->lhs   = lhs;
-    entry->rhs   = rhs;
-    entry->when  = when;
+    std::vector<std::string> typeParams, const std::shared_ptr<void> &lhs,
+    const std::shared_ptr<void> &rhs, const std::shared_ptr<void> &when) {
+    Table &table           = rulesOf(context);
+    auto entry             = std::make_shared<GenericRuleEntry>();
+    entry->name            = std::move(name);
+    entry->typeParams      = std::move(typeParams);
+    entry->owner           = owner;
+    entry->lhs             = lhs;
+    entry->rhs             = rhs;
+    entry->when            = when;
     table.push_back(std::move(entry));
     // Ids start at 1: a rule value that keeps 0 is an ordinary rule, whose two sides are its own
     // functions, and every path that reads a rule value goes on reading it the way it did.
     return table.size();
+}
+
+RuleConditionAt ruleConditionAt(
+    camel::core::context::Context &context, uint64_t ruleId,
+    const std::vector<camel::core::type::Type *> &types, std::string &why) {
+    GenericRuleEntry *entry = genericRuleEntry(context, ruleId);
+    if (entry == nullptr) {
+        why = "the rule is not registered in this context";
+        return RuleConditionAt::Unknown;
+    }
+    auto *owner = static_cast<Builder *>(entry->owner);
+    if (owner == nullptr) {
+        why = "the builder that declared it is gone";
+        return RuleConditionAt::Unknown;
+    }
+    return owner->ruleConditionVerdict(*entry, types, why);
+}
+
+std::vector<Type *> ruleInstanceTypes() {
+    return camel::core::OperatorTable::instance().allRegisteredTypes();
 }
 
 size_t genericRuleInstance(

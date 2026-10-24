@@ -302,6 +302,18 @@ class Builder {
         const GenericRuleEntry &entry, const std::vector<Type *> &types, compile_graph_ptr_t &lhs,
         compile_graph_ptr_t &rhs, compile_graph_ptr_t &when, std::string &why);
 
+    /// What the condition of a generic rule says about one type tuple, at compile time (the ruling
+    /// of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`: `check`
+    /// enumerates the instances of a generic rule over the registered types that its condition
+    /// admits). The condition's type-level part alone is asked -- the type arguments of its
+    /// predicate calls are bound to the tuple -- so nothing is instantiated and nothing is
+    /// sampled: a conjunction answers as soon as one side settles it, and a condition that reads
+    /// the values it matches is `ValueDependent`. Public for the same reason
+    /// `instantiateRuleTemplates` is (rule_templates.cpp calls it where a rule is checked).
+    RuleConditionAt
+    ruleConditionVerdict(const GenericRuleEntry &entry, const std::vector<Type *> &types,
+                         std::string &why);
+
     /// Runs `body` with the state of `module`'s unit in force: the same state a top-level
     /// declaration of that module is built in (its diagnostics, its construction tree, its module
     /// and its scopes, `UnitContext`). An instance of a generic rule of that module is built this
