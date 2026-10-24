@@ -1,0 +1,35 @@
+/**
+ * `null` is a compile-time constant of the nullable type it stands in (design principles 4.4,
+ * 5.1, the ruling of 2026-10-24 on `check-program-parameter`). The three positions: the default of
+ * a parameter whose type is a `T?`, a `let` whose declared type is a `T?` (the literal takes the
+ * position's type, so the value is a constant of that type), and a `return` under a declared `T?`.
+ * A `with` parameter takes a default by the one rule the ordinary parameters follow, so its `T?`
+ * takes `null` the same way.
+ */
+module nullable_positions
+
+// The return under a declared `int?`: `null` is the constant of that type, not a computed value.
+func maybe(b: bool): int? {
+    if b then { return 1 } else { return null }
+}
+
+// A `with` parameter of a nullable type, defaulted to the null of it.
+with <p: int? = null>
+func twice(x: int?): int? {
+    return match x {
+        case null => p
+        case v => v
+    }
+}
+
+func main(): int sync {
+    // The declared type is the literal's: the constant `null` of `int?`.
+    let none: int? = null
+    println(none)
+    println(maybe(false))
+    println(maybe(true))
+    // Left out, the `with` parameter reads its own null.
+    println(twice(null))
+    println(twice(4))
+    return 0
+}

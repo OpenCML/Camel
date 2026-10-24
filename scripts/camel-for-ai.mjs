@@ -65,18 +65,22 @@ const TOKENS_REL = 'include/camel/parse/syntax/token_kinds.def'
 //
 // The generated half keeps every entry of its source: 260 diagnostics and 411 library names with
 // all their overloads cost 55,000 characters and are not trimmed, because a name left out is a
-// name the reader has to look up elsewhere. The hand-written half is 47,000. The whole is therefore
-// about 108,000 characters -- some 30,000 tokens of English prose, tables and Camel, against the
+// name the reader has to look up elsewhere. The hand-written half is 55,000: it was 54,000, and a
+// round that closed measured gaps in it -- `loop` and `rule` had no entry, §11 taught a `for` that
+// is not a statement, §12.13 taught a `var` spelling the compiler warns about, and §12.2 pointed a
+// `Tensor` parameter at a type the tensor operators do not take -- added 3,000 characters of
+// content and took out 2,400 by rewriting the entries that were wrong. The whole is therefore
+// about 110,000 characters -- some 30,000 tokens of English prose, tables and Camel, against the
 // roughly 700,000 characters of the four normative documents it distills (docs/language/,
 // docs/diagnostics.md, docs/stdlib-reference.md, docs/design-principles.cn.md).
 const BUDGET = {
     total: 112000,
-    written: 54000,
+    written: 55000,
     regions: {
         lexical: 4000,
         precedence: 3000,
         diagnostics: 28000,
-        'stdlib-signatures': 27000,
+        'stdlib-signatures': 28000,
     },
 }
 

@@ -74,10 +74,18 @@ ParseOutcome parseText(const std::string &path, const std::string &text) {
     std::istringstream input(text);
     outcome.accepted = parser.parse(input);
     outcome.syntaxOk = parser.parsed();
+    // Ranges are resolved once, for both forms of the report: the JSON one a person reads, and the
+    // identity one the snapshot hashes.
+    parser.diagnostics()->fetchAll(parser.tokenPositions());
     std::ostringstream diagText;
     parser.dumpDiagnostics(diagText, true);
     outcome.diagnostics = diagText.str();
-    outcome.dump = dumpParse(outcome.accepted, parser.ast(), sourceContext, outcome.diagnostics);
+    // What the snapshot records about a rejected file: the code and the place of every diagnostic,
+    // never its wording. A message, a help text or a note is prose and prose is edited; an edit to
+    // one must not move test/plans/feat/parse/golden/ast_hashes.txt (H252).
+    std::ostringstream identity;
+    parser.diagnostics()->dumpIdentity(identity);
+    outcome.dump = dumpParse(outcome.accepted, parser.ast(), sourceContext, identity.str());
     if (outcome.accepted) {
         std::ostringstream structure;
         dumpAstNode(structure, parser.ast(), sourceContext, 0, false);

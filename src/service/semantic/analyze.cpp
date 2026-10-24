@@ -670,6 +670,26 @@ class ModelBuilder {
             info.message    = d.message;
             info.suggestion = d.suggestion;
             info.notes      = d.notes;
+            // The changes the compiler knows the text of, carried through to the editor: the
+            // language server hands them out as code actions. An edit's range is a range of the
+            // file the diagnostic is located in, so it is measured in that file.
+            for (const camel::core::error::DiagFix &fix : d.fixes) {
+                DiagnosticInfo::Fix out;
+                out.title = fix.title;
+                for (const camel::core::error::DiagEdit &edit : fix.edits) {
+                    if (!std::holds_alternative<CharRange>(edit.range)) {
+                        out.edits.clear();
+                        break;
+                    }
+                    out.edits.push_back(
+                        DiagnosticInfo::Fix::Edit{rangeIn(info.file, edit.range), edit.replacement});
+                }
+                // A fix with an edit that cannot be placed is not offered at all: an editor would
+                // apply it somewhere else.
+                if (!fix.edits.empty() && out.edits.size() == fix.edits.size()) {
+                    info.fixes.push_back(std::move(out));
+                }
+            }
             for (const auto &label : d.related) {
                 DiagnosticInfo::Related related;
                 related.file    = fileOfPath(label.path, info.file);

@@ -1,0 +1,31 @@
+/**
+ * A `main` that reaches a recursion (through `spin`) and whose own computation is exactly the
+ * limit of "small": eight compute nodes. The inliner copies it into the entry graph, so the
+ * call of `main` does not survive; `compute_node_size_over_limit.cml` is the same program with
+ * one statement more. How small a function is counts its own compute nodes only: its OPERs, the
+ * calls it makes and its structural nodes; a constant, a parameter, a GATE and what an inline
+ * splice adds are not counted (review 2026-10-24).
+ */
+module compute_node_size_at_limit
+
+import { Tensor, reshape } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+func double(t: Tensor): Tensor {
+    return t * 2.0
+}
+
+func spin(n: int): int sync {
+    println(n)
+    return if n <= 0 then 0 else spin(n - 1)
+}
+
+func main(): int sync {
+    export_model(double, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/compute_node_size_at_limit.onnx')
+    let x = int(get_env('H434_STEPS'))
+    println(x)
+    println(x)
+    println(x)
+    return spin(x)
+}
