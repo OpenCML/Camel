@@ -178,6 +178,23 @@ Type *computeTangentType(Type *primal) {
         if (array->isNumericUnknown()) {
             return DerivativeRegistry::instance().statedTangentType(primal);
         }
+        // A numeric array whose element type is fixed is a tensor as well, and a tensor's tangent
+        // is a tensor of the same shape: building it from the element's tangent -- the array of the
+        // elements' tangents -- leaves out the extents of the value's own outermost dimension.
+        // `f32[2, 3]` came back as `f32[]` that way, and that is what a loop over the array
+        // scattered its rounds' row gradients into: the zero tangent and the scatter were typed one
+        // rank short of the array they accumulate into, and the gradient was two uninitialized
+        // floats where the hand adjoint is six ones
+        // (test/cases/modules/autodiff/loop_grad_refuse_slice_iterable.cml, `shape(d)` was `[2]`
+        // while the value is `[2, 3]`). The construction still answers for an array whose elements
+        // are arrays *as values* -- a nested array, whose elements' tangents are arrays of their
+        // elements' tangents -- and such an array is not a numeric array. Whether the elements have
+        // a tangent at all is still the element's answer: an array of integers has none, and it
+        // must not be handed one just because its element type is numeric (a discrete loop's state).
+        if (isNumericArrayType(primal) && array->elemType() != nullptr &&
+            tangentTypeOf(array->elemType()) != nullptr) {
+            return primal;
+        }
         Type *elem    = array->elemType();
         Type *tangent = elem ? tangentTypeOf(elem) : nullptr;
         if (tangent != nullptr) {

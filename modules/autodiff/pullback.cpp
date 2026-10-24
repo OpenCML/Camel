@@ -1811,10 +1811,28 @@ void buildReverseBody(
             *loop.elementTangent);
         const std::array<gc_node_ref_t, 3> scatter{
             ports[loop.arraySlot], ports.front(), element};
+        // Which scatter takes that element's gradient back is the iterated value's own kind's
+        // answer, not one hard-wired operator: the registry states it beside the kind's add and
+        // zero (`TangentSpace::scatterUri`). An array whose elements the core holds one slot each
+        // scatters a slot (`:tangent/scatter_add_arr`), a tensor scatters a row of its own dtype
+        // (`tensor:row_add_at`), and the two are not interchangeable -- a row's gradient written
+        // as one slot is the garbage the rank-2 loop printed
+        // (test/cases/modules/autodiff/loop_grad_refuse_slice_iterable.cml). The registry is keyed
+        // by the type code, and a tensor and an array of records share the array code until the
+        // ownership predicate tells the two apart, so the numeric-array test is that question asked
+        // here, where the iterated value's own type is in hand.
+        const TangentSpace *const space =
+            DerivativeRegistry::instance().findTangentSpace(loop.iterableType);
+        const std::string_view scatterUri =
+            (isNumericArrayType(loop.iterableType) &&
+             tangentTypeOf(loop.iterableType) != nullptr && space != nullptr &&
+             !space->scatterUri.empty())
+                ? std::string_view(space->scatterUri)
+                : std::string_view(":tangent/scatter_add_arr");
         next.push_back(addOper(
             draft,
             loop.tangentsType->typeAt(*loop.arrayTangent),
-            ":tangent/scatter_add_arr",
+            scatterUri,
             scatter));
     }
     draft.setRegionResult(region, packState(draft, stateTypes, next));
@@ -3102,6 +3120,46 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                             iterableType->toString(),
                             whereIs(forward_.nodeOrigin(*iterable)),
                             elementType->toString()));
+                }
+                // A round of a loop over an array whose elements are themselves arrays (a rank-2
+                // or higher numeric array, whose rounds are its slices) cannot be reversed yet:
+                // such an array's tangent is the array of its *elements'* tangents, one rank short
+                // of the value (src/core/derivative.cpp, computeTangentType's Array case), so both
+                // the zero tangent the reverse loop starts from and its per-round scatter-add are
+                // typed one rank short of the array they accumulate into. `std::macro std::jgir`
+                // prints them, `tensor:zeros_like` and `:tangent/scatter_add_arr` both of type
+                // `f32[]`, while the array is `f32[2, 3]`; the rounds' slices then landed in a
+                // container nothing filled, and the gradient came back as uninitialized memory --
+                // two garbage floats where the hand adjoint has six ones
+                // (test/cases/modules/autodiff/loop_grad_tensor_iterable.cml, `shape(d) = [2]`).
+                // Refuse the loop by name until an array's tangent is the array itself.
+                else if (iterableType->code() == TypeCode::Array) {
+                    // What a round gives is the array's element along its first dimension
+                    // (design principles 5.4): a slice one dimension shorter, not `elemType`,
+                    // which is the scalar of a flat rank-2 array. A numeric array's slice is a row
+                    // of the tensor, and the tensor's own scatter takes it back
+                    // (`tensor:row_add_at`, `TangentSpace::scatterUri`). An array whose rounds are
+                    // arrays *as values* -- a nested array, whose elements are not numbers but
+                    // arrays -- has no such scatter yet, and its rounds would be written into a
+                    // gradient nothing has the shape of, so the loop is refused by name instead.
+                    Type *const roundType =
+                        tt::as_ptr<type::ArrayType>(iterableType)->firstDimensionElement();
+                    const bool slicedValues =
+                        roundType != nullptr && roundType->code() == TypeCode::Array;
+                    if (slicedValues && !isNumericArrayType(iterableType)) {
+                        failAt(
+                            forward_.nodeOrigin(node),
+                            std::format(
+                                "a 'loop' iterates over an array of type '{}'{} whose rounds are "
+                                "its slices: a round of that array is itself an array, and the "
+                                "reverse pass cannot scatter the gradient of a slice back into "
+                                "it yet (an array's tangent is the array of its elements' "
+                                "tangents, one rank short of the value). Iterate an array whose "
+                                "rounds are numbers or records, or take the slices' gradient "
+                                "another way",
+                                iterableType->toString(),
+                                whereIs(forward_.nodeOrigin(*iterable))));
+                    }
                 }
             }
         }

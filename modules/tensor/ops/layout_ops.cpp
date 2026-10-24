@@ -575,6 +575,36 @@ std::optional<Type *> takeGradInfer(const InferContext &ctx) {
     return tensorOf(ctx.facts(0).dtype, ctx.facts(0).shape);
 }
 
+// row_add_at(acc, index, row): `acc` with one row's gradient added where the index puts it. The
+// tangent space of a tensor states this as the operator that takes an element's tangent back into
+// a tangent of the whole value (`TangentSpace::scatterUri`), which is what a round of a loop over
+// the tensor needs: `for row in t` takes the row `index` of the first dimension (design principles
+// 5.4), so that round's gradient is a row gradient and it belongs at that row. `take_grad` is the
+// same scatter for a list of indices, built from zeros; a loop's rounds accumulate into one
+// gradient, so this one starts from the accumulator and takes a single index.
+slot_t rowAddAtKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    const Array *acc = tensorArg(norm, 0);
+    if (acc->rank() < 1) {
+        reportShapeError("row_add_at", "expects a tensor with at least one dimension");
+    }
+    const int64_t index = intArg(norm, 1);
+    if (index < 0 || index >= acc->dim(0)) {
+        throwRuntimeFault(
+            RuntimeDiag::IndexOutOfRange,
+            index,
+            std::string("the first dimension of the tensor"),
+            acc->dim(0));
+    }
+    const Array *row = tensorArg(norm, 2);
+    return runKernel("row_add_at", [&] {
+        return wrap(norm.resultType(), k::rowAddAt(acc, index, row, resultAllocator()));
+    });
+}
+
+std::optional<Type *> rowAddAtInfer(const InferContext &ctx) {
+    return tensorOf(ctx.facts(0).dtype, ctx.facts(0).shape);
+}
+
 // one_hot(labels, classes): [len(labels), classes] float32 rows.
 slot_t oneHotKernel(ArgsView &, ArgsView &norm, context::Context &) {
     const int64_t classes              = intArg(norm, 1);
@@ -893,6 +923,14 @@ std::vector<OpDef> layoutOps() {
         .resultDoc = "Tensor",
         .infer     = takeGradInfer,
         .kernel    = &takeGradKernel,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "row_add_at",
+        .exports   = {},
+        .params    = {{"acc", ParamKind::Tensor}, {"index", ParamKind::Int}, {"row", ParamKind::Tensor}},
+        .resultDoc = "Tensor",
+        .infer     = rowAddAtInfer,
+        .kernel    = &rowAddAtKernel,
         .traits    = {}});
     defs.push_back(OpDef{
         .name      = "one_hot",

@@ -146,6 +146,13 @@ struct TangentSpace {
     std::optional<slot_t> zero;
     /// Otherwise, an operator producing the zero tangent of a primal value: (x) => 0.
     std::string zerosLikeUri;
+    /// Operator taking one element's tangent back into a tangent of the whole value:
+    /// (acc, index, element) => `acc` with `element` added where `index` puts it. This is the
+    /// reverse of taking a value apart along its outermost dimension, which is what a round of a
+    /// loop over an array is, and it has to agree with the kind's own reading of that dimension:
+    /// an array whose elements the core holds one slot each scatters a slot, a tensor scatters a
+    /// row of its own dtype (design principles 9.9).
+    std::string scatterUri;
 };
 
 class DerivativeRegistry {

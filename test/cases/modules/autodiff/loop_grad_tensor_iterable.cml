@@ -1,20 +1,37 @@
 /**
- * The adjoint of a loop that iterates over a tensor's first axis (design principles 9.9). A
- * numeric array is a tensor, and `for row in w` walks the rows `tensor:iter` hands out, each a
- * rank-1 slice of `w`: the loop's reverse pass scatters each round's slice gradient back at that
- * round's index, so the gradient keeps `w`'s own shape and every position receives the share its
- * round earned. Until the flip this program was refused by name at the iteration; the commit that
- * removed the refusal rewrote its case, which now asserts the gradient the reverse pass must
- * build.
+ * Verifies the adjoint of a loop over a tensor's first axis, against finite differences: a numeric
+ * array is a tensor, `for row in w` takes the row an index names (design principles 5.4, and the
+ * author's ruling of 2026-10-24 that a `for` over any array takes its first dimension in the core),
+ * and the reverse pass scatters that round's row gradient back into the array's gradient at that
+ * round's index -- the scatter-add the author's ruling of 2026-10-25 asks for beside JAX's `scan`,
+ * where a `scan` over an array's leading axis carries the per-round gradients back along it.
  *
- * Hand adjoint, written out from the forward expression:
- *   f(w) = loop acc = 0.0 for row in w do acc + sum(row) = sum(w), with w of shape [2, 3]:
- *       d f / d w = 1.0 at every one of its six elements, in w's own shape [2, 3]
- * `f` is the forward value (21.0, so the differentiated program is the one written above) and
- * `d` is printed with `{}`, so it is asserted element by element as the rank-2 array it must be:
- * a gradient that scattered the rounds into an array of the rounds' own shape prints two numbers
- * instead of six, which is the defect this case is about. The gradient's own type is rank-open
- * here (`f32[]`), so a scalar reading of it (`sum(d)`) is not available to this case yet.
+ * The scatter is the tensor's own (`tensor:row_add_at`, `TangentSpace::scatterUri`): a row of the
+ * tensor's dtype at its own width, not the core's slot-array `:tangent/scatter_add_arr`. Until it
+ * was there, this program printed uninitialized memory -- `d=[2.0769207e+34, 2.0768573e+34]`,
+ * a different pair of garbage floats on every run, with `shape(d)` = `[2]` while the value is
+ * `[2, 3]` -- because an array's tangent was built from its element's tangent and came out one rank
+ * short (`src/core/derivative.cpp`, computeTangentType's Array case; `f32[2, 3]` came back as
+ * `f32[]`). The author's ruling of 2026-10-25 refuses a program that runs and gives a wrong value;
+ * `loop_grad_refuse_slice_iterable` pinned the refusal that stood in for the missing scatter, and
+ * this case is that case turned back into the positive one it had to build: the readings below are
+ * the adjoint itself (`d` has a 1 at every position, its own shape [2, 3]) and a finite difference
+ * that has to agree with it.
+ *
+ * The finite difference is taken along the direction `v` = [1, 2, 3, 4, 5, 6] (the same numbers as
+ * `w` here, which does not matter: what matters is that the direction weights every position of the
+ * tensor differently) with `eps` = 2^-10 = 0.0009765625, written into the two perturbed tensors as
+ * the decimal literals themselves (`w + eps*v` and `w - eps*v` element by element, so `plus` holds
+ * `1.0009765625` where `minus` holds `0.9990234375`): an f32 literal has to be a value the type can
+ * hold, which is why `eps` is not built by arithmetic on a cast. Then the adjoint's directional
+ * derivative is the sum of `d`'s elements against the same weights,
+ * `dot = sum(d * v)`. Both are the same derivative, so they agree; `gap` is their distance and the
+ * case asserts it is under 1e-3 -- f32's own rounding at this `eps` (the two forward values differ
+ * by about 0.042 of 21, so the difference is good to about six digits) sets that tolerance, not the
+ * mathematics. A wrong scatter cannot pass both readings: it either gives a `d` that is not
+ * six ones
+ * or a `gap` that is orders of magnitude larger, and the uninitialized-memory version printed
+ * `nan`/garbage in `d` instead of the row of ones.
  */
 module loop_grad_tensor_iterable
 
@@ -26,9 +43,28 @@ func total(): float {
     return loop acc = 0.0 for row in w do acc + sum(row)
 }
 
+func totalOf(v: Tensor<f32, [2, 3]>): float {
+    return loop acc = 0.0 for row in v do acc + sum(row)
+}
+
 func main(): int sync {
     let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
     let d = grad(total)<w>()
-    'loop_grad_tensor_iterable f={:.1f} d={}'->format<total<w>(), d>->println
+    let v = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let e = 1.0 / 1024.0
+    let plus = reshape(
+        [1.0009765625, 2.001953125, 3.0029296875, 4.00390625, 5.0048828125,
+         6.005859375] as f32[],
+        [2, 3])
+    let minus = reshape(
+        [0.9990234375, 1.998046875, 2.9970703125, 3.99609375, 4.9951171875,
+         5.994140625] as f32[],
+        [2, 3])
+    let fd = (totalOf(plus) - totalOf(minus)) / (2.0 * e)
+    let dot = sum(d * v)
+    let gap = if fd > dot then fd - dot else dot - fd
+    let ok = gap < 0.001
+    'loop_grad_tensor_iterable f={:.1f} d={} fd={:.6f} dot={:.6f} gap={:.6f} ok={}'
+        ->format<total<w>(), d, fd, dot, gap, ok>->println
     return 0
 }
