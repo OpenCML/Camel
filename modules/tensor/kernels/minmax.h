@@ -5,6 +5,12 @@
  * The maximum, minimum and relu of every tensor kernel (design principles 7.7: `max` and
  * `min` are IEEE 754-2019 maximum and minimum, and relu(x) = maximum(x, +0)).
  *
+ * The comparison itself is not stated here: `maximum` and `minimum` forward to `maxOf`/`minOf` of
+ * modules/math/minmax.h, which is the one statement in C++ of "a NaN on either side gives the
+ * canonical quiet NaN, and -0 is below +0", on values widened to f32 for bf16 and f16. This file
+ * adds what only a tensor has — the argmax/argmin order and the identities a reduction starts
+ * from — and its file comment is where the rules are written out for the kernels that read it.
+ *
  * For floats:
  *   - a NaN on either side gives NaN. The result is always the canonical quiet NaN
  *     (std::numeric_limits<T>::quiet_NaN(), sign bit clear, no payload), whatever NaN came in,
@@ -23,52 +29,20 @@
 #pragma once
 
 #include "camel/core/rtdata/half.h"
+#include "modules/math/minmax.h"
 
-#include <bit>
 #include <cmath>
-#include <cstdint>
 #include <limits>
 #include <type_traits>
 
 namespace camel::tensor::kernels {
 
-namespace detail {
-/// The unsigned integer type of the bits of a float type.
-template <typename T> using FloatBits = std::conditional_t<sizeof(T) == 4, uint32_t, uint64_t>;
-} // namespace detail
+/// IEEE 754-2019 maximum: the `math` module's comparison, which the array kernels call as well
+/// (modules/math/minmax.h).
+template <typename T> inline T maximum(T a, T b) { return camel::core::math::maxOf(a, b); }
 
-/// IEEE 754-2019 maximum (see the file comment).
-template <typename T> inline T maximum(T a, T b) {
-    if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
-        // An f16 or bf16 maximum is the f32 maximum of two exactly converted operands,
-        // converted back: the result is one of the two values, so no rounding happens.
-        return T(maximum(a.toFloat(), b.toFloat()));
-    } else if constexpr (std::is_floating_point_v<T>) {
-        using Bits = detail::FloatBits<T>;
-        // Equal operands are identical except +0 and -0: the AND of the bits keeps the sign
-        // bit only when both are -0, which picks +0 from a mixed pair.
-        const T equal = std::bit_cast<T>(std::bit_cast<Bits>(a) & std::bit_cast<Bits>(b));
-        const T r     = a == b ? equal : (a < b ? b : a);
-        return (a != a || b != b) ? std::numeric_limits<T>::quiet_NaN() : r;
-    } else {
-        return a < b ? b : a;
-    }
-}
-
-/// IEEE 754-2019 minimum (see the file comment).
-template <typename T> inline T minimum(T a, T b) {
-    if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
-        return T(minimum(a.toFloat(), b.toFloat()));
-    } else if constexpr (std::is_floating_point_v<T>) {
-        using Bits = detail::FloatBits<T>;
-        // The OR of the bits of equal operands sets the sign bit when either is -0.
-        const T equal = std::bit_cast<T>(std::bit_cast<Bits>(a) | std::bit_cast<Bits>(b));
-        const T r     = a == b ? equal : (b < a ? b : a);
-        return (a != a || b != b) ? std::numeric_limits<T>::quiet_NaN() : r;
-    } else {
-        return b < a ? b : a;
-    }
-}
+/// IEEE 754-2019 minimum: the same one statement as `maximum`.
+template <typename T> inline T minimum(T a, T b) { return camel::core::math::minOf(a, b); }
 
 /**
  * argmax (Max) and argmin (design principles 7.7): true when `v`, met after `best` (the

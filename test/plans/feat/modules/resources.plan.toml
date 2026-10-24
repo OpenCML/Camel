@@ -10,7 +10,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "core"
-desc = "test::resources (test-only): one rejected declaration per rule of check 5 (an access of unknown class, an ambient resource without a name, a named variable, an ambient resource bound to an operand and a variable bound to none, an operator bound to a capture, a same result without its operand, a pure operator that touches something, an effectful one that touches nothing, an external effect for a state-only operator, an ambient allocation), the refinement of an operator its traits count as external, the minor version a declaration of resources adds to an existing record; the bounds of mapped regions and which overlap. In the program: assignments write their cell, reads read it, a var parameter, a capture and a recursion (a fixpoint) carry the access to the caller's cell, an array sorted in place is an object read and written, the generator, the console and the file system are ambient and external; pairs that conflict are ordered by data or by control edges, the arms of a branch are not a pair, and the program's output is unchanged."
+desc = "test::resources (test-only): one rejected declaration per rule of check 5 (an access of unknown class, an ambient resource without a name, a named variable, an ambient resource bound to an operand and a variable bound to none, an operator bound to a capture, a same result without its operand, a pure operator that touches something, an effectful one that touches nothing, an external effect for a state-only operator, an ambient allocation), the refinement of an operator its traits count as external, the minor version a declaration of resources adds to an existing record; the bounds of mapped regions and which overlap. In the program: assignments write their cell, reads read it, a var parameter, a capture and a recursion (a fixpoint) carry the access to the caller's cell, an array sorted in place is an object read and written, the generator, the console and the file system are ambient and external; pairs that conflict are ordered by data or by control edges, the arms of a branch are not a pair, and the program's output is unchanged. The closure's footprint is found by what it says rather than by its graph number, which counts the graphs every compiled module created before it."
 kind = "behavior"
 case = "../../../cases/resources/effects.cml"
 args = ["${case}", "test::resources"]
@@ -52,7 +52,6 @@ for (const l of [
   'RESOURCES overlap a-b 0 a-c 1 a-empty 0 a-unknown 1',
   'RESOURCES footprint bump rmw variable norm 0 whole',
   'RESOURCES footprint countdown rmw variable norm 0 whole',
-  'RESOURCES footprint __g_5__ rmw variable capture 0 whole; result fresh',
   'RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw object (any); external',
   'RESOURCES node main 2 :var/new: allocates variable',
   'RESOURCES node main 9 :op/assn_l: write variable (node 2); result may_alias 1',
@@ -71,6 +70,15 @@ for (const l of [
   'RESOURCES order countdown 4 12 resource ordered by control',
   'true', 'false', '4', '16', '[1, 2, 3]',
 ]) line(l)
+// The closure `let inc = sync () => { c += 1 }` is an anonymous graph, and its name is the number
+// the compilation had reached when it was built -- how many graphs were created before it, the
+// imported modules' and the speculative instantiations' included -- not a fact about the program
+// (it was `__g_5__` while the `array` module was smaller and is `__g_125__` with one declaration
+// per element type in it). The footprint is the fact this test is about, so it is named by what it
+// says: one graph, the captured cell, and the whole access to it. A pin on the number would fail
+// on any change to any module compiled before the closure, and would say nothing more than this.
+const captured = out.split('\n').filter((l) => /^RESOURCES footprint \S+ rmw variable capture 0 whole; result fresh$/.test(l))
+assert(captured.length === 1, `the captured closure's footprint: ${JSON.stringify(captured)}`)
 // This test used to write `RESOURCES order main 23 24 external ordered by control`: a pair of
 // effects outside the program was a pair whatever they touched. A conflict is judged by resource
 // alone now (design principles 3.3, F9; the ruling: "冲突只按资源判断；不同资源上的效应之间没有
