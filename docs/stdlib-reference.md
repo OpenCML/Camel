@@ -1734,6 +1734,7 @@ an `int64` tensor of shape [labels, classes].
 #### `shape`
 
 ```camel
+shape: (t: T[..]) => int[] when is_numeric::<T>()
 shape: (t: Tensor) => int[]
 ```
 
@@ -1745,6 +1746,7 @@ The extents of a tensor, in order.
 #### `numel`
 
 ```camel
+numel: (t: T[..]) => int when is_numeric::<T>()
 numel: (t: Tensor) => int
 ```
 
@@ -1756,6 +1758,8 @@ The number of elements in a tensor: the product of its extents.
 #### `dim`
 
 ```camel
+dim: (t: T[..], axis: int) => int when is_numeric::<T>()
+dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
 dim: (t: Tensor, axis: int) => int
 dim: (t: Tensor, axis: i32) => int
 ```
@@ -2025,6 +2029,7 @@ passes the stored values through without rounding, so it needs no numeric permis
 #### `to_bytes`
 
 ```camel
+to_bytes: (t: T[..]) => Bytes when is_numeric::<T>()
 to_bytes: (t: Tensor) => Bytes
 ```
 
@@ -2050,6 +2055,7 @@ the program runs (check them with `as`, or read them with `shape`).
 #### `save_npy`
 
 ```camel
+save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
 save_npy: (t: Tensor, path: string) => void
 ```
 
