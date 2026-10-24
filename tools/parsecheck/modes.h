@@ -17,8 +17,8 @@ namespace parsecheck {
 struct ParseOutcome {
     bool syntaxOk = false; // no lexical and no syntax error
     bool accepted = false; // and the AST was built
-    std::string dump;        // normalized AST and diagnostics (ast_dump.h)
-    std::string diagnostics; // the diagnostics alone, as JSON
+    std::string dump;        // normalized AST and the diagnostics' identity (ast_dump.h)
+    std::string diagnostics; // the diagnostics alone, as JSON, with their wording
     std::string structure;   // the AST without positions (empty unless accepted)
     std::string formatted;   // the text camel-format gives (empty unless syntaxOk)
     /// The text of every comment token of the source, in order (empty unless syntaxOk). A comment
