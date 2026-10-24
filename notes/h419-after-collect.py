@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 import json, re, collections, sys
 
 rows = json.load(open(sys.argv[1]))

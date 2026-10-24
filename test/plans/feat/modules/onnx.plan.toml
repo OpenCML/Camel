@@ -1898,23 +1898,25 @@ timeout_ms = 240000
 
 [[tests]]
 name = "export_loop_values_array"
-desc = "A tail recursion whose depth depends on the model input and which returns, next to its state, an int array built from the counter is refused by export_model at the recursive call, with a diagnostic that names the element of the result and says what a loop can return. (In the first, specialised call the array literal has constant elements inside a branch arm; that used to stop the export earlier with 'a tuple, struct or array of constants was not folded' at the if.)"
+desc = "A tail recursion whose depth depends on the model input returns, next to its state, an int array built from the counter (`[k, k + 1]`, two elements on every round), so the export succeeds and the model keeps both outputs: whether a Loop can hand a value out is the same fact as for its state — the shape does not change from one round to the next (the ruling of 2026-10-24-evening, growable-array-vs-tensor-in-the-onnx-exporter) — not what the type prints. The case reads `ks[1]` out of the returned array at run time (7 at k = 6), and the export lowers that read to a Gather; the trip count is a constant here (`k >= 6`), so the recursion is unrolled rather than emitted as a Loop."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_values_array.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_loop_values_array.onnx"]
-expect_exit = 1
+expect_exit = 0
+expect_stdout_contains = ["7", "exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
-const fs = await import('fs')
 const path = await import('path')
-const text = input.normalized.output
-assert(text.includes('returns an int array whose elements depend on the model input (element 1 of its result) on a path next to a recursive call'), 'missing detail: ' + text)
-assert(text.includes('it can return tensors and scalars (float, int, bool) and tuples or structs of them'), 'missing what is accepted: ' + text)
-assert(/[(]at [^ ]*export_loop_values_array[.]cml:12:68[)]/.test(text), 'missing source position of the recursive call: ' + text)
-assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
-assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_values_array.onnx')), 'a refused export must not write a model')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_loop_values_array.onnx'))
+assert(model.inputs.length === 1, `expected one model input, got ${model.inputs}`)
+assert(model.outputs.length === 2, `expected two outputs, got ${model.outputs}`)
+assert(model.ops.includes('If'), `the input-dependent decision must stay in the model, got ${model.ops}`)
+assert(model.ops.includes('Gather'), `the read of an element of the returned array must lower to a Gather, got ${model.ops}`)
 }
 """
 timeout_ms = 8000
@@ -1946,30 +1948,32 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_carried_array"
-desc = "A tail recursion whose depth depends on the model input and which carries an int array that changes every call is refused by export_model at the recursive call: a loop carries tensors and scalars, and tuples and structs of them (H44's outline), but an array has no carried form. The diagnostic names the argument."
+desc = "A tail recursion whose depth depends on the model input carries an int array whose length is the same on every call (`[k]` is one element each round), so the export succeeds: whether a Loop can keep a value is a fact about the loop body — the shape of the carried state does not change from one round to the next — not what its type prints (the ruling of 2026-10-24-evening, growable-array-vs-tensor-in-the-onnx-exporter). The type printer's `[]` spelling used to refuse this case. The trip count is a constant here (`k >= 3`), so the export unrolls the recursion and the model keeps the input-dependent If; the case locks that the array spelling no longer refuses it."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_carried_array.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_loop_carried_array.onnx"]
-expect_exit = 1
+expect_exit = 0
+expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
-const fs = await import('fs')
 const path = await import('path')
-const text = input.normalized.output
-assert(text.includes("a recursive call changes argument 2 of a recursion whose depth depends on the model input"), 'missing detail: ' + text)
-assert(text.includes('which is a value of type'), 'missing condition: ' + text)
-assert(text.includes('; a loop carries tensors and scalars and tuples and structs of them'), 'missing carried kinds: ' + text)
-assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
-assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_carried_array.onnx')), 'a refused export must not write a model')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_loop_carried_array.onnx'))
+assert(model.inputs.length === 1, `expected one model input, got ${model.inputs}`)
+assert(model.outputs.length === 1, `expected one output, got ${model.outputs}`)
+assert(model.ops.includes('If'), `the input-dependent decision must stay in the model, got ${model.ops}`)
+assert(model.ops.includes('Mul'), `the then-branch must stay in the model, got ${model.ops}`)
 }
 """
 timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_carried_array_field"
-desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field is refused by export_model at the recursive call, and stays refused: the ruling of 2026-10-23 keeps it — 「(b) ONNX 导出对带数组字段的携带状态保持拒绝，等原生多维数组（H17 第 2、4 项）把形状的说法定下来再处理定长数组。」 — so the diagnostic names the array field and the missing thing (native multi-dimensional arrays, H17 items 2 and 4) instead of the general 'a loop carries tensors and scalars and tuples and structs of them', and no model file is written."
+desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field the body appends to is refused by export_model at the recursive call: a Loop's state input has one shape for every round, so the criterion is the fact the ruling of 2026-10-24-evening asks for — the body appends to this value, its length is not the same on every round (growable-array-vs-tensor-in-the-onnx-exporter). The diagnostic names the array field and the fact, and no model file is written. (The refusal used to be justified by the type printer's `[]` spelling and the H17 staging note.)"
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_carried_array_field.cml"
 args = ["${case}"]
@@ -1983,7 +1987,7 @@ const path = await import('path')
 const text = input.normalized.output
 assert(text.includes("a recursive call changes argument 2 of a recursion whose depth depends on the model input"), 'missing the argument: ' + text)
 assert(text.includes("the leaf 'xs', a value of type 'int[]'"), 'the diagnostic must name the array field: ' + text)
-assert(text.includes('a carried state with an array field is refused until native multi-dimensional arrays settle the shapes of fixed-size arrays (H17 items 2 and 4)'), 'the diagnostic must say what is missing: ' + text)
+assert(text.includes('the body appends to this value or concatenates it, so its length is not the same on every round, and a Loop carries a state whose shape is the same on every round'), 'the diagnostic must state the fact: ' + text)
 assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_carried_array_field.onnx')), 'a refused export must not write a model')
 }
@@ -2596,7 +2600,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 13
 expect_diagnostic_column = 13
-expect_output_contains = ["the conversion to 'Tensor<float32, [2, 3]>' of a value that depends on the model input cannot be checked when the model is exported"]
+expect_output_contains = ["the conversion to 'f32[2, 3]' of a value that depends on the model input cannot be checked when the model is exported: the value is only known to be a 'f32[?, 3]'"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -2609,7 +2613,7 @@ case = "../../../cases/modules/onnx/refusals/as_unproven.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["the conversion to 'Tensor<float32, [2, 3]>' of a value that depends on the model input cannot be checked when the model is exported", "as_unproven.cml:13:13"]
+expect_output_contains = ["the conversion to 'f32[2, 3]' of a value that depends on the model input cannot be checked when the model is exported: the value is only known to be a 'f32[?, 3]'", "as_unproven.cml:13:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
@@ -2624,7 +2628,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 13
-expect_output_contains = ["this conversion to 'Tensor<float32, [3, 2]>' always fails: for the exported inputs the value is a 'Tensor<float32, [2, 3]>'"]
+expect_output_contains = ["this conversion to 'f32[3, 2]' always fails: for the exported inputs the value is a 'f32[2, 3]'"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -2637,7 +2641,7 @@ case = "../../../cases/modules/onnx/refusals/as_always_fails.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["this conversion to 'Tensor<float32, [3, 2]>' always fails: for the exported inputs the value is a 'Tensor<float32, [2, 3]>'", "as_always_fails.cml:12:13"]
+expect_output_contains = ["this conversion to 'f32[3, 2]' always fails: for the exported inputs the value is a 'f32[2, 3]'", "as_always_fails.cml:12:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
@@ -2652,7 +2656,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 16
 expect_diagnostic_column = 13
-expect_output_contains = ["this conversion of a constant always fails: conversion to 'Tensor<float32, [3, 2]>' failed: the tensor has shape [2, 3]"]
+expect_output_contains = ["this conversion of a constant always fails: conversion to 'f32[3, 2]' failed: the array has shape [2, 3]"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -2665,7 +2669,7 @@ case = "../../../cases/modules/onnx/refusals/as_constant_fails.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["this conversion of a constant always fails: conversion to 'Tensor<float32, [3, 2]>' failed: the tensor has shape [2, 3]", "as_constant_fails.cml:16:13"]
+expect_output_contains = ["this conversion of a constant always fails: conversion to 'f32[3, 2]' failed: the array has shape [2, 3]", "as_constant_fails.cml:16:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
@@ -2680,7 +2684,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 15
 expect_diagnostic_column = 5
-expect_output_contains = ["the example given for parameter 'x' is a '(Tensor<float32, [2, 3]>)', but the parameter is declared 'Tensor<float32, [2, 3]>'", "pass the value, not a tuple that holds it"]
+expect_output_contains = ["the example given for parameter 'x' is a '(f32[2, 3])', but the parameter is declared 'f32[2, 3]'", "pass the value, not a tuple that holds it"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "is used where a tensor is expected"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -2693,7 +2697,7 @@ case = "../../../cases/modules/onnx/refusals/tuple_example.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["the example given for parameter 'x' is a '(Tensor<float32, [2, 3]>)', but the parameter is declared 'Tensor<float32, [2, 3]>'"]
+expect_output_contains = ["the example given for parameter 'x' is a '(f32[2, 3])', but the parameter is declared 'f32[2, 3]'"]
 expect_output_not_contains = ["is used where a tensor is expected"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -2709,7 +2713,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 14
 expect_diagnostic_column = 5
-expect_output_contains = ["the example given for parameter 'x' is a 'Tensor<float32, [2, 3]>', but the parameter is declared 'Tensor<float32, [4, 3]>'"]
+expect_output_contains = ["the example given for parameter 'x' is a 'f32[2, 3]', but the parameter is declared 'f32[4, 3]'"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -2722,7 +2726,7 @@ case = "../../../cases/modules/onnx/refusals/example_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["the example given for parameter 'x' is a 'Tensor<float32, [2, 3]>', but the parameter is declared 'Tensor<float32, [4, 3]>'"]
+expect_output_contains = ["the example given for parameter 'x' is a 'f32[2, 3]', but the parameter is declared 'f32[4, 3]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 

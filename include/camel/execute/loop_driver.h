@@ -192,7 +192,9 @@ template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Hos
                 if (round >= array->size()) {
                     break;
                 }
-                element = array->getSlot(round);
+                // The round's element, along the first dimension: the element itself for a rank-1
+                // array, the row for a higher-rank one (Array::firstDimensionElement).
+                element = array->firstDimensionElement(round);
             }
             takeLoopRound(
                 shape,

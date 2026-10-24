@@ -137,38 +137,24 @@ class EdgeChecker {
                 bad("orders a node after itself");
                 continue;
             }
-            if (isPureNode(edge.user)) {
+            if (isFreelySchedulable(edge.user)) {
                 bad("is on a pure node, which nothing orders");
             }
         }
     }
 
-    /// A node whose value is entirely determined by its inputs: the kinds that carry no resource
-    /// and no writing, and the operators declared `pure` (design principles 3.3). A node of a
-    /// kind this does not name (a call, a function, a gate, a loop, a sync node) is an anchor
-    /// that may be an effect, and nothing here refuses an order on it.
-    bool isPureNode(gc_node_ref_t ref) const {
+    /// The rule of 4.6's third clause, read off the shared classification so that the seal check
+    /// and the passes that write order edges cannot drift: only a node the model lets a pass
+    /// arrange freely -- pure *and* unable to fault (design principles 3.4) -- refuses one.
+    bool isFreelySchedulable(gc_node_ref_t ref) const {
         const GCNode *node = graph_.node(ref);
         if (node == nullptr) {
             return false;
         }
-        switch (node->kind) {
-        case GCNodeKind::Data:
-        case GCNodeKind::Port:
-        case GCNodeKind::Cast:
-        case GCNodeKind::Copy:
-        case GCNodeKind::Fill:
-        case GCNodeKind::Accs:
-        case GCNodeKind::Brch:
-        case GCNodeKind::Join:
-            return true;
-        case GCNodeKind::Oper:
-            return graph_.nodeBodyAs<GCOperBody>(ref) != nullptr &&
-                   camel::core::OperatorTable::instance().isPure(
-                       graph_.nodeBodyAs<GCOperBody>(ref)->oper);
-        default:
-            return false;
-        }
+        const GCOperBody *body =
+            node->kind == GCNodeKind::Oper ? graph_.nodeBodyAs<GCOperBody>(ref) : nullptr;
+        return nodeIsFreelySchedulable(
+            node->kind, body != nullptr ? body->oper : camel::core::kNoOper);
     }
     /// The equivalences between nodes (the Tabled state): a graph validated as another state has
     /// none; in this one each names two nodes that compute a value of the same type, in the same

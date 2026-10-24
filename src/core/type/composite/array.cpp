@@ -260,6 +260,29 @@ ArrayType *ArrayType::withElementType(Type *elemType) const {
     return make(elemType, extents_, anyRank_, packName(), numericUnknown_);
 }
 
+Type *ArrayType::firstDimensionElement() const {
+    // One dimension fewer: the extents after the first, which is what `t[i]` takes for every
+    // rank (design principles 5.4) and what the tensor module's `iterInfer` stated while a `for`
+    // over a numeric array went through its `iter` (the ruling of 2026-10-24 makes it the core's
+    // for every array, so the rule lives here, in one place).
+    const std::span<const ExtentForm> extents(extents_);
+    const std::span<const ExtentForm> rest = extents.empty() ? extents : extents.subspan(1);
+    if (anyRank_) {
+        // Open rank: a dimension dropped from "at least n" leaves an open rank with the rest of
+        // the prefix, which is the type `iterInfer` gave the same value.
+        return numericUnknown_ ? numericUnknownFromForms(rest, packName())
+                               : openRank(elemType_, rest);
+    }
+    if (rest.empty()) {
+        // Rank 1: the first dimension's elements are the elements themselves — a scalar is not a
+        // rank-0 array, it is the element type (questions-2026-10-23.md, rank-zero-tensor). A
+        // nested array's `T[][]` is one dimension of `T[]`.
+        return elemType_;
+    }
+    return numericUnknown_ ? numericUnknownFromForms(rest, packName())
+                           : create(elemType_, rest, packName());
+}
+
 const Type *
 ArrayType::applyArguments(std::span<const TypeArgument> arguments, std::string &error) const {
     // `Tensor` is this numeric array written with a module type's name, so its arguments are the
@@ -512,8 +535,9 @@ CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
 }
 
 // The runtime half of the checked conversion: the shape (and, for the numeric-unknown array,
-// the element type) is checked against the type the program declared. The diagnostic format is
-// the one the tensor module used for the same check, so moving it here changes no message.
+// the element type) is checked against the type the program declared. After the tensor alias the
+// array is where a numeric array states its shape, and these diagnostics are its own: they say
+// `the array has shape [2, 3]`, which is what the value is.
 slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
     const CastSafety safety = castSafetyFrom(sourceType);
     ASSERT(safety != CastSafety::Forbidden, "castSlotFrom only allowed when the cast is not forbidden");

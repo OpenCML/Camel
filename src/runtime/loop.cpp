@@ -638,7 +638,7 @@ void validateRuntimeLoopInterface(
             if (sequence == nullptr || sequence->code() != TypeCode::Array) {
                 loopFails(graph, node, std::format("it iterates over a '{}'", typeText(sequence)));
             }
-            element = static_cast<ArrayType *>(sequence)->elemType();
+            element = static_cast<ArrayType *>(sequence)->firstDimensionElement();
         }
         Type *port = bodyType(bodyPorts().front());
         if (port == nullptr || element == nullptr || !port->assignableFrom(element)) {

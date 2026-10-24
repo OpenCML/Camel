@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 import os, glob, sys, json, collections, re
 
 root = os.path.expanduser('~/camel-work/h419-flip-next/test/results/log')

@@ -261,6 +261,6 @@ kind = "negative"
 case = "../../../../cases/compile/array_shape/err_return_shape.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
+expect_diagnostic_name = "SemanticDiag::ReturnNeedsConversion"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

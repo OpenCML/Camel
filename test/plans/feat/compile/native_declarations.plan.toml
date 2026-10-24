@@ -915,7 +915,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:12:18", "argument types: <> (Tensor<float32, [?, ?]>, int)", "<tensor:numel>: (t: Tensor) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:12:18", "argument types: <> (f32[?, ?], int)", "<tensor:numel>: (t: Tensor) => int"]
 
 [[tests]]
 name = "native.tensor_wrong_type"
@@ -936,12 +936,12 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.tensor_show_declaration_import"
-desc = "`show`'s two declarations are what an importer sees: the tensor rule and the array rule both type-check and both reach the C++ operator, printing in the module's layout; the marker line proves the program ran to the end."
+desc = "`show`'s two declarations are what an importer sees: the tensor rule and the array rule both type-check and both reach the C++ operator, printing the array form (the single print form of the 2026-10-24 ruling: the value's own shape in brackets, each element in the shortest text of its own type); the marker line proves the program ran to the end."
 kind = "behavior"
 case = "../../../cases/compile/native/tensor_show_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "tensor([[      1.,       2.]], dtype=float32)\ntensor([      3.,       4.], dtype=float32)\n7\n"
+expect_stdout_exact = "[[1.0, 2.0]]\n[3.0, 4.0]\n7\n"
 
 [[tests]]
 name = "native.tensor_show_wrong_arity"
@@ -950,7 +950,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_show_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:12:5", "argument types: <> (Tensor<float32, [?, ?]>, int)", "<tensor:show>: (t: Tensor) => void", "<tensor:show>: (t: A[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:12:5", "argument types: <> (f32[?, ?], int)", "<tensor:show>: (t: Tensor) => void", "<tensor:show>: (t: A[]) => void"]
 
 [[tests]]
 name = "native.tensor_show_wrong_type"

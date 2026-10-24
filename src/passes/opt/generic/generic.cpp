@@ -504,7 +504,15 @@ bool foldStaticCast(
     const bool safeStruct = safety == type::CastSafety::Safe &&
                             target->code() == type::TypeCode::Struct &&
                             source->second->code() == type::TypeCode::Struct;
-    if (!checkedByTarget && !safePrimitive && !safeStruct) {
+    // A tensor is an array (`f32[2, 3]`), and its conversion to another array type is the same
+    // kind of pure retyping: a Safe conversion checks the element type and the shape and moves
+    // nothing, so a constant under it is still that constant. An Unsafe one is a conversion the
+    // program means to be checked (a shape that does not fit) and is left in the graph, as the
+    // module-type conversion above is.
+    const bool safeArray = safety == type::CastSafety::Safe &&
+                           target->code() == type::TypeCode::Array &&
+                           source->second->code() == type::TypeCode::Array;
+    if (!checkedByTarget && !safePrimitive && !safeStruct && !safeArray) {
         return false;
     }
     slot_t result = NullSlot;
@@ -896,15 +904,16 @@ DeadCodePass::apply(const camel::runtime::Program *program, std::ostream &) {
 }
 
 const camel::runtime::Program *
-ControlReductionPass::apply(const camel::runtime::Program *program, std::ostream &) {
+OrderReductionPass::apply(const camel::runtime::Program *program, std::ostream &) {
     return rewriteReachableGraphs(
         context_,
         program,
-        "std::opt::ctrl",
-        [](GraphDraft &draft) { return camel::runtime::reduceControlDependencies(draft); },
+        "std::opt::order",
+        [](GraphDraft &draft) { return camel::runtime::reduceOrderDependencies(draft) +
+                   camel::runtime::reduceControlDependencies(draft); },
         nullptr,
         nullptr,
-        mayReduceControl);
+        mayReduceOrder);
 }
 
 const camel::runtime::Program *simplifyGraph(
@@ -922,11 +931,12 @@ const camel::runtime::Program *simplifyGraph(
         return rewriteReachableGraphs(
             context,
             result,
-            "std::opt::ctrl",
-            [](GraphDraft &draft) { return camel::runtime::reduceControlDependencies(draft); },
+            "std::opt::order",
+            [](GraphDraft &draft) { return camel::runtime::reduceOrderDependencies(draft) +
+                   camel::runtime::reduceControlDependencies(draft); },
             nullptr,
             &memo,
-            mayReduceControl,
+            mayReduceOrder,
             config.checkScreens);
     };
     for (size_t round = 0; round < maxRounds; ++round) {
