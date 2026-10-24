@@ -794,7 +794,10 @@ LowerFn constantOfShapeOp(std::optional<double> fill) {
     };
 }
 
-/// arr[i] on an int[] that depends on the input (e.g. shape(x)[0] with a dynamic batch).
+/// arr[i] on an int[] that depends on the input (e.g. shape(x)[0] with a dynamic batch), and
+/// arr[i] reading one number out of a tensor that depends on the input: since the tensor flip a
+/// `Tensor` parameter is an array, so `t[0]` is this operator, and the read lowers the way the
+/// tensor index does (Gather along axis 0, one per index).
 Value lowerArrayIndex(const LowerContext &ctx) {
     const Value &array = ctx.arg(0);
     if (array.isSymbolic() && array.form == Value::Form::IntArray && ctx.arg(1).isConstant()) {
@@ -809,8 +812,12 @@ Value lowerArrayIndex(const LowerContext &ctx) {
         }
     }
     if (!array.isSymbolic() || array.form != Value::Form::IntArray) {
-        throw ExportError(
-            "':op/idx_arr': only int arrays (shapes) can be indexed by the model input");
+        std::string v = ctx.input(0, TypeCode::Float64);
+        for (size_t i = 1; i < ctx.size(); ++i) {
+            v = ctx.emitter().node(
+                "Gather", {v, ctx.input(i, TypeCode::Int64)}, {intAttr("axis", 0)});
+        }
+        return Value::symbolicScalar(v, type::Type::Float64());
     }
     return ctx.emitScalar(
         "Gather",
