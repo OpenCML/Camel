@@ -17,7 +17,10 @@ std::unordered_map<std::string, operator_t> getArrayOpsMap();
 
 /// Declares what the operators of the map are: every one of them is pure except the in-place
 /// forms the compiler introduces for `xs = xs->sort`, which change their operand (design
-/// principles 11.3), and the sorts may fault on an element type that is not a number.
+/// principles 11.3). One entry per operator, and one operator per element type: the sorts and the
+/// reductions both name the element type they take in their own name (`sort_i`, `sum_d`, ...), so
+/// none of them asks an array which element type it holds and none of them faults on a type it
+/// does not take — such a call has no declaration to compile through at all.
 void declareArrayOperatorFacts();
 
 // The reductions' kernels, in builtin/operators/array_reduce.cpp: one executor per element type,

@@ -38,10 +38,16 @@ for (const uri of notPure) {
 }
 const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median',
   're:test', 'json:encode', 'json:decode', 'hash:sha256_str', 'hash:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
-  // They return a new array and leave their argument unchanged (design principles 11.3).
-  ':struct/append_arr', ':struct/extend_arr', 'array:sort', 'array:quick_sort', 'array:insert_sort', 'array:merge_sort',
+  // They return a new array and leave their argument unchanged (design principles 11.3), one
+  // operator per element type (H393): the name carries the element type it takes.
+  ':struct/append_arr', ':struct/extend_arr', 'array:sort_i', 'array:sort_l', 'array:sort_f', 'array:sort_d',
+  'array:quick_sort_i', 'array:quick_sort_l', 'array:quick_sort_f', 'array:quick_sort_d',
+  'array:insert_sort_i', 'array:insert_sort_l', 'array:insert_sort_f', 'array:insert_sort_d',
+  'array:merge_sort_i', 'array:merge_sort_l', 'array:merge_sort_f', 'array:merge_sort_d',
   // The native primitives of `array`: pure too, and every one of them returns a new array.
-  'array:merge_sorted_arrays', 'array:argsort', 'array:flatten', 'array:unique']
+  'array:merge_sorted_arrays_i', 'array:merge_sorted_arrays_l', 'array:merge_sorted_arrays_f',
+  'array:merge_sorted_arrays_d', 'array:argsort_i', 'array:argsort_l', 'array:argsort_f',
+  'array:argsort_d', 'array:argsort_b', 'array:argsort_s', 'array:flatten', 'array:unique']
 for (const uri of pure) {
   assert(purity[uri] === 'pure', `${uri} is declared ${purity[uri]}, expected pure`)
 }
