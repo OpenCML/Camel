@@ -1,0 +1,12 @@
+/// A named type argument without a name: `= string` names nothing, so the parser reports the name
+/// where it should stand and stops the list there. `camel-parsecheck fuzz` found this first as a
+/// crash: the builder read the name of an argument that has none and followed the null tree
+/// (`f::<A = int, = string>`), and the tree is still lossless after the refusal.
+module syntax_type_arguments_missing_name
+
+func pair::<B, A>(b: B, a: A): (A, B) { return (a, b) }
+
+func main(): int sync {
+    println(pair::<A = int, = string>('s', 1))
+    return 0
+}

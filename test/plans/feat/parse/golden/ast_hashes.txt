@@ -42,6 +42,7 @@ a24945bb64fb63aa no test/cases/parse/syntax/missing_then.cml
 2b17772c82721c98 ok test/cases/parse/syntax/postfix_access.cml
 296c3ba76674282f ok test/cases/parse/syntax/subscript_forms.cml
 41c46559f542a83c ok test/cases/parse/syntax/tuple_and_parenthesis.cml
+d85056a217270a69 no test/cases/parse/syntax/type_arguments_missing_name.cml
 3cdde65c3beacbd8 no test/cases/parse/syntax/unterminated_comment.cml
 4c6b6e3195b9ef66 ok probes/probe_d000.cml
 5131da37189b4814 ok probes/probe_d001.cml
