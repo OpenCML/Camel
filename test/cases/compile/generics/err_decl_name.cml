@@ -1,0 +1,16 @@
+/**
+ * A name a generic function's body writes is resolved where the declaration is written: a
+ * misspelling is a declaration-site error, reported on the declaration's line, and the module
+ * does not load. It does not wait for an instantiation -- `never_called` is called nowhere, and
+ * its body still reports.
+ */
+module err_decl_name
+
+func never_called::<T>(x: T): T {
+    return x + no_such_name
+}
+
+func main(): int sync {
+    println('ok')
+    return 0
+}

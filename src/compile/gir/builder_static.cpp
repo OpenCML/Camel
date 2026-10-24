@@ -66,29 +66,155 @@ void Builder::resolveStaticBodyNames(const GCT::node_ptr_t &body) {
     walkStaticBodyNames(body, locals);
 }
 
+void Builder::insertParameterNames(
+    const GCT::node_ptr_t &func, const FunctionType *signature,
+    std::unordered_set<std::string> &into) {
+    if (signature != nullptr) {
+        for (size_t i = 0; i < signature->argNamesCount(); ++i) {
+            const std::string_view arg = signature->argNameAt(i);
+            if (!arg.empty() && arg != GCT::kDiscardName) {
+                into.insert(std::string(arg));
+            }
+        }
+    }
+    if (func == nullptr) {
+        return;
+    }
+    // A parameter written as a tuple pattern is one value whose elements the body reads by name.
+    if (const auto *tuples = GCT::Tree::of(func)->tupleParamsOf(func)) {
+        for (const GCT::Tree::TupleParamBinding &tupleParam : *tuples) {
+            for (const std::string &name : tupleParam.names) {
+                if (!name.empty() && name != GCT::kDiscardName) {
+                    into.insert(name);
+                }
+            }
+        }
+    }
+}
+
+void Builder::resolveGenericTemplateNames(const generic_template_ptr_t &tmpl) {
+    if (tmpl == nullptr || tmpl->func == nullptr || tmpl->func->size() < 2) {
+        return;
+    }
+    std::vector<std::unordered_set<std::string>> locals;
+    // Every parameter of the declaration is a name its body may read: the `with` parameters and
+    // the `constas` values among them, and the rest parameter's name. What their types are is not
+    // read here; only the names are.
+    locals.emplace_back();
+    insertParameterNames(tmpl->func, tmpl->funcType, locals.back());
+    walkStaticBodyNames(tmpl->func->at(1), locals, true);
+    // A `when` clause is not a body: it belongs to the condition evaluator, which already answers
+    // the declaration-site half of it for a function that is not generic, where it is written
+    // (visitFuncNode). The same half is answered here, so that it does not wait for an
+    // instantiation either: a name the declaration does not make visible, a predicate of a module
+    // that is not imported (and the module that declares it is named), two imports of one name, a
+    // name that is not a compile-time predicate, a condition that is not a bool, a condition that
+    // is not a compile-time expression.
+    //
+    // Whether the condition *holds* stays the instantiation's question, and so does a query on a
+    // type parameter: at the declaration the parameter is open, and only the instance knows what
+    // it stands for (`WhenTypeQueryNotConcrete`, cases/compile/when/open_type.cml).
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        const WhenResult early =
+            evaluateWhenCondition(when->condition, tmpl->funcType, {}, {}, tmpl);
+        switch (early.outcome) {
+        case WhenOutcome::UnknownName:
+        case WhenOutcome::NotImported:
+        case WhenOutcome::NotCompileTime:
+        case WhenOutcome::PredicateAmbiguous:
+        case WhenOutcome::NotBool:
+        case WhenOutcome::NotEvaluable:
+            reportWhenProblem(early, tmpl->func->name(), when->condition);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+bool Builder::moduleSourceDeclares(const std::string &written) {
+    ModuleUnit *unit = currentModuleUnit();
+    if (unit == nullptr || unit->tree == nullptr) {
+        return false;
+    }
+    if (!unit->sourceNamesRead) {
+        // Read once: every name any node of the module's source carries.
+        unit->sourceNamesRead = true;
+        const GCT::node_ptr_t root = unit->tree->root();
+        std::vector<GCT::node_ptr_t> pending{root};
+        while (!pending.empty()) {
+            const GCT::node_ptr_t node = pending.back();
+            pending.pop_back();
+            if (node == nullptr) {
+                continue;
+            }
+            switch (node->type()) {
+            // Only the kinds whose `name()` is a name (gct/node.h): a VARI binds the NREFs that
+            // are its children, and those are collected on their own.
+            case GCT::NodeKind::FUNC:
+            case GCT::NodeKind::DECL:
+            case GCT::NodeKind::NREF:
+                if (!node->name().empty()) {
+                    unit->sourceNames.insert(node->name());
+                }
+                break;
+            default:
+                break;
+            }
+            for (size_t i = 0; i < node->size(); ++i) {
+                pending.push_back(node->at(i));
+            }
+        }
+    }
+    return unit->sourceNames.contains(written) ||
+           unit->sourceNames.contains(moduleLevelName(written));
+}
+
 void Builder::walkStaticBodyNames(
-    const GCT::node_ptr_t &node, std::vector<std::unordered_set<std::string>> &locals) {
+    const GCT::node_ptr_t &node, std::vector<std::unordered_set<std::string>> &locals,
+    bool intoFunctions) {
     if (!node) {
         return;
     }
     switch (node->type()) {
-    case GCT::NodeKind::FUNC:
+    case GCT::NodeKind::FUNC: {
+        if (!intoFunctions) {
+            // A function written in a case that is not selected is read when it is built. Its
+            // parameters and body are a scope of their own; names here would not resolve against
+            // the scopes around it.
+            return;
+        }
+        // The declaration-site check of a generic template reads into the functions written in
+        // its body (a lambda, a function of the body): their own parameters bind and the names
+        // around them stay visible, exactly as they are when the body is built.
+        locals.emplace_back();
+        if (node->size() > 0 &&
+            node->at(0)->type() == GCT::NodeKind::TYPE && node->at(0)->dataType() != nullptr &&
+            node->at(0)->dataType()->code() == TypeCode::Function) {
+            insertParameterNames(
+                node, tt::as_ptr<FunctionType>(node->at(0)->dataType()), locals.back());
+        }
+        if (node->size() > 1) {
+            walkStaticBodyNames(node->at(1), locals, true);
+        }
+        locals.pop_back();
+        return;
+    }
     case GCT::NodeKind::DECL:
-        // A function written in a case that is not selected is read when it is built. Its
-        // parameters and body are a scope of their own; names here would not resolve against
-        // the scopes around it.
+        // A declaration read ahead of its use: the body is elsewhere, and the signature's types
+        // are read where the declaration is.
         return;
     case GCT::NodeKind::EXEC: {
         locals.emplace_back();
         for (size_t i = 0; i < node->size(); ++i) {
-            walkStaticBodyNames(node->at(i), locals);
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
         }
         locals.pop_back();
         return;
     }
     case GCT::NodeKind::NREF:
         for (size_t i = 0; i < node->size(); ++i) {
-            walkStaticBodyNames(node->at(i), locals);
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
         }
         if (!locals.empty() && !node->name().empty() &&
             node->name() != GCT::kDiscardName) {
@@ -96,11 +222,11 @@ void Builder::walkStaticBodyNames(
         }
         return;
     case GCT::NodeKind::VARI:
+        // A VARI node carries no name of its own: the names it binds are the NREFs that are its
+        // children (`var x = 1`, program.cpp collectBoundNames), and the NREF case above binds
+        // each of them. `name()` is not a VARI's to read (gct/node.h).
         for (size_t i = 0; i < node->size(); ++i) {
-            walkStaticBodyNames(node->at(i), locals);
-        }
-        if (!locals.empty() && !node->name().empty()) {
-            locals.back().insert(node->name());
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
         }
         return;
     case GCT::NodeKind::DREF: {
@@ -116,6 +242,14 @@ void Builder::walkStaticBodyNames(
             found = true;
         }
         if (!found && staticValueNamed(node->name()).has_value()) {
+            found = true;
+        }
+        // The declaration-site check of a generic template is the one caller that reads a body
+        // no instance has built, so a name a declaration of the module gives later in the source
+        // is not a misspelling there: the module is one scope and the top level is built by
+        // dependency, not in written order. Every other caller (an unselected case of
+        // `match type`) keeps the stricter reading it was written with.
+        if (!found && intoFunctions && moduleSourceDeclares(node->name())) {
             found = true;
         }
         if (!found && !valueNameExists(node->name(), node)) {
@@ -135,7 +269,7 @@ void Builder::walkStaticBodyNames(
         if (!valueName.empty() && valueName != "_") {
             locals.back().insert(valueName);
         }
-        walkStaticBodyNames(node->staticForBody(), locals);
+        walkStaticBodyNames(node->staticForBody(), locals, intoFunctions);
         locals.pop_back();
         return;
     }
@@ -143,7 +277,7 @@ void Builder::walkStaticBodyNames(
         // The first values are outside the names of the head; `n` and the state names are
         // bound in the body only (as for a run-time loop).
         for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
-            walkStaticBodyNames(node->staticLoopInitial(j), locals);
+            walkStaticBodyNames(node->staticLoopInitial(j), locals, intoFunctions);
         }
         locals.emplace_back();
         const std::string &valueName = node->staticLoopValueName();
@@ -153,13 +287,75 @@ void Builder::walkStaticBodyNames(
         for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
             locals.back().insert(node->staticLoopStateName(j));
         }
-        walkStaticBodyNames(node->staticLoopBody(), locals);
+        walkStaticBodyNames(node->staticLoopBody(), locals, intoFunctions);
+        locals.pop_back();
+        return;
+    }
+    case GCT::NodeKind::CASE: {
+        // The pattern binds its names in the arm's body only: `case v`, `case error e`,
+        // `case Shape::Rect { w, h }` (design principles 5.3). A `case` written as a value
+        // (`case 1`) binds nothing, and the value it compares is read outside the bindings.
+        const GCT::CaseType pattern = node->caseType();
+        const size_t bodyAt =
+            pattern == GCT::CaseType::Value && node->size() > 1 ? size_t(1) : size_t(0);
+        for (size_t i = 0; i < bodyAt; ++i) {
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
+        }
+        locals.emplace_back();
+        if (pattern == GCT::CaseType::Bind || pattern == GCT::CaseType::Error) {
+            const std::string &bound = node->binding();
+            if (!bound.empty() && bound != GCT::kDiscardName) {
+                locals.back().insert(bound);
+            }
+        } else if (pattern == GCT::CaseType::Enum) {
+            const GCT::Node::EnumCase &variant = node->enumCase();
+            for (size_t i = 0; i < variant.count; ++i) {
+                const std::string *bound = variant.bindings[i];
+                if (bound != nullptr && !bound->empty() && *bound != GCT::kDiscardName) {
+                    locals.back().insert(*bound);
+                }
+            }
+        }
+        for (size_t i = bodyAt; i < node->size(); ++i) {
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
+        }
+        locals.pop_back();
+        return;
+    }
+    case GCT::NodeKind::LOOP: {
+        // `loop s1 = a1, ... (for x in xs)? (while c)? do b`: the first values and the sequence
+        // are read where the loop is, the condition sees the state's names, and the body sees
+        // the state's names and the element (design principles 3.10).
+        const size_t states = node->loopStateCount();
+        for (size_t j = 0; j < states; ++j) {
+            walkStaticBodyNames(node->loopInitial(j), locals, intoFunctions);
+        }
+        if (const GCT::node_ptr_t sequence = node->loopSequence()) {
+            walkStaticBodyNames(sequence, locals, intoFunctions);
+        }
+        locals.emplace_back();
+        for (size_t j = 0; j < states; ++j) {
+            const std::string &state = node->loopStateName(j);
+            if (!state.empty() && state != GCT::kDiscardName) {
+                locals.back().insert(state);
+            }
+        }
+        if (camel::core::loopHasIterable(node->loopKind())) {
+            const std::string &element = node->loopElementName();
+            if (!element.empty() && element != GCT::kDiscardName) {
+                locals.back().insert(element);
+            }
+        }
+        if (const GCT::node_ptr_t condition = node->loopCondition()) {
+            walkStaticBodyNames(condition, locals, intoFunctions);
+        }
+        walkStaticBodyNames(node->loopBody(), locals, intoFunctions);
         locals.pop_back();
         return;
     }
     default:
         for (size_t i = 0; i < node->size(); ++i) {
-            walkStaticBodyNames(node->at(i), locals);
+            walkStaticBodyNames(node->at(i), locals, intoFunctions);
         }
         return;
     }

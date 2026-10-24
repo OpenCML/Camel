@@ -391,6 +391,12 @@ class Builder {
         std::vector<BuiltFunction> builtFunctions;
         std::vector<compile_graph_ptr_t> builtBodies;
         std::vector<PendingIgnoredWrite> pendingIgnoredWrites;
+        // The names the module's source declares anywhere: a function or a type declared, and the
+        // NREF that binds a name in any body (`let`, `var`, a parameter). Read once, on the first
+        // name the declaration-site check cannot resolve (resolveGenericTemplateNames); the module
+        // is one scope, so a name a later declaration gives is not a misspelling.
+        std::unordered_set<std::string> sourceNames;
+        bool sourceNamesRead = false;
     };
     std::unordered_map<const camel::core::module::Module *, std::unique_ptr<ModuleUnit>> units_;
     // The module being built.
@@ -1966,8 +1972,26 @@ class Builder {
     /// Resolve the names of a case body that is not selected: its own `let`/`var` names bind,
     /// and every other name must exist. No graph node is made and no type is checked.
     void resolveStaticBodyNames(const GCT::node_ptr_t &body);
+    /// Resolve the names of a generic declaration where it is declared (the ruling of 2026-10-24
+    /// on `generic-rule-condition-unresolved-name`, docs/handover/reviews/questions-2026-10-23.md):
+    /// the parameters bind, every other name its body writes must exist, and the declaration-site
+    /// half of its `when` clause is answered. No graph node is made and no type is read, so what
+    /// the check needs from the type parameters -- an operator overload, a field, the argument of
+    /// a call -- stays with the instantiation. A name that is not one at all is reported here, on
+    /// the declaration's line, and the module does not load.
+    void resolveGenericTemplateNames(const generic_template_ptr_t &tmpl);
+    /// The names a function's own parameters bind, for a body read where it is written: every
+    /// parameter's name, and the names a parameter destructured as a tuple binds
+    /// (`((a, b)) => ...`, builder.cpp declares them the same way).
+    void insertParameterNames(
+        const GCT::node_ptr_t &func, const FunctionType *signature,
+        std::unordered_set<std::string> &into);
+    /// Whether the module's source declares `written` anywhere: the fallback of the
+    /// declaration-site check for a name a later declaration gives.
+    bool moduleSourceDeclares(const std::string &written);
     void walkStaticBodyNames(
-        const GCT::node_ptr_t &node, std::vector<std::unordered_set<std::string>> &locals);
+        const GCT::node_ptr_t &node, std::vector<std::unordered_set<std::string>> &locals,
+        bool intoFunctions = false);
     static constexpr size_t kMaxStaticMatchDepth = 256;
     /// A loop (design principles 3.10; camel/runtime/loop.h): the first values and the array
     /// where the loop is, its condition and its body as regions of the current graph (built where

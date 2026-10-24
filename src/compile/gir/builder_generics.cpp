@@ -161,6 +161,9 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             plainNames.insert(name);
         }
     }
+    // The templates this block declares, in the order they are written: registered first, so
+    // that two of them may call one another, then resolved by name (the second loop below).
+    std::vector<generic_template_ptr_t> declared;
     for (size_t i = 0; i < exec->size(); ++i) {
         const auto &child = exec->at(i);
         if (child->type() != GCT::NodeKind::FUNC) {
@@ -233,6 +236,16 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
                 templateScope_->insert(name, generic_ref_t(fresh));
             }
         }
+        declared.push_back(tmpl);
+    }
+    // Every declaration of this block is known now, so the names that do not depend on a type
+    // parameter are resolved here, on the declaration's line, rather than waiting for an
+    // instantiation that may never come (the ruling of 2026-10-24 on
+    // `generic-rule-condition-unresolved-name`: a misspelled predicate is an unresolved name like
+    // any other, and the module does not load). No type is read: what only the instantiation can
+    // answer -- an operator overload, a field, the argument a call fits -- is not asked here.
+    for (const generic_template_ptr_t &tmpl : declared) {
+        resolveGenericTemplateNames(tmpl);
     }
 }
 

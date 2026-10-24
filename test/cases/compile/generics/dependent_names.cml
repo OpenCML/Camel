@@ -1,0 +1,78 @@
+/**
+ * Names in a generic body that only the instantiation can resolve are not asked about where the
+ * declaration is written: an operator on a type parameter, a field of a parameter, whether a call
+ * fits. The names that are names of the declaration's own scope are resolved there (the ruling of
+ * 2026-10-24 on `generic-rule-condition-unresolved-name`,
+ * docs/handover/reviews/questions-2026-10-23.md) -- including the awkward ones, which this program
+ * is made of:
+ *
+ * - a `with` parameter, and a generic function calling one that is declared after it;
+ * - an imported predicate in a generic function's `when`;
+ * - a parameter destructured as a tuple (`((a, b)) => ...`);
+ * - a loop's state name and its element;
+ * - a generic function declared inside a generic function;
+ * - a name a top-level `let` gives later in the source than the declaration that reads it.
+ *
+ * All of them resolve, so the program loads and runs.
+ */
+module dependent_names
+
+import { is_integer } from types
+
+/// A field of a struct-typed parameter: a name only the instantiation answers.
+func name_of::<T>(s: { name: T }): T {
+    return s.name
+}
+
+/// `later` is declared after this, and `bump` is a `with` parameter.
+with <bump: T>
+func scaled::<T>(x: T): T {
+    return later(x) + bump
+}
+
+func later::<T>(x: T): T {
+    return x + x
+}
+
+/// A generic `when`: the predicate is a name of this declaration's scope.
+func only_int::<T>(x: T): T when is_integer::<T>() {
+    return x
+}
+
+/// The lambda's parameter is written as a tuple pattern: `a` and `b` are its names.
+func add_pairs::<T>(p: (T, T)): T {
+    let f: (x: (T, T)) => T = ((a, b)) => a + b
+    return f(p)
+}
+
+/// The loop's condition reads the state's name, and its body the element.
+func any_above::<T>(xs: T[], k: T): bool {
+    return loop hit = false for x in xs while !hit do x > k
+}
+
+/// A generic function declared in a generic body, its own type parameter and this one's.
+func four_times::<T>(x: T): T {
+    func twice_inner::<U>(y: U): (U, U) {
+        return (y, y)
+    }
+    let a = twice_inner(x)
+    return a.0
+}
+
+/// `base` is declared below this.
+func add_base::<T>(x: T): T {
+    return x + base
+}
+
+let base = 100
+
+func main(): int sync {
+    println(name_of({ name: 'n' }))
+    println(scaled<2>(21))
+    println(only_int(5))
+    println(add_pairs((3, 4)))
+    println(any_above([1, 9, 2], 8))
+    println(four_times(7))
+    println(add_base(1))
+    return 0
+}

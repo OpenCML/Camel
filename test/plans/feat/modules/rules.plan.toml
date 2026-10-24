@@ -1302,6 +1302,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
+name = "rules.when_predicate_misspelled"
+desc = "A rule's `when` is Camel code of the scope the rule is declared in, and its names are resolved there: a misspelled predicate is an unresolved name like any other, reported on the rule's line, and the module does not load. The rule is generic and is never applied, so nothing waited for an instance (the ruling of 2026-10-24 on `generic-rule-condition-unresolved-name`, docs/handover/reviews/questions-2026-10-23.md)."
+kind = "negative"
+case = "../../../cases/modules/rules/err_when_unknown_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_line = 15
+expect_output_contains = ["Unresolved reference: 'is_integerr'"]
+expect_output_not_contains = ["in the instance", "1\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
 name = "rules.generic_condition_refusal_is_what_why_not_repeats"
 desc = "The same attempt from the reader's side: at the `int` site `why_not` answers that the rule is generic and no instance could be made for `int`, with the verdict the guard's own body gave -- the missing `!=` -- as the reason. So a type a condition cannot be written for costs nothing where it was tried and is still explained where the user asks."
 kind = "behavior"

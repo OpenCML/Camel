@@ -1,8 +1,8 @@
 module sem_generic_instance
 
 func twice::<T>(x: T): T {
-    let n = x + undefined_in_body
-    return x + x
+    let n = x + x
+    return n
 }
 
 func main(): int sync {
