@@ -1,0 +1,11 @@
+// The deletion is the language's two-parameter built-in, not the identifier: a module's own
+// `range(a, b)` keeps its name and is called as it declares (design principles 4.2, the ruling of
+// 2026-10-24). The tensor module's `range` is the standard case.
+module h426_interval_own_range
+
+func range(a: int, b: int): int[] { return [b, a] }
+
+func main(): int sync {
+    println(range(0, 3))
+    return 0
+}

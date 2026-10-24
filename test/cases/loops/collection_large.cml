@@ -3,6 +3,6 @@
 // the last state and the lengths of the tapes, not their elements.
 func main(): int sync {
     println(loop i = 0 while i < 100000 do i + 1)
-    println(loop acc = 0 for x in range(0, 100000) do acc + 1)
+    println(loop acc = 0 for x in 0..100000 do acc + 1)
     return 0
 }

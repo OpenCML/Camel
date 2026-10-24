@@ -3,7 +3,7 @@
 module arrays
 
 func main(): int sync {
-    let xs = range(1, 11)                                     // [1, ..., 10]
+    let xs = 1..11    // [1, ..., 10]
     let squares = xs->map<(x: int): int => x * x>
     let evens = squares->filter<(x: int): bool => x % 2 == 0>
     let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>

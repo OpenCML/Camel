@@ -31,7 +31,7 @@ func words(n: int, i: int, acc: Set<string>): Set<string> {
 }
 
 func pairs(n: int): Map<(int, string), string?> {
-    return range(0, n)->map<(i: int): ((int, string), string?) => ((i % 5, key_of(i)), (key_of(i * 2)) as string?)> as Map<(int, string), string?>
+    return 0..n->map<(i: int): ((int, string), string?) => ((i % 5, key_of(i)), (key_of(i * 2)) as string?)> as Map<(int, string), string?>
 }
 
 func nested(n: int, i: int, acc: Map<int, Map<string, int[]>>): Map<int, Map<string, int[]>> {

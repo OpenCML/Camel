@@ -327,9 +327,13 @@ export func len(x: T[..]): int
 
 // ---- arrays ----
 
-/// The integers from start up to, not including, end; empty when end is not above start.
+/// The integers from start up to, not including, end; empty when end is not above start. This is
+/// what the interval `a..b` becomes on the graph (design principles 4.2); it is not a name a
+/// program writes: the interval of two integers is written `a..b`, and the two-parameter
+/// `range(a, b)` it used to be written as is gone (SemanticDiag::RangeTwoArgumentsRemoved).
 /// @pure
-/// @example range(0, 3)    // [0, 1, 2]
+/// @example 0..3    // [0, 1, 2]
+/// @example-fragment the interval is written `a..b`; `range(a, b)` is refused, and this built-in is what the interval lowers to
 #op<':struct/range'>
 export func range(start: int, end: int): int[]
 

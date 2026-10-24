@@ -7,7 +7,7 @@ import { unordered_reduce } from para
 
 func main(): int sync {
     let n = 16
-    let nums = range(1, n + 1)
+    let nums = 1..(n + 1)
     let actual = unordered_reduce<(acc: int, item: int): int => acc + item, 0>(nums)
     let expected = n * (n + 1) / 2
 

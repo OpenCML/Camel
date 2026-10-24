@@ -516,7 +516,7 @@ export func first(f: Program): Run<Program>! {
 /// @example-fragment the tests apply a schedule to a real graph
 with <rules: Rule[], rounds: int, strict: bool>
 export func repeat(f: Program): Run<Program>! {
-    return loop r = started(f) for i in range(0, rounds) while !settled(r) do
+    return loop r = started(f) for i in 0..rounds while !settled(r) do
         r ?-> (x: Run<Program>) => stage(x, rules, 1, strict)
 }
 
@@ -528,7 +528,7 @@ export func repeat(f: Program): Run<Program>! {
 /// @example-fragment a predicate, a rule set and a program come from the caller
 with <rules: Rule[], done: (q: Program) => bool, rounds: int, strict: bool>
 export func until(f: Program): Run<Program>! {
-    return loop r = started(f) for i in range(0, rounds) while !finished(r, done) do
+    return loop r = started(f) for i in 0..rounds while !finished(r, done) do
         r ?-> (x: Run<Program>) => stage(x, rules, 1, strict)
 }
 
@@ -539,7 +539,7 @@ export func until(f: Program): Run<Program>! {
 /// @example-fragment two rule sets and a program come from the caller
 with <left: Rule[], right: Rule[], rounds: int, strict: bool>
 export func alternate(f: Program): Run<Program>! {
-    return loop r = started(f) for i in range(0, rounds) while !settled(r) do
+    return loop r = started(f) for i in 0..rounds while !settled(r) do
         r ?-> (x: Run<Program>) => pair(x, left, right, strict)
 }
 

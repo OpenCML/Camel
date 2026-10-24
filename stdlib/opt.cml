@@ -109,7 +109,7 @@ func mergeableConstant(n: Node): bool {
 
 /// Whether the two lists name the same nodes in the same order.
 func sameNodes(xs: Node[], ys: Node[]): bool {
-    return len(xs) == len(ys) && range(0, len(xs))->all<(i: int): bool => xs[i] == ys[i]>
+    return len(xs) == len(ys) && 0..len(xs)->all<(i: int): bool => xs[i] == ys[i]>
 }
 
 /// Whether one of the nodes may be written in place. An operation over such a value is not one

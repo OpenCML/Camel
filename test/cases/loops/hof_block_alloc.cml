@@ -2,7 +2,7 @@ module hof_block_alloc
 
 func main(): int sync {
     let n  = 10000
-    let xs = range(0, n)->map<(i: int): (int, int) => (i, i + 1)>
+    let xs = 0..n->map<(i: int): (int, int) => (i, i + 1)>
 
     let b0 = std::mem::blocks()
     let mapped = xs->map<(p: (int, int)): int => p.0 + p.1>

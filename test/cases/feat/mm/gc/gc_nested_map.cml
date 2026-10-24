@@ -10,11 +10,11 @@ module gc_nested_map
 type Row = int[]
 
 func table(n: int, k: int): Row[] {
-    return range(0, n)->map<(i: int): int[] => range(0, n)->map<(j: int): int => i + j + k>>
+    return 0..n->map<(i: int): int[] => 0..n->map<(j: int): int => i + j + k>>
 }
 
 func probe(t: Row[], n: int): int {
-    return range(0, n)
+    return 0..n
         ->map<(i: int): int => t[i][0] + t[i][i] + t[i][n - 1]>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
 }

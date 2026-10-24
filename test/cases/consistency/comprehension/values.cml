@@ -18,7 +18,7 @@ func main(): int sync {
     println(squares_of_even(xs), [x + k for x in xs], [string(x) for x in xs if x > k])
     // nested, over strings, over tuples, over the result of a call, inside a generic function
     println([[y * x for y in [1, 2]] for x in xs if x < 3], [w + '!' for w in ['a', 'b']])
-    println([p.0 + p.1 for p in zip([1, 2], [10, 20])], [x for x in range(0, 4) if x != 2])
+    println([p.0 + p.1 for p in zip([1, 2], [10, 20])], [x for x in 0..4 if x != 2])
     println(lengths([[1], [2, 3]]), lengths([['a', 'b', 'c']]))
     // it is an expression like any other
     println(len([x for x in xs if x > 4]), [x for x in [y * 2 for y in xs] if x > 8])

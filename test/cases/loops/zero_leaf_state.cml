@@ -10,7 +10,7 @@ type Nothing = {}
 // The body is the state itself: it never changes, so the loop runs one round per element and
 // its value is the empty struct it started with.
 func carried(n: int): Nothing {
-    return loop s = {} for x in range(0, n) do s
+    return loop s = {} for x in 0..n do s
 }
 
 // A `sync` body: one line per round, which is how the rounds are counted, and the empty struct

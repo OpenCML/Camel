@@ -11,7 +11,7 @@ func check(x: int): int sync {
 
 func main(): int sync {
     println('before')
-    let ys = range(0, 8)->map<check>
+    let ys = 0..8->map<check>
     println('not reached')
     return 0
 }

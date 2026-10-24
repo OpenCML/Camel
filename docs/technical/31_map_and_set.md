@@ -562,7 +562,7 @@ memory; an empty program takes 0.02 s and 12.7 MB. `std::fvm` unless stated.
 
 | Program | n | Time | Peak memory |
 |---|---|---|---|
-| `range(0, n)->map<...> as Map<int, int>` (keys in scrambled order), one lookup | 100,000 | 0.09 s | 24.5 MB |
+| `0..n->map<...> as Map<int, int>` (keys in scrambled order), one lookup | 100,000 | 0.09 s | 24.5 MB |
 | the same | 1,000,000 | 1.96 s | 182 MB |
 | the same on `std::nvm` / `std::jit` / `std::prl` | 100,000 | 0.08 / 0.09 / 0.34 s | 24.5 / 24.6 / 55.3 MB |
 | `Map<string, int>` of n string keys, `keys(m) as Set<string>`, `union`, `merge`, `==` | 100,000 | 0.36 s | 62 MB |

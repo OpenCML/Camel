@@ -6,7 +6,7 @@
 module filter_keeps_all
 
 func kept(n: int, k: int): int[] {
-    return range(0, n)->filter<(i: int): bool => (i + k) % 3 != 0>
+    return 0..n->filter<(i: int): bool => (i + k) % 3 != 0>
 }
 
 func weigh(xs: int[]): int {

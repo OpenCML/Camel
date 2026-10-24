@@ -77,7 +77,7 @@ func main(): int sync {
     sync func build_one_hot(i: int, acc: Tensor): Tensor {
         return if i >= n then acc else sync {
             let label_idx = i % num_classes
-            let row = (range(0, num_classes) == label_idx) * 1.0
+            let row = (0..num_classes == label_idx) * 1.0
             let row_2d = reshape(row, [1, num_classes])
             let new_acc = if i == 0 then row_2d else concat(acc, row_2d, 0)
             return build_one_hot(i + 1, new_acc)

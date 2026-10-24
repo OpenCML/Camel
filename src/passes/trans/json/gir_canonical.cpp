@@ -839,6 +839,12 @@ class CanonicalDocument {
         json loop{
             {"kind", camel::core::loopKindName(graph->loopKindOf(ref))},
             {"collectionCount", graph->loopCollectionCountOf(ref)}};
+        // Where the elements come from, when it is not an array: the interval of `for i in a..b`,
+        // which the compiler fuses (design principles 4.2, LoopIterableForm::Interval). An array
+        // is what every other loop iterates, and is left out as the other defaults are.
+        if (graph->loopIterableFormOf(ref) == camel::core::LoopIterableForm::Interval) {
+            loop["iterable"] = "interval";
+        }
         const GCGraph *condition = program_.loopCondOf(*graph, ref);
         const GCGraph *body      = program_.loopBodyOf(*graph, ref);
         loop["condition"] = condition == nullptr ? json(nullptr) : json(graphIds_.at(condition));

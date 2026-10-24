@@ -1923,12 +1923,28 @@ class Builder {
     /// type the lambda `x => g(f(x))` would have and instantiates the operands (the ruling,
     /// section generic-operands-of-composition).
     node_handle_t buildComposition(const GCT::node_ptr_t &gct, Type *expected);
+    /// The same, from two operands already built: the sequence position of a loop builds them
+    /// itself, to know whether the interval is the loop's form before the rest of `..` is built.
+    node_handle_t
+    buildCompositionWith(const GCT::node_ptr_t &gct, node_handle_t lhs, node_handle_t rhs);
+    /// Whether `expr` is written `a..b`: the GCT link of `kCompositionCall`.
+    static bool isIntervalExpr(const GCT::node_ptr_t &expr);
+    /// Whether the two operands of `..` are the interval's: two integers, and nothing else
+    /// (design principles 4.2).
+    bool intervalBounds(node_handle_t from, node_handle_t to) const;
+    /// The two bounds of an interval a loop iterates, as the one value its sequence is: a tuple
+    /// of the two integers (camel::core::LoopIterableForm::Interval). The interval is the
+    /// `int[]` of `intervalValue` in every other position.
+    node_handle_t
+    intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr);
     /// The composition `f..g` as the lambda `x => g(f(x))`: a graph of one parameter whose body
     /// calls `f` and then `g`, both of them captures of it.
     node_handle_t composeFunctionValue(
         node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
         const GCT::node_ptr_t &gct);
-    /// The interval `a..b` of two integers as the array `int[]`: the call `range(a, b)`.
+    /// The interval `a..b` of two integers as the array `int[]`. The form it is written in is
+    /// `a..b` and nothing else: the two-parameter `range(a, b)` it used to be the same operation
+    /// as is gone (design principles 4.2, the ruling of 2026-10-24).
     node_handle_t intervalValue(
         node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
