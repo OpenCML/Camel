@@ -34,6 +34,7 @@
 #include <cstring>
 #include <format>
 #include <map>
+#include <stdexcept>
 #include <tuple>
 #include <unordered_set>
 #include <vector>
@@ -988,9 +989,9 @@ bool specializeDirectFuncInDraft(
     // whose parameters are the ones that instance already states: the one it is in. Making a new
     // copy there is what unrolled the recursion one level per rewriting pass — the same key again
     // and again, because every rewrite of a call inside the base invalidates the entry that names
-    // the copy — until the count bound kMaxTypeSpecializationsPerRecursiveFunction stopped it, and
-    // an export found no loop in the result (H463). Nothing is bound by the copy, so the types the
-    // instance states have to accept the arguments; when they do not, the call still specializes.
+    // the copy — until a count bound stopped it, and an export found no loop in the result (H463).
+    // Nothing is bound by the copy, so the types the instance states have to accept the arguments;
+    // when they do not, the call still specializes.
     const GraphId instanceRoot = draft.typeSpecializationRoot();
     if (std::ranges::none_of(
             bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
@@ -1012,8 +1013,12 @@ bool specializeDirectFuncInDraft(
         }
     }
 
-    // Type-only specialization of a recursive function is bounded (see
-    // kMaxTypeSpecializationsPerRecursiveFunction); a copy that already exists is reused freely.
+    // Type-only specialization on a call cycle has no shape bound any more. A call inside an
+    // instance of the function it names reuses that instance (above), and a call whose key
+    // differs is the polymorphic case the ruling widens to `?`; what is left here is a runaway
+    // guard, and passing it means the specialization did not reach a fixed point. That is a
+    // compiler error naming the function: the eight-copy count this replaces used to keep the
+    // current callee instead, which silently truncated the shape.
     const bool boundedTypeSpecialization =
         std::ranges::none_of(
             bindings,
@@ -1025,15 +1030,19 @@ bool specializeDirectFuncInDraft(
         const GraphId root = isValid(calleeGraph->typeSpecializationRoot())
                                  ? calleeGraph->typeSpecializationRoot()
                                  : calleeGraph->id();
-        if (session.typeSpecializationCount(root) >= kMaxTypeSpecializationsPerRecursiveFunction) {
+        if (session.typeSpecializationCount(root) >= kTypeSpecializationFixedPointGuard) {
             CAMEL_LOG_INFO_S(
                 "DraftOpt",
-                "FUNC node {} keeps callee '{}': '{}' has {} type specializations.",
+                "FUNC node {} cannot specialize '{}': '{}' has {} type specializations.",
                 funcNodeId,
                 calleeGraph->name(),
                 toText(root),
-                kMaxTypeSpecializationsPerRecursiveFunction);
-            return false;
+                kTypeSpecializationFixedPointGuard);
+            throw std::runtime_error(std::format(
+                "the type specialization of '{}' did not reach a fixed point: {} instances, each "
+                "with a key the one before it did not have",
+                calleeGraph->name(),
+                kTypeSpecializationFixedPointGuard));
         }
         session.noteTypeSpecialization(root);
     }
