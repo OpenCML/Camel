@@ -1703,7 +1703,17 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array ||
                                 norm[1]->code() != TypeCode::Int64)
                                 return nullopt;
-                            return tt::as_ptr<ArrayType>(norm[0])->elemType();
+                            Type *elem = tt::as_ptr<ArrayType>(norm[0])->elemType();
+                            // An array whose element type is not fixed (`Tensor`) has no element
+                            // type to name the value a subscript reads: this op answers with the
+                            // element type, and the module that owns numeric arrays reads the
+                            // element at the element type the value itself carries, which is
+                            // what its own overload of `t[idx]` does (design principles 5.2).
+                            // Declining here leaves the value to that overload.
+                            if (elem == nullptr || elem->code() == TypeCode::Void) {
+                                return nullopt;
+                            }
+                            return elem;
                         }),
                 },
                 {
@@ -2121,6 +2131,17 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             for (size_t i = 1; i < 5; ++i) {
                                 if (norm[i]->code() != TypeCode::Int64)
                                     return nullopt;
+                            }
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
+                            Type *elem         = arrType->elemType();
+                            // An array whose element type is not fixed (`Tensor`) is sliced by
+                            // the module that owns numeric arrays: it reads the elements at the
+                            // element type the value carries, while the core's slice is the
+                            // array of values whose elements the tangent space holds one slot
+                            // each (design principles 5.4, 9.9). Declining here leaves the value
+                            // to that module's own overload of `t[a:b]`.
+                            if (elem == nullptr || elem->code() == TypeCode::Void) {
+                                return nullopt;
                             }
                             return norm[0];
                         }),
