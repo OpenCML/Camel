@@ -202,6 +202,106 @@ EdgesOrderScheduleTestPass::apply(const camel::runtime::Program *program, std::o
     }
 }
 
+namespace {
+
+using namespace camel::runtime;
+
+/// An anchor chain A -> B -> C of three nodes that may carry an order edge (a SYNC anchor is not
+/// a pure node, docs/design/effects/edges.cn.md 4.6), committed as part of the program.
+struct OrderChain {
+    gc_node_ref_t a = kInvalidNodeRef;
+    gc_node_ref_t b = kInvalidNodeRef;
+    gc_node_ref_t c = kInvalidNodeRef;
+};
+
+/// Writes the chain into the root graph and commits it. Returns the committed program, or null
+/// when the program has no root.
+const Program *writeOrderChain(
+    const camel::core::context::context_ptr_t &context, const Program *program, GraphId &rootId,
+    OrderChain &chain) {
+    if (program == nullptr || program->root() == nullptr) {
+        return nullptr;
+    }
+    rootId = program->root()->id();
+    RuntimeGraphDraftSession session(context, program);
+    GraphDraft &draft = session.edit(program->root());
+    chain.a           = draft.addSyncNode();
+    chain.b           = draft.addSyncNode();
+    chain.c           = draft.addSyncNode();
+    draft.appendOrderDependency(chain.b, chain.a);
+    draft.appendOrderDependency(chain.c, chain.b);
+    return session.commit();
+}
+
+/// Prints the order edges of a committed graph as `pred>user`, in the order the graph holds them.
+void printOrderEdges(const Program *program, GraphId rootId, std::ostream &os) {
+    const GCGraph *root = program->graph(rootId);
+    os << "ORDER edges=" << (root != nullptr ? root->orderEdges().size() : 0);
+    if (root != nullptr) {
+        for (const GCGraphOrderEdge &edge : root->orderEdges()) {
+            os << ' ' << edge.pred << '>' << edge.user;
+        }
+    }
+    os << "\n";
+}
+
+} // namespace
+
+// The orderings that pass through a removed node survive it: A -> B -> C becomes A -> C.
+const camel::runtime::Program *
+EdgesOrderSpliceTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    GraphId rootId;
+    OrderChain chain;
+    const Program *withChain = writeOrderChain(context_, program, rootId, chain);
+    if (withChain == nullptr) {
+        return program;
+    }
+    printOrderEdges(withChain, rootId, os);
+    // The same call a dead-code pass makes to drop a statement the graph no longer needs.
+    RuntimeGraphDraftSession session(context_, withChain);
+    session.edit(withChain->graph(rootId)).eraseNode(chain.b);
+    const Program *committed = nullptr;
+    try {
+        committed = session.commit();
+    } catch (const std::exception &error) {
+        os << "EDGES refused: " << error.what() << "\n";
+        return withChain;
+    }
+    os << "EDGES accepted\n";
+    printOrderEdges(committed, rootId, os);
+    return committed;
+}
+
+// A replacement takes the replaced node's order edges, both directions: A -> B -> C becomes
+// A -> D -> C.
+const camel::runtime::Program *
+EdgesOrderReplaceTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    GraphId rootId;
+    OrderChain chain;
+    const Program *withChain = writeOrderChain(context_, program, rootId, chain);
+    if (withChain == nullptr) {
+        return program;
+    }
+    printOrderEdges(withChain, rootId, os);
+    RuntimeGraphDraftSession session(context_, withChain);
+    GraphDraft &draft = session.edit(withChain->graph(rootId));
+    const gc_node_ref_t replacement = draft.addSyncNode();
+    draft.takeStatementPlace(chain.b, replacement);
+    draft.eraseNode(chain.b);
+    const Program *committed = nullptr;
+    try {
+        committed = session.commit();
+    } catch (const std::exception &error) {
+        os << "EDGES refused: " << error.what() << "\n";
+        return withChain;
+    }
+    os << "EDGES accepted replacer=" << replacement << "\n";
+    printOrderEdges(committed, rootId, os);
+    return committed;
+}
+
 const camel::runtime::Program *
 CommitMergeTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
