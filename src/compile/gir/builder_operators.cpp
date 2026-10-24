@@ -895,36 +895,56 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
     return chosen;
 }
 
+bool Builder::plainOperatorAvailableFor(
+    const std::string &group, const std::vector<Argument> &operands, const type_vec_t &normTypes) {
+    if (normTypes.size() != operands.size()) {
+        return false;
+    }
+    std::vector<StaticArg> statics;
+    statics.reserve(operands.size());
+    for (const Argument &operand : operands) {
+        statics.push_back(staticArgOf(operand.node));
+    }
+    // A built-in operator, or one a module registers for the types it declares (the `+` the
+    // tensor module declares for a numeric array): the group answers for the operand types
+    // alone (design principles 4.3).
+    if (operatorOverloadsOf(group)
+            .ops->resolve({}, normTypes, statics, Modifier::None)
+            .has_value()) {
+        return true;
+    }
+    // An `operator` the program writes, or one an import brings: its parameters are matched
+    // where the ordinary call of the plain operator is built, and no type's origin enters it.
+    if (hasProgramOperatorOverloads(group)) {
+        return true;
+    }
+    // The module that declares the operand's type offers the operator with the type
+    // (design principles 5.7): asked of the types, as the operator itself is.
+    return hasDeclaringModuleOperator(group, {}, normTypes);
+}
+
 node_handle_t Builder::compoundAssignmentByRebinding(
-    const std::string &group, const GCT::node_ptr_t &gct, const std::vector<Argument> &operands) {
-    // The plain operator a compound assignment follows: the table of operator_names.cpp.
+    const std::string &group, const GCT::node_ptr_t &gct, const std::vector<Argument> &operands,
+    const type_vec_t &normTypes) {
+    // `a op= b` is `a = a op b` (design principles 4.2): one rule for every type, whoever
+    // declared it — a number's built-in `+`, a `+` the tensor module declares for a numeric
+    // array, an `operator +` of the program. What the compound assignment follows is that
+    // operator, so the two things asked of it are the two things the rule states: that `a op b`
+    // be defined for these operands, and that what it gives be `a`'s own type. `int[]` has no
+    // `+`, and a `+` that answers with another type is not a `+=` either; both are refused
+    // here, and the call reports the compound assignment the program wrote.
     const auto plainGroup = camel::core::plainGroupOfCompoundAssignment(group);
-    if (!plainGroup || operands.size() != 2) {
+    if (!plainGroup || operands.size() != 2 || normTypes.size() != operands.size()) {
         return nullptr;
     }
     const std::string plainName(*plainGroup);
-    // Only for a type a module defines. The built-in types have their own operators, and
-    // where one is missing (`%=` on a float, `+=` on an array) that stays an error.
-    // Or for any type when the program overloads the plain operator: `m &= n` on a type of
-    // the program is `m = m & n` through its `operator &` (design principles 4.2, 4.3). In a
-    // generic instance the plain operator may come from the module that declares the operand's
-    // type (design principles 5.7), and the rebinding follows it there too.
-    Type *target = valueTypeOf(nodeTypeOf(operands[0].node));
-    if (target == nullptr) {
+    if (!plainOperatorAvailableFor(plainName, operands, normTypes)) {
         return nullptr;
     }
-    bool plainOverloaded = hasProgramOperatorOverloads(plainName);
-    if (!plainOverloaded && instantiationDepth_ > 0) {
-        // Design principles 5.7: the module that declares the operand's type offers the
-        // operator with it, so `x += y` follows that `+` as it follows one visible here.
-        type_vec_t operandTypes;
-        operandTypes.reserve(operands.size());
-        for (const Argument &operand : operands) {
-            operandTypes.push_back(nodeTypeOf(operand.node));
-        }
-        plainOverloaded = hasDeclaringModuleOperator(plainName, {}, operandTypes);
-    }
-    if (!target->isOtherType() && !plainOverloaded) {
+    // `a`'s type as the operator of `a op b` sees it: the two are compared where the operator
+    // is resolved, so the comparison asks about one and the same reading of the type.
+    Type *target = valueTypeOf(normTypes[0]);
+    if (target == nullptr) {
         return nullptr;
     }
     const auto make = [&](GCT::node_ptr_t node) {
@@ -936,8 +956,22 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     GCT::node_ptr_t value   = make(tree_->makeLink(2));
     *value << make(tree_->makeDRef(plainName)) << tree_->clone(operands[0].expr)
            << make(tree_->makeDRef(right));
+    // The plain operator is resolved as one written by itself would be: this is where its
+    // availability is settled for the arguments, and where its result type is known. A result
+    // of another type than the target's is not this assignment's meaning, so the rebinding
+    // does not apply and the compound assignment is reported as undefined, exactly as for a
+    // type that has no plain operator at all.
+    const node_handle_t plain = visitLinkNode(value);
+    Type *result             = valueTypeOf(nodeTypeOf(plain));
+    if (result == nullptr || !result->equals(target)) {
+        return nullptr;
+    }
+    // The value the plain operator gave is named for the assignment, so that it is computed
+    // once: the assignment stores what the operator answered.
+    const std::string held = bindTemporary(valueOf(plain));
     GCT::node_ptr_t assign = make(tree_->makeLink(2));
-    *assign << make(tree_->makeDRef("__assn__")) << tree_->clone(operands[0].expr) << value;
+    *assign << make(tree_->makeDRef("__assn__")) << tree_->clone(operands[0].expr)
+            << make(tree_->makeDRef(held));
     return visitLinkNode(assign);
 }
 
@@ -2675,10 +2709,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
             if (!res.has_value() && withInputs.empty()) {
-                // `t += u` on a tensor: no operator changes the tensor in place; the new
-                // tensor is computed and `t` bound to it, as for a number.
+                // `a op= b` where the compound group of the operand's type has no rule for it:
+                // it is `a = a op b` when `a op b` is defined and gives `a`'s type, whatever
+                // declared the type (design principles 4.2). A tensor follows its module's `+`
+                // this way, and so does a type of the program; nothing is changed in place.
                 if (node_handle_t rebound =
-                        compoundAssignmentByRebinding(ops->name(), gct, normInputs)) {
+                        compoundAssignmentByRebinding(ops->name(), gct, normInputs, normInputTypes)) {
                     LEAVE("LINK");
                     return rebound;
                 }

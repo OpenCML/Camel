@@ -2,7 +2,7 @@ id = "compile.operators"
 order = 324
 tier = "fast"
 tags = ["feat", "compile", "semantic", "negative", "ops"]
-desc = "A combination of operator and operand type without an implementation is rejected when the program is compiled, at the operator."
+desc = "A combination of operator and operand type without an implementation is rejected when the program is compiled, at the operator. And `a op= b` is `a = a op b`, one rule for every type: it follows the plain operator when the operands have one and that operator answers with `a`'s own type (design principles 4.2, 4.3)."
 
 [[tests]]
 name = "string_sub_assign"
@@ -145,5 +145,51 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "float_of_array.cml:8:18:", "(int[])"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "tensor_add_assign"
+desc = "+= and *= on a numeric array follow the `+` and `*` the tensor module declares for it: a new array is computed and the variable rebound, so another name of the old array keeps its value (design principles 4.2)."
+kind = "behavior"
+case = "../../../cases/compile/operators/tensor_add_assign.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "9.0 3.0\n18.0 3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "struct_add_assign"
+desc = "+= on a type of the program follows the `operator +` declared beside it: `a = a + b` (design principles 4.2, 4.3)."
+kind = "behavior"
+case = "../../../cases/compile/operators/struct_add_assign.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "struct_no_add_assign"
+desc = "+= on a type of the program that has no `+` at all is rejected when compiled: `a = a + b` is not defined, and what the program is told about is the compound assignment it wrote (design principles 4.2)."
+kind = "negative"
+case = "../../../cases/compile/operators/struct_no_add_assign.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "struct_no_add_assign.cml:12:5:", "(P, P)", "operator '+=' is not defined for these operand types"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "operator '=' is not defined"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "add_assign_result_type"
+desc = "+= on a type of the program whose `+` answers with another type is rejected when compiled, as the compound assignment: `a = a + b` does not hold, so the assignment that would report next is never built (design principles 4.2)."
+kind = "negative"
+case = "../../../cases/compile/operators/add_assign_result_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "add_assign_result_type.cml:18:5:", "(A, A)", "operator '+=' is not defined for these operand types"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "operator '=' is not defined"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
