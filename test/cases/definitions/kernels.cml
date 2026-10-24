@@ -7,7 +7,7 @@ import { Tensor, reshape, zeros, softmax, log_softmax, mean, relu, sigmoid, nume
 
 func elems(t: Tensor<f32>): float[] {
     let v = reshape(t, [numel(t)])
-    return range(0, numel(t))->map<(i: int): float => v[i]>
+    return 0..numel(t)->map<(i: int): float => v[i]>
 }
 
 func show(name: string, t: Tensor<f32>): int sync {

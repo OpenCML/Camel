@@ -479,6 +479,7 @@ class EncodeSession {
                 payloadStorage = toPayloadBytes(
                     camel::runtime::GCLoopRef{
                         .kind            = source->kind,
+                        .iterableForm    = source->iterableForm,
                         .collectionCount = source->collectionCount,
                     });
             } break;

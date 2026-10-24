@@ -38,7 +38,7 @@ func blocky(x: float): float {
 
 @mark
 func looped(n: int): int {
-    return loop acc = 0 for i in range(0, n) do acc + i * i
+    return loop acc = 0 for i in 0..n do acc + i * i
 }
 
 /// The innermost decorator grants as the program is built; the outer one is applied as it runs.

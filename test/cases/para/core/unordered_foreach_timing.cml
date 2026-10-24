@@ -12,7 +12,7 @@ import { sleep } from process
 import { unordered_foreach } from para
 
 func main(): int sync {
-    let jobs = range(0, 8)
+    let jobs = 0..8
     let delay_ms = 200
 
     let start = now()

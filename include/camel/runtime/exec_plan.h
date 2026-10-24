@@ -65,8 +65,18 @@ struct ExecLoop {
     uint32_t collectionCount = 0; // s
     bool iterates            = false; // for, for ... while: one element a round
     bool hasCond             = false; // while, for ... while
+    /// Where the elements come from (camel::core::LoopIterableForm). `false` (Array): the slot of
+    /// `iterableSlot` holds the array, and the round takes its element at the round number.
+    /// `true` (Interval): Norm input 0 is the pair of the interval's two bounds, and the round
+    /// takes `intervalFromSlot + round` while it is below `intervalToSlot`; no array of the
+    /// interval exists (`for i in a..b`: the compiler fuses it, design principles 4.2).
+    bool intervalIterates = false;
     gc_data_idx_t stateSlot      = 0; // the slot of the LOOP node: the state, a tuple if it wraps
     gc_data_idx_t iterableSlot   = 0;
+    /// The two bound slots of an interval iterable (intervalIterates): the integers `from` and
+    /// `to` of the half-open interval [from, to).
+    gc_data_idx_t intervalFromSlot = 0;
+    gc_data_idx_t intervalToSlot   = 0;
     gc_data_idx_t condResultSlot = 0;
     gc_data_idx_t bodyResultSlot = 0;
     /// The slot the rounds are counted in: the number of rounds done while the loop runs, -1 once

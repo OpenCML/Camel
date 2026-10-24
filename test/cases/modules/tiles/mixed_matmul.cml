@@ -11,7 +11,7 @@ func incomplete(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
 func main(run_gpu: bool): int sync {
     set_num_threads(1)
     let a = ones([256, 256]) * 1.00390625
-    let eye = reshape(range(0, 65536)->map<(i: int): f32 => if i / 256 == i % 256 then 1.0 else 0.0>, [256, 256])
+    let eye = reshape(0..65536->map<(i: int): f32 => if i / 256 == i % 256 then 1.0 else 0.0>, [256, 256])
     println(inspect<mixed>((a, eye)))
     println(inspect<incomplete>((a, eye)))
     println(inspect<strict>((a, eye)))

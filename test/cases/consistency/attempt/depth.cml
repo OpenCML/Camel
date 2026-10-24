@@ -14,7 +14,7 @@ func via(f: (n: int) => int, n: int): int {
 }
 func step(n: int): int { return 0 + via(step, n) }
 
-func each(n: int): int { return range(0, 3)->map<depth>->reduce<(a: int, x: int): int => a + x, n> }
+func each(n: int): int { return 0..3->map<depth>->reduce<(a: int, x: int): int => a + x, n> }
 
 // Every level is a boundary: the fault of the innermost call is taken by the boundary below it.
 func tower(n: int): int {

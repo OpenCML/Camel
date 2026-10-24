@@ -20,7 +20,7 @@ func code(s: string): int {
 }
 
 func main(): int sync {
-    println(range(0, 5)->map<name>)
-    println(range(0, 5)->map<(n: int): int => code(name(n))>)
+    println(0..5->map<name>)
+    println(0..5->map<(n: int): int => code(name(n))>)
     return 0
 }

@@ -42,12 +42,12 @@ func main(): int sync {
     println(kind(attempt(by0, 10)))
     println(kind(attempt((x: int): int => x / (x - x), 5)))
 
-    println(attempt(() => range(4, 8)->map<inv>) !! [-1])
-    println(attempt(() => range(0, 8)->map<inv>) !! [-1])
-    println(attempt(() => range(3, 8)->filter<keep>) !! [-2])
-    println(attempt(() => range(0, 8)->filter<keep>) !! [-2])
-    println(attempt(() => range(4, 8)->reduce<step, 0>) !! -3)
-    println(attempt(() => range(0, 8)->reduce<step, 0>) !! -3)
+    println(attempt(() => 4..8->map<inv>) !! [-1])
+    println(attempt(() => 0..8->map<inv>) !! [-1])
+    println(attempt(() => 3..8->filter<keep>) !! [-2])
+    println(attempt(() => 0..8->filter<keep>) !! [-2])
+    println(attempt(() => 4..8->reduce<step, 0>) !! -3)
+    println(attempt(() => 0..8->reduce<step, 0>) !! -3)
 
     println(kind(attempt(spin, 0, 400, 0)))
     println(kind(attempt(spin, 0, 1000, 0)))

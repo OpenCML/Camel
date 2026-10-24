@@ -9,7 +9,7 @@ import {
 } from tensor
 
 func main(): int sync {
-    let a = reshape(cast(range(0, 24), 'float32'), [2, 3, 4])
+    let a = reshape(cast(0..24, 'float32'), [2, 3, 4])
     let b = ones([4, 5])
     let c = a @ b
     let w = ones([4, 2])

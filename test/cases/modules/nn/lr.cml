@@ -43,7 +43,7 @@ sync func train(var weights: Tensor): void {
     let ones_col = ones([m, 1])
     let X_bias = concat(X, ones_col, 1)  // axis=1
 
-    return range(0, its)->foreach<sync (i: int) => sync {
+    return 0..its->foreach<sync (i: int) => sync {
         let nw = update<X_bias, y, lr>(weights)
         if i % 100 == 0 then {
             let pred = X_bias @ nw

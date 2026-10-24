@@ -17,7 +17,7 @@ func main(steps: int, rows: int, size: int): int sync {
     let base = start.bytes
     let seed: int[][] = []
     let (iLeft, window, peak, low, released, total) = loop i = steps, window = seed, peak = 0, low = 1000000000000, released = 0, total = 0 while i > 0 do {
-        let row = range(0, size)
+        let row = 0..size
         let grown = window->append<row>
         let next = if len(grown) > rows then grown->drop<1> else grown
         let now = std::mem::blocks()

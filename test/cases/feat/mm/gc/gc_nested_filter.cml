@@ -19,18 +19,18 @@ func total_of(xs: int[]): int {
 }
 
 func rows(n: int, k: int): Row[] {
-    return range(0, n)->map<(i: int): int[] => range(0, n)->map<(j: int): int => i + j + k>->filter<(x: int): bool => is_even(x)>>
+    return 0..n->map<(i: int): int[] => 0..n->map<(j: int): int => i + j + k>->filter<(x: int): bool => is_even(x)>>
 }
 
 func probe_rows(t: Row[], n: int): int {
-    return range(0, n)
+    return 0..n
         ->map<(i: int): int => len(t[i]) + t[i][0] + t[i][len(t[i]) - 1]>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
 }
 
 func kept(n: int, k: int): int[] {
-    return range(0, n)->filter<(i: int): bool => {
-        let row = range(0, n)->map<(j: int): int => i + j + k>
+    return 0..n->filter<(i: int): bool => {
+        let row = 0..n->map<(j: int): int => i + j + k>
         return total_of(row) % 3 == 0
     }>
 }

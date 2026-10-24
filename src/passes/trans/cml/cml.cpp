@@ -208,8 +208,28 @@ struct Expr {
     int precedence = 100;
 };
 
+/// The precedence of the interval `..` (design principles 4.2): tighter than every operator the
+/// printer writes except the postfix forms, so an operand that is an operator, a prefix or an
+/// `as` is parenthesised and a name, a literal or a postfix chain is not. Only the interval
+/// operator and the sequence of a fused loop are written with it.
+constexpr int kIntervalPrecedence = 85;
+
 std::string parenthesize(const Expr &value, int minimum) {
     return value.precedence < minimum ? "(" + value.text + ")" : value.text;
+}
+
+/// A bound of the interval `a..b`: `parenthesize`, and a value whose text begins with a minus sign
+/// is parenthesised too. A negative constant is an atom to `parenthesize`, but the unary minus
+/// binds *looser* than `..` (design principles 4.2, the language reference's precedence table), so
+/// `-2..3` reads as `-(2..3)`: the compiler says so, `'-'` having no `int[]` reading. The interval
+/// is the one form the printer writes as the operand of an operator that binds tighter than a
+/// unary.
+std::string intervalOperand(const Expr &value, int minimum) {
+    const std::string text = parenthesize(value, minimum);
+    if (!text.empty() && text.front() == '-') {
+        return "(" + text + ")";
+    }
+    return text;
 }
 
 std::string functionNameOf(const GCGraph *graph) {
@@ -1606,7 +1626,22 @@ class CmlPrinter {
         }
         std::string iterable;
         if (iterates) {
-            iterable = expression(*view.iterable()).text;
+            const gc_node_ref_t sequence = *view.iterable();
+            // A loop whose sequence is the interval `a..b` walks the interval's two bounds and no
+            // array exists (design principles 4.2: a `for` over an interval is fused): the source
+            // form is the interval itself, not the pair of bounds, so the printed program compiles
+            // back to the same graph.
+            const bool interval =
+                view.graph().loopIterableFormOf(view.node()) ==
+                camel::core::LoopIterableForm::Interval;
+            const auto bounds = interval ? view.graph().intervalBoundsOf(sequence) : std::nullopt;
+            if (bounds.has_value()) {
+                iterable = std::format(
+                    "{}..{}", intervalOperand(expression(bounds->first), kIntervalPrecedence),
+                    intervalOperand(expression(bounds->second), kIntervalPrecedence + 1));
+            } else {
+                iterable = expression(sequence).text;
+            }
         }
 
         auto savedParams   = params_;
@@ -1947,6 +1982,20 @@ class CmlPrinter {
             return {
                 std::format("{}[{}]", parenthesize(base, 90), index.text),
                 90};
+        }
+        if (uri == ":struct/range") {
+            // The interval `a..b` (design principles 4.2): the one spelling of the integers from
+            // `a` to `b - 1`, and the operator the front end lowers it to. Writing the operator
+            // back as the interval is what keeps the round trip a round trip; the two-parameter
+            // `range(a, b)` no longer compiles (SemanticDiag::RangeTwoArgumentsRemoved).
+            if (inputs.size() != 2) {
+                fail(ref, "an interval without its two bounds");
+            }
+            return {
+                std::format(
+                    "{}..{}", intervalOperand(expression(inputs[0]), kIntervalPrecedence),
+                    intervalOperand(expression(inputs[1]), kIntervalPrecedence + 1)),
+                kIntervalPrecedence};
         }
 
         std::string name;

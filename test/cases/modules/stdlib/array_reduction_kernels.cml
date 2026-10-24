@@ -96,7 +96,7 @@ func main(): int sync {
     let bodyMax: (xs: f32[]) => f32? = max
 
     // 2^24 then 1025 ones: the exact sum is 16778241 and the one f32 rounding is 16778240.
-    let a = range(0, 1026)->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
+    let a = 0..1026->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
     let sumA = sum(a)
     let refA = foldF64(a)
     let onceA = sumA == f32(refA) && f32(refA) == f32(16778240.0) && sumA != foldStep(a)

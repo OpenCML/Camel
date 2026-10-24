@@ -268,7 +268,13 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         return wrap(f"{post(n.c[0])}->append<{arg(n.c[1])}>")
     if k == "join":
         return wrap(f"{post(n.c[0])}->join<{str_lit(n.a['sep'])}>")
-    if k in ("zip", "range", "concat"):
+    if k == "range":
+        # The interval of the integers `a` to `b - 1` is written `a..b` and nothing else (design
+        # principles 4.2): the two-parameter `range(a, b)` is gone. `..` binds tighter than every
+        # binary operator and looser than the postfix forms, so a bound is written as the receiver
+        # of a postfix form is.
+        return f"{post(n.c[0])}..{post(n.c[1])}"
+    if k in ("zip", "concat"):
         return f"{k}({arg(n.c[0])}, {arg(n.c[1])})"
     if k == "println":
         return f"println({arg(n.c[0])})"

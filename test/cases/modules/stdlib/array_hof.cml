@@ -33,7 +33,7 @@ func main(): int sync {
     println(xs->all<(x: int) => x > 0>, xs->all<is_even>, none->all<is_even>)
     println(xs->count<is_even>, xs->count<(x: int) => x > 100>, none->count<is_even>, words->count<(w: string) => len(w) == 5>)
 
-    println(xs->flat_map<(x: int) => [x, x * 10]>->len, [1, 2, 3]->flat_map<(x: int) => range(0, x)>)
+    println(xs->flat_map<(x: int) => [x, x * 10]>->len, [1, 2, 3]->flat_map<(x: int) => 0..x>)
     println(words->flat_map<(w: string) => [w, to_lower(w)]>->len, none->flat_map<(x: int) => [x]>)
     println([1, 2]->flat_map<(x: int) => tail([x])>)
 

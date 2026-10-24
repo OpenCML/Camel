@@ -13,7 +13,7 @@ import { Json, decode, get, as_string, as_array } from json
 }
 
 func churn(n: int): int {
-    return len(range(0, n)->map<(i: int): string => 'item-' + string(i)>)
+    return len(0..n->map<(i: int): string => 'item-' + string(i)>)
 }
 
 func show(t: Json, n: int): int sync {

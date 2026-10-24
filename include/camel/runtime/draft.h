@@ -653,6 +653,13 @@ class GraphDraft {
     /// state and one array per slot. A graph producer that builds such a node calls this; the
     /// source syntax never does. Asserts that `id` is a LOOP node.
     void setLoopCollectionCount(gc_node_ref_t id, uint32_t count);
+    /// Makes LOOP node `id` take its elements from the interval `(from, to)` rather than from an
+    /// array (camel::core::LoopIterableForm): its first Norm input is then the pair of the two
+    /// bounds, and a round takes `from + round` while `round < to - from`. The front end calls
+    /// this for `for i in a..b` (design principles 4.2: the compiler fuses the interval, without
+    /// materialising an array); no graph producer of a library does. Asserts that `id` is a LOOP
+    /// node.
+    void setLoopIterableInterval(gc_node_ref_t id);
     /// Regions (GCRegion). A draft has region 0, the body, once it has any other. Ids are not
     /// reused.
     size_t regionCount() const { return regions_.size(); }

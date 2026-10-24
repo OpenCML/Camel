@@ -2054,6 +2054,7 @@ GCLoopBody GraphDraft::loopGraphsOf(gc_node_ref_t id) const {
         .condGraph       = payloadGraphAt(ref->condRef),
         .bodyGraph       = payloadGraphAt(ref->bodyRef),
         .kind            = ref->kind,
+        .iterableForm    = ref->iterableForm,
         .collectionCount = ref->collectionCount,
     };
 }

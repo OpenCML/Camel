@@ -9,7 +9,7 @@ module para_unordered_reduce_callback_arity
 import { unordered_reduce } from para
 
 func main(): int sync {
-    let xs: int[] = range(1, 5)
+    let xs: int[] = 1..5
     let total: int = unordered_reduce<(acc: int, item: int, extra: int): int => acc + item + extra, 0>(xs)
     return total
 }

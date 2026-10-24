@@ -9,7 +9,7 @@ module content_equality
 type Point = { x: int, y: int }
 type Named = { name: string, at: Point, tags: string[] }
 
-func ints(n: int): int[] { return range(0, n) }
+func ints(n: int): int[] { return 0..n }
 // The infinity is reached at run time: `1.0e308 * 10.0` written with literals only is the
 // exact 1e309, which no float type can hold (design principles 5.1), so it is an error there.
 func nan(): float {
