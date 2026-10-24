@@ -847,7 +847,7 @@ class Compiler {
         // A whole-tensor reduction answers f64 today (the accumulator's type): `tensor:sum`
         // declares `float` for every tensor dtype. Taking the element type here is the second half
         // of the ruling in `9acbac6f7`;
-        // `docs/handover/questions/tensor-reduction-element-type-slice.md` records what it needs
+        // `docs/handover/reviews/questions-2026-10-23.md（§tensor-reduction-element-type-slice）` records what it needs
         // (the run-time answer cannot disagree with the inferred type) and what it still costs.
         if (inferred && (*inferred)->code() == ty::TypeCode::Float64 &&
             (def->name == "sum" || def->name == "mean")) {

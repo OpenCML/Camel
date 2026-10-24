@@ -13,7 +13,7 @@
  * Two of the four floating instances are reported `unchecked` with their reason: `check`'s sampler
  * draws `int`, `i32`, `float`, `f32`, `bool` and tensors of them, and a `bf16`/`f16` instance needs
  * an element-epsilon tolerance this lane did not invent
- * (`docs/handover/questions/check-generic-instance-space.md`). The 39 rules of this list are 70
+ * (`docs/handover/reviews/questions-2026-10-23.md（§check-generic-instance-space）`). The 39 rules of this list are 70
  * instances of generic laws (13 integer laws x 2 types, 11 floating laws x 4 types -- the two
  * accuracy laws are not in this list) besides the 15 rules of it that are not generic, so the report
  * is 85 lines: 48 instances with a verdict, 22 instances reported with a reason, and the 15 rules
