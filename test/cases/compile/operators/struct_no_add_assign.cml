@@ -1,0 +1,15 @@
+/**
+ * A type of the program with no `+` has no `+=` either: `a = a + b` is not defined, so the
+ * compound assignment itself is what the program is told about (design principles 4.2).
+ */
+module struct_no_add_assign
+
+type P = { v: int }
+
+func main(): int sync {
+    var a: P = { v: 1 }
+    let b: P = { v: 2 }
+    a += b
+    println(a.v)
+    return 0
+}

@@ -6,7 +6,10 @@
  *
  * `camel-parsecheck hashes <list>` prints, per file, a 64-bit hash of what the front end makes of
  * it: the normalized AST with every node's token range and origin, and the diagnostics, or the
- * diagnostics alone when the file is rejected. The list committed as
+ * diagnostics alone when the file is rejected. A diagnostic is recorded by its code and its place,
+ * never by its wording (Diagnostics::dumpIdentity): rewording a message, a help text or a note
+ * leaves the hash where it was, so the snapshot answers "does the front end read this file the
+ * same way" and not "is the report about it worded the same way" (H252). The list committed as
  * test/plans/feat/parse/golden/ast_hashes.txt is the regression snapshot of the parser: it was
  * recorded when the ASTs were last compared with those of the ANTLR parser, just before that
  * parser was removed.

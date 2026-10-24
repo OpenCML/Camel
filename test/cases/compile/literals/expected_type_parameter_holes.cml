@@ -1,0 +1,32 @@
+/**
+ * A composite literal with a computed element takes the type of its position for the elements it
+ * did write, in a parameter position as in a return position (design principles 5.1; the ruling
+ * of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3). The value written just
+ * above the f32 midpoint prints 1.00000012 in every line: converted once from the value written,
+ * not 1.0 from the double the element was lowered to. Every element of a literal with a computed
+ * sibling used to be dropped, in a parameter position and in a return position alike.
+ */
+module expected_type_parameter_holes
+
+type P = { n: int, t: (f32, f32) }
+
+func takeStruct(p: P): f32 { return p.t.0 }
+func takeTuple(t: (f32, f32)): f32 { return t.0 }
+func takeArray(xs: f32[]): f32 { return xs[0] }
+
+func returnedStruct(n: int): P { return { n: n, t: (1.0000000596046447753906251, 2.0) } }
+func returnedTuple(n: int): (f32, f32) { return (1.0000000596046447753906251, f32(n)) }
+func returnedArray(n: int): f32[] { return [1.0000000596046447753906251, f32(n)] }
+
+func main(): int sync {
+    let n = 1
+    // the parameter position, for a struct, a tuple and an array
+    println('{:.9g}'->format<takeStruct({ n: n, t: (1.0000000596046447753906251, 2.0) })>)
+    println('{:.9g}'->format<takeTuple((1.0000000596046447753906251, f32(n)))>)
+    println('{:.9g}'->format<takeArray([1.0000000596046447753906251, f32(n)])>)
+    // the same shape in a return position: the same value
+    println('{:.9g}'->format<returnedStruct(n).t.0>)
+    println('{:.9g}'->format<returnedTuple(n).0>)
+    println('{:.9g}'->format<returnedArray(n)[0]>)
+    return 0
+}

@@ -1,0 +1,15 @@
+/**
+ * A type variable nothing determines is still refused with the same diagnosis, whether the
+ * position says nothing (design principles 5.5; the ruling of 2026-10-23 on
+ * `expected-type-through-literals-and-calls`): aligning the result type with the position adds
+ * a source of types, it does not make an open one closed.
+ */
+module expected_type_unresolved
+
+func make::<T>(): T[] { let xs: T[] = []; return xs }
+
+func main(): int sync {
+    let xs = make()
+    println(len(xs))
+    return 0
+}
