@@ -10,7 +10,10 @@
  *
  * `Rich` is what a person reads: the message, the source line with the range underlined, the
  * secondary locations each with its own excerpt, and the notes and the suggestion as
- * `note:` / `help:` lines.
+ * `note:` / `help:` lines. A report that carries a machine-applicable fix (DiagFix) prints that
+ * too, the way rustc prints a suggestion: a `help:` line with the fix's title, and under it the
+ * source line the fix leaves behind with `+` under the text it writes (or, for a fix that only
+ * cuts text, the line as it stood with `-` under what it cuts).
  *
  * The format and the colour policy are process-wide settings (a tool chooses them once from its
  * command line). The default is Short with colours, which is what every tool printed before the
