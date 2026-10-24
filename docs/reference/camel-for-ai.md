@@ -2,7 +2,7 @@
 
 One file that says everything an AI needs to write Camel that compiles: the rules, the idioms, the
 errors a first draft makes, and the exact name of every diagnostic it will meet. It is written to be
-read whole — the whole file is under 108,000 characters, about 30,000 tokens, and the check below
+read whole — the whole file is under 112,000 characters, about 31,000 tokens, and the check below
 keeps it there.
 
 The language described here is the development version (`develop`), and it is tied to that tree:
@@ -34,31 +34,31 @@ disagree. Read it as the language you are compiling against, not as a snapshot o
 
 ## What each part costs
 
-Budgets, in characters: the file as a whole (108,000), the hand-written half (47,000) and each
+Budgets, in characters: the file as a whole (112,000), the hand-written half (54,000) and each
 generated region (61,000 together). `node scripts/camel-for-ai.mjs --report` prints the current
 numbers, and `--check` fails when one of them is exceeded — including the per-chapter budget in the
 last column below, which is read out of this table and measured against the chapter it names.
 
 | Part | Answers | Budget |
 |---|---|---|
-| 2. The shape of a Camel program | what a program is: values, the graph, effects, passes | 2,500 |
-| 3. The smallest program that compiles | entry point, module, output, exit | 1,400 |
-| 4. Lexical: names, comments, literals | what the lexer accepts, keywords, operators | 2,700 |
-| 5. Expressions, operators, precedence | how an expression is read | 7,600 |
-| 6. Statements and declarations | functions, parameters, overloads, generics, `when` | 4,500 |
-| 7. Effects and `sync` | what runs in order, and what the compiler folds | 2,200 |
-| 8. Streams (`target`) | `T..`, `yield`, `tee` | 800 |
-| 9. Modules and the standard library | imports, exports, namespaces, where the library is | 2,700 |
-| 10. Passes, the command line, the graph | how to run a program and look at its graph | 2,600 |
-| 11. Idioms | how Camel code is written when it is written by someone who knows | 3,000 |
-| 12. Common errors | the error, the diagnostic, the fix | 10,800 |
-| 13. Accepted and then rejected | reserved spellings and their diagnostics | 2,100 |
-| 14. Not implemented yet (`target`) | what to avoid until its design lands | 1,300 |
+| 2. The shape of a Camel program | what a program is: values, the graph, effects, passes | 3,000 |
+| 3. The smallest program that compiles | entry point, module, output, exit | 2,000 |
+| 4. Lexical: names, comments, literals | what the lexer accepts, keywords, operators | 3,200 |
+| 5. Expressions, operators, precedence | how an expression is read | 8,200 |
+| 6. Statements and declarations | functions, parameters, overloads, generics, `when` | 5,000 |
+| 7. Effects and `sync` | what runs in order, and what the compiler folds | 2,700 |
+| 8. Streams (`target`) | `T..`, `yield`, `tee` | 1,500 |
+| 9. Modules and the standard library | imports, exports, namespaces, where the library is | 3,300 |
+| 10. Passes, the command line, the graph | how to run a program and look at its graph | 3,000 |
+| 11. Idioms | how Camel code is written when it is written by someone who knows | 3,300 |
+| 12. Common errors | the error, the diagnostic, the fix | 11,600 |
+| 13. Accepted and then rejected | reserved spellings and their diagnostics | 2,600 |
+| 14. Not implemented yet (`target`) | what to avoid until its design lands | 1,700 |
 | Appendix A. Diagnostics | name, severity, message — generated | 27,000 |
 | Appendix B. Standard library signatures | every exported name — generated | 27,000 |
 | Appendix C. Sources | which normative page each rule comes from | 1,800 |
 | — | generated, all four regions | 61,000 |
-| — | hand-written, this header and sections 2–14 with Appendix C | 47,000 |
+| — | hand-written, this header and sections 2–14 with Appendix C | 54,000 |
 
 ## 2. The shape of a Camel program
 
@@ -93,6 +93,21 @@ What runs the graph is a **pass**: `camel prog.cml` uses the default pipeline, `
 std::fvm` chooses the bytecode VM, and `std::gir` prints the graph instead of running it (§10).
 
 Sources: `docs/design-principles.cn.md` §§2–4, 11.3; `docs/language/04_execution_model.md`.
+
+**Common errors.** Executed statements belong in a function. A statement at the top level is
+where the grammar stops reading, and the compiler reports `SyntaxDiag::UnexpectedToken` at the word
+that did not fit. Move it into a function (§3).
+
+<!-- camel-snippet: counter-example: the top level holds declarations, not statements -->
+
+```camel
+let x = 1
+println(x)
+
+func main(): int sync {
+    return 0
+}
+```
 
 ## 3. The smallest program that compiles
 
@@ -135,6 +150,19 @@ func main(name: string, times: int): int sync {
 Hello, Camel! x2
 ```
 
+**Common errors.** Printing is an effect, and in a function that is not `sync` nothing uses it:
+the compiler answers the warning `SemanticDiag::EffectNotExecuted` and the line does not run. Mark the
+function `sync` when its printing has to happen (§7, §12.1).
+
+<!-- camel-snippet: counter-example: an effect nothing uses is dropped -->
+
+```camel
+func greet(): int {
+    println('Hello, Camel')
+    return 1
+}
+```
+
 ## 4. Lexical: names, comments, literals, keywords
 
 - **Comments.** `//` to the end of the line, `/* ... */` across lines, and `#` to the end of the line
@@ -171,6 +199,18 @@ Hello, Camel! x2
 
 The token table `include/camel/parse/syntax/token_kinds.def` groups `enum` (token table: `Reserved`; reference: Type and conversion). This file follows the reference.
 <!-- camel-for-ai end: lexical -->
+
+**Common errors.** A keyword cannot be a name: a binding called `if` is
+`SyntaxDiag::KeywordAsIdentifier`, and the fix is a name outside the reserved spellings (§13, §12.9).
+
+<!-- camel-snippet: counter-example: a keyword is not an identifier -->
+
+```camel
+func main(): int sync {
+    let if = 1
+    return if
+}
+```
 
 ## 5. Expressions, operators, precedence
 
@@ -339,6 +379,17 @@ annoExpr           : accessExpr (indices | parentArgues | structData | angledVal
 ```
 <!-- camel-for-ai end: precedence -->
 
+**Common errors.** `as` restricts a value, it does not convert one: `s as int` on a string is
+`SemanticDiag::DynamicCastForbidden`, and the fix is the conversion function `int(s)` (§12.5).
+
+<!-- camel-snippet: counter-example: as does no numeric conversion -->
+
+```camel
+func n(s: string): int {
+    return s as int
+}
+```
+
 ## 6. Statements and declarations
 
 A declaration is: optional annotations, optional `with <...>`, optional `export`, optional modifiers,
@@ -429,6 +480,18 @@ func main(): int sync {
 }
 ```
 
+**Common errors.** A declaration must agree with what it is given: `let n: int = '42'` is
+`SemanticDiag::DeclaredTypeMismatch`, and the fix is to convert at the binding (§12.5).
+
+<!-- camel-snippet: counter-example: a declared type and its initializer must agree -->
+
+```camel
+func main(): int sync {
+    let n: int = '42'
+    return n
+}
+```
+
 ## 7. Effects and `sync`
 
 A **sync block** orders the statements written directly in it, and only those: `func f(): T sync
@@ -471,6 +534,11 @@ func main(): int sync {
 error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of length 3.
 ```
 
+**Common errors.** A fault is not an error value. `!!` opens a `T!`; it does not catch a fault,
+and `xs[10]` past the end of an array stops the program with `RuntimeDiag::IndexOutOfRange` and exit
+1 — the fix is to look at the length first. A function that writes must be `sync`, or its call is
+`SemanticDiag::EffectNotExecuted` (§7, §12.1).
+
 ## 8. Streams (`target`)
 
 `T..` (a stream of `T`), `yield`, and `tee` are decided and **not implemented**: writing them does
@@ -482,6 +550,19 @@ push/pull boundary written as a function the stream calls; until it lands, expre
 integers, and `f..g` composition, are implemented today.
 
 Sources: `docs/design-principles.cn.md` §4.2; `docs/design/io-concurrency-streams/`.
+
+**Common errors.** Streams are not in the language yet, so a stream spelling is refused instead of
+run: `xs..map(inc)` has no reading and the compiler answers `SemanticDiag::UnresolvedReference` —
+there is no stream `map` to find. The fix today is an array with `map` and a filter (§12.14); the
+design draft is `docs/design/io-concurrency-streams/`.
+
+<!-- camel-snippet: counter-example: a stream spelling is not in the language yet -->
+
+```camel
+func doubled(xs: int[]): int[] {
+    return xs..map(inc)
+}
+```
 
 ## 9. Modules and the standard library
 
@@ -548,6 +629,19 @@ func main(): int sync {
 
 Sources: `docs/language/05_modules.md`, `docs/stdlib-reference.md`.
 
+**Common errors.** An exported name is not in scope until its module is imported: using `area`
+without `import` is `SemanticDiag::UnresolvedReference`, and the fix is the import above the use
+(§12.15; `docs/stdlib-reference.md` names the module a name lives in).
+
+<!-- camel-snippet: counter-example: an exported name needs its module -->
+
+```camel
+func main(): int sync {
+    println(area(Shape::Circle(1.0)))
+    return 0
+}
+```
+
 ## 10. Passes, the command line, the graph
 
 `camel prog.cml` runs the program with the default pipeline. Words after the file name are **passes**,
@@ -597,6 +691,10 @@ func main(): int sync {
   `SemanticDiag::UnusedFallibleValue`).
 
 Sources: `docs/language/04_execution_model.md` §4.7, `docs/cli.cn.md`.
+
+**Common errors.** A pass list is not a run. `camel f.cml std::gir` prints the graph and stops,
+so a reader who wanted output sees none; pass a scheduling pass (`std::nvm`) when output is what is
+wanted, and keep `std::gir` for inspection (§10).
 
 ## 11. Idioms
 
@@ -653,6 +751,18 @@ export func total_area(kinds: Shape[], scale: float): float {
 
 Sources: `docs/language/07_statements.md`, `docs/language/06_expressions.md`,
 `docs/design-principles.cn.md` §11.
+
+**Common errors.** An idiom is only an idiom if its types line up: a signature that mixes the two
+spellings of the 32-bit integer is `SemanticDiag::NoMatchingFunction` at the call, and the fix is one
+spelling throughout (§5, §12.4).
+
+<!-- camel-snippet: counter-example: one type has one spelling in a signature -->
+
+```camel
+func add(a: i32, b: int): int {
+    return a + b
+}
+```
 
 ## 12. Common errors
 
@@ -1102,6 +1212,18 @@ exit code 1, and `!!` does not catch it. `println(xs[5])` on a three-element arr
 `RuntimeDiag::IndexOutOfRange`. **Write instead** — check the index, or take a slice, which
 tolerates the end (`xs[3:9]`).
 
+**Common errors.** A reserved spelling reads like a construct the language has, and the compiler
+says otherwise: `typeof` is accepted by the grammar and refused where it is used
+(`SyntaxDiag::UnexpectedToken`), so the fix is the spelling the type system offers (§5).
+
+<!-- camel-snippet: counter-example: a reserved spelling is read and then refused -->
+
+```camel
+func kind(x: int): int {
+    return typeof(x)
+}
+```
+
 ## 13. Accepted and then rejected
 
 These spellings parse or are reserved, and the compiler rejects them on purpose. Do not build on
@@ -1125,6 +1247,11 @@ them: most have no decided meaning yet. The diagnostics are named as the compile
 | Declaring a function type: `let f: (x: int) => int = g` | `SemanticDiag::FeatureNotSupported` | let the type be inferred: `let f = g` |
 
 Source: `docs/language/08_top_level_and_grammar.md` §8.6.
+
+**Common errors.** Writing a `target` feature as if it already existed. The compiler refuses it
+today rather than doing something else: a stream spelling is `SemanticDiag::NoMatchingFunction`
+(§9 above), and the fix until the feature lands is the array form of the same program. Every
+`target` paragraph names the design draft that owns it.
 
 ## 14. Not implemented yet (`target`)
 

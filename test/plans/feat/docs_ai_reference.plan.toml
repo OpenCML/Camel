@@ -27,7 +27,7 @@ tool = "node"
 case = "../../../scripts/camel-for-ai.mjs"
 args = ["${case}", "--check"]
 expect_exit = 0
-expect_stdout_contains = ["docs/reference/camel-for-ai.md is what its sources produce", "generated region(s)", "diagnostic name(s) cited by the prose", "characters (budget 108000)"]
+expect_stdout_contains = ["docs/reference/camel-for-ai.md is what its sources produce", "generated region(s)", "diagnostic name(s) cited by the prose", "characters (budget 112000)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 

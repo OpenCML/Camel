@@ -70,8 +70,8 @@ const TOKENS_REL = 'include/camel/parse/syntax/token_kinds.def'
 // roughly 700,000 characters of the four normative documents it distills (docs/language/,
 // docs/diagnostics.md, docs/stdlib-reference.md, docs/design-principles.cn.md).
 const BUDGET = {
-    total: 108000,
-    written: 47000,
+    total: 112000,
+    written: 54000,
     regions: {
         lexical: 4000,
         precedence: 3000,
