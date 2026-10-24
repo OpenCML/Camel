@@ -66,17 +66,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 # The array sequence functions that are not reductions: the sorts order four element types and
-# refuse a reduced one at run time, naming the function, the element type and the set it orders.
+# refuse a reduced one where the call is written.
 
 [[tests]]
 name = "reduced_sort_refused"
-desc = "`sort` over an `f16[]` is refused at run time by the ordering kernel: RuntimeDiag::OperandTypeUnsupported names the algorithm and `f16[]`, and the supported set is written as the four element types the kernel orders, not as `numbers` -- bf16 and f16 are numbers, so the old wording claimed to take what it refuses."
+desc = "`sort` over an `f16[]` is refused where the call is written, not at run time (H393): the sorts have one declaration per element type and none takes a reduced-precision element type, so the call has nothing to compile through. SemanticDiag::ReducedPrecisionUnsupported names `sort` and `f16`, and the help says to read the value as f32 first; bf16 and f16 are numbers, and the old wording claimed to take what it refuses. The old spelling declared one generic `sort::<T>(xs: T[]): T[]` and refused the element type inside the C++ kernel (RuntimeDiag::OperandTypeUnsupported, 'an array of i32, i64, f32 or f64 values')."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_sort_refused.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::OperandTypeUnsupported"
-expect_output_contains = ["does not support a value of type 'f16[]'", "an array of i32, i64, f32 or f64 values"]
+expect_diagnostic_name = "SemanticDiag::ReducedPrecisionUnsupported"
+expect_diagnostic_code = "0x030001D7"
+expect_diagnostic_line = 16
+expect_output_contains = ["cannot take a value of the reduced-precision element type 'f16'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

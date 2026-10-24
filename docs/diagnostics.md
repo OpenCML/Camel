@@ -6219,14 +6219,16 @@ The call of '{0}' cannot take a value of the reduced-precision element type '{1}
 bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3, H238). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).
 ```
 
-**Example** (`test/cases/modules/stdlib/reduced_arithmetic_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_arithmetic_refused.cml`)
+**Example** (`test/cases/modules/stdlib/reduced_sort_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sort_refused.cml`)
 
 ```camel
-module stdlib_reduced_arithmetic_refused
+module stdlib_reduced_sort_refused
+
+import { sort } from array
 
 func main(): int sync {
-    let xs: bf16[] = []
-    println(xs[0] % xs[0])
+    let xs: f16[] = []
+    println(sort(xs))
     return 0
 }
 ```
@@ -7479,16 +7481,24 @@ A replacement field is a pair of braces, optionally holding a format specificati
 Convert the value to a supported type before the call.
 ```
 
-**Example** (`test/cases/modules/stdlib/reduced_sort_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sort_refused.cml`)
+**Example** (`test/cases/modules/tensor/dtype/f32_only.cml`, run as `camel test/cases/modules/tensor/dtype/f32_only.cml`)
 
 ```camel
-module stdlib_reduced_sort_refused
+// `conv2d` computes in f32 only, and says so: an f64 tensor is refused at the call with a
+// diagnostic naming the operator, the argument's element type and the set the kernel takes.
+// It is never narrowed to f32 (design principles 5.1, 13.1).
+module tensor_dtype_f32_only
 
-import { sort } from array
+import { new, reshape, ones, sum } from tensor
+import { conv2d } from nn
 
 func main(): int sync {
-    let xs: f16[] = []
-    println(sort(xs))
+    let values: f64[] = [1.0, 2.0, 3.0, 4.0]
+    let x = reshape(new(values), [1, 1, 2, 2])
+    let kernel = ones([1, 1, 1, 1])
+    let bias = ones([1])
+    let y = conv2d(x, kernel, bias, 1, 0)
+    println(sum(y))
     return 0
 }
 ```

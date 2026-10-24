@@ -33,6 +33,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <numeric>
 #include <string>
 #include <string_view>
@@ -62,52 +63,47 @@ template <typename T> bool numberLess(T a, T b) {
 
 // (keys: number[] | bool[] | string[]) => int[]: the positions of the keys in ascending order of
 // key. Equal keys keep their order (a stable sort), so sorting by one key and then by another
-// works.
-slot_t __array_argsort__(ArgsView &, ArgsView &norm, Context &) {
-    Array *keys         = norm.get<Array *>(0);
-    const TypeCode code = tt::as_ptr<ArrayType>(norm.type(0))->elemTypeCode();
-    const size_t n      = keys->size();
+// works. One executor per key element type: which one runs is fixed by the declaration the call
+// compiled through (`#op<'array:argsort_i'>` and its siblings, stdlib/array.cml), so nothing here
+// asks the array which element type it holds and an element type with no declaration is refused
+// where the call is written rather than here.
+
+/// The order `argsort` puts two keys in: a NaN comes after every number, a string is compared by
+/// its bytes (as the comparison operators order strings), and a bool is `false` below `true`.
+template <typename Key> bool keyLess(Array *keys, Int64 a, Int64 b) {
+    if constexpr (std::is_same_v<Key, String *>) {
+        return keys->get<String *>(a)->compare(keys->get<String *>(b)) < 0;
+    } else {
+        return numberLess(keys->get<Key>(a), keys->get<Key>(b));
+    }
+}
+
+template <typename Key> slot_t argsortOf(ArgsView &norm) {
+    Array *keys    = norm.get<Array *>(0);
+    const size_t n = keys->size();
     std::vector<Int64> order(n);
     std::iota(order.begin(), order.end(), Int64(0));
-    const auto sortBy = [&](auto less) { std::stable_sort(order.begin(), order.end(), less); };
-    switch (code) {
-    case TypeCode::Int32:
-        sortBy([&](Int64 a, Int64 b) { return keys->get<Int32>(a) < keys->get<Int32>(b); });
-        break;
-    case TypeCode::Int64:
-        sortBy([&](Int64 a, Int64 b) { return keys->get<Int64>(a) < keys->get<Int64>(b); });
-        break;
-    case TypeCode::Float32:
-        sortBy([&](Int64 a, Int64 b) {
-            return numberLess(keys->get<Float32>(a), keys->get<Float32>(b));
-        });
-        break;
-    case TypeCode::Float64:
-        sortBy([&](Int64 a, Int64 b) {
-            return numberLess(keys->get<Float64>(a), keys->get<Float64>(b));
-        });
-        break;
-    case TypeCode::Bool:
-        sortBy([&](Int64 a, Int64 b) { return keys->get<Bool>(a) < keys->get<Bool>(b); });
-        break;
-    case TypeCode::String:
-        // By byte, as the comparison operators order strings.
-        sortBy([&](Int64 a, Int64 b) {
-            return keys->get<String *>(a)->compare(keys->get<String *>(b)) < 0;
-        });
-        break;
-    default:
-        throwRuntimeFault(
-            RuntimeDiag::OperandTypeUnsupported,
-            "array.argsort",
-            typeCodeToString(code) + "[]",
-            "an array of i32, i64, f32, f64, bool or string values");
-    }
+    std::stable_sort(
+        order.begin(), order.end(), [&](Int64 a, Int64 b) { return keyLess<Key>(keys, a, b); });
     Array *result = Array::create(mm::autoSpace(), ArrayType::create(Type::Int64()), n);
     for (size_t i = 0; i < n; ++i)
         result->set<Int64>(i, order[i]);
     return toSlot(result);
 }
+
+#define ARRAY_ARGSORT_IMPL(suffix, Key)                                             \
+    slot_t __array_argsort_##suffix##__(ArgsView &, ArgsView &norm, Context &) {     \
+        return argsortOf<Key>(norm);                                                \
+    }
+
+ARRAY_ARGSORT_IMPL(i, Int32)
+ARRAY_ARGSORT_IMPL(l, Int64)
+ARRAY_ARGSORT_IMPL(f, Float32)
+ARRAY_ARGSORT_IMPL(d, Float64)
+ARRAY_ARGSORT_IMPL(b, Bool)
+ARRAY_ARGSORT_IMPL(s, String *)
+
+#undef ARRAY_ARGSORT_IMPL
 
 // ---- sequence ----
 
@@ -185,7 +181,15 @@ slot_t __array_unique__(ArgsView &, ArgsView &norm, Context &) {
 
 // ---- the sorts ----
 
+/// The three algorithms the sorts are written under. Which one an executor runs is a template
+/// parameter, so no executor switches on it and the fault the old `switch` had for a value that
+/// is not one of them is not a path any more (kUnknownSortAlgorithm, __doSortSlots__).
 enum class SortAlgo { Insertion, Quick, Merge };
+
+/// False for every algorithm: the condition of the `static_assert` that stands where the old
+/// `default:` arm was, so an algorithm added to the enum without a body here is refused where the
+/// file is compiled rather than running as an unsorted array.
+template <SortAlgo> inline constexpr bool kUnknownSortAlgorithm = false;
 
 template <typename T, typename Compare> void insertionSortSlots(T *vals, size_t n, Compare comp) {
     for (size_t i = 1; i < n; ++i) {
@@ -265,8 +269,13 @@ void mergeSortSlots(T *vals, size_t n, Compare comp, T *tmp) {
 // the compiler hands over only when no one else refers to it (design principles 11.3;
 // Builder::inPlaceRebindingOf). The elements are numbers: the slots hold no references, so
 // reordering them needs no write barrier.
-template <typename T>
-Array *__doSortSlots__(Array *arr, SortAlgo algo, const ArrayType *arrType, bool inPlace) {
+//
+// The algorithm and the element type are template parameters, because both are fixed where the
+// executor is chosen: the declaration a call compiled through names its own element type
+// (`#op<'array:sort_i'>`, ...), and the algorithm is the name the call used. Nothing here reads
+// the element type code, so there is no run-time switch on it and no default arm that could
+// guess: an element type no declaration names never reaches an executor at all.
+template <SortAlgo Algo, typename T> Array *__doSortSlots__(Array *arr, const ArrayType *arrType, bool inPlace) {
     size_t n = arr->size();
     // The in-place form is only taken when the block is unshared and writable; a view or an
     // imported (external) buffer means someone else sees the old order.
@@ -278,52 +287,23 @@ Array *__doSortSlots__(Array *arr, SortAlgo algo, const ArrayType *arrType, bool
     }
     T *vals   = target->dataAs<T>();
     auto comp = [](T a, T b) { return a < b; };
-    switch (algo) {
-    case SortAlgo::Insertion:
+    if constexpr (Algo == SortAlgo::Insertion) {
         insertionSortSlots<T>(vals, n, comp);
-        break;
-    case SortAlgo::Quick:
+    } else if constexpr (Algo == SortAlgo::Quick) {
         quickSortSlots<T>(vals, 0, static_cast<ptrdiff_t>(n) - 1, comp);
-        break;
-    case SortAlgo::Merge: {
+    } else if constexpr (Algo == SortAlgo::Merge) {
         std::vector<T> tmp(n);
         mergeSortSlots<T>(vals, n, comp, tmp.data());
-        break;
-    }
-    default:
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "Unknown sort algorithm");
+    } else {
+        static_assert(kUnknownSortAlgorithm<Algo>, "unknown sort algorithm");
     }
     return target;
 }
 
-template <SortAlgo Algo>
-Array *
-__doSortWithTypeCode__(Array *arr, const ArrayType *arrType, bool inPlace, std::string_view fname) {
-    TypeCode code = arrType->elemTypeCode();
-    Array *result = nullptr;
-    // The element type is checked before anything is sorted: an in-place form that faults
-    // leaves the array as it was.
-    switch (code) {
-    case TypeCode::Int32:
-        result = __doSortSlots__<Int32>(arr, Algo, arrType, inPlace);
-        break;
-    case TypeCode::Int64:
-        result = __doSortSlots__<Int64>(arr, Algo, arrType, inPlace);
-        break;
-    case TypeCode::Float32:
-        result = __doSortSlots__<Float32>(arr, Algo, arrType, inPlace);
-        break;
-    case TypeCode::Float64:
-        result = __doSortSlots__<Float64>(arr, Algo, arrType, inPlace);
-        break;
-    default:
-        throwRuntimeFault(
-            RuntimeDiag::OperandTypeUnsupported,
-            std::string(fname),
-            typeCodeToString(code) + "[]",
-            "an array of i32, i64, f32 or f64 values");
-    }
-    return result;
+template <SortAlgo Algo, typename T> slot_t sortSlotsOf(ArgsView &norm, bool inPlace) {
+    Array *arr          = norm.get<Array *>(0);
+    const auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    return toSlot(__doSortSlots__<Algo, T>(arr, arrType, inPlace));
 }
 
 template <typename T>
@@ -345,130 +325,193 @@ Array *__merge_sorted_arrays_slots__(Array *lhs, Array *rhs, const ArrayType *ar
     return result;
 }
 
-// `name` returns a sorted copy; `name_in_place` is its in-place form (see __doSortSlots__).
-#define ARRAY_SORT_IMPL(name, algo)                                                                  \
-    slot_t __array_##name##__(ArgsView &, ArgsView &norm, Context &) {                               \
-        Array *arr               = norm.get<Array *>(0);                                             \
-        const ArrayType *arrType = tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));           \
-        Array *result            = __doSortWithTypeCode__<algo>(arr, arrType, false, "<" #name ">"); \
-        return result ? toSlot(result) : NullSlot;                                                   \
-    }                                                                                                \
-    slot_t __array_##name##_in_place__(ArgsView &, ArgsView &norm, Context &) {                      \
-        Array *arr               = norm.get<Array *>(0);                                             \
-        const ArrayType *arrType = tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));           \
-        Array *result            = __doSortWithTypeCode__<algo>(arr, arrType, true, "<" #name ">");  \
-        return result ? toSlot(result) : NullSlot;                                                   \
+template <typename T> slot_t mergeSortedArraysOf(ArgsView &norm) {
+    Array *lhs          = norm.get<Array *>(0);
+    Array *rhs          = norm.get<Array *>(1);
+    const auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    return toSlot(__merge_sorted_arrays_slots__<T>(lhs, rhs, arrType));
+}
+
+// One executor per element type for each algorithm: the returning form, and the in-place form the
+// compiler calls for `xs = xs->sort` (OperatorTable::setInPlaceForm; no program names either).
+// `sort` is the quicksort, so it shares the quicksort's pair rather than holding a second copy of
+// it: the two are one operation under two names (design principles 11.3).
+#define ARRAY_SORT_EXECUTOR(suffix, Algo, T)                                          \
+    slot_t __array_##suffix##__(ArgsView &, ArgsView &norm, Context &) {              \
+        return sortSlotsOf<Algo, T>(norm, false);                                     \
+    }                                                                                 \
+    slot_t __array_##suffix##_in_place__(ArgsView &, ArgsView &norm, Context &) {     \
+        return sortSlotsOf<Algo, T>(norm, true);                                      \
     }
 
-ARRAY_SORT_IMPL(insert_sort, SortAlgo::Insertion)
-ARRAY_SORT_IMPL(quick_sort, SortAlgo::Quick)
-ARRAY_SORT_IMPL(merge_sort, SortAlgo::Merge)
+#define ARRAY_SORT_FAMILY(alg, Algo)                                                  \
+    ARRAY_SORT_EXECUTOR(alg##_i, Algo, Int32)                                         \
+    ARRAY_SORT_EXECUTOR(alg##_l, Algo, Int64)                                         \
+    ARRAY_SORT_EXECUTOR(alg##_f, Algo, Float32)                                       \
+    ARRAY_SORT_EXECUTOR(alg##_d, Algo, Float64)
 
-// `sort` is the quicksort; `quick_sort` is the same kernel under the algorithm's own name.
-slot_t __array_sort__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return __array_quick_sort__(with, norm, ctx);
-}
-slot_t __array_sort_in_place__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return __array_quick_sort_in_place__(with, norm, ctx);
-}
+ARRAY_SORT_FAMILY(insert_sort, SortAlgo::Insertion)
+ARRAY_SORT_FAMILY(quick_sort, SortAlgo::Quick)
+ARRAY_SORT_FAMILY(merge_sort, SortAlgo::Merge)
 
-slot_t __array_merge_sorted_arrays__(ArgsView &, ArgsView &norm, Context &) {
-    Array *lhs               = norm.get<Array *>(0);
-    Array *rhs               = norm.get<Array *>(1);
-    const ArrayType *arrType = tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));
-    TypeCode code            = arrType->elemTypeCode();
-    Array *merged            = nullptr;
-    switch (code) {
-    case TypeCode::Int32:
-        merged = __merge_sorted_arrays_slots__<Int32>(lhs, rhs, arrType);
-        break;
-    case TypeCode::Int64:
-        merged = __merge_sorted_arrays_slots__<Int64>(lhs, rhs, arrType);
-        break;
-    case TypeCode::Float32:
-        merged = __merge_sorted_arrays_slots__<Float32>(lhs, rhs, arrType);
-        break;
-    case TypeCode::Float64:
-        merged = __merge_sorted_arrays_slots__<Float64>(lhs, rhs, arrType);
-        break;
-    default:
-        throwRuntimeFault(
-            RuntimeDiag::OperandTypeUnsupported,
-            "array.merge_sorted_arrays",
-            typeCodeToString(code) + "[]",
-            "two arrays of i32, i64, f32 or f64 values");
+#undef ARRAY_SORT_FAMILY
+#undef ARRAY_SORT_EXECUTOR
+
+#define ARRAY_MERGE_SORTED_IMPL(suffix, T)                                                  \
+    slot_t __array_merge_sorted_arrays_##suffix##__(ArgsView &, ArgsView &norm, Context &) { \
+        return mergeSortedArraysOf<T>(norm);                                                \
     }
-    return toSlot(merged);
-}
 
-#undef ARRAY_SORT_IMPL
+ARRAY_MERGE_SORTED_IMPL(i, Int32)
+ARRAY_MERGE_SORTED_IMPL(l, Int64)
+ARRAY_MERGE_SORTED_IMPL(f, Float32)
+ARRAY_MERGE_SORTED_IMPL(d, Float64)
+
+#undef ARRAY_MERGE_SORTED_IMPL
+
+// ---- the sorting family's element types, one entry each ----
+
+// Everything below is derived from these two tables, so a name and the executor it stands for
+// cannot drift apart: the operator names of `stdlib/array.cml`'s declarations, the ops map, the
+// purity and resource declarations and the in-place form of each operator are all one table's.
+
+/// One element type of the sorting family: the suffix its operator names carry (the reductions'
+/// convention — `_i` i32, `_l` int, `_f` f32, `_d` float), the two executors of each of
+/// `kSortAlgorithms` in that order (the returning form first, the in-place form beside it), and
+/// the executor of `merge_sorted_arrays`.
+struct SortType {
+    const char *suffix;
+    operator_t forms[4][2];
+    operator_t mergeSorted;
+};
+
+/// The four algorithm names the sorts are written under, in the order of `SortType::forms`.
+/// `sort` is the quicksort: its pair of executors is the quicksort's.
+constexpr const char *kSortAlgorithms[] = {"sort", "insert_sort", "quick_sort", "merge_sort"};
+
+const SortType kSortTypes[] = {
+    {"i",
+     {{__array_quick_sort_i__, __array_quick_sort_i_in_place__},
+      {__array_insert_sort_i__, __array_insert_sort_i_in_place__},
+      {__array_quick_sort_i__, __array_quick_sort_i_in_place__},
+      {__array_merge_sort_i__, __array_merge_sort_i_in_place__}},
+     __array_merge_sorted_arrays_i__},
+    {"l",
+     {{__array_quick_sort_l__, __array_quick_sort_l_in_place__},
+      {__array_insert_sort_l__, __array_insert_sort_l_in_place__},
+      {__array_quick_sort_l__, __array_quick_sort_l_in_place__},
+      {__array_merge_sort_l__, __array_merge_sort_l_in_place__}},
+     __array_merge_sorted_arrays_l__},
+    {"f",
+     {{__array_quick_sort_f__, __array_quick_sort_f_in_place__},
+      {__array_insert_sort_f__, __array_insert_sort_f_in_place__},
+      {__array_quick_sort_f__, __array_quick_sort_f_in_place__},
+      {__array_merge_sort_f__, __array_merge_sort_f_in_place__}},
+     __array_merge_sorted_arrays_f__},
+    {"d",
+     {{__array_quick_sort_d__, __array_quick_sort_d_in_place__},
+      {__array_insert_sort_d__, __array_insert_sort_d_in_place__},
+      {__array_quick_sort_d__, __array_quick_sort_d_in_place__},
+      {__array_merge_sort_d__, __array_merge_sort_d_in_place__}},
+     __array_merge_sorted_arrays_d__},
+};
+
+/// The element types `argsort` takes keys of: the four above, and the two ordered types the sorts
+/// do not order (`_b` bool, `_s` string).
+const std::pair<const char *, operator_t> kArgsortTypes[] = {
+    {"i", __array_argsort_i__},
+    {"l", __array_argsort_l__},
+    {"f", __array_argsort_f__},
+    {"d", __array_argsort_d__},
+    {"b", __array_argsort_b__},
+    {"s", __array_argsort_s__},
+};
+
+/// The name of one form of one operation for one element type, without the module prefix:
+/// `<alg>_<suffix>`, and `<alg>_<suffix>_in_place` for the form the compiler rewrites
+/// `xs = xs->sort` to (Builder::inPlaceRebindingOf). The element type is part of the name of the
+/// in-place form too, because the executor takes one element type and the URI is what picks it
+/// (OperatorTable::inPlaceForm, ExecutorManager::find): a shared in-place name would have to read
+/// the element type at run time, which is what these names remove.
+std::string sortFormName(const std::string &alg, const char *suffix, bool inPlace) {
+    std::string name = alg + "_" + suffix;
+    if (inPlace) {
+        name += "_in_place";
+    }
+    return name;
+}
 
 } // namespace
 
 std::unordered_map<std::string, operator_t> getArrayOpsMap() {
-    return {
-        // One name per operation: `sort` returns a new array (design principles 11.3). The
-        // `*_in_place` forms are the ones the compiler calls for `xs = xs->sort`
-        // (OperatorTable::setInPlaceForm); no program names them.
-        {"sort", __array_sort__},
-        {"sort_in_place", __array_sort_in_place__},
-        {"insert_sort", __array_insert_sort__},
-        {"insert_sort_in_place", __array_insert_sort_in_place__},
-        {"quick_sort", __array_quick_sort__},
-        {"quick_sort_in_place", __array_quick_sort_in_place__},
-        {"merge_sort", __array_merge_sort__},
-        {"merge_sort_in_place", __array_merge_sort_in_place__},
-        {"merge_sorted_arrays", __array_merge_sorted_arrays__},
+    std::unordered_map<std::string, operator_t> ops = {
+        // The primitives that are not sorts.
         {"flatten", __array_flatten__},
         {"unique", __array_unique__},
-        {"argsort", __array_argsort__},
-        // The reductions' kernels (builtin/operators/array_reduce.cpp): one executor per element
-        // type, named after the element type it takes. Each body-less declaration in
-        // stdlib/array.cml names one of them with its `#op` tag and admits exactly that element
-        // type with its own `when` (`Builder::declaredRuleApplies`), so the element type is known
-        // where the executor is chosen and no executor asks an array what it holds. An element
-        // type no declaration admits has no executor and runs the Camel body (H228: one operator,
-        // per-type executors).
-        {"sum_i", __array_sum_i__},
-        {"sum_l", __array_sum_l__},
-        {"sum_f", __array_sum_f__},
-        {"sum_d", __array_sum_d__},
-        {"sum_bf", __array_sum_bf__},
-        {"sum_f6", __array_sum_f6__},
-        {"min_i", __array_min_i__},
-        {"min_l", __array_min_l__},
-        {"min_f", __array_min_f__},
-        {"min_d", __array_min_d__},
-        {"min_bf", __array_min_bf__},
-        {"min_f6", __array_min_f6__},
-        {"min_b", __array_min_b__},
-        {"min_s", __array_min_s__},
-        {"max_i", __array_max_i__},
-        {"max_l", __array_max_l__},
-        {"max_f", __array_max_f__},
-        {"max_d", __array_max_d__},
-        {"max_bf", __array_max_bf__},
-        {"max_f6", __array_max_f6__},
-        {"max_b", __array_max_b__},
-        {"max_s", __array_max_s__},
     };
+    // The sorting family, one operator per element type (kSortTypes): `sort_<t>` returns a new
+    // array (design principles 11.3) and `sort_<t>_in_place` is the form the compiler calls for
+    // `xs = xs->sort` (OperatorTable::setInPlaceForm); no program names either. The element type
+    // is in the name because the executor takes exactly one, which is what the declaration the
+    // call compiled through fixed.
+    for (const SortType &type : kSortTypes) {
+        for (size_t algo = 0; algo < std::size(kSortAlgorithms); ++algo) {
+            ops[sortFormName(kSortAlgorithms[algo], type.suffix, false)] = type.forms[algo][0];
+            ops[sortFormName(kSortAlgorithms[algo], type.suffix, true)]  = type.forms[algo][1];
+        }
+        ops[std::string("merge_sorted_arrays_") + type.suffix] = type.mergeSorted;
+    }
+    // `argsort` takes the keys it can order: the sorts' four element types and the two ordered
+    // types the sorts do not order (kArgsortTypes).
+    for (const auto &[suffix, exec] : kArgsortTypes) {
+        ops[std::string("argsort_") + suffix] = exec;
+    }
+    // The reductions' kernels (builtin/operators/array_reduce.cpp): one executor per element
+    // type, named after the element type it takes. Each body-less declaration in stdlib/array.cml
+    // names one of them with its `#op` tag and admits exactly that element type with its own
+    // `when` (`Builder::declaredRuleApplies`), so the element type is known where the executor is
+    // chosen and no executor asks an array what it holds. An element type no declaration admits
+    // has no executor and runs the Camel body (H228: one operator, per-type executors).
+    for (const auto &[name, exec] :
+         std::initializer_list<std::pair<const char *, operator_t>>{
+             {"sum_i", __array_sum_i__},
+             {"sum_l", __array_sum_l__},
+             {"sum_f", __array_sum_f__},
+             {"sum_d", __array_sum_d__},
+             {"sum_bf", __array_sum_bf__},
+             {"sum_f6", __array_sum_f6__},
+             {"min_i", __array_min_i__},
+             {"min_l", __array_min_l__},
+             {"min_f", __array_min_f__},
+             {"min_d", __array_min_d__},
+             {"min_bf", __array_min_bf__},
+             {"min_f6", __array_min_f6__},
+             {"min_b", __array_min_b__},
+             {"min_s", __array_min_s__},
+             {"max_i", __array_max_i__},
+             {"max_l", __array_max_l__},
+             {"max_f", __array_max_f__},
+             {"max_d", __array_max_d__},
+             {"max_bf", __array_max_bf__},
+             {"max_f6", __array_max_f6__},
+             {"max_b", __array_max_b__},
+             {"max_s", __array_max_s__},
+         }) {
+        ops[name] = exec;
+    }
+    return ops;
 }
 
 void declareArrayOperatorFacts() {
     auto &table = camel::core::OperatorTable::instance();
-    // Every operator returns a new array: none of them changes its argument (design principles
-    // 11.3). Only one name per operation is kept (11.3: `sort`, not `sorted`).
+    // Every operator that returns an array returns a new one: none of them changes its argument
+    // (design principles 11.3). Only one name per operation is kept (11.3: `sort`, not `sorted`),
+    // and there is one name per element type, because one executor takes one element type.
     table.declare(
         "array",
         {
-            {"sort", true},
-            {"insert_sort", true},
-            {"quick_sort", true},
-            {"merge_sort", true},
-            {"merge_sorted_arrays", true},
             {"flatten", true},
             {"unique", true},
-            {"argsort", true},
             // The reductions' kernels are pure as the functions they execute are: the fold reads
             // the array it is given and touches nothing else. The declarations in the map above
             // name them; this is what tells the compiler what a call of one may touch. One entry
@@ -496,27 +539,35 @@ void declareArrayOperatorFacts() {
             {"max_b", true},
             {"max_s", true},
         });
-    // The in-place forms of the sorting operators (design principles 11.3): `xs = xs->sort`
-    // sorts the variable's own array when nothing else refers to it (Builder::
-    // inPlaceRebindingOf). Each changes the array it is given, so it is not pure; what it
-    // changes is the program's own variable, so it has no effect outside the program. An array
-    // of numbers is sorted without a fault, so the array is never left half done.
-    for (const char *name : {"sort", "insert_sort", "quick_sort", "merge_sort"}) {
-        const std::string uri = std::string("array:") + name;
-        table.set(uri + "_in_place", {.stateOnly = true, .mayFault = true});
-        table.setInPlaceForm(uri, uri + "_in_place");
-        // The form returns its operand, changed: the one fact the temporary-value analysis needs.
-        table.declareReusesOperand(uri + "_in_place");
+    for (const auto &[suffix, exec] : kArgsortTypes) {
+        (void)exec;
+        table.declare("array", {{std::string("argsort_") + suffix, true}});
     }
-    // An in-place form changes the array it is given and returns it (docs/design/op-semantics
-    // 8): a read-modify-write of its first operand, an object, whole.
+    // The sorts: the returning form of every element type, and the in-place form the compiler
+    // introduces for `xs = xs->sort` (design principles 11.3; Builder::inPlaceRebindingOf). The
+    // in-place form changes the array it is given, so it is not pure; what it changes is the
+    // program's own variable, so it has no effect outside the program. It changes the array and
+    // returns it, so it is a read-modify-write of its first operand, an object, whole
+    // (docs/design/op-semantics 8), and it reuses its operand — the one fact the temporary-value
+    // analysis needs. Sorting never faults now: an element type the sorts have no executor for
+    // has no declaration either, and the call is refused where it is written.
     using namespace camel::core::sem;
-    for (const char *name : {"sort", "insert_sort", "quick_sort", "merge_sort"}) {
-        table.declareResources(
-            std::string("array:") + name + "_in_place",
-            ResourceSpec{
-                .accesses = {operandAccess(ResourceClass::Object, 0, AccessMode::ReadModifyWrite)},
-                .result   = ResultAlias{.kind = ResultAlias::Kind::Same, .operand = 0},
-            });
+    for (const SortType &type : kSortTypes) {
+        for (const char *algo : kSortAlgorithms) {
+            const std::string name = sortFormName(algo, type.suffix, false);
+            table.declare("array", {{name, true}});
+            const std::string inPlace = sortFormName(algo, type.suffix, true);
+            table.set(std::string("array:") + inPlace, {.stateOnly = true, .mayFault = true});
+            table.setInPlaceForm(std::string("array:") + name, std::string("array:") + inPlace);
+            table.declareReusesOperand(std::string("array:") + inPlace);
+            table.declareResources(
+                std::string("array:") + inPlace,
+                ResourceSpec{
+                    .accesses =
+                        {operandAccess(ResourceClass::Object, 0, AccessMode::ReadModifyWrite)},
+                    .result = ResultAlias{.kind = ResultAlias::Kind::Same, .operand = 0},
+                });
+        }
+        table.declare("array", {{std::string("merge_sorted_arrays_") + type.suffix, true}});
     }
 }

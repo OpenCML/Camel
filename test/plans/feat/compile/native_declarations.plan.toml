@@ -290,7 +290,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.array_declaration_import"
-desc = "`array`'s declarations are the module's signature: `argsort` has its six declared key element types and gives `int[]`; each sort name and `merge_sorted_arrays` is generic over its element type, as its kernel is; `flatten` and `unique` are generic declarations; every call reaches the built-in operator."
+desc = "`array`'s declarations are the module's signature: `argsort` has its six declared key element types and gives `int[]`; each sort name and `merge_sorted_arrays` has one declaration per element type, each taking its own element type and naming its own operator (`array:sort_i` for `i32`, `array:sort_d` for `float`, ...); `flatten` and `unique` are generic declarations; every call reaches the built-in operator."
 kind = "behavior"
 case = "../../../cases/compile/native/array_declaration_import.cml"
 args = ["${case}"]
@@ -304,7 +304,7 @@ kind = "negative"
 case = "../../../cases/compile/native/array_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_arity.cml:11:20", "(int[], int)", "<array:argsort>: (keys: i32[]) => int[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_arity.cml:11:20", "(int[], int)", "<array:argsort_i>: (keys: i32[]) => int[]"]
 
 [[tests]]
 name = "native.array_wrong_type"
@@ -313,25 +313,25 @@ kind = "negative"
 case = "../../../cases/compile/native/array_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_type.cml:12:20", "argument types: <> (int)", "<array:argsort>: (keys: i32[]) => int[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_type.cml:12:20", "argument types: <> (int)", "<array:argsort_i>: (keys: i32[]) => int[]"]
 
 [[tests]]
 name = "native.array_sort_wrong_arity"
-desc = "`array:sort` is declared with one array argument: a second one is refused at the call, and the overloads the message lists are the declarations', parameter name included."
+desc = "`array:sort` is declared with one array argument: a second one is refused at the call, and the overloads the message lists are the declarations', parameter name included — one per element type, each naming its own operator (`array:sort_i` for `i32`)."
 kind = "negative"
 case = "../../../cases/compile/native/array_sort_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_arity.cml:10:17", "argument types: <> (int[], int)", "<array:sort>: (xs: T[]) => T[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_arity.cml:10:17", "argument types: <> (int[], int)", "<array:sort_i>: (xs: i32[]) => i32[]"]
 
 [[tests]]
 name = "native.array_sort_wrong_type"
-desc = "A number where the declarations of `array:sort` take an array: refused at the declarations' type, and the signature in the message has their own parameter name (`xs`) and type variable — `stdlib/array.cml`, not the C++, is the source."
+desc = "A number where the declarations of `array:sort` take an array: refused at the declarations' type, and the signatures in the message have their own parameter name (`xs`) and the element type of their own declaration — `stdlib/array.cml`, not the C++, is the source."
 kind = "negative"
 case = "../../../cases/compile/native/array_sort_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_type.cml:11:17", "argument types: <> (int)", "<array:sort>: (xs: T[]) => T[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_type.cml:11:17", "argument types: <> (int)", "<array:sort_i>: (xs: i32[]) => i32[]"]
 
 # ---- The declarations of `statistics`: four element types per name (handover H135) ----
 

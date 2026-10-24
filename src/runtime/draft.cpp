@@ -1317,6 +1317,80 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     }
 }
 
+void GraphDraft::replaceOrderEdgesAt(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    requireOneWriting("replaceOrderEdgesAt");
+    if (oldId == newId || !alive(oldId) || !alive(newId)) {
+        return;
+    }
+    ++mutations_;
+    const uint32_t region = nodeRegion(newId);
+    // What ordered the replaced node orders its replacer (docs/design/effects/edges.cn.md 4). An
+    // ordering never leaves the region that holds it, so a predecessor of another region is not
+    // moved; the replacer heads the ordering of its own region instead.
+    const std::vector<gc_node_ref_t> preds(orderInputsOf(oldId).begin(), orderInputsOf(oldId).end());
+    for (gc_node_ref_t pred : preds) {
+        if (pred == newId || !alive(pred) || nodeRegion(pred) != region) {
+            continue;
+        }
+        if (std::ranges::find(orderInputsOf(newId), pred) != orderInputsOf(newId).end()) {
+            continue;
+        }
+        appendOrderDependency(newId, pred);
+    }
+    // What the replaced node ordered is ordered by its replacer. A user of another region cannot
+    // take the new predecessor either: its own region's ordering is not this one, and the edge is
+    // dropped with the node rather than moved (the seal check reads the regions back).
+    const std::vector<gc_node_ref_t> users(orderUsersOf(oldId).begin(), orderUsersOf(oldId).end());
+    for (gc_node_ref_t user : users) {
+        if (user == newId || !alive(user)) {
+            continue;
+        }
+        std::vector<gc_node_ref_t> inputs(orderInputsOf(user).begin(), orderInputsOf(user).end());
+        const auto at = std::ranges::find(inputs, oldId);
+        if (at == inputs.end()) {
+            continue;
+        }
+        if (nodeRegion(user) != region) {
+            inputs.erase(at);
+        } else {
+            *at = newId;
+        }
+        setOrderInputs(user, inputs);
+    }
+}
+
+void GraphDraft::spliceOrderEdgesOver(gc_node_ref_t id) {
+    requireOneWriting("spliceOrderEdgesOver");
+    if (!alive(id)) {
+        return;
+    }
+    const std::vector<gc_node_ref_t> preds(orderInputsOf(id).begin(), orderInputsOf(id).end());
+    const std::vector<gc_node_ref_t> users(orderUsersOf(id).begin(), orderUsersOf(id).end());
+    if (preds.empty() || users.empty()) {
+        return;
+    }
+    ++mutations_;
+    // Removing a node keeps the ordering that passed through it: a node ordered after it is
+    // ordered after what it was ordered after (A -> B -> C becomes A -> C; docs/design/effects/
+    // edges.cn.md 4). Both ends already carried an order edge, so both are nodes an order may sit
+    // on; the copy is made because appendOrderDependency rewrites the runs it reads from.
+    for (gc_node_ref_t user : users) {
+        if (!alive(user)) {
+            continue;
+        }
+        for (gc_node_ref_t pred : preds) {
+            if (pred == id || pred == user || !alive(pred) ||
+                nodeRegion(pred) != nodeRegion(user)) {
+                continue;
+            }
+            if (std::ranges::find(orderInputsOf(user), pred) != orderInputsOf(user).end()) {
+                continue;
+            }
+            appendOrderDependency(user, pred);
+        }
+    }
+}
+
 void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
     requireOneWriting("takeStatementPlace");
     if (oldId == newId) {
@@ -1324,12 +1398,20 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
     }
     const DraftNodeHeader *oldHeader = header(oldId);
     const DraftNodeHeader *newHeader = header(newId);
-    if (oldHeader == nullptr || newHeader == nullptr ||
-        (oldHeader->runtimeFlags & kGCNodeFlagSyncStatement) == 0) {
-        // Nothing stood in a chain, so there is no place to take.
+    if (oldHeader == nullptr || newHeader == nullptr) {
         return;
     }
-    if (nodeRegion(oldId) != nodeRegion(newId)) {
+    const bool sameRegion = nodeRegion(oldId) == nodeRegion(newId);
+    if (sameRegion) {
+        // The replaced node's order edges are part of what it hands over (docs/design/effects/
+        // edges.cn.md 4), whether or not it also stood in a `sync` block's chain.
+        replaceOrderEdgesAt(oldId, newId);
+    }
+    if ((oldHeader->runtimeFlags & kGCNodeFlagSyncStatement) == 0) {
+        // Nothing stood in a chain, so there is no chain place to take.
+        return;
+    }
+    if (!sameRegion) {
         // The replacer is not a statement of the block the replaced one was written in: the chain
         // closes over the replaced node instead (closeChainOver).
         return;
@@ -1398,6 +1480,9 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     // The block's chain closes over a statement the graph loses: its successors follow what it
     // followed, and the control edge naming the same pair is written beside the sync edge.
     closeChainOver(id);
+    // The orderings that passed through the node survive it the same way (docs/design/effects/
+    // edges.cn.md 4), and both splices run before the node's own runs go.
+    spliceOrderEdgesOver(id);
 
     for (gc_node_ref_t input : normInputs) {
         removeUserRef(input, id, DraftEdgeSlot::NormalPorts);
