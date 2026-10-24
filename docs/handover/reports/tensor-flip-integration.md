@@ -240,6 +240,52 @@ element type is undetermined where the ruling says a value's element type is alw
 determined**. The kernel's refusal was right; the flip's VJP typing is incomplete. Not the
 rank-0 wall, not the `var Tensor` invariant: its own lever, 3 reds.
 
+## The `var Tensor` family (38 reds): the cell rule is strict, and the two spellings are the defect
+
+**38 tests** fail with one message, counted by test name over the shape-2 run
+(`notes/h388-fast-s2-clean.log`), and every one of them is the same pair of types:
+
+```
+camel: internal error: Runtime graph 'main' breaks its edge invariants (2 violation(s)):
+  graph 'main' node 5 (10): passes a var f32[?, ?] as ordinary argument 0 of 'step', which takes a var Tensor
+  graph 'main' node 9 (10): passes a var f32[?, ?] as ordinary argument 0 of 'twice', which takes a var Tensor
+```
+
+Repro: `test/cases/modules/autodiff/var_tensor_read.cml` (`main` has `var acc = reshape([0, 0], [2])`
+and calls `loss(x: Tensor, var acc: Tensor)`), plus `var_tensor*.{default,fvm,jit,opt,inline,cse,dce,fold,…}`
+and `poison:linear.var_reference:var_tensor.default` — one family, 38 entries.
+
+**The rule that fires** is deliberate and correct: `ArrayType::assignableFrom` accepts this pair
+(`numericUnknown()` takes any numeric element, `src/core/type/composite/array.cpp`), but the
+argument is a **cell**, and `TupleType::assignableFrom` refuses anything but equality for a cell:
+
+```cpp
+if (cell_) {
+    // A cell is written through every reference to it: the content types must be equal.
+    return typesPtr_[0]->equals(other.typesPtr_[0]);
+}
+```
+(`src/core/type/composite/tuple.cpp`.) The reason is sound: a `var` parameter may **write** any
+`Tensor` through the caller's cell, so a caller whose variable is `f32[?, ?]` would end up holding
+something outside its own declared type. Relaxing the invariant would hide exactly that.
+
+**So the defect is the spelling, not the check**: the variable's cell holds `f32[?, ?]` (an array
+whose element is stated and whose extents are not) and the parameter's cell holds `Tensor`
+(`ArrayType::numericUnknown()`, element unstated, rank open). On develop these are one type —
+`reshape` answers a `TensorType` and so does the parameter — so the cell contents are equal and
+all 38 are green. The flip spells "a tensor whose shape is not known" two ways in two places, and
+the cell equality rule cannot see them as one.
+
+**Where the fix belongs**: make the two spellings agree at the call — in the compiler's
+`var`-argument path (`src/compile/gir/**`), where the caller's cell should take the declared
+parameter type at the call — **not** in the invariant, and **not** by rejecting the call: the
+programs are develop's own and are green there, so the acceptance "develop's behaviour is not
+lost" rules out turning them into compile errors. **This family and the ONNX shape-2 pair share
+one root** — a declared `Tensor` spelling living beside the actual spelling of the same value —
+which is why the `var Tensor` slice is also evidence for the (b) question
+(`docs/handover/questions/bare-tensor-parameter-instantiation.md`): the exporter meets the same
+disagreement as data, this family meets it as a cell.
+
 ## The holes: 47 at case level, unchanged, and the list is longer than 22
 
 The same tests name a `NoMatchingFunction` before and after, with the same operators: **47 of
