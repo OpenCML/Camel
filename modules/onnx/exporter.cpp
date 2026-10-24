@@ -216,7 +216,7 @@ class Evaluator {
     /// Refuses `graph` when an impure operator is reachable from its exit through data or
     /// control edges, in `graph` itself or in a function it calls or holds as a constant.
     /// translate() only follows data dependencies, so an operator that runs for its effect
-    /// alone (a `println` statement of a sync function) would otherwise be left out of the
+    /// alone (a `println` statement of a function with a sync body) would otherwise be left out of the
     /// model without a word.
     void refuseEffects(GCGraph *graph);
 

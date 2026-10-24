@@ -343,6 +343,7 @@ class ParserImpl {
     void parseStaticForHeader();
     void parseStaticForName();
     void parseStaticLoop();
+    void parseStaticLoopHeader();
     void parseMatchCase();
     void parseTypeCase();
     void parseTypeCasePattern();

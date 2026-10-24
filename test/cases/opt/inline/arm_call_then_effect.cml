@@ -14,7 +14,7 @@ module arm_call_then_effect
 
 import { now } from time
 
-sync func timed(remaining: int, ticks: int): int {
+func timed(remaining: int, ticks: int): int {
     return if remaining <= 0 then ticks else sync {
         return timed(remaining - 1, ticks + 1)
     }

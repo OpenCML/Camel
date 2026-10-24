@@ -9,7 +9,7 @@
  */
 module bare_arm_var_call_warning
 
-sync func wr(var c: int, x: int): int sync {
+func wr(var c: int, x: int): int sync {
     c += x
     println('wr')
     return c

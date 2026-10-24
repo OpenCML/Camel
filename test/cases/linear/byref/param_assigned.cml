@@ -6,7 +6,7 @@
 module param_assigned
 
 func f(x: int): int sync {
-    wait x = 5
+    x = 5
     return x
 }
 

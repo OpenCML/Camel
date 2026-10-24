@@ -1,0 +1,18 @@
+// `sync` in the function body position: the body is a sync block, and its statements run in order.
+// Run: camel docs/tutorial/examples/06_sync_body.cml
+module sync_body
+
+func f(): int {
+    println('f')        // not executed: the body is not a sync block
+    return 1
+}
+
+func g(): int sync {
+    println('g')        // executed: the body is a sync block
+    return 2
+}
+
+func main(): int sync {
+    println(f() + g())
+    return 0
+}

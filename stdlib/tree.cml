@@ -70,7 +70,7 @@ with <f: (acc: R, leaf: A) => R>
 export func tree_reduce::<T, R, A>(t: T, init: R): R {
     return match type T {
         case struct | tuple =>
-            static loop a = init for (n, _) in fields T do tree_reduce<f>(t.[n], a)
+            static loop a = init for n, _ in fields T do tree_reduce<f>(t.[n], a)
         case _ => f(init, t)
     }
 }

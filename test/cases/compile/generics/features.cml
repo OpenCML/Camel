@@ -78,7 +78,7 @@ func local_generic(n: int): (int, string) {
     return (a.0 + a.1, b.0 + b.1)
 }
 
-sync func bump::<T>(var x: T, d: T): void sync {
+func bump::<T>(var x: T, d: T): void sync {
     x = x + d
 }
 

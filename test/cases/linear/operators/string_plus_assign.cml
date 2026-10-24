@@ -4,7 +4,7 @@
  */
 module string_plus_assign
 
-sync func append(var t: string, x: string): string sync {
+func append(var t: string, x: string): string sync {
     t += x
     return t
 }

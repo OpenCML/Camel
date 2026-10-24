@@ -306,7 +306,6 @@ bool ParserImpl::startsDecl(TK kind) const {
     case TK::KwFunc:
     case TK::KwType:
     case TK::KwWith:
-    case TK::KwSync:
     case TK::At:
     case TK::Hash:
         return true;
@@ -439,12 +438,11 @@ void ParserImpl::parseDecl() {
 
 /// stmt : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
 ///      | blockStmt | staticForExpr
-/// blockStmt : 'wait'? stmtBlock | funcAnno+ stmtBlock
+/// blockStmt : stmtBlock | funcAnno+ stmtBlock
 /// Decided on the first token, except:
-///   - modifiers (`sync`) are skipped to see what they modify: `func` (a declaration), `{`
-///     after a lone `sync` (a block), anything else (a lambda expression);
-///   - `{` is a struct literal when it is `{}`, `{ name: ...` or `{ ...`, a block otherwise;
-///     the same after `wait`.
+///   - `sync` is looked past to see what it is written on: `{` (a synchronous block),
+///     anything else (a lambda or a function type, read as an expression);
+///   - `{` is a struct literal when it is `{}`, `{ name: ...` or `{ ...`, a block otherwise.
 /// `static for` is a statement, not a value (H51 step 3): it parses here only, so writing it
 /// where a value is needed is a syntax error rather than a silently dropped value.
 void ParserImpl::parseStmt() {
@@ -476,9 +474,6 @@ void ParserImpl::parseStmt() {
         return parseAnnotatedStmt();
     case TK::KwSync: {
         const uint32_t n = afterModifiers();
-        if (peek(n) == TK::KwFunc) {
-            return parseFuncDecl();
-        }
         if (n == 1 && peek(1) == TK::LBrace) {
             return parseStmtBlock();
         }
@@ -488,19 +483,6 @@ void ParserImpl::parseStmt() {
         // `static for` is a statement; `static loop` is an expression with a value, and is
         // read by parseExpr (`static` never starts anything else).
         return peek(1) == TK::KwLoop ? parseStaticLoop() : parseStaticFor();
-    case TK::KwWait: {
-        // blockStmt : 'wait' stmtBlock, or the expression `wait {struct}`.
-        const uint32_t brace = peek(1) == TK::KwSync ? 2 : 1;
-        if (peek(brace) == TK::LBrace &&
-            (brace == 2 || !(peek(2) == TK::RBrace || braceIsStruct(1)))) {
-            const size_t m = mark();
-            bump();
-            parseStmtBlock();
-            close(m, NK::BlockStmt);
-            return;
-        }
-        return parseExpr();
-    }
     case TK::LBrace:
         // The expression is the first alternative: `{}` alone is the empty struct.
         if (peek(1) == TK::RBrace || braceIsStruct(0)) {
@@ -795,7 +777,7 @@ void ParserImpl::parseFrontMatter() {
     }
 }
 
-/// funcDecl : frontMatter ('with' angledParams)? 'export'? modifiers?
+/// funcDecl : frontMatter ('with' angledParams)? 'export'?
 ///            'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
 ///            resourceClause? whenClause? stmtBlock?
 ///
@@ -962,9 +944,6 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
         parseAngledParams();
     }
     eat(TK::KwExport);
-    if (isModifier(cur_)) {
-        parseModifiers();
-    }
     if (!eat(TK::KwFunc)) {
         unexpected({e(TK::KwFunc)});
         return close(m, NK::FuncDecl);

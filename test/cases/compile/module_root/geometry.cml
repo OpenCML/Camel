@@ -8,7 +8,7 @@ export let pi = 3.14159
 export let tau = pi * 2.0
 export let unit = make_unit()
 
-sync func make_unit(): (float, float) sync {
+func make_unit(): (float, float) sync {
     println('geometry: making the unit vector')
     return (1.0, 0.0)
 }

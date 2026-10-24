@@ -435,7 +435,7 @@ node_ptr_t Tree::makeStaticFor(
 
 node_ptr_t Tree::makeStaticLoop(
     const std::vector<std::string> &state, const std::string &valueName,
-    const std::string &typeName, bool byIndices) {
+    const std::string &typeName, bool byIndices, bool bySequence) {
     Node *node = makeNode(NodeKind::SLOOP);
     const size_t count = state.size() + 2;
     auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(count)));
@@ -448,6 +448,9 @@ node_ptr_t Tree::makeStaticLoop(
     node->payload_.names = list;
     if (byIndices) {
         node->flags_ |= Node::kFlagA;
+    }
+    if (bySequence) {
+        node->flags_ |= Node::kFlagB;
     }
     return node;
 }

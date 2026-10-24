@@ -5,13 +5,13 @@
  */
 module let_field_to_var_param
 
-sync func bump(var x: int) {
-    wait x += 1
+func bump(var x: int) {
+    x += 1
 }
 
 func main(): int sync {
     let s = { x: 1, y: 2 }
-    wait bump(s.x)
+    bump(s.x)
     println(s.x)
     return 0
 }

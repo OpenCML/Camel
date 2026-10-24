@@ -35,7 +35,7 @@ func my_filter(points: Point[]): Point[] sync {
 @add_n<1>
 @tools::trace
 @mul_n<2>
-export sync func core(x: int): int {
+export func core(x: int): int {
     return x + 3
 }
 
@@ -61,6 +61,6 @@ func calls(arr: int[], p: Point): int sync {
     }
     let compare = direct < 5 && direct > 2
     let tight = add_n<direct>(fib)(1) >= 2
-    wait no_params()
+    no_params()
     return lambda(direct)
 }

@@ -465,7 +465,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ExportedVariable",
                 "The variable '{0}' cannot be exported.",
-                "A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export sync func bump(): int sync {{ wait cnt += 1; return cnt }}'). A 'let' can be exported.",
+                "A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export func bump(): int sync {{ cnt += 1; return cnt }}'). A 'let' can be exported.",
             },
         },
         {
@@ -914,6 +914,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StaticIndicesNotTuple",
                 "'indices' walks the positions of a tuple, but '{0}' has type '{1}'.",
                 "'indices ts' walks the positions of an ordinary tuple: it needs a value of tuple type (a tuple variable or a tuple literal). A struct has named fields; walk it with 'fields T'. A 'T?' or 'T!' and a mutable cell are leaves (design principles 13.5).",
+            },
+        },
+        {
+            SemanticDiag::StaticLoopSequenceNotKnown,
+            {
+                "StaticLoopSequenceNotKnown",
+                "The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not.",
+                "A 'static loop' is unrolled where it stands, so how many rounds it has must be known then: a constant interval 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'indices ts' for the positions of a compile-time tuple, or 'fields T' for the fields of a type. A run-time array or a run-time value leaves the number of rounds open.",
             },
         },
         {
@@ -1525,27 +1533,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::VarParamInAsyncFunction,
-            {
-                "VarParamInAsyncFunction",
-                "Variable parameters are only allowed in sync functions.",
-                "Remove the variable parameter or make the function synchronous.",
-            },
-        },
-        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
-                "{0} is neither waited nor in a sync block, and {1}.",
-                "Write 'wait' before the expression or put it in a sync block: only then is the write ordered after the earlier uses of the variable. Without either, the write runs only if the variable is read afterwards.",
-            },
-        },
-        {
-            SemanticDiag::CapturedWriteInAsyncFunction,
-            {
-                "CapturedWriteInAsyncFunction",
-                "{0} writes the captured variable{1} {2} but is not declared with the 'sync' modifier.",
-                "Write 'sync' before the function ('sync func f(...)', 'sync (...) => ...'): the modifier declares that the function has side effects, as it does for a function with a var parameter. It does not make the body a sync block.",
+                "{0} is not in a sync block, and {1}.",
+                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.",
             },
         },
         {

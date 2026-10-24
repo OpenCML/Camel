@@ -20,7 +20,7 @@ module var_capture_reference
 func pick(k: int): int sync {
     var c = 0
     let r = if k > 0 then sync {
-        wait c += 5
+        c += 5
         return 1
     } else 0
     println('{} {}'->format<c, r>)
@@ -30,15 +30,15 @@ func pick(k: int): int sync {
 func counter(): () => int sync {
     var n = 0
     return (): int => sync {
-        wait n += 1
+        n += 1
         return n
     }
 }
 
 func nested(): int sync {
     var v = 3
-    sync func lift(by: int): int sync {
-        wait v += by
+    func lift(by: int): int sync {
+        v += by
         return v
     }
     let r = lift(5)
@@ -47,7 +47,7 @@ func nested(): int sync {
 
 func through(var out: int): int sync {
     let add = (x: int): int => sync {
-        wait out += x
+        out += x
         return out
     }
     let a = add(1)
@@ -61,23 +61,23 @@ func main(): int sync {
 
     var c = 0
     let f = (): int => sync {
-        wait c += 1
+        c += 1
         return c
     }
     let r1 = f()
     println('{} {}'->format<r1, c>)
-    wait c += 10
+    c += 10
     let r2 = f()
     println('{} {}'->format<r2, c>)
 
     var total = 0
     [1, 2, 3]->foreach<(x: int) => sync {
-        wait total += x
+        total += x
     }>
     println(total)
 
     var base = 0
-    wait base += 10
+    base += 10
     let shifted = [1, 2, 3]->map<(x: int): int => x + base>
     println(shifted)
 

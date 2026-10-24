@@ -11,11 +11,11 @@
  */
 module var_param_jit
 
-sync func down(var acc: int, n: int): int {
+func down(var acc: int, n: int): int {
     return if n <= 0 then 0 else down(acc, n - 1)
 }
 
-sync func read(var acc: int, n: int): int {
+func read(var acc: int, n: int): int {
     return if n <= 0 then acc else read(acc, n - 1)
 }
 

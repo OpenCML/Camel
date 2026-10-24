@@ -1,18 +1,18 @@
 /**
- * A fault in a waited call that has already written its var parameter.
+ * A fault in a call that has already written its var parameter.
  */
 module fault_in_wait
 
-sync func bump(var x: int, d: int) {
-    wait x += 10
-    wait x = x / d
+func bump(var x: int, d: int) {
+    x += 10
+    x = x / d
 }
 
 func main(): int sync {
     var i = 5
-    wait bump(i, 3)
+    bump(i, 3)
     println(i)
-    wait bump(i, 0)
+    bump(i, 0)
     println(i)
     println('not reached')
     return 0

@@ -332,7 +332,7 @@ device context; it does not cache tensor values. Each invocation uploads fresh
 host inputs, while resident inputs reuse their native allocations. Public calls
 wait for completion before returning Camel values. The internal native submission
 interface can chain work on distinct streams through completion events; it does
-not introduce a pending Camel value or change source-level `sync`/`wait`.
+not introduce a pending Camel value or change the source-level `sync`.
 Compilation-cache access uses a short mutex rather than serializing device
 execution. This release does not claim competitive performance with Triton.
 

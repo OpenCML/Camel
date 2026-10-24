@@ -86,12 +86,11 @@ CAMEL_NODE(IdentRef, Other)            // (IDENTIFIER '::')* IDENTIFIER, where a
 
 CAMEL_NODE(SpreadValue, Expr)          // '...' dataExpr (an indexValue with the marker)
 CAMEL_NODE(RestValue, Expr)            // '..' dataExpr (a rest argument, expanded at the call)
-CAMEL_NODE(WaitExpr, Expr)             // 'wait' assignExpr
 CAMEL_NODE(IfExpr, Expr)               // 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 CAMEL_NODE(MatchExpr, Expr)            // 'match' logicalOrExpr '{' matchCase+ '}'
 CAMEL_NODE(MatchTypeExpr, Expr)        // 'match' 'type' typeExpr '{' typeCase* '}'
 CAMEL_NODE(StaticForExpr, Expr)        // 'static' 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr '=>' blockExpr
-CAMEL_NODE(StaticLoopExpr, Expr)       // 'static' 'loop' loopState (',' loopState)* 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr 'do' blockExpr
+CAMEL_NODE(StaticLoopExpr, Expr)       // 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr
 CAMEL_NODE(TryExpr, Expr)              // 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
 CAMEL_NODE(LoopExpr, Expr)             // 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
 CAMEL_NODE(LoopState, Other)           // identDef '=' logicalOrExpr

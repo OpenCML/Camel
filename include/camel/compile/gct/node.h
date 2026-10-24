@@ -416,12 +416,22 @@ class Node {
         check(NodeKind::SLOOP);
         return (flags_ & kFlagA) != 0;
     }
+    /// SLOOP: the fold walks a sequence written after `in` (`for i in 0..5`), rather than the
+    /// fields of a type or the positions of a tuple value. The sequence must be one the compiler
+    /// works out; the graph builder refuses it with `SemanticDiag::StaticLoopSequenceNotKnown`
+    /// when it is not (the ruling of 2026-10-24, H462). Never set together with
+    /// `staticLoopIndices`.
+    bool staticLoopSequence() const {
+        check(NodeKind::SLOOP);
+        return (flags_ & kFlagB) != 0;
+    }
     /// SLOOP: the j-th first value of the state (children 1 ... k).
     node_ptr_t staticLoopInitial(size_t j) const {
         check(NodeKind::SLOOP);
         return at(j + 1);
     }
-    /// SLOOP: the walked shape (child 0): a TYPE for `fields`, the operand value for `indices`.
+    /// SLOOP: the walked shape (child 0): a TYPE for `fields`, the operand value for `indices`
+    /// and for a written sequence.
     node_ptr_t staticLoopOperand() const {
         check(NodeKind::SLOOP);
         return at(0);

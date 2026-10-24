@@ -1,6 +1,6 @@
 /**
  * progen finding F41 (branch arm). The lambda passed to `f15` ignores its arguments. When its
- *   call is inlined, what used the call is made to wait on what the arguments were computed
+ *   call is inlined, what used the call is made to on what the arguments were computed
  *   from (`0 % 997`, the inner `if`). The call was the tail of the `case 5` arm, so its user
  *   was the JOIN of the `match`: the JOIN itself waited on code of that arm, which no arm's
  *   tail depended on any more.

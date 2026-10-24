@@ -738,8 +738,6 @@ class Formatter {
 
     std::any visitCtrlExpr(syn::Node context);
 
-    std::any visitWaitExpr(cst::WaitExpr context);
-
     std::any visitAssignExpr(cst::AssignExpr context);
 
     std::any visitLogicalOrExpr(cst::LogicalOrExpr context);

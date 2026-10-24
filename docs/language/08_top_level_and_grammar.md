@@ -41,10 +41,9 @@ blockExpr : stmtBlock | dataExpr            // 分支臂、lambda 体
 从低优先级到高优先级（见 [6.12](06_expressions.md#612-运算符优先级)）：
 
 ```
-dataExpr   : waitExpr | ctrlExpr
+dataExpr   : ctrlExpr
 ctrlExpr   : if logicalOr then blockExpr (else blockExpr)?
            | match 名字 '{' (case pattern ('|' pattern)* '=>' blockExpr)+ '}'
-waitExpr   : wait? assignExpr
 assignExpr : logicalOr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOr)?
 logicalOr  : logicalAnd ('||' logicalAnd)*
 logicalAnd : or ('&&' or)*
@@ -100,7 +99,7 @@ decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usin
                      | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt | staticForExpr
-blockStmt          : 'wait'? stmtBlock | funcAnno+ stmtBlock
+blockStmt          : stmtBlock | funcAnno+ stmtBlock
 stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
@@ -116,7 +115,7 @@ namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDec
                      | typeDecl | dataDecl | resourceDecl
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
-funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
+funcDecl           : frontMatter ('with' angledParams)? 'export'?
                      'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
                      resourceClause? whenClause? stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
@@ -150,8 +149,7 @@ keyParamPair       : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
 angledParams       : '<' pairedParams? ','? '>'
-dataExpr           : waitExpr | ctrlExpr | loopExpr
-waitExpr           : 'wait'? assignExpr
+dataExpr           : ctrlExpr | loopExpr
 ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
                      | 'match' identRef '{' matchCase+ '}'
                      | 'match' 'type' typeExpr '{' typeCase* '}'
@@ -205,7 +203,9 @@ typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExp
 staticForExpr      : 'static' staticForHeader '=>' blockExpr
 staticForHeader    : 'for' '(' (identDef | '_') (',' (identDef | '_'))? ')' 'in'
                      ('fields' typeExpr | 'indices' dataExpr)
-staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
+staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr
+staticLoopHeader   : 'for' (identDef | '_') (',' (identDef | '_'))? 'in'
+                     ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 matchCase          : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
 pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
@@ -289,7 +289,6 @@ analysisClause     : IDENTIFIER '=>' dataExpr
 | 非空断言 `x!` | `ConstructNotSupported` | `x ?? 默认值`、`match` |
 | `f ?.. g` | `ConstructNotSupported` | 无 |
 | `f..g` | 组合的结果不能被调用（`ArgumentsMismatch`） | `(x: T) => g(f(x))` |
-| `wait { ... }`，以及名字、字面量、lambda 之前的 `wait` | `ConstructNotSupported` | `sync { ... }` |
 | `try { } catch e: T { } finally { }` | `SemanticDiag::TryCatchNotInLanguage`（不属于语言） | `T!` 与 `!!`、`?->`、`case error e` |
 | 元组模式、结构体模式；对普通类型的标识符模式 | `ConstructNotSupported` | `if` 链；先取成员 |
 | 结构体解构 `let { x, y } = p`、数组解构 `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`、`xs[0]`（元组解构可用） |

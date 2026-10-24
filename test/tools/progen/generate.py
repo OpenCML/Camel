@@ -31,7 +31,7 @@ FEATURES = {
     "tuple": "tuple literals and .N access",
     "struct": "struct types, literals and field access",
     "var": "var declarations and assignments in sync blocks",
-    "varparam": "functions with var parameters (sync func), writes through them",
+    "varparam": "functions with var parameters, writes through them",
     "capture": "lambdas and nested functions that read or write captured variables",
     "if": "if expressions, block arms, if statements with effects in the arms",
     "match": "match on an int, string or bool name, with literal cases",
@@ -41,7 +41,6 @@ FEATURES = {
     "hof": "user functions that take function parameters",
     "builtin": "map, filter, reduce, foreach, zip, range",
     "effects": "println in functions with sync bodies, effects in branch and match arms",
-    "wait": "wait before writes and calls that write",
     "env": "values read from the environment (unknown to every pass)",
     "macro": "pure functions declared macro",
     "comprehension": "list comprehensions [e for x in xs if c] with pure element and condition",
@@ -948,7 +947,6 @@ class Gen:
                 pre.append(self.println(1))
             call = N("call", [N("ref", t=sym.t, name=name), bin_("-", nref.clone(), lit(INT, 1), INT), ref(cs)] +
                      [N("ref", t=p[1], name=p[0]) for p in params[2:]], t=INT, eff=True, vargs=[1])
-            call = self.maybe_wait(call, 0.7)
             if tail:
                 step = N("blk", [pre, call], t=INT, sync=True)
             else:
@@ -987,9 +985,6 @@ class Gen:
         self.add_func(name, params, ft, body, sym)
 
     # -- statements of a sync block ---------------------------------------------------------
-    def maybe_wait(self, e, p=0.4):
-        return N("wait", [e], t=e.t) if self.on("wait") and self.chance(p) else e
-
     def write(self, v: Sym, d):
         t = v.t
         if t == INT:
@@ -1025,7 +1020,7 @@ class Gen:
             op, rhs = "=", (N("un", [ref(v)], t=BOOL, op="!") if self.chance(0.5) else self.expr(BOOL, d))
         else:
             op, rhs = "=", self.expr(t, d)
-        return N("expr", [self.maybe_wait(N("assign", [rhs], t=t, name=v.name, op=op))])
+        return N("expr", [N("assign", [rhs], t=t, name=v.name, op=op)])
 
     def println(self, d):
         self.label += 1
@@ -1054,7 +1049,6 @@ class Gen:
         for i, (_n, pt, _v) in enumerate(s.params if s.kind == "fn" else []):
             if pt[0] == "fn" and pt == FN([INT], INT) and self.chance(0.7):       # an effectful function argument
                 call.c[1 + i] = self.effect_lambda(d)
-        call = self.maybe_wait(call, 0.5 if call.a["vargs"] else 0.15)
         if self.chance(0.2):
             return N("expr", [call])
         r = Sym(self.fresh("n"), call.t, "let", eff=bool(s.ret_eff))

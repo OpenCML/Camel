@@ -101,9 +101,9 @@ code --install-extension camel-lang-0.1.0.vsix
 | `readonly` | 是 | 不可变绑定（`let`）。 |
 | `defaultLibrary` | 是 | 标准库中的名字或内建名字。 |
 | `mutable` | 否 | 用 `var` 声明的变量或参数。 |
-| `sync` | 否 | 声明为 `sync func` 的函数：它有副作用。 |
+| `sync` | 否 | 函数上的 `sync` 修饰符。前缀 `sync func` 已退役（H461），它在函数声明上不会再出现。 |
 
-`mutable` 与 `sync` 是阅读 Camel 代码时最要紧的两个区分：一个名字能否被重新赋值，一次调用是否有副作用。VS Code 扩展声明了这两个修饰符并给出默认样式（`mutable` 加下划线，`sync` 用斜体）。在其他编辑器中，请把它们映射到你选定的高亮；不认识某个修饰符的编辑器会忽略它。
+`mutable` 是阅读 Camel 代码时最要紧的区分：一个名字能否被重新赋值。VS Code 扩展声明了 `mutable` 与 `sync` 两个修饰符并给出默认样式（`mutable` 加下划线，`sync` 用斜体）；`sync` 修饰符随前缀 `sync func` 一起退役（H461），保留它的声明只是为了不改动扩展清单。在其他编辑器中，请把它们映射到你选定的高亮；不认识某个修饰符的编辑器会忽略它。
 
 ### 2.2 `camel/graph` 请求
 

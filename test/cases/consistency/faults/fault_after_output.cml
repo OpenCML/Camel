@@ -1,5 +1,5 @@
 /**
- * A fault in a sync function that has printed, called from a sync main that has printed: all
+ * A fault in a function with a sync body that has printed, called from a sync main that has printed: all
  * four lines before the fault are on standard output, in order, then the diagnostic.
  */
 module fault_after_output
