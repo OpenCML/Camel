@@ -52,7 +52,21 @@ VjpRule DerivativeRegistry::findRule(std::string_view uri) const {
 
 void DerivativeRegistry::setTangentSpace(type::TypeCode code, TangentSpace space) {
     std::unique_lock lock(mutex_);
-    tangents_.insert_or_assign(code, std::move(space));
+    auto &spaces = tangents_[code];
+    if (space.owns == nullptr) {
+        // A space that owns every value of the code replaces the code's space: nothing else has
+        // to answer for it. A subset space is kept, and still answers for the values it owns.
+        spaces.clear();
+        spaces.push_back(std::move(space));
+        return;
+    }
+    for (TangentSpace &existing : spaces) {
+        if (existing.owns == space.owns) {
+            existing = std::move(space);
+            return;
+        }
+    }
+    spaces.push_back(std::move(space));
 }
 
 const TangentSpace *DerivativeRegistry::findTangentSpace(const type::Type *type) const {
@@ -61,7 +75,17 @@ const TangentSpace *DerivativeRegistry::findTangentSpace(const type::Type *type)
     }
     std::shared_lock lock(mutex_);
     auto it = tangents_.find(type->code());
-    return it == tangents_.end() ? nullptr : &it->second;
+    if (it == tangents_.end()) {
+        return nullptr;
+    }
+    // The last space that owns the value: a module that claimed a subset of a shared code is
+    // registered after the code's own space, and its values are the ones it answers for.
+    for (auto space = it->second.rbegin(); space != it->second.rend(); ++space) {
+        if (space->owns == nullptr || space->owns(type)) {
+            return &*space;
+        }
+    }
+    return nullptr;
 }
 
 void DerivativeRegistry::setTangentType(type::TypeCode code, type::Type *(*fn)(type::Type *)) {

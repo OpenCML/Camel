@@ -30,6 +30,7 @@
 #include "camel/core/type/base.h"
 #include "camel/runtime/graph.h"
 
+#include <deque>
 #include <optional>
 #include <shared_mutex>
 #include <span>
@@ -130,6 +131,15 @@ struct TangentSpace {
     /// Tangent type of a value of the primal type, or nullptr when that value has no tangent
     /// (e.g. an integer tensor). Null means the tangent type is the primal type itself.
     type::Type *(*tangentType)(type::Type *primal) = nullptr;
+    /// The values of the code this space answers for, or null when it answers for all of them.
+    /// Two kinds share the array code: a tensor is a numeric array, and an array of structs,
+    /// tuples or arrays is an array of values the core holds one slot each. Their tangents are
+    /// different things -- a tensor's is the tensor itself, summed and zeroed by `tensor:add`
+    /// and `tensor:zeros_like`, an array of values' is the array of its elements' tangents,
+    /// summed and zeroed by `:tangent/add_arr` and `:tangent/zeros_arr` -- so a module that
+    /// registers for a shared code declares which of its values it owns, and the space it
+    /// displaces stays in place for the rest (design principles 9.9, `ArrayType`).
+    bool (*owns)(const type::Type *type) = nullptr;
     /// Operator adding two tangents: (a, b) => a + b.
     std::string addUri;
     /// The zero tangent as a constant, for types that have one (scalars).
@@ -147,9 +157,13 @@ class DerivativeRegistry {
     /// The rule of `uri`, or nullptr.
     VjpRule findRule(std::string_view uri) const;
 
-    /// Registers (or replaces) the tangent space of the values of type code `code`.
+    /// Registers a tangent space for the values of type code `code`. A space that owns all of
+    /// them (no `owns` predicate) replaces what is registered for the code; a space that owns
+    /// some of them is added in front of it, and answers only for the values it owns. A code has
+    /// one space that owns all of it and any number that own a subset, in registration order.
     void setTangentSpace(type::TypeCode code, TangentSpace space);
-    /// The tangent space of `type`'s code, or nullptr when values of that type have no tangent.
+    /// The tangent space of `type`: the most recently registered space of its code that owns it,
+    /// or nullptr when values of that type have no tangent.
     const TangentSpace *findTangentSpace(const type::Type *type) const;
 
     /// Registers the tangent type of values of type code `code` whose tangent the core cannot
@@ -181,7 +195,7 @@ class DerivativeRegistry {
 
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, VjpRule, StringHash, std::equal_to<>> rules_;
-    std::unordered_map<type::TypeCode, TangentSpace> tangents_;
+    std::unordered_map<type::TypeCode, std::deque<TangentSpace>> tangents_;
     std::unordered_map<type::TypeCode, type::Type *(*)(type::Type *)> tangentTypes_;
     std::unordered_map<type::TypeCode, bool (*)(const type::Type *)> discrete_;
 };
