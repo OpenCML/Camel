@@ -38,31 +38,6 @@ const runtime::GCGraph *functionGraphOf(const runtime::GCGraph &graph, runtime::
     return fn == nullptr ? nullptr : fn->graph();
 }
 
-/// The graph a call node reaches, whether it names it (`Func`) or holds it as a value (`Call`).
-/// A call through a value whose value is not a constant has no one graph: the run chooses it.
-const runtime::GCGraph *calleeGraphOf(
-    const runtime::Program &program, const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
-    // A caller reaches this for every node of a scope graph, not only for the calls it looks at:
-    // a node that is not one of the two call kinds reaches no graph.
-    if (graph.node(id) == nullptr || (graph.node(id)->kind != runtime::GCNodeKind::Func &&
-                                      graph.node(id)->kind != runtime::GCNodeKind::Call)) {
-        return nullptr;
-    }
-    if (graph.node(id)->kind == runtime::GCNodeKind::Func) {
-        return program.calleeOf(graph, id);
-    }
-    // The call reads its callee as a value: `autodiff::expand` replaces the grad operator at the
-    // call site with the function constant of the derived graph (docs/design/gpu/plan.cn.md 2.6),
-    // and a call through it is a call to that graph, exactly as a written call to a named
-    // function is.
-    for (const runtime::gc_node_ref_t operand : graph.withInputsOf(id)) {
-        if (const runtime::GCGraph *callee = functionGraphOf(graph, operand)) {
-            return callee;
-        }
-    }
-    return nullptr;
-}
-
 attr::AttrSetId bodyAttrs(const runtime::GCGraph &graph) {
     return graph.regionCount() > 0 && graph.region(0) ? graph.region(0)->attrs : attr::kNoAttrs;
 }
@@ -143,6 +118,29 @@ void addCounts(nlohmann::json &entry, const Counts &counts) {
 }
 
 } // namespace
+
+const runtime::GCGraph *calleeGraphOf(
+    const runtime::Program &program, const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
+    // A caller reaches this for every node of a scope graph, not only for the calls it looks at:
+    // a node that is not one of the two call kinds reaches no graph.
+    if (graph.node(id) == nullptr || (graph.node(id)->kind != runtime::GCNodeKind::Func &&
+                                      graph.node(id)->kind != runtime::GCNodeKind::Call)) {
+        return nullptr;
+    }
+    if (graph.node(id)->kind == runtime::GCNodeKind::Func) {
+        return program.calleeOf(graph, id);
+    }
+    // The call reads its callee as a value: `autodiff::expand` replaces the grad operator at the
+    // call site with the function constant of the derived graph (docs/design/gpu/plan.cn.md 2.6),
+    // and a call through it is a call to that graph, exactly as a written call to a named
+    // function is. A value that is not a constant names no one graph: the run chooses the callee.
+    for (const runtime::gc_node_ref_t operand : graph.withInputsOf(id)) {
+        if (const runtime::GCGraph *callee = functionGraphOf(graph, operand)) {
+            return callee;
+        }
+    }
+    return nullptr;
+}
 
 const char *placementName(Placement placement) {
     switch (placement) {

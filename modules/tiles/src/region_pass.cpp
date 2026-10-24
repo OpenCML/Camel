@@ -7,6 +7,7 @@
 #include "camel/execute/pass/opt.h"
 #include "tiles/internal/placement.h"
 #include "tiles/internal/regions.h"
+#include "tiles/internal/residency.h"
 #include <memory>
 #include <utility>
 
@@ -40,6 +41,12 @@ class RegionPass final : public RuntimeGraphRewritePass {
         // it. A derived graph the expansion just published is a graph like any other here, and
         // the report shows the placement it inherited from its primal (plan 2.3).
         out << placementReport(*program);
+        // The residency conclusion of the same program (plan 3.2): which block each value lives
+        // in, which values change class at a boundary, and what a call between two graphs of one
+        // class moves (nothing: a parameter follows its argument's block). Printed beside the
+        // placement report, before the rewrite, and empty for a program that writes no fact, so
+        // an untagged program's output is unchanged. It reads the graph; it inserts no node yet.
+        out << residencyReport(*program);
         size_t count = 0;
         return outlineRegions(
             *context_,
