@@ -460,10 +460,36 @@ bool readsOrAssignsVariable(core::OperId id) {
            core::OperatorTable::instance().isAssignment(id);
 }
 
+/// The `:var/new` that declared the variable a version names. A read takes the version its last
+/// writer produced -- the write's own result, which is the cell -- so the chain of versions is
+/// followed through the writes down to the declaration: a write stores into the cell it was
+/// handed and holds it as its first normal input. `camel::runtime::kInvalidNodeRef` when the
+/// version is not a version of a variable of `g` itself: a `var` parameter is a port, a captured
+/// cell belongs to the closure's own graph, and what a branch's writes meet at is not a write.
+gc_node_ref_t declaringCellOf(const GCGraph *g, gc_node_ref_t version) {
+    while (version != camel::runtime::kInvalidNodeRef) {
+        const core::OperId id = operIdOf(g, version);
+        if (id == core::oper::VarNew) {
+            return version;
+        }
+        if (!core::OperatorTable::instance().isAssignment(id)) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const auto inputs = g->normInputsOf(version);
+        if (inputs.empty()) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        version = inputs.front();
+    }
+    return camel::runtime::kInvalidNodeRef;
+}
+
 /// A variable declared in `g` itself (`var v = e` is the operator `:var/new`): its content
-/// never leaves the function, so reads and assignments of it are not effects of the model.
+/// never leaves the function, so reads and assignments of it are not effects of the model. A
+/// read names the version its writer gave rather than the cell, so the version chain is walked
+/// back to the declaration.
 bool isLocalVariable(const GCGraph *g, gc_node_ref_t cell) {
-    return operIdOf(g, cell) == core::oper::VarNew;
+    return declaringCellOf(g, cell) != camel::runtime::kInvalidNodeRef;
 }
 
 /// An assignment operator, taken apart: `:op/assn[_T]` stores its operand; `:op/assn_<op>[_T]`
@@ -3272,14 +3298,19 @@ std::optional<Value> Evaluator::foldConstantOper(
 // A variable of the exported function. ONNX has no cells; a variable that lives and dies inside
 // one function is only a name for a sequence of values, so a read is translated as the value of
 // the assignment that reaches it (the declaration's initial value when none does). That is
-// decided from the graph: the assignments of this variable that must run before the read form a
-// chain, and the last of the chain is the one read. Everything this cannot decide is refused: a
+// decided from the graph: a read names the version its last writer produced, that version's cell
+// is the declaration, and the assignments of the variable that must run before the read form a
+// chain whose last element is the one read. Everything this cannot decide is refused: a
 // variable that comes from outside the function (its content is state outside the model), one
 // that a call, a branch arm or a closure receives, an assignment not ordered with the read.
 Value Evaluator::evalVariableRead(Activation &act, gc_node_ref_t ref) {
-    GCGraph *g               = act.graph;
-    const gc_node_ref_t cell = g->normInputsOf(ref).front();
-    if (!isLocalVariable(g, cell)) {
+    GCGraph *g        = act.graph;
+    const auto inputs = g->normInputsOf(ref);
+    // What a read names is the version its last writer produced; the cell that version stores
+    // into is what the assignments reaching this read are enumerated from.
+    const gc_node_ref_t cell =
+        inputs.empty() ? camel::runtime::kInvalidNodeRef : declaringCellOf(g, inputs.front());
+    if (cell == camel::runtime::kInvalidNodeRef) {
         unsupported(act, kOuterVariable);
     }
     return variableValueAt(act, cell, ref);
@@ -3364,7 +3395,11 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
             return operand;
         }
         const Value old = variableValueAt(act, cell, last);
-        return applyOper(act, kind.binary, {old, operand}, g->node(last)->dataType());
+        // A write gives the cell of this version, so what the node is declared to answer with is
+        // the cell; the value the compound operator combines is the type of the value written.
+        return applyOper(
+            act, kind.binary, {old, operand},
+            camel::core::type::valueTypeOf(g->node(last)->dataType()));
     }
     unsupported(
         act,

@@ -391,7 +391,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -402,7 +402,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "std::macro", "std::stats", "std::opt", "std::stats", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
@@ -552,7 +552,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -713,7 +713,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -724,7 +724,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -835,7 +835,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
-expect_stdout_contains = ["scalar d2=12", "[6.0, -12.0, 3.0]"]
+expect_stdout_contains = ["scalar d2=12.0", "[6.0, -12.0, 3.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
@@ -1672,16 +1672,25 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "loop_grad_refuse_tensor_iterable"
-desc = "A loop that iterates over a tensor computed from the differentiated parameter is refused before the loop: iterating a tensor walks its first axis through the operator `tensor:iter`, whose result is an array of slices and which has no derivative rule, so the diagnostic names that operator at the iteration (line 15) instead of dropping the slices' gradient."
-kind = "negative"
-case = "../../../cases/modules/autodiff/loop_grad_refuse_tensor_iterable.cml"
+name = "loop_grad_tensor_iterable.runtime.nvm"
+desc = "A loop that iterates over a tensor's first axis differentiates: a numeric array is a tensor, so `for row in w` walks the rows `tensor:iter` hands out, and the reverse pass scatters each round's slice gradient back at that round's index -- the forward is 21.0 and `d` is the six ones in w's own shape [2, 3], asserted element by element (a gradient of the rounds' own shape prints two numbers instead of six). This case replaced `loop_grad_refuse_tensor_iterable`, which expected the refusal of `tensor:iter`. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_tensor_iterable.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 15
-expect_output_contains = ["no derivative rule for operator 'tensor:iter'", "cannot be dropped silently"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_tensor_iterable f=21.0 d=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_tensor_iterable.macro.fvm"
+desc = "The same loop adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the scatter of each round's slice gradient is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_tensor_iterable.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_tensor_iterable f=21.0 d=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -3046,7 +3055,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "f64_broadcast_grad"
-desc = "An f64 gradient through a broadcast: sum(x * p0) with x a Tensor<f64, [2, 3]> and p0 a Tensor<f64, [3]> multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'Tensor<f64>'\". Both gradients are printed and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
+desc = "An f64 gradient through a broadcast: sum(x * p0) with x a Tensor<f64, [2, 3]> and p0 a Tensor<f64, [3]> multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'Tensor<f64>'\". Both gradients are printed in the array form and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/f64_broadcast_grad.cml"
 args = ["${case}", "${run_nvm}"]
@@ -3056,10 +3065,9 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.stdout
 assert(text.includes('f64_broadcast_grad value=22.25 a_x=0.0 a_p0=0.0 wa=0.0'), `unexpected distances: ${text}`)
-assert(text.includes('gx tensor([[        0.5,        0.25,       2.],'), `the x gradient is not the row broadcast of p0: ${text}`)
-assert(text.includes('[        0.5,        0.25,       2.]], dtype=float64)'), `the x gradient is not f64: ${text}`)
-assert(text.includes('gp tensor([      5.,       7.,       9.], dtype=float64)'), `the p0 gradient is not the column sum of x: ${text}`)
-assert(text.includes('wp tensor([ 16777217.,       2.,  16777217.], dtype=float64)'), `the wide sum did not accumulate in f64: ${text}`)
+assert(text.includes('gx [[0.5, 0.25, 2.0], [0.5, 0.25, 2.0]]'), `the x gradient is not the row broadcast of p0: ${text}`)
+assert(text.includes('gp [5.0, 7.0, 9.0]'), `the p0 gradient is not the column sum of x: ${text}`)
+assert(text.includes('wp [16777217.0, 2.0, 16777217.0]'), `the wide sum did not accumulate in f64: ${text}`)
 }
 """
 timeout_ms = 10000
