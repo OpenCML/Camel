@@ -412,7 +412,12 @@ std::vector<std::vector<Type *>> tuplesOf(const camel::runtime::Program &program
             continue;
         }
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-            Type *type = graph->node(it.ref())->dataType();
+            // The type of the value, not the cell a `var` parameter is held in: a law is
+            // instantiated at the type of the value it applies to (`float`, not `var float`),
+            // and built for `var float` its guard would pass a reference where the guard's own
+            // instance takes the value (measured 2026-10-24: `float_combine__when<var float>`
+            // passes a `var float` to `combineSameSign<float>`).
+            Type *type = camel::core::type::valueTypeOf(graph->node(it.ref())->dataType());
             if (type == nullptr || type->code() == TypeCode::Void) {
                 continue;
             }
