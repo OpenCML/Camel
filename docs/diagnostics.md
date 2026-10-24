@@ -1438,31 +1438,23 @@ No matching function found for argument types: {0}.
 Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads: {1}
 ```
 
-**Example** (`test/cases/modules/optim/unknown_optimizer.cml`, run as `camel test/cases/modules/optim/unknown_optimizer.cml`)
+**Example** (`test/cases/compile/array_alias/type_text.cml`, run as `camel test/cases/compile/array_alias/type_text.cml ${backend}`)
 
 ```camel
-module optim_unknown_optimizer
+// What the alias prints as (plan section 5.4): `Tensor<f32>` is `f32[..]`, `Tensor<[3]>` keeps
+// the `Tensor` spelling for an element nobody fixed, and `Tensor<f32, [2, 3]>` is `f32[2, 3]`.
+// The candidate list of a refused call is where the text is visible.
+module array_alias_type_text
 
-import { Tensor, full } from tensor
-import { init } from optim
+import { Tensor } from tensor
 
-type Unknown = { rate: float }
-
-type Model = { w: Tensor }
-
-func model_at(): Model {
-    return { w: full([4], f32(0.5)) }
-}
-
-func init_unknown(): int {
-    let opt: Unknown = { rate: 0.1 }
-    let state = init(opt, model_at())
-    return state.step
+func takes(a: Tensor<f32>, b: Tensor<[3]>, c: Tensor<f32, [2, 3]>): int {
+    return 0
 }
 
 func main(): int sync {
-    let steps = init_unknown()
-    'optim unknown optimizer init steps={}' ->format<steps> ->println
+    let s: string[] = ["a"]
+    println(takes(s, s, s))
     return 0
 }
 ```
@@ -1997,15 +1989,16 @@ The arguments of the type '{0}<...>' are not accepted: {1}.
 What a type takes between '<' and '>' is defined by the type itself (a type argument, or a constant written 'const <data>'). An argument a type does not accept is an error; it is never ignored.
 ```
 
-**Example** (`test/cases/compile/array_shape/err_const_shape.cml`, run as `camel test/cases/compile/array_shape/err_const_shape.cml`)
+**Example** (`test/cases/compile/array_alias/err_element_type.cml`, run as `camel test/cases/compile/array_alias/err_element_type.cml ${backend}`)
 
 ```camel
-// A shape argument is written without `const`; the old spelling is refused and the message
-// gives the new one.
-module array_shape_err_const
+// The element type of the alias is a numeric scalar (plan section 5.1): anything else is the
+// type's own refusal, and the message names the set it takes.
+module array_alias_err_element_type
+
 import { Tensor } from tensor
 
-func bad(x: Tensor<f32, const [3]>): int {
+func count(x: Tensor<string>): int {
     return 0
 }
 
