@@ -180,6 +180,8 @@ and its reason from the front end (`WhenResult::detail`).
 
 ## 6. What the families merge into, measured from `stdlib/rules.cml`
 
+Plan. §9 has what the fold measured.
+
 69 rules. The shapes, as written:
 
 | family | rules | merge | what the merge needs |
@@ -256,4 +258,64 @@ The pieces, each with its own test:
    first (the float zero law stays its own), red before and green after on every element type, with
    `test/cases/modules/rules/typed_cross.cml` green; then the rest of §6's families, with
    `test/cases/opt/algebra_rules/pairs.mjs` and the plan descriptions re-pointed in the same commit.
+
+## 9. What the fold measured (2026-10-24)
+
+§6 is the plan; this is the result, from the same file.
+
+| | plan (§6) | result |
+| --- | --- | --- |
+| `export rule`s in `stdlib/rules.cml` | 69 | **43**, 26 of them with a generic head |
+| entries in `simplifyWith`'s list | 69 | **40** (12 int, 13 float, 12 tensor, 3 accuracy) |
+| `int_*` / `int32_*` | 13 + 13 | 13 generic `int_*`, the twelve `int32_*` declarations deleted |
+| `float_*` / `float32_*` | 12 + 12 | 12 generic, plus `float_double` and `float32_double` kept apart (the bound `exactDoubling` reads is the one thing the type decides) |
+| `float_log1p`/`f32_log1p`, `float_expm1`/`f32_expm1` | 2 + 2 | 2 generic, the f32 declarations deleted |
+| `tensor_f32_*` | 12, "measure first" | **12 stay**: `Tensor<T>` is not a type a rule's head can take (the maker binds the whole node type), so the elementwise tensor laws keep their own heads |
+| the guards | "fold with the law" | generic too (`finiteValue::<T>`, `combineSameSign::<T>`, `combineMixedSign::<T>`, `foldCoefficients::<T>`, `combineOneSameSign::<T>`, `combineOneMixedSign::<T>`), called inferred from the law's own type variable |
+
+Measured, and not in the plan: `is_float` covers `bf16` and `f16`, so the folded scalar float laws
+have instances at those types too -- and the tensor laws cannot reach them, since the element type
+is the operator's and it is fixed at f32. That is why `check` reports `float_log1p` as unchecked
+(it walks no instances yet, §1 of the 2026-10-23 ruling) and checks the tensor law.
+
+The order of the list is behaviour now: a generic law's instances are read in the list's order, so
+`float_double` and `float32_double` stand before `float_add_self`, whose `x + x => x*2.0` would
+otherwise take `x*c + x*c` first at f32 (`strict32` of `test/cases/opt/generic/algebra.cml` pins the
+shape, and it caught exactly that).
+
+`test/cases/opt/algebra_rules/pairs.mjs` needed **no change**: the family prefixes are kept and the
+width suffixes dropped, so `int_mul_zero`, `int_add_zero` and the rest still name the law that
+fires, and `anchor_mul32` runs on `int_mul_one<i32>`. The only stale sentence the fold left in that
+corpus was the count of `int32_*` rules in `agreement.cml`, and it is re-worded in place, with the
+line count unchanged because that case's golden carries source spans.
+
+Four defects surfaced under the fold and are fixed with it:
+
+1. a generic call that resolved to no instance was read as a graph pointer
+   (`src/compile/gir/type_arguments.cpp`, `src/compile/gir/builder_operators.cpp`): a rule with two
+   `const` parameters whose `when` calls a generic function with no instance for a tried type
+   crashed every `rules::simplify` test.
+2. `programContentChanged` read a program a nested stage had released (`src/execute/pass.cpp`): the
+   `rules::simplify` stage that `std::opt::algebra` runs inside `std::opt` replaced the program, and
+   the outer stage then compared against freed graphs (six autodiff `simplify` tests crashed).
+3. the maker enumerated a node's own type, so a `var` parameter produced an instance for
+   `var float` whose guard call passed a reference where the guard's instance takes the value
+   (`modules/rewrite/module.cpp`, `tuplesOf`; measured on `onnx.export_var_compound` and the three
+   other `var` cases).
+4. a writing layer was looked up by the low byte of its permission mask (`src/runtime/writings.cpp`,
+   `uint8_t` against a 16-bit `PermissionMask`), so bit 9 (`refine_accuracy`) made a *second* layer
+   for a context that already had one and four of them tripped `kMaxLayers`; measured on
+   `rules.accuracy_licence_gates_simplify`, whose failing store held `{515, 3, 515, 3}`.
+
+Also measured and left to the language author: `check`'s verdict for
+`tensor_log_softmax_of_softmax` depends on the sampled draw (`docs/handover/questions/accuracy-check-sampling.md`).
+
+Evidence, `Tier fast -Jobs 8`, `smoke,feat/opt,feat/modules,feat/parse` (2026-10-24): `f177b10db`
+reads 2285 total / 2280 pass / 0 fail / 1 skip / 4 known failures; the fold reads 2287 / 2282 / 0 / 1
+/ 4, the two extra tests being `rules.generic_condition_that_a_type_has_no_instance_of` and
+`rules.generic_condition_refusal_is_what_why_not_repeats`. The layers in flight were red until the
+four defects above were fixed (16, then 8, then 6 failures, then none, over `feat/modules,feat/opt`).
+Every law that folded kept its body: the guards are the old f64 ones with a generic head
+(`finite32` was `x - x == 0.0`, the same body as `finiteValue`), and the two bounds that a type
+decides -- `exactDoubling`'s `2^52` and `exactDoubling32`'s `2^23` -- are still two rules.
 
