@@ -2170,15 +2170,21 @@ struct AccuracyResult {
     std::string reason;
 };
 
+/// One side of a rule as its real value: the side's expression over the same argument values,
+/// evaluated in the reference's precision. Throws for an operator outside the reference's fragment
+/// (rewrite 8.10), which each caller turns into what it can say instead.
+RefValue realValueOf(const camel::runtime::GCGraph &graph, const std::vector<Sample> &values) {
+    RefEvaluator evaluator(graph, values);
+    return evaluator.eval(graph.exitNodeRef());
+}
+
 AccuracyResult compareAgainstReference(
     const camel::runtime::GCGraph &lhsGraph, const camel::runtime::GCGraph &rhsGraph,
     const std::vector<Sample> &values, const Sample &left, const Sample &right, TypeCode code) {
     AccuracyResult result;
     try {
-        RefEvaluator lhs(lhsGraph, values);
-        RefEvaluator rhs(rhsGraph, values);
-        const RefValue referenceLeft  = lhs.eval(lhsGraph.exitNodeRef());
-        const RefValue referenceRight = rhs.eval(rhsGraph.exitNodeRef());
+        const RefValue referenceLeft  = realValueOf(lhsGraph, values);
+        const RefValue referenceRight = realValueOf(rhsGraph, values);
         result.leftError  = refSampleError(left, referenceLeft);
         result.rightError = refSampleError(right, referenceRight);
     } catch (const std::exception &e) {
@@ -2197,8 +2203,7 @@ AccuracyResult compareBeforeAfter(
     const Sample &before, const Sample &after, TypeCode code) {
     AccuracyResult result;
     try {
-        RefEvaluator evaluator(graph, values);
-        const RefValue reference = evaluator.eval(graph.exitNodeRef());
+        const RefValue reference = realValueOf(graph, values);
         result.leftError         = refSampleError(before, reference);
         result.rightError        = refSampleError(after, reference);
     } catch (const std::exception &e) {
@@ -2644,6 +2649,172 @@ bool agree(
     return a.slot == b.slot;
 }
 
+// ---- the proposition of a `reassociate` / `contract` rule ------------------------------------
+//
+// The ruling of 2026-10-24 on `verification-report-surface-s0` corrects what these rules are
+// checked against. `reassociate` licenses a different rounding, and a different rounding may differ
+// from the written one by far more than one rounding step when the expression cancels -- the right
+// side is then the *more* accurate one -- so "the two sides differ by less than a rounding bound"
+// is not the proposition. The proposition is the two halves the ruling gives it: real equality on
+// the finite values, and IEEE equality, bit for bit, on the values the real model does not have
+// (NaN, the infinities, a signed zero) -- unless the rule asked for `no_nans` / `no_infs` /
+// `no_signed_zeros`, which narrow its domain.
+//
+// The finite half is compared where the real value is: both sides are evaluated in the reference's
+// precision and the comparison is made there, never one element-type result against another. The
+// contract that remains is the rule's own -- a rule whose syntax rounds (`x * (c1 + c2)` folds
+// `c1 + c2` in the element type, one rounding the permission covers) may differ by that rounding --
+// but the cancellation that inflates two element-type results is not part of the comparison any
+// more, which is the whole of the correction: at `x = 1e+30` the library's `tensor_f32_combine_mixed`
+// has two element-type results 27 ulps apart and one real value.
+//
+// The method needs the reference, so it applies to the element types the reference reads; a rule
+// whose fragment the reference cannot evaluate falls back to the element type's own comparison,
+// which is what it got before this change (a `reassociate` rule outside the fragment is not newly
+// refuted for the check's own limitation).
+
+/// Whether the element type is one the higher-precision reference can evaluate: the values
+/// `tensorOfSample` reads and the operators of the reference's fragment are declared for.
+bool realComparable(TypeCode code) {
+    return code == TypeCode::Float32 || code == TypeCode::Float64;
+}
+
+/// Whether two real values are the same number under the rule's numeric contract: the comparison the
+/// element type's own results used to get (`agreeFloat`), applied to the values the reference
+/// computed. The contract stays the rule's -- a rule whose own syntax rounds (`c1 + c2` folded in the
+/// element type is one rounding the permission covers) may differ by that rounding -- but the
+/// cancellation that inflates two element-type results is no longer in the comparison at all.
+bool refScalarsAgree(long double x, long double y, bool single,
+    const camel::core::sem::RewriteErrorBound &bound, double scale) {
+    if (std::isnan(x) || std::isnan(y)) {
+        return std::isnan(x) && std::isnan(y);
+    }
+    if (!bound.checkable) {
+        return true; // no contract to compare against (reported as unchecked)
+    }
+    if (bound.ulps == 0.0 && bound.relative == 0.0) {
+        return x == y;
+    }
+    if (std::isinf(x) || std::isinf(y)) {
+        return x == y;
+    }
+    const long double eps       = single ? 1.2e-7L : 2.3e-16L;
+    const long double magnitude = std::fabs(x) + std::fabs(y) + scale;
+    // The smallest subnormal: a rounding in the subnormal range is absolute, not relative.
+    const long double smallest  = single ? 1.4e-45L : 4.9e-324L;
+    const long double allowed =
+        (bound.ulps * eps + bound.relative) * magnitude + bound.ulps * smallest;
+    return std::fabs(x - y) <= allowed;
+}
+
+/// Whether two reference values are the same number, elementwise for tensors.
+bool refValuesAgree(const RefValue &a, const RefValue &b, bool single,
+    const camel::core::sem::RewriteErrorBound &bound, double scale) {
+    if (a.tensor != b.tensor) {
+        return false;
+    }
+    if (!a.tensor) {
+        return refScalarsAgree(a.scalar, b.scalar, single, bound, scale);
+    }
+    if (a.t.shape != b.t.shape || a.t.values.size() != b.t.values.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.t.values.size(); ++i) {
+        if (!refScalarsAgree(a.t.values[i], b.t.values[i], single, bound, scale)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Whether the two natives are both zeros of different sign: a special value the element type's own
+/// bits decide and the real model does not have. A zero against a nonzero is not this case -- an
+/// underflowed zero and a subnormal are both roundings of one real value, and the licence covers the
+/// path that lost the value.
+bool zeroSignsDiffer(const Sample &a, const Sample &b) {
+    if (a.tensor != nullptr || b.tensor != nullptr) {
+        if (a.tensor == nullptr || b.tensor == nullptr) {
+            return false;
+        }
+        if (a.tensor->dtype != TypeCode::Float32 || b.tensor->dtype != TypeCode::Float32 ||
+            a.tensor->shape != b.tensor->shape ||
+            a.tensor->bytes.size() != b.tensor->bytes.size()) {
+            return false;
+        }
+        const size_t count = a.tensor->bytes.size() / sizeof(float);
+        for (size_t i = 0; i < count; ++i) {
+            const double x = tensorElement(*a.tensor, i);
+            const double y = tensorElement(*b.tensor, i);
+            if (x == 0.0 && y == 0.0 && std::signbit(x) != std::signbit(y)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (a.code != TypeCode::Float32 && a.code != TypeCode::Float64) {
+        return false;
+    }
+    return a.asDouble == 0.0 && b.asDouble == 0.0 &&
+           std::signbit(a.asDouble) != std::signbit(b.asDouble);
+}
+
+/// What the check found when it compared two values under the proposition of a `reassociate` /
+/// `contract` rule.
+struct RealComparison {
+    /// Whether the two values agree under that proposition (meaningless when `compared` is false).
+    bool agree = true;
+    /// True when the higher-precision reference decided the comparison. False when the ruling's
+    /// method does not apply to this rule -- its proposition is not real equality, or its element
+    /// type is not one the reference reads -- or when the reference cannot evaluate a side; the
+    /// caller then compares the two element-type values as it did before.
+    bool compared = false;
+    /// Which half of the proposition failed, for the row's line.
+    std::string why;
+};
+
+/// The comparison the ruling gives a rule of this proposition: real equality on the finite values,
+/// bit for bit on a special value. `leftGraph` and `rightGraph` are the two sides over the same
+/// arguments (`values`), and `leftValue` / `rightValue` the two element-type results the VM made of
+/// them -- the special half is read off those, the finite half off the reference.
+RealComparison propositionComparison(const std::string &proposition,
+    const camel::runtime::GCGraph &leftGraph, const camel::runtime::GCGraph &rightGraph,
+    const std::vector<Sample> &values, const Sample &leftValue, const Sample &rightValue,
+    camel::core::sem::PermissionMask needs, const camel::core::sem::RewriteErrorBound &bound,
+    double scale) {
+    RealComparison result;
+    if (proposition != kPropositionRealEquality || !realComparable(elementCodeOf(leftValue)) ||
+        leftGraph.normPorts().size() != rightGraph.normPorts().size()) {
+        return result;
+    }
+    RefValue referenceLeft, referenceRight;
+    try {
+        referenceLeft  = realValueOf(leftGraph, values);
+        referenceRight = realValueOf(rightGraph, values);
+    } catch (const std::exception &) {
+        return result; // the reference cannot read this fragment: the element type's own comparison
+    }
+    result.compared = true;
+    // A side whose native value is a NaN or an infinity where the real model has a finite value is
+    // not a rounding of that value: there the proposition is the IEEE half, and `agree` with no
+    // numeric contract is exactly that comparison (a NaN agrees with a NaN, the bits otherwise).
+    const bool special = std::isinf(refSampleError(leftValue, referenceLeft)) ||
+                         std::isinf(refSampleError(rightValue, referenceRight));
+    if (special) {
+        result.agree = agree(leftValue, rightValue, {}, 1.0);
+        result.why   = "a special value is not the same bit for bit";
+        return result;
+    }
+    if ((needs & camel::core::sem::kNoSignedZeros) == 0 && zeroSignsDiffer(leftValue, rightValue)) {
+        result.agree = false;
+        result.why   = "a zero of the other sign is a different bit pattern";
+        return result;
+    }
+    result.agree = refValuesAgree(
+        referenceLeft, referenceRight, elementCodeOf(leftValue) == TypeCode::Float32, bound, scale);
+    result.why = "the real values differ by more than the permission's rounding";
+    return result;
+}
+
 std::string sampleText(const Sample &s) {
     if (s.tensor != nullptr) {
         const TensorSample &t = *s.tensor;
@@ -3038,21 +3209,32 @@ void checkOneRule(
                     failure         = std::format("the check cannot examine this rule at ({})", at);
                 }
             }
-        } else if (!agree(
-                       left,
-                       right,
-                       bound,
-                       std::min(scale * scale, std::numeric_limits<double>::max()))) {
-            std::string at;
-            for (size_t i = 0; i < values.size(); ++i) {
-                at += (i == 0 ? "" : ", ") + sampleText(values[i]);
+        } else {
+            const double sampleScale =
+                std::min(scale * scale, std::numeric_limits<double>::max());
+            const RealComparison real = propositionComparison(
+                proposition, *lhsGraph, *program->graph(rhsId), values, left, right, needs, bound,
+                sampleScale);
+            const bool holds = real.compared ? real.agree : agree(left, right, bound, sampleScale);
+            if (!holds) {
+                std::string at;
+                for (size_t i = 0; i < values.size(); ++i) {
+                    at += (i == 0 ? "" : ", ") + sampleText(values[i]);
+                }
+                failureEvidence = "counterexample";
+                failure         = real.compared
+                    ? std::format(
+                          "the two sides differ at ({}): {} and {} ({})",
+                          at,
+                          sampleText(left),
+                          sampleText(right),
+                          real.why)
+                    : std::format(
+                          "the two sides differ at ({}): {} and {}",
+                          at,
+                          sampleText(left),
+                          sampleText(right));
             }
-            failureEvidence = "counterexample";
-            failure         = std::format(
-                "the two sides differ at ({}): {} and {}",
-                at,
-                sampleText(left),
-                sampleText(right));
         }
     }
     // The engine applies the rule to the left side, with random constants for the const
@@ -3136,25 +3318,44 @@ void checkOneRule(
                             std::format("the check cannot examine the rewritten side at ({})", at);
                     }
                 }
-            } else if (!agree(
-                           before,
-                           after,
-                           bound,
-                           std::min(scale * scale, std::numeric_limits<double>::max()))) {
-                std::string at;
-                for (const Sample &value : values) {
-                    at += (at.empty() ? "" : ", ") + sampleText(value);
+            } else {
+                const double sampleScale =
+                    std::min(scale * scale, std::numeric_limits<double>::max());
+                const RealComparison real = propositionComparison(
+                    proposition,
+                    *lhsGraph,
+                    *rewritten->graph(lhsId),
+                    values,
+                    before,
+                    after,
+                    needs,
+                    bound,
+                    sampleScale);
+                const bool holds =
+                    real.compared ? real.agree : agree(before, after, bound, sampleScale);
+                if (!holds) {
+                    std::string at;
+                    for (const Sample &value : values) {
+                        at += (at.empty() ? "" : ", ") + sampleText(value);
+                    }
+                    failureEvidence = "counterexample";
+                    failure         = real.compared
+                        ? std::format(
+                              "the rewritten left side differs at ({}): {} and {} ({})",
+                              at,
+                              sampleText(before),
+                              sampleText(after),
+                              real.why)
+                        : std::format(
+                              "the rewritten left side differs at ({}): {} and {} "
+                              "(bound {} ulps, {} relative, scale {})",
+                              at,
+                              sampleText(before),
+                              sampleText(after),
+                              bound.ulps,
+                              bound.relative,
+                              scale * scale);
                 }
-                failureEvidence = "counterexample";
-                failure         = std::format(
-                    "the rewritten left side differs at ({}): {} and {} "
-                    "(bound {} ulps, {} relative, scale {})",
-                    at,
-                    sampleText(before),
-                    sampleText(after),
-                    bound.ulps,
-                    bound.relative,
-                    scale * scale);
             }
         }
         if (failure.empty() && fired == 0) {
