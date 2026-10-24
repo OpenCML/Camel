@@ -4,5 +4,9 @@ error[SyntaxDiag::ExtraSemicolon]: Unexpected ';': there is no statement between
  4 |     let x = 1;;
    |               ^
 help: Statements are separated by a line break or by one ';'. Remove the extra ';'.
+help: remove the extra ';'
+   |
+ 4 |     let x = 1;;
+   |               -
 
 camel: 1 error

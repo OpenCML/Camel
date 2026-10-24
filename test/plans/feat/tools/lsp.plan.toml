@@ -34,6 +34,11 @@ desc = "Completion (scope, fields after a dot, module members after ::, on text 
 case = "../../../cases/tools/lsp/editing.test.mjs"
 
 [[tests]]
+name = "lsp.code_actions"
+desc = "The fixes the compiler attaches to its diagnostics reach the editor: `textDocument/diagnostic` carries them in `data.fixes` (a title, and edits as range/newText), `textDocument/codeAction` hands each one out as a quick fix whose workspace edit repairs the file when it is applied, a request that touches no diagnostic gets none, `context.only` is respected, and the candidate search for a misspelt name is still offered and marked preferred."
+case = "../../../cases/tools/lsp/code_actions.test.mjs"
+
+[[tests]]
 name = "lsp.robustness"
 desc = "Malformed frames, empty and half-written documents, positions outside the text, UTF-16 positions on lines with Chinese text and emoji, a document of 20000 lines, a burst of edits, cancellation: every request is answered and the server stays up."
 case = "../../../cases/tools/lsp/robustness.test.mjs"
