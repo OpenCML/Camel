@@ -1,19 +1,20 @@
-# The tensor flip after integrating develop: 372 red, nine SIGSEGVs fixed, rank 0 done
+# The tensor flip after integrating develop: 332 red, nine SIGSEGVs fixed, rank 0 done, the `var` cell widened
 
 `origin/develop` (`ea624c980`) is merged into the flip's frozen tip (`c8e5e561d`) as
 `5dad9d646`, a real merge commit. The flip's diff is untouched: no rebase, no rewrite.
 
-**Read this note for the current state**: the ledger below has four measurement points — the
+**Read this note for the current state**: the ledger below has five measurement points — the
 integration (`5dad9d646`, 494 red, nine SIGSEGVs), the crash round (`9670cd287`, 454 red, zero
-signals), the first rank-0 slice (`1fc410091`, 372 red) and the second (`4f9345c29`, 372 red,
-no test moved) — and the ranking at the end is written from the last one. Every number says
-which target produced it: `smoke,feat --tier fast --jobs 8` is what the integration round ran
-(through the remote helper's `-Tier fast`); **`node scripts/test.js test/plans --tier fast
---jobs 8` is this lane's gate from now on**, whole tree, because five crash sites live in the
-`gpu.profile` plan, which smoke+feat never selects. Rank 0 was this lane's largest lever and it
-is now spent: its remaining two shapes are 2 tests and 1 test (the second is core's), so the
-next slice is the `var Tensor` edge invariant's 41 reds, and the print-form class (92) after
-that.
+signals), the first rank-0 slice (`1fc410091`, 372 red), the second (`4f9345c29`, 372 red, no test
+moved) and the `var`-cell widening (`332` red, the only slice that adds a case) — and the ranking
+at the end is written from the last one. Every number says which target produced it:
+`smoke,feat --tier fast --jobs 8` is what the integration round ran (through the remote helper's
+`-Tier fast`); **`node scripts/test.js test/plans --tier fast --jobs 8` is this lane's gate from
+now on**, whole tree, because five crash sites live in the `gpu.profile` plan, which smoke+feat
+never selects. Rank 0 was this lane's largest lever and it is now spent: its remaining two shapes
+are 2 tests and 1 test (the second is core's). The `var Tensor` edge invariant's 41 reds are spent
+too — 40 green, and the one left is the `Tensor<void>` VJP typing item, not this root. The next
+slice is the print-form class (92), after the 22 declarations the holes section lists.
 
 ## What the merge brought, and how the two collisions were resolved
 
@@ -46,6 +47,69 @@ author's rulings.
 | integrated + crash round `9670cd287` | `node scripts/test.js test/plans --tier fast --jobs 8` | 5972 | **454** | 11 | 282.7 s |
 | + rank-0 shape 1 `1fc410091` | same | 5972 | **372** | 11 | 291.8 s |
 | + rank-0 shape 2 (a) `4f9345c29` | same | 5972 | **372** | 11 | 215.5 s |
+| + `var`-cell widening (h395) | `node scripts/test.js test/plans --tier fast --jobs 8` | 5973 | **332** | 11 | 300.8 s |
+
+The last column is this slice: the same command, the same host, the same window as the row above
+it. `5973` is `5972 + 1`: the slice adds one case, `shape_inference/var_argument_non_numeric.cml`,
+which is the negative half of the fix and **passes** (it is the only test in the row that is new,
+so the rows still compare test for test on the 5972). **40 reds green, 0 new red, 0 signals**
+(`got null` occurrences: 0; set difference over `notes/h395-full-base.log` and
+`notes/h395-full-final.log`). The baseline row was re-measured on this same host in this same
+window (`h388-flip-staging`, `5972 / 372 / 11`, 248.6 s) rather than carried over, so the two
+columns are one measurement pair.
+
+## The `var`-cell widening (h395): which fix, and why this one
+
+**The fix chosen: widen at the call site.** The caller's normalized argument cell is given the
+declared parameter type when the parameter's content is the transitional unstated tensor
+(`ArrayType::numericUnknown()`) and `assignableFrom` accepts the argument's value; everything else
+is left to the invariant. The insertion point is the one the ruling pinned:
+`src/compile/gir/builder_operators.cpp`, `Builder::visitLinkNode`, immediately after
+`normInputTypes` is filled. The predicate is the safe rule the previous lane recorded, verbatim.
+
+Why not the two alternatives:
+
+- **Not in `TupleType::assignableFrom`** — the rule there (a cell's contents must be equal) is what
+  makes a variable one thing to every reference to it; widening it would let two references to the
+  same cell disagree with the cell's own operation types. It is untouched.
+- **Not by rejecting the call** — the programs are develop's own and are green there, so refusing
+  them would lose develop's behaviour. The one place where refusing is right is a cell the
+  parameter genuinely cannot take, and that is now pinned by a test (below).
+
+**What the argument actually is, measured.** The probe round that settled the guard found that
+`normInputTypes[i]` holds the argument's *value* type, not its cell: for `var w: Tensor`'s
+argument, `valueTypeOf(normInputTypes[0]) == normInputTypes[0]` and both print `f32[?, ?]`. The
+first attempted version tested that value for being a cell, so it never fired (identical 37 reds,
+twice). The version that lands reads the cell from the argument node (`nodeTypeOf`) and states the
+widening on the node's type, keeping `normInputTypes[i]` as the parameter's content type so the
+rest of the call binding sees the declared type. This is why the fix is at the call site and not
+in the invariant: what disagreed was the spelling the caller carried, not the cell rule.
+
+**The negative half.** `test/cases/modules/tensor/shape_inference/var_argument_non_numeric.cml`
+passes a `string[]` variable to a `var Tensor` parameter. `Tensor` accepts numeric elements only,
+so `assignableFrom` refuses the cell's content, the widening does not apply, and the call is
+refused: `No matching function found for argument types: <> (string[], float)` at `17:17`, exit 1.
+Pinned by `si_var_argument_non_numeric` in `shape_inference.plan.toml`. (It asserts the message and
+the position rather than `expect_diagnostic_name`: the short error format puts the name and code
+after the wrapped message, on a continuation line, where the runner's per-line diagnostic pattern
+cannot see it.)
+
+The 40 greens are the family and its neighbours: 32 `var_tensor.*`, all four `var_tensor_read.*`,
+the poison alias `poison:linear.var_reference:var_tensor.default`, and three tests whose first wall
+was this invariant (`lr`, `nn.lr`, `si_var_argument_plain` — the last moved from the internal error
+to its own expectation, `ArgumentNeedsConversion`; the other two now pass). **Nothing else moved**:
+`shape_inference` was measured separately on both trees and went 14 red → 13 (the one green is
+`si_var_argument_plain`; `si_var_argument` is red on both, with the same `NoMatchingFunction` — it
+asks for the `ArgumentNeedsConversion` diagnostic that its own test never produced).
+
+**The one red left in the family is not this root**: `var_tensor_read.macro_simplify_jit`
+(`std::macro std::opt std::jit`). On the flip tip it dies on this same edge invariant; with the
+widening `std::opt` and `std::opt std::jit` pass, and under `std::macro std::opt` the optimizer
+folds `sum(acc)` against the widened cell's unstated element type and reports
+`sum: Unsupported Tensor dtype` (`RuntimeDiag::RuntimeError`) with the warning "This constant
+expression faults whenever it is evaluated (RuntimeError); it is not folded". That is the
+`Tensor<void>` VJP typing item already on the list below, reached by a new route — the cell now
+says what the parameter says, and what the parameter says has no element type yet.
 
 Wall time moves with the host's load (another lane ran `test/plans/perf` in the same window);
 the fail set is what is compared, never the clock.
@@ -73,17 +137,23 @@ now: the cards were available, and there is no device red to explain away.
 Bucketing is the attribution report's, applied by one classifier to both logs: the first
 diagnostic in the block, with the diagnostic classes taking precedence over the runner's text.
 
-| class | flip tip | integrated | + crash round | delta, integrated → now |
+| class | flip tip | integrated | + crash round | delta, integrated → now | h395, `var` cell widened | delta, now → h395 |
 |---|---|---|---|---|---|---|
-| kernel element-type refusal | 162 | 3 | 0 | 0 | 0 | −3 |
-| `NoMatchingFunction` hole | 49 | 49 | 7 | 7 | 7 | −42 (see below) |
-| internal error | 43 | 43 | 40 | 38 | 38 | −5 |
-| exit-code catch-all | 88 | 243 | 250 | 119 | 119 | −124 |
-| print form | 59 | 63 | 75 | 92 | 92 | +29 |
-| runtime error | 22 | 26 | 15 | 32 | 32 | +6 |
-| other text | 66 | 67 | 67 | 84 | 84 | +17 |
-| **total** | **489** | **494** | **454** | **372** | **372** | **−122** |
-| of which `expected exit N, got null` (a signal) | — | **9** | **0** | **0** | **0** | **−9** |
+| kernel element-type refusal | 162 | 3 | 0 | 0 | 0 | 0 |
+| `NoMatchingFunction` hole | 49 | 49 | 7 | 7 | 7 | 0 |
+| internal error | 43 | 43 | 40 | 38 | 38 | 0 |
+| exit-code catch-all | 88 | 243 | 250 | 119 | 119 | 0 |
+| print form | 59 | 63 | 75 | 92 | 92 | 0 |
+| runtime error | 22 | 26 | 15 | 32 | 32 | 0 |
+| other text | 66 | 67 | 67 | 84 | 84 | 0 |
+| **total** | **489** | **494** | **454** | **372** | **332** | **−40** |
+| of which `expected exit N, got null` (a signal) | — | **9** | **0** | **0** | **0** | **0** |
+
+**The h395 column is the measured total; its class buckets are deliberately not filled in.** The
+bucketing is the attribution report's classifier applied to a log, and putting a second
+classifier's numbers into the author's rows would misreport the method. What moved is known exactly
+and is in the section below — **40 greens, 0 new red, 0 signals**, by set difference over the two
+logs — so the class rows carry the previous slice's figures with a zero delta rather than a guess.
 
 The last two columns are the two rank-0 slices; shape 2 (a) moved **no** test, which is the
 point of its entry below: it changes what the exporter can express, not what the suite measures.
@@ -343,6 +413,15 @@ alias), 4 `var_tensor_read.*`, 2 `nn.lr` and `lr`, 1 `si_var_argument_plain`, an
 43 remain** after the crash round; the other three now fail at a later expectation
 (`nn.lr`, `lr`, `si_var_argument_plain` → exit-code).
 
+**h395 closes them** (and with them the invariant): the same log's `breaks its edge invariants`
+occurrences go **79 → 0**, and 0 of the 332 failing entries in the final run name it. The three that
+had already moved at the crash round (`nn.lr`, `lr`, `si_var_argument_plain`) now **pass** — they
+were the invariant's last wall before their own expectations. The two `…macro.simplify`
+PassInternalError entries are not in this set; they were gone by the previous slice. What is left of
+the family is one test, `var_tensor_read.macro_simplify_jit`, and it is the `Tensor<void>` VJP
+typing item, not this root: `std::opt` and `std::opt std::jit` pass, and `std::macro std::opt` folds
+`sum(acc)` against the widened cell's unstated element type (`sum: Unsupported Tensor dtype`).
+
 The crash nine, its two causes, its five extra sites and the fix are in **The crash round**
 above. Their record: all nine ended `exit=None signal=SIGSEGV` on both the flip's baseline and
 the integrated tree, over five cases (`compile/numeric/gemm_library.cml`,
@@ -352,9 +431,9 @@ the integrated tree, over five cases (`compile/numeric/gemm_library.cml`,
 
 ## What has to be decided
 
-Landing the flip now moves develop from 0 to 372 red, none of them a signal. The rest is known
+Landing the flip now moves develop from 0 to 332 red, none of them a signal. The rest is known
 and ranked, from the ledger above (gate: `node scripts/test.js test/plans --tier fast --jobs 8`,
-5972 tests / 372 fail / 11 skip, `1fc410091`). The acceptance for the first item is the ruling's
+5973 tests / 332 fail / 11 skip, `h395`). The acceptance for the first item is the ruling's
 own sentence: **rank 0 is the element type itself**.
 
 - **The rank-0 representation.** Three shapes, the first done (entry counts from `grep -rl` over
@@ -424,10 +503,16 @@ own sentence: **rank 0 is the element type itself**.
     (`sem::instantiate`, `include/camel/core/index_semantics.h:501`) finds none; that entry point
     is core, so this shape is a diagnosis for the core lane unless the harness can name the
     operand the way the kernel reads it.
-- **Then the `var Tensor` edge invariant**: 41 reds, one root cause (a declared `Tensor`
-  parameter against a concrete `f64[?, ?]` variable). A *different* lever: a compile-time
-  invariant on a concrete value reaching a declared-unknown type, not value/type agreement at
-  rank 0.
+- **The `var Tensor` edge invariant — done** (`h395`): 41 reds, one root cause (a declared `Tensor`
+  parameter against a concrete `f64[?, ?]` variable). A *different* lever: a compile-time invariant
+  on a concrete value reaching a declared-unknown type, not value/type agreement at rank 0. Taken
+  at the call site (the caller's cell is given the declared parameter type where the parameter's
+  content is the unstated tensor and `assignableFrom` accepts the argument's value), never in
+  `TupleType::assignableFrom` and never by rejecting the call. **Measured: 40 green, 0 new, 0
+  signals**, whole tree, same window; the one red left of the family
+  (`var_tensor_read.macro_simplify_jit`) is the `Tensor<void>` VJP typing item below, not this root.
+  The refusal that is genuinely right — a non-numeric cell against `var Tensor` — is pinned by
+  `shape_inference/var_argument_non_numeric.cml`.
 - **Then the 22 declarations** (`tensor:gt`, `:add`, `:sum`, `:numel`, `:show` written over
   `Tensor<T>` in the module): 47 failing entries name a `NoMatchingFunction` at case level, the
   22 among them, and the count has not moved across either slice.
@@ -443,9 +528,10 @@ own sentence: **rank 0 is the element type itself**.
 
 Cost of landing now, in user-visible behaviour: `Tensor` is a numeric-array alias whose
 unstated element type reads as f64, rank-0 values are the element type itself, tensor printing
-is the array printer's, and `var Tensor` parameters produce a hard "defect of the compiler"
-message. Recommendation: **do not land yet**; the integration has settled the element-type
-question on the kernel side (`sum_to_f64` is now a real arm), the crash round has taken the
-signals to zero and the first rank-0 shape has taken 82 reds off the wall, so what is left is
-rank 0's other two shapes and the items ranked above them, and one run per slice measures the
+is the array printer's, and `var Tensor` parameters no longer produce a hard "defect of the
+compiler" message (40 reds green, 0 new, 0 signals). Recommendation: **do not land yet**; the
+integration has settled the element-type question on the kernel side (`sum_to_f64` is now a real
+arm), the crash round has taken the signals to zero, the first rank-0 shape has taken 82 reds off
+the wall and the `var`-cell widening 40 more, so what is left is rank 0's other two shapes and the
+items ranked above them, and one run per slice measures the
 reds it moves.
