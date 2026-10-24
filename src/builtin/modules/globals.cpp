@@ -2057,14 +2057,25 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":struct/range",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "(start: int, end: int) => int[]",
+                        {{0, {}}, {-1, {}}},
+                        "(start: int, end: int, step: int) => int[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Int64)
+                            // `range(a, b)` is the interval of the integers from `a` to `b - 1`
+                            // and `range(a, b, step)` is the same sequence with a step, as the
+                            // language's `a..b` is the one without one (design principles 4.2;
+                            // the author's ruling of 2026-10-24). One rule for the two spellings:
+                            // a second rule of the same URI would leave the table (which holds
+                            // one resolver per URI) with the last one only, so every re-typing of
+                            // the call would read the other spelling's arity.
+                            if (norm.size() != 2 && norm.size() != 3) {
                                 return nullopt;
-                            if (norm[1]->code() != TypeCode::Int64)
-                                return nullopt;
+                            }
+                            for (Type *type : norm) {
+                                if (type->code() != TypeCode::Int64) {
+                                    return nullopt;
+                                }
+                            }
                             return ArrayType::create(Type::Int64());
                         }),
                 },

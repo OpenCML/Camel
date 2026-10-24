@@ -1,0 +1,31 @@
+/**
+ * The same `main` as `compute_node_size_at_limit.cml` with one `println` more: nine compute
+ * nodes, one over the limit of "small", so the inliner leaves the call of `main` as a call (the
+ * pipeline that shows both sides of the limit is std::opt::devirtualize then std::opt::inline,
+ * which does not fold the `reshape` of the example away). The refusal of an export that hides
+ * its request behind that call reports the number and the reason (see the onnx plan).
+ */
+module compute_node_size_over_limit
+
+import { Tensor, reshape } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+func double(t: Tensor): Tensor {
+    return t * 2.0
+}
+
+func spin(n: int): int sync {
+    println(n)
+    return if n <= 0 then 0 else spin(n - 1)
+}
+
+func main(): int sync {
+    export_model(double, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/compute_node_size_over_limit.onnx')
+    let x = int(get_env('H434_STEPS'))
+    println(x)
+    println(x)
+    println(x)
+    println(x)
+    return spin(x)
+}

@@ -157,6 +157,44 @@ json Server::readingSupport(const std::string &method, const json &params) {
             requestRange["start"]["character"]);
         const auto end =
             file.lines.offsetOfUtf16(requestRange["end"]["line"], requestRange["end"]["character"]);
+        // A workspace edit that replaces `edits` in this document, in the shape the client said
+        // it wants at initialize.
+        const auto workspaceEdit = [&](const json &edits) {
+            return documentChanges_
+                       ? json{
+                             {"documentChanges",
+                              json::array(
+                                  {json{
+                                      {"textDocument",
+                                       json{{"uri", doc->uri}, {"version", doc->version}}},
+                                      {"edits", edits}}})}}
+                       : json{{"changes", json{{doc->uri, edits}}}};
+        };
+        // The fixes the compiler attached to its own diagnostics (DiagFix): each one is a code
+        // action, offered wherever the request touches the diagnostic it belongs to. They are the
+        // same changes `textDocument/diagnostic` hands out in `data.fixes`, so the editor's reader
+        // and its AI get the change the compiler knows the text of, without inventing one. An edit
+        // is `{range, newText}`: the protocol's spelling of the compiler's `{range, replacement}`.
+        for (const auto &diag : model.diagnostics()) {
+            if (diag.file != 0 || diag.fixes.empty())
+                continue;
+            if (diag.range.end < start || diag.range.start > end)
+                continue;
+            const json item = diagnosticItem(*doc, diag);
+            for (const auto &fix : diag.fixes) {
+                json edits = json::array();
+                for (const auto &edit : fix.edits) {
+                    edits.push_back(
+                        json{{"range", range(file, edit.range)}, {"newText", edit.newText}});
+                }
+                result.push_back(
+                    json{
+                        {"title", fix.title},
+                        {"kind", "quickfix"},
+                        {"edit", workspaceEdit(edits)},
+                        {"diagnostics", json::array({item})}});
+            }
+        }
         for (const auto &diag : model.diagnostics()) {
             if (diag.file || (diag.code != "0x0300000B" && diag.code != "0x0300000b"))
                 continue;
@@ -201,16 +239,12 @@ json Server::readingSupport(const std::string &method, const json &params) {
                 continue;
             const auto edits = json::array(
                 {json{{"range", range(file, ref->nameRange())}, {"newText", replacement}}});
-            const auto edit =
-                documentChanges_
-                    ? json{{"documentChanges", json::array({json{{"textDocument", json{{"uri", doc->uri}, {"version", doc->version}}}, {"edits", edits}}})}}
-                    : json{{"changes", json{{doc->uri, edits}}}};
             result.push_back(
                 json{
                     {"title", "Replace with '" + replacement + "'"},
                     {"kind", "quickfix"},
                     {"isPreferred", true},
-                    {"edit", edit}});
+                    {"edit", workspaceEdit(edits)}});
         }
     }
     return result;

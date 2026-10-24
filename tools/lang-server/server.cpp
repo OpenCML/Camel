@@ -37,6 +37,7 @@ namespace camel::ls {
 
 namespace fs = std::filesystem;
 using semantic::DeclKind;
+using semantic::DiagnosticInfo;
 using semantic::FileModel;
 using semantic::Location;
 
@@ -391,6 +392,53 @@ uint32_t Server::offsetAt(Document &doc, const json &params) {
         static_cast<uint32_t>(std::min<int64_t>(character, UINT32_MAX)));
 }
 
+json Server::diagnosticItem(Document &doc, const DiagnosticInfo &d) {
+    const auto &model = modelOf(doc);
+    json item{
+        {"range", range(model.main(), d.range)},
+        {"severity", d.severity},
+        {"source", "Camel"},
+        {"message", d.message},
+        {"code", d.code}};
+    json data{{"name", d.name}};
+    if (!d.suggestion.empty()) {
+        data["suggestion"] = d.suggestion;
+    }
+    if (!d.notes.empty()) {
+        data["notes"] = d.notes;
+    }
+    // The changes the compiler knows the text of, in the shape a code action carries them: a
+    // title that says what the change does, and the edits that carry it out. An edit is
+    // `{range, newText}` - the protocol's spelling of the compiler's `{range, replacement}` - and
+    // the edits of one fix name disjoint ranges of the open document, applied to the text as
+    // written. A reader that sees `fixes` may apply them without asking; a reader that does not
+    // must fall back to `suggestion`.
+    if (!d.fixes.empty()) {
+        json fixes = json::array();
+        for (const DiagnosticInfo::Fix &fix : d.fixes) {
+            json edits = json::array();
+            for (const DiagnosticInfo::Fix::Edit &edit : fix.edits) {
+                edits.push_back(
+                    json{{"range", range(model.main(), edit.range)}, {"newText", edit.newText}});
+            }
+            fixes.push_back(json{{"title", fix.title}, {"edits", edits}});
+        }
+        data["fixes"] = fixes;
+    }
+    item["data"] = data;
+    if (!d.related.empty()) {
+        json related = json::array();
+        for (const auto &label : d.related) {
+            related.push_back(
+                json{
+                    {"location", location(doc, Location{label.file, label.range})},
+                    {"message", label.message}});
+        }
+        item["relatedInformation"] = related;
+    }
+    return item;
+}
+
 json Server::diagnosticsOf(Document &doc) {
     const auto &model = modelOf(doc);
     json items        = json::array();
@@ -398,31 +446,7 @@ json Server::diagnosticsOf(Document &doc) {
         if (d.file != 0) {
             continue; // an imported module's own errors: its import carries one here
         }
-        json item{
-            {"range", range(model.main(), d.range)},
-            {"severity", d.severity},
-            {"source", "Camel"},
-            {"message", d.message},
-            {"code", d.code}};
-        json data{{"name", d.name}};
-        if (!d.suggestion.empty()) {
-            data["suggestion"] = d.suggestion;
-        }
-        if (!d.notes.empty()) {
-            data["notes"] = d.notes;
-        }
-        item["data"] = data;
-        if (!d.related.empty()) {
-            json related = json::array();
-            for (const auto &label : d.related) {
-                related.push_back(
-                    json{
-                        {"location", location(doc, Location{label.file, label.range})},
-                        {"message", label.message}});
-            }
-            item["relatedInformation"] = related;
-        }
-        items.push_back(std::move(item));
+        items.push_back(diagnosticItem(doc, d));
     }
     return items;
 }
