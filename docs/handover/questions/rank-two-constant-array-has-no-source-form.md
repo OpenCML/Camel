@@ -36,3 +36,15 @@
 本 lane 能给出的秩 ≥2 读数只有运行时那半：`test/cases/loops/iterate_tensor.cml`（`new([[1,2],[3,4],
 [5,6]])` 走 3 行、`zeros([0, 2])` 走 0 行、行内再循环，期望 `21 3 3 6 7 21 3`）与
 `test/cases/loops/h453-*`（测量用临时文件，已删）。
+
+## 附：另一棵树上的完整实现（事实，供"按声明成形 vs 按今天读数"定夺）
+
+`handover/h469-literal-shape` 上有一份**可以整体复活**的完整实现：提交 `20e7a7713`（`+641/−36`），
+在 `src/compile/gct/builder.cpp` 加 228 行、`src/core/rtdata/conv.cpp` 加 64 行，其中 `statedExtents()`
+负责按注解给的形状把平铺字面量成形。本翻转线上**整个不存在**这份改动（今天仍是
+`Array::create(alloc, type, 0)` + `append`），`git grep` 在 `handover/h465-flip-integration` 里对
+`h469`/`literal_rank_two`/`err_literal_ragged`/`reshape_constant` 零命中。
+
+它的 5 条用例与 6 个 plan 段**钉的是"按声明成形"这个行为**，与本文件的实测读数方向相反：若维持今天的
+读数，那些用例与 plan 段**不要**补进树（补进来会让 `array_shape` 计划红）；若裁定按声明成形，则可以把
+`20e7a7713` 整条复活，不必重做。本文只记这个事实，不定语义。

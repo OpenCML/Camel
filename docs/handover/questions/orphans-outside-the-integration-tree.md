@@ -77,3 +77,25 @@ handover/h465-flip-integration` 为 0 命中：h465 里没有任何地方提到�
    `docs/handover/questions/subscript-operator-choice-and-the-rank-two-refusal.md` 引用的
    `notes/h446-r3-layer-after.log` 在该工作树里**不存在**（`Test-Path` 为假），也不在任何分支的树里
    ——那 31 条实验的完整 `[FAIL]` 名单只剩问题文件正文里的 6 行摘要。
+
+## 四、`handover/h438-tensor-alias` 上那两个记录件的判断（本条由集成 lane 补，仍只报事实与依据）
+
+结论：**都不并进翻转线**，一个在线上已有等价物，一个只是过渡期的旧计划。
+
+- `docs/handover/questions/tensor-alias-h438-open-items.md`（104 行，6 条）——**六条在线上都已重立或被裁定**，
+  逐条依据：
+  1. "数组拼法的张量 `t[i]` 落到核心数组索引"：别名已由 `a5a32a077` 落地，`isTensorType` =
+     `isNumericArrayType`（`modules/tensor/type.cpp`），线上记录在 `tensor-alias-transition.md`。
+  2. "未写元素类型的字面量数组 f64 还是 f32"：同一个问题在本线上以**逐字两侧读数**重立为
+     `rank-zero-array-and-a-float-literal.md`（`kernel f64, declaration f32`）。
+  3. "梯度算子的节点类型（`addTensorOperFor`）"：`tensor-alias-transition.md` 有专条（该文件里
+     `addTensorOperFor` 1 处命中）。
+  4. "打印收口只做了一半"：作者"一种打印形"的裁定已定，线上记录在
+     `h450-spelling-and-print-form-leftovers.md`，且 `docs.snippets_compile` 在 tip 上已绿。
+  5. "两个真缺陷"：**线上都已不红** —— `si_var_argument_plain`（`test/plans/feat/modules/tensor/
+     shape_inference.plan.toml:230`）与 `single_instance` 在 `-Plan .` 与 `smoke,feat` 两个口径的
+     最新跑里都是 `[PASS]`；`docs/handover/` 下"未述元素类型"12 处命中覆盖第 6 条那一族。
+  6. "22 处未述元素类型的叶子"：同上，`element-type-convention-leftovers.md` 一族在线上。
+- `docs/handover/plans/H17-plan.cn.md`（71 行）：其 §一 已是 `tensor-alias-transition.md` 的
+  "一、建议加进计划的文字"（照录），§二/§三是 h438 自己的**过渡依赖表**；别名落地后过渡结束，它只是
+  旧计划。留一句引用即可，不搬实体。
