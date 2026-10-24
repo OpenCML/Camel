@@ -50,19 +50,19 @@ for (const l of [
   'RESOURCES conservative_pure none',
   'RESOURCES bounds [2, 5] [6, 9] [5, 7] empty [0, 6] unknown',
   'RESOURCES overlap a-b 0 a-c 1 a-empty 0 a-unknown 1',
-  'RESOURCES footprint bump rmw variable norm 0 whole; rmw variable (any)',
-  'RESOURCES footprint countdown rmw variable norm 0 whole; rmw variable (any)',
-  'RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw variable (any); rmw object (any); external',
+  'RESOURCES footprint bump rmw variable norm 0 whole',
+  'RESOURCES footprint countdown rmw variable norm 0 whole',
+  'RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw object (any); external',
   'RESOURCES node main 2 :var/new: allocates variable',
-  'RESOURCES node main 9 :op/assn_l: write variable (node 2); result may_alias 1',
-  'RESOURCES node main 10 FUNC bump: rmw variable (node 2); rmw variable (any); result unknown',
-  'RESOURCES node main 12 FUNC countdown: rmw variable (node 5); rmw variable (any); result unknown',
-  'RESOURCES node main 15 CALL: rmw variable (node 2)',
+  'RESOURCES node main 9 :op/assn_l: write variable (node 2); result same 0',
+  'RESOURCES node main 10 FUNC bump: rmw variable (node 2); result unknown',
+  'RESOURCES node main 12 FUNC countdown: rmw variable (node 5); result unknown',
+  'RESOURCES node main 15 CALL: rmw variable (node 2); result unknown',
   'RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0',
   'RESOURCES node main 20 array:sort_l_in_place: rmw object (node 19); result same 0',
   'RESOURCES node main 23 rand:seed: write ambient rng; external',
   'RESOURCES node main 29 fs:exists: read ambient fs; external',
-  'RESOURCES node countdown 12 FUNC countdown: rmw variable (node 0); rmw variable (any); result unknown',
+  'RESOURCES node countdown 12 FUNC countdown: rmw variable (node 0); result unknown',
   'RESOURCES order main 8 9 resource ordered by data',
   'RESOURCES order main 9 10 resource ordered by control',
   'RESOURCES order main 12 34 resource ordered by control',
@@ -77,7 +77,17 @@ for (const l of [
 // per element type in it). The footprint is the fact this test is about, so it is named by what it
 // says: one graph, the captured cell, and the whole access to it. A pin on the number would fail
 // on any change to any module compiled before the closure, and would say nothing more than this.
-const captured = out.split('\n').filter((l) => /^RESOURCES footprint \S+ rmw variable capture 0 whole; result fresh$/.test(l))
+// The result part is gone, and that is the analysis's answer rather than a loosened pin: the
+// closure's body is `c += 1`, what a write gives is this version's cell (`:op/assn*` names operand
+// 0, the cell -- the ruling on the var version node; the value it wrote is its second operand),
+// and that cell is the closure's *capture*. A
+// footprint's result names a norm port or nothing (`ResultAlias` numbers the norm ports;
+// resources.cpp `Resolver::resultOf` answers Unknown for a port that is not one, and the footprint
+// "has no binding for a capture yet"), so what the closure hands back is Unknown and
+// `toString(GraphFootprint)` writes no result at all. It said `result fresh` while the write's
+// result was declared `may_alias 1` -- the very declaration that made two variables' cells one
+// resource. The `$` keeps the pin on the whole line, absence of a result included.
+const captured = out.split('\n').filter((l) => /^RESOURCES footprint \S+ rmw variable capture 0 whole$/.test(l))
 assert(captured.length === 1, `the captured closure's footprint: ${JSON.stringify(captured)}`)
 // This test used to write `RESOURCES order main 23 24 external ordered by control`: a pair of
 // effects outside the program was a pair whatever they touched. A conflict is judged by resource
@@ -103,6 +113,16 @@ for (let i = 0; i < prints.length; i++) for (let j = i + 1; j < prints.length; j
 }
 assert(!out.includes('RESOURCES order countdown 9 12'), 'the two arms of a branch are not a pair')
 assert(!/RESOURCES order main (2|5|18) /.test(out), 'making a cell conflicts with nothing')
+// `c` and `d` are two variables and so two resources (design principles 3.3: each `var` is one
+// resource, and a `var` parameter is the caller's own variable; 10.5: a `var` cell is one of the
+// things that have an identity). The versions of one variable's cell are that one cell (the
+// ruling on the var version node: a write gives this version's cell), so a write of `c` conflicts
+// with every other access to `c` and with nothing of `d`. A cell reached through a write whose
+// resource declaration does not name the cell is unknown instead, and then *every* variable of
+// the graph meets it; that over-approximation is what this pair used to be.
+// `inc()` (node 15) is the call that writes `c` through its capture, so its result is unknown too,
+// for the reason the closure's own footprint below gives: what the closure hands back is its
+// capture, and a footprint names a norm port or nothing.
 assert(!/RESOURCES order main 12 (8|9|10|15|32) /.test(out), 'the cells of c and d are different resources')
 assert(!out.includes(' unordered'), 'the program orders every conflicting pair')
 
@@ -209,9 +229,9 @@ const expect = {
   ':var/new': 'allocates variable',
   ':var/get': 'read variable norm 0 whole; result may_alias 0',
   ':var/take': 'rmw variable norm 0 whole; result may_alias 0',
-  ':op/assn_l': 'write variable norm 0 whole; result may_alias 1',
-  ':op/assn_add_l': 'rmw variable norm 0 whole',
-  ':op/assn_owned': 'write variable norm 0 whole; result may_alias 1',
+  ':op/assn_l': 'write variable norm 0 whole; result same 0',
+  ':op/assn_add_l': 'rmw variable norm 0 whole; result same 0',
+  ':op/assn_owned': 'write variable norm 0 whole; result same 0',
   ':io/println': 'write ambient stdout; external',
   ':io/eprintln': 'write ambient stderr; external',
   ':io/input': 'rmw ambient stdin; external',
