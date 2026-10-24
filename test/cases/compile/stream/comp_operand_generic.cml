@@ -1,19 +1,17 @@
-/**
- * An operand of `..` whose type is not settled: `ident` is generic, and a generic function
- * named without its type arguments has no value of one type yet, so the composition is refused.
- * The refusal no longer prints `void` as if it were the operand's type - it says what the
- * operand is and how to settle it (the ruling is docs/handover/reviews/questions-2026-10-23.md,
- * section generic-operands-of-composition: the expected type instantiates the operands, and this
- * refusal comes to have a diagnostic of its own).
- */
-module stream_type_comp_operand_generic
+// A name of a generic function says no instance of it until a position fixes its types (design
+// principles 5.5), and nothing here does: the composition stands in a `let` with no declared
+// type, so neither the operand nor the whole expression has a function type to take the instance
+// from. The refusal is the composition's own, and it says what the operand is and both ways to
+// settle it (the ruling is docs/handover/reviews/questions-2026-10-23.md, section
+// generic-operands-of-composition).
+module h428_comp_operand_generic
 
 func ident::<T>(x: T): T {
     return x
 }
 
 func main(): int sync {
-    let h: (x: int) => int = ident..ident
-    println(h(4))
+    let composed = ident..ident
+    println(composed(4))
     return 0
 }

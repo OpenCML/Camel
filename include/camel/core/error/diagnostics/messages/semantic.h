@@ -351,8 +351,10 @@ enum class SemanticDiag : uint32_t {
     /// Neither reading of `..` takes these operands: they are not two functions and not two integers.
     CompOperandMismatch = 0x0001E1,
     /// The left operand of `..` is a function that takes more or fewer than one parameter.
-    CompOperandNotUnary         = 0x0001E2,
-    ReducedPrecisionUnsupported = 0x0001D7,
+    CompOperandNotUnary = 0x0001E2,
+    /// An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (the author's ruling of 2026-10-24, section generic-operands-of-composition of docs/handover/reviews/questions-2026-10-23.md).
+    CompOperandGenericWithoutType = 0x0001E4,
+    ReducedPrecisionUnsupported   = 0x0001D7,
     // #impl<f> (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
     // resolves the tag when it declares the module, so no pass reads it and it names no reader.
