@@ -20,7 +20,6 @@ A Camel program expresses computational intent only: what is to be computed, and
 | An expression, an operator call | Nodes and data edges | Evaluation follows dependencies; nodes that do not depend on each other may run in any order or in parallel |
 | A function | A subgraph; a call is a node | A function's behaviour is decided by the function itself |
 | A `sync` block | Control edges between adjacent expressions | Statements run in the order written |
-| `wait e` | Control edges around one expression | Local order where a variable is modified |
 | `if`, `match`, `a ?? b`, `a !! b` | A branch | Errors and nulls are values, handled by branches |
 | A generic function | A subgraph template, instantiated per set of concrete types | Only concrete types are on the graph |
 | A pass | A program that turns one graph into another, or consumes it | An open pipeline |

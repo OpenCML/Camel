@@ -122,7 +122,7 @@ export func save_tree::<T>(dir: string, t: T): unit! {
 func save_at::<T>(h: Ckpt, here: string, t: T): Ckpt {
     return match type T {
         case struct | tuple =>
-            static loop h = h for (n, F) in fields T do   // 展开的折叠
+            static loop h = h for n, F in fields T do   // 展开的折叠
                 save_at(h, join(here, n), t.[n])
         case _ => ckpt_put(h, here, t)             // 没有适用的重载：带路径的编译错误
     }

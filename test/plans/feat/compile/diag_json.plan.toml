@@ -193,11 +193,10 @@ expect_exit = 11
 verify_script = """
 assert(input.normalized.stdout === '11\n', 'stdout is the program output only: ' + JSON.stringify(input.normalized.stdout))
 const lines = input.normalized.stderr.trim().split('\n')
-assert(lines.length === 3, 'three warnings on stderr, got ' + lines.length + ': ' + input.normalized.stderr)
+assert(lines.length === 2, 'two warnings on stderr, got ' + lines.length + ': ' + input.normalized.stderr)
 const expect = [
-    ['warnings_visible.cml:11:10: [Warn]: Variable parameters are only allowed in sync functions.', 'SemanticDiag::VarParamInAsyncFunction, code=0x03100001'],
-    ['warnings_visible.cml:18:5: [Warn]: The call of \'inc: (var x: int) => int\' is neither waited nor in a sync block, and it takes a var argument.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
-    ['warnings_visible.cml:19:13: [Warn]: The branch is neither waited nor in a sync block, and an arm writes the captured variable \'c\'.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
+    ['warnings_visible.cml:17:5: [Warn]: The call of \'inc: (var x: int) => int\' is not in a sync block, and it takes a var argument.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
+    ['warnings_visible.cml:18:13: [Warn]: The branch is not in a sync block, and an arm writes the captured variable \'c\'.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
 ]
 expect.forEach(([text, name], i) => {
     assert(lines[i].includes(text), `warning ${i + 1}: expected ${text}, got ${lines[i]}`)
@@ -217,11 +216,11 @@ expect_exit = 11
 verify_script = """
 assert(input.normalized.stdout === '11\n', 'stdout is the program output only: ' + JSON.stringify(input.normalized.stdout))
 const diags = JSON.parse(input.stderr)
-assert(diags.length === 3, 'three warnings, got ' + diags.length)
+assert(diags.length === 2, 'two warnings, got ' + diags.length)
 assert(diags.every(d => d.severity === 'Warn'), 'severity Warn')
 assert(diags.every(d => d.data.stage === 'typecheck'), 'stage typecheck')
 const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1) + ':' + (d.range.start.character + 1))
-const want = ['SemanticDiag::VarParamInAsyncFunction@11:10', 'SemanticDiag::IgnoredSideEffect@18:5', 'SemanticDiag::IgnoredSideEffect@19:13']
+const want = ['SemanticDiag::IgnoredSideEffect@17:5', 'SemanticDiag::IgnoredSideEffect@18:13']
 assert(JSON.stringify(got) === JSON.stringify(want), 'names and positions: ' + got.join(' '))
 assert(diags.every(d => d.data.modulePath.endsWith('warnings_visible.cml')), 'each names its file')
 """
@@ -232,7 +231,7 @@ timeout_ms = 6000
 name = "warnings_none_stderr_empty"
 desc = "A program without warnings prints nothing on stderr, in text and in JSON mode alike (no empty array)."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["--output-format", "json", "${case}"]
 expect_exit = 0
 verify_script = """
@@ -244,7 +243,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "warning_with_error_json"
-desc = "When the module has an error, its warnings stay where they were: in the diagnostics array on stdout, with the error; stderr does not repeat them. A warning placed by the GCT builder now has its source position there too."
+desc = "When the module has an error, its warnings stay where they were: in the diagnostics array on stdout, with the error; stderr does not repeat them. A warning placed by the GCT builder has its source position there too."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/warning_with_error.cml"
 args = ["--output-format", "json", "${case}"]
@@ -252,7 +251,7 @@ expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
 const got = diags.map(d => d.severity + ' ' + d.data.name + '@' + (d.range.start.line + 1) + ':' + (d.range.start.character + 1))
-const want = ['Warn SemanticDiag::VarParamInAsyncFunction@8:10', 'Error SemanticDiag::UnresolvedReference@14:12']
+const want = ['Warn SemanticDiag::ExitInUnusedBranch@12:9', 'Error SemanticDiag::UnresolvedReference@19:12']
 assert(JSON.stringify(got) === JSON.stringify(want), 'diagnostics on stdout: ' + got.join(' | '))
 assert(input.stderr === '', 'nothing on stderr: ' + JSON.stringify(input.stderr))
 """
@@ -260,32 +259,8 @@ normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
 
 [[tests]]
-name = "captured_write_without_sync"
-desc = "A function or lambda that writes a captured variable, itself or through a function it calls directly, and is not declared with the `sync` modifier gets the warning CapturedWriteInAsyncFunction at its definition; declared ones and readers do not. The modifier is a declaration only: the program runs as before."
-kind = "behavior"
-case = "../../../cases/compile/diag_json/captured_write_without_sync.cml"
-args = ["--output-format", "json", "${case}"]
-expect_exit = 0
-verify_script = """
-assert(input.normalized.stdout === '3 1\n', 'program output: ' + JSON.stringify(input.normalized.stdout))
-const diags = JSON.parse(input.stderr)
-assert(diags.every(d => d.severity === 'Warn' && d.data.name === 'SemanticDiag::CapturedWriteInAsyncFunction'),
-    'only CapturedWriteInAsyncFunction warnings: ' + diags.map(d => d.data.name).join(' '))
-const got = diags.map(d => (d.range.start.line + 1) + ' ' + d.message).sort()
-const want = [
-    "18 Function 'bump' writes the captured variable 'total' but is not declared with the 'sync' modifier.",
-    "32 Function 'via' writes the captured variable 'total' but is not declared with the 'sync' modifier.",
-    "42 Function 'main' writes the captured variable 'total' but is not declared with the 'sync' modifier.",
-    "44 The lambda writes the captured variable 'seen' but is not declared with the 'sync' modifier.",
-]
-assert(JSON.stringify(got) === JSON.stringify(want), 'warnings: ' + got.join(' | '))
-"""
-normalizers = ["strip_ansi", "normalize_newlines"]
-timeout_ms = 6000
-
-[[tests]]
 name = "dropped_effects"
-desc = "Outside a sync block an effectful expression nothing depends on is not executed; that is legal and each one gets the warning EffectNotExecuted at its position: an impure operator, a function whose body has effects, a call bound to an unused name, a write nothing reads, an assignment, a function declared `sync func`, a branch with an effectful arm; a chain of dropped effects gets one warning. Nothing in a sync block and no pure expression is reported, and the program runs as written."
+desc = "Outside a sync block an effectful expression nothing depends on is not executed; that is legal and each one gets the warning EffectNotExecuted at its position: an impure operator, a function whose body has effects, a call bound to an unused name, a write nothing reads, an assignment, a branch with an effectful arm; a chain of dropped effects gets one warning. Nothing in a sync block and no pure expression is reported, and the program runs as written."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/dropped_effects.cml"
 args = ["--output-format", "json", "${case}"]
@@ -302,9 +277,8 @@ const want = [
     "33 The call of 'noisy'",
     "34 The call of 'modify'",
     "35 The assignment",
-    "36 The call of 'declared'",
-    "37 The call of 'println'",
-    "38 The branch",
+    "36 The call of 'println'",
+    "37 The branch",
 ]
 assert(JSON.stringify(got) === JSON.stringify(want), 'dropped effects: ' + got.join(' | '))
 assert(dropped.every(d => d.message.endsWith('has side effects but is never executed: nothing depends on it and it is not in a sync block.')), 'message text')
@@ -315,7 +289,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "dropped_effects_outside_sync"
-desc = "The five dropped prints of effects_outside_sync.cml (plain body, under wait, nested sync block, prefix sync func, a statement before the returned call) are each reported as EffectNotExecuted; the three kept ones are not."
+desc = "The three dropped prints of effects_outside_sync.cml (plain body, the first print of the nested sync block, a statement before the returned call) are each reported as EffectNotExecuted; the kept ones are not."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["--output-format", "json", "${case}"]
@@ -323,7 +297,7 @@ expect_exit = 0
 verify_script = """
 const diags = JSON.parse(input.stderr)
 const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1))
-const want = [11, 19, 28, 36, 48].map(line => 'SemanticDiag::EffectNotExecuted@' + line)
+const want = [13, 22, 35].map(line => 'SemanticDiag::EffectNotExecuted@' + line)
 assert(JSON.stringify(got) === JSON.stringify(want), 'warnings: ' + got.join(' '))
 assert(!input.stdout.includes('DROPPED'), 'no dropped line is printed')
 """
@@ -334,7 +308,7 @@ timeout_ms = 6000
 name = "unknown_pass_after_scheduler"
 desc = "An unknown pass name written after a scheduling pass is rejected before anything runs: the program is not executed (stdout is nothing but the diagnostics array), exit 1, UnrecognizedGraphPass with stage pass:<name>."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["--output-format", "json", "${case}", "std::nvm", "std::no_such_pass"]
 expect_exit = 1
 verify_script = """
@@ -356,7 +330,7 @@ timeout_ms = 6000
 name = "unknown_pass_after_rewrite_and_scheduler"
 desc = "The first unknown name is the one reported, wherever it is written: after a rewrite pass and a scheduling pass, in text mode. Nothing runs."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::opt::inline", "std::fvm", "std::typo_one", "std::typo_two"]
 expect_exit = 1
 verify_script = """
@@ -372,7 +346,7 @@ timeout_ms = 6000
 name = "unknown_module_pass"
 desc = "A pass name whose module does not exist is an unknown pass, and the program does not run. (This test used onnx::export on a program without `import onnx`, which was unknown then; naming a module's pass now loads the module, see module_pass_autoload, so the test names a module that does not exist.)"
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["--output-format", "json", "${case}", "std::nvm", "nosuchmodule::export"]
 expect_exit = 1
 verify_script = """
@@ -387,7 +361,7 @@ timeout_ms = 6000
 name = "unknown_pass_of_known_module"
 desc = "A C++ module that exists but contributes no pass of that name: still an unknown pass (the module is loaded, the name stays unknown), and the program does not run. (`onnx` was the example until H179 and `hash` until H163; both are declaration modules now, so their missing pass gets the H130 module-specific diagnostic, tested in feat/modules/pass_not_found. `ckpt` is the C++ module with no declaration file, so it is the subject here.)"
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["--output-format", "json", "${case}", "std::nvm", "ckpt::nosuchpass"]
 expect_exit = 1
 verify_script = """
@@ -402,7 +376,7 @@ timeout_ms = 6000
 name = "module_pass_autoload"
 desc = "Naming a module's pass on the command line loads the module: tensor::fuse on a program that imports nothing is a known pass (it finds nothing to fuse) and the program runs under the scheduler after it."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "tensor::fuse", "std::nvm"]
 expect_exit = 0
 verify_script = """
@@ -416,7 +390,7 @@ timeout_ms = 6000
 name = "passes_never_run_text"
 desc = "Passes written after a scheduling pass can never run. The program still runs; before it does, the warning PassesNeverRun on stderr names the consuming pass and the passes after it."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::nvm", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 verify_script = """
@@ -433,7 +407,7 @@ timeout_ms = 6000
 name = "passes_never_run_json"
 desc = "The same warning with --output-format json, after a translation pass: one JSON array on stderr with severity Warn and stage pass:<consuming pass>; stdout is the translation's output and the program is not executed."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["--output-format", "json", "${case}", "std::rgir", "std::nvm"]
 expect_exit = 0
 verify_script = """
@@ -454,7 +428,7 @@ timeout_ms = 6000
 name = "passes_last_consumer_quiet"
 desc = "A consuming pass written last is the normal pipeline: no warning."
 kind = "behavior"
-case = "../../../cases/linear/byref/wait_direct_user.cml"
+case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 verify_script = """

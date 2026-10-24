@@ -28,7 +28,7 @@ func r10(a7: int, a8: int, a9: int): int {
     }, a9);
 }
 
-sync func w28(a29: int, var c30: int, a31: int): int sync {
+func w28(a29: int, var c30: int, a31: int): int sync {
     return if (a29 <= 0) then r6(1, 31, -2) else sync {
         let n32 = w28(a29 - 1, c30, 0);
         return 1;

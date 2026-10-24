@@ -117,6 +117,13 @@ using EvalCallResolver  = std::function<data_ptr_t(
     const std::vector<data_ptr_t> &arguments,
     const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
     const camel::core::type::type_bindings_t &vars, size_t depth)>;
+/// How the evaluator works out the sequence of a `static loop` whose head writes one out
+/// (`for i in 0..5`, H462, the ruling of 2026-10-24). It is the same reading the graph builder
+/// uses (`Builder::staticLoopSequenceOf`), passed in as a callback because the evaluator is a
+/// helper that holds no builder: a `when` predicate and the expansion must agree on the elements
+/// a head names, and a sequence the compiler cannot work out comes back as nothing.
+using EvalSequenceResolver =
+    std::function<std::optional<std::vector<int64_t>>(const GCT::node_ptr_t &)>;
 
 data_ptr_t makeBool(bool value) {
     return std::make_shared<PrimaryData<bool>>(value);
@@ -205,11 +212,13 @@ class GctConstantEvaluator {
     static data_ptr_t runFunction(
         const GCT::node_ptr_t &func, const camel::core::type::type_bindings_t &vars,
         const std::vector<data_ptr_t> &args, const std::vector<data_ptr_t> &withArgs,
-        EvalDataResolver dataResolver, EvalCallResolver callResolver, size_t depth) {
+        EvalDataResolver dataResolver, EvalCallResolver callResolver,
+        EvalSequenceResolver sequenceResolver, size_t depth) {
         GctConstantEvaluator evaluator(func->at(1), vars);
-        evaluator.dataResolver_ = std::move(dataResolver);
-        evaluator.callResolver_  = std::move(callResolver);
-        evaluator.depth_         = depth;
+        evaluator.dataResolver_     = std::move(dataResolver);
+        evaluator.callResolver_     = std::move(callResolver);
+        evaluator.sequenceResolver_ = std::move(sequenceResolver);
+        evaluator.depth_            = depth;
         FunctionType *type       = tt::as_ptr<FunctionType>(func->at(0)->dataType());
         const size_t withCount   = type->withTypesCount();
         for (size_t i = 0; i < withCount && i < withArgs.size(); ++i) {
@@ -229,11 +238,13 @@ class GctConstantEvaluator {
     /// value.
     static data_ptr_t runExpression(
         const GCT::node_ptr_t &expression, const camel::core::type::type_bindings_t &vars,
-        EvalDataResolver dataResolver, EvalCallResolver callResolver, size_t depth) {
+        EvalDataResolver dataResolver, EvalCallResolver callResolver,
+        EvalSequenceResolver sequenceResolver, size_t depth) {
         GctConstantEvaluator evaluator(expression, vars);
-        evaluator.dataResolver_ = std::move(dataResolver);
-        evaluator.callResolver_  = std::move(callResolver);
-        evaluator.depth_         = depth;
+        evaluator.dataResolver_     = std::move(dataResolver);
+        evaluator.callResolver_     = std::move(callResolver);
+        evaluator.sequenceResolver_ = std::move(sequenceResolver);
+        evaluator.depth_            = depth;
         return evaluator.run();
     }
 
@@ -383,10 +394,29 @@ class GctConstantEvaluator {
     }
 
     /// Visits each round of a `static for`/`static loop`: the field name and type for `fields T`,
-/// the position and the element's type for `indices ts`. Does not touch the environment.
+    /// the position and the element's type for `indices ts`, and the element itself for a
+    /// sequence the head writes out (`for i in 0..5`, H462). Does not touch the environment.
+    /// `round` is called with `(name, index, type, element)`, where `element` carries a value
+    /// only for a written sequence: it is the one round value that is not a position or a name.
     void walkRounds(
-        const GCT::node_ptr_t &operand, bool byIndices,
-        const std::function<void(const std::string &name, size_t index, Type *type)> &round) {
+        const GCT::node_ptr_t &operand, bool byIndices, bool bySequence,
+        const std::function<
+            void(const std::string &name, size_t index, Type *type, const int64_t *element)>
+            &round) {
+        if (bySequence) {
+            const std::optional<std::vector<int64_t>> elements =
+                sequenceResolver_ ? sequenceResolver_(operand) : std::nullopt;
+            if (!elements.has_value()) {
+                fail(
+                    EvalProblem::Construct, {},
+                    "the sequence of its 'static loop' is not known when it is compiled");
+            }
+            for (size_t i = 0; i < elements->size(); ++i) {
+                const int64_t element = (*elements)[i];
+                round(std::to_string(element), i, Type::Int64(), &element);
+            }
+            return;
+        }
         if (byIndices) {
             const data_ptr_t data = eval(operand);
             const auto tuple      = std::dynamic_pointer_cast<TupleData>(data);
@@ -397,7 +427,8 @@ class GctConstantEvaluator {
             }
             for (size_t i = 0; i < tuple->size(); ++i) {
                 const data_ptr_t element = tuple->get(i);
-                round(std::to_string(i), i, element != nullptr ? element->type() : nullptr);
+                round(
+                    std::to_string(i), i, element != nullptr ? element->type() : nullptr, nullptr);
             }
             return;
         }
@@ -408,14 +439,23 @@ class GctConstantEvaluator {
                 "it walks the fields of a type that is not a struct or a tuple");
         }
         for (size_t i = 0; i < tree::arity(subject); ++i) {
-            round(std::string(tree::childName(subject, i)), i, tree::childType(subject, i));
+            round(
+                std::string(tree::childName(subject, i)),
+                i,
+                tree::childType(subject, i),
+                nullptr);
         }
     }
 
     /// Binds the walked entry in the body: its index as an `int` for `indices`, its field name
-    /// as a string for `fields`.
+    /// as a string for `fields`, and the element itself as an `int` for a written sequence.
     void bindRoundValue(
-        const std::string &valueName, const std::string &name, size_t index, bool byIndices) {
+        const std::string &valueName, const std::string &name, size_t index, bool byIndices,
+        const int64_t *element = nullptr) {
+        if (element != nullptr) {
+            env_[valueName] = data_ptr_t(std::make_shared<PrimaryData<int64_t>>(*element));
+            return;
+        }
         env_[valueName] = byIndices
                               ? data_ptr_t(std::make_shared<PrimaryData<int64_t>>(
                                     static_cast<int64_t>(index)))
@@ -429,8 +469,8 @@ class GctConstantEvaluator {
         const auto saved            = env_;
         const auto savedTypes       = typeEnv_;
         walkRounds(
-            node->staticForOperand(), byIndices,
-            [&](const std::string &name, size_t index, Type *type) {
+            node->staticForOperand(), byIndices, false,
+            [&](const std::string &name, size_t index, Type *type, const int64_t *) {
                 env_ = saved;
                 bindRoundValue(valueName, name, index, byIndices);
                 if (!typeName.empty() && type != nullptr) {
@@ -452,15 +492,16 @@ class GctConstantEvaluator {
         const std::string valueName = node->staticLoopValueName();
         const std::string typeName  = node->staticLoopTypeName();
         const bool byIndices        = node->staticLoopIndices();
+        const bool bySequence       = node->staticLoopSequence();
         const auto saved            = env_;
         const auto savedTypes       = typeEnv_;
         data_ptr_t state            = eval(node->staticLoopInitial(0));
         walkRounds(
-            node->staticLoopOperand(), byIndices,
-            [&](const std::string &name, size_t index, Type *type) {
+            node->staticLoopOperand(), byIndices, bySequence,
+            [&](const std::string &name, size_t index, Type *type, const int64_t *element) {
                 env_ = saved;
                 env_[node->staticLoopStateName(0)] = state;
-                bindRoundValue(valueName, name, index, byIndices);
+                bindRoundValue(valueName, name, index, byIndices, element);
                 if (!typeName.empty() && type != nullptr) {
                     typeEnv_[typeName] = type;
                 }
@@ -743,8 +784,8 @@ class GctConstantEvaluator {
         const auto saved            = env_;
         const auto savedTypes       = typeEnv_;
         walkRounds(
-            generator->staticForOperand(), byIndices,
-            [&](const std::string &name, size_t index, Type *type) {
+            generator->staticForOperand(), byIndices, false,
+            [&](const std::string &name, size_t index, Type *type, const int64_t *) {
                 env_ = saved;
                 bindRoundValue(valueName, name, index, byIndices);
                 if (!typeName.empty() && type != nullptr) {
@@ -765,6 +806,9 @@ class GctConstantEvaluator {
     std::unordered_map<std::string, Type *> typeEnv_;
     EvalDataResolver dataResolver_;
     EvalCallResolver callResolver_;
+    /// How a `static loop`'s written sequence is read (`Builder::staticLoopSequenceOf`); null when
+    /// the caller has no builder to ask, and then a sequence is not a sequence the compiler knows.
+    EvalSequenceResolver sequenceResolver_;
     size_t depth_ = 0;
     /// How many EXECs enclose the expression being evaluated: 1 is the body itself, more is a
     /// block nested in it, whose `return` gives the block's value.
@@ -1272,6 +1316,9 @@ const std::string written = callee->at(0)->name();
                             return evaluateCallInsideBody(
                                 call, callee, arguments, evalArg, vars, depth);
                         },
+                        [this](const GCT::node_ptr_t &subject) {
+                            return staticLoopSequenceOf(subject);
+                        },
                         0);
                     std::optional<bool> foldedValue;
                     if (folded != nullptr && boolOf(folded, foldedValue)) {
@@ -1774,7 +1821,9 @@ Builder::FoldedCall Builder::evaluateCallAtBuildTime(
     };
     try {
         result.data = GctConstantEvaluator::runFunction(
-            func, bindings, arguments, withArguments, dataResolver, callResolver, depth + 1);
+            func, bindings, arguments, withArguments, dataResolver, callResolver,
+            [this](const GCT::node_ptr_t &subject) { return staticLoopSequenceOf(subject); },
+            depth + 1);
     } catch (const EvalFailure &failure) {
         switch (failure.kind) {
         case EvalProblem::ArgumentNotConstant:
@@ -1861,7 +1910,8 @@ data_ptr_t Builder::compileTimeExpression(const GCT::node_ptr_t &expression) {
         return evaluateCallInsideBody(call, callee, arguments, eval, vars, depth);
     };
     return GctConstantEvaluator::runExpression(
-        expression, typeBindings_, nullptr, callResolver, 0);
+        expression, typeBindings_, nullptr, callResolver,
+        [this](const GCT::node_ptr_t &subject) { return staticLoopSequenceOf(subject); }, 0);
 }
 
 [[noreturn]] void Builder::reportFoldRefusal(

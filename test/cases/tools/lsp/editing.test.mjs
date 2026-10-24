@@ -229,7 +229,7 @@ ${body}
         ['34:8-34:11 result', '39:19-39:22 result'], 'a local: its declaration and its uses')
     // From a use, and for a parameter.
     we = await ls.request('textDocument/rename', { ...pos('counter += by'), newName: 'cell' })
-    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['21:19-21:26', '22:4-22:11', '23:11-23:18'],
+    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['21:14-21:21', '22:4-22:11', '23:11-23:18'],
         'a var parameter, renamed from a use')
     // Every overload of a function is renamed with it.
     we = await ls.request('textDocument/rename', { ...pos('add(1, 2)'), newName: 'plus' })
@@ -305,8 +305,7 @@ func main() sync {
         const t = decoded.find((x) => x.line === lineNo && x.text === text)
         return t ? `${t.type}${t.mods ? ' ' + t.mods : ''}` : 'none'
     }
-    checkEq(tok(21, 'sync'), 'keyword', 'sync is a keyword')
-    checkEq(tok(21, 'bump'), 'function declaration+sync', 'a sync function is marked')
+    checkEq(tok(21, 'bump'), 'function declaration', 'a function is marked')
     checkEq(tok(21, 'counter'), 'parameter declaration+mutable', 'a var parameter is mutable')
     checkEq(tok(21, 'by'), 'parameter declaration+readonly', 'a plain parameter is not')
     checkEq(tok(27, 'p'), 'variable declaration+readonly', 'let: readonly')
@@ -326,8 +325,8 @@ func main() sync {
     checkEq(tok(33, "'text'"), 'string', 'a string')
     checkEq(tok(26, 'main'), 'function declaration', 'main')
     checkEq(tok(1, 'anything'), 'none', 'nothing for what is not there')
-    // A bump call marks the use as sync too.
-    m = edit(MAIN.replace('    return 0\n}', '    wait bump(total, 1)\n    return 0\n}'))
+    // A call of a function with a var parameter: the use is marked too.
+    m = edit(MAIN.replace('    return 0\n}', '    bump(total, 1)\n    return 0\n}'))
     const t2 = await ls.request('textDocument/semanticTokens/full', { textDocument: { uri } })
     check(t2.data.length > tokens.data.length, 'tokens of the edited text', t2.data.length)
 })

@@ -120,7 +120,7 @@ func main(): int sync {
 module counter
 var cnt = 0
 let step = 2
-export sync func bump(): int sync { wait cnt += step; return cnt }
+export func bump(): int sync { cnt += step; return cnt }
 export func current(): int { return cnt }
 ```
 
@@ -129,7 +129,7 @@ export func current(): int { return cnt }
 import counter
 let step = 1000                 // 与 counter 的 step 无关
 
-sync func main(): int sync {
+func main(): int sync {
     println(counter::bump(), counter::bump(), counter::current())
     return 0
 }

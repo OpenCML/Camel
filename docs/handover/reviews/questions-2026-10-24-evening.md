@@ -222,3 +222,80 @@ H254 的评测框架落地，对照组（15 道题的标准解）首稿 15/15 �
 - `staticSliceRejection` 里"步长必须是常量 1"这一条删掉——它把一个实现缺口写成了语言限制；按"第一维 extent 是否常量"划界也随之不需要。
 - `subscript/slice_step`、`slice_step_negative` 改为断言切片的**值**（`[2]`、`[3]` 之类按实际语义算出的结果），不再断言拒绝。这两条用例当初钉的是"尚未实现"，不是语言规则。
 - 静态越界检查照旧：常量下标或常量切片端点超出已知 extent 时编译期报错（上一条裁定）；步长为常量 0 时编译期报错（与 `range` 的步长同一条规则）。
+
+## h461-retired-syntax-leftovers
+
+改法对：靠 `wait` 建立顺序的地方改成同步函数体、核对输出不变，不改期望值。图上从"直接使用者"变成"相邻语句"的顺序，正是终态。
+
+1. **LSP 的 `sync` 修饰符改指同步函数体**：函数体写 `: T sync` 的函数，以及 `sync` lambda，在声明处发这个修饰符——它们是现在唯一的"同步"写法，编辑器标出来有用。清单不用动。
+2. **GCT/GIR 里 `wait` 的内部机器整套删除**（`WaitLoad` 下沉、`NodeKind::WAIT`、`waited()` 标志、两处死打印机），单独一轮做，golden 随之重推。用例文件名里的 `wait` 在同一轮改掉（`wait_direct_user` → `order_direct_user` 之类），plan 名、golden、poison 列表一起移。
+3. **文档只写现在的语言**：
+   - `docs/technical/00_language_reference.md` 整份删除，引用它的地方改指 `docs/language/**`（随文档重组 5.32）。
+   - `docs/language/04_execution_model.md` 的 §4.3.3、§4.4 标题按现在的内容改名，交叉引用一并改，不为锚点留旧标题；正文里"已退役"的说明删掉，只描述同步函数体与 `var` 的顺序规则。
+   - `docs/technical/18_*` 里"描述退役前的模型"那几节同样删掉或改写成现在的模型。`docs/technical/30_*:272` 的测量记录可以留。
+   - `docs/design/*`、`docs/handover/*`、`changes.log` 是记录，不改。
+4. `IgnoredSideEffect` 对 `func bump(var x: int)` 调用点的假阳性仍归 H242a。
+
+## h462-static-loop-sequence-boundaries
+
+1. **`a..b` 半开，确认**——与已有裁定（`a..b` 是半开的 `int[]`）一致。
+2. **"编译期能求出的序列"按一条规则画界**：`in` 后的表达式只由编译期常量（字面量、常量绑定、外层 `static` 的迭代变量）经过**可自由排布的运算**（纯、不会出错，3.4 那一个谓词）组成，编译器就把它求成值再展开。所以：
+   - `range(a, b, step)`（实参是常量）、数组字面量、常量数组：都行，按元素走；
+   - 编译期元组：`for x in ts` 按元素走，每一轮 `x` 是该位置的类型——这正是 `static loop` 区别于普通 `loop` 的地方；`indices ts` 走位置，`fields T` 走 (名字, 类型)；
+   - 区间只有 `int` 两端（`..` 只造 `int[]`），不另造浮点、字符区间；
+   - 多个名字只在序列的元素本身是成对的时候合法（`fields` 给出两个，`n, F, tags` 给出三个）。
+   不需要 `constas`/`#macro` 另开入口；求不出时仍报 `StaticLoopSequenceNotKnown`。
+3. **作者页**：设计原则与设计稿里的旧写法我已改（`static loop … for n, F in fields T`）。`docs/language/**` 按"文档随代码走"由改语法的车道一起改——这 6 个代码块请本 lane 补上，不必等我。文法生成块重推是对的。
+4. `for j, F in indices ts` 的诊断变化接受。
+5. （待负责人）`static for (n, F) in fields T => …` 仍带括号，与 `static loop` 的头不一致；是否一并去括号已提交负责人。
+
+## recursion-specialization-fixed-point-followups
+
+读法 E 就是我要的不动点，**采用 E**：
+
+1. **元素位置**：P4 之后裸 `Tensor` 形参写成 `::<T>` 加 `T[..]`，`T` 是类型变量，所以按元素代入、extent 不代入（读法 A 的键）是对的语义。A 下"同一个键反复造新实例"不是键的问题，是缓存的问题：E 的"调用要的实例就是调用者自己"把它修好了。读法 B（元素也不代入）丢精度，不用。
+2. **"第二圈"的判据**：沿当前调用环，若同一个函数以**相同的键**再次被实例化，就用环上已有的那个实例（E）。若键不同（多态递归），不同的位置里 extent 与维度名放宽为 `?`；若是**元素类型**不同，按 5.5 不能实例化出无穷多个具体类型，报编译错误（"递归调用改变了元素类型"）。
+3. **计数上限删掉**：`export_gated_gru_forward` 在 4096 下给出 plan 自己描述的形状（7 个 If），说明 8 只是截断。删除 `kMaxTypeSpecializationsPerRecursiveFunction`；若保留守卫，只能是一条内部断言——达到它就报"特化没有到达不动点"的错误，不能悄悄停在截断的形状上。期望按无上限的读数重推。
+4. **形状断言随裁定重推**：`export_gated_gru_forward` 的算子表、`fold_specialize.bounded` 的下界、`shape_unroll.simplify.rgir` 里被调用者的名字，都按新的读数改，本 lane 负责。前提是对应的 `ort_*` 数值用例保持绿——它们钉的是值。
+5. **`resident_loop_declares_its_blocks`**：图里出现 `tensor:iter` 说明有一处还在走张量迭代器，而 `for` 对数组已由核心负责（上一轮裁定）；查出是哪条路径生成它，修那条路径，不改放置期望。
+6. **`export_loop_carried_array` 的措辞**：断言按 P4 后的措辞（"int array"）更新，`valueKind()` 不改顺序。**返工**：这条拒绝的文本里写着"H17 items 2 and 4"——诊断面向用户，不能出现内部任务编号；而且按 `growable-array-vs-tensor` 的裁定，判据是"携带的数组各轮长度是否不变"，消息说这个事实即可（"argument 2 is an array whose length changes from one round to the next"），去掉"等原生多维数组落地"的说法。归 h449/h456。
+7. 维度名放宽的诊断：补一条形参写 `T[n]` 的多态递归用例（例如每层取一半的递归），取了读数再定措辞。
+
+## var-version-node（补二、补三）
+
+1. **逃逸判定在哪一步**：落地的做法——整个函数体建完之后（`leaveScope`，捕获与调用都已知）统一判定并把不逃逸的读改成 SSA——就是答案，不需要单遍预知。逃逸的定义也对：被闭包捕获、作为 `var` 实参交出、或本图的 `var` 形参。
+2. **图层面的原地判据已经有**，在 `docs/design/arrays-memory/README.cn.md` 4.3.1（原地更新的统一规则）：更新在旧值**之后没有别的观察者**时原地进行；第 1 层（编译期规划）的证明就是"图上这是旧值的最后一次使用；其他只读使用者由内存规划排在更新之前（加顺序边），排不开就拷贝"；第 2 层是运行时计数为 1；都证明不了就拷贝。决定只在内存规划阶段做、写进执行计划。补三拟的那句话与它一致，不另立；函数结果、捕获端口、导出端口都是"别的观察者"。
+3. 由此 `string_plus_assign`（`abab`）这一族：`:var/take` 把仍有观察者的数组交出去原地追加，违反 4.3.1，是缺陷——SSA 之后由内存规划按 4.3.1 判定，不在 `:var/take` 里各自判断。
+
+**返工（已由我顺手修掉）**：本批 4 个文件的注释里有 7 处 `` `var` `` 变成了垂直制表符加 `ar`（`\x0b`，PowerShell 双引号字符串里的 `` `v ``）。生成提交信息或源码文本时用单引号 here-string，或在提交前 `grep -P '\x0b'`。
+
+## dim-name-relaxation-has-no-readable-difference
+
+读数说明得对：`len(xs) / 2` 是运行时值，静态键始终不变，放宽那条路走不到。现在这条用例保留，它钉住的"实例签名就是声明、调用不造新实例、总数 1"是对的。
+
+要读到放宽，需要**静态 extent 每层都变、而递归深度取决于运行时值**的递归，例如：
+
+```camel
+func grow(xs: f32[n], k: int): f32 {
+    return if k <= 0 then sum(xs) else grow(concat(xs, xs[0 .. 1]), k - 1)
+}
+println(grow([1.0, 2.0], read_int()))
+```
+
+第一次实例化时 `n = 2`，递归调用的实参是 `f32[3]`，键不同，于是放宽成 `f32[?]`；`f32[?]` 的实例再调用自己时键相同，复用它。期望是：恰好两个实例（`f32[2]` 和 `f32[?]`），与计数上限无关。如果 `concat` 的结果 extent 今天推不出 `n + 1`（给出的是 `?`），那么键从第二层起就相同了，读数会和放宽之后一样——这时把读数如实写进用例说明，不为此补 extent 运算。
+
+元素类型变化的那条用例等另一条车道的读数。
+
+## load-npy-computed-signature-and-the-generic-wrapper
+
+判断确认。计算签名是过渡做法，与 `from_bytes` 同构，可以接受；P4 让 `Tensor<f32>` 与 `f32[..]` 成为同一个类型之后，`load_npy` 改回声明式的 `load_npy::<T>(path: string): T[..]`，`LoadNpyResolver` 那 5 条规则删除（`from_bytes` 同样处理）。泛型包装 `func f::<T>(p: string): T[..] { return load_npy::<T>(p) }` 在那之前不编译，这是已知的过渡损失；把它写成 P4 的一条验收用例（翻转后必须编译通过，并且读出正确的元素类型），而不是现在写成负例。不保留元素类型未定的版本。
+
+## static-loop-sequence-forms
+
+**按第 2 条补实现，不收窄措辞。** 文档只写今天认的三种是对的（文档随代码走），实现补齐后再改文档。补的范围就是第 2 条那一个判据：`in` 后的表达式由编译期常量经可自由排布的运算组成，就先求值再展开——
+
+- `[1, 2, 3]` 与常量数组：按元素走；
+- `range(a, b, step)`（实参是常量）：与 `a..b` 同一条路径，常量折叠求出 `int[]`；
+- 编译期元组 `ts`（含剩余参数）：按元素走，每轮 `x` 是该位置的类型。
+
+四个探针程序入库成用例（现在是负例的，补完后翻成正例）。求值复用常量折叠，不另写一个求值器。报错消息本身是完整的（`'[1, 2, 3]' is not.` 是"must be known … : '{0}' is not."的后半句），不用改。

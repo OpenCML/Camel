@@ -29,7 +29,7 @@ func meet(timeout_ms: int): int sync {
 
 func bump(var total: int, delay_ms: int, by: int): int sync {
     sleep(delay_ms)
-    wait total = total * 2 + by
+    total = total * 2 + by
     return total
 }
 

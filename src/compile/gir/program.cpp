@@ -56,7 +56,7 @@ class Builder::UnitContext {
           tree_(builder.tree_), graph_(builder.currGraph_), nodeScope_(builder.nodeScope_),
           graphScope_(builder.graphScope_), decoratedScope_(builder.decoratedScope_),
           templateScope_(builder.templateScope_), bindings_(builder.typeBindings_),
-          depth_(builder.instantiationDepth_), waited_(builder.waited_), synced_(builder.synced_),
+          depth_(builder.instantiationDepth_), synced_(builder.synced_),
           varied_(builder.varied_), declaresVariable_(builder.declaresVariable_),
           calleeAllowed_(builder.genericCalleeAllowed_), lastSynced_(builder.lastSyncedNode_),
           refOrigin_(builder.refOrigin_), namespacePath_(builder.namespacePath_),
@@ -72,7 +72,6 @@ class Builder::UnitContext {
         builder.templateScope_        = unit.templateScope;
         builder.typeBindings_         = {};
         builder.instantiationDepth_   = 0;
-        builder.waited_               = false;
         builder.synced_               = false;
         builder.varied_               = false;
         builder.declaresVariable_     = false;
@@ -99,7 +98,6 @@ class Builder::UnitContext {
         self_.templateScope_        = templateScope_;
         self_.typeBindings_         = std::move(bindings_);
         self_.instantiationDepth_   = depth_;
-        self_.waited_               = waited_;
         self_.synced_               = synced_;
         self_.varied_               = varied_;
         self_.declaresVariable_     = declaresVariable_;
@@ -125,7 +123,7 @@ class Builder::UnitContext {
     template_scope_ptr_t templateScope_;
     camel::core::type::type_bindings_t bindings_;
     size_t depth_;
-    bool waited_, synced_, varied_, declaresVariable_, calleeAllowed_;
+    bool synced_, varied_, declaresVariable_, calleeAllowed_;
     node_handle_t lastSynced_;
     camel::source::origin_id_t refOrigin_;
     std::vector<std::string> namespacePath_;
@@ -664,7 +662,6 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
             UnitContext context(*this, *unit);
             try {
                 reportIgnoredCapturedWrites();
-                reportUndeclaredCapturedWrites();
                 // Before the bodies are let go by reportDroppedEffectsOfBodies.
                 reportUnusedFallibleValues();
                 reportDroppedEffectsOfBodies();

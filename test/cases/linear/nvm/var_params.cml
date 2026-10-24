@@ -15,22 +15,22 @@
  */
 module var_params
 
-sync func bump(var x: int) {
-    wait x += 1
+func bump(var x: int) {
+    x += 1
 }
 
-sync func bump_twice(var y: int) {
-    wait bump(y)
-    wait bump(y)
+func bump_twice(var y: int) {
+    bump(y)
+    bump(y)
 }
 
 func bump_then(var z: int, k: int): int sync {
-    wait z += 10
+    z += 10
     return k + 1
 }
 
-sync func replace(var t: (int, int), a: int) {
-    wait t = (a, a + 1)
+func replace(var t: (int, int), a: int) {
+    t = (a, a + 1)
 }
 
 func show(x: int): int sync {
@@ -40,27 +40,27 @@ func show(x: int): int sync {
 
 func spin(n: int, acc: int): int sync {
     var s = acc
-    wait bump(s)
+    bump(s)
     return if n == 0 then s else spin(n - 1, s)
 }
 
 func main(): int sync {
     var c = 0
-    wait bump(c)
+    bump(c)
     println(c)
-    wait bump_twice(c)
+    bump_twice(c)
     println(c)
     let r = bump_then(c, 5)
     println(c)
     println(r)
     var p = (1, 2)
-    wait replace(p, 7)
+    replace(p, 7)
     println(p.0 + p.1)
     let f = bump
     var g = 7
-    wait f(g)
+    f(g)
     println(g)
-    wait c += 100
+    c += 100
     let shown = show(c)
     println(spin(20000, shown))
     return 0

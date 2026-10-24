@@ -1,0 +1,19 @@
+/**
+ * The graph of a `static loop` over a sequence is the hand-written expansion of the same rounds:
+ * `for i in 0..3 do acc + t.[i]` is `((0 + t.0) + t.1) + t.2`, one ACCS per round in order, and
+ * nothing of the interval is left in the graph -- no array of the elements is made, and no SLOOP,
+ * LOOP, SFOR, SACC or BRCH node stands where the loop was written.
+ */
+module static_loop_sequence_graph
+
+func loopSum(t: (int, int, int)): int {
+    return static loop acc = 0 for i in 0..3 do acc + t.[i]
+}
+
+func unrolled(t: (int, int, int)): int {
+    return ((0 + t.0) + t.1) + t.2
+}
+
+func main(): int {
+    return loopSum((1, 2, 3)) - unrolled((1, 2, 3))
+}

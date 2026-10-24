@@ -10,14 +10,14 @@ import { Tensor, reshape } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-sync func bump(var acc: Tensor): int sync {
+func bump(var acc: Tensor): int sync {
     acc = acc + 1.0
     return 0
 }
 
 func forward(x: Tensor): Tensor sync {
     var acc = x * 2.0
-    wait bump(acc)
+    bump(acc)
     return acc
 }
 

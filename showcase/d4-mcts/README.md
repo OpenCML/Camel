@@ -110,15 +110,15 @@ example is here to show is that the same search is the same tree on both sides, 
 | a position | `type State = { board: int[], to_move: int }` | `(board, to_move)` |
 | a node | `type Node = { key, state, place, visits, score, moves, children }` | the same fields, `__slots__` |
 | children | `children: Node[]` (a recursive struct) | a `node.children` list |
-| a move | `var next = state; wait next.board[place] = …` | `played = list(board); played[place] = …` |
+| a move | `var next = state; next.board[place] = …` | `played = list(board); played[place] = …` |
 | expansion | `grow(node, child)` returns a new node | `node.children.append(child)` |
 | a playout | `loop current = state, draw = key while … do { … }` | `while win == 0 and not full(...)` |
 | the move | `loop chosen = 0, index = 1 while … do { … }` | `for index in range(1, …)` |
 | the generator | `(key * 48271) % 2147483647` | the same expression |
 
 In Camel's own idiom the four helpers that change a tree (`apply_move`, `record`, `grow`,
-`put_child`) are not `sync` and `wait` their path assignments, so their callers need no `wait`
-(probe-verified). `visit` and `search` are pure: they return a new tree, which is why the four
+`put_child`) write their path assignments in a sync body (`: T sync`), so their callers just
+follow the written order (probe-verified). `visit` and `search` are pure: they return a new tree, which is why the four
 back ends produce one output.
 
 ## What went wrong
@@ -158,10 +158,10 @@ back ends produce one output.
 - **A `return` inside an `if`/`match` arm does not leave the function**
   (`SemanticDiag::ExitInUnusedBranch`): three `return`s in `visit`'s arms produced two warnings;
   one `return if … then … else if … then … else …` expression is clean.
-- **A path assignment on a `var` inside a non-`sync` function needs `wait`**: otherwise
-  `The call of '<__assn__>: (var State, State) => State' is neither waited nor in a sync block`.
-  The four helpers `wait` it. A `wait` inside a non-`sync` function body does not infect its
-  callers (probe-verified), so `playout` calls them without `wait`.
+- **A path assignment belongs in a sync body**: otherwise
+  `The call of '<__assn__>: (var State, State) => State' is not in a sync block`.
+  The four helpers write it in a `: State sync` body. The order inside a sync body does not infect
+  its callers (probe-verified), so `playout` needs nothing extra.
 - **A `loop` state cannot be written as an empty array literal**: `loop plays: int[] = [], …`
   fails with `Expected '=' before ':'` (no type annotation there) and `loop plays = []` fails with
   `LoopStateWithoutType` (`[]` has no element type). No loop in the tree needs one; the probe

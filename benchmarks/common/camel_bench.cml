@@ -28,14 +28,14 @@ export func weight(name: string): Tensor {
     return load_npy(get_env('CAMEL_BENCH_WEIGHTS') + '/' + name + '.npy')
 }
 
-sync func warmup(forward: (x: Tensor) => Tensor, x: Tensor, remaining: int): int {
+func warmup(forward: (x: Tensor) => Tensor, x: Tensor, remaining: int): int {
     return if remaining <= 0 then 0 else sync {
         let y = forward(x)
         return warmup(forward, x, remaining - 1)
     }
 }
 
-sync func timed(forward: (x: Tensor) => Tensor, x: Tensor, remaining: int): int {
+func timed(forward: (x: Tensor) => Tensor, x: Tensor, remaining: int): int {
     return if remaining <= 0 then 0 else sync {
         let start = now()
         let y = forward(x)
@@ -68,14 +68,14 @@ func measure(forward: (x: Tensor) => Tensor): int sync {
     return status
 }
 
-sync func warm_steps(step: (x: Tensor) => float, x: Tensor, remaining: int): int {
+func warm_steps(step: (x: Tensor) => float, x: Tensor, remaining: int): int {
     return if remaining <= 0 then 0 else sync {
         let loss = step(x)
         return warm_steps(step, x, remaining - 1)
     }
 }
 
-sync func timed_steps(step: (x: Tensor) => float, x: Tensor, remaining: int): int {
+func timed_steps(step: (x: Tensor) => float, x: Tensor, remaining: int): int {
     return if remaining <= 0 then 0 else sync {
         let start = now()
         let loss = step(x)

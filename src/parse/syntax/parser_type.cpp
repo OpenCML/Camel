@@ -291,7 +291,7 @@ void ParserImpl::parsePrimaryType() {
         // The operand stops before an assignment: `let v: typeof a = b` declares `v`.
         const size_t m = mark();
         bump();
-        if (cur_ == TK::KwIf || cur_ == TK::KwMatch || cur_ == TK::KwTry || cur_ == TK::KwWait) {
+        if (cur_ == TK::KwIf || cur_ == TK::KwMatch || cur_ == TK::KwTry) {
             parseExpr();
         } else {
             parseLogicalOr();

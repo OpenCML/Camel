@@ -360,8 +360,6 @@ std::optional<OperId> Tree::operRefOf(const Node *node) const {
 
 node_ptr_t Tree::makeVari() { return makeNode(NodeKind::VARI); }
 
-node_ptr_t Tree::makeWait() { return makeNode(NodeKind::WAIT); }
-
 node_ptr_t Tree::makeLink(size_t argCount) {
     Node *node            = makeNode(NodeKind::LINK);
     node->payload_.number = argCount;
@@ -435,7 +433,7 @@ node_ptr_t Tree::makeStaticFor(
 
 node_ptr_t Tree::makeStaticLoop(
     const std::vector<std::string> &state, const std::string &valueName,
-    const std::string &typeName, bool byIndices) {
+    const std::string &typeName, bool byIndices, bool bySequence) {
     Node *node = makeNode(NodeKind::SLOOP);
     const size_t count = state.size() + 2;
     auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(count)));
@@ -448,6 +446,9 @@ node_ptr_t Tree::makeStaticLoop(
     node->payload_.names = list;
     if (byIndices) {
         node->flags_ |= Node::kFlagA;
+    }
+    if (bySequence) {
+        node->flags_ |= Node::kFlagB;
     }
     return node;
 }
@@ -834,7 +835,7 @@ std::string Node::toString() const {
         return text + "]";
     }
     default:
-        return to_string(kind_); // VARI, WAIT, ANNO
+        return to_string(kind_); // VARI, ANNO
     }
 }
 

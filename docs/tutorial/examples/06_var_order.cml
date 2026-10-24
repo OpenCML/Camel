@@ -1,0 +1,20 @@
+// var parameters are references; the order of the writes comes from the sync body that writes them.
+// Run: camel docs/tutorial/examples/06_var_order.cml
+module var_order
+
+func bump(var counter: int): int sync {
+    counter += 1
+    return counter
+}
+
+func twice(): int sync {
+    var c = 0
+    bump(c)
+    bump(c)
+    return c
+}
+
+func main(): int sync {
+    println(twice())
+    return 0
+}

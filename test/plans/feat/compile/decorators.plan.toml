@@ -117,15 +117,6 @@ expect_exit = 0
 expect_stdout_exact = "20 20\n7 7\nplain after\ndecorated after\ngranted after\nplain a\nplain b\nplain after\ndecorated a\ndecorated b\ndecorated after\n15 15\n4\n10\n"
 
 [[tests]]
-name = "blocks.no_declaration_warning"
-desc = "A decorated block that writes a variable of its function is not a function the program declares: no CapturedWriteInAsyncFunction."
-kind = "behavior"
-case = "../../../cases/compile/decorators/blocks.cml"
-args = ["${case}"]
-expect_exit = 0
-expect_output_not_contains = ["CapturedWriteInAsyncFunction"]
-
-[[tests]]
 name = "blocks.trees"
 desc = "The AST keeps a block's decorators; the GCT lowers the block to a call of the function it is."
 kind = "behavior"

@@ -53,7 +53,7 @@ var count = 0
 
   Struct destructuring `let { x, y } = p` and array destructuring `let [a, b] = xs` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`); use `p.x`, `xs[0]`.
 - **`let _ = e` drops the value of `e` on purpose.** `_` is not a name: nothing is bound, so it can be written any number of times in one block, and it cannot be read. The expression is evaluated like the initial value of any `let` (in a sync block, in order). It is the way to say that a `T!` is ignored deliberately ([7.1](#71-expression-statements)). Only this form exists: `var _`, and `_` among several names, are syntax errors.
-- A `let` at the module top level is a global constant; a top-level `var` can be read and written by functions (a function that writes it is declared `sync func`), also by an imported function of the module that declares it ([5.3](05_modules.md#53-exports)). **The top-level declarations do not depend on the order they are written in, only on what they use**: `let area = pi * r * r` may come before `let pi`; top-level values that depend on each other are `SemanticDiag::ModuleValueCycle` ([5.6](05_modules.md#56-loading-modules)). A local `let` in a function body is still declared before it is used.
+- A `let` at the module top level is a global constant; a top-level `var` can be read and written by functions, also by an imported function of the module that declares it ([5.3](05_modules.md#53-exports)). **The top-level declarations do not depend on the order they are written in, only on what they use**: `let area = pi * r * r` may come before `let pi`; top-level values that depend on each other are `SemanticDiag::ModuleValueCycle` ([5.6](05_modules.md#56-loading-modules)). A local `let` in a function body is still declared before it is used.
 
 ## 7.3 `return` and `throw`
 
@@ -103,7 +103,7 @@ func hello(name: string) sync {      // no return value; a sync function body
 }
 ```
 
-- Each parameter is written `name: type`. A parameter preceded by `var` is a mutable reference ([4.4](04_execution_model.md#44-var-references-and-wait)).
+- Each parameter is written `name: type`. A parameter preceded by `var` is a mutable reference ([4.4](04_execution_model.md#44-var-and-the-order-of-writes)).
 - The return type can be omitted and is inferred from the function body; a recursive function must write out its return type. When the body has no `return`, the value of the function is the value of the last statement of the body: that value when the statement is an expression with one, `void` otherwise. Note that the value of `println(x)` is `x` (so that `x->println->f` can go on), so `func main() sync { println('a') }` returns the string `'a'`, and the default pipeline writes the result of `main` to the output: the line appears twice. Declare the return type `: void`, or end with `return 0`.
 - A `sync` before the function body makes the function body a sync block; a `sync` before `func` is a function modifier. The two have different meanings ([4.3](04_execution_model.md#43-sync)).
 - A function can be declared at the module top level, in a namespace, or in a block (a local function). Functions can be mutually recursive, and need not be declared before use.
@@ -200,7 +200,7 @@ int 1 string a
 
 | Modifier | Meaning |
 |---|---|
-| `sync` | The function has side effects and needs to be synchronised ([4.3.3](04_execution_model.md#433-sync-func-function-modifier)) |
+| `sync` | The function's body is a sync block ([4.3.3](04_execution_model.md#433-sync-on-a-function-body-function-modifier)) |
 
 There are no other modifiers. A function implemented in C++ is a body-less `export func` declaration (design principles 6.4); a helper used only inside its module is a plain `func` without `export`, since `func` is module-private already.
 
@@ -338,7 +338,7 @@ func main(): int sync {
 
 ```cml
 func sum(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {

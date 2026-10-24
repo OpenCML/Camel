@@ -457,7 +457,7 @@ func first(t: (int, float)) {
 
 ```cml
 func sum(t: (int, int, int)): int {
-    return static loop acc = 0 for (j) in indices t do acc + t.[j]
+    return static loop acc = 0 for j in indices t do acc + t.[j]
 }
 
 func positions(t: (int, string)): (int, int) {
@@ -490,26 +490,33 @@ func rebuild::<T>(t: T) {
 
 ### 6.8.5 `static loop`
 
-`static loop state = init, ... for (n, F) in fields T do expression` is the fold form of `static for`: the field list is expanded when the function is instantiated, each field advances the state one round, and the graph has no loop node.
+`static loop state = init, ... for n, F in fields T do expression` is the fold form of `static for`: the field list is expanded when the function is instantiated, each field advances the state one round, and the graph has no loop node.
 
 ```
-static loop name = init (, name = init)* (for (n, F) in fields T | for (j) in indices ts) do expression
+static loop name = init (, name = init)* for name (, name)? in (fields type | indices value | constant sequence) do expression
 ```
+
+The head differs from `static for`'s: a `static loop` head is the ordinary `loop`'s `for name in sequence`, without parentheses (one thing, one spelling); `fields` and `indices` bind the names they bind there, as below.
 
 - The head is the same as the `loop` of [6.8.6](#686-loop): with one name the loop's value is that value; with several names the body gives a tuple in the order written and the loop's value is that tuple. The state names are visible in the body only; the first values are evaluated once where the loop is, and the state names are not visible in them. A name may not be repeated (`SemanticDiag::LoopNameRepeated`).
 - Each round's body value is the next state, and its type must be the state's type (except for the implicit conversions, an `int` into an `int?`); otherwise it is `SemanticDiag::LoopBodyTypeMismatch`. An empty struct or tuple has no rounds and the value is the first value.
-- The walk is the header shared with `static for`: `for (n, F) in fields T` (by field) or `for (j) in indices ts` (by tuple position, with the rules of `indices` in 6.8.4). There is no `while`, no `for` over an ordinary sequence, and no `break`/`continue`. `T` / `ts` must be a concrete struct or ordinary tuple (the rules of 6.8.4). When it is a type parameter of an enclosing generic, the trip count is decided by the type at instantiation — that is the count known at instantiation.
+- The walk is written like the head of the `loop` of [6.8.6](#686-loop), without parentheses: `for n, F in fields T` (by field), `for j in indices ts` (by tuple position, with the rules of `indices` in 6.8.4), or `for i in a..b` (a constant interval; `..` is half-open, so `0..3` is 0, 1, 2). `fields` binds two names; `indices` and a constant interval bind one each.
+- The sequence must be worked out at compile time: `fields T` / `indices ts` follow the rules of 6.8.4 (`T` / `ts` must be a concrete struct or ordinary tuple), and the ends of an interval must be compile-time constants; one the compiler cannot work out reports `SemanticDiag::StaticLoopSequenceNotKnown`. There is no `while`, no `for` over a runtime sequence, and no `break`/`continue`. When it is a type parameter of an enclosing generic, the trip count is decided by the type at instantiation — that is the count known at instantiation.
 - It expands to straight-line code: each round builds the `ACCS` it reads, in field order, the previous round's state is directly the value the next round reads, and `static loop` has no node of its own. A `return` in the body leaves the function, as in an ordinary function; it does not leave the loop.
 - Its effects are those of straight-line code: whether the body is a sync block is decided by the body itself (3.2), and each round's effects run in field order.
 
 ```cml
 func count::<T>(t: T): int {
-    return static loop n = 0 for (name, F) in fields T do n + 1
+    return static loop n = 0 for name, F in fields T do n + 1
+}
+
+func sum3(t: (int, int, int)): int {
+    return static loop acc = 0 for i in 0..3 do acc + t.[i]
 }
 
 func total_and_max(t: {a: int, b: int}): (int, int) {
     return static loop total = 0, best = 0
-        for (n, F) in fields {a: int, b: int} do {
+        for n, F in fields {a: int, b: int} do {
             (total + t.[n], if best < t.[n] then t.[n] else best)
         }
 }
@@ -662,7 +669,7 @@ item 5
 
 If the element function of `foreach` is to produce side effects, its body must be a sync block (`=> sync { ... }`); for the reason see [4.3.2](04_execution_model.md#432-a-functions-behaviour-is-decided-by-the-function-itself). A function with `var` parameters cannot be handed to these operators.
 
-## 6.11 Assignment and `wait`
+## 6.11 Assignment
 
 - `x = e`, `x += e` and so on are expressions; their value is described below. The target is a `var` variable or a `var` parameter itself, or a **path** that starts at one: fields, indices, any combination ([3.7](03_data_model.md#37-let-var-and-references)). `p.x = e`, `xs[0] = e` and `m[i].f = e` all rebind the whole of `p`, `xs`, `m`: `xs[i].f = e` is `xs = set(xs, i, set(xs[i], f, e))`, where `set` is a pure operator that returns the value with one place changed. A path assignment may therefore appear in any expression position; when the root of the target is not a variable (`f().x = e`, `{ x: 1 }.x = e`) the diagnostic is `AssignmentTargetNotVariable`, and an index out of range is the fault `IndexOutOfRange`.
 - The value of a path assignment is the **whole value rebound**: `xs = xs->append<…>` gives the new array, and `xs[0] = 5` gives that `xs` as it is now, not `5`. Only when the target is the variable itself is the value the value assigned.
@@ -679,15 +686,12 @@ If the element function of `foreach` is to produce side effects, its body must b
 
 - **A compound assignment computes the new value first, then rebinds.** `x op= e` computes the new value and binds `x` to it, so numerically it is `x = x op e`. A compound assignment on a path (`xs[0] += 1`, `p.n += 1`) writes the new value back to that place, and the write back follows the in-place rule above: after `let a = xs`, `xs[0] += 1` copies and `a` is unchanged. A type defined by a module (a tensor), and a type for which the program overloads an operator ([7.4.5](07_statements.md#745-operator-overloading)), has no compound-assignment operators of its own, so for it `t += u` is `t = t + u` (likewise `-=`, `*=`, `/=`, `%=`, `@=`, `^=`, `&=`, `|=`, wherever the binary operator is defined for the types).
 
-- For `wait e` see [4.4](04_execution_model.md#44-var-references-and-wait).
-
 ## 6.12 Operator precedence
 
 From lowest to highest:
 
 | Level | Operators | Notes |
 |---|---|---|
-| 1 | `wait` | Prefix; applies to the whole assignment expression |
 | 2 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Cannot be chained |
 | 3 | `\|\|` | Left-associative; a branch, the right side evaluated only when needed |
 | 4 | `&&` | Left-associative; a branch, the right side evaluated only when needed |

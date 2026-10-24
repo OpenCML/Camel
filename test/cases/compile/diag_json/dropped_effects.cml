@@ -12,12 +12,12 @@ func noisy(x: int): int sync {
     return x
 }
 
-sync func modify(var x: int): int sync {
-    wait x += 1
+func modify(var x: int): int sync {
+    x += 1
     return 0
 }
 
-sync func declared(x: int): int {
+func declared(x: int): int {
     return x
 }
 
@@ -31,11 +31,10 @@ func dropped(): int {
     println('operator')              // DROPPED line 31: an impure operator
     noisy(1)                         // DROPPED line 32: a function whose sync body prints
     let unused = noisy(2)            // DROPPED line 33: bound to a name nothing reads
-    wait modify(i)                   // DROPPED line 34: a write nothing reads afterwards
-    wait j = 7                       // DROPPED line 35: an assignment nothing reads afterwards
-    declared(3)                      // DROPPED line 36: a function declared `sync func`
-    println(noisy(4))                // DROPPED line 37: one warning, for the outer call
-    if quiet(0) > 0 then sync {      // DROPPED line 38: a branch with an effectful arm
+    modify(i)                        // DROPPED line 34: a write nothing reads afterwards
+    j = 7                            // DROPPED line 35: an assignment nothing reads afterwards
+    println(noisy(4))                // DROPPED line 36: one warning, for the outer call
+    if quiet(0) > 0 then sync {      // DROPPED line 37: a branch with an effectful arm
         println('arm')
     } else sync {
         println('other arm')
@@ -48,7 +47,7 @@ func dropped(): int {
 func kept(): int sync {
     var i = 5
     println('kept {}'->format<noisy_free(1)>)
-    wait modify(i)
+    modify(i)
     declared(3)
     return i
 }

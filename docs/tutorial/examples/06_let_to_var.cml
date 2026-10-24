@@ -2,8 +2,8 @@
 // Run: camel docs/tutorial/examples/06_let_to_var.cml
 module let_to_var
 
-sync func bump(var counter: int) {
-    wait counter += 1
+func bump(var counter: int) {
+    counter += 1
 }
 
 func main(): int sync {

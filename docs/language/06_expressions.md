@@ -457,7 +457,7 @@ func first(t: (int, float)) {
 
 ```cml
 func sum(t: (int, int, int)): int {
-    return static loop acc = 0 for (j) in indices t do acc + t.[j]
+    return static loop acc = 0 for j in indices t do acc + t.[j]
 }
 
 func positions(t: (int, string)): (int, int) {
@@ -490,26 +490,33 @@ func rebuild::<T>(t: T) {
 
 ### 6.8.5 `static loop`
 
-`static loop 状态 = 初值, ... for (n, F) in fields T do 表达式` 是 `static for` 的折叠形式：字段表在实例化时展开，每个字段把状态推进一轮，展开后没有循环节点。
+`static loop 状态 = 初值, ... for n, F in fields T do 表达式` 是 `static for` 的折叠形式：字段表在实例化时展开，每个字段把状态推进一轮，展开后没有循环节点。
 
 ```
-static loop 名字 = 初值 (, 名字 = 初值)* (for (n, F) in fields T | for (j) in indices ts) do 表达式
+static loop 名字 = 初值 (, 名字 = 初值)* for 名字 (, 名字)? in (fields 类型 | indices 值 | 常量序列) do 表达式
 ```
+
+头与 `static for` 的不同：`static loop` 的头就是普通 `loop` 的 `for 名字 in 序列`，不写括号（同一件事一种写法）；`fields` 与 `indices` 各绑定它自己的那些名字，见下。
 
 - 状态头与 [6.8.6](#686-loop) 的 `loop` 相同：一个名字时循环的值就是这个值；几个名字时循环体给出按书写顺序的元组，循环的值也是这个元组。状态的名字只在循环体内可见；初值在循环所在处求值一次，其中看不到状态的名字。名字不能重复（`SemanticDiag::LoopNameRepeated`）。
 - 循环体每轮的值就是下一轮的状态，其类型必须是状态的类型（能自动装入的除外，如 `int` 进入 `int?`），否则是 `SemanticDiag::LoopBodyTypeMismatch`。空结构体或空元组一轮也不展开，循环的值是初值。
-- 遍历由 `static for` 共用的头给出：`for (n, F) in fields T`（按字段）或 `for (j) in indices ts`（按元组的位置，规则与 6.8.4 的 `indices` 相同）。没有 `while`，没有普通序列的 `for`，也没有 `break`/`continue`。`T` / `ts` 的类型必须是具体的结构体或普通元组（规则与 6.8.4 相同）。遍历外层泛型的类型参数时，轮数由实例化时的类型决定——这就是“实例化时已知的轮数”。
+- 遍历的写法与 [6.8.6](#686-loop) 的 `loop` 头相同（不写括号）：`for n, F in fields T`（按字段）、`for j in indices ts`（按元组的位置，规则与 6.8.4 的 `indices` 相同），或 `for i in a..b`（常量区间；`..` 是半开的，`0..3` 是 0、1、2）。`fields` 绑定两个名字，`indices` 与常量区间各绑定一个名字。
+- 序列必须在编译期求出：`fields T` / `indices ts` 的规则与 6.8.4 相同（`T` / `ts` 必须是具体的结构体或普通元组），区间的两端必须是编译期常量；求不出时报 `SemanticDiag::StaticLoopSequenceNotKnown`。没有 `while`，没有运行期序列的 `for`，也没有 `break`/`continue`。遍历外层泛型的类型参数时，轮数由实例化时的类型决定——这就是“实例化时已知的轮数”。
 - 展开成直线代码：每轮按字段顺序建出它读的 `ACCS`，上一轮的状态直接是下一轮读到的值，`static loop` 本身没有节点。块里的 `return` 与普通函数一样离开函数，不是“跳出循环”。
 - 效应就是直线代码的效应：循环体是不是同步块由它自己决定（3.2），每轮的效应按字段顺序执行。
 
 ```cml
 func count::<T>(t: T): int {
-    return static loop n = 0 for (name, F) in fields T do n + 1
+    return static loop n = 0 for name, F in fields T do n + 1
+}
+
+func sum3(t: (int, int, int)): int {
+    return static loop acc = 0 for i in 0..3 do acc + t.[i]
 }
 
 func total_and_max(t: {a: int, b: int}): (int, int) {
     return static loop total = 0, best = 0
-        for (n, F) in fields {a: int, b: int} do {
+        for n, F in fields {a: int, b: int} do {
             (total + t.[n], if best < t.[n] then t.[n] else best)
         }
 }
@@ -697,7 +704,7 @@ DivisionByZero at main.cml:1:38
 - 并行调度器下，`map` 的一个元素故障时，已经开始的元素运行到结束，尚未开始的不再开始；`attempt` 在已开始的全部结束之后才给出错误值。
 - 在图上它是一个 `OPER` 节点（`:mark/isolate`），第一个输入是函数值，其余是实参。实现与尚待裁定的问题见 [技术说明](../technical/33_fault_isolation.md)。
 
-## 6.11 赋值与 `wait`
+## 6.11 赋值
 
 - `x = e`、`x += e` 等是表达式，值见下。目标是 `var` 变量或 `var` 形参本身，或从它出发的一条**路径**：字段、下标、任意组合（[3.7](03_data_model.md#37-letvar-与引用)）。`p.x = e`、`xs[0] = e`、`m[i].f = e` 都是对 `p`、`xs`、`m` 整体的重新绑定：`xs[i].f = e` 就是 `xs = set(xs, i, set(xs[i], f, e))`，`set` 是只改一个位置、返回新值的纯算子。路径赋值因此可以写在任何表达式位置；目标的根不是变量时（如 `f().x = e`、`{ x: 1 }.x = e`）是 `AssignmentTargetNotVariable`，下标越界是故障 `IndexOutOfRange`。
 - 路径赋值的值是**重新绑定后的整体**：`xs = xs->append<…>` 的值是新数组，`xs[0] = 5` 的值是改过之后的那个 `xs`，不是 `5`。只有目标就是变量本身时，值才是所赋的值。
@@ -714,15 +721,12 @@ DivisionByZero at main.cml:1:38
 
 - **复合赋值先算新值，再重新绑定。** `x op= e` 是算出新值再让 `x` 重新绑定到它，所以数值上的结果与 `x = x op e` 相同。路径形式的复合赋值（`xs[0] += 1`、`p.n += 1`）把新值写回那个位置，写回按上面的原地规则：`let a = xs` 之后 `xs[0] += 1` 复制，`a` 不变。模块定义的类型（如张量）以及程序重载了运算符的类型（[7.4.5](07_statements.md#745-运算符重载)）没有自己的复合赋值算子，对它们 `t += u` 就是 `t = t + u`（`-=`、`*=`、`/=`、`%=`、`@=`、`^=`、`&=`、`|=` 同理，只要对应的二元运算符对这些类型有定义）。
 
-- `wait e` 见 [4.4](04_execution_model.md#44-var引用与-wait)。
-
 ## 6.12 运算符优先级
 
 从低到高：
 
 | 级 | 运算符 | 说明 |
 |---|---|---|
-| 1 | `wait` | 前缀，作用于整个赋值表达式 |
 | 2 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | 不能连写 |
 | 3 | `\|\|` | 左结合；是分支，右侧只在需要时求值 |
 | 4 | `&&` | 左结合；是分支，右侧只在需要时求值 |

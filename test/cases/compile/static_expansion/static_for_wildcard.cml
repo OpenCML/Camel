@@ -13,7 +13,7 @@ func names_of::<T>(t: T) {
 
 /// The number of fields: the field name is not bound, and `F` is still a type.
 func arity_of::<T>(t: T): int {
-    return static loop n = 0 for (_, F) in fields T do {
+    return static loop n = 0 for _, F in fields T do {
         let empty: F[] = []
         n + 1
     }

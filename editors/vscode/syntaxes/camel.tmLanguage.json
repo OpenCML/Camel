@@ -390,7 +390,7 @@
         },
         {
           "name": "keyword.control.flow.camel",
-          "match": "\\b(?:return|throw|wait)\\b"
+          "match": "\\b(?:return|throw)\\b"
         },
         {
           "name": "keyword.control.import.camel",

@@ -21,7 +21,7 @@ func apply(f: (x: int) => int, x: int): int { return f(x) }
 func twice(f: (x: int) => int): (x: int) => int { return (x: int): int => f(f(x)) }
 
 with <tag: string>
-sync func log(x: int): int sync { println(tag, x); return x }
+func log(x: int): int sync { println(tag, x); return x }
 
 
 // a function value that still has a context parameter can be configured in turn

@@ -53,7 +53,7 @@ var count = 0
 
   结构体解构 `let { x, y } = p` 与数组解构 `let [a, b] = xs` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）；用 `p.x`、`xs[0]`。
 - **`let _ = e` 有意丢弃 `e` 的值。** `_` 不是名字：它不绑定任何东西，所以同一个块里可以写任意多次，也不能读它。表达式与任何 `let` 的初值一样求值（在同步块里按顺序）。这是表明有意忽略一个 `T!` 的写法（[7.1](#71-表达式语句)）。只有这一种写法：`var _`、在多个名字中间写 `_` 都是语法错误。
-- 模块顶层的 `let` 是全局常量，顶层的 `var` 可以被函数读写（写它的函数声明为 `sync func`），包括被导入的函数读写它所在模块的（[5.3](05_modules.md#53-导出)）。**顶层的声明与书写顺序无关，只看依赖**：`let area = pi * r * r` 可以写在 `let pi` 之前；顶层的值之间成环是 `SemanticDiag::ModuleValueCycle`（[5.6](05_modules.md#56-模块的加载)）。函数体里的局部 `let` 仍是先声明后使用。
+- 模块顶层的 `let` 是全局常量，顶层的 `var` 可以被函数读写，包括被导入的函数读写它所在模块的（[5.3](05_modules.md#53-导出)）。**顶层的声明与书写顺序无关，只看依赖**：`let area = pi * r * r` 可以写在 `let pi` 之前；顶层的值之间成环是 `SemanticDiag::ModuleValueCycle`（[5.6](05_modules.md#56-模块的加载)）。函数体里的局部 `let` 仍是先声明后使用。
 
 ## 7.3 `return` 与 `throw`
 
@@ -103,7 +103,7 @@ func hello(name: string) sync {      // 没有返回值；同步的函数体
 }
 ```
 
-- 每个形参写 `名字: 类型`。前面加 `var` 的形参是可变的引用（[4.4](04_execution_model.md#44-var引用与-wait)）。
+- 每个形参写 `名字: 类型`。前面加 `var` 的形参是可变的引用（[4.4](04_execution_model.md#44-var-与写入的顺序)）。
 - 返回类型可以省略，由函数体推出；递归函数必须写出返回类型。函数体里没有 `return` 时，函数的值是函数体最后一条语句的值：那是一个有值的表达式时返回它的值，否则返回 `void`。注意 `println(x)` 的值是 `x`（便于 `x->println->f` 这样接着写），所以 `func main() sync { println('a') }` 返回字符串 `'a'`，默认流水线又把 `main` 的结果写到输出，这一行会出现两次；把返回类型写成 `: void`，或以 `return 0` 结束。
 - 函数体前的 `sync` 使函数体成为同步块；`func` 前的 `sync` 是函数修饰符。两者含义不同（[4.3](04_execution_model.md#43-sync)）。
 - 函数可以声明在模块顶层、命名空间里，也可以声明在块里（局部函数）。函数之间可以相互递归，不要求先声明后使用。
@@ -200,7 +200,7 @@ int 1 string a
 
 | 修饰符 | 含义 |
 |---|---|
-| `sync` | 函数有副作用、需要被同步（[4.3.3](04_execution_model.md#433-sync-func函数修饰符)） |
+| `sync` | 函数体是同步块（[4.3.3](04_execution_model.md#433-函数体的-sync函数修饰符)） |
 
 没有别的修饰符。C++ 实现的函数写成无函数体的 `export func` 声明（[6.4](../design-principles.cn.md)），只在模块内使用的辅助函数写成不导出的 `func`：`func` 本身就是模块私有。
 
@@ -338,7 +338,7 @@ func main(): int sync {
 
 ```cml
 func sum(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {

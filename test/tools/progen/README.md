@@ -65,14 +65,13 @@ with `--features all,modules`.
 | `array` | literals (of scalars, tuples, structs), index (with and without a length guard), `len`, `concat`, `slice`, `contains` |
 | `tuple`, `struct` | literals, `.N` and field access, as parameters, results, array elements and variables |
 | `var` | `var` of int, float, string, bool, `int[]`, tuple; `=`, `+=`, `-=`, `*=`, `/=`, `%=` (and `+=` on a string) in sync blocks; reads before and after writes |
-| `varparam` | `sync func` with one or two `var` parameters, writes through them, a variable passed on to another function |
+| `varparam` | a function with one or two `var` parameters, writes through them, a variable passed on to another function |
 | `capture` | lambdas and nested functions that read captured values and variables (seeing later writes) or write them; a function returning a lambda that owns a variable (a counter) |
 | `if`, `match` | as expressions with expression or block arms; as statements with `sync` arms that print and write; `match` on an int, string or bool name with literal cases and `_` |
-| `func`, `rec` | functions over all the types; recursion bounded by a depth argument (0 to 9): tail, non-tail, tree (two self calls), mutual, and a `sync func` recursion that writes a `var` parameter before and after the call and prints |
+| `func`, `rec` | functions over all the types; recursion bounded by a depth argument (0 to 9): tail, non-tail, tree (two self calls), mutual, and a recursion that writes a `var` parameter before and after the call and prints |
 | `closure`, `hof` | lambdas, named functions as values, functions that return lambdas, user functions with function parameters (pure, and effectful ones called from sync bodies) |
 | `builtin` | `map`, `filter`, `reduce`, `zip`, `range` (pure element functions); `foreach` and `reduce` with element functions that print and write captured variables |
 | `effects` | `println` in functions whose body is a sync block, in branch and match arms, in `foreach` / `reduce` element functions |
-| `wait` | `wait` before assignments and calls that write (inside sync blocks, where it must not change anything) |
 | `env` | one to three values read with `get_env`, which no pass can know |
 | `macro` | pure functions declared `macro` (ordinary functions without `std::macro`, evaluated ahead of time with it) |
 | `comprehension` | `[e for x in xs if c]` with a pure element expression and condition (the condition is left out in two of five), over arrays of every element type, nested in any expression |
@@ -119,8 +118,8 @@ checks it on every generated and every reduced program:
 3. **Element functions of `map` and `filter` are pure** (3.6: their elements have no order).
    `foreach` and `reduce` are ordered and may print and write.
 4. **Everything outside sync blocks is pure**, so whether and when it runs cannot be seen.
-5. **`wait` only appears in sync blocks**, where it changes nothing (log 2.6). The ordering that
-   `wait` gives outside sync blocks is not generated.
+5. **Every write is written in a sync block**, so its order against the other statements of the
+   block is the writing order.
 6. **No fault can happen**: no division by zero, no index out of range, recursion depth at
    most 9 (far below 256), no macro evaluation deeper than the limit by construction of the
    depth arguments. A program whose reference evaluation meets one is discarded.
@@ -197,8 +196,8 @@ the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
 - Effect order under parallelism: no effect is generated where the order is open (effects
   outside sync blocks, element functions of `map` / `filter` that print, `para` operators).
   `std::prl` is in the matrix, but only on programs whose output is determined.
-- `wait` outside sync blocks (ordering by the use of a variable, principles log 2.6), and writes to
-  one variable from several places without `wait` (principles section 15, undecided).
+- Writes to one variable from several places outside a sync block, where the order is open
+  (principles section 15, undecided).
 - Effects that run on demand: nothing checks that an unused effect outside a sync block does
   *not* run.
 - Module-level variables (`var`), imports of whole modules and qualified names (`m::f`),
