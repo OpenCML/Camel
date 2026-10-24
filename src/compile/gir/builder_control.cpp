@@ -2089,16 +2089,60 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
     }
 
+    // Whether the first value written at `expr` is a numeric literal the position `type` holds.
+    // Such a literal takes that type while it is made (visitInPosition, literalDataInType), as it
+    // does in the arm of an `if`. A value that is not a literal is never given this type: the
+    // loop's value is the state's type, and the position's own check reports the mismatch.
+    //
+    // A composite literal is not one of these, and neither is the empty array literal. A
+    // composite has a shape of its own, and the loop's state keeps it: the position then converts
+    // the loop's value (`loop s = {}` under `Nothing` keeps the state `{  }` and a CAST names it;
+    // cases/loops/zero_leaf_state.cml). The empty array literal has no element type at all, and
+    // takes the position's element type below, once the body is built and the elements it appends
+    // are known (inferLoopStateFromAppend).
+    const auto literalEnters = [&](const GCT::node_ptr_t &expr, Type *type) -> bool {
+        if (expr == nullptr || type == nullptr || asTagged(type) != nullptr) {
+            return false;
+        }
+        const std::optional<literal::Value> exact = literalValueOfExpr(expr);
+        return exact.has_value() && literal::kindEnters(*exact, type);
+    };
+
     // The first values and the array: evaluated once, where the loop is (they do not see the
-    // names of the head). A loop of one state has the state's type, so a state written as the
-    // empty literal takes the type of the position the loop's value goes to (`loop losses = []
-    // for ...` where the loop gives a `float[]`; design principles 5.1, 5.2). A loop of several
-    // states gives a tuple, and says nothing about one state.
-    Type *loopExpected = nullptr;
-    if (k == 1 && expectedValueType_ != nullptr) {
-        Type *value = valueTypeOf(expectedValueType_);
-        if (value != nullptr && value->code() == TypeCode::Array) {
-            loopExpected = value;
+    // names of the head). The loop's value is the state's type -- the tuple of the state types
+    // when there are several -- so each first value stands at the loop's own position, and a
+    // numeric literal written there takes the position's type (design principles 5.1): `let n:
+    // f32 = loop s = 0.0 while s < 3.0 do s + 1.0` is a loop of `f32`, and the body's and the
+    // condition's literals follow from the state's type. A state written as the empty literal is
+    // the other way round: it takes the element type of the position the loop's value goes to
+    // (`loop losses = [] for ...` where the loop gives a `float[]`; design principles 5.1, 5.2).
+    // A state whose first value is anything else keeps its own type, whatever the position says.
+    std::vector<Type *> stateExpected(k, nullptr);
+    std::vector<bool> literalAtPosition(k, false);
+    if (expectedValueType_ != nullptr) {
+        Type *position = valueTypeOf(expectedValueType_);
+        for (size_t j = 0; j < k; ++j) {
+            Type *state = position;
+            if (k > 1) {
+                // The loop's value is a tuple of the state types: one state's position is one
+                // element of it, and a position that is not that tuple says nothing per state.
+                if (position == nullptr || position->code() != TypeCode::Tuple ||
+                    tt::as_ptr<TupleType>(position)->size() != k) {
+                    continue;
+                }
+                state = tt::as_ptr<TupleType>(position)->typeAt(j);
+            }
+            if (state == nullptr) {
+                continue;
+            }
+            if (k == 1 && state->code() == TypeCode::Array) {
+                stateExpected[j] = state;
+                continue;
+            }
+            if (literalEnters(gct->loopInitial(j), state)) {
+                stateExpected[j] = state;
+                literalAtPosition[j] = true;
+            }
         }
     }
     std::vector<node_handle_t> initial;
@@ -2106,13 +2150,22 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     std::vector<bool> emptyInitial(k, false);
     bool deferredEmpty = false;
     for (size_t j = 0; j < k; ++j) {
-        const auto &expr = gct->loopInitial(j);
+        const auto &expr      = gct->loopInitial(j);
+        Type *loopExpected    = stateExpected[j];
         node_handle_t node;
         {
             ExpectedValueScope stateScope(expectedValueType_, loopExpected);
-            node = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+            // A literal in the position is made in the position's type; the empty literal is
+            // left as it is and takes that type below.
+            node_handle_t built{};
+            if (literalAtPosition[j]) {
+                built = visitInPosition(expr, loopExpected);
+            } else {
+                built = valueNodeOf(visit(expr));
+            }
+            node = valueOf(functionValueOf(built, expr));
         }
-        if (loopExpected != nullptr) {
+        if (loopExpected != nullptr && !literalAtPosition[j]) {
             // A value that is not the empty literal is converted only when its position
             // accepts it; one that does not fit stays as it is and is reported below.
             if (node_handle_t typed = checkValue(node, loopExpected, expr); typed != nullptr) {

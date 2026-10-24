@@ -152,6 +152,27 @@ assert(out === want, `unexpected output: ${out}`)
 """
 timeout_ms = 8000
 
+# The value of a `loop` is a position with an expected type as well, and it reaches the literals
+# written in the loop at last: a loop of one state has the state's type, so the state's first
+# value stands at the loop's own position; a loop of several states gives a tuple, whose elements
+# are the states' positions. Before this, only the empty array literal took that position
+# (`loop acc = []`, in context.empty_array), and a literal state kept its default type, so the
+# loop was a `float` wherever an `f32` was declared.
+
+[[tests]]
+name = "context.loop_state"
+desc = "The state's first value takes the loop's own position: a declaration and a declared return type make `loop s = 0.0 while s < 3.0 do s + 1.0` a loop of `f32` (body and condition literals follow from the state's type), a `for` loop of `i32`, an expression of literals only (`1.0 + 2.0`) takes the position as well, and a loop of several states takes one type per element of the tuple position. A composite or empty-array state is not this rule and keeps its own shape (cases/loops/zero_leaf_state.cml, context.empty_array). Before this each of these was a `DeclaredTypeMismatch`/`ReturnTypeMismatch` for `float` where `f32` was declared."
+kind = "behavior"
+case = "../../../cases/compile/literals/context_loop_state.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+expect_stdout = "3.0\n3\n3.0\n3\n5.0\n9.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
 [[tests]]
 name = "context.composite_rounding"
 desc = "A composite literal keeps the exact value each element was written as, and GIR rebuilds it from those values: a decimal just above the midpoint between 1.0 and the next f32 prints 1.00000012 whether it is returned from an array literal, declared, a struct field or a nested array, not 1.0 from a rounding through a double."
@@ -388,6 +409,20 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
 expect_diagnostic_line = 7
 expect_output_contains = ["type 'int'", "declared type 'float'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.loop_state_variable"
+desc = "The position of a loop's value moves a literal, never a variable (the neighbour of context.variable_declaration above): a state whose first value is a name keeps that name's type, so a `float` value where an `f32` is declared is a `DeclaredTypeMismatch` at the declaration, as `let n: f32 = f` is."
+kind = "negative"
+case = "../../../cases/compile/literals/context_loop_state_variable.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'float', which is not the declared type 'f32'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

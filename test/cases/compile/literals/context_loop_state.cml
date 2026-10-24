@@ -1,0 +1,50 @@
+/**
+ * The value of a `loop` takes the expected type of the whole expression, as the value of an
+ * `if`/`match` arm does (design principles 5.1): a loop of one state has the state's type, so
+ * the first value of that state stands at the loop's own position and a literal written there
+ * takes the position's type — `let n: f32 = loop s = 0.0 while s < 3.0 do s + 1.0` is a loop of
+ * `f32`, and the body's and the condition's literals follow from the state's type. A loop of
+ * several states gives a tuple, and its position names one type per state.
+ *
+ * Before this, only the empty array literal took the position's type (`loop acc = []`): a state
+ * whose first value was a numeric literal kept its default type (`float` for a decimal form), and
+ * the loop's value was that type, so the declaration below was a `DeclaredTypeMismatch`.
+ *
+ * A composite literal as a state is not this rule: it has a shape of its own, and the state keeps
+ * it (cases/loops/zero_leaf_state.cml pins the zero-leaf case).
+ */
+module literal_context_loop_state
+
+func fromWhile(): f32 {
+    loop s = 0.0 while s < 3.0 do s + 1.0
+}
+
+func fromFor(): i32 {
+    loop s = 0 for x in [1, 2, 3] do s + 1
+}
+
+func fromFold(): f32 {
+    // An expression of literals only is a literal as well: the position types the value it
+    // comes to (design principles 5.1).
+    loop s = 1.0 + 2.0 while s < 5.0 do s + 1.0
+}
+
+func fromStates(): f32 {
+    // Several states give a tuple: the position names one type per state.
+    let pair: (f32, f32) = loop a = 0.0, b = 0.0 for k in [1, 2, 3] do (a + 1.0, b + 2.0)
+    pair.0 + pair.1
+}
+
+func main(): int sync {
+    // A declaration types the state's first value...
+    let n: f32 = loop s = 0.0 while s < 3.0 do s + 1.0
+    println(n)
+    let k: i32 = loop s = 0 for x in [1, 2, 3] do s + 1
+    println(k)
+    // ...and so does a function's declared return type.
+    println(fromWhile())
+    println(fromFor())
+    println(fromFold())
+    println(fromStates())
+    return 0
+}
