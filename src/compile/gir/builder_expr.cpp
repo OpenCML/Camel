@@ -421,42 +421,18 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
     nodeModifierMaps_[inputGraph][nodeIdOf(input)] = nodeIdOf(modifier);
 }
 
-void Builder::recordWrite(
-    node_handle_t variable, node_handle_t entry, node_handle_t exit, bool throughCallee) {
-    // `A(i); wait modify(i); B(i)` gives A -> modify -> B (design principles log 2.6). The second
-    // half follows from setModifier. The first: the waited writer is ordered after every
-    // operation that directly used the variable's value before it: the operations that took a
-    // value read from it (the read itself when nothing took it), and the calls and branches
-    // that used the variable through a capture. `wait` orders by this use of the variable, not
-    // by position: in `A(i + 1); wait modify(i)` the direct user is `+`, not A. In a sync block
-    // the block's chain already orders them. A writer that is neither waited nor in a sync
-    // block is not ordered after earlier users; they stay pending for the next waited writer.
+void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throughCallee) {
+    // `A(i); modify(i); B(i)` gives A -> modify -> B (design principles log 2.6). The second half
+    // follows from setModifier. The first is the sync block's chain when the write is in one: a
+    // sync body orders its statements. A write outside a sync block is not ordered after earlier
+    // users; they stay pending for the next write.
     auto &uses = pendingUsesOf(variable);
-    if (waited_ && !synced_) {
-        std::unordered_set<node_handle_t> before;
-        for (const VariableUse &use : uses) {
-            bool taken = false;
-            if (use.isRead) {
-                for (auto users : {normUsersOf(use.node), withUsersOf(use.node)}) {
-                    for (draft_node_ref_t user : users) {
-                        before.insert(nodeDraftOf(use.node)->ref(user));
-                        taken = true;
-                    }
-                }
-            }
-            if (!taken) {
-                before.insert(use.node);
-            }
-        }
-        for (node_handle_t node : before) {
-            if (node != exit && shouldAddSyncCtrlLink(node, entry)) {
-                linkNodes(LinkType::Ctrl, node, entry);
-            }
-        }
-    }
-    if (waited_ || synced_) {
+    if (synced_) {
         uses.clear();
     }
+    // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
+    // did not record -- a :var/take, a call handed the `var` -- makes the cell escape.
+    knownCellUsers_.insert(exit);
     setModifier(variable, exit);
     if (!throughCallee) {
         if (ArmBuild *arm = activeArm()) {
@@ -1138,16 +1114,6 @@ node_handle_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {
     return node;
 }
 
-node_handle_t Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
-    ENTER("WAIT");
-    bool old        = waited_;
-    waited_         = true;
-    node_handle_t node = valueNodeOf(visit(gct->at(0)));
-    waited_            = old;
-    LEAVE("WAIT");
-    return node;
-}
-
 oper_group_ptr_t Builder::internalOperatorGroup(camel::core::OperId oper) {
     const auto group = context_->importModule("")->nativeOperatorGroup(oper);
     ASSERT(
@@ -1195,6 +1161,18 @@ node_handle_t Builder::readVariableThrough(
             linkNodes(LinkType::Ctrl, *modifier, value);
         }
     }
+    // SSA (collapseNonEscapingVariableReads): this read may later take its value from the write that
+    // made it instead of from the cell, so the writer it belongs to is recorded here, while the
+    // builder still knows it. The read node counts as one of the cell's known users.
+    if (sameGraph(variable, currGraph_)) {
+        node_handle_t source = variable;
+        if (auto modifier = modifierOf(variable);
+            modifier.has_value() && sameGraph(*modifier, currGraph_)) {
+            source = *modifier;
+        }
+        variableReadSource_[value] = VariableRead{source, variable};
+        knownCellUsers_.insert(value);
+    }
     // In a sync block a read happens where it is written, like a call.
     if (synced_) {
         if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
@@ -1215,6 +1193,67 @@ node_handle_t Builder::peekVariable(node_handle_t variable) {
     return readVariableThrough(variable, camel::core::oper::VarPeek);
 }
 
+void Builder::collapseNonEscapingVariableReads() {
+    if (variableReadSource_.empty() || currGraph_ == nullptr) {
+        return;
+    }
+    // The reads recorded for this graph, grouped by the cell they read. A cell of an outer graph
+    // belongs to that graph's own turn, so it is skipped here.
+    std::unordered_map<node_handle_t, std::vector<std::pair<node_handle_t, node_handle_t>>> byCell;
+    for (const auto &[read, info] : variableReadSource_) {
+        if (info.cell == nullptr || !sameGraph(info.cell, currGraph_)) {
+            continue;
+        }
+        byCell[info.cell].push_back({read, info.source});
+    }
+    auto &draft = currGraph_->draft();
+    for (auto &[cell, reads] : byCell) {
+        // A `var` parameter of this graph is a resource shared with the caller, and a captured cell
+        // is shared with a closure: both keep their cell.
+        if (nodeKindOf(cell) == camel::runtime::GCNodeKind::Port ||
+            escapingVariables_.contains(cell)) {
+            continue;
+        }
+        const camel::runtime::gc_node_ref_t cellId = nodeIdOf(cell);
+        if (draft.header(cellId) == nullptr) {
+            continue;
+        }
+        // Every user of the cell must be one this builder recorded: one of its reads, or one of its
+        // stores. Any other user -- a `:var/take`, a call the `var` was handed to, a capture port --
+        // is a use this conversion does not model, so the cell keeps its cell.
+        bool known = true;
+        for (auto users : {normUsersOf(cell), withUsersOf(cell), ctrlUsersOf(cell)}) {
+            for (draft_node_ref_t user : users) {
+                if (!knownCellUsers_.contains(nodeDraftOf(cell)->ref(user))) {
+                    known = false;
+                    break;
+                }
+            }
+            if (!known) {
+                break;
+            }
+        }
+        if (!known) {
+            continue;
+        }
+        // The value of a cell nothing has written yet is the one it was made with (:var/new's input).
+        const auto cellInputs = draft.normInputsOf(cellId);
+        for (auto &[read, source] : reads) {
+            const camel::runtime::gc_node_ref_t readId = nodeIdOf(read);
+            if (draft.header(readId) == nullptr) {
+                continue;
+            }
+            const camel::runtime::gc_node_ref_t version =
+                source == cell ? (cellInputs.empty() ? cellId : cellInputs[0]) : nodeIdOf(source);
+            if (version == cellId || draft.header(version) == nullptr) {
+                continue;
+            }
+            // The read's users take the version's value; the read node is not needed any more.
+            draft.replaceAllValueUses(readId, version);
+            draft.eraseNode(readId);
+        }
+    }
+}
 std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr) {
     GCT::node_ptr_t root = expr;
     while (root && root->type() == GCT::NodeKind::ACCS) {

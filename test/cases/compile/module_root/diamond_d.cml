@@ -1,7 +1,7 @@
 /** Helper module: the bottom of the diamond, whose top-level value has an effect. */
 module diamond_d
 
-sync func compute(): int sync {
+func compute(): int sync {
     println('computing the common value')
     return 40
 }

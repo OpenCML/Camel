@@ -3340,7 +3340,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             capturedWrites.push_back(use.origin);
         }
     }
-    if (!waited_ && !synced_) {
+    if (!synced_) {
         const std::string subject =
             std::format("The call of '{}: {}'", targetName, targetFuncType->toString());
         if (hasVarArgument) {
@@ -3359,7 +3359,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
     for (const CapturedUse &use : captured) {
         if (use.written) {
-            recordWrite(use.variable, targetNode, targetNode, true);
+            recordWrite(use.variable, targetNode, true);
         } else {
             pendingUsesOf(use.variable).push_back({targetNode, false});
         }

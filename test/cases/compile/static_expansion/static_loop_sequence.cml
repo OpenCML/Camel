@@ -1,0 +1,61 @@
+/**
+ * `static loop` over a sequence (the ruling of 2026-10-24, H462): the head is `for i in <序列>`,
+ * without the parentheses it used to carry -- one thing, one spelling, the same shape the
+ * ordinary `loop` writes. The constant interval `a..b` is one of the sequences the compiler works
+ * out (the one rule of the ruling of 2026-10-25, H475; `range` and arrays are in
+ * `static_loop_sequence_forms.cml`), read half-open exactly as `..` is everywhere else (`0..5` is
+ * 0, 1, 2, 3, 4). The rounds are unrolled where the loop stands, so `i` is a compile-time
+ * constant: it is an ordinary `int` value and a `t.[i]` key at the same time.
+ */
+module static_loop_sequence
+
+func sumTo5(): int {
+    return static loop acc = 0 for i in 0..5 do acc + i
+}
+
+func stepped(): int {
+    return static loop acc = 0 for i in 2..5 do acc + i * 10
+}
+
+/* An empty interval unrolls to no round at all: the loop's value is the first value. */
+func empty(): int {
+    return static loop acc = 7 for i in 3..3 do acc + 1
+}
+
+/* `i` is a key: the trip count is the interval's, not the tuple's. */
+func prefix(t: (int, int, int)): int {
+    return static loop acc = 0 for i in 0..2 do acc + t.[i]
+}
+
+func indexed(t: (int, int, int)): int {
+    return static loop acc = 0 for i in 0..3 do acc + t.[i]
+}
+
+/* A name bound once to a constant is a sequence bound the compiler knows. */
+func fromBinding(): int {
+    let bound = 4
+    return static loop acc = 0 for i in 0..bound do acc + i
+}
+
+func several(t: (int, int, int)): (int, int) {
+    return static loop total = 0, last = 0 for i in 0..3 do (total + t.[i], i)
+}
+
+/* A sequence loop nested in another one: the inner bound is the outer round's constant. */
+func triangular(): int {
+    return static loop acc = 0 for i in 0..4 do
+        acc + (static loop inner = 0 for j in 0..i do inner + 1)
+}
+
+func main(): int sync {
+    println(sumTo5())
+    println(stepped())
+    println(empty())
+    println(prefix((5, 6, 7)))
+    println(indexed((5, 6, 7)))
+    println(fromBinding())
+    let (total, last) = several((1, 2, 3))
+    println(total, last)
+    println(triangular())
+    return 0
+}

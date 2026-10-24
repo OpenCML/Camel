@@ -2120,17 +2120,6 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
     // Extract the statement block load and create an ExecLoad node
     // The ExecLoad node represents the execution of the statement block
     const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
-    if (stmtBlock->waited()) {
-        // `wait { ... }`: the grammar takes it and the mark was dropped. `wait` is defined
-        // for one expression (design principles log 2.6); what it means for a block is not.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit(
-                "wait",
-                "it is not implemented before a block and would be ignored; write 'sync { ... }' "
-                "to run the statements of a block in order");
-        throw BuildAbortException();
-    }
     // Numeric permissions are permission tags, resolved by the graph builder where they are
     // written (design principles 7.2, 7.5): the statement block carries none of its own.
     node_ptr_t execNode = makeExec(stmtBlock->synced());
@@ -2289,20 +2278,6 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     default:
         throw std::runtime_error("Unknown data type");
     }
-    if (data->waited() && data->dataType() != AST::DataType::BinaryExpr &&
-        data->dataType() != AST::DataType::ReservedExpr) {
-        // `wait` orders the one expression after it (design principles log 2.6). Only an operator
-        // expression, an assignment, a call, an access or a binding is lowered with the mark;
-        // on anything else (a name, a literal, a unary operator, a lambda) the mark was
-        // dropped without a word. What it should order there has not been decided.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit(
-                "wait",
-                "it is implemented before a call, an assignment or a binary operator "
-                "expression only, and would be ignored before this expression");
-        throw BuildAbortException();
-    }
 
     LEAVE("Data");
     setOriginFromAst(context_, dataNode, ast, camel::source::OriginKind::GctNode, "gct.data");
@@ -2418,9 +2393,6 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     // Extract the binary expression load and the left-hand side (LHS) AST node
     const auto &binaryExpr = ast->loadAs<AST::BinaryExprLoad>();
     const auto &lhsASTNode = ast->atAs<AST::DataLoad>(0);
-
-    // Check if the binary expression is marked as "waited"
-    bool waited = binaryExpr->waited();
 
     node_ptr_t opNode = nullptr;
 
@@ -2576,30 +2548,6 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.binary.link");
     registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
 
-    // If the expression is marked as "waited", wrap it in a WaitLoad node
-    if (waited) {
-        node_ptr_t waitNode = tree_->makeWait();
-        *waitNode << res;
-        setOriginFromAst(context_, waitNode, ast, camel::source::OriginKind::GctNode, "gct.wait");
-        registerGctSemantic(
-            context_,
-            waitNode,
-            ast,
-            {
-                semanticPart(
-                    camel::source::SemanticRole::Keyword,
-                    nodeOrigin(waitNode),
-                    -1,
-                    "wait"),
-                semanticPart(
-                    camel::source::SemanticRole::ValueProducer,
-                    nodeOrigin(res),
-                    -1,
-                    "inner"),
-            },
-            {nodeOrigin(res)});
-        res = waitNode;
-    }
     LEAVE("BinaryExpr");
     return res;
 }
@@ -2650,12 +2598,6 @@ node_ptr_t Builder::visitLogicalExpr(const AST::node_ptr_t &ast) {
               << armOf(CaseType::Else, isAnd ? decidedNode : rhsNode);
 
     node_ptr_t res = brchNode;
-    if (logicalExpr->waited()) {
-        node_ptr_t waitNode = tree_->makeWait();
-        *waitNode << res;
-        setOriginFromAst(context_, waitNode, ast, camel::source::OriginKind::GctNode, "gct.wait");
-        res = waitNode;
-    }
     LEAVE("LogicalExpr");
     return res;
 }
@@ -2682,7 +2624,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     node_ptr_t res           = nullptr;
     const auto &reservedExpr = ast->loadAs<AST::ReservedExprLoad>();
-    bool waited              = reservedExpr->waited();
     const auto &lhsASTNode   = ast->atAs<AST::DataLoad>(0);
 
     // Handle different reserved operators
@@ -3108,25 +3049,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         res = nullptr;
     }
 
-    // If the expression is "waited", wrap the result in a WaitLoad node
-    if (waited) {
-        node_ptr_t waitNode = tree_->makeWait();
-        *waitNode << res; // Wait for the result of the reserved expression
-        setOriginFromAst(context_, waitNode, ast, camel::source::OriginKind::GctNode, "gct.wait");
-        registerGctSemantic(
-            context_,
-            waitNode,
-            ast,
-            {
-                semanticPart(
-                    camel::source::SemanticRole::ValueProducer,
-                    nodeOrigin(res),
-                    -1,
-                    "inner"),
-            },
-            {nodeOrigin(res)});
-        res = waitNode;
-    }
     LEAVE("ReservedExpr");
     return res;
 }
@@ -3561,24 +3483,32 @@ node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
 
 /*
 staticLoopExpr
-    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+    : STATIC LOOP loopState (',' loopState)* staticLoopHeader DO blockExpr
+staticLoopHeader
+    : FOR (identDef | '_') (',' (identDef | '_'))? IN
+      ('fields' typeExpr | 'indices' dataExpr | dataExpr)
 The AST node holds the first values of the state (a Repeated Data), the walked shape, and the
 body (StaticLoopLoad). The GCT node holds the shape first, then the first values, then the EXEC
 body. `F` is an ordinary type variable of the enclosing function's instance, bound per field
-by the graph builder; `n` (or `j` for `indices`) and the state names are bound per round.
+by the graph builder; `n` (or `j` for `indices`, or the element's name for a written sequence)
+and the state names are bound per round. The head of `static loop` lost its parentheses in H462
+(the ruling of 2026-10-24): `in <序列>` is what `static for` still writes between parentheses.
 */
 node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     ENTER("StaticLoop");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticLoop");
     const auto &load = ast->loadAs<AST::StaticLoopLoad>();
+    // `fields T` is the only head that names a type (`F`): `indices ts` and a written sequence
+    // bind one name, the entry itself.
+    const bool byFields = !load->byIndices() && !load->bySequence();
 
     std::vector<std::string> state;
     state.reserve(load->state().size());
     for (const Reference &name : load->state()) {
         state.push_back(name.toString());
     }
-    node_ptr_t loopNode =
-        tree_->makeStaticLoop(state, load->valueName(), load->typeName(), load->byIndices());
+    node_ptr_t loopNode = tree_->makeStaticLoop(
+        state, load->valueName(), load->typeName(), load->byIndices(), load->bySequence());
     setOriginFromAst(
         context_,
         loopNode,
@@ -3589,9 +3519,7 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     const ValueUseScope valueUseScope(*this);
     valueUse_ = {};
 
-    if (load->byIndices()) {
-        *loopNode << visitData(ast->at(1));
-    } else {
+    if (byFields) {
         const auto &typeAst = ast->atAs<AST::TypeLoad>(1);
         Type *subject       = visitType(typeAst);
         node_ptr_t typeNode = tree_->makeType(subject);
@@ -3602,6 +3530,10 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
             camel::source::OriginKind::GctNode,
             "gct.static.loop.type");
         *loopNode << typeNode;
+    } else {
+        // `indices ts` walks a tuple value and a written sequence is an ordinary expression:
+        // both are built as data, and what they hold is read when the expansion happens.
+        *loopNode << visitData(ast->at(1));
     }
 
     // The first values, evaluated once where the loop is, before the names of the head exist.
@@ -3611,10 +3543,21 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
 
     // `F` names the type of one field in the body only (as in `static for`).
     pushScope();
-    if (!load->byIndices()) {
+    if (byFields) {
         typeScope_->insert(
             Reference(load->typeName()),
             TypeVarType::create(load->typeName(), false));
+    } else if (load->bySequence() && load->valueName() != "_") {
+        // A written sequence's round name is a type as well: `for x in ts` walks a compile-time
+        // tuple and binds the type at each position (the ruling of 2026-10-25, H475), while
+        // `for i in 0..5` binds a value and no type. The name is inserted as an unbound type
+        // variable here, as `F` is: the graph builder binds it at each round when the sequence
+        // gives types, and a sequence of values leaves it unbound, so a body that used the name
+        // in a type position reports that the type is not concrete instead of reading some other
+        // `i` of the same name.
+        typeScope_->insert(
+            Reference(load->valueName()),
+            TypeVarType::create(load->valueName(), false));
     }
     node_ptr_t bodyNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(2));
     popScope();
@@ -5448,11 +5391,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
     std::string lastDefaultName;
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
-        bool isVar            = paramLoad->isVar();
-        if (isVar && !typeLoad->modifiers().sync()) {
-            // Variable parameters are not allowed in asynchronous functions
-            diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
-        }
+        const bool isVar     = paramLoad->isVar();
         const Reference &paramRef = paramLoad->getRef();
         const string &name        = paramRef.ident();
         Type *type                = nullptr;
@@ -5560,11 +5499,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             factory.addRestArg(name);
             continue;
         }
-        bool isVar = paramLoad->isVar();
-        if (isVar && !typeLoad->modifiers().sync()) {
-            // variable parameters are not allowed in asynchronous functions
-            diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
-        }
+        const bool isVar = paramLoad->isVar();
         Type *type = nullptr;
         {
             dimBindAllowed_ = signature;

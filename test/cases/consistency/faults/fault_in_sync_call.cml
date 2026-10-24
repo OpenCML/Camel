@@ -1,0 +1,19 @@
+/**
+ * A fault in a call that has already written its var parameter.
+ */
+module fault_in_sync_call
+
+func bump(var x: int, d: int) {
+    x += 10
+    x = x / d
+}
+
+func main(): int sync {
+    var i = 5
+    bump(i, 3)
+    println(i)
+    bump(i, 0)
+    println(i)
+    println('not reached')
+    return 0
+}

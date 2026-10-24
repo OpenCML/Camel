@@ -247,4 +247,68 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
     return removed;
 }
 
+size_t reduceOrderDependencies(GraphDraft &draft, size_t maxWork) {
+    if (!maxWork) {
+        return 0;
+    }
+    // One order edge cannot be implied by another one, so only a node that two order edges meet in
+    // is a candidate; the pass's screen reads the same condition from the frozen graph.
+    const size_t slots = draft.nodeSlotCount();
+    std::vector<size_t> seen(slots, 0);
+    size_t removed = 0;
+    size_t epoch   = 0;
+    for (gc_node_ref_t user = 0; user < slots && maxWork; ++user) {
+        const auto inputs = draft.orderInputsOf(user);
+        if (inputs.size() < 2) {
+            continue;
+        }
+        const uint32_t region = draft.nodeRegion(user);
+        std::vector<gc_node_ref_t> keep;
+        for (gc_node_ref_t predecessor : inputs) {
+            ++epoch;
+            // Breadth first over order users, so the direct edge is the first level: the walk has
+            // proven a longer path only when it reaches `user` at depth two or more.
+            bool proven  = false;
+            size_t depth = 0;
+            std::vector<gc_node_ref_t> level{predecessor};
+            seen[predecessor] = epoch;
+            while (!level.empty() && !proven && maxWork) {
+                ++depth;
+                std::vector<gc_node_ref_t> next;
+                for (gc_node_ref_t from : level) {
+                    for (gc_node_ref_t to : draft.orderUsersOf(from)) {
+                        if (!maxWork) {
+                            break;
+                        }
+                        --maxWork;
+                        if (to == user) {
+                            proven = depth >= 2;
+                            break;
+                        }
+                        if (seen[to] == epoch || !draft.header(to) ||
+                            draft.nodeRegion(to) != region) {
+                            continue;
+                        }
+                        seen[to] = epoch;
+                        next.push_back(to);
+                    }
+                    if (proven || !maxWork) {
+                        break;
+                    }
+                }
+                level = std::move(next);
+            }
+            if (proven) {
+                ++removed;
+                continue;
+            }
+            keep.push_back(predecessor);
+        }
+        if (keep.size() != inputs.size()) {
+            draft.setOrderInputs(user, keep);
+        }
+    }
+    return removed;
+}
+
 } // namespace camel::runtime

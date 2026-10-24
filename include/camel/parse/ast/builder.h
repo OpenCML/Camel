@@ -177,7 +177,6 @@ class Builder {
     TypeCaseKind typeCaseKindOf(syntax::cst::TypeCasePattern pattern);
     /// IfExpr, MatchExpr, MatchTypeExpr, TryExpr.
     Value visitCtrlExpr(syntax::Node context);
-    Value visitWaitExpr(syntax::cst::WaitExpr context);
     Value visitLoopExpr(syntax::cst::LoopExpr context);
     Value visitAssignExpr(syntax::cst::AssignExpr context);
     Value visitLogicalOrExpr(syntax::cst::LogicalOrExpr context);

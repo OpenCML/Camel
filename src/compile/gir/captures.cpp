@@ -98,6 +98,8 @@ node_handle_t Builder::captureInto(
     if (isVar) {
         variables_.insert(port);
         captures_[graph.get()].variables.push_back(origin);
+        // The cell is shared with the closure: it is a resource, so it keeps its cell.
+        escapingVariables_.insert(origin);
     }
     return port;
 }

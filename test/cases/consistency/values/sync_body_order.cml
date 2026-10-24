@@ -1,0 +1,23 @@
+/**
+ * a sync body: a function that writes its var parameter is ordered between the uses of the
+ * variable before and after it.
+ */
+module sync_body_order
+
+func bump(var x: int) {
+    x += 5
+}
+
+func main(): int sync {
+    var i = 1
+    let a = i + 1
+    bump(i)
+    let b = i + 1
+    bump(i)
+    let c = i + 1
+    println(a)
+    println(b)
+    println(c)
+    println(i)
+    return 0
+}

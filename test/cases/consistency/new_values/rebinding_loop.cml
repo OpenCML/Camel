@@ -18,7 +18,7 @@ func collect(n: int): int[] sync {
     return out
 }
 
-sync func push_all(var xs: int[], n: int): int sync {
+func push_all(var xs: int[], n: int): int sync {
     0..n->foreach<sync (i: int) => sync {
         xs = xs->append<i>
         return null

@@ -23,7 +23,7 @@ func arithmetic(a: float, b: float, X: Tensor, w: Tensor): float {
     return sum
 }
 
-sync func assign(var x: int, var t: Tensor, u: Tensor) {
+func assign(var x: int, var t: Tensor, u: Tensor) {
     x = 1
     x += 2
     x -= 3

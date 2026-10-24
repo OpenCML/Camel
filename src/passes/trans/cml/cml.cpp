@@ -2389,7 +2389,6 @@ class CmlPrinter {
 
         const FunctionType *type = graph->funcType();
         const std::string name   = graph->name();
-        const bool syncType      = type->hasModifier(Modifier::Sync);
         std::string signature;
         if (type->withTypesCount() > 0) {
             std::string clause = "with <";
@@ -2403,7 +2402,7 @@ class CmlPrinter {
             clause += ">";
             emit(clause);
         }
-        signature += syncType ? "sync func " + name + "(" : "func " + name + "(";
+        signature += "func " + name + "(";
         for (size_t i = 0; i < type->normTypesCount(); ++i) {
             signature += i ? ", " : "";
             if (type->normIsVarAt(i)) {
@@ -2419,10 +2418,9 @@ class CmlPrinter {
         if (type->hasExitType()) {
             signature += ": " + typeText(type->exitType());
         }
-        // `sync` is a modifier of the function type: a function declared `sync func` keeps it even
-        // when its body has no control edge. Otherwise the suffix says the body is a sync block,
-        // which is a control edge between two nodes of the body itself.
-        if (!syncType && regionNeedsSync(0)) {
+        // A function graph whose body has a control edge between its own nodes was written with
+        // a body that is a sync block: the modifier says so, and it is the only mark of it.
+        if (regionNeedsSync(0)) {
             signature += " sync";
         }
         emit(signature + " {");

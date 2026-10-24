@@ -1,7 +1,7 @@
 /**
- * `A(i); wait modify(i); B(i)` outside a sync block (docs/design-principles-log.cn.md 2.6): the
- * compiler orders A -> modify -> B. A observes the old value of i, B the new one, and A has
- * completed before modify starts. Expected output:
+ * `A(i); modify(i); B(i)` in a sync body (docs/language/04_execution_model.md 4.4): the
+ * compiler orders A -> modify -> B by the writing order of the body. A observes the old value
+ * of i, B the new one, and A has completed before modify starts. Expected output:
  *   A 1
  *   modify
  *   B 2
@@ -9,7 +9,7 @@
  * Any other order prints something else: A after modify gives `A 2` and 20020, B before modify
  * gives `B 1` and 10010, and the three lines change places.
  */
-module wait_before_after
+module order_before_after
 
 func before(x: int): int sync {
     println('A {}'->format<x>)
@@ -23,15 +23,15 @@ func after(x: int): int sync {
 
 func modify(var x: int): int sync {
     println('modify')
-    wait x += 1
+    x += 1
     return 0
 }
 
-// Not a sync block: only `wait` orders the three calls.
-func run(): int {
+// A sync body: the three calls are ordered by the writing order of its statements.
+func run(): int sync {
     var i = 1
     let a = before(i)
-    wait modify(i)
+    modify(i)
     let b = after(i)
     return a * 1000 + b
 }

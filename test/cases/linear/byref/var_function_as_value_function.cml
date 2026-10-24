@@ -5,8 +5,8 @@
  */
 module var_function_as_value_function
 
-sync func bump(var x: int) {
-    wait x += 1
+func bump(var x: int) {
+    x += 1
 }
 
 func call(f: (x: int) => void, v: int): int sync {

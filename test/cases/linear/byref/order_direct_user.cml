@@ -1,0 +1,33 @@
+/**
+ * A sync body orders its statements: in `before(i + 1); modify(i)` the call of `before` is
+ * ordered before `modify`, even though `before` never touches `i`. (The retired `wait` ordered
+ * the direct user of the variable instead -- `+`, hence no edge from `before`.)
+ *
+ * run() is a sync body, and its statements run in writing order. The value is
+ *   a = before(1 + 1) = 2, b = i after modify = 11, result 2011
+ * The plan checks the control edges on the graph dump (order_direct_user.graph): `before ->
+ * modify` is present, and so is `modify ->` the read written after it.
+ */
+module order_direct_user
+
+func before(x: int): int {
+    return x
+}
+
+func modify(var x: int): int sync {
+    x += 10
+    return 0
+}
+
+func run(): int sync {
+    var i = 1
+    let a = before(i + 1)
+    modify(i)
+    let b = i
+    return a * 1000 + b
+}
+
+func main(): int sync {
+    println(run())
+    return 0
+}

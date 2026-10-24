@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-266 diagnostics: 247 errors, 19 warnings. 15 carry a machine-applicable edit, 251 say why they carry none.
+265 diagnostics: 248 errors, 17 warnings. 15 carry a machine-applicable edit, 250 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -233,9 +233,8 @@ prints one entry.
 | `0x030001E4` | [SemanticDiag::CompOperandGenericWithoutType](#compoperandgenericwithouttype) | Error | no |
 | `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
-| `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn | no |
+| `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
-| `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn | no |
@@ -1927,13 +1926,13 @@ Only a variable declared with 'var' (or a var parameter) can be modified. Declar
 ```camel
 module let_to_var_param
 
-sync func bump(var x: int) {
-    wait x += 1
+func bump(var x: int) {
+    x += 1
 }
 
 func main(): int sync {
     let k = 0
-    wait bump(k)
+    bump(k)
     println(k)
     return 0
 }
@@ -1971,7 +1970,7 @@ func point(): P {
 }
 
 func main(): int sync {
-    wait point().x = 9
+    point().x = 9
     return 0
 }
 ```
@@ -3046,7 +3045,7 @@ The variable '{0}' cannot be exported.
 **Help**
 
 ```text
-A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export sync func bump(): int sync { wait cnt += 1; return cnt }'). A 'let' can be exported.
+A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export func bump(): int sync { cnt += 1; return cnt }'). A 'let' can be exported.
 ```
 
 **Example** (`test/cases/compile/module_root/export_var.cml`, run as `camel -E short test/cases/compile/module_root/export_var.cml`)
@@ -3121,9 +3120,9 @@ A function that calls itself, directly or through other functions, must use a va
 // could not pass it (CaptureAfterRecursiveCall).
 var count = 0
 
-sync func walk(n: int): int sync {
+func walk(n: int): int sync {
     let rest = if n > 0 then walk(n - 1) else 0
-    wait count += 1
+    count += 1
     return rest + count
 }
 
@@ -3567,7 +3566,7 @@ The initial state fixes the state type. Return that type after 'do', or change t
 module static_loop_body_type
 
 func bad(t: {a: int}): int {
-    return static loop acc = 0 for (n, F) in fields {a: int} do "not an int"
+    return static loop acc = 0 for n, F in fields {a: int} do "not an int"
 }
 
 func main(): int {
@@ -3661,7 +3660,7 @@ The names of a loop's state and the name 'for' binds to the element are declared
 module static_loop_name_repeated
 
 func bad(t: {a: int}): int {
-    return static loop n = 0 for (n, F) in fields {a: int} do n + 1
+    return static loop n = 0 for n, F in fields {a: int} do n + 1
 }
 
 func main(): int {
@@ -5151,7 +5150,7 @@ None: choice: the repair is a decision only the writer can make
 module indices_not_tuple
 
 func bad(t: {a: int, b: int}): int {
-    return static loop acc = 0 for (j) in indices t do acc + 1
+    return static loop acc = 0 for j in indices t do acc + 1
 }
 
 func main(): int {
@@ -5253,7 +5252,7 @@ The rest argument '..{0}' must be the last positional argument.
 module rest_arg_not_last
 
 func sum(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
@@ -5287,7 +5286,7 @@ The rest argument '..{0}' is not a compile-time tuple.
 module rest_arg_not_tuple
 
 func sum(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
@@ -5321,7 +5320,7 @@ A function with a rest parameter has no runtime arity, so it has no function val
 module rest_as_value
 
 func sum(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
@@ -7625,18 +7624,17 @@ The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.
 The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.
 ```
 
-**Example** (`test/cases/compile/stream/range_two_arguments.cml`, run as `camel test/cases/compile/stream/range_two_arguments.cml`)
+**Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`)
 
 ```camel
-// The two-parameter `range(a, b)` is deleted: the interval `a..b` is the one spelling (design
-// principles 4.2, the ruling of 2026-10-24). The call is refused where it stands, with the
-// spelling to write instead.
-module h426_range_two_arguments
+module static_loop_sequence_range_two
 
-func main(): int sync {
-    let xs = range(0, 3)
-    println(xs)
-    return 0
+func sum(): int {
+    return static loop acc = 0 for i in range(0, 3) do acc + i
+}
+
+func main(): int {
+    return sum()
 }
 ```
 
@@ -7660,61 +7658,47 @@ The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers
 The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
 ```
 
-**Example** (`test/cases/compile/stream/range_step_zero.cml`, run as `camel test/cases/compile/stream/range_step_zero.cml`)
+**Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`)
 
 ```camel
-// `range(a, b, 0)` names no sequence at all: the step never moves, so no integers are the
-// sequence and no sequence is the array (design principles 4.2; the author's ruling of
-// 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the refusal is at the
-// call, under the step the program wrote, and says both ways to write what it meant.
-module h426_range_step_zero
+module static_loop_sequence_range_step_zero
 
-func main(): int sync {
-    let xs = range(0, 10, 0)
-    println(xs)
-    return 0
+func sum(): int {
+    return static loop acc = 0 for i in range(0, 9, 0) do acc + i
+}
+
+func main(): int {
+    return sum()
 }
 ```
 
-### VarParamInAsyncFunction
+### StaticLoopSequenceNotKnown
 
-`0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
+`0x030001E7` · Error · `SemanticDiag::StaticLoopSequenceNotKnown`
 
 **Fix**
 
-None: context: the declaration has to be restructured - a 'var' parameter is not allowed in an async function
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
 ```text
-Variable parameters are only allowed in sync functions.
+The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not.
 ```
 
 **Help**
 
 ```text
-Remove the variable parameter or make the function synchronous.
+A 'static loop' is unrolled where it stands, so how many rounds it has must be known then. Every sequence the compiler works out counts: an expression built only from compile-time constants (literals, names bound to constants, the rounds of an enclosing 'static' expansion) through operations that are pure and cannot fail. So 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'range(a, b, step)' with constant arguments, an array literal or a constant array, 'indices ts' for the positions of a compile-time tuple, 'fields T' for the fields of a type, and 'for x in ts' for the type at each position of a compile-time tuple all count. A run-time array or a run-time value leaves the number of rounds open.
 ```
 
-**Example** (`test/cases/compile/diag_json/warnings_visible.cml`, run as `camel test/cases/compile/diag_json/warnings_visible.cml`)
+**Example** (`test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_unknown.cml`)
 
 ```camel
-module warnings_visible
+module static_loop_sequence_unknown
 
-// Line numbers below are asserted by the plan.
-func inc(var x: int): int sync {
-    wait x += 1
-    return 0
-}
-
-func main(): int {
-    var c = 0
-    inc(c)
-    let r = if c > 0 then sync {
-        wait c += 10
-        return 0
-    } else 0
-    return println(c + r)
+func sumTo(n: int): int {
+    return static loop acc = 0 for i in 0..n do acc + i
 }
 ```
 
@@ -7729,13 +7713,13 @@ None: choice: a value that has to be taken has no single spelling - bind it, ret
 **Message**
 
 ```text
-{0} is neither waited nor in a sync block, and {1}.
+{0} is not in a sync block, and {1}.
 ```
 
 **Help**
 
 ```text
-Write 'wait' before the expression or put it in a sync block: only then is the write ordered after the earlier uses of the variable. Without either, the write runs only if the variable is read afterwards.
+Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.
 ```
 
 **Example** (`test/cases/compile/diag_json/warnings_visible.cml`, run as `camel test/cases/compile/diag_json/warnings_visible.cml`)
@@ -7745,7 +7729,7 @@ module warnings_visible
 
 // Line numbers below are asserted by the plan.
 func inc(var x: int): int sync {
-    wait x += 1
+    x += 1
     return 0
 }
 
@@ -7753,34 +7737,12 @@ func main(): int {
     var c = 0
     inc(c)
     let r = if c > 0 then sync {
-        wait c += 10
+        c += 10
         return 0
     } else 0
     return println(c + r)
 }
 ```
-
-### CapturedWriteInAsyncFunction
-
-`0x03100003` · Warn · `SemanticDiag::CapturedWriteInAsyncFunction`
-
-**Fix**
-
-None: context: what the body writes has to be passed in or returned instead of captured
-
-**Message**
-
-```text
-{0} writes the captured variable{1} {2} but is not declared with the 'sync' modifier.
-```
-
-**Help**
-
-```text
-Write 'sync' before the function ('sync func f(...)', 'sync (...) => ...'): the modifier declares that the function has side effects, as it does for a function with a var parameter. It does not make the body a sync block.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### EffectNotExecuted
 
@@ -7849,23 +7811,23 @@ This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: i
 An arm of an 'if' or 'match' is a graph of its own: '{0}' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the '{0}' has no effect and the function goes on with the next statement. To return from the function through a branch, make the '{1}' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
 ```
 
-**Example** (`test/cases/consistency/if_without_else/return_null_in_arm.cml`, run as `camel -E short test/cases/consistency/if_without_else/return_null_in_arm.cml ${backend}`)
+**Example** (`test/cases/compile/diag_json/warning_with_error.cml`, run as `camel --output-format json test/cases/compile/diag_json/warning_with_error.cml`)
 
 ```camel
-module return_null_in_arm
+module warning_with_error
 
-func f(x: int): int sync {
-    if x > 2 then sync {
-        println('big')
+func count(a: int): int sync {
+    var total = 0
+    if a > 0 then sync {
+        total = a
         return null
     }
-    println('after')
-    return x
+    return total
 }
 
 func main(): int sync {
-    println(f(9))
-    return 0
+    println(count(1))
+    return missing_name
 }
 ```
 
@@ -9474,24 +9436,24 @@ Pass '{0}' consumes the graph, so {1} written after it will not run.
 A scheduling pass executes the program and a translation pass translates it; neither hands a graph on, and the pipeline ends there. Remove the passes written after it, or move them before it.
 ```
 
-**Example** (`test/cases/linear/byref/wait_direct_user.cml`, run as `camel test/cases/linear/byref/wait_direct_user.cml std::nvm std::opt::inline std::fvm`)
+**Example** (`test/cases/linear/byref/order_direct_user.cml`, run as `camel test/cases/linear/byref/order_direct_user.cml std::nvm std::opt::inline std::fvm`)
 
 ```camel
-module wait_direct_user
+module order_direct_user
 
 func before(x: int): int {
     return x
 }
 
-sync func modify(var x: int): int sync {
-    wait x += 10
+func modify(var x: int): int sync {
+    x += 10
     return 0
 }
 
-func run(): int {
+func run(): int sync {
     var i = 1
     let a = before(i + 1)
-    wait modify(i)
+    modify(i)
     let b = i
     return a * 1000 + b
 }

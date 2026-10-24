@@ -5,7 +5,7 @@
 module indices_not_tuple
 
 func bad(t: {a: int, b: int}): int {
-    return static loop acc = 0 for (j) in indices t do acc + 1
+    return static loop acc = 0 for j in indices t do acc + 1
 }
 
 func main(): int {

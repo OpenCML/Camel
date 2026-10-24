@@ -1,7 +1,7 @@
 /**
  * A rule's `when` is Camel code of the scope the rule is declared in, and its names are resolved
  * there: a misspelled predicate is an unresolved name like any other, reported on the rule's line,
- * and the module does not load. It does not wait for an instance -- the rule here is generic and
+ * and the module does not load. It does not for an instance -- the rule here is generic and
  * never applied.
  *
  * The silent half of the older ruling is untouched: a condition that names a type for which the

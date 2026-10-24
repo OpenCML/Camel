@@ -1,7 +1,7 @@
 """Generated programs that write variables, compared across pipelines and with a reference.
 
 Each program declares recursive `sync` functions with a `var` parameter that write the variable on
-the way down and / or up (all writes declared and waited), calls them from `main` at several
+the way down and / or up (all writes declared, in sync bodies), calls them from `main` at several
 depths, and prints the results and the final values of the variables. The expected output is
 computed here by a direct simulation, so every pipeline is compared with the reference and not
 only with the default run. Depths go beyond the number of inlining rounds after which a lost write
@@ -71,10 +71,10 @@ def make_function(rng: random.Random, j: int):
         pre = 1
     base = rng.choice([0, 7, -1])          # what the last call returns: a constant
     bump = rng.choice([0, 0, 1])           # what each level adds to the result on the way back
-    lines = [f"sync func rec{j}(i: int, n: int, var c: int): int sync {{", "    return if i >= n then " + str(base) + " else sync {"]
+    lines = [f"func rec{j}(i: int, n: int, var c: int): int sync {{", "    return if i >= n then " + str(base) + " else sync {"]
     if pre:
         lines.append(f"        c += {pre}")
-    lines.append(f"        let r = wait rec{j}(i + 1, n, c)")
+    lines.append(f"        let r = rec{j}(i + 1, n, c)")
     if post:
         lines.append(f"        c += {post}")
     lines.append("        r + " + str(bump) if bump else "        r")
@@ -94,11 +94,11 @@ def make_straight(rng: random.Random, j: int, rec_sims):
     use_rec = rng.random() < 0.6
     rj, depth = rng.randrange(len(rec_sims)), rng.randint(1, 5)
     use_branch = rng.random() < 0.6
-    lines = [f"sync func ign{j}(x: int, var c: int): int sync {{", f"    c += {wa}", f"    return {wb}", "}", "",
-             f"sync func line{j}(var c: int): int sync {{", f"    c += {a1}", "    let k1 = c + 0",
-             f"    let r1 = wait ign{j}(k1 * 3, c)", "    let k2 = c + 0", f"    c += {a2}"]
+    lines = [f"func ign{j}(x: int, var c: int): int sync {{", f"    c += {wa}", f"    return {wb}", "}", "",
+             f"func line{j}(var c: int): int sync {{", f"    c += {a1}", "    let k1 = c + 0",
+             f"    let r1 = ign{j}(k1 * 3, c)", "    let k2 = c + 0", f"    c += {a2}"]
     if use_rec:
-        lines.append(f"    let r2 = wait rec{rj}(0, {depth}, c)")
+        lines.append(f"    let r2 = rec{rj}(0, {depth}, c)")
     if use_branch:
         lines.append(f"    let r3 = if k1 > {t} then sync {{ c += {ba}; 1 }} else sync {{ c += {bb}; 2 }}")
     lines.append("    let k3 = c + 0")
@@ -128,7 +128,7 @@ def make_straight(rng: random.Random, j: int, rec_sims):
 def make_arms(rng: random.Random, j: int):
     """Nested run-time branches around a call of a self-tail-recursive function (see the module text).
     Returns the source and simulate(k, x, c) -> (result, c, printed lines)."""
-    var_flavor = rng.random() < 0.3       # the recursion writes the variable (a sync function)
+    var_flavor = rng.random() < 0.3       # the recursion writes the variable (a sync body)
     mul, step = rng.choice([2, 3]), rng.choice([1, 5])
     base = rng.choice(["tap", "tap", "mul", "acc"])                # pure flavor: what ends the recursion
     base_write, level_write, base_print = rng.choice([0, 7]), rng.choice([0, 1]), rng.random() < 0.5
@@ -150,12 +150,12 @@ def make_arms(rng: random.Random, j: int):
         ends = [f"println('basev{j} {{}}'->format<acc>)"] if base_print else []
         ends += [f"c += {base_write}"] if base_write else []
         ends.append(f"acc * {mul}")
-        lines = [f"sync func loop{j}(i: int, n: int, acc: int, var c: int): int sync {{",
+        lines = [f"func loop{j}(i: int, n: int, acc: int, var c: int): int sync {{",
                  "    return if i >= n then sync { " + "; ".join(ends) + " } else sync {"]
         if level_write:
             lines.append(f"        c += {level_write}")
-        lines += [f"        let a2 = acc + {step}", f"        wait loop{j}(i + 1, n, a2, c)", "    }", "}", ""]
-        call = f"wait loop{j}({i0}, {bound}, x, c)"
+        lines += [f"        let a2 = acc + {step}", f"        loop{j}(i + 1, n, a2, c)", "    }", "}", ""]
+        call = f"loop{j}({i0}, {bound}, x, c)"
     else:
         end = {"tap": f"tap{j}(acc)", "mul": f"acc * {mul}", "acc": "acc"}[base]
         lines = [f"func tap{j}(a: int): int sync {{", f"    println('tap{j} {{}}'->format<a>)", f"    return a * {mul}", "}", "",
@@ -179,7 +179,7 @@ def make_arms(rng: random.Random, j: int):
             text = ("sync " if effects else "") + "{\n" + f"let q{depth_index} = {branch}\nq{depth_index}\n" + "}"
         else:
             text = f"let r = {branch}"
-    lines += [f"sync func arms{j}(k: int, x: int, var c: int): int sync {{", text, "    return r", "}", ""]
+    lines += [f"func arms{j}(k: int, x: int, var c: int): int sync {{", text, "    return r", "}", ""]
 
     def simulate(k: int, x: int, c: int):
         out = []
@@ -223,7 +223,7 @@ def make_arms_program(rng: random.Random, k: int):
             start, runtime_x = rng.choice([0, 5]), dk == 0 or rng.random() < 0.5
             x_text, x = ("k * 10 + 7", ENV_VALUE * 10 + 7) if runtime_x else ("9", 9)
             body.append(f"    var v{v} = {start}")
-            body.append(f"    let x{v} = wait arms{j}(k + {dk}, {x_text}, v{v})")
+            body.append(f"    let x{v} = arms{j}(k + {dk}, {x_text}, v{v})")
             body.append(f"    println('arms{j} +{dk}: {{}} {{}}'->format<x{v}, v{v}>)")
             r, c, printed = sim(ENV_VALUE + dk, x, start)
             expected += printed + [f"arms{j} +{dk}: {r} {c}"]
@@ -244,7 +244,7 @@ def make_program(rng: random.Random, k: int):
             v += 1
             start = rng.choice([0, 5])
             body.append(f"    var v{v} = {start}")
-            body.append(f"    let x{v} = wait rec{j}(0, {depth}, v{v})")
+            body.append(f"    let x{v} = rec{j}(0, {depth}, v{v})")
             body.append(f"    println('f{j} depth {depth}: {{}} {{}}'->format<x{v}, v{v}>)")
             r, c = sims[j](depth, start)
             expected.append(f"f{j} depth {depth}: {r} {c}")
@@ -254,7 +254,7 @@ def make_program(rng: random.Random, k: int):
         for start in (0, 3):
             v += 1
             body.append(f"    var v{v} = {start}")
-            body.append(f"    let x{v} = wait line{j}(v{v})")
+            body.append(f"    let x{v} = line{j}(v{v})")
             body.append(f"    println('line{j} from {start}: {{}} {{}}'->format<x{v}, v{v}>)")
             r, c = sim(start)
             expected.append(f"line{j} from {start}: {r} {c}")

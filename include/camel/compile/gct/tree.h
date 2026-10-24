@@ -110,7 +110,6 @@ class Tree {
     /// every other node.
     std::optional<OperId> operRefOf(const Node *node) const;
     node_ptr_t makeVari();
-    node_ptr_t makeWait();
     node_ptr_t makeLink(size_t argCount);
     node_ptr_t makeWith(size_t argCount);
     node_ptr_t makeTypeApplication();
@@ -128,13 +127,15 @@ class Tree {
     /// (empty for `indices`); both are bound only while the body is built.
     node_ptr_t makeStaticFor(
         const std::string &valueName, const std::string &typeName, bool byIndices = false);
-    /// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body` (children: TYPE, the k
-    /// first values, body), or the same over `indices ts` (children: the operand value, the k
-    /// first values, body). `state` are the names of the state; `valueName` is `n` (or `j`) and
-    /// `typeName` is `F` (empty for `indices`), both bound only while the body is built.
+    /// `static loop s1 = a1, ..., sk = ak for i in <序列> do body`: `in fields T` (children:
+    /// TYPE, the k first values, body), `in indices ts` (children: the operand value, the k first
+    /// values, body), or a written sequence (the same children as `indices`; `bySequence`).
+    /// `state` are the names of the state; `valueName` is `n`, `j` or the element's name and
+    /// `typeName` is `F` (empty for `indices` and for a sequence), both bound only while the body
+    /// is built. `byIndices` and `bySequence` are never both true (H462).
     node_ptr_t makeStaticLoop(
         const std::vector<std::string> &state, const std::string &valueName,
-        const std::string &typeName, bool byIndices = false);
+        const std::string &typeName, bool byIndices = false, bool bySequence = false);
     /// `t.[key]` (children: the target, the key expression).
     node_ptr_t makeStaticAccess();
     /// `..e` (child: the operand): the elements of the compile-time tuple are the arguments.

@@ -11,7 +11,7 @@ type Node = { value: int, children: Node[] }
 func total(node: Node): int sync {
     var acc = node.value
     let _ = loop i = 0 while i < len(node.children) do sync {
-        wait acc += total(node.children[i])
+        acc += total(node.children[i])
         i + 1
     }
     return acc
@@ -50,7 +50,7 @@ func main(): void sync {
         // type; the temporary tree is then a Node too.
         let child: Node = { value: i + 1, children: [] }
         let temp: Node = { value: i, children: [child] }
-        wait sink += total(temp)
+        sink += total(temp)
         i + 1
     }
     // `kept` and `wide` were live across the collections and are still the same trees.
