@@ -855,7 +855,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_dim_name_recursion.graph"
-desc = "The graph of the same program names what the widening did to the types: the one instance the recursion takes is declared `(n: int, xs: f32[k]) => f32`, the declaration itself with the name still unbound (never `f32[8]`), and the call its recursive arm makes is the base function, not another instance."
+desc = "The graph of the same program names what the widening did to the types: the one instance the recursion takes is declared `(n: int, xs: f32[k]) => f32`, the declaration itself with the name still unbound and never the eight the entry argument is long, and the call inside it is a call of the base `sniff` that takes no further instance."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_dim_name_recursion.cml"
 args = ["${case}", "std::opt::specialize", "std::jgir"]
