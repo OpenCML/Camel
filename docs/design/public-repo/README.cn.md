@@ -52,6 +52,7 @@ docs/
                              CLI 参考、诊断目录
   internals/                 编译器与运行时：每个模块一篇（见下）
   design.md                  设计取舍：语言的定位与原则（设计原则的公开版，不含裁定记录与内部措辞）
+  reference/camel-for-ai.md  给 AI 的精炼语言参考（一份写全规则、能放进上下文；根目录 `llms.txt` 指向它）
   assets/
 ```
 
