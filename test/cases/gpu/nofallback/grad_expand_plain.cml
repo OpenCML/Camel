@@ -1,0 +1,45 @@
+/**
+ * The same gradient program without a tag: `autodiff::expand` must leave it exactly as it is.
+ *
+ * The expansion only rewrites a `grad`/`with_grad` call site inside a `#gpu` scope, because that
+ * is the case where no pass would otherwise ever see the derived graph
+ * (docs/design/gpu/plan.cn.md 2.6). Outside a scope the operator keeps building its gradient at
+ * run time, and the plan's requirement is that nothing else moves: the graph a program without
+ * the tag compiles to is byte-identical with and without the pass.
+ *
+ * The two runs of `std::jgir` this pairs with (`grad_expand.untagged_graph_unchanged` and
+ * `grad_expand.untagged_graph_is_byte_identical`) compare the whole dumped document, so any
+ * difference the pass made anywhere — a node, an attribute, an edge, a reference — fails the
+ * pair.
+ */
+module gpu_grad_expand_plain
+
+import { Tensor, abs, reshape, sum } from tensor
+import { with_grad } from autodiff
+
+type M = {
+    p0: Tensor<f32, [3]>,
+    x: Tensor<f32, [2, 3]>,
+}
+
+with <m: M>
+func loss(): float sync {
+    return sum(m.x * m.p0)
+}
+
+func step(m: M): Tensor<f32, [3]> sync {
+    let vg = with_grad(loss)<m>()
+    return vg.1.p0
+}
+
+func main(): int sync {
+    let m = {
+        p0: reshape([0.5, 0.25, 2.0] as f32[], [3]),
+        x: reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]),
+    }
+    let gradient = step(m)
+    let expected = reshape([5.0, 7.0, 9.0] as f32[], [3])
+    println("gradient {}"->format<gradient>)
+    println("wrong {}"->format<sum(expected - expected) + sum(abs(gradient - expected))>)
+    return 0
+}

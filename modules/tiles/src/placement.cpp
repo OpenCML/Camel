@@ -6,6 +6,7 @@
 #include "tiles/internal/placement.h"
 
 #include "camel/core/node_attrs.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/runtime/program.h"
 
 #include <nlohmann/json.hpp>
@@ -19,6 +20,48 @@ namespace camel::tiles {
 namespace {
 
 namespace attr = camel::core::attr;
+
+/// The graph of the function constant a node holds, or nullptr when the node is not one or holds
+/// no function: a DATA node whose static slot is a `Function` value (a named function, or the
+/// derived graph `autodiff::expand` leaves at a grad call site).
+const runtime::GCGraph *functionGraphOf(const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
+    const runtime::GCNode *node = graph.node(id);
+    if (node == nullptr || node->kind != runtime::GCNodeKind::Data || node->dataIndex >= 0) {
+        return nullptr;
+    }
+    const auto slots  = graph.staticSlots();
+    const size_t slot = static_cast<size_t>(-node->dataIndex);
+    if (slot >= slots.size() || slots[slot] == NullSlot) {
+        return nullptr;
+    }
+    auto *fn = camel::core::rtdata::fromSlot<::Function *>(slots[slot]);
+    return fn == nullptr ? nullptr : fn->graph();
+}
+
+/// The graph a call node reaches, whether it names it (`Func`) or holds it as a value (`Call`).
+/// A call through a value whose value is not a constant has no one graph: the run chooses it.
+const runtime::GCGraph *calleeGraphOf(
+    const runtime::Program &program, const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
+    // A caller reaches this for every node of a scope graph, not only for the calls it looks at:
+    // a node that is not one of the two call kinds reaches no graph.
+    if (graph.node(id) == nullptr || (graph.node(id)->kind != runtime::GCNodeKind::Func &&
+                                      graph.node(id)->kind != runtime::GCNodeKind::Call)) {
+        return nullptr;
+    }
+    if (graph.node(id)->kind == runtime::GCNodeKind::Func) {
+        return program.calleeOf(graph, id);
+    }
+    // The call reads its callee as a value: `autodiff::expand` replaces the grad operator at the
+    // call site with the function constant of the derived graph (docs/design/gpu/plan.cn.md 2.6),
+    // and a call through it is a call to that graph, exactly as a written call to a named
+    // function is.
+    for (const runtime::gc_node_ref_t operand : graph.withInputsOf(id)) {
+        if (const runtime::GCGraph *callee = functionGraphOf(graph, operand)) {
+            return callee;
+        }
+    }
+    return nullptr;
+}
 
 attr::AttrSetId bodyAttrs(const runtime::GCGraph &graph) {
     return graph.regionCount() > 0 && graph.region(0) ? graph.region(0)->attrs : attr::kNoAttrs;
@@ -279,11 +322,9 @@ GpuScopes::GpuScopes(const runtime::Program &program) {
     // A call written in a device scope (a `#gpu` body or block) makes the callee one too, even
     // when the code around the block is the host's: that call is still a device call.
     const auto addCall = [&](const runtime::GCGraph &graph, runtime::gc_node_ref_t id) {
-        if (graph.node(id)->kind != runtime::GCNodeKind::Func)
-            return;
         if (placementOf(graph, id).fact == "cpu")
             return;
-        const runtime::GCGraph *callee = program.calleeOf(graph, id);
+        const runtime::GCGraph *callee = calleeGraphOf(program, graph, id);
         if (callee == nullptr || scopeOf_.contains(callee))
             return;
         const auto found = scopeOf_.find(&graph);
