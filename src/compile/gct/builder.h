@@ -318,6 +318,10 @@ class Builder {
     /// (`let p: P = { a: 1, b: 2.0 }`). Only when the literal writes exactly the fields of
     /// `structType`: any other shape is left to the ordinary build, which reports it.
     node_ptr_t visitStructInto(const AST::node_ptr_t &ast, Type *structType, bool &entered);
+    /// The tuple literal `ast` built with every element in the type its position gives it
+    /// (`let t: (f32, f32) = (1.0, 2.0)`). Only when the literal writes as many elements as the
+    /// tuple type: any other shape is left to the ordinary build, which reports it.
+    node_ptr_t visitTupleInto(const AST::node_ptr_t &ast, Type *tupleType, bool &entered);
     /// `node` as a constant of `type` when it is a literal the tree kept the exact value of
     /// (an integer literal becomes the float type exactly, a value out of range or one that
     /// would be truncated is reported at `at`); the same node when it is not a literal, or

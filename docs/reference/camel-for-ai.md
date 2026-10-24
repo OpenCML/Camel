@@ -55,7 +55,7 @@ last column below, which is read out of this table and measured against the chap
 | 13. Accepted and then rejected | reserved spellings and their diagnostics | 2,600 |
 | 14. Not implemented yet (`target`) | what to avoid until its design lands | 1,700 |
 | Appendix A. Diagnostics | name, severity, message — generated | 28,000 |
-| Appendix B. Standard library signatures | every exported name — generated | 27,000 |
+| Appendix B. Standard library signatures | every exported name — generated | 28,000 |
 | Appendix C. Sources | which normative page each rule comes from | 1,800 |
 | — | generated, all four regions | 61,000 |
 | — | hand-written, this header and sections 2–14 with Appendix C | 54,000 |
@@ -258,7 +258,7 @@ equal contents are equal. Numeric types never convert implicitly: `i32` with `in
 (`let x: f32 = 1`); variables do not. Convert with `float(n)`, `int(x)`, `string(v)`.
 
 `a..b` is the integer interval [a, b) — left-closed, right-open, an `int[]`, integers only; with two
-functions `f..g` is the composition `x => g(f(x))`, which can be called, passed on, or used directly
+functions `f..g` is the composition `(x) => g(f(x))`, which can be called, passed on, or used directly
 in a higher-order call; `..` binds tighter than `->`, so `x->f..g` is `x->(f..g)`.
 
 ```camel
@@ -922,6 +922,8 @@ rule add_zero(x: int) {
 **Write instead:**
 
 ```camel
+import { is_ordered } from types
+
 func pick::<T>(x: T): T when is_ordered::<T>() {
     return x
 }
@@ -1299,7 +1301,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `UnterminatedComment` | E | Unterminated comment: {0}. |
 | `InvalidEscapeSequence` | W | Invalid escape sequence in string: {0}. |
 
-**Syntax** (`SyntaxDiag`) — 18 (17 errors, 1 warning)
+**Syntax** (`SyntaxDiag`) — 19 (18 errors, 1 warning)
 
 | `MissingClosingDelimiter` | E | Expected '{0}' before {2}, to close the '{1}'. |
 | `UnmatchedClosingDelimiter` | E | Unexpected '{0}': no '{1}' is open here. |
@@ -1318,6 +1320,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `EmptyInterpolation` | E | An interpolation has no expression to format. |
 | `AsRightSideIsType` | E | The right side of '{0}' is a type; write the interval as '(a..b)'. |
 | `WhenAfterBody` | E | A 'when' condition comes before what it guards, so {0} cannot follow it. |
+| `LambdaParametersNeedParentheses` | E | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 | `ComparisonAcrossLines` | W | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
 **Semantic** (`SemanticDiag`) — 202 (188 errors, 14 warnings)
@@ -1794,8 +1797,12 @@ concat: (a: Tensor | number[], b: Tensor | number[], axis: int) => Tensor
 slice: (t: Tensor, axis: int, start: int, end: int, step?: int) => Tensor
 take: (t: Tensor, indices: Tensor | number[]) => Tensor
 one_hot: (labels: Tensor | number[], classes: int) => Tensor
+shape: (t: T[..]) => int[] when is_numeric::<T>()
 shape: (t: Tensor) => int[]
+numel: (t: T[..]) => int when is_numeric::<T>()
 numel: (t: Tensor) => int
+dim: (t: T[..], axis: int) => int when is_numeric::<T>()
+dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
 dim: (t: Tensor, axis: int) => int
 dim: (t: Tensor, axis: i32) => int
 sum: (t: Tensor) => float
@@ -1818,8 +1825,10 @@ cast: (t: Tensor | number[], dtype: string) => Tensor
 show: (t: Tensor) => void
 show: (t: A[]) => void
 from_bytes: (bytes: Bytes, shape: int[]) => Tensor
+to_bytes: (t: T[..]) => Bytes when is_numeric::<T>()
 to_bytes: (t: Tensor) => Bytes
 load_npy: (path: string) => Tensor
+save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
 save_npy: (t: Tensor, path: string) => void
 num_threads: () => int
 set_num_threads: (n: int) => void
@@ -2253,7 +2262,7 @@ rewrite: (p: Program, rules: Rule[], strict: bool) => Program!
 saturate: (p: Program, rules: Rule[], rounds: int) => Program!
 saturate: (p: Program, rules: Rule[], rounds: int, strict: bool) => Program!
 extract: (p: Program, cost: string) => Program!
-check: (rules: Rule[], samples: int, seed: int) => CheckReport
+check: (rules: Rule[], samples: int = 100, seed: int = 0, program: Program? = null) => CheckReport
 check_text: (r: CheckReport) => string
 check_row_count: (r: CheckReport) => int
 check_rule: (r: CheckReport, row: int) => string!

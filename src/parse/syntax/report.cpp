@@ -477,6 +477,38 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
             }
         }
 
+        // `x => e`. A lambda's parameters need their parentheses (design principles 5.9; the
+        // author's ruling of 2026-10-24 on `composition-expected-type-edges`, item 4): where a
+        // name stands directly before an arrow that fits nothing, the writer wrote the one
+        // spelling the language does not have. It is reported by name rather than as a token that
+        // did not fit, and before the repairs below, because the same mistake reaches them as a
+        // missing ',' (`[x => 1]`, `f(a, x => 1)`) or as the '<' of an angle-bracket list
+        // (`xs->map<x => x + 1>`), where the named diagnostic is the one that says what to write.
+        // A rule body is the one place a name before an arrow is read: there the arrow is the
+        // rule's own (`rule r(x: int) { x => x }`), and it is consumed before any of this.
+        if (offToken.kind == TokenKind::FatArrow && previous != offending &&
+            buffer[previous].kind == TokenKind::Identifier) {
+            if (once(SyntaxDiag::LambdaParametersNeedParentheses, offending)) {
+                auto builder =
+                    diagnostics.of(SyntaxDiag::LambdaParametersNeedParentheses).at(at(offending));
+                // The repair is one text when a single name stands before the arrow: wrap it. A
+                // list of names (`x, y => e`) is not wrapped, because the names before the arrow
+                // read the same way as the arguments of a call (`f(a, x => e)`), and a fix that
+                // wraps the wrong range is a wrong change a tool would apply without asking.
+                const size_t previousPosition = scan.positionOf(previous);
+                const uint32_t beforePrevious =
+                    previousPosition > 0 ? scan.significant[previousPosition - 1] : previous;
+                if (beforePrevious == previous || buffer[beforePrevious].kind != TokenKind::Comma) {
+                    builder.fix(
+                        "put the parameters in parentheses",
+                        at(previous),
+                        std::format("({})", buffer.text(buffer[previous])));
+                }
+                builder.commit();
+            }
+            continue;
+        }
+
         // 3. Rule 1: the parse failed directly inside an angle-bracket list.
         if (error.kind == SyntaxError::Kind::AngleCloseAfterSpace) {
             if (once(SyntaxDiag::AngleCloseAfterSpace, error.aux)) {

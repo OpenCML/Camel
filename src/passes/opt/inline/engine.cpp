@@ -37,6 +37,8 @@
 
 namespace {
 
+using camel::runtime::GCRegion;
+using camel::runtime::GCRegionKind;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
@@ -62,29 +64,64 @@ bool shouldInlineTarget(
     }
 }
 
-bool isSmallRuntimeSubgraphForInline(const GCGraph *bodyGraph, const InlineRewriteConfig &config) {
-    if (!bodyGraph) {
-        return false;
+/// True when the region a node lies in is one an inline splice added to this graph, directly or
+/// through the region that holds it: its nodes are a copy of another function's body, not this
+/// function's own computation (GCRegionKind::Inline, camel/runtime/graph.h).
+bool nodeCameFromInlineSplice(const GCGraph *graph, uint32_t region) {
+    for (uint32_t id = region; id != 0;) {
+        const GCRegion *holder = graph->region(id);
+        if (!holder) {
+            break;
+        }
+        if (holder->kind == GCRegionKind::Inline) {
+            return true;
+        }
+        id = holder->parent;
     }
+    return false;
+}
 
-    size_t nonDataPortCount = 0;
-    for (auto it = bodyGraph->nodes().begin(); it != bodyGraph->nodes().end(); ++it) {
+/// The function's own computation: the OPERs, the calls it makes and the structural nodes
+/// (BRCH/JOIN/LOOP/FUNC) it is made of. A constant (DATA), a parameter (PORT), a GATE and the
+/// bookkeeping an inline splice adds (a GATE per argument, a SYNC, the nodes of a function the
+/// splice copied in) are not counted. This is the measure of "how small is the function"
+/// (InlineRewriteConfig::smallSubgraphMaxComputeNodes) and what a message about a callee's size
+/// reports; the same function answers the same whatever the splice implementation does (review
+/// 2026-10-24: "how small is a function" measures the compute nodes of the function being
+/// inlined).
+size_t inlinedComputeNodeCount(const GCGraph *graph) {
+    size_t count = 0;
+    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
         const auto *node = *it;
         if (!node) {
             continue;
         }
-        if (node->kind == GCNodeKind::Data || node->kind == GCNodeKind::Port) {
+        switch (node->kind) {
+        case GCNodeKind::Data: // a constant
+        case GCNodeKind::Port: // a parameter
+        case GCNodeKind::Gate: // orders a value after something; a splice adds one per argument
+        case GCNodeKind::Sync: // stands for several control predecessors at a splice
+        case GCNodeKind::Dead:
+            continue;
+        default:
+            break;
+        }
+        if (nodeCameFromInlineSplice(graph, graph->nodeRegion(it.ref()))) {
             continue;
         }
-        nonDataPortCount++;
-        if (nonDataPortCount > config.smallSubgraphMaxNonDataPortNodes) {
-            return false;
-        }
+        count++;
     }
-    return true;
+    return count;
 }
 
-/// Nodes of `graph` that inlining copies (all but constants and ports).
+bool isSmallRuntimeSubgraphForInline(const GCGraph *bodyGraph, const InlineRewriteConfig &config) {
+    return bodyGraph &&
+           inlinedComputeNodeCount(bodyGraph) <= config.smallSubgraphMaxComputeNodes;
+}
+
+/// Nodes of `graph` that inlining copies (all but constants and ports). This is what the copy
+/// costs the growth budget and the owner cap; how small the function is is a different question
+/// (inlinedComputeNodeCount).
 size_t inlinedNodeCount(const GCGraph *graph) {
     size_t count = 0;
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
@@ -535,6 +572,7 @@ struct DeclinedCall {
     const GCGraph *callee;
     InlineDecline why;
     size_t calleeNodes;
+    size_t calleeComputeNodes;
     size_t callerNodes;
     size_t callSites;
 };
@@ -879,10 +917,13 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 // checked last (below), so that a call they stop is known to be one the engine
                 // would otherwise have inlined.
                 const size_t copied = inlinedNodeCount(calleeGraph);
-                const size_t calls  = callBook.calls(calleeGraph);
-                const auto decline = [&](InlineDecline why) {
+                // How small the callee is: its own computation, not what a splice has added to
+                // its body (see inlinedComputeNodeCount). Reported with a call the engine leaves.
+                const size_t computed = inlinedComputeNodeCount(calleeGraph);
+                const size_t calls    = callBook.calls(calleeGraph);
+                const auto decline    = [&](InlineDecline why) {
                     declined.push_back(
-                        {nextGraph, calleeGraph, why, copied, draft.nodeCount(), calls});
+                        {nextGraph, calleeGraph, why, copied, computed, draft.nodeCount(), calls});
                 };
                 if (shouldSkipRecursiveInline(
                         nextGraph,
@@ -1015,6 +1056,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
              call.callee->name(),
              call.why,
              call.calleeNodes,
+             call.calleeComputeNodes,
              call.callerNodes,
              call.callSites});
     }
@@ -1217,7 +1259,7 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         report->budgetFromParameter = config.growthBudget.written;
         report->passName            = config.growthBudget.passName;
         report->maxOwnerNodes       = config.inlineConfig.maxOwnerNodes;
-        report->smallNodes          = config.inlineConfig.smallSubgraphMaxNonDataPortNodes;
+        report->smallNodes          = config.inlineConfig.smallSubgraphMaxComputeNodes;
         report->declined            = std::move(declined);
         context->setPassFact(kInlineReportFactKey, std::move(report));
     }

@@ -1,0 +1,20 @@
+/**
+ * A numeric array follows the `+` the tensor module declares for it (design principles 4.2,
+ * 4.3): `a += b` is `a = a + b`, a new array computed and the variable rebound, exactly as for
+ * a number — the type's origin does not enter the rule, only whether `a + b` is defined and
+ * gives `a`'s type.
+ */
+module tensor_add_assign
+
+import { Tensor, ones, sum } from tensor
+
+func main(): int sync {
+    var a: Tensor<f32, [3]> = ones([3])
+    let b: Tensor<f32, [3]> = ones([3]) + ones([3])
+    let old                  = a
+    a += b
+    println(sum(a), sum(old))
+    a *= b
+    println(sum(a), sum(old))
+    return 0
+}

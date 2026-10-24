@@ -83,6 +83,22 @@ struct DiagnosticInfo {
     std::string message;
     std::string suggestion;
     std::vector<std::string> notes;
+    /// The changes the report asks for that an editor can apply without asking (the compiler's
+    /// `DiagFix`): a title that says what the change does, and the edits that carry it out. An
+    /// edit replaces the text its range covers with `newText`; the empty range inserts, the empty
+    /// `newText` deletes, and the edits of one fix name disjoint ranges of the file the diagnostic
+    /// is located in, applied to the text as written. Empty where the compiler does not know the
+    /// text to write; `suggestion` is then the advice in words. A fix is what
+    /// `textDocument/codeAction` hands the editor.
+    struct Fix {
+        struct Edit {
+            Range range;
+            std::string newText;
+        };
+        std::string title;
+        std::vector<Edit> edits;
+    };
+    std::vector<Fix> fixes;
     struct Related {
         uint32_t file = 0;
         Range range;

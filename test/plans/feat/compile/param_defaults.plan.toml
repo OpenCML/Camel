@@ -286,3 +286,27 @@ expect_diagnostic_line = 10
 expect_output_contains = ["default of the parameter 'p' is not a compile-time constant"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.nullable_default"
+desc = "A `T?` parameter takes `null` as its default: `null` is a compile-time constant of the nullable type it stands in (design principles 4.4, 5.1, the ruling of 2026-10-24 on `check-program-parameter`), so the declaration is accepted and a call that leaves the parameter out reads the declaration's one null, while a call that gives a value overrides it -- including a parameter after the defaulted one, given by name."
+kind = "behavior"
+case = "../../../cases/compile/param_defaults/default_nullable.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "7\n3\n9\nnone\nsome 5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 12000
+
+[[tests]]
+name = "param_defaults.null_not_nullable"
+desc = "`null` is the constant of a nullable type and of no other (design principles 3.8, 4.4): a default of `null` for a parameter of a type with no `?` is ParamDefaultWrongType, at the default expression, and the message says the type the value has."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/default_null_not_nullable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamDefaultWrongType"
+expect_diagnostic_line = 8
+expect_output_contains = ["default of the parameter 'p' has type 'void', not 'int'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

@@ -10,14 +10,16 @@
  * the integer family is instantiable at `int` and `i32` and the floating family at `float`, `f32`,
  * `bf16` and `f16` (the condition `is_float::<T>()` holds for all four -- design principles 7.3).
  *
- * Two of the four floating instances are reported `unchecked` with their reason: `check`'s sampler
- * draws `int`, `i32`, `float`, `f32`, `bool` and tensors of them, and a `bf16`/`f16` instance needs
- * an element-epsilon tolerance this lane did not invent
- * (`docs/handover/reviews/questions-2026-10-23.md（§check-generic-instance-space）`). The 39 rules of this list are 70
- * instances of generic laws (13 integer laws x 2 types, 11 floating laws x 4 types -- the two
- * accuracy laws are not in this list) besides the 15 rules of it that are not generic, so the report
- * is 85 lines: 48 instances with a verdict, 22 instances reported with a reason, and the 15 rules
- * that are not generic.
+ * Every floating instance is checked, the two reduced-precision ones included: the sampler draws a
+ * `bf16` and an `f16` as it draws an f32 -- the drawn value is rounded once into the element type,
+ * a tensor of either type is two bytes per element -- and the comparison uses the element epsilon
+ * of the type the instance is at (the ruling of 2026-10-23 on
+ * `docs/handover/reviews/questions-2026-10-23.md`, §check-generic-instance-space, 3, which opened
+ * this lane; `check_reduced_element_type.cml` is the case that reads those rows one by one). The 39
+ * rules of this list are 70 instances of generic laws (13 integer laws x 2 types, 11 floating laws
+ * x 4 types -- the two accuracy laws are not in this list) besides the 15 rules of it that are not
+ * generic, so the report is 85 lines: 70 instances with a verdict and the 15 rules that are not
+ * generic.
  *
  * The rules below that are not generic -- the tensor laws, `float_double`, `float32_double` -- are
  * checked as they were. That this list is the library's list is asserted by
