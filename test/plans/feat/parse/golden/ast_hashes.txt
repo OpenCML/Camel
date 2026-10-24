@@ -8,8 +8,8 @@ d4a926a0e303904e ok test/cases/parse/constructs/comprehensions.cml
 b441dbe0dae31665 ok test/cases/parse/constructs/literals.cml
 cd7c99fe2ec05bdc ok test/cases/parse/constructs/match_guard.cml
 a5e9896ce55676d8 ok test/cases/parse/constructs/operator_name.cml
-313fc122bdc7bf03 ok test/cases/parse/constructs/rest_signature.cml
-a29a9f091dfcc477 ok test/cases/parse/constructs/static_loop.cml
+6b3b84a63e8e8e9a ok test/cases/parse/constructs/rest_signature.cml
+28bf5f62951274b6 ok test/cases/parse/constructs/static_loop.cml
 17cd43b603695566 ok test/cases/parse/constructs/tags.cml
 8abbc9717bdde956 ok test/cases/parse/constructs/type_arguments.cml
 2fe3134d6fc3e87e no test/cases/parse/numbers/bad_octal_digit.cml

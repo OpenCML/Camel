@@ -275,23 +275,29 @@ class StaticForLoad : public DataLoad {
     bool byIndices_ = false;
 };
 
-/// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body` (or `in indices ts`):
-/// children [0] a Repeated Data of the first values, [1] the walked shape (a type for `fields`,
-/// a value for `indices`), [2] the body (a block). The load holds the names of the state and the
-/// generator's bindings; the rounds are the fields of `T` or the positions of `ts`.
+/// `static loop s1 = a1, ..., sk = ak for i in <序列> do body` (`in fields T`, `in indices ts`,
+/// or a sequence the compiler works out — the ruling of 2026-10-24, H462, dropped the
+/// parentheses the head used to carry): children [0] a Repeated Data of the first values, [1] the
+/// walked shape (a type for `fields`, a value for `indices` and for a sequence), [2] the body (a
+/// block). The load holds the names of the state and the generator's bindings; the rounds are the
+/// fields of `T`, the positions of `ts`, or the elements of the sequence. `byIndices` and
+/// `bySequence` are never both set, and neither is set for `fields`.
 class StaticLoopLoad : public DataLoad {
   public:
     StaticLoopLoad(
         std::vector<Reference> state, std::string valueName, std::string typeName,
-        bool byIndices = false)
+        bool byIndices = false, bool bySequence = false)
         : DataLoad(DataType::StaticLoop), state_(std::move(state)),
           valueName_(std::move(valueName)), typeName_(std::move(typeName)),
-          byIndices_(byIndices) {}
+          byIndices_(byIndices), bySequence_(bySequence) {}
 
     const std::vector<Reference> &state() const { return state_; }
     const std::string &valueName() const { return valueName_; }
     const std::string &typeName() const { return typeName_; }
     bool byIndices() const { return byIndices_; }
+    /// The head is `in <序列>`: the written sequence, whose elements the compiler must work out
+    /// (a constant interval today). Only one name is bound, the element itself, not a position.
+    bool bySequence() const { return bySequence_; }
     const std::string toString() const override { return "StaticLoop" + this->status(); }
     const std::string geneCode() const override { return "static loop"; }
 
@@ -299,7 +305,8 @@ class StaticLoopLoad : public DataLoad {
     std::vector<Reference> state_;
     std::string valueName_;
     std::string typeName_;
-    bool byIndices_ = false;
+    bool byIndices_  = false;
+    bool bySequence_ = false;
 };
 
 /// `t.[key]`: children [0] the target, [1] the key expression. The key must be a compile-time

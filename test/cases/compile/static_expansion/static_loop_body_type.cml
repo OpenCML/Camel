@@ -5,7 +5,7 @@
 module static_loop_body_type
 
 func bad(t: {a: int}): int {
-    return static loop acc = 0 for (n, F) in fields {a: int} do "not an int"
+    return static loop acc = 0 for n, F in fields {a: int} do "not an int"
 }
 
 func main(): int {
