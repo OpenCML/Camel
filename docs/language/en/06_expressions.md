@@ -226,8 +226,7 @@ false
 
 - entering the nullable or fallible form: `5 as int?`, `null as int?`, `v as int!` (not needed where the target type is known, see [3.4](03_data_model.md));
 - constructing maps and sets: `[...] as Map<K, V>`, `[...] as Set<T>`;
-- checked conversion of module types: `t as Tensor<f32, [3]>`, where the shape is checked at the conversion.
-- checked conversion of arrays: `a as f32[4]`, where the shape is checked at the conversion.
+- The checked conversion of an array: `a as f32[4]`, where the shape is checked at the conversion; `Tensor<f32, [3]>` is another spelling of a numeric array (kept during the transition), and `t as Tensor<f32, [3]>` is the same conversion.
 
 `as` never changes the type of a value unchecked. The result of `json::decode` is a `Json`, which does not convert to another type with `as`; JSON of a known shape is decoded with `json::decode_as(s, [0])`, which checks the shape while decoding and gives a `T!`.
 
