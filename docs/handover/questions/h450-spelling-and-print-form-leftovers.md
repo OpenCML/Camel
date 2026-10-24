@@ -60,3 +60,48 @@ println([[1, 2], [3, 4]])                          ->   [[1, 2], [3, 4]]        
 - `opt.generic/fold_cast.rewrites`、`modules.tensor.dtype/gather_grad_f64.*`、`modules.tensor.compound_assign/*`、
   `modules.definitions/kernels*`、`modules.naive_in_expert_out/*`、`linear.loops/*`、`docs.*`、`examples/*`
   （golden 快照，走 `run-tests.mjs --update-golden`）等仍未处理，原因见报告。
+
+## 五、静态越界检查整族丢失（**根因已定位；修在 core，不属本 lane**）
+
+规范依据是明确的：`docs/design-principles.cn.md:211`「**越界**：编译期能知道长度时（尤其是固定长度的
+类型），`slice` 与下标的越界应当是编译期错误，而不是悄悄截断或留到运行期。」
+
+实测（本树，日志戳 `20261024_122250_696948`）——不是措辞，是**行为变了**：
+
+| 用例 | 用例期望 | 终态实测 |
+|---|---|---|
+| `modules.tensor.bounds/index_const` | 退出 1 + `SemanticDiag::ArgumentsRejected`「index 8 is outside axis 0 of extent 3」 | 先打印 `ran`，再 `RuntimeDiag::IndexOutOfRange`「Index 8 is out of range for an array of length 3.」（`index_const.cml:6:14`） |
+| `modules.tensor.bounds/index_declared_shape` | 退出 1 + 「index 5 is outside axis 0 of extent 3」 | 先打印 `ran`，再运行期 `IndexOutOfRange`（`index_declared_shape.cml:4:13`） |
+| `modules.tensor.subscript/slice_const_bounds` | 编译期「slice bounds 0..9 are outside the first dimension …」 | 运行期「The range 0 to 9 is out of range for an array of length 4」 |
+| `modules.tensor.subscript/slice_rank2` | 编译期「rank 2 or more」拒绝 | 无该诊断 |
+| `modules.tensor.subscript/slice_step`、`slice_step_negative` | `expect_exit = 1` | **`expected exit 1, got 0`**：编译通过、跑完 |
+
+根因：这些检查原先在 **tensor 模块的 infer** 里——`modules/tensor/ops/utility_ops.cpp:64-86`
+（`indexInfer`：`ctx.constInt(k+1)` 取常量下标、`in.shape[k]` 取静态 extent，越界就
+`throw std::invalid_argument("index {} is outside axis {} of extent {}")`，由调用点报成
+`SemanticDiag::ArgumentsRejected`）。翻转后 `b` 是 core 数组 `f32[3]`，`b[8]` 改派发到 **core** 的
+`:op/idx_arr`（`src/builtin/modules/globals.cpp:1697-1707`）：它的 resolver 只拿到类型、拿不到常量，
+越界留给运行期内核 `src/builtin/operators/ops.cpp:793`
+（`throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "an array", arr->size())`）。
+tensor 模块的 infer 不再被选中 ⇒ **静态检查整体消失**，只剩运行期检查。
+
+归属与修法：这是 **core 数组下标/切片语义**（与已裁定的「`for` over an array 是 core 的」同族），而
+`h453-core-loop-domain` 正在改 `src/compile/gir/builder_control.cpp`、`src/core/rtdata/array.cpp`、
+`src/core/type/composite/array.cpp`、`include/camel/core/**`。修法要在 core 的 `[]`/`slice` 路径上按
+规范补回同样的静态检查（常量下标 vs 静态 extent、rank、切片界），会连带改动
+`test/plans/feat/linear/subscript.plan.toml` 与 `test/plans/feat/consistency/faults.plan.toml` 的期望，
+所以按纪律报回，不在 h450 分支落。
+
+## 六、`ArgumentNeedsConversion` 为什么不再报（`shape_types/unshaped_argument`）
+
+终态：`SemanticDiag::NoMatchingFunction`，实参类型 `(Tensor)`，只列 `f: (b: Tensor<[3]>) => float`；
+用例期望 `SemanticDiag::ArgumentNeedsConversion` +「argument 1 ('t', for parameter 'b') has type
+'Tensor', which is less exact than 'Tensor<?, [3]>'」+ 写法提示。
+
+根因：`ArgumentNeedsConversion` 在 `src/compile/gir/builder_diagnostics.cpp:1289-1298` 报出，条件是
+**某个候选被判为「fits」**（类型相容、只差一处可写出来的转换）。现在 `Tensor` 传到
+`Tensor<[3]>`（=`Tensor<?, [3]>`）不再被判为 fits，于是提前落到 `NoMatchingFunction`。
+
+归属：这是「未述/部分述类型的相容关系」，与作者在 `docs/handover/reviews/questions-2026-10-23.md:620-627`
+的两条裁定（`unstated-element-type-scalar-and-print`、`tensor-alias-transition`）同族。需要作者定
+「`Tensor` 到 `Tensor<?, [3]>` 还算不算 less exact、还算不算可以写的转换」，本 lane 不能替它定。
