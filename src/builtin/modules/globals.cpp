@@ -127,18 +127,19 @@ resolver_ptr_t namedStaticSignature(const char *name, Type *param, Type *exit) {
                                Type::Bool())                                                       \
     }
 
-/// A compound assignment of a group: the target is the type and keeps it, the value is the type.
+/// A compound assignment of a group: the target is the type and keeps it, the value is the type,
+/// and what the write gives is the version of the variable: the cell itself.
 #define CAMEL_HALF_ASSIGN(STEM)                                                                    \
     {":op/" STEM "_bf",                                                                            \
      StaticFuncTypeResolver::create(                                                               \
          {},                                                                                       \
          {{Type::BFloat16(), true}, {Type::BFloat16(), false}},                                    \
-         Type::BFloat16())},                                                                       \
+         TupleType::cell(Type::BFloat16()))},                                                      \
     {                                                                                              \
         ":op/" STEM "_f6", StaticFuncTypeResolver::create(                                         \
                                {},                                                                 \
                                {{Type::Float16(), true}, {Type::Float16(), false}},                \
-                               Type::Float16())                                                    \
+                               TupleType::cell(Type::Float16()))                                   \
     }
 
 /// A unary operator of a group (`-x`): the operand is the type and so is the result.
@@ -650,12 +651,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/assn_owned",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
-                        "(var self: T[], value: T[]) => T[]",
+                        "(var self: T[], value: T[]) => var T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array || !norm[0]->equals(norm[1]))
                                 return nullopt;
-                            return norm[0];
+                            return TupleType::cell(norm[0]);
                         }),
                 },
             }),
@@ -671,55 +672,55 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_s",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::String(), true}, {Type::String(), false}},
-                        Type::String()),
+                        TupleType::cell(Type::String())),
                 },
                 {
                     ":op/assn_b",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), true}, {Type::Bool(), false}},
-                        Type::Bool()),
+                        TupleType::cell(Type::Bool())),
                 },
                 {
                     ":op/assn",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
-                        "(var self: T, other: T) => T",
+                        "(var self: T, other: T) => var T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             // The target keeps its declared type; the value only has to fit it.
                             if (!norm[0]->assignableFrom(norm[1])) {
                                 return nullopt;
                             }
-                            return norm[0];
+                            return TupleType::cell(norm[0]);
                         }),
                 },
             }),
@@ -731,49 +732,49 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_add_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_add_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_add_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_add_s",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::String(), true}, {Type::String(), false}},
-                        Type::String()),
+                        TupleType::cell(Type::String())),
                 },
                 {
                     ":op/assn_add_c",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Complex64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_add_z",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 // bf16 and f16: `acc += x` on one of them (design principles 7.3).
                 CAMEL_HALF_ASSIGN("assn_add"),
@@ -786,42 +787,42 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_sub_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_sub_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_sub_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_sub_c",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Complex64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_sub_z",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 CAMEL_HALF_ASSIGN("assn_sub"),
             }),
@@ -833,42 +834,42 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_mul_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_mul_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_mul_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_mul_c",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Complex64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_mul_z",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 CAMEL_HALF_ASSIGN("assn_mul"),
             }),
@@ -880,42 +881,42 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_div_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_div_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_div_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_div_c",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Complex64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_div_z",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 CAMEL_HALF_ASSIGN("assn_div"),
             }),
@@ -927,14 +928,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_mod_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
             }),
         // No built-in type has `@`; a module that has it (tensor) provides `@=` or it is rejected.
@@ -947,70 +948,70 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int32(), true}, {Type::Int32(), false}},
-                        Type::Int32()),
+                        TupleType::cell(Type::Int32())),
                 },
                 {
                     ":op/assn_pow_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Int64(), true}, {Type::Int64(), false}},
-                        Type::Int64()),
+                        TupleType::cell(Type::Int64())),
                 },
                 {
                     ":op/assn_pow_f",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float32(), true}, {Type::Float32(), false}},
-                        Type::Float32()),
+                        TupleType::cell(Type::Float32())),
                 },
                 {
                     ":op/assn_pow_d",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
-                        Type::Float64()),
+                        TupleType::cell(Type::Float64())),
                 },
                 {
                     ":op/assn_pow_c",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Complex64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_pow_c_i",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Int32(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_pow_c_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex64(), true}, {Type::Int64(), false}},
-                        Type::Complex64()),
+                        TupleType::cell(Type::Complex64())),
                 },
                 {
                     ":op/assn_pow_z",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Complex128(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 {
                     ":op/assn_pow_z_i",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Int32(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 {
                     ":op/assn_pow_z_l",
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Complex128(), true}, {Type::Int64(), false}},
-                        Type::Complex128()),
+                        TupleType::cell(Type::Complex128())),
                 },
                 CAMEL_HALF_ASSIGN("assn_pow"),
             }),
@@ -1022,7 +1023,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), true}, {Type::Bool(), false}},
-                        Type::Bool()),
+                        TupleType::cell(Type::Bool())),
                 },
             }),
         OperatorGroup::create(
@@ -1033,7 +1034,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::Bool(), true}, {Type::Bool(), false}},
-                        Type::Bool()),
+                        TupleType::cell(Type::Bool())),
                 },
             }),
         // ======= Logical operators =======
