@@ -515,3 +515,4 @@ export func check(rules: Rule[], samples: int = …, seed: int = …, program: P
 - **不标任何"允许失败"**：同意。慢层那 8 条按 batch-slow 报告的归因逐条处置（已排优先级）。
 - **CUDA：选 (b)**：一条只编译 tiles CUDA 目标的作业，钉住"有头文件"的构建；按构建能力跳过的前置条件保留。是否升级到 (a) 看 runner 成本。
 - **触发：建议 develop 上每次合并跑三条腿，加 `concurrency: cancel-in-progress`**（连续合并时只跑最新一次，实际消耗远低于"每次合并一整轮"）；慢层不进每次合并，改为每晚在 88 主机上跑一次并出报告，标签发布前要求慢层全绿。这一条牵涉 runner 分钟数的费用（仓库私有期间按分钟计费，公开后 GitHub 托管 runner 免费），**等负责人确认后再改 `ci.yml`**。
+- **负责人裁定（2026-10-24）**：CI 触发不改；改为合并闸门在 Windows 上多编译一次（交接说明 5.33）。
