@@ -1,0 +1,51 @@
+/**
+ * What a `reassociate` rule is checked against: real equality on the finite values, and IEEE
+ * equality, bit for bit, on the special ones (the ruling of 2026-10-24 on
+ * `verification-report-surface-s0`, which corrected the method the library's
+ * `tensor_f32_combine_mixed` was refused by).
+ *
+ * `real_cancel` is that rule's equation with its coefficients fixed, `x*48 + x*(-47) => x*1`, and
+ * the grants that rule asks for. The check draws `x = 1e+30`, where the left side loses five digits
+ * to cancellation and the right side is the exact value -- the two element-type results are 27 ulps
+ * of the result apart, far outside the 11 the reassociate contract allows, and they are one real
+ * number. A reassociation is allowed to change the rounding, so the comparison is made in the
+ * reference's precision and the rule is `sampled`; the line `refuted tensor_f32_combine_mixed` this
+ * case's library twin used to print, with `1.0000041e+30` and `1e+30` as its two values, is the
+ * method that ruling withdrew.
+ *
+ * The other three rules state what the second half of the proposition still refuses, each with the
+ * half that decides it written into the row:
+ *
+ *   * `overflow_to_nan` (the same law without `no_infs` / `no_nans`, but with `no_signed_zeros` so
+ *     that only the special half can be reached) has two sides whose real values agree -- the
+ *     reference gives zero on both at `x = 1e+30` -- while its element-type left side is a NaN where
+ *     the right side is a zero: IEEE does not call a NaN a zero, so the rule is `refuted`;
+ *   * `zero_sign` differs in the sign of a zero, which is what `no_signed_zeros` makes unobservable:
+ *     the same law with that grant (`zero_sign_licensed`) is `sampled`.
+ */
+module check_real_equality
+import { check } from rewrite
+
+/// `x*48 + x*(-47)` and `x*1` are two roundings of one real number: at the sample the check draws
+/// (`x = 1e+30`) the element-type results are `1.0000041e+30` and `1e+30`.
+#requires<reassociate, no_infs, no_signed_zeros>
+rule real_cancel(x: f32) { x * 48.0 + x * (-47.0) => x * 1.0 }
+
+/// The same law with no grant for the infinities: at `x = 1e+30` the left side's two products
+/// overflow (`inf + -inf` is a NaN) where the right side is a zero.
+#requires<reassociate, no_signed_zeros>
+rule overflow_to_nan(x: f32) { x * 1e30 + x * (-1e30) => x * 0.0 }
+
+/// Two zeros of different sign.
+#requires<reassociate>
+rule zero_sign(x: f32) { x * -0.0 => x * 0.0 }
+
+#requires<reassociate, no_signed_zeros>
+rule zero_sign_licensed(x: f32) { x * -0.0 => x * 0.0 }
+
+func main(): int sync {
+    let x: f32 = 1e30
+    println("at x = 1e+30", x * 48.0 + x * (-47.0), x * 1.0)
+    print(check([real_cancel, overflow_to_nan, zero_sign, zero_sign_licensed], 200, 7))
+    return 0
+}

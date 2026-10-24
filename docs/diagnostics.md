@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-264 diagnostics: 245 errors, 19 warnings. 14 carry a machine-applicable edit, 250 say why they carry none.
+265 diagnostics: 246 errors, 19 warnings. 15 carry a machine-applicable edit, 250 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -42,6 +42,7 @@ prints one entry.
 | `0x0200000F` | [SyntaxDiag::EmptyInterpolation](#emptyinterpolation) | Error | no |
 | `0x02000010` | [SyntaxDiag::WhenAfterBody](#whenafterbody) | Error | yes |
 | `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error | no |
+| `0x02000012` | [SyntaxDiag::LambdaParametersNeedParentheses](#lambdaparametersneedparentheses) | Error | yes |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn | no |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error | no |
 | `0x03000002` | [SemanticDiag::ModuleNotFound](#modulenotfound) | Error | no |
@@ -983,6 +984,43 @@ func main(): int sync {
     let r = n as int..5
     println(r)
     return 0
+}
+```
+
+### LambdaParametersNeedParentheses
+
+`0x02000012` · Error · `SyntaxDiag::LambdaParametersNeedParentheses`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+
+**Message**
+
+```text
+A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'.
+```
+
+**Help**
+
+```text
+A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) { x => x }), so the two readings would collide and no unparenthesised spelling is added (the author's ruling of 2026-10-24). What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.
+```
+
+**Example** (`test/cases/parse/rulings/lambda_without_parentheses.cml`, run as `camel test/cases/parse/rulings/lambda_without_parentheses.cml`)
+
+```camel
+module lambda_without_parentheses
+
+func ident(x: int): int {
+    return x
+}
+
+func main(): int sync {
+    let composed: (x: int) => int = ident..ident
+    let written: (x: int) => int = x => ident(ident(x))
+    println(composed(3))
+    return written(3)
 }
 ```
 
@@ -3393,14 +3431,17 @@ This value has type '{0}', which is not the declared type '{1}'.
 A declaration written with a type takes a value of that type; nothing is converted on the way (a number does not become a float by itself, and a text does not become a number). Convert the value explicitly: 'float(n)' for a number of another type, 'int(s)' or 'parse_int(s)' for a text, 'string(n)' for a number written as text (the same for 'i32', 'f32', 'f64' and the complex types), 'v as T' for a module type; or change the declared type.
 ```
 
-**Example** (`test/cases/compile/literals/context_text_declared_int.cml`, run as `camel -E short test/cases/compile/literals/context_text_declared_int.cml`)
+**Example** (`test/cases/compile/literals/expected_type_typed_value_not_converted.cml`, run as `camel -E short test/cases/compile/literals/expected_type_typed_value_not_converted.cml`)
 
 ```camel
-module literal_context_text_int
+module expected_type_typed_value_not_converted
+
+func keep::<T>(xs: T[], n: int): T[] { return xs }
 
 func main(): int sync {
-    let x: int = '42'
-    println(x)
+    let v: float[] = [1.0, 2.0]
+    let xs: f32[] = keep(v, 2)
+    println(len(xs))
     return 0
 }
 ```
@@ -7475,7 +7516,7 @@ The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): '
 **Example** (`test/cases/compile/stream/comp_operand_not_unary.cml`, run as `camel test/cases/compile/stream/comp_operand_not_unary.cml`)
 
 ```camel
-// The left operand of `..` is unary, because the composition is the lambda `x => g(f(x))`
+// The left operand of `..` is unary, because the composition is the lambda `(x) => g(f(x))`
 // (design principles 4.2): `add2` takes two parameters, so the construct has no reading.
 module h405_comp_not_unary
 
