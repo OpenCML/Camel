@@ -342,7 +342,7 @@ any Formatter::visitUsingNamespaceDecl(cst::UsingNamespaceDecl context) {
 }
 
 /*
-blockStmt  : WAIT? stmtBlock | funcAnno+ stmtBlock ;
+blockStmt  : stmtBlock | funcAnno+ stmtBlock ;
 */
 any Formatter::visitBlockStmt(cst::BlockStmt context) {
     string result;
@@ -358,7 +358,6 @@ any Formatter::visitBlockStmt(cst::BlockStmt context) {
         result += any_cast<string>(visitFuncAnno(funcAnno)) +
                   commentsInFrontMatter(funcAnno->lastToken()->index());
     }
-    result += context->tok(TK::KwWait) ? "wait " : "";
     result += any_cast<string>(visitStmtBlock(context->get<cst::StmtBlock>()));
     return result;
 }
@@ -1395,13 +1394,6 @@ any Formatter::visitCtrlExpr(syn::Node context) {
 }
 
 /*
-waitExpr : WAIT? assignExpr ;
-*/
-any Formatter::visitWaitExpr(cst::WaitExpr context) {
-    return (context->tok(TK::KwWait) ? "wait " : "") + any_cast<string>(visitExpr(context->expr()));
-}
-
-/*
 assignExpr
     : logicalOrExpr (
         ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=')
@@ -2079,7 +2071,6 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(IdentRef)
         CAMEL_FORMAT(SpreadValue)
         CAMEL_FORMAT(RestValue)
-        CAMEL_FORMAT(WaitExpr)
         CAMEL_FORMAT(AssignExpr)
         CAMEL_FORMAT(LogicalOrExpr)
         CAMEL_FORMAT(LogicalAndExpr)

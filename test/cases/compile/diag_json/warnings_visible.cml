@@ -1,15 +1,14 @@
 /**
- * A program that compiles without an error and has three warnings. They are printed on
+ * A program that compiles without an error and has two warnings. They are printed on
  * stderr before the program runs; stdout carries only what the program prints (11).
- *   line 11: VarParamInAsyncFunction   `inc` has a var parameter and no `sync` modifier
- *   line 18: IgnoredSideEffect         a call with a var argument, not waited, no sync block
- *   line 19: IgnoredSideEffect         a branch whose arm writes the captured `c`
+ *   line 17: IgnoredSideEffect         a call with a var argument, outside a sync block
+ *   line 18: IgnoredSideEffect         a branch whose arm writes the captured `c`
  */
 module warnings_visible
 
 // Line numbers below are asserted by the plan.
 func inc(var x: int): int sync {
-    wait x += 1
+    x += 1
     return 0
 }
 
@@ -17,7 +16,7 @@ func main(): int {
     var c = 0
     inc(c)
     let r = if c > 0 then sync {
-        wait c += 10
+        c += 10
         return 0
     } else 0
     return println(c + r)

@@ -465,7 +465,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ExportedVariable",
                 "The variable '{0}' cannot be exported.",
-                "A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export sync func bump(): int sync {{ wait cnt += 1; return cnt }}'). A 'let' can be exported.",
+                "A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export func bump(): int sync {{ cnt += 1; return cnt }}'). A 'let' can be exported.",
             },
         },
         {
@@ -1533,27 +1533,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::VarParamInAsyncFunction,
-            {
-                "VarParamInAsyncFunction",
-                "Variable parameters are only allowed in sync functions.",
-                "Remove the variable parameter or make the function synchronous.",
-            },
-        },
-        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
-                "{0} is neither waited nor in a sync block, and {1}.",
-                "Write 'wait' before the expression or put it in a sync block: only then is the write ordered after the earlier uses of the variable. Without either, the write runs only if the variable is read afterwards.",
-            },
-        },
-        {
-            SemanticDiag::CapturedWriteInAsyncFunction,
-            {
-                "CapturedWriteInAsyncFunction",
-                "{0} writes the captured variable{1} {2} but is not declared with the 'sync' modifier.",
-                "Write 'sync' before the function ('sync func f(...)', 'sync (...) => ...'): the modifier declares that the function has side effects, as it does for a function with a var parameter. It does not make the body a sync block.",
+                "{0} is not in a sync block, and {1}.",
+                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.",
             },
         },
         {

@@ -53,7 +53,6 @@ const FOLDED = {
     bracketIdents: 'parseBracketedIdents',
     dataExpr: 'parseExpr',
     arrayDimItem: 'parseArrayDim',
-    waitExpr: 'parseExpr',
     ctrlExpr: 'parseExpr',
     matchTypeExpr: 'parseMatchType',
     staticForExpr: 'parseStaticFor',

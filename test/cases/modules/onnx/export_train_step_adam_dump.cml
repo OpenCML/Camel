@@ -19,7 +19,7 @@ func loss(x: Tensor): float {
     return mean(y * y)
 }
 
-sync func spin(m: Mlp, st: OptimizerState, x: Tensor, i: int, steps: int, dir: string): Mlp {
+func spin(m: Mlp, st: OptimizerState, x: Tensor, i: int, steps: int, dir: string): Mlp {
     return if i >= steps then m else sync {
         let vg = with_grad(loss)<m>(x)
         let next = adam(m, vg.1, st, 0.001)

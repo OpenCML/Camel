@@ -7,7 +7,7 @@ module let_assigned
 
 func main(): int sync {
     let k = 0
-    wait k = 5
+    k = 5
     println(k)
     return 0
 }

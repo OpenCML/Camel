@@ -2,7 +2,7 @@
 // (design principles 10.1: one root graph, captures bound to the value, not to its name).
 import counter
 
-sync func main(): int sync {
+func main(): int sync {
     println(counter::bump())
     println(counter::bump())
     println(counter::current())

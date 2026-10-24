@@ -94,7 +94,7 @@ func dump_grads(m: Tf4, x: Tensor, dir: string): int sync {
 
 /// The stateful training loop: step `i` starts from the parameters step `i - 1` produced.
 /// Returns the parameters after step `total - 1`.
-sync func train_loop(m: Tf4, x: Tensor, i: int, warm: int, total: int, t0: float): Tf4 {
+func train_loop(m: Tf4, x: Tensor, i: int, warm: int, total: int, t0: float): Tf4 {
     return if i >= total then m else sync {
         let start = now()
         let r = step(m, x)

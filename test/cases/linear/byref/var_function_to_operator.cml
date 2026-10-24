@@ -5,8 +5,8 @@
  */
 module var_function_to_operator
 
-sync func bump(var x: int) {
-    wait x += 1
+func bump(var x: int) {
+    x += 1
 }
 
 func main(): int sync {

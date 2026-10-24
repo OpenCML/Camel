@@ -6,8 +6,8 @@
 module let_to_var_with_param
 
 with <var acc: int>
-sync func add(n: int): int sync {
-    wait acc += n
+func add(n: int): int sync {
+    acc += n
     return acc
 }
 

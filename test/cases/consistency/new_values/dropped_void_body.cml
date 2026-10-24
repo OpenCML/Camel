@@ -4,7 +4,7 @@
  */
 module dropped_void_body
 
-sync func push(var xs: int[]): void sync {
+func push(var xs: int[]): void sync {
     xs->append<1>
 }
 

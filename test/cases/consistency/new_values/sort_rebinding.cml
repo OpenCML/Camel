@@ -9,7 +9,7 @@ module sort_rebinding
 
 import { sort, merge_sort, insert_sort } from array
 
-sync func sorted_param(var v: int[]): int sync {
+func sorted_param(var v: int[]): int sync {
     v = v->sort
     return len(v)
 }

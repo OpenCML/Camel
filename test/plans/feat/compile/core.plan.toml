@@ -117,7 +117,7 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AssignmentTargetNotVariable"
 expect_diagnostic_line = 15
-expect_diagnostic_column = 17
+expect_diagnostic_column = 12
 expect_output_contains = ["must be a variable, or a path from one", "'var p = { x: 1 }; p.x = 2'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

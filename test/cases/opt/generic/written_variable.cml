@@ -11,7 +11,7 @@ module written_variable
 // The tuple is built from a non-constant element, reassigned, then projected.
 func reassigned(a: int): int sync {
     var t = (a, 2)
-    wait t = (a + 2, 7)
+    t = (a + 2, 7)
     println(t.0)
     return 0
 }
@@ -22,7 +22,7 @@ func reassigned(a: int): int sync {
 func refilled(a: int): int sync {
     var t = (a, 2)
     println(t.1)
-    wait t = (a + 2, 7)
+    t = (a + 2, 7)
     println(t.1)
     println(t.0)
     return 0
@@ -33,7 +33,7 @@ func reread(a: int): int sync {
     var x = a
     let p = x + 1
     println(p)
-    wait x += 5
+    x += 5
     let q = x + 1
     println(q)
     return 0

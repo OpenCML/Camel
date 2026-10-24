@@ -1,22 +1,16 @@
 module effects_outside_sync
 
-// Effectful calls outside a `sync` block (docs/design-principles.cn.md 3.1; docs/design-principles-log.cn.md 2.3, 2.6;
+// Effectful calls outside a `sync` block (docs/design-principles.cn.md 3.1;
 // docs/technical/18_sync_control_semantics.md section 2.2). Only the lines marked KEPT are
 // printed, on every scheduler. All cases are the language rule except `nested`, which is an
 // open question (section 2.5 there) whose current behaviour is recorded here.
 
 // A statement whose result is unused, in a function whose body is not a `sync` block: the call
-// is not connected to the function's exit and is not in the graph.
+// is not connected to the function's exit and is not in the graph. A `wait` on the call and a
+// prefix `sync func` used to be recorded beside this case; both are retired (H7 item 5), and a
+// body that is not a sync block is what is left.
 func plain(x: int): int {
     println('DROPPED plain')
-    return x + 1
-}
-
-// `wait` does not change that, by design: `wait` orders by the use of a `var`, and this
-// expression involves none, so there is nothing to order it by. It is not an error either;
-// such a call belongs in a sync block.
-func waited(x: int): int {
-    wait println('DROPPED waited')
     return x + 1
 }
 
@@ -27,13 +21,6 @@ func nested(x: int): int {
         println('DROPPED nested 1')
         println('DROPPED nested 2')
     }
-    return x + 1
-}
-
-// Prefix spelling: `sync` is a modifier of the function type (it allows `var` parameters); the
-// body is an ordinary block.
-sync func prefix(x: int): int {
-    println('DROPPED prefix')
     return x + 1
 }
 
@@ -51,7 +38,7 @@ func returned(x: int): void {
 
 func main(): int sync {
     println('KEPT main start')
-    let a = plain(1) + waited(1) + nested(1) + prefix(1) + suffix(1)
+    let a = plain(1) + nested(1) + suffix(1)
     returned(1)
     println(a)
     println('KEPT main end')

@@ -5,14 +5,14 @@
  */
 module let_to_var_param_indirect
 
-sync func bump(var x: int) {
-    wait x += 1
+func bump(var x: int) {
+    x += 1
 }
 
 func main(): int sync {
     let f = bump
     let k = 0
-    wait f(k)
+    f(k)
     println(k)
     return 0
 }
