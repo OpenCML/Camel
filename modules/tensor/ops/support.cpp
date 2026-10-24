@@ -30,7 +30,16 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
         // conversion below is for.
         auto *tensor = args.get<Array *>(index);
         if (!tensor) {
-            throwRuntimeFault(RuntimeDiag::RuntimeError, "Tensor argument cannot be null");
+            // The slot the type promises a pointer in holds the element itself when the value has
+            // no dimension (the rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md
+            // section rank-zero-tensor): a rank-0 result stays an array only where the type it is
+            // read by says so (wrap), so a value like this is a value with no dimension and not an
+            // argument that went missing. The message says what the value is rather than calling it
+            // a null argument (the author's ruling of 2026-10-25 on
+            // no-dimension-value-in-an-array-typed-slot: the transition-period bare `Tensor` is
+            // that gap, and no mechanism is built for it).
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError, "Tensor argument holds a value with no dimension");
         }
         return tensor;
     }
