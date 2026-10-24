@@ -1,0 +1,44 @@
+/**
+ * A gradient inside a `#gpu` scope whose function the run chooses is refused at compile time.
+ *
+ * `with_grad(body)` reads a function the caller passes in, so the derived graph cannot be built
+ * while the program is compiled: the operator would have to build it at run time, inside the
+ * scope, where no pass sees it and the device has no program for it
+ * (docs/design/gpu/plan.cn.md 2.6). The expansion refuses the call site instead of letting the
+ * scope reach the device with an operator it cannot run, and the diagnostic names the operator
+ * and where the call is written.
+ *
+ * Red when: the refusal is missing (the program compiles and the scope runs a gradient the device
+ * cannot), or the refusal is the module's generic "no device program" for the operator instead of
+ * the expansion's own reason (a gradient inside a scope needs a function known at compile time).
+ */
+module gpu_grad_dynamic
+
+import { Tensor, reshape, sum } from tensor
+import { with_grad } from autodiff
+
+type M = {
+    p0: Tensor<f32, [3]>,
+    x: Tensor<f32, [2, 3]>,
+}
+
+with <m: M>
+func loss(): float sync {
+    return sum(m.x * m.p0)
+}
+
+#gpu
+func step(body: <m: M> () => float, m: M): Tensor<f32, [3]> sync {
+    let vg = with_grad(body)<m>()
+    return vg.1.p0
+}
+
+func main(): int sync {
+    let m = {
+        p0: reshape([0.5, 0.25, 2.0] as f32[], [3]),
+        x: reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]),
+    }
+    let gradient = step(loss, m)
+    println("gradient {}"->format<gradient>)
+    return 0
+}
