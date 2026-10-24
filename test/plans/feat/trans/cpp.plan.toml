@@ -80,16 +80,16 @@ timeout_ms = 10000
 
 [[tests]]
 name = "refuse_tensor"
-desc = "std::cpp does not translate tensors. A function that returns a Tensor is refused with a located TranslationRefused at the definition of the function, naming the function and the type; it used to be the unlocated PassInternalError \"runtime graph 'scale' is not supported by the direct C++ path: node#N: non-bridgeable return type\"."
+desc = "std::cpp does not translate tensors. The refusal is located at the operator use that needs one -- 	ensor:ones in main, line 16 column 19 -- and names the operator and the type of its argument (int[], the shape); the Tensor-returning scale is never reached (the operator use in the body stands in main, which the pass walks first). It used to be the unlocated PassInternalError \"runtime graph 'scale' is not supported by the direct C++ path: node#N: non-bridgeable return type\"."
 kind = "negative"
 case = "../../../cases/trans/cpp/refuse_tensor.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 10
-expect_diagnostic_column = 1
-expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'scale' returns a value of type 'Tensor'; std::cpp translates numbers (real and complex), bool, string, enums, arrays, tuples, structs, T?, T!, functions and var variables of these, and void"]
+expect_diagnostic_line = 16
+expect_diagnostic_column = 19
+expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'main' uses the operator 'tensor:ones' on a value of type 'int[]', which has no translation in std::cpp yet"]
 expect_output_not_contains = ["internal error", "node#", "non-bridgeable", ":?:?:", "#include"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -109,8 +109,8 @@ assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
 const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:std::cpp', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.code === '0x0400000B', `code ${d.code}`)
-assert(d.message.includes("function 'scale' returns a value of type 'Tensor'"), `unexpected message: ${d.message}`)
-assert(d.range.start.line === 9 && d.range.start.character === 0 && d.range.end.line === 11, `unexpected range ${JSON.stringify(d.range)}`)
+assert(d.message.includes("function 'main' uses the operator 'tensor:ones' on a value of type 'int[]'"), `unexpected message: ${d.message}`)
+assert(d.range.start.line === 15 && d.range.start.character === 18 && d.range.end.line === 15, `unexpected range ${JSON.stringify(d.range)}`)
 }
 """
 timeout_ms = 8000

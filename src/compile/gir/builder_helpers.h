@@ -230,6 +230,23 @@ inline bool collectConversionGaps(
         gaps.push_back({path, have, want});
         return true;
     }
+    if (want->code() == TypeCode::Array && have->code() == TypeCode::Array) {
+        // A tensor is an array (P4), so the conversion that refines one is an array's and not a
+        // module type's: the relation lives in ArrayType::castSafetyFrom, which is Unsafe exactly
+        // when the source leaves open what the target fixes (an unknown rank, extent or element
+        // type) and the program writes `as` to have it checked when the conversion runs
+        // (design principles 5.4: an array whose shape is unknown entering a position that
+        // declares one is converted explicitly; camel/core/type/composite/array.cpp). The gap is
+        // the whole value: one `as` reaches it, whatever is left open inside it. Without this
+        // branch a call like `f(t)` with `t: Tensor` and `b: Tensor<[3]>` was refused as
+        // "no matching function" with the overload list, which says less than the conversion to
+        // write (ruling 2026-10-24 evening, h450 item 2).
+        if (want->castSafetyFrom(have) != CastSafety::Unsafe) {
+            return false;
+        }
+        gaps.push_back({path, have, want});
+        return true;
+    }
     if (want->code() == TypeCode::Tuple && have->code() == TypeCode::Tuple) {
         auto *w = tt::as_ptr<TupleType>(want);
         auto *h = tt::as_ptr<TupleType>(have);

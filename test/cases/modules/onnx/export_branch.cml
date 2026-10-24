@@ -9,7 +9,7 @@ import { Tensor, reshape, relu } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func gate(t: Tensor): Tensor {
+func gate(t: f32[4]): f32[4] {
     return if t[0] > 0.5 then relu(t) * 2.0 else t * (t[1] * 2.0) - 1.0
 }
 
@@ -17,7 +17,7 @@ func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 0.5] as f32[], [4])
     let y = gate(x)
     'camel gate={} {} {} {}'->format<y[0], y[1], y[2], y[3]>->println
-    export_model((t: Tensor): Tensor => gate(t), x, get_env('ONNX_OUT'))
+    export_model((t: Tensor): Tensor => gate(t as f32[4]), x, get_env('ONNX_OUT'))
     println('exported')
     return 0
 }

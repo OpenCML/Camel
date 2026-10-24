@@ -10,7 +10,7 @@ import { Tensor, reshape, relu, zeros, shape, load_npy, save_npy } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func gate(t: Tensor): Tensor {
+func gate(t: f32[..]): f32[..] {
     return if t[0] > 0.5 then relu(t) * 2.0 else t * (t[1] * 2.0) - 1.0
 }
 
@@ -24,7 +24,7 @@ func main(): int sync {
     let x = load_npy(get_env('X'))
     let w = reshape([1.0, 0.0, 2.0, 0.0, 1.0, -1.0] as f32[], [2, 3])
     let isGate = get_env('MODEL') == 'gate'
-    let y = if isGate then gate(x) else forward(x, w)
+    let y = if isGate then gate(x as f32[..]) else forward(x, w)
     save_npy(y, get_env('Y'))
     let out = get_env('ONNX_OUT')
     return if out == '' then 0 else if isGate then sync {

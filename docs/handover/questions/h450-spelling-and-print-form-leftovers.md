@@ -105,3 +105,35 @@ tensor 模块的 infer 不再被选中 ⇒ **静态检查整体消失**，只剩
 归属：这是「未述/部分述类型的相容关系」，与作者在 `docs/handover/reviews/questions-2026-10-23.md:620-627`
 的两条裁定（`unstated-element-type-scalar-and-print`、`tensor-alias-transition`）同族。需要作者定
 「`Tensor` 到 `Tensor<?, [3]>` 还算不算 less exact、还算不算可以写的转换」，本 lane 不能替它定。
+
+**2026-10-25 更新（已按裁定修回）**：裁定（`questions-2026-10-24-evening.md` §h450 第 2 条）要求仍报
+`ArgumentNeedsConversion`。根因落定在 `src/compile/gir/builder_helpers.h:226` 的 `collectConversionGaps`：
+翻转前 `Tensor<f32, [3]>` 是模块的 `OtherType`，走 `want->isOtherType()` 那支（`castSafetyFrom` 为
+`Unsafe` 就算一处可写的转换）；翻转后它是 core 的 `ArrayType`，那一支不成立，于是没有 gap、直接落
+`NoMatchingFunction`。修法是给数组加同一支：`want->castSafetyFrom(have) == Unsafe` 时算一个 gap
+（关系本身早就在 `ArrayType::castSafetyFrom` 里，`src/core/type/composite/array.cpp:464-512`）。
+改后 9 条回到 `ArgumentNeedsConversion`（`unshaped_argument` + `si_computed_extent_stays_open`、
+`si_plain_result`、`si_loaded_struct`、`si_computed_slice`、`si_branch_join`、`si_recursion_leaf`、
+`si_tuple_return`、`si_var_argument`），帮助文本给出 `as` 的写法。
+
+## 七、`[]` 改走 core 之后，onnx 导出器不再接受「按下标读一个浮点数组」（实测，未修）
+
+`modules.onnx/export_branch`、`modules.onnx/ort_branch`（各 2 变体：operator/pass 与 ort）在按裁定把
+`gate(t: Tensor)` 写成终态（`f32[4]` / `f32[..]`）之后，仍然红，且原因**不是拼写**：
+
+```
+export_branch.cml:20:5: [Error]: onnx.export_model: ':op/idx_arr': only int arrays (shapes) can be
+indexed by the model input
+```
+
+根因：导出器的下标规则只覆盖 **int 数组（形状）**——`modules/onnx/lowering.cpp:798-819`
+（`lowerArrayIndex`：符号 int 数组 + 常量下标 → `Gather`；否则 `throw ExportError("only int arrays
+(shapes) can be indexed by the model input")`）。翻转前 `t[0]`（t 是浮点张量）走的是 tensor 模块自己的
+`idx` 算子，导出器对它另有规则；翻转后 `[]` 统一走 core 的 `:op/idx_arr`，那条规则不认浮点数组，于是
+「从模型输入读一个元素当条件」的图拒绝导出——这正是这两个用例存在的理由（If 的条件由输入算出来）。
+
+归 h460/h449 同一处：这是「`[]` 从模块算子改走 core」的第三个落点（前两个是静态越界检查丢失、
+`autodiff: no derivative rule for ':op/idx_take'`）。可用的修法很小：`Gather` 对任意数据类型都成立，
+常量下标时把浮点数组的输入直接交给 `Gather`（当前代码用 `ctx.input(0, TypeCode::Int64)` 把输入钉成
+int64），只保留「浮点数组 + 非常量下标」为拒绝。本 lane 没落：这属于导出器的能力矩阵，且放宽它可能
+让别的应当拒绝的程序被接受，应由掌握导出器用例的车道改并验收。
