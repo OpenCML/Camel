@@ -1491,20 +1491,35 @@ class Builder {
         const camel::core::type::resolver_ptr_t &rule, const std::string &name,
         const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes, std::string *conditionText = nullptr);
-    /// The rule of the operator group `ops` a call means: the first rule, in the order the group
-    /// answers, whose signature takes the arguments and whose own `when` holds for them (design
-    /// principles 4.4). The order in which two body-less declarations of one name are written
-    /// therefore cannot choose between them. A rule that takes the arguments while its condition
-    /// is false is not a candidate; it is recorded in `unmet` with the condition it wrote, so
-    /// that a call no rule accepts reports those conditions (WhenConditionUnmet) rather than
-    /// settling on one of them. `normStatics` are the compile-time values of constant arguments,
-    /// as for `OperatorGroup::resolveForCall`.
+    /// The rule of the operator group `ops` a call means: a rule whose signature takes the
+    /// arguments and whose own `when` holds for them (design principles 4.4). A rule that takes
+    /// the arguments while its condition is false is not a candidate; it is recorded in `unmet`
+    /// with the condition it wrote, so that a call no rule accepts reports those conditions
+    /// (WhenConditionUnmet) rather than settling on one of them. `normStatics` are the
+    /// compile-time values of constant arguments, as for `OperatorGroup::resolveForCall`.
+    ///
+    /// Two candidates that both write `when` and both hold for the arguments are an ambiguity,
+    /// not a choice: the order two declarations of one name are written in decides nothing (the
+    /// language author's ruling of 2026-10-23 on `two-when-conditions-hold`,
+    /// docs/handover/reviews/questions-2026-10-23.md), and the declaration-time check asks about
+    /// one type at a time, so the call site is the first place that can see the pair. Every such
+    /// candidate is recorded in `ambiguous` as `signature — when condition`, sorted and without
+    /// repeats, so that the report is the same whichever order the declarations are written in;
+    /// the caller reports it (AmbiguousCall, which names the call and lists them). A candidate
+    /// that writes no condition is not part of that list: which overload without `when` the group
+    /// answers with today is a separate question, left as it is.
+    ///
+    /// The returned index is the first candidate in the group's own order — the fixed signatures
+    /// first, then the order the rules were written in. It is what a call with fewer than two
+    /// candidates that write `when` means; a call with more is reported through `ambiguous` and
+    /// the index is not used.
     std::optional<oper_idx_ptr_t> resolveGroupedCall(
         const oper_group_ptr_t &ops, const camel::core::type::type_vec_t &explicitTypes,
         Type *expectedResult, const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes,
         camel::core::type::static_args_t normStatics,
-        std::vector<std::pair<std::string, std::string>> &unmet);
+        std::vector<std::pair<std::string, std::string>> &unmet,
+        std::vector<std::string> *ambiguous = nullptr);
     /// The kernel of `graphs` when they are exactly the one `#impl` body: what a call of the
     /// function is, instead of a call of the body (design principles 10.4).
     std::optional<ImplKernel> implKernelOf(const graph_set_ptr_t &graphs) const;
