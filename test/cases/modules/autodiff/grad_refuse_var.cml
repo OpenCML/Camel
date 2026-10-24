@@ -3,7 +3,7 @@ module grad_refuse_var
 import { grad } from autodiff
 
 with <var v: float>
-sync func varred(x: float): float {
+func varred(x: float): float {
     return v * x
 }
 

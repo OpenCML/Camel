@@ -12,7 +12,7 @@ func pair_of::<T>(t: T): (T, T) {
 
 /// Two rounds: the fields of the type of the call.
 func width::<T>(t: T): int {
-    return static loop n = 0 for (j, C) in fields typeof(pair_of(t)) do n + 1
+    return static loop n = 0 for j, C in fields typeof(pair_of(t)) do n + 1
 }
 
 /// The same type in a `match type` subject.

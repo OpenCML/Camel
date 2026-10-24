@@ -1,11 +1,11 @@
 // A `var` parameter: the callee writes the caller's cell.
-sync func bump(var x: int) {
-    wait x += 1
+func bump(var x: int) {
+    x += 1
 }
 
 func main(): int sync {
     var n = 1
-    wait bump(n)
+    bump(n)
     println(n)
     return 0
 }

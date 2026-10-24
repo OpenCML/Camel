@@ -31,14 +31,14 @@ func conv_s1_p0(x: Tensor, w: Tensor, b: Tensor): float {
     return mean(conv2d(x, w, b, 1, 0))
 }
 
-sync func warm(step: () => float, remaining: int): int {
+func warm(step: () => float, remaining: int): int {
     return if remaining <= 0 then 0 else sync {
         let v = step()
         return warm(step, remaining - 1)
     }
 }
 
-sync func timed(step: () => float, remaining: int): int {
+func timed(step: () => float, remaining: int): int {
     return if remaining <= 0 then 0 else sync {
         let start = now()
         let v = step()

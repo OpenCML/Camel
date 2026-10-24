@@ -9,42 +9,42 @@
 module var_read_before_callee_write
 import { Tensor, reshape, sum } from tensor
 
-sync func ignores(x: Tensor, var c: int): int sync {
+func ignores(x: Tensor, var c: int): int sync {
     c += 5
     return 1
 }
 
-sync func steps(i: int, n: int, x: Tensor, var c: int): Tensor sync {
+func steps(i: int, n: int, x: Tensor, var c: int): Tensor sync {
     return if i >= n then x else sync {
         c += 1
         let fresh = reshape([0.5, 0.5], [2])
-        let r = wait steps(i + 1, n, fresh, c)
+        let r = steps(i + 1, n, fresh, c)
         r
     }
 }
 
-sync func f(var c: int): int sync {
+func f(var c: int): int sync {
     c += 1
     let snapshot = c + 0
     let t = reshape([1.0, 2.0], [2])
-    let r = wait ignores(t, c)
+    let r = ignores(t, c)
     return snapshot * 100 + r
 }
 
-sync func g(var c: int): float sync {
+func g(var c: int): float sync {
     c += 1
     let snapshot = c + 0
     let t = reshape([1.0, 2.0], [2])
-    let y = wait steps(0, 3, t, c)
+    let y = steps(0, 3, t, c)
     return sum(y) + float(snapshot % 4) * 100.0
 }
 
 func main(): int sync {
     var a = 0
-    let x = wait f(a)
+    let x = f(a)
     println('f: {} counter {}'->format<x, a>)
     var b = 0
-    let y = wait g(b)
+    let y = g(b)
     println('g: {} counter {}'->format<y, b>)
     return 0
 }

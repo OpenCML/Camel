@@ -1,5 +1,5 @@
 /**
- * One warning (EffectNotExecuted: `main` is not a sync function, so the println nothing depends
+ * One warning (EffectNotExecuted: `main`'s body is not a sync block, so the println nothing depends
  * on does not run) and no error. Used to test the command-line switches for warnings.
  */
 module warning

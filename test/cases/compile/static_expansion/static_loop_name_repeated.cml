@@ -5,7 +5,7 @@
 module static_loop_name_repeated
 
 func bad(t: {a: int}): int {
-    return static loop n = 0 for (n, F) in fields {a: int} do n + 1
+    return static loop n = 0 for n, F in fields {a: int} do n + 1
 }
 
 func main(): int {

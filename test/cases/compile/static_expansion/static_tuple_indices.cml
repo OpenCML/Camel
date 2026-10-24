@@ -7,11 +7,11 @@
 module static_tuple_indices
 
 func total(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func weighted(..ts): int {
-    return static loop acc = 0 for (j) in indices ts do acc + ts.[j] * (j + 1)
+    return static loop acc = 0 for j in indices ts do acc + ts.[j] * (j + 1)
 }
 
 func positions(..ts): (int, int) {
@@ -24,7 +24,7 @@ func firstTwo(..ts): (int, int) {
 
 func nested(t: (int, int)): int {
     return static loop acc = 0
-        for (j) in indices ( static for (k) in indices t => t.[k] ) do acc + 1
+        for j in indices ( static for (k) in indices t => t.[k] ) do acc + 1
 }
 
 func main(): int sync {

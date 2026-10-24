@@ -13,7 +13,7 @@ The fundamental positioning of the language and its execution model are laid dow
 Camel is a graph-native general-purpose programming language; AI is its primary application domain.
 
 - **A program expresses only computational intent**: what is to be computed, and what depends on what. What the source code writes down is a computation graph; it is not captured or recovered from some other language.
-- **Every language element corresponds directly to a piece of structure on the graph**: an expression is a node with data edges, a function is a subgraph, a call is a node, a `sync` block and `wait` are control edges, a branch is a branch node. All other properties follow from this correspondence: evaluation by dependency, computations that do not depend on each other can run in parallel, the same source code can be processed by different passes.
+- **Every language element corresponds directly to a piece of structure on the graph**: an expression is a node with data edges, a function is a subgraph, a call is a node, a `sync` block is a control edge, a branch is a branch node. All other properties follow from this correspondence: evaluation by dependency, computations that do not depend on each other can run in parallel, the same source code can be processed by different passes.
 - **Compilation, optimisation, differentiation, export and execution are all transformations of the graph**, called passes. Passes are combined on the command line:
 
   ```bash
@@ -50,7 +50,7 @@ Hello, Camel!
 |---|---|
 | [2 Lexical structure](02_lexical.md) | Comments, identifiers, keywords, literals, operators |
 | [3 Data model](03_data_model.md) | Types, values, `let`/`var`, nullable and fallible types, maps and sets |
-| [4 Execution model](04_execution_model.md) | Evaluation by dependency, `sync`, `wait`, references, faults and exit, passes |
+| [4 Execution model](04_execution_model.md) | Evaluation by dependency, `sync`, references, faults and exit, passes |
 | [5 Modules](05_modules.md) | `module`, `import`, `export`, `namespace` |
 | [6 Expressions](06_expressions.md) | Literals, access, calls, pipes, operators, `if`, `match`, lambdas |
 | [7 Statements and declarations](07_statements.md) | `let`/`var`, `return`/`throw`, blocks, functions, generics, type declarations |

@@ -5,7 +5,7 @@
 module static_loop_not_composite
 
 func bad(t: int): int {
-    return static loop acc = 0 for (n, F) in fields int do acc + 1
+    return static loop acc = 0 for n, F in fields int do acc + 1
 }
 
 func main(): int {

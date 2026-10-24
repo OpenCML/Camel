@@ -14,7 +14,7 @@ Camel 是图原生的通用编程语言：程序只表达计算意图——要�
 [3 函数](#3-函数) ·
 [4 分支与 match](#4-分支与-match) ·
 [5 数组与高阶算子](#5-数组与高阶算子) ·
-[6 按依赖求值、sync 与 wait](#6-按依赖求值sync-与-wait) ·
+[6 按依赖求值、sync 与函数体](#6-按依赖求值sync-与函数体) ·
 [7 闭包与函数值](#7-闭包与函数值) ·
 [8 泛型](#8-泛型) ·
 [9 错误处理](#9-错误处理) ·
@@ -332,7 +332,7 @@ func main(): int sync {
 
 这是语言规定的行为（设计原则 3.6），不是缺陷：正因为元素之间没有顺序，`map` 才能并行。第二行用的 `reduce` 按元素顺序执行，在所有后端上结果相同。规则很简单：**传给 `map`、`filter` 的函数保持纯；必须按顺序做的事用 `foreach`、`reduce` 或尾递归。**
 
-## 6. 按依赖求值、sync 与 wait
+## 6. 按依赖求值、sync 与函数体
 
 这是 Camel 最不同于其他语言的地方，值得慢慢读。
 
@@ -432,20 +432,20 @@ func main(): int sync {
 
 两次 `log` 调用按顺序执行了（`b` 是 3），但 `println(x)` 属于 `log` 自己的函数体，那里不是同步块（编译器照样给出 `EffectNotExecuted` 警告）。要打印，把 `log` 声明为 `func log(x: int): int sync { ... }`。
 
-### 6.4 `sync func` 是另一回事
+### 6.4 `sync` 与函数体
 
-`sync` 还可以写在 `func` **之前**。那是函数修饰符：声明这个函数有副作用、需要被同步。它**不会**使函数体成为同步块。[`examples/06_sync_func.cml`](examples/06_sync_func.cml)：
+`sync` 写在**函数体**位置时（`func g(): int sync { ... }`），它修饰的是函数体那个块：块里的语句按书写顺序执行。不写 `sync` 的函数体不是同步块，里面 `println` 这类效果不执行（按依赖求值）。[`examples/06_sync_body.cml`](examples/06_sync_body.cml)：
 
 ```cml
-module sync_func
+module sync_body
 
-sync func f(): int {
-    println('f')        // still not executed
+func f(): int {
+    println('f')        // 不执行：函数体不是同步块
     return 1
 }
 
-sync func g(): int sync {
-    println('g')        // executed: the body is a sync block
+func g(): int sync {
+    println('g')        // 执行：函数体是同步块
     return 2
 }
 
@@ -460,9 +460,9 @@ g
 3
 ```
 
-前缀的 `sync` 修饰函数，后缀的 `sync` 修饰函数体这个块；两者含义不同，可以并用。
+写在 lambda 之前的 `sync`（`sync (x: int) => ...`）是另一种用法：它修饰函数类型，保持不变。
 
-### 6.5 `var`、引用与 `wait`
+### 6.5 `var`、引用与顺序
 
 Camel 里一切值按引用传递。形参前写 `var` 表示函数会修改它；修改就是写到调用方的那个变量上。把 `let` 传给 `var` 形参是编译期错误（[`examples/06_let_to_var.cml`](examples/06_let_to_var.cml)）：
 
@@ -476,20 +476,20 @@ help: Only a variable declared with 'var' (or a var parameter) can be modified. 
       'var', or bind the new value to a new name.
 ```
 
-有了可变的变量，就有了顺序问题：读要排在哪次写之后？同步块是一种回答。另一种更局部的回答是 **`wait`**：它作用于后面的**一个**表达式，让用到这个表达式的值、或用到被它修改的变量的前后操作与它有序。[`examples/06_wait.cml`](examples/06_wait.cml)：
+有了可变的变量，就有了顺序问题：读要排在哪次写之后？答案是同步块：写进同一个同步块的语句按书写顺序执行，所以两次写入与后面的读取有确定的先后。[`examples/06_var_order.cml`](examples/06_var_order.cml)：
 
 ```cml
-module wait_demo
+module var_order
 
-sync func bump(var counter: int) {
-    wait counter += 1
+func bump(var counter: int): int sync {
+    counter += 1
+    return counter
 }
 
-// Not a sync block: the order comes from `wait` and from the data dependencies.
-func twice(): int {
+func twice(): int sync {
     var c = 0
-    wait bump(c)
-    wait bump(c)
+    bump(c)
+    bump(c)
     return c
 }
 
@@ -503,13 +503,12 @@ func main(): int sync {
 2
 ```
 
-`twice` 的函数体不是同步块，但两次 `bump` 都执行了，并且在 `return c` 读 `c` 之前：`wait` 让编译器按对变量 `c` 的使用插入了控制边。几点补充：
+`twice` 的函数体是同步块，两次 `bump` 与 `return c` 按书写顺序执行。几点补充：
 
-- `wait` 靠 `var` 的使用来排序。被等待的表达式不涉及任何 `var`（比如只是打印）时，`wait` 没有可依据的东西；这类调用写在同步块里。
-- 在同步块里写不写 `wait` 都一样。
-- `wait modify(i)` 之后如果再没有人读 `i`，这次修改不执行——还是按依赖求值。
+- 不在同步块里的写入，与此前的读取之间没有顺序；编译器给出 `SemanticDiag::IgnoredSideEffect` 警告。
+- 写入之后如果没有任何地方再读这个变量，这次修改不执行——还是按依赖求值。
 
-日常的建议很简单：计算写成 `let` 与纯函数；输入输出放进同步块；`var` 与 `wait` 留给确实需要原地更新的少数地方。
+日常的建议很简单：计算写成 `let` 与纯函数；输入输出放进同步块；`var` 留给确实需要原地更新的少数地方。
 
 ## 7. 闭包与函数值
 

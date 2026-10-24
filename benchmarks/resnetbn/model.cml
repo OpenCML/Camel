@@ -174,7 +174,7 @@ func dump_grads(m: Resnet, s: BnStats, x: Tensor, dir: string): int sync {
 
 /// The stateful training loop: step `i` starts from the parameters and the running statistics
 /// step `i - 1` produced. Returns both after step `total - 1`.
-sync func train_loop(m: Resnet, s: BnStats, x: Tensor, i: int, warm: int, total: int, t0: float): (Resnet, BnStats) {
+func train_loop(m: Resnet, s: BnStats, x: Tensor, i: int, warm: int, total: int, t0: float): (Resnet, BnStats) {
     return if i >= total then (m, s) else sync {
         let start = now()
         let r = step(m, x, s)

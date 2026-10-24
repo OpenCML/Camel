@@ -5,7 +5,7 @@
 module indices_shadowed_key
 
 func bad(t: (int, int), k: int): int {
-    return static loop acc = 0 for (j) in indices t do {
+    return static loop acc = 0 for j in indices t do {
         let j = k
         acc + t.[j]
     }

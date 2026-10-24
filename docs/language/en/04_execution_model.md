@@ -4,16 +4,14 @@ English | [中文](../04_execution_model.md)
 
 > The rules of this chapter come from sections 2–4 of [the design principles](../../design-principles.en.md), which prevail in case of conflict.
 
-A Camel program is a graph. This chapter explains how this graph is evaluated: evaluation by dependency, `sync`, `var` and `wait`, `macro`, faults and exit, passes.
+A Camel program is a graph. This chapter explains how this graph is evaluated: evaluation by dependency, `sync`, `var`, `macro`, faults and exit, passes.
 
 | Language element | What it is on the graph |
 |---|---|
 | Expression, operator call | A node with data edges; only nodes reachable along edges from the function's exit are executed |
 | Function | A subgraph of its own; a call site is a node in the enclosing graph that points to that subgraph |
 | `sync { ... }` block | Control edges between the adjacent statements it writes directly |
-| `sync func` (function modifier) | A mark on the function type; it produces no edge inside the function body |
 | `var` parameter | The callee subgraph and the caller point to the same object |
-| `wait e` | Control edges between `e` and the operations before and after it that use its value or the variables it modifies |
 | `if`, `match`, `??`, `!!`, `?->` | A branch node; each arm is a subgraph |
 | `#macro` function | An ordinary subgraph; the `std::macro` pass can evaluate it ahead of time and materialise the result as a constant in the graph |
 
@@ -131,18 +129,20 @@ func main(): int sync {
 
 ### 4.3.3 `sync func` (function modifier)
 
-A `sync` written before `func` modifies the function: it declares that the function has side effects and needs to be synchronised, and that callers may need to `wait` it.
+**The `sync` function modifier is retired** (H461): `sync func` is no longer a legal spelling, and the
+parser, the registry and this reference no longer keep it. A `var` parameter is a resource parameter
+(the design principles, 3.3) and needs no declaration. The `sync` prefix of a lambda,
+`sync (x: int) => ...`, is unchanged.
 
-- Functions with `var` parameters and functions that write captured variables (including module top-level variables) should be declared this way; when they are not, the compiler gives the warnings `SemanticDiag::VarParamInAsyncFunction` and `SemanticDiag::CapturedWriteInAsyncFunction`. For a lambda the form is `sync (x: int) => ...`.
-- **It does not make the function body a sync block.** To make the function body execute in order, use both:
+**The `sync` written in the function body position is kept**: it makes the body a sync block.
 
 ```cml
-sync func f(): int {
-    println('f')        // still not executed
+func f(): int {
+    println('f')        // not executed: the function body is not a sync block
     return 1
 }
 
-sync func g(): int sync {
+func g(): int sync {
     println('g')        // executed: the function body is a sync block
     return 2
 }
@@ -158,7 +158,7 @@ g
 3
 ```
 
-At present this modifier is only a declaration: the compiler checks "whether a function with side effects has declared it", and does not produce any order at call sites on the basis of it. How call sites should treat it is not yet decided.
+To make a function body execute in order, write the `sync` in the function body position.
 
 ## 4.4 `var`, references and `wait`
 
@@ -166,18 +166,18 @@ At present this modifier is only a declaration: the compiler checks "whether a f
 - Assignment is an operation with a side effect. **The declaration of side effects is a closed loop**: to modify a parameter, it must be declared `var`; mutability is declared from the lowest-level operator all the way up, explicitly at every level. A function that has not declared a parameter as `var` cannot possibly modify it.
 - Passing a `let` to a `var` parameter, and assigning to a non-`var` parameter inside a function body, are both compile-time errors (`SemanticDiag::ImmutablePassedToVarParam`).
 
-**`wait` applies to the one expression that follows it.** Operations before and after the `wait` that use the value of that expression, or use a variable modified by it, are locally ordered with it:
+**The order comes from the sync block that writes.** Several writes to one variable in the same sync block are ordered by the order they are written in; `wait` is retired (H461) and brings no local order. When the function body is not a sync block, a write is ordered against the operations that read it only by dependency:
 
 ```cml
-sync func bump(var counter: int) {
-    wait counter += 1
+func bump(var counter: int): int sync {
+    counter += 1
+    return counter
 }
 
-// the function body is not a sync block: the order comes from wait and data dependencies
-func twice(): int {
+func twice(): int sync {
     var c = 0
-    wait bump(c)
-    wait bump(c)
+    bump(c)
+    bump(c)
     return c
 }
 
@@ -191,15 +191,11 @@ func main(): int sync {
 2
 ```
 
-- `wait` is not mechanical ordering; it orders on the basis of how `var`s are used. What is ordered before the modification are those earlier operations that **directly used** the value of the variable: in `A(i + 1); wait modify(i)` it is `+` that directly uses `i`, so `modify` is ordered after `+`, with no guarantee that it is ordered after `A`. A waited write is ordered before later reads of the variable.
-- If the waited expression involves no `var` at all (for example, only input and output), `wait` has nothing to go by and therefore has no meaning; write such calls in a sync block.
-- In a sync block it makes no difference whether `wait` is written or not.
-- If nothing reads `i` any more after `wait modify(i)`, the modification does not execute (evaluation by dependency).
-- A write that has no `wait` and is not in a sync block has no order relative to earlier reads; the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
-- Tracking of modifications covers captures: when a function writes a `var` through a capture, the call site is recorded as a write to that variable. For a call through a function value (an argument, a return value or a stored lambda), the call site can recognise side effects only by its type (the `sync` modifier, `var` parameters).
-- `wait` can be written before calls, assignments and operator expressions. Writing it before a block, a name, a literal or a lambda is reserved, not implemented (`SemanticDiag::ConstructNotSupported`); to make a block execute in order, use `sync { ... }`.
+- When a write is not in a sync block and nothing reads the variable afterwards, the modification does not execute (evaluation by dependency).
+- A write that is not in a sync block has no order relative to earlier reads; the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
+- Tracking of modifications covers captures: when a function writes a `var` through a capture, the call site is recorded as a write to that variable. For a call through a function value (an argument, a return value or a stored lambda), the call site can recognise side effects only by its type (`var` parameters).
 
-The management and tracking of side effects is still under research (the design principles, 2.8). The behaviour when the same mutable object is written in several places outside a sync block, none of them with `wait`, is not yet decided.
+The management and tracking of side effects is still under research (the design principles, 2.8). The behaviour when the same mutable object is written in several places outside a sync block is not yet decided.
 
 ## 4.5 `#macro` functions
 
@@ -301,7 +297,7 @@ A program is processed by the sequence of passes on the command line: `camel fil
 
 - **The language does not restrict the order of passes, and the order can affect the result.** Passes modify the graph and may have side effects; "the same behaviour under any sequence of passes" is not a property of the language.
 - Scheduling passes and translation passes consume the graph, and passes written after them do not run (there is a warning `RuntimeDiag::PassesNeverRun`). When none of the specified passes consumes the graph, the default pass runs next.
-- The source-level rules (`var`/`let`, `wait`, `sync`) constrain how the compiler builds the graph; once the graph has been obtained, these rules no longer constrain later passes. The optimisation passes of the standard library aim not to change the result of the program; this is a quality requirement on those passes, ensured by tests.
+- The source-level rules (`var`/`let`, `sync`) constrain how the compiler builds the graph; once the graph has been obtained, these rules no longer constrain later passes. The optimisation passes of the standard library aim not to change the result of the program; this is a quality requirement on those passes, ensured by tests.
 - When a pass of some module (such as `onnx::export`) is written on the command line, the compiler loads that module automatically.
 
 ## 4.8 Order in higher-order operators

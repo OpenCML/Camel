@@ -98,14 +98,14 @@ MCTS 的取值方式，不是算错（`test/plans/feat/showcase_d4.plan.toml` �
 | 局面 | `type State = { board: int[], to_move: int }` | `(board, to_move)` |
 | 结点 | `type Node = { key, state, place, visits, score, moves, children }` | 同样的字段，`__slots__` |
 | 孩子 | `children: Node[]`（递归结构体） | `node.children` 列表 |
-| 走一步 | `var next = state; wait next.board[place] = …` | `played = list(board); played[place] = …` |
+| 走一步 | `var next = state; next.board[place] = …` | `played = list(board); played[place] = …` |
 | 展开 | `grow(node, child)` 返回新结点 | `node.children.append(child)` |
 | 试走 | `loop current = state, draw = key while … do { … }` | `while win == 0 and not full(...)` |
 | 选着法 | `loop chosen = 0, index = 1 while … do { … }` | `for index in range(1, …)` |
 | 生成器 | `(key * 48271) % 2147483647` | 同一个式子 |
 
-用 Camel 的习惯写法：改树的四个辅助函数（`apply_move`、`record`、`grow`、`put_child`）不是
-`sync`，里面用 `wait` 做路径赋值，调用方不用 `wait`（探针验证过）。`visit`/`search` 是纯的：
+用 Camel 的习惯写法：改树的四个辅助函数（`apply_move`、`record`、`grow`、`put_child`）把路径赋值
+写在自己的同步函数体（`: T sync`）里，调用方按书写顺序执行即可（探针验证过）。`visit`/`search` 是纯的：
 返回新树，没有副作用，所以四个后端跑出同一份输出。
 
 ## 遇到的问题
@@ -145,10 +145,10 @@ MCTS 的取值方式，不是算错（`test/plans/feat/showcase_d4.plan.toml` �
 - **`return` 写在 `if`/`match` 分支里不算离开函数**（`SemanticDiag::ExitInUnusedBranch` 警告）：
   `visit` 三个分支各写一个 `return` 会有两个警告，改成一个
   `return if … then … else if … then … else …` 表达式就好了。
-- **非 `sync` 函数里对 `var` 做路径赋值要 `wait`**，否则警告
-  `The call of '<__assn__>: (var State, State) => State' is neither waited nor in a sync block`。
-  四个辅助函数里加了 `wait`；非 `sync` 函数体里的 `wait` 不传染调用方（探针验证过），
-  所以 `playout` 里调用它们不用 `wait`。
+- **路径赋值要写在同步函数体里**，否则警告
+  `The call of '<__assn__>: (var State, State) => State' is not in a sync block`。
+  四个辅助函数把赋值写在 `: State sync` 的函数体里；同步函数体里的顺序不传染调用方
+  （探针验证过），所以 `playout` 里调用它们不必再做什么。
 - **`loop` 状态不能写空数组字面量**：`loop plays: int[] = [], …` 报
   `Expected '=' before ':'`（类型标注不支持），只写 `loop plays = []` 报 `LoopStateWithoutType`
   （`[]` 推不出元素类型）。写树的循环里不需要它，探针里改成把着法拼成字符串绕开。

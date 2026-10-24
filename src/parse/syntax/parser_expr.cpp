@@ -6,7 +6,7 @@
  *
  * Precedence, loosest first (the levels of the grammar, unchanged):
  *
- *   dataExpr        if / match / try, or `wait`? assignExpr
+ *   dataExpr        if / match / try, or assignExpr
  *   assignExpr      =  +=  -=  *=  /=  %=  ^=  @=  &=  |=      one, not associative
  *   logicalOrExpr   ||                                          left
  *   logicalAndExpr  &&                                          left
@@ -60,7 +60,6 @@ bool ParserImpl::startsExpr(TK kind) const {
     case TK::Plus:
     case TK::Bang:
     case TK::Tilde:
-    case TK::KwWait:
     case TK::KwIf:
     case TK::KwMatch:
     case TK::KwTry:
@@ -72,8 +71,7 @@ bool ParserImpl::startsExpr(TK kind) const {
     }
 }
 
-/// dataExpr : waitExpr | ctrlExpr | loopExpr
-/// waitExpr : 'wait'? assignExpr
+/// dataExpr : ctrlExpr | loopExpr
 /// ctrlExpr : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 ///          | 'match' identRef '{' matchCase+ '}'
 ///          | 'match' 'type' typeExpr '{' typeCase* '}'
@@ -100,12 +98,6 @@ void ParserImpl::parseExpr() {
             return parseStaticLoop();
         }
         return parseAssign();
-    case TK::KwWait: {
-        const size_t m = mark();
-        bump();
-        parseAssign();
-        return close(m, NK::WaitExpr);
-    }
     default:
         return parseAssign();
     }
@@ -1270,12 +1262,17 @@ void ParserImpl::parseStaticForName() {
     parseIdentDef();
 }
 
-/// staticLoopExpr : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
-/// `static loop acc = 0 for (n, F) in fields T do 表达式`（H51 步骤 5）：在实例化时按字段顺序
-/// 展开的折叠。状态头与普通的 `loop` 相同（一个名字时结果就是这个值，多个名字时是元组）；
-/// 遍历由 `staticForHeader` 给出：`in fields T`（步骤 5）或 `in indices ts`（步骤 6）。
-/// 没有 `while`，也没有普通序列的 `for`，因为轮数必须由类型在实例化时确定。`do` 后面是循环
-/// 体，它的值是下一轮的状态；展开后没有 LOOP 节点。
+/// staticLoopExpr : 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr
+/// `static loop acc = 0 for i in 0..5 do 表达式`（H51 步骤 5；作者的裁决 2026-10-24，见
+/// docs/handover/reviews/questions-2026-10-24-evening.md 的 loop-for-and-static-loop）：在
+/// 实例化时展开的折叠。状态头与普通的 `loop` 相同（一个名字时结果就是这个值，多个名字时是
+/// 元组）；头上的括号与 `static` 一起进来的遗留，已按“同一件事一种写法”去掉（H462），现在与
+/// 普通 `loop` 的 `for i in <序列>` 同形（头由下面的 `staticLoopHeader` 给出）。序列是
+/// `in fields T`（按结构体的字段）、`in indices ts`（按元组的位置），或任何编译期能求出的
+/// 序列——今天只认常量区间 `a..b`（半开，与 `..` 运算符同一个读法），节点的图 builder 判不出
+/// 时报 `SemanticDiag::StaticLoopSequenceNotKnown`。没有 `while`，也没有运行期序列的 `for`，
+/// 因为轮数必须在编译期确定。`do` 后面是循环体，它的值是下一轮的状态；展开后没有 LOOP 节点。
+/// 迭代变量是编译期常量：`acc + i` 和 `t.[i]` 都能写。
 void ParserImpl::parseStaticLoop() {
     const size_t m = mark();
     bump(); // static
@@ -1295,11 +1292,54 @@ void ParserImpl::parseStaticLoop() {
         }
         break;
     }
-    parseStaticForHeader();
+    parseStaticLoopHeader();
     if (!panic_ && expect(TK::KwDo)) {
         parseBlockExpr();
     }
     close(m, NK::StaticLoopExpr);
+}
+
+/// staticLoopHeader : 'for' (identDef | '_') (',' (identDef | '_'))? 'in'
+///                    ('fields' typeExpr | 'indices' dataExpr | dataExpr)
+/// The head of a `static loop`, written without the parentheses `static for` still has: the
+/// ruling of 2026-10-24 unifies it with the ordinary `loop`'s `for i in <序列>` (one thing, one
+/// spelling). The subject after `in` is a type for `fields`, a value for `indices`, and in every
+/// other case a sequence the compiler must be able to work out (a constant interval today).
+/// A second name is legal only with `fields`: it names the field's type, and `indices` and a
+/// plain sequence have no type name to give (the same reading as `staticForHeader`'s).
+void ParserImpl::parseStaticLoopHeader() {
+    if (panic_ || !expect(TK::KwFor)) {
+        return;
+    }
+    uint32_t secondNameAt = kNone;
+    parseStaticForName();
+    if (cur_ == TK::Comma && !panic_) {
+        secondNameAt = pos_;
+        bump();
+        parseStaticForName();
+    }
+    if (panic_ || !expect(TK::KwIn)) {
+        return;
+    }
+    if (atWord(0, "fields")) {
+        bump();
+        TypeHeadScope typeHead(*this);
+        parseType();
+        return;
+    }
+    if (secondNameAt != kNone) {
+        // `in indices (j, F)` and `in 0..5 (v, F)`: only `fields` names a type, so the second
+        // name is the error and `in` is what stood where the head should have stopped.
+        error(SyntaxError::Kind::Unexpected, {e(TK::KwIn)}, secondNameAt);
+    }
+    if (atWord(0, "indices")) {
+        // `indices ts` walks a tuple value; `ts` is an ordinary expression, so this is not a
+        // type position and `TypeHeadScope` is not entered. It binds one name (`j`).
+        bump();
+    }
+    if (!panic_) {
+        parseExpr();
+    }
 }
 
 /// typeCasePattern : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr

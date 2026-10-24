@@ -12,6 +12,6 @@ func point(): P {
 }
 
 func main(): int sync {
-    wait point().x = 9
+    point().x = 9
     return 0
 }

@@ -1031,7 +1031,6 @@ void Builder::buildFuncBody(
             rejectDiscardedValue(graph.get());
         }
         bodyStates_[graph.get()] = BodyState::Built;
-        unit_->builtFunctions.push_back({graph.get(), gct->origin(), name});
         unit_->builtBodies.push_back(graph);
         if (recorder_) {
             recorder_->functionBuilt(gct->origin(), name, graph->graphId(), funcType);

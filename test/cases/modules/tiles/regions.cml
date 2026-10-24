@@ -12,7 +12,7 @@ func detour(x: Tensor<f32, [2,3]>): Tensor<f32, [2,3]> {
     return y + cpu(y)
 }
 func ordered(x: Tensor<f32, [2,3]>): Tensor<f32, [2,3]> sync {
-    let y = wait (x + x)
+    let y = (x + x)
     return y + y
 }
 #[contract]

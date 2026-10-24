@@ -2,8 +2,8 @@
 /// by a closure (a shared cell: every holder sees the same value, design principles 3.5).
 module variables
 
-sync func bump(var x: int) {
-    wait x += 1
+func bump(var x: int) {
+    x += 1
 }
 
 func count(n: int): int sync {
@@ -17,8 +17,8 @@ func count(n: int): int sync {
 
 func main(): int sync {
     var c = 10
-    wait bump(c)
-    wait bump(c)
+    bump(c)
+    bump(c)
     println(c, count(3))
     var s = 'a'
     s = s + 'b'

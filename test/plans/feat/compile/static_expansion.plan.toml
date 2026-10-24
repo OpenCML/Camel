@@ -373,7 +373,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop"
-desc = "`static loop ... for (n, F) in fields T do body` walks the fields at instantiation and advances the state once per field: one state, several states as a tuple, the trip count coming from a type parameter of an enclosing generic, an empty struct, an ordinary tuple, `F` used as a type, and a loop nested in a `static for`."
+desc = "`static loop ... for n, F in fields T do body` walks the fields at instantiation and advances the state once per field: one state, several states as a tuple, the trip count coming from a type parameter of an enclosing generic, an empty struct, an ordinary tuple, `F` used as a type, and a loop nested in a `static for`."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_loop.cml"
 args = ["${case}", "std::fvm"]
@@ -471,6 +471,85 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "static_loop_sequence"
+desc = "`static loop` walks a sequence written after `in` (the ruling of 2026-10-24, H462: the head lost the parentheses it carried and is written like the ordinary `loop`'s `for i in <序列>`). The constant interval `a..b` is read half-open as `..` is everywhere else, the trip count is the interval's and not any tuple's, an empty interval unrolls to no round, a `let` bound once to a constant is a bound the compiler knows, the iteration variable is a compile-time constant used as a value and as a `t.[i]` key at once, and one sequence loop nests in another."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_loop_sequence.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "10",
+  "90",
+  "7",
+  "11",
+  "18",
+  "6",
+  "6 2",
+  "6",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `static loop over a sequence changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_sequence_graph_matches_unrolled"
+desc = "The graph of `static loop acc = 0 for i in 0..3 do acc + t.[i]` is the graph of the hand-written `((0 + t.0) + t.1) + t.2`: nothing of the interval is left in the graph (no array of its elements is made), and no SLOOP, LOOP, SFOR, SACC or BRCH node stands where the loop was written."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_loop_sequence_graph.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const attribute = (text, key) => {
+  const at = text.indexOf(key + '="')
+  if (at < 0) return null
+  const from = at + key.length + 2
+  return text.slice(from, text.indexOf('"', from))
+}
+const shapeOf = (name) => {
+  const at = lines.findIndex((line) => line.includes(`label="${name}"`))
+  assert(at > 0, `the graph of ${name} is missing`)
+  const indent = lines[at - 1].slice(0, lines[at - 1].indexOf(lines[at - 1].trim()))
+  const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+  assert(end > at, `the graph of ${name} has no end`)
+  const shape = []
+  for (const line of lines.slice(at, end)) {
+    const label = attribute(line, 'label')
+    const type = attribute(line, 'type')
+    if (label === null || type === null) continue
+    shape.push(`${line.includes('->') ? 'edge' : 'node'} ${label.replace(name, 'expansion')} ${type}`)
+  }
+  return shape
+}
+const loop = shapeOf("loopSum")
+const unrolled = shapeOf("unrolled")
+assert(loop.length > 0, "the static loop graph has no nodes")
+assert(loop.join(String.fromCharCode(10)) === unrolled.join(String.fromCharCode(10)),
+  `the sequence loop is not the hand-written expansion: ${loop.join(String.fromCharCode(10))} --- ${unrolled.join(String.fromCharCode(10))}`)
+const left = lines.filter((line) => /type="(SLOOP|LOOP|SFOR|SACC|BRCH|CASE)"/.test(line))
+assert(left.length === 0, `a static or branch node was left in the graph: ${left[0]}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_sequence_unknown"
+desc = "A `static loop` is unrolled where it stands, so how many rounds it has must be known when the function is compiled: a sequence bound by a parameter is refused by name (`SemanticDiag::StaticLoopSequenceNotKnown`, the ruling of 2026-10-24) rather than with the message of a missing tuple or of a type that is not concrete."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_sequence_unknown.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticLoopSequenceNotKnown"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "indices"
 desc = "`indices` (H51 step 6) walks the positions of a tuple value at instantiation, in both `static for` and `static loop`: `j` is an ordinary int and a compile-time key, the trip count is the tuple's arity (zero for the empty tuple, the type parameter's at instantiation for a generic), and a generator nested in a `fields` body walks a local tuple."
 kind = "behavior"
@@ -496,7 +575,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "indices_graph_matches_unrolled"
-desc = "The graph of `static loop acc = 0 for (j) in indices t do acc + t.[j]` is the graph of the hand-written `((0 + t.0) + t.1) + t.2`: the same nodes and links, and no SFOR, SLOOP, SACC or LOOP node left."
+desc = "The graph of `static loop acc = 0 for j in indices t do acc + t.[j]` is the graph of the hand-written `((0 + t.0) + t.1) + t.2`: the same nodes and links, and no SFOR, SLOOP, SACC or LOOP node left."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/indices_graph.cml"
 args = ["${case}", "std::gir"]

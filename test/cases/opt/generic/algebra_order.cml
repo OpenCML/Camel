@@ -5,7 +5,7 @@
  * `scaled` is called twice in one argument list: inlining gives the second body's entry product a
  * control input from the first call's effect, so the two products are ordered. The law
  * `t + t => t * 2` is about the data alone, so it applies to a product that waits, and the new
- * writing has to keep the wait: the graph test checks the control edge, the run tests check that
+ * writing has to keep the order: the graph test checks the control edge, the run tests check that
  * the effects still happen in program order on every back end.
  *
  *   camel algebra_order.cml std::opt::inline std::opt::algebra std::jgir
