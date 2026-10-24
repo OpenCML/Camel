@@ -1,13 +1,20 @@
 /**
- * Refined tensor types: var bindings widen at the same rank, branch joins unify,
- * and seeded random generation is reproducible.
+ * Refined tensor types: var bindings widen at the same rank, branch joins unify, and seeded
+ * random generation is reproducible.
  *
- * The third assignment of the original case (`w = ones([5])` after `w` had widened to the rank-2
- * `f32[?, ?]`) asked a `var` cell to change rank. Q5 of docs/design/arrays-memory/plan.cn.md keeps
- * the rank when a cell widens, so that assignment is a diagnostic now
- * (test/cases/compile/array_alias/err_var_rank.cml). Following that file's rewrite list
- * (plan.cn.md:323, "rewritten as two `var`s or an explicit `as`"), the rank-1 tensor lands in a
- * binding of its own and the rank-2 cell still widens in place.
+ * Two assignments of the original case need a word here, both of them readings of the terminal
+ * state rather than choices of this case:
+ *
+ *  - `w = ones([5])` after `w` had widened to the rank-2 `f32[?, ?]` asked a `var` cell to change
+ *    rank. Q5 of docs/design/arrays-memory/plan.cn.md keeps the rank when a cell widens, so that
+ *    assignment is the diagnostic test/cases/compile/array_alias/err_var_rank.cml pins; the value
+ *    keeps rank 2 and only its extents change. plan.cn.md:784 states this cost for this very case,
+ *    and plan.cn.md:323 lists it for rewriting ("rewritten as two `var`s or an explicit `as`").
+ *  - a call whose declared result is the bare `Tensor` (open rank, unstated element type) cannot
+ *    enter a cell whose element type is written down: that is a narrowing assignment and is
+ *    refused (`docs/handover/questions/var-cell-widening-and-the-bare-tensor-return.md`). The
+ *    result therefore has a binding of its own, which is the other half of plan.cn.md:323's
+ *    "two `var`s"; its value is read out below, which the original case never did.
  */
 module static_types
 
@@ -24,15 +31,15 @@ func pick(flag: bool): Tensor {
 }
 
 func main(): int sync {
-    var w = zeros([2, 1])
     // The cell widens to f32[?, ?]: same rank, extents forgotten (Q5).
-    w = grow(w)
-    // A rank-1 binding of its own, not a rank change of `w` (plan.cn.md:323).
-    var v = ones([5])
+    var w = zeros([2, 1])
+    w = ones([5, 1])
+    // A bare `Tensor` result has a binding of its own, and is read (sum 10.0).
+    var g = grow(w)
     seed(7)
     let r1 = random([4], 0.0, 1.0)
     seed(7)
     let r2 = random([4], 0.0, 1.0)
-    'static_types w_sum={} pick={} same_seed={}'->format<sum(v), shape(pick(false)), sum(r1) == sum(r2)>->println
+    'static_types w_sum={} pick={} same_seed={} g={}'->format<sum(w), shape(pick(false)), sum(r1) == sum(r2), sum(g)>->println
     return 0
 }
