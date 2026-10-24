@@ -32,6 +32,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
@@ -1475,17 +1476,125 @@ struct Sample {
     std::shared_ptr<TensorSample> tensor;
 };
 
-/// The element type a tensor dtype holds.
+/// The element type a tensor dtype holds, as the type an Array of it is made with. Every element
+/// type a tensor stores is here, the two reduced-precision floating types included (a `bf16` or
+/// an `f16` element is two bytes, camel/core/rtdata/half.h): a dtype this returns nothing for is
+/// one the check cannot make a value of, and it says so by name rather than widening it to f32.
 const Type *tensorElementType(TypeCode dtype) {
     switch (dtype) {
     case TypeCode::Float32:
         return Type::Float32();
+    case TypeCode::BFloat16:
+        return Type::BFloat16();
+    case TypeCode::Float16:
+        return Type::Float16();
     case TypeCode::Int64:
         return Type::Int64();
     case TypeCode::Bool:
         return Type::Bool();
     default:
         return nullptr;
+    }
+}
+
+/// The bytes one element of a tensor dtype takes.
+size_t elementBytesOf(TypeCode dtype) {
+    switch (dtype) {
+    case TypeCode::Float64:
+    case TypeCode::Int64:
+        return 8;
+    case TypeCode::Float32:
+    case TypeCode::Int32:
+        return 4;
+    case TypeCode::BFloat16:
+    case TypeCode::Float16:
+        return 2;
+    default:
+        return 1;
+    }
+}
+
+/// One element of a tensor sample, as a double. A bf16 or an f16 element is widened to the f32 it
+/// is exactly (camel/core/rtdata/half.h), which is the value the operator the rule was written
+/// with saw: the check never compares the two-byte pattern of an element whose arithmetic is f32.
+double elementOfBytes(TypeCode dtype, const uint8_t *at) {
+    switch (dtype) {
+    case TypeCode::Float64: {
+        double value = 0.0;
+        std::memcpy(&value, at, sizeof(double));
+        return value;
+    }
+    case TypeCode::Float32: {
+        float value = 0.0F;
+        std::memcpy(&value, at, sizeof(float));
+        return value;
+    }
+    case TypeCode::Int32: {
+        int32_t value = 0;
+        std::memcpy(&value, at, sizeof(int32_t));
+        return static_cast<double>(value);
+    }
+    case TypeCode::Int64: {
+        int64_t value = 0;
+        std::memcpy(&value, at, sizeof(int64_t));
+        return static_cast<double>(value);
+    }
+    case TypeCode::BFloat16: {
+        uint16_t bits = 0;
+        std::memcpy(&bits, at, sizeof(bits));
+        return static_cast<double>(halfToFloat<BFloat16>(halfSlotOfBits(bits)));
+    }
+    case TypeCode::Float16: {
+        uint16_t bits = 0;
+        std::memcpy(&bits, at, sizeof(bits));
+        return static_cast<double>(halfToFloat<Float16>(halfSlotOfBits(bits)));
+    }
+    default:
+        return *at != 0 ? 1.0 : 0.0;
+    }
+}
+
+/// The text of one element of a bf16 or an f16 tensor sample: the element type's own shortest
+/// text (camel/core/rtdata/half.h, `halfText`), never the f32 text of the value it widens to
+/// (design principles 7.7; the ruling of 2026-10-23 on `reduced-precision-text`).
+std::string halfTextOf(const TensorSample &t, size_t at) {
+    uint16_t bits = 0;
+    std::memcpy(&bits, t.bytes.data() + at * 2, sizeof(bits));
+    return t.dtype == TypeCode::BFloat16 ? halfText(BFloat16::fromBits(bits))
+                                         : halfText(Float16::fromBits(bits));
+}
+
+/// The least positive subnormal of a floating element type, in the type's own value. A rounding
+/// below the smallest normal is absolute rather than relative, so the error bound carries one such
+/// step per rounding; a type that has none here reads as 0 and the term drops out.
+double smallestSubnormalOf(TypeCode dtype) {
+    switch (dtype) {
+    case TypeCode::BFloat16:
+        return 0x1p-133; // bf16 has f32's exponent range: 2^-133 is its least subnormal
+    case TypeCode::Float16:
+        return 0x1p-24; // the least subnormal of binary16
+    case TypeCode::Float64:
+        return 4.9e-324;
+    default:
+        return 1.4e-45;
+    }
+}
+
+/// The epsilon two floating sides of an element type are compared with. It is the element type's
+/// own (camel::core::sem::elementEpsilon: bf16 2^-8, f16 2^-10, and the reduced types' instances
+/// are what this lane exists to make checkable), except that f32 and f64 keep the two constants
+/// the check has always measured their verdicts with. Those two are one *full* ulp of the type
+/// (1.2e-7 = 2^-23, 2.3e-16 = 2^-52) where `elementEpsilon` declares the half of it (2^-24,
+/// 2^-53), and a lane may neither loosen an f32 bound nor move an f32 or f64 reading: changing
+/// them halves every f32 bound and belongs to a numeric-contract change of its own.
+double checkEpsilon(TypeCode dtype) {
+    switch (dtype) {
+    case TypeCode::Float32:
+        return 1.2e-7;
+    case TypeCode::Float64:
+        return 2.3e-16;
+    default:
+        return camel::core::sem::elementEpsilon(dtype);
     }
 }
 
@@ -1704,7 +1813,8 @@ RefValue refSoftmax(const RefTensor &x, int64_t axisArg, bool logarithm) {
     return RefValue::ofTensor(std::move(out));
 }
 
-/// The tensor of a sample as long double elements.
+/// The tensor of a sample as long double elements. A bf16 or an f16 element is the f32 it widens
+/// to exactly, which is the value the operator the reference is a reference for computes on.
 RefTensor tensorOfSample(const TensorSample &sample) {
     RefTensor out;
     out.shape = sample.shape;
@@ -1713,26 +1823,14 @@ RefTensor tensorOfSample(const TensorSample &sample) {
         count *= static_cast<size_t>(extent < 0 ? 0 : extent);
     }
     out.values.resize(count);
-    switch (sample.dtype) {
-    case TypeCode::Float32:
-        for (size_t i = 0; i < count; ++i) {
-            float value = 0.0F;
-            std::memcpy(&value, sample.bytes.data() + i * sizeof(float), sizeof(float));
-            out.values[i] = static_cast<long double>(value);
+    const size_t elementBytes = elementBytesOf(sample.dtype);
+    for (size_t i = 0; i < count; ++i) {
+        if (sample.bytes.size() < (i + 1) * elementBytes) {
+            out.values[i] = 0.0L;
+            continue;
         }
-        break;
-    case TypeCode::Int64:
-        for (size_t i = 0; i < count; ++i) {
-            int64_t value = 0;
-            std::memcpy(&value, sample.bytes.data() + i * sizeof(int64_t), sizeof(int64_t));
-            out.values[i] = static_cast<long double>(value);
-        }
-        break;
-    default:
-        for (size_t i = 0; i < count; ++i) {
-            out.values[i] = sample.bytes[i] != 0 ? 1.0L : 0.0L;
-        }
-        break;
+        out.values[i] = static_cast<long double>(
+            elementOfBytes(sample.dtype, sample.bytes.data() + i * elementBytes));
     }
     return out;
 }
@@ -1823,6 +1921,14 @@ class RefEvaluator {
             return RefValue::ofScalar(static_cast<long double>(fromSlot<Int64>(slot)));
         case TypeCode::Bool:
             return RefValue::ofScalar(fromSlot<Bool>(slot) ? 1.0L : 0.0L);
+        case TypeCode::BFloat16:
+            // A constant of a reduced-precision type is the f32 it widens to, exactly: the
+            // reference holds more precision than the element type, which is the one thing an
+            // accuracy comparison needs of it.
+            return RefValue::ofScalar(
+                static_cast<long double>(halfToFloat<BFloat16>(slot)));
+        case TypeCode::Float16:
+            return RefValue::ofScalar(static_cast<long double>(halfToFloat<Float16>(slot)));
         default:
             throw std::runtime_error("the reference cannot read a constant of this type");
         }
@@ -2010,9 +2116,20 @@ long double refSampleError(const Sample &native, const RefValue &reference) {
     return refScalarError(static_cast<long double>(native.asDouble), reference.scalar);
 }
 
-/// The one rounding step the element type can make, the measurement noise of "not worse".
+/// The one rounding step the element type can make, the measurement noise of "not worse". f32 and
+/// f64 keep the numbers this comparison has always used (their full ulp); the two reduced-precision
+/// types take their own element epsilon (camel/core/operator_semantics.h, `elementEpsilon`:
+/// bf16 2^-8, f16 2^-10), because no accuracy rule of the library has an instance at either of
+/// them today and the next one that does must not be measured in f32's rounding.
 double refTypeEpsilon(TypeCode code) {
-    return code == TypeCode::Float32 ? 1.1920928955078125e-7 : 2.220446049250313e-16;
+    switch (code) {
+    case TypeCode::Float32:
+        return 1.1920928955078125e-7;
+    case TypeCode::Float64:
+        return 2.220446049250313e-16;
+    default:
+        return camel::core::sem::elementEpsilon(code);
+    }
 }
 
 /// Whether the right side's error is not larger than the left side's, allowing one rounding step
@@ -2098,9 +2215,9 @@ class Sampler {
     Sampler(uint64_t seed, camel::core::sem::PermissionMask needs) : rng_(seed), needs_(needs) {}
 
     /// Whether `value` can make a sample of this type: the scalars it knows (int, i32, float, f32,
-    /// bool) and a tensor whose element type it knows. A rule instance whose parameters are of
-    /// another type cannot be checked, and the report says so instead of failing the whole check
-    /// (an instance of `float_combine` at `bf16` has no value the check can draw).
+    /// `bf16`, `f16`, bool) and a tensor whose element type it knows. A rule instance whose
+    /// parameters are of another type cannot be checked, and the report says so instead of failing
+    /// the whole check (`the check cannot make a value of type '...'`).
     bool canDraw(const Type *type) const {
         const auto shape = camel::runtime::fact::shapeOfType(type);
         if (shape) {
@@ -2111,6 +2228,8 @@ class Sampler {
         case TypeCode::Int32:
         case TypeCode::Float64:
         case TypeCode::Float32:
+        case TypeCode::BFloat16:
+        case TypeCode::Float16:
         case TypeCode::Bool:
             return true;
         default:
@@ -2143,6 +2262,10 @@ class Sampler {
             const float v = static_cast<float>(pickFloat(constant, TypeCode::Float32));
             return {TypeCode::Float32, toSlot<Float32>(v), static_cast<double>(v), nullptr};
         }
+        case TypeCode::BFloat16:
+            return reducedFloat<BFloat16>(TypeCode::BFloat16, constant);
+        case TypeCode::Float16:
+            return reducedFloat<Float16>(TypeCode::Float16, constant);
         case TypeCode::Bool: {
             const bool v = (rng_() & 1) != 0;
             return {TypeCode::Bool, toSlot<Bool>(v), v ? 1.0 : 0.0, nullptr};
@@ -2189,6 +2312,17 @@ class Sampler {
     }
 
   private:
+    /// A sample of one of the two reduced-precision floating types. The drawn value is rounded
+    /// once into the element type -- that rounding is the type's own store rounding, the same one
+    /// a literal and a written conversion use -- and both the slot the argument is passed in and
+    /// the double the check compares are that stored element, never the wider value it was drawn
+    /// from. A check that compared the drawn value would be comparing a number the operator never
+    /// saw.
+    template <typename Half> Sample reducedFloat(TypeCode code, bool constant) {
+        const slot_t slot = halfFromFloat<Half>(static_cast<float>(pickFloat(constant, code)));
+        return {code, slot, static_cast<double>(halfToFloat<Half>(slot)), nullptr};
+    }
+
     /// A tensor of the type's element type. The shape is the one the type carries; an unknown
     /// rank is a vector of three and an unknown extent is two. A type with a large known shape is
     /// sampled in the same rank at two elements per extent (elementwise laws do not depend on
@@ -2258,6 +2392,21 @@ class Sampler {
             std::memcpy(sample->bytes.data(), values.data(), sample->bytes.size());
             break;
         }
+        case TypeCode::BFloat16:
+        case TypeCode::Float16: {
+            // Two bytes per element, in the element's own bit pattern (camel/core/rtdata/half.h;
+            // the tensor module stores these two types the same way). Each element is rounded once
+            // into the element type, exactly as a bf16 or f16 literal is.
+            sample->bytes.resize(static_cast<size_t>(elements) * 2);
+            for (int64_t i = 0; i < elements; ++i) {
+                const float drawn = static_cast<float>(pickFloat(false, dtype));
+                const uint16_t bits = dtype == TypeCode::BFloat16
+                    ? halfBitsOfSlot(halfFromFloat<BFloat16>(drawn))
+                    : halfBitsOfSlot(halfFromFloat<Float16>(drawn));
+                std::memcpy(sample->bytes.data() + static_cast<size_t>(i) * 2, &bits, 2);
+            }
+            break;
+        }
         case TypeCode::Int64: {
             std::vector<int64_t> values(static_cast<size_t>(elements));
             for (int64_t &value : values) {
@@ -2314,20 +2463,26 @@ class Sampler {
         std::vector<double> specials{0.0, 1.0, -1.0, 2.0, -2.0, 0.5, -0.5, 3.0, -3.0, 4.0, 0.1};
         // A special has to be a value of the parameter's own type: 1e300 is finite as a float64
         // and an infinity as a float32, which would smuggle an infinity past `no_infs` and make
-        // every float32 rule that assumes finiteness fail its own check.
+        // every float32 rule that assumes finiteness fail its own check. The two reduced-precision
+        // types need the same care, one step further: bf16's range is f32's (8 exponent bits) but
+        // its largest finite value is 3.3895314e38, so 3.4e38 already rounds to an infinity, and
+        // f16's range is 65504, where 1e30 and 1e-300 are an infinity and a zero. Each type's list
+        // below is a list of values *of that type*.
         // The accuracy rules are the ones that promise a smaller error over the whole interesting
         // domain, so their sampler includes the overflow, underflow, denormal and near-zero
         // regions. The other rules keep the narrower set: a law like
         // `(x * c) + (y * c) => (x + y) * c` is exact on finite values but not at an overflow, and
         // it does not claim to be.
         const bool accuracy = (needs_ & camel::core::sem::kRefineAccuracy) != 0;
-        if (code == TypeCode::Float32) {
+        if (code == TypeCode::Float32 || code == TypeCode::BFloat16) {
+            // bf16 has f32's exponent range and one byte of f32's significand: the same regions,
+            // with the largest finite value of bf16 instead of f32's for the near-overflow probe.
             specials.push_back(1e-30);
             specials.push_back(1e30);
             specials.push_back(1e-40); // subnormal
             if (accuracy) {
-                specials.push_back(1e-45); // smallest subnormal
-                specials.push_back(3.4e38); // near overflow
+                specials.push_back(code == TypeCode::BFloat16 ? 1e-41 : 1e-45); // least subnormal
+                specials.push_back(code == TypeCode::BFloat16 ? 3.3e38 : 3.4e38); // near overflow
                 specials.push_back(100.0);  // exp overflows f32 here (e^100 = 2.7e43)
                 specials.push_back(-100.0);
                 specials.push_back(1000.0);
@@ -2336,6 +2491,24 @@ class Sampler {
                 specials.push_back(-1e-8);
                 specials.push_back(1e-16);
                 specials.push_back(-1e-16);
+            }
+        } else if (code == TypeCode::Float16) {
+            // The whole region of binary16: 65504 is its largest finite value, 6.1035156e-05 its
+            // least normal and 5.9604645e-08 its least subnormal.
+            specials.push_back(6.1e-5); // the least normal
+            specials.push_back(1.0e-6);
+            specials.push_back(1.0e-7); // subnormal
+            specials.push_back(1.0e-4);
+            specials.push_back(1.0e4);
+            if (accuracy) {
+                specials.push_back(6.0e-8);  // the least subnormal
+                specials.push_back(65000.0); // near overflow
+                specials.push_back(100.0);
+                specials.push_back(-100.0);
+                specials.push_back(1000.0);
+                specials.push_back(-1000.0);
+                specials.push_back(1e-3); // the log(1 + x) near-zero region of this type
+                specials.push_back(-1e-3);
             }
         } else {
             specials.push_back(1e-300);
@@ -2382,9 +2555,12 @@ class Sampler {
 };
 
 /// Whether two float results agree: NaN agrees with NaN, and otherwise bit for bit when the rule
-/// needs no permission, or within the numeric contract below when it does.
-bool agreeFloat(double x, double y, bool single, const camel::core::sem::RewriteErrorBound &bound,
-    double scale) {
+/// needs no permission, or within the numeric contract below when it does. `element` is the
+/// element type the two values are of (`f32`, `f64`, `bf16` or `f16`): it decides both the bit
+/// pattern an exact comparison compares and the epsilon a bounded one is measured in, so a
+/// reduced-precision instance is never judged with f32's tolerance.
+bool agreeFloat(double x, double y, TypeCode element,
+    const camel::core::sem::RewriteErrorBound &bound, double scale) {
     if (std::isnan(x) || std::isnan(y)) {
         return std::isnan(x) && std::isnan(y);
     }
@@ -2392,18 +2568,21 @@ bool agreeFloat(double x, double y, bool single, const camel::core::sem::Rewrite
         return true; // no contract to compare against (reported as unchecked)
     }
     if (bound.ulps == 0.0 && bound.relative == 0.0) {
-        return single ? std::bit_cast<uint32_t>(static_cast<float>(x)) ==
-                                std::bit_cast<uint32_t>(static_cast<float>(y)) &&
-                            std::signbit(x) == std::signbit(y)
-                      : std::bit_cast<uint64_t>(x) == std::bit_cast<uint64_t>(y);
+        // A bf16 or an f16 widens to its f32 exactly (camel/core/rtdata/half.h), so comparing the
+        // widened f32 bits compares the two-byte patterns: the two paths are one comparison.
+        return element == TypeCode::Float64
+            ? std::bit_cast<uint64_t>(x) == std::bit_cast<uint64_t>(y)
+            : std::bit_cast<uint32_t>(static_cast<float>(x)) ==
+                      std::bit_cast<uint32_t>(static_cast<float>(y)) &&
+                  std::signbit(x) == std::signbit(y);
     }
     if (std::isinf(x) || std::isinf(y)) {
         return x == y;
     }
-    const double eps       = single ? 1.2e-7 : 2.3e-16;
+    const double eps       = checkEpsilon(element);
     const double magnitude = std::abs(x) + std::abs(y) + scale;
     // The smallest subnormal: a rounding in the subnormal range is absolute, not relative.
-    const double smallest  = single ? 1.4e-45 : 4.9e-324;
+    const double smallest  = smallestSubnormalOf(element);
     const double allowed   = (bound.ulps * eps + bound.relative) * magnitude + bound.ulps * smallest;
     return std::abs(x - y) <= allowed;
 }
@@ -2411,36 +2590,27 @@ bool agreeFloat(double x, double y, bool single, const camel::core::sem::Rewrite
 /// One element of a tensor sample, as a double (the bytes of a sample are not aligned for the
 /// element type).
 double tensorElement(const TensorSample &t, size_t at) {
-    switch (t.dtype) {
-    case TypeCode::Float32: {
-        float value = 0.0F;
-        std::memcpy(&value, t.bytes.data() + at * sizeof(float), sizeof(float));
-        return value;
-    }
-    case TypeCode::Int64: {
-        int64_t value = 0;
-        std::memcpy(&value, t.bytes.data() + at * sizeof(int64_t), sizeof(int64_t));
-        return static_cast<double>(value);
-    }
-    default:
-        return t.bytes[at] != 0 ? 1.0 : 0.0;
-    }
+    return elementOfBytes(t.dtype, t.bytes.data() + at * elementBytesOf(t.dtype));
 }
 
 /// Whether two tensor results agree elementwise (the scalar rule above, per element): a NaN agrees
 /// with a NaN, an exact rule compares bits (a signed zero included), a permission-bound rule uses
-/// its bound per element.
+/// its bound per element. Every floating element type is compared elementwise, the reduced
+/// precision ones included, so an instance at `bf16` is measured with bf16's epsilon and not with
+/// a byte comparison (which would fail a legal rounding) nor with f32's (which would call an
+/// illegal one equal).
 bool agreeTensor(const TensorSample &a, const TensorSample &b,
     const camel::core::sem::RewriteErrorBound &bound, double scale) {
     if (a.dtype != b.dtype || a.shape != b.shape || a.bytes.size() != b.bytes.size()) {
         return false;
     }
-    if (a.dtype != TypeCode::Float32) {
+    if (!isFloatingScalar(a.dtype)) {
         return a.bytes == b.bytes;
     }
-    const size_t count = a.bytes.size() / sizeof(float);
+    const size_t elementBytes = elementBytesOf(a.dtype);
+    const size_t count = elementBytes == 0 ? 0 : a.bytes.size() / elementBytes;
     for (size_t i = 0; i < count; ++i) {
-        if (!agreeFloat(tensorElement(a, i), tensorElement(b, i), true, bound, scale)) {
+        if (!agreeFloat(tensorElement(a, i), tensorElement(b, i), a.dtype, bound, scale)) {
             return false;
         }
     }
@@ -2456,8 +2626,8 @@ bool agree(
     if (a.tensor != nullptr || b.tensor != nullptr) {
         return a.tensor != nullptr && b.tensor != nullptr && agreeTensor(*a.tensor, *b.tensor, bound, scale);
     }
-    if (a.code == TypeCode::Float64 || a.code == TypeCode::Float32) {
-        return agreeFloat(a.asDouble, b.asDouble, a.code == TypeCode::Float32, bound, scale);
+    if (isFloatingScalar(a.code)) {
+        return agreeFloat(a.asDouble, b.asDouble, a.code, bound, scale);
     }
     if (a.code == TypeCode::Int32) {
         return fromSlot<Int32>(a.slot) == fromSlot<Int32>(b.slot);
@@ -2474,9 +2644,8 @@ std::string sampleText(const Sample &s) {
             text += (i == 0 ? "" : ", ") + std::to_string(t.shape[i]);
         }
         text += "] {";
-        const size_t count = t.dtype == TypeCode::Float32 ? t.bytes.size() / sizeof(float)
-            : t.dtype == TypeCode::Int64                    ? t.bytes.size() / sizeof(int64_t)
-                                                            : t.bytes.size();
+        const size_t count =
+            t.bytes.size() / elementBytesOf(t.dtype);
         const size_t shown = std::min<size_t>(count, 8);
         for (size_t i = 0; i < shown; ++i) {
             if (i != 0) {
@@ -2486,8 +2655,18 @@ std::string sampleText(const Sample &s) {
             case TypeCode::Float32:
                 text += std::format("{}", static_cast<float>(tensorElement(t, i)));
                 break;
+            case TypeCode::Float64:
+                text += std::format("{}", tensorElement(t, i));
+                break;
             case TypeCode::Int64:
                 text += std::to_string(static_cast<int64_t>(tensorElement(t, i)));
+                break;
+            case TypeCode::BFloat16:
+            case TypeCode::Float16:
+                // The text of the element is the element type's own (design principles 7.7 and
+                // the ruling of 2026-10-23 on `reduced-precision-text`): the shortest digits that
+                // read back as the same bf16 or f16, not the f32 text of the value it widens to.
+                text += halfTextOf(t, i);
                 break;
             default:
                 text += t.bytes[i] != 0 ? "true" : "false";
@@ -2506,6 +2685,10 @@ std::string sampleText(const Sample &s) {
         return std::to_string(fromSlot<Int32>(s.slot));
     case TypeCode::Bool:
         return fromSlot<Bool>(s.slot) ? "true" : "false";
+    case TypeCode::BFloat16:
+        return halfText(BFloat16::fromBits(halfBitsOfSlot(s.slot)));
+    case TypeCode::Float16:
+        return halfText(Float16::fromBits(halfBitsOfSlot(s.slot)));
     default:
         return std::format("{}", s.asDouble);
     }
@@ -2536,6 +2719,17 @@ Sample resultOf(slot_t slot, const Type *type) {
         return {TypeCode::Float32, slot, static_cast<double>(fromSlot<Float32>(slot)), nullptr};
     case TypeCode::Float64:
         return {TypeCode::Float64, slot, fromSlot<Float64>(slot), nullptr};
+    case TypeCode::BFloat16:
+        // The slot holds the two bytes of the format; the value the check compares is the f32 it
+        // widens to, exactly (camel/core/rtdata/half.h).
+        return {
+            TypeCode::BFloat16,
+            slot,
+            static_cast<double>(halfToFloat<BFloat16>(slot)),
+            nullptr};
+    case TypeCode::Float16:
+        return {
+            TypeCode::Float16, slot, static_cast<double>(halfToFloat<Float16>(slot)), nullptr};
     default:
         return {type->code(), slot, fromSlot<Bool>(slot) ? 1.0 : 0.0, nullptr};
     }
