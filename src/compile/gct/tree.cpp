@@ -360,8 +360,6 @@ std::optional<OperId> Tree::operRefOf(const Node *node) const {
 
 node_ptr_t Tree::makeVari() { return makeNode(NodeKind::VARI); }
 
-node_ptr_t Tree::makeWait() { return makeNode(NodeKind::WAIT); }
-
 node_ptr_t Tree::makeLink(size_t argCount) {
     Node *node            = makeNode(NodeKind::LINK);
     node->payload_.number = argCount;
@@ -837,7 +835,7 @@ std::string Node::toString() const {
         return text + "]";
     }
     default:
-        return to_string(kind_); // VARI, WAIT, ANNO
+        return to_string(kind_); // VARI, ANNO
     }
 }
 

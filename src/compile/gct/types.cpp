@@ -22,8 +22,6 @@ std::string to_string(NodeKind kind) {
         return "DREF";
     case NodeKind::VARI:
         return "VARI";
-    case NodeKind::WAIT:
-        return "WAIT";
     case NodeKind::LINK:
         return "LINK";
     case NodeKind::WITH:

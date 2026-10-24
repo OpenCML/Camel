@@ -283,16 +283,13 @@ const std::string ExitStmtLoad::geneCode() const {
     }
 }
 const std::string StmtBlockLoad::toString() const {
-    return std::string("StmtBlock: ") + (synced_ ? "sync" : "") + (waited_ ? " wait" : "");
+    return std::string("StmtBlock: ") + (synced_ ? "sync" : "");
 }
 
 const std::string StmtBlockLoad::geneCode() const {
     std::string result = "block";
     if (synced_) {
         result += " sync";
-    }
-    if (waited_) {
-        result += " wait";
     }
     return result;
 }

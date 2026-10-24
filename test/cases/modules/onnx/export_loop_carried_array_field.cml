@@ -2,8 +2,8 @@
  * Refused: a tail recursion whose depth depends on the model input and whose carried state is a
  * struct with an `int[]` field the body appends to. A Loop's state input has one shape for all its
  * rounds, and the ruling of 2026-10-24-evening (growable-array-vs-tensor-in-the-onnx-exporter) makes
- * that the criterion: the body appends to this value, so its length is not the same on every round.
- * The diagnostic names the array field and says so; no model file is written.
+ * that the criterion: the body appends to this value, so its length changes from one round to the
+ * next — the diagnostic names the array field, an int array, and says so; no model file is written.
  */
 module export_loop_carried_array_field
 import { Tensor, reshape, sum } from tensor

@@ -1226,6 +1226,21 @@ bool isCarriable(const Value &v) {
     return tensor::isTensorType(v.ty);
 }
 
+/// Whether the model can hold `v` as a value a Loop carries: a tensor or a scalar, or an int
+/// array the model writes as an int64 vector, whose dtype and shape its facts state. The kind
+/// alone is not the criterion (the ruling of 2026-10-24-evening,
+/// growable-array-vs-tensor-in-the-onnx-exporter): an int array whose length is the same on every
+/// round is carried like a tensor, and what decides is that the shape holds — the checks that
+/// know both values (`shapeIsKept`, the two paths' facts) ask for it before this one is reached.
+bool carriesAsTensor(const Value &v) {
+    if (isCarriable(v)) {
+        return true;
+    }
+    const TensorFacts facts = factsOf(v);
+    return v.isSymbolic() && v.form == Value::Form::IntArray && facts.dtype.has_value() &&
+           facts.shape.has_value();
+}
+
 /// The operators that grow an array's length: the body appends one element or concatenates two
 /// arrays (the ruling's own test for a value that changes from one round to the next,
 /// questions-2026-10-24-evening §growable-array-vs-tensor-in-the-onnx-exporter: "循环体对它追加或拼接
@@ -1406,23 +1421,48 @@ std::string carriedKind(const Value &v) {
     return at == size_t(-1) ? valueKind(v) : spelledLeaf(leaves[at], place);
 }
 
+/// The noun a diagnostic uses for an array the body grows, by its element type: `an int array`
+/// (the wording the ruling of 2026-10-24-evening uses for the leaf), `a float array`, and the
+/// element type's own name for anything else. This spells the *declared* type, not `valueKind`:
+/// valueKind's branches stay in the order it has, and the declared type is what names the leaf.
+std::string arrayKindName(const type::Type *array) {
+    const auto *arr = type::asArrayType(array);
+    if (arr == nullptr) {
+        return std::format("a value of type '{}'", array->toString());
+    }
+    switch (arr->elemType()->code()) {
+        case TypeCode::Int32:
+        case TypeCode::Int64:
+            return "an int array";
+        case TypeCode::Float16:
+        case TypeCode::BFloat16:
+        case TypeCode::Float32:
+        case TypeCode::Float64:
+            return "a float array";
+        case TypeCode::Bool:
+            return "a boolean array";
+        default:
+            return std::format("an array of '{}'", arr->elemType()->toString());
+    }
+}
+
 /// How a diagnostic names the value of an argument the body grows: the first leaf of the declared
-/// type of the parameter whose length that declaration leaves open (`int[]` — a struct says which
-/// field), or the value as `carriedKind` spells it. The declaration is what names the leaf: by the
-/// time the body is evaluated the value is a placeholder, and a placeholder says nothing about the
-/// shape of what it stands for. The growth itself is the fact about the body (`growsItsExtent`).
+/// type of the parameter whose length that declaration leaves open (`an int array` — a struct says
+/// which field), or the value as `carriedKind` spells it. The declaration is what names the leaf:
+/// by the time the body is evaluated the value is a placeholder, and a placeholder says nothing
+/// about the shape of what it stands for. The growth itself is the fact about the body
+/// (`growsItsExtent`).
 std::string growingLeafName(const type::Type *declared, const Value &v) {
     if (declared != nullptr) {
         if (lengthIsOpen(declared)) {
-            return std::format("a value of type '{}'", declared->toString());
+            return arrayKindName(declared);
         }
         if (declared->code() == TypeCode::Struct) {
             auto *strct = static_cast<const type::StructType *>(declared);
             for (size_t i = 0; i < strct->size(); ++i) {
                 type::Type *field = strct->typeAt(i);
                 if (lengthIsOpen(field)) {
-                    return std::format(
-                        "the leaf '{}', a value of type '{}'", strct->fieldName(i), field->toString());
+                    return std::format("the leaf '{}', {}", strct->fieldName(i), arrayKindName(field));
                 }
             }
         }
@@ -1596,7 +1636,7 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
     std::vector<Output> outputs;
     const auto request = [&](const Value &va, const Value &vb) {
         const TensorFacts fa = factsOf(va), fb = factsOf(vb);
-        if (!isCarriable(va) || !isCarriable(vb) || !fa.dtype || fa.dtype != fb.dtype) {
+        if (!carriesAsTensor(va) || !carriesAsTensor(vb) || !fa.dtype || fa.dtype != fb.dtype) {
             unsupported(
                 act,
                 "a tuple, struct or array, or values of different types, differ between the "
@@ -1660,17 +1700,36 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
                 continue;
             }
             if (!isCarriable(la[j]) || !isCarriable(lb[j])) {
-                const Value &bad        = isCarriable(la[j]) ? lb[j] : la[j];
-                const std::string place = j < places.size() ? places[j] : std::string();
-                unsupported(
-                    act,
-                    std::format(
-                        "a recursive call changes argument {} of a recursion whose depth "
-                        "depends on the model input (counting from 1, `with` parameters first), "
-                        "which is {}; a loop carries tensors and scalars and tuples and structs "
-                        "of them",
-                        k + 1,
-                        spelledLeaf(bad, place)));
+                // The kind decides nothing here (the ruling of 2026-10-24-evening,
+                // growable-array-vs-tensor-in-the-onnx-exporter, replaced the spelling with the
+                // fact): what a Loop needs is that the two paths state the same dtype and the
+                // same shape, which an int array the model holds as an int64 vector does as much
+                // as a tensor does. A string, a closure, or an array the paths disagree about
+                // still has no state.
+                const TensorFacts fa = factsOf(la[j]), fb = factsOf(lb[j]);
+                const bool stated =
+                    fa.dtype && fb.dtype && fa.shape && fb.shape && *fa.dtype == *fb.dtype &&
+                    *fa.shape == *fb.shape;
+                if (!stated) {
+                    const Value &bad        = isCarriable(la[j]) ? lb[j] : la[j];
+                    const std::string place = j < places.size() ? places[j] : std::string();
+                    const std::string why =
+                        (!fa.dtype || !fb.dtype)
+                            ? "a value whose element type the model cannot state"
+                            : (*fa.dtype != *fb.dtype
+                                   ? "a value whose element type is not the same on the two paths"
+                                   : "a value whose shape is not the same on the two paths");
+                    unsupported(
+                        act,
+                        std::format(
+                            "a recursive call changes argument {} of a recursion whose depth "
+                            "depends on the model input (counting from 1, `with` parameters "
+                            "first): it is {}, and {}; a Loop carries a state whose dtype and "
+                            "shape are the same on every round",
+                            k + 1,
+                            spelledLeaf(bad, place),
+                            why));
+                }
             }
             at[j] = request(la[j], lb[j]);
         }
@@ -1730,7 +1789,11 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
             if (real.isConstant() && !(real.ty && real.ty->code() == TypeCode::Function)) {
                 continue; // known at export time: the same whatever the If selects
             }
-            if (!isCarriable(real) || !facts.dtype) {
+            // An int array the model holds as an int64 vector states a dtype and a shape, so it
+            // stands in for the missing side as a tensor does; the kind alone refuses it, and the
+            // kind is not the criterion (the ruling of 2026-10-24-evening,
+            // growable-array-vs-tensor-in-the-onnx-exporter).
+            if (!carriesAsTensor(real) || !facts.dtype) {
                 unsupported(
                     act,
                     std::format(
@@ -1851,9 +1914,9 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
                             act,
                             std::format(
                                 "a recursive call changes argument {} of a recursion whose depth "
-                                "depends on the model input, which is {}: the body appends to this "
-                                "value or concatenates it, so its length is not the same on every "
-                                "round, and a Loop carries a state whose shape is the same on every "
+                                "depends on the model input: it is {}, whose length changes from "
+                                "one round to the next (the body appends to it or concatenates "
+                                "it), and a Loop carries a state whose shape is the same on every "
                                 "round",
                                 k + 1,
                                 growingLeafName(
@@ -3867,25 +3930,42 @@ Value Evaluator::symbolicIntArray(
     for (size_t k = 0; k < fillSlots.size(); ++k) {
         elems[static_cast<size_t>(fillSlots[k])] = values[k];
     }
-    std::vector<std::string> parts;
     std::vector<int64_t> known;
+    std::vector<bool> symbolic;
     for (size_t i = 0; i < elems.size(); ++i) {
         if (!elems[i] || elems[i]->isConstant()) {
             const int64_t v = elems[i] ? tensor::scalarToInt64(elems[i]->ty->code(), elems[i]->slot)
                                        : templ->get<rtdata::Int64>(i);
-            const int64_t one[] = {v};
-            parts.push_back(emitter_.int64s(one));
             known.push_back(v);
+            symbolic.push_back(false);
             continue;
         }
         if (elems[i]->form != Value::Form::Scalar) {
             unsupported(act, "an int array element that depends on the model input must be an int");
         }
-        const int64_t axis[] = {0};
+        known.push_back(tensor::kUnknownDim);
+        symbolic.push_back(true);
+    }
+    if (std::ranges::none_of(symbolic, [](bool s) { return s; })) {
+        // Every element is a constant: simplification folds an array literal only where replacing
+        // it is execution-safe, and one inside a branch arm reaches the export unfolded, so this
+        // path sees literals the model already holds the value of. The vector is then one
+        // initializer; a Concat of constant parts would compute at model-run time what the
+        // exporter already knows, and where the same shape is also a literal the model folds, the
+        // two writings of one shape disagree over a `Concat` that need not be in the model.
+        return Value::symbolicIntArray(emitter_.int64s(known), known);
+    }
+    std::vector<std::string> parts;
+    const int64_t axis[] = {0};
+    for (size_t i = 0; i < elems.size(); ++i) {
+        if (!symbolic[i]) {
+            const int64_t one[] = {known[i]};
+            parts.push_back(emitter_.int64s(one));
+            continue;
+        }
         parts.push_back(emitter_.node(
             "Unsqueeze",
             {emitter_.operand(*elems[i], TypeCode::Int64), emitter_.int64s(axis)}));
-        known.push_back(tensor::kUnknownDim);
     }
     return Value::symbolicIntArray(
         emitter_.node("Concat", std::move(parts), {Attribute::makeInt("axis", 0)}),

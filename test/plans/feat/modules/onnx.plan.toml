@@ -1973,7 +1973,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_carried_array_field"
-desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field the body appends to is refused by export_model at the recursive call: a Loop's state input has one shape for every round, so the criterion is the fact the ruling of 2026-10-24-evening asks for — the body appends to this value, its length is not the same on every round (growable-array-vs-tensor-in-the-onnx-exporter). The diagnostic names the array field and the fact, and no model file is written. (The refusal used to be justified by the type printer's `[]` spelling and the H17 staging note.)"
+desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field the body appends to is refused by export_model at the recursive call: a Loop's state input has one shape for every round, so the criterion is the fact the ruling of 2026-10-24-evening asks for — the body appends to this value, so its length changes from one round to the next (growable-array-vs-tensor-in-the-onnx-exporter). The diagnostic names the array field and the fact, and no model file is written. (The refusal used to be justified by what the type printer spelled, not by the fact.)"
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_carried_array_field.cml"
 args = ["${case}"]
@@ -1986,8 +1986,8 @@ const fs = await import('fs')
 const path = await import('path')
 const text = input.normalized.output
 assert(text.includes("a recursive call changes argument 2 of a recursion whose depth depends on the model input"), 'missing the argument: ' + text)
-assert(text.includes("the leaf 'xs', a value of type 'int[]'"), 'the diagnostic must name the array field: ' + text)
-assert(text.includes('the body appends to this value or concatenates it, so its length is not the same on every round, and a Loop carries a state whose shape is the same on every round'), 'the diagnostic must state the fact: ' + text)
+assert(text.includes("the leaf 'xs', an int array"), 'the diagnostic must name the array field: ' + text)
+assert(text.includes('whose length changes from one round to the next (the body appends to it or concatenates it), and a Loop carries a state whose shape is the same on every round'), 'the diagnostic must state the fact: ' + text)
 assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_carried_array_field.onnx')), 'a refused export must not write a model')
 }

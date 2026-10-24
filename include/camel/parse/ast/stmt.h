@@ -199,9 +199,6 @@ class StmtBlockLoad : public StmtLoad {
     void sync() { synced_ = true; }
     bool synced() const { return synced_; }
 
-    void wait() { waited_ = true; }
-    bool waited() const { return waited_; }
-
     // The children of a block, in this order (each only when it is there):
     //   [0] RepeatedLoad("Stmt")          the statements (always)
     //   [1] RepeatedLoad("FuncAnno")      the decorators after the statements' child, in the
@@ -213,8 +210,7 @@ class StmtBlockLoad : public StmtLoad {
     const std::string geneCode() const override;
 
   private:
-    bool synced_     = false;
-    bool waited_     = false;
+    bool synced_ = false;
 };
 
 /// One `#` form (design principles 6.2): `#name`, `#name<args>`, and each member of
