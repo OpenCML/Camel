@@ -58,16 +58,20 @@ with <key: string>
 export func get(j: Json!?): Json!?
 
 /// The element index of an array; null when j is not an array, the index is out of range, or j
-/// is null itself. A `Json!` gives a `Json!?`, as get<key> does.
+/// is null itself. The with-parameter is `key`, the name the member-key declarations above use:
+/// the position means which member of the Json to take, and the argument's type says whether it
+/// is written as a string or as an integer, so `get<key: 'a'>` and `get<key: 0>` name the same
+/// position of every declaration of `get`. A `Json!` gives a `Json!?`, as the member-key form
+/// does.
 /// @pure
 /// @example j->get<1>->as_int ?? 0    // 6, for j of '[5, 6]'
-with <index: int>
+with <key: int>
 export func get(j: Json): Json?
-with <index: int>
+with <key: int>
 export func get(j: Json?): Json?
-with <index: int>
+with <key: int>
 export func get(j: Json!): Json!?
-with <index: int>
+with <key: int>
 export func get(j: Json!?): Json!?
 
 /// The bool a Json holds; null for any other kind (and a `Json!` gives a `bool!?`, the error of
