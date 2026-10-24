@@ -507,3 +507,11 @@ export func check(rules: Rule[], samples: int = …, seed: int = …, program: P
    - **位一致**（`rules.fusion_bit_identical_fused`、`fuse.result`）：融合前后逐位相同这一性质与元素类型无关；在 f32 下不再逐位相同，就是融合改变了计算，要查，不要放宽。
    - **打印精度**（`numeric_contract` 等）：按已定的"按值自己的类型求最短文本"，f32 的值打印 f32 的最短文本；期望随之更新，这是规则的结果。
 3. 每类改写在报告里列出条数与依据，不逐条复述。
+
+## ci-triggers-and-coverage 与 ci-cuda-toolkit
+
+诊断清楚，修掉了快层的两条真红——好。
+
+- **不标任何"允许失败"**：同意。慢层那 8 条按 batch-slow 报告的归因逐条处置（已排优先级）。
+- **CUDA：选 (b)**：一条只编译 tiles CUDA 目标的作业，钉住"有头文件"的构建；按构建能力跳过的前置条件保留。是否升级到 (a) 看 runner 成本。
+- **触发：建议 develop 上每次合并跑三条腿，加 `concurrency: cancel-in-progress`**（连续合并时只跑最新一次，实际消耗远低于"每次合并一整轮"）；慢层不进每次合并，改为每晚在 88 主机上跑一次并出报告，标签发布前要求慢层全绿。这一条牵涉 runner 分钟数的费用（仓库私有期间按分钟计费，公开后 GitHub 托管 runner 免费），**等负责人确认后再改 `ci.yml`**。
