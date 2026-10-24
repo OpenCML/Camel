@@ -224,16 +224,92 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_operand_generic"
-desc = "An operand of `..` whose type is not settled: a generic function named without its type arguments has no value of one type, so the composition is refused - and the refusal says what the operand is and how to settle it instead of printing `void` as if it were a type (the ruling is docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition: the expected type instantiates the operands, and this refusal comes to have a diagnostic of its own, so this entry's code changes with that lane)."
+desc = "An operand of `..` whose type is not settled: `ident` is generic, and nothing at this position says which instance it is - the composition stands in a `let` with no declared type - so it is refused by that name. The refusal is the composition's own diagnostic, and it says what the old one did not: which operand is the generic function, that the type arguments name the instance, and that an expected function type for the whole expression settles it (the ruling is docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition). With such a type the same program passes - stream.comp_expected_type - and the refusal no longer prints `void` as if it were the operand's type or reaches CompOperandMismatch, which stays for operands `..` cannot take at all."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_generic.cml"
 args = ["${case}"]
 expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CompOperandGenericWithoutType"
+expect_diagnostic_code = "0x030001E4"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 20
+expect_output_contains = ["'..' composes two functions, and its left operand, the generic function 'ident', has no instance here: write its type arguments ('ident::<int>'), or give the whole expression an expected function type."]
+expect_output_not_contains = ["UnknownInternalError", "Warning", "'void'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.comp_operand_generic_mixed"
+desc = "Which operand is generic is part of what the refusal says: `ident::<int>` on the left is the instance written out, so the composition is one operand short, and the refusal names the right one. The position alone would have settled both, which is why the same text with `ident` on both sides is refused for a different reason (there is no expected type there) and not for this one."
+kind = "negative"
+case = "../../../cases/compile/stream/comp_operand_generic_mixed.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CompOperandGenericWithoutType"
+expect_diagnostic_code = "0x030001E4"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 20
+expect_output_contains = ["and its right operand, the generic function 'ident', has no instance here"]
+expect_output_not_contains = ["UnknownInternalError", "Warning", "'void'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.comp_expected_type"
+desc = "`f..g` is the lambda `x => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = x => ident(ident(x))` passed before this, so the composition must too (the ruling is docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition). It used to be CompOperandMismatch at the `..`, with the operand printed as `void`."
+kind = "behavior"
+case = "../../../cases/compile/stream/comp_expected_type.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "4\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.comp_chain"
+desc = "The expected type reaches every link of a chain: `f..g..h` is `x => h(g(f(x)))`, so the composition's input types `f`, what `f` returns types `g`, what `g` returns types `h`, and the result the position expects is what `h` gives. The three operands of this case take three different instances (`wrap::<int>`, `head::<int>`, `wrap::<int>`), which a distribution that handed them one and the same type could not produce. The lambda written out is the same value."
+kind = "behavior"
+case = "../../../cases/compile/stream/comp_chain.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "[4]\n[4]\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.comp_lambda_equivalence"
+desc = "The equivalence is the whole rule, so it is read off one program: the composition and the lambda it stands for are written in the same two positions - a declared value and the argument of a function whose parameter names the function type - and the four readings must agree. A distribution that reached only one of those positions, or that gave the composition a type of its own, shows here and not in a case that pins one number."
+kind = "behavior"
+case = "../../../cases/compile/stream/comp_lambda_equivalence.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.trim().split('\n')
+  assert(lines.length === 4, `expected 4 lines, got ${lines.length}: ${JSON.stringify(lines)}`)
+  assert(lines[0] === lines[1], `as a declared value the composition gave '${lines[0]}' and the lambda '${lines[1]}'`)
+  assert(lines[2] === lines[3], `as an argument the composition gave '${lines[2]}' and the lambda '${lines[3]}'`)
+  assert(lines[0] === '4' && lines[2] === '7', `the four readings are ${lines.join(', ')}`)
+}
+"""
+
+[[tests]]
+name = "stream.comp_operand_function_integer"
+desc = "The refusal CompOperandMismatch was written for stays where it was written for: `..` takes two functions or two integers (design principles 4.2), and a function with an integer is neither. Both operands are named by their types, and a function among them is not a generic-operand case - that refusal needs a name that is generic, which this program has none of."
+kind = "negative"
+case = "../../../cases/compile/stream/comp_operand_function_integer.cml"
+args = ["${case}"]
+expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
-expect_diagnostic_line = 16
-expect_diagnostic_column = 30
-expect_output_contains = ["the left operand is 'a generic function with no type arguments' and the right one 'a generic function with no type arguments'.", "a generic function has no value of one type until its type arguments are written: 'ident::<int>..ident::<int>' composes the two instances of 'ident'"]
-expect_output_not_contains = ["UnknownInternalError", "Warning", "'void'"]
+expect_diagnostic_line = 13
+expect_diagnostic_column = 20
+expect_output_contains = ["'..' takes two functions or two integers; the left operand is '(x: int) => int' and the right one 'int'."]
+expect_output_not_contains = ["UnknownInternalError", "Warning", "has no instance here"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

@@ -1912,8 +1912,11 @@ class Builder {
     node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);
     /// `a..b` (the GCT link of `kCompositionCall`): the composition of two functions, or the
     /// interval of two integers, told apart by the types of the two operands (design principles
-    /// 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`).
-    node_handle_t buildComposition(const GCT::node_ptr_t &gct);
+    /// 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`). `expected`
+    /// is the type of the position the whole expression stands in: a function type there is the
+    /// type the lambda `x => g(f(x))` would have and instantiates the operands (the ruling,
+    /// section generic-operands-of-composition).
+    node_handle_t buildComposition(const GCT::node_ptr_t &gct, Type *expected);
     /// The composition `f..g` as the lambda `x => g(f(x))`: a graph of one parameter whose body
     /// calls `f` and then `g`, both of them captures of it.
     node_handle_t composeFunctionValue(

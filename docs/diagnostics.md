@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-262 diagnostics: 243 errors, 19 warnings.
+263 diagnostics: 244 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -229,6 +229,7 @@ prints one entry.
 | `0x030001E1` | [SemanticDiag::CompOperandMismatch](#compoperandmismatch) | Error |
 | `0x030001E2` | [SemanticDiag::CompOperandNotUnary](#compoperandnotunary) | Error |
 | `0x030001E3` | [SemanticDiag::StreamInContainer](#streamincontainer) | Error |
+| `0x030001E4` | [SemanticDiag::CompOperandGenericWithoutType](#compoperandgenericwithouttype) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -6668,6 +6669,44 @@ module stream_type_in_container
 func main(): int sync {
     let s: int..[3] = [1, 2, 3]
     println(0)
+    return 0
+}
+```
+
+### CompOperandGenericWithoutType
+
+`0x030001E4` · Error · `SemanticDiag::CompOperandGenericWithoutType`
+
+**Message**
+
+```text
+'..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type.
+```
+
+**Help**
+
+```text
+The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident..ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int>..ident::<int>`. Only a name that is generic is refused here; an operand of a type `..` cannot take stays CompOperandMismatch.
+```
+
+**Example** (`test/cases/compile/stream/comp_operand_generic.cml`, run as `camel test/cases/compile/stream/comp_operand_generic.cml`)
+
+```camel
+// A name of a generic function says no instance of it until a position fixes its types (design
+// principles 5.5), and nothing here does: the composition stands in a `let` with no declared
+// type, so neither the operand nor the whole expression has a function type to take the instance
+// from. The refusal is the composition's own, and it says what the operand is and both ways to
+// settle it (the ruling is docs/handover/reviews/questions-2026-10-23.md, section
+// generic-operands-of-composition).
+module h428_comp_operand_generic
+
+func ident::<T>(x: T): T {
+    return x
+}
+
+func main(): int sync {
+    let composed = ident..ident
+    println(composed(4))
     return 0
 }
 ```

@@ -1310,12 +1310,65 @@ constexpr std::string_view kCompRhs       = "$comp_g";
 constexpr std::string_view kRangeCall = "$builtin::range";
 } // namespace
 
-node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expected) {
+    // The composition is the lambda `x => g(f(x))` and nothing else (design principles 4.2), so
+    // it is typed exactly as that lambda is typed: the function type the position expects gives
+    // the composed function its input - the parameter of `f` - and its output - the result of
+    // `g` - and it instantiates the operands where they stand, as the lambda's two calls are
+    // instantiated (design principles 5.9). The ruling is
+    // docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition.
+    FunctionType *expectedFunc = nullptr;
+    if (expected != nullptr && expected->code() == TypeCode::Function) {
+        auto *candidate = tt::as_ptr<FunctionType>(expected);
+        // A composed function takes the one argument `f` takes. A position that expects some
+        // other signature - two parameters, or a `with` parameter this value cannot carry - says
+        // nothing about the operands, and the composition is left to the two of them.
+        if (candidate->withTypesCount() == 0 && candidate->normTypesCount() == 1) {
+            expectedFunc = candidate;
+        }
+    }
+    // What `f` is expected to be: the one parameter the composed function takes. Its result is
+    // deliberately not taken from the expectation: what `f` returns is what `g` takes, and only
+    // `f` says what that is (the lambda reads it off the call `f(x)`, not off the declared type).
+    FunctionType *lhsExpected = nullptr;
+    if (expectedFunc != nullptr) {
+        FunctionTypeFactory factory;
+        factory.setModifiers(expectedFunc->modifiers());
+        factory.addNormArg(
+            std::string(kCompParameter), expectedFunc->normTypeAt(0), expectedFunc->normIsVarAt(0));
+        lhsExpected = factory.build();
+    }
     // The two operands are values, and a function written by name is its value here as it is in
-    // any argument position.
-    node_handle_t lhs = argumentNodeOf(visit(gct->at(1)), gct->at(1));
-    node_handle_t rhs = argumentNodeOf(visit(gct->at(2)), gct->at(2));
+    // any argument position. The name of a generic function is instantiated by the type its
+    // position gives it, exactly as an argument is (`checkValue`): with no such type the name
+    // still stands for no instance, and the refusal below says so by name.
+    const auto operandValue = [&](const GCT::node_ptr_t &expr, Type *wanted) {
+        ExpectedValueScope scope(expectedValueType_, wanted);
+        node_handle_t node = valueNodeOf(visit(expr));
+        if (wanted != nullptr && genericDrefs_.contains(node)) {
+            node = genericValueFor(node, wanted, expr);
+        }
+        return argumentNodeOf(node, expr);
+    };
+    node_handle_t lhs = operandValue(gct->at(1), lhsExpected);
     Type *lhsType     = nodeTypeOf(lhs);
+    // What `g` is expected to be: it takes what `f` returns - which is known now - and gives
+    // what the whole composition gives, the result the position expects.
+    FunctionType *rhsExpected = nullptr;
+    if (expectedFunc != nullptr && lhsType != nullptr && lhsType->code() == TypeCode::Function) {
+        auto *lhsFunc = tt::as_ptr<FunctionType>(lhsType);
+        if (lhsFunc->withTypesCount() == 0 && lhsFunc->normTypesCount() == 1 &&
+            lhsFunc->hasExitType()) {
+            FunctionTypeFactory factory;
+            factory.setModifiers(expectedFunc->modifiers());
+            factory.addNormArg(std::string(kCompParameter), lhsFunc->exitType(), false);
+            if (expectedFunc->hasExitType()) {
+                factory.setExitType(expectedFunc->exitType());
+            }
+            rhsExpected = factory.build();
+        }
+    }
+    node_handle_t rhs = operandValue(gct->at(2), rhsExpected);
     Type *rhsType     = nodeTypeOf(rhs);
     const bool bothFunctions = lhsType != nullptr && rhsType != nullptr &&
                                lhsType->code() == TypeCode::Function &&
@@ -1340,31 +1393,42 @@ node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct) {
         rhsType->code() == TypeCode::Int64) {
         return intervalValue(lhs, rhs, gct);
     }
-    // The operand's type as the message names it. A value whose type is not settled reads as
-    // `void`, which is no type the program wrote: a generic function named without its type
-    // arguments is the case that reaches here, and the note says how to settle it. The ruling is
-    // docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition: the
-    // expected type instantiates the operands, and this refusal comes to have a diagnostic of its
-    // own rather than CompOperandMismatch.
-const auto operandText = [](Type *type) -> std::string {
-    if (type == nullptr) {
-        return "nothing";
+    // A name of a generic function that neither the position nor the other operand settles: the
+    // composition is refused by that name, together with the two ways to settle it (the ruling,
+    // section generic-operands-of-composition). This is not CompOperandMismatch: the operand is
+    // not a value of a type the composition cannot take, it is a name with no instance yet.
+    for (const bool isLeft : {true, false}) {
+        const node_handle_t operandNode = isLeft ? lhs : rhs;
+        const auto found                = genericDrefs_.find(operandNode);
+        if (found == genericDrefs_.end()) {
+            continue;
+        }
+        const GCT::node_ptr_t &expr        = gct->at(isLeft ? 1 : 2);
+        const generic_template_ptr_t &tmpl = found->second.one();
+        std::string written                = sourceTextOf(expr);
+        if (written.empty() && tmpl != nullptr) {
+            written = tmpl->name;
+        }
+        diags_->of(SemanticDiag::CompOperandGenericWithoutType)
+            .atOrigin(gct->origin())
+            .commit(isLeft ? "left" : "right", written);
+        throw BuildAbortException();
     }
-    if (type->code() != TypeCode::Void) {
-        return type->toString();
-    }
-    return "a generic function with no type arguments";
-};
-const bool unsettled = (lhsType != nullptr && lhsType->code() == TypeCode::Void) ||
-                       (rhsType != nullptr && rhsType->code() == TypeCode::Void);
-auto mismatch = diags_->of(SemanticDiag::CompOperandMismatch).atOrigin(gct->origin());
-if (unsettled) {
-    mismatch.note(
-        "a generic function has no value of one type until its type arguments are written: "
-        "'ident::<int>..ident::<int>' composes the two instances of 'ident'");
-}
-mismatch.commit(operandText(lhsType), operandText(rhsType));
-throw BuildAbortException();
+    // The operand's type as the message names it. A value whose type is not settled is not a
+    // type the program wrote, and the message says that rather than print `void` as one.
+    const auto operandText = [](Type *type) -> std::string {
+        if (type == nullptr) {
+            return "nothing";
+        }
+        if (type->code() != TypeCode::Void) {
+            return type->toString();
+        }
+        return "a value with no type yet";
+    };
+    diags_->of(SemanticDiag::CompOperandMismatch)
+        .atOrigin(gct->origin())
+        .commit(operandText(lhsType), operandText(rhsType));
+    throw BuildAbortException();
 }
 
 node_handle_t Builder::composeFunctionValue(
@@ -1485,10 +1549,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
     // `a..b` (gct.comp): one construct of two readings, told apart by the types of its two
     // operands, and they are known only here (design principles 4.2; the author's ruling of
-    // 2026-10-24 on `h248-generator-and-composition`).
+    // 2026-10-24 on `h248-generator-and-composition`). The type this position expects is what a
+    // generic operand is instantiated from (the ruling, section generic-operands-of-composition).
     if (gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
         gct->at(0)->name() == camel::core::kCompositionCall) {
-        node_handle_t composed = buildComposition(gct);
+        node_handle_t composed = buildComposition(gct, expectedResult);
         LEAVE("LINK");
         return composed;
     }
