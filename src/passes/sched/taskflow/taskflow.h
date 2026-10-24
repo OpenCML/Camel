@@ -193,6 +193,12 @@ class TaskflowGcGate {
     void resetStats();
     // One line: "[taskflow] gc: pending_polls=.. collections=.. in_flow=.. ...".
     void reportStats(std::ostream &os) const;
+    // Whether this run's collections may be paced (the gate's default; the `gc_stress`
+    // parameter of the pass turns the pacing off). Set where a run starts; read by every poll.
+    void setCollectionsPaced(bool paced) {
+        collectionsPaced_.store(paced, std::memory_order_relaxed);
+    }
+    bool collectionsPaced() const { return collectionsPaced_.load(std::memory_order_relaxed); }
     // A flow is running on the executor (nested flows count once each). Statistics only: the
     // gate does not decide by it.
     void flowStarted() { flowsRunning_.fetch_add(1, std::memory_order_relaxed); }
@@ -207,6 +213,10 @@ class TaskflowGcGate {
     std::atomic<int64_t> retryAfterNs_{0};
     // No collection before this time: the cap after a collection.
     std::atomic<int64_t> capUntilNs_{0};
+    // Pacing is the default of every run; a run whose work *is* the collection stress turns it
+    // off (`gc_stress=true`; the head of test/plans/feat/mm/gc_collections.plan.toml says what
+    // that cost).
+    std::atomic<bool> collectionsPaced_{true};
     std::atomic<int64_t> flowsRunning_{0};
     Stats stats_;
     std::mutex collectorMutex_;
@@ -278,6 +288,11 @@ struct TaskflowOptions {
     /// 1: print the task graphs and collections of the run when it ends; 2: also one line per
     /// collection.
     int gcStats = 0;
+    /// This run's work is the collection stress (`gc_stress=true`): serve every collection it
+    /// asks for one for one, instead of letting the gate pace them. The gate otherwise starts
+    /// the next collection no sooner than twice the time the last one took, which holds the
+    /// collector at a third of a production run.
+    bool gcStress = false;
 };
 
 class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
