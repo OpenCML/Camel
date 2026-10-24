@@ -769,7 +769,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 16
-expect_output_contains = ["Invalid call to '__mul__'", "(Tensor<float32, [3]>, float)", "the scalar operand has type 'float', but the tensor's element type is 'f32'", "write the conversion, f32(value)"]
+expect_output_contains = ["Invalid call to '__mul__'", "(f32[3], float)", "the scalar operand has type 'float', but the tensor's element type is 'f32'", "write the conversion, f32(value)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -804,7 +804,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
 expect_diagnostic_line = 13
 expect_diagnostic_column = 16
-expect_output_contains = ["The literal '0.5' cannot be represented as type 'int'", "the value would be truncated", "in the instance 'half<Tensor<int64, [4]>>'"]
+expect_output_contains = ["The literal '0.5' cannot be represented as type 'int'", "the value would be truncated", "in the instance 'half<int[4]>' of the generic function 'half' with T = int[4]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

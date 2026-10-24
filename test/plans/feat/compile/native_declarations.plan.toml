@@ -915,7 +915,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:12:18", "argument types: <> (Tensor<float32, [?, ?]>, int)", "<tensor:numel>: (t: Tensor) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:12:18", "argument types: <> (f32[?, ?], int)", "<tensor:numel>: (t: Tensor) => int"]
 
 [[tests]]
 name = "native.tensor_wrong_type"
@@ -950,7 +950,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_show_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:12:5", "argument types: <> (Tensor<float32, [?, ?]>, int)", "<tensor:show>: (t: Tensor) => void", "<tensor:show>: (t: A[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:12:5", "argument types: <> (f32[?, ?], int)", "<tensor:show>: (t: Tensor) => void", "<tensor:show>: (t: A[]) => void"]
 
 [[tests]]
 name = "native.tensor_show_wrong_type"
